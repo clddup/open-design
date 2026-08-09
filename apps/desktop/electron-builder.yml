@@ -1,0 +1,38 @@
+appId: design.open.app
+productName: OpenDesign
+artifactName: OpenDesign-${version}-${os}-${arch}.${ext}
+asar: true
+compression: maximum
+npmRebuild: false
+
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - out/main/**
+  - out/preload/**
+  - out/renderer/**
+  - out/agent/**
+  - package.json
+
+extraResources:
+  - from: ../../THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+  - from: build/icon.png
+    to: icon.png
+
+mac:
+  category: public.app-category.graphics-design
+  icon: icon.icns
+  target:
+    - dir
+
+win:
+  icon: icon.ico
+
+linux:
+  category: Graphics
+  icon: icons
+
+publish: null

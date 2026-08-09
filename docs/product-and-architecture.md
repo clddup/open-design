@@ -1,0 +1,301 @@
+# OpenDesign 产品与架构
+
+## 1. 产品定义
+
+OpenDesign 是 AI-native 通用设计平台。用户可以直接操作专业画布，也可以用自然语言、上下文命令和可组合工具让 Agent 理解意图、生成方案、修改对象并解释结果。
+
+UI 设计是首要能力和最先打磨的工作流，但不是产品边界。统一的文档模型、设计命令和引擎适配层应能承载界面、Logo、海报、品牌物料、社交图片及未来设计类型，避免形成只认识 Frame 和组件库的 UI 专用内核。
+
+### 1.1 当前实现
+
+截至 2026-08-10，仓库当前具备：
+
+- OpenDesign 自有的 `DesignDocument 1.1.0`、多 Page、事务、preview、单调 revision、diff、history、undo/redo、checkpoint 和 `1.0.0 → 1.1.0` 迁移。
+- Workspace/Project/Design File 持久化与导航、持久 Conversation、按 Conversation 隔离的时间线和单目标 Global Task 投影。
+- 固定 `leafer-editor@2.2.9` 的唯一生产画布路径，覆盖场景投影、pan/zoom、命中、选择、move/resize/rotate/skew 和文本内编辑。旧 Canvas2D、手写选择框和 OpenPencil 运行时已移除。
+- 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask、高级描边和事务化图片 asset 的公共设计语义及属性检查器/Leafer 映射。
+- 运行于 `utilityProcess` 的持续 Agent Conversation、取消/恢复、多 Provider Catalog、OpenAI Responses、OpenAI Chat Completions、Anthropic Messages adapter 和 Main-only `safeStorage` 凭据。
+- `opendesign_inspect_document`、`opendesign_apply_transaction`、`opendesign_read_image` 与 `opendesign_place_image` 四个 typed tools；图片/文档附件、剪贴板/拖放，以及受限读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL 的多模态链路。
+- Renderer/Preload/Main/Agent 的运行时校验、最小环境变量 allowlist 和按 run 绑定 Design File/revision/scope 的设计工具桥。
+
+尚未完成的主要目标包括：完整 Working Set/Mutation Targets/Capabilities、attached roots、通用 per-run resource handles、Main approval/audit/sandbox 执行链、跨 Project 多目标、完整 MCP 产品链、`fetch_reference`/隔离 `capture_reference`，以及能力基线中列出的专业矢量、布局、组件、变量、富文本和导入导出。
+
+本文后续同时描述当前边界和已接受的目标架构；目标内容不能当作已完成事实。实施状态见[专业设计能力基线](design-capability-baseline.md)与[路线图](roadmap.md)，项目/会话/跨目录边界见 [ADR-0006](adr/0006-project-conversation-agent-scope.md)。
+
+## 2. 产品原则
+
+### 2.1 人和 Agent 共用同一设计系统
+
+人类操作和 Agent 操作最终进入同一套设计命令、约束、历史记录和撤销机制。Agent 不是自动点击 UI 的宏，也不拥有一条绕过校验的隐蔽写路径。
+
+### 2.2 画布优先，AI 原生
+
+画布始终是设计事实的可视化中心。AI 入口应贴近当前文档、选区、页面和任务上下文，支持“提议—预览—应用—撤销”的短反馈循环，而不是把设计工作降格为一次性聊天生成。
+
+### 2.3 UI 优先，内核通用
+
+首个成熟能力覆盖 UI 布局、组件、样式、设计 token、响应式状态和交付检查。公共对象模型同时保留通用图形能力，例如路径、文本、图片、蒙版、效果、约束、资源和导出配置。
+
+### 2.4 本地优先且权限可见
+
+文档编辑、历史和基础渲染默认在本地完成。外部模型、MCP 服务和 skills 只能在用户可理解的作用域内访问数据和执行能力，敏感动作需要显式同意并留下审计记录。
+
+### 2.5 专业桌面体验
+
+OpenDesign 追求高质量、低 Web 感的 Codex 式桌面 UI。应用应表现为稳定、紧凑且可长期工作的工具，而不是套在窗口中的网站：使用持久工作区、分栏、检查器、原生感菜单、快捷键、上下文命令和细致状态反馈；避免巨型圆角卡片、营销式 Hero、过量胶囊按钮和无功能的渐变装饰。
+
+### 2.6 组织、上下文与权限分离
+
+Project 用于组织设计文件、会话和持久配置，不是文件系统 sandbox。Conversation 的 `homeProjectId` 只定义默认归档与上下文锚点；实际读取、写入和执行由每个 run 的 Working Set、Mutation Targets、Capabilities、Approval 与 Sandbox 决定。
+
+## 3. 核心工作流
+
+1. 用户在 Workspace 中创建或打开 Project 与 Design File，并在 Page 的 Frame/Artboard 和 Layers 上直接编辑。
+2. 用户通过选区命令、命令面板或 Agent 面板描述目标；Conversation 保留 `homeProjectId`，但可以为本次 run 显式引用其他 Project 或目录。
+3. 主机为 run 固定 Working Set、Mutation Targets 与 Capabilities。三者分别表达可读上下文、计划写目标和策略允许的动作，互不隐式授予。
+4. Agent 读取经授权的最小上下文并返回结构化计划与设计事务；Tool Runtime 执行 Trust、Capability、Approval 与 Sandbox 检查。
+5. OpenDesign EditorRuntime 按每个 Design File 的 `baseRevision` 预演或应用事务，并向 UI 返回变更集、冲突、诊断和渲染状态。
+6. 用户检查单目标或多目标结果，继续编辑、处理冲突、接受替代方案或通过各 Design File 的统一历史撤销。
+
+典型 UI 工作包括从需求生成首版、重排已有界面、建立 token、提取组件、检查一致性和生成交付说明。通用设计工作包括构图、文字层级、矢量编辑、资源替换、多尺寸变体和导出。
+
+## 4. 产品范围
+
+### 4.1 首要范围
+
+- 无限或大范围 Web 画布、页面与多画板编辑。
+- 选择、变换、对齐、布局、文本、矢量、图片、样式、组件和资源管理。
+- UI 设计系统能力，包括 token、变体、响应式约束和可访问性检查。
+- 上下文感知 Agent、可组合 skills、工具调用、方案预览和可撤销应用。
+- 双向 MCP：连接外部数据与工具，以及向外部 Agent 暴露受控设计能力。
+- 本地文档、导入导出和可恢复的编辑历史。
+
+完整的专业设计能力范围、当前实现状态与后续协议门禁见 [专业设计能力基线](design-capability-baseline.md)。该基线用于避免按反馈逐项追加字段；分阶段交付不改变完整产品边界。
+
+### 4.2 暂非目标
+
+- 在第一阶段替代完整的视频、3D、CAD 或专业排版软件。
+- 让模型直接拥有不受限制的 shell、网络、文件系统或引擎内存访问。
+- 以特定模型供应商、特定 MCP 实现或 OpenPencil 私有对象作为公共产品协议。
+- 用聊天记录充当设计文档的唯一事实来源。
+
+### 4.3 资源层级
+
+目标产品层级固定为：
+
+```text
+Workspace
+└── Project
+    └── Design File
+        └── Page
+            └── Frame / Artboard
+                └── Layers
+```
+
+Workspace 聚合项目、会话入口、策略和连接配置，但不授权整个磁盘。Project 是组织、检索和默认上下文单元，不是 sandbox；它可以没有目录，也可以关联多个经批准的 attached roots。Design File 是持久化、revision 和冲突检测的基本文档单元，并包含一个或多个 Page。Frame/Artboard 是 Page 内的通用容器，Layers 是其下的节点树；这些名称不把内核限制为 UI 设计。
+
+每层使用不依赖绝对路径的稳定 ID。Main 把用户选定路径映射为资源 ID 或不透明句柄；移动或重命名文件不应改变 Design File 身份。一个 Design File 只有一个权威 `EditorRuntime` 状态和单调 revision。
+
+## 5. 系统上下文
+
+```text
+用户
+  │
+  ▼
+Electron Renderer ── Web 画布、工作台、Project / Conversation / Agent UI
+  │  仅类型化 preload API
+  ▼
+Electron Main ───── 路径/句柄、凭据、策略/审批、工具执行代理、进程监督
+  ├──────────────► TypeScript Agent utilityProcess
+  │                      ├──► 模型提供商
+  │                      ├──► Skills（不受信任的说明与资源）
+  │                      └──► 外部 MCP Servers
+  └──────────────► Tool Runtime ─► 受限 worker / sandbox（按能力）
+
+Electron Renderer
+  ├──────────────► OpenDesign EditorRuntime（每个 Design File 的权威状态）
+  │                  └──► Pages / 节点 / 事务 / revision / history / editor state
+  └──────────────► Leafer Engine Adapter
+                     └──► 当前 revision 场景投影 / viewport / hit test / direct manipulation
+
+获准的外部 MCP Clients ─► OpenDesign MCP Server ─► 同一 Tool Runtime / 事务入口
+```
+
+Renderer 不直接接触 Node.js、Electron、模型密钥或引擎私有 API。Main 拥有路径解析、root/handle 登记、凭据、Capability 解析、Approval 绑定和工具执行代理；实际重负载可以在受限 worker 中执行，业务推理和长时 Agent 工作不进入主进程事件循环。Agent、skills 和 MCP 只接收受限结果或不透明句柄，不获得原始凭据或任意路径能力。
+
+## 6. 逻辑组件
+
+| 组件               | 职责                                                      | 明确不负责                        |
+| ------------------ | --------------------------------------------------------- | --------------------------------- |
+| Desktop Shell      | 窗口、菜单、生命周期、路径/句柄、凭据、权限与安全 IPC     | 模型推理、具体设计语义            |
+| Renderer Workbench | 面板、命令、画布交互、可视化状态                          | 任意本地文件和密钥访问            |
+| Resource Registry  | Workspace/Project/Design File 身份、attached roots        | 把 Project 当作授权 sandbox       |
+| Design Contracts   | 通用节点、命令、事务、快照、诊断和版本                    | 具体渲染后端私有结构              |
+| Editor Runtime     | 权威文档、事务、revision、history 与 editor session state | 产品 UI、模型供应商逻辑、画布渲染 |
+| Leafer Adapter     | 场景投影、绘制、viewport、命中、选择和直接操作            | 持久化事实、history、Agent        |
+| Agent Runtime      | Conversation/run、上下文组装、计划、工具循环和恢复        | Electron 主进程特权、裸 fs/Bash   |
+| Tool Runtime       | 工具注册、schema、Capability、Approval、审计与派发        | 自动扩大 skill 或 MCP 权限        |
+| MCP Gateway        | 客户端和服务端传输、能力映射、身份与会话                  | 绕过 Tool Runtime 或事务入口      |
+| Persistence        | 原子保存、恢复、版本迁移、会话日志和本地索引              | 把聊天文本当作设计状态            |
+
+这些名称描述目标边界，不保证相应目录当前已完整实现。仓库中的包结构可以逐步承载这些职责，但应保持依赖方向从产品层指向契约层，而不是反向引用桌面实现。
+
+## 7. Electron 进程模型
+
+### 7.1 Renderer
+
+Renderer 开启上下文隔离并关闭 Node.js 集成。它通过 preload 暴露的窄接口请求文件、引擎和 Agent 操作；接口使用明确的请求与响应类型，禁止暴露原始 `ipcRenderer`、任意通道名或通用 `execute` 方法。
+
+### 7.2 Main 与 Preload
+
+Main 负责可信调度和系统能力，所有入口校验来源、参数、资源身份、权限与取消信号。Main 拥有路径选择与规范化、符号链接和路径穿越检查、root/handle 映射、操作系统凭据、安全策略、审批绑定和工具执行代理；每次执行都重新确认句柄有效且目标仍在授权边界内。Preload 只完成能力桥接，不持有产品业务状态，也不把路径、凭据、事件对象或 Electron 原生对象传入页面。
+
+### 7.3 Agent utilityProcess
+
+Agent Runtime 使用 TypeScript 并运行于 Electron `utilityProcess`。当前 `AgentRequest 3.2` 的 `run.start` 包含 `sessionId`（承载产品 `conversationId`）、`runId`、prompt、model selection、可选附件、单个 `documentId`、revision 与选区；`homeProjectId` 仍由 Main-owned Conversation descriptor 和 Global Task 目标校验承载。目标协议还需要加入 Working Set、Mutation Targets、能力快照、审批和多目标结果，这些扩展需要协议升级和存量会话迁移。
+
+主进程负责启动、健康检查、限流、取消和异常重启。utilityProcess 默认不继承渲染页面权限，也不直接访问引擎、文件系统、shell 或凭据；所有工具执行都通过主机侧 Tool Runtime 进行策略判断和代理。详细决策见 [ADR-0002](adr/0002-agent-utility-process.md) 与 [ADR-0006](adr/0006-project-conversation-agent-scope.md)。
+
+## 8. 设计引擎边界
+
+OpenDesign 自己拥有文档模型与 `EditorRuntime`；`DesignDocument`、`DesignTransaction`、revision、diff、history、undo/redo 和持久化不委托给第三方引擎。Renderer 中的 `@opendesign/leafer-engine` 把活动 Page 的当前 revision 投影成 Leafer 场景，并隔离所有 Leafer 类型和 API。Leafer 负责渲染、DPR、资源生命周期、viewport 机制、坐标转换、命中测试、hover、选择器、框选、多选、变换控制框和文本内编辑。固定依赖记录在 `engine-baseline.json` 中，规范决策见 [ADR-0009](adr/0009-leafer-rendering-and-interaction-engine.md)。
+
+Leafer 场景不是第二份可保存状态。手势期间 Leafer 可以临时改变投影以保证逐帧反馈；手势结束时，适配器只返回稳定节点 ID 和候选 `DesignOperation[]`。Renderer 使用当前 `documentId` 与 `baseRevision` 提交一条事务：成功后从新 revision 同步，冲突、取消或失败则从权威快照恢复。Agent、MCP、Main 和 utility process 永远不获得 Leafer 对象或私有 JSON。
+
+`DesignDocument 1.1.0` 已把纯色、线性/径向/角度渐变、图片 Paint、多色标、投影、内阴影、内外光晕、图层/背景模糊、灰度、混合模式、蒙版与高级描边定义为 OpenDesign 公共语义。属性检查器与 Agent 共用这些字段，Leafer adapter 只负责投影。图片使用事务化 `DesignAsset`；`put_asset` 与 image node 可以在同一 revision 中应用和撤销，被节点或 image paint 引用的 asset 不得删除。规范决策见 [ADR-0010](adr/0010-open-design-appearance-image-and-reference-semantics.md)。
+
+OpenDesign 设计内核的目标能力族包括：
+
+- 生命周期：创建、打开、关闭、保存、导入、导出和恢复文档。
+- 查询：页面、节点、选区、资源、样式、能力和轻量快照。
+- 事务：创建、更新、移动、删除、批量变更、预演、提交和撤销。
+- 视图：Leafer 实现命中测试、缩放、视口、覆盖层和渲染失效；OpenDesign 只持久化产品需要的 session state，并通过适配器同步。
+- 事件：文档变化、选区变化、历史变化、资源状态、诊断和崩溃恢复。
+
+这些是跨 Contracts、EditorRuntime、Main host 和专业 service 的产品能力，不是 `@opendesign/leafer-engine` 单包接口清单；当前尚未实现的导入导出、组件、布局等能力必须通过 capability manifest 明确返回 `unavailable` 或 `degraded`。
+
+公共命令使用稳定 ID、预期文档版本和幂等/冲突语义。Design File 是 revision 与提交冲突的边界：不同文件可以并行；同一文件的权威 runtime 在短提交区间内串行处理，并对过期 `baseRevision` 返回结构化 `conflict`，不得静默覆盖。引擎缺少某项能力时返回 `unsupported`，不允许调用者猜测私有 API。详细决策见 [ADR-0003](adr/0003-design-engine-adapter.md) 与 [ADR-0006](adr/0006-project-conversation-agent-scope.md)。
+
+## 9. 项目、会话与内置设计 Agent
+
+OpenDesign 的主产品路径是应用内部的垂直设计 Agent，而不是等待外部 Agent 通过 MCP 驱动。用户在工作台内选择模型提供商并描述目标；内置 Agent 理解经授权的设计文件、选区、设计系统、视觉结果和会话历史，通过 typed design tools 生成、检查和修改结构化设计。多模型 provider adapter 是产品基础能力，不能把模型选择或核心设计循环外包给外部 MCP 客户端。
+
+Agent 参考 Pi/OpenCode 的工程思路：保持核心循环小而透明，以消息、工具、事件和持久会话为基础，通过 provider adapter、skills 和 MCP Client 扩展。这里的“参考”表示借鉴架构原则，不表示复制代码、品牌、协议或许可证未确认的实现。
+
+### 当前模型 Provider 边界
+
+桌面设置页实现版本化 `ModelProviderCatalog v1`。每个 Provider profile 分别保存稳定 ID、名称、启用状态、API 格式、鉴权方式、Base URL 和模型能力列表；当前 API 格式为 OpenAI Responses、OpenAI Chat Completions 与 Anthropic Messages。API Key 按 `providerId` 由 Electron `safeStorage` 加密后存入 Main-only `WorkspaceStore`，Renderer 只能读取 `hasApiKey`，不会收到明文或密文。
+
+Agent composer 在每个 Conversation 中选择 `Provider/Model` 和模型支持的 reasoning effort。`AgentRequest 3.2` 把选择和可选的内容寻址附件显式放入 `run.start`，run journal 保存选择与附件元数据；Main 只解析并执行该选择，不用隐藏全局值覆盖。一条消息最多包含 6 个附件，单个不超过 16 MB、合计不超过 32 MB。Main 按真实内容自动识别图片和受支持文档，不要求用户预先选择类型；图片使用 `image_<sha256>`，文档使用绑定 MIME 的 `file_<sha256>`。PDF/DOCX/UTF-8 文本文档在 Main 中提取为最多 200,000 字符的只读参考上下文，DOCX 先经过条目数、展开大小、压缩比、加密和路径检查。只有包含图片的请求才要求模型声明 `imageInput`；纯文档请求可以发送给文本模型。文件选择器、魔数/大小校验、SHA-256 存储和完整性复验都在 Main 中完成，模型 bridge 不接受 utility process 提交 inline base64 或任意路径。`ParentModelGateway` 通过内部、受校验的 model bridge 把可序列化请求交给 Main；Main 在发起网络请求时才解密对应 Provider 凭据、解析获准附件 ID，把图片转成原生多模态 block、把文档转成带不可信边界标记的 text block，再通过固定 adapter 适配三种协议。取消通过关联 `requestId` 的 `AbortController` 传递。该链路不授予 Agent 原始凭据、任意网络入口或文件系统能力。当前四个内置设计/图片工具只操作 Main 绑定到 run 的活动 Design File 或当前 run 明示引用，并通过受校验的事务/附件桥执行；每次 run 的完整外发数据预览、Main approval bridge 和完整工具审计策略链仍未实现。详细决策见 [ADR-0007](adr/0007-main-hosted-model-provider.md) 与 [ADR-0008](adr/0008-multi-provider-model-catalog.md)。
+
+Agent composer 还支持粘贴和拖入图片/文件。模型可按需调用 `opendesign_read_image` 读取当前 run 已附加的图片，或用户在当前 prompt 中精确明示的绝对路径、`file:` URL 和 HTTP(S) 图片 URL；Main 只做 source 授权、受限读取、内容寻址和完整性校验，识别由模型完成。tool result 内保存 attachment metadata，下一轮由 Model Gateway 解析成真实多模态图片块。`opendesign_place_image` 可把同一 attachment 以受信任的 asset + image node 原子事务嵌入画布。远程读取不携带 Cookie 或 Provider 凭据，并限制协议、重定向、超时与大小。通用网页文本读取和隔离截图仍是后续 `fetch_reference` / `capture_reference` 能力，不把仅获取 HTML 描述为已经看见页面视觉。
+
+### 9.1 Conversation 与 `homeProjectId`
+
+Conversation 是持久会话。目标模型为每个 Conversation 保存 `conversationId` 和创建时确定的 `homeProjectId`；后者只提供默认浏览位置、相对引用起点、策略提示和 UI 归档位置，不构成 sandbox 或文件权限。Conversation 后续可以引用其他 Project，且不改变 `homeProjectId`，也不把外部目录自动附加到 home Project。
+
+每个 run 保存其实际作用域和权限快照。Project 被移动或归档后，会话审计记录仍应有效；旧会话迁移到默认 Project 时，不得把历史路径自动转成 attached root 或持久授权。
+
+### 9.2 Working Set、Mutation Targets 与 Capabilities
+
+目标运行模型明确分离三类集合：
+
+| 集合             | 回答的问题           | 典型内容                                             | 不代表什么           |
+| ---------------- | -------------------- | ---------------------------------------------------- | -------------------- |
+| Working Set      | 本次推理可以看到什么 | 固定 revision 的文件、Page、节点、外部文件和检索结果 | 不授予写权限         |
+| Mutation Targets | 本次计划要改变什么   | Design File/节点范围、输出文件、预期 revision        | 不代表调用已经获准   |
+| Capabilities     | 主体最多能请求什么   | 主体、资源选择器、操作、有效期、配额和来源           | 不替代审批或执行隔离 |
+
+一个写调用必须同时满足：资源已列入 Mutation Targets、主体持有匹配 Capability、所需 Approval 已完成，并且执行符合 Sandbox 约束。三类集合不得从 `homeProjectId`、当前选区或彼此隐式扩大。上下文可读不等于可写，多目标计划也不等于跨文件原子事务。
+
+### 9.3 Attached roots 与 per-run references
+
+Project 可以保存零个或多个经用户或受管策略批准的 attached roots。Main 为每个 root 登记稳定 ID、规范化边界、允许操作、来源、有效期和撤销状态；Agent 只获得资源 ID 或不透明句柄，不获得可任意拼接的绝对路径。Attached root 建立持久关联，但每次工具调用仍需匹配 Capability。
+
+用户可以通过文件选择器、拖放、打开文件或明确命令创建 per-run reference，把未附加目录中的文件或其他 Project 的资源只加入当前 run。Run 结束、取消或权限撤销后，临时句柄失效；该引用不改变 Project 归属，也不会自动成为 attached root。
+
+### 9.4 跨项目多目标与并发
+
+一次 run 可以跨 Project 指定多个 Mutation Targets。每个目标单独携带 Project、Design File、`baseRevision`、能力和审批，并通过各自的 `DesignTransaction` 提交。当前目标架构不承诺跨 Design File 原子提交；发生部分成功时，UI 必须逐目标显示结果、冲突和可用的撤销或补偿动作。
+
+多个 Conversation 可以并发运行。只读操作固定到 revision 后可并行，不同 Design File 可以独立提交；同一 Design File 的权威 runtime 按 `baseRevision` 做乐观并发控制。过期事务返回 `conflict`，Agent 重新读取、重新预演，并在作用域和审批仍有效时重试；运行时不得静默覆盖、自动重放语义不明的命令、建立会话私有事实副本或以长时间项目级锁掩盖冲突。
+
+### 9.5 工具优先级与回合
+
+一个典型回合包含：解析用户目标、固定三类作用域、构建最小上下文、选择工具、完成策略与审批、执行、读取结构和渲染结果、视觉复核、形成后续动作并输出可审计事件。上下文按需拉取，优先传递结构化摘要和相关节点，避免默认上传整个设计文件或无界截图。
+
+内置 Agent 优先使用 typed design tools。默认工具集不暴露裸 `fs`、通用 Bash/shell 或任意命令执行；确需文件、进程或网络能力时，只能调用 Main 托管的窄工具。设计写操作生成 `DesignTransaction`，包含 Design File、基准 revision、作用域、命令列表和可读摘要；高影响事务先预演并返回差异，应用后进入同一 Design File 的统一撤销历史。模型输出永远不等于执行授权。
+
+## 10. 双向 MCP
+
+MCP 是内置设计 Agent 的互操作和生态边界，优先级低于应用内完整设计闭环。MCP Server 不替代内置模型接入，外部客户端也不能获得比内置 Agent 更宽的设计权限或绕过同一事务历史。
+
+### 10.1 OpenDesign 作为 MCP 客户端
+
+Agent 可以连接用户配置的 MCP Server，以读取设计素材、代码上下文、品牌数据或业务系统。每个连接独立声明 transport、身份、可用工具、资源和提示词，Tool Runtime 在调用前执行 schema 校验、Capability 检查、Approval、Sandbox、超时和输出大小限制。外部 Server 返回的路径或资源标识不自动成为 attached root、per-run reference 或 Mutation Target。
+
+### 10.2 OpenDesign 作为 MCP 服务端
+
+外部获准客户端可以通过稳定 Workspace、Project、Design File、Page、节点或 root handle 查询摘要、读取选区、请求导出或提交受限设计事务。设计写操作进入与内置 Agent 相同的 Tool Runtime、`DesignTransaction` 校验、权威 `EditorRuntime`、revision 冲突和审计链。服务端不得默认暴露模型密钥、任意文件读取、原始引擎句柄、未保存的全量文档或无提示写权限。
+
+### 10.3 共同策略
+
+两个方向共享 Capability 标识、风险等级、Approval 记录、来源标签、审计事件、撤销信息和断开机制。连接身份与资源身份分离；切换 Project、Workspace 或用户，以及句柄、目标或 revision 改变后，必须重新计算授权范围。MCP 工具不得接受模型可控的任意本地 `filePath` 并直接加载、创建或保存文件；兼容适配器只能在 Main 的可信边界内把用户明确选择的文件转换为受限句柄。
+
+## 11. Trust、Capability、Approval 与 Sandbox
+
+Agent、skills、MCP 和所有外部资源调用依次经过四层控制：
+
+1. **Trust** 对代码、调用主体和数据来源分类。内置控制代码可以比第三方扩展更可信，但模型输出、文档文本、网页和 MCP 返回值始终是不可信输入。Trust 影响默认策略，不直接授予动作。
+2. **Capability** 是 Main 可验证的最小权限，绑定主体、资源选择器、操作、有效期和配额。Project 归属、Working Set、连接成功或 skill 声明都不能自行生成 Capability。
+3. **Approval** 把用户或受管策略的决定绑定到具体动作、目标、revision、影响摘要和不可变调用参数。目标或风险变化后重新评估；Approval 不能绕过被禁止或不存在的 Capability。
+4. **Sandbox** 限制获准代码或工具的文件、网络、进程、时间、内存和输出。Sandbox 是执行隔离，不替代前三层授权判断。
+
+四层在同一策略链中协作，但不得合并语义。每个审计事件关联 Workspace、Conversation、run、主体、工具、Working Set 摘要、Mutation Target、Project、Design File、base/current revision、审批和结果。
+
+## 12. Skills 安全模型
+
+Skill 是包含说明、参考资料、脚本或资产的扩展包，应默认视为不受信任内容。运行时先解析清单并显示来源、版本、完整性和请求能力；只有用户或受管策略可以授予权限。
+
+加载说明不等于执行附带脚本。脚本应在受限环境中运行，并受工作目录、文件路径、网络域名、命令、时间、输出和资源配额约束。Skill 内容、MCP 返回值、设计文档文本和网页内容都可能包含提示注入，不能改变系统策略或提升权限。
+
+详细的开放源码和扩展边界见 [ADR-0004](adr/0004-agent-open-source-boundaries.md)。项目自带 UI 设计工作流见 `../.agents/skills/ui-design/SKILL.md`。
+
+## 13. 历史引擎迁移记录
+
+早期 OpenPencil 原型验证过单 Design File、多 Page 和完整编辑器嵌入，但同时引入第二份页面、图层、历史和任意 `filePath` 工具边界。OpenDesign 保留“单文件多 Page”的产品结论，不采用其文档状态、运行时或路径授权方式。
+
+OpenPencil vendor/runtime、旧 Canvas2D 产品包、手写 React 画布交互及其构建/发行资源均已移除。缺失的专业能力继续通过 OpenDesign 公共语义、LeaferJS 和可替换成熟服务实现，不能以能力尚未完成为理由恢复 fallback 或双写。历史原因见 [ADR-0005](adr/0005-opendesign-owned-editor-runtime.md)、[ADR-0006](adr/0006-project-conversation-agent-scope.md)、[ADR-0009](adr/0009-leafer-rendering-and-interaction-engine.md) 与 [ADR-0011](adr/0011-professional-design-capability-architecture.md)。
+
+## 14. 数据、隐私与恢复
+
+- 本地文档采用原子写入，保留可恢复快照或操作日志，并为格式升级提供显式迁移。
+- 当前每个 Provider 的 API Key 由 Main 使用 Electron `safeStorage` 分别加密；Renderer 与 Agent 只看到脱敏 Catalog 或 canonical model events。密钥不写入 Project、日志、提示词或 Renderer 存储。
+- 用户明确选择的 Agent 附件默认保存在本机 `~/.opendesign/attachments`；只有在发送包含该附件的 Conversation 消息时，Main 才把对应图片内容或本地提取的文档文本交给当前选择的外部模型。图片要求模型声明 `imageInput`，文档不授予原文件或目录访问。项目正文、Utility journal 和 model bridge 不保存原始路径或 inline base64。
+- 发送给外部模型或 MCP 的每段数据都带来源、Working Set 与资源作用域，并受 provider 配置、Capability 和 Approval 约束。
+- 日志默认去除设计正文、提示词、令牌和个人数据。诊断导出应允许用户预览。
+- Agent 与 MCP 写操作逐目标记录主体、Conversation/run、工具、参数摘要、Project、Design File、base/current revision、结果和撤销句柄。
+
+## 15. 质量属性
+
+### 响应性
+
+指针、键盘、缩放和选区更新不得等待 Agent 或远程服务。长任务异步执行、可取消，并以渐进状态更新 UI。
+
+### 可恢复性
+
+Renderer、Agent 或引擎子系统异常后，主进程应隔离故障并尽可能恢复最近的持久状态。单个 Design File 的事务要么完整提交，要么不产生可见修改；跨文件多目标计划可能部分完成，必须保留逐目标状态、冲突与撤销或补偿信息。
+
+### 可替换性
+
+模型 provider、MCP transport 和低层渲染后端都通过契约接入。升级基线必须通过兼容性与视觉回归验证。替换渲染后端不得改变 OpenDesign 文档、事务或 editor state 语义。
+
+### 可测试性
+
+契约使用确定性 fixtures 和 contract tests；引擎适配器验证快照、事务与事件；Agent 使用录制或伪造工具响应测试取消、重试、三类作用域、四层安全和同文件 revision 冲突；跨项目多目标覆盖部分失败与恢复；关键 UI 进行键盘、可访问性与视觉验证。
+
+## 16. 演进顺序
+
+当前演进顺序由 [`roadmap.md`](roadmap.md) 维护：先稳定 `1.1.0`、Leafer 和图片/引用链，再建立 capability manifest 与专业基础协议，随后按精确矢量 → 布局/文字/设计系统 → 导入导出/交付 → 完整 Agent 权限与 MCP 的依赖顺序推进。
+
+阶段顺序不承诺发布日期，但每一阶段必须保持唯一事实状态、可运行、可验证、可撤销，并且不得恢复旧引擎作为过渡入口。

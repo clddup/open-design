@@ -1,0 +1,1099 @@
+import { mkdirSync } from "node:fs";
+import { mkdir, open, readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
+export type JournalEventType =
+  | "session.created"
+  | "run.state"
+  | "message.user"
+  | "message.assistant"
+  | "tool.requested"
+  | "tool.progress"
+  | "tool.completed"
+  | "tool.failed"
+  | "approval.requested"
+  | "approval.resolved"
+  | "design.revision"
+  | "context.compacted";
+
+export interface JournalEvent<T = unknown> {
+  eventId: string;
+  sessionId: string;
+  runId?: string;
+  sequence: number;
+  type: JournalEventType;
+  createdAt: string;
+  payload: T;
+}
+
+export interface AssistantTimelineBlock {
+  blockId: string;
+  type: "text" | "reasoning_summary";
+  text?: string;
+  status?: "streaming" | "completed" | "omitted";
+  summary?: string;
+}
+
+export type SessionAttachment =
+  | {
+      attachmentId: string;
+      name: string;
+      mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+      byteSize: number;
+    }
+  | {
+      attachmentId: string;
+      name: string;
+      mimeType:
+        | "application/pdf"
+        | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        | "text/plain"
+        | "text/markdown"
+        | "text/csv"
+        | "text/html"
+        | "application/json"
+        | "application/yaml";
+      byteSize: number;
+    };
+
+interface TimelineBase {
+  itemId: string;
+  sessionId: string;
+  runId?: string;
+  sequence: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SessionTimelineItem =
+  | (TimelineBase & {
+      type: "user.message";
+      messageId: string;
+      content: string;
+      attachments?: SessionAttachment[];
+      documentId: string;
+      revision: number;
+      scope: SelectionScope;
+    })
+  | (TimelineBase & {
+      type: "assistant.message";
+      messageId: string;
+      blocks: AssistantTimelineBlock[];
+    })
+  | (TimelineBase & {
+      type: "tool";
+      toolCallId: string;
+      toolName: string;
+      input: unknown;
+      risk: ToolRisk;
+      status: "requested" | "running" | "completed" | "failed";
+      progress?: number;
+      progressMessage?: string;
+      result?: unknown;
+      error?: { code: string; message: string };
+      revision?: number;
+      transactionId?: string;
+    })
+  | (TimelineBase & {
+      type: "approval";
+      approvalId: string;
+      toolCallId: string;
+      title: string;
+      summary: string;
+      status: "requested" | "resolved";
+      decision?: ApprovalDecision;
+      resolvedAt?: string;
+    })
+  | (TimelineBase & {
+      type: "design.revision";
+      documentId: string;
+      previousRevision: number;
+      revision: number;
+      transactionId: string;
+      toolCallId?: string;
+    })
+  | (TimelineBase & {
+      type: "run";
+      runId: string;
+      status: "started" | "completed" | "cancelled" | "error" | "budget";
+      startedAt: string;
+      finishedAt?: string;
+      stopReason?: RunStopReason;
+      modelSelection?: SessionModelSelection;
+    });
+
+export type SelectionScope =
+  | {
+      kind: "selection";
+      selectedNodeIds: string[];
+      primaryNodeId?: string;
+      pageId?: string;
+    }
+  | {
+      kind: "page";
+      selectedNodeIds: string[];
+      primaryNodeId?: string;
+      pageId: string;
+    }
+  | {
+      kind: "document";
+      selectedNodeIds: string[];
+      primaryNodeId?: string;
+      pageId?: string;
+    };
+
+export type ToolRisk = "read" | "design_write" | "external" | "destructive";
+export type ApprovalDecision = "allow_once" | "allow_session" | "deny";
+export type RunStopReason = "complete" | "cancelled" | "error" | "budget";
+export type ModelReasoningEffort =
+  "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export interface SessionModelSelection {
+  providerId: string;
+  modelId: string;
+  reasoningEffort?: ModelReasoningEffort;
+}
+
+export interface SessionProjection {
+  sessionId: string;
+  lastSequence: number;
+  activeRunId?: string;
+  latestRevision?: number;
+  messageCount: number;
+  toolCallCount: number;
+  compactedRanges: Array<{ fromSequence: number; toSequence: number }>;
+}
+
+export interface SessionStore {
+  append<T>(event: JournalEvent<T>): Promise<void>;
+  appendNext?<T>(
+    sessionId: string,
+    createEvent: (sequence: number) => JournalEvent<T>,
+  ): Promise<JournalEvent<T>>;
+  read(sessionId: string): Promise<JournalEvent[]>;
+  readTimeline(sessionId: string): Promise<SessionTimelineItem[]>;
+  project(sessionId: string): Promise<SessionProjection>;
+}
+
+export class SqliteSessionStore implements SessionStore {
+  readonly #database: DatabaseSync;
+
+  constructor(path: string) {
+    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+    this.#database = new DatabaseSync(path);
+    this.#database.exec(`
+      PRAGMA busy_timeout = 5000;
+      PRAGMA journal_mode = WAL;
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE IF NOT EXISTS journal_events (
+        event_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        run_id TEXT,
+        sequence INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        UNIQUE(session_id, sequence)
+      );
+      CREATE INDEX IF NOT EXISTS journal_events_session_sequence
+        ON journal_events(session_id, sequence);
+    `);
+  }
+
+  append<T>(event: JournalEvent<T>): Promise<void> {
+    assertJournalEvent(event);
+    this.#insert(event);
+    return Promise.resolve();
+  }
+
+  appendNext<T>(
+    sessionId: string,
+    createEvent: (sequence: number) => JournalEvent<T>,
+  ): Promise<JournalEvent<T>> {
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.#database
+        .prepare(
+          `
+          SELECT COALESCE(MAX(sequence), 0) + 1 AS next_sequence
+          FROM journal_events
+          WHERE session_id = ?
+        `,
+        )
+        .get(sessionId) as { next_sequence: number };
+      const event = createEvent(row.next_sequence);
+      assertAllocatedEvent(event, sessionId, row.next_sequence);
+      this.#insert(event);
+      this.#database.exec("COMMIT");
+      return Promise.resolve(event);
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original allocation or insertion error.
+      }
+      throw error;
+    }
+  }
+
+  read(sessionId: string): Promise<JournalEvent[]> {
+    const rows = this.#database
+      .prepare(
+        `
+        SELECT event_id, session_id, run_id, sequence, type, created_at, payload_json
+        FROM journal_events
+        WHERE session_id = ?
+        ORDER BY sequence ASC, event_id ASC
+      `,
+      )
+      .all(sessionId) as Array<{
+      event_id: string;
+      session_id: string;
+      run_id: string | null;
+      sequence: number;
+      type: string;
+      created_at: string;
+      payload_json: string;
+    }>;
+
+    return Promise.resolve(
+      rows.flatMap((row) => {
+        try {
+          const candidate = {
+            eventId: row.event_id,
+            sessionId: row.session_id,
+            ...(row.run_id ? { runId: row.run_id } : {}),
+            sequence: row.sequence,
+            type: row.type,
+            createdAt: row.created_at,
+            payload: JSON.parse(row.payload_json) as unknown,
+          };
+          return isJournalEvent(candidate) ? [candidate] : [];
+        } catch {
+          return [];
+        }
+      }),
+    );
+  }
+
+  async readTimeline(sessionId: string): Promise<SessionTimelineItem[]> {
+    return projectTimeline(sessionId, await this.read(sessionId));
+  }
+
+  async project(sessionId: string): Promise<SessionProjection> {
+    return projectEvents(sessionId, await this.read(sessionId));
+  }
+
+  close(): void {
+    this.#database.close();
+  }
+
+  #insert<T>(event: JournalEvent<T>): void {
+    this.#database
+      .prepare(
+        `
+        INSERT INTO journal_events (
+          event_id, session_id, run_id, sequence, type, created_at, payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      )
+      .run(
+        event.eventId,
+        event.sessionId,
+        event.runId ?? null,
+        event.sequence,
+        event.type,
+        event.createdAt,
+        JSON.stringify(event.payload),
+      );
+  }
+}
+
+export class JsonlSessionStore implements SessionStore {
+  private readonly path: string;
+
+  constructor(path: string) {
+    this.path = resolve(path);
+  }
+
+  append<T>(event: JournalEvent<T>): Promise<void> {
+    assertJournalEvent(event);
+    return enqueueJsonl(this.path, async () => {
+      await appendJsonlEvent(this.path, event);
+    });
+  }
+
+  appendNext<T>(
+    sessionId: string,
+    createEvent: (sequence: number) => JournalEvent<T>,
+  ): Promise<JournalEvent<T>> {
+    return enqueueJsonl(this.path, async () => {
+      const events = await readJsonlEvents(this.path, sessionId);
+      const nextSequence =
+        events.reduce(
+          (maximum, event) => Math.max(maximum, event.sequence),
+          0,
+        ) + 1;
+      const event = createEvent(nextSequence);
+      assertAllocatedEvent(event, sessionId, nextSequence);
+      await appendJsonlEvent(this.path, event);
+      return event;
+    });
+  }
+
+  async read(sessionId: string): Promise<JournalEvent[]> {
+    await waitForJsonlAppends(this.path);
+    return readJsonlEvents(this.path, sessionId);
+  }
+
+  async readTimeline(sessionId: string): Promise<SessionTimelineItem[]> {
+    return projectTimeline(sessionId, await this.read(sessionId));
+  }
+
+  async project(sessionId: string): Promise<SessionProjection> {
+    return projectEvents(sessionId, await this.read(sessionId));
+  }
+}
+
+export function projectTimeline(
+  sessionId: string,
+  sourceEvents: JournalEvent[],
+): SessionTimelineItem[] {
+  const items = new Map<string, SessionTimelineItem>();
+  const events = sourceEvents
+    .filter((event) => event.sessionId === sessionId)
+    .sort(compareEvents);
+
+  for (const event of events) {
+    if (event.type === "run.state" && event.runId) {
+      const payload = event.payload as RunStatePayload;
+      const key = `run:${event.runId}`;
+      const current = items.get(key);
+      if (current?.type === "run") {
+        items.set(key, {
+          ...current,
+          status: payload.status,
+          updatedAt: event.createdAt,
+          ...(payload.finishedAt === undefined
+            ? {}
+            : { finishedAt: payload.finishedAt }),
+          ...(payload.stopReason === undefined
+            ? {}
+            : { stopReason: payload.stopReason }),
+          ...(payload.modelSelection === undefined
+            ? {}
+            : { modelSelection: payload.modelSelection }),
+        });
+      } else {
+        items.set(key, {
+          ...timelineBase(key, event),
+          type: "run",
+          runId: event.runId,
+          status: payload.status,
+          startedAt: payload.startedAt,
+          ...(payload.finishedAt === undefined
+            ? {}
+            : { finishedAt: payload.finishedAt }),
+          ...(payload.stopReason === undefined
+            ? {}
+            : { stopReason: payload.stopReason }),
+          ...(payload.modelSelection === undefined
+            ? {}
+            : { modelSelection: payload.modelSelection }),
+        });
+      }
+      continue;
+    }
+
+    if (event.type === "message.user" && event.runId) {
+      const payload = event.payload as UserMessagePayload;
+      const key = `message:${payload.messageId}`;
+      items.set(key, {
+        ...timelineBase(key, event),
+        type: "user.message",
+        runId: event.runId,
+        messageId: payload.messageId,
+        content: payload.content,
+        ...(payload.attachments === undefined
+          ? {}
+          : { attachments: payload.attachments }),
+        documentId: payload.documentId,
+        revision: payload.revision,
+        scope: payload.scope,
+      });
+      continue;
+    }
+
+    if (event.type === "message.assistant" && event.runId) {
+      const payload = event.payload as AssistantMessagePayload;
+      const key = `message:${payload.messageId}`;
+      const current = items.get(key);
+      items.set(key, {
+        ...(current?.type === "assistant.message"
+          ? { ...current, updatedAt: event.createdAt }
+          : timelineBase(key, event)),
+        type: "assistant.message",
+        runId: event.runId,
+        messageId: payload.messageId,
+        blocks: payload.blocks,
+      });
+      continue;
+    }
+
+    if (event.type === "tool.requested" && event.runId) {
+      const payload = event.payload as ToolRequestedPayload;
+      const key = `tool:${payload.toolCallId}`;
+      if (!items.has(key)) {
+        items.set(key, {
+          ...timelineBase(key, event),
+          type: "tool",
+          runId: event.runId,
+          toolCallId: payload.toolCallId,
+          toolName: payload.toolName,
+          input: payload.input,
+          risk: payload.risk,
+          status: "requested",
+        });
+      }
+      continue;
+    }
+
+    if (event.type === "tool.progress") {
+      const payload = event.payload as ToolProgressPayload;
+      const key = `tool:${payload.toolCallId}`;
+      const current = items.get(key);
+      if (current?.type === "tool") {
+        items.set(key, {
+          ...current,
+          status: "running",
+          progress: payload.progress,
+          progressMessage: payload.message,
+          updatedAt: event.createdAt,
+        });
+      }
+      continue;
+    }
+
+    if (event.type === "tool.completed") {
+      const payload = event.payload as ToolCompletedPayload;
+      const key = `tool:${payload.toolCallId}`;
+      const current = items.get(key);
+      if (current?.type === "tool") {
+        items.set(key, {
+          ...current,
+          status: "completed",
+          result: payload.result,
+          updatedAt: event.createdAt,
+          ...(payload.revision === undefined
+            ? {}
+            : { revision: payload.revision }),
+          ...(payload.transactionId === undefined
+            ? {}
+            : { transactionId: payload.transactionId }),
+        });
+      }
+      continue;
+    }
+
+    if (event.type === "tool.failed") {
+      const payload = event.payload as ToolFailedPayload;
+      const key = `tool:${payload.toolCallId}`;
+      const current = items.get(key);
+      if (current?.type === "tool") {
+        items.set(key, {
+          ...current,
+          status: "failed",
+          error: { code: payload.code, message: payload.message },
+          updatedAt: event.createdAt,
+        });
+      }
+      for (const [approvalKey, item] of items) {
+        if (
+          item.type === "approval" &&
+          item.toolCallId === payload.toolCallId &&
+          item.status === "requested"
+        ) {
+          items.set(approvalKey, {
+            ...item,
+            status: "resolved",
+            resolvedAt: event.createdAt,
+            updatedAt: event.createdAt,
+          });
+        }
+      }
+      continue;
+    }
+
+    if (event.type === "approval.requested" && event.runId) {
+      const payload = event.payload as ApprovalRequestedPayload;
+      const key = `approval:${payload.approvalId}`;
+      if (!items.has(key)) {
+        items.set(key, {
+          ...timelineBase(key, event),
+          type: "approval",
+          runId: event.runId,
+          approvalId: payload.approvalId,
+          toolCallId: payload.toolCallId,
+          title: payload.title,
+          summary: payload.summary,
+          status: "requested",
+        });
+      }
+      continue;
+    }
+
+    if (event.type === "approval.resolved") {
+      const payload = event.payload as ApprovalResolvedPayload;
+      const key = `approval:${payload.approvalId}`;
+      const current = items.get(key);
+      if (current?.type === "approval") {
+        items.set(key, {
+          ...current,
+          status: "resolved",
+          decision: payload.decision,
+          resolvedAt: payload.resolvedAt,
+          updatedAt: event.createdAt,
+        });
+      }
+      continue;
+    }
+
+    if (event.type === "design.revision" && event.runId) {
+      const payload = event.payload as DesignRevisionPayload;
+      const key = `revision:${payload.transactionId}`;
+      items.set(key, {
+        ...timelineBase(key, event),
+        type: "design.revision",
+        runId: event.runId,
+        documentId: payload.documentId,
+        previousRevision: payload.previousRevision,
+        revision: payload.revision,
+        transactionId: payload.transactionId,
+        ...(payload.toolCallId === undefined
+          ? {}
+          : { toolCallId: payload.toolCallId }),
+      });
+    }
+  }
+
+  return [...items.values()].sort(
+    (left, right) =>
+      left.sequence - right.sequence || left.itemId.localeCompare(right.itemId),
+  );
+}
+
+function projectEvents(
+  sessionId: string,
+  events: JournalEvent[],
+): SessionProjection {
+  const projection: SessionProjection = {
+    sessionId,
+    lastSequence: 0,
+    messageCount: 0,
+    toolCallCount: 0,
+    compactedRanges: [],
+  };
+  const messages = new Set<string>();
+  const toolCalls = new Set<string>();
+
+  for (const event of events.sort(compareEvents)) {
+    projection.lastSequence = Math.max(projection.lastSequence, event.sequence);
+    if (event.type === "run.state" && event.runId) {
+      const payload = event.payload as RunStatePayload;
+      if (payload.status === "started") projection.activeRunId = event.runId;
+      if (payload.status !== "started") delete projection.activeRunId;
+    }
+    if (event.type === "message.user" || event.type === "message.assistant") {
+      const payload = event.payload as { messageId: string; revision?: number };
+      messages.add(payload.messageId);
+      if (event.type === "message.user" && payload.revision !== undefined) {
+        projection.latestRevision = Math.max(
+          projection.latestRevision ?? 0,
+          payload.revision,
+        );
+      }
+    }
+    if (event.type === "tool.requested") {
+      const payload = event.payload as ToolRequestedPayload;
+      toolCalls.add(payload.toolCallId);
+    }
+    if (event.type === "design.revision") {
+      const payload = event.payload as DesignRevisionPayload;
+      projection.latestRevision = Math.max(
+        projection.latestRevision ?? 0,
+        payload.revision,
+      );
+    }
+    if (event.type === "context.compacted") {
+      const payload = event.payload as ContextCompactedPayload;
+      projection.compactedRanges.push({
+        fromSequence: payload.fromSequence,
+        toSequence: payload.toSequence,
+      });
+    }
+  }
+
+  projection.messageCount = messages.size;
+  projection.toolCallCount = toolCalls.size;
+  return projection;
+}
+
+function timelineBase(itemId: string, event: JournalEvent): TimelineBase {
+  return {
+    itemId,
+    sessionId: event.sessionId,
+    ...(event.runId === undefined ? {} : { runId: event.runId }),
+    sequence: event.sequence,
+    createdAt: event.createdAt,
+    updatedAt: event.createdAt,
+  };
+}
+
+function compareEvents(left: JournalEvent, right: JournalEvent): number {
+  return (
+    left.sequence - right.sequence ||
+    left.createdAt.localeCompare(right.createdAt) ||
+    left.eventId.localeCompare(right.eventId)
+  );
+}
+
+const jsonlAppendQueues = new Map<string, Promise<void>>();
+
+function enqueueJsonl<T>(
+  path: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = jsonlAppendQueues.get(path) ?? Promise.resolve();
+  const result = previous.then(operation);
+  const queued = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  jsonlAppendQueues.set(path, queued);
+  void queued.then(() => {
+    if (jsonlAppendQueues.get(path) === queued) jsonlAppendQueues.delete(path);
+  });
+  return result;
+}
+
+async function waitForJsonlAppends(path: string): Promise<void> {
+  await jsonlAppendQueues.get(path);
+}
+
+async function appendJsonlEvent<T>(
+  path: string,
+  event: JournalEvent<T>,
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const handle = await open(path, "a", 0o600);
+  try {
+    await handle.writeFile(`${JSON.stringify(event)}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function readJsonlEvents(
+  path: string,
+  sessionId: string,
+): Promise<JournalEvent[]> {
+  let content: string;
+  try {
+    content = await readFile(path, "utf8");
+  } catch (error) {
+    if (isMissingFile(error)) return [];
+    throw error;
+  }
+
+  return content
+    .split("\n")
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        const candidate: unknown = JSON.parse(line);
+        return isJournalEvent(candidate) && candidate.sessionId === sessionId
+          ? [candidate]
+          : [];
+      } catch {
+        return [];
+      }
+    })
+    .sort(compareEvents);
+}
+
+function assertAllocatedEvent<T>(
+  event: JournalEvent<T>,
+  sessionId: string,
+  sequence: number,
+): void {
+  assertJournalEvent(event);
+  if (event.sessionId !== sessionId || event.sequence !== sequence) {
+    throw new TypeError(
+      "Allocated journal event must use the requested session and sequence",
+    );
+  }
+}
+
+function assertJournalEvent(value: unknown): asserts value is JournalEvent {
+  if (!isJournalEvent(value)) throw new TypeError("Invalid journal event");
+}
+
+function isJournalEvent(value: unknown): value is JournalEvent {
+  if (!isRecord(value)) return false;
+  if (
+    !isNonEmptyString(value.eventId) ||
+    !isNonEmptyString(value.sessionId) ||
+    (value.runId !== undefined && !isNonEmptyString(value.runId)) ||
+    !Number.isInteger(value.sequence) ||
+    (value.sequence as number) < 1 ||
+    !isNonEmptyString(value.createdAt) ||
+    !isJournalEventType(value.type) ||
+    !isRecord(value.payload)
+  ) {
+    return false;
+  }
+
+  const payload = value.payload;
+  switch (value.type) {
+    case "session.created":
+      return Object.keys(payload).length === 0;
+    case "run.state":
+      return (
+        isNonEmptyString(value.runId) &&
+        isRunStatus(payload.status) &&
+        isNonEmptyString(payload.startedAt) &&
+        optionalString(payload.finishedAt) &&
+        (payload.stopReason === undefined ||
+          isRunStopReason(payload.stopReason)) &&
+        (payload.modelSelection === undefined ||
+          isModelSelection(payload.modelSelection))
+      );
+    case "message.user":
+      return (
+        isNonEmptyString(value.runId) &&
+        isNonEmptyString(payload.messageId) &&
+        isNonEmptyString(payload.content) &&
+        (payload.attachments === undefined ||
+          (Array.isArray(payload.attachments) &&
+            payload.attachments.length <= 6 &&
+            payload.attachments.every(isAttachment))) &&
+        isNonEmptyString(payload.documentId) &&
+        isRevision(payload.revision) &&
+        isSelectionScope(payload.scope)
+      );
+    case "message.assistant":
+      return (
+        isNonEmptyString(value.runId) &&
+        isNonEmptyString(payload.messageId) &&
+        Array.isArray(payload.blocks) &&
+        payload.blocks.every(isAssistantBlock)
+      );
+    case "tool.requested":
+      return (
+        isNonEmptyString(value.runId) &&
+        isNonEmptyString(payload.toolCallId) &&
+        isNonEmptyString(payload.toolName) &&
+        isToolRisk(payload.risk) &&
+        "input" in payload
+      );
+    case "tool.progress":
+      return (
+        isNonEmptyString(value.runId) &&
+        isNonEmptyString(payload.toolCallId) &&
+        typeof payload.message === "string" &&
+        typeof payload.progress === "number" &&
+        payload.progress >= 0 &&
+        payload.progress <= 1
+      );
+    case "tool.completed":
+      return (
+        isNonEmptyString(value.runId) &&
+        isNonEmptyString(payload.toolCallId) &&
+        "result" in payload &&
+        (payload.revision === undefined || isRevision(payload.revision)) &&
+        optionalString(payload.transactionId)
+      );
+    case "tool.failed":
+      return (
+        isNonEmptyString(value.runId) &&
+        isNonEmptyString(payload.toolCallId) &&
+        isNonEmptyString(payload.code) &&
+        isNonEmptyString(payload.message)
+      );
+    case "approval.requested":
+      return (
+        isNonEmptyString(value.runId) &&
+        isNonEmptyString(payload.approvalId) &&
+        isNonEmptyString(payload.toolCallId) &&
+        isNonEmptyString(payload.title) &&
+        typeof payload.summary === "string"
+      );
+    case "approval.resolved":
+      return (
+        isNonEmptyString(value.runId) &&
+        isNonEmptyString(payload.approvalId) &&
+        isNonEmptyString(payload.toolCallId) &&
+        isApprovalDecision(payload.decision) &&
+        isNonEmptyString(payload.resolvedAt)
+      );
+    case "design.revision":
+      return (
+        isNonEmptyString(value.runId) &&
+        isNonEmptyString(payload.documentId) &&
+        isRevision(payload.previousRevision) &&
+        isRevision(payload.revision) &&
+        isNonEmptyString(payload.transactionId) &&
+        optionalString(payload.toolCallId)
+      );
+    case "context.compacted":
+      return (
+        Number.isInteger(payload.fromSequence) &&
+        (payload.fromSequence as number) >= 1 &&
+        Number.isInteger(payload.toSequence) &&
+        (payload.toSequence as number) >= (payload.fromSequence as number) &&
+        optionalString(payload.summary)
+      );
+  }
+}
+
+function isSelectionScope(value: unknown): value is SelectionScope {
+  if (!isRecord(value) || !Array.isArray(value.selectedNodeIds)) return false;
+  if (
+    value.selectedNodeIds.length > 512 ||
+    !value.selectedNodeIds.every(isNonEmptyString) ||
+    new Set(value.selectedNodeIds).size !== value.selectedNodeIds.length
+  ) {
+    return false;
+  }
+  if (
+    (value.kind === "selection" && value.selectedNodeIds.length === 0) ||
+    (value.kind === "page" && !isNonEmptyString(value.pageId)) ||
+    (value.kind !== "selection" &&
+      value.kind !== "page" &&
+      value.kind !== "document") ||
+    !optionalString(value.pageId) ||
+    !optionalString(value.primaryNodeId)
+  ) {
+    return false;
+  }
+  const primaryNodeId = value.primaryNodeId;
+  return (
+    primaryNodeId === undefined ||
+    (typeof primaryNodeId === "string" &&
+      value.selectedNodeIds.includes(primaryNodeId))
+  );
+}
+
+function isAssistantBlock(value: unknown): value is AssistantTimelineBlock {
+  if (!isRecord(value) || !isNonEmptyString(value.blockId)) return false;
+  if (value.type === "text") return typeof value.text === "string";
+  return (
+    value.type === "reasoning_summary" &&
+    (value.status === "streaming" ||
+      value.status === "completed" ||
+      value.status === "omitted") &&
+    optionalString(value.summary)
+  );
+}
+
+function isJournalEventType(value: unknown): value is JournalEventType {
+  return (
+    value === "session.created" ||
+    value === "run.state" ||
+    value === "message.user" ||
+    value === "message.assistant" ||
+    value === "tool.requested" ||
+    value === "tool.progress" ||
+    value === "tool.completed" ||
+    value === "tool.failed" ||
+    value === "approval.requested" ||
+    value === "approval.resolved" ||
+    value === "design.revision" ||
+    value === "context.compacted"
+  );
+}
+
+function isRunStatus(value: unknown): value is RunStatePayload["status"] {
+  return (
+    value === "started" ||
+    value === "completed" ||
+    value === "cancelled" ||
+    value === "error" ||
+    value === "budget"
+  );
+}
+
+function isRunStopReason(value: unknown): value is RunStopReason {
+  return (
+    value === "complete" ||
+    value === "cancelled" ||
+    value === "error" ||
+    value === "budget"
+  );
+}
+
+function isModelSelection(value: unknown): value is SessionModelSelection {
+  if (!isRecord(value)) return false;
+  return (
+    isNonEmptyString(value.providerId) &&
+    isNonEmptyString(value.modelId) &&
+    (value.reasoningEffort === undefined ||
+      value.reasoningEffort === "off" ||
+      value.reasoningEffort === "minimal" ||
+      value.reasoningEffort === "low" ||
+      value.reasoningEffort === "medium" ||
+      value.reasoningEffort === "high" ||
+      value.reasoningEffort === "xhigh" ||
+      value.reasoningEffort === "max")
+  );
+}
+
+function isToolRisk(value: unknown): value is ToolRisk {
+  return (
+    value === "read" ||
+    value === "design_write" ||
+    value === "external" ||
+    value === "destructive"
+  );
+}
+
+function isApprovalDecision(value: unknown): value is ApprovalDecision {
+  return (
+    value === "allow_once" || value === "allow_session" || value === "deny"
+  );
+}
+
+function isRevision(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 0;
+}
+
+function optionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isMissingFile(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}
+
+interface RunStatePayload {
+  status: "started" | "completed" | "cancelled" | "error" | "budget";
+  startedAt: string;
+  finishedAt?: string;
+  stopReason?: RunStopReason;
+  modelSelection?: SessionModelSelection;
+}
+
+interface UserMessagePayload {
+  messageId: string;
+  content: string;
+  attachments?: SessionAttachment[];
+  documentId: string;
+  revision: number;
+  scope: SelectionScope;
+}
+
+function isAttachment(value: unknown): value is SessionAttachment {
+  if (!isRecord(value) || typeof value.attachmentId !== "string") return false;
+  const image = value.attachmentId.startsWith("image_");
+  const validId = image
+    ? /^image_[a-f0-9]{64}$/.test(value.attachmentId)
+    : /^file_[a-f0-9]{64}$/.test(value.attachmentId);
+  const imageMimeTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+  const documentMimeTypes = [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+    "text/markdown",
+    "text/csv",
+    "text/html",
+    "application/json",
+    "application/yaml",
+  ];
+  return (
+    validId &&
+    Object.keys(value).length === 4 &&
+    Object.keys(value).every((key) =>
+      ["attachmentId", "name", "mimeType", "byteSize"].includes(key),
+    ) &&
+    isNonEmptyString(value.name) &&
+    value.name.length <= 255 &&
+    (image
+      ? imageMimeTypes.includes(String(value.mimeType))
+      : documentMimeTypes.includes(String(value.mimeType))) &&
+    Number.isInteger(value.byteSize) &&
+    Number(value.byteSize) > 0 &&
+    Number(value.byteSize) <= 16 * 1024 * 1024
+  );
+}
+
+interface AssistantMessagePayload {
+  messageId: string;
+  blocks: AssistantTimelineBlock[];
+}
+
+interface ToolRequestedPayload {
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  risk: ToolRisk;
+}
+
+interface ToolProgressPayload {
+  toolCallId: string;
+  message: string;
+  progress: number;
+}
+
+interface ToolCompletedPayload {
+  toolCallId: string;
+  result: unknown;
+  revision?: number;
+  transactionId?: string;
+}
+
+interface ToolFailedPayload {
+  toolCallId: string;
+  code: string;
+  message: string;
+}
+
+interface ApprovalRequestedPayload {
+  approvalId: string;
+  toolCallId: string;
+  title: string;
+  summary: string;
+}
+
+interface ApprovalResolvedPayload {
+  approvalId: string;
+  toolCallId: string;
+  decision: ApprovalDecision;
+  resolvedAt: string;
+}
+
+interface DesignRevisionPayload {
+  documentId: string;
+  previousRevision: number;
+  revision: number;
+  transactionId: string;
+  toolCallId?: string;
+}
+
+interface ContextCompactedPayload {
+  fromSequence: number;
+  toSequence: number;
+  summary?: string;
+}

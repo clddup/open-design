@@ -1,0 +1,22 @@
+{
+  "name": "@opendesign/agent-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.84.1",
+    "@opendesign/agent-contracts": "workspace:*",
+    "@opendesign/model-gateway": "workspace:*",
+    "@opendesign/session-store": "workspace:*",
+    "@opendesign/tool-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

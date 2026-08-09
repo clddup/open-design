@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+
+catalog:
+  "@types/node": ^22.19.3
+  typescript: ^5.9.3
+  vitest: ^4.0.16
+
+onlyBuiltDependencies:
+  - electron

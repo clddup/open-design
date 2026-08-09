@@ -1,0 +1,1318 @@
+import {
+  DesignTransactionSchema,
+  ViewportStateSchema,
+  isDesignTransaction,
+  schemaValidationIssues,
+  type DesignActor,
+  type DesignChangeSet,
+  type DesignDocument,
+  type DesignError,
+  type DesignNode,
+  type DesignOperation,
+  type DesignTransaction,
+  type DesignTransactionFailure,
+  type DesignTransactionResult,
+  type DesignTransactionSuccess,
+  type EditorEvent,
+  type EditorState,
+  type HistoryEntry,
+  type HistoryState,
+  type Revision,
+  type SelectionState,
+  type ViewportState,
+} from "@opendesign/design-contracts";
+import {
+  canonicalJsonStringify,
+  deepFreeze,
+  documentContentFingerprint,
+  DocumentValidationError,
+  normalizeDesignDocument,
+} from "./document.js";
+
+export interface EditorSnapshot {
+  document: DesignDocument;
+  state: EditorState;
+}
+
+export type EditorRuntimeListener = (
+  event: EditorEvent,
+  snapshot: EditorSnapshot,
+) => void;
+
+export interface EditorRuntimeOptions {
+  now?: () => string;
+  createId?: (prefix: string) => string;
+  onListenerError?: (error: unknown, event: EditorEvent) => void;
+  initialTool?: string;
+  initialViewport?: Partial<ViewportState>;
+}
+
+interface HistoryRecord {
+  entry: HistoryEntry;
+  before: DesignDocument;
+  after: DesignDocument;
+  groupId?: string;
+}
+
+export interface EditorApplyOptions {
+  historyGroupId?: string;
+  finalizeHistoryGroup?: boolean;
+}
+
+interface StoredTransaction {
+  fingerprint: string;
+  result: DesignTransactionSuccess;
+}
+
+interface QueuedEditorEvent {
+  event: EditorEvent;
+  snapshot: EditorSnapshot;
+}
+
+type EditorEventPayload = EditorEvent extends infer Event
+  ? Event extends EditorEvent
+    ? Omit<
+        Event,
+        "eventId" | "sequence" | "occurredAt" | "documentId" | "revision"
+      >
+    : never
+  : never;
+
+const DEFAULT_VIEWPORT: ViewportState = {
+  panX: 0,
+  panY: 0,
+  zoom: 1,
+  width: 0,
+  height: 0,
+};
+
+export class EditorRuntime {
+  #document: DesignDocument;
+  #snapshot: EditorSnapshot;
+  #selection: SelectionState = { nodeIds: [] };
+  #tool: string;
+  #viewport: ViewportState;
+  #checkpointRevision: number;
+  #checkpointFingerprint: string;
+  #undo: HistoryRecord[] = [];
+  #redo: HistoryRecord[] = [];
+  #activeHistoryGroupId: string | undefined;
+  #listeners = new Set<EditorRuntimeListener>();
+  #transactions = new Map<string, StoredTransaction>();
+  #eventQueue: QueuedEditorEvent[] = [];
+  #dispatchingEvents = false;
+  #revision: Revision;
+  #sequence = 0;
+  #idSequence = 0;
+  readonly #now: () => string;
+  readonly #createId: (prefix: string) => string;
+  readonly #onListenerError: (error: unknown, event: EditorEvent) => void;
+
+  constructor(document: unknown, options: EditorRuntimeOptions = {}) {
+    this.#now = options.now ?? (() => new Date().toISOString());
+    this.#createId =
+      options.createId ??
+      ((prefix) => `${prefix}_${Date.now()}_${++this.#idSequence}`);
+    this.#onListenerError = options.onListenerError ?? (() => undefined);
+    this.#document = normalizeDesignDocument(document);
+    this.#tool = options.initialTool ?? "select";
+    this.#viewport = validateViewport({
+      ...DEFAULT_VIEWPORT,
+      ...options.initialViewport,
+    });
+    this.#checkpointRevision = this.#document.revision;
+    this.#checkpointFingerprint = documentContentFingerprint(this.#document);
+    this.#revision = deepFreeze({
+      revision: this.#document.revision,
+      createdAt: this.#now(),
+      label: "Opened document",
+    });
+    this.#snapshot = this.#createSnapshot();
+  }
+
+  getSnapshot(): EditorSnapshot {
+    return this.#snapshot;
+  }
+
+  subscribe(listener: EditorRuntimeListener): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  preview(transaction: unknown): DesignTransactionResult {
+    const validation = this.#validateTransaction(transaction, "preview");
+    if (validation) return validation;
+    const typedTransaction = transaction as DesignTransaction;
+    const executed = this.#execute(typedTransaction);
+    if (!executed.ok) {
+      return this.#failure(typedTransaction, "preview", executed.error);
+    }
+    return this.#success(
+      typedTransaction,
+      "preview",
+      executed.document,
+      executed.changes,
+    );
+  }
+
+  apply(
+    transaction: unknown,
+    options: EditorApplyOptions = {},
+  ): DesignTransactionResult {
+    if (isDesignTransaction(transaction)) {
+      const stored = this.#transactions.get(transaction.transactionId);
+      if (stored) {
+        if (stored.fingerprint === canonicalJsonStringify(transaction)) {
+          return stored.result;
+        }
+        return this.#failure(transaction, "apply", {
+          code: "duplicate",
+          message: `Transaction ${transaction.transactionId} was already used with different content`,
+          retryable: false,
+        });
+      }
+    }
+
+    const validation = this.#validateTransaction(transaction, "apply");
+    if (validation) return validation;
+    const typedTransaction = transaction as DesignTransaction;
+    const historyGroupConflict = this.#historyGroupConflict(
+      typedTransaction,
+      options,
+    );
+    if (historyGroupConflict) return historyGroupConflict;
+    const executed = this.#execute(typedTransaction);
+    if (!executed.ok) {
+      return this.#failure(typedTransaction, "apply", executed.error);
+    }
+
+    const before = this.#document;
+    const result = this.#success(
+      typedTransaction,
+      "apply",
+      executed.document,
+      executed.changes,
+    );
+    const selectionChanged = this.#commitDocument(
+      executed.document,
+      result.revision,
+    );
+    const previousHistory = this.#undo.at(-1);
+    if (
+      options.historyGroupId !== undefined &&
+      previousHistory?.groupId === options.historyGroupId
+    ) {
+      this.#undo[this.#undo.length - 1] = {
+        ...previousHistory,
+        after: this.#document,
+        entry: groupedHistoryEntry(
+          previousHistory,
+          typedTransaction,
+          result,
+          options.historyGroupId,
+          this.#document,
+        ),
+      };
+    } else {
+      this.#undo.push({
+        before,
+        after: this.#document,
+        entry: historyEntry(typedTransaction, result, options.historyGroupId),
+        ...(options.historyGroupId === undefined
+          ? {}
+          : { groupId: options.historyGroupId }),
+      });
+    }
+    this.#redo = [];
+    this.#transactions.set(typedTransaction.transactionId, {
+      fingerprint: canonicalJsonStringify(typedTransaction),
+      result,
+    });
+    if (options.historyGroupId !== undefined) {
+      this.#activeHistoryGroupId = options.finalizeHistoryGroup
+        ? undefined
+        : options.historyGroupId;
+    }
+    this.#afterDocumentChange(result, selectionChanged);
+    return result;
+  }
+
+  rollbackHistoryGroup(
+    historyGroupId: string,
+    actorId = "opendesign-agent",
+  ): DesignTransactionResult {
+    const record = this.#undo.at(-1);
+    if (!record || record.groupId !== historyGroupId) {
+      return this.#historyFailure(
+        "undo",
+        actorId,
+        `History group ${historyGroupId} is not the latest change`,
+      );
+    }
+    if (this.#activeHistoryGroupId === historyGroupId) {
+      this.#activeHistoryGroupId = undefined;
+    }
+    this.#undo.pop();
+    this.#redo = [];
+    const transactionId = this.#createId("rollback");
+    const baseRevision = this.#document.revision;
+    const nextRevision = baseRevision + 1;
+    const document = withRevision(record.before, nextRevision);
+    const actor: DesignActor = { type: "agent", id: actorId };
+    const changes = diffDocuments(this.#document, document, nextRevision);
+    const revision = this.#newRevision(
+      nextRevision,
+      `Cancelled ${record.entry.label}`,
+      transactionId,
+      actor,
+    );
+    const result = deepFreeze({
+      ok: true,
+      mode: "undo",
+      transactionId,
+      documentId: document.documentId,
+      baseRevision,
+      revision,
+      changes,
+      warnings: [],
+    } satisfies DesignTransactionSuccess);
+    const selectionChanged = this.#commitDocument(document, revision);
+    this.#afterDocumentChange(result, selectionChanged);
+    return result;
+  }
+
+  undo(actorId = "local-user"): DesignTransactionResult {
+    if (this.#activeHistoryGroupId !== undefined) {
+      return this.#historyFailure(
+        "undo",
+        actorId,
+        `Design change ${this.#activeHistoryGroupId} is still being applied`,
+      );
+    }
+    const record = this.#undo.pop();
+    if (!record) {
+      return this.#historyFailure("undo", actorId, "Nothing to undo");
+    }
+    const transactionId = this.#createId("undo");
+    const baseRevision = this.#document.revision;
+    const nextRevision = baseRevision + 1;
+    const document = withRevision(record.before, nextRevision);
+    const actor: DesignActor = { type: "user", id: actorId };
+    const changes = diffDocuments(this.#document, document, nextRevision);
+    const revision = this.#newRevision(
+      nextRevision,
+      `Undo ${record.entry.label}`,
+      transactionId,
+      actor,
+    );
+    const result = deepFreeze({
+      ok: true,
+      mode: "undo",
+      transactionId,
+      documentId: document.documentId,
+      baseRevision,
+      revision,
+      changes,
+      warnings: [],
+    } satisfies DesignTransactionSuccess);
+    this.#redo.push(record);
+    const selectionChanged = this.#commitDocument(document, revision);
+    this.#afterDocumentChange(result, selectionChanged);
+    return result;
+  }
+
+  redo(actorId = "local-user"): DesignTransactionResult {
+    if (this.#activeHistoryGroupId !== undefined) {
+      return this.#historyFailure(
+        "redo",
+        actorId,
+        `Design change ${this.#activeHistoryGroupId} is still being applied`,
+      );
+    }
+    const record = this.#redo.pop();
+    if (!record) {
+      return this.#historyFailure("redo", actorId, "Nothing to redo");
+    }
+    const transactionId = this.#createId("redo");
+    const baseRevision = this.#document.revision;
+    const nextRevision = baseRevision + 1;
+    const document = withRevision(record.after, nextRevision);
+    const actor: DesignActor = { type: "user", id: actorId };
+    const changes = diffDocuments(this.#document, document, nextRevision);
+    const revision = this.#newRevision(
+      nextRevision,
+      `Redo ${record.entry.label}`,
+      transactionId,
+      actor,
+    );
+    const result = deepFreeze({
+      ok: true,
+      mode: "redo",
+      transactionId,
+      documentId: document.documentId,
+      baseRevision,
+      revision,
+      changes,
+      warnings: [],
+    } satisfies DesignTransactionSuccess);
+    this.#undo.push(record);
+    const selectionChanged = this.#commitDocument(document, revision);
+    this.#afterDocumentChange(result, selectionChanged);
+    return result;
+  }
+
+  checkpoint(label?: string): Revision {
+    this.#checkpointRevision = this.#document.revision;
+    this.#checkpointFingerprint = documentContentFingerprint(this.#document);
+    this.#refreshSnapshot();
+    this.#emit({
+      type: "checkpoint.created",
+      checkpointRevision: this.#checkpointRevision,
+      ...(label === undefined ? {} : { label }),
+    });
+    this.#emit({
+      type: "dirty.changed",
+      dirty: false,
+      checkpointRevision: this.#checkpointRevision,
+    });
+    return deepFreeze({
+      ...this.#revision,
+      ...(label === undefined ? {} : { label }),
+    });
+  }
+
+  setSelection(nodeIds: readonly string[], anchorNodeId?: string): void {
+    const unique = [...new Set(nodeIds)].filter(
+      (nodeId) => this.#document.nodesById[nodeId] !== undefined,
+    );
+    const anchor =
+      anchorNodeId && unique.includes(anchorNodeId) ? anchorNodeId : unique[0];
+    if (
+      arraysEqual(unique, this.#selection.nodeIds) &&
+      anchor === this.#selection.anchorNodeId
+    ) {
+      return;
+    }
+    this.#selection = deepFreeze({
+      nodeIds: unique,
+      ...(anchor === undefined ? {} : { anchorNodeId: anchor }),
+    });
+    this.#refreshSnapshot();
+    this.#emit({ type: "selection.changed", selection: this.#selection });
+  }
+
+  setTool(tool: string): void {
+    if (tool.length === 0) throw new Error("Tool must be a non-empty string");
+    if (tool === this.#tool) return;
+    this.#tool = tool;
+    this.#refreshSnapshot();
+    this.#emit({ type: "tool.changed", tool });
+  }
+
+  setViewport(viewport: Partial<ViewportState>): void {
+    const next = validateViewport({ ...this.#viewport, ...viewport });
+    if (JSON.stringify(next) === JSON.stringify(this.#viewport)) return;
+    this.#viewport = deepFreeze(next);
+    this.#refreshSnapshot();
+    this.#emit({ type: "viewport.changed", viewport: this.#viewport });
+  }
+
+  #validateTransaction(
+    transaction: unknown,
+    mode: "preview" | "apply",
+  ): DesignTransactionFailure | null {
+    const fallback = transactionEnvelope(transaction, this.#document);
+    if (!isDesignTransaction(transaction)) {
+      const issues = schemaValidationIssues(
+        DesignTransactionSchema,
+        transaction,
+      );
+      return deepFreeze({
+        ok: false,
+        mode,
+        ...fallback,
+        revision: this.#revision,
+        error: {
+          code: "invalid",
+          message: "Transaction does not match the design schema",
+          retryable: false,
+          details: issues.map((issue) => ({
+            path: issue.path,
+            message: issue.message,
+          })),
+        },
+      });
+    }
+    if (transaction.documentId !== this.#document.documentId) {
+      return this.#failure(transaction, mode, {
+        code: "invalid",
+        message: `Transaction targets document ${transaction.documentId}`,
+        retryable: false,
+      });
+    }
+    if (transaction.baseRevision !== this.#document.revision) {
+      return this.#failure(transaction, mode, {
+        code: "conflict",
+        message: `Expected revision ${transaction.baseRevision}, current revision is ${this.#document.revision}`,
+        retryable: true,
+        details: {
+          expectedRevision: transaction.baseRevision,
+          currentRevision: this.#document.revision,
+        },
+      });
+    }
+    const commandIds = new Set<string>();
+    for (const command of transaction.commands) {
+      if (commandIds.has(command.commandId)) {
+        return this.#failure(transaction, mode, {
+          code: "invalid",
+          message: `Command id ${command.commandId} is duplicated`,
+          commandId: command.commandId,
+          retryable: false,
+        });
+      }
+      commandIds.add(command.commandId);
+    }
+    return null;
+  }
+
+  #execute(
+    transaction: DesignTransaction,
+  ):
+    | { ok: true; document: DesignDocument; changes: DesignChangeSet }
+    | { ok: false; error: DesignError } {
+    const draft = structuredClone(this.#document);
+    try {
+      for (const command of transaction.commands)
+        applyOperation(draft, command);
+      draft.revision = this.#document.revision + 1;
+      const document = normalizeDesignDocument(draft);
+      return {
+        ok: true,
+        document,
+        changes: diffDocuments(this.#document, document, document.revision),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: operationError(error),
+      };
+    }
+  }
+
+  #success(
+    transaction: DesignTransaction,
+    mode: "preview" | "apply",
+    document: DesignDocument,
+    changes: DesignChangeSet,
+  ): DesignTransactionSuccess {
+    return deepFreeze({
+      ok: true,
+      mode,
+      transactionId: transaction.transactionId,
+      documentId: transaction.documentId,
+      baseRevision: transaction.baseRevision,
+      revision: this.#newRevision(
+        document.revision,
+        transaction.label,
+        transaction.transactionId,
+        transaction.actor,
+      ),
+      changes,
+      warnings: [],
+    });
+  }
+
+  #failure(
+    transaction: DesignTransaction,
+    mode: "preview" | "apply",
+    error: DesignError,
+  ): DesignTransactionFailure {
+    return deepFreeze({
+      ok: false,
+      mode,
+      transactionId: transaction.transactionId,
+      documentId: transaction.documentId,
+      baseRevision: transaction.baseRevision,
+      revision: this.#revision,
+      error,
+    });
+  }
+
+  #historyFailure(
+    mode: "undo" | "redo",
+    actorId: string,
+    message: string,
+  ): DesignTransactionFailure {
+    return deepFreeze({
+      ok: false,
+      mode,
+      transactionId: this.#createId(mode),
+      documentId: this.#document.documentId,
+      baseRevision: this.#document.revision,
+      revision: this.#revision,
+      error: {
+        code: "invalid",
+        message,
+        retryable: false,
+        details: { actorId },
+      },
+    });
+  }
+
+  #historyGroupConflict(
+    transaction: DesignTransaction,
+    options: EditorApplyOptions,
+  ): DesignTransactionFailure | undefined {
+    if (
+      options.finalizeHistoryGroup === true &&
+      options.historyGroupId === undefined
+    ) {
+      return this.#failure(transaction, "apply", {
+        code: "invalid",
+        message: "A finalized history group requires a historyGroupId",
+        retryable: false,
+      });
+    }
+    if (
+      this.#activeHistoryGroupId === undefined ||
+      options.historyGroupId === this.#activeHistoryGroupId
+    ) {
+      return undefined;
+    }
+    return this.#failure(transaction, "apply", {
+      code: "conflict",
+      message: `Design change ${this.#activeHistoryGroupId} is still being applied`,
+      retryable: true,
+    });
+  }
+
+  #newRevision(
+    revision: number,
+    label: string | undefined,
+    transactionId: string,
+    actor: DesignActor,
+  ): Revision {
+    return deepFreeze({
+      revision,
+      createdAt: this.#now(),
+      ...(label === undefined ? {} : { label }),
+      transactionId,
+      actor,
+    });
+  }
+
+  #commitDocument(document: DesignDocument, revision: Revision): boolean {
+    this.#document = document;
+    this.#revision = revision;
+    const previousSelection = this.#selection;
+    const selected = previousSelection.nodeIds.filter(
+      (nodeId) => document.nodesById[nodeId] !== undefined,
+    );
+    if (!arraysEqual(selected, previousSelection.nodeIds)) {
+      const anchorNodeId =
+        previousSelection.anchorNodeId &&
+        selected.includes(previousSelection.anchorNodeId)
+          ? previousSelection.anchorNodeId
+          : selected[0];
+      this.#selection = deepFreeze({
+        nodeIds: selected,
+        ...(anchorNodeId === undefined ? {} : { anchorNodeId }),
+      });
+    }
+    this.#refreshSnapshot();
+    return this.#selection !== previousSelection;
+  }
+
+  #afterDocumentChange(
+    result: DesignTransactionSuccess,
+    selectionChanged: boolean,
+  ): void {
+    this.#refreshSnapshot();
+    this.#emit({ type: "document.changed", result });
+    if (selectionChanged) {
+      this.#emit({ type: "selection.changed", selection: this.#selection });
+    }
+    this.#emit({ type: "history.changed", history: this.#historyState() });
+    this.#emit({
+      type: "dirty.changed",
+      dirty: this.#isDirty(),
+      checkpointRevision: this.#checkpointRevision,
+    });
+  }
+
+  #emit(payload: EditorEventPayload): void {
+    const sequence = ++this.#sequence;
+    const event: EditorEvent = deepFreeze({
+      ...payload,
+      eventId: this.#createId("event"),
+      sequence,
+      occurredAt: this.#now(),
+      documentId: this.#document.documentId,
+      revision: this.#document.revision,
+    });
+    this.#eventQueue.push({ event, snapshot: this.#snapshot });
+    if (this.#dispatchingEvents) return;
+
+    this.#dispatchingEvents = true;
+    try {
+      while (this.#eventQueue.length > 0) {
+        const queued = this.#eventQueue.shift();
+        if (!queued) continue;
+        for (const listener of [...this.#listeners]) {
+          try {
+            listener(queued.event, queued.snapshot);
+          } catch (error) {
+            try {
+              this.#onListenerError(error, queued.event);
+            } catch {
+              // Diagnostics must not change committed runtime results.
+            }
+          }
+        }
+      }
+    } finally {
+      this.#dispatchingEvents = false;
+    }
+  }
+
+  #isDirty(): boolean {
+    return (
+      documentContentFingerprint(this.#document) !== this.#checkpointFingerprint
+    );
+  }
+
+  #historyState(): HistoryState {
+    return deepFreeze({
+      canUndo: this.#undo.length > 0,
+      canRedo: this.#redo.length > 0,
+      undo: this.#undo.map((record) => record.entry),
+      redo: this.#redo.map((record) => record.entry),
+    });
+  }
+
+  #createSnapshot(): EditorSnapshot {
+    return deepFreeze({
+      document: this.#document,
+      state: {
+        documentId: this.#document.documentId,
+        revision: this.#document.revision,
+        selection: this.#selection,
+        tool: this.#tool,
+        viewport: this.#viewport,
+        dirty: this.#isDirty(),
+        checkpointRevision: this.#checkpointRevision,
+        history: this.#historyState(),
+      },
+    });
+  }
+
+  #refreshSnapshot(): void {
+    this.#snapshot = this.#createSnapshot();
+  }
+}
+
+class OperationError extends Error {
+  readonly commandId: string;
+  readonly code: DesignError["code"];
+
+  constructor(
+    commandId: string,
+    message: string,
+    code: DesignError["code"] = "invalid",
+  ) {
+    super(message);
+    this.commandId = commandId;
+    this.code = code;
+  }
+}
+
+function applyOperation(
+  document: DesignDocument,
+  command: DesignOperation,
+): void {
+  switch (command.type) {
+    case "insert_element":
+      insertElement(document, command);
+      return;
+    case "update_properties":
+      updateProperties(document, command);
+      return;
+    case "move_element":
+      moveElement(document, command);
+      return;
+    case "delete_element":
+      deleteElement(document, command);
+      return;
+    case "replace_subtree":
+      replaceSubtree(document, command);
+      return;
+    case "put_asset":
+      putAsset(document, command);
+      return;
+    case "delete_asset":
+      deleteAsset(document, command);
+      return;
+  }
+}
+
+function putAsset(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "put_asset" }>,
+): void {
+  document.assetsById[command.asset.id] = structuredClone(command.asset);
+}
+
+function deleteAsset(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "delete_asset" }>,
+): void {
+  if (!document.assetsById[command.assetId]) {
+    throw notFound(command.commandId, command.assetId);
+  }
+  const referencingNode = Object.values(document.nodesById).find((node) =>
+    nodeAssetIds(node).includes(command.assetId),
+  );
+  if (referencingNode) {
+    throw new OperationError(
+      command.commandId,
+      `Asset ${command.assetId} is still referenced by node ${referencingNode.id}`,
+    );
+  }
+  delete document.assetsById[command.assetId];
+}
+
+function insertElement(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "insert_element" }>,
+): void {
+  if (document.nodesById[command.node.id]) {
+    throw new OperationError(
+      command.commandId,
+      `Node ${command.node.id} already exists`,
+      "duplicate",
+    );
+  }
+  assertPage(document, command.pageId, command.commandId);
+  if (command.node.parentId !== command.parentId) {
+    throw new OperationError(
+      command.commandId,
+      "Inserted node parentId does not match the target parent",
+    );
+  }
+  const target = targetChildren(
+    document,
+    command.pageId,
+    command.parentId,
+    command.commandId,
+  );
+  assertIndex(target, command.index, command.commandId);
+  document.nodesById[command.node.id] = structuredClone(command.node);
+  target.splice(command.index, 0, command.node.id);
+}
+
+function updateProperties(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "update_properties" }>,
+): void {
+  const node = document.nodesById[command.nodeId];
+  if (!node) throw notFound(command.commandId, command.nodeId);
+  const fields = [
+    "name",
+    "visible",
+    "locked",
+    "transform",
+    "size",
+    "opacity",
+    "blendMode",
+    "effects",
+    "maskMode",
+    "properties",
+    "extensions",
+  ] as const;
+  if (!fields.some((field) => command[field] !== undefined)) {
+    throw new OperationError(
+      command.commandId,
+      "Update must change at least one field",
+    );
+  }
+  for (const field of fields) {
+    const value = command[field];
+    if (value === undefined) continue;
+    if (field === "properties" || field === "extensions") {
+      Object.assign(node[field], structuredClone(value));
+    } else {
+      Object.assign(node, { [field]: structuredClone(value) });
+    }
+  }
+}
+
+function moveElement(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "move_element" }>,
+): void {
+  const node = document.nodesById[command.nodeId];
+  if (!node) throw notFound(command.commandId, command.nodeId);
+  assertPage(document, command.pageId, command.commandId);
+  const oldLocation = locateNode(document, command.nodeId);
+  if (!oldLocation) throw notFound(command.commandId, command.nodeId);
+  const oldChildren = targetChildren(
+    document,
+    oldLocation.pageId,
+    oldLocation.parentId,
+    command.commandId,
+  );
+  oldChildren.splice(oldLocation.index, 1);
+  const target = targetChildren(
+    document,
+    command.pageId,
+    command.parentId,
+    command.commandId,
+  );
+  assertIndex(target, command.index, command.commandId);
+  target.splice(command.index, 0, command.nodeId);
+
+  node.parentId = command.parentId;
+}
+
+function deleteElement(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "delete_element" }>,
+): void {
+  const node = document.nodesById[command.nodeId];
+  const location = locateNode(document, command.nodeId);
+  if (!node || !location) throw notFound(command.commandId, command.nodeId);
+  const source = targetChildren(
+    document,
+    location.pageId,
+    location.parentId,
+    command.commandId,
+  );
+  source.splice(location.index, 1);
+  for (const nodeId of collectSubtreeIds(document, command.nodeId)) {
+    delete document.nodesById[nodeId];
+  }
+}
+
+function replaceSubtree(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "replace_subtree" }>,
+): void {
+  const current = document.nodesById[command.rootNodeId];
+  if (!current) throw notFound(command.commandId, command.rootNodeId);
+  const replacement = new Map(command.nodes.map((node) => [node.id, node]));
+  if (replacement.size !== command.nodes.length) {
+    throw new OperationError(
+      command.commandId,
+      "Replacement subtree contains duplicate node ids",
+    );
+  }
+  const root = replacement.get(command.rootNodeId);
+  if (!root) {
+    throw new OperationError(
+      command.commandId,
+      "Replacement nodes must include rootNodeId",
+    );
+  }
+  if (root.parentId !== current.parentId) {
+    throw new OperationError(
+      command.commandId,
+      "Replacement root must preserve its parent",
+    );
+  }
+  const oldIds = new Set(collectSubtreeIds(document, command.rootNodeId));
+  for (const node of command.nodes) {
+    if (!oldIds.has(node.id) && document.nodesById[node.id]) {
+      throw new OperationError(
+        command.commandId,
+        `Node ${node.id} already exists outside the replaced subtree`,
+        "duplicate",
+      );
+    }
+    for (const childId of node.childIds) {
+      if (!replacement.has(childId)) {
+        throw new OperationError(
+          command.commandId,
+          `Replacement child ${childId} is missing`,
+        );
+      }
+    }
+  }
+  for (const nodeId of oldIds) delete document.nodesById[nodeId];
+  for (const node of command.nodes) {
+    document.nodesById[node.id] = structuredClone(node);
+  }
+}
+
+function targetChildren(
+  document: DesignDocument,
+  pageId: string,
+  parentId: string | null,
+  commandId: string,
+): string[] {
+  if (parentId === null) {
+    return assertPage(document, pageId, commandId).rootNodeIds;
+  }
+  const parent = document.nodesById[parentId];
+  if (!parent) throw notFound(commandId, parentId);
+  if (parent.kind !== "frame" && parent.kind !== "group") {
+    throw new OperationError(
+      commandId,
+      `${parent.kind} nodes cannot contain children`,
+    );
+  }
+  const location = locateNode(document, parentId);
+  if (!location || location.pageId !== pageId) {
+    throw new OperationError(
+      commandId,
+      `Parent ${parentId} is not on ${pageId}`,
+    );
+  }
+  return parent.childIds;
+}
+
+function assertPage(
+  document: DesignDocument,
+  pageId: string,
+  commandId: string,
+) {
+  const page = document.pagesById[pageId];
+  if (!page) {
+    throw new OperationError(
+      commandId,
+      `Page ${pageId} does not exist`,
+      "not-found",
+    );
+  }
+  return page;
+}
+
+function assertIndex(
+  children: readonly string[],
+  index: number,
+  commandId: string,
+): void {
+  if (index > children.length) {
+    throw new OperationError(
+      commandId,
+      `Index ${index} exceeds child count ${children.length}`,
+    );
+  }
+}
+
+function locateNode(document: DesignDocument, nodeId: string) {
+  const visit = (
+    pageId: string,
+    parentId: string | null,
+    childIds: readonly string[],
+  ): { pageId: string; parentId: string | null; index: number } | undefined => {
+    const index = childIds.indexOf(nodeId);
+    if (index >= 0) return { pageId, parentId, index };
+    for (const childId of childIds) {
+      const child = document.nodesById[childId];
+      if (!child) continue;
+      const found = visit(pageId, childId, child.childIds);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  for (const pageId of document.pageOrder) {
+    const page = document.pagesById[pageId];
+    if (!page) continue;
+    const found = visit(pageId, null, page.rootNodeIds);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function collectSubtreeIds(
+  document: DesignDocument,
+  rootNodeId: string,
+): string[] {
+  const ids: string[] = [];
+  const visit = (nodeId: string): void => {
+    const node = document.nodesById[nodeId];
+    if (!node) return;
+    ids.push(nodeId);
+    for (const childId of node.childIds) visit(childId);
+  };
+  visit(rootNodeId);
+  return ids;
+}
+
+function diffDocuments(
+  before: DesignDocument,
+  after: DesignDocument,
+  toRevision: number,
+): DesignChangeSet {
+  const changes: DesignChangeSet["changes"] = [];
+  const addedNodeIds: string[] = [];
+  const changedNodeIds: string[] = [];
+  const removedNodeIds: string[] = [];
+  const addedAssetIds: string[] = [];
+  const changedAssetIds: string[] = [];
+  const removedAssetIds: string[] = [];
+  const ids = new Set([
+    ...Object.keys(before.nodesById),
+    ...Object.keys(after.nodesById),
+  ]);
+
+  for (const nodeId of ids) {
+    const oldNode = before.nodesById[nodeId];
+    const newNode = after.nodesById[nodeId];
+    if (!oldNode && newNode) {
+      addedNodeIds.push(nodeId);
+      changes.push({
+        type: "added",
+        nodeId,
+        after: newNode,
+        changedFields: ["node"],
+      });
+      continue;
+    }
+    if (oldNode && !newNode) {
+      removedNodeIds.push(nodeId);
+      changes.push({
+        type: "removed",
+        nodeId,
+        before: oldNode,
+        changedFields: ["node"],
+      });
+      continue;
+    }
+    if (!oldNode || !newNode) continue;
+    if (JSON.stringify(oldNode) === JSON.stringify(newNode)) {
+      if (siblingIndexChanged(before, after, nodeId)) {
+        changedNodeIds.push(nodeId);
+        changes.push({
+          type: "moved",
+          nodeId,
+          before: oldNode,
+          after: newNode,
+          changedFields: ["zOrder"],
+        });
+      }
+      continue;
+    }
+    changedNodeIds.push(nodeId);
+    const changedFields = nodeChangedFields(oldNode, newNode);
+    changes.push({
+      type:
+        changedFields.includes("parentId") ||
+        siblingIndexChanged(before, after, nodeId)
+          ? "moved"
+          : "updated",
+      nodeId,
+      before: oldNode,
+      after: newNode,
+      changedFields,
+    });
+  }
+
+  const assetIds = new Set([
+    ...Object.keys(before.assetsById),
+    ...Object.keys(after.assetsById),
+  ]);
+  for (const assetId of assetIds) {
+    const oldAsset = before.assetsById[assetId];
+    const newAsset = after.assetsById[assetId];
+    if (!oldAsset && newAsset) addedAssetIds.push(assetId);
+    else if (oldAsset && !newAsset) removedAssetIds.push(assetId);
+    else if (JSON.stringify(oldAsset) !== JSON.stringify(newAsset)) {
+      changedAssetIds.push(assetId);
+    }
+  }
+
+  return deepFreeze({
+    documentId: before.documentId,
+    fromRevision: before.revision,
+    toRevision,
+    addedNodeIds,
+    changedNodeIds,
+    removedNodeIds,
+    addedAssetIds,
+    changedAssetIds,
+    removedAssetIds,
+    changes,
+  });
+}
+
+function nodeAssetIds(node: DesignNode): string[] {
+  const ids: string[] = [];
+  if (node.kind === "image") ids.push(node.properties.assetId);
+  if (
+    node.kind === "frame" ||
+    node.kind === "rectangle" ||
+    node.kind === "ellipse" ||
+    node.kind === "text"
+  ) {
+    for (const paint of [
+      ...node.properties.fills,
+      ...node.properties.strokes,
+    ]) {
+      if (paint.type === "image") ids.push(paint.assetId);
+    }
+  }
+  return ids;
+}
+
+function nodeChangedFields(before: DesignNode, after: DesignNode): string[] {
+  const fields = [
+    "name",
+    "parentId",
+    "childIds",
+    "visible",
+    "locked",
+    "transform",
+    "size",
+    "opacity",
+    "blendMode",
+    "effects",
+    "maskMode",
+    "properties",
+    "extensions",
+  ] as const;
+  return fields.filter(
+    (field) => JSON.stringify(before[field]) !== JSON.stringify(after[field]),
+  );
+}
+
+function siblingIndexChanged(
+  before: DesignDocument,
+  after: DesignDocument,
+  nodeId: string,
+): boolean {
+  const oldLocation = locateNode(before, nodeId);
+  const newLocation = locateNode(after, nodeId);
+  return (
+    oldLocation?.pageId !== newLocation?.pageId ||
+    oldLocation?.index !== newLocation?.index
+  );
+}
+
+function historyEntry(
+  transaction: DesignTransaction,
+  result: DesignTransactionSuccess,
+  transactionId = transaction.transactionId,
+): HistoryEntry {
+  return deepFreeze({
+    transactionId,
+    label: transaction.label ?? transaction.summary ?? "Design change",
+    actor: transaction.actor,
+    revision: result.revision,
+    changes: result.changes,
+  });
+}
+
+function groupedHistoryEntry(
+  record: HistoryRecord,
+  transaction: DesignTransaction,
+  result: DesignTransactionSuccess,
+  historyGroupId: string,
+  after: DesignDocument,
+): HistoryEntry {
+  return deepFreeze({
+    transactionId: historyGroupId,
+    label: record.entry.label,
+    actor: transaction.actor,
+    revision: result.revision,
+    changes: diffDocuments(record.before, after, result.revision.revision),
+  });
+}
+
+function withRevision(
+  document: DesignDocument,
+  revision: number,
+): DesignDocument {
+  const clone = structuredClone(document);
+  clone.revision = revision;
+  return normalizeDesignDocument(clone);
+}
+
+function operationError(error: unknown): DesignError {
+  if (error instanceof OperationError) {
+    return {
+      code: error.code,
+      message: error.message,
+      commandId: error.commandId,
+      retryable: false,
+    };
+  }
+  if (error instanceof DocumentValidationError) {
+    return {
+      code: "invalid",
+      message: "Transaction would violate document invariants",
+      retryable: false,
+      details: error.issues.map((issue) => ({
+        path: issue.path,
+        message: issue.message,
+      })),
+    };
+  }
+  return {
+    code: "engine-failure",
+    message: error instanceof Error ? error.message : "Unknown runtime failure",
+    retryable: false,
+  };
+}
+
+function notFound(commandId: string, nodeId: string): OperationError {
+  return new OperationError(
+    commandId,
+    `Node ${nodeId} does not exist`,
+    "not-found",
+  );
+}
+
+function validateViewport(value: ViewportState): ViewportState {
+  const issues = schemaValidationIssues(ViewportStateSchema, value);
+  if (issues.length > 0) {
+    throw new Error(
+      `Invalid viewport: ${issues[0]?.message ?? "unknown error"}`,
+    );
+  }
+  return deepFreeze(value);
+}
+
+function transactionEnvelope(
+  value: unknown,
+  document: DesignDocument,
+): {
+  transactionId: string;
+  documentId: string;
+  baseRevision: number;
+} {
+  const record =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  return {
+    transactionId:
+      typeof record.transactionId === "string" &&
+      record.transactionId.length > 0
+        ? record.transactionId
+        : "invalid_transaction",
+    documentId:
+      typeof record.documentId === "string" && record.documentId.length > 0
+        ? record.documentId
+        : document.documentId,
+    baseRevision:
+      typeof record.baseRevision === "number" &&
+      Number.isInteger(record.baseRevision) &&
+      record.baseRevision >= 0
+        ? record.baseRevision
+        : document.revision,
+  };
+}
+
+function arraysEqual(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+export { diffDocuments };

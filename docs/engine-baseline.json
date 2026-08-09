@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 3,
+  "recordedAt": "2026-08-10",
+  "policy": {
+    "allowFloatingRefs": false,
+    "upgradeRequiresCompatibilityReview": true
+  },
+  "contracts": {
+    "documentFormat": "dev.opendesign.document",
+    "documentSchemaVersion": "1.1.0",
+    "runtimeProtocolVersion": "0.1.0"
+  },
+  "components": {
+    "editorRuntime": {
+      "role": "opendesign-owned-editor-runtime",
+      "package": "@opendesign/editor-runtime",
+      "path": "packages/editor-runtime"
+    },
+    "leafer": {
+      "role": "production-rendering-and-interaction-engine",
+      "adapterPackage": "@opendesign/leafer-engine",
+      "adapterPath": "packages/leafer-engine",
+      "dependency": "leafer-editor",
+      "version": "2.2.9",
+      "source": "https://github.com/leaferjs/leafer-ui",
+      "license": "MIT"
+    }
+  },
+  "verification": {
+    "contracts": "pnpm exec vitest run packages/design-contracts/src/index.test.ts",
+    "editorRuntime": "pnpm exec vitest run packages/editor-runtime/src/index.test.ts",
+    "leafer": "pnpm exec vitest run packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts"
+  }
+}
