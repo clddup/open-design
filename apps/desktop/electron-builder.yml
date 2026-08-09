@@ -26,10 +26,13 @@ mac:
   category: public.app-category.graphics-design
   icon: icon.icns
   target:
-    - dir
+    - dmg
+    - zip
 
 win:
   icon: icon.ico
+  target:
+    - nsis
 
 linux:
   category: Graphics

@@ -2,7 +2,17 @@
 
 本路线图按架构依赖组织，不按临时反馈逐项追加。完整产品边界由 [`design-capability-baseline.md`](design-capability-baseline.md) 定义；每个实施切片必须同时覆盖公共语义、事务、人工 UI、Agent、渲染/导出、持久化和验证。
 
-## P0：稳定当前 `1.1.0` 与 Leafer 迁移
+## P0-A：macOS 与 Windows 一级平台可用
+
+- 建立 macOS 与 Windows 原生 CI/发布矩阵；共享 `pnpm verify`，并分别在原生 runner 构建 protected bundle 和安装包。V8 bytecode 不能跨操作系统复用。
+- macOS 产出 DMG/ZIP，Windows 产出 NSIS installer；分别验证干净安装、首次启动、升级覆盖、卸载和用户数据保留策略。
+- 两个平台共同执行：窗口/菜单/快捷键、Leafer 画布鼠标与触控板/滚轮、文本输入、文件选择、Project 保存重开、Agent utilityProcess、`safeStorage`、附件、Provider 调用、取消和崩溃恢复 smoke。
+- 审计并移除只在 macOS 成立的路径、菜单、图标、快捷键和 shell 假设；平台差异通过窄 adapter 处理。
+- Windows 原生 smoke 未通过前，不得把桌面版描述为跨平台可发布。Linux 保留目标和构建边界，但当前不阻塞此里程碑。
+
+完成条件：macOS 与 Windows 的同一 commit 都有 `verify + native package + install/start/product smoke` 证据，并写入 `verification.md`。
+
+## P0-B：稳定当前 `1.1.0` 与 Leafer 迁移
 
 - 为 host-only `put_asset + insert_element(image)` 内部事务补 Renderer 集成测试，验证单次 revision、作用域和一次 undo 同时移除 asset/node。
 - 为 Agent composer 的剪贴板粘贴和文件拖放补交互测试，验证 Renderer 只提交 bytes，最终 run 只携带安全附件元数据。
@@ -49,4 +59,5 @@
 - 不恢复 OpenPencil、Canvas2D、手写选择框、隐藏 fallback 或双写状态。
 - 不让模型、MCP、skills 或 Renderer 获得 Leafer 对象、原始凭据、任意路径或裸 shell。
 - 新第三方依赖必须固定版本并更新 ADR、`engine-baseline.json`、第三方通知和兼容性测试。
+- macOS 与 Windows 是同级发布门禁；不能用一个平台的构建或自动化结果替代另一个平台的原生验证。
 - 文档只描述当前事实或明确目标；未验证能力不得宣传为完成。

@@ -13,6 +13,13 @@ OpenDesign 需要同时提供专业桌面集成、快速迭代的工作台 UI �
 
 OpenDesign 采用 Electron 作为桌面外壳，并在 Renderer 中实现 Web 画布与工作台 UI。
 
+平台支持分级如下：
+
+- **一级支持：macOS、Windows。** 两个平台都必须提供原生安装包，并通过安装、启动、窗口/菜单、输入、画布、文件/凭据、Agent、保存恢复、升级与卸载门禁；任一平台失败都阻塞桌面版本发布。
+- **目标支持：Linux。** 架构与依赖不得主动封死 Linux，保留构建配置；当前阶段 Linux 可用性不阻塞 macOS/Windows 里程碑。
+
+平台可用性只能由对应原生系统上的构建和 smoke 证明。不得用 macOS 产物、共享 TypeScript 测试或跨平台打包推断 Windows 可用，反之亦然；Bytenode/V8 bytecode 等平台耦合产物必须在目标系统生成。
+
 - Main 管理窗口、菜单、文件、权限、应用生命周期与受信任进程监督。
 - Preload 通过 `contextBridge` 暴露窄且类型化的产品 API。
 - Renderer 开启上下文隔离、关闭 Node.js 集成，不接触原始 Electron IPC。
@@ -43,6 +50,7 @@ OpenDesign 采用 Electron 作为桌面外壳，并在 Renderer 中实现 Web �
 - 所有 IPC 输入进行运行时校验，并验证调用方与文档作用域。
 - 高频画布操作停留在适合的本地执行边界；跨边界通信采用批量、版本化消息。
 - 发布前验证启动时间、空闲内存、长文档交互、键盘导航和各平台窗口行为。
+- 每个待发布 commit 必须同时具有 macOS 与 Windows 的原生 `verify`、安装包和产品 smoke 结果；Linux 当前记录结果但不作为阻塞项。
 
 ## 复审条件
 

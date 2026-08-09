@@ -18,7 +18,7 @@ UI 设计是首要能力和最先打磨的工作流，但不是产品边界。�
 - `opendesign_inspect_document`、`opendesign_apply_transaction`、`opendesign_read_image` 与 `opendesign_place_image` 四个 typed tools；图片/文档附件、剪贴板/拖放，以及受限读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL 的多模态链路。
 - Renderer/Preload/Main/Agent 的运行时校验、最小环境变量 allowlist 和按 run 绑定 Design File/revision/scope 的设计工具桥。
 
-尚未完成的主要目标包括：完整 Working Set/Mutation Targets/Capabilities、attached roots、通用 per-run resource handles、Main approval/audit/sandbox 执行链、跨 Project 多目标、完整 MCP 产品链、`fetch_reference`/隔离 `capture_reference`，以及能力基线中列出的专业矢量、布局、组件、变量、富文本和导入导出。
+当前自动化与普通生产构建只在 macOS arm64 上验证。Windows 虽已有 electron-builder 配置和 NSIS 入口，但尚未取得原生构建、安装和产品 smoke 证据，属于 P0 发布阻塞项。尚未完成的其他主要目标包括：完整 Working Set/Mutation Targets/Capabilities、attached roots、通用 per-run resource handles、Main approval/audit/sandbox 执行链、跨 Project 多目标、完整 MCP 产品链、`fetch_reference`/隔离 `capture_reference`，以及能力基线中列出的专业矢量、布局、组件、变量、富文本和导入导出。
 
 本文后续同时描述当前边界和已接受的目标架构；目标内容不能当作已完成事实。实施状态见[专业设计能力基线](design-capability-baseline.md)与[路线图](roadmap.md)，项目/会话/跨目录边界见 [ADR-0006](adr/0006-project-conversation-agent-scope.md)。
 
@@ -47,6 +47,12 @@ OpenDesign 追求高质量、低 Web 感的 Codex 式桌面 UI。应用应表现
 ### 2.6 组织、上下文与权限分离
 
 Project 用于组织设计文件、会话和持久配置，不是文件系统 sandbox。Conversation 的 `homeProjectId` 只定义默认归档与上下文锚点；实际读取、写入和执行由每个 run 的 Working Set、Mutation Targets、Capabilities、Approval 与 Sandbox 决定。
+
+### 2.7 跨平台是发布能力
+
+OpenDesign 是跨平台桌面产品，不是 macOS 专用工具。macOS 与 Windows 同属一级支持平台：两者必须提供原生安装包，并通过启动、窗口/菜单、画布输入、文件选择、Project 保存重开、Agent utilityProcess、凭据存储、附件、模型调用、升级与卸载等平台 smoke。不能因为共享 Electron/TypeScript 代码或 macOS 测试通过，就推断 Windows 可用。
+
+平台特有实现必须位于明确 adapter 或条件分支，并在另一一级平台具有等价行为或显式替代。Linux 仍是目标平台，构建配置和代码边界不得主动封死 Linux，但当前阶段 Linux 缺陷不阻塞 macOS/Windows 里程碑。
 
 ## 3. 核心工作流
 

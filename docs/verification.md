@@ -7,6 +7,16 @@
 
 本文只记录当前工作树实际执行的证据。计划命令、历史会话结果和第三方能力说明不算通过。
 
+## 平台支持矩阵
+
+| 平台    | 产品级别 | 当前证据                                                                       | 发布状态       |
+| ------- | -------- | ------------------------------------------------------------------------------ | -------------- |
+| macOS   | 一级支持 | arm64 源码门禁与普通生产 build 通过；本次未复验 DMG/ZIP、安装和 packaged smoke | 未达到发布门禁 |
+| Windows | 一级支持 | 已配置 NSIS 与 `package:win`；尚无 Windows 原生 verify、安装包或产品 smoke     | **P0 阻塞**    |
+| Linux   | 目标平台 | 保留 electron-builder 配置，当前无原生验证                                     | 当前阶段不阻塞 |
+
+macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。Electron、TypeScript 和共享测试通过不等于另一操作系统可用，protected V8 bytecode 也不能跨系统构建后复用。
+
 ## 自动化门禁
 
 当前工作树通过：
@@ -82,7 +92,8 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 - `build:protected` 与 V8 bytecode startup。
 - `package:dir`、ASAR/extraResources 内容审计和 packaged Agent smoke。
 - Developer ID 签名、hardened runtime、notarization、DMG/ZIP。
-- Windows 与 Linux 原生构建和 protected bytecode。
+- Windows 原生 verify、protected bytecode、NSIS 安装/升级/卸载与产品 smoke。
+- Linux 原生构建和 protected bytecode（当前不阻塞 macOS/Windows 里程碑）。
 - 从实际发行物生成的完整第三方许可证清单。
 
 因此当前结果只证明源码门禁与普通生产构建通过，不代表可发布安装包已经完成。

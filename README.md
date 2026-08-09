@@ -4,6 +4,8 @@ OpenDesign 是一个本地优先的 AI-native 通用设计平台。用户既可�
 
 UI 设计是第一个质量标杆，但不是产品边界。文档协议和能力架构同时面向 Logo、海报、品牌物料、社交图片、演示图形及后续设计类型。
 
+OpenDesign 定位为跨平台桌面产品。**macOS 与 Windows 是一级支持平台，两者都必须可安装、启动、编辑、运行 Agent、保存并恢复项目，任一平台不满足门禁都不能视为桌面版本可发布。** Linux 保留在跨平台目标中，但当前阶段不作为发布阻塞项。
+
 > 当前处于早期开发阶段，不是可发布版本。已实现能力、缺口和验证状态分别以[产品与架构](docs/product-and-architecture.md)、[专业设计能力基线](docs/design-capability-baseline.md)、[路线图](docs/roadmap.md)和[验证状态](docs/verification.md)为准。
 
 ## 架构概览
@@ -59,6 +61,18 @@ pnpm test
 pnpm build
 pnpm verify
 ```
+
+原生安装包必须在对应操作系统构建和验证，不能用跨平台产物推断可用性：
+
+```bash
+# macOS：DMG + ZIP
+pnpm --dir apps/desktop package:mac
+
+# Windows：NSIS installer
+pnpm --dir apps/desktop package:win
+```
+
+当前仓库只有 macOS 源码门禁与普通生产构建证据；Windows 原生构建、安装和 smoke 是 P0，详见[验证状态](docs/verification.md)与[路线图](docs/roadmap.md)。
 
 ## 仓库结构
 

@@ -59,6 +59,7 @@ OpenDesign DesignDocument / DesignTransaction / revision / history
 | Agent 设计能力    | 读取文档、结构化事务、作用域、revision、图片多模态读取/放置、语义化专业命令、预览/审批、进度、取消、审计                                                   | inspect/apply/read_image/place_image 基础路径已存在；专业高层工具、完整 Capability/Approval/Audit/Sandbox、网页 fetch/capture 待实现   |
 | 性能与可靠性      | 万级节点、增量投影、资源释放、长任务取消、Agent 并发时画布响应、内存/帧率基准、上下文丢失恢复                                                              | Leafer 增量复用和基础错误路径已实现；正式节点/图片/效果基准与恢复测试待建立                                                            |
 | 可访问性与桌面 UX | 快捷键、焦点恢复、菜单、状态不只靠颜色、缩放/主题/语言、键盘操作、可取消长任务                                                                             | 工作台与部分控件已覆盖；所有新增专业命令必须同步补键盘、焦点、错误和窄窗口验证                                                         |
+| 平台与分发        | macOS/Windows 原生安装、启动、窗口/菜单、输入、文件/凭据、Agent、保存恢复、升级卸载；Linux 保留目标                                                        | macOS 源码与普通 build 已验证，当前安装包未复验；Windows NSIS 配置已补但无原生证据，属于 P0；Linux 当前不阻塞                          |
 
 ## 4. 协议演进要求
 
