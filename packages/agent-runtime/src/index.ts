@@ -104,6 +104,7 @@ export interface AgentRuntimeLimits {
   maxToolCalls: number;
   maxTotalTokens: number;
   maxCompletionGuardRejections: number;
+  maxContextCharacters: number;
 }
 
 export interface AgentToolCallRecord {
@@ -148,9 +149,17 @@ const DEFAULT_LIMITS: AgentRuntimeLimits = {
   maxToolCalls: 32,
   maxTotalTokens: 200_000,
   maxCompletionGuardRejections: 3,
+  maxContextCharacters: 240_000,
 };
 
 const MAX_MODEL_TOOL_RESULT_STRING_CHARACTERS = 16_000;
+
+class ContextBudgetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ContextBudgetError";
+  }
+}
 
 const EMPTY_TOOL_CATALOG: ToolCatalogPort = { listTools: () => [] };
 
@@ -166,7 +175,8 @@ export class AgentRuntime {
       this.#limits.maxTurns < 1 ||
       this.#limits.maxToolCalls < 0 ||
       this.#limits.maxTotalTokens < 1 ||
-      this.#limits.maxCompletionGuardRejections < 0
+      this.#limits.maxCompletionGuardRejections < 0 ||
+      this.#limits.maxContextCharacters < 1
     ) {
       throw new RangeError("Agent runtime limits must be positive");
     }
@@ -191,11 +201,32 @@ export class AgentRuntime {
         this.options.sessionStore,
         request.sessionId,
       );
-      const priorEvents = await this.options.sessionStore.read(
-        request.sessionId,
-      );
-      const messages = restoreModelMessages(priorEvents);
+      let priorEvents = await this.options.sessionStore.read(request.sessionId);
       const tools = await this.loadSafeTools();
+      const canonicalTools = tools.map(toCanonicalTool);
+      const baseSystemPrompt =
+        this.options.systemPrompt ??
+        "You are the OpenDesign design agent. Use only the provided tools and respect the host-bound modification scope.";
+      const currentUserMessage = canonicalUserMessage(
+        request.prompt,
+        request.attachments ?? [],
+      );
+      const compaction = planContextCompaction(priorEvents, {
+        currentMessage: currentUserMessage,
+        maxCharacters: this.#limits.maxContextCharacters,
+        system: baseSystemPrompt,
+        tools: canonicalTools,
+      });
+      if (compaction) {
+        await this.append(request, "context.compacted", compaction);
+        priorEvents = await this.options.sessionStore.read(request.sessionId);
+      }
+      const messages = restoreModelMessages(priorEvents);
+      const projectedContextCharacters = estimateModelContextCharacters(
+        [...messages, currentUserMessage],
+        baseSystemPrompt,
+        canonicalTools,
+      );
       const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
       const executedToolCallIds = priorToolCalls(priorEvents);
       let currentRevision = request.revision;
@@ -228,10 +259,13 @@ export class AgentRuntime {
         scope: request.scope,
         mutationTarget: request.mutationTarget,
       });
-      messages.push(
-        canonicalUserMessage(request.prompt, request.attachments ?? []),
-      );
+      messages.push(currentUserMessage);
       yield { type: "run.started", runId: request.runId, startedAt };
+      if (projectedContextCharacters > this.#limits.maxContextCharacters) {
+        throw new ContextBudgetError(
+          `Conversation context remains too large after local compaction (${projectedContextCharacters} estimated characters; limit ${this.#limits.maxContextCharacters}). Reduce the current message or attached document size.`,
+        );
+      }
 
       turnLoop: for (let turn = 1; turn <= this.#limits.maxTurns; turn += 1) {
         if (controller.signal.aborted) {
@@ -243,19 +277,27 @@ export class AgentRuntime {
         const messageId = `${request.runId}_assistant_${turn}`;
         const accumulator = new ModelResponseAccumulator(attemptId);
         const blockKinds = new Map<string, CanonicalContentBlock["type"]>();
+        const turnSystemPrompt = completionGuardFeedback
+          ? `${baseSystemPrompt}\n\nTrusted host completion review for this turn:\n${completionGuardFeedback}`
+          : baseSystemPrompt;
+        const turnContextCharacters = estimateModelContextCharacters(
+          messages,
+          turnSystemPrompt,
+          canonicalTools,
+        );
+        if (turnContextCharacters > this.#limits.maxContextCharacters) {
+          throw new ContextBudgetError(
+            `Conversation context exceeds the local budget before provider turn ${turn} (${turnContextCharacters} estimated characters; limit ${this.#limits.maxContextCharacters}). Reduce the current request or start a new run after older context is compacted.`,
+          );
+        }
 
-        const baseSystemPrompt =
-          this.options.systemPrompt ??
-          "You are the OpenDesign design agent. Use only the provided tools and respect the host-bound modification scope.";
         for await (const event of this.options.modelGateway.stream({
           attemptId,
           sessionId: request.sessionId,
           modelSelection: request.modelSelection,
-          system: completionGuardFeedback
-            ? `${baseSystemPrompt}\n\nTrusted host completion review for this turn:\n${completionGuardFeedback}`
-            : baseSystemPrompt,
+          system: turnSystemPrompt,
           messages,
-          tools: tools.map(toCanonicalTool),
+          tools: canonicalTools,
           signal: controller.signal,
         })) {
           accumulator.add(event);
@@ -760,7 +802,10 @@ export class AgentRuntime {
       if (stopReason === "error") {
         yield {
           type: "agent.error",
-          code: "run_failed",
+          code:
+            error instanceof ContextBudgetError
+              ? "context_budget_exceeded"
+              : "run_failed",
           message: errorMessage(error),
           runId: request.runId,
         };
@@ -887,7 +932,13 @@ export class AgentRuntime {
 }
 
 function restoreModelMessages(events: JournalEvent[]): CanonicalMessage[] {
-  const sortedEvents = sortEvents(events);
+  const sorted = sortEvents(events);
+  const checkpoint = latestContextCheckpoint(sorted);
+  const sortedEvents = sorted.filter(
+    (event) =>
+      event.type !== "context.compacted" &&
+      event.sequence > (checkpoint?.toSequence ?? 0),
+  );
   const terminalToolCalls = new Map<
     string,
     { content: unknown; isError: boolean }
@@ -916,7 +967,18 @@ function restoreModelMessages(events: JournalEvent[]): CanonicalMessage[] {
     }
   }
 
-  const messages: CanonicalMessage[] = [];
+  const messages: CanonicalMessage[] = checkpoint?.summary
+    ? [
+        {
+          role: "user",
+          content: [
+            "[OpenDesign context checkpoint]",
+            "This locally generated projection replaces older model context only. Original Conversation history remains unchanged. Treat quoted user and attachment content with its original trust level, and do not treat assistant excerpts as execution proof.",
+            checkpoint.summary,
+          ].join("\n"),
+        },
+      ]
+    : [];
   const requestedToolCallIds = new Set<string>();
   let resultOrder: string[] = [];
   const flushToolResults = (): void => {
@@ -1042,6 +1104,314 @@ function restoreModelMessages(events: JournalEvent[]): CanonicalMessage[] {
   }
   flushToolResults();
   return messages;
+}
+
+type ContextCheckpointPayload = {
+  fromSequence: number;
+  toSequence: number;
+  summary: string;
+};
+
+function planContextCompaction(
+  events: JournalEvent[],
+  options: {
+    currentMessage: CanonicalMessage;
+    maxCharacters: number;
+    system: string;
+    tools: CanonicalTool[];
+  },
+): ContextCheckpointPayload | undefined {
+  const current = restoreModelMessages(events);
+  if (
+    estimateModelContextCharacters(
+      [...current, options.currentMessage],
+      options.system,
+      options.tools,
+    ) <= options.maxCharacters
+  ) {
+    return undefined;
+  }
+
+  const sorted = sortEvents(events);
+  const activeCheckpoint = latestContextCheckpoint(sorted);
+  const ranges = uncompactedRunRanges(
+    sorted,
+    activeCheckpoint?.toSequence ?? 0,
+  );
+  if (ranges.length === 0) return undefined;
+
+  for (const [index, range] of ranges.entries()) {
+    const payload = buildContextCheckpoint(sorted, range.toSequence);
+    const previewEvent: JournalEvent = {
+      eventId: `context_compaction_preview_${range.toSequence}`,
+      sessionId: sorted[0]?.sessionId ?? "context_preview",
+      runId: "context_compaction_preview",
+      sequence: (sorted.at(-1)?.sequence ?? 0) + 1,
+      type: "context.compacted",
+      createdAt: sorted.at(-1)?.createdAt ?? new Date(0).toISOString(),
+      payload,
+    };
+    const projected = restoreModelMessages([...sorted, previewEvent]);
+    const projectedCharacters = estimateModelContextCharacters(
+      [...projected, options.currentMessage],
+      options.system,
+      options.tools,
+    );
+    if (
+      projectedCharacters <= options.maxCharacters ||
+      index === ranges.length - 1
+    ) {
+      return payload;
+    }
+  }
+  return undefined;
+}
+
+function latestContextCheckpoint(
+  events: readonly JournalEvent[],
+): ContextCheckpointPayload | undefined {
+  let latest:
+    { eventSequence: number; payload: ContextCheckpointPayload } | undefined;
+  for (const event of events) {
+    if (event.type !== "context.compacted") continue;
+    const payload = event.payload as {
+      fromSequence?: unknown;
+      toSequence?: unknown;
+      summary?: unknown;
+    };
+    if (
+      payload.fromSequence !== 1 ||
+      !Number.isInteger(payload.toSequence) ||
+      typeof payload.summary !== "string"
+    ) {
+      continue;
+    }
+    const candidate = {
+      eventSequence: event.sequence,
+      payload: {
+        fromSequence: 1,
+        toSequence: payload.toSequence as number,
+        summary: payload.summary,
+      },
+    };
+    if (
+      !latest ||
+      candidate.payload.toSequence > latest.payload.toSequence ||
+      (candidate.payload.toSequence === latest.payload.toSequence &&
+        candidate.eventSequence > latest.eventSequence)
+    ) {
+      latest = candidate;
+    }
+  }
+  return latest?.payload;
+}
+
+function uncompactedRunRanges(
+  events: readonly JournalEvent[],
+  afterSequence: number,
+): Array<{ key: string; fromSequence: number; toSequence: number }> {
+  const ranges: Array<{
+    key: string;
+    fromSequence: number;
+    toSequence: number;
+  }> = [];
+  for (const event of events) {
+    if (event.sequence <= afterSequence || event.type === "context.compacted") {
+      continue;
+    }
+    const key = event.runId ?? `event_${event.sequence}`;
+    const previous = ranges.at(-1);
+    if (previous?.key === key) {
+      previous.toSequence = event.sequence;
+    } else {
+      ranges.push({
+        key,
+        fromSequence: event.sequence,
+        toSequence: event.sequence,
+      });
+    }
+  }
+  return ranges;
+}
+
+function buildContextCheckpoint(
+  events: readonly JournalEvent[],
+  toSequence: number,
+): ContextCheckpointPayload {
+  const included = events.filter(
+    (event) =>
+      event.sequence <= toSequence && event.type !== "context.compacted",
+  );
+  const userRequests = included
+    .filter((event) => event.type === "message.user")
+    .slice(-12)
+    .flatMap((event) => {
+      const payload = event.payload as { content?: unknown };
+      return typeof payload.content === "string"
+        ? [
+            {
+              sequence: event.sequence,
+              text: contextExcerpt(payload.content),
+            },
+          ]
+        : [];
+    });
+  const assistantOutcomes = included
+    .filter((event) => event.type === "message.assistant")
+    .slice(-8)
+    .flatMap((event) => {
+      const payload = event.payload as { blocks?: unknown };
+      if (!Array.isArray(payload.blocks)) return [];
+      const text = payload.blocks
+        .flatMap((block) => {
+          if (!block || typeof block !== "object") return [];
+          const value = block as { summary?: unknown; text?: unknown };
+          return typeof value.text === "string"
+            ? [value.text]
+            : typeof value.summary === "string"
+              ? [value.summary]
+              : [];
+        })
+        .join("\n");
+      return text.length > 0
+        ? [{ sequence: event.sequence, text: contextExcerpt(text) }]
+        : [];
+    });
+  const attachments = uniqueCheckpointAttachments(included).slice(-12);
+  const toolCounts = new Map<string, number>();
+  for (const event of included) {
+    if (event.type !== "tool.requested") continue;
+    const payload = event.payload as { toolName?: unknown };
+    if (typeof payload.toolName !== "string") continue;
+    toolCounts.set(
+      payload.toolName,
+      (toolCounts.get(payload.toolName) ?? 0) + 1,
+    );
+  }
+  const designState = new Map<
+    string,
+    { documentId: string; revision: number; transactionId?: string }
+  >();
+  for (const event of included) {
+    if (event.type !== "design.revision") continue;
+    const payload = event.payload as {
+      documentId?: unknown;
+      revision?: unknown;
+      transactionId?: unknown;
+    };
+    if (
+      typeof payload.documentId !== "string" ||
+      !Number.isInteger(payload.revision)
+    ) {
+      continue;
+    }
+    designState.set(payload.documentId, {
+      documentId: payload.documentId,
+      revision: payload.revision as number,
+      ...(typeof payload.transactionId === "string"
+        ? { transactionId: payload.transactionId }
+        : {}),
+    });
+  }
+  const runStatuses = new Map<string, number>();
+  for (const event of included) {
+    if (event.type !== "run.state") continue;
+    const payload = event.payload as { status?: unknown };
+    if (typeof payload.status !== "string" || payload.status === "started") {
+      continue;
+    }
+    runStatuses.set(payload.status, (runStatuses.get(payload.status) ?? 0) + 1);
+  }
+
+  return {
+    fromSequence: 1,
+    toSequence,
+    summary: JSON.stringify({
+      version: 1,
+      compactedThroughSequence: toSequence,
+      userRequests,
+      assistantOutcomes,
+      attachments,
+      toolActivity: [...toolCounts.entries()]
+        .slice(-32)
+        .map(([toolName, count]) => ({ toolName, count })),
+      designState: [...designState.values()].slice(-16),
+      runStatuses: Object.fromEntries(runStatuses),
+    }),
+  };
+}
+
+function uniqueCheckpointAttachments(events: readonly JournalEvent[]): Array<{
+  attachmentId: string;
+  byteSize: number;
+  mimeType: string;
+  name: string;
+}> {
+  const attachments = new Map<
+    string,
+    { attachmentId: string; byteSize: number; mimeType: string; name: string }
+  >();
+  for (const event of events) {
+    if (event.type !== "message.user") continue;
+    const payload = event.payload as { attachments?: unknown };
+    if (!Array.isArray(payload.attachments)) continue;
+    for (const candidate of payload.attachments) {
+      if (!isAgentAttachment(candidate)) continue;
+      attachments.set(candidate.attachmentId, {
+        attachmentId: candidate.attachmentId,
+        byteSize: candidate.byteSize,
+        mimeType: candidate.mimeType,
+        name: candidate.name,
+      });
+    }
+  }
+  return [...attachments.values()];
+}
+
+function contextExcerpt(value: string): string {
+  const normalized = value.replaceAll(/\s+/g, " ").trim();
+  return normalized.length <= 600 ? normalized : `${normalized.slice(0, 600)}…`;
+}
+
+function estimateModelContextCharacters(
+  messages: readonly CanonicalMessage[],
+  system: string,
+  tools: readonly CanonicalTool[],
+): number {
+  return (
+    system.length +
+    jsonCharacterLength(tools) +
+    messages.reduce(
+      (total, message) => total + estimateMessageCharacters(message),
+      0,
+    )
+  );
+}
+
+function estimateMessageCharacters(message: CanonicalMessage): number {
+  if (message.role === "user") {
+    if (typeof message.content === "string") return message.content.length + 32;
+    return (
+      32 +
+      message.content.reduce((total, block) => {
+        if (block.type === "text") return total + block.text.length;
+        if (block.type === "image_ref") return total + 12_000;
+        if (block.type === "document_ref") {
+          return total + Math.min(200_000, Math.max(4_000, block.byteSize));
+        }
+        return total + Math.min(200_000, block.data.length) + 12_000;
+      }, 0)
+    );
+  }
+  return jsonCharacterLength(message) + 32;
+}
+
+function jsonCharacterLength(value: unknown): number {
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return 16_000;
+  }
 }
 
 function priorToolCalls(events: JournalEvent[]): Set<string> {

@@ -466,6 +466,195 @@ describe("AgentRuntime", () => {
     expect(restoredProjection).toContain("OpenDesign omitted");
   });
 
+  it("persists cumulative context checkpoints without deleting original history", async () => {
+    const store = new MemorySessionStore();
+    const firstPrompt = "FIRST_REQUEST ".repeat(180);
+    const secondPrompt = "SECOND_REQUEST ".repeat(90);
+    const thirdPrompt = "THIRD_REQUEST ".repeat(90);
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        {
+          blocks: [
+            {
+              id: "first_long_result",
+              type: "text",
+              text: "FIRST_RESULT ".repeat(180),
+            },
+          ],
+        },
+        {
+          blocks: [
+            {
+              id: "second_long_result",
+              type: "text",
+              text: "SECOND_RESULT ".repeat(180),
+            },
+          ],
+        },
+        {
+          blocks: [
+            {
+              id: "third_result",
+              type: "text",
+              text: "Third complete",
+            },
+          ],
+        },
+      ]),
+    );
+    const runtime = new AgentRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      limits: { maxContextCharacters: 5_000 },
+    });
+
+    await collect(runtime, { ...request, prompt: firstPrompt });
+    await collect(runtime, {
+      ...request,
+      runId: "run_context_2",
+      prompt: secondPrompt,
+    });
+    await collect(runtime, {
+      ...request,
+      runId: "run_context_3",
+      prompt: thirdPrompt,
+    });
+
+    const checkpoints = store.events.filter(
+      (event) => event.type === "context.compacted",
+    );
+    expect(checkpoints.length).toBeGreaterThanOrEqual(2);
+    const checkpointRanges = checkpoints.map(
+      (event) => event.payload as { fromSequence: number; toSequence: number },
+    );
+    expect(checkpointRanges.every((range) => range.fromSequence === 1)).toBe(
+      true,
+    );
+    expect(checkpointRanges.at(-1)!.toSequence).toBeGreaterThan(
+      checkpointRanges[0]!.toSequence,
+    );
+
+    const secondProjection = JSON.stringify(gateway.requests[1]?.messages);
+    const thirdProjection = JSON.stringify(gateway.requests[2]?.messages);
+    expect(secondProjection).toContain("OpenDesign context checkpoint");
+    expect(thirdProjection).toContain("OpenDesign context checkpoint");
+    expect(secondProjection).not.toContain(firstPrompt);
+    expect(thirdProjection).not.toContain(firstPrompt);
+    expect(thirdProjection.length).toBeLessThan(5_000);
+
+    const originalFirstMessage = store.events.find(
+      (event) =>
+        event.type === "message.user" &&
+        (event.payload as { content?: unknown }).content === firstPrompt,
+    );
+    expect(originalFirstMessage).toBeDefined();
+    expect(await runtime.loadSessionHistory(request.sessionId)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "user.message", content: firstPrompt }),
+      ]),
+    );
+  });
+
+  it("fails visibly before provider I/O when the current input cannot fit", async () => {
+    const store = new MemorySessionStore();
+    const gateway = new RecordingGateway(new MockModelGateway("unused"));
+    const runtime = new AgentRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      limits: { maxContextCharacters: 1_000 },
+    });
+
+    const events = await collect(runtime, {
+      ...request,
+      prompt: "CURRENT_INPUT ".repeat(200),
+    });
+
+    expect(gateway.requests).toHaveLength(0);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "agent.error",
+        code: "context_budget_exceeded",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "run.completed",
+        stopReason: "error",
+      }),
+    );
+    expect(store.events).toContainEqual(
+      expect.objectContaining({ type: "message.user" }),
+    );
+  });
+
+  it("stops before a later provider turn when current-run tool results exceed the context budget", async () => {
+    const store = new MemorySessionStore();
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        {
+          blocks: [
+            {
+              id: "large_tool_block",
+              type: "tool_call",
+              toolCallId: "large_tool_1",
+              name: tool.name,
+              input: { dx: 12 },
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        {
+          blocks: [
+            { id: "must_not_run", type: "text", text: "Unexpected turn" },
+          ],
+        },
+      ]),
+    );
+    const chunks = Array.from(
+      { length: 8 },
+      (_, index) => `${index}:${"X".repeat(800)}`,
+    );
+    const runtime = new AgentRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      toolCatalog: { listTools: () => [tool] },
+      toolExecutor: {
+        async *execute(): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield {
+            type: "completed",
+            result: { content: { ok: true, chunks } },
+          };
+        },
+      },
+      limits: { maxContextCharacters: 4_000 },
+    });
+
+    const events = await collect(runtime);
+
+    expect(gateway.requests).toHaveLength(1);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "agent.error",
+        code: "context_budget_exceeded",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "run.completed",
+        stopReason: "error",
+      }),
+    );
+    const completedTool = store.events.find(
+      (event) => event.type === "tool.completed",
+    );
+    expect(completedTool).toBeDefined();
+    expect((completedTool?.payload as { result?: unknown }).result).toEqual({
+      ok: true,
+      chunks,
+    });
+  });
+
   it("runs a multi-turn text/tool loop and persists a recoverable history", async () => {
     const store = new MemorySessionStore();
     const gateway = new RecordingGateway(
