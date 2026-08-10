@@ -587,6 +587,46 @@ describe("AgentRuntime", () => {
     );
   });
 
+  it("distinguishes an incompatible model window from conversation growth", async () => {
+    const store = new MemorySessionStore();
+    const gateway = new RecordingGateway(new MockModelGateway("unused"));
+    const protocolHeavyTool: AgentToolDefinition = {
+      ...tool,
+      inputSchema: {
+        type: "object",
+        properties: {
+          payload: {
+            type: "string",
+            description: "x".repeat(40_000),
+          },
+        },
+        additionalProperties: false,
+      },
+    };
+    const runtime = new AgentRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      toolCatalog: { listTools: () => [protocolHeavyTool] },
+    });
+
+    const events = await collect(runtime, {
+      ...request,
+      prompt: "Short request",
+      modelContext: { contextWindow: 8_192, maxOutputTokens: 2_048 },
+    });
+
+    expect(gateway.requests).toHaveLength(0);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "agent.error",
+        code: "model_context_incompatible",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "run.completed", stopReason: "error" }),
+    );
+  });
+
   it("stops before a later provider turn when current-run tool results exceed the context budget", async () => {
     const store = new MemorySessionStore();
     const gateway = new RecordingGateway(

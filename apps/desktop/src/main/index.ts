@@ -698,6 +698,9 @@ function registerIpc() {
       throw new TypeError("Agent handshake is host-internal");
     }
     if (request.type === "run.start") {
+      if (request.modelContext !== undefined) {
+        throw new TypeError("Renderer cannot supply model context metadata");
+      }
       if (!globalTaskCoordinator) {
         throw new Error("Global Task services are not initialized");
       }
@@ -705,7 +708,12 @@ function registerIpc() {
       requireAgentReferenceHost().registerRun(request);
       conversationIdByRunId.set(request.runId, request.sessionId);
       try {
-        agentHost.send(request);
+        agentHost.send({
+          ...request,
+          modelContext: requireModelProviderHost().resolveModelContext(
+            request.modelSelection,
+          ),
+        });
       } catch (error) {
         conversationIdByRunId.delete(request.runId);
         requireAgentReferenceHost().releaseRun(request.runId);
@@ -767,7 +775,10 @@ function registerIpc() {
 }
 
 void app.whenReady().then(async () => {
-  if (process.platform === "darwin") {
+  if (
+    process.platform === "darwin" &&
+    process.env.OPENDESIGN_AGENT_SMOKE !== "1"
+  ) {
     app.dock?.setIcon(resolveApplicationIconPath());
   }
 
@@ -806,6 +817,10 @@ void app.whenReady().then(async () => {
             providerId: "smoke",
             modelId: "smoke",
             reasoningEffort: "off",
+          },
+          modelContext: {
+            contextWindow: 200_000,
+            maxOutputTokens: 16_384,
           },
         });
       }

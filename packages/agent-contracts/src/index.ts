@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const AGENT_PROTOCOL_VERSION = "3.3.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.4.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
@@ -85,6 +85,14 @@ export const ModelSelectionSchema = Type.Object(
         Type.Literal("max"),
       ]),
     ),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentModelContextSchema = Type.Object(
+  {
+    contextWindow: Type.Integer({ minimum: 1_024, maximum: 10_000_000 }),
+    maxOutputTokens: Type.Integer({ minimum: 1, maximum: 2_000_000 }),
   },
   { additionalProperties: false },
 );
@@ -580,6 +588,7 @@ export const AgentRequestSchema = Type.Union([
       scope: SelectionScopeSchema,
       mutationTarget: DesignMutationTargetSchema,
       modelSelection: ModelSelectionSchema,
+      modelContext: Type.Optional(AgentModelContextSchema),
     },
     { additionalProperties: false },
   ),
@@ -766,6 +775,7 @@ export type DurableTimelineEvent = Static<typeof DurableTimelineEventSchema>;
 export type AgentRequest = Static<typeof AgentRequestSchema>;
 export type AgentEvent = Static<typeof AgentEventSchema>;
 export type AgentModelSelection = Static<typeof ModelSelectionSchema>;
+export type AgentModelContext = Static<typeof AgentModelContextSchema>;
 
 export function isAgentAttachment(value: unknown): value is AgentAttachment {
   return Value.Check(AgentAttachmentSchema, value);

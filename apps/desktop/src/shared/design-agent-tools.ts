@@ -1,5 +1,4 @@
 import {
-  NodeDesignOperationSchema,
   isDesignOperation,
   type DesignOperation,
 } from "@opendesign/design-contracts";
@@ -42,6 +41,339 @@ export type DesignApplyToolInput = {
   summary?: string;
   commands: DesignOperation[];
 };
+
+// The canonical DesignOperation schema is deliberately exhaustive and is used
+// for the trusted runtime validation below. Serializing that TypeBox union into
+// a model tool repeated the complete node union for insert and replace, turning
+// one tool into a 300+ KB request. The model-facing schema describes the same
+// public command surface in a compact form; it is guidance, never the trust
+// boundary. Every generated command still has to pass isDesignOperation().
+const MODEL_BLEND_MODES = [
+  "pass-through",
+  "normal",
+  "multiply",
+  "screen",
+  "overlay",
+  "darken",
+  "lighten",
+  "color-dodge",
+  "color-burn",
+  "hard-light",
+  "soft-light",
+  "difference",
+  "exclusion",
+  "hue",
+  "saturation",
+  "color",
+  "luminosity",
+] as const;
+
+const MODEL_POINT_SCHEMA = {
+  type: "object",
+  properties: { x: { type: "number" }, y: { type: "number" } },
+  required: ["x", "y"],
+  additionalProperties: false,
+} as const;
+
+const MODEL_SIZE_SCHEMA = {
+  type: "object",
+  properties: {
+    width: { type: "number", minimum: 0 },
+    height: { type: "number", minimum: 0 },
+  },
+  required: ["width", "height"],
+  additionalProperties: false,
+} as const;
+
+const MODEL_TRANSFORM_SCHEMA = {
+  type: "array",
+  minItems: 6,
+  maxItems: 6,
+  items: { type: "number" },
+  description: "Affine matrix [a,b,c,d,tx,ty].",
+} as const;
+
+const MODEL_PAINT_SCHEMA = {
+  type: "object",
+  description:
+    "A solid, linear-gradient, radial-gradient, angular-gradient, or image paint. solid requires color; gradients require stops and may use from/to/rotation/stretch; image requires assetId and fit. opacity is always required.",
+  properties: {
+    type: {
+      enum: [
+        "solid",
+        "linear-gradient",
+        "radial-gradient",
+        "angular-gradient",
+        "image",
+      ],
+    },
+    color: { type: "string", minLength: 1 },
+    opacity: { type: "number", minimum: 0, maximum: 1 },
+    visible: { type: "boolean" },
+    blendMode: { enum: MODEL_BLEND_MODES },
+    stops: {
+      type: "array",
+      minItems: 2,
+      items: {
+        type: "object",
+        properties: {
+          offset: { type: "number", minimum: 0, maximum: 1 },
+          color: { type: "string", minLength: 1 },
+          opacity: { type: "number", minimum: 0, maximum: 1 },
+        },
+        required: ["offset", "color", "opacity"],
+        additionalProperties: false,
+      },
+    },
+    from: MODEL_POINT_SCHEMA,
+    to: MODEL_POINT_SCHEMA,
+    rotation: { type: "number" },
+    stretch: { type: "number", exclusiveMinimum: 0 },
+    assetId: { type: "string", minLength: 1 },
+    fit: { enum: ["fill", "contain", "cover", "tile"] },
+    scale: MODEL_POINT_SCHEMA,
+    offset: MODEL_POINT_SCHEMA,
+  },
+  required: ["type", "opacity"],
+  additionalProperties: false,
+} as const;
+
+const MODEL_EFFECT_SCHEMA = {
+  type: "object",
+  description:
+    "An OpenDesign effect. Shadows require color, opacity, offset, blur, and spread; glows require color, opacity, radius, and spread; blur requires radius; grayscale requires amount.",
+  properties: {
+    type: {
+      enum: [
+        "drop-shadow",
+        "inner-shadow",
+        "outer-glow",
+        "inner-glow",
+        "layer-blur",
+        "background-blur",
+        "grayscale",
+      ],
+    },
+    color: { type: "string", minLength: 1 },
+    opacity: { type: "number", minimum: 0, maximum: 1 },
+    offset: MODEL_POINT_SCHEMA,
+    blur: { type: "number", minimum: 0 },
+    spread: { type: "number" },
+    radius: { type: "number", minimum: 0 },
+    amount: { type: "number", minimum: 0, maximum: 1 },
+    visible: { type: "boolean" },
+    blendMode: { enum: MODEL_BLEND_MODES },
+  },
+  required: ["type"],
+  additionalProperties: false,
+} as const;
+
+const MODEL_SHAPE_PROPERTIES = {
+  fills: { type: "array", items: MODEL_PAINT_SCHEMA },
+  strokes: { type: "array", items: MODEL_PAINT_SCHEMA },
+  strokeWidth: { type: "number", minimum: 0 },
+  strokeAlign: { enum: ["inside", "center", "outside"] },
+  strokeCap: { enum: ["none", "round", "square"] },
+  strokeJoin: { enum: ["miter", "round", "bevel"] },
+  dashPattern: {
+    type: "array",
+    items: { type: "number", minimum: 0 },
+  },
+} as const;
+
+const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
+  type: "object",
+  description:
+    "Properties must match node.kind. frame: shape fields + cornerRadius + clipsContent; group: empty object; rectangle: shape fields + cornerRadius; ellipse: shape fields; text: content/fontFamily/fontSize/fontWeight/lineHeight/letterSpacing/textAlignHorizontal/textAlignVertical + shape fields; image: assetId/fit/altText/cornerRadius; path or vector: shape fields + SVG path and optional fillRule.",
+  properties: {
+    ...MODEL_SHAPE_PROPERTIES,
+    cornerRadius: { type: "number", minimum: 0 },
+    clipsContent: { type: "boolean" },
+    content: { type: "string" },
+    fontFamily: { type: "string", minLength: 1 },
+    fontSize: { type: "number", exclusiveMinimum: 0 },
+    fontWeight: { type: "integer", minimum: 1, maximum: 1_000 },
+    lineHeight: { type: "number", exclusiveMinimum: 0 },
+    letterSpacing: { type: "number" },
+    textAlignHorizontal: {
+      enum: ["left", "center", "right", "justify"],
+    },
+    textAlignVertical: { enum: ["top", "center", "bottom"] },
+    assetId: { type: "string", minLength: 1 },
+    fit: { enum: ["fill", "contain", "cover"] },
+    altText: { type: "string" },
+    path: {
+      type: "string",
+      minLength: 1,
+      maxLength: 200_000,
+      description: "Portable SVG path data in the node's local coordinates.",
+    },
+    fillRule: { enum: ["nonzero", "evenodd"] },
+  },
+  additionalProperties: false,
+} as const;
+
+const MODEL_NODE_SCHEMA = {
+  type: "object",
+  description:
+    "A complete OpenDesign node. All common fields are required. childIds and parentId must agree with the transaction hierarchy; a new composite container can be inserted before its children in the same ordered transaction.",
+  properties: {
+    id: { type: "string", minLength: 1, maxLength: 256 },
+    name: { type: "string" },
+    parentId: {
+      anyOf: [
+        { type: "string", minLength: 1, maxLength: 256 },
+        { type: "null" },
+      ],
+    },
+    childIds: {
+      type: "array",
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 256 },
+    },
+    visible: { type: "boolean" },
+    locked: { type: "boolean" },
+    transform: MODEL_TRANSFORM_SCHEMA,
+    size: MODEL_SIZE_SCHEMA,
+    opacity: { type: "number", minimum: 0, maximum: 1 },
+    blendMode: { enum: MODEL_BLEND_MODES },
+    effects: { type: "array", items: MODEL_EFFECT_SCHEMA },
+    maskMode: {
+      enum: ["none", "alpha", "luminance", "clipping", "outline"],
+    },
+    extensions: { type: "object" },
+    kind: {
+      enum: [
+        "frame",
+        "group",
+        "rectangle",
+        "ellipse",
+        "text",
+        "image",
+        "vector",
+        "path",
+        "instance",
+      ],
+    },
+    properties: MODEL_NODE_KIND_PROPERTIES_SCHEMA,
+  },
+  required: [
+    "id",
+    "name",
+    "parentId",
+    "childIds",
+    "visible",
+    "locked",
+    "transform",
+    "size",
+    "opacity",
+    "extensions",
+    "kind",
+    "properties",
+  ],
+  additionalProperties: false,
+} as const;
+
+const MODEL_NODE_OPERATION_SCHEMA = {
+  anyOf: [
+    {
+      type: "object",
+      properties: {
+        commandId: { type: "string", minLength: 1, maxLength: 256 },
+        type: { const: "insert_element" },
+        pageId: { type: "string", minLength: 1, maxLength: 256 },
+        parentId: {
+          anyOf: [
+            { type: "string", minLength: 1, maxLength: 256 },
+            { type: "null" },
+          ],
+        },
+        index: { type: "integer", minimum: 0 },
+        node: MODEL_NODE_SCHEMA,
+      },
+      required: ["commandId", "type", "pageId", "parentId", "index", "node"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        commandId: { type: "string", minLength: 1, maxLength: 256 },
+        type: { const: "update_properties" },
+        nodeId: { type: "string", minLength: 1, maxLength: 256 },
+        name: { type: "string" },
+        visible: { type: "boolean" },
+        locked: { type: "boolean" },
+        transform: MODEL_TRANSFORM_SCHEMA,
+        size: MODEL_SIZE_SCHEMA,
+        opacity: { type: "number", minimum: 0, maximum: 1 },
+        blendMode: { enum: MODEL_BLEND_MODES },
+        effects: { type: "array", items: MODEL_EFFECT_SCHEMA },
+        maskMode: {
+          enum: ["none", "alpha", "luminance", "clipping", "outline"],
+        },
+        properties: MODEL_NODE_KIND_PROPERTIES_SCHEMA,
+        extensions: { type: "object" },
+      },
+      required: ["commandId", "type", "nodeId"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        commandId: { type: "string", minLength: 1, maxLength: 256 },
+        type: { const: "move_element" },
+        nodeId: { type: "string", minLength: 1, maxLength: 256 },
+        pageId: { type: "string", minLength: 1, maxLength: 256 },
+        parentId: {
+          anyOf: [
+            { type: "string", minLength: 1, maxLength: 256 },
+            { type: "null" },
+          ],
+        },
+        index: { type: "integer", minimum: 0 },
+      },
+      required: ["commandId", "type", "nodeId", "pageId", "parentId", "index"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        commandId: { type: "string", minLength: 1, maxLength: 256 },
+        type: { const: "delete_element" },
+        nodeId: { type: "string", minLength: 1, maxLength: 256 },
+      },
+      required: ["commandId", "type", "nodeId"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        commandId: { type: "string", minLength: 1, maxLength: 256 },
+        type: { const: "replace_subtree" },
+        rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
+        nodes: { type: "array", minItems: 1, items: MODEL_NODE_SCHEMA },
+      },
+      required: ["commandId", "type", "rootNodeId", "nodes"],
+      additionalProperties: false,
+    },
+  ],
+} as const;
+
+const MODEL_APPLY_TRANSACTION_SCHEMA = {
+  type: "object",
+  properties: {
+    label: { type: "string", minLength: 1, maxLength: 256 },
+    summary: { type: "string", maxLength: 2_000 },
+    commands: {
+      type: "array",
+      minItems: 1,
+      maxItems: 1_000,
+      items: MODEL_NODE_OPERATION_SCHEMA,
+    },
+  },
+  required: ["label", "commands"],
+  additionalProperties: false,
+} as const;
 
 export const DESIGN_AGENT_TOOL_SPECS = [
   {
@@ -165,19 +497,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     description:
       "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. For organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with portable SVG path data in properties.path; they support the same fills, strokes, gradients, effects, and advanced stroke fields as other shapes. Path coordinates are local to the node and should fit its declared size. Composite designs should create a named Frame or Group before inserting its children later in the same ordered transaction; do not flatten their parts into Page-root layers. It does not create, rename, duplicate, or delete Projects, Design Files, or Pages. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input.",
     inputSchema: {
-      type: "object",
-      properties: {
-        label: { type: "string", minLength: 1, maxLength: 256 },
-        summary: { type: "string", maxLength: 2_000 },
-        commands: {
-          type: "array",
-          minItems: 1,
-          maxItems: 1_000,
-          items: NodeDesignOperationSchema,
-        },
-      },
-      required: ["label", "commands"],
-      additionalProperties: false,
+      ...MODEL_APPLY_TRANSACTION_SCHEMA,
     },
     risk: "design_write" as const,
     approval: "never" as const,

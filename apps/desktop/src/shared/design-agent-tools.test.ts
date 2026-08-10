@@ -38,6 +38,9 @@ describe("design Agent tool contract", () => {
     expect(schema).toContain('"fillRule"');
     expect(schema).toContain('"fills"');
     expect(schema).toContain('"strokes"');
+    expect(schema.length).toBeLessThan(64_000);
+    expect(schema).not.toContain('"$ref"');
+    expect(schema).not.toContain('"$defs"');
   });
 
   it("accepts a path node transaction and rejects non-path markup", () => {

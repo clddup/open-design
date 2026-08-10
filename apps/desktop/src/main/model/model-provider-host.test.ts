@@ -390,6 +390,18 @@ describe("ModelProviderHost", () => {
     store.close();
   });
 
+  it("resolves trusted context limits for the selected model", () => {
+    const store = new WorkspaceStore(":memory:");
+    const host = new ModelProviderHost(store, cipher);
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    expect(host.resolveModelContext(selection)).toEqual({
+      contextWindow: 200_000,
+      maxOutputTokens: 16_384,
+    });
+    store.close();
+  });
+
   it("tests and completes the explicitly selected provider/model", async () => {
     const store = new WorkspaceStore(":memory:");
     const fetch = vi

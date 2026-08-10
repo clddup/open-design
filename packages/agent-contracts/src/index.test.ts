@@ -21,6 +21,7 @@ const validStart = {
     modelId: "design-model",
     reasoningEffort: "medium",
   },
+  modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
   scope: {
     kind: "selection",
     selectedNodeIds: ["node_1", "node_2"],
@@ -46,6 +47,26 @@ describe("Agent contracts", () => {
         selectedNodeIds: [],
       }),
     ).toBe(true);
+  });
+
+  it("accepts only bounded host-resolved model context metadata", () => {
+    expect(isAgentRequest(validStart)).toBe(true);
+    expect(
+      isAgentRequest({
+        ...validStart,
+        modelContext: { contextWindow: 1_000, maxOutputTokens: 128 },
+      }),
+    ).toBe(false);
+    expect(
+      isAgentRequest({
+        ...validStart,
+        modelContext: {
+          contextWindow: 200_000,
+          maxOutputTokens: 16_384,
+          apiKey: "forged",
+        },
+      }),
+    ).toBe(false);
   });
 
   it("accepts only bounded content-addressed image and document attachments", () => {

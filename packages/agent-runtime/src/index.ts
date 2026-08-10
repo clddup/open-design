@@ -2,6 +2,7 @@ import {
   isAgentAttachment,
   type AgentEvent,
   type AgentAttachment,
+  type AgentModelContext,
   type ApprovalDecision,
   type AssistantTimelineBlock,
   type DesignMutationTarget,
@@ -32,6 +33,7 @@ export interface AgentRunRequest {
   scope: SelectionScope;
   mutationTarget: DesignMutationTarget;
   modelSelection: ModelSelection;
+  modelContext?: AgentModelContext;
 }
 
 export interface AgentToolDefinition extends CanonicalTool {
@@ -161,6 +163,13 @@ class ContextBudgetError extends Error {
   }
 }
 
+class ModelContextCompatibilityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModelContextCompatibilityError";
+  }
+}
+
 const EMPTY_TOOL_CATALOG: ToolCatalogPort = { listTools: () => [] };
 
 export class AgentRuntime {
@@ -211,22 +220,26 @@ export class AgentRuntime {
         request.prompt,
         request.attachments ?? [],
       );
-      const compaction = planContextCompaction(priorEvents, {
-        currentMessage: currentUserMessage,
-        maxCharacters: this.#limits.maxContextCharacters,
-        system: baseSystemPrompt,
-        tools: canonicalTools,
-      });
+      const contextBudget = createContextBudget(
+        request.modelContext,
+        baseSystemPrompt,
+        canonicalTools,
+        this.#limits.maxContextCharacters,
+      );
+      const compaction = contextBudget.fixedProtocolFits
+        ? planContextCompaction(priorEvents, {
+            currentMessage: currentUserMessage,
+            budget: contextBudget,
+            system: baseSystemPrompt,
+            tools: canonicalTools,
+          })
+        : undefined;
       if (compaction) {
         await this.append(request, "context.compacted", compaction);
         priorEvents = await this.options.sessionStore.read(request.sessionId);
       }
       const messages = restoreModelMessages(priorEvents);
-      const projectedContextCharacters = estimateModelContextCharacters(
-        [...messages, currentUserMessage],
-        baseSystemPrompt,
-        canonicalTools,
-      );
+      const projectedMessages = [...messages, currentUserMessage];
       const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
       const executedToolCallIds = priorToolCalls(priorEvents);
       let currentRevision = request.revision;
@@ -261,9 +274,27 @@ export class AgentRuntime {
       });
       messages.push(currentUserMessage);
       yield { type: "run.started", runId: request.runId, startedAt };
-      if (projectedContextCharacters > this.#limits.maxContextCharacters) {
+      if (!contextBudget.fixedProtocolFits) {
+        throw new ModelContextCompatibilityError(
+          modelContextCompatibilityMessage(contextBudget),
+        );
+      }
+      if (
+        !modelContextFits(
+          projectedMessages,
+          baseSystemPrompt,
+          canonicalTools,
+          contextBudget,
+        )
+      ) {
         throw new ContextBudgetError(
-          `Conversation context remains too large after local compaction (${projectedContextCharacters} estimated characters; limit ${this.#limits.maxContextCharacters}). Reduce the current message or attached document size.`,
+          contextBudgetExceededMessage(
+            projectedMessages,
+            baseSystemPrompt,
+            canonicalTools,
+            contextBudget,
+            "after local compaction",
+          ),
         );
       }
 
@@ -280,14 +311,22 @@ export class AgentRuntime {
         const turnSystemPrompt = completionGuardFeedback
           ? `${baseSystemPrompt}\n\nTrusted host completion review for this turn:\n${completionGuardFeedback}`
           : baseSystemPrompt;
-        const turnContextCharacters = estimateModelContextCharacters(
-          messages,
-          turnSystemPrompt,
-          canonicalTools,
-        );
-        if (turnContextCharacters > this.#limits.maxContextCharacters) {
+        if (
+          !modelContextFits(
+            messages,
+            turnSystemPrompt,
+            canonicalTools,
+            contextBudget,
+          )
+        ) {
           throw new ContextBudgetError(
-            `Conversation context exceeds the local budget before provider turn ${turn} (${turnContextCharacters} estimated characters; limit ${this.#limits.maxContextCharacters}). Reduce the current request or start a new run after older context is compacted.`,
+            contextBudgetExceededMessage(
+              messages,
+              turnSystemPrompt,
+              canonicalTools,
+              contextBudget,
+              `before provider turn ${turn}`,
+            ),
           );
         }
 
@@ -805,7 +844,9 @@ export class AgentRuntime {
           code:
             error instanceof ContextBudgetError
               ? "context_budget_exceeded"
-              : "run_failed",
+              : error instanceof ModelContextCompatibilityError
+                ? "model_context_incompatible"
+                : "run_failed",
           message: errorMessage(error),
           runId: request.runId,
         };
@@ -1112,22 +1153,73 @@ type ContextCheckpointPayload = {
   summary: string;
 };
 
+type ContextBudget = {
+  fixedInputTokens: number;
+  fixedProtocolFits: boolean;
+  maxConversationCharacters: number;
+  maxInputTokens?: number;
+  modelContext?: AgentModelContext;
+  safetyReserveTokens?: number;
+};
+
+const MODEL_REQUEST_FRAMING_TOKENS = 256;
+const MINIMUM_CONTEXT_SAFETY_RESERVE_TOKENS = 2_048;
+
+function createContextBudget(
+  modelContext: AgentModelContext | undefined,
+  system: string,
+  tools: readonly CanonicalTool[],
+  maxConversationCharacters: number,
+): ContextBudget {
+  const fixedInputTokens =
+    estimateTextTokens(system) +
+    estimateJsonTokens(tools) +
+    MODEL_REQUEST_FRAMING_TOKENS;
+  if (modelContext === undefined) {
+    return {
+      fixedInputTokens,
+      fixedProtocolFits: true,
+      maxConversationCharacters,
+    };
+  }
+
+  const safetyReserveTokens = Math.max(
+    MINIMUM_CONTEXT_SAFETY_RESERVE_TOKENS,
+    Math.ceil(modelContext.contextWindow * 0.01),
+  );
+  const maxInputTokens = Math.max(
+    0,
+    modelContext.contextWindow -
+      modelContext.maxOutputTokens -
+      safetyReserveTokens,
+  );
+  return {
+    fixedInputTokens,
+    fixedProtocolFits: fixedInputTokens < maxInputTokens,
+    maxConversationCharacters,
+    maxInputTokens,
+    modelContext,
+    safetyReserveTokens,
+  };
+}
+
 function planContextCompaction(
   events: JournalEvent[],
   options: {
+    budget: ContextBudget;
     currentMessage: CanonicalMessage;
-    maxCharacters: number;
     system: string;
     tools: CanonicalTool[];
   },
 ): ContextCheckpointPayload | undefined {
   const current = restoreModelMessages(events);
   if (
-    estimateModelContextCharacters(
+    modelContextFits(
       [...current, options.currentMessage],
       options.system,
       options.tools,
-    ) <= options.maxCharacters
+      options.budget,
+    )
   ) {
     return undefined;
   }
@@ -1152,13 +1244,13 @@ function planContextCompaction(
       payload,
     };
     const projected = restoreModelMessages([...sorted, previewEvent]);
-    const projectedCharacters = estimateModelContextCharacters(
-      [...projected, options.currentMessage],
-      options.system,
-      options.tools,
-    );
     if (
-      projectedCharacters <= options.maxCharacters ||
+      modelContextFits(
+        [...projected, options.currentMessage],
+        options.system,
+        options.tools,
+        options.budget,
+      ) ||
       index === ranges.length - 1
     ) {
       return payload;
@@ -1373,16 +1465,41 @@ function contextExcerpt(value: string): string {
   return normalized.length <= 600 ? normalized : `${normalized.slice(0, 600)}…`;
 }
 
-function estimateModelContextCharacters(
+function modelContextFits(
+  messages: readonly CanonicalMessage[],
+  system: string,
+  tools: readonly CanonicalTool[],
+  budget: ContextBudget,
+): boolean {
+  if (estimateMessagesCharacters(messages) > budget.maxConversationCharacters) {
+    return false;
+  }
+  return (
+    budget.maxInputTokens === undefined ||
+    estimateModelContextTokens(messages, system, tools) <= budget.maxInputTokens
+  );
+}
+
+function estimateMessagesCharacters(
+  messages: readonly CanonicalMessage[],
+): number {
+  return messages.reduce(
+    (total, message) => total + estimateMessageCharacters(message),
+    0,
+  );
+}
+
+function estimateModelContextTokens(
   messages: readonly CanonicalMessage[],
   system: string,
   tools: readonly CanonicalTool[],
 ): number {
   return (
-    system.length +
-    jsonCharacterLength(tools) +
+    MODEL_REQUEST_FRAMING_TOKENS +
+    estimateTextTokens(system) +
+    estimateJsonTokens(tools) +
     messages.reduce(
-      (total, message) => total + estimateMessageCharacters(message),
+      (total, message) => total + estimateMessageTokens(message),
       0,
     )
   );
@@ -1404,6 +1521,90 @@ function estimateMessageCharacters(message: CanonicalMessage): number {
     );
   }
   return jsonCharacterLength(message) + 32;
+}
+
+function estimateMessageTokens(message: CanonicalMessage): number {
+  if (message.role === "user") {
+    if (typeof message.content === "string") {
+      return estimateTextTokens(message.content) + 8;
+    }
+    return (
+      8 +
+      message.content.reduce((total, block) => {
+        if (block.type === "text") {
+          return total + estimateTextTokens(block.text);
+        }
+        if (block.type === "image_ref") return total + 16_000;
+        if (block.type === "document_ref") {
+          return (
+            total +
+            Math.min(100_000, Math.max(2_000, Math.ceil(block.byteSize / 3)))
+          );
+        }
+        return (
+          total + Math.min(100_000, estimateTextTokens(block.data)) + 16_000
+        );
+      }, 0)
+    );
+  }
+  return estimateJsonTokens(message) + 8;
+}
+
+function estimateJsonTokens(value: unknown): number {
+  try {
+    return estimateTextTokens(JSON.stringify(value));
+  } catch {
+    return 8_000;
+  }
+}
+
+function estimateTextTokens(value: string): number {
+  let asciiCharacters = 0;
+  let cjkCharacters = 0;
+  let otherCharacters = 0;
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 0x7f) {
+      asciiCharacters += 1;
+    } else if (
+      (codePoint >= 0x3400 && codePoint <= 0x9fff) ||
+      (codePoint >= 0xf900 && codePoint <= 0xfaff)
+    ) {
+      cjkCharacters += 1;
+    } else {
+      otherCharacters += 1;
+    }
+  }
+  return Math.ceil(
+    asciiCharacters / 3.5 + cjkCharacters * 1.25 + otherCharacters * 2,
+  );
+}
+
+function modelContextCompatibilityMessage(budget: ContextBudget): string {
+  const modelContext = budget.modelContext;
+  if (modelContext === undefined || budget.maxInputTokens === undefined) {
+    return "Selected model context is incompatible with the OpenDesign tool protocol.";
+  }
+  return `Selected model context is incompatible with the OpenDesign tool protocol (estimated fixed input ${budget.fixedInputTokens} tokens; available input budget ${budget.maxInputTokens} after reserving ${modelContext.maxOutputTokens} output tokens and ${budget.safetyReserveTokens ?? 0} safety tokens; configured context window ${modelContext.contextWindow}). Configure or select a model with a larger context window.`;
+}
+
+function contextBudgetExceededMessage(
+  messages: readonly CanonicalMessage[],
+  system: string,
+  tools: readonly CanonicalTool[],
+  budget: ContextBudget,
+  phase: string,
+): string {
+  const messageCharacters = estimateMessagesCharacters(messages);
+  if (budget.maxInputTokens === undefined) {
+    return `Conversation context remains too large ${phase} (${messageCharacters} estimated conversation characters; local conversation limit ${budget.maxConversationCharacters}). Reduce the current message or attached document size.`;
+  }
+  const estimatedInputTokens = estimateModelContextTokens(
+    messages,
+    system,
+    tools,
+  );
+  return `Conversation context remains too large ${phase} (${estimatedInputTokens} estimated input tokens; model input budget ${budget.maxInputTokens}; ${messageCharacters} estimated conversation characters; local conversation limit ${budget.maxConversationCharacters}). Reduce the current message or attached document size.`;
 }
 
 function jsonCharacterLength(value: unknown): number {
@@ -1483,6 +1684,9 @@ function snapshotRunRequest(request: AgentRunRequest): AgentRunRequest {
           })),
         }),
     modelSelection: { ...request.modelSelection },
+    ...(request.modelContext === undefined
+      ? {}
+      : { modelContext: { ...request.modelContext } }),
     scope: {
       ...request.scope,
       selectedNodeIds: [...request.scope.selectedNodeIds],

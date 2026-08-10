@@ -33,4 +33,4 @@
 
 ## 结果
 
-OpenDesign 获得可扩展的成熟模型接入基线，同时维持 Renderer/Agent 无凭据、Main 托管网络、模型输出不授权设计写入的既有边界。新增协议不需要改变画布事实状态，但新增模型能力或鉴权类型仍需扩展 Catalog 版本、迁移和负面测试。当前 `AgentRequest 3.3` 在本决策基础上继续加入安全附件元数据，并把发送时选区上下文与单一 Mutation Target 分离，不改变 Provider Catalog 与 Main 凭据边界。
+OpenDesign 获得可扩展的成熟模型接入基线，同时维持 Renderer/Agent 无凭据、Main 托管网络、模型输出不授权设计写入的既有边界。新增协议不需要改变画布事实状态，但新增模型能力或鉴权类型仍需扩展 Catalog 版本、迁移和负面测试。当前 `AgentRequest 3.4` 在本决策基础上继续加入安全附件元数据，把发送时选区上下文与单一 Mutation Target 分离，并由 Main 从可信 Catalog 注入 Model Context 预算；Renderer 提交该预算会被拒绝，不改变 Provider Catalog 与 Main 凭据边界。

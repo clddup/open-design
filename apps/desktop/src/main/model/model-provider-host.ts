@@ -5,6 +5,7 @@ import {
   type ModelRequest,
   type ModelSelection,
 } from "@opendesign/model-gateway";
+import type { AgentModelContext } from "@opendesign/agent-contracts";
 import {
   MODEL_PROVIDER_CATALOG_VERSION,
   isModelProviderCatalog,
@@ -100,6 +101,14 @@ export class ModelProviderHost {
       this.migrateLegacyCatalog() ??
       emptyCatalog
     );
+  }
+
+  resolveModelContext(selection: ModelSelection): AgentModelContext {
+    const { model } = this.resolveSelection(selection);
+    return {
+      contextWindow: model.contextWindow,
+      maxOutputTokens: model.maxOutputTokens,
+    };
   }
 
   saveProfile(request: SaveModelProviderProfileRequest): ModelProviderCatalog {
