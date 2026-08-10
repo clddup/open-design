@@ -94,10 +94,11 @@ if (
 }
 if (
   !/\bappendRunJournalEvent\b/.test(runEventAdapter) ||
-  !/\bappendRunJournalEvent\b/.test(currentRuntime)
+  !/\bappendRunJournalEvent\b/.test(currentRuntime) ||
+  !/\bCompletionGuardPort\b/.test(runEventAdapter)
 ) {
   throw new Error(
-    "Current and Pi Agent paths must share the OpenDesign run journal writer",
+    "Pi runs must preserve OpenDesign journal and completion-guard boundaries",
   );
 }
 

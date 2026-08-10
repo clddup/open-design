@@ -20,6 +20,7 @@ import type {
   AgentToolCallRecord,
   AgentToolDefinition,
   ApprovalPort,
+  CompletionGuardPort,
   ToolExecutorPort,
 } from "./index.js";
 import {
@@ -36,12 +37,23 @@ export interface PiRunEventAdapterOptions {
   toolDefinitions?: readonly AgentToolDefinition[];
   toolExecutor?: ToolExecutorPort;
   approvalPort?: ApprovalPort;
+  completionGuard?: CompletionGuardPort;
+  requestContinuation?: (message: UserMessage) => void;
   maxToolCalls?: number;
+  maxTurns?: number;
+  maxTotalTokens?: number;
+  maxCompletionGuardRejections?: number;
   now?: () => Date;
 }
 
 interface ActiveAssistantMessage {
   messageId: string;
+}
+
+interface PendingCompletion {
+  active: ActiveAssistantMessage;
+  blocks: AssistantTimelineBlock[];
+  message: AssistantMessage;
 }
 
 /**
@@ -54,21 +66,33 @@ interface ActiveAssistantMessage {
  */
 export class PiRunEventAdapter {
   readonly #emit: PiRunEventAdapterOptions["emit"];
+  readonly #completionGuard: CompletionGuardPort | undefined;
+  readonly #maxCompletionGuardRejections: number;
+  readonly #maxTotalTokens: number;
+  readonly #maxTurns: number;
   readonly #now: () => Date;
   readonly #request: AgentRunRequest;
+  readonly #requestContinuation: ((message: UserMessage) => void) | undefined;
   readonly #sessionStore: SessionStore;
   #activeAssistant: ActiveAssistantMessage | undefined;
   #activeToolResultCallId: string | undefined;
   #activeUserMessage = false;
   #ended = false;
+  #forcedError: { code: string; message: string } | undefined;
+  #forcedStopReason: RunStopReason | undefined;
+  #guardRejections = 0;
   #initialPromptConsumed = false;
   #lastAssistantError: string | undefined;
   #lastAssistantHadToolCalls = false;
   #lastAssistantStopReason: AssistantMessage["stopReason"] | undefined;
+  #pendingCompletion: PendingCompletion | undefined;
   #started = false;
   #startedAt = "";
+  #stopAfterTurn = false;
   readonly #toolAdapter: OpenDesignPiToolAdapter | undefined;
   #turn = 0;
+  #totalTokens = 0;
+  readonly #trustedContinuations: string[] = [];
   #userMessageSequence = 0;
 
   constructor(options: PiRunEventAdapterOptions) {
@@ -76,6 +100,30 @@ export class PiRunEventAdapter {
     this.#sessionStore = options.sessionStore;
     this.#emit = options.emit;
     this.#now = options.now ?? (() => new Date());
+    this.#completionGuard = options.completionGuard;
+    this.#requestContinuation = options.requestContinuation;
+    this.#maxTurns = options.maxTurns ?? 8;
+    this.#maxTotalTokens = options.maxTotalTokens ?? 200_000;
+    this.#maxCompletionGuardRejections =
+      options.maxCompletionGuardRejections ?? 3;
+    if (
+      !Number.isInteger(this.#maxTurns) ||
+      this.#maxTurns < 1 ||
+      !Number.isInteger(this.#maxTotalTokens) ||
+      this.#maxTotalTokens < 1 ||
+      !Number.isInteger(this.#maxCompletionGuardRejections) ||
+      this.#maxCompletionGuardRejections < 0
+    ) {
+      throw new RangeError("Pi run limits are invalid");
+    }
+    if (
+      this.#completionGuard !== undefined &&
+      this.#requestContinuation === undefined
+    ) {
+      throw new TypeError(
+        "Pi completion guard requires a trusted continuation queue",
+      );
+    }
     if (options.toolDefinitions !== undefined) {
       this.#toolAdapter = new OpenDesignPiToolAdapter({
         request: this.#request,
@@ -114,6 +162,11 @@ export class PiRunEventAdapter {
     return this.#toolAdapter.beforeToolCall(context, signal);
   };
 
+  readonly shouldStopAfterTurn = (): boolean =>
+    this.#stopAfterTurn ||
+    this.#forcedStopReason !== undefined ||
+    this.#toolAdapter?.forcedStopReason !== undefined;
+
   async accept(event: PiAgentEvent): Promise<void> {
     if (this.#ended) {
       throw new Error(`Pi emitted ${event.type} after agent_end`);
@@ -136,6 +189,10 @@ export class PiRunEventAdapter {
     }
     if (event.type === "message_end") {
       await this.#endMessage(event.message);
+      return;
+    }
+    if (event.type === "turn_end") {
+      await this.#endTurn(event);
       return;
     }
     if (
@@ -273,6 +330,7 @@ export class PiRunEventAdapter {
     this.#lastAssistantHadToolCalls = assistantMessage.content.some(
       (block) => block.type === "toolCall",
     );
+    this.#totalTokens += usageTokens(assistantMessage);
     if (
       assistantMessage.stopReason === "error" ||
       assistantMessage.stopReason === "aborted"
@@ -281,17 +339,26 @@ export class PiRunEventAdapter {
     }
 
     const blocks = toTimelineBlocks(assistantMessage, active.messageId);
-    await this.#append("message.assistant", {
-      messageId: active.messageId,
-      blocks,
-      source: toResolvedIdentity(assistantMessage, this.#request),
-    });
-    await this.#publish({
-      type: "message.completed",
-      runId: this.#request.runId,
-      messageId: active.messageId,
-      blocks,
-    });
+    const canReviewCompletion =
+      this.#completionGuard !== undefined &&
+      assistantMessage.stopReason === "stop" &&
+      !this.#lastAssistantHadToolCalls &&
+      this.#totalTokens <= this.#maxTotalTokens;
+    if (canReviewCompletion) {
+      this.#pendingCompletion = {
+        active,
+        blocks,
+        message: assistantMessage,
+      };
+      return;
+    }
+    await this.#finalizeAssistant(active, assistantMessage, blocks);
+    if (
+      assistantMessage.stopReason === "length" ||
+      this.#totalTokens > this.#maxTotalTokens
+    ) {
+      this.#forcedStopReason = "budget";
+    }
   }
 
   async #persistUserMessage(message: UserMessage): Promise<void> {
@@ -303,6 +370,10 @@ export class PiRunEventAdapter {
           "Pi initial prompt does not match the durable run request",
         );
       }
+      return;
+    }
+    if (content === this.#trustedContinuations[0]) {
+      this.#trustedContinuations.shift();
       return;
     }
     this.#userMessageSequence += 1;
@@ -326,7 +397,11 @@ export class PiRunEventAdapter {
     ) {
       throw new Error("Pi ended a run with an active tool call");
     }
+    if (this.#pendingCompletion !== undefined) {
+      throw new Error("Pi ended a run before completion review settled");
+    }
     const stopReason =
+      this.#forcedStopReason ??
       this.#toolAdapter?.forcedStopReason ??
       toRunStopReason(
         this.#lastAssistantStopReason,
@@ -338,10 +413,14 @@ export class PiRunEventAdapter {
         !this.#lastAssistantHadToolCalls;
       await this.#publish({
         type: "agent.error",
-        code: invalidToolStop ? "invalid_model_response" : "run_failed",
-        message: invalidToolStop
-          ? "Model stopped for tool use without a tool call"
-          : (this.#lastAssistantError ?? "Pi Agent run failed"),
+        code:
+          this.#forcedError?.code ??
+          (invalidToolStop ? "invalid_model_response" : "run_failed"),
+        message:
+          this.#forcedError?.message ??
+          (invalidToolStop
+            ? "Model stopped for tool use without a tool call"
+            : (this.#lastAssistantError ?? "Pi Agent run failed")),
         runId: this.#request.runId,
       });
     }
@@ -381,6 +460,107 @@ export class PiRunEventAdapter {
 
   async #publish(event: AgentEvent): Promise<void> {
     await this.#emit(event);
+  }
+
+  async #endTurn(
+    event: Extract<PiAgentEvent, { type: "turn_end" }>,
+  ): Promise<void> {
+    const message = requireAssistantMessage(event.message);
+    const hasToolCalls = message.content.some(
+      (block) => block.type === "toolCall",
+    );
+    if (this.#turn >= this.#maxTurns) {
+      this.#stopAfterTurn = true;
+      if (hasToolCalls) this.#forcedStopReason = "budget";
+    }
+    const pending = this.#pendingCompletion;
+    if (pending === undefined) return;
+    this.#pendingCompletion = undefined;
+    const guard = this.#completionGuard;
+    const requestContinuation = this.#requestContinuation;
+    if (guard === undefined || requestContinuation === undefined) {
+      throw new Error("Pi completion review dependencies became unavailable");
+    }
+
+    let decision;
+    try {
+      decision = await guard.review({
+        request: this.#request,
+        currentRevision:
+          this.#toolAdapter?.currentRevision ?? this.#request.revision,
+        turn: this.#turn,
+        rejectionCount: this.#guardRejections,
+        toolCalls: this.#toolAdapter?.toolCallRecords ?? [],
+      });
+    } catch (error) {
+      await this.#publishProvisionalClear(pending.active.messageId);
+      this.#forcedStopReason = "error";
+      this.#forcedError = {
+        code: "completion_guard_failed",
+        message: errorMessage(error),
+      };
+      return;
+    }
+    if (decision.allow) {
+      await this.#finalizeAssistant(
+        pending.active,
+        pending.message,
+        pending.blocks,
+      );
+      return;
+    }
+
+    await this.#publishProvisionalClear(pending.active.messageId);
+    this.#guardRejections += 1;
+    if (
+      this.#guardRejections > this.#maxCompletionGuardRejections ||
+      this.#turn >= this.#maxTurns
+    ) {
+      this.#forcedStopReason = "error";
+      this.#forcedError = {
+        code: "completion_guard_blocked",
+        message: decision.message,
+      };
+      return;
+    }
+    const content = [
+      "Trusted OpenDesign host completion review:",
+      decision.message,
+      "Continue the same run and satisfy this review before finishing.",
+    ].join("\n");
+    this.#trustedContinuations.push(content);
+    requestContinuation({
+      role: "user",
+      content,
+      timestamp: this.#now().getTime(),
+    });
+  }
+
+  async #finalizeAssistant(
+    active: ActiveAssistantMessage,
+    message: AssistantMessage,
+    blocks: AssistantTimelineBlock[],
+  ): Promise<void> {
+    await this.#append("message.assistant", {
+      messageId: active.messageId,
+      blocks,
+      source: toResolvedIdentity(message, this.#request),
+    });
+    await this.#publish({
+      type: "message.completed",
+      runId: this.#request.runId,
+      messageId: active.messageId,
+      blocks,
+    });
+  }
+
+  #publishProvisionalClear(messageId: string): Promise<void> {
+    return this.#publish({
+      type: "message.completed",
+      runId: this.#request.runId,
+      messageId,
+      blocks: [],
+    });
   }
 
   async #acceptToolEvent(
@@ -614,4 +794,14 @@ function blockId(messageId: string, contentIndex: number): string {
 
 function snapshotRequest(request: AgentRunRequest): AgentRunRequest {
   return structuredClone(request);
+}
+
+function usageTokens(message: AssistantMessage): number {
+  return (
+    message.usage.input + message.usage.output + (message.usage.reasoning ?? 0)
+  );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Completion review failed";
 }

@@ -451,6 +451,7 @@ async function runPiToolLoop(options: {
       })(),
     }),
     beforeToolCall: adapter.beforeToolCall,
+    shouldStopAfterTurn: adapter.shouldStopAfterTurn,
   });
   const unsubscribe = agent.subscribe((event) => adapter.accept(event));
   try {

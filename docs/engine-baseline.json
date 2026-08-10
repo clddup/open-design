@@ -19,7 +19,7 @@
       "version": "0.84.1",
       "source": "https://github.com/earendil-works/pi/tree/main/packages/agent",
       "license": "MIT",
-      "productionStatus": "stage-2-tools",
+      "productionStatus": "stage-2-guard",
       "entrypoint": "Agent",
       "rejectedEntrypoint": "AgentHarness",
       "rejectedReason": "AgentHarness.prompt throws HarnessNotImplemented at the pinned version"
@@ -40,7 +40,7 @@
     }
   },
   "verification": {
-    "agentCore": "pnpm agent-core:check && pnpm exec vitest run packages/agent-runtime/src/pi-core-adapter.test.ts packages/agent-runtime/src/pi-model-gateway-adapter.test.ts packages/agent-runtime/src/pi-run-event-adapter.test.ts packages/agent-runtime/src/pi-tool-adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/agent/pi-production-tool-adapter.test.ts",
+    "agentCore": "pnpm agent-core:check && pnpm exec vitest run packages/agent-runtime/src/pi-core-adapter.test.ts packages/agent-runtime/src/pi-model-gateway-adapter.test.ts packages/agent-runtime/src/pi-run-event-adapter.test.ts packages/agent-runtime/src/pi-tool-adapter.test.ts packages/agent-runtime/src/pi-completion-guard-adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/agent/pi-production-tool-adapter.test.ts",
     "contracts": "pnpm exec vitest run packages/design-contracts/src/index.test.ts",
     "editorRuntime": "pnpm exec vitest run packages/editor-runtime/src/index.test.ts",
     "leafer": "pnpm exec vitest run packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts"

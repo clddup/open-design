@@ -101,7 +101,9 @@ Pi run event adapter 使用和旧 Runtime 相同的原子 journal writer，把 P
 
 截至 2026-08-11，第一项与 `max tool calls` 已完成。一个通用 Pi tool adapter 直接复用十二个生产工具的原始标准 JSON Schema、OpenDesign 业务 validator、`ToolExecutorPort`、`ApprovalPort`、可信 Run context 和顺序执行，不为每个工具建立分支实现，也不把 TypeBox 私有标记发送给 Provider。Pi tool lifecycle 会写入现有 `tool.requested/progress/completed/failed`、approval 和 `design.revision` journal，并生成相同 `AgentEvent 3.4`；结构化结果仍按单字段/总量上限投影给模型，原始结果及内容寻址附件元数据进入 journal，inline base64 不进入 Pi transcript。测试覆盖成功的两轮工具循环、progress、revision、附件、业务 validator、审批拒绝、工具预算和非法 revision；桌面生产目录门禁证明十二个公开工具全部注册且两个 internal host 工具未暴露。迁移实现只从 `@opendesign/agent-runtime/pi-migration` 子入口导出，正式切换前不会因根 barrel 让旧生产 Agent bundle 提前包含未启用的 Pi loop。
 
-阶段 2 尚未整体完成：completion guard、max turns、total token budget、停止期间 pending tool 的最终化，以及不可恢复 bridge failure 与业务 tool failure 的完整 parity 仍是下一门禁。图片附件在本阶段只保留内容寻址元数据和文字投影；下一阶段的 Context adapter 才能把获准附件解析为下一 Provider turn 的多模态输入。
+现有 plan/review `CompletionGuardPort` 也已接到 Pi `turn_end`：无工具的候选完成在 review 决定前保持 provisional，不写 journal；拒绝时发送空 `message.completed` 清除临时内容，把可信反馈作为不持久化的内部 steering 注入同一 Run，允许后才持久化最终 assistant。拒绝上限、guard failure、max turns 与累计 total token budget 都产生明确 stop/error 状态。专项测试证明首轮拒绝后会发起第二次 Provider call，journal 只保留最终获准消息；达到上限时不会留下虚假完成。
+
+阶段 2 尚未整体完成：用户停止/Provider abort 期间 pending tool 的最终化，以及不可恢复 bridge failure 与可恢复业务 tool failure 的完整 parity 仍是下一门禁。图片附件在本阶段只保留内容寻址元数据和文字投影；下一阶段的 Context adapter 才能把获准附件解析为下一 Provider turn 的多模态输入。
 
 ### 阶段 3：上下文、持久化和恢复 parity
 

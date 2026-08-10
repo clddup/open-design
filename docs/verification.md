@@ -7,7 +7,7 @@
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.3.0`
 - Agent 协议：`3.4.0`
-- Agent Core：`@earendil-works/pi-agent-core 0.84.1`（stage-2-tools）
+- Agent Core：`@earendil-works/pi-agent-core 0.84.1`（stage-2-guard）
 - 生产画布：`leafer-editor 2.2.9`
 
 <!-- verification-facts:baseline:end -->
@@ -38,7 +38,7 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   24 files / 181 tests
+├── package tests   25 files / 184 tests
 └── desktop tests   38 files / 269 tests
 pnpm build          passed
 ├── Renderer
@@ -60,7 +60,7 @@ pnpm build          passed
 - Leafer 文档投影、Path 实例、复杂外观映射和 change-set 增量同步：未变节点保持 spec/元素 identity，不调用 `set()`；无关新增、删除和 revision 不刷新 tree/Editor，也不取消进行中的直接操作；选中节点变化只刷新该元素 bounds 并更新 editBox；asset change 会精确重投影引用节点。
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
-- 固定 `@earendil-works/pi-agent-core 0.84.1` 的 contract tests 使用已实现的 headless `Agent` 完成模型、工具和 journal parity；adapter 强制顺序执行、逐轮 `transformContext`、单条 steering/follow-up，并拒绝裸 `bash` 与重复工具。ModelGateway bridge 覆盖三种 API identity、reasoning/text/tool-call、partial arguments、usage、取消和错误；run event adapter 与旧 Runtime 共用一个原子 journal writer。通用 Pi tool adapter 已复用 `ToolExecutorPort`/`ApprovalPort` 接通十二个生产公开工具，直接携带原始标准 JSON Schema 而不注入 `~unsafe` 等私有字段；专项覆盖成功两轮工具循环、业务 validation、approval denial、progress、原始 journal 结果、内容寻址附件元数据、可信 revision、非法 revision 和 max tool calls，失败会回到下一模型轮次。桌面目录门禁同时证明两个 internal host 工具没有暴露；迁移代码使用独立 `pi-migration` 子入口，根生产 Agent bundle 未提前包含未启用的 Pi loop。`agent-core:check` 继续阻止 `pi-coding-agent`、`pi-tui` 和未实现的 `AgentHarness`；completion guard、context/recovery parity 尚未完成，因此生产 Agent loop 仍未切换。
+- 固定 `@earendil-works/pi-agent-core 0.84.1` 的 contract tests 使用已实现的 headless `Agent` 完成模型、工具和 journal parity；adapter 强制顺序执行、逐轮 `transformContext`、单条 steering/follow-up，并拒绝裸 `bash` 与重复工具。ModelGateway bridge 覆盖三种 API identity、reasoning/text/tool-call、partial arguments、usage、取消和错误；run event adapter 与旧 Runtime 共用一个原子 journal writer。通用 Pi tool adapter 已复用 `ToolExecutorPort`/`ApprovalPort` 接通十二个生产公开工具，直接携带原始标准 JSON Schema 而不注入 `~unsafe` 等私有字段；专项覆盖成功两轮工具循环、业务 validation、approval denial、progress、原始 journal 结果、内容寻址附件元数据、可信 revision、非法 revision 和 max tool calls，失败会回到下一模型轮次。Completion guard 专项证明首个候选完成保持 provisional，拒绝会清除临时内容并以 trusted steering 继续第二次 Provider call，journal 只保存最终获准消息；拒绝上限、guard failure、max turns 和 total tokens 都有可信终态。桌面目录门禁证明两个 internal host 工具没有暴露；迁移代码使用独立 `pi-migration` 子入口，根生产 Agent bundle 未提前包含未启用的 Pi loop。`agent-core:check` 继续阻止 `pi-coding-agent`、`pi-tui` 和未实现的 `AgentHarness`；取消/pending tool 与 context/recovery parity 尚未完成，因此生产 Agent loop 仍未切换。
 - 生产 Provider stream 的首响应、空闲和总时限 watchdog 会 abort 实际 fetch；timeout 与 Agent process exit 都会解除 Renderer active Run、恢复可编辑输入并显示可重试错误。
 - 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。生产回归使用完整 system prompt、十二个工具和 200K Model Profile，既证明短消息会进入 Provider，也证明含多模态结果的八轮工具循环会在 Run 内压缩后完成。模型可见 `apply_transaction` Schema 不依赖 `$ref/$defs`，本地仍用完整 `DesignOperationSchema` 校验。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
 - 工具执行、业务校验和设计工具桥失败会作为 `tool.failed` 回到下一轮模型上下文供其重试或解释；模型桥、Provider、Agent 进程/协议和可信 Run binding 失败才会取消 Run。两类路径分别有“继续第二个模型回合”和“相关 Run 终结/解锁”测试。
