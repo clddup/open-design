@@ -883,6 +883,136 @@ describe("Renderer semantic hierarchy tool", () => {
     ]);
   });
 
+  it("reparents explicit layers with host-computed transforms and dynamic Group bounds", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const before = runtime.getSnapshot().document;
+    const featureWorld = getWorldTransform(before, "feature_one");
+    const siblingWorld = getWorldTransform(before, "feature_two");
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_reparent",
+        call: {
+          toolCallId: "tool_hierarchy_reparent",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "reparent",
+            label: "Move first capability out of its Group",
+            pageId: "page_welcome",
+            nodeIds: ["feature_one"],
+            parentId: "frame_welcome",
+            index: 1,
+          },
+        },
+        context: selectionContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "reparent",
+          nodeIds: ["feature_one"],
+          parentId: "frame_welcome",
+          index: 1,
+          siblingOrder: [
+            "shape_accent",
+            "feature_one",
+            "title_welcome",
+            "subtitle_welcome",
+            "feature_group",
+          ],
+          atomic: true,
+          revision: 1,
+          warnings: [],
+        },
+      },
+    });
+    const moved = runtime.getSnapshot();
+    expect(moved.document.nodesById.feature_one?.parentId).toBe(
+      "frame_welcome",
+    );
+    expect(moved.document.nodesById.feature_group?.size).toEqual({
+      width: 556,
+      height: 220,
+    });
+    expect(getWorldTransform(moved.document, "feature_one")).toEqual(
+      featureWorld,
+    );
+    expect(getWorldTransform(moved.document, "feature_two")).toEqual(
+      siblingWorld,
+    );
+    expect(moved.state.selection).toEqual({
+      nodeIds: ["title_welcome"],
+      anchorNodeId: "title_welcome",
+    });
+    expect(moved.state.history.undo).toHaveLength(1);
+  });
+
+  it("returns hierarchy failures and visual-context warnings for Agent reparenting", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "hierarchy_reparent_cycle",
+          call: {
+            toolCallId: "tool_hierarchy_reparent_cycle",
+            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            input: {
+              action: "reparent",
+              label: "Invalid cycle",
+              pageId: "page_welcome",
+              nodeIds: ["frame_welcome"],
+              parentId: "feature_group",
+              index: 0,
+            },
+          },
+          context: pageContext,
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("hierarchy.invalid-target");
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+
+    const styled = structuredClone(createWelcomeDocument());
+    const styledGroup = styled.nodesById.feature_group;
+    if (!styledGroup) throw new Error("Missing Group fixture");
+    styledGroup.opacity = 0.6;
+    const styledRuntime = new EditorRuntime(styled);
+    const warned = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_reparent_warning",
+        call: {
+          toolCallId: "tool_hierarchy_reparent_warning",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "reparent",
+            label: "Move title into styled Group",
+            pageId: "page_welcome",
+            nodeIds: ["title_welcome"],
+            parentId: "feature_group",
+            index: 0,
+          },
+        },
+        context: pageContext,
+      },
+      styledRuntime,
+      "page_welcome",
+    );
+    expect(warned).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          warnings: [expect.stringContaining("inherited clipping")],
+        },
+      },
+    });
+  });
+
   it("returns scoped planner failures without partially changing the document", async () => {
     const mixedRuntime = new EditorRuntime(createWelcomeDocument());
     await expect(

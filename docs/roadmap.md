@@ -51,6 +51,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [ ] 在本仓库启动的 Electron 实例中复验：Agent 渐进事务期间 pan/zoom/resize 后 Leafer editBox 始终贴合选区，不出现巨大蓝色角、残影或输入锁死。
 - [ ] 实机复验复杂渐变/光晕/模糊、属性检查器同步、`capture_canvas` 多模态视觉回读、本地路径/URL `read_image`、全局 GPT Image 2 `generate_image`、粘贴/拖放附件和 `place_image`。
 - [x] 将 Leafer revision 同步改为 transaction change set 驱动的 affected-node 增量投影与 reconcile：未变节点不再 `set()`，无关 revision 不再隐藏 Editor、取消直接操作或刷新 tree bounds；选区相关变化只刷新对应元素 bounds，断档/切页/恢复才全量回退。
+- [x] 建立人工 UI 与 Agent 共用的层级 planner：支持兄弟层序和 Page root/Frame/Group 跨容器重挂载，保持世界坐标、固定 Frame 尺寸并动态重算 Group bounds；图层树提供 before/inside/after 拖放、明确状态、单 revision/undo 和 macOS/Windows 共享行为测试。
 - [x] 建立 P0 持久上下文压缩：原始 journal 不删除，模型投影按完整 run 边界生成累计 `context.compacted` checkpoint，保留近期用户/Agent 摘录、附件元数据、工具统计和最新 design revision；当前轮与旧 journal 的超长工具字段都会被省略，压缩后仍超本地预算则在 Provider I/O 前返回 `context_budget_exceeded`。
 - [x] 将固定 system/tool 协议与可压缩 Conversation 投影分账；Main 按所选 Model Profile 注入 `contextWindow/maxOutputTokens`，Agent 对文字、图片、文档、工具与输出预留执行启发式 token 预算，并用 `model_context_incompatible` 区分“模型装不下协议”和用户上下文过长。模型可见 `apply_transaction` Schema 从 314,159 字符压至 25,222 字符，完整运行时校验保持不变。
 - [ ] 接入服务端 Model metadata 探测、Provider/tokenizer/image 精确预算和可选语义 compactor；上游仍返回 `context_too_large` 时只允许重新预算和紧急压缩后自动重试一次。
@@ -88,7 +89,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 - 建立 `@opendesign/geometry-service` 边界，并通过维护状态、许可证、包体积、确定性、WASM/原生要求和 macOS/Windows 兼容基准选择固定版本的成熟 geometry kernel。React、Agent prompt 和 Leafer adapter 不得承载几何算法。
 - 增加正式 Line/Arrow/Polygon/Star/Slice 与可编辑 Path/Vector 轮廓；实现 Pen、节点/手柄、开放/闭合、连接/断开、路径反转、布尔 union/subtract/intersect/exclude、flatten 和 outline stroke。
-- 补齐创建、重命名、复制、删除、编组/解组、层级移动、跨容器移动、批量操作、对齐、分布、等间距、翻转、原点、智能吸附、参考线、标尺和像素对齐。
+- 扩展剩余图层与精确变换工作流：重命名、批量属性、分布、等间距、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
 - 人工命令与 Agent typed tools 调用同一 geometry service，并把结果作为一个可预览、可撤销的 `DesignTransaction` 应用。SVG 导入导出必须经过同一公共 Path 语义，不能泄漏 provider 私有命令。
 
 完成条件：`OD-PENGUIN-01` 可以通过人工 Pen 和 Agent 工具继续编辑，不需要重建整个轮廓；`OD-BRAND-01` 的布尔、outline 和 SVG 往返保持结构、bounds 与视觉基线；所有动作支持保存重开和 undo/redo。

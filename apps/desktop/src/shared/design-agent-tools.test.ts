@@ -153,6 +153,14 @@ describe("design Agent tool contract", () => {
       nodeIds: ["face", "scarf"],
       order: "bring-forward",
     };
+    const reparent = {
+      action: "reparent",
+      label: "Move mascot into poster",
+      pageId: "page_1",
+      nodeIds: ["mascot_group"],
+      parentId: "poster_frame",
+      index: 2,
+    };
 
     expect(hierarchy).toMatchObject({
       risk: "design_write",
@@ -168,6 +176,16 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, reorder),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, reparent),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...reparent,
+        parentId: null,
+        index: 0,
+      }),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
@@ -209,6 +227,24 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
         ...reorder,
         groupId: "must_not_be_accepted",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...reparent,
+        nodeIds: ["mascot_group", "mascot_group"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...reparent,
+        index: -1,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...reparent,
+        groupId: "not_part_of_reparent",
       }),
     ).toBe(false);
   });

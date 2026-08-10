@@ -21,6 +21,7 @@ import {
   getWorldTransform,
   invertTransform,
   planGroupNodes,
+  planReparentNodes,
   planReorderNodes,
   planUngroupNode,
   screenToDocument,
@@ -50,7 +51,11 @@ import { AgentTimeline } from "./components/AgentTimeline";
 import { Canvas, type CanvasPreviewCapture } from "./components/Canvas";
 import { DiagnosticNotifications } from "./components/DiagnosticNotifications";
 import { DesignFileTabs } from "./components/DesignFileTabs";
-import { LeftSidebar } from "./components/LeftSidebar";
+import {
+  LeftSidebar,
+  type LayerReparentRequest,
+  type LayerReparentResult,
+} from "./components/LeftSidebar";
 import { ProjectHome } from "./components/ProjectHome";
 import { SettingsPage } from "./components/SettingsPage";
 import {
@@ -647,6 +652,46 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         return;
       }
       applyCommands(t(LAYER_ORDER_HISTORY_KEYS[action]), plan.commands);
+    },
+    [activePageId, applyCommands, runtime, t],
+  );
+
+  const reparentLayers = useCallback(
+    (request: LayerReparentRequest): LayerReparentResult => {
+      const current = runtime.getSnapshot();
+      const operationId = `reparent_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planReparentNodes(
+        current.document,
+        activePageId,
+        request.nodeIds,
+        {
+          parentId: request.parentId,
+          index: request.index,
+          commandPrefix: operationId,
+        },
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return { ok: false, error: plan.message };
+      }
+      if (
+        !applyCommands(
+          t(
+            plan.selectionNodeIds.length === 1
+              ? "history.reparentLayer"
+              : "history.reparentLayers",
+            { count: plan.selectionNodeIds.length },
+          ),
+          plan.commands,
+        )
+      ) {
+        return { ok: false, error: t("sidebar.dropApplyFailed") };
+      }
+      runtime.setSelection(plan.selectionNodeIds, plan.selectionNodeIds.at(-1));
+      return {
+        ok: true,
+        ...(plan.warnings?.length ? { warning: plan.warnings.join(" ") } : {}),
+      };
     },
     [activePageId, applyCommands, runtime, t],
   );
@@ -1525,6 +1570,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             document={designDocument}
             onPageChange={activatePage}
             onDelete={(nodeId) => deleteNodes([nodeId])}
+            onReparent={reparentLayers}
             onSelect={(nodeId) => runtime.setSelection([nodeId], nodeId)}
             onTabChange={setSidebarTab}
             onToggleLock={(nodeId) => {
@@ -1619,7 +1665,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           />
         </div>
         <footer className="statusbar">
-          <span className={editorError ? "statusbar__error" : undefined}>
+          <span
+            className={editorError ? "statusbar__error" : undefined}
+            role="status"
+          >
             <i />
             {editorError ??
               (state.dirty ? t("title.unsaved") : t("status.allSaved"))}

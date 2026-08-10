@@ -65,6 +65,14 @@ export type DesignHierarchyToolInput =
       nodeIds: string[];
       order:
         "bring-forward" | "bring-to-front" | "send-backward" | "send-to-back";
+    }
+  | {
+      action: "reparent";
+      label: string;
+      pageId: string;
+      nodeIds: string[];
+      parentId: string | null;
+      index: number;
     };
 
 // The canonical DesignOperation schema is deliberately exhaustive and is used
@@ -403,9 +411,9 @@ const MODEL_APPLY_TRANSACTION_SCHEMA = {
 const MODEL_HIERARCHY_SCHEMA = {
   type: "object",
   description:
-    "For group, nodeIds, groupId, and name are required. For ungroup, groupId is required. For reorder, nodeIds and order are required. Runtime validation enforces the action-specific shape.",
+    "For group, nodeIds, groupId, and name are required. For ungroup, groupId is required. For reorder, nodeIds and order are required. For reparent, nodeIds, parentId, and final index are required. Runtime validation enforces the action-specific shape.",
   properties: {
-    action: { enum: ["group", "ungroup", "reorder"] },
+    action: { enum: ["group", "ungroup", "reorder", "reparent"] },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     nodeIds: {
@@ -415,9 +423,23 @@ const MODEL_HIERARCHY_SCHEMA = {
       uniqueItems: true,
       items: { type: "string", minLength: 1, maxLength: 256 },
       description:
-        "Explicit sibling layer IDs; required for group (2..249) and reorder (1..500).",
+        "Explicit same-parent layer IDs; required for group (2..249), reorder (1..500), and reparent (1..500).",
     },
     groupId: { type: "string", minLength: 1, maxLength: 256 },
+    parentId: {
+      anyOf: [
+        { type: "string", minLength: 1, maxLength: 256 },
+        { type: "null" },
+      ],
+      description:
+        "Destination Frame or Group ID, or null for the Page root; required only for reparent.",
+    },
+    index: {
+      type: "integer",
+      minimum: 0,
+      description:
+        "Final insertion index after moved nodes are removed from the destination; required only for reparent.",
+    },
     order: {
       enum: [
         "bring-forward",
@@ -558,7 +580,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_HIERARCHY_TOOL_NAME,
     description:
-      "Edit existing layer hierarchy in the currently bound Design File without asking the model to calculate low-level move commands or transform changes. It can group sibling layers, ungroup one Group, or reorder one or more siblings with bring-forward, bring-to-front, send-backward, and send-to-back semantics. Targets are explicit stable node IDs on an explicit existing Page; the send-time or live user selection is context only and is never used as an implicit target. The host preserves sibling order and world geometry where applicable, previews the complete change, and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, no-op order changes, and ungrouping that would lose Group-level appearance.",
+      "Edit existing layer hierarchy in the currently bound Design File without asking the model to calculate low-level move commands or transform changes. It can group siblings, ungroup one Group, reorder siblings, or reparent one or more same-parent layers to an explicit Page-root, Frame, or Group insertion index. Reparenting preserves world transforms and dynamically recomputes affected Group bounds; Frame sizes remain fixed. Targets are explicit stable node IDs on an explicit existing Page, never the send-time or live user selection. The host previews the complete change and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, cycles, empty source Groups, non-invertible targets, no-op changes, and visually lossy ungrouping; inherited clipping or appearance changes return a visual-review warning.",
     inputSchema: MODEL_HIERARCHY_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -716,7 +738,8 @@ export function isDesignHierarchyToolInput(
   const common =
     (input.action === "group" ||
       input.action === "ungroup" ||
-      input.action === "reorder") &&
+      input.action === "reorder" ||
+      input.action === "reparent") &&
     typeof input.label === "string" &&
     input.label.trim().length > 0 &&
     input.label.length <= 256 &&
@@ -743,6 +766,23 @@ export function isDesignHierarchyToolInput(
         input.order === "send-to-back") &&
       Object.keys(input).every((key) =>
         ["action", "label", "pageId", "nodeIds", "order"].includes(key),
+      )
+    );
+  }
+  if (input.action === "reparent") {
+    return (
+      Array.isArray(input.nodeIds) &&
+      input.nodeIds.length >= 1 &&
+      input.nodeIds.length <= 500 &&
+      input.nodeIds.every(safeId) &&
+      new Set(input.nodeIds).size === input.nodeIds.length &&
+      (input.parentId === null || safeId(input.parentId)) &&
+      Number.isInteger(input.index) &&
+      Number(input.index) >= 0 &&
+      Object.keys(input).every((key) =>
+        ["action", "label", "pageId", "nodeIds", "parentId", "index"].includes(
+          key,
+        ),
       )
     );
   }

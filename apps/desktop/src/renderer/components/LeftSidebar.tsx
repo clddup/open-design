@@ -4,7 +4,13 @@ import type {
   NodeKind,
 } from "@opendesign/design-contracts";
 import { Glyph, IconButton, type GlyphName } from "@opendesign/ui";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent as ReactDragEvent,
+} from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
 import type { SidebarTab } from "../state/editor";
@@ -55,6 +61,91 @@ type TreeEntry = {
   effectiveLocked: boolean;
   inheritedLocked: boolean;
 };
+
+export type LayerDropPosition = "before" | "inside" | "after";
+
+export type LayerReparentRequest = {
+  nodeIds: readonly string[];
+  parentId: string | null;
+  index: number;
+  position: LayerDropPosition;
+  targetNodeId: string;
+};
+
+export type LayerReparentResult =
+  { ok: true; warning?: string } | { ok: false; error: string };
+
+type ActiveLayerDrop = {
+  nodeId: string;
+  position: LayerDropPosition;
+};
+
+function sameParentSelection(
+  document: DesignDocument,
+  draggedNodeId: string,
+  selectedNodeIds: readonly string[],
+): string[] {
+  if (!selectedNodeIds.includes(draggedNodeId)) return [draggedNodeId];
+  const parentId = document.nodesById[draggedNodeId]?.parentId;
+  const selected = [...new Set(selectedNodeIds)].filter(
+    (nodeId) => document.nodesById[nodeId]?.parentId === parentId,
+  );
+  return selected.length === selectedNodeIds.length
+    ? selected
+    : [draggedNodeId];
+}
+
+function dropPosition(
+  event: ReactDragEvent<HTMLElement>,
+  node: DesignNode,
+  canDropInside: boolean,
+): LayerDropPosition {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  const ratio =
+    bounds.height > 0 ? (event.clientY - bounds.top) / bounds.height : 0.5;
+  if (canDropInside && (node.kind === "frame" || node.kind === "group")) {
+    if (ratio < 0.25) return "before";
+    if (ratio > 0.75) return "after";
+    return "inside";
+  }
+  return ratio < 0.5 ? "before" : "after";
+}
+
+function reparentRequest(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  targetNode: DesignNode,
+  position: LayerDropPosition,
+): LayerReparentRequest | null {
+  if (position === "inside") {
+    const selected = new Set(nodeIds);
+    return {
+      nodeIds,
+      parentId: targetNode.id,
+      index: targetNode.childIds.filter((nodeId) => !selected.has(nodeId))
+        .length,
+      position,
+      targetNodeId: targetNode.id,
+    };
+  }
+  const parentId = targetNode.parentId;
+  const siblings = parentId
+    ? document.nodesById[parentId]?.childIds
+    : document.pagesById[pageId]?.rootNodeIds;
+  if (!siblings) return null;
+  const selected = new Set(nodeIds);
+  const remaining = siblings.filter((nodeId) => !selected.has(nodeId));
+  const targetIndex = remaining.indexOf(targetNode.id);
+  if (targetIndex < 0) return null;
+  return {
+    nodeIds,
+    parentId,
+    index: targetIndex + (position === "after" ? 1 : 0),
+    position,
+    targetNodeId: targetNode.id,
+  };
+}
 
 function flattenPageTree(
   document: DesignDocument,
@@ -109,6 +200,7 @@ export function LeftSidebar({
   onPageChange,
   onDelete,
   onSelect,
+  onReparent,
   onToggleLock,
   onToggleVisibility,
 }: {
@@ -120,6 +212,7 @@ export function LeftSidebar({
   onPageChange: (pageId: string) => void;
   onDelete: (nodeId: string) => void;
   onSelect: (nodeId: string) => void;
+  onReparent: (request: LayerReparentRequest) => LayerReparentResult;
   onToggleLock: (nodeId: string) => void;
   onToggleVisibility: (nodeId: string) => void;
 }) {
@@ -127,6 +220,9 @@ export function LeftSidebar({
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [activeDrop, setActiveDrop] = useState<ActiveLayerDrop | null>(null);
+  const [dragStatus, setDragStatus] = useState("");
+  const draggedNodeIds = useRef<readonly string[] | null>(null);
   const revealedSelectionKey = useRef<string | null>(null);
   const layers = flattenPageTree(document, activePageId, collapsedNodeIds);
   const selectedIds = new Set(selectedNodeIds);
@@ -151,6 +247,9 @@ export function LeftSidebar({
   useEffect(() => {
     setCollapsedNodeIds(new Set());
     revealedSelectionKey.current = null;
+    draggedNodeIds.current = null;
+    setActiveDrop(null);
+    setDragStatus("");
   }, [activePageId, document.documentId]);
 
   const expandNode = (nodeId: string) => {
@@ -169,6 +268,87 @@ export function LeftSidebar({
       else next.add(nodeId);
       return next;
     });
+  };
+
+  const clearDrag = () => {
+    draggedNodeIds.current = null;
+    setActiveDrop(null);
+  };
+
+  const startDrag = (
+    event: ReactDragEvent<HTMLButtonElement>,
+    nodeId: string,
+  ) => {
+    const nodeIds = sameParentSelection(document, nodeId, selectedNodeIds);
+    draggedNodeIds.current = nodeIds;
+    setActiveDrop(null);
+    setDragStatus(
+      t(
+        nodeIds.length === 1
+          ? "sidebar.draggingLayer"
+          : "sidebar.draggingLayers",
+        { count: nodeIds.length },
+      ),
+    );
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-opendesign-layer-drag", "active");
+  };
+
+  const updateDrop = (
+    event: ReactDragEvent<HTMLDivElement>,
+    node: DesignNode,
+    effectiveLocked: boolean,
+  ) => {
+    if (!draggedNodeIds.current) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const position = dropPosition(event, node, !effectiveLocked);
+    setActiveDrop({ nodeId: node.id, position });
+    setDragStatus(
+      t(
+        position === "before"
+          ? "sidebar.dropBefore"
+          : position === "inside"
+            ? "sidebar.dropInside"
+            : "sidebar.dropAfter",
+        { name: node.name || t(nodeKindKeys[node.kind]) },
+      ),
+    );
+  };
+
+  const finishDrop = (
+    event: ReactDragEvent<HTMLDivElement>,
+    node: DesignNode,
+    effectiveLocked: boolean,
+  ) => {
+    const nodeIds = draggedNodeIds.current;
+    if (!nodeIds) return;
+    event.preventDefault();
+    const position = dropPosition(event, node, !effectiveLocked);
+    const request = reparentRequest(
+      document,
+      activePageId,
+      nodeIds,
+      node,
+      position,
+    );
+    clearDrag();
+    if (!request) {
+      setDragStatus(t("sidebar.dropUnavailable"));
+      return;
+    }
+    const result = onReparent(request);
+    setDragStatus(
+      result.ok
+        ? (result.warning ??
+            t(
+              request.nodeIds.length === 1
+                ? "sidebar.movedLayer"
+                : "sidebar.movedLayers",
+              { count: request.nodeIds.length },
+            ))
+        : result.error,
+    );
   };
 
   return (
@@ -253,8 +433,28 @@ export function LeftSidebar({
                   aria-expanded={hasChildren ? !collapsed : undefined}
                   aria-level={depth + 1}
                   aria-selected={selected}
-                  className="layer-row"
+                  className={`layer-row${
+                    activeDrop?.nodeId === node.id
+                      ? ` layer-row--drop-${activeDrop.position}`
+                      : ""
+                  }`}
                   key={node.id}
+                  onDragLeave={(event) => {
+                    const nextTarget = event.relatedTarget;
+                    if (
+                      activeDrop?.nodeId === node.id &&
+                      !(
+                        nextTarget instanceof Node &&
+                        event.currentTarget.contains(nextTarget)
+                      )
+                    ) {
+                      setActiveDrop(null);
+                    }
+                  }}
+                  onDragOver={(event) =>
+                    updateDrop(event, node, effectiveLocked)
+                  }
+                  onDrop={(event) => finishDrop(event, node, effectiveLocked)}
                   role="treeitem"
                   style={{ "--layer-depth": depth } as CSSProperties}
                 >
@@ -278,6 +478,18 @@ export function LeftSidebar({
                   )}
                   <button
                     className="layer-row__main"
+                    draggable={!effectiveLocked}
+                    onDragEnd={() => {
+                      if (draggedNodeIds.current) {
+                        clearDrag();
+                        setDragStatus("");
+                      }
+                    }}
+                    onDragStart={
+                      effectiveLocked
+                        ? undefined
+                        : (event) => startDrag(event, node.id)
+                    }
                     onClick={() => {
                       if (hasChildren) expandNode(node.id);
                       onSelect(node.id);
@@ -293,6 +505,17 @@ export function LeftSidebar({
                         })}
                     </span>
                   </button>
+                  {activeDrop?.nodeId === node.id && (
+                    <span aria-hidden="true" className="layer-row__drop-label">
+                      {t(
+                        activeDrop.position === "before"
+                          ? "sidebar.dropBeforeShort"
+                          : activeDrop.position === "inside"
+                            ? "sidebar.dropInsideShort"
+                            : "sidebar.dropAfterShort",
+                      )}
+                    </span>
+                  )}
                   <span className="layer-row__actions">
                     <IconButton
                       className={
@@ -330,6 +553,9 @@ export function LeftSidebar({
                 </div>
               );
             })}
+            <span className="layer-tree__drag-status" role="status">
+              {dragStatus}
+            </span>
           </div>
         </div>
       ) : (

@@ -5,10 +5,17 @@ import type {
   Transform,
 } from "@opendesign/design-contracts";
 import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
-import { multiplyTransforms, transformPoint } from "./geometry.js";
+import {
+  getWorldTransform,
+  IDENTITY_TRANSFORM,
+  invertTransform,
+  multiplyTransforms,
+  transformPoint,
+} from "./geometry.js";
 
 export type LayerOperationFailureCode =
   | "invalid-selection"
+  | "invalid-target"
   | "locked"
   | "mixed-parent"
   | "not-found"
@@ -23,6 +30,7 @@ export type LayerOperationPlan =
       ok: true;
       commands: DesignOperation[];
       selectionNodeIds: string[];
+      warnings?: string[];
     }
   | {
       ok: false;
@@ -269,6 +277,257 @@ export function canReorderNodes(
   ).ok;
 }
 
+export function planReparentNodes(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  options: {
+    parentId: string | null;
+    index: number;
+    commandPrefix: string;
+  },
+): LayerOperationPlan {
+  const selection = analyzeReorderSelection(document, pageId, nodeIds);
+  if (!selection.ok) return selection;
+  const {
+    ordered,
+    parentId: sourceParentId,
+    siblings: sourceSiblings,
+  } = selection;
+  const targetParent = options.parentId
+    ? document.nodesById[options.parentId]
+    : undefined;
+  if (options.parentId && !targetParent) {
+    return failure(
+      "not-found",
+      `Target parent ${options.parentId} does not exist`,
+    );
+  }
+  if (
+    targetParent &&
+    targetParent.kind !== "frame" &&
+    targetParent.kind !== "group"
+  ) {
+    return failure(
+      "invalid-target",
+      "Layers can only be moved to the Page root, a Frame, or a Group",
+    );
+  }
+  if (targetParent && !nodeBelongsToPage(document, pageId, targetParent.id)) {
+    return failure(
+      "invalid-target",
+      "The target parent does not belong to the target Page hierarchy",
+    );
+  }
+  if (targetParent && isEffectivelyLocked(document, targetParent.id)) {
+    return failure("locked", "Layers cannot be moved into a locked container");
+  }
+  if (
+    options.parentId &&
+    ordered.some(
+      (nodeId) =>
+        nodeId === options.parentId ||
+        nodeContains(document, nodeId, options.parentId!),
+    )
+  ) {
+    return failure(
+      "invalid-target",
+      "A layer cannot be moved into itself or one of its descendants",
+    );
+  }
+
+  const targetSiblings = childIds(document, pageId, options.parentId);
+  if (!targetSiblings) {
+    return failure("invalid-target", "Target hierarchy is unavailable");
+  }
+  const selected = new Set(ordered);
+  const targetWithoutSelection = targetSiblings.filter(
+    (nodeId) => !selected.has(nodeId),
+  );
+  if (
+    !Number.isInteger(options.index) ||
+    options.index < 0 ||
+    options.index > targetWithoutSelection.length
+  ) {
+    return failure(
+      "invalid-target",
+      `Target index ${options.index} is outside the final parent range 0..${targetWithoutSelection.length}`,
+    );
+  }
+  if (
+    sourceParentId !== options.parentId &&
+    sourceParentId &&
+    document.nodesById[sourceParentId]?.kind === "group" &&
+    sourceSiblings.every((nodeId) => selected.has(nodeId))
+  ) {
+    return failure(
+      "invalid-target",
+      "Moving these layers would leave their source Group empty; move or ungroup the Group instead",
+    );
+  }
+
+  const targetOrder = [
+    ...targetWithoutSelection.slice(0, options.index),
+    ...ordered,
+    ...targetWithoutSelection.slice(options.index),
+  ];
+  if (
+    sourceParentId === options.parentId &&
+    arraysEqual(sourceSiblings, targetOrder)
+  ) {
+    return failure(
+      "invalid-selection",
+      "Selected layers are already at the requested hierarchy position",
+    );
+  }
+
+  const projected = structuredClone(document);
+  const selectedWorldTransforms = new Map<string, Transform>();
+  for (const nodeId of ordered) {
+    const world = getWorldTransform(document, nodeId);
+    if (!world) {
+      return failure(
+        "visual-fidelity",
+        `Layer ${nodeId} has an invalid world transform`,
+      );
+    }
+    selectedWorldTransforms.set(nodeId, world);
+  }
+  const targetParentWorld = options.parentId
+    ? getWorldTransform(document, options.parentId)
+    : IDENTITY_TRANSFORM;
+  const worldToTarget = targetParentWorld
+    ? invertTransform(targetParentWorld)
+    : null;
+  if (!worldToTarget) {
+    return failure(
+      "visual-fidelity",
+      "The target container transform is not invertible, so world geometry cannot be preserved",
+    );
+  }
+
+  const projectedSourceSiblings = mutableChildIds(
+    projected,
+    pageId,
+    sourceParentId,
+  );
+  if (!projectedSourceSiblings) {
+    return failure("invalid-target", "Source hierarchy is unavailable");
+  }
+  projectedSourceSiblings.splice(
+    0,
+    projectedSourceSiblings.length,
+    ...projectedSourceSiblings.filter((nodeId) => !selected.has(nodeId)),
+  );
+  const projectedTargetSiblings = mutableChildIds(
+    projected,
+    pageId,
+    options.parentId,
+  );
+  if (!projectedTargetSiblings) {
+    return failure("invalid-target", "Target hierarchy is unavailable");
+  }
+  if (sourceParentId === options.parentId) {
+    projectedTargetSiblings.splice(
+      0,
+      projectedTargetSiblings.length,
+      ...targetOrder,
+    );
+  } else {
+    projectedTargetSiblings.splice(options.index, 0, ...ordered);
+  }
+  for (const nodeId of ordered) {
+    const node = projected.nodesById[nodeId];
+    const world = selectedWorldTransforms.get(nodeId);
+    if (!node || !world) {
+      return failure("not-found", `Layer ${nodeId} does not exist`);
+    }
+    node.parentId = options.parentId;
+    if (sourceParentId !== options.parentId) {
+      node.transform = multiplyTransforms(worldToTarget, world);
+    }
+  }
+
+  if (sourceParentId !== options.parentId) {
+    const affectedGroups = new Set([
+      ...groupAncestorIds(document, sourceParentId),
+      ...groupAncestorIds(projected, options.parentId),
+    ]);
+    const deepestFirst = [...affectedGroups].sort(
+      (left, right) => nodeDepth(projected, right) - nodeDepth(projected, left),
+    );
+    for (const groupId of deepestFirst) {
+      const normalized = normalizeGroupInPlace(projected, groupId);
+      if (!normalized.ok) return normalized;
+    }
+  }
+
+  const updates: DesignOperation[] = [];
+  for (const nodeId of Object.keys(projected.nodesById)) {
+    const before = document.nodesById[nodeId];
+    const after = projected.nodesById[nodeId];
+    if (!before || !after) continue;
+    const transformChanged = !arraysEqual(before.transform, after.transform);
+    const sizeChanged =
+      before.size.width !== after.size.width ||
+      before.size.height !== after.size.height;
+    if (!transformChanged && !sizeChanged) continue;
+    updates.push({
+      commandId: `${options.commandPrefix}_update_${updates.length}`,
+      type: "update_properties",
+      nodeId,
+      ...(transformChanged ? { transform: after.transform } : {}),
+      ...(sizeChanged ? { size: after.size } : {}),
+    });
+  }
+  const moves =
+    sourceParentId === options.parentId
+      ? planBlockMoves(
+          sourceSiblings,
+          targetOrder,
+          ordered,
+          pageId,
+          options.parentId,
+          options.commandPrefix,
+        )
+      : ordered.map((nodeId, index): DesignOperation => ({
+          commandId: `${options.commandPrefix}_move_${index}`,
+          type: "move_element",
+          nodeId,
+          pageId,
+          parentId: options.parentId,
+          index: options.index + index,
+        }));
+  if (!moves) {
+    return failure(
+      "invalid-target",
+      "The requested sibling insertion order could not be planned",
+    );
+  }
+  const commands = [...updates, ...moves];
+  if (commands.length > MAX_TRANSACTION_COMMANDS) {
+    return failure(
+      "operation-limit",
+      `Moving these layers requires ${commands.length} commands, exceeding the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+    );
+  }
+  const warnings = inheritedVisualContextChanged(
+    document,
+    sourceParentId,
+    options.parentId,
+  )
+    ? [
+        "Reparenting changes inherited clipping or container appearance; inspect the rendered canvas after applying",
+      ]
+    : [];
+  return {
+    ok: true,
+    commands,
+    selectionNodeIds: ordered,
+    ...(warnings.length > 0 ? { warnings } : {}),
+  };
+}
+
 type GroupSelectionAnalysis =
   | {
       ok: true;
@@ -495,6 +754,180 @@ function nodeBelongsToPage(
     node = document.nodesById[node.parentId];
   }
   return false;
+}
+
+function nodeContains(
+  document: DesignDocument,
+  rootNodeId: string,
+  candidateNodeId: string,
+): boolean {
+  const pending = [...(document.nodesById[rootNodeId]?.childIds ?? [])];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const nodeId = pending.pop();
+    if (!nodeId || visited.has(nodeId)) continue;
+    if (nodeId === candidateNodeId) return true;
+    visited.add(nodeId);
+    pending.push(...(document.nodesById[nodeId]?.childIds ?? []));
+  }
+  return false;
+}
+
+function mutableChildIds(
+  document: DesignDocument,
+  pageId: string,
+  parentId: string | null,
+): string[] | undefined {
+  if (parentId) return document.nodesById[parentId]?.childIds;
+  return document.pagesById[pageId]?.rootNodeIds;
+}
+
+function groupAncestorIds(
+  document: DesignDocument,
+  startNodeId: string | null,
+): string[] {
+  const result: string[] = [];
+  const visited = new Set<string>();
+  let node = startNodeId ? document.nodesById[startNodeId] : undefined;
+  while (node && !visited.has(node.id)) {
+    visited.add(node.id);
+    if (node.kind === "group") result.push(node.id);
+    node = node.parentId ? document.nodesById[node.parentId] : undefined;
+  }
+  return result;
+}
+
+function nodeDepth(document: DesignDocument, nodeId: string): number {
+  let depth = 0;
+  const visited = new Set<string>();
+  let node = document.nodesById[nodeId];
+  while (node?.parentId && !visited.has(node.id)) {
+    visited.add(node.id);
+    depth += 1;
+    node = document.nodesById[node.parentId];
+  }
+  return depth;
+}
+
+function normalizeGroupInPlace(
+  document: DesignDocument,
+  groupId: string,
+): { ok: true } | LayerOperationFailure {
+  const group = document.nodesById[groupId];
+  if (!group || group.kind !== "group") {
+    return failure("not-found", `Group ${groupId} does not exist`);
+  }
+  const children = group.childIds.map((nodeId) => document.nodesById[nodeId]);
+  if (children.length === 0) {
+    return failure("invalid-target", `Group ${groupId} cannot be left empty`);
+  }
+  if (children.some((node) => !node)) {
+    return failure("not-found", `Group ${groupId} has a missing child`);
+  }
+  const bounds = localSelectionBounds(
+    children.filter((node): node is DesignNode => node !== undefined),
+  );
+  if (!bounds) {
+    return failure(
+      "visual-fidelity",
+      `Group ${groupId} children have invalid bounds`,
+    );
+  }
+  const offset: Transform = [1, 0, 0, 1, bounds.x, bounds.y];
+  const compensate: Transform = [1, 0, 0, 1, -bounds.x, -bounds.y];
+  group.transform = multiplyTransforms(group.transform, offset);
+  group.size = { width: bounds.width, height: bounds.height };
+  for (const child of children) {
+    if (child)
+      child.transform = multiplyTransforms(compensate, child.transform);
+  }
+  return { ok: true };
+}
+
+function planBlockMoves(
+  sourceOrder: readonly string[],
+  targetOrder: readonly string[],
+  orderedNodeIds: readonly string[],
+  pageId: string,
+  parentId: string | null,
+  commandPrefix: string,
+): DesignOperation[] | null {
+  for (const executionOrder of [
+    [...orderedNodeIds],
+    [...orderedNodeIds].reverse(),
+  ]) {
+    const working = [...sourceOrder];
+    const moves: DesignOperation[] = [];
+    for (const nodeId of executionOrder) {
+      const currentIndex = working.indexOf(nodeId);
+      const targetIndex = targetOrder.indexOf(nodeId);
+      if (currentIndex < 0 || targetIndex < 0) return null;
+      if (currentIndex === targetIndex) continue;
+      working.splice(currentIndex, 1);
+      working.splice(targetIndex, 0, nodeId);
+      moves.push({
+        commandId: `${commandPrefix}_move_${moves.length}`,
+        type: "move_element",
+        nodeId,
+        pageId,
+        parentId,
+        index: targetIndex,
+      });
+    }
+    if (arraysEqual(working, targetOrder)) return moves;
+  }
+  return null;
+}
+
+function inheritedVisualContextChanged(
+  document: DesignDocument,
+  sourceParentId: string | null,
+  targetParentId: string | null,
+): boolean {
+  return (
+    JSON.stringify(inheritedVisualContext(document, sourceParentId)) !==
+    JSON.stringify(inheritedVisualContext(document, targetParentId))
+  );
+}
+
+function inheritedVisualContext(
+  document: DesignDocument,
+  parentId: string | null,
+): object[] {
+  const result: object[] = [];
+  const visited = new Set<string>();
+  let node = parentId ? document.nodesById[parentId] : undefined;
+  while (node && !visited.has(node.id)) {
+    visited.add(node.id);
+    const nonNeutral =
+      !node.visible ||
+      node.opacity !== 1 ||
+      (node.blendMode !== undefined && node.blendMode !== "pass-through") ||
+      (node.effects?.length ?? 0) > 0 ||
+      (node.maskMode !== undefined && node.maskMode !== "none") ||
+      (node.kind === "frame" && node.properties.clipsContent);
+    if (nonNeutral) {
+      result.push({
+        nodeId: node.id,
+        visible: node.visible,
+        opacity: node.opacity,
+        blendMode: node.blendMode ?? "pass-through",
+        effects: node.effects ?? [],
+        maskMode: node.maskMode ?? "none",
+        clipsContent:
+          node.kind === "frame" ? node.properties.clipsContent : false,
+      });
+    }
+    node = node.parentId ? document.nodesById[node.parentId] : undefined;
+  }
+  return result;
+}
+
+function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function localSelectionBounds(nodes: readonly DesignNode[]) {

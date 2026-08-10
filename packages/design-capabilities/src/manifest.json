@@ -116,8 +116,8 @@
       "status": "degraded",
       "label": { "en": "Layer hierarchy", "zh-CN": "图层层级" },
       "description": {
-        "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
-        "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序和有序事务；人工命令与 Agent 共用同一套层级 planner。"
+        "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, cross-container reparenting, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
+        "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。"
       },
       "provider": "DesignDocument 1.2.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
@@ -131,8 +131,8 @@
       },
       "limitations": [
         {
-          "en": "Cross-container reparenting, Layers-panel drag and drop, distribute, and equal-spacing commands remain incomplete.",
-          "zh-CN": "跨容器重挂载、图层面板拖放、分布与等间距命令仍未补齐。"
+          "en": "Distribute, equal-spacing, and automatic Canvas parenting commands remain incomplete; explicit cross-container reparenting in the Layers panel is currently pointer-driven.",
+          "zh-CN": "分布、等间距和画布直接操作时的自动归属命令仍未补齐；图层面板中的显式跨容器重挂载目前以指针拖放为主。"
         },
         {
           "en": "Ungrouping explicitly rejects Group-level visibility, opacity, blend, effects, or masks that cannot be preserved without changing rendered output.",

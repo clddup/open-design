@@ -11,6 +11,7 @@ import type {
 import {
   diagnoseDesignPages,
   planGroupNodes,
+  planReparentNodes,
   planReorderNodes,
   planUngroupNode,
   type EditorRuntime,
@@ -131,13 +132,19 @@ export async function executeDesignToolRequest(
               input.groupId,
               commandPrefix,
             )
-          : planReorderNodes(
-              document,
-              input.pageId,
-              input.nodeIds,
-              input.order,
-              commandPrefix,
-            );
+          : input.action === "reorder"
+            ? planReorderNodes(
+                document,
+                input.pageId,
+                input.nodeIds,
+                input.order,
+                commandPrefix,
+              )
+            : planReparentNodes(document, input.pageId, input.nodeIds, {
+                parentId: input.parentId,
+                index: input.index,
+                commandPrefix,
+              });
     if (!plan.ok) {
       throw new Error(`hierarchy.${plan.code}: ${plan.message}`);
     }
@@ -173,26 +180,44 @@ export async function executeDesignToolRequest(
     if (!result.ok) {
       throw new Error(`${result.error.code}: ${result.error.message}`);
     }
+    const appliedDocument = runtime.getSnapshot().document;
     const childNodeIds =
       input.action === "group"
-        ? (runtime.getSnapshot().document.nodesById[input.groupId]?.childIds ??
-          [])
+        ? (appliedDocument.nodesById[input.groupId]?.childIds ?? [])
         : input.action === "ungroup"
           ? plan.selectionNodeIds
           : undefined;
-    const reorderedNode =
-      input.action === "reorder"
-        ? runtime.getSnapshot().document.nodesById[
-            plan.selectionNodeIds[0] ?? ""
-          ]
-        : undefined;
+    const resultParentId =
+      input.action === "reparent"
+        ? input.parentId
+        : input.action === "reorder"
+          ? (appliedDocument.nodesById[plan.selectionNodeIds[0] ?? ""]
+              ?.parentId ?? null)
+          : undefined;
     const siblingOrder =
-      input.action === "reorder"
-        ? reorderedNode?.parentId
-          ? runtime.getSnapshot().document.nodesById[reorderedNode.parentId]
-              ?.childIds
-          : runtime.getSnapshot().document.pagesById[input.pageId]?.rootNodeIds
+      input.action === "reorder" || input.action === "reparent"
+        ? resultParentId
+          ? appliedDocument.nodesById[resultParentId]?.childIds
+          : appliedDocument.pagesById[input.pageId]?.rootNodeIds
         : undefined;
+    const hierarchyResult =
+      input.action === "reorder"
+        ? {
+            order: input.order,
+            nodeIds: plan.selectionNodeIds,
+            siblingOrder: siblingOrder ?? [],
+          }
+        : input.action === "reparent"
+          ? {
+              nodeIds: plan.selectionNodeIds,
+              parentId: input.parentId,
+              index: input.index,
+              siblingOrder: siblingOrder ?? [],
+            }
+          : { groupId: input.groupId, childNodeIds };
+    const warnings = [
+      ...new Set([...(plan.warnings ?? []), ...result.warnings]),
+    ];
     return {
       requestId: request.requestId,
       ok: true,
@@ -202,17 +227,11 @@ export async function executeDesignToolRequest(
           action: input.action,
           label: input.label,
           pageId: input.pageId,
-          ...(input.action === "reorder"
-            ? {
-                order: input.order,
-                nodeIds: plan.selectionNodeIds,
-                siblingOrder: siblingOrder ?? [],
-              }
-            : { groupId: input.groupId, childNodeIds }),
+          ...hierarchyResult,
           revision: result.revision.revision,
           atomic: true,
           changes: result.changes,
-          warnings: result.warnings,
+          warnings,
         },
         designRevision: {
           previousRevision: transaction.baseRevision,

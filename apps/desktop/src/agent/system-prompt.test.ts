@@ -58,6 +58,12 @@ describe("OpenDesign Agent system prompt", () => {
       "bring-forward, bring-to-front, send-backward, or send-to-back",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "use reparent with an explicit destination parent and final insertion index",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "recomputes affected Group bounds",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "does not prove rendered visual quality",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

@@ -12,6 +12,7 @@ import {
   getWorldTransform,
   normalizeDesignDocument,
   planGroupNodes,
+  planReparentNodes,
   planReorderNodes,
   planUngroupNode,
 } from "./index.js";
@@ -457,6 +458,223 @@ describe("layer hierarchy operations", () => {
     expect(
       runtime.getSnapshot().document.nodesById.frame_welcome?.childIds,
     ).toEqual(reordered.document.nodesById.frame_welcome?.childIds);
+  });
+
+  it("reparents layers across containers while preserving every affected child world transform", () => {
+    const runtime = new EditorRuntime(transformedWelcomeDocument());
+    runtime.setSelection(["feature_one"], "feature_one");
+    const before = runtime.getSnapshot();
+    const trackedIds = ["feature_one", "feature_two", "feature_three"];
+    const worldTransforms = Object.fromEntries(
+      trackedIds.map((nodeId) => [
+        nodeId,
+        getWorldTransform(before.document, nodeId),
+      ]),
+    );
+    const plan = planReparentNodes(
+      before.document,
+      "page_welcome",
+      ["feature_one"],
+      {
+        parentId: "frame_welcome",
+        index: 1,
+        commandPrefix: "move_feature_out",
+      },
+    );
+
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) throw new Error(plan.message);
+    expect(
+      runtime.apply(transaction(runtime, "move_feature_out", plan.commands)).ok,
+    ).toBe(true);
+    const moved = runtime.getSnapshot();
+    expect(moved.document.nodesById.frame_welcome?.childIds).toEqual([
+      "shape_accent",
+      "feature_one",
+      "title_welcome",
+      "subtitle_welcome",
+      "feature_group",
+    ]);
+    expect(moved.document.nodesById.feature_group).toMatchObject({
+      childIds: ["feature_two", "feature_three"],
+      size: { width: 556, height: 220 },
+    });
+    expect(moved.state.selection).toEqual(before.state.selection);
+    for (const nodeId of trackedIds) {
+      const expected = worldTransforms[nodeId];
+      if (!expected) throw new Error(`Missing transform for ${nodeId}`);
+      expectTransformClose(getWorldTransform(moved.document, nodeId), expected);
+    }
+    expect(moved.state.history.undo).toHaveLength(1);
+
+    expect(runtime.undo().ok).toBe(true);
+    expect({
+      ...runtime.getSnapshot().document,
+      revision: before.document.revision,
+    }).toEqual(before.document);
+    expect(runtime.redo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.feature_one?.parentId).toBe(
+      "frame_welcome",
+    );
+  });
+
+  it("expands and rebases a destination Group without moving existing or inserted artwork", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const before = runtime.getSnapshot().document;
+    const trackedIds = [
+      "title_welcome",
+      "feature_one",
+      "feature_two",
+      "feature_three",
+    ];
+    const worldTransforms = Object.fromEntries(
+      trackedIds.map((nodeId) => [nodeId, getWorldTransform(before, nodeId)]),
+    );
+    const plan = planReparentNodes(before, "page_welcome", ["title_welcome"], {
+      parentId: "feature_group",
+      index: 3,
+      commandPrefix: "move_title_into_group",
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    expect(
+      runtime.apply(
+        transaction(runtime, "move_title_into_group", plan.commands),
+      ).ok,
+    ).toBe(true);
+
+    const moved = runtime.getSnapshot().document;
+    expect(moved.nodesById.feature_group).toMatchObject({
+      childIds: [
+        "feature_one",
+        "feature_two",
+        "feature_three",
+        "title_welcome",
+      ],
+      size: { width: 892, height: 452 },
+    });
+    for (const nodeId of trackedIds) {
+      const expected = worldTransforms[nodeId];
+      if (!expected) throw new Error(`Missing transform for ${nodeId}`);
+      expectTransformClose(getWorldTransform(moved, nodeId), expected);
+    }
+    const reopened = normalizeDesignDocument(JSON.parse(JSON.stringify(moved)));
+    expect(reopened.nodesById.title_welcome?.parentId).toBe("feature_group");
+  });
+
+  it("inserts a sibling block at an exact final index without changing transforms", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const before = runtime.getSnapshot().document;
+    const plan = planReparentNodes(
+      before,
+      "page_welcome",
+      ["title_welcome", "subtitle_welcome"],
+      {
+        parentId: "frame_welcome",
+        index: 0,
+        commandPrefix: "move_copy_to_start",
+      },
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(
+      runtime.apply(transaction(runtime, "move_copy_to_start", plan.commands))
+        .ok,
+    ).toBe(true);
+    const moved = runtime.getSnapshot().document;
+    expect(moved.nodesById.frame_welcome?.childIds).toEqual([
+      "title_welcome",
+      "subtitle_welcome",
+      "shape_accent",
+      "feature_group",
+    ]);
+    expect(getWorldTransform(moved, "title_welcome")).toEqual(
+      getWorldTransform(before, "title_welcome"),
+    );
+    expect(getWorldTransform(moved, "subtitle_welcome")).toEqual(
+      getWorldTransform(before, "subtitle_welcome"),
+    );
+  });
+
+  it("rejects cyclic, empty-group, locked, singular, and invalid reparent targets", () => {
+    const document = createWelcomeDocument();
+    expect(
+      planReparentNodes(document, "page_welcome", ["frame_welcome"], {
+        parentId: "feature_group",
+        index: 0,
+        commandPrefix: "cycle",
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(
+      planReparentNodes(
+        document,
+        "page_welcome",
+        ["feature_one", "feature_two", "feature_three"],
+        {
+          parentId: "frame_welcome",
+          index: 0,
+          commandPrefix: "empty_group",
+        },
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(
+      planReparentNodes(document, "page_welcome", ["title_welcome"], {
+        parentId: "shape_accent",
+        index: 0,
+        commandPrefix: "shape_parent",
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(
+      planReparentNodes(document, "page_welcome", ["title_welcome"], {
+        parentId: "frame_welcome",
+        index: 99,
+        commandPrefix: "bad_index",
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+
+    const locked = structuredClone(document);
+    const lockedGroup = locked.nodesById.feature_group;
+    if (!lockedGroup) throw new Error("Missing Group fixture");
+    lockedGroup.locked = true;
+    expect(
+      planReparentNodes(locked, "page_welcome", ["title_welcome"], {
+        parentId: "feature_group",
+        index: 0,
+        commandPrefix: "locked_target",
+      }),
+    ).toMatchObject({ ok: false, code: "locked" });
+
+    const singular = structuredClone(document);
+    const singularGroup = singular.nodesById.feature_group;
+    if (!singularGroup) throw new Error("Missing Group fixture");
+    singularGroup.transform = [0, 0, 0, 0, 64, 340];
+    expect(
+      planReparentNodes(singular, "page_welcome", ["title_welcome"], {
+        parentId: "feature_group",
+        index: 0,
+        commandPrefix: "singular_target",
+      }),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+  });
+
+  it("reports inherited clipping or appearance changes for visual review", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const target = document.nodesById.feature_group;
+    if (!target) throw new Error("Missing Group fixture");
+    target.opacity = 0.6;
+    const plan = planReparentNodes(
+      document,
+      "page_welcome",
+      ["title_welcome"],
+      {
+        parentId: "feature_group",
+        index: 0,
+        commandPrefix: "appearance_change",
+      },
+    );
+
+    expect(plan).toMatchObject({
+      ok: true,
+      warnings: [expect.stringContaining("inherited clipping")],
+    });
   });
 
   it("rejects no-op, mixed-parent, cross-page, and locked layer order requests", () => {

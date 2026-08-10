@@ -1,5 +1,6 @@
 import {
   act,
+  createEvent,
   fireEvent,
   render,
   screen,
@@ -15,6 +16,7 @@ import type {
 import {
   createEmptyDesignDocument,
   createWelcomeDocument,
+  getWorldTransform,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import type {
@@ -1533,6 +1535,122 @@ describe("App", () => {
       .setup()
       .click(screen.getByRole("button", { name: "Layer order" }));
     expect(screen.getByText("Ctrl+Shift+[")).toBeInTheDocument();
+  });
+
+  it.each(["darwin", "win32"] as const)(
+    "reparents a layer from the tree atomically on %s and restores it with one undo",
+    async (platform) => {
+      vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
+        platform,
+        version: "0.0.0",
+      });
+      const user = userEvent.setup();
+      renderApp();
+      const before = runtime().getSnapshot();
+      const beforeWorld = getWorldTransform(before.document, "title_welcome");
+      act(() => runtime().setSelection(["title_welcome"], "title_welcome"));
+      const source = screen.getByRole("button", { name: "Title" });
+      const target = screen
+        .getByRole("button", { name: "Capabilities" })
+        .closest(".layer-row");
+      if (!target) throw new Error("Missing target layer row");
+      vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+        top: 100,
+        bottom: 128,
+        left: 0,
+        right: 220,
+        width: 220,
+        height: 28,
+        x: 0,
+        y: 100,
+        toJSON: () => undefined,
+      });
+      const dataTransfer = {
+        dropEffect: "none",
+        effectAllowed: "none",
+        setData: vi.fn(),
+      };
+
+      fireEvent.dragStart(source, { dataTransfer });
+      const dragOver = createEvent.dragOver(target, { dataTransfer });
+      Object.defineProperty(dragOver, "clientY", { value: 114 });
+      fireEvent(target, dragOver);
+      expect(screen.getByText("Inside")).toBeInTheDocument();
+      const drop = createEvent.drop(target, { dataTransfer });
+      Object.defineProperty(drop, "clientY", { value: 114 });
+      fireEvent(target, drop);
+
+      const moved = runtime().getSnapshot();
+      expect(moved.document.nodesById.title_welcome?.parentId).toBe(
+        "feature_group",
+      );
+      expect(getWorldTransform(moved.document, "title_welcome")).toEqual(
+        beforeWorld,
+      );
+      expect(moved.state.selection).toEqual({
+        nodeIds: ["title_welcome"],
+        anchorNodeId: "title_welcome",
+      });
+      expect(moved.document.revision).toBe(1);
+      expect(moved.state.history.undo).toHaveLength(1);
+
+      await user.click(screen.getByRole("button", { name: "Undo" }));
+      const restored = runtime().getSnapshot();
+      expect(restored.document.nodesById.title_welcome?.parentId).toBe(
+        "frame_welcome",
+      );
+      expect(getWorldTransform(restored.document, "title_welcome")).toEqual(
+        beforeWorld,
+      );
+      expect(restored.document.revision).toBe(2);
+    },
+  );
+
+  it("rejects cyclic tree drops without mutating the document or leaving drop chrome", () => {
+    renderApp();
+    const source = screen.getByRole("button", { name: "Welcome canvas" });
+    const target = screen
+      .getByRole("button", { name: "Capabilities" })
+      .closest(".layer-row");
+    if (!target) throw new Error("Missing target layer row");
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top: 100,
+      bottom: 128,
+      left: 0,
+      right: 220,
+      width: 220,
+      height: 28,
+      x: 0,
+      y: 100,
+      toJSON: () => undefined,
+    });
+    const dataTransfer = {
+      dropEffect: "none",
+      effectAllowed: "none",
+      setData: vi.fn(),
+    };
+
+    fireEvent.dragStart(source, { dataTransfer });
+    const dragOver = createEvent.dragOver(target, { dataTransfer });
+    Object.defineProperty(dragOver, "clientY", { value: 114 });
+    fireEvent(target, dragOver);
+    expect(screen.getByText("Inside")).toBeInTheDocument();
+    const drop = createEvent.drop(target, { dataTransfer });
+    Object.defineProperty(drop, "clientY", { value: 114 });
+    fireEvent(target, drop);
+
+    const snapshot = runtime().getSnapshot();
+    expect(snapshot.document.revision).toBe(0);
+    expect(snapshot.state.history.undo).toHaveLength(0);
+    expect(snapshot.document.pagesById.page_welcome?.rootNodeIds).toEqual([
+      "frame_welcome",
+    ]);
+    expect(screen.queryByText("Inside")).not.toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "A layer cannot be moved into itself or one of its descendants",
+      ),
+    ).not.toHaveLength(0);
   });
 
   it("uses Windows hierarchy shortcuts and labels without stealing text input", async () => {

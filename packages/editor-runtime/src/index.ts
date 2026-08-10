@@ -25,6 +25,7 @@ export {
   canGroupNodes,
   canUngroupNode,
   planGroupNodes,
+  planReparentNodes,
   planReorderNodes,
   planUngroupNode,
   type LayerOrderAction,
