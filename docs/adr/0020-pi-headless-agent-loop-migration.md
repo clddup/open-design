@@ -105,7 +105,7 @@ Pi run event adapter 使用和旧 Runtime 相同的原子 journal writer，把 P
 
 阶段 2 已完成。用户停止或 signal abort 会把工具终态标为 `run_cancelled` 并将 Run 终结为 `cancelled`；若 Pi 因 listener、协议或 bridge 异常在 `tool_execution_end` 前进入 `agent_end`，adapter 会按工具开始顺序补齐唯一 `run_error` 终态，而不是留下 pending tool。工具终态采用“先投影、journal 成功后确认”的两阶段处理，fatal bridge/model failure 终止 Run，可恢复的 validation、approval、revision 和业务 tool failure 则作为 `tool.failed` 回到下一模型轮次。对应测试覆盖取消发生在 requested 与 execution 之间、异常 `agent_end` 的 pending tool 恢复、Provider failure 和业务失败继续。
 
-图片附件在阶段 2 只保留内容寻址元数据和文字投影；阶段 3 的 Context adapter 才能把获准附件解析为下一 Provider turn 的多模态输入，并迁移逐轮预算、压缩、journal 恢复和重启语义。
+图片附件在阶段 2 只保留内容寻址元数据和文字投影；阶段 3 已由 Context adapter 把获准附件解析为下一 Provider turn 的多模态引用，并迁移逐轮预算、压缩、journal 恢复和重启语义。
 
 ### 阶段 3：上下文、持久化和恢复 parity
 
@@ -113,10 +113,14 @@ Pi run event adapter 使用和旧 Runtime 相同的原子 journal writer，把 P
 - 覆盖历史 checkpoint、Run 内第八轮压缩、图片/文档引用、超大工具结果和预算分账。
 - 覆盖应用重启、孤立 Run、pending tool、取消和 Conversation 排序恢复。
 
+阶段 3 已完成。`prepareOpenDesignPiContext` 从唯一 journal 读取累计 `context.compacted` checkpoint 和未压缩事件，再构造可丢弃的 Pi 初始消息；`transformContext` 在每个 Provider turn 前复用现有 Model Profile/token/字符预算和 Run 内 checkpoint 算法。无法容纳固定 system/tool 协议与当前输入分别产生 `model_context_incompatible`、`context_budget_exceeded`，并在 Provider I/O 前经现有 Run event/journal 终态可见失败，不依赖抛出 `transformContext`。
+
+附件只以经过校验的内容寻址元数据绑定到 run-local 消息对象；ModelGateway bridge 在 Main 边界前将其投影为 `image_ref`/`document_ref`，工具原始结果继续进入 journal，Pi transcript 不持久化 inline base64。专项验证覆盖用户附件、工具返回图片、应用重建 Context adapter 后的引用恢复、原始 journal 保留和累计 checkpoint。完整生产 system prompt、十二个工具、200K Model Profile 与八轮三图 `capture_canvas` 循环已通过相同 `transformContext`，第八轮完成且 journal 保留七个原始工具结果。启动时的孤立 Run/pending tool 一次性终结和 Conversation 最近活动排序继续由唯一 SessionStore/Main 恢复链负责，Pi 不建立第二套恢复器。
+
 ### 阶段 4：生产切换与删除
 
 - 在 macOS/Windows protected Agent build 和 packaged smoke 中运行相同 transcript。
-- 切换唯一生产入口，删除旧通用循环和无用依赖/适配代码。
+- 将共享 Context 投影从旧 Runtime 模块抽成独立边界，切换唯一生产入口，随后删除旧通用循环和无用依赖/适配代码，不保留长期双循环或 fallback。
 - 更新验证文档、包体基线、第三方清单和所有受影响 ADR。
 
 ## 切换门禁

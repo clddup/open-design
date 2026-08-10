@@ -162,14 +162,14 @@ const DEFAULT_LIMITS: AgentRuntimeLimits = {
   maxContextCharacters: 240_000,
 };
 
-class ContextBudgetError extends Error {
+export class ContextBudgetError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ContextBudgetError";
   }
 }
 
-class ModelContextCompatibilityError extends Error {
+export class ModelContextCompatibilityError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ModelContextCompatibilityError";
@@ -975,7 +975,9 @@ export class AgentRuntime {
   }
 }
 
-function restoreModelMessages(events: JournalEvent[]): CanonicalMessage[] {
+export function restoreModelMessages(
+  events: JournalEvent[],
+): CanonicalMessage[] {
   const sorted = sortEvents(events);
   const checkpoint = latestContextCheckpoint(sorted);
   const sortedEvents = sorted.filter(
@@ -1150,13 +1152,13 @@ function restoreModelMessages(events: JournalEvent[]): CanonicalMessage[] {
   return messages;
 }
 
-type ContextCheckpointPayload = {
+export type ContextCheckpointPayload = {
   fromSequence: number;
   toSequence: number;
   summary: string;
 };
 
-type ContextBudget = {
+export type ContextBudget = {
   fixedInputTokens: number;
   fixedProtocolFits: boolean;
   framingInputTokens: number;
@@ -1171,7 +1173,7 @@ type ContextBudget = {
 const MODEL_REQUEST_FRAMING_TOKENS = 256;
 const MINIMUM_CONTEXT_SAFETY_RESERVE_TOKENS = 2_048;
 
-function createContextBudget(
+export function createContextBudget(
   modelContext: AgentModelContext | undefined,
   system: string,
   tools: readonly CanonicalTool[],
@@ -1215,7 +1217,7 @@ function createContextBudget(
   };
 }
 
-function planContextCompaction(
+export function planContextCompaction(
   events: JournalEvent[],
   options: {
     budget: ContextBudget;
@@ -1479,7 +1481,7 @@ function contextExcerpt(value: string, maximumCharacters = 600): string {
     : `${normalized.slice(0, maximumCharacters)}…`;
 }
 
-function compactInRunMessagesForProvider(
+export function compactInRunMessagesForProvider(
   messages: readonly CanonicalMessage[],
   currentUserMessage: CanonicalMessage,
   system: string,
@@ -1657,7 +1659,7 @@ function summarizeContextValue(value: unknown, depth = 0): unknown {
   return `[omitted ${typeof value}]`;
 }
 
-function modelContextFits(
+export function modelContextFits(
   messages: readonly CanonicalMessage[],
   system: string,
   tools: readonly CanonicalTool[],
@@ -1774,7 +1776,9 @@ function estimateTextTokens(value: string): number {
   );
 }
 
-function modelContextCompatibilityMessage(budget: ContextBudget): string {
+export function modelContextCompatibilityMessage(
+  budget: ContextBudget,
+): string {
   const modelContext = budget.modelContext;
   if (modelContext === undefined || budget.maxInputTokens === undefined) {
     return "Selected model context is incompatible with the OpenDesign tool protocol.";
@@ -1782,7 +1786,7 @@ function modelContextCompatibilityMessage(budget: ContextBudget): string {
   return `Selected model context is incompatible with the OpenDesign tool protocol (estimated fixed input ${budget.fixedInputTokens} tokens: system ${budget.systemInputTokens}, tool schemas ${budget.toolSchemaInputTokens}, request framing ${budget.framingInputTokens}; available input budget ${budget.maxInputTokens} after reserving ${modelContext.maxOutputTokens} output tokens and ${budget.safetyReserveTokens ?? 0} safety tokens; configured context window ${modelContext.contextWindow}). Configure or select a model with a larger context window.`;
 }
 
-function contextBudgetExceededMessage(
+export function contextBudgetExceededMessage(
   messages: readonly CanonicalMessage[],
   budget: ContextBudget,
   phase: string,
@@ -1848,7 +1852,7 @@ function toTimelineBlocks(
   });
 }
 
-function toCanonicalTool(tool: AgentToolDefinition): CanonicalTool {
+export function toCanonicalTool(tool: AgentToolDefinition): CanonicalTool {
   return {
     name: tool.name,
     description: tool.description,
@@ -1888,7 +1892,7 @@ function snapshotRunRequest(request: AgentRunRequest): AgentRunRequest {
   };
 }
 
-function canonicalUserMessage(
+export function canonicalUserMessage(
   content: string,
   attachments: readonly AgentAttachment[],
 ): Extract<CanonicalMessage, { role: "user" }> {

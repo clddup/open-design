@@ -7,7 +7,7 @@
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.3.0`
 - Agent 协议：`3.4.0`
-- Agent Core：`@earendil-works/pi-agent-core 0.84.1`（stage-2-parity）
+- Agent Core：`@earendil-works/pi-agent-core 0.84.1`（stage-3-context-parity）
 - 生产画布：`leafer-editor 2.2.9`
 
 <!-- verification-facts:baseline:end -->
@@ -38,8 +38,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   25 files / 186 tests
-└── desktop tests   38 files / 269 tests
+├── package tests   26 files / 189 tests
+└── desktop tests   38 files / 270 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -60,7 +60,7 @@ pnpm build          passed
 - Leafer 文档投影、Path 实例、复杂外观映射和 change-set 增量同步：未变节点保持 spec/元素 identity，不调用 `set()`；无关新增、删除和 revision 不刷新 tree/Editor，也不取消进行中的直接操作；选中节点变化只刷新该元素 bounds 并更新 editBox；asset change 会精确重投影引用节点。
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
-- 固定 `@earendil-works/pi-agent-core 0.84.1` 的 contract tests 使用已实现的 headless `Agent` 完成模型、工具和 journal parity；adapter 强制顺序执行、逐轮 `transformContext`、单条 steering/follow-up，并拒绝裸 `bash` 与重复工具。ModelGateway bridge 覆盖三种 API identity、reasoning/text/tool-call、partial arguments、usage、取消和错误；run event adapter 与旧 Runtime 共用一个原子 journal writer。通用 Pi tool adapter 复用 `ToolExecutorPort`/`ApprovalPort` 接通十二个生产公开工具和原始标准 JSON Schema，覆盖业务 validation、approval、progress、原始 journal 结果、附件元数据、可信/非法 revision 和预算。Completion guard 首个候选完成保持 provisional，拒绝以 trusted steering 继续而不污染 journal；拒绝上限和 guard failure 有可见终态。取消专项在 `tool.requested` 后 abort，证明 executor 不运行、tool 以 `run_cancelled` 完成且 Run 为 `cancelled`；异常 `agent_end` 会按顺序把未终结工具写为 `run_error`。业务 tool failure 继续下一轮，Provider/bridge failure 终止 Run。桌面门禁证明 internal host 工具未暴露，独立 `pi-migration` 子入口也避免旧生产 bundle 提前包含 Pi loop。阶段 2 已完成；context/recovery parity 尚未完成，因此生产 Agent loop 仍未切换。
+- 固定 `@earendil-works/pi-agent-core 0.84.1` 的 contract tests 使用已实现的 headless `Agent` 完成模型、工具、journal 和 Context parity；adapter 强制顺序执行、单条 steering/follow-up，并拒绝裸 `bash` 与重复工具。ModelGateway bridge 覆盖三种 API identity、reasoning/text/tool-call、partial arguments、usage、取消和错误；run event adapter 与旧 Runtime 共用一个原子 journal writer。通用 Pi tool adapter 接通十二个生产工具、原始标准 JSON Schema、validation、approval、progress、revision、失败、completion guard、取消和 pending tool 最终化。阶段 3 Context adapter 从同一 journal 恢复累计 checkpoint，在每个 Provider turn 通过 Pi `transformContext` 复用 Model Profile/token/字符预算；预算失败在 Provider I/O 前形成 `model_context_incompatible` 或 `context_budget_exceeded` 可见终态。用户及工具附件只以内容寻址 `image_ref`/`document_ref` 交给 Main，应用重建投影后仍可恢复，Pi transcript 不保存 inline base64。完整生产 system prompt、十二工具、200K Model Profile 和八轮三图工具循环在第八轮压缩后完成，七个工具原始结果仍保留在 journal。SessionStore 的孤立 Run/pending tool 一次性恢复与 Main 的 Conversation 最近活动排序继续作为唯一恢复链。阶段 3 已完成；生产 Agent loop 尚未切换，下一门禁是唯一入口切换、旧循环删除和 macOS/Windows 同 commit 发行验证。
 - 生产 Provider stream 的首响应、空闲和总时限 watchdog 会 abort 实际 fetch；timeout 与 Agent process exit 都会解除 Renderer active Run、恢复可编辑输入并显示可重试错误。
 - 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。生产回归使用完整 system prompt、十二个工具和 200K Model Profile，既证明短消息会进入 Provider，也证明含多模态结果的八轮工具循环会在 Run 内压缩后完成。模型可见 `apply_transaction` Schema 不依赖 `$ref/$defs`，本地仍用完整 `DesignOperationSchema` 校验。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
 - 工具执行、业务校验和设计工具桥失败会作为 `tool.failed` 回到下一轮模型上下文供其重试或解释；模型桥、Provider、Agent 进程/协议和可信 Run binding 失败才会取消 Run。两类路径分别有“继续第二个模型回合”和“相关 Run 终结/解锁”测试。

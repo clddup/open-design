@@ -28,6 +28,7 @@ import {
   type PiToolApprovalRequested,
   type PiToolApprovalResolved,
 } from "./pi-tool-adapter.js";
+import type { PiContextFailurePort } from "./pi-context-adapter.js";
 import { appendRunJournalEvent } from "./run-journal-writer.js";
 
 export interface PiRunEventAdapterOptions {
@@ -38,6 +39,7 @@ export interface PiRunEventAdapterOptions {
   toolExecutor?: ToolExecutorPort;
   approvalPort?: ApprovalPort;
   completionGuard?: CompletionGuardPort;
+  contextFailurePort?: PiContextFailurePort;
   requestContinuation?: (message: UserMessage) => void;
   maxToolCalls?: number;
   maxTurns?: number;
@@ -67,6 +69,7 @@ interface PendingCompletion {
 export class PiRunEventAdapter {
   readonly #emit: PiRunEventAdapterOptions["emit"];
   readonly #completionGuard: CompletionGuardPort | undefined;
+  readonly #contextFailurePort: PiContextFailurePort | undefined;
   readonly #maxCompletionGuardRejections: number;
   readonly #maxTotalTokens: number;
   readonly #maxTurns: number;
@@ -101,6 +104,7 @@ export class PiRunEventAdapter {
     this.#emit = options.emit;
     this.#now = options.now ?? (() => new Date());
     this.#completionGuard = options.completionGuard;
+    this.#contextFailurePort = options.contextFailurePort;
     this.#requestContinuation = options.requestContinuation;
     this.#maxTurns = options.maxTurns ?? 8;
     this.#maxTotalTokens = options.maxTotalTokens ?? 200_000;
@@ -409,6 +413,11 @@ export class PiRunEventAdapter {
         code: "tool_result_interrupted",
         message: "Pi Agent ended during a tool-result message",
       };
+    }
+    const contextFailure = this.#contextFailurePort?.consumeFailure();
+    if (contextFailure !== undefined) {
+      this.#forcedStopReason = "error";
+      this.#forcedError = contextFailure;
     }
     const stopReason =
       this.#forcedStopReason ??

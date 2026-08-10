@@ -1,0 +1,510 @@
+import {
+  isAgentAttachment,
+  type AgentAttachment,
+} from "@opendesign/agent-contracts";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type {
+  Api,
+  AssistantMessage,
+  Message,
+  Model,
+  UserMessage,
+} from "@earendil-works/pi-ai";
+import type {
+  CanonicalContentBlock,
+  CanonicalMessage,
+  CanonicalTool,
+  ModelApiFormat,
+} from "@opendesign/model-gateway";
+import type { SessionStore } from "@opendesign/session-store";
+import {
+  ContextBudgetError,
+  ModelContextCompatibilityError,
+  canonicalUserMessage,
+  compactInRunMessagesForProvider,
+  contextBudgetExceededMessage,
+  createContextBudget,
+  modelContextCompatibilityMessage,
+  modelContextFits,
+  planContextCompaction,
+  restoreModelMessages,
+  toCanonicalTool,
+  type AgentRunRequest,
+  type AgentToolDefinition,
+  type ContextBudget,
+} from "./index.js";
+import {
+  projectPiMessageToCanonical,
+  type PiContextFailure,
+  type PiModelContextProjectionPort,
+} from "./pi-model-gateway-adapter.js";
+import { appendRunJournalEvent } from "./run-journal-writer.js";
+
+const DEFAULT_MAX_CONTEXT_CHARACTERS = 240_000;
+
+export interface PrepareOpenDesignPiContextOptions {
+  request: AgentRunRequest;
+  sessionStore: SessionStore;
+  systemPrompt: string;
+  toolDefinitions: readonly AgentToolDefinition[];
+  model: Model<Api>;
+  maxContextCharacters?: number;
+  now?: () => Date;
+}
+
+export interface PreparedOpenDesignPiContext {
+  context: OpenDesignPiContextAdapter;
+  initialMessages: Message[];
+  promptMessage: UserMessage;
+  systemPrompt: string;
+  compactedThroughSequence?: number;
+}
+
+export interface PiContextFailurePort {
+  consumeFailure(): PiContextFailure | undefined;
+}
+
+/**
+ * Builds Pi's disposable model transcript from the OpenDesign Conversation
+ * journal. The journal remains the only durable transcript; Pi messages are a
+ * run-local projection and never contain inline attachment bytes.
+ */
+export async function prepareOpenDesignPiContext(
+  options: PrepareOpenDesignPiContextOptions,
+): Promise<PreparedOpenDesignPiContext> {
+  const maxContextCharacters =
+    options.maxContextCharacters ?? DEFAULT_MAX_CONTEXT_CHARACTERS;
+  if (!Number.isInteger(maxContextCharacters) || maxContextCharacters < 1) {
+    throw new RangeError("Pi context character limit must be positive");
+  }
+
+  const request = snapshotRequest(options.request);
+  const tools = options.toolDefinitions.map(toCanonicalTool);
+  const currentMessage = canonicalUserMessage(
+    request.prompt,
+    request.attachments ?? [],
+  );
+  const budget = createContextBudget(
+    request.modelContext,
+    options.systemPrompt,
+    tools,
+    maxContextCharacters,
+  );
+  let priorEvents = await options.sessionStore.read(request.sessionId);
+  let compactedThroughSequence: number | undefined;
+
+  if (budget.fixedProtocolFits) {
+    const compaction = planContextCompaction(priorEvents, {
+      budget,
+      currentMessage,
+      system: options.systemPrompt,
+      tools,
+    });
+    if (compaction !== undefined) {
+      await appendRunJournalEvent(
+        options.sessionStore,
+        request,
+        "context.compacted",
+        compaction,
+        (options.now ?? (() => new Date()))().toISOString(),
+      );
+      compactedThroughSequence = compaction.toSequence;
+      priorEvents = await options.sessionStore.read(request.sessionId);
+    }
+  }
+
+  const restored = restoreModelMessages(priorEvents);
+  const context = new OpenDesignPiContextAdapter({
+    budget,
+    model: options.model,
+    system: options.systemPrompt,
+    tools,
+  });
+  const initialMessages = context.projectCanonicalMessages(restored);
+  const promptMessage = context.projectCanonicalUserMessage(currentMessage);
+  context.setCurrentPrompt(promptMessage);
+
+  if (!budget.fixedProtocolFits) {
+    context.fail(
+      "model_context_incompatible",
+      modelContextCompatibilityMessage(budget),
+    );
+  } else if (
+    !modelContextFits(
+      [...restored, currentMessage],
+      options.systemPrompt,
+      tools,
+      budget,
+    )
+  ) {
+    context.fail(
+      "context_budget_exceeded",
+      contextBudgetExceededMessage(
+        [...restored, currentMessage],
+        budget,
+        "after local compaction",
+      ),
+    );
+  }
+
+  return {
+    context,
+    initialMessages,
+    promptMessage,
+    systemPrompt: options.systemPrompt,
+    ...(compactedThroughSequence === undefined
+      ? {}
+      : { compactedThroughSequence }),
+  };
+}
+
+interface OpenDesignPiContextAdapterOptions {
+  budget: ContextBudget;
+  model: Model<Api>;
+  system: string;
+  tools: readonly CanonicalTool[];
+}
+
+/**
+ * Shared port for Pi transformContext, the ModelGateway bridge and the run
+ * event adapter. Attachment references stay out-of-band in a WeakMap and are
+ * materialized only as canonical image_ref/document_ref blocks for Main.
+ */
+export class OpenDesignPiContextAdapter
+  implements PiModelContextProjectionPort, PiContextFailurePort
+{
+  readonly #attachments = new WeakMap<object, readonly AgentAttachment[]>();
+  readonly #budget: ContextBudget;
+  readonly #model: Model<Api>;
+  readonly #system: string;
+  readonly #tools: readonly CanonicalTool[];
+  #currentPrompt: UserMessage | undefined;
+  #pendingFailure: PiContextFailure | undefined;
+  #reportedFailure: PiContextFailure | undefined;
+  #providerTurn = 0;
+
+  constructor(options: OpenDesignPiContextAdapterOptions) {
+    this.#budget = options.budget;
+    this.#model = options.model;
+    this.#system = options.system;
+    this.#tools = options.tools;
+  }
+
+  readonly transformContext = (
+    messages: AgentMessage[],
+    signal?: AbortSignal,
+  ): Promise<AgentMessage[]> =>
+    Promise.resolve(this.#transformContext(messages, signal));
+
+  #transformContext(
+    messages: AgentMessage[],
+    signal?: AbortSignal,
+  ): AgentMessage[] {
+    if (signal?.aborted || this.#pendingFailure !== undefined) return messages;
+    this.#providerTurn += 1;
+    try {
+      const llmMessages = requirePiMessages(messages);
+      for (const message of llmMessages) this.#captureToolAttachments(message);
+      const projected: CanonicalMessage[] = [];
+      let currentCanonical: CanonicalMessage | undefined;
+      for (const [index, message] of llmMessages.entries()) {
+        const messageProjection = projectPiMessageToCanonical(
+          message,
+          index,
+          this,
+        );
+        if (message === this.#currentPrompt) {
+          currentCanonical = messageProjection[0];
+        }
+        projected.push(...messageProjection);
+      }
+      if (
+        modelContextFits(projected, this.#system, this.#tools, this.#budget)
+      ) {
+        return messages;
+      }
+
+      const currentPrompt = this.#currentPrompt;
+      if (currentPrompt === undefined) {
+        throw new Error("Pi context does not have a current prompt anchor");
+      }
+      const currentIndex = llmMessages.indexOf(currentPrompt);
+      if (currentIndex < 0) {
+        throw new Error("Pi context lost the current prompt anchor");
+      }
+      if (currentCanonical === undefined) {
+        throw new Error("Pi current prompt projection is empty");
+      }
+      const compacted = compactInRunMessagesForProvider(
+        projected,
+        currentCanonical,
+        this.#system,
+        this.#tools,
+        this.#budget,
+      );
+      if (compacted === undefined) {
+        this.fail(
+          "context_budget_exceeded",
+          contextBudgetExceededMessage(
+            projected,
+            this.#budget,
+            `before provider turn ${this.#providerTurn}`,
+          ),
+        );
+        return messages;
+      }
+      return this.projectCanonicalMessages(compacted);
+    } catch (error) {
+      const failure = toContextFailure(error);
+      this.fail(failure.code, failure.message);
+      return messages;
+    }
+  }
+
+  attachmentsFor(message: Message): readonly AgentAttachment[] {
+    this.#captureToolAttachments(message);
+    return this.#attachments.get(message) ?? [];
+  }
+
+  beforeProviderTurn(): PiContextFailure | undefined {
+    const failure = this.#pendingFailure;
+    if (failure !== undefined) {
+      this.#pendingFailure = undefined;
+      this.#reportedFailure = failure;
+    }
+    return failure;
+  }
+
+  consumeFailure(): PiContextFailure | undefined {
+    const failure = this.#reportedFailure;
+    this.#reportedFailure = undefined;
+    return failure;
+  }
+
+  fail(code: string, message: string): void {
+    if (this.#pendingFailure === undefined) {
+      this.#pendingFailure = { code, message };
+    }
+  }
+
+  setCurrentPrompt(message: UserMessage): void {
+    this.#currentPrompt = message;
+  }
+
+  projectCanonicalUserMessage(message: CanonicalMessage): UserMessage {
+    if (message.role !== "user") {
+      throw new TypeError("Expected a canonical user message");
+    }
+    const projected = this.#projectCanonicalMessage(message, new Map());
+    if (projected.role !== "user") {
+      throw new Error("Canonical user projection changed role");
+    }
+    return projected;
+  }
+
+  projectCanonicalMessages(messages: readonly CanonicalMessage[]): Message[] {
+    const toolNames = collectCanonicalToolNames(messages);
+    return messages.map((message) =>
+      this.#projectCanonicalMessage(message, toolNames),
+    );
+  }
+
+  #projectCanonicalMessage(
+    message: CanonicalMessage,
+    toolNames: ReadonlyMap<string, string>,
+  ): Message {
+    const timestamp = Date.now();
+    if (message.role === "user") {
+      const { attachments, text } = canonicalUserParts(message);
+      const projected: UserMessage = { role: "user", content: text, timestamp };
+      if (attachments.length > 0) {
+        this.#attachments.set(
+          projected,
+          attachments.map((attachment) => ({ ...attachment })),
+        );
+      }
+      return projected;
+    }
+    if (message.role === "tool") {
+      return {
+        role: "toolResult",
+        toolCallId: message.toolCallId,
+        toolName:
+          message.toolName ?? toolNames.get(message.toolCallId) ?? "tool",
+        content: [{ type: "text", text: modelResultText(message.content) }],
+        isError: message.isError,
+        timestamp,
+      };
+    }
+
+    const content = message.blocks.map(toPiAssistantBlock);
+    const source = message.source;
+    return {
+      role: "assistant",
+      content,
+      api: source ? toPiApi(source.apiFormat) : this.#model.api,
+      provider: source?.providerId ?? this.#model.provider,
+      model: source?.modelId ?? this.#model.id,
+      usage: emptyUsage(),
+      stopReason: content.some((block) => block.type === "toolCall")
+        ? "toolUse"
+        : "stop",
+      timestamp,
+      ...(source?.responseId === undefined
+        ? {}
+        : { responseId: source.responseId }),
+    };
+  }
+
+  #captureToolAttachments(message: Message): void {
+    if (message.role !== "toolResult" || this.#attachments.has(message)) return;
+    const details: unknown = message.details;
+    if (!details || typeof details !== "object" || Array.isArray(details)) {
+      return;
+    }
+    const candidates = (details as { attachments?: unknown }).attachments;
+    if (!Array.isArray(candidates) || !candidates.every(isAgentAttachment)) {
+      return;
+    }
+    this.#attachments.set(
+      message,
+      candidates.map((attachment) => ({ ...attachment })),
+    );
+  }
+}
+
+function requirePiMessages(messages: AgentMessage[]): Message[] {
+  if (
+    !messages.every(
+      (message): message is Message =>
+        message.role === "user" ||
+        message.role === "assistant" ||
+        message.role === "toolResult",
+    )
+  ) {
+    throw new TypeError("Pi context contains an unsupported custom message");
+  }
+  return messages;
+}
+
+function canonicalUserParts(
+  message: Extract<CanonicalMessage, { role: "user" }>,
+): { text: string; attachments: AgentAttachment[] } {
+  if (typeof message.content === "string") {
+    return { text: message.content, attachments: [] };
+  }
+  const text = message.content
+    .flatMap((block) => (block.type === "text" ? [block.text] : []))
+    .join("\n");
+  const attachments = message.content.flatMap((block): AgentAttachment[] => {
+    if (block.type === "image_ref" || block.type === "document_ref") {
+      const attachment = {
+        attachmentId: block.attachmentId,
+        name: block.name,
+        mimeType: block.mimeType,
+        byteSize: block.byteSize,
+      };
+      if (!isAgentAttachment(attachment)) {
+        throw new TypeError("Canonical attachment reference is invalid");
+      }
+      return [attachment];
+    }
+    if (block.type === "image") {
+      throw new TypeError(
+        "Inline image bytes cannot enter the OpenDesign Pi transcript",
+      );
+    }
+    return [];
+  });
+  return { text, attachments };
+}
+
+function collectCanonicalToolNames(
+  messages: readonly CanonicalMessage[],
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    for (const block of message.blocks) {
+      if (block.type === "tool_call") names.set(block.toolCallId, block.name);
+    }
+  }
+  return names;
+}
+
+function toPiAssistantBlock(
+  block: CanonicalContentBlock,
+): AssistantMessage["content"][number] {
+  if (block.type === "text") return { type: "text", text: block.text };
+  if (block.type === "reasoning_summary") {
+    return {
+      type: "thinking",
+      thinking: block.summary ?? "",
+      ...(block.signature === undefined
+        ? {}
+        : { thinkingSignature: block.signature }),
+    };
+  }
+  return {
+    type: "toolCall",
+    id: block.toolCallId,
+    name: block.name,
+    arguments: asRecord(block.input),
+  };
+}
+
+function emptyUsage(): AssistantMessage["usage"] {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    reasoning: 0,
+    totalTokens: 0,
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    },
+  };
+}
+
+function toPiApi(format: ModelApiFormat): Api {
+  return format === "openai-chat-completions" ? "openai-completions" : format;
+}
+
+function modelResultText(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "[OpenDesign tool result could not be serialized]";
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function toContextFailure(error: unknown): PiContextFailure {
+  if (error instanceof ModelContextCompatibilityError) {
+    return { code: "model_context_incompatible", message: error.message };
+  }
+  if (error instanceof ContextBudgetError) {
+    return { code: "context_budget_exceeded", message: error.message };
+  }
+  return {
+    code: "context_projection_failed",
+    message:
+      error instanceof Error
+        ? error.message
+        : "OpenDesign context projection failed",
+  };
+}
+
+function snapshotRequest(request: AgentRunRequest): AgentRunRequest {
+  return structuredClone(request);
+}

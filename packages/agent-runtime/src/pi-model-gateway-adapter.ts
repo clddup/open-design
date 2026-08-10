@@ -1,3 +1,4 @@
+import type { AgentAttachment } from "@opendesign/agent-contracts";
 import type {
   CanonicalContentBlock,
   CanonicalMessage,
@@ -26,8 +27,19 @@ import {
 
 export interface PiModelGatewayAdapterOptions {
   modelGateway: ModelGateway;
+  contextProjection?: PiModelContextProjectionPort;
   nextAttemptId?: () => string;
   now?: () => number;
+}
+
+export interface PiContextFailure {
+  code: string;
+  message: string;
+}
+
+export interface PiModelContextProjectionPort {
+  beforeProviderTurn(): PiContextFailure | undefined;
+  attachmentsFor(message: Message): readonly AgentAttachment[];
 }
 
 /**
@@ -50,7 +62,13 @@ export function createPiModelGatewayStreamFn(
     stream.push({ type: "start", partial: snapshotMessage(output) });
     let request: ModelRequest;
     try {
-      request = toModelRequest(attemptId, model, context, streamOptions);
+      request = toModelRequest(
+        attemptId,
+        model,
+        context,
+        streamOptions,
+        options.contextProjection,
+      );
     } catch (error) {
       output.stopReason = streamOptions?.signal?.aborted ? "aborted" : "error";
       output.errorMessage =
@@ -193,7 +211,12 @@ function toModelRequest(
   model: Model<Api>,
   context: Context,
   options: SimpleStreamOptions | undefined,
+  projection: PiModelContextProjectionPort | undefined,
 ): ModelRequest {
+  const failure = projection?.beforeProviderTurn();
+  if (failure !== undefined) {
+    throw new PiContextProjectionError(failure);
+  }
   return {
     attemptId,
     ...(options?.sessionId === undefined
@@ -209,10 +232,79 @@ function toModelRequest(
           }),
     },
     system: context.systemPrompt ?? "",
-    messages: context.messages.map(toCanonicalMessage),
+    messages: projectPiMessagesToCanonical(context.messages, projection),
     tools: (context.tools ?? []).map(toCanonicalTool),
     signal: options?.signal ?? new AbortController().signal,
   };
+}
+
+class PiContextProjectionError extends Error {
+  readonly code: string;
+
+  constructor(failure: PiContextFailure) {
+    super(failure.message);
+    this.name = "PiContextProjectionError";
+    this.code = failure.code;
+  }
+}
+
+export function projectPiMessagesToCanonical(
+  messages: readonly Message[],
+  attachments?: Pick<PiModelContextProjectionPort, "attachmentsFor">,
+): CanonicalMessage[] {
+  return messages.flatMap((message, messageIndex) =>
+    projectPiMessageToCanonical(message, messageIndex, attachments),
+  );
+}
+
+export function projectPiMessageToCanonical(
+  message: Message,
+  messageIndex: number,
+  attachments?: Pick<PiModelContextProjectionPort, "attachmentsFor">,
+): CanonicalMessage[] {
+  const projected = toCanonicalMessage(message, messageIndex);
+  const references = attachments?.attachmentsFor(message) ?? [];
+  if (references.length === 0) return [projected];
+  const referenceMessage: CanonicalMessage = {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text:
+          message.role === "toolResult"
+            ? `Multimodal content returned by tool call ${message.toolCallId}.`
+            : userMessageText(message),
+      },
+      ...references.map((attachment) =>
+        attachment.attachmentId.startsWith("image_")
+          ? {
+              type: "image_ref" as const,
+              attachmentId: attachment.attachmentId,
+              name: attachment.name,
+              mimeType: attachment.mimeType,
+              byteSize: attachment.byteSize,
+            }
+          : {
+              type: "document_ref" as const,
+              attachmentId: attachment.attachmentId,
+              name: attachment.name,
+              mimeType: attachment.mimeType,
+              byteSize: attachment.byteSize,
+            },
+      ),
+    ],
+  };
+  return message.role === "toolResult"
+    ? [projected, referenceMessage]
+    : [referenceMessage];
+}
+
+function userMessageText(message: Message): string {
+  if (message.role !== "user") return "";
+  if (typeof message.content === "string") return message.content;
+  return message.content
+    .flatMap((block) => (block.type === "text" ? [block.text] : []))
+    .join("\n");
 }
 
 function toCanonicalMessage(
