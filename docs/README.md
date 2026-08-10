@@ -53,4 +53,4 @@
 | [0020](adr/0020-pi-headless-agent-loop-migration.md)                     | 已接受     | Pi headless Agent loop 与 OpenDesign adapter                       |
 | [0021](adr/0021-skia-pathkit-vector-geometry-provider.md)                | 已接受     | 固定 PathKit 矢量 geometry provider                                |
 | [0022](adr/0022-versioned-nondestructive-boolean-groups.md)              | 已接受     | 非破坏 Boolean Group 与可丢弃派生结果                              |
-| [0023](adr/0023-versioned-svg-interchange-service.md)                    | 已接受     | 版本化 SVG 交换 service、Boolean flatten 与显式保真报告            |
+| [0023](adr/0023-versioned-svg-interchange-service.md)                    | 已接受     | 版本化 SVG service、原子导入 planner、Boolean flatten 与保真报告   |

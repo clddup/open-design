@@ -1,6 +1,6 @@
 # ADR-0023：版本化 SVG 交换服务与显式保真边界
 
-- 状态：已接受（纯 service contract 与首个结构化子集完成，产品入口待完成）
+- 状态：已接受（纯 service 与 EditorRuntime 导入 planner 完成，产品入口待完成）
 - 日期：2026-08-11
 - 补充：ADR-0011、ADR-0012、ADR-0015、ADR-0021、ADR-0022
 - 固定依赖：`@xmldom/xmldom 0.8.13`、`transformation-matrix 3.1.0`
@@ -31,7 +31,7 @@ Paper.js 拥有 Project/Layer/Item 和渲染场景，ADR-0021 已因第二份编
 - 导入后的候选 OpenDesign nodes、单一 root Group、source viewport 和结构化 fidelity issues；
 - 失败时的明确 issue code，不返回部分成功文档冒充完整结果。
 
-service 不读取或写入文件，不持有 `EditorRuntime`，不创建第二份持久文档，不访问 Leafer、Electron、项目路径、网络、凭据或 Agent 权限。后续人工 UI、Agent 与 MCP 只能把候选 nodes 包装成普通 `DesignTransaction` 进入唯一 `EditorRuntime.apply()`。
+service 不读取或写入文件，不持有 `EditorRuntime`，不创建第二份持久文档，不访问 Leafer、Electron、项目路径、网络、凭据或 Agent 权限。`EditorRuntime.planSvgImport()` 已把成功候选树转换成父节点优先的标准 `insert_element` 命令，并保持 service 与文档状态分离；后续人工 UI、Agent 与 MCP 只能复用该 planner，把候选 nodes 包装成普通 `DesignTransaction` 进入唯一 `EditorRuntime.apply()`。
 
 ### 当前结构化子集
 
@@ -65,12 +65,13 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - re-import 返回可编辑 Vector，重应用 transform 后与原 Boolean result 的 normalized path、fill rule 和 bounds 一致；
 - Path/Vector/Rectangle/Ellipse、group hierarchy、transform、solid/linear gradient、stroke 和 dash 确定性往返；
 - 导入候选树可组成合法 `DesignDocument`；
+- EditorRuntime planner 校验显式 Page/Frame/Group 目标、锁定祖先、插入位置、候选 schema、唯一根、可达性、parent/child 对称、ID 冲突、asset 引用和事务命令上限；成功树按 parent-first 顺序进入一个 revision，一次 undo 删除整棵 SVG，保存重开与 redo 保持一致；
 - DOCTYPE/ENTITY、script、stylesheet、external URL 和缺失 Boolean geometry 均产生稳定失败；
 - service typecheck、lint、fixture 和全仓验证纳入统一门禁。
 
 ## 后续门禁
 
-1. 用 EditorRuntime planner 把 imported nodes 以单次可预览、可撤销事务插入显式 Page/parent；导出从当前选区或 Frame 解析可信 world transform 和 viewport。
+1. 为导出从显式选区或 Frame 解析可信 world transform、viewport、Boolean revision 和导出设置，返回纯 service request，不读取实时选区完成后续行为。
 2. Main 通过窄 IPC 读取用户选择的 `.svg` 和写入用户选择的目标，不让 Renderer 获得原始路径能力。
 3. 人工 UI 与 Agent typed tools 复用同一 planner/service、fidelity report、取消与诊断；MCP 后续复用同一入口。
 4. 接入 outline stroke、text glyph、effects/filter、mask/clip、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。

@@ -653,11 +653,11 @@
         "en": "Import supported SVG structure as editable OpenDesign vectors and export Path, Vector, basic shapes, and resolved Boolean results with explicit fidelity reporting.",
         "zh-CN": "把受支持的 SVG 结构导入为可编辑 OpenDesign 矢量，并以显式保真报告导出 Path、Vector、基础图形和已解析 Boolean 结果。"
       },
-      "provider": "@opendesign/import-export-service SVG v1 + PathKit geometry",
+      "provider": "@opendesign/import-export-service SVG v1 + EditorRuntime planner + PathKit geometry",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "export"],
       "surfaces": {
         "contract": "available",
-        "runtime": "unavailable",
+        "runtime": "degraded",
         "human": "unavailable",
         "agent": "unavailable",
         "render": "unavailable",
@@ -665,8 +665,8 @@
       },
       "limitations": [
         {
-          "en": "The pure service contract currently has no Main file bridge, EditorRuntime import planner, human command, Agent tool, or packaged-product path. It cannot yet be used from the application UI.",
-          "zh-CN": "当前只有纯 service contract，尚无 Main 文件桥、EditorRuntime 导入 planner、人工命令、Agent tool 或打包产品路径，应用 UI 暂时不可直接使用。"
+          "en": "The EditorRuntime import planner now converts a validated candidate tree into one previewable, undoable transaction at an explicit Page, Frame, or Group target. There is still no export-target planner, Main file bridge, human command, Agent tool, or packaged-product path, so it cannot yet be used from the application UI.",
+          "zh-CN": "EditorRuntime 导入 planner 已能把校验后的候选树转换为显式 Page、Frame 或 Group 目标下的一次可预览、可撤销事务；导出目标 planner、Main 文件桥、人工命令、Agent tool 和打包产品路径仍未完成，因此应用 UI 暂时不可直接使用。"
         },
         {
           "en": "The current subset covers groups, rectangles, ellipses, Path/Vector, transforms, solid and linear/radial gradients, and center strokes. Text, images, effects, masks, stylesheets, angular gradients, multiple paints, and inside/outside stroke fidelity remain unavailable.",
@@ -678,7 +678,10 @@
         }
       ],
       "evidence": {
-        "automated": ["packages/import-export-service/src/svg.test.ts"],
+        "automated": [
+          "packages/import-export-service/src/svg.test.ts",
+          "packages/editor-runtime/src/svg-import-operations.test.ts"
+        ],
         "manual": []
       },
       "references": [

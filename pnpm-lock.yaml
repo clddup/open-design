@@ -215,6 +215,9 @@ importers:
       '@opendesign/geometry-service':
         specifier: workspace:*
         version: link:../geometry-service
+      '@opendesign/import-export-service':
+        specifier: workspace:*
+        version: link:../import-export-service
     devDependencies:
       typescript:
         specifier: 'catalog:'

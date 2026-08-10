@@ -66,6 +66,12 @@ export {
   type ImageUpdatePlan,
 } from "./image-operations.js";
 export {
+  planSvgImport,
+  type SvgImportOperationFailureCode,
+  type SvgImportOperationPlan,
+  type SvgImportPlacement,
+} from "./svg-import-operations.js";
+export {
   DESIGN_DIAGNOSTIC_REPORT_VERSION,
   diagnoseDesignPages,
   type DesignDiagnostic,

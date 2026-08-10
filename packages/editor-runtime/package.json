@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@opendesign/design-contracts": "workspace:*",
-    "@opendesign/geometry-service": "workspace:*"
+    "@opendesign/geometry-service": "workspace:*",
+    "@opendesign/import-export-service": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",

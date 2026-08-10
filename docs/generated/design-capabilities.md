@@ -203,10 +203,10 @@
 把受支持的 SVG 结构导入为可编辑 OpenDesign 矢量，并以显式保真报告导出 Path、Vector、基础图形和已解析 Boolean 结果。
 
 - ID：`delivery.svg-interchange`
-- 实现方：@opendesign/import-export-service SVG v1 + PathKit geometry
-- 表面：contract=available；runtime=unavailable；human=unavailable；agent=unavailable；render=unavailable；export=degraded
-- 证据：自动化 1 项；实机 0 项
-- 限制：当前只有纯 service contract，尚无 Main 文件桥、EditorRuntime 导入 planner、人工命令、Agent tool 或打包产品路径，应用 UI 暂时不可直接使用。
+- 实现方：@opendesign/import-export-service SVG v1 + EditorRuntime planner + PathKit geometry
+- 表面：contract=available；runtime=degraded；human=unavailable；agent=unavailable；render=unavailable；export=degraded
+- 证据：自动化 2 项；实机 0 项
+- 限制：EditorRuntime 导入 planner 已能把校验后的候选树转换为显式 Page、Frame 或 Group 目标下的一次可预览、可撤销事务；导出目标 planner、Main 文件桥、人工命令、Agent tool 和打包产品路径仍未完成，因此应用 UI 暂时不可直接使用。
 - 限制：当前子集覆盖 Group、Rectangle、Ellipse、Path/Vector、transform、纯色与线性/径向渐变和居中描边；文字、图片、效果、蒙版、stylesheet、角度渐变、多 paint 与内外描边保真仍不可用。
 - 限制：标准 SVG 不能保留 OpenDesign Boolean operands；导出使用可丢弃 resolved path 并报告 boolean-flattened，重新导入为可编辑 Vector，不伪造已丢失的源层。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040028034-Add-images-and-videos-to-designs)
