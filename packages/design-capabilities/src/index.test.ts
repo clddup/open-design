@@ -33,7 +33,7 @@ describe("design capability manifest", () => {
   it("does not mark evidence-free professional workflows available", () => {
     expect(summarizeCapabilityStatuses()).toEqual({
       available: 0,
-      degraded: 10,
+      degraded: 11,
       unavailable: 7,
     });
     expect(getDesignCapability("appearance.paints-effects-masks")?.status).toBe(
@@ -41,6 +41,9 @@ describe("design capability manifest", () => {
     );
     expect(getDesignCapability("layout.auto-layout")?.status).toBe(
       "unavailable",
+    );
+    expect(getDesignCapability("delivery.svg-interchange")?.status).toBe(
+      "degraded",
     );
   });
 

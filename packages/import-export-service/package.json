@@ -1,0 +1,24 @@
+{
+  "name": "@opendesign/import-export-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./svg": "./src/svg.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@opendesign/design-contracts": "workspace:*",
+    "@opendesign/geometry-service": "workspace:*",
+    "@xmldom/xmldom": "0.8.13",
+    "transformation-matrix": "3.1.0"
+  },
+  "devDependencies": {
+    "pathkit-wasm": "1.0.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

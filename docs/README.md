@@ -42,3 +42,15 @@
 | [0009](adr/0009-leafer-rendering-and-interaction-engine.md)              | 已接受     | LeaferJS 是唯一生产画布和直接操作引擎                              |
 | [0010](adr/0010-open-design-appearance-image-and-reference-semantics.md) | 已接受     | 复杂外观、图片 asset 与多模态引用                                  |
 | [0011](adr/0011-professional-design-capability-architecture.md)          | 已接受     | 完整专业能力由 OpenDesign 语义和可替换成熟服务承载                 |
+| [0012](adr/0012-formal-path-vector-and-visual-review.md)                 | 已接受     | 正式 Path/Vector 语义与可信视觉复核                                |
+| [0013](adr/0013-global-gpt-image-generation.md)                          | 已接受     | 全局图片生成服务与 Agent 工具                                      |
+| [0014](adr/0014-standalone-global-image-generation-settings.md)          | 已接受     | 生图配置与会话模型配置分离                                         |
+| [0015](adr/0015-versioned-design-capability-manifest.md)                 | 已接受     | 版本化能力事实源与生成文档                                         |
+| [0016](adr/0016-durable-agent-context-compaction.md)                     | 已接受     | 持久 Conversation 与模型上下文投影压缩                             |
+| [0017](adr/0017-model-token-budget-authority.md)                         | 已接受     | Main 注入可信模型预算并区分协议与上下文超限                        |
+| [0018](adr/0018-agent-design-plan-and-visual-review.md)                  | 已接受     | 设计计划、截图审查与 refinement 完成门禁                           |
+| [0019](adr/0019-versioned-image-placement-and-crop.md)                   | 已接受     | 非破坏图片 placement/crop 与来源替换                               |
+| [0020](adr/0020-pi-headless-agent-loop-migration.md)                     | 已接受     | Pi headless Agent loop 与 OpenDesign adapter                       |
+| [0021](adr/0021-skia-pathkit-vector-geometry-provider.md)                | 已接受     | 固定 PathKit 矢量 geometry provider                                |
+| [0022](adr/0022-versioned-nondestructive-boolean-groups.md)              | 已接受     | 非破坏 Boolean Group 与可丢弃派生结果                              |
+| [0023](adr/0023-versioned-svg-interchange-service.md)                    | 已接受     | 版本化 SVG 交换 service、Boolean flatten 与显式保真报告            |

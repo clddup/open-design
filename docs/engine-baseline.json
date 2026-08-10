@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "recordedAt": "2026-08-11",
   "policy": {
     "allowFloatingRefs": false,
@@ -50,6 +50,27 @@
       "version": "2.2.9",
       "source": "https://github.com/leaferjs/leafer-ui",
       "license": "MIT"
+    },
+    "svgInterchange": {
+      "role": "structured-svg-import-export-service",
+      "adapterPackage": "@opendesign/import-export-service",
+      "adapterPath": "packages/import-export-service",
+      "dependencies": [
+        {
+          "dependency": "@xmldom/xmldom",
+          "version": "0.8.13",
+          "source": "https://github.com/xmldom/xmldom",
+          "license": "MIT"
+        },
+        {
+          "dependency": "transformation-matrix",
+          "version": "3.1.0",
+          "source": "https://github.com/chrvadala/transformation-matrix",
+          "license": "MIT"
+        }
+      ],
+      "geometryProvider": "@opendesign/geometry-service/vector-path",
+      "productionStatus": "service-contract-only"
     }
   },
   "verification": {
@@ -57,6 +78,7 @@
     "contracts": "pnpm exec vitest run packages/design-contracts/src/index.test.ts",
     "editorRuntime": "pnpm exec vitest run packages/editor-runtime/src/index.test.ts",
     "vectorGeometry": "pnpm --filter @opendesign/geometry-service typecheck && pnpm exec vitest run packages/geometry-service/src/vector-path.test.ts packages/geometry-service/src/boolean-resolver.test.ts",
-    "leafer": "pnpm exec vitest run packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts packages/leafer-engine/src/professional-fixtures.test.ts"
+    "leafer": "pnpm exec vitest run packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts packages/leafer-engine/src/professional-fixtures.test.ts",
+    "svgInterchange": "pnpm --filter @opendesign/import-export-service typecheck && pnpm exec vitest run packages/import-export-service/src/svg.test.ts"
   }
 }

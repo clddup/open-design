@@ -4,7 +4,7 @@
 
 能力清单版本：`1` · 更新日期：2026-08-11 · 文档协议：`1.4.0` · 画布基线：`leafer-editor@2.2.9`
 
-当前状态：可用 0 项，降级可用 10 项，不可用 7 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
+当前状态：可用 0 项，降级可用 11 项，不可用 7 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
 ## 基础工作流
 
@@ -197,6 +197,20 @@
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/14506821864087-Overview-of-variables-collections-and-modes)
 
 ## 交付
+
+### 可编辑 SVG 交换 — 降级可用
+
+把受支持的 SVG 结构导入为可编辑 OpenDesign 矢量，并以显式保真报告导出 Path、Vector、基础图形和已解析 Boolean 结果。
+
+- ID：`delivery.svg-interchange`
+- 实现方：@opendesign/import-export-service SVG v1 + PathKit geometry
+- 表面：contract=available；runtime=unavailable；human=unavailable；agent=unavailable；render=unavailable；export=degraded
+- 证据：自动化 1 项；实机 0 项
+- 限制：当前只有纯 service contract，尚无 Main 文件桥、EditorRuntime 导入 planner、人工命令、Agent tool 或打包产品路径，应用 UI 暂时不可直接使用。
+- 限制：当前子集覆盖 Group、Rectangle、Ellipse、Path/Vector、transform、纯色与线性/径向渐变和居中描边；文字、图片、效果、蒙版、stylesheet、角度渐变、多 paint 与内外描边保真仍不可用。
+- 限制：标准 SVG 不能保留 OpenDesign Boolean operands；导出使用可丢弃 resolved path 并报告 boolean-flattened，重新导入为可编辑 Vector，不伪造已丢失的源层。
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040028034-Add-images-and-videos-to-designs)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/13402894554519-Export-formats-and-settings)
 
 ### 专业静态导出 — 不可用
 

@@ -642,6 +642,51 @@
       ]
     },
     {
+      "id": "delivery.svg-interchange",
+      "category": "delivery",
+      "status": "degraded",
+      "label": {
+        "en": "Editable SVG interchange",
+        "zh-CN": "可编辑 SVG 交换"
+      },
+      "description": {
+        "en": "Import supported SVG structure as editable OpenDesign vectors and export Path, Vector, basic shapes, and resolved Boolean results with explicit fidelity reporting.",
+        "zh-CN": "把受支持的 SVG 结构导入为可编辑 OpenDesign 矢量，并以显式保真报告导出 Path、Vector、基础图形和已解析 Boolean 结果。"
+      },
+      "provider": "@opendesign/import-export-service SVG v1 + PathKit geometry",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "export"],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "unavailable",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "unavailable",
+        "export": "degraded"
+      },
+      "limitations": [
+        {
+          "en": "The pure service contract currently has no Main file bridge, EditorRuntime import planner, human command, Agent tool, or packaged-product path. It cannot yet be used from the application UI.",
+          "zh-CN": "当前只有纯 service contract，尚无 Main 文件桥、EditorRuntime 导入 planner、人工命令、Agent tool 或打包产品路径，应用 UI 暂时不可直接使用。"
+        },
+        {
+          "en": "The current subset covers groups, rectangles, ellipses, Path/Vector, transforms, solid and linear/radial gradients, and center strokes. Text, images, effects, masks, stylesheets, angular gradients, multiple paints, and inside/outside stroke fidelity remain unavailable.",
+          "zh-CN": "当前子集覆盖 Group、Rectangle、Ellipse、Path/Vector、transform、纯色与线性/径向渐变和居中描边；文字、图片、效果、蒙版、stylesheet、角度渐变、多 paint 与内外描边保真仍不可用。"
+        },
+        {
+          "en": "Standard SVG cannot retain OpenDesign Boolean operands. Export consumes a disposable resolved path, reports boolean-flattened, and re-imports it as an editable Vector without inventing lost source layers.",
+          "zh-CN": "标准 SVG 不能保留 OpenDesign Boolean operands；导出使用可丢弃 resolved path 并报告 boolean-flattened，重新导入为可编辑 Vector，不伪造已丢失的源层。"
+        }
+      ],
+      "evidence": {
+        "automated": ["packages/import-export-service/src/svg.test.ts"],
+        "manual": []
+      },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360040028034-Add-images-and-videos-to-designs",
+        "https://help.figma.com/hc/en-us/articles/13402894554519-Export-formats-and-settings"
+      ]
+    },
+    {
       "id": "export.static-formats",
       "category": "delivery",
       "status": "unavailable",

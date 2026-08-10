@@ -252,6 +252,31 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(happy-dom@20.11.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
 
+  packages/import-export-service:
+    dependencies:
+      '@opendesign/design-contracts':
+        specifier: workspace:*
+        version: link:../design-contracts
+      '@opendesign/geometry-service':
+        specifier: workspace:*
+        version: link:../geometry-service
+      '@xmldom/xmldom':
+        specifier: 0.8.13
+        version: 0.8.13
+      transformation-matrix:
+        specifier: 3.1.0
+        version: 3.1.0
+    devDependencies:
+      pathkit-wasm:
+        specifier: 1.0.0
+        version: 1.0.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(happy-dom@20.11.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
+
   packages/leafer-engine:
     dependencies:
       '@opendesign/design-contracts':
@@ -3153,6 +3178,9 @@ packages:
   toidentifier@1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
+
+  transformation-matrix@3.1.0:
+    resolution: {integrity: sha512-oYubRWTi2tYFHAL2J8DLvPIqIYcYZ0fSOi2vmSy042Ho4jBW2ce6VP7QfD44t65WQz6bw5w1Pk22J7lcUpaTKA==}
 
   truncate-utf8-bytes@1.0.2:
     resolution: {integrity: sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcbM2O5Au6SO3AWCSEfW4mQ==}
@@ -6742,6 +6770,8 @@ snapshots:
 
   toidentifier@1.0.1:
     optional: true
+
+  transformation-matrix@3.1.0: {}
 
   truncate-utf8-bytes@1.0.2:
     dependencies:

@@ -22,6 +22,10 @@ The authoritative development dependency graph is pinned by `pnpm-lock.yaml`, wh
 
 `@opendesign/geometry-service` directly uses `pathkit-wasm` 1.0.0 from [Google Skia PathKit](https://github.com/google/skia/tree/main/modules/pathkit). It is distributed under the BSD 3-Clause License, Copyright (c) 2018 Google LLC. OpenDesign loads it through an isolated, on-demand vector-path provider for bounded SVG path operations and disposable Boolean render geometry; PathKit objects and WASM state do not enter design documents, persistent Renderer state, Agent schemas or public contracts.
 
+`@opendesign/import-export-service` directly uses `@xmldom/xmldom` 0.8.13 from [xmldom](https://github.com/xmldom/xmldom). It is distributed under the MIT License, Copyright 2019-present Christopher J. Brody and contributors and Copyright 2012-2017 @jindw and contributors. OpenDesign uses it only inside the bounded SVG adapter for XML DOM parsing and serialization; DOM objects do not enter design documents, Electron protocols, Agent schemas or persisted project state.
+
+`@opendesign/import-export-service` directly uses `transformation-matrix` 3.1.0 from [transformation-matrix](https://github.com/chrvadala/transformation-matrix). It is distributed under the MIT License, Copyright (c) 2017 https://github.com/chrvadala. OpenDesign uses it to parse SVG transform attributes and compose plain affine transforms behind the SVG adapter; third-party matrix objects do not cross the service boundary.
+
 `@opendesign/desktop` directly uses `unpdf` 1.8.0 from [unjs/unpdf](https://github.com/unjs/unpdf). It is distributed under the MIT License, Copyright (c) 2023-PRESENT Johann Schopplich. OpenDesign uses its PDF.js-backed text extraction for user-selected Agent document attachments; the optional `@napi-rs/canvas` rendering peer is not installed or used.
 
 `@opendesign/desktop` directly uses `mammoth` 1.12.0 from [mwilliamson/mammoth.js](https://github.com/mwilliamson/mammoth.js). It is distributed under the BSD 2-Clause License, Copyright (c) 2013 Michael Williamson. OpenDesign uses `extractRawText` for user-selected DOCX Agent attachments after host-side archive validation.
