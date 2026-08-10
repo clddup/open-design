@@ -31,7 +31,7 @@ describe("ImageGenerationHost", () => {
     });
     await expect(
       host.generateImage(
-        { prompt: "A cinematic penguin poster" },
+        { prompt: "A cinematic penguin poster", role: "hero" },
         new AbortController().signal,
       ),
     ).rejects.toThrow("Global image generation is not enabled");
@@ -69,6 +69,7 @@ describe("ImageGenerationHost", () => {
     const result = await host.generateImage(
       {
         prompt: "A cinematic campaign poster with a luminous penguin mascot",
+        role: "hero",
         size: "1536x1024",
         quality: "high",
         outputFormat: "webp",
@@ -204,7 +205,10 @@ describe("ImageGenerationHost", () => {
 
     expect(saved.hasApiKey).toBe(false);
     await expect(
-      host.generateImage({ prompt: "A penguin" }, new AbortController().signal),
+      host.generateImage(
+        { prompt: "A penguin", role: "hero" },
+        new AbortController().signal,
+      ),
     ).rejects.toThrow("Global image-generation API key is not configured");
     expect(fetch).not.toHaveBeenCalled();
     store.close();

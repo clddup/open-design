@@ -13,6 +13,14 @@ import {
 } from "@opendesign/workspace-contracts";
 import type { ProjectHost } from "../project/project-host.js";
 import type { WorkspaceStore } from "../project/workspace-store.js";
+import {
+  designApplyRequiresPlan,
+  type DesignApplyToolInput,
+  type DesignPlanToolInput,
+  type DesignVisualReviewToolInput,
+  type PlaceableRasterAssetRole,
+  type RasterAssetRole,
+} from "../../shared/design-agent-tools.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 type RunScopedEvent = AgentEvent & { runId: string };
@@ -33,8 +41,26 @@ export class GlobalTaskCoordinator {
       revision: number;
       scope: SelectionScope;
       mutationTarget: DesignMutationTarget;
+      prompt: string;
     }
   >();
+  readonly #designPlansByRunId = new Map<
+    string,
+    {
+      artboardEstablished: boolean;
+      artboardDescendantIds: Set<string>;
+      captureCount: number;
+      lastReview: DesignVisualReviewToolInput | null;
+      materialWriteCompleted: boolean;
+      plan: DesignPlanToolInput;
+      reviewedCaptureCount: number;
+    }
+  >();
+  readonly #generatedRasterRolesByRunId = new Map<
+    string,
+    Map<string, RasterAssetRole>
+  >();
+  readonly #inspectedRuns = new Set<string>();
 
   constructor(
     private readonly projectHost: ProjectHost,
@@ -144,6 +170,7 @@ export class GlobalTaskCoordinator {
       revision: request.revision,
       scope: structuredClone(request.scope),
       mutationTarget: structuredClone(request.mutationTarget),
+      prompt: request.prompt,
     });
     return task;
   }
@@ -166,6 +193,202 @@ export class GlobalTaskCoordinator {
         `Design tool revision conflict: expected ${binding.revision}, received ${context.revision}`,
       );
     }
+  }
+
+  registerDesignPlan(
+    context: TrustedToolContext,
+    plan: DesignPlanToolInput,
+  ): void {
+    this.assertDesignToolContext(context);
+    if (!this.#inspectedRuns.has(context.runId)) {
+      throw new Error(
+        "Inspect the bound design document before defining a design plan",
+      );
+    }
+    const existingPlan = this.#designPlansByRunId.get(context.runId);
+    if (existingPlan?.materialWriteCompleted) {
+      throw new Error(
+        "The design plan cannot be replaced after material design writes have started",
+      );
+    }
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (!binding) throw new Error("Design plan requires an active Run");
+    const targetPageId =
+      binding.mutationTarget.kind === "page"
+        ? binding.mutationTarget.pageId
+        : binding.scope.pageId;
+    if (!targetPageId || plan.pageId !== targetPageId) {
+      throw new Error("Design plan Page does not match the registered Run");
+    }
+    if (plan.outputMode === "single-raster") {
+      const evidence = plan.singleRasterEvidence;
+      if (
+        !evidence ||
+        !binding.prompt.includes(evidence) ||
+        !explicitlyRequestsSingleRaster(evidence)
+      ) {
+        throw new Error(
+          "Single-raster output requires an exact excerpt that explicitly requests one flattened image",
+        );
+      }
+    }
+    this.#designPlansByRunId.set(context.runId, {
+      artboardEstablished: plan.artboard.mode === "existing",
+      artboardDescendantIds: new Set(),
+      captureCount: 0,
+      lastReview: null,
+      materialWriteCompleted: false,
+      plan: structuredClone(plan),
+      reviewedCaptureCount: 0,
+    });
+    this.#generatedRasterRolesByRunId.set(context.runId, new Map());
+  }
+
+  recordDocumentInspection(context: TrustedToolContext): void {
+    this.assertDesignToolContext(context);
+    this.#inspectedRuns.add(context.runId);
+  }
+
+  recordCanvasCapture(context: TrustedToolContext): void {
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (!state?.materialWriteCompleted) return;
+    this.#designPlansByRunId.set(context.runId, {
+      ...state,
+      captureCount: state.captureCount + 1,
+    });
+  }
+
+  registerVisualReview(
+    context: TrustedToolContext,
+    review: DesignVisualReviewToolInput,
+  ): void {
+    const state = this.#requireDesignPlan(context);
+    if (state.captureCount <= state.reviewedCaptureCount) {
+      throw new Error("Visual review requires a newer rendered canvas capture");
+    }
+    this.#designPlansByRunId.set(context.runId, {
+      ...state,
+      lastReview: structuredClone(review),
+      reviewedCaptureCount: state.captureCount,
+    });
+  }
+
+  assertVisualReviewBeforeWrite(context: TrustedToolContext): void {
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (
+      state?.materialWriteCompleted &&
+      state.captureCount > state.reviewedCaptureCount
+    ) {
+      throw new Error(
+        "Record a structured visual review of the latest canvas capture before refining the design",
+      );
+    }
+  }
+
+  assertDesignPlanForRaster(
+    context: TrustedToolContext,
+    role: RasterAssetRole,
+  ): DesignPlanToolInput {
+    const state = this.#requireDesignPlan(context);
+    if (!state.plan.rasterAssetRoles.includes(role)) {
+      throw new Error(
+        `Raster role ${role} is not declared by the active design plan`,
+      );
+    }
+    return state.plan;
+  }
+
+  recordGeneratedRaster(
+    context: TrustedToolContext,
+    attachmentId: string,
+    role: RasterAssetRole,
+  ): void {
+    this.assertDesignPlanForRaster(context, role);
+    const roles = this.#generatedRasterRolesByRunId.get(context.runId);
+    if (!roles) {
+      throw new Error("Generated raster requires an active design plan");
+    }
+    roles.set(attachmentId, role);
+  }
+
+  assertDesignPlanForImagePlacement(
+    context: TrustedToolContext,
+    role: PlaceableRasterAssetRole,
+    parentId: string | null,
+    attachmentId?: string,
+  ): DesignPlanToolInput {
+    const state = this.#requireDesignPlan(context);
+    if (!state.plan.rasterAssetRoles.includes(role)) {
+      throw new Error(
+        `Raster role ${role} is not declared by the active design plan`,
+      );
+    }
+    const generatedRole = attachmentId
+      ? this.#generatedRasterRolesByRunId.get(context.runId)?.get(attachmentId)
+      : undefined;
+    if (generatedRole && generatedRole !== role) {
+      throw new Error(
+        `Generated raster was declared as ${generatedRole} and cannot be placed as ${role}`,
+      );
+    }
+    if (!state.artboardEstablished) {
+      throw new Error(
+        "Image placement requires the planned artboard Frame to be created first",
+      );
+    }
+    if (parentId !== state.plan.artboard.frameId) {
+      throw new Error(
+        "Design images must be placed inside the planned artboard Frame",
+      );
+    }
+    return state.plan;
+  }
+
+  assertDesignPlanForApply(
+    context: TrustedToolContext,
+    input: DesignApplyToolInput,
+  ): DesignPlanToolInput | undefined {
+    if (!designApplyRequiresPlan(input)) return undefined;
+    const state = this.#requireDesignPlan(context);
+    assertPlannedArtboardWrite(input, state);
+    return state.plan;
+  }
+
+  recordDesignApplyCompleted(runId: string, input: DesignApplyToolInput): void {
+    const state = this.#designPlansByRunId.get(runId);
+    if (!state) return;
+    const artboardEstablished =
+      state.artboardEstablished ||
+      input.commands.some(
+        (command) =>
+          command.type === "insert_element" &&
+          command.node.id === state.plan.artboard.frameId &&
+          command.node.kind === "frame",
+      );
+    const artboardDescendantIds = new Set(state.artboardDescendantIds);
+    input.commands.forEach((command) => {
+      if (
+        command.type === "insert_element" &&
+        command.node.id !== state.plan.artboard.frameId
+      ) {
+        artboardDescendantIds.add(command.node.id);
+      }
+    });
+    this.#designPlansByRunId.set(runId, {
+      ...state,
+      artboardEstablished,
+      artboardDescendantIds,
+      materialWriteCompleted: true,
+    });
+  }
+
+  recordMaterialDesignWriteCompleted(runId: string): void {
+    const state = this.#designPlansByRunId.get(runId);
+    if (!state) return;
+    this.#designPlansByRunId.set(runId, {
+      ...state,
+      materialWriteCompleted: true,
+    });
   }
 
   handleAgentEvent(event: AgentEvent): void {
@@ -203,6 +426,9 @@ export class GlobalTaskCoordinator {
     }
     if (event.type === "run.completed" || event.type === "agent.error") {
       this.#toolBindingsByRunId.delete(runId);
+      this.#designPlansByRunId.delete(runId);
+      this.#generatedRasterRolesByRunId.delete(runId);
+      this.#inspectedRuns.delete(runId);
     }
   }
 
@@ -216,6 +442,9 @@ export class GlobalTaskCoordinator {
       });
       this.#tasksByRunId.delete(runId);
       this.#toolBindingsByRunId.delete(runId);
+      this.#designPlansByRunId.delete(runId);
+      this.#generatedRasterRolesByRunId.delete(runId);
+      this.#inspectedRuns.delete(runId);
       this.#touchConversation(task.conversationId, timestamp);
     }
   }
@@ -225,6 +454,128 @@ export class GlobalTaskCoordinator {
     if (!conversation || conversation.updatedAt >= updatedAt) return;
     this.workspaceStore.saveConversation({ ...conversation, updatedAt });
   }
+
+  #requireDesignPlan(context: TrustedToolContext) {
+    this.assertDesignToolContext(context);
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (!state) {
+      throw new Error(
+        "Create and record a structured design plan before generating imagery or creating design layers",
+      );
+    }
+    return state;
+  }
+}
+
+function assertPlannedArtboardWrite(
+  input: DesignApplyToolInput,
+  state: {
+    artboardEstablished: boolean;
+    artboardDescendantIds: Set<string>;
+    captureCount: number;
+    lastReview: DesignVisualReviewToolInput | null;
+    materialWriteCompleted: boolean;
+    plan: DesignPlanToolInput;
+    reviewedCaptureCount: number;
+  },
+): void {
+  const inserts = input.commands.filter(
+    (command) => command.type === "insert_element",
+  );
+  const { artboard, pageId } = state.plan;
+  if (inserts.length === 0) {
+    if (
+      !state.artboardEstablished &&
+      input.commands.some((command) => command.type === "replace_subtree")
+    ) {
+      throw new Error(
+        "Create the planned artboard Frame before replacing design subtrees",
+      );
+    }
+    return;
+  }
+  if (!state.artboardEstablished) {
+    const artboardInsert = inserts.find(
+      (command) => command.node.id === artboard.frameId,
+    );
+    if (
+      !artboardInsert ||
+      artboardInsert.node.kind !== "frame" ||
+      artboardInsert.pageId !== pageId ||
+      artboardInsert.parentId !== null ||
+      artboardInsert.node.parentId !== null ||
+      artboardInsert.node.size.width !== artboard.width ||
+      artboardInsert.node.size.height !== artboard.height
+    ) {
+      throw new Error(
+        "The first design creation transaction must create the planned Page-root Frame at its declared dimensions",
+      );
+    }
+    const insertedParents = new Map(
+      inserts.map((command) => [command.node.id, command.parentId]),
+    );
+    for (const command of inserts) {
+      if (command.node.id === artboard.frameId) continue;
+      if (
+        !parentChainReaches(
+          command.parentId,
+          artboard.frameId,
+          insertedParents,
+          state.artboardDescendantIds,
+        )
+      ) {
+        throw new Error(
+          "Every new design layer must be nested under the planned artboard Frame",
+        );
+      }
+    }
+    return;
+  }
+  const insertedParents = new Map(
+    inserts.map((command) => [command.node.id, command.parentId]),
+  );
+  for (const command of inserts) {
+    if (
+      !parentChainReaches(
+        command.parentId,
+        artboard.frameId,
+        insertedParents,
+        state.artboardDescendantIds,
+      )
+    ) {
+      throw new Error(
+        "New design layers cannot be scattered outside the planned artboard Frame",
+      );
+    }
+  }
+}
+
+function parentChainReaches(
+  parentId: string | null,
+  frameId: string,
+  insertedParents: ReadonlyMap<string, string | null>,
+  knownDescendants: ReadonlySet<string>,
+): boolean {
+  const visited = new Set<string>();
+  let current = parentId;
+  while (current !== null && !visited.has(current)) {
+    if (current === frameId) return true;
+    if (knownDescendants.has(current)) return true;
+    visited.add(current);
+    current = insertedParents.get(current) ?? null;
+  }
+  return false;
+}
+
+function explicitlyRequestsSingleRaster(value: string): boolean {
+  return (
+    /\b(?:single|one|flattened|flat)\b.{0,40}\b(?:image|raster|bitmap|png|jpe?g|webp)\b/i.test(
+      value,
+    ) ||
+    /(?:单张|一张|整张|扁平化|不可编辑).{0,20}(?:图片|图像|海报|PNG|JPE?G|WebP)/i.test(
+      value,
+    )
+  );
 }
 
 function sameMutationTarget(

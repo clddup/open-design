@@ -8,6 +8,10 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
+  DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_REVIEW_TOOL_NAME,
+  GENERATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 import { reviewDesignCompletion } from "./design-completion-guard";
@@ -23,10 +27,44 @@ const materialWrite: AgentToolCallRecord = {
   revision: 5,
 };
 
+const designPlan: AgentToolCallRecord = {
+  toolCallId: "plan_1",
+  toolName: DESIGN_PLAN_TOOL_NAME,
+  input: {
+    outputMode: "editable-composition",
+    artboard: { mode: "existing", frameId: "artboard_1" },
+  },
+  status: "completed",
+};
+
+const inspection: AgentToolCallRecord = {
+  toolCallId: "inspect_1",
+  toolName: DESIGN_INSPECT_TOOL_NAME,
+  input: {},
+  status: "completed",
+  revision: 4,
+};
+
 const firstCapture: AgentToolCallRecord = {
   toolCallId: "capture_1",
   toolName: DESIGN_CAPTURE_TOOL_NAME,
   input: {},
+  status: "completed",
+  revision: 5,
+};
+
+const visualReview: AgentToolCallRecord = {
+  toolCallId: "review_1",
+  toolName: DESIGN_REVIEW_TOOL_NAME,
+  input: {
+    composition: "Main silhouette needs more breathing room",
+    hierarchy: "Primary and secondary elements compete",
+    typography: "Secondary type needs lower contrast",
+    assetIntegration: "Hero edge is not integrated with the title",
+    formAndSurface: "The opaque surface is too heavy",
+    effects: "Glow needs a tighter radius",
+    refinements: ["Open negative space", "Reduce the opaque surface"],
+  },
   status: "completed",
   revision: 5,
 };
@@ -89,34 +127,133 @@ describe("design completion guard", () => {
   });
 
   it("requires capture, refinement, and a final capture in order", () => {
-    expectBlocked([materialWrite], "opendesign_capture_canvas");
+    expectBlocked([materialWrite], "structured design plan");
+    expectBlocked([designPlan, materialWrite], "document inspection");
     expectBlocked(
-      [materialWrite, firstCapture],
+      [inspection, designPlan, materialWrite],
+      "opendesign_capture_canvas",
+    );
+    expectBlocked(
+      [inspection, designPlan, materialWrite, firstCapture],
+      "opendesign_record_visual_review",
+    );
+    expectBlocked(
+      [inspection, designPlan, materialWrite, firstCapture, visualReview],
       "concrete refinement transaction",
     );
-    expectBlocked([materialWrite, firstCapture, refinementWrite], "again");
+    expectBlocked(
+      [
+        inspection,
+        designPlan,
+        materialWrite,
+        firstCapture,
+        visualReview,
+        refinementWrite,
+      ],
+      "again",
+    );
     expect(
       reviewDesignCompletion(
-        context([materialWrite, firstCapture, refinementWrite, finalCapture]),
+        context([
+          inspection,
+          designPlan,
+          materialWrite,
+          firstCapture,
+          visualReview,
+          refinementWrite,
+          finalCapture,
+        ]),
       ),
     ).toEqual({ allow: true });
+  });
+
+  it("does not allow generated imagery to replace a canvas design", () => {
+    const generated: AgentToolCallRecord = {
+      toolCallId: "generate_1",
+      toolName: GENERATE_IMAGE_TOOL_NAME,
+      input: { prompt: "Generate a hero", role: "hero" },
+      status: "completed",
+    };
+    expectBlocked(
+      [inspection, designPlan, generated],
+      "did not change the design",
+    );
   });
 
   it("treats placing a generated image as a material canvas write", () => {
     const placeImage: AgentToolCallRecord = {
       toolCallId: "place_1",
       toolName: PLACE_IMAGE_TOOL_NAME,
-      input: { attachmentId: `image_${"a".repeat(64)}` },
+      input: {
+        attachmentId: `image_${"a".repeat(64)}`,
+        role: "final-single-image",
+      },
       status: "completed",
       revision: 5,
     };
 
-    expectBlocked([placeImage], "opendesign_capture_canvas");
+    const singleRasterPlan: AgentToolCallRecord = {
+      ...designPlan,
+      input: {
+        outputMode: "single-raster",
+        artboard: { mode: "create", frameId: "artboard_1" },
+      },
+    };
+
+    expectBlocked(
+      [inspection, singleRasterPlan, placeImage],
+      "opendesign_capture_canvas",
+    );
     expect(
       reviewDesignCompletion(
-        context([placeImage, firstCapture, refinementWrite, finalCapture]),
+        context([
+          inspection,
+          singleRasterPlan,
+          placeImage,
+          firstCapture,
+          visualReview,
+          refinementWrite,
+          finalCapture,
+        ]),
       ),
     ).toEqual({ allow: true });
+  });
+
+  it("rejects a new editable artboard that is only a placed raster", () => {
+    const editablePlan: AgentToolCallRecord = {
+      ...designPlan,
+      input: {
+        outputMode: "editable-composition",
+        artboard: { mode: "create", frameId: "artboard_1" },
+      },
+    };
+    const artboardOnly: AgentToolCallRecord = {
+      toolCallId: "write_artboard",
+      toolName: DESIGN_APPLY_TOOL_NAME,
+      input: {
+        label: "Create artboard",
+        commands: [
+          {
+            type: "insert_element",
+            node: { id: "artboard_1", kind: "frame" },
+          },
+        ],
+      },
+      status: "completed",
+      revision: 5,
+    };
+    const placeHero: AgentToolCallRecord = {
+      toolCallId: "place_hero",
+      toolName: PLACE_IMAGE_TOOL_NAME,
+      input: { role: "hero" },
+      status: "completed",
+      revision: 6,
+    };
+
+    expectBlocked(
+      [inspection, editablePlan, artboardOnly, placeHero],
+      "dominated by one placed raster",
+    );
   });
 
   it("accepts a semantic hierarchy edit as a post-review refinement without making it a material draft", () => {
@@ -138,7 +275,15 @@ describe("design completion guard", () => {
     });
     expect(
       reviewDesignCompletion(
-        context([materialWrite, firstCapture, hierarchyWrite, finalCapture]),
+        context([
+          inspection,
+          designPlan,
+          materialWrite,
+          firstCapture,
+          visualReview,
+          hierarchyWrite,
+          finalCapture,
+        ]),
       ),
     ).toEqual({ allow: true });
   });
@@ -162,7 +307,15 @@ describe("design completion guard", () => {
     });
     expect(
       reviewDesignCompletion(
-        context([materialWrite, firstCapture, arrangeWrite, finalCapture]),
+        context([
+          inspection,
+          designPlan,
+          materialWrite,
+          firstCapture,
+          visualReview,
+          arrangeWrite,
+          finalCapture,
+        ]),
       ),
     ).toEqual({ allow: true });
   });

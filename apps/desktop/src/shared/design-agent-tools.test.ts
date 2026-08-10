@@ -5,11 +5,101 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
+  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
 
 describe("design Agent tool contract", () => {
+  it("requires a bounded executable design plan and rendered critique", () => {
+    const plan = {
+      pageId: "page_1",
+      deliverable: "ui",
+      objective: "Design a polished analytics workspace",
+      outputMode: "editable-composition",
+      artboard: {
+        mode: "create",
+        frameId: "analytics_artboard",
+        width: 1440,
+        height: 1024,
+      },
+      composition: {
+        direction: "Dense desktop workspace with a strong primary data plane",
+        hierarchy: ["Navigation", "Primary analysis", "Contextual detail"],
+        assetIntegration:
+          "Use native icons and restrained vector data accents; no raster asset",
+        spacingRhythm: "4/8/12/20/32 px rhythm",
+      },
+      visualSystem: {
+        avoidances: [
+          "Do not wrap every region in the same rounded card",
+          "Do not use borders as the only hierarchy signal",
+        ],
+        formLanguage: "Compact controls, precise edges, restrained 6 px radii",
+        palette: ["#0F172A ink", "#F8FAFC canvas", "#2563EB action"],
+        surfaceAndDepth:
+          "Use surface contrast and one elevation tier instead of card soup",
+        typography: ["Inter 12/16 body", "Inter 24/30 semibold heading"],
+        effects: ["Subtle 1 px separators", "Focused blue selection halo"],
+      },
+      rasterAssetRoles: [],
+      editableLayers: ["Navigation", "Charts", "Inspector"],
+      implementationSteps: ["Create artboard", "Build hierarchy", "Add states"],
+      validationChecks: ["Check hierarchy", "Check density", "Check focus"],
+    };
+    const review = {
+      composition: "Primary plane is clear but the inspector is too dominant",
+      hierarchy: "Heading and chart compete at the same contrast",
+      typography: "Secondary labels need a quieter weight",
+      assetIntegration: "Vector data accents align with the chart grid",
+      formAndSurface: "Too many bordered surfaces flatten the depth",
+      effects: "Selection halo is legible without decorative glow",
+      refinements: [
+        "Reduce inspector width and contrast",
+        "Remove borders from secondary groups",
+      ],
+    };
+
+    expect(
+      DESIGN_AGENT_TOOL_SPECS.find(
+        (tool) => tool.name === DESIGN_PLAN_TOOL_NAME,
+      ),
+    ).toMatchObject({ risk: "read", approval: "never" });
+    expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, plan)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...plan,
+        visualSystem: {
+          ...plan.visualSystem,
+          avoidances: ["Make it good"],
+        },
+      }),
+    ).toBe(false);
+    expect(validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, review)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, {
+        ...review,
+        refinements: ["Looks fine"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, {
+        composition: "Looks good",
+        hierarchy: "Looks good",
+        typography: "Looks good",
+        assetIntegration: "Looks good",
+        formAndSurface: "Looks good",
+        effects: "Looks good",
+        refinements: ["Looks good", "Looks good"],
+      }),
+    ).toBe(false);
+  });
+
   it("exposes the trusted capability manifest as a read-only tool", () => {
     const capabilities = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_CAPABILITIES_TOOL_NAME,
@@ -110,6 +200,7 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(GENERATE_IMAGE_TOOL_NAME, {
         prompt: "A luminous editorial penguin poster",
+        role: "hero",
         size: "1536x1024",
         quality: "high",
         outputFormat: "webp",
@@ -118,12 +209,14 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(GENERATE_IMAGE_TOOL_NAME, {
         prompt: "A poster",
+        role: "hero",
         modelId: "conversation-model",
       }),
     ).toBe(false);
     expect(
       validateDesignAgentToolInput(GENERATE_IMAGE_TOOL_NAME, {
         prompt: "A poster",
+        role: "hero",
         size: "8192x8192",
       }),
     ).toBe(false);

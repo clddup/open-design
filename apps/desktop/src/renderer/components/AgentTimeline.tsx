@@ -31,6 +31,8 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_REVIEW_TOOL_NAME,
 } from "../../shared/design-agent-tools";
 import { useI18n } from "../i18n";
 
@@ -93,6 +95,8 @@ function isNativeDesignTool(toolName: string | undefined): boolean {
   return (
     toolName === DESIGN_INSPECT_TOOL_NAME ||
     toolName === DESIGN_APPLY_TOOL_NAME ||
+    toolName === DESIGN_PLAN_TOOL_NAME ||
+    toolName === DESIGN_REVIEW_TOOL_NAME ||
     toolName === DESIGN_ARRANGE_TOOL_NAME ||
     toolName === DESIGN_HIERARCHY_TOOL_NAME
   );
@@ -141,6 +145,16 @@ function toolTitle(
     return state === "done"
       ? t("agent.canvasUpdated")
       : t("agent.buildingCanvas");
+  }
+  if (toolName === DESIGN_PLAN_TOOL_NAME) {
+    return state === "done"
+      ? t("agent.designPlanReady")
+      : t("agent.planningDesign");
+  }
+  if (toolName === DESIGN_REVIEW_TOOL_NAME) {
+    return state === "done"
+      ? t("agent.visualReviewReady")
+      : t("agent.reviewingDesign");
   }
   if (toolName === DESIGN_HIERARCHY_TOOL_NAME) {
     return state === "done"

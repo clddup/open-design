@@ -9,14 +9,65 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
+  DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_REVIEW_TOOL_NAME,
+  GENERATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools.js";
 
 export function reviewDesignCompletion(
   context: AgentCompletionContext,
 ): AgentCompletionDecision {
+  const generationIndex = context.toolCalls.findIndex(
+    (call) => call.toolName === GENERATE_IMAGE_TOOL_NAME,
+  );
   const materialWriteIndex = findMaterialWriteIndex(context.toolCalls);
-  if (materialWriteIndex < 0) return { allow: true };
+  if (materialWriteIndex < 0) {
+    if (generationIndex < 0) return { allow: true };
+    return {
+      allow: false,
+      message:
+        "Image generation alone did not change the design. Continue with the declared editable composition and apply it to the planned artboard before finishing.",
+    };
+  }
+
+  const planIndex = context.toolCalls.findIndex(
+    (call, index) =>
+      index < materialWriteIndex && call.toolName === DESIGN_PLAN_TOOL_NAME,
+  );
+  if (planIndex < 0) {
+    return {
+      allow: false,
+      message:
+        "The host recorded a material design write without a preceding structured design plan. Inspect the current canvas, call opendesign_define_design_plan, and rebuild or correct the work inside its artboard before finishing.",
+    };
+  }
+
+  const inspectionIndex = context.toolCalls.findIndex(
+    (call, index) =>
+      index < planIndex && call.toolName === DESIGN_INSPECT_TOOL_NAME,
+  );
+  if (inspectionIndex < 0) {
+    return {
+      allow: false,
+      message:
+        "The structured design plan was not preceded by a successful document inspection. Call opendesign_inspect_document, correct the plan from the live structure and diagnostics, then continue.",
+    };
+  }
+
+  const plan = context.toolCalls[planIndex]?.input;
+  if (
+    hasPlacedRaster(context.toolCalls) &&
+    isEditableCreatedArtboardPlan(plan) &&
+    editableInsertedLayerCount(context.toolCalls, plan) < 2
+  ) {
+    return {
+      allow: false,
+      message:
+        "The editable composition is still dominated by one placed raster. Add at least two meaningful editable typography, vector, shape, control, or information layers inside the planned artboard instead of treating the image as the finished design.",
+    };
+  }
 
   const firstCaptureIndex = context.toolCalls.findIndex(
     (call, index) =>
@@ -30,8 +81,20 @@ export function reviewDesignCompletion(
     };
   }
 
+  const reviewIndex = context.toolCalls.findIndex(
+    (call, index) =>
+      index > firstCaptureIndex && call.toolName === DESIGN_REVIEW_TOOL_NAME,
+  );
+  if (reviewIndex < 0) {
+    return {
+      allow: false,
+      message:
+        "The first rendered draft needs a structured visual critique. Call opendesign_record_visual_review with concrete composition, hierarchy, typography, asset-integration, surface, and refinement findings before editing again.",
+    };
+  }
+
   const refinementWriteIndex = context.toolCalls.findIndex(
-    (call, index) => index > firstCaptureIndex && isSuccessfulDesignWrite(call),
+    (call, index) => index > reviewIndex && isSuccessfulDesignWrite(call),
   );
   if (refinementWriteIndex < 0) {
     return {
@@ -55,6 +118,40 @@ export function reviewDesignCompletion(
   }
 
   return { allow: true };
+}
+
+function hasPlacedRaster(toolCalls: readonly AgentToolCallRecord[]): boolean {
+  return toolCalls.some((call) => call.toolName === PLACE_IMAGE_TOOL_NAME);
+}
+
+function isEditableCreatedArtboardPlan(input: unknown): boolean {
+  if (!isRecord(input) || input.outputMode !== "editable-composition") {
+    return false;
+  }
+  return isRecord(input.artboard) && input.artboard.mode === "create";
+}
+
+function editableInsertedLayerCount(
+  toolCalls: readonly AgentToolCallRecord[],
+  plan: unknown,
+): number {
+  const frameId =
+    isRecord(plan) && isRecord(plan.artboard)
+      ? plan.artboard.frameId
+      : undefined;
+  let count = 0;
+  for (const call of toolCalls) {
+    if (call.toolName !== DESIGN_APPLY_TOOL_NAME) continue;
+    for (const command of readCommands(call.input)) {
+      if (command.type !== "insert_element" || !isRecord(command.node)) {
+        continue;
+      }
+      if (command.node.id === frameId || command.node.kind === "image")
+        continue;
+      count += 1;
+    }
+  }
+  return count;
 }
 
 export const DESIGN_VISUAL_COMPLETION_GUARD: CompletionGuardPort = {
@@ -97,7 +194,9 @@ function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
   );
 }
 
-function readCommands(input: unknown): Array<{ type?: unknown }> {
+function readCommands(
+  input: unknown,
+): Array<{ type?: unknown; node?: unknown }> {
   if (!isRecord(input) || !Array.isArray(input.commands)) return [];
   return input.commands.filter(isRecord);
 }

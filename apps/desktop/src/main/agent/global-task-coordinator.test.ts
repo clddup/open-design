@@ -6,11 +6,60 @@ import { describe, expect, it } from "vitest";
 import { ProjectHost } from "../project/project-host.js";
 import { WorkspaceStore } from "../project/workspace-store.js";
 import { GlobalTaskCoordinator } from "./global-task-coordinator.js";
+import type {
+  DesignApplyToolInput,
+  DesignPlanToolInput,
+} from "../../shared/design-agent-tools.js";
 
 const modelSelection = {
   providerId: "provider_1",
   modelId: "design-model",
   reasoningEffort: "medium" as const,
+};
+
+const designPlan: DesignPlanToolInput = {
+  pageId: "page_welcome",
+  deliverable: "ui",
+  objective: "Design a polished product workspace",
+  outputMode: "editable-composition",
+  artboard: {
+    mode: "create",
+    frameId: "workspace_artboard",
+    width: 1440,
+    height: 1024,
+  },
+  composition: {
+    direction: "Dense desktop workspace with a dominant primary work area",
+    hierarchy: ["Navigation", "Primary work area", "Contextual inspector"],
+    assetIntegration:
+      "Integrate one hero image below editable navigation and data",
+    spacingRhythm: "4/8/12/20/32 px rhythm",
+  },
+  visualSystem: {
+    avoidances: [
+      "Do not wrap every region in the same rounded card",
+      "Do not use borders as the only hierarchy signal",
+    ],
+    formLanguage: "Compact controls with precise edges and restrained radii",
+    palette: ["#0F172A ink", "#F8FAFC canvas", "#2563EB action"],
+    surfaceAndDepth: "Use tonal contrast and one deliberate elevation tier",
+    typography: ["Inter 12/16 body", "Inter 24/30 semibold heading"],
+    effects: ["Subtle separators", "Focused selection halo"],
+  },
+  rasterAssetRoles: ["hero", "background"],
+  editableLayers: ["Navigation", "Workspace", "Inspector"],
+  implementationSteps: ["Create artboard", "Build hierarchy", "Add states"],
+  validationChecks: ["Check hierarchy", "Check density", "Check focus"],
+};
+
+const visualReview = {
+  composition: "The primary work area needs more width",
+  hierarchy: "The inspector competes with the page title",
+  typography: "Secondary labels need lower contrast",
+  assetIntegration: "Native icons align with the control grid",
+  formAndSurface: "Secondary groups use too many borders",
+  effects: "Selection treatment is clear and restrained",
+  refinements: ["Reduce inspector contrast", "Remove secondary borders"],
 };
 
 async function setup() {
@@ -42,6 +91,199 @@ async function setup() {
 }
 
 describe("GlobalTaskCoordinator", () => {
+  it("enforces a planned artboard and a rendered review before refinement", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_planned_design",
+      sessionId: "conversation_mobile",
+      prompt: "Refine the mobile experience",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_planned_design",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+
+    expect(() =>
+      coordinator.assertDesignPlanForRaster(context, "hero"),
+    ).toThrow("structured design plan");
+    expect(() =>
+      coordinator.registerDesignPlan(context, { ...designPlan, pageId }),
+    ).toThrow("Inspect the bound design document");
+    coordinator.recordDocumentInspection(context);
+    coordinator.registerDesignPlan(context, { ...designPlan, pageId });
+    expect(() =>
+      coordinator.assertDesignPlanForRaster(context, "hero"),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignPlanForRaster(context, "background"),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignPlanForRaster(context, "final-single-image"),
+    ).toThrow("not declared");
+    coordinator.recordGeneratedRaster(context, "image_generated", "hero");
+    expect(() =>
+      coordinator.registerDesignPlan(context, {
+        ...designPlan,
+        pageId,
+        outputMode: "single-raster",
+        rasterAssetRoles: ["final-single-image"],
+        singleRasterEvidence: "Refine the mobile experience",
+      }),
+    ).toThrow("explicitly requests one flattened image");
+
+    const scatteredDraft: DesignApplyToolInput = {
+      label: "Scatter one root layer",
+      commands: [
+        {
+          commandId: "insert_scattered",
+          type: "insert_element",
+          pageId,
+          parentId: null,
+          index: 0,
+          node: {
+            id: "scattered",
+            kind: "rectangle",
+            name: "Scattered layer",
+            parentId: null,
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 0, 0],
+            size: { width: 200, height: 120 },
+            opacity: 1,
+            properties: {
+              fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+              cornerRadius: 0,
+            },
+            extensions: {},
+          },
+        },
+      ],
+    };
+    expect(() =>
+      coordinator.assertDesignPlanForApply(context, scatteredDraft),
+    ).toThrow("planned Page-root Frame");
+
+    const plannedDraft: DesignApplyToolInput = {
+      label: "Create planned editable workspace",
+      commands: [
+        {
+          commandId: "insert_artboard",
+          type: "insert_element",
+          pageId,
+          parentId: null,
+          index: 0,
+          node: {
+            id: "workspace_artboard",
+            kind: "frame",
+            name: "Workspace artboard",
+            parentId: null,
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 0, 0],
+            size: { width: 1440, height: 1024 },
+            opacity: 1,
+            properties: {
+              fills: [{ type: "solid", color: "#f8fafc", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+              cornerRadius: 0,
+              clipsContent: true,
+            },
+            extensions: {},
+          },
+        },
+        {
+          commandId: "insert_title",
+          type: "insert_element",
+          pageId,
+          parentId: "workspace_artboard",
+          index: 0,
+          node: {
+            id: "workspace_title",
+            kind: "text",
+            name: "Workspace title",
+            parentId: "workspace_artboard",
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 48, 40],
+            size: { width: 520, height: 48 },
+            opacity: 1,
+            properties: {
+              content: "Analytics workspace",
+              fontFamily: "Inter",
+              fontSize: 32,
+              fontWeight: 650,
+              lineHeight: 40,
+              letterSpacing: -0.5,
+              textAlignHorizontal: "left",
+              textAlignVertical: "top",
+              fills: [{ type: "solid", color: "#0f172a", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+            },
+            extensions: {},
+          },
+        },
+      ],
+    };
+    expect(() =>
+      coordinator.assertDesignPlanForApply(context, plannedDraft),
+    ).not.toThrow();
+    coordinator.recordDesignApplyCompleted(context.runId, plannedDraft);
+    coordinator.recordCanvasCapture(context);
+    expect(() => coordinator.assertVisualReviewBeforeWrite(context)).toThrow(
+      "structured visual review",
+    );
+    coordinator.registerVisualReview(context, visualReview);
+    expect(() =>
+      coordinator.assertVisualReviewBeforeWrite(context),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignPlanForApply(context, scatteredDraft),
+    ).toThrow("outside the planned artboard Frame");
+    expect(() =>
+      coordinator.assertDesignPlanForImagePlacement(
+        context,
+        "hero",
+        "wrong_parent",
+      ),
+    ).toThrow("planned artboard Frame");
+    expect(() =>
+      coordinator.assertDesignPlanForImagePlacement(
+        context,
+        "background",
+        "workspace_artboard",
+        "image_generated",
+      ),
+    ).toThrow("declared as hero");
+    expect(() =>
+      coordinator.assertDesignPlanForImagePlacement(
+        context,
+        "hero",
+        "workspace_artboard",
+        "image_generated",
+      ),
+    ).not.toThrow();
+
+    store.close();
+  });
+
   it("moves the active Conversation to the front when a new Run starts", async () => {
     const { store, host, file, opened, pageId } = await setup();
     store.createConversation({

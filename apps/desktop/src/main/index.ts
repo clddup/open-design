@@ -64,8 +64,18 @@ import type {
 import { DEFAULT_APP_LOCALE, type AppLocale } from "../shared/i18n/locale";
 import { translate } from "../shared/i18n/messages";
 import {
+  DESIGN_APPLY_TOOL_NAME,
+  DESIGN_ARRANGE_TOOL_NAME,
+  DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_HIERARCHY_TOOL_NAME,
+  DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_REVIEW_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
+  isDesignApplyToolInput,
+  isDesignPlanToolInput,
+  isDesignVisualReviewToolInput,
   isGenerateImageToolInput,
   isPlaceImageToolInput,
   isReadImageToolInput,
@@ -888,6 +898,37 @@ void app.whenReady().then(async () => {
           : "Design tool Run context is invalid",
       );
     }
+    if (call.toolName === DESIGN_PLAN_TOOL_NAME) {
+      if (!isDesignPlanToolInput(call.input)) {
+        throw new TypeError("Invalid design plan tool input");
+      }
+      globalTaskCoordinator.registerDesignPlan(context, call.input);
+      return {
+        content: {
+          ok: true,
+          status: "accepted",
+          deliverable: call.input.deliverable,
+          outputMode: call.input.outputMode,
+          pageId: call.input.pageId,
+          artboard: call.input.artboard,
+          editableLayers: call.input.editableLayers,
+          rasterAssetRoles: call.input.rasterAssetRoles,
+        },
+      };
+    }
+    if (call.toolName === DESIGN_REVIEW_TOOL_NAME) {
+      if (!isDesignVisualReviewToolInput(call.input)) {
+        throw new TypeError("Invalid visual review tool input");
+      }
+      globalTaskCoordinator.registerVisualReview(context, call.input);
+      return {
+        content: {
+          ok: true,
+          status: "accepted",
+          refinements: call.input.refinements,
+        },
+      };
+    }
     if (call.toolName === READ_IMAGE_TOOL_NAME) {
       if (!isReadImageToolInput(call.input)) {
         throw new TypeError("Invalid read image tool input");
@@ -902,6 +943,7 @@ void app.whenReady().then(async () => {
       if (!isGenerateImageToolInput(call.input)) {
         throw new TypeError("Invalid generate image tool input");
       }
+      globalTaskCoordinator.assertDesignPlanForRaster(context, call.input.role);
       const generated = await requireImageGenerationHost().generateImage(
         call.input,
         signal,
@@ -919,6 +961,11 @@ void app.whenReady().then(async () => {
         },
         context,
       );
+      globalTaskCoordinator.recordGeneratedRaster(
+        context,
+        authorized.attachmentId,
+        call.input.role,
+      );
       return {
         content: {
           ok: true,
@@ -930,6 +977,7 @@ void app.whenReady().then(async () => {
             : {}),
           size: generated.size,
           quality: generated.quality,
+          role: call.input.role,
           outputFormat: generated.outputFormat,
           attachment: authorized,
           attachments: [authorized],
@@ -940,6 +988,13 @@ void app.whenReady().then(async () => {
       if (!isPlaceImageToolInput(call.input)) {
         throw new TypeError("Invalid place image tool input");
       }
+      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+      globalTaskCoordinator.assertDesignPlanForImagePlacement(
+        context,
+        call.input.role,
+        call.input.parentId,
+        call.input.attachmentId,
+      );
       const image = await requireAgentReferenceHost().materializeImage(
         call.input.attachmentId,
         context,
@@ -961,7 +1016,7 @@ void app.whenReady().then(async () => {
           : intrinsicHeight);
       const digest = image.attachment.attachmentId.slice("image_".length);
       const assetId = `asset_${digest}`;
-      return rendererDesignToolHost.execute(
+      const result = await rendererDesignToolHost.execute(
         {
           ...call,
           toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
@@ -983,6 +1038,7 @@ void app.whenReady().then(async () => {
                   },
                   extensions: {
                     attachmentId: image.attachment.attachmentId,
+                    designRole: call.input.role,
                   },
                 },
               },
@@ -1009,7 +1065,7 @@ void app.whenReady().then(async () => {
                     altText: call.input.name,
                     cornerRadius: 0,
                   },
-                  extensions: {},
+                  extensions: { designRole: call.input.role },
                 },
               },
             ],
@@ -1018,8 +1074,47 @@ void app.whenReady().then(async () => {
         context,
         signal,
       );
+      globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+      return result;
     }
-    return rendererDesignToolHost.execute(call, context, signal);
+    if (call.toolName === DESIGN_APPLY_TOOL_NAME) {
+      if (!isDesignApplyToolInput(call.input)) {
+        throw new TypeError("Invalid design apply tool input");
+      }
+      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+      globalTaskCoordinator.assertDesignPlanForApply(context, call.input);
+      const result = await rendererDesignToolHost.execute(
+        call,
+        context,
+        signal,
+      );
+      globalTaskCoordinator.recordDesignApplyCompleted(
+        context.runId,
+        call.input,
+      );
+      return result;
+    }
+    if (
+      call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
+      call.toolName === DESIGN_ARRANGE_TOOL_NAME
+    ) {
+      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+      const result = await rendererDesignToolHost.execute(
+        call,
+        context,
+        signal,
+      );
+      globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+      return result;
+    }
+    const result = await rendererDesignToolHost.execute(call, context, signal);
+    if (call.toolName === DESIGN_INSPECT_TOOL_NAME) {
+      globalTaskCoordinator.recordDocumentInspection(context);
+    }
+    if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
+      globalTaskCoordinator.recordCanvasCapture(context);
+    }
+    return result;
   });
   projectHost = new ProjectHost(workspaceStore);
   projectIpc = new ProjectIpcService(

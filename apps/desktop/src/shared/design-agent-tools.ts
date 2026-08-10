@@ -5,6 +5,8 @@ import {
 export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
+export const DESIGN_PLAN_TOOL_NAME = "opendesign_define_design_plan";
+export const DESIGN_REVIEW_TOOL_NAME = "opendesign_record_visual_review";
 export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
 export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
 export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
@@ -15,11 +17,67 @@ export const INTERNAL_DESIGN_APPLY_TOOL_NAME =
   "opendesign_internal_apply_transaction";
 
 export type ReadImageToolInput = { source: string };
+export type DesignDeliverable =
+  | "ui"
+  | "poster"
+  | "logo"
+  | "brand-asset"
+  | "illustration"
+  | "presentation-visual"
+  | "other";
+export type RasterAssetRole =
+  | "reference"
+  | "background"
+  | "hero"
+  | "supporting-content"
+  | "final-single-image";
+export type PlaceableRasterAssetRole = Exclude<RasterAssetRole, "reference">;
+export type DesignPlanToolInput = {
+  pageId: string;
+  deliverable: DesignDeliverable;
+  objective: string;
+  outputMode: "editable-composition" | "single-raster";
+  artboard: {
+    mode: "create" | "existing";
+    frameId: string;
+    width: number;
+    height: number;
+  };
+  composition: {
+    assetIntegration: string;
+    direction: string;
+    hierarchy: string[];
+    spacingRhythm: string;
+  };
+  visualSystem: {
+    avoidances: string[];
+    formLanguage: string;
+    palette: string[];
+    surfaceAndDepth: string;
+    typography: string[];
+    effects: string[];
+  };
+  rasterAssetRoles: RasterAssetRole[];
+  editableLayers: string[];
+  implementationSteps: string[];
+  validationChecks: string[];
+  singleRasterEvidence?: string;
+};
+export type DesignVisualReviewToolInput = {
+  composition: string;
+  hierarchy: string;
+  typography: string;
+  assetIntegration: string;
+  formAndSurface: string;
+  effects: string;
+  refinements: string[];
+};
 export type ImageGenerationSize = "auto" | `${number}x${number}`;
 export type ImageGenerationQuality = "auto" | "low" | "medium" | "high";
 export type ImageGenerationOutputFormat = "png" | "jpeg" | "webp";
 export type GenerateImageToolInput = {
   prompt: string;
+  role: RasterAssetRole;
   size?: ImageGenerationSize;
   quality?: ImageGenerationQuality;
   outputFormat?: ImageGenerationOutputFormat;
@@ -31,6 +89,7 @@ export type PlaceImageToolInput = {
   index: number;
   nodeId: string;
   name: string;
+  role: PlaceableRasterAssetRole;
   x: number;
   y: number;
   width?: number;
@@ -526,6 +585,197 @@ const MODEL_ARRANGE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_DESIGN_PLAN_SCHEMA = {
+  type: "object",
+  description:
+    "A bounded, executable visual plan for the current Page. New poster work must name one Frame artboard and keep all poster layers inside it.",
+  properties: {
+    pageId: { type: "string", minLength: 1, maxLength: 256 },
+    deliverable: {
+      enum: [
+        "ui",
+        "poster",
+        "logo",
+        "brand-asset",
+        "illustration",
+        "presentation-visual",
+        "other",
+      ],
+    },
+    objective: { type: "string", minLength: 1, maxLength: 2_000 },
+    outputMode: { enum: ["editable-composition", "single-raster"] },
+    artboard: {
+      type: "object",
+      properties: {
+        mode: { enum: ["create", "existing"] },
+        frameId: { type: "string", minLength: 1, maxLength: 256 },
+        width: { type: "number", exclusiveMinimum: 0, maximum: 100_000 },
+        height: { type: "number", exclusiveMinimum: 0, maximum: 100_000 },
+      },
+      required: ["mode", "frameId", "width", "height"],
+      additionalProperties: false,
+    },
+    composition: {
+      type: "object",
+      properties: {
+        direction: { type: "string", minLength: 1, maxLength: 1_000 },
+        hierarchy: {
+          type: "array",
+          minItems: 2,
+          maxItems: 16,
+          items: { type: "string", minLength: 1, maxLength: 256 },
+        },
+        assetIntegration: {
+          type: "string",
+          minLength: 1,
+          maxLength: 1_000,
+          description:
+            "How native shapes, icons, vectors, illustrations, or raster imagery integrate with editable typography and layout through negative space, contrast, edge treatment, color, masks, gradients, or depth. State an intentional no-raster strategy when appropriate.",
+        },
+        spacingRhythm: { type: "string", minLength: 1, maxLength: 500 },
+      },
+      required: ["direction", "hierarchy", "assetIntegration", "spacingRhythm"],
+      additionalProperties: false,
+    },
+    visualSystem: {
+      type: "object",
+      properties: {
+        avoidances: {
+          type: "array",
+          minItems: 2,
+          maxItems: 12,
+          items: { type: "string", minLength: 1, maxLength: 256 },
+          description:
+            "Concrete visual shortcuts to avoid for this design, such as a generic opaque text slab, arbitrary centered layout, or unintegrated stock imagery.",
+        },
+        formLanguage: {
+          type: "string",
+          minLength: 1,
+          maxLength: 1_000,
+          description:
+            "The intended shape, radius, edge, icon, illustration, and control language. Repeating generic rounded rectangles is not a sufficient form language.",
+        },
+        palette: {
+          type: "array",
+          minItems: 1,
+          maxItems: 12,
+          items: { type: "string", minLength: 1, maxLength: 128 },
+        },
+        surfaceAndDepth: {
+          type: "string",
+          minLength: 1,
+          maxLength: 1_000,
+          description:
+            "How borders, fills, gradients, shadows, glows, blur, overlap, and contrast establish hierarchy without turning every region into the same card.",
+        },
+        typography: {
+          type: "array",
+          minItems: 1,
+          maxItems: 8,
+          items: { type: "string", minLength: 1, maxLength: 256 },
+        },
+        effects: {
+          type: "array",
+          maxItems: 12,
+          items: { type: "string", minLength: 1, maxLength: 256 },
+        },
+      },
+      required: [
+        "avoidances",
+        "formLanguage",
+        "palette",
+        "surfaceAndDepth",
+        "typography",
+        "effects",
+      ],
+      additionalProperties: false,
+    },
+    rasterAssetRoles: {
+      type: "array",
+      maxItems: 5,
+      uniqueItems: true,
+      items: {
+        enum: [
+          "reference",
+          "background",
+          "hero",
+          "supporting-content",
+          "final-single-image",
+        ],
+      },
+    },
+    editableLayers: {
+      type: "array",
+      minItems: 2,
+      maxItems: 24,
+      items: { type: "string", minLength: 1, maxLength: 256 },
+    },
+    implementationSteps: {
+      type: "array",
+      minItems: 2,
+      maxItems: 16,
+      items: { type: "string", minLength: 1, maxLength: 500 },
+    },
+    validationChecks: {
+      type: "array",
+      minItems: 2,
+      maxItems: 16,
+      items: { type: "string", minLength: 1, maxLength: 500 },
+    },
+    singleRasterEvidence: {
+      type: "string",
+      minLength: 1,
+      maxLength: 200,
+      description:
+        "Required only for single-raster output. Quote the user's explicit request for a single flattened image; the host verifies it against the current prompt.",
+    },
+  },
+  required: [
+    "pageId",
+    "deliverable",
+    "objective",
+    "outputMode",
+    "artboard",
+    "composition",
+    "visualSystem",
+    "rasterAssetRoles",
+    "editableLayers",
+    "implementationSteps",
+    "validationChecks",
+  ],
+  additionalProperties: false,
+} as const;
+
+const MODEL_VISUAL_REVIEW_SCHEMA = {
+  type: "object",
+  description:
+    "A concrete critique of the most recent rendered canvas capture. Every field must identify what the image actually shows and refinements must be actionable edits, not generic praise.",
+  properties: {
+    composition: { type: "string", minLength: 12, maxLength: 1_000 },
+    hierarchy: { type: "string", minLength: 12, maxLength: 1_000 },
+    typography: { type: "string", minLength: 12, maxLength: 1_000 },
+    assetIntegration: { type: "string", minLength: 12, maxLength: 1_000 },
+    formAndSurface: { type: "string", minLength: 12, maxLength: 1_000 },
+    effects: { type: "string", minLength: 12, maxLength: 1_000 },
+    refinements: {
+      type: "array",
+      minItems: 2,
+      maxItems: 12,
+      items: { type: "string", minLength: 8, maxLength: 500 },
+    },
+  },
+  required: [
+    "composition",
+    "hierarchy",
+    "typography",
+    "assetIntegration",
+    "formAndSurface",
+    "effects",
+    "refinements",
+  ],
+  additionalProperties: false,
+} as const;
+
 export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_CAPABILITIES_TOOL_NAME,
@@ -564,6 +814,22 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_PLAN_TOOL_NAME,
+    description:
+      "Define the executable visual plan for the current Page after inspection and before generating imagery or creating new design layers. The plan fixes the deliverable, artboard Frame and dimensions, composition hierarchy, spacing, palette, typography, effects, editable layers, raster asset roles, implementation steps, and rendered validation checks. Posters default to editable-composition and must live inside the named Frame. single-raster is allowed only when singleRasterEvidence exactly quotes an explicit request in the current user prompt. This tool records Run planning state; it does not mutate the canvas.",
+    inputSchema: MODEL_DESIGN_PLAN_SCHEMA,
+    risk: "read" as const,
+    approval: "never" as const,
+  },
+  {
+    name: DESIGN_REVIEW_TOOL_NAME,
+    description:
+      "Record a structured critique of the most recent opendesign_capture_canvas result before refining a material draft. Evaluate the rendered composition, hierarchy, typography, asset integration, form/surface, and effects, then name at least two concrete refinements. Do not submit generic praise. The host rejects a review when no newer canvas capture exists. This records Run review state and does not mutate the canvas.",
+    inputSchema: MODEL_VISUAL_REVIEW_SCHEMA,
+    risk: "read" as const,
+    approval: "never" as const,
+  },
+  {
     name: READ_IMAGE_TOOL_NAME,
     description:
       "Read an image that the user explicitly referenced in the current prompt or attached to the current run. source must be the exact attachment ID, absolute local path, file URL, or HTTP(S) image URL written by the user. The host resolves it as a bounded, content-addressed image attachment and returns multimodal content. This tool cannot enumerate directories, discover neighboring files, use browser cookies, or read an unmentioned source.",
@@ -581,11 +847,20 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: GENERATE_IMAGE_TOOL_NAME,
     description:
-      "Generate one original raster image with OpenDesign's globally configured image-generation model. This selection is application-wide and independent of the current conversation model. Use it when a poster, campaign visual, textured background, illustration, product scene, or other design requires generated imagery. The result is a content-addressed image attachment; call opendesign_place_image to add it to the current Design File. If visual inspection is needed, the generated attachment is also returned as multimodal content. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
+      "Generate one original raster image with OpenDesign's globally configured image-generation model. A successful opendesign_define_design_plan call must already declare the exact role as reference, background, hero, supporting-content, or final-single-image. This selection is application-wide and independent of the current conversation model. The result is a content-addressed image attachment; call opendesign_place_image only for a declared placeable role. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
     inputSchema: {
       type: "object",
       properties: {
         prompt: { type: "string", minLength: 1, maxLength: 32_000 },
+        role: {
+          enum: [
+            "reference",
+            "background",
+            "hero",
+            "supporting-content",
+            "final-single-image",
+          ],
+        },
         size: {
           type: "string",
           pattern: "^(auto|[1-9][0-9]{2,3}x[1-9][0-9]{2,3})$",
@@ -595,7 +870,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
         quality: { enum: ["auto", "low", "medium", "high"] },
         outputFormat: { enum: ["png", "jpeg", "webp"] },
       },
-      required: ["prompt"],
+      required: ["prompt", "role"],
       additionalProperties: false,
     },
     risk: "external" as const,
@@ -604,7 +879,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: PLACE_IMAGE_TOOL_NAME,
     description:
-      "Place an image attachment returned by opendesign_read_image, opendesign_generate_image, or explicitly attached by the user into the currently bound Design File. The host imports the approved attachment as a durable project image asset and inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
+      "Place an image attachment returned by opendesign_read_image, opendesign_generate_image, or explicitly attached by the user into the currently bound Design File. A successful design plan must declare the image role. Editable posters must place the image inside their planned artboard Frame and cannot use final-single-image. The host imports the approved attachment as a durable project image asset and inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
     inputSchema: {
       type: "object",
       properties: {
@@ -622,6 +897,14 @@ export const DESIGN_AGENT_TOOL_SPECS = [
         index: { type: "integer", minimum: 0 },
         nodeId: { type: "string", minLength: 1, maxLength: 256 },
         name: { type: "string", minLength: 1, maxLength: 256 },
+        role: {
+          enum: [
+            "background",
+            "hero",
+            "supporting-content",
+            "final-single-image",
+          ],
+        },
         x: { type: "number" },
         y: { type: "number" },
         width: { type: "number", exclusiveMinimum: 0 },
@@ -635,6 +918,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
         "index",
         "nodeId",
         "name",
+        "role",
         "x",
         "y",
       ],
@@ -683,6 +967,10 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === DESIGN_CAPTURE_TOOL_NAME) {
     return isRecord(input) && Object.keys(input).length === 0;
+  }
+  if (toolName === DESIGN_PLAN_TOOL_NAME) return isDesignPlanToolInput(input);
+  if (toolName === DESIGN_REVIEW_TOOL_NAME) {
+    return isDesignVisualReviewToolInput(input);
   }
   if (toolName === READ_IMAGE_TOOL_NAME) {
     return (
@@ -743,11 +1031,12 @@ export function isGenerateImageToolInput(
   input: unknown,
 ): input is GenerateImageToolInput {
   if (!isRecord(input)) return false;
-  const allowed = ["prompt", "size", "quality", "outputFormat"];
+  const allowed = ["prompt", "role", "size", "quality", "outputFormat"];
   return (
     typeof input.prompt === "string" &&
     input.prompt.trim().length > 0 &&
     input.prompt.length <= 32_000 &&
+    isRasterAssetRole(input.role) &&
     (input.size === undefined || isImageGenerationSize(input.size)) &&
     (input.quality === undefined ||
       input.quality === "auto" ||
@@ -773,6 +1062,7 @@ export function isPlaceImageToolInput(
     "index",
     "nodeId",
     "name",
+    "role",
     "x",
     "y",
     "width",
@@ -790,6 +1080,7 @@ export function isPlaceImageToolInput(
     typeof input.name === "string" &&
     input.name.length > 0 &&
     input.name.length <= 256 &&
+    isPlaceableRasterAssetRole(input.role) &&
     finite(input.x) &&
     finite(input.y) &&
     (input.width === undefined || positive(input.width)) &&
@@ -799,6 +1090,117 @@ export function isPlaceImageToolInput(
       input.fit === "contain" ||
       input.fit === "cover") &&
     Object.keys(input).every((key) => allowed.includes(key))
+  );
+}
+
+export function isDesignPlanToolInput(
+  input: unknown,
+): input is DesignPlanToolInput {
+  if (!isRecord(input)) return false;
+  const allowed = [
+    "pageId",
+    "deliverable",
+    "objective",
+    "outputMode",
+    "artboard",
+    "composition",
+    "visualSystem",
+    "rasterAssetRoles",
+    "editableLayers",
+    "implementationSteps",
+    "validationChecks",
+    "singleRasterEvidence",
+  ];
+  if (
+    !safeId(input.pageId) ||
+    !isDesignDeliverable(input.deliverable) ||
+    !boundedText(input.objective, 2_000) ||
+    (input.outputMode !== "editable-composition" &&
+      input.outputMode !== "single-raster") ||
+    !isRecord(input.artboard) ||
+    (input.artboard.mode !== "create" && input.artboard.mode !== "existing") ||
+    !safeId(input.artboard.frameId) ||
+    !positiveBounded(input.artboard.width, 100_000) ||
+    !positiveBounded(input.artboard.height, 100_000) ||
+    !exactKeys(input.artboard, ["mode", "frameId", "width", "height"]) ||
+    !isRecord(input.composition) ||
+    !boundedText(input.composition.direction, 1_000) ||
+    !boundedTextArray(input.composition.hierarchy, 2, 16, 256) ||
+    !boundedText(input.composition.assetIntegration, 1_000) ||
+    !boundedText(input.composition.spacingRhythm, 500) ||
+    !exactKeys(input.composition, [
+      "direction",
+      "hierarchy",
+      "assetIntegration",
+      "spacingRhythm",
+    ]) ||
+    !isRecord(input.visualSystem) ||
+    !boundedTextArray(input.visualSystem.avoidances, 2, 12, 256) ||
+    !boundedText(input.visualSystem.formLanguage, 1_000) ||
+    !boundedTextArray(input.visualSystem.palette, 1, 12, 128) ||
+    !boundedText(input.visualSystem.surfaceAndDepth, 1_000) ||
+    !boundedTextArray(input.visualSystem.typography, 1, 8, 256) ||
+    !boundedTextArray(input.visualSystem.effects, 0, 12, 256) ||
+    !exactKeys(input.visualSystem, [
+      "avoidances",
+      "formLanguage",
+      "palette",
+      "surfaceAndDepth",
+      "typography",
+      "effects",
+    ]) ||
+    !Array.isArray(input.rasterAssetRoles) ||
+    input.rasterAssetRoles.length > 5 ||
+    !input.rasterAssetRoles.every(isRasterAssetRole) ||
+    new Set(input.rasterAssetRoles).size !== input.rasterAssetRoles.length ||
+    !boundedTextArray(input.editableLayers, 2, 24, 256) ||
+    !boundedTextArray(input.implementationSteps, 2, 16, 500) ||
+    !boundedTextArray(input.validationChecks, 2, 16, 500) ||
+    !Object.keys(input).every((key) => allowed.includes(key))
+  ) {
+    return false;
+  }
+  if (input.outputMode === "single-raster") {
+    return (
+      boundedText(input.singleRasterEvidence, 200) &&
+      input.rasterAssetRoles.includes("final-single-image")
+    );
+  }
+  return (
+    input.singleRasterEvidence === undefined &&
+    !input.rasterAssetRoles.includes("final-single-image")
+  );
+}
+
+export function isDesignVisualReviewToolInput(
+  input: unknown,
+): input is DesignVisualReviewToolInput {
+  return (
+    isRecord(input) &&
+    substantiveReviewText(input.composition) &&
+    substantiveReviewText(input.hierarchy) &&
+    substantiveReviewText(input.typography) &&
+    substantiveReviewText(input.assetIntegration) &&
+    substantiveReviewText(input.formAndSurface) &&
+    substantiveReviewText(input.effects) &&
+    boundedTextArray(input.refinements, 2, 12, 500) &&
+    input.refinements.every((item) => item.trim().length >= 8) &&
+    exactKeys(input, [
+      "composition",
+      "hierarchy",
+      "typography",
+      "assetIntegration",
+      "formAndSurface",
+      "effects",
+      "refinements",
+    ])
+  );
+}
+
+export function designApplyRequiresPlan(input: DesignApplyToolInput): boolean {
+  return input.commands.some(
+    (command) =>
+      command.type === "insert_element" || command.type === "replace_subtree",
   );
 }
 
@@ -943,6 +1345,74 @@ function finite(value: unknown): value is number {
 
 function positive(value: unknown): value is number {
   return finite(value) && value > 0;
+}
+
+function positiveBounded(value: unknown, maximum: number): value is number {
+  return positive(value) && value <= maximum;
+}
+
+function boundedText(value: unknown, maximum: number): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= maximum
+  );
+}
+
+function substantiveReviewText(value: unknown): value is string {
+  if (!boundedText(value, 1_000) || value.trim().length < 12) return false;
+  return !/^(?:looks? good|fine|great|okay|ok|no issues?|很好|不错|没问题|可以|正常)[.!。！\s]*$/i.test(
+    value.trim(),
+  );
+}
+
+function boundedTextArray(
+  value: unknown,
+  minimumItems: number,
+  maximumItems: number,
+  maximumTextLength: number,
+): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length >= minimumItems &&
+    value.length <= maximumItems &&
+    value.every((item) => boundedText(item, maximumTextLength))
+  );
+}
+
+function exactKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  return (
+    Object.keys(value).length === keys.length &&
+    Object.keys(value).every((key) => keys.includes(key))
+  );
+}
+
+function isDesignDeliverable(value: unknown): value is DesignDeliverable {
+  return (
+    value === "ui" ||
+    value === "poster" ||
+    value === "logo" ||
+    value === "brand-asset" ||
+    value === "illustration" ||
+    value === "presentation-visual" ||
+    value === "other"
+  );
+}
+
+function isRasterAssetRole(value: unknown): value is RasterAssetRole {
+  return (
+    value === "reference" ||
+    value === "background" ||
+    value === "hero" ||
+    value === "supporting-content" ||
+    value === "final-single-image"
+  );
+}
+
+function isPlaceableRasterAssetRole(
+  value: unknown,
+): value is PlaceableRasterAssetRole {
+  return isRasterAssetRole(value) && value !== "reference";
 }
 
 function isImageGenerationSize(value: unknown): value is ImageGenerationSize {

@@ -46,6 +46,21 @@ describe("OpenDesign Agent system prompt", () => {
       "call opendesign_capture_canvas",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "call opendesign_define_design_plan",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "call opendesign_record_visual_review",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Default to outputMode editable-composition",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Do not make every section the same rounded card",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "one large opaque rectangle plus generic copy",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "Build every new composite object",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
