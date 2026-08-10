@@ -1,0 +1,44 @@
+{
+  "transactionId": "fixture_brand_refinement_01",
+  "documentId": "document_od_brand_01",
+  "baseRevision": 0,
+  "actor": {
+    "type": "agent",
+    "id": "fixture-agent",
+    "displayName": "Professional fixture replay"
+  },
+  "label": "Visual refinement",
+  "summary": "Recorded correction after the first visual inspection.",
+  "commands": [
+    {
+      "commandId": "rebalance_optical_opening",
+      "type": "update_properties",
+      "nodeId": "brand_mark_slot",
+      "transform": [1, 0, 0, 1, 158, 88],
+      "properties": { "path": "M 0 0 L 134 20 L 134 76 L 0 96 Z" }
+    },
+    {
+      "commandId": "focus_mark_glow",
+      "type": "update_properties",
+      "nodeId": "brand_mark",
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#02040d",
+          "opacity": 0.68,
+          "offset": { "x": 0, "y": 16 },
+          "blur": 34,
+          "spread": 2
+        },
+        {
+          "type": "outer-glow",
+          "color": "#61e9ff",
+          "opacity": 0.42,
+          "radius": 28,
+          "spread": 1
+        }
+      ]
+    }
+  ],
+  "extensions": { "fixtureReplay": true }
+}

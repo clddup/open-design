@@ -21,6 +21,11 @@ const fixtureSources = [
     promptPath: `${fixtureRoot}/OD-POSTER-01/prompt.md`,
     build: buildPosterFixture,
   },
+  {
+    id: "OD-BRAND-01",
+    promptPath: `${fixtureRoot}/OD-BRAND-01/prompt.md`,
+    build: buildBrandFixture,
+  },
 ];
 
 const iconPath = "apps/desktop/build/icons/64x64.png";
@@ -56,6 +61,8 @@ for (const source of fixtureSources) {
     artboardId: built.artboardId,
     compositeGroupId: built.compositeGroupId,
     requiredPathNodeIds: built.requiredPathNodeIds,
+    requiredBooleanNodeIds: built.requiredBooleanNodeIds,
+    booleanExpectations: built.booleanExpectations,
     projectionExpectations: built.projectionExpectations,
     minimumFeatures: built.minimumFeatures,
     artboard: built.artboard,
@@ -226,6 +233,8 @@ function buildPenguinFixture({ promptSha256 }) {
     artboardId,
     compositeGroupId: mascot.group.id,
     requiredPathNodeIds: mascot.requiredPathNodeIds,
+    requiredBooleanNodeIds: [],
+    booleanExpectations: null,
     projectionExpectations: {
       gradientNodeId: "penguin_body",
       effectNodeId: "penguin_scarf_tail",
@@ -603,6 +612,8 @@ function buildPosterFixture({ iconBase64, promptSha256 }) {
     artboardId,
     compositeGroupId: mascot.group.id,
     requiredPathNodeIds: mascot.requiredPathNodeIds,
+    requiredBooleanNodeIds: [],
+    booleanExpectations: null,
     projectionExpectations: {
       gradientNodeId: title.id,
       effectNodeId: horizon.id,
@@ -620,6 +631,275 @@ function buildPosterFixture({ iconBase64, promptSha256 }) {
       text: 6,
     },
     artboard: { width: 1440, height: 1024 },
+    initialDocument,
+    refinementTransaction,
+    finalDocument,
+  };
+}
+
+function buildBrandFixture({ promptSha256 }) {
+  const pageId = "page_brand_01";
+  const artboardId = "brand_artboard";
+  const identityId = "brand_identity";
+  const markId = "brand_mark";
+
+  const atmosphere = ellipse({
+    id: "brand_atmosphere",
+    name: "Signal atmosphere",
+    parentId: artboardId,
+    transform: [1, 0, 0, 1, 38, 54],
+    size: { width: 492, height: 492 },
+    fills: [
+      radialGradient([
+        [0, "#5ee8ff", 0.26],
+        [0.46, "#5568ff", 0.12],
+        [1, "#080c1c", 0],
+      ]),
+    ],
+    effects: [{ type: "layer-blur", radius: 34 }],
+    blendMode: "screen",
+  });
+  const identity = group({
+    id: identityId,
+    name: "OpenDesign identity",
+    parentId: artboardId,
+    childIds: [markId, "brand_wordmark", "brand_descriptor", "brand_axis"],
+    transform: [1, 0, 0, 1, 128, 150],
+    size: { width: 704, height: 340 },
+  });
+  const mark = booleanNode({
+    id: markId,
+    name: "Open orbit / Boolean subtract",
+    parentId: identityId,
+    childIds: ["brand_mark_outer", "brand_mark_inner", "brand_mark_slot"],
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 280, height: 280 },
+    operation: "subtract",
+    fills: [
+      angularGradient([
+        [0, "#68efff", 1],
+        [0.42, "#6677ff", 1],
+        [0.78, "#c65cff", 1],
+        [1, "#ff5f9e", 1],
+      ]),
+    ],
+    strokes: [solid("#d9fbff", 0.48)],
+    strokeWidth: 2,
+    strokeAlign: "inside",
+    effects: [
+      dropShadow("#02040d", 0.62, 14, 30, 2),
+      outerGlow("#61e9ff", 0.34, 24, 1),
+    ],
+  });
+  const outer = path({
+    id: "brand_mark_outer",
+    name: "Outer signal / Path",
+    parentId: markId,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 280, height: 280 },
+    pathData:
+      "M 140 0 C 217 0 280 63 280 140 C 280 217 217 280 140 280 C 63 280 0 217 0 140 C 0 63 63 0 140 0 Z",
+    fills: [solid("#ffffff", 1)],
+  });
+  const inner = ellipse({
+    id: "brand_mark_inner",
+    name: "Counter / Ellipse",
+    parentId: markId,
+    transform: [1, 0, 0, 1, 66, 66],
+    size: { width: 148, height: 148 },
+    fills: [solid("#ffffff", 1)],
+  });
+  const slot = path({
+    id: "brand_mark_slot",
+    name: "Optical opening / Path",
+    parentId: markId,
+    transform: [1, 0, 0, 1, 166, 92],
+    size: { width: 126, height: 96 },
+    pathData: "M 0 0 L 126 18 L 126 78 L 0 96 Z",
+    fills: [solid("#ffffff", 1)],
+  });
+  const wordmark = text({
+    id: "brand_wordmark",
+    name: "OpenDesign wordmark",
+    parentId: identityId,
+    transform: [1, 0, 0, 1, 342, 62],
+    size: { width: 362, height: 96 },
+    content: "OPEN\nDESIGN",
+    fontSize: 56,
+    fontWeight: 900,
+    lineHeight: 52,
+    letterSpacing: -1.8,
+    fills: [
+      linearGradient(
+        [
+          [0, "#ffffff", 1],
+          [0.52, "#d8efff", 1],
+          [1, "#9baeff", 1],
+        ],
+        116,
+      ),
+    ],
+    effects: [dropShadow("#02040d", 0.46, 8, 20, 1)],
+  });
+  const descriptor = text({
+    id: "brand_descriptor",
+    name: "Identity descriptor",
+    parentId: identityId,
+    transform: [1, 0, 0, 1, 346, 196],
+    size: { width: 358, height: 44 },
+    content: "AI-NATIVE CREATIVE SYSTEM",
+    fontSize: 13,
+    fontWeight: 700,
+    lineHeight: 20,
+    letterSpacing: 2.7,
+    fills: [solid("#9fdff3", 0.84)],
+  });
+  const axis = path({
+    id: "brand_axis",
+    name: "Identity axis / Path",
+    parentId: identityId,
+    transform: [1, 0, 0, 1, 346, 260],
+    size: { width: 334, height: 20 },
+    pathData: "M 0 10 C 86 -2 216 22 334 6",
+    fills: [],
+    strokes: [
+      linearGradient(
+        [
+          [0, "#64eaff", 0.16],
+          [0.52, "#7786ff", 0.92],
+          [1, "#ff62a3", 0.22],
+        ],
+        0,
+      ),
+    ],
+    strokeWidth: 2,
+    strokeCap: "round",
+    effects: [outerGlow("#6ce9ff", 0.32, 14, 0)],
+    blendMode: "screen",
+  });
+  const specimen = text({
+    id: "brand_specimen",
+    name: "Specimen reference",
+    parentId: artboardId,
+    transform: [1, 0, 0, 1, 128, 550],
+    size: { width: 704, height: 26 },
+    content: "OD-BRAND-01   /   NON-DESTRUCTIVE BOOLEAN MASTER",
+    fontSize: 11,
+    fontWeight: 700,
+    lineHeight: 18,
+    letterSpacing: 2.2,
+    fills: [solid("#8493c5", 0.72)],
+    textAlignHorizontal: "center",
+  });
+  const artboard = frame({
+    id: artboardId,
+    name: "OD-BRAND-01 / Master",
+    parentId: null,
+    childIds: [atmosphere.id, identity.id, specimen.id],
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 960, height: 640 },
+    fills: [
+      linearGradient(
+        [
+          [0, "#060914", 1],
+          [0.5, "#101831", 1],
+          [1, "#080a17", 1],
+        ],
+        132,
+      ),
+      radialGradient([
+        [0, "#304bd4", 0.18],
+        [1, "#080c1c", 0],
+      ]),
+    ],
+    cornerRadius: 28,
+    clipsContent: true,
+  });
+  const initialDocument = document({
+    documentId: "document_od_brand_01",
+    pageId,
+    pageName: "Brand",
+    rootNodeIds: [artboardId],
+    nodes: [
+      artboard,
+      atmosphere,
+      identity,
+      mark,
+      outer,
+      inner,
+      slot,
+      wordmark,
+      descriptor,
+      axis,
+      specimen,
+    ],
+    extensions: fixtureExtensions("OD-BRAND-01", promptSha256),
+  });
+  const refinementTransaction = transaction({
+    transactionId: "fixture_brand_refinement_01",
+    documentId: initialDocument.documentId,
+    commands: [
+      {
+        commandId: "rebalance_optical_opening",
+        type: "update_properties",
+        nodeId: slot.id,
+        transform: [1, 0, 0, 1, 158, 88],
+        properties: { path: "M 0 0 L 134 20 L 134 76 L 0 96 Z" },
+      },
+      {
+        commandId: "focus_mark_glow",
+        type: "update_properties",
+        nodeId: mark.id,
+        effects: [
+          dropShadow("#02040d", 0.68, 16, 34, 2),
+          outerGlow("#61e9ff", 0.42, 28, 1),
+        ],
+      },
+    ],
+  });
+  const finalDocument = applyFixtureRefinement(
+    initialDocument,
+    refinementTransaction,
+  );
+
+  return {
+    title: "Open orbit brand identity",
+    pageId,
+    artboardId,
+    compositeGroupId: identityId,
+    requiredPathNodeIds: [outer.id, slot.id, axis.id],
+    requiredBooleanNodeIds: [mark.id],
+    booleanExpectations: {
+      nodeId: mark.id,
+      operation: "subtract",
+      provider: "skia-pathkit",
+      providerVersion: "1.0.0",
+      resultBounds: {
+        x: 0,
+        y: 0,
+        width: 277.5323486328125,
+        height: 280,
+      },
+      resultPathSha256:
+        "985abf56d945f33326936e41f59ea11f6f96ca20286344353ceb0a8da2132b9d",
+    },
+    projectionExpectations: {
+      gradientNodeId: wordmark.id,
+      effectNodeId: wordmark.id,
+      maskNodeId: null,
+      imageNodeId: null,
+    },
+    minimumFeatures: {
+      paths: 3,
+      gradients: 5,
+      glows: 2,
+      blurs: 1,
+      blends: 2,
+      masks: 0,
+      images: 0,
+      text: 3,
+    },
+    artboard: { width: 960, height: 640 },
     initialDocument,
     refinementTransaction,
     finalDocument,
@@ -1169,6 +1449,33 @@ function frame({
 
 function group(base) {
   return { ...nodeBase({ ...base, kind: "group" }), properties: {} };
+}
+
+function booleanNode({
+  operation,
+  fills,
+  strokes = [],
+  strokeWidth = 0,
+  strokeAlign,
+  strokeCap,
+  strokeJoin,
+  dashPattern,
+  ...base
+}) {
+  return {
+    ...nodeBase({ ...base, kind: "boolean" }),
+    properties: shapeProperties({
+      operation,
+      fillRule: "nonzero",
+      fills,
+      strokes,
+      strokeWidth,
+      strokeAlign,
+      strokeCap,
+      strokeJoin,
+      dashPattern,
+    }),
+  };
 }
 
 function rectangle({

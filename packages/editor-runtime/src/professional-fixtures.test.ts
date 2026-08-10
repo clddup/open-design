@@ -29,6 +29,7 @@ describe("professional design fixtures", () => {
     expect(manifest.fixtures.map((fixture) => fixture.id)).toEqual([
       "OD-PENGUIN-01",
       "OD-POSTER-01",
+      "OD-BRAND-01",
     ]);
     expect(
       manifest.fixtures.every(
@@ -110,11 +111,32 @@ describe("professional design fixtures", () => {
         const node = document.nodesById[nodeId];
         expect(node).toMatchObject({
           kind: "path",
-          parentId: fixture.compositeGroupId,
         });
+        expect(
+          isWithinComposite(document, nodeId, fixture.compositeGroupId),
+        ).toBe(true);
         if (node?.kind === "path") {
           expect(node.properties.path.trim().length).toBeGreaterThan(12);
         }
+      }
+      for (const nodeId of fixture.requiredBooleanNodeIds) {
+        const node = document.nodesById[nodeId];
+        expect(node).toMatchObject({
+          kind: "boolean",
+          parentId: fixture.compositeGroupId,
+        });
+        if (node?.kind === "boolean") {
+          expect(node.childIds.length).toBeGreaterThanOrEqual(2);
+          expect(node.properties).not.toHaveProperty("path");
+        }
+      }
+      if (fixture.booleanExpectations) {
+        expect(
+          document.nodesById[fixture.booleanExpectations.nodeId],
+        ).toMatchObject({
+          kind: "boolean",
+          properties: { operation: fixture.booleanExpectations.operation },
+        });
       }
 
       const report = diagnoseDesignPages(document, [fixture.pageId]);
@@ -136,6 +158,21 @@ describe("professional design fixtures", () => {
 
 function readDocument(relativePath: string): DesignDocument {
   return normalizeDesignDocument(readJson(relativePath));
+}
+
+function isWithinComposite(
+  document: DesignDocument,
+  nodeId: string,
+  compositeId: string,
+): boolean {
+  const seen = new Set<string>();
+  let current = document.nodesById[nodeId];
+  while (current?.parentId && !seen.has(current.parentId)) {
+    if (current.parentId === compositeId) return true;
+    seen.add(current.parentId);
+    current = document.nodesById[current.parentId];
+  }
+  return false;
 }
 
 function readTransaction(relativePath: string): DesignTransaction {
@@ -167,6 +204,11 @@ interface ProfessionalFixture {
   artboardId: string;
   compositeGroupId: string;
   requiredPathNodeIds: string[];
+  requiredBooleanNodeIds: string[];
+  booleanExpectations: {
+    nodeId: string;
+    operation: "union" | "subtract" | "intersect" | "exclude";
+  } | null;
   minimumFeatures: Record<
     | "paths"
     | "gradients"

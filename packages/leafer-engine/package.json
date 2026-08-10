@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@opendesign/editor-runtime": "workspace:*",
+    "pathkit-wasm": "1.0.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -1,0 +1,367 @@
+{
+  "format": "dev.opendesign.document",
+  "schemaVersion": "1.4.0",
+  "documentId": "document_od_brand_01",
+  "revision": 0,
+  "pageOrder": ["page_brand_01"],
+  "pagesById": {
+    "page_brand_01": {
+      "id": "page_brand_01",
+      "name": "Brand",
+      "rootNodeIds": ["brand_artboard"],
+      "extensions": {}
+    }
+  },
+  "nodesById": {
+    "brand_artboard": {
+      "id": "brand_artboard",
+      "kind": "frame",
+      "name": "OD-BRAND-01 / Master",
+      "parentId": null,
+      "childIds": ["brand_atmosphere", "brand_identity", "brand_specimen"],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "size": { "width": 960, "height": 640 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#060914", "opacity": 1 },
+              { "offset": 0.5, "color": "#101831", "opacity": 1 },
+              { "offset": 1, "color": "#080a17", "opacity": 1 }
+            ],
+            "rotation": 132
+          },
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#304bd4", "opacity": 0.18 },
+              { "offset": 1, "color": "#080c1c", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0,
+        "cornerRadius": 28,
+        "clipsContent": true
+      }
+    },
+    "brand_atmosphere": {
+      "id": "brand_atmosphere",
+      "kind": "ellipse",
+      "name": "Signal atmosphere",
+      "parentId": "brand_artboard",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 38, 54],
+      "size": { "width": 492, "height": 492 },
+      "opacity": 1,
+      "blendMode": "screen",
+      "effects": [{ "type": "layer-blur", "radius": 34 }],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#5ee8ff", "opacity": 0.26 },
+              { "offset": 0.46, "color": "#5568ff", "opacity": 0.12 },
+              { "offset": 1, "color": "#080c1c", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "brand_identity": {
+      "id": "brand_identity",
+      "kind": "group",
+      "name": "OpenDesign identity",
+      "parentId": "brand_artboard",
+      "childIds": [
+        "brand_mark",
+        "brand_wordmark",
+        "brand_descriptor",
+        "brand_axis"
+      ],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 128, 150],
+      "size": { "width": 704, "height": 340 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {}
+    },
+    "brand_mark": {
+      "id": "brand_mark",
+      "kind": "boolean",
+      "name": "Open orbit / Boolean subtract",
+      "parentId": "brand_identity",
+      "childIds": ["brand_mark_outer", "brand_mark_inner", "brand_mark_slot"],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "size": { "width": 280, "height": 280 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#02040d",
+          "opacity": 0.62,
+          "offset": { "x": 0, "y": 14 },
+          "blur": 30,
+          "spread": 2
+        },
+        {
+          "type": "outer-glow",
+          "color": "#61e9ff",
+          "opacity": 0.34,
+          "radius": 24,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "operation": "subtract",
+        "fillRule": "nonzero",
+        "fills": [
+          {
+            "type": "angular-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#68efff", "opacity": 1 },
+              { "offset": 0.42, "color": "#6677ff", "opacity": 1 },
+              { "offset": 0.78, "color": "#c65cff", "opacity": 1 },
+              { "offset": 1, "color": "#ff5f9e", "opacity": 1 }
+            ]
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#d9fbff", "opacity": 0.48 }],
+        "strokeWidth": 2,
+        "strokeAlign": "inside"
+      }
+    },
+    "brand_mark_outer": {
+      "id": "brand_mark_outer",
+      "kind": "path",
+      "name": "Outer signal / Path",
+      "parentId": "brand_mark",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "size": { "width": 280, "height": 280 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 1 }],
+        "strokes": [],
+        "strokeWidth": 0,
+        "path": "M 140 0 C 217 0 280 63 280 140 C 280 217 217 280 140 280 C 63 280 0 217 0 140 C 0 63 63 0 140 0 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "brand_mark_inner": {
+      "id": "brand_mark_inner",
+      "kind": "ellipse",
+      "name": "Counter / Ellipse",
+      "parentId": "brand_mark",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 66, 66],
+      "size": { "width": 148, "height": 148 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 1 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "brand_mark_slot": {
+      "id": "brand_mark_slot",
+      "kind": "path",
+      "name": "Optical opening / Path",
+      "parentId": "brand_mark",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 166, 92],
+      "size": { "width": 126, "height": 96 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 1 }],
+        "strokes": [],
+        "strokeWidth": 0,
+        "path": "M 0 0 L 126 18 L 126 78 L 0 96 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "brand_wordmark": {
+      "id": "brand_wordmark",
+      "kind": "text",
+      "name": "OpenDesign wordmark",
+      "parentId": "brand_identity",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 342, 62],
+      "size": { "width": 362, "height": 96 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#02040d",
+          "opacity": 0.46,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 20,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "content": "OPEN\nDESIGN",
+        "fontFamily": "Arial",
+        "fontSize": 56,
+        "fontWeight": 900,
+        "lineHeight": 52,
+        "letterSpacing": -1.8,
+        "textAlignHorizontal": "left",
+        "textAlignVertical": "top",
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ffffff", "opacity": 1 },
+              { "offset": 0.52, "color": "#d8efff", "opacity": 1 },
+              { "offset": 1, "color": "#9baeff", "opacity": 1 }
+            ],
+            "rotation": 116
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "brand_descriptor": {
+      "id": "brand_descriptor",
+      "kind": "text",
+      "name": "Identity descriptor",
+      "parentId": "brand_identity",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 346, 196],
+      "size": { "width": 358, "height": 44 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "content": "AI-NATIVE CREATIVE SYSTEM",
+        "fontFamily": "Arial",
+        "fontSize": 13,
+        "fontWeight": 700,
+        "lineHeight": 20,
+        "letterSpacing": 2.7,
+        "textAlignHorizontal": "left",
+        "textAlignVertical": "top",
+        "fills": [{ "type": "solid", "color": "#9fdff3", "opacity": 0.84 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "brand_axis": {
+      "id": "brand_axis",
+      "kind": "path",
+      "name": "Identity axis / Path",
+      "parentId": "brand_identity",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 346, 260],
+      "size": { "width": 334, "height": 20 },
+      "opacity": 1,
+      "blendMode": "screen",
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#6ce9ff",
+          "opacity": 0.32,
+          "radius": 14,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [],
+        "strokes": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#64eaff", "opacity": 0.16 },
+              { "offset": 0.52, "color": "#7786ff", "opacity": 0.92 },
+              { "offset": 1, "color": "#ff62a3", "opacity": 0.22 }
+            ],
+            "rotation": 0
+          }
+        ],
+        "strokeWidth": 2,
+        "strokeCap": "round",
+        "path": "M 0 10 C 86 -2 216 22 334 6",
+        "fillRule": "nonzero"
+      }
+    },
+    "brand_specimen": {
+      "id": "brand_specimen",
+      "kind": "text",
+      "name": "Specimen reference",
+      "parentId": "brand_artboard",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 128, 550],
+      "size": { "width": 704, "height": 26 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "content": "OD-BRAND-01   /   NON-DESTRUCTIVE BOOLEAN MASTER",
+        "fontFamily": "Arial",
+        "fontSize": 11,
+        "fontWeight": 700,
+        "lineHeight": 18,
+        "letterSpacing": 2.2,
+        "textAlignHorizontal": "center",
+        "textAlignVertical": "top",
+        "fills": [{ "type": "solid", "color": "#8493c5", "opacity": 0.72 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    }
+  },
+  "componentsById": {},
+  "variantSetsById": {},
+  "tokenCollectionsById": {},
+  "tokensById": {},
+  "interactionsById": {},
+  "assetsById": {},
+  "extensions": {
+    "fixture": {
+      "id": "OD-BRAND-01",
+      "version": 1,
+      "generator": "scripts/generate-professional-fixtures.mjs",
+      "promptSha256": "c9848727b01bc445848e6cf594c26149878bdca01314be0252289baf49343bfb"
+    }
+  }
+}

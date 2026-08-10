@@ -28,6 +28,8 @@
         "penguin_scarf_knot",
         "penguin_scarf_tail"
       ],
+      "requiredBooleanNodeIds": [],
+      "booleanExpectations": null,
       "projectionExpectations": {
         "gradientNodeId": "penguin_body",
         "effectNodeId": "penguin_scarf_tail",
@@ -90,6 +92,8 @@
         "poster_penguin_scarf_knot",
         "poster_penguin_scarf_tail"
       ],
+      "requiredBooleanNodeIds": [],
+      "booleanExpectations": null,
       "projectionExpectations": {
         "gradientNodeId": "poster_title",
         "effectNodeId": "poster_horizon",
@@ -123,6 +127,77 @@
         "finalDocument": {
           "path": "fixtures/professional/OD-POSTER-01/document.opendesign",
           "sha256": "ceff33345ee2e5acc8966254f386f53cc90b4fb18aa246465937f87f7bbfe7cc"
+        }
+      },
+      "evidence": {
+        "structuralReplay": "automated",
+        "sceneProjection": "automated",
+        "pixelBaseline": "pending",
+        "liveAgentReplay": "pending",
+        "professionalExport": "pending",
+        "macos": "pending",
+        "windows": "pending"
+      }
+    },
+    {
+      "fixtureVersion": 1,
+      "id": "OD-BRAND-01",
+      "title": "Open orbit brand identity",
+      "pageId": "page_brand_01",
+      "artboardId": "brand_artboard",
+      "compositeGroupId": "brand_identity",
+      "requiredPathNodeIds": [
+        "brand_mark_outer",
+        "brand_mark_slot",
+        "brand_axis"
+      ],
+      "requiredBooleanNodeIds": ["brand_mark"],
+      "booleanExpectations": {
+        "nodeId": "brand_mark",
+        "operation": "subtract",
+        "provider": "skia-pathkit",
+        "providerVersion": "1.0.0",
+        "resultBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 277.5323486328125,
+          "height": 280
+        },
+        "resultPathSha256": "985abf56d945f33326936e41f59ea11f6f96ca20286344353ceb0a8da2132b9d"
+      },
+      "projectionExpectations": {
+        "gradientNodeId": "brand_wordmark",
+        "effectNodeId": "brand_wordmark",
+        "maskNodeId": null,
+        "imageNodeId": null
+      },
+      "minimumFeatures": {
+        "paths": 3,
+        "gradients": 5,
+        "glows": 2,
+        "blurs": 1,
+        "blends": 2,
+        "masks": 0,
+        "images": 0,
+        "text": 3
+      },
+      "artboard": { "width": 960, "height": 640 },
+      "files": {
+        "prompt": {
+          "path": "fixtures/professional/OD-BRAND-01/prompt.md",
+          "sha256": "c9848727b01bc445848e6cf594c26149878bdca01314be0252289baf49343bfb"
+        },
+        "initialDocument": {
+          "path": "fixtures/professional/OD-BRAND-01/initial.opendesign",
+          "sha256": "95eaaa9d2fc3a92ce68d24b9d118d8a73350f16a4e92069cd945cf102aa832ce"
+        },
+        "refinementTransaction": {
+          "path": "fixtures/professional/OD-BRAND-01/refinement.transaction.json",
+          "sha256": "c8da9944a39926ce78f91bf29bd58071ff2fec1e308df3cf15ea4cec6ff4fd25"
+        },
+        "finalDocument": {
+          "path": "fixtures/professional/OD-BRAND-01/document.opendesign",
+          "sha256": "f3198f7cd1816e76595eac0a6b7d4d3965a8d5ad855d993d5908fefd19e8d409"
         }
       },
       "evidence": {

@@ -303,10 +303,12 @@
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/editor-runtime/src/boolean-operations.test.ts",
+          "packages/editor-runtime/src/professional-fixtures.test.ts",
           "packages/editor-runtime/src/selection-navigation.test.ts",
           "packages/geometry-service/src/vector-path.test.ts",
           "packages/geometry-service/src/boolean-resolver.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
+          "packages/leafer-engine/src/professional-fixtures.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
