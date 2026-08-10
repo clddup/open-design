@@ -1,0 +1,824 @@
+{
+  "format": "dev.opendesign.document",
+  "schemaVersion": "1.2.0",
+  "documentId": "document_od_penguin_01",
+  "revision": 1,
+  "pageOrder": ["page_penguin_01"],
+  "pagesById": {
+    "page_penguin_01": {
+      "id": "page_penguin_01",
+      "name": "Penguin",
+      "rootNodeIds": ["penguin_artboard"],
+      "extensions": {}
+    }
+  },
+  "nodesById": {
+    "penguin_artboard": {
+      "id": "penguin_artboard",
+      "kind": "frame",
+      "name": "OD-PENGUIN-01 Artboard",
+      "parentId": null,
+      "childIds": [
+        "penguin_background_orb",
+        "penguin_mascot",
+        "penguin_caption"
+      ],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "size": { "width": 760, "height": 760 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#070b19", "opacity": 1 },
+              { "offset": 0.5, "color": "#101a3a", "opacity": 1 },
+              { "offset": 1, "color": "#080b16", "opacity": 1 }
+            ],
+            "rotation": 132
+          },
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#344ed8", "opacity": 0.34 },
+              { "offset": 1, "color": "#0b1024", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0,
+        "cornerRadius": 32,
+        "clipsContent": true
+      }
+    },
+    "penguin_background_orb": {
+      "id": "penguin_background_orb",
+      "kind": "ellipse",
+      "name": "Ice halo",
+      "parentId": "penguin_artboard",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 90, 80],
+      "size": { "width": 580, "height": 580 },
+      "opacity": 1,
+      "blendMode": "screen",
+      "effects": [{ "type": "layer-blur", "radius": 18 }],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#56d8ff", "opacity": 0.34 },
+              { "offset": 0.55, "color": "#7567ff", "opacity": 0.12 },
+              { "offset": 1, "color": "#0b1024", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "penguin_mascot": {
+      "id": "penguin_mascot",
+      "kind": "group",
+      "name": "Orbit Penguin",
+      "parentId": "penguin_artboard",
+      "childIds": [
+        "penguin_halo",
+        "penguin_foot_left",
+        "penguin_foot_right",
+        "penguin_scarf_tail",
+        "penguin_wing_left",
+        "penguin_wing_right",
+        "penguin_body",
+        "penguin_belly",
+        "penguin_face",
+        "penguin_eye_left",
+        "penguin_eye_right",
+        "penguin_pupil_left",
+        "penguin_pupil_right",
+        "penguin_highlight_left",
+        "penguin_highlight_right",
+        "penguin_beak",
+        "penguin_scarf_band",
+        "penguin_scarf_knot"
+      ],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 170, 64],
+      "size": { "width": 420, "height": 570 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {}
+    },
+    "penguin_halo": {
+      "id": "penguin_halo",
+      "kind": "ellipse",
+      "name": "Mascot aura",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 18, 26],
+      "size": { "width": 384, "height": 520 },
+      "opacity": 1,
+      "blendMode": "screen",
+      "effects": [{ "type": "layer-blur", "radius": 14 }],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#64ecff", "opacity": 0.26 },
+              { "offset": 0.52, "color": "#5865ff", "opacity": 0.09 },
+              { "offset": 1, "color": "#0a0d20", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "penguin_foot_left": {
+      "id": "penguin_foot_left",
+      "kind": "path",
+      "name": "Left foot / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 76, 474],
+      "size": { "width": 126, "height": 62 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#050713",
+          "opacity": 0.46,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 16,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ffd166", "opacity": 1 },
+              { "offset": 0.58, "color": "#ff8a3d", "opacity": 1 },
+              { "offset": 1, "color": "#e34d5b", "opacity": 1 }
+            ],
+            "rotation": 18
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffcf75", "opacity": 0.55 }],
+        "strokeWidth": 2,
+        "path": "M 8 48 C 18 20 42 4 70 10 C 86 12 94 22 100 34 C 108 28 118 30 124 40 C 116 56 94 62 64 60 C 34 62 14 58 8 48 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_foot_right": {
+      "id": "penguin_foot_right",
+      "kind": "path",
+      "name": "Right foot / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 218, 474],
+      "size": { "width": 126, "height": 62 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#050713",
+          "opacity": 0.46,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 16,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#e34d5b", "opacity": 1 },
+              { "offset": 0.42, "color": "#ff8a3d", "opacity": 1 },
+              { "offset": 1, "color": "#ffd166", "opacity": 1 }
+            ],
+            "rotation": 162
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffcf75", "opacity": 0.55 }],
+        "strokeWidth": 2,
+        "path": "M 2 40 C 10 30 20 28 28 34 C 34 20 44 12 60 10 C 90 4 112 20 122 48 C 116 58 96 62 66 60 C 36 62 14 56 2 40 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_scarf_tail": {
+      "id": "penguin_scarf_tail",
+      "kind": "path",
+      "name": "Scarf tail / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 276, 278],
+      "size": { "width": 124, "height": 186 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#080b20",
+          "opacity": 0.52,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 18,
+          "spread": 1
+        },
+        {
+          "type": "outer-glow",
+          "color": "#ff5b86",
+          "opacity": 0.34,
+          "radius": 18,
+          "spread": 2
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ff4f87", "opacity": 1 },
+              { "offset": 0.48, "color": "#ff6e66", "opacity": 1 },
+              { "offset": 1, "color": "#ffb24e", "opacity": 1 }
+            ],
+            "rotation": 126
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffd4dd", "opacity": 0.42 }],
+        "strokeWidth": 2,
+        "path": "M 10 0 C 48 12 84 8 112 28 C 102 62 88 86 72 106 L 108 174 L 72 158 L 48 184 L 30 112 C 14 84 2 42 10 0 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_wing_left": {
+      "id": "penguin_wing_left",
+      "kind": "path",
+      "name": "Left wing / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [0.99, -0.08, 0.08, 0.99, 4, 174],
+      "size": { "width": 122, "height": 246 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#02030a",
+          "opacity": 0.58,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 20,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#172752", "opacity": 1 },
+              { "offset": 0.6, "color": "#0a1028", "opacity": 1 },
+              { "offset": 1, "color": "#03050c", "opacity": 1 }
+            ],
+            "rotation": 82
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#5ce8ff", "opacity": 0.22 }],
+        "strokeWidth": 2,
+        "path": "M 112 4 C 58 10 20 48 6 104 C -4 150 8 210 42 240 C 58 218 68 192 72 164 C 86 184 102 192 118 184 C 104 124 106 66 112 4 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_wing_right": {
+      "id": "penguin_wing_right",
+      "kind": "path",
+      "name": "Right wing / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [0.985, 0.12, -0.12, 0.985, 307, 166],
+      "size": { "width": 122, "height": 246 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#02030a",
+          "opacity": 0.58,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 20,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#172752", "opacity": 1 },
+              { "offset": 0.6, "color": "#0a1028", "opacity": 1 },
+              { "offset": 1, "color": "#03050c", "opacity": 1 }
+            ],
+            "rotation": 98
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#5ce8ff", "opacity": 0.22 }],
+        "strokeWidth": 2,
+        "path": "M 10 4 C 64 10 102 48 116 104 C 126 150 114 210 80 240 C 64 218 54 192 50 164 C 36 184 20 192 4 184 C 18 124 16 66 10 4 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_body": {
+      "id": "penguin_body",
+      "kind": "path",
+      "name": "Body / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 50, 42],
+      "size": { "width": 320, "height": 446 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#01030a",
+          "opacity": 0.72,
+          "offset": { "x": 0, "y": 16 },
+          "blur": 34,
+          "spread": 4
+        },
+        {
+          "type": "outer-glow",
+          "color": "#4bdfff",
+          "opacity": 0.2,
+          "radius": 24,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#243968", "opacity": 1 },
+              { "offset": 0.42, "color": "#0d1736", "opacity": 1 },
+              { "offset": 1, "color": "#03050e", "opacity": 1 }
+            ],
+            "rotation": 138
+          },
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#4be7ff", "opacity": 0.18 },
+              { "offset": 1, "color": "#071022", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#76efff", "opacity": 0.56 },
+              { "offset": 0.45, "color": "#6f79ff", "opacity": 0.18 },
+              { "offset": 1, "color": "#141c3e", "opacity": 0.12 }
+            ],
+            "rotation": 120
+          }
+        ],
+        "strokeWidth": 3,
+        "strokeJoin": "round",
+        "path": "M 160 2 C 238 2 294 62 308 154 C 326 268 296 376 226 422 C 188 448 126 450 84 426 C 18 388 -8 282 10 174 C 26 76 80 2 160 2 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_belly": {
+      "id": "penguin_belly",
+      "kind": "path",
+      "name": "Belly / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 92, 178],
+      "size": { "width": 236, "height": 266 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "inner-glow",
+          "color": "#79dfff",
+          "opacity": 0.22,
+          "radius": 18,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#f8fbff", "opacity": 1 },
+              { "offset": 0.56, "color": "#dbeaff", "opacity": 1 },
+              { "offset": 1, "color": "#9fc9e7", "opacity": 1 }
+            ],
+            "rotation": 112
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffffff", "opacity": 0.34 }],
+        "strokeWidth": 2,
+        "path": "M 118 0 C 180 0 224 58 232 134 C 240 202 204 258 118 264 C 34 258 -2 202 6 134 C 14 58 56 0 118 0 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_face": {
+      "id": "penguin_face",
+      "kind": "path",
+      "name": "Face patch / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 80, 82],
+      "size": { "width": 260, "height": 160 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#05102a",
+          "opacity": 0.28,
+          "offset": { "x": 0, "y": 4 },
+          "blur": 14,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#f9fcff", "opacity": 1 },
+              { "offset": 1, "color": "#cfe8fa", "opacity": 1 }
+            ],
+            "rotation": 104
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffffff", "opacity": 0.5 }],
+        "strokeWidth": 2,
+        "path": "M 130 10 C 174 -8 232 10 252 54 C 270 98 238 144 184 150 C 160 152 142 144 130 130 C 116 144 98 152 74 150 C 20 144 -12 98 8 54 C 28 10 84 -8 130 10 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_eye_left": {
+      "id": "penguin_eye_left",
+      "kind": "ellipse",
+      "name": "Left eye",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 126, 116],
+      "size": { "width": 56, "height": 64 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 1 }],
+        "strokes": [{ "type": "solid", "color": "#9edfff", "opacity": 0.5 }],
+        "strokeWidth": 2
+      }
+    },
+    "penguin_eye_right": {
+      "id": "penguin_eye_right",
+      "kind": "ellipse",
+      "name": "Right eye",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 238, 116],
+      "size": { "width": 56, "height": 64 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 1 }],
+        "strokes": [{ "type": "solid", "color": "#9edfff", "opacity": 0.5 }],
+        "strokeWidth": 2
+      }
+    },
+    "penguin_pupil_left": {
+      "id": "penguin_pupil_left",
+      "kind": "ellipse",
+      "name": "Left pupil",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 144, 132],
+      "size": { "width": 28, "height": 36 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#62dcff",
+          "opacity": 0.28,
+          "radius": 8,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#2445a0", "opacity": 1 },
+              { "offset": 1, "color": "#030610", "opacity": 1 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "penguin_pupil_right": {
+      "id": "penguin_pupil_right",
+      "kind": "ellipse",
+      "name": "Right pupil",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 248, 132],
+      "size": { "width": 28, "height": 36 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#62dcff",
+          "opacity": 0.28,
+          "radius": 8,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#2445a0", "opacity": 1 },
+              { "offset": 1, "color": "#030610", "opacity": 1 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "penguin_highlight_left": {
+      "id": "penguin_highlight_left",
+      "kind": "ellipse",
+      "name": "Left eye light",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 150, 136],
+      "size": { "width": 9, "height": 11 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 0.96 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "penguin_highlight_right": {
+      "id": "penguin_highlight_right",
+      "kind": "ellipse",
+      "name": "Right eye light",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 254, 136],
+      "size": { "width": 9, "height": 11 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 0.96 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "penguin_beak": {
+      "id": "penguin_beak",
+      "kind": "path",
+      "name": "Beak / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 178, 176],
+      "size": { "width": 64, "height": 54 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#4b1430",
+          "opacity": 0.28,
+          "offset": { "x": 0, "y": 3 },
+          "blur": 8,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ffd166", "opacity": 1 },
+              { "offset": 1, "color": "#ff6b4a", "opacity": 1 }
+            ],
+            "rotation": 90
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#fff0b2", "opacity": 0.6 }],
+        "strokeWidth": 1.5,
+        "path": "M 4 24 C 18 8 44 8 60 24 C 50 42 40 52 32 52 C 24 52 14 42 4 24 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_scarf_band": {
+      "id": "penguin_scarf_band",
+      "kind": "path",
+      "name": "Scarf band / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 66, 244],
+      "size": { "width": 290, "height": 82 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#06091a",
+          "opacity": 0.5,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 18,
+          "spread": 1
+        },
+        {
+          "type": "outer-glow",
+          "color": "#ff4f87",
+          "opacity": 0.26,
+          "radius": 16,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ff3f82", "opacity": 1 },
+              { "offset": 0.52, "color": "#ff6a65", "opacity": 1 },
+              { "offset": 1, "color": "#ffb14a", "opacity": 1 }
+            ],
+            "rotation": 10
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffd8e0", "opacity": 0.46 }],
+        "strokeWidth": 2,
+        "path": "M 8 16 C 72 -2 220 -2 282 16 L 274 64 C 208 82 78 82 16 64 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_scarf_knot": {
+      "id": "penguin_scarf_knot",
+      "kind": "path",
+      "name": "Scarf knot / Path",
+      "parentId": "penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 270, 248],
+      "size": { "width": 82, "height": 86 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#ff5b86",
+          "opacity": 0.32,
+          "radius": 14,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "angular-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ff3f82", "opacity": 1 },
+              { "offset": 0.52, "color": "#ff8d52", "opacity": 1 },
+              { "offset": 1, "color": "#ffcf67", "opacity": 1 }
+            ]
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffe0e7", "opacity": 0.42 }],
+        "strokeWidth": 2,
+        "path": "M 8 42 C 8 14 28 2 48 8 C 72 14 82 38 70 62 C 58 84 28 88 12 68 C 6 60 4 50 8 42 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "penguin_caption": {
+      "id": "penguin_caption",
+      "kind": "text",
+      "name": "Specimen caption",
+      "parentId": "penguin_artboard",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 170, 684],
+      "size": { "width": 420, "height": 36 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "content": "ORBIT PENGUIN  /  VECTOR STUDY 01",
+        "fontFamily": "Arial",
+        "fontSize": 14,
+        "fontWeight": 700,
+        "lineHeight": 20,
+        "letterSpacing": 2.4,
+        "textAlignHorizontal": "center",
+        "textAlignVertical": "top",
+        "fills": [{ "type": "solid", "color": "#b7c6f8", "opacity": 0.84 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    }
+  },
+  "componentsById": {},
+  "variantSetsById": {},
+  "tokenCollectionsById": {},
+  "tokensById": {},
+  "interactionsById": {},
+  "assetsById": {},
+  "extensions": {
+    "fixture": {
+      "id": "OD-PENGUIN-01",
+      "version": 1,
+      "generator": "scripts/generate-professional-fixtures.mjs",
+      "promptSha256": "3abe2356f05a1623b76a146dbf882dc467f5602c72f4d2986ffa8191bbc52562"
+    }
+  }
+}

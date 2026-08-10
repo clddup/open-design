@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "generatedBy": "scripts/generate-professional-fixtures.mjs",
+  "documentSchemaVersion": "1.2.0",
+  "engineBaseline": "leafer-editor@2.2.9",
+  "sourceAssets": [
+    {
+      "path": "apps/desktop/build/icons/64x64.png",
+      "sha256": "9d46377c3e3c17115a78cb43ac8948891e6ef9243ed9c18a04661a5bd1349ba4",
+      "purpose": "Embedded image-layer projection evidence in OD-POSTER-01"
+    }
+  ],
+  "fixtures": [
+    {
+      "fixtureVersion": 1,
+      "id": "OD-PENGUIN-01",
+      "title": "Orbit Penguin vector mascot",
+      "pageId": "page_penguin_01",
+      "artboardId": "penguin_artboard",
+      "compositeGroupId": "penguin_mascot",
+      "requiredPathNodeIds": [
+        "penguin_body",
+        "penguin_wing_left",
+        "penguin_wing_right",
+        "penguin_foot_left",
+        "penguin_foot_right",
+        "penguin_scarf_band",
+        "penguin_scarf_knot",
+        "penguin_scarf_tail"
+      ],
+      "projectionExpectations": {
+        "gradientNodeId": "penguin_body",
+        "effectNodeId": "penguin_scarf_tail",
+        "maskNodeId": null,
+        "imageNodeId": null
+      },
+      "minimumFeatures": {
+        "paths": 11,
+        "gradients": 10,
+        "glows": 3,
+        "blurs": 2,
+        "blends": 2,
+        "masks": 0,
+        "images": 0,
+        "text": 1
+      },
+      "artboard": { "width": 760, "height": 760 },
+      "files": {
+        "prompt": {
+          "path": "fixtures/professional/OD-PENGUIN-01/prompt.md",
+          "sha256": "3abe2356f05a1623b76a146dbf882dc467f5602c72f4d2986ffa8191bbc52562"
+        },
+        "initialDocument": {
+          "path": "fixtures/professional/OD-PENGUIN-01/initial.opendesign",
+          "sha256": "8927c2deea011109e12ebeccae3365ef14fb5e72e3bf4681c687811712a893d7"
+        },
+        "refinementTransaction": {
+          "path": "fixtures/professional/OD-PENGUIN-01/refinement.transaction.json",
+          "sha256": "d55dd0470b4f8efae0e90b3116f86661e2ffe1b409a254dbcbdd894173cbe6ad"
+        },
+        "finalDocument": {
+          "path": "fixtures/professional/OD-PENGUIN-01/document.opendesign",
+          "sha256": "d66b951ae4af8dbdaa81c5ded2f541ff76bc5eecff29eb2136a02b94d318dd80"
+        }
+      },
+      "evidence": {
+        "structuralReplay": "automated",
+        "sceneProjection": "automated",
+        "pixelBaseline": "pending",
+        "liveAgentReplay": "pending",
+        "professionalExport": "pending",
+        "macos": "pending",
+        "windows": "pending"
+      }
+    },
+    {
+      "fixtureVersion": 1,
+      "id": "OD-POSTER-01",
+      "title": "Beyond the Ice launch poster",
+      "pageId": "page_poster_01",
+      "artboardId": "poster_artboard",
+      "compositeGroupId": "poster_penguin_mascot",
+      "requiredPathNodeIds": [
+        "poster_penguin_body",
+        "poster_penguin_wing_left",
+        "poster_penguin_wing_right",
+        "poster_penguin_foot_left",
+        "poster_penguin_foot_right",
+        "poster_penguin_scarf_band",
+        "poster_penguin_scarf_knot",
+        "poster_penguin_scarf_tail"
+      ],
+      "projectionExpectations": {
+        "gradientNodeId": "poster_title",
+        "effectNodeId": "poster_horizon",
+        "maskNodeId": "poster_aurora_mask",
+        "imageNodeId": "poster_signal_image"
+      },
+      "minimumFeatures": {
+        "paths": 12,
+        "gradients": 14,
+        "glows": 6,
+        "blurs": 3,
+        "blends": 6,
+        "masks": 1,
+        "images": 1,
+        "text": 6
+      },
+      "artboard": { "width": 1440, "height": 1024 },
+      "files": {
+        "prompt": {
+          "path": "fixtures/professional/OD-POSTER-01/prompt.md",
+          "sha256": "9262e270c9408944eecf78ae8cfc1e128b95be9e6e22c84d6f40a0bdbbb5f9c6"
+        },
+        "initialDocument": {
+          "path": "fixtures/professional/OD-POSTER-01/initial.opendesign",
+          "sha256": "0f7eb14eab004a6562c1a31e93a16089a66a75c69bc9c149a3e35a81a7df8f31"
+        },
+        "refinementTransaction": {
+          "path": "fixtures/professional/OD-POSTER-01/refinement.transaction.json",
+          "sha256": "e0393083917bfa6ea382bbc89a530985843966383eba12f065c1135e450900ae"
+        },
+        "finalDocument": {
+          "path": "fixtures/professional/OD-POSTER-01/document.opendesign",
+          "sha256": "54667025cbd61c89dc17bdf21a013f8d68b24e0e4727f323f3741698d0aefe9c"
+        }
+      },
+      "evidence": {
+        "structuralReplay": "automated",
+        "sceneProjection": "automated",
+        "pixelBaseline": "pending",
+        "liveAgentReplay": "pending",
+        "professionalExport": "pending",
+        "macos": "pending",
+        "windows": "pending"
+      }
+    }
+  ]
+}

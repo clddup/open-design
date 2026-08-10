@@ -1,0 +1,1226 @@
+{
+  "format": "dev.opendesign.document",
+  "schemaVersion": "1.2.0",
+  "documentId": "document_od_poster_01",
+  "revision": 0,
+  "pageOrder": ["page_poster_01"],
+  "pagesById": {
+    "page_poster_01": {
+      "id": "page_poster_01",
+      "name": "Poster",
+      "rootNodeIds": ["poster_artboard"],
+      "extensions": {}
+    }
+  },
+  "nodesById": {
+    "poster_artboard": {
+      "id": "poster_artboard",
+      "kind": "frame",
+      "name": "OD-POSTER-01 / 1440×1024",
+      "parentId": null,
+      "childIds": [
+        "poster_atmosphere",
+        "poster_signal_image",
+        "poster_copy",
+        "poster_penguin_mascot",
+        "poster_footer"
+      ],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "size": { "width": 1440, "height": 1024 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#050713", "opacity": 1 },
+              { "offset": 0.46, "color": "#0e1734", "opacity": 1 },
+              { "offset": 1, "color": "#090919", "opacity": 1 }
+            ],
+            "rotation": 128
+          },
+          {
+            "type": "angular-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#2731a8", "opacity": 0.2 },
+              { "offset": 0.5, "color": "#00d8ff", "opacity": 0.04 },
+              { "offset": 1, "color": "#ff3f91", "opacity": 0.12 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0,
+        "cornerRadius": 0,
+        "clipsContent": true
+      }
+    },
+    "poster_atmosphere": {
+      "id": "poster_atmosphere",
+      "kind": "group",
+      "name": "Atmosphere",
+      "parentId": "poster_artboard",
+      "childIds": [
+        "poster_orb_cyan",
+        "poster_orb_magenta",
+        "poster_aurora_mask",
+        "poster_horizon",
+        "poster_axis"
+      ],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "size": { "width": 1440, "height": 1024 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {}
+    },
+    "poster_orb_cyan": {
+      "id": "poster_orb_cyan",
+      "kind": "ellipse",
+      "name": "Cyan atmosphere",
+      "parentId": "poster_atmosphere",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 820, -160],
+      "size": { "width": 560, "height": 560 },
+      "opacity": 1,
+      "blendMode": "screen",
+      "effects": [{ "type": "layer-blur", "radius": 46 }],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#32e7ff", "opacity": 0.58 },
+              { "offset": 0.52, "color": "#1c75ff", "opacity": 0.16 },
+              { "offset": 1, "color": "#081027", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_orb_magenta": {
+      "id": "poster_orb_magenta",
+      "kind": "ellipse",
+      "name": "Magenta atmosphere",
+      "parentId": "poster_atmosphere",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, -130, 650],
+      "size": { "width": 500, "height": 500 },
+      "opacity": 1,
+      "blendMode": "screen",
+      "effects": [{ "type": "layer-blur", "radius": 54 }],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ff477e", "opacity": 0.52 },
+              { "offset": 0.5, "color": "#8d3cff", "opacity": 0.18 },
+              { "offset": 1, "color": "#090b1a", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_aurora_mask": {
+      "id": "poster_aurora_mask",
+      "kind": "ellipse",
+      "name": "Aurora luminance mask",
+      "parentId": "poster_atmosphere",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 748, 118],
+      "size": { "width": 610, "height": 730 },
+      "opacity": 1,
+      "blendMode": "screen",
+      "maskMode": "luminance",
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ffffff", "opacity": 0.3 },
+              { "offset": 0.62, "color": "#6de8ff", "opacity": 0.08 },
+              { "offset": 1, "color": "#000000", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_horizon": {
+      "id": "poster_horizon",
+      "kind": "path",
+      "name": "Energy horizon",
+      "parentId": "poster_atmosphere",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 52, 650],
+      "size": { "width": 1336, "height": 220 },
+      "opacity": 1,
+      "blendMode": "screen",
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#58e8ff",
+          "opacity": 0.62,
+          "radius": 24,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [],
+        "strokes": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#4eeaff", "opacity": 0.08 },
+              { "offset": 0.48, "color": "#7af3ff", "opacity": 0.92 },
+              { "offset": 1, "color": "#ff5d9e", "opacity": 0.18 }
+            ],
+            "rotation": 0
+          }
+        ],
+        "strokeWidth": 3,
+        "strokeCap": "round",
+        "dashPattern": [18, 12],
+        "path": "M 0 178 C 220 52 420 216 650 96 C 850 -8 1020 158 1336 24",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_axis": {
+      "id": "poster_axis",
+      "kind": "rectangle",
+      "name": "Editorial axis",
+      "parentId": "poster_atmosphere",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 84, 88],
+      "size": { "width": 3, "height": 838 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#7df0ff", "opacity": 0.9 },
+              { "offset": 0.52, "color": "#7584ff", "opacity": 0.34 },
+              { "offset": 1, "color": "#ff5d9e", "opacity": 0.08 }
+            ],
+            "rotation": 90
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0,
+        "cornerRadius": 2
+      }
+    },
+    "poster_signal_image": {
+      "id": "poster_signal_image",
+      "kind": "image",
+      "name": "Signal image",
+      "parentId": "poster_artboard",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 1238, 74],
+      "size": { "width": 104, "height": 104 },
+      "opacity": 0.34,
+      "blendMode": "screen",
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#6de8ff",
+          "opacity": 0.48,
+          "radius": 30,
+          "spread": 2
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "assetId": "asset_poster_signal",
+        "fit": "contain",
+        "altText": "",
+        "cornerRadius": 0
+      }
+    },
+    "poster_copy": {
+      "id": "poster_copy",
+      "kind": "group",
+      "name": "Launch copy",
+      "parentId": "poster_artboard",
+      "childIds": [
+        "poster_kicker",
+        "poster_title",
+        "poster_subtitle",
+        "poster_meta",
+        "poster_chapter"
+      ],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "size": { "width": 760, "height": 760 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {}
+    },
+    "poster_kicker": {
+      "id": "poster_kicker",
+      "kind": "text",
+      "name": "Kicker",
+      "parentId": "poster_copy",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 122, 106],
+      "size": { "width": 580, "height": 32 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "content": "OPEN DESIGN / NEW CREATIVE ORBIT",
+        "fontFamily": "Arial",
+        "fontSize": 16,
+        "fontWeight": 700,
+        "lineHeight": 24,
+        "letterSpacing": 3.2,
+        "textAlignHorizontal": "left",
+        "textAlignVertical": "top",
+        "fills": [{ "type": "solid", "color": "#7cecff", "opacity": 0.96 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_title": {
+      "id": "poster_title",
+      "kind": "text",
+      "name": "Hero title",
+      "parentId": "poster_copy",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 112, 172],
+      "size": { "width": 650, "height": 276 },
+      "opacity": 0.88,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#02040d",
+          "opacity": 0.62,
+          "offset": { "x": 0, "y": 14 },
+          "blur": 34,
+          "spread": 2
+        },
+        {
+          "type": "outer-glow",
+          "color": "#5fe9ff",
+          "opacity": 0.2,
+          "radius": 24,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "content": "BEYOND\nTHE ICE",
+        "fontFamily": "Arial",
+        "fontSize": 118,
+        "fontWeight": 900,
+        "lineHeight": 108,
+        "letterSpacing": -4.2,
+        "textAlignHorizontal": "left",
+        "textAlignVertical": "top",
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ffffff", "opacity": 1 },
+              { "offset": 0.46, "color": "#bdefff", "opacity": 1 },
+              { "offset": 1, "color": "#8e7cff", "opacity": 1 }
+            ],
+            "rotation": 118
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#d9f7ff", "opacity": 0.22 }],
+        "strokeWidth": 1.5
+      }
+    },
+    "poster_subtitle": {
+      "id": "poster_subtitle",
+      "kind": "text",
+      "name": "Subtitle",
+      "parentId": "poster_copy",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 122, 492],
+      "size": { "width": 570, "height": 92 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "content": "A new creative species lands where structured design meets generative intelligence.",
+        "fontFamily": "Arial",
+        "fontSize": 25,
+        "fontWeight": 500,
+        "lineHeight": 36,
+        "letterSpacing": 0.2,
+        "textAlignHorizontal": "left",
+        "textAlignVertical": "top",
+        "fills": [{ "type": "solid", "color": "#c9d6ff", "opacity": 0.78 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_meta": {
+      "id": "poster_meta",
+      "kind": "text",
+      "name": "Event metadata",
+      "parentId": "poster_copy",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 122, 632],
+      "size": { "width": 580, "height": 70 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "content": "08.10 — 20:30  /  MAIN STAGE\nSHANGHAI · STREAMING WORLDWIDE",
+        "fontFamily": "Arial",
+        "fontSize": 15,
+        "fontWeight": 700,
+        "lineHeight": 28,
+        "letterSpacing": 1.8,
+        "textAlignHorizontal": "left",
+        "textAlignVertical": "top",
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 0.82 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_chapter": {
+      "id": "poster_chapter",
+      "kind": "text",
+      "name": "Chapter marker",
+      "parentId": "poster_copy",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 122, 770],
+      "size": { "width": 560, "height": 28 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "content": "CHAPTER 01  /  A NEW CREATIVE SPECIES",
+        "fontFamily": "Arial",
+        "fontSize": 12,
+        "fontWeight": 700,
+        "lineHeight": 20,
+        "letterSpacing": 2.1,
+        "textAlignHorizontal": "left",
+        "textAlignVertical": "top",
+        "fills": [{ "type": "solid", "color": "#ff77a8", "opacity": 0.82 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_penguin_mascot": {
+      "id": "poster_penguin_mascot",
+      "kind": "group",
+      "name": "Launch Penguin",
+      "parentId": "poster_artboard",
+      "childIds": [
+        "poster_penguin_halo",
+        "poster_penguin_foot_left",
+        "poster_penguin_foot_right",
+        "poster_penguin_scarf_tail",
+        "poster_penguin_wing_left",
+        "poster_penguin_wing_right",
+        "poster_penguin_body",
+        "poster_penguin_belly",
+        "poster_penguin_face",
+        "poster_penguin_eye_left",
+        "poster_penguin_eye_right",
+        "poster_penguin_pupil_left",
+        "poster_penguin_pupil_right",
+        "poster_penguin_highlight_left",
+        "poster_penguin_highlight_right",
+        "poster_penguin_beak",
+        "poster_penguin_scarf_band",
+        "poster_penguin_scarf_knot"
+      ],
+      "visible": true,
+      "locked": false,
+      "transform": [0.92, 0, 0, 0.92, 870, 214],
+      "size": { "width": 420, "height": 570 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {}
+    },
+    "poster_penguin_halo": {
+      "id": "poster_penguin_halo",
+      "kind": "ellipse",
+      "name": "Mascot aura",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 18, 26],
+      "size": { "width": 384, "height": 520 },
+      "opacity": 1,
+      "blendMode": "screen",
+      "effects": [{ "type": "layer-blur", "radius": 14 }],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#64ecff", "opacity": 0.26 },
+              { "offset": 0.52, "color": "#5865ff", "opacity": 0.09 },
+              { "offset": 1, "color": "#0a0d20", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_penguin_foot_left": {
+      "id": "poster_penguin_foot_left",
+      "kind": "path",
+      "name": "Left foot / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 76, 474],
+      "size": { "width": 126, "height": 62 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#050713",
+          "opacity": 0.46,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 16,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ffd166", "opacity": 1 },
+              { "offset": 0.58, "color": "#ff8a3d", "opacity": 1 },
+              { "offset": 1, "color": "#e34d5b", "opacity": 1 }
+            ],
+            "rotation": 18
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffcf75", "opacity": 0.55 }],
+        "strokeWidth": 2,
+        "path": "M 8 48 C 18 20 42 4 70 10 C 86 12 94 22 100 34 C 108 28 118 30 124 40 C 116 56 94 62 64 60 C 34 62 14 58 8 48 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_foot_right": {
+      "id": "poster_penguin_foot_right",
+      "kind": "path",
+      "name": "Right foot / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 218, 474],
+      "size": { "width": 126, "height": 62 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#050713",
+          "opacity": 0.46,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 16,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#e34d5b", "opacity": 1 },
+              { "offset": 0.42, "color": "#ff8a3d", "opacity": 1 },
+              { "offset": 1, "color": "#ffd166", "opacity": 1 }
+            ],
+            "rotation": 162
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffcf75", "opacity": 0.55 }],
+        "strokeWidth": 2,
+        "path": "M 2 40 C 10 30 20 28 28 34 C 34 20 44 12 60 10 C 90 4 112 20 122 48 C 116 58 96 62 66 60 C 36 62 14 56 2 40 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_scarf_tail": {
+      "id": "poster_penguin_scarf_tail",
+      "kind": "path",
+      "name": "Scarf tail / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 276, 278],
+      "size": { "width": 124, "height": 186 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#080b20",
+          "opacity": 0.42,
+          "offset": { "x": 0, "y": 6 },
+          "blur": 14,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ff4f87", "opacity": 1 },
+              { "offset": 0.48, "color": "#ff6e66", "opacity": 1 },
+              { "offset": 1, "color": "#ffb24e", "opacity": 1 }
+            ],
+            "rotation": 126
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffd4dd", "opacity": 0.42 }],
+        "strokeWidth": 2,
+        "path": "M 10 0 C 48 12 84 8 112 28 C 102 62 88 86 72 106 L 108 174 L 72 158 L 48 184 L 30 112 C 14 84 2 42 10 0 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_wing_left": {
+      "id": "poster_penguin_wing_left",
+      "kind": "path",
+      "name": "Left wing / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [0.99, -0.08, 0.08, 0.99, 4, 174],
+      "size": { "width": 122, "height": 246 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#02030a",
+          "opacity": 0.58,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 20,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#172752", "opacity": 1 },
+              { "offset": 0.6, "color": "#0a1028", "opacity": 1 },
+              { "offset": 1, "color": "#03050c", "opacity": 1 }
+            ],
+            "rotation": 82
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#5ce8ff", "opacity": 0.22 }],
+        "strokeWidth": 2,
+        "path": "M 112 4 C 58 10 20 48 6 104 C -4 150 8 210 42 240 C 58 218 68 192 72 164 C 86 184 102 192 118 184 C 104 124 106 66 112 4 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_wing_right": {
+      "id": "poster_penguin_wing_right",
+      "kind": "path",
+      "name": "Right wing / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [0.99, 0.08, -0.08, 0.99, 304, 174],
+      "size": { "width": 122, "height": 246 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#02030a",
+          "opacity": 0.58,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 20,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#172752", "opacity": 1 },
+              { "offset": 0.6, "color": "#0a1028", "opacity": 1 },
+              { "offset": 1, "color": "#03050c", "opacity": 1 }
+            ],
+            "rotation": 98
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#5ce8ff", "opacity": 0.22 }],
+        "strokeWidth": 2,
+        "path": "M 10 4 C 64 10 102 48 116 104 C 126 150 114 210 80 240 C 64 218 54 192 50 164 C 36 184 20 192 4 184 C 18 124 16 66 10 4 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_body": {
+      "id": "poster_penguin_body",
+      "kind": "path",
+      "name": "Body / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 50, 42],
+      "size": { "width": 320, "height": 446 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#01030a",
+          "opacity": 0.72,
+          "offset": { "x": 0, "y": 16 },
+          "blur": 34,
+          "spread": 4
+        },
+        {
+          "type": "outer-glow",
+          "color": "#4bdfff",
+          "opacity": 0.2,
+          "radius": 24,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#243968", "opacity": 1 },
+              { "offset": 0.42, "color": "#0d1736", "opacity": 1 },
+              { "offset": 1, "color": "#03050e", "opacity": 1 }
+            ],
+            "rotation": 138
+          },
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#4be7ff", "opacity": 0.18 },
+              { "offset": 1, "color": "#071022", "opacity": 0 }
+            ]
+          }
+        ],
+        "strokes": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#76efff", "opacity": 0.56 },
+              { "offset": 0.45, "color": "#6f79ff", "opacity": 0.18 },
+              { "offset": 1, "color": "#141c3e", "opacity": 0.12 }
+            ],
+            "rotation": 120
+          }
+        ],
+        "strokeWidth": 3,
+        "strokeJoin": "round",
+        "path": "M 160 2 C 238 2 294 62 308 154 C 326 268 296 376 226 422 C 188 448 126 450 84 426 C 18 388 -8 282 10 174 C 26 76 80 2 160 2 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_belly": {
+      "id": "poster_penguin_belly",
+      "kind": "path",
+      "name": "Belly / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 92, 178],
+      "size": { "width": 236, "height": 266 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "inner-glow",
+          "color": "#79dfff",
+          "opacity": 0.22,
+          "radius": 18,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#f8fbff", "opacity": 1 },
+              { "offset": 0.56, "color": "#dbeaff", "opacity": 1 },
+              { "offset": 1, "color": "#9fc9e7", "opacity": 1 }
+            ],
+            "rotation": 112
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffffff", "opacity": 0.34 }],
+        "strokeWidth": 2,
+        "path": "M 118 0 C 180 0 224 58 232 134 C 240 202 204 258 118 264 C 34 258 -2 202 6 134 C 14 58 56 0 118 0 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_face": {
+      "id": "poster_penguin_face",
+      "kind": "path",
+      "name": "Face patch / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 80, 82],
+      "size": { "width": 260, "height": 160 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#05102a",
+          "opacity": 0.28,
+          "offset": { "x": 0, "y": 4 },
+          "blur": 14,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#f9fcff", "opacity": 1 },
+              { "offset": 1, "color": "#cfe8fa", "opacity": 1 }
+            ],
+            "rotation": 104
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffffff", "opacity": 0.5 }],
+        "strokeWidth": 2,
+        "path": "M 130 10 C 174 -8 232 10 252 54 C 270 98 238 144 184 150 C 160 152 142 144 130 130 C 116 144 98 152 74 150 C 20 144 -12 98 8 54 C 28 10 84 -8 130 10 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_eye_left": {
+      "id": "poster_penguin_eye_left",
+      "kind": "ellipse",
+      "name": "Left eye",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 126, 116],
+      "size": { "width": 56, "height": 64 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 1 }],
+        "strokes": [{ "type": "solid", "color": "#9edfff", "opacity": 0.5 }],
+        "strokeWidth": 2
+      }
+    },
+    "poster_penguin_eye_right": {
+      "id": "poster_penguin_eye_right",
+      "kind": "ellipse",
+      "name": "Right eye",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 238, 116],
+      "size": { "width": 56, "height": 64 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 1 }],
+        "strokes": [{ "type": "solid", "color": "#9edfff", "opacity": 0.5 }],
+        "strokeWidth": 2
+      }
+    },
+    "poster_penguin_pupil_left": {
+      "id": "poster_penguin_pupil_left",
+      "kind": "ellipse",
+      "name": "Left pupil",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 144, 132],
+      "size": { "width": 28, "height": 36 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#62dcff",
+          "opacity": 0.28,
+          "radius": 8,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#2445a0", "opacity": 1 },
+              { "offset": 1, "color": "#030610", "opacity": 1 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_penguin_pupil_right": {
+      "id": "poster_penguin_pupil_right",
+      "kind": "ellipse",
+      "name": "Right pupil",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 248, 132],
+      "size": { "width": 28, "height": 36 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#62dcff",
+          "opacity": 0.28,
+          "radius": 8,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "radial-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#2445a0", "opacity": 1 },
+              { "offset": 1, "color": "#030610", "opacity": 1 }
+            ]
+          }
+        ],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_penguin_highlight_left": {
+      "id": "poster_penguin_highlight_left",
+      "kind": "ellipse",
+      "name": "Left eye light",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 150, 136],
+      "size": { "width": 9, "height": 11 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 0.96 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_penguin_highlight_right": {
+      "id": "poster_penguin_highlight_right",
+      "kind": "ellipse",
+      "name": "Right eye light",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 254, 136],
+      "size": { "width": 9, "height": 11 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#ffffff", "opacity": 0.96 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    },
+    "poster_penguin_beak": {
+      "id": "poster_penguin_beak",
+      "kind": "path",
+      "name": "Beak / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 178, 176],
+      "size": { "width": 64, "height": 54 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#4b1430",
+          "opacity": 0.28,
+          "offset": { "x": 0, "y": 3 },
+          "blur": 8,
+          "spread": 0
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ffd166", "opacity": 1 },
+              { "offset": 1, "color": "#ff6b4a", "opacity": 1 }
+            ],
+            "rotation": 90
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#fff0b2", "opacity": 0.6 }],
+        "strokeWidth": 1.5,
+        "path": "M 4 24 C 18 8 44 8 60 24 C 50 42 40 52 32 52 C 24 52 14 42 4 24 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_scarf_band": {
+      "id": "poster_penguin_scarf_band",
+      "kind": "path",
+      "name": "Scarf band / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 66, 244],
+      "size": { "width": 290, "height": 82 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#06091a",
+          "opacity": 0.5,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 18,
+          "spread": 1
+        },
+        {
+          "type": "outer-glow",
+          "color": "#ff4f87",
+          "opacity": 0.26,
+          "radius": 16,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "linear-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ff3f82", "opacity": 1 },
+              { "offset": 0.52, "color": "#ff6a65", "opacity": 1 },
+              { "offset": 1, "color": "#ffb14a", "opacity": 1 }
+            ],
+            "rotation": 10
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffd8e0", "opacity": 0.46 }],
+        "strokeWidth": 2,
+        "path": "M 8 16 C 72 -2 220 -2 282 16 L 274 64 C 208 82 78 82 16 64 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_penguin_scarf_knot": {
+      "id": "poster_penguin_scarf_knot",
+      "kind": "path",
+      "name": "Scarf knot / Path",
+      "parentId": "poster_penguin_mascot",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 270, 248],
+      "size": { "width": 82, "height": 86 },
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#ff5b86",
+          "opacity": 0.32,
+          "radius": 14,
+          "spread": 1
+        }
+      ],
+      "extensions": {},
+      "properties": {
+        "fills": [
+          {
+            "type": "angular-gradient",
+            "opacity": 1,
+            "stops": [
+              { "offset": 0, "color": "#ff3f82", "opacity": 1 },
+              { "offset": 0.52, "color": "#ff8d52", "opacity": 1 },
+              { "offset": 1, "color": "#ffcf67", "opacity": 1 }
+            ]
+          }
+        ],
+        "strokes": [{ "type": "solid", "color": "#ffe0e7", "opacity": 0.42 }],
+        "strokeWidth": 2,
+        "path": "M 8 42 C 8 14 28 2 48 8 C 72 14 82 38 70 62 C 58 84 28 88 12 68 C 6 60 4 50 8 42 Z",
+        "fillRule": "nonzero"
+      }
+    },
+    "poster_footer": {
+      "id": "poster_footer",
+      "kind": "group",
+      "name": "Footer",
+      "parentId": "poster_artboard",
+      "childIds": ["poster_footer_rule", "poster_footer_text"],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "size": { "width": 1440, "height": 1024 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {}
+    },
+    "poster_footer_rule": {
+      "id": "poster_footer_rule",
+      "kind": "rectangle",
+      "name": "Footer rule",
+      "parentId": "poster_footer",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 122, 900],
+      "size": { "width": 1196, "height": 1 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "fills": [{ "type": "solid", "color": "#bdefff", "opacity": 0.28 }],
+        "strokes": [],
+        "strokeWidth": 0,
+        "cornerRadius": 0
+      }
+    },
+    "poster_footer_text": {
+      "id": "poster_footer_text",
+      "kind": "text",
+      "name": "Footer caption",
+      "parentId": "poster_footer",
+      "childIds": [],
+      "visible": true,
+      "locked": false,
+      "transform": [1, 0, 0, 1, 122, 926],
+      "size": { "width": 1196, "height": 28 },
+      "opacity": 1,
+      "extensions": {},
+      "properties": {
+        "content": "OD / 001     HUMAN DIRECTION × AGENT EXECUTION     1440 × 1024",
+        "fontFamily": "Arial",
+        "fontSize": 12,
+        "fontWeight": 700,
+        "lineHeight": 20,
+        "letterSpacing": 2.3,
+        "textAlignHorizontal": "left",
+        "textAlignVertical": "top",
+        "fills": [{ "type": "solid", "color": "#9dacd9", "opacity": 0.72 }],
+        "strokes": [],
+        "strokeWidth": 0
+      }
+    }
+  },
+  "componentsById": {},
+  "variantSetsById": {},
+  "tokenCollectionsById": {},
+  "tokensById": {},
+  "interactionsById": {},
+  "assetsById": {
+    "asset_poster_signal": {
+      "id": "asset_poster_signal",
+      "kind": "image",
+      "name": "OpenDesign signal texture",
+      "mimeType": "image/png",
+      "source": {
+        "type": "data",
+        "value": "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"
+      },
+      "size": { "width": 64, "height": 64 },
+      "extensions": { "fixtureSource": "apps/desktop/build/icons/64x64.png" }
+    }
+  },
+  "extensions": {
+    "fixture": {
+      "id": "OD-POSTER-01",
+      "version": 1,
+      "generator": "scripts/generate-professional-fixtures.mjs",
+      "promptSha256": "9262e270c9408944eecf78ae8cfc1e128b95be9e6e22c84d6f40a0bdbbb5f9c6"
+    }
+  }
+}

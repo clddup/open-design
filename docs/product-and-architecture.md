@@ -201,6 +201,8 @@ Agent composer 在每个 Conversation 中选择 `Provider/Model` 和模型支持
 
 Conversation 的原始 append-only journal 与模型上下文投影分离。P0 Agent Runtime 使用保守字符预算，在完整 run 边界把旧事件写成累计 `context.compacted` checkpoint；checkpoint 只含有界消息摘录、附件元数据、工具统计和最新 design revision，原始 Timeline 与工具审计不删除。压缩后仍过大时会在 Provider I/O 前返回 `context_budget_exceeded`。Main 按实际模型 `contextWindow`、输出预留、图片和 tokenizer 精确预算以及可选语义 compactor 尚未完成，详见 [ADR-0016](adr/0016-durable-agent-context-compaction.md)。
 
+专业设计回归使用 `fixtures/professional/manifest.json` 作为样张证据索引。每个样张分别保存固定 prompt、干净初稿、一个可校验 refinement 事务和预期最终 `.opendesign` 文档；生成器记录 SHA-256，并由 `fixtures:check` 阻止漂移。当前自动化只证明文档结构、Path/外观/图片语义、EditorRuntime 历史与 Leafer 场景投影，不把这些结构证据冒充像素视觉、真实 Agent 工具轨迹、专业导出或 macOS/Windows 实机验收。
+
 用户请求停止后，Renderer 立即把对应 Run 显示为“正在停止”并去除流式活动光标，但在 `run.completed` 或失败终态到达前仍保持并发占用。终态会兜底结束该 Run 遗留的 partial message、tool 与 approval 活动态，避免对话中残留看似仍在运行的蓝色光标。
 
 失败按“是否还能可靠地继续模型循环”分类，而不是按任意一层是否抛错分类：

@@ -66,6 +66,7 @@
       "evidence": {
         "automated": [
           "packages/editor-runtime/src/index.test.ts",
+          "packages/editor-runtime/src/professional-fixtures.test.ts",
           "apps/desktop/src/main/project/project-host.test.ts"
         ],
         "manual": []
@@ -137,6 +138,7 @@
       "evidence": {
         "automated": [
           "packages/editor-runtime/src/index.test.ts",
+          "packages/editor-runtime/src/professional-fixtures.test.ts",
           "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
         ],
         "manual": []
@@ -172,8 +174,10 @@
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
+          "packages/leafer-engine/src/professional-fixtures.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "packages/editor-runtime/src/diagnostics.test.ts"
+          "packages/editor-runtime/src/diagnostics.test.ts",
+          "packages/editor-runtime/src/professional-fixtures.test.ts"
         ],
         "manual": []
       },
@@ -273,8 +277,10 @@
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
+          "packages/leafer-engine/src/professional-fixtures.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "packages/editor-runtime/src/diagnostics.test.ts"
+          "packages/editor-runtime/src/diagnostics.test.ts",
+          "packages/editor-runtime/src/professional-fixtures.test.ts"
         ],
         "manual": []
       },
@@ -316,7 +322,8 @@
           "apps/desktop/src/main/model/image-generation-host.test.ts",
           "apps/desktop/src/main/agent/agent-attachment-host.test.ts",
           "apps/desktop/src/renderer/design-tool-execution.test.ts",
-          "packages/editor-runtime/src/diagnostics.test.ts"
+          "packages/editor-runtime/src/diagnostics.test.ts",
+          "packages/leafer-engine/src/professional-fixtures.test.ts"
         ],
         "manual": []
       },
@@ -416,8 +423,10 @@
       "evidence": {
         "automated": [
           "packages/leafer-engine/src/adapter.test.ts",
+          "packages/leafer-engine/src/professional-fixtures.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
-          "packages/editor-runtime/src/diagnostics.test.ts"
+          "packages/editor-runtime/src/diagnostics.test.ts",
+          "packages/editor-runtime/src/professional-fixtures.test.ts"
         ],
         "manual": []
       },

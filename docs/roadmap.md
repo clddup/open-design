@@ -58,7 +58,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P0-C：固定样张与能力事实门禁
 
 - [ ] 使用当前仓库启动的 Electron 实例执行 `OD-PENGUIN-01` 和 `OD-POSTER-01`，保存原始 prompt、最终 `.opendesign` 文件、两次 `capture_canvas`、中间 refinement、截图、Conversation/Run ID 和相关诊断。
-- [ ] 建立专业样张 fixture 与跨平台视觉 baseline；测试必须从干净文档重放，不能依赖某个开发会话的临时状态。
+- [x] 建立可重放专业样张 fixture：固定 prompt、初稿 `.opendesign`、一次 refinement 事务、最终文档和 SHA-256 manifest 均由确定性生成器维护；`EditorRuntime` 与 Leafer 测试从干净文档验证命名 Group、正式 Path、复杂外观、图片、诊断、保存重开和 undo/redo，不依赖开发会话临时状态。
+- [ ] 为同一 fixture 建立 macOS/Windows 像素视觉 baseline；必须由真实生产 Leafer 画布渲染并记录平台、DPR、字体、截图和允许差异，结构投影测试不能替代像素证据。
 - [x] 为 Path、渐变、光晕、模糊、blend、mask、图片和文字建立版本化预检：`inspect_document` 返回实际特性计数，并识别空 Path/文字、不可见或无绘制外观节点、丢失/不受支持的图片 asset、非有限 bounds、完全越出 clipping Frame 和异常根图层碎片；Agent prompt 要求先处理 error 并解释 warning。
 - [x] 建立版本化 capability manifest。每项能力记录 `available / degraded / unavailable`、provider、限制、六个产品表面、自动化证据和实机证据；Agent system context、`get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON 事实来源，`capabilities:check` 阻止生成物漂移。能力状态不是设置项，不进入设置页。
 - [ ] 让验证文档的协议版本、测试数量、构建产物和平台证据由门禁命令更新或校验，禁止 `verification.md` 与当前工作树长期漂移。

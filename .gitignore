@@ -13,6 +13,7 @@ test-results/
 *.db
 *.jsonl
 *.opendesign
+!fixtures/professional/**/*.opendesign
 .env
 .env.*
 !.env.example

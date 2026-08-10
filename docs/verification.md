@@ -23,10 +23,11 @@ macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。
 
 ```text
 pnpm format:check  passed
+pnpm fixtures:check passed（7 个生成文件）
 pnpm lint          passed
 pnpm typecheck     passed（16 个 workspace package 执行 typecheck）
 pnpm test          passed
-├── package tests  13 files / 110 tests
+├── package tests  15 files / 117 tests
 └── desktop tests  34 files / 223 tests
 pnpm build         passed
 ├── Renderer
@@ -41,6 +42,7 @@ pnpm build         passed
 - `DesignCapabilityManifest v1` 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context、只读 `get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON，`capabilities:check` 会拒绝文档漂移。
 - `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
 - Agent Runtime 在完整 run 边界生成累计 `context.compacted` checkpoint；测试覆盖原始 Timeline 不删除、checkpoint 范围单调增加、旧全文退出模型投影，以及单次输入或当前 Run 工具结果在任一后续轮仍超预算时，在对应 Provider I/O 前返回 `context_budget_exceeded`。
+- `OD-PENGUIN-01` 与 `OD-POSTER-01` 专业 fixture 从固定 prompt 生成初稿、refinement 事务、最终 `.opendesign` 和 SHA-256 manifest；`fixtures:check` 阻止生成物漂移。EditorRuntime 测试验证命名 Group、主体/翅膀/脚/围巾正式 Path、1440×1024 海报画板、复杂特性下限、零结构诊断、JSON 保存重开及 apply/undo/redo；Leafer 测试验证所有权威节点可达、Path/渐变/效果/mask/内嵌图片映射且没有 fidelity warning。
 - EditorRuntime 设计预检覆盖 Path/渐变/光晕/模糊/blend/mask/图片/文字特性计数，以及空内容、不可见/无外观、缺失或不受支持图片源、非有限 bounds、clipping Frame 完全越界和根层碎片；同一报告经 `inspect_document` 交给 Agent。
 - Leafer 文档投影、Path 实例、复杂外观映射和 change-set 增量同步：未变节点保持 spec/元素 identity，不调用 `set()`；无关新增、删除和 revision 不刷新 tree/Editor，也不取消进行中的直接操作；选中节点变化只刷新该元素 bounds 并更新 editBox；asset change 会精确重投影引用节点。
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
@@ -70,7 +72,7 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、8 项降级可用和 8 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.2.0`、EditorRuntime、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置和视觉复核的基础路径。该路径解除“只能稳定使用椭圆和矩形”的限制，但自动化尚未证明完整专业设计工作流。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、8 项降级可用和 8 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.2.0`、EditorRuntime、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置和视觉复核的基础路径。两个固定专业 fixture 进一步证明这些语义可以组成完整企鹅层级和复杂海报文档，而不是只能稳定使用椭圆和矩形；它们尚未提供真实 Electron 像素截图、Agent 重放或专业导出，因此不能据此把完整工作流标为可用。
 
 仓库当前没有独立的 Geometry、Layout、Text/Font、Image 或 Import/Export service 包。`packages/editor-runtime/src/geometry.ts` 只提供矩阵、坐标转换和 bounds 计算，不包含 Pen 节点编辑、布尔运算、flatten、outline stroke、吸附或路径诊断；组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。图片链当前只支持分析参考图、生成新图和放置；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系均明确标记为不可用。
 
@@ -86,7 +88,7 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 | Leafer Web chunk |   302.16 kB | 100.55 kB |
 | Electron Main    | 2,094.94 kB | 418.97 kB |
 | Preload          |   233.09 kB |  37.00 kB |
-| Agent            |   316.33 kB |  60.42 kB |
+| Agent            |   316.96 kB |  60.47 kB |
 
 构建提示 Renderer/Main 存在超过 500 kB 的 chunk。当前不影响构建成功，但需要在性能阶段评估动态加载与 Rolldown code splitting，不能通过移除 sourcemap 或隐藏警告冒充优化。
 
@@ -111,7 +113,8 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 2. 复杂渐变、光晕、模糊、blend、mask 和高级描边组合的视觉保真。
 3. 属性检查器修改后画布同步、文本中文输入法、缩放中的 DOM TextEditor 和焦点恢复。
 4. 粘贴/拖放附件、本地路径/URL `read_image`、全局 GPT Image 2 `generate_image` 到真实多模态模型，以及 `place_image` 的完整用户流程。
-5. 大节点量、复杂文本、图片/效果的帧率、内存和资源释放基准。
+5. 从两个固定 fixture 生成 macOS/Windows 真实 Leafer 像素 baseline，并重放完整 Agent“写入 → 截图 → 修正 → 截图”轨迹。
+6. 大节点量、复杂文本、图片/效果的帧率、内存和资源释放基准。
 
 实机验证只能连接明确从当前仓库 `apps/desktop` 启动的实例，不能控制用户的其他 Electron/Chrome 进程或个人浏览器配置。
 

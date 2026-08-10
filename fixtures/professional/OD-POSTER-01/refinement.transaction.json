@@ -1,0 +1,58 @@
+{
+  "transactionId": "fixture_poster_refinement_01",
+  "documentId": "document_od_poster_01",
+  "baseRevision": 0,
+  "actor": {
+    "type": "agent",
+    "id": "fixture-agent",
+    "displayName": "Professional fixture replay"
+  },
+  "label": "Visual refinement",
+  "summary": "Recorded correction after the first visual inspection.",
+  "commands": [
+    {
+      "commandId": "increase_title_contrast",
+      "type": "update_properties",
+      "nodeId": "poster_title",
+      "opacity": 1,
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#02040d",
+          "opacity": 0.7,
+          "offset": { "x": 0, "y": 16 },
+          "blur": 38,
+          "spread": 2
+        },
+        {
+          "type": "outer-glow",
+          "color": "#5fe9ff",
+          "opacity": 0.3,
+          "radius": 30,
+          "spread": 0
+        }
+      ]
+    },
+    {
+      "commandId": "rebalance_mascot",
+      "type": "update_properties",
+      "nodeId": "poster_penguin_mascot",
+      "transform": [1, 0, 0, 1, 835, 176]
+    },
+    {
+      "commandId": "focus_horizon",
+      "type": "update_properties",
+      "nodeId": "poster_horizon",
+      "effects": [
+        {
+          "type": "outer-glow",
+          "color": "#58e8ff",
+          "opacity": 0.78,
+          "radius": 30,
+          "spread": 2
+        }
+      ]
+    }
+  ],
+  "extensions": { "fixtureReplay": true }
+}

@@ -1,0 +1,43 @@
+{
+  "transactionId": "fixture_penguin_refinement_01",
+  "documentId": "document_od_penguin_01",
+  "baseRevision": 0,
+  "actor": {
+    "type": "agent",
+    "id": "fixture-agent",
+    "displayName": "Professional fixture replay"
+  },
+  "label": "Visual refinement",
+  "summary": "Recorded correction after the first visual inspection.",
+  "commands": [
+    {
+      "commandId": "pose_right_wing",
+      "type": "update_properties",
+      "nodeId": "penguin_wing_right",
+      "transform": [0.985, 0.12, -0.12, 0.985, 307, 166]
+    },
+    {
+      "commandId": "polish_scarf_tail",
+      "type": "update_properties",
+      "nodeId": "penguin_scarf_tail",
+      "effects": [
+        {
+          "type": "drop-shadow",
+          "color": "#080b20",
+          "opacity": 0.52,
+          "offset": { "x": 0, "y": 8 },
+          "blur": 18,
+          "spread": 1
+        },
+        {
+          "type": "outer-glow",
+          "color": "#ff5b86",
+          "opacity": 0.34,
+          "radius": 18,
+          "spread": 2
+        }
+      ]
+    }
+  ],
+  "extensions": { "fixtureReplay": true }
+}
