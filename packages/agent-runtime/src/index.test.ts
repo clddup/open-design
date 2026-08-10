@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@opendesign/agent-contracts";
 import {
   MockModelGateway,
+  type MockModelResponse,
   type ModelGateway,
   type ModelRequest,
 } from "@opendesign/model-gateway";
@@ -381,6 +382,7 @@ describe("AgentRuntime", () => {
   it("keeps oversized tool-result fields out of current and restored model context", async () => {
     const store = new MemorySessionStore();
     const oversizedValue = `data:image/png;base64,${"A".repeat(20_000)}`;
+    const structuredMarker = "node_3999";
     const inspectTool: AgentToolDefinition = {
       name: "design.inspect",
       description: "Inspect a design",
@@ -423,6 +425,11 @@ describe("AgentRuntime", () => {
               content: {
                 ok: true,
                 document: {
+                  nodes: Array.from({ length: 4_000 }, (_, index) => ({
+                    id: `node_${index}`,
+                    name: `Structured layer ${index}`,
+                    kind: "rectangle",
+                  })),
                   assetsById: {
                     asset_large: {
                       source: { type: "data", value: oversizedValue },
@@ -442,6 +449,9 @@ describe("AgentRuntime", () => {
     );
     expect(currentProjection).not.toContain(oversizedValue);
     expect(currentProjection).toContain("OpenDesign omitted");
+    expect(currentProjection).not.toContain(structuredMarker);
+    expect(currentProjection.length).toBeLessThan(60_000);
+    expect(JSON.stringify(store.events)).toContain(structuredMarker);
 
     const restoredGateway = new RecordingGateway(
       new MockModelGateway({
@@ -464,6 +474,8 @@ describe("AgentRuntime", () => {
     );
     expect(restoredProjection).not.toContain(oversizedValue);
     expect(restoredProjection).toContain("OpenDesign omitted");
+    expect(restoredProjection).not.toContain(structuredMarker);
+    expect(restoredProjection.length).toBeLessThan(60_000);
   });
 
   it("persists cumulative context checkpoints without deleting original history", async () => {
@@ -587,6 +599,32 @@ describe("AgentRuntime", () => {
     );
   });
 
+  it("reports token budget partitions when the current input cannot fit", async () => {
+    const store = new MemorySessionStore();
+    const gateway = new RecordingGateway(new MockModelGateway("unused"));
+    const runtime = new AgentRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+    });
+
+    const events = await collect(runtime, {
+      ...request,
+      prompt: "CURRENT_TOKEN_INPUT ".repeat(2_000),
+      modelContext: { contextWindow: 8_192, maxOutputTokens: 2_048 },
+    });
+
+    expect(gateway.requests).toHaveLength(0);
+    const contextError = events.find(
+      (event): event is Extract<AgentEvent, { type: "agent.error" }> =>
+        event.type === "agent.error" &&
+        event.code === "context_budget_exceeded",
+    );
+    expect(contextError).toBeDefined();
+    expect(contextError?.message).toMatch(
+      /system \d+, tool schemas \d+, conversation and tool results \d+, request framing \d+/,
+    );
+  });
+
   it("uses a trusted model token budget instead of rejecting a fitting request by character count", async () => {
     const store = new MemorySessionStore();
     const gateway = new RecordingGateway(
@@ -648,18 +686,21 @@ describe("AgentRuntime", () => {
     });
 
     expect(gateway.requests).toHaveLength(0);
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "agent.error",
-        code: "model_context_incompatible",
-      }),
+    const compatibilityError = events.find(
+      (event): event is Extract<AgentEvent, { type: "agent.error" }> =>
+        event.type === "agent.error" &&
+        event.code === "model_context_incompatible",
+    );
+    expect(compatibilityError).toBeDefined();
+    expect(compatibilityError?.message).toMatch(
+      /system \d+, tool schemas \d+, request framing \d+/,
     );
     expect(events).toContainEqual(
       expect.objectContaining({ type: "run.completed", stopReason: "error" }),
     );
   });
 
-  it("stops before a later provider turn when current-run tool results exceed the context budget", async () => {
+  it("compacts completed current-run tool turns before later provider I/O", async () => {
     const store = new MemorySessionStore();
     const gateway = new RecordingGateway(
       new MockModelGateway([
@@ -677,7 +718,7 @@ describe("AgentRuntime", () => {
         },
         {
           blocks: [
-            { id: "must_not_run", type: "text", text: "Unexpected turn" },
+            { id: "recovered_turn", type: "text", text: "Recovered turn" },
           ],
         },
       ]),
@@ -704,17 +745,17 @@ describe("AgentRuntime", () => {
 
     const events = await collect(runtime);
 
-    expect(gateway.requests).toHaveLength(1);
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "agent.error",
-        code: "context_budget_exceeded",
-      }),
+    expect(gateway.requests).toHaveLength(2);
+    expect(JSON.stringify(gateway.requests[1]?.messages)).toContain(
+      "OpenDesign in-run context checkpoint",
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "agent.error" }),
     );
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "run.completed",
-        stopReason: "error",
+        stopReason: "complete",
       }),
     );
     const completedTool = store.events.find(
@@ -725,6 +766,90 @@ describe("AgentRuntime", () => {
       ok: true,
       chunks,
     });
+  });
+
+  it("recovers a slightly over-budget eighth provider turn without dropping the journal", async () => {
+    const store = new MemorySessionStore();
+    const responses: MockModelResponse[] = Array.from(
+      { length: 7 },
+      (_, index) => ({
+        blocks: [
+          {
+            id: `tool_block_${index + 1}`,
+            type: "tool_call" as const,
+            toolCallId: `tool_call_${index + 1}`,
+            name: tool.name,
+            input: { dx: index + 1 },
+          },
+        ],
+        stopReason: "tool_use" as const,
+      }),
+    );
+    responses.push({
+      blocks: [
+        {
+          id: "final_after_compaction",
+          type: "text" as const,
+          text: "Final response after local compaction",
+        },
+      ],
+      stopReason: "complete" as const,
+    });
+    const gateway = new RecordingGateway(new MockModelGateway(responses));
+    const runtime = new AgentRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      toolCatalog: { listTools: () => [tool] },
+      toolExecutor: {
+        async *execute(call): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield {
+            type: "completed",
+            result: {
+              content: {
+                ok: true,
+                callId: call.toolCallId,
+                chunks: Array.from(
+                  { length: 12 },
+                  (_, index) =>
+                    `${call.toolCallId}:${index}:${"Y".repeat(1_400)}`,
+                ),
+              },
+            },
+          };
+        },
+      },
+    });
+
+    const events = await collect(runtime, {
+      ...request,
+      modelContext: { contextWindow: 40_000, maxOutputTokens: 4_096 },
+    });
+
+    expect(gateway.requests).toHaveLength(8);
+    expect(
+      gateway.requests.some((providerRequest) =>
+        JSON.stringify(providerRequest.messages).includes(
+          "OpenDesign in-run context checkpoint",
+        ),
+      ),
+    ).toBe(true);
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: "agent.error",
+        code: "context_budget_exceeded",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "run.completed",
+        stopReason: "complete",
+      }),
+    );
+    expect(
+      store.events.filter((event) => event.type === "tool.completed"),
+    ).toHaveLength(7);
+    expect(JSON.stringify(store.events)).toContain("Y".repeat(1_400));
   });
 
   it("runs a multi-turn text/tool loop and persists a recoverable history", async () => {

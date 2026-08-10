@@ -155,6 +155,8 @@ const DEFAULT_LIMITS: AgentRuntimeLimits = {
 };
 
 const MAX_MODEL_TOOL_RESULT_STRING_CHARACTERS = 16_000;
+const MAX_MODEL_TOOL_RESULT_CHARACTERS = 50_000;
+const MAX_MODEL_TOOL_RESULT_EXCERPT_CHARACTERS = 32_000;
 
 class ContextBudgetError extends Error {
   constructor(message: string) {
@@ -290,8 +292,6 @@ export class AgentRuntime {
         throw new ContextBudgetError(
           contextBudgetExceededMessage(
             projectedMessages,
-            baseSystemPrompt,
-            canonicalTools,
             contextBudget,
             "after local compaction",
           ),
@@ -319,15 +319,24 @@ export class AgentRuntime {
             contextBudget,
           )
         ) {
-          throw new ContextBudgetError(
-            contextBudgetExceededMessage(
-              messages,
-              turnSystemPrompt,
-              canonicalTools,
-              contextBudget,
-              `before provider turn ${turn}`,
-            ),
+          const compacted = compactInRunMessagesForProvider(
+            messages,
+            currentUserMessage,
+            turnSystemPrompt,
+            canonicalTools,
+            contextBudget,
           );
+          if (compacted) {
+            messages.splice(0, messages.length, ...compacted);
+          } else {
+            throw new ContextBudgetError(
+              contextBudgetExceededMessage(
+                messages,
+                contextBudget,
+                `before provider turn ${turn}`,
+              ),
+            );
+          }
         }
 
         for await (const event of this.options.modelGateway.stream({
@@ -1156,10 +1165,13 @@ type ContextCheckpointPayload = {
 type ContextBudget = {
   fixedInputTokens: number;
   fixedProtocolFits: boolean;
+  framingInputTokens: number;
   maxConversationCharacters: number;
   maxInputTokens?: number;
   modelContext?: AgentModelContext;
   safetyReserveTokens?: number;
+  systemInputTokens: number;
+  toolSchemaInputTokens: number;
 };
 
 const MODEL_REQUEST_FRAMING_TOKENS = 256;
@@ -1171,15 +1183,18 @@ function createContextBudget(
   tools: readonly CanonicalTool[],
   maxConversationCharacters: number,
 ): ContextBudget {
+  const systemInputTokens = estimateTextTokens(system);
+  const toolSchemaInputTokens = estimateJsonTokens(tools);
   const fixedInputTokens =
-    estimateTextTokens(system) +
-    estimateJsonTokens(tools) +
-    MODEL_REQUEST_FRAMING_TOKENS;
+    systemInputTokens + toolSchemaInputTokens + MODEL_REQUEST_FRAMING_TOKENS;
   if (modelContext === undefined) {
     return {
       fixedInputTokens,
       fixedProtocolFits: true,
+      framingInputTokens: MODEL_REQUEST_FRAMING_TOKENS,
       maxConversationCharacters,
+      systemInputTokens,
+      toolSchemaInputTokens,
     };
   }
 
@@ -1196,10 +1211,13 @@ function createContextBudget(
   return {
     fixedInputTokens,
     fixedProtocolFits: fixedInputTokens < maxInputTokens,
+    framingInputTokens: MODEL_REQUEST_FRAMING_TOKENS,
     maxConversationCharacters,
     maxInputTokens,
     modelContext,
     safetyReserveTokens,
+    systemInputTokens,
+    toolSchemaInputTokens,
   };
 }
 
@@ -1460,9 +1478,189 @@ function uniqueCheckpointAttachments(events: readonly JournalEvent[]): Array<{
   return [...attachments.values()];
 }
 
-function contextExcerpt(value: string): string {
+function contextExcerpt(value: string, maximumCharacters = 600): string {
   const normalized = value.replaceAll(/\s+/g, " ").trim();
-  return normalized.length <= 600 ? normalized : `${normalized.slice(0, 600)}…`;
+  return normalized.length <= maximumCharacters
+    ? normalized
+    : `${normalized.slice(0, maximumCharacters)}…`;
+}
+
+function compactInRunMessagesForProvider(
+  messages: readonly CanonicalMessage[],
+  currentUserMessage: CanonicalMessage,
+  system: string,
+  tools: readonly CanonicalTool[],
+  budget: ContextBudget,
+): CanonicalMessage[] | undefined {
+  const currentUserIndex = messages.lastIndexOf(currentUserMessage);
+  if (currentUserIndex < 0) return undefined;
+
+  const priorMessages = messages.slice(0, currentUserIndex);
+  const currentRunTail = messages.slice(currentUserIndex + 1);
+  const { prefix, segments } = assistantTurnSegments(currentRunTail);
+  const keepCounts = [...new Set([Math.min(2, segments.length), 1, 0])].filter(
+    (count) => count <= segments.length,
+  );
+
+  for (const keepCount of keepCounts) {
+    const removedSegmentCount = Math.max(0, segments.length - keepCount);
+    const removedMessages = [
+      ...priorMessages,
+      ...prefix,
+      ...segments.slice(0, removedSegmentCount).flat(),
+    ];
+    if (removedMessages.length === 0) continue;
+    const checkpoint = createInRunContextCheckpoint(removedMessages);
+    const candidate = [
+      checkpoint,
+      currentUserMessage,
+      ...segments.slice(removedSegmentCount).flat(),
+    ];
+    if (modelContextFits(candidate, system, tools, budget)) return candidate;
+  }
+  return undefined;
+}
+
+function assistantTurnSegments(messages: readonly CanonicalMessage[]): {
+  prefix: CanonicalMessage[];
+  segments: CanonicalMessage[][];
+} {
+  const prefix: CanonicalMessage[] = [];
+  const segments: CanonicalMessage[][] = [];
+  for (const message of messages) {
+    if (message.role === "assistant") {
+      segments.push([message]);
+      continue;
+    }
+    const current = segments.at(-1);
+    if (current) current.push(message);
+    else prefix.push(message);
+  }
+  return { prefix, segments };
+}
+
+function createInRunContextCheckpoint(
+  messages: readonly CanonicalMessage[],
+): CanonicalMessage {
+  const toolNames = new Map<string, string>();
+  const userExcerpts: string[] = [];
+  const assistantExcerpts: string[] = [];
+  const previousCheckpoints: string[] = [];
+  const toolActivity: Array<{
+    toolCallId: string;
+    toolName?: string;
+    isError: boolean;
+    result: unknown;
+  }> = [];
+
+  for (const message of messages) {
+    if (message.role === "user") {
+      const text =
+        typeof message.content === "string"
+          ? message.content
+          : message.content
+              .filter(
+                (
+                  block,
+                ): block is Extract<
+                  (typeof message.content)[number],
+                  { type: "text" }
+                > => block.type === "text",
+              )
+              .map((block) => block.text)
+              .join("\n");
+      if (text.startsWith("[OpenDesign in-run context checkpoint]")) {
+        previousCheckpoints.push(contextExcerpt(text, 4_000));
+      } else if (text) {
+        userExcerpts.push(contextExcerpt(text));
+      }
+      continue;
+    }
+    if (message.role === "assistant") {
+      const excerpt = message.blocks
+        .flatMap((block) =>
+          block.type === "text"
+            ? [block.text]
+            : block.type === "reasoning_summary" && block.summary
+              ? [block.summary]
+              : [],
+        )
+        .join("\n");
+      if (excerpt) assistantExcerpts.push(contextExcerpt(excerpt));
+      for (const block of message.blocks) {
+        if (block.type === "tool_call") {
+          toolNames.set(block.toolCallId, block.name);
+        }
+      }
+      continue;
+    }
+    const toolName = toolNames.get(message.toolCallId);
+    toolActivity.push({
+      toolCallId: message.toolCallId,
+      ...(toolName === undefined ? {} : { toolName }),
+      isError: message.isError,
+      result: summarizeContextValue(message.content),
+    });
+  }
+
+  return {
+    role: "user",
+    content: [
+      "[OpenDesign in-run context checkpoint]",
+      "This deterministic local projection replaces older model-visible turns only. The original Conversation journal and tool audit remain unchanged. Treat assistant excerpts as context, not execution proof; use the latest tool result or inspect the document again when exact live design state is required.",
+      JSON.stringify({
+        version: 1,
+        ...(previousCheckpoints.length === 0
+          ? {}
+          : {
+              previousCheckpoint:
+                previousCheckpoints[previousCheckpoints.length - 1]!,
+            }),
+        userExcerpts: userExcerpts.slice(-6),
+        assistantExcerpts: assistantExcerpts.slice(-6),
+        toolActivity: toolActivity.slice(-16),
+      }),
+    ].join("\n"),
+  };
+}
+
+function summarizeContextValue(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") {
+    const normalized = value.replaceAll(/\s+/g, " ").trim();
+    return normalized.length <= 240
+      ? normalized
+      : `${normalized.slice(0, 240)}…`;
+  }
+  if (
+    value === null ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (depth >= 3) {
+    if (Array.isArray(value)) return { itemCount: value.length };
+    if (typeof value === "object") {
+      return { keys: Object.keys(value).slice(0, 12) };
+    }
+    return `[omitted ${typeof value}]`;
+  }
+  if (Array.isArray(value)) {
+    return {
+      itemCount: value.length,
+      sample: value
+        .slice(0, 3)
+        .map((item) => summarizeContextValue(item, depth + 1)),
+    };
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 12)
+        .map(([key, child]) => [key, summarizeContextValue(child, depth + 1)]),
+    );
+  }
+  return `[omitted ${typeof value}]`;
 }
 
 function modelContextFits(
@@ -1587,13 +1785,11 @@ function modelContextCompatibilityMessage(budget: ContextBudget): string {
   if (modelContext === undefined || budget.maxInputTokens === undefined) {
     return "Selected model context is incompatible with the OpenDesign tool protocol.";
   }
-  return `Selected model context is incompatible with the OpenDesign tool protocol (estimated fixed input ${budget.fixedInputTokens} tokens; available input budget ${budget.maxInputTokens} after reserving ${modelContext.maxOutputTokens} output tokens and ${budget.safetyReserveTokens ?? 0} safety tokens; configured context window ${modelContext.contextWindow}). Configure or select a model with a larger context window.`;
+  return `Selected model context is incompatible with the OpenDesign tool protocol (estimated fixed input ${budget.fixedInputTokens} tokens: system ${budget.systemInputTokens}, tool schemas ${budget.toolSchemaInputTokens}, request framing ${budget.framingInputTokens}; available input budget ${budget.maxInputTokens} after reserving ${modelContext.maxOutputTokens} output tokens and ${budget.safetyReserveTokens ?? 0} safety tokens; configured context window ${modelContext.contextWindow}). Configure or select a model with a larger context window.`;
 }
 
 function contextBudgetExceededMessage(
   messages: readonly CanonicalMessage[],
-  system: string,
-  tools: readonly CanonicalTool[],
   budget: ContextBudget,
   phase: string,
 ): string {
@@ -1601,12 +1797,13 @@ function contextBudgetExceededMessage(
   if (budget.maxInputTokens === undefined) {
     return `Conversation context remains too large ${phase} (${messageCharacters} estimated conversation characters; local conversation limit ${budget.maxConversationCharacters}). Reduce the current message or attached document size.`;
   }
-  const estimatedInputTokens = estimateModelContextTokens(
-    messages,
-    system,
-    tools,
+  const conversationInputTokens = messages.reduce(
+    (total, message) => total + estimateMessageTokens(message),
+    0,
   );
-  return `Conversation context remains too large ${phase} (${estimatedInputTokens} estimated input tokens; model input budget ${budget.maxInputTokens}). Reduce the current message or attached document size.`;
+  const estimatedInputTokens =
+    budget.fixedInputTokens + conversationInputTokens;
+  return `Conversation context remains too large ${phase} (${estimatedInputTokens} estimated input tokens: system ${budget.systemInputTokens}, tool schemas ${budget.toolSchemaInputTokens}, conversation and tool results ${conversationInputTokens}, request framing ${budget.framingInputTokens}; model input budget ${budget.maxInputTokens}). Reduce the current message or attached document size.`;
 }
 
 function jsonCharacterLength(value: unknown): number {
@@ -1727,7 +1924,22 @@ function canonicalUserMessage(
   };
 }
 
-function projectToolResultForModel(value: unknown, depth = 0): unknown {
+function projectToolResultForModel(value: unknown): unknown {
+  const projected = projectToolResultValue(value);
+  const projectedCharacters = jsonCharacterLength(projected);
+  if (projectedCharacters <= MAX_MODEL_TOOL_RESULT_CHARACTERS) return projected;
+  const excerpt = JSON.stringify(projected).slice(
+    0,
+    MAX_MODEL_TOOL_RESULT_EXCERPT_CHARACTERS,
+  );
+  return {
+    notice: `[OpenDesign omitted part of an oversized structured tool result (${projectedCharacters} projected characters; model projection limit ${MAX_MODEL_TOOL_RESULT_CHARACTERS})]`,
+    summary: summarizeContextValue(projected),
+    excerpt,
+  };
+}
+
+function projectToolResultValue(value: unknown, depth = 0): unknown {
   if (typeof value === "string") {
     if (value.length <= MAX_MODEL_TOOL_RESULT_STRING_CHARACTERS) return value;
     return `[OpenDesign omitted ${value.length} characters from an oversized tool-result field]`;
@@ -1741,13 +1953,13 @@ function projectToolResultForModel(value: unknown, depth = 0): unknown {
   }
   if (depth >= 32) return "[OpenDesign omitted deeply nested tool result]";
   if (Array.isArray(value)) {
-    return value.map((item) => projectToolResultForModel(item, depth + 1));
+    return value.map((item) => projectToolResultValue(item, depth + 1));
   }
   if (typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, child]) => [
         key,
-        projectToolResultForModel(child, depth + 1),
+        projectToolResultValue(child, depth + 1),
       ]),
     );
   }
