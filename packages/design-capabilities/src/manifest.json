@@ -368,8 +368,8 @@
       },
       "limitations": [
         {
-          "en": "Image generation requires separate global configuration; direct canvas replacement, background removal, and asset management UI are incomplete.",
-          "zh-CN": "图片生成需要独立全局配置；画布内直接替换、移除背景和资源管理 UI 尚未完成。"
+          "en": "Image generation requires separate global configuration; direct canvas placement handles, background removal, and asset management UI are incomplete.",
+          "zh-CN": "图片生成需要独立全局配置；画布直接放置手柄、移除背景和资源管理 UI 尚未完成。"
         }
       ],
       "evidence": {
@@ -401,22 +401,26 @@
       "surfaces": {
         "contract": "degraded",
         "runtime": "degraded",
-        "human": "unavailable",
-        "agent": "unavailable",
+        "human": "degraded",
+        "agent": "degraded",
         "render": "degraded",
         "export": "unavailable"
       },
       "limitations": [
         {
-          "en": "Image nodes now have versioned non-destructive placement and deterministic crop geometry, but direct canvas crop controls, replacement UI, adjustment filters, export fidelity, and a dedicated Agent edit workflow remain incomplete.",
-          "zh-CN": "Image 节点已有版本化非破坏 placement 与确定性裁剪几何，但画布直接裁剪控件、替换 UI、调整滤镜、导出保真和专用 Agent 编辑工作流仍未完成。"
+          "en": "The inspector and dedicated Agent tool now share non-destructive placement and source replacement semantics, but direct canvas crop controls, adjustment filters, export fidelity, and native macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "检查器与专用 Agent 工具已共用非破坏 placement 和来源替换语义，但画布直接裁剪控件、调整滤镜、导出保真及 macOS/Windows 原生交互证据仍未完成。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/image-service/src/index.test.ts",
-          "packages/leafer-engine/src/mapping.test.ts"
+          "packages/editor-runtime/src/image-operations.test.ts",
+          "packages/leafer-engine/src/mapping.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx"
         ],
         "manual": []
       },

@@ -34,7 +34,7 @@ Agent utilityProcess ── Conversation / Provider / typed design tools
 - LeaferJS 场景投影、pan/zoom、命中、框选、多选、move/resize/rotate/skew 和文本内编辑。
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask 和事务化图片 asset 的公共语义。
 - 持久 Conversation、可取消 Agent run、只管理对话模型的 `ModelProviderCatalog v3`，以及 OpenAI Responses、OpenAI Chat Completions 和 Anthropic Messages adapter；独立的应用级图片生成配置拥有自己的 adapter、Base URL、鉴权、凭据和模型 ID，不受任何 Conversation 模型影响，当前 OpenAI Images adapter 已用 GPT Image 2 验证。
-- `get_capabilities`、`inspect_document`、`capture_canvas`、`apply_transaction`、`read_image`、`generate_image` 和 `place_image` typed tools；Agent 从与帮助文档和发布摘要相同的 manifest 获取能力事实，并可把当前画布预览和生成图片作为多模态结果回读，而不是只凭节点坐标判断视觉质量。
+- `get_capabilities`、`inspect_document`、`define_design_plan`、`capture_canvas`、`record_visual_review`、`edit_hierarchy`、`arrange_layers`、`apply_transaction`、`read_image`、`generate_image`、`place_image` 和 `update_image` typed tools；Agent 从与帮助文档和发布摘要相同的 manifest 获取能力事实，并可把当前画布预览和生成图片作为多模态结果回读，而不是只凭节点坐标判断视觉质量。
 - 图片/文档附件、剪贴板/拖放导入，以及按需读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL 的受限链路。
 
 未完成的专业矢量、布局、组件、变量、富文本、导入导出、完整 Capability/Approval/Audit/Sandbox 和跨项目多目标能力不会被描述成已经支持；详见能力基线与路线图。
@@ -68,11 +68,11 @@ pnpm verify
 # macOS：DMG + ZIP
 pnpm --dir apps/desktop package:mac
 
-# Windows：NSIS installer
+# Windows：可选择安装目录的 NSIS assisted installer
 pnpm --dir apps/desktop package:win
 ```
 
-当前仓库只有 macOS 源码门禁与普通生产构建证据；Windows 原生构建、安装和 smoke 是 P0，详见[验证状态](docs/verification.md)与[路线图](docs/roadmap.md)。
+macOS/Windows 原生 workflow 已分别生成安装包并完成打包后 Agent smoke；签名、干净安装、升级/卸载和 GUI 产品 smoke 仍是 P0。当前 NSIS 配置已改为可交互安装并允许选择目录，仍须由最新 commit 的 Windows 原生产物复验，详见[验证状态](docs/verification.md)与[路线图](docs/roadmap.md)。
 
 ## 仓库结构
 

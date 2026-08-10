@@ -1144,7 +1144,9 @@ function nodeAssetIds(node: DesignNode): string[] {
     node.kind === "frame" ||
     node.kind === "rectangle" ||
     node.kind === "ellipse" ||
-    node.kind === "text"
+    node.kind === "text" ||
+    node.kind === "path" ||
+    node.kind === "vector"
   ) {
     for (const paint of [
       ...node.properties.fills,

@@ -15,6 +15,7 @@ import {
   isAgentAttachmentPreviewResult,
   isAgentAttachmentSelection,
   isAgentAttachmentImport,
+  isDesignImageSelection,
   isConversationDescriptorResult,
   isCreateConversationRequest,
   isCreateProjectDesignFileRequest,
@@ -42,6 +43,7 @@ import {
   type AgentAttachmentPreviewResult,
   type AgentAttachmentSelection,
   type AgentAttachmentImport,
+  type DesignImageSelection,
   type CreateProjectDesignFileRequest,
   type CreateProjectRequest,
   type DesktopApi,
@@ -294,6 +296,17 @@ const desktopApi: DesktopApi = Object.freeze({
       result,
       isAgentAttachmentPreviewResult,
       "Invalid Agent attachment preview response",
+    );
+  },
+  selectDesignImage: async () => {
+    const result: unknown = await ipcRenderer.invoke(
+      channels.selectDesignImage,
+    );
+    if (result === null) return null;
+    return validate<DesignImageSelection>(
+      result,
+      isDesignImageSelection,
+      "Invalid design image selection response",
     );
   },
   onDesignToolRequest: (

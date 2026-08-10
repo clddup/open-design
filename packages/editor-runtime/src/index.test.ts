@@ -777,6 +777,71 @@ describe("EditorRuntime transactions", () => {
       "image",
     );
   });
+
+  it.each(["path", "vector"] as const)(
+    "prevents deleting an image asset referenced by a %s paint",
+    (kind) => {
+      const runtime = new EditorRuntime(createWelcomeDocument());
+      const node = {
+        ...pathNode(`${kind}_image_paint`, "frame_welcome"),
+        kind,
+        properties: {
+          ...pathNode("template").properties,
+          fills: [
+            {
+              type: "image" as const,
+              assetId: "asset_path_paint",
+              fit: "cover" as const,
+              opacity: 1,
+            },
+          ],
+        },
+      };
+      const inserted = runtime.apply(
+        transaction(runtime, `transaction_${kind}_image_paint`, [
+          {
+            commandId: "put_path_paint_asset",
+            type: "put_asset",
+            asset: {
+              id: "asset_path_paint",
+              kind: "image",
+              name: "Path paint",
+              mimeType: "image/png",
+              source: { type: "data", value: "aW1hZ2U=" },
+              size: { width: 640, height: 480 },
+              extensions: {},
+            },
+          },
+          {
+            commandId: `insert_${kind}_image_paint`,
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 4,
+            node,
+          },
+        ]),
+      );
+      expect(inserted.ok).toBe(true);
+
+      const deleted = runtime.apply(
+        transaction(runtime, `delete_${kind}_paint_asset`, [
+          {
+            commandId: "delete_path_paint_asset",
+            type: "delete_asset",
+            assetId: "asset_path_paint",
+          },
+        ]),
+      );
+      expect(deleted).toMatchObject({
+        ok: false,
+        error: { code: "invalid", commandId: "delete_path_paint_asset" },
+      });
+      expect(
+        runtime.getSnapshot().document.assetsById.asset_path_paint,
+      ).toBeDefined();
+    },
+  );
 });
 
 describe("document geometry", () => {

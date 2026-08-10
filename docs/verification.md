@@ -15,11 +15,11 @@
 
 ## 平台支持矩阵
 
-| 平台    | 产品级别 | 当前证据                                                                                                                                                                                           | 发布状态                    |
-| ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| macOS   | 一级支持 | 原生 workflow [31384519288](https://github.com/clddup/open-design/actions/runs/31384519288) 已通过 verify、protected Vite build、未签名 DMG/ZIP、包内容检查、packaged Agent smoke 与 artifact 上传 | 自动化通过；签名/安装待验收 |
-| Windows | 一级支持 | 同一 workflow 已在 Windows runner 通过 verify、protected Vite build、NSIS、包内容检查、packaged executable/Agent smoke 与 artifact 上传；已产出 `OpenDesign-Windows-X64`                           | 自动化通过；实机安装待验收  |
-| Linux   | 目标平台 | 保留 electron-builder 配置，当前无原生验证                                                                                                                                                         | 当前阶段不阻塞              |
+| 平台    | 产品级别 | 当前证据                                                                                                                                                                                                    | 发布状态                     |
+| ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| macOS   | 一级支持 | 原生 workflow [31384519288](https://github.com/clddup/open-design/actions/runs/31384519288) 已通过 verify、protected Vite build、未签名 DMG/ZIP、包内容检查、packaged Agent smoke 与 artifact 上传          | 自动化通过；签名/安装待验收  |
+| Windows | 一级支持 | 历史 workflow 已在 Windows runner 通过 verify、protected Vite build、NSIS、包内容检查、packaged executable/Agent smoke 与 artifact 上传；当前 NSIS 已配置 assisted installer 和目录选择，待最新原生产物复验 | 自动化待复验；实机安装待验收 |
+| Linux   | 目标平台 | 保留 electron-builder 配置，当前无原生验证                                                                                                                                                                  | 当前阶段不阻塞               |
 
 macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。Electron、TypeScript 和共享测试通过不等于另一操作系统可用，protected V8 bytecode 也不能跨系统构建后复用。
 
@@ -36,8 +36,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   19 files / 157 tests
-└── desktop tests   35 files / 258 tests
+├── package tests   20 files / 162 tests
+└── desktop tests   37 files / 267 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -59,7 +59,7 @@ pnpm build          passed
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
 - 生产 Provider stream 的首响应、空闲和总时限 watchdog 会 abort 实际 fetch；timeout 与 Agent process exit 都会解除 Renderer active Run、恢复可编辑输入并显示可重试错误。
-- 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。生产回归还使用完整 system prompt、十一个工具、200K Model Profile 和短消息证明 Provider 确实被调用。模型可见 `apply_transaction` Schema 不依赖 `$ref/$defs`，本地仍用完整 `DesignOperationSchema` 校验。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
+- 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。生产回归还使用完整 system prompt、十二个工具、200K Model Profile 和短消息证明 Provider 确实被调用。模型可见 `apply_transaction` Schema 不依赖 `$ref/$defs`，本地仍用完整 `DesignOperationSchema` 校验。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
 - 工具执行、业务校验和设计工具桥失败会作为 `tool.failed` 回到下一轮模型上下文供其重试或解释；模型桥、Provider、Agent 进程/协议和可信 Run binding 失败才会取消 Run。两类路径分别有“继续第二个模型回合”和“相关 Run 终结/解锁”测试。
 - JSONL 启动恢复会一次性终结孤立 started Run 和 pending tool；Global Task 同步转为 interrupted。Conversation 在 Run 注册和后续 Agent 活动时更新持久 `updatedAt`，Renderer 立即按最近活动重排。
 - Main-owned 诊断事件经过严格跨进程校验，按大小轮转写入 JSONL，且不接受任意上下文字段；右下角错误通知会显示稳定错误码和关联 Run，并复制包含 Conversation/Run/Request/Tool Call ID、应用版本和平台的诊断文本。
@@ -67,6 +67,7 @@ pnpm build          passed
 - `openai-images` adapter 只使用独立应用级配置的 Base URL、鉴权、凭据和任意 model ID 调用 `/images/generations`，GPT Image 2 是首个验证模型；链路校验 `data[0].b64_json`、响应/图片大小、格式、凭据和取消。tool schema 不接受 Provider/Model 覆盖，也不会借用 Conversation Provider；旧 v2 选择和密文迁移已有回归测试。
 - Renderer Agent 对话、属性检查器、设计工具 selection context / Mutation Target / revision、`capture_canvas` 内容寻址多模态结果、取消/继续、i18n 和桌面控件交互；对话在底部时跟随新消息与状态，用户上翻后保持阅读位置，回到底部后恢复跟随；剪贴板文件与拖放文件经 Preload API 导入，run 只接收安全附件元数据，纯文本路径粘贴保持普通输入行为。
 - host-only 图片放置以单个 Page-targeted `put_asset + insert_element(image)` 事务进入 `EditorRuntime`；测试验证单次 revision、发送时存在选区也能在固定 Page 新增 asset/node、当前活动页面变化不漂移目标，以及一次 undo 同时移除 asset/node。
+- 人工检查器与 `opendesign_update_image` 共用 `planImageNodeUpdate`：明确 Page/node ID 的 placement 与来源替换进入单个事务，保留现有 placement，未共享的旧 asset 可安全清理，共享 Image/Path/Vector paint 资源不会误删；文件选择取消/失败不产生 revision，Agent 执行不读取发送时或实时选区。
 - `opendesign_edit_hierarchy` 对现有节点提供显式 ID 的编组/解组、前移/后移/置顶/置底和跨 Page root/Frame/Group 重挂载语义；宿主与人工 UI 复用同一 planner，保持世界 transform 与多选内部顺序，固定 Frame 尺寸，自底向上重算受影响 Group bounds，并以一个原子事务写入和一次撤销。人工入口包含 Layer order 菜单、macOS `⌘/⌥⌘ + [ ]`、Windows `Ctrl/Ctrl+Shift + [ ]` 快捷键，以及图层树 before/inside/after 指针拖放。测试覆盖两个平台状态下的拖放、选区保持、保存重开、undo/redo、stale revision、Page Mutation Target、锁定、混合父级、cycle、空来源 Group、不可逆 transform、无效 index、外部拖放数据拒绝、继承外观 warning 与提交前取消；这仍是自动化 DOM/Runtime 证据，不冒充 Electron 实机指针验证。
 - `@opendesign/geometry-service` 提供不持有文档状态的纯排列结果；EditorRuntime 的 `planArrangeNodes` 将六向多层对齐、固定两端横/纵均分和明确正数/零/负数间距映射为一个原子事务，并自底向上维护 Group bounds。Inspector 与 `opendesign_arrange_layers` 共用该 planner；Agent 必须提供检查所得的稳定 Page/node IDs，发送时或实时选区不作为写目标。测试覆盖不等尺寸、旋转/缩放父级、负间距、两端固定、Group rebase、保存重开、undo/redo、锁定、不可逆 transform、Page scope、无操作拒绝，以及 macOS/Windows Renderer 状态；尚未执行真实 Electron 指针/键盘产品 smoke。
 
@@ -85,9 +86,9 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、8 项降级可用和 8 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.3.0`、EditorRuntime、Image service、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement 和视觉复核的基础路径。两个固定专业 fixture 进一步证明这些语义可以组成完整企鹅层级和复杂海报文档，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、来源替换、真实 Electron 像素截图、Agent 重放和专业导出仍未完成，因此不能据此把完整工作流标为可用。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、8 项降级可用和 8 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.3.0`、EditorRuntime、Image service、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement、来源替换和视觉复核的基础路径。两个固定专业 fixture 进一步证明这些语义可以组成完整企鹅层级和复杂海报文档，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、真实 Electron 像素截图、Agent 重放和专业导出仍未完成，因此不能据此把完整工作流标为可用。
 
-仓库当前已有独立 `@opendesign/geometry-service`，但只提供确定性排列；尚未选定 Pen 节点编辑、布尔运算、flatten、outline stroke 或 Bézier 所需的成熟 geometry kernel，也没有独立 Layout、Text/Font、Image 或 Import/Export service 包。`packages/editor-runtime/src/geometry.ts` 仍只负责矩阵、坐标转换和 bounds 计算；组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。图片链当前只支持分析参考图、生成新图和放置；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系均明确标记为不可用。
+仓库当前已有独立 `@opendesign/geometry-service`，但只提供确定性排列；尚未选定 Pen 节点编辑、布尔运算、flatten、outline stroke 或 Bézier 所需的成熟 geometry kernel，也没有独立 Layout、Text/Font 或 Import/Export service 包。`packages/editor-runtime/src/geometry.ts` 仍只负责矩阵、坐标转换和 bounds 计算；组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
 
 Agent Runtime 与 Main 当前强制执行“inspect → typed plan → 实质初稿 → `capture_canvas` → typed visual review → refinement → `capture_canvas`”。所有新 composition 必须位于计划 Frame 内；全局生图只能使用计划声明的 role，默认不能用一张 raster 替代可编辑设计。该流程显著收紧敷衍路径，但仍不能单独保证审美、文字可读性或交付保真；后续交付必须按照 [`roadmap.md`](roadmap.md) 的像素基线、固定样张、capability manifest、专业 service 和人工验收推进。
 
@@ -144,12 +145,12 @@ Vite 生产构建完成四个环境。共享门禁从实际 `out/` 检查每个�
 
 `verify:package:mac` 已检查目标平台/架构命名、非空 DMG/ZIP、unpacked `app.asar`、`icon.png`、`THIRD_PARTY_NOTICES.md`、Main/Agent bytecode wrapper、`.jsc`、bytenode runtime，以及 protected output 中不存在 sourcemap。打包过程没有启动 OpenDesign 窗口；按用户要求，本次未运行 packaged executable smoke。
 
-仓库新增 macOS/Windows 原生 workflow，目标顺序为 `verify → native protected package → package content verification → packaged Agent smoke → artifact upload`。但 workflow 尚未 push 或运行，因此以下发布门禁仍未完成：
+仓库的 macOS/Windows 原生 workflow 顺序为 `verify → native protected package → package content verification → packaged Agent smoke → artifact upload`；历史 workflow 已在两个平台通过。当前 worktree 修改了 NSIS 安装模式，尚无对应 Windows 原生产物，因此以下发布门禁仍未完成：
 
-- Windows 原生 verify、protected bytecode、NSIS、packaged smoke、安装/升级/卸载和用户数据保留。
-- macOS packaged Agent smoke、干净安装、升级/卸载、Developer ID 签名、hardened runtime 和 notarization。
+- Windows 当前 commit 的原生 verify、可选目录 NSIS、packaged smoke，以及干净安装/升级/卸载和用户数据保留。
+- macOS 干净安装、升级/卸载、Developer ID 签名、hardened runtime 和 notarization。
 - 两个平台的窗口、菜单、输入、画布、文件、`safeStorage`、Provider 与崩溃恢复产品 smoke。
 - Linux 原生构建和 protected bytecode（当前不阻塞 macOS/Windows 里程碑）。
 - 从实际发行物生成的完整第三方许可证清单。
 
-因此当前证据证明 macOS arm64 可生成并通过静态内容检查的未签名安装包，不代表 macOS 或 Windows 已达到可发布状态。
+因此历史证据证明 macOS/Windows 可以生成安装包并运行 packaged Agent smoke；当前安装器变更仍需 Windows 原生复验，两个平台都未达到完整发布门禁。

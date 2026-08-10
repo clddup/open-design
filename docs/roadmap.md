@@ -30,7 +30,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 当前仓库已配置 `.github/workflows/native-desktop.yml`：macOS 与 Windows 原生 runner 分别执行共享 `pnpm verify`、目标平台 protected build/安装包、产物内容校验，并直接启动打包后的 `OpenDesign.app` / `OpenDesign.exe` 执行无窗口 Agent smoke；不启动开发 Electron 入口。原生 workflow [31384519288](https://github.com/clddup/open-design/actions/runs/31384519288) 已在两个平台通过并上传产物，macOS arm64 也已在本机生成未签名 DMG/ZIP。自动化 packaged smoke 不能替代干净安装、签名、升级/卸载和人工 GUI 产品 smoke，下面的完整 P0-A 发布门禁仍未完成。
 
 - [x] 建立 macOS 与 Windows 原生 CI/发布矩阵；共享 `pnpm verify`，并分别在原生 runner 构建 protected bundle 和安装包。V8 bytecode 不跨操作系统复用。
-- [ ] macOS 产出 DMG/ZIP，Windows 产出 NSIS installer；分别验证干净安装、首次启动、升级覆盖、卸载和用户数据保留策略。当前只证明产物已生成并通过包内容校验。
+- [x] macOS 产出 DMG/ZIP，Windows 产出 NSIS installer；Windows 使用 assisted installer 并允许用户选择安装目录。历史 workflow 已证明产物生成与包内容，但当前配置仍需最新 Windows 原生产物复验。
+- [ ] 分别验证干净安装、安装目录选择、首次启动、升级覆盖、卸载和用户数据保留策略。
 - [ ] 两个平台共同执行：窗口/菜单/快捷键、Leafer 画布鼠标与触控板/滚轮、文本输入、文件选择、Project 保存重开、Agent utilityProcess、`safeStorage`、附件、Provider 调用、取消和崩溃恢复 GUI smoke。当前只完成打包程序的无窗口 Agent smoke。
 - [ ] 审计并移除只在 macOS 成立的路径、菜单、图标、快捷键和 shell 假设；平台差异通过窄 adapter 处理。
 - [ ] Windows 安装后产品 smoke 未通过前，不得把桌面版描述为跨平台可发布。Linux 保留目标和构建边界，但当前不阻塞此里程碑。
@@ -99,7 +100,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P3-A：文字、图片与海报交付
 
 - 建立 Text/Font service，支持富文本 runs、paragraph、列表、OpenType/variable font、字体 asset、缺失字体替换和共享文本样式。文字测量与 shaping 必须在 macOS 和 Windows 上产生明确的兼容结果或 fidelity warning。
-- 扩展已建立的 Image service：当前已有 Image 节点的版本化 placement、crop/focal 几何和 Leafer 投影；下一步补齐画布直接 Crop、检查器、replace、mask、透明背景、基础 adjustments/filter、资源变体、引用恢复和大图生命周期。增加独立 `edit_image` adapter/tool，支持局部重绘、扩图、背景替换、重打光和风格统一；参考图、原图和 AI 派生资源必须分离并可追溯，任何编辑都不得覆盖原始 asset。
+- 扩展已建立的 Image service：当前已有 Image 节点的版本化 placement、crop/focal 几何、Leafer 投影、检查器、来源替换和专用 Agent update tool；下一步补齐画布直接 Crop、mask、透明背景、基础 adjustments/filter、资源变体、引用恢复和大图生命周期。增加独立 `edit_image` adapter/tool，支持局部重绘、扩图、背景替换、重打光和风格统一；参考图、原图和 AI 派生资源必须分离并可追溯，任何编辑都不得覆盖原始 asset。
 - 建立首个专业导出切片，支持选区或 Frame 的 PNG/JPEG/WebP、多倍图、透明背景和颜色配置。导出读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
 - 为人工属性面板和 Agent 增加文字、裁剪、替换、调整和导出的语义命令；长任务必须展示进度、支持取消并返回稳定产物或明确失败。
 

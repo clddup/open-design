@@ -13,6 +13,7 @@ import {
   DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
+  UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 import { reviewDesignCompletion } from "./design-completion-guard";
 
@@ -282,6 +283,38 @@ describe("design completion guard", () => {
           firstCapture,
           visualReview,
           hierarchyWrite,
+          finalCapture,
+        ]),
+      ),
+    ).toEqual({ allow: true });
+  });
+
+  it("accepts an explicit Image update as a post-review refinement without making it a material draft", () => {
+    const updateImage: AgentToolCallRecord = {
+      toolCallId: "update_image_1",
+      toolName: UPDATE_IMAGE_TOOL_NAME,
+      input: {
+        action: "set-placement",
+        pageId: "page_1",
+        nodeId: "hero_image",
+        placement: { mode: "fit" },
+      },
+      status: "completed",
+      revision: 6,
+    };
+
+    expect(reviewDesignCompletion(context([updateImage]))).toEqual({
+      allow: true,
+    });
+    expect(
+      reviewDesignCompletion(
+        context([
+          inspection,
+          designPlan,
+          materialWrite,
+          firstCapture,
+          visualReview,
+          updateImage,
           finalCapture,
         ]),
       ),

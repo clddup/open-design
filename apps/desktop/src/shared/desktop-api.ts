@@ -10,7 +10,9 @@ import type {
   ModelSelection,
 } from "@opendesign/model-gateway";
 import {
+  isDesignAsset,
   isDesignDocument,
+  type DesignAsset,
   type DesignDocument,
 } from "@opendesign/design-contracts";
 import {
@@ -174,6 +176,10 @@ export type AgentAttachmentPreviewResult = AgentAttachmentPreviewRequest & {
   previewDataUrl: string | null;
 };
 
+export type DesignImageSelection = {
+  asset: DesignAsset;
+};
+
 export type CreateProjectRequest = {
   projectId: string;
   name: string;
@@ -254,6 +260,7 @@ export interface DesktopApi {
   getAgentAttachmentPreview: (
     request: AgentAttachmentPreviewRequest,
   ) => Promise<AgentAttachmentPreviewResult>;
+  selectDesignImage: () => Promise<DesignImageSelection | null>;
   onDesignToolRequest: (
     listener: (request: RendererDesignToolRequest) => void,
   ) => () => void;
@@ -324,6 +331,7 @@ export const channels = {
   selectAgentAttachments: "agent-attachment:select",
   importAgentAttachments: "agent-attachment:import",
   getAgentAttachmentPreview: "agent-attachment:preview",
+  selectDesignImage: "design-image:select",
   designToolRequest: "design-tool:request",
   designToolCancel: "design-tool:cancel",
   resolveDesignToolRequest: "design-tool:resolve",
@@ -413,6 +421,25 @@ export function isAgentAttachmentPreviewResult(
     Object.keys(value).every((key) =>
       ["attachmentId", "previewDataUrl"].includes(key),
     )
+  );
+}
+
+export function isDesignImageSelection(
+  value: unknown,
+): value is DesignImageSelection {
+  if (!isRecord(value) || !isDesignAsset(value.asset)) return false;
+  const { asset } = value;
+  return (
+    asset.kind === "image" &&
+    /^asset_[a-f0-9]{64}$/.test(asset.id) &&
+    asset.source.type === "data" &&
+    asset.source.value.length > 0 &&
+    asset.source.value.length <= 24_000_000 &&
+    /^[A-Za-z0-9+/]*={0,2}$/.test(asset.source.value) &&
+    asset.size !== undefined &&
+    asset.size.width > 0 &&
+    asset.size.height > 0 &&
+    Object.keys(value).every((key) => key === "asset")
   );
 }
 

@@ -111,7 +111,7 @@
 - 实现方：AgentAttachmentHost + ImageGenerationHost + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
 - 证据：自动化 5 项；实机 0 项
-- 限制：图片生成需要独立全局配置；画布内直接替换、移除背景和资源管理 UI 尚未完成。
+- 限制：图片生成需要独立全局配置；画布直接放置手柄、移除背景和资源管理 UI 尚未完成。
 
 ### 图片裁剪与调整 — 降级可用
 
@@ -119,9 +119,9 @@
 
 - ID：`image.crop-adjustments`
 - 实现方：DesignDocument 1.3.0 + OpenDesign Image service crop geometry + Leafer projection
-- 表面：contract=degraded；runtime=degraded；human=unavailable；agent=unavailable；render=degraded；export=unavailable
-- 证据：自动化 3 项；实机 0 项
-- 限制：Image 节点已有版本化非破坏 placement 与确定性裁剪几何，但画布直接裁剪控件、替换 UI、调整滤镜、导出保真和专用 Agent 编辑工作流仍未完成。
+- 表面：contract=degraded；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=unavailable
+- 证据：自动化 7 项；实机 0 项
+- 限制：检查器与专用 Agent 工具已共用非破坏 placement 和来源替换语义，但画布直接裁剪控件、调整滤镜、导出保真及 macOS/Windows 原生交互证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040675194-Crop-an-image)
 
 ### AI 图片编辑 — 不可用

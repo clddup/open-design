@@ -1676,6 +1676,44 @@ textarea {
   color: var(--ui-text);
   background: var(--ui-surface-raised);
 }
+.image-placement-editor {
+  gap: 7px;
+}
+.image-placement-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+}
+.image-placement-actions button {
+  min-width: 0;
+  height: 27px;
+  padding: 0 5px;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  color: var(--ui-text-muted);
+  background: var(--ui-bg);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.image-placement-actions button:hover,
+.image-placement-actions button.is-active {
+  color: var(--ui-text);
+  border-color: var(--ui-border-strong);
+  background: var(--ui-surface-raised);
+}
+.image-placement-actions button.is-active {
+  box-shadow: inset 0 0 0 1px var(--ui-focus);
+}
+.image-placement-actions button:focus-visible,
+.image-replace-button:focus-visible {
+  outline: 1px solid var(--ui-focus);
+  outline-offset: 1px;
+}
+.image-replace-button {
+  border-style: solid;
+}
 .paint-editor + .paint-editor,
 .effect-editor + .effect-editor {
   margin-top: 8px;

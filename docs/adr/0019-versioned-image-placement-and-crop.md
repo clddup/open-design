@@ -37,7 +37,7 @@ Leafer adapter 把 resolved placement 投影为固定 `leafer-editor@2.2.9` 的 
 
 一次同时引入 layout、rich text、component、token、image 和 export 的单体协议升级会阻塞可独立验证的高优先级能力。后续允许每个专业能力单独升级协议，但每个切片仍必须覆盖 schema、migration、runtime、human UI、Agent、provider、persistence/export、undo/redo 和能力清单；未覆盖完整表面的能力保持 `degraded`，不得以底层字段存在冒充完成。
 
-本 ADR 的首个提交只完成协议、迁移、确定性 crop geometry、Leafer 投影和工具 schema 基础。画布直接 Crop 模式、检查器、来源替换和专用 Agent 编辑流程在后续同一目标切片中完成前，`image.crop-adjustments` 继续标记为 `degraded`。
+当前纵向切片已经覆盖协议、迁移、确定性 crop geometry、Leafer 投影、检查器 placement 控件、受限文件选择、来源替换，以及人工 UI/Agent 共用的显式 Page/node planner。来源替换以 `put_asset + update_properties + 可安全删除旧 asset` 的单个事务执行；共享 asset 保留，取消或失败不产生 revision，Agent 不读取实时选区。画布直接 Crop 模式、图片 adjustments/filter、保存重开的完整产品流和真实 macOS/Windows 指针验证尚未完成，因此 `image.crop-adjustments` 继续标记为 `degraded`。
 
 ## 验证
 

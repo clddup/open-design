@@ -1,6 +1,8 @@
 import {
+  isDesignAsset,
   isDesignOperation,
   isImagePlacement,
+  type DesignAsset,
   type DesignOperation,
   type ImagePlacement,
 } from "@opendesign/design-contracts";
@@ -15,8 +17,11 @@ export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
 export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
 export const GENERATE_IMAGE_TOOL_NAME = "opendesign_generate_image";
 export const PLACE_IMAGE_TOOL_NAME = "opendesign_place_image";
+export const UPDATE_IMAGE_TOOL_NAME = "opendesign_update_image";
 export const INTERNAL_DESIGN_APPLY_TOOL_NAME =
   "opendesign_internal_apply_transaction";
+export const INTERNAL_UPDATE_IMAGE_TOOL_NAME =
+  "opendesign_internal_update_image";
 
 export type ReadImageToolInput = { source: string };
 export type DesignDeliverable =
@@ -98,6 +103,33 @@ export type PlaceImageToolInput = {
   height?: number;
   placement?: ImagePlacement;
 };
+export type UpdateImageToolInput =
+  | {
+      action: "set-placement";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      placement: ImagePlacement;
+    }
+  | {
+      action: "replace-source";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      attachmentId: string;
+      placement?: ImagePlacement;
+    };
+
+export type InternalUpdateImageToolInput =
+  | Extract<UpdateImageToolInput, { action: "set-placement" }>
+  | {
+      action: "replace-source";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      asset: DesignAsset;
+      placement?: ImagePlacement;
+    };
 
 export type DesignApplyToolInput = {
   label: string;
@@ -990,6 +1022,38 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: UPDATE_IMAGE_TOOL_NAME,
+    description:
+      "Update one existing Image node through OpenDesign's non-destructive image workflow. set-placement switches Stretch/Fit/Fill/Crop or changes normalized focal point, crop zoom, rotation, and flips without modifying the source asset. replace-source consumes an image attachment already authorized for this run, creates a new durable content-addressed asset, preserves the existing placement unless a replacement placement is supplied, and atomically updates the node. Targets are explicit Page and node IDs returned by inspection, never the live selection. This tool does not perform pixel generation, inpainting, background removal, or destructive file edits.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: {
+          enum: ["set-placement", "replace-source"],
+          description:
+            "set-placement requires placement; replace-source requires attachmentId and may also provide placement.",
+        },
+        label: { type: "string", minLength: 1, maxLength: 256 },
+        pageId: { type: "string", minLength: 1, maxLength: 256 },
+        nodeId: { type: "string", minLength: 1, maxLength: 256 },
+        attachmentId: {
+          type: "string",
+          pattern: "^image_[a-f0-9]{64}$",
+          description: "Required only for replace-source.",
+        },
+        placement: {
+          ...MODEL_NODE_KIND_PROPERTIES_SCHEMA.properties.placement,
+          description:
+            "Required for set-placement and optional for replace-source.",
+        },
+      },
+      required: ["action", "label", "pageId", "nodeId"],
+      additionalProperties: false,
+    },
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: DESIGN_HIERARCHY_TOOL_NAME,
     description:
       "Edit existing layer hierarchy in the currently bound Design File without asking the model to calculate low-level move commands or transform changes. It can group siblings, ungroup one Group, reorder siblings, or reparent one or more same-parent layers to an explicit Page-root, Frame, or Group insertion index. Reparenting preserves world transforms and dynamically recomputes affected Group bounds; Frame sizes remain fixed. Targets are explicit stable node IDs on an explicit existing Page, never the send-time or live user selection. The host previews the complete change and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, cycles, empty source Groups, non-invertible targets, no-op changes, and visually lossy ungrouping; inherited clipping or appearance changes return a visual-review warning.",
@@ -1047,6 +1111,10 @@ export function validateDesignAgentToolInput(
     return isGenerateImageToolInput(input);
   }
   if (toolName === PLACE_IMAGE_TOOL_NAME) return isPlaceImageToolInput(input);
+  if (toolName === UPDATE_IMAGE_TOOL_NAME) return isUpdateImageToolInput(input);
+  if (toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME) {
+    return isInternalUpdateImageToolInput(input);
+  }
   if (toolName === DESIGN_HIERARCHY_TOOL_NAME) {
     return isDesignHierarchyToolInput(input);
   }
@@ -1149,6 +1217,76 @@ export function isPlaceImageToolInput(
     (input.height === undefined || positive(input.height)) &&
     (input.placement === undefined || isImagePlacement(input.placement)) &&
     Object.keys(input).every((key) => allowed.includes(key))
+  );
+}
+
+export function isUpdateImageToolInput(
+  input: unknown,
+): input is UpdateImageToolInput {
+  if (!isRecord(input)) return false;
+  const common =
+    typeof input.label === "string" &&
+    input.label.length > 0 &&
+    input.label.length <= 256 &&
+    safeId(input.pageId) &&
+    safeId(input.nodeId);
+  if (!common) return false;
+  if (input.action === "set-placement") {
+    return (
+      isImagePlacement(input.placement) &&
+      Object.keys(input).every((key) =>
+        ["action", "label", "pageId", "nodeId", "placement"].includes(key),
+      )
+    );
+  }
+  if (input.action === "replace-source") {
+    return (
+      typeof input.attachmentId === "string" &&
+      /^image_[a-f0-9]{64}$/.test(input.attachmentId) &&
+      (input.placement === undefined || isImagePlacement(input.placement)) &&
+      Object.keys(input).every((key) =>
+        [
+          "action",
+          "label",
+          "pageId",
+          "nodeId",
+          "attachmentId",
+          "placement",
+        ].includes(key),
+      )
+    );
+  }
+  return false;
+}
+
+export function isInternalUpdateImageToolInput(
+  input: unknown,
+): input is InternalUpdateImageToolInput {
+  if (!isRecord(input)) return false;
+  const common =
+    typeof input.label === "string" &&
+    input.label.length > 0 &&
+    input.label.length <= 256 &&
+    safeId(input.pageId) &&
+    safeId(input.nodeId);
+  if (!common) return false;
+  if (input.action === "set-placement") {
+    return (
+      isImagePlacement(input.placement) &&
+      Object.keys(input).every((key) =>
+        ["action", "label", "pageId", "nodeId", "placement"].includes(key),
+      )
+    );
+  }
+  if (input.action !== "replace-source") return false;
+  return (
+    isBoundedEmbeddedImageAsset(input.asset) &&
+    (input.placement === undefined || isImagePlacement(input.placement)) &&
+    Object.keys(input).every((key) =>
+      ["action", "label", "pageId", "nodeId", "asset", "placement"].includes(
+        key,
+      ),
+    )
   );
 }
 
@@ -1388,6 +1526,23 @@ export function isInternalDesignApplyToolInput(
   input: unknown,
 ): input is DesignApplyToolInput {
   return validateDesignAgentToolInput(INTERNAL_DESIGN_APPLY_TOOL_NAME, input);
+}
+
+function isBoundedEmbeddedImageAsset(value: unknown): value is DesignAsset {
+  if (!isDesignAsset(value) || value.kind !== "image") return false;
+  return (
+    /^asset_[a-f0-9]{64}$/.test(value.id) &&
+    /^(?:image\/png|image\/jpeg|image\/webp|image\/gif)$/.test(
+      value.mimeType ?? "",
+    ) &&
+    value.source.type === "data" &&
+    value.source.value.length > 0 &&
+    value.source.value.length <= 24_000_000 &&
+    /^[A-Za-z0-9+/]*={0,2}$/.test(value.source.value) &&
+    value.size !== undefined &&
+    value.size.width > 0 &&
+    value.size.height > 0
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

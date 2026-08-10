@@ -79,8 +79,11 @@ import {
   isGenerateImageToolInput,
   isPlaceImageToolInput,
   isReadImageToolInput,
+  isUpdateImageToolInput,
+  INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
+  UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 
 const applicationId = "design.open.app";
@@ -636,6 +639,55 @@ function registerIpc() {
       };
     },
   );
+  ipcMain.handle(channels.selectDesignImage, async (event, ...args) => {
+    assertMainRenderer(event);
+    assertArgumentCount(args, 0);
+    const window = mainWindow;
+    if (!window) return null;
+    const result = await dialog.showOpenDialog(window, {
+      title: translate(localePreference, "main.selectDesignImageTitle"),
+      buttonLabel: translate(localePreference, "main.selectDesignImageButton"),
+      properties: ["openFile"],
+      filters: [
+        {
+          name: translate(localePreference, "main.imageFilter"),
+          extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+        },
+      ],
+    });
+    const path = result.filePaths[0];
+    if (result.canceled || !path) return null;
+    const selected = (
+      await requireAgentAttachmentHost().importFiles([path])
+    )[0];
+    if (!selected || !selected.attachmentId.startsWith("image_")) {
+      throw new TypeError("Selected design asset is not an image");
+    }
+    const resolved = await requireAgentAttachmentHost().resolve(
+      selected.attachmentId,
+    );
+    if (resolved.kind !== "image") {
+      throw new TypeError("Selected design asset is not an image");
+    }
+    const intrinsic = nativeImage
+      .createFromBuffer(Buffer.from(resolved.data, "base64"))
+      .getSize();
+    if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+      throw new TypeError("Selected design image has invalid dimensions");
+    }
+    const digest = selected.attachmentId.slice("image_".length);
+    return {
+      asset: {
+        id: `asset_${digest}`,
+        kind: "image",
+        name: selected.name,
+        mimeType: resolved.mimeType,
+        source: { type: "data", value: resolved.data },
+        size: { width: intrinsic.width, height: intrinsic.height },
+        extensions: { importedBy: "design-image-picker" },
+      },
+    };
+  });
   ipcMain.handle(channels.openDesignFile, async (event) => {
     assertMainRenderer(event);
     const window = mainWindow;
@@ -1073,6 +1125,76 @@ void app.whenReady().then(async () => {
               },
             ],
           },
+        },
+        context,
+        signal,
+      );
+      globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+      return result;
+    }
+    if (call.toolName === UPDATE_IMAGE_TOOL_NAME) {
+      if (!isUpdateImageToolInput(call.input)) {
+        throw new TypeError("Invalid update image tool input");
+      }
+      if (
+        context.mutationTarget.kind === "page" &&
+        context.mutationTarget.pageId !== call.input.pageId
+      ) {
+        throw new Error(
+          "Image update targets a Page outside the active mutation target",
+        );
+      }
+      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+      if (call.input.action === "replace-source") {
+        const image = await requireAgentReferenceHost().materializeImage(
+          call.input.attachmentId,
+          context,
+        );
+        const intrinsic = nativeImage
+          .createFromBuffer(Buffer.from(image.data, "base64"))
+          .getSize();
+        if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+          throw new TypeError("Replacement image has invalid dimensions");
+        }
+        const digest = image.attachment.attachmentId.slice("image_".length);
+        const assetId = `asset_${digest}`;
+        const result = await rendererDesignToolHost.execute(
+          {
+            ...call,
+            toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+            input: {
+              action: "replace-source",
+              label: call.input.label,
+              pageId: call.input.pageId,
+              nodeId: call.input.nodeId,
+              asset: {
+                id: assetId,
+                kind: "image",
+                name: image.attachment.name,
+                mimeType: image.mimeType,
+                source: { type: "data", value: image.data },
+                size: { width: intrinsic.width, height: intrinsic.height },
+                extensions: {
+                  attachmentId: image.attachment.attachmentId,
+                  importedBy: "agent-image-update",
+                },
+              },
+              ...(call.input.placement === undefined
+                ? {}
+                : { placement: call.input.placement }),
+            },
+          },
+          context,
+          signal,
+        );
+        globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+        return result;
+      }
+      const result = await rendererDesignToolHost.execute(
+        {
+          ...call,
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: call.input,
         },
         context,
         signal,

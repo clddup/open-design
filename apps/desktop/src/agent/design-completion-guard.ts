@@ -14,6 +14,7 @@ import {
   DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
+  UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools.js";
 
 export function reviewDesignCompletion(
@@ -187,6 +188,7 @@ function findMaterialWriteIndex(
 function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
   return (
     call.toolName === PLACE_IMAGE_TOOL_NAME ||
+    call.toolName === UPDATE_IMAGE_TOOL_NAME ||
     call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
     call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
     (call.toolName === DESIGN_APPLY_TOOL_NAME &&

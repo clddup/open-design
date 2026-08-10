@@ -44,6 +44,12 @@ export {
 } from "./arrange-operations.js";
 export { MAX_ARRANGEMENT_SPACING } from "@opendesign/geometry-service";
 export {
+  planImageNodeUpdate,
+  type ImageUpdateFailureCode,
+  type ImageUpdateOperation,
+  type ImageUpdatePlan,
+} from "./image-operations.js";
+export {
   DESIGN_DIAGNOSTIC_REPORT_VERSION,
   diagnoseDesignPages,
   type DesignDiagnostic,

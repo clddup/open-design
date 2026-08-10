@@ -8,7 +8,9 @@ import {
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
+  INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
+  UPDATE_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
 
@@ -262,6 +264,93 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
         ...input,
         fit: "cover",
+      }),
+    ).toBe(false);
+  });
+
+  it("updates an explicit Image node without deriving a target from selection", () => {
+    const setPlacement = {
+      action: "set-placement",
+      label: "Reframe the hero",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      placement: {
+        mode: "crop",
+        focalPoint: { x: 0.36, y: 0.58 },
+        zoom: 1.25,
+        rotation: -4,
+        flipHorizontal: false,
+        flipVertical: false,
+      },
+    };
+    const replaceSource = {
+      action: "replace-source",
+      label: "Replace the hero source",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      attachmentId: `image_${"b".repeat(64)}`,
+    };
+    const update = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === UPDATE_IMAGE_TOOL_NAME,
+    );
+
+    expect(update).toMatchObject({ risk: "design_write", approval: "never" });
+    expect(update?.description).toContain("explicit Page and node IDs");
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, setPlacement),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, replaceSource),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
+        ...setPlacement,
+        placement: {
+          ...setPlacement.placement,
+          zoom: 0.5,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
+        ...replaceSource,
+        attachmentId: "C:\\Users\\me\\hero.png",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(UPDATE_IMAGE_TOOL_NAME, {
+        ...setPlacement,
+        selectedNodeId: "live_selection",
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only bounded embedded image assets on the trusted internal bridge", () => {
+    const input = {
+      action: "replace-source",
+      label: "Replace hero",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      asset: {
+        id: `asset_${"c".repeat(64)}`,
+        kind: "image",
+        name: "Hero.webp",
+        mimeType: "image/webp",
+        source: { type: "data", value: "aW1hZ2U=" },
+        size: { width: 1600, height: 900 },
+        extensions: {},
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, input),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, {
+        ...input,
+        asset: {
+          ...input.asset,
+          source: { type: "external", value: "C:\\secret\\hero.webp" },
+        },
       }),
     ).toBe(false);
   });

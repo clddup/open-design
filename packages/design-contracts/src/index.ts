@@ -1152,6 +1152,10 @@ export function isDesignDocument(value: unknown): value is DesignDocument {
   return checkSchema(DesignDocumentSchema, value);
 }
 
+export function isDesignAsset(value: unknown): value is DesignAsset {
+  return checkSchema(DesignAssetSchema, value);
+}
+
 export function isImagePlacement(value: unknown): value is ImagePlacement {
   return checkSchema(ImagePlacementSchema, value);
 }

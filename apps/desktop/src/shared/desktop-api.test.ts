@@ -12,6 +12,7 @@ import {
   isAgentAttachmentPreviewRequest,
   isAgentAttachmentPreviewResult,
   isAgentAttachmentSelection,
+  isDesignImageSelection,
   isGlobalImageGenerationSettings,
   isGlobalTaskProjectionResult,
   isListProjectConversationsRequest,
@@ -279,6 +280,32 @@ describe("Agent attachment desktop API guards", () => {
     expect(
       isAgentAttachmentPreviewRequest({
         attachmentId: "../../reference.png",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("Design image desktop API guards", () => {
+  it("accepts an embedded content-addressed image without exposing its path", () => {
+    const selection = {
+      asset: {
+        id: `asset_${"a".repeat(64)}`,
+        kind: "image",
+        name: "Hero.webp",
+        mimeType: "image/webp",
+        source: { type: "data", value: "aW1hZ2U=" },
+        size: { width: 1600, height: 900 },
+        extensions: { importedBy: "design-image-picker" },
+      },
+    };
+    expect(isDesignImageSelection(selection)).toBe(true);
+    expect(
+      isDesignImageSelection({
+        ...selection,
+        asset: {
+          ...selection.asset,
+          source: { type: "external", value: "C:\\Users\\me\\hero.webp" },
+        },
       }),
     ).toBe(false);
   });

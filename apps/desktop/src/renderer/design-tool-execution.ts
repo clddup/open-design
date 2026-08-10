@@ -12,6 +12,7 @@ import {
   diagnoseDesignPages,
   planArrangeNodes,
   planGroupNodes,
+  planImageNodeUpdate,
   planReparentNodes,
   planReorderNodes,
   planUngroupNode,
@@ -24,10 +25,12 @@ import {
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   isDesignArrangeToolInput,
   isDesignApplyToolInput,
   isDesignHierarchyToolInput,
   isInternalDesignApplyToolInput,
+  isInternalUpdateImageToolInput,
 } from "../shared/design-agent-tools";
 import type {
   RendererDesignToolRequest,
@@ -318,6 +321,107 @@ export async function executeDesignToolRequest(
           ...(plan.resolvedSpacing === undefined
             ? {}
             : { resolvedSpacing: plan.resolvedSpacing }),
+          revision: result.revision.revision,
+          atomic: true,
+          changes: result.changes,
+          warnings: result.warnings,
+        },
+        designRevision: {
+          previousRevision: transaction.baseRevision,
+          revision: result.revision.revision,
+          transactionId: transaction.transactionId,
+        },
+      },
+    };
+  }
+
+  if (
+    request.call.toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME &&
+    isInternalUpdateImageToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "Image update",
+    );
+    const commandPrefix =
+      `image_${input.action}_${request.call.toolCallId}`.slice(0, 200);
+    const plan = planImageNodeUpdate(
+      document,
+      input.action === "set-placement"
+        ? {
+            action: input.action,
+            pageId: input.pageId,
+            nodeId: input.nodeId,
+            placement: input.placement,
+          }
+        : {
+            action: input.action,
+            pageId: input.pageId,
+            nodeId: input.nodeId,
+            asset: input.asset,
+            ...(input.placement === undefined
+              ? {}
+              : { placement: input.placement }),
+          },
+      commandPrefix,
+    );
+    if (!plan.ok) {
+      throw new Error(`image-update.${plan.code}: ${plan.message}`);
+    }
+    assertCommandsWithinMutationTarget(
+      document,
+      plan.commands,
+      request.context.mutationTarget,
+      { allowedAssetDeletionId: plan.deletedAssetId },
+    );
+    const transaction = {
+      transactionId:
+        `transaction_agent_image_${request.call.toolCallId}_${Date.now()}`.slice(
+          0,
+          256,
+        ),
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: {
+        type: "agent",
+        id: `agent_${request.context.sessionId}`,
+        displayName: "OpenDesign Agent",
+      },
+      label: input.label,
+      commands: plan.commands,
+    } satisfies DesignTransaction;
+    throwIfAborted(options.signal);
+    const preview = runtime.preview(transaction);
+    if (!preview.ok) {
+      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+    }
+    throwIfAborted(options.signal);
+    const result = runtime.apply(transaction);
+    if (!result.ok) {
+      throw new Error(`${result.error.code}: ${result.error.message}`);
+    }
+    const applied = runtime.getSnapshot().document.nodesById[input.nodeId];
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        content: {
+          ok: true,
+          action: input.action,
+          label: input.label,
+          pageId: input.pageId,
+          nodeId: input.nodeId,
+          assetId:
+            applied?.kind === "image" ? applied.properties.assetId : undefined,
+          placement:
+            applied?.kind === "image"
+              ? applied.properties.placement
+              : undefined,
+          ...(plan.deletedAssetId === undefined
+            ? {}
+            : { deletedAssetId: plan.deletedAssetId }),
           revision: result.revision.revision,
           atomic: true,
           changes: result.changes,
@@ -641,6 +745,7 @@ function assertCommandsWithinMutationTarget(
   document: DesignDocument,
   commands: readonly DesignOperation[],
   mutationTarget: DesignMutationTarget,
+  options: { allowedAssetDeletionId?: string } = {},
 ): void {
   if (mutationTarget.kind === "document") return;
   const pageId = requiredMutationPageId(document, mutationTarget);
@@ -672,6 +777,7 @@ function assertCommandsWithinMutationTarget(
   for (const command of commands) {
     if (command.type === "put_asset") continue;
     if (command.type === "delete_asset") {
+      if (options.allowedAssetDeletionId === command.assetId) continue;
       throw new Error("Agent asset deletion requires a dedicated scoped tool");
     }
     if (command.type === "insert_element") {

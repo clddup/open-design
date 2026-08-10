@@ -34,6 +34,10 @@ win:
   target:
     - nsis
 
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
 linux:
   category: Graphics
   icon: icons

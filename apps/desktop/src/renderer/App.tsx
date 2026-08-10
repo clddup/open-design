@@ -22,6 +22,7 @@ import {
   invertTransform,
   planArrangeNodes,
   planGroupNodes,
+  planImageNodeUpdate,
   planReparentNodes,
   planReorderNodes,
   planUngroupNode,
@@ -561,6 +562,42 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     },
     [applyCommands, t],
   );
+
+  const replaceSelectedImage = useCallback(async () => {
+    const selected = runtime.getSnapshot().state.selection.nodeIds;
+    const nodeId = selected.length === 1 ? selected[0] : undefined;
+    const before = nodeId
+      ? runtime.getSnapshot().document.nodesById[nodeId]
+      : undefined;
+    if (!nodeId || !before || before.kind !== "image") return;
+    try {
+      const selection = await window.desktop?.selectDesignImage();
+      if (!selection) return;
+      const current = runtime.getSnapshot().document;
+      const image = current.nodesById[nodeId];
+      if (!image || image.kind !== "image") {
+        setEditorError(t("error.replaceImage"));
+        return;
+      }
+      const plan = planImageNodeUpdate(
+        current,
+        {
+          action: "replace-source",
+          pageId: activePageId,
+          nodeId,
+          asset: selection.asset,
+        },
+        `replace_image_${nodeId}`,
+      );
+      if (!plan.ok) {
+        if (plan.code !== "no-op") setEditorError(t("error.replaceImage"));
+        return;
+      }
+      applyCommands(t("history.replaceImage"), plan.commands);
+    } catch {
+      setEditorError(t("error.replaceImage"));
+    }
+  }, [activePageId, applyCommands, runtime, t]);
 
   const deleteNodes = useCallback(
     (nodeIds: readonly string[]) => {
@@ -1646,6 +1683,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onArrange={arrangeSelection}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
                 onDuplicate={duplicateSelection}
+                onReplaceImage={() => void replaceSelectedImage()}
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}

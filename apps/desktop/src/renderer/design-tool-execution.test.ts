@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
+  INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
 import { executeDesignToolRequest } from "./design-tool-execution";
@@ -522,6 +523,150 @@ describe("Renderer design tool scope", () => {
     expect(
       selectedRuntime.getSnapshot().document.assetsById.asset_reference,
     ).toBeDefined();
+  });
+
+  it("updates the explicit Image node instead of the live selection", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const oldAssetId = `asset_${"a".repeat(64)}`;
+    const inserted = runtime.apply({
+      transactionId: "insert_update_target",
+      documentId: "document_welcome",
+      baseRevision: 0,
+      actor: { type: "user", id: "test" },
+      commands: [
+        {
+          commandId: "put_update_target",
+          type: "put_asset",
+          asset: {
+            id: oldAssetId,
+            kind: "image",
+            name: "Old hero",
+            mimeType: "image/png",
+            source: { type: "data", value: "b2xk" },
+            size: { width: 800, height: 600 },
+            extensions: {},
+          },
+        },
+        {
+          commandId: "insert_update_target",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: "frame_welcome",
+          index: 4,
+          node: {
+            id: "hero_image",
+            kind: "image",
+            name: "Hero",
+            parentId: "frame_welcome",
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 32, 32],
+            size: { width: 320, height: 240 },
+            opacity: 1,
+            properties: {
+              assetId: oldAssetId,
+              placement: { mode: "fit" },
+              altText: "Hero",
+              cornerRadius: 0,
+            },
+            extensions: {},
+          },
+        },
+      ],
+    });
+    expect(inserted.ok).toBe(true);
+    runtime.setSelection(["feature_one"], "feature_one");
+
+    const placementResponse = await executeDesignToolRequest(
+      {
+        requestId: "update_image_placement",
+        call: {
+          toolCallId: "tool_update_image_placement",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "set-placement",
+            label: "Reframe hero",
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            placement: {
+              mode: "crop",
+              focalPoint: { x: 0.4, y: 0.6 },
+              zoom: 1.3,
+              rotation: -6,
+              flipHorizontal: false,
+              flipVertical: false,
+            },
+          },
+        },
+        context: { ...selectionContext, revision: 1 },
+      },
+      runtime,
+      "page_changed_after_send",
+    );
+    expect(placementResponse).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-placement",
+          nodeId: "hero_image",
+          revision: 2,
+          atomic: true,
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById.feature_one?.name).toBe(
+      "Structured editing",
+    );
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "feature_one",
+    ]);
+
+    const newAssetId = `asset_${"b".repeat(64)}`;
+    const replacementResponse = await executeDesignToolRequest(
+      {
+        requestId: "replace_image_source",
+        call: {
+          toolCallId: "tool_replace_image_source",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "replace-source",
+            label: "Replace hero source",
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            asset: {
+              id: newAssetId,
+              kind: "image",
+              name: "New hero",
+              mimeType: "image/webp",
+              source: { type: "data", value: "bmV3" },
+              size: { width: 1600, height: 900 },
+              extensions: {},
+            },
+          },
+        },
+        context: { ...selectionContext, revision: 2 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(replacementResponse).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "replace-source",
+          nodeId: "hero_image",
+          assetId: newAssetId,
+          deletedAssetId: oldAssetId,
+          revision: 3,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.assetsById[oldAssetId],
+    ).toBeUndefined();
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(3);
   });
 
   it("returns bounded image asset metadata without copying source bytes into model context", async () => {

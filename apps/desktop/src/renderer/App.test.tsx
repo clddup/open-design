@@ -171,6 +171,7 @@ beforeEach(() => {
     selectAgentAttachments: vi.fn().mockResolvedValue([]),
     importAgentAttachments: vi.fn().mockResolvedValue([]),
     getAgentAttachmentPreview: vi.fn(),
+    selectDesignImage: vi.fn().mockResolvedValue(null),
     onDesignToolRequest: vi
       .fn()
       .mockImplementation(
@@ -1382,6 +1383,233 @@ describe("App", () => {
       },
     });
     expect(runtime().getSnapshot().document.revision).toBe(4);
+  });
+
+  it("edits non-destructive image crop properties and replaces the source atomically", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const oldAssetId = `asset_${"a".repeat(64)}`;
+    const newAssetId = `asset_${"b".repeat(64)}`;
+    act(() => {
+      const current = runtime().getSnapshot().document;
+      const result = runtime().apply({
+        transactionId: "insert_image_fixture",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: [
+          {
+            commandId: "put_old_image",
+            type: "put_asset",
+            asset: {
+              id: oldAssetId,
+              kind: "image",
+              name: "Old hero",
+              mimeType: "image/png",
+              source: { type: "data", value: "aW1hZ2U=" },
+              size: { width: 800, height: 600 },
+              extensions: {},
+            },
+          },
+          {
+            commandId: "insert_hero_image",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: null,
+            index: 1,
+            node: {
+              id: "hero_image",
+              kind: "image",
+              name: "Hero image",
+              parentId: null,
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 100, 120],
+              size: { width: 400, height: 300 },
+              opacity: 1,
+              properties: {
+                assetId: oldAssetId,
+                placement: { mode: "fit" },
+                altText: "Hero",
+                cornerRadius: 0,
+              },
+              extensions: {},
+            },
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      runtime().setSelection(["hero_image"], "hero_image");
+    });
+    await user.click(screen.getByRole("tab", { name: "Properties" }));
+
+    fireEvent.change(screen.getByLabelText("Placement"), {
+      target: { value: "crop" },
+    });
+    expect(runtime().getSnapshot().document.nodesById.hero_image).toMatchObject(
+      {
+        properties: {
+          placement: {
+            mode: "crop",
+            focalPoint: { x: 0.5, y: 0.5 },
+            zoom: 1,
+            rotation: 0,
+            flipHorizontal: false,
+            flipVertical: false,
+          },
+        },
+      },
+    );
+
+    const zoom = screen.getByLabelText("Crop zoom");
+    await user.clear(zoom);
+    await user.type(zoom, "140");
+    await user.tab();
+    await user.click(screen.getByRole("button", { name: "Flip H" }));
+
+    vi.mocked(window.desktop!.selectDesignImage).mockResolvedValueOnce({
+      asset: {
+        id: newAssetId,
+        kind: "image",
+        name: "New hero",
+        mimeType: "image/webp",
+        source: { type: "data", value: "bmV3LWltYWdl" },
+        size: { width: 1600, height: 900 },
+        extensions: { importedBy: "design-image-picker" },
+      },
+    });
+    await user.click(screen.getByRole("button", { name: "Replace image…" }));
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.nodesById.hero_image,
+      ).toMatchObject({
+        properties: {
+          assetId: newAssetId,
+          placement: {
+            mode: "crop",
+            zoom: 1.4,
+            flipHorizontal: true,
+          },
+        },
+      }),
+    );
+    expect(
+      runtime().getSnapshot().document.assetsById[oldAssetId],
+    ).toBeUndefined();
+    expect(
+      runtime().getSnapshot().document.assetsById[newAssetId],
+    ).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(runtime().getSnapshot().document.nodesById.hero_image).toMatchObject(
+      { properties: { assetId: oldAssetId } },
+    );
+    expect(
+      runtime().getSnapshot().document.assetsById[oldAssetId],
+    ).toBeDefined();
+    expect(
+      runtime().getSnapshot().document.assetsById[newAssetId],
+    ).toBeUndefined();
+  });
+
+  it("keeps shared image assets and leaves the document unchanged on cancel or picker failure", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const oldAssetId = `asset_${"c".repeat(64)}`;
+    const newAssetId = `asset_${"d".repeat(64)}`;
+    act(() => {
+      const current = runtime().getSnapshot().document;
+      const result = runtime().apply({
+        transactionId: "insert_shared_image_fixture",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: [
+          {
+            commandId: "put_shared_image",
+            type: "put_asset",
+            asset: {
+              id: oldAssetId,
+              kind: "image",
+              name: "Shared source",
+              mimeType: "image/png",
+              source: { type: "data", value: "c2hhcmVk" },
+              size: { width: 1200, height: 800 },
+              extensions: {},
+            },
+          },
+          ...["shared_hero", "shared_thumbnail"].map((nodeId, index) => ({
+            commandId: `insert_${nodeId}`,
+            type: "insert_element" as const,
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 4 + index,
+            node: {
+              id: nodeId,
+              kind: "image" as const,
+              name:
+                nodeId === "shared_hero" ? "Shared hero" : "Shared thumbnail",
+              parentId: "frame_welcome",
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 100 + index * 340, 120] as const,
+              size: { width: 320, height: 240 },
+              opacity: 1,
+              properties: {
+                assetId: oldAssetId,
+                placement: { mode: "fit" as const },
+                altText: "",
+                cornerRadius: 0,
+              },
+              extensions: {},
+            },
+          })),
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      runtime().setSelection(["shared_hero"], "shared_hero");
+    });
+    await user.click(screen.getByRole("tab", { name: "Properties" }));
+    const replace = screen.getByRole("button", { name: "Replace image…" });
+
+    const beforeCancel = runtime().getSnapshot().document.revision;
+    await user.click(replace);
+    expect(runtime().getSnapshot().document.revision).toBe(beforeCancel);
+
+    vi.mocked(window.desktop!.selectDesignImage).mockRejectedValueOnce(
+      new Error("picker failed"),
+    );
+    await user.click(replace);
+    expect(
+      await screen.findByText("Could not replace the image"),
+    ).toBeVisible();
+    expect(runtime().getSnapshot().document.revision).toBe(beforeCancel);
+
+    vi.mocked(window.desktop!.selectDesignImage).mockResolvedValueOnce({
+      asset: {
+        id: newAssetId,
+        kind: "image",
+        name: "Replacement",
+        mimeType: "image/webp",
+        source: { type: "data", value: "cmVwbGFjZW1lbnQ=" },
+        size: { width: 1600, height: 900 },
+        extensions: {},
+      },
+    });
+    await user.click(replace);
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.nodesById.shared_hero,
+      ).toMatchObject({ properties: { assetId: newAssetId } }),
+    );
+    expect(
+      runtime().getSnapshot().document.nodesById.shared_thumbnail,
+    ).toMatchObject({ properties: { assetId: oldAssetId } });
+    expect(
+      runtime().getSnapshot().document.assetsById[oldAssetId],
+    ).toBeDefined();
   });
 
   it("duplicates a complete layer subtree through one transaction", async () => {
