@@ -653,11 +653,11 @@
         "en": "Import supported SVG structure as editable OpenDesign vectors and export Path, Vector, basic shapes, and resolved Boolean results with explicit fidelity reporting.",
         "zh-CN": "把受支持的 SVG 结构导入为可编辑 OpenDesign 矢量，并以显式保真报告导出 Path、Vector、基础图形和已解析 Boolean 结果。"
       },
-      "provider": "@opendesign/import-export-service SVG v1 + EditorRuntime planner + PathKit geometry",
+      "provider": "@opendesign/import-export-service SVG v1 + EditorRuntime planners + PathKit geometry",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "export"],
       "surfaces": {
         "contract": "available",
-        "runtime": "degraded",
+        "runtime": "available",
         "human": "unavailable",
         "agent": "unavailable",
         "render": "unavailable",
@@ -665,8 +665,8 @@
       },
       "limitations": [
         {
-          "en": "The EditorRuntime import planner now converts a validated candidate tree into one previewable, undoable transaction at an explicit Page, Frame, or Group target. There is still no export-target planner, Main file bridge, human command, Agent tool, or packaged-product path, so it cannot yet be used from the application UI.",
-          "zh-CN": "EditorRuntime 导入 planner 已能把校验后的候选树转换为显式 Page、Frame 或 Group 目标下的一次可预览、可撤销事务；导出目标 planner、Main 文件桥、人工命令、Agent tool 和打包产品路径仍未完成，因此应用 UI 暂时不可直接使用。"
+          "en": "EditorRuntime import and export planners now provide explicit target, revision, hierarchy, world-bounds, viewport, padding, z-order, and Boolean-snapshot handling. There is still no Main file bridge, human command, Agent tool, or packaged-product path, so the application UI cannot use them yet.",
+          "zh-CN": "EditorRuntime 导入与导出 planner 已提供显式目标、revision、层级、world bounds、viewport、padding、z-order 和 Boolean snapshot 处理；Main 文件桥、人工命令、Agent tool 和打包产品路径仍未完成，因此应用 UI 暂时不可直接使用。"
         },
         {
           "en": "The current subset covers groups, rectangles, ellipses, Path/Vector, transforms, solid and linear/radial gradients, and center strokes. Text, images, effects, masks, stylesheets, angular gradients, multiple paints, and inside/outside stroke fidelity remain unavailable.",
@@ -680,12 +680,14 @@
       "evidence": {
         "automated": [
           "packages/import-export-service/src/svg.test.ts",
-          "packages/editor-runtime/src/svg-import-operations.test.ts"
+          "packages/editor-runtime/src/svg-import-operations.test.ts",
+          "packages/editor-runtime/src/svg-export-operations.test.ts"
         ],
         "manual": []
       },
       "references": [
         "https://help.figma.com/hc/en-us/articles/360040028034-Add-images-and-videos-to-designs",
+        "https://help.figma.com/hc/en-us/articles/360040028114-Export-static-designs-from-Figma",
         "https://help.figma.com/hc/en-us/articles/13402894554519-Export-formats-and-settings"
       ]
     },

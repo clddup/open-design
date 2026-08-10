@@ -72,6 +72,15 @@ export {
   type SvgImportPlacement,
 } from "./svg-import-operations.js";
 export {
+  MAX_SVG_EXPORT_PADDING,
+  MAX_SVG_EXPORT_TITLE_CHARACTERS,
+  planSvgExportRequest,
+  type SvgExportBooleanSnapshot,
+  type SvgExportPlan,
+  type SvgExportPlanFailureCode,
+  type SvgExportPlanInput,
+} from "./svg-export-operations.js";
+export {
   DESIGN_DIAGNOSTIC_REPORT_VERSION,
   diagnoseDesignPages,
   type DesignDiagnostic,
