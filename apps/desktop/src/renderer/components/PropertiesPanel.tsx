@@ -13,16 +13,32 @@ import type {
   ArrangeOperation,
   ArrangementSelectionMetrics,
 } from "@opendesign/editor-runtime";
-import { MAX_ARRANGEMENT_SPACING } from "@opendesign/editor-runtime";
-import { Glyph, IconButton, type GlyphName } from "@opendesign/ui";
+import {
+  MAX_ARRANGEMENT_SPACING,
+  MAX_SVG_EXPORT_PADDING,
+} from "@opendesign/editor-runtime";
+import type { SvgInterchangeIssue } from "@opendesign/import-export-service";
+import { Button, Glyph, IconButton, type GlyphName } from "@opendesign/ui";
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
+import type { SvgWorkerExportSettings } from "../svg-interchange-contract";
 
 export type UpdatePropertiesPatch = Omit<
   UpdatePropertiesCommand,
   "commandId" | "nodeId" | "type"
 >;
+
+export interface SvgOperationStatus {
+  kind: "import" | "export";
+  name: string;
+}
+
+export interface SvgInterchangeFeedback {
+  kind: "import" | "export";
+  name: string;
+  issues: readonly SvgInterchangeIssue[];
+}
 
 type FillNode = Extract<
   DesignNode,
@@ -810,7 +826,7 @@ function SelectedNodeProperties({
   };
 
   return (
-    <div className="properties-scroll">
+    <div className="selected-node-properties">
       <div className="selection-heading">
         <span className="selection-heading__icon">
           <Glyph name={nodeIcons[node.kind]} />
@@ -1516,6 +1532,159 @@ function ImagePlacementEditor({
   );
 }
 
+function SvgOperationNotice({
+  operation,
+  onCancel,
+}: {
+  operation: SvgOperationStatus;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <section aria-live="polite" className="svg-operation-notice" role="status">
+      <span aria-hidden="true" className="svg-operation-notice__indicator" />
+      <span className="svg-operation-notice__copy">
+        <strong>
+          {operation.kind === "import"
+            ? t("properties.importingSvg", { name: operation.name })
+            : t("properties.exportingSvg")}
+        </strong>
+        <small>{t("properties.svgOperationDetail")}</small>
+      </span>
+      <Button onClick={onCancel} tone="quiet">
+        {t("properties.cancelSvgOperation")}
+      </Button>
+    </section>
+  );
+}
+
+function SvgFidelityReport({
+  feedback,
+  onDismiss,
+}: {
+  feedback: SvgInterchangeFeedback;
+  onDismiss: () => void;
+}) {
+  const { t } = useI18n();
+  const warning = feedback.issues.length > 0;
+  const visibleIssues = feedback.issues.slice(0, 3);
+  return (
+    <section
+      aria-live="polite"
+      className={`svg-fidelity-report ${warning ? "is-warning" : "is-success"}`}
+      role="status"
+    >
+      <header>
+        <span aria-hidden="true" className="svg-fidelity-report__mark">
+          {warning ? "!" : "✓"}
+        </span>
+        <strong>
+          {t(
+            feedback.kind === "import"
+              ? "properties.svgImportComplete"
+              : "properties.svgExportComplete",
+            { name: feedback.name },
+          )}
+        </strong>
+        <IconButton
+          icon="close"
+          label={t("properties.dismissSvgFeedback")}
+          onClick={onDismiss}
+        />
+      </header>
+      <p>
+        {warning
+          ? t("properties.svgFidelityIssues", {
+              count: feedback.issues.length,
+            })
+          : t("properties.svgNoFidelityIssues")}
+      </p>
+      {visibleIssues.length > 0 && (
+        <ul>
+          {visibleIssues.map((issue, index) => (
+            <li key={`${issue.code}-${index}`}>
+              <code>{issue.code}</code>
+              <span>{issue.message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {feedback.issues.length > visibleIssues.length && (
+        <small className="svg-fidelity-report__more">
+          {t("properties.svgMoreIssues", {
+            count: feedback.issues.length - visibleIssues.length,
+          })}
+        </small>
+      )}
+    </section>
+  );
+}
+
+function SvgExportSection({
+  busy,
+  onExport,
+  onSettingsChange,
+  selectionCount,
+  settings,
+}: {
+  busy: boolean;
+  onExport: () => void;
+  onSettingsChange: (settings: SvgWorkerExportSettings) => void;
+  selectionCount: number;
+  settings: SvgWorkerExportSettings;
+}) {
+  const { t } = useI18n();
+  return (
+    <Section title={t("properties.export")}>
+      <div className="svg-export-settings">
+        <div className="svg-export-format">
+          <span>{t("properties.exportFormat")}</span>
+          <strong>SVG</strong>
+        </div>
+        <label className="svg-export-toggle">
+          <input
+            checked={settings.includeLayerIds}
+            disabled={busy}
+            onChange={(event) =>
+              onSettingsChange({
+                ...settings,
+                includeLayerIds: event.target.checked,
+              })
+            }
+            type="checkbox"
+          />
+          <span>{t("properties.exportIncludeLayerIds")}</span>
+        </label>
+        <Field
+          accessibleLabel={t("properties.exportPadding")}
+          disabled={busy}
+          label="P"
+          max={MAX_SVG_EXPORT_PADDING}
+          min={0}
+          onCommit={(draft) =>
+            commitNumber(
+              draft,
+              settings.padding,
+              (padding) => onSettingsChange({ ...settings, padding }),
+              { min: 0, max: MAX_SVG_EXPORT_PADDING },
+            )
+          }
+          suffix="px"
+          value={formatNumber(settings.padding)}
+        />
+        <Button
+          className="svg-export-button"
+          disabled={busy}
+          onClick={onExport}
+          tone="primary"
+        >
+          {t("properties.exportSelection", { count: selectionCount })}
+        </Button>
+      </div>
+    </Section>
+  );
+}
+
 export function PropertiesPanel({
   node,
   arrangement,
@@ -1526,10 +1695,17 @@ export function PropertiesPanel({
   onBooleanOperationChange,
   onDelete,
   onDuplicate,
+  onCancelSvgOperation,
+  onDismissSvgFeedback,
+  onExportSvg,
   onReplaceImage,
   onSelectBooleanParent,
   onUpdate,
   selectionCount,
+  svgExportSettings,
+  svgFeedback,
+  svgOperation,
+  onSvgExportSettingsChange,
 }: {
   node: DesignNode | undefined;
   arrangement: ArrangementSelectionMetrics | null;
@@ -1540,10 +1716,17 @@ export function PropertiesPanel({
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  onCancelSvgOperation: () => void;
+  onDismissSvgFeedback: () => void;
+  onExportSvg: () => void;
   onReplaceImage: () => void;
   onSelectBooleanParent: (nodeId: string) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   selectionCount: number;
+  svgExportSettings: SvgWorkerExportSettings;
+  svgFeedback: SvgInterchangeFeedback | null;
+  svgOperation: SvgOperationStatus | null;
+  onSvgExportSettingsChange: (settings: SvgWorkerExportSettings) => void;
 }) {
   const { t } = useI18n();
   return (
@@ -1576,10 +1759,22 @@ export function PropertiesPanel({
       </div>
       <div
         aria-labelledby="properties-design-tab"
-        className="properties-panel__content"
+        className="properties-panel__content properties-scroll"
         id="properties-design-panel"
         role="tabpanel"
       >
+        {svgOperation && (
+          <SvgOperationNotice
+            onCancel={onCancelSvgOperation}
+            operation={svgOperation}
+          />
+        )}
+        {svgFeedback && (
+          <SvgFidelityReport
+            feedback={svgFeedback}
+            onDismiss={onDismissSvgFeedback}
+          />
+        )}
         {node ? (
           <SelectedNodeProperties
             key={node.id}
@@ -1740,6 +1935,15 @@ export function PropertiesPanel({
             <strong>{t("properties.noSelection")}</strong>
             <span>{t("properties.selectLayer")}</span>
           </div>
+        )}
+        {selectionCount > 0 && (
+          <SvgExportSection
+            busy={svgOperation !== null}
+            onExport={onExportSvg}
+            onSettingsChange={onSvgExportSettingsChange}
+            selectionCount={selectionCount}
+            settings={svgExportSettings}
+          />
         )}
       </div>
     </section>

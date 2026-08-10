@@ -653,20 +653,20 @@
         "en": "Import supported SVG structure as editable OpenDesign vectors and export Path, Vector, basic shapes, and resolved Boolean results with explicit fidelity reporting.",
         "zh-CN": "把受支持的 SVG 结构导入为可编辑 OpenDesign 矢量，并以显式保真报告导出 Path、Vector、基础图形和已解析 Boolean 结果。"
       },
-      "provider": "@opendesign/import-export-service SVG v1 + EditorRuntime planners + Main path-free file bridge + PathKit geometry",
+      "provider": "@opendesign/import-export-service SVG v1 + EditorRuntime planners + cancellable Renderer worker + Main path-free file bridge + PathKit geometry",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "export"],
       "surfaces": {
         "contract": "available",
         "runtime": "available",
-        "human": "unavailable",
+        "human": "degraded",
         "agent": "unavailable",
-        "render": "unavailable",
+        "render": "degraded",
         "export": "degraded"
       },
       "limitations": [
         {
-          "en": "EditorRuntime planners and the Main-owned path-free SVG file bridge now provide explicit target, revision, hierarchy, bounds, viewport, z-order, Boolean-snapshot, bounded UTF-8 open, and atomic save handling. There is still no human command, Agent tool, or packaged-product path, so the application UI cannot use them yet.",
-          "zh-CN": "EditorRuntime planner 与 Main-owned 路径不外泄 SVG 文件桥已提供显式目标、revision、层级、bounds、viewport、z-order、Boolean snapshot、有界 UTF-8 打开和原子保存；人工命令、Agent tool 与打包产品路径仍未完成，因此应用 UI 暂时不可直接使用。"
+          "en": "The File menu and Properties inspector now import into an explicitly frozen Page/Frame/Group target and export frozen selected roots through a cancellable Renderer worker. Import rechecks revision, applies one undoable transaction, selects the editable root, and reports fidelity; export exposes only implemented ID and padding settings and saves through the Main-owned native dialog. Agent tools and macOS/Windows packaged-product smoke remain unavailable.",
+          "zh-CN": "文件菜单与属性检查器现可把 SVG 导入冻结的 Page/Frame/Group 目标，并通过可取消 Renderer worker 导出冻结的显式选区根。导入会复核 revision、应用一次可撤销事务、选中可编辑根并报告保真；导出只开放已实现的 ID 与留白设置，并经 Main-owned 原生对话框保存。Agent tool 与 macOS/Windows 打包产品 smoke 仍未完成。"
         },
         {
           "en": "The current subset covers groups, rectangles, ellipses, Path/Vector, transforms, solid and linear/radial gradients, and center strokes. Text, images, effects, masks, stylesheets, angular gradients, multiple paints, and inside/outside stroke fidelity remain unavailable.",
@@ -684,7 +684,13 @@
           "packages/editor-runtime/src/svg-export-operations.test.ts",
           "apps/desktop/src/shared/desktop-api.test.ts",
           "apps/desktop/src/main/svg/svg-file-service.test.ts",
-          "apps/desktop/src/main/svg/svg-file-ipc.test.ts"
+          "apps/desktop/src/main/svg/svg-file-ipc.test.ts",
+          "apps/desktop/src/main/application-menu.test.ts",
+          "apps/desktop/src/main/packaging-config.test.ts",
+          "apps/desktop/src/renderer/svg-interchange.test.ts",
+          "apps/desktop/src/renderer/components/Titlebar.test.tsx",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/App.test.tsx"
         ],
         "manual": []
       },

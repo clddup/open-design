@@ -19,8 +19,12 @@ export function Titlebar({
   dirty,
   onThemeChange,
   onOpen,
+  onImportSvg,
   onSave,
   onSaveAs,
+  onExportSvg,
+  canExportSvg,
+  svgBusy,
   onWorkspace,
   onProject,
   onSettings,
@@ -33,8 +37,12 @@ export function Titlebar({
   dirty: boolean;
   onThemeChange: (theme: ThemePreference) => void;
   onOpen?: () => void;
+  onImportSvg: () => void;
   onSave: () => void;
   onSaveAs?: () => void;
+  onExportSvg: () => void;
+  canExportSvg: boolean;
+  svgBusy: boolean;
   onWorkspace: () => void;
   onProject?: () => void;
   onSettings: () => void;
@@ -82,24 +90,32 @@ export function Titlebar({
         <Button onClick={onSave} tone="quiet">
           {t("common.save")}
         </Button>
-        {(onOpen || onSaveAs) && (
-          <DropdownMenu
-            icon={<Glyph name="more" />}
-            label={t("title.fileActions")}
+        <DropdownMenu
+          icon={<Glyph name="more" />}
+          label={t("title.fileActions")}
+        >
+          {onOpen && (
+            <DropdownMenuItem onSelect={onOpen}>
+              {t("title.openFile")}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem disabled={svgBusy} onSelect={onImportSvg}>
+            {t("title.importSvg")}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {onSaveAs && (
+            <DropdownMenuItem onSelect={onSaveAs}>
+              {t("title.saveAs")}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            disabled={svgBusy || !canExportSvg}
+            onSelect={onExportSvg}
+            shortcut={platform === "darwin" ? "⇧⌘E" : "Ctrl+Shift+E"}
           >
-            {onOpen && (
-              <DropdownMenuItem onSelect={onOpen}>
-                {t("title.openFile")}
-              </DropdownMenuItem>
-            )}
-            {onOpen && onSaveAs && <DropdownMenuSeparator />}
-            {onSaveAs && (
-              <DropdownMenuItem onSelect={onSaveAs}>
-                {t("title.saveAs")}
-              </DropdownMenuItem>
-            )}
-          </DropdownMenu>
-        )}
+            {t("title.exportSvgSelection")}
+          </DropdownMenuItem>
+        </DropdownMenu>
         <Button
           aria-label={t("settings.open")}
           icon="settings"

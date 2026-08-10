@@ -20,6 +20,7 @@ import {
   getWorldTransform,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
+import type { SvgInterchangeIssue } from "@opendesign/import-export-service";
 import type {
   LeaferEngineCallbacks,
   LeaferEngineSyncInput,
@@ -40,6 +41,8 @@ import {
   useEditorSnapshot,
 } from "./editor-runtime";
 import { I18nProvider } from "./i18n";
+import * as svgInterchange from "./svg-interchange";
+import type { SuccessfulSvgImportResult } from "./svg-interchange-contract";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
 import type { DiagnosticEvent } from "../shared/diagnostics";
 
@@ -70,8 +73,17 @@ vi.mock("@opendesign/leafer-engine", () => ({
   ),
 }));
 
+vi.mock("./svg-interchange", { spy: true });
+
+const svgHarness = {
+  runImport: vi.mocked(svgInterchange.runSvgImportInWorker),
+  runExport: vi.mocked(svgInterchange.runSvgExportInWorker),
+};
+
 let emitAgentEvent: ((event: AgentEvent) => void) | undefined;
 let requestOpenSettings: (() => void) | undefined;
+let requestImportSvg: (() => void) | undefined;
+let requestExportSvg: (() => void) | undefined;
 let observedRuntime: EditorRuntime | undefined;
 let requestDesignTool:
   ((request: RendererDesignToolRequest) => void) | undefined;
@@ -80,6 +92,8 @@ let emitDiagnosticEvent: ((event: DiagnosticEvent) => void) | undefined;
 beforeEach(() => {
   emitAgentEvent = undefined;
   requestOpenSettings = undefined;
+  requestImportSvg = undefined;
+  requestExportSvg = undefined;
   observedRuntime = undefined;
   requestDesignTool = undefined;
   emitDiagnosticEvent = undefined;
@@ -87,6 +101,8 @@ beforeEach(() => {
   leaferHarness.input = null;
   leaferHarness.sync.mockClear();
   leaferHarness.retryBooleanGeometry.mockClear();
+  svgHarness.runImport.mockReset();
+  svgHarness.runExport.mockReset();
   Object.defineProperties(HTMLElement.prototype, {
     hasPointerCapture: {
       configurable: true,
@@ -115,6 +131,14 @@ beforeEach(() => {
       }),
     onOpenSettings: vi.fn().mockImplementation((listener: () => void) => {
       requestOpenSettings = listener;
+      return () => undefined;
+    }),
+    onImportSvgCommand: vi.fn().mockImplementation((listener: () => void) => {
+      requestImportSvg = listener;
+      return () => undefined;
+    }),
+    onExportSvgCommand: vi.fn().mockImplementation((listener: () => void) => {
+      requestExportSvg = listener;
       return () => undefined;
     }),
     getLocale: vi.fn().mockResolvedValue("en"),
@@ -286,6 +310,53 @@ async function openProjectConversation() {
 
 const now = "2026-08-07T12:00:00.000Z";
 
+function importedSvgResult(
+  issues: SvgInterchangeIssue[] = [],
+): SuccessfulSvgImportResult {
+  return {
+    ok: true,
+    version: 1,
+    rootNodeId: "svg_fixture_root",
+    nodes: [
+      {
+        id: "svg_fixture_root",
+        kind: "group",
+        name: "Imported brand",
+        parentId: null,
+        childIds: ["svg_fixture_mark"],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, 0, 0],
+        size: { width: 120, height: 80 },
+        opacity: 1,
+        properties: {},
+        extensions: {},
+      },
+      {
+        id: "svg_fixture_mark",
+        kind: "rectangle",
+        name: "Brand mark",
+        parentId: "svg_fixture_root",
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, 0, 0],
+        size: { width: 120, height: 80 },
+        opacity: 1,
+        properties: {
+          cornerRadius: 8,
+          fills: [{ type: "solid", color: "#356df3", opacity: 1 }],
+          strokes: [],
+          strokeWidth: 0,
+        },
+        extensions: {},
+      },
+    ],
+    sourceViewport: { x: 0, y: 0, width: 120, height: 80 },
+    issues,
+  };
+}
+
 function conversationDescriptor(
   overrides: Partial<ConversationDescriptor> = {},
 ): ConversationDescriptor {
@@ -435,6 +506,136 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "Language and appearance" }),
     ).toBeVisible();
+  });
+
+  it("imports native SVG files as one editable, undoable document transaction", async () => {
+    const user = userEvent.setup();
+    vi.mocked(window.desktop!.openSvgFile).mockResolvedValueOnce({
+      name: "Brand.svg",
+      contents: '<svg viewBox="0 0 120 80" />',
+    });
+    svgHarness.runImport.mockResolvedValueOnce(
+      importedSvgResult([
+        {
+          code: "effect-omitted",
+          message: "A filter was omitted from the editable result",
+          severity: "warning",
+        },
+      ]),
+    );
+    renderApp();
+
+    act(() => requestImportSvg?.());
+
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.nodesById.svg_fixture_root,
+      ).toBeDefined(),
+    );
+    expect(window.desktop!.openSvgFile).toHaveBeenCalledOnce();
+    const importCall = svgHarness.runImport.mock.calls[0];
+    expect(importCall).toBeDefined();
+    expect(importCall?.[0].svg).toBe('<svg viewBox="0 0 120 80" />');
+    expect(importCall?.[0].name).toBe("Brand.svg");
+    expect(importCall?.[0].idPrefix).toMatch(/^svg_[a-f\d]+$/);
+    expect(importCall?.[1]).toBeInstanceOf(AbortSignal);
+    expect(runtime().getSnapshot().document.revision).toBe(1);
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      "svg_fixture_root",
+    ]);
+    expect(
+      runtime().getSnapshot().document.nodesById.svg_fixture_root?.parentId,
+    ).toBeNull();
+    expect(screen.getByText("Imported Brand.svg")).toBeVisible();
+    expect(screen.getByText("effect-omitted")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.nodesById.svg_fixture_root,
+    ).toBeUndefined();
+  });
+
+  it("exports a frozen explicit selection with controlled SVG settings", async () => {
+    const user = userEvent.setup();
+    svgHarness.runExport.mockResolvedValueOnce({
+      svg: '<svg viewBox="0 0 304 220"><rect /></svg>',
+      issues: [
+        {
+          code: "boolean-flattened",
+          message: "Boolean geometry was exported as a standard path",
+          severity: "warning",
+        },
+      ],
+      exportedNodeIds: ["feature_one"],
+      revision: 0,
+      sourceBounds: { x: 0, y: 0, width: 304, height: 220 },
+    });
+    vi.mocked(window.desktop!.saveSvgFile).mockResolvedValueOnce({
+      name: "Structured editing.svg",
+    });
+    renderApp();
+    act(() => runtime().setSelection(["feature_one"], "feature_one"));
+    await user.click(screen.getByRole("tab", { name: "Properties" }));
+
+    await user.click(screen.getByLabelText("Include layer IDs"));
+    const padding = screen.getByLabelText("Padding");
+    await user.clear(padding);
+    await user.type(padding, "16");
+    await user.tab();
+    act(() => requestExportSvg?.());
+
+    await waitFor(() => expect(window.desktop!.saveSvgFile).toHaveBeenCalled());
+    const exportCall = svgHarness.runExport.mock.calls[0];
+    expect(exportCall).toBeDefined();
+    expect(exportCall?.[0].pageId).toBe("page_welcome");
+    expect(exportCall?.[0].rootNodeIds).toEqual(["feature_one"]);
+    expect(exportCall?.[0].settings).toEqual({
+      includeLayerIds: true,
+      padding: 16,
+    });
+    expect(exportCall?.[0].document.revision).toBe(0);
+    expect(exportCall?.[1]).toBeInstanceOf(AbortSignal);
+    expect(window.desktop!.saveSvgFile).toHaveBeenCalledWith({
+      suggestedName: "Structured editing.svg",
+      contents: '<svg viewBox="0 0 304 220"><rect /></svg>',
+    });
+    expect(screen.getByText("Exported Structured editing.svg")).toBeVisible();
+    expect(screen.getByText("boolean-flattened")).toBeVisible();
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+  });
+
+  it("cancels background SVG parsing without changing the document", async () => {
+    const user = userEvent.setup();
+    let workerSignal: AbortSignal | undefined;
+    vi.mocked(window.desktop!.openSvgFile).mockResolvedValueOnce({
+      name: "Large.svg",
+      contents: "<svg />",
+    });
+    svgHarness.runImport.mockImplementationOnce(
+      (_input: unknown, signal: AbortSignal | undefined) =>
+        new Promise((_resolve, reject) => {
+          workerSignal = signal;
+          signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("cancelled", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    renderApp();
+
+    act(() => requestImportSvg?.());
+    expect(await screen.findByText("Importing Large.svg")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(workerSignal?.aborted).toBe(true));
+    await waitFor(() =>
+      expect(screen.queryByText("Importing Large.svg")).toBeNull(),
+    );
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+    expect(window.desktop!.reportDiagnostic).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "svg_import_failed" }),
+    );
   });
 
   it("starts at Workspace Home and opens recent Projects without exposing paths", async () => {

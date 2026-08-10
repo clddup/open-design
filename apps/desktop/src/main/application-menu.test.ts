@@ -1,13 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApplicationMenuTemplate } from "./application-menu";
 
+function options() {
+  return {
+    exportSvgLabel: "Export selection as SVG…",
+    fileLabel: "File",
+    importSvgLabel: "Import SVG…",
+    onExportSvg: vi.fn(),
+    onImportSvg: vi.fn(),
+    onOpenSettings: vi.fn(),
+    settingsLabel: "Settings…",
+  };
+}
+
 describe("createApplicationMenuTemplate", () => {
   it("uses the product name for the macOS application menu", () => {
-    const onOpenSettings = vi.fn();
-    const template = createApplicationMenuTemplate("OpenDesign", "darwin", {
-      onOpenSettings,
-      settingsLabel: "Settings…",
-    });
+    const menuOptions = options();
+    const template = createApplicationMenuTemplate(
+      "OpenDesign",
+      "darwin",
+      menuOptions,
+    );
 
     const applicationMenu = template[0];
     expect(applicationMenu?.label).toBe("OpenDesign");
@@ -24,15 +37,56 @@ describe("createApplicationMenuTemplate", () => {
       accelerator: "CommandOrControl+,",
       label: "Settings…",
     });
-    expect(settingsItem?.click).toBe(onOpenSettings);
+    expect(settingsItem?.click).toBe(menuOptions.onOpenSettings);
   });
 
-  it("keeps the native application menu macOS-only", () => {
-    expect(
-      createApplicationMenuTemplate("OpenDesign", "win32", {
-        onOpenSettings: vi.fn(),
-        settingsLabel: "Settings…",
-      })[0],
-    ).toEqual({ role: "fileMenu" });
+  it("provides the same SVG commands and platform exit role on macOS and Windows", () => {
+    const macOptions = options();
+    const mac = createApplicationMenuTemplate(
+      "OpenDesign",
+      "darwin",
+      macOptions,
+    );
+    const windowsOptions = options();
+    const windows = createApplicationMenuTemplate(
+      "OpenDesign",
+      "win32",
+      windowsOptions,
+    );
+    const macFile = mac[1];
+    const windowsFile = windows[0];
+    const macItems = Array.isArray(macFile?.submenu) ? macFile.submenu : [];
+    const windowsItems = Array.isArray(windowsFile?.submenu)
+      ? windowsFile.submenu
+      : [];
+
+    expect(macFile?.label).toBe("File");
+    expect(windowsFile?.label).toBe("File");
+    expect(macItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          click: macOptions.onImportSvg,
+          label: "Import SVG…",
+        }),
+        expect.objectContaining({
+          accelerator: "CommandOrControl+Shift+E",
+          click: macOptions.onExportSvg,
+        }),
+        expect.objectContaining({ role: "close" }),
+      ]),
+    );
+    expect(windowsItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          click: windowsOptions.onImportSvg,
+          label: "Import SVG…",
+        }),
+        expect.objectContaining({
+          accelerator: "CommandOrControl+Shift+E",
+          click: windowsOptions.onExportSvg,
+        }),
+        expect.objectContaining({ role: "quit" }),
+      ]),
+    );
   });
 });

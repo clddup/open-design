@@ -24,6 +24,7 @@ describe("desktop packaging configuration", () => {
     );
     expect(html).toContain("script-src 'self' 'wasm-unsafe-eval'");
     expect(html).not.toMatch(/script-src[^;]*'unsafe-eval'/);
+    expect(html).toContain("worker-src 'self'");
     expect(html).toContain("object-src 'none'");
   });
 });

@@ -203,10 +203,10 @@
 把受支持的 SVG 结构导入为可编辑 OpenDesign 矢量，并以显式保真报告导出 Path、Vector、基础图形和已解析 Boolean 结果。
 
 - ID：`delivery.svg-interchange`
-- 实现方：@opendesign/import-export-service SVG v1 + EditorRuntime planners + Main path-free file bridge + PathKit geometry
-- 表面：contract=available；runtime=available；human=unavailable；agent=unavailable；render=unavailable；export=degraded
-- 证据：自动化 6 项；实机 0 项
-- 限制：EditorRuntime planner 与 Main-owned 路径不外泄 SVG 文件桥已提供显式目标、revision、层级、bounds、viewport、z-order、Boolean snapshot、有界 UTF-8 打开和原子保存；人工命令、Agent tool 与打包产品路径仍未完成，因此应用 UI 暂时不可直接使用。
+- 实现方：@opendesign/import-export-service SVG v1 + EditorRuntime planners + cancellable Renderer worker + Main path-free file bridge + PathKit geometry
+- 表面：contract=available；runtime=available；human=degraded；agent=unavailable；render=degraded；export=degraded
+- 证据：自动化 12 项；实机 0 项
+- 限制：文件菜单与属性检查器现可把 SVG 导入冻结的 Page/Frame/Group 目标，并通过可取消 Renderer worker 导出冻结的显式选区根。导入会复核 revision、应用一次可撤销事务、选中可编辑根并报告保真；导出只开放已实现的 ID 与留白设置，并经 Main-owned 原生对话框保存。Agent tool 与 macOS/Windows 打包产品 smoke 仍未完成。
 - 限制：当前子集覆盖 Group、Rectangle、Ellipse、Path/Vector、transform、纯色与线性/径向渐变和居中描边；文字、图片、效果、蒙版、stylesheet、角度渐变、多 paint 与内外描边保真仍不可用。
 - 限制：标准 SVG 不能保留 OpenDesign Boolean operands；导出使用可丢弃 resolved path 并报告 boolean-flattened，重新导入为可编辑 Vector，不伪造已丢失的源层。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040028034-Add-images-and-videos-to-designs)

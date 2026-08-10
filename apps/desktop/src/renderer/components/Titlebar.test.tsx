@@ -8,16 +8,21 @@ import { Titlebar } from "./Titlebar";
 
 function renderTitlebar() {
   const onOpen = vi.fn();
+  const onImportSvg = vi.fn();
   const onSave = vi.fn();
   const onSaveAs = vi.fn();
+  const onExportSvg = vi.fn();
   const onThemeChange = vi.fn();
 
   render(
     <TooltipProvider delayDuration={0}>
       <I18nProvider initialLocale="en">
         <Titlebar
+          canExportSvg
           dirty={false}
           documentName="Welcome.opendesign"
+          onExportSvg={onExportSvg}
+          onImportSvg={onImportSvg}
           onOpen={onOpen}
           onSave={onSave}
           onSaveAs={onSaveAs}
@@ -25,13 +30,21 @@ function renderTitlebar() {
           onThemeChange={onThemeChange}
           onWorkspace={vi.fn()}
           platform="darwin"
+          svgBusy={false}
           theme="light"
         />
       </I18nProvider>
     </TooltipProvider>,
   );
 
-  return { onOpen, onSave, onSaveAs, onThemeChange };
+  return {
+    onExportSvg,
+    onImportSvg,
+    onOpen,
+    onSave,
+    onSaveAs,
+    onThemeChange,
+  };
 }
 
 describe("Titlebar behavior primitives", () => {
@@ -40,13 +53,17 @@ describe("Titlebar behavior primitives", () => {
       <TooltipProvider delayDuration={0}>
         <I18nProvider initialLocale="en">
           <Titlebar
+            canExportSvg={false}
             dirty={false}
             documentName="Welcome.opendesign"
+            onExportSvg={vi.fn()}
+            onImportSvg={vi.fn()}
             onSave={vi.fn()}
             onSettings={vi.fn()}
             onThemeChange={vi.fn()}
             onWorkspace={vi.fn()}
             platform="win32"
+            svgBusy={false}
             theme="light"
           />
         </I18nProvider>
@@ -65,13 +82,17 @@ describe("Titlebar behavior primitives", () => {
       <TooltipProvider delayDuration={0}>
         <I18nProvider initialLocale="en">
           <Titlebar
+            canExportSvg={false}
             dirty={false}
             documentName="Welcome.opendesign"
+            onExportSvg={vi.fn()}
+            onImportSvg={vi.fn()}
             onSave={vi.fn()}
             onSettings={vi.fn()}
             onThemeChange={vi.fn()}
             onWorkspace={vi.fn()}
             platform="darwin"
+            svgBusy={false}
             theme="light"
           />
         </I18nProvider>
@@ -93,14 +114,18 @@ describe("Titlebar behavior primitives", () => {
       return (
         <div onPointerDown={() => rerender((value) => value + 1)}>
           <Titlebar
+            canExportSvg={false}
             dirty={false}
             documentName="Welcome.opendesign"
+            onExportSvg={vi.fn()}
+            onImportSvg={vi.fn()}
             onOpen={vi.fn()}
             onSave={vi.fn()}
             onSettings={vi.fn()}
             onThemeChange={vi.fn()}
             onWorkspace={vi.fn()}
             platform="darwin"
+            svgBusy={false}
             theme="light"
           />
         </div>
@@ -140,6 +165,53 @@ describe("Titlebar behavior primitives", () => {
 
     expect(onOpen).toHaveBeenCalledOnce();
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("offers editable SVG import and selection export in the file menu", async () => {
+    const user = userEvent.setup();
+    const { onExportSvg, onImportSvg } = renderTitlebar();
+
+    await user.click(screen.getByRole("button", { name: "File actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Import SVG…" }));
+    expect(onImportSvg).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole("button", { name: "File actions" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Export selection as SVG…" }),
+    );
+    expect(onExportSvg).toHaveBeenCalledOnce();
+  });
+
+  it("disables SVG commands while an operation is active or no layer is selected", async () => {
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <I18nProvider initialLocale="en">
+          <Titlebar
+            canExportSvg={false}
+            dirty={false}
+            documentName="Welcome.opendesign"
+            onExportSvg={vi.fn()}
+            onImportSvg={vi.fn()}
+            onSave={vi.fn()}
+            onSettings={vi.fn()}
+            onThemeChange={vi.fn()}
+            onWorkspace={vi.fn()}
+            platform="win32"
+            svgBusy
+            theme="light"
+          />
+        </I18nProvider>
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "File actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Import SVG…" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("menuitem", { name: "Export selection as SVG…" }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("shows accessible tooltip content for icon-only controls", async () => {

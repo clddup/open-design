@@ -307,7 +307,16 @@ function installApplicationMenu() {
       onOpenSettings: () => {
         mainWindow?.webContents.send(channels.openSettings);
       },
+      onImportSvg: () => {
+        mainWindow?.webContents.send(channels.importSvgCommand);
+      },
+      onExportSvg: () => {
+        mainWindow?.webContents.send(channels.exportSvgCommand);
+      },
       settingsLabel: translate(localePreference, "settings.menuItem"),
+      fileLabel: translate(localePreference, "main.fileMenu"),
+      importSvgLabel: translate(localePreference, "main.importSvgMenu"),
+      exportSvgLabel: translate(localePreference, "main.exportSvgMenu"),
     },
   );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));

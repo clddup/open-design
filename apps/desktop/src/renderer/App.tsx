@@ -70,6 +70,8 @@ import { ProjectHome } from "./components/ProjectHome";
 import { SettingsPage } from "./components/SettingsPage";
 import {
   PropertiesPanel,
+  type SvgInterchangeFeedback,
+  type SvgOperationStatus,
   type UpdatePropertiesPatch,
 } from "./components/PropertiesPanel";
 import { Titlebar } from "./components/Titlebar";
@@ -84,6 +86,15 @@ import {
 import { useI18n } from "./i18n";
 import { executeDesignToolRequest } from "./design-tool-execution";
 import { isTool, type SidebarTab, type Tool } from "./state/editor";
+import type { SvgWorkerExportSettings } from "./svg-interchange-contract";
+import {
+  captureSvgImportTarget,
+  normalizeSvgExportRoots,
+  planHumanSvgImport,
+  runSvgExportInWorker,
+  runSvgImportInWorker,
+  suggestSvgExportName,
+} from "./svg-interchange";
 
 const LAYER_ORDER_ACTIONS: readonly LayerOrderAction[] = [
   "bring-forward",
@@ -192,6 +203,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     null,
   );
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [svgExportSettings, setSvgExportSettings] =
+    useState<SvgWorkerExportSettings>({
+      includeLayerIds: false,
+      padding: 0,
+    });
+  const [svgOperation, setSvgOperation] = useState<SvgOperationStatus | null>(
+    null,
+  );
+  const [svgFeedback, setSvgFeedback] = useState<SvgInterchangeFeedback | null>(
+    null,
+  );
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
   );
@@ -202,6 +224,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const conversationIdByHistoryRequestId = useRef(new Map<string, string>());
   const latestHistoryRequestId = useRef(new Map<string, string>());
   const designToolControllers = useRef(new Map<string, AbortController>());
+  const svgOperationController = useRef<AbortController | null>(null);
   const canvasPreviewCapture = useRef<CanvasPreviewCapture | null>(null);
   const { document: designDocument, state } = snapshot;
   const tool: Tool = isTool(state.tool) ? state.tool : "select";
@@ -1477,6 +1500,229 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     }
   };
 
+  const beginSvgOperation = useCallback((status: SvgOperationStatus) => {
+    if (svgOperationController.current) return null;
+    const controller = new AbortController();
+    svgOperationController.current = controller;
+    setSvgOperation(status);
+    setSvgFeedback(null);
+    setEditorError(null);
+    setUtilityTab("properties");
+    return controller;
+  }, []);
+
+  const finishSvgOperation = useCallback((controller: AbortController) => {
+    if (svgOperationController.current !== controller) return;
+    svgOperationController.current = null;
+    setSvgOperation(null);
+  }, []);
+
+  const cancelSvgOperation = useCallback(() => {
+    svgOperationController.current?.abort();
+  }, []);
+
+  const importSvg = useCallback(async () => {
+    const desktop = window.desktop;
+    if (!desktop || view !== "editor" || svgOperationController.current) return;
+    const frozen = runtime.getSnapshot();
+    let target;
+    try {
+      target = captureSvgImportTarget(
+        frozen.document,
+        activePageId,
+        frozen.state.selection.nodeIds,
+        frozen.state.viewport,
+      );
+    } catch (error) {
+      setEditorError(
+        reportRendererError(
+          "svg_import_target_invalid",
+          error,
+          t("error.importSvg"),
+          {
+            projectId: workspaceSnapshot.activeProjectId,
+            designFileId: workspaceSnapshot.activeDesignFileId,
+          },
+        ),
+      );
+      return;
+    }
+    const controller = beginSvgOperation({ kind: "import", name: "SVG" });
+    if (!controller) return;
+    try {
+      const file = await desktop.openSvgFile();
+      if (!file || controller.signal.aborted) return;
+      setSvgOperation({ kind: "import", name: file.name });
+      const operationId = `svg_${crypto.randomUUID().replaceAll("-", "")}`;
+      const imported = await runSvgImportInWorker(
+        {
+          svg: file.contents,
+          idPrefix: operationId,
+          name: file.name,
+        },
+        controller.signal,
+      );
+      const current = runtime.getSnapshot().document;
+      const plan = planHumanSvgImport(current, imported, target, operationId);
+      if (!plan.ok) throw new Error(plan.message);
+      if (
+        !applyCommands(
+          t("history.importSvg", { name: file.name }),
+          plan.commands,
+        )
+      )
+        return;
+      runtime.setSelection([plan.rootNodeId], plan.rootNodeId);
+      setSvgFeedback({
+        kind: "import",
+        name: file.name,
+        issues: imported.issues.map((issue) => ({ ...issue })),
+      });
+    } catch (error) {
+      if (!isAbortError(error)) {
+        setEditorError(
+          reportRendererError(
+            "svg_import_failed",
+            error,
+            t("error.importSvg"),
+            {
+              projectId: workspaceSnapshot.activeProjectId,
+              designFileId: workspaceSnapshot.activeDesignFileId,
+            },
+          ),
+        );
+      }
+    } finally {
+      finishSvgOperation(controller);
+    }
+  }, [
+    activePageId,
+    applyCommands,
+    beginSvgOperation,
+    finishSvgOperation,
+    runtime,
+    t,
+    view,
+    workspaceSnapshot.activeDesignFileId,
+    workspaceSnapshot.activeProjectId,
+  ]);
+
+  const exportSvg = useCallback(async () => {
+    const desktop = window.desktop;
+    if (!desktop || view !== "editor" || svgOperationController.current) return;
+    const frozen = runtime.getSnapshot();
+    if (frozen.state.selection.nodeIds.length === 0) {
+      setUtilityTab("properties");
+      setEditorError(t("error.exportSvgSelection"));
+      return;
+    }
+    let rootNodeIds: string[];
+    let suggestedName: string;
+    try {
+      rootNodeIds = normalizeSvgExportRoots(
+        frozen.document,
+        frozen.state.selection.nodeIds,
+      );
+      suggestedName = suggestSvgExportName(
+        frozen.document,
+        activePageId,
+        rootNodeIds,
+      );
+    } catch (error) {
+      setEditorError(
+        reportRendererError(
+          "svg_export_target_invalid",
+          error,
+          t("error.exportSvg"),
+          {
+            projectId: workspaceSnapshot.activeProjectId,
+            designFileId: workspaceSnapshot.activeDesignFileId,
+          },
+        ),
+      );
+      return;
+    }
+    const controller = beginSvgOperation({
+      kind: "export",
+      name: suggestedName,
+    });
+    if (!controller) return;
+    try {
+      const result = await runSvgExportInWorker(
+        {
+          document: frozen.document,
+          pageId: activePageId,
+          rootNodeIds,
+          settings: { ...svgExportSettings },
+        },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      const saved = await desktop.saveSvgFile({
+        suggestedName,
+        contents: result.svg,
+      });
+      if (!saved || controller.signal.aborted) return;
+      setSvgFeedback({
+        kind: "export",
+        name: saved.name,
+        issues: result.issues.map((issue) => ({ ...issue })),
+      });
+    } catch (error) {
+      if (!isAbortError(error)) {
+        setEditorError(
+          reportRendererError(
+            "svg_export_failed",
+            error,
+            t("error.exportSvg"),
+            {
+              projectId: workspaceSnapshot.activeProjectId,
+              designFileId: workspaceSnapshot.activeDesignFileId,
+            },
+          ),
+        );
+      }
+    } finally {
+      finishSvgOperation(controller);
+    }
+  }, [
+    activePageId,
+    beginSvgOperation,
+    finishSvgOperation,
+    runtime,
+    svgExportSettings,
+    t,
+    view,
+    workspaceSnapshot.activeDesignFileId,
+    workspaceSnapshot.activeProjectId,
+  ]);
+
+  useEffect(() => {
+    const desktop = window.desktop;
+    if (!desktop) return;
+    const unsubscribeImport = desktop.onImportSvgCommand(() => {
+      void importSvg();
+    });
+    const unsubscribeExport = desktop.onExportSvgCommand(() => {
+      void exportSvg();
+    });
+    return () => {
+      unsubscribeImport();
+      unsubscribeExport();
+    };
+  }, [exportSvg, importSvg]);
+
+  useEffect(() => {
+    if (view !== "editor") svgOperationController.current?.abort();
+  }, [view]);
+
+  useEffect(
+    () => () => {
+      svgOperationController.current?.abort();
+    },
+    [],
+  );
+
   const submitAgentTask = async (
     prompt: string,
     modelSelection: ModelSelection,
@@ -1700,8 +1946,11 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         }
       >
         <Titlebar
+          canExportSvg={state.selection.nodeIds.length > 0}
           dirty={state.dirty}
           documentName={documentName}
+          onExportSvg={() => void exportSvg()}
+          onImportSvg={() => void importSvg()}
           onOpen={activeProject ? undefined : () => void openDocument()}
           onProject={activeProject ? () => setView("project") : undefined}
           onSave={() => void saveDocument(false)}
@@ -1712,6 +1961,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           pageName={pageName}
           platform={platform}
           projectName={activeProject?.name}
+          svgBusy={svgOperation !== null}
           theme={theme}
         />
         <Toolbar
@@ -1852,8 +2102,11 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 node={selectedNode}
                 onArrange={arrangeSelection}
                 onBooleanOperationChange={applyBooleanOperation}
+                onCancelSvgOperation={cancelSvgOperation}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
+                onDismissSvgFeedback={() => setSvgFeedback(null)}
                 onDuplicate={duplicateSelection}
+                onExportSvg={() => void exportSvg()}
                 onReplaceImage={() => void replaceSelectedImage()}
                 onSelectBooleanParent={(nodeId) =>
                   runtime.setSelection([nodeId], nodeId)
@@ -1861,7 +2114,11 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}
+                onSvgExportSettingsChange={setSvgExportSettings}
                 selectionCount={state.selection.nodeIds.length}
+                svgExportSettings={svgExportSettings}
+                svgFeedback={svgFeedback}
+                svgOperation={svgOperation}
               />
             }
           />
@@ -2157,6 +2414,13 @@ function errorMessage(error: unknown, fallback: string) {
     return fallback;
   }
   return message;
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
 }
 
 function reportRendererError(

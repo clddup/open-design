@@ -1,6 +1,6 @@
 # ADR-0023：版本化 SVG 交换服务与显式保真边界
 
-- 状态：已接受（纯 service、EditorRuntime planner 与 Main 文件桥完成，产品入口待完成）
+- 状态：已接受（纯 service、EditorRuntime planner、Main 文件桥与人工产品入口完成；Agent 与打包实机待完成）
 - 日期：2026-08-11
 - 补充：ADR-0011、ADR-0012、ADR-0015、ADR-0021、ADR-0022
 - 固定依赖：`@xmldom/xmldom 0.8.13`、`transformation-matrix 3.1.0`
@@ -31,9 +31,11 @@ Paper.js 拥有 Project/Layer/Item 和渲染场景，ADR-0021 已因第二份编
 - 导入后的候选 OpenDesign nodes、单一 root Group、source viewport 和结构化 fidelity issues；
 - 失败时的明确 issue code，不返回部分成功文档冒充完整结果。
 
-service 不读取或写入文件，不持有 `EditorRuntime`，不创建第二份持久文档，不访问 Leafer、Electron、项目路径、网络、凭据或 Agent 权限。`EditorRuntime.planSvgImport()` 已把成功候选树转换成父节点优先的标准 `insert_element` 命令，并保持 service 与文档状态分离；后续人工 UI、Agent 与 MCP 只能复用该 planner，把候选 nodes 包装成普通 `DesignTransaction` 进入唯一 `EditorRuntime.apply()`。`EditorRuntime.planSvgExportRequest()` 从显式 Page、稳定 root IDs 和 `baseRevision` 生成 origin-normalized 的纯 `SvgExportRequest`；它不读取实时选区、Renderer 对象或文件路径。
+service 不读取或写入文件，不持有 `EditorRuntime`，不创建第二份持久文档，不访问 Leafer、Electron、项目路径、网络、凭据或 Agent 权限。`EditorRuntime.planSvgImport()` 已把成功候选树转换成父节点优先的标准 `insert_element` 命令，并保持 service 与文档状态分离；人工 UI 已复用该 planner，把候选 nodes 包装成普通 `DesignTransaction` 进入唯一 `EditorRuntime.apply()`，后续 Agent 与 MCP 也必须复用同一入口。`EditorRuntime.planSvgExportRequest()` 从显式 Page、稳定 root IDs 和 `baseRevision` 生成 origin-normalized 的纯 `SvgExportRequest`；它不读取实时选区、Renderer 对象或文件路径。
 
 Electron Main 另以 `SvgFileService` 提供路径不出 Main 的窄文件桥：Renderer 只能请求原生打开对话框，或提交 `suggestedName + contents` 请求原生保存对话框；不能提交或接收 `filePath`。打开只接受一个 regular `.svg` 文件，并在读取前后校验共享字符/UTF-8 字节预算，使用 fatal UTF-8 解码；保存只接受 `.svg`，缺少扩展名时追加，并使用同目录临时文件后 rename。Preload 对请求与响应再次执行 exact-shape 校验，取消统一返回 `null`。POSIX 与 Windows path semantics、伪造路径字段、未知发送方、额外 IPC 参数、非法 UTF-8 和超预算文件均有自动化回归。
+
+人工产品入口位于原生/标题栏 File 菜单和 Properties Inspector。导入在打开原生对话框前冻结 document、revision、Page、选区目标与 viewport center；单选 Frame/Group 时居中插入容器，否则居中插入当前 Page viewport。XML 与 PathKit 工作只在可终止的 module Web Worker 中执行，返回后再次核对 revision，再以一个事务应用并选中新根；取消、worker crash、协议错误和 stale target 都不会留下部分树。导出冻结 document snapshot 与显式选区 roots，移除已被选中 ancestor 覆盖的 descendant，在同一 worker 解析 Boolean 后才经 Main 保存；用户在导出期间继续编辑不会改变该次产物。Properties 只开放当前真实实现的 `includeLayerIds` 和 `padding`，并显示进行中、取消、成功与有界 fidelity report。
 
 ### 导出目标与设置语义
 
@@ -81,12 +83,14 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - EditorRuntime planner 校验显式 Page/Frame/Group 目标、锁定祖先、插入位置、候选 schema、唯一根、可达性、parent/child 对称、ID 冲突、asset 引用和事务命令上限；成功树按 parent-first 顺序进入一个 revision，一次 undo 删除整棵 SVG，保存重开与 redo 保持一致；
 - EditorRuntime 导出 planner 校验显式根层、Page 归属、ancestor/descendant 重复选择、base revision、设置预算与 Boolean snapshot；嵌套变换、Group/Frame bounds、stroke 防裁切、padding、Page paint order 和 0-origin viewport 通过纯 service 产物测试；
 - Main 文件桥只从原生对话框取得绝对路径，不向 Renderer 返回路径；打开/保存的扩展名、regular file、fatal UTF-8、字符/字节预算、原子写入、取消、发送方与参数数量均有专项测试，并覆盖 Windows `win32` 路径规则；
+- 原生/标题栏 File 菜单和 Properties Inspector 已接通人工导入导出；专项测试覆盖 Page/Frame/Group 居中目标、revision stale 拒绝、ancestor/descendant 选区规范化、Windows-safe 文件名、worker 协议/崩溃/取消、设置禁用、保真报告、单 revision、自动选中新根和一次 undo；
+- Renderer CSP 显式限制 `worker-src 'self'`；worker 只接收版本化 pure-data 请求，不获得 Electron、路径、凭据或第二份持久文档状态；
 - DOCTYPE/ENTITY、script、stylesheet、external URL 和缺失 Boolean geometry 均产生稳定失败；
 - service typecheck、lint、fixture 和全仓验证纳入统一门禁。
 
 ## 后续门禁
 
-1. 人工 UI 与 Agent typed tools 复用同一 planner/service、fidelity report、取消与诊断；MCP 后续复用同一入口。
+1. Agent typed tools 复用同一 planner/service、fidelity report、取消与诊断；MCP 后续复用同一入口。
 2. 接入 outline stroke、text glyph、effects/filter、mask/clip、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
 3. 在 `OD-BRAND-01` 上保存导出产物、re-import 文档、真实 Leafer像素 baseline，并完成 macOS/Windows 打包产品 smoke。
 

@@ -246,6 +246,8 @@ export interface DesktopApi {
   reportDiagnostic: (report: RendererDiagnosticReport) => Promise<void>;
   onDiagnosticEvent: (listener: (event: DiagnosticEvent) => void) => () => void;
   onOpenSettings: (listener: () => void) => () => void;
+  onImportSvgCommand: (listener: () => void) => () => void;
+  onExportSvgCommand: (listener: () => void) => () => void;
   getLocale: () => Promise<AppLocale>;
   setLocale: (locale: AppLocale) => Promise<AppLocale>;
   onLocaleChange: (listener: (locale: AppLocale) => void) => () => void;
@@ -334,6 +336,8 @@ export const channels = {
   reportDiagnostic: "diagnostic:report",
   diagnosticEvent: "diagnostic:event",
   openSettings: "settings:open",
+  importSvgCommand: "svg:import-command",
+  exportSvgCommand: "svg:export-command",
   getLocale: "locale:get",
   setLocale: "locale:set",
   localeChanged: "locale:changed",

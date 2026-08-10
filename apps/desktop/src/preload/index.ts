@@ -132,6 +132,18 @@ const desktopApi: DesktopApi = Object.freeze({
     return () =>
       ipcRenderer.removeListener(channels.openSettings, subscription);
   },
+  onImportSvgCommand: (listener: () => void) => {
+    const subscription = () => listener();
+    ipcRenderer.on(channels.importSvgCommand, subscription);
+    return () =>
+      ipcRenderer.removeListener(channels.importSvgCommand, subscription);
+  },
+  onExportSvgCommand: (listener: () => void) => {
+    const subscription = () => listener();
+    ipcRenderer.on(channels.exportSvgCommand, subscription);
+    return () =>
+      ipcRenderer.removeListener(channels.exportSvgCommand, subscription);
+  },
   getLocale: async () => {
     const locale: unknown = await ipcRenderer.invoke(channels.getLocale);
     return validate(locale, isLocalePreference, "Invalid locale response");
