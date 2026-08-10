@@ -1218,7 +1218,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isAgentAttachmentId(value: unknown): value is string {
-  return typeof value === "string" && /^(image|file)_[a-f0-9]{64}$/.test(value);
+  return (
+    typeof value === "string" && /^(image|file|svg)_[a-f0-9]{64}$/.test(value)
+  );
 }
 
 function isAgentAttachment(
@@ -1235,17 +1237,26 @@ function isAgentAttachment(
     "application/json",
     "application/yaml",
   ];
-  const image =
-    typeof value.attachmentId === "string" &&
-    value.attachmentId.startsWith("image_");
+  const kind =
+    typeof value.attachmentId !== "string"
+      ? null
+      : value.attachmentId.startsWith("image_")
+        ? "image"
+        : value.attachmentId.startsWith("file_")
+          ? "document"
+          : value.attachmentId.startsWith("svg_")
+            ? "svg"
+            : null;
   return (
     isAgentAttachmentId(value.attachmentId) &&
     typeof value.name === "string" &&
     value.name.length > 0 &&
     value.name.length <= 255 &&
-    (image
+    (kind === "image"
       ? imageMimeTypes.includes(String(value.mimeType))
-      : documentMimeTypes.includes(String(value.mimeType))) &&
+      : kind === "document"
+        ? documentMimeTypes.includes(String(value.mimeType))
+        : value.mimeType === "image/svg+xml") &&
     Number.isInteger(value.byteSize) &&
     Number(value.byteSize) > 0 &&
     Number(value.byteSize) <= 16 * 1024 * 1024

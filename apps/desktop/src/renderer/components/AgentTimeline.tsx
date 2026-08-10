@@ -1316,6 +1316,7 @@ function isImageAttachment(
 
 function formatAttachmentKind(mimeType: AgentAttachment["mimeType"]): string {
   const labels: Partial<Record<AgentAttachment["mimeType"], string>> = {
+    "image/svg+xml": "SVG",
     "application/pdf": "PDF",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
       "DOCX",

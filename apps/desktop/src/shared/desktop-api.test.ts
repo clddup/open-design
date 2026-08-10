@@ -267,6 +267,29 @@ describe("Agent attachment desktop API guards", () => {
         previewDataUrl: null,
       }),
     ).toBe(true);
+    const svgId = `svg_${"c".repeat(64)}`;
+    expect(
+      isAgentAttachmentSelection({
+        attachmentId: svgId,
+        name: "brand-mark.svg",
+        mimeType: "image/svg+xml",
+        byteSize: 4096,
+      }),
+    ).toBe(true);
+    expect(
+      isAgentAttachmentPreviewResult({
+        attachmentId: svgId,
+        previewDataUrl: null,
+      }),
+    ).toBe(true);
+    expect(
+      isAgentAttachmentSelection({
+        attachmentId: svgId,
+        name: "brand-mark.svg",
+        mimeType: "text/plain",
+        byteSize: 4096,
+      }),
+    ).toBe(false);
   });
 
   it("rejects arbitrary paths and mismatched preview media types", () => {

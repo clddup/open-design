@@ -25,11 +25,13 @@ export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
 export const GENERATE_IMAGE_TOOL_NAME = "opendesign_generate_image";
 export const PLACE_IMAGE_TOOL_NAME = "opendesign_place_image";
 export const UPDATE_IMAGE_TOOL_NAME = "opendesign_update_image";
+export const IMPORT_SVG_TOOL_NAME = "opendesign_import_svg";
 export const EXPORT_SVG_TOOL_NAME = "opendesign_export_svg";
 export const INTERNAL_DESIGN_APPLY_TOOL_NAME =
   "opendesign_internal_apply_transaction";
 export const INTERNAL_UPDATE_IMAGE_TOOL_NAME =
   "opendesign_internal_update_image";
+export const INTERNAL_IMPORT_SVG_TOOL_NAME = "opendesign_internal_import_svg";
 
 export type ReadImageToolInput = { source: string };
 export type DesignDeliverable =
@@ -134,6 +136,37 @@ export type ExportSvgToolInput = {
   suggestedName: string;
   includeLayerIds?: boolean;
   padding?: number;
+};
+
+export type ImportSvgToolInput = {
+  attachmentId: string;
+  pageId: string;
+  parentId: string | null;
+  index: number;
+  x: number;
+  y: number;
+};
+
+export type InternalImportSvgToolInput = ImportSvgToolInput & {
+  name: string;
+  svg: string;
+  idPrefix: string;
+};
+
+export type AgentSvgImportResult = {
+  kind: "svg-import-result";
+  version: 1;
+  ok: true;
+  format: "svg";
+  attachmentId: string;
+  name: string;
+  pageId: string;
+  parentId: string | null;
+  rootNodeId: string;
+  importedNodeIds: string[];
+  revision: number;
+  atomic: true;
+  issues: SvgInterchangeIssue[];
 };
 
 export type PreparedAgentSvgExport = {
@@ -1125,6 +1158,34 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: IMPORT_SVG_TOOL_NAME,
+    description:
+      "Import one SVG attachment explicitly authorized for the current Run as an editable OpenDesign vector tree. attachmentId must be a run-scoped svg_<sha256> handle shown in the user's attachment metadata; SVG XML and local paths are never accepted. pageId, parentId, and index must be stable targets returned by opendesign_inspect_document. x and y place the imported SVG's top-left corner in the local coordinate system of that Page root, Frame, or Group. The tool never reads the live user selection or viewport. Main materializes the authorized SVG only after validation, Renderer parses it in the same cancellable SVG worker as manual import, and the host previews and applies one atomic undoable EditorRuntime transaction, selects the imported root, and reports explicit fidelity issues.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        attachmentId: {
+          type: "string",
+          pattern: "^svg_[a-f0-9]{64}$",
+        },
+        pageId: { type: "string", minLength: 1, maxLength: 256 },
+        parentId: {
+          anyOf: [
+            { type: "string", minLength: 1, maxLength: 256 },
+            { type: "null" },
+          ],
+        },
+        index: { type: "integer", minimum: 0 },
+        x: { type: "number" },
+        y: { type: "number" },
+      },
+      required: ["attachmentId", "pageId", "parentId", "index", "x", "y"],
+      additionalProperties: false,
+    },
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: EXPORT_SVG_TOOL_NAME,
     description:
       "Export explicit existing layers from the currently bound Design File as one SVG through OpenDesign's versioned interchange service. pageId and rootNodeIds must be stable IDs returned by opendesign_inspect_document; the tool never reads the live user selection. It freezes the current revision, resolves Boolean geometry in a cancellable Renderer worker, reports fidelity limitations, and opens the native save dialog owned by Main. Call this only when the user explicitly asks to export or deliver SVG. The user chooses or cancels the destination; the model never receives a local path. Only implemented includeLayerIds and padding settings are exposed. Text, images, effects, masks, angular gradients, multiple paints, inside/outside strokes, and Boolean source operands may be omitted or flattened with explicit fidelity notes.",
@@ -1214,7 +1275,11 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === PLACE_IMAGE_TOOL_NAME) return isPlaceImageToolInput(input);
   if (toolName === UPDATE_IMAGE_TOOL_NAME) return isUpdateImageToolInput(input);
+  if (toolName === IMPORT_SVG_TOOL_NAME) return isImportSvgToolInput(input);
   if (toolName === EXPORT_SVG_TOOL_NAME) return isExportSvgToolInput(input);
+  if (toolName === INTERNAL_IMPORT_SVG_TOOL_NAME) {
+    return isInternalImportSvgToolInput(input);
+  }
   if (toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME) {
     return isInternalUpdateImageToolInput(input);
   }
@@ -1389,6 +1454,103 @@ export function isExportSvgToolInput(
         "padding",
       ].includes(key),
     )
+  );
+}
+
+export function isImportSvgToolInput(
+  input: unknown,
+): input is ImportSvgToolInput {
+  if (!isRecord(input)) return false;
+  return (
+    typeof input.attachmentId === "string" &&
+    /^svg_[a-f0-9]{64}$/.test(input.attachmentId) &&
+    safeId(input.pageId) &&
+    (input.parentId === null || safeId(input.parentId)) &&
+    Number.isInteger(input.index) &&
+    Number(input.index) >= 0 &&
+    finite(input.x) &&
+    finite(input.y) &&
+    exactKeys(input, ["attachmentId", "pageId", "parentId", "index", "x", "y"])
+  );
+}
+
+export function isInternalImportSvgToolInput(
+  input: unknown,
+): input is InternalImportSvgToolInput {
+  if (!isRecord(input)) return false;
+  const publicInput = {
+    attachmentId: input.attachmentId,
+    pageId: input.pageId,
+    parentId: input.parentId,
+    index: input.index,
+    x: input.x,
+    y: input.y,
+  };
+  return (
+    isImportSvgToolInput(publicInput) &&
+    boundedText(input.name, 255) &&
+    typeof input.svg === "string" &&
+    input.svg.length > 0 &&
+    input.svg.length <= SVG_MAX_CHARACTERS &&
+    typeof input.idPrefix === "string" &&
+    input.idPrefix.length <= 80 &&
+    /^[A-Za-z][A-Za-z0-9_-]*$/.test(input.idPrefix) &&
+    exactKeys(input, [
+      "attachmentId",
+      "pageId",
+      "parentId",
+      "index",
+      "x",
+      "y",
+      "name",
+      "svg",
+      "idPrefix",
+    ])
+  );
+}
+
+export function isAgentSvgImportResult(
+  value: unknown,
+): value is AgentSvgImportResult {
+  if (!isRecord(value)) return false;
+  return (
+    value.kind === "svg-import-result" &&
+    value.version === 1 &&
+    value.ok === true &&
+    value.format === "svg" &&
+    typeof value.attachmentId === "string" &&
+    /^svg_[a-f0-9]{64}$/.test(value.attachmentId) &&
+    boundedText(value.name, 255) &&
+    safeId(value.pageId) &&
+    (value.parentId === null || safeId(value.parentId)) &&
+    safeId(value.rootNodeId) &&
+    Array.isArray(value.importedNodeIds) &&
+    value.importedNodeIds.length > 0 &&
+    value.importedNodeIds.length <= 10_000 &&
+    value.importedNodeIds.every(safeId) &&
+    new Set(value.importedNodeIds).size === value.importedNodeIds.length &&
+    value.importedNodeIds.includes(value.rootNodeId) &&
+    Number.isInteger(value.revision) &&
+    Number(value.revision) >= 1 &&
+    value.atomic === true &&
+    Array.isArray(value.issues) &&
+    value.issues.length <= 1_000 &&
+    value.issues.every(isSvgInterchangeIssue) &&
+    exactKeys(value, [
+      "kind",
+      "version",
+      "ok",
+      "format",
+      "attachmentId",
+      "name",
+      "pageId",
+      "parentId",
+      "rootNodeId",
+      "importedNodeIds",
+      "revision",
+      "atomic",
+      "issues",
+    ])
   );
 }
 

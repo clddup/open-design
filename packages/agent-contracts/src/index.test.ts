@@ -69,7 +69,7 @@ describe("Agent contracts", () => {
     ).toBe(false);
   });
 
-  it("accepts only bounded content-addressed image and document attachments", () => {
+  it("accepts only bounded content-addressed image, document, and SVG handles", () => {
     const imageAttachment = {
       attachmentId: `image_${"a".repeat(64)}`,
       name: "inspiration.png",
@@ -82,11 +82,17 @@ describe("Agent contracts", () => {
       mimeType: "text/markdown",
       byteSize: 2048,
     } as const;
+    const svgAttachment = {
+      attachmentId: `svg_${"c".repeat(64)}`,
+      name: "brand-mark.svg",
+      mimeType: "image/svg+xml",
+      byteSize: 4096,
+    } as const;
 
     expect(
       isAgentRequest({
         ...validStart,
-        attachments: [imageAttachment, documentAttachment],
+        attachments: [imageAttachment, documentAttachment, svgAttachment],
       }),
     ).toBe(true);
     expect(
@@ -123,6 +129,20 @@ describe("Agent contracts", () => {
             attachmentId: `image_${"b".repeat(64)}`,
           },
         ],
+      }),
+    ).toBe(false);
+    expect(
+      isAgentRequest({
+        ...validStart,
+        attachments: [
+          { ...svgAttachment, attachmentId: `file_${"c".repeat(64)}` },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      isAgentRequest({
+        ...validStart,
+        attachments: [{ ...svgAttachment, mimeType: "text/plain" }],
       }),
     ).toBe(false);
   });

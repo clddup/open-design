@@ -156,6 +156,34 @@ describe("AgentAttachmentHost", () => {
     await expect(host.preview(selected[0].attachmentId)).resolves.toBeNull();
   });
 
+  it("stores SVG as a dedicated handle without projecting XML as document context", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-svg-host-"));
+    const source = join(root, "brand-mark.svg");
+    const svg = '<svg viewBox="0 0 64 64"><path d="M0 0H64V64Z"/></svg>';
+    await writeFile(source, svg);
+    const host = new AgentAttachmentHost(join(root, "attachments"));
+
+    const selected = await host.importFiles([source]);
+
+    expect(selected[0]).toMatchObject({
+      name: "brand-mark.svg",
+      mimeType: "image/svg+xml",
+      byteSize: Buffer.byteLength(svg),
+    });
+    expect(selected[0]?.attachmentId).toMatch(/^svg_[a-f0-9]{64}$/);
+    expect(selected[0]?.previewDataUrl).toBeUndefined();
+    await expect(host.resolve(selected[0].attachmentId)).resolves.toEqual({
+      kind: "svg",
+      svg,
+      mimeType: "image/svg+xml",
+      byteSize: Buffer.byteLength(svg),
+    });
+    await expect(
+      host.resolveModelAttachment(selected[0].attachmentId),
+    ).rejects.toThrow("typed SVG import tool");
+    await expect(host.preview(selected[0].attachmentId)).resolves.toBeNull();
+  });
+
   it("extracts text from a selected PDF by content rather than extension", async () => {
     const root = await mkdtemp(join(tmpdir(), "opendesign-attachment-host-"));
     const source = join(root, "product-brief.bin");
@@ -227,7 +255,7 @@ describe("AgentAttachmentHost", () => {
     const host = new AgentAttachmentHost(join(root, "attachments"));
 
     await expect(host.importFiles([source])).rejects.toThrow(
-      "Attachments must be PNG, JPEG, WebP, GIF, PDF, DOCX, Markdown, text, CSV, HTML, JSON, or YAML files",
+      "Attachments must be PNG, JPEG, WebP, GIF, SVG, PDF, DOCX, Markdown, text, CSV, HTML, JSON, or YAML files",
     );
   });
 

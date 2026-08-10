@@ -55,6 +55,12 @@ export type SessionAttachment =
         | "application/json"
         | "application/yaml";
       byteSize: number;
+    }
+  | {
+      attachmentId: string;
+      name: string;
+      mimeType: "image/svg+xml";
+      byteSize: number;
     };
 
 interface TimelineBase {
@@ -1141,10 +1147,21 @@ interface UserMessagePayload {
 
 function isAttachment(value: unknown): value is SessionAttachment {
   if (!isRecord(value) || typeof value.attachmentId !== "string") return false;
-  const image = value.attachmentId.startsWith("image_");
-  const validId = image
-    ? /^image_[a-f0-9]{64}$/.test(value.attachmentId)
-    : /^file_[a-f0-9]{64}$/.test(value.attachmentId);
+  const kind = value.attachmentId.startsWith("image_")
+    ? "image"
+    : value.attachmentId.startsWith("file_")
+      ? "document"
+      : value.attachmentId.startsWith("svg_")
+        ? "svg"
+        : null;
+  const validId =
+    kind === "image"
+      ? /^image_[a-f0-9]{64}$/.test(value.attachmentId)
+      : kind === "document"
+        ? /^file_[a-f0-9]{64}$/.test(value.attachmentId)
+        : kind === "svg"
+          ? /^svg_[a-f0-9]{64}$/.test(value.attachmentId)
+          : false;
   const imageMimeTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
   const documentMimeTypes = [
     "application/pdf",
@@ -1164,9 +1181,11 @@ function isAttachment(value: unknown): value is SessionAttachment {
     ) &&
     isNonEmptyString(value.name) &&
     value.name.length <= 255 &&
-    (image
+    (kind === "image"
       ? imageMimeTypes.includes(String(value.mimeType))
-      : documentMimeTypes.includes(String(value.mimeType))) &&
+      : kind === "document"
+        ? documentMimeTypes.includes(String(value.mimeType))
+        : value.mimeType === "image/svg+xml") &&
     Number.isInteger(value.byteSize) &&
     Number(value.byteSize) > 0 &&
     Number(value.byteSize) <= 16 * 1024 * 1024

@@ -26,7 +26,7 @@ Agent Runtime 在网络请求前把上下文分为两类：固定协议开销（
 
 同一 Run 的 inspect、plan、apply、capture 和 review 也会持续增加模型输入。Agent Runtime 因此在每个 Provider turn 前重新计算预算。当前 Run 超预算时，Runtime 用临时 `OpenDesign in-run context checkpoint` 替换较早的模型可见 assistant/tool 段，始终保留当前用户原文，并依次尝试保留最近两个、一个或零个完整 assistant/tool 段。临时 checkpoint 只存在于当前模型投影，不写回原始 journal；tool call 与对应 result 始终位于同一保留段或同一摘要范围。
 
-Main 根据可信 Model Profile 解析所选模型的 `contextWindow` 与 `maxOutputTokens`，拒绝 Renderer 自行提供这些字段，再以 `AgentRequest 3.4` 的 `modelContext` 元数据注入 utility process。Agent Runtime 为最大输出和请求波动保留空间，并分别估算 ASCII、CJK、其他 Unicode、图片引用和文档引用的输入 token。当前估算是跨 Provider 的保守启发式，不宣称等价于任一模型 tokenizer。
+Main 根据可信 Model Profile 解析所选模型的 `contextWindow` 与 `maxOutputTokens`，拒绝 Renderer 自行提供这些字段，再以 `AgentRequest 3.5` 的 `modelContext` 元数据注入 utility process。Agent Runtime 为最大输出和请求波动保留空间，并分别估算 ASCII、CJK、其他 Unicode、图片引用和文档引用的输入 token；SVG 只按有界句柄提示计入文本，不把 XML 送入模型。当前估算是跨 Provider 的保守启发式，不宣称等价于任一模型 tokenizer。
 
 模型可见的设计工具 Schema 与可信运行时校验 Schema 分离：前者是无 `$ref/$defs`、跨 adapter 的紧凑命令契约，后者继续使用完整 `DesignOperationSchema` 验证所有不可信模型输出。不得为了缩小请求而放松运行时校验。若固定协议本身无法装入所选模型，Run 返回 `model_context_incompatible`；不得错误报告为用户 Conversation 过长。
 
@@ -60,7 +60,7 @@ Token 预算错误按 system、tool schemas、Conversation/tool results 和请�
 - 单测证明当前 Run 的工具结果令后续轮超预算时，Runtime 保留当前用户原文和完整的近期 tool call/result 段，以临时 checkpoint 替换更早段后继续 Provider 调用；原始完成工具审计不丢失。
 - 单测证明第八个 Provider turn 轻微超预算时可以自动恢复，无法容纳当前输入或最小必要段时仍返回可见终态。
 - 单测证明当前轮和恢复旧 journal 时都会省略超长工具字段，并对大量短字段组成的超大结构化结果执行整体上限。
-- 完整生产 system prompt、十三个工具和 `200000` token Model Profile 的回归证明短消息能进入 Provider；八轮多模态工具循环还会触发 Run 内压缩并正常完成。`apply_transaction` 模型 Schema 受尺寸门禁约束，而完整运行时 Schema 继续拒绝非法命令。
+- 完整生产 system prompt、十四个工具和 `200000` token Model Profile 的回归证明短消息能进入 Provider；八轮多模态工具循环还会触发 Run 内压缩并正常完成。`apply_transaction` 模型 Schema 受尺寸门禁约束，而完整运行时 Schema 继续拒绝非法命令；SVG 附件仅增加有界句柄提示，不把 XML 计入或塞入 Provider 上下文。
 - 单测证明 Main 只从所选 Model Profile 注入预算，并区分 `model_context_incompatible` 与 `context_budget_exceeded`。
 - 单测证明两类预算错误都报告固定协议或 Conversation 的分账估算。
 - 无窗口真实 Provider 烟测证明两轮请求都带 checkpoint 且不含 data URI，原始 1.6M 字符工具结果仍留在 journal，第二轮模型正常完成。

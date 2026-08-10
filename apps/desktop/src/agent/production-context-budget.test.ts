@@ -40,7 +40,7 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("production Agent context budget", () => {
-  it("reaches the provider with the complete production prompt and thirteen tools", async () => {
+  it("reaches the provider with the complete production prompt and fourteen tools", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-context-"));
     try {
       const gateway = new RecordingGateway(
@@ -88,7 +88,7 @@ describe("production Agent context budget", () => {
 
       expect(gateway.requests).toHaveLength(1);
       expect(gateway.requests[0]?.system).toBe(OPENDESIGN_AGENT_SYSTEM_PROMPT);
-      expect(gateway.requests[0]?.tools).toHaveLength(13);
+      expect(gateway.requests[0]?.tools).toHaveLength(14);
       expect(events).not.toContainEqual(
         expect.objectContaining({ type: "agent.error" }),
       );
@@ -193,7 +193,7 @@ describe("production Agent context budget", () => {
         gateway.requests.every(
           (request) =>
             request.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-            request.tools.length === 13,
+            request.tools.length === 14,
         ),
       ).toBe(true);
       expect(
@@ -369,7 +369,7 @@ describe("production Agent context budget", () => {
         gateway.requests.every(
           (providerRequest) =>
             providerRequest.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-            providerRequest.tools.length === 13,
+            providerRequest.tools.length === 14,
         ),
       ).toBe(true);
       expect(

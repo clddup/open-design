@@ -26,6 +26,7 @@ import { AgentHost, FatalAgentRunError } from "./agent/agent-host";
 import { AgentAttachmentHost } from "./agent/agent-attachment-host";
 import { AgentReferenceHost } from "./agent/agent-reference-host";
 import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
+import { AgentSvgImportHost } from "./agent/agent-svg-import-host";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { GlobalTaskCoordinator } from "./agent/global-task-coordinator";
@@ -75,6 +76,7 @@ import {
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
+  IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   isDesignApplyToolInput,
@@ -82,6 +84,7 @@ import {
   isDesignVisualReviewToolInput,
   isGenerateImageToolInput,
   isExportSvgToolInput,
+  isImportSvgToolInput,
   isPlaceImageToolInput,
   isReadImageToolInput,
   isUpdateImageToolInput,
@@ -127,6 +130,7 @@ let imageGenerationHost: ImageGenerationHost | null = null;
 let agentAttachmentHost: AgentAttachmentHost | null = null;
 let agentReferenceHost: AgentReferenceHost | null = null;
 let agentSvgExportHost: AgentSvgExportHost | null = null;
+let agentSvgImportHost: AgentSvgImportHost | null = null;
 let svgFileService: SvgFileService | null = null;
 let diagnosticLog: DiagnosticLog | null = null;
 const pendingDiagnosticEvents: DiagnosticEvent[] = [];
@@ -222,6 +226,13 @@ function requireAgentSvgExportHost(): AgentSvgExportHost {
     throw new Error("Agent SVG export services are not initialized");
   }
   return agentSvgExportHost;
+}
+
+function requireAgentSvgImportHost(): AgentSvgImportHost {
+  if (!agentSvgImportHost) {
+    throw new Error("Agent SVG import services are not initialized");
+  }
+  return agentSvgImportHost;
 }
 
 function assertDesignFilePath(path: string) {
@@ -503,6 +514,10 @@ function registerIpc() {
     rendererDesignToolHost,
     svgFileService,
   );
+  agentSvgImportHost = new AgentSvgImportHost(
+    rendererDesignToolHost,
+    requireAgentReferenceHost(),
+  );
   registerProjectIpc();
   registerSvgFileIpc({
     ipc: ipcMain,
@@ -648,6 +663,7 @@ function registerIpc() {
             "jpeg",
             "webp",
             "gif",
+            "svg",
             "pdf",
             "docx",
             "txt",
@@ -1002,7 +1018,10 @@ void app.whenReady().then(async () => {
     workspaceStore,
     credentialCipher,
     globalThis.fetch,
-    requireAgentAttachmentHost(),
+    {
+      resolve: (attachmentId) =>
+        requireAgentAttachmentHost().resolveModelAttachment(attachmentId),
+    },
   );
   agentHost.setModelRequestHandler((request, signal) =>
     requireModelProviderHost().stream(request, signal),
@@ -1061,6 +1080,20 @@ void app.whenReady().then(async () => {
       }
       globalTaskCoordinator.assertDocumentInspected(context);
       return await requireAgentSvgExportHost().execute(call, context, signal);
+    }
+    if (call.toolName === IMPORT_SVG_TOOL_NAME) {
+      if (!isImportSvgToolInput(call.input)) {
+        throw new TypeError("Invalid SVG import tool input");
+      }
+      globalTaskCoordinator.assertDocumentInspected(context);
+      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+      const result = await requireAgentSvgImportHost().execute(
+        call,
+        context,
+        signal,
+      );
+      globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+      return result;
     }
     if (call.toolName === READ_IMAGE_TOOL_NAME) {
       if (!isReadImageToolInput(call.input)) {
@@ -1428,6 +1461,7 @@ app.on("before-quit", () => {
   agentAttachmentHost = null;
   agentReferenceHost = null;
   agentSvgExportHost = null;
+  agentSvgImportHost = null;
   svgFileService = null;
   agentHost.setModelRequestHandler(null);
   agentHost.setDesignToolRequestHandler(null);

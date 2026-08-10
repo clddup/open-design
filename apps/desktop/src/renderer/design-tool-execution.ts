@@ -16,6 +16,7 @@ import {
   planImageNodeUpdate,
   planReparentNodes,
   planReorderNodes,
+  planSvgImport,
   planSetBooleanOperation,
   planUngroupBooleanGroup,
   planUngroupNode,
@@ -29,19 +30,21 @@ import {
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   isDesignArrangeToolInput,
   isDesignApplyToolInput,
   isDesignHierarchyToolInput,
   isExportSvgToolInput,
   isInternalDesignApplyToolInput,
+  isInternalImportSvgToolInput,
   isInternalUpdateImageToolInput,
 } from "../shared/design-agent-tools";
 import type {
   RendererDesignToolRequest,
   RendererDesignToolResponse,
 } from "../shared/design-tool-bridge";
-import { runSvgExportInWorker } from "./svg-interchange";
+import { runSvgExportInWorker, runSvgImportInWorker } from "./svg-interchange";
 
 export async function executeDesignToolRequest(
   request: RendererDesignToolRequest,
@@ -59,6 +62,7 @@ export async function executeDesignToolRequest(
       width: number;
     }>;
     exportSvg?: typeof runSvgExportInWorker;
+    importSvg?: typeof runSvgImportInWorker;
     signal?: AbortSignal;
     stageDelayMs?: number;
   } = {},
@@ -118,6 +122,96 @@ export async function executeDesignToolRequest(
     throw new Error(
       `Design revision conflict: expected ${request.context.revision}, current ${document.revision}`,
     );
+  }
+
+  if (
+    request.call.toolName === INTERNAL_IMPORT_SVG_TOOL_NAME &&
+    isInternalImportSvgToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "SVG import",
+    );
+    throwIfAborted(options.signal);
+    const imported = await (options.importSvg ?? runSvgImportInWorker)(
+      {
+        svg: input.svg,
+        idPrefix: input.idPrefix,
+        name: input.name,
+      },
+      options.signal,
+    );
+    throwIfAborted(options.signal);
+    const plan = planSvgImport(document, imported, {
+      pageId: input.pageId,
+      parentId: input.parentId,
+      index: input.index,
+      transform: [1, 0, 0, 1, input.x, input.y],
+      commandPrefix: input.idPrefix,
+    });
+    if (!plan.ok) {
+      throw new Error(`svg-import.${plan.code}: ${plan.message}`);
+    }
+    assertCommandsWithinMutationTarget(
+      document,
+      plan.commands,
+      request.context.mutationTarget,
+    );
+    const transaction = {
+      transactionId:
+        `transaction_agent_svg_import_${request.call.toolCallId}_${Date.now()}`.slice(
+          0,
+          256,
+        ),
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: {
+        type: "agent",
+        id: `agent_${request.context.sessionId}`,
+        displayName: "OpenDesign Agent",
+      },
+      label: `Import SVG: ${input.name}`,
+      commands: plan.commands,
+    } satisfies DesignTransaction;
+    const preview = runtime.preview(transaction);
+    if (!preview.ok) {
+      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+    }
+    throwIfAborted(options.signal);
+    const result = runtime.apply(transaction);
+    if (!result.ok) {
+      throw new Error(`${result.error.code}: ${result.error.message}`);
+    }
+    runtime.setSelection(plan.selectionNodeIds, plan.rootNodeId);
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        observedRevision: result.revision.revision,
+        content: {
+          kind: "svg-import-result",
+          version: 1,
+          ok: true,
+          format: "svg",
+          attachmentId: input.attachmentId,
+          name: input.name,
+          pageId: input.pageId,
+          parentId: input.parentId,
+          rootNodeId: plan.rootNodeId,
+          importedNodeIds: imported.nodes.map((node) => node.id),
+          revision: result.revision.revision,
+          atomic: true,
+          issues: plan.issues.map((issue) => ({ ...issue })),
+        },
+        designRevision: {
+          previousRevision: transaction.baseRevision,
+          revision: result.revision.revision,
+          transactionId: transaction.transactionId,
+        },
+      },
+    };
   }
 
   if (

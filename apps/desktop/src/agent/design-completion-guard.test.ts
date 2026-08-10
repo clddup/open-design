@@ -12,6 +12,7 @@ import {
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
+  IMPORT_SVG_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
@@ -347,6 +348,40 @@ describe("design completion guard", () => {
           firstCapture,
           visualReview,
           arrangeWrite,
+          finalCapture,
+        ]),
+      ),
+    ).toEqual({ allow: true });
+  });
+
+  it("accepts editable SVG import as a refinement without treating a direct import as a full design draft", () => {
+    const importSvg: AgentToolCallRecord = {
+      toolCallId: "import_svg_1",
+      toolName: IMPORT_SVG_TOOL_NAME,
+      input: {
+        attachmentId: `svg_${"a".repeat(64)}`,
+        pageId: "page_1",
+        parentId: "artboard_1",
+        index: 2,
+        x: 120,
+        y: 80,
+      },
+      status: "completed",
+      revision: 6,
+    };
+
+    expect(reviewDesignCompletion(context([inspection, importSvg]))).toEqual({
+      allow: true,
+    });
+    expect(
+      reviewDesignCompletion(
+        context([
+          inspection,
+          designPlan,
+          materialWrite,
+          firstCapture,
+          visualReview,
+          importSvg,
           finalCapture,
         ]),
       ),

@@ -1,6 +1,6 @@
 # ADR-0023：版本化 SVG 交换服务与显式保真边界
 
-- 状态：已接受（纯 service、EditorRuntime planner、Main 文件桥、人工入口与 Agent 导出完成；Agent 导入与打包实机待完成）
+- 状态：已接受（纯 service、EditorRuntime planner、Main 文件桥、人工入口与 Agent 导入/导出完成；格式保真与打包实机待完成）
 - 日期：2026-08-11
 - 补充：ADR-0011、ADR-0012、ADR-0015、ADR-0021、ADR-0022
 - 固定依赖：`@xmldom/xmldom 0.8.13`、`transformation-matrix 3.1.0`
@@ -37,7 +37,9 @@ Electron Main 另以 `SvgFileService` 提供路径不出 Main 的窄文件桥：
 
 人工产品入口位于原生/标题栏 File 菜单和 Properties Inspector。导入在打开原生对话框前冻结 document、revision、Page、选区目标与 viewport center；单选 Frame/Group 时居中插入容器，否则居中插入当前 Page viewport。XML 与 PathKit 工作只在可终止的 module Web Worker 中执行，返回后再次核对 revision，再以一个事务应用并选中新根；取消、worker crash、协议错误和 stale target 都不会留下部分树。导出冻结 document snapshot 与显式选区 roots，移除已被选中 ancestor 覆盖的 descendant，在同一 worker 解析 Boolean 后才经 Main 保存；用户在导出期间继续编辑不会改变该次产物。Properties 只开放当前真实实现的 `includeLayerIds` 和 `padding`，并显示进行中、取消、成功与有界 fidelity report。
 
-Agent `opendesign_export_svg` 只接受 `inspect_document` 返回的稳定 Page/root IDs、portable suggested name、`includeLayerIds` 与 `padding`，不读取发送时或实时选区，也不接受路径、SVG 源码或未实现设置。Renderer 使用同一 worker 生成版本化 preparation；Main 再校验完整源码、revision、实际导出节点和 fidelity issues，随后打开同一原生保存对话框。utilityProcess 最终只收到 `saved/name/revision/exportedNodeIds/issues`，不收到 SVG 源码或目标路径。用户取消原生对话框是正常 `saved:false` 结果。Agent 导入不接受模型内联 XML；它必须等待后续专用 run-scoped SVG attachment handle，不能把 SVG 冒充普通文档或任意 `filePath`。
+Agent `opendesign_export_svg` 只接受 `inspect_document` 返回的稳定 Page/root IDs、portable suggested name、`includeLayerIds` 与 `padding`，不读取发送时或实时选区，也不接受路径、SVG 源码或未实现设置。Renderer 使用同一 worker 生成版本化 preparation；Main 再校验完整源码、revision、实际导出节点和 fidelity issues，随后打开同一原生保存对话框。utilityProcess 最终只收到 `saved/name/revision/exportedNodeIds/issues`，不收到 SVG 源码或目标路径。用户取消原生对话框是正常 `saved:false` 结果。
+
+Agent `opendesign_import_svg` 只接受当前 Run 已附加的 `svg_<sha256>` 内容寻址句柄，以及 `inspect_document` 返回的稳定 Page/Frame/Group 目标、插入层序和目标局部左上角坐标；不接受 XML、URL、路径、实时选区或 viewport。SVG 附件不冒充 raster image 或普通文档，不进入 Provider 多模态/文档输入；模型只看到有界的 handle/name/byteSize 提示。Main 的 `AgentReferenceHost` 在当前 Run 内复核句柄和存储元数据，生成不由模型控制的内部 ID prefix，再以仅限 Main→Renderer 的 `opendesign_internal_import_svg` 传入同一可取消 worker。Renderer 复用 `planSvgImport()`，preview 后执行一次 `EditorRuntime.apply()`、自动选中新根并形成一次 undo。Main 最终只向 utilityProcess 返回 `attachmentId/name/pageId/parentId/rootNodeId/importedNodeIds/revision/issues`；XML、路径和内部 ID prefix 不回传。未授权句柄、过期 revision、锁定或越界目标、worker 失败、伪造结果和取消均不会留下部分树。
 
 ### 导出目标与设置语义
 
@@ -87,15 +89,15 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - Main 文件桥只从原生对话框取得绝对路径，不向 Renderer 返回路径；打开/保存的扩展名、regular file、fatal UTF-8、字符/字节预算、原子写入、取消、发送方与参数数量均有专项测试，并覆盖 Windows `win32` 路径规则；
 - 原生/标题栏 File 菜单和 Properties Inspector 已接通人工导入导出；专项测试覆盖 Page/Frame/Group 居中目标、revision stale 拒绝、ancestor/descendant 选区规范化、Windows-safe 文件名、worker 协议/崩溃/取消、设置禁用、保真报告、单 revision、自动选中新根和一次 undo；
 - Renderer CSP 显式限制 `worker-src 'self'`；worker 只接收版本化 pure-data 请求，不获得 Electron、路径、凭据或第二份持久文档状态；
-- Agent export contract、Renderer preparation 与 Main delivery host 已覆盖无路径参数、先 inspect、显式稳定 roots、revision 匹配、worker 取消、伪造 response 拒绝、原生保存取消、fidelity result 有界化和源码不回传；第十三个生产工具仍通过完整 prompt/tool context budget 与 Pi adapter 门禁；
+- Agent import/export contract、run-scoped SVG attachment/reference host、Renderer 原子 import 与 export preparation、Main import/delivery host 已覆盖无路径参数、先 inspect、显式稳定目标、revision 匹配、worker 取消、伪造 response 拒绝、单次 undo、自动选中新根、原生保存取消、fidelity result 有界化和源码不回传；十四个生产工具仍通过完整 prompt/tool context budget 与 Pi adapter 门禁；
 - DOCTYPE/ENTITY、script、stylesheet、external URL 和缺失 Boolean geometry 均产生稳定失败；
 - service typecheck、lint、fixture 和全仓验证纳入统一门禁。
 
 ## 后续门禁
 
-1. 为 Agent SVG 导入建立 run-scoped SVG attachment handle，再复用同一 import planner、fidelity report、取消与诊断；MCP 后续复用同一入口。
+1. MCP 后续复用同一版本化 SVG import/export service、资源句柄和事务入口，不新增任意 `filePath` 通道。
 2. 接入 outline stroke、text glyph、effects/filter、mask/clip、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
-3. 在 `OD-BRAND-01` 上保存导出产物、re-import 文档、真实 Leafer像素 baseline，并完成 macOS/Windows 打包产品 smoke。
+3. 在 `OD-BRAND-01` 上保存导出产物、re-import 文档、真实 Leafer 像素 baseline，并完成 macOS/Windows 打包产品 smoke。
 
 ## 参考
 

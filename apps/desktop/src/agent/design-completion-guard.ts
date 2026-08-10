@@ -13,6 +13,7 @@ import {
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
+  IMPORT_SVG_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools.js";
@@ -188,6 +189,7 @@ function findMaterialWriteIndex(
 function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
   return (
     call.toolName === PLACE_IMAGE_TOOL_NAME ||
+    call.toolName === IMPORT_SVG_TOOL_NAME ||
     call.toolName === UPDATE_IMAGE_TOOL_NAME ||
     call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
     call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||

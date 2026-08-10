@@ -3,6 +3,7 @@ import {
   type AgentAttachment,
   type AgentImageAttachment,
   type AgentRequest,
+  type AgentSvgAttachment,
 } from "@opendesign/agent-contracts";
 import type {
   TrustedToolContext,
@@ -159,6 +160,32 @@ export class AgentReferenceHost {
     };
   }
 
+  async materializeSvg(
+    attachmentId: string,
+    context: TrustedToolContext,
+    signal: AbortSignal,
+  ): Promise<{ attachment: AgentSvgAttachment; svg: string }> {
+    throwIfAborted(signal);
+    const references = this.#runs.get(context.runId);
+    const metadata = references?.attachments.get(attachmentId);
+    if (!metadata || !isSvgAttachment(metadata)) {
+      throw new Error("SVG attachment is not authorized for this run");
+    }
+    const resolved = await this.attachments.resolve(attachmentId);
+    throwIfAborted(signal);
+    if (
+      resolved.kind !== "svg" ||
+      resolved.mimeType !== metadata.mimeType ||
+      resolved.byteSize !== metadata.byteSize
+    ) {
+      throw new Error("SVG attachment metadata failed verification");
+    }
+    return {
+      attachment: { ...metadata },
+      svg: resolved.svg,
+    };
+  }
+
   private async fetchImage(
     initialUrl: URL,
     signal: AbortSignal,
@@ -232,6 +259,15 @@ function isImageAttachment(
   return (
     attachment.attachmentId.startsWith("image_") &&
     attachment.mimeType.startsWith("image/")
+  );
+}
+
+function isSvgAttachment(
+  attachment: AgentAttachment,
+): attachment is AgentSvgAttachment {
+  return (
+    attachment.attachmentId.startsWith("svg_") &&
+    attachment.mimeType === "image/svg+xml"
   );
 }
 

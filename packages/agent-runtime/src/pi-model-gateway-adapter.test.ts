@@ -14,7 +14,10 @@ import {
 } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
+import {
+  createPiModelGatewayStreamFn,
+  projectPiMessageToCanonical,
+} from "./pi-model-gateway-adapter.js";
 
 class RecordingGateway implements ModelGateway {
   readonly requests: ModelRequest[] = [];
@@ -41,6 +44,26 @@ const model: Model<"openai-responses"> = {
 };
 
 describe("Pi ModelGateway adapter", () => {
+  it("rejects SVG resources at the Provider attachment boundary", () => {
+    const message = {
+      role: "user" as const,
+      content: "Import the attached SVG",
+      timestamp: 1,
+    };
+    expect(() =>
+      projectPiMessageToCanonical(message, 0, {
+        attachmentsFor: () => [
+          {
+            attachmentId: `svg_${"a".repeat(64)}`,
+            name: "brand.svg",
+            mimeType: "image/svg+xml",
+            byteSize: 1024,
+          },
+        ],
+      }),
+    ).toThrow("cannot enter the Provider attachment projection");
+  });
+
   it("maps canonical reasoning, text, tool calls, identity and usage into Pi events", async () => {
     const gateway = new RecordingGateway(
       new MockModelGateway({

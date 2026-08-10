@@ -4,7 +4,12 @@ import {
   type AgentAttachment,
   type AgentDocumentAttachment,
   type AgentImageAttachment,
+  type AgentSvgAttachment,
 } from "@opendesign/agent-contracts";
+import {
+  SVG_MAX_CHARACTERS,
+  SVG_MAX_FILE_BYTES,
+} from "@opendesign/import-export-service/limits";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
@@ -15,7 +20,7 @@ const MAX_TOTAL_ATTACHMENT_BYTES = 32 * 1024 * 1024;
 const MAX_EXTRACTED_DOCUMENT_CHARACTERS = 200_000;
 const MAX_DOCX_EXPANDED_BYTES = 64 * 1024 * 1024;
 const MAX_DOCX_ENTRIES = 2_048;
-const attachmentIdPattern = /^(image|file)_([a-f0-9]{64})$/;
+const attachmentIdPattern = /^(image|file|svg)_([a-f0-9]{64})$/;
 
 type AttachmentMimeType = AgentAttachment["mimeType"];
 type DocumentMimeType = AgentDocumentAttachment["mimeType"];
@@ -38,6 +43,12 @@ export type ResolvedAgentAttachment =
       byteSize: number;
       truncated: boolean;
       extractedCharacterCount: number;
+    }
+  | {
+      kind: "svg";
+      svg: string;
+      mimeType: AgentSvgAttachment["mimeType"];
+      byteSize: number;
     };
 
 type StoredAttachmentMetadata = {
@@ -83,17 +94,18 @@ export class AgentAttachmentHost {
       const mimeType = detectAttachmentMimeType(bytes, path);
       if (!mimeType) {
         throw new TypeError(
-          "Attachments must be PNG, JPEG, WebP, GIF, PDF, DOCX, Markdown, text, CSV, HTML, JSON, or YAML files",
+          "Attachments must be PNG, JPEG, WebP, GIF, SVG, PDF, DOCX, Markdown, text, CSV, HTML, JSON, or YAML files",
         );
       }
       const image = isImageMimeType(mimeType);
+      const svg = isSvgMimeType(mimeType);
       const digest = attachmentDigest(bytes, image ? undefined : mimeType);
-      const attachmentId = `${image ? "image" : "file"}_${digest}`;
+      const attachmentId = `${image ? "image" : svg ? "svg" : "file"}_${digest}`;
       if (seen.has(attachmentId)) continue;
       seen.add(attachmentId);
 
       let extraction: DocumentExtraction | undefined;
-      if (!image) extraction = await extractDocument(bytes, mimeType);
+      if (!image && !svg) extraction = await extractDocument(bytes, mimeType);
       await writeContentAddressedFile(join(this.root, digest), bytes);
       await writeContentAddressedFile(
         join(this.root, `${digest}.meta.json`),
@@ -175,14 +187,15 @@ export class AgentAttachmentHost {
     const mimeType = detectAttachmentMimeType(bytes, name);
     if (!mimeType) {
       throw new TypeError(
-        "Attachment must be a supported image, PDF, DOCX, Markdown, text, CSV, HTML, JSON, or YAML file",
+        "Attachment must be a supported image, SVG, PDF, DOCX, Markdown, text, CSV, HTML, JSON, or YAML file",
       );
     }
     const image = isImageMimeType(mimeType);
+    const svg = isSvgMimeType(mimeType);
     const digest = attachmentDigest(bytes, image ? undefined : mimeType);
-    const attachmentId = `${image ? "image" : "file"}_${digest}`;
+    const attachmentId = `${image ? "image" : svg ? "svg" : "file"}_${digest}`;
     let extraction: DocumentExtraction | undefined;
-    if (!image) extraction = await extractDocument(bytes, mimeType);
+    if (!image && !svg) extraction = await extractDocument(bytes, mimeType);
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     await writeContentAddressedFile(join(this.root, digest), bytes);
     await writeContentAddressedFile(
@@ -246,7 +259,27 @@ export class AgentAttachmentHost {
     }
 
     const metadata = await readMetadata(join(this.root, `${digest}.meta.json`));
-    if (isImageMimeType(metadata.mimeType)) {
+    if (kind === "svg") {
+      if (!isSvgMimeType(metadata.mimeType)) {
+        throw new TypeError("Stored Agent SVG metadata is invalid");
+      }
+      if (
+        metadata.byteSize !== bytes.byteLength ||
+        attachmentDigest(bytes, metadata.mimeType) !== digest
+      ) {
+        throw new Error("Stored Agent attachment failed its integrity check");
+      }
+      return {
+        kind: "svg",
+        svg: decodeSvgText(bytes),
+        mimeType: metadata.mimeType,
+        byteSize: metadata.byteSize,
+      };
+    }
+    if (
+      isImageMimeType(metadata.mimeType) ||
+      isSvgMimeType(metadata.mimeType)
+    ) {
       throw new TypeError("Stored Agent document metadata is invalid");
     }
     if (
@@ -272,6 +305,18 @@ export class AgentAttachmentHost {
       truncated: metadata.truncated,
       extractedCharacterCount: metadata.extractedCharacterCount,
     };
+  }
+
+  async resolveModelAttachment(
+    attachmentId: string,
+  ): Promise<Exclude<ResolvedAgentAttachment, { kind: "svg" }>> {
+    const resolved = await this.resolve(attachmentId);
+    if (resolved.kind === "svg") {
+      throw new Error(
+        "SVG resources must be consumed by the typed SVG import tool",
+      );
+    }
+    return resolved;
   }
 
   async preview(attachmentId: string): Promise<string | null> {
@@ -336,6 +381,10 @@ function detectAttachmentMimeType(
     return "application/pdf";
   }
   const extension = extname(path).toLowerCase();
+  if (extension === ".svg") {
+    decodeSvgText(bytes);
+    return "image/svg+xml";
+  }
   if (extension === ".docx" && isZipArchive(bytes)) {
     validateDocxArchive(bytes);
     return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -438,7 +487,10 @@ function validateDocxArchive(bytes: Buffer): void {
   if (!hasDocumentXml) throw new TypeError("DOCX attachment is invalid");
 }
 
-function attachmentDigest(bytes: Buffer, mimeType?: DocumentMimeType): string {
+function attachmentDigest(
+  bytes: Buffer,
+  mimeType?: AttachmentMimeType,
+): string {
   const hash = createHash("sha256");
   if (mimeType) hash.update(mimeType).update("\0");
   return hash.update(bytes).digest("hex");
@@ -500,6 +552,7 @@ function isAttachmentMimeType(value: unknown): value is AttachmentMimeType {
     typeof value === "string" &&
     (isImageMimeType(value) ||
       [
+        "image/svg+xml",
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "text/plain",
@@ -510,6 +563,25 @@ function isAttachmentMimeType(value: unknown): value is AttachmentMimeType {
         "application/yaml",
       ].includes(value))
   );
+}
+
+function isSvgMimeType(
+  value: unknown,
+): value is AgentSvgAttachment["mimeType"] {
+  return value === "image/svg+xml";
+}
+
+function decodeSvgText(bytes: Buffer): string {
+  if (bytes.byteLength > SVG_MAX_FILE_BYTES) {
+    throw new RangeError(`SVG attachment exceeds ${SVG_MAX_FILE_BYTES} bytes`);
+  }
+  const svg = decodeUtf8Text(bytes);
+  if (svg.length < 1 || svg.length > SVG_MAX_CHARACTERS) {
+    throw new RangeError(
+      `SVG attachment must contain between 1 and ${SVG_MAX_CHARACTERS} characters`,
+    );
+  }
+  return svg;
 }
 
 function isImageMimeType(

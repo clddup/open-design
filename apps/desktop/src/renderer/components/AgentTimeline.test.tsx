@@ -1094,6 +1094,99 @@ describe("AgentTimeline", () => {
     );
   });
 
+  it("submits an SVG handle to a text-only model for typed editable import", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    const attachmentId = `svg_${"e".repeat(64)}`;
+    window.desktop = {
+      getModelProviderCatalog: vi.fn().mockResolvedValue({
+        version: 3,
+        providers: [
+          {
+            providerId: "provider_1",
+            name: "Primary",
+            enabled: true,
+            apiFormat: "openai-responses",
+            authMode: "bearer",
+            baseUrl: "https://api.openai.com/v1",
+            models: [
+              {
+                modelId: "text-model",
+                name: "Text model",
+                contextWindow: 200_000,
+                maxOutputTokens: 16_384,
+                capabilities: {
+                  toolUse: true,
+                  imageInput: false,
+                  reasoning: false,
+                },
+                reasoningEfforts: ["off"],
+              },
+            ],
+            hasApiKey: true,
+            updatedAt: now,
+          },
+        ],
+        defaultSelection: {
+          providerId: "provider_1",
+          modelId: "text-model",
+          reasoningEffort: "off",
+        },
+      }),
+      onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),
+      selectAgentAttachments: vi.fn().mockResolvedValue([
+        {
+          attachmentId,
+          name: "brand-mark.svg",
+          mimeType: "image/svg+xml",
+          byteSize: 4096,
+        },
+      ]),
+      getAgentAttachmentPreview: vi.fn(),
+    } as unknown as DesktopApi;
+
+    render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={onSubmit}
+        timeline={[]}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add attachments" }),
+    );
+    expect(screen.getByText("brand-mark.svg")).toBeInTheDocument();
+    expect(screen.getByText("SVG · 4 KB")).toBeInTheDocument();
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Import this as editable vectors",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      "Import this as editable vectors",
+      {
+        providerId: "provider_1",
+        modelId: "text-model",
+        reasoningEffort: "off",
+      },
+      [
+        {
+          attachmentId,
+          name: "brand-mark.svg",
+          mimeType: "image/svg+xml",
+          byteSize: 4096,
+        },
+      ],
+    );
+  });
+
   it("imports pasted and dropped files but submits only safe attachment metadata", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(true);

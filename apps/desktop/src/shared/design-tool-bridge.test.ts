@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { INTERNAL_UPDATE_IMAGE_TOOL_NAME } from "./design-agent-tools";
+import {
+  INTERNAL_IMPORT_SVG_TOOL_NAME,
+  INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+} from "./design-agent-tools";
 import { isRendererDesignToolRequest } from "./design-tool-bridge";
 
 const context = {
@@ -67,6 +70,42 @@ describe("Renderer design tool bridge", () => {
               ...request.call.input.asset,
               source: { type: "external", value: "C:\\Users\\me\\hero.webp" },
             },
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts SVG source only on the bounded Main-to-Renderer import call", () => {
+    const request = {
+      requestId: "renderer_svg_import",
+      call: {
+        toolCallId: "import_svg_1",
+        toolName: INTERNAL_IMPORT_SVG_TOOL_NAME,
+        input: {
+          attachmentId: `svg_${"b".repeat(64)}`,
+          pageId: "page_1",
+          parentId: null,
+          index: 1,
+          x: 120,
+          y: 80,
+          name: "Brand.svg",
+          svg: '<svg viewBox="0 0 20 20" />',
+          idPrefix: "agent_svg_deadbeef",
+        },
+      },
+      context,
+    };
+
+    expect(isRendererDesignToolRequest(request)).toBe(true);
+    expect(
+      isRendererDesignToolRequest({
+        ...request,
+        call: {
+          ...request.call,
+          input: {
+            ...request.call.input,
+            filePath: "C:\\Users\\designer\\Brand.svg",
           },
         },
       }),

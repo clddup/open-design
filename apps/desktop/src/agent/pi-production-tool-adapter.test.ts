@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "../shared/design-agent-tools.js";
@@ -28,7 +29,7 @@ const request: AgentRunRequest = {
 };
 
 describe("production Pi design-tool catalog", () => {
-  it("adapts all thirteen public typed tools without exposing internal host tools", () => {
+  it("adapts all fourteen public typed tools without exposing internal host tools", () => {
     const definitions: AgentToolDefinition[] = DESIGN_AGENT_TOOL_SPECS.map(
       (tool) => ({
         ...tool,
@@ -44,7 +45,7 @@ describe("production Pi design-tool catalog", () => {
       toolDefinitions: definitions,
     });
 
-    expect(DESIGN_AGENT_TOOL_SPECS).toHaveLength(13);
+    expect(DESIGN_AGENT_TOOL_SPECS).toHaveLength(14);
     expect(adapter.tools.map((tool) => tool.name)).toEqual(
       DESIGN_AGENT_TOOL_SPECS.map((tool) => tool.name),
     );
@@ -61,6 +62,9 @@ describe("production Pi design-tool catalog", () => {
     );
     expect(adapter.tools.map((tool) => tool.name)).not.toContain(
       INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+    );
+    expect(adapter.tools.map((tool) => tool.name)).not.toContain(
+      INTERNAL_IMPORT_SVG_TOOL_NAME,
     );
   });
 });

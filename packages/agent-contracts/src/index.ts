@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const AGENT_PROTOCOL_VERSION = "3.4.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.5.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
@@ -57,9 +57,23 @@ export const AgentDocumentAttachmentSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const AgentSvgAttachmentSchema = Type.Object(
+  {
+    attachmentId: Type.String({ pattern: "^svg_[a-f0-9]{64}$" }),
+    name: Type.String({ minLength: 1, maxLength: 255 }),
+    mimeType: Type.Literal("image/svg+xml"),
+    byteSize: Type.Integer({
+      minimum: 1,
+      maximum: MAX_AGENT_ATTACHMENT_BYTES,
+    }),
+  },
+  { additionalProperties: false },
+);
+
 export const AgentAttachmentSchema = Type.Union([
   AgentImageAttachmentSchema,
   AgentDocumentAttachmentSchema,
+  AgentSvgAttachmentSchema,
 ]);
 
 const AgentAttachmentsSchema = Type.Array(AgentAttachmentSchema, {
@@ -771,6 +785,7 @@ export type AgentImageAttachment = Static<typeof AgentImageAttachmentSchema>;
 export type AgentDocumentAttachment = Static<
   typeof AgentDocumentAttachmentSchema
 >;
+export type AgentSvgAttachment = Static<typeof AgentSvgAttachmentSchema>;
 export type DurableTimelineEvent = Static<typeof DurableTimelineEventSchema>;
 export type AgentRequest = Static<typeof AgentRequestSchema>;
 export type AgentEvent = Static<typeof AgentEventSchema>;

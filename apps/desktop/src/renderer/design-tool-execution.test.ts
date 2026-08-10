@@ -1,3 +1,4 @@
+import type { DesignNode } from "@opendesign/design-contracts";
 import {
   createWelcomeDocument,
   EditorRuntime,
@@ -9,11 +10,15 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
+  INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
 import { executeDesignToolRequest } from "./design-tool-execution";
-import type { runSvgExportInWorker } from "./svg-interchange";
+import type {
+  runSvgExportInWorker,
+  runSvgImportInWorker,
+} from "./svg-interchange";
 
 const selectionContext = {
   runId: "run_1",
@@ -293,6 +298,114 @@ describe("Renderer design tool scope", () => {
     expect(JSON.stringify(response)).not.toContain("filePath");
     expect(runtime.getSnapshot().document.revision).toBe(0);
     expect(runtime.getSnapshot().state.history.canUndo).toBe(false);
+  });
+
+  it("imports one authorized SVG preparation as editable layers in one undo step", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const idPrefix = "agent_svg_import_test";
+    const root: DesignNode = {
+      id: `${idPrefix}_0001_svg`,
+      kind: "group",
+      name: "Brand mark",
+      parentId: null,
+      childIds: [`${idPrefix}_0002_path`],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 120, height: 80 },
+      opacity: 1,
+      properties: {},
+      extensions: {},
+    };
+    const path: DesignNode = {
+      id: `${idPrefix}_0002_path`,
+      kind: "path",
+      name: "Editable contour",
+      parentId: root.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 120, height: 80 },
+      opacity: 1,
+      properties: {
+        path: "M0 0H120V80H0Z",
+        fills: [{ type: "solid", color: "#6d5dfc", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    const svg = '<svg viewBox="0 0 120 80"><path d="M0 0H120V80H0Z"/></svg>';
+    let workerInput: Parameters<typeof runSvgImportInWorker>[0] | undefined;
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "import_svg",
+        call: {
+          toolCallId: "tool_import_svg",
+          toolName: INTERNAL_IMPORT_SVG_TOOL_NAME,
+          input: {
+            attachmentId: `svg_${"a".repeat(64)}`,
+            pageId: "page_welcome",
+            parentId: null,
+            index: 1,
+            x: 920,
+            y: 140,
+            name: "Brand mark.svg",
+            svg,
+            idPrefix,
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_changed_after_send",
+      {
+        importSvg: (input) => {
+          workerInput = input;
+          return Promise.resolve({
+            ok: true,
+            version: 1,
+            rootNodeId: root.id,
+            nodes: [root, path],
+            sourceViewport: { x: 0, y: 0, width: 120, height: 80 },
+            issues: [
+              {
+                code: "effect-omitted",
+                message: "One filter was omitted",
+                severity: "warning",
+              },
+            ],
+          });
+        },
+      },
+    );
+
+    expect(workerInput).toEqual({ svg, idPrefix, name: "Brand mark.svg" });
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        observedRevision: 1,
+        designRevision: { previousRevision: 0, revision: 1 },
+        content: {
+          kind: "svg-import-result",
+          rootNodeId: root.id,
+          importedNodeIds: [root.id, path.id],
+          revision: 1,
+          atomic: true,
+          issues: [{ code: "effect-omitted" }],
+        },
+      },
+    });
+    expect(JSON.stringify(response)).not.toContain("<svg");
+    expect(JSON.stringify(response)).not.toContain("idPrefix");
+    expect(
+      runtime.getSnapshot().document.nodesById[root.id]?.transform,
+    ).toEqual([1, 0, 0, 1, 920, 140]);
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([root.id]);
+    expect(runtime.undo()).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.nodesById[root.id]).toBeUndefined();
+    expect(runtime.getSnapshot().document.nodesById[path.id]).toBeUndefined();
   });
 
   it("allows a page-targeted write outside the contextual selection", async () => {

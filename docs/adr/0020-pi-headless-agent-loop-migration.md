@@ -56,7 +56,7 @@ Pi Agent 只负责通用模型/工具轮次。以下状态和策略继续由 Ope
 迁移增加四个窄 adapter：
 
 1. Model adapter 把 OpenDesign `ModelGateway` 转成 Pi `StreamFn`，继续通过 ParentModelGateway 请求 Main。Adapter 不在 utility process 解析凭据或直接调用 Provider。
-2. Message/event adapter 在 OpenDesign canonical message、Pi message 和 `AgentEvent 3.4` 之间转换。未知 block、超大字段和不完整 tool pair 必须显式失败，不能静默丢弃。
+2. Message/event adapter 在 OpenDesign canonical message、Pi message 和当前 `AgentEvent 3.5` 之间转换。未知 block、超大字段和不完整 tool pair 必须显式失败，不能静默丢弃。
 3. Tool adapter 把已校验的 OpenDesign tool definition 包装为 Pi `AgentTool`。实际执行仍进入当前 ToolExecutor/Main/Renderer host，Pi 不取得引擎句柄。
 4. Context adapter 通过 `transformContext` 在每次 Provider call 前应用 OpenDesign token 预算、内容寻址附件和 checkpoint 投影。
 
@@ -91,15 +91,15 @@ Pi 导出的 compaction 纯函数可以作为后续语义 compactor provider，�
 
 截至 2026-08-11，阶段 1 已完成 contract/parity tests。ModelGateway bridge 将 Pi user/assistant/tool-result context 转换为 OpenDesign canonical message，并把 canonical reasoning/text/tool-call stream 按相同 block 生命周期转换回 Pi event；identity、response ID、原始 stop reason、usage、取消、content filter 和失败均有明确终态。桥接器拒绝错 `attemptId`、重复/未知/未完成 block、block 类型漂移和 utility process 内的 inline image/base64，并已通过 `Pi Agent → ModelGateway → OpenDesign tool → 第二个 Provider turn` 的端到端测试。OpenAI Responses、OpenAI Chat Completions 与 Anthropic Messages 的 Pi/canonical API identity 往返均有独立覆盖。它不解析凭据，也不绕过 ParentModelGateway。
 
-Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message lifecycle 投影为现有 `AgentEvent 3.4`、`message.user`、`message.assistant` 和终态 `run.state`。切换前的双路径测试固定了成功 transcript、Provider failure 和“tool-use stop 但没有 tool call”的用户可见事件与 journal 语义；切换后 production composition test 直接比较完整 `OpenDesignPiRuntime` 和底层 adapter，旧循环与双路径测试已经删除。“tool-use stop 但没有 tool call”产生可见 `invalid_model_response`，不只留下 error 状态。
+Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message lifecycle 投影为当前 `AgentEvent 3.5`、`message.user`、`message.assistant` 和终态 `run.state`。切换前的双路径测试固定了成功 transcript、Provider failure 和“tool-use stop 但没有 tool call”的用户可见事件与 journal 语义；切换后 production composition test 直接比较完整 `OpenDesignPiRuntime` 和底层 adapter，旧循环与双路径测试已经删除。“tool-use stop 但没有 tool call”产生可见 `invalid_model_response`，不只留下 error 状态。
 
 ### 阶段 2：工具和完成策略 parity
 
-- 包装十二个生产设计工具，并保留参数验证、审批、progress、revision 和附件结果。
+- 包装十四个生产设计工具，并保留参数验证、审批、progress、revision 和附件结果。
 - 覆盖可恢复 tool failure、不可恢复 bridge failure、停止、max turns、max tool calls 和 total token budget。
 - 把现有 plan/review completion guard 接到 Pi turn 生命周期，不能只依赖 system prompt。
 
-截至 2026-08-11，第一项与 `max tool calls` 已完成。一个通用 Pi tool adapter 直接复用十三个生产工具的原始标准 JSON Schema、OpenDesign 业务 validator、`ToolExecutorPort`、`ApprovalPort`、可信 Run context 和顺序执行，不为每个工具建立分支实现，也不把 TypeBox 私有标记发送给 Provider。Pi tool lifecycle 会写入现有 `tool.requested/progress/completed/failed`、approval 和 `design.revision` journal，并生成相同 `AgentEvent 3.4`；结构化结果仍按单字段/总量上限投影给模型，原始结果及内容寻址附件元数据进入 journal，inline base64 不进入 Pi transcript。测试覆盖成功的两轮工具循环、progress、revision、附件、业务 validator、审批拒绝、工具预算和非法 revision；桌面生产目录门禁证明十三个公开工具全部注册且两个 internal host 工具未暴露。迁移实现只从 `@opendesign/agent-runtime/pi-migration` 子入口导出，正式切换前不会因根 barrel 让旧生产 Agent bundle 提前包含未启用的 Pi loop。
+截至 2026-08-11，第一项与 `max tool calls` 已完成。一个通用 Pi tool adapter 直接复用十四个生产工具的原始标准 JSON Schema、OpenDesign 业务 validator、`ToolExecutorPort`、`ApprovalPort`、可信 Run context 和顺序执行，不为每个工具建立分支实现，也不把 TypeBox 私有标记发送给 Provider。Pi tool lifecycle 会写入现有 `tool.requested/progress/completed/failed`、approval 和 `design.revision` journal，并生成当前 `AgentEvent 3.5`；结构化结果仍按单字段/总量上限投影给模型，原始结果及内容寻址附件元数据进入 journal，inline base64 与 SVG XML 不进入 Pi transcript。测试覆盖成功的两轮工具循环、progress、revision、附件、业务 validator、审批拒绝、工具预算和非法 revision；桌面生产目录门禁证明十四个公开工具全部注册且三个 internal host 工具未暴露。迁移实现只从 `@opendesign/agent-runtime/pi-migration` 子入口导出，正式切换前不会因根 barrel 让旧生产 Agent bundle 提前包含未启用的 Pi loop。
 
 现有 plan/review `CompletionGuardPort` 也已接到 Pi `turn_end`：无工具的候选完成在 review 决定前保持 provisional，不写 journal；拒绝时发送空 `message.completed` 清除临时内容，把可信反馈作为不持久化的内部 steering 注入同一 Run，允许后才持久化最终 assistant。拒绝上限、guard failure、max turns 与累计 total token budget 都产生明确 stop/error 状态。专项测试证明首轮拒绝后会发起第二次 Provider call，journal 只保留最终获准消息；达到上限时不会留下虚假完成。
 
@@ -115,7 +115,7 @@ Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message li
 
 阶段 3 已完成。`prepareOpenDesignPiContext` 从唯一 journal 读取累计 `context.compacted` checkpoint 和未压缩事件，再构造可丢弃的 Pi 初始消息；`transformContext` 在每个 Provider turn 前复用现有 Model Profile/token/字符预算和 Run 内 checkpoint 算法。无法容纳固定 system/tool 协议与当前输入分别产生 `model_context_incompatible`、`context_budget_exceeded`，并在 Provider I/O 前经现有 Run event/journal 终态可见失败，不依赖抛出 `transformContext`。
 
-附件只以经过校验的内容寻址元数据绑定到 run-local 消息对象；ModelGateway bridge 在 Main 边界前将其投影为 `image_ref`/`document_ref`，工具原始结果继续进入 journal，Pi transcript 不持久化 inline base64。专项验证覆盖用户附件、工具返回图片、应用重建 Context adapter 后的引用恢复、原始 journal 保留和累计 checkpoint。完整生产 system prompt、十三个工具、200K Model Profile 与八轮三图 `capture_canvas` 循环已通过相同 `transformContext`，第八轮完成且 journal 保留七个原始工具结果。启动时的孤立 Run/pending tool 一次性终结和 Conversation 最近活动排序继续由唯一 SessionStore/Main 恢复链负责，Pi 不建立第二套恢复器。
+附件只以经过校验的内容寻址元数据绑定到 run-local 消息对象；ModelGateway bridge 在 Main 边界前将 raster/文档投影为 `image_ref`/`document_ref`，SVG 只投影为 run-scoped handle/name/byteSize 并由 typed import tool 消费，工具原始结果继续进入 journal，Pi transcript 不持久化 inline base64 或 SVG XML。专项验证覆盖用户附件、工具返回图片、SVG 句柄、应用重建 Context adapter 后的引用恢复、原始 journal 保留和累计 checkpoint。完整生产 system prompt、十四个工具、200K Model Profile 与八轮三图 `capture_canvas` 循环已通过相同 `transformContext`，第八轮完成且 journal 保留七个原始工具结果。启动时的孤立 Run/pending tool 一次性终结和 Conversation 最近活动排序继续由唯一 SessionStore/Main 恢复链负责，Pi 不建立第二套恢复器。
 
 ### 阶段 4：生产切换与删除
 
@@ -130,10 +130,10 @@ Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message li
 生产切换必须同时证明：
 
 - 当前 `pnpm verify` 全部通过，且 Pi parity tests 覆盖现有 Agent Runtime 的成功与失败分支。
-- 完整生产 system prompt、十三个工具、200K Model Profile 和八轮多模态循环完成且不丢 journal。
+- 完整生产 system prompt、十四个工具、200K Model Profile 和八轮多模态循环完成且不丢 journal。
 - 工具批次顺序执行，同一 Design File 不出现并行 revision 写入。
 - Renderer、utility process 和 Pi adapter 都无法获取原始凭据、裸文件系统或 shell。
-- 图片和文档继续使用内容寻址引用；Pi transcript 不持久化 inline base64。
+- 图片、文档和 SVG 继续使用内容寻址引用；Pi transcript 不持久化 inline base64 或 SVG XML。
 - 停止、Provider 超时、进程崩溃和协议错误都产生可见终态并解除 UI active Run。
 - macOS 与 Windows 的 protected build、packaged Agent smoke 和产品级 Agent GUI smoke 使用同一 commit。
 

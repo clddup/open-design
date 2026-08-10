@@ -265,6 +265,13 @@ export function projectPiMessageToCanonical(
   const projected = toCanonicalMessage(message, messageIndex);
   const references = attachments?.attachmentsFor(message) ?? [];
   if (references.length === 0) return [projected];
+  if (
+    references.some((attachment) => attachment.attachmentId.startsWith("svg_"))
+  ) {
+    throw new TypeError(
+      "SVG resources cannot enter the Provider attachment projection",
+    );
+  }
   const referenceMessage: CanonicalMessage = {
     role: "user",
     content: [

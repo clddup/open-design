@@ -367,9 +367,13 @@ export class OpenDesignPiContextAdapter
     if (!Array.isArray(candidates) || !candidates.every(isAgentAttachment)) {
       return;
     }
+    const modelAttachments = candidates.filter(
+      (attachment) => !attachment.attachmentId.startsWith("svg_"),
+    );
+    if (modelAttachments.length === 0) return;
     this.#attachments.set(
       message,
-      candidates.map((attachment) => ({ ...attachment })),
+      modelAttachments.map((attachment) => ({ ...attachment })),
     );
   }
 }

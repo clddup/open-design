@@ -340,6 +340,49 @@ describe("OpenDesign Pi context adapter", () => {
       ),
     ).toBe(true);
   });
+
+  it("projects SVG attachments as run-scoped handles without XML or model attachment refs", async () => {
+    const store = new MemorySessionStore();
+    const svgAttachment = {
+      attachmentId: `svg_${"c".repeat(64)}`,
+      name: "brand-mark.svg",
+      mimeType: "image/svg+xml" as const,
+      byteSize: 4_096,
+    };
+    const svgRequest = {
+      ...request,
+      runId: "run_pi_context_svg",
+      prompt: "Import the attached brand mark",
+      attachments: [svgAttachment],
+    };
+    const gateway = new RecordingGateway(
+      new MockModelGateway("I will import the attached SVG resource."),
+    );
+    const prepared = await prepareOpenDesignPiContext({
+      request: svgRequest,
+      sessionStore: store,
+      systemPrompt: "OpenDesign SVG resource context",
+      toolDefinitions: [],
+      model,
+    });
+
+    const execution = await runPreparedPi({
+      request: svgRequest,
+      store,
+      gateway,
+      prepared,
+      toolDefinitions: [],
+    });
+
+    expect(gateway.requests, JSON.stringify(execution.events)).toHaveLength(1);
+    const serialized = JSON.stringify(gateway.requests[0]?.messages);
+    expect(serialized).toContain(svgAttachment.attachmentId);
+    expect(serialized).toContain("opendesign_import_svg");
+    expect(serialized).not.toContain("image/svg+xml");
+    expect(serialized).not.toContain("document_ref");
+    expect(serialized).not.toContain("<svg");
+    expect(JSON.stringify(store.events)).toContain(svgAttachment.attachmentId);
+  });
 });
 
 async function runPreparedPi(options: {

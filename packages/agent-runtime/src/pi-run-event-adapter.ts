@@ -15,13 +15,14 @@ import type {
 } from "@opendesign/model-gateway";
 import type { SessionStore } from "@opendesign/session-store";
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
-import type {
-  AgentRunRequest,
-  AgentToolCallRecord,
-  AgentToolDefinition,
-  ApprovalPort,
-  CompletionGuardPort,
-  ToolExecutorPort,
+import {
+  canonicalUserMessage,
+  type AgentRunRequest,
+  type AgentToolCallRecord,
+  type AgentToolDefinition,
+  type ApprovalPort,
+  type CompletionGuardPort,
+  type ToolExecutorPort,
 } from "./index.js";
 import {
   OpenDesignPiToolAdapter,
@@ -288,7 +289,7 @@ export class PiRunEventAdapter {
     const update = event.assistantMessageEvent;
     if (update.type !== "text_delta" || update.delta.length === 0) return;
     if (update.delta.length > 200_000) {
-      throw new RangeError("Pi text delta exceeds AgentEvent 3.4 limits");
+      throw new RangeError("Pi text delta exceeds AgentEvent protocol limits");
     }
     const block = message.content[update.contentIndex];
     if (block?.type !== "text") {
@@ -373,7 +374,7 @@ export class PiRunEventAdapter {
     const content = userText(message);
     if (!this.#initialPromptConsumed) {
       this.#initialPromptConsumed = true;
-      if (content !== this.#request.prompt) {
+      if (content !== projectedInitialUserText(this.#request)) {
         throw new Error(
           "Pi initial prompt does not match the durable run request",
         );
@@ -734,6 +735,19 @@ export class PiRunEventAdapter {
       ...approval,
     });
   }
+}
+
+function projectedInitialUserText(request: AgentRunRequest): string {
+  const message = canonicalUserMessage(
+    request.prompt,
+    request.attachments ?? [],
+  );
+  if (typeof message.content === "string") return message.content;
+  const text = message.content.find((block) => block.type === "text");
+  if (!text) {
+    throw new Error("Canonical initial user message has no text block");
+  }
+  return text.text;
 }
 
 type PiAgentEventMessage = Extract<

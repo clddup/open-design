@@ -40,6 +40,12 @@ const events: JournalEvent[] = [
         mimeType: "text/markdown",
         byteSize: 2048,
       },
+      {
+        attachmentId: `svg_${"b".repeat(64)}`,
+        name: "brand-mark.svg",
+        mimeType: "image/svg+xml",
+        byteSize: 4096,
+      },
     ],
     documentId: "document_1",
     revision: 4,
@@ -105,6 +111,10 @@ async function expectRecoveredTimeline(store: SessionStore): Promise<void> {
       {
         attachmentId: `file_${"a".repeat(64)}`,
         mimeType: "text/markdown",
+      },
+      {
+        attachmentId: `svg_${"b".repeat(64)}`,
+        mimeType: "image/svg+xml",
       },
     ],
     revision: 4,

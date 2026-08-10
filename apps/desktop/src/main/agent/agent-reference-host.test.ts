@@ -16,7 +16,13 @@ const context = {
   mutationTarget: { kind: "document" as const },
 };
 
-function request(prompt: string) {
+function request(
+  prompt: string,
+  attachments?: Extract<
+    Parameters<AgentReferenceHost["registerRun"]>[0],
+    { type: "run.start" }
+  >["attachments"],
+) {
   return {
     type: "run.start" as const,
     runId: context.runId,
@@ -27,6 +33,7 @@ function request(prompt: string) {
     scope: context.scope,
     mutationTarget: context.mutationTarget,
     modelSelection: { providerId: "test", modelId: "vision" },
+    ...(attachments === undefined ? {} : { attachments }),
   };
 }
 
@@ -87,6 +94,41 @@ describe("AgentReferenceHost", () => {
         new AbortController().signal,
       ),
     ).rejects.toThrow("not explicitly referenced");
+  });
+
+  it("materializes an attached SVG only inside its registered run", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-reference-svg-"));
+    const attachments = new AgentAttachmentHost(join(root, "attachments"));
+    const svg = '<svg viewBox="0 0 20 20"><path d="M0 0H20V20Z"/></svg>';
+    const selected = await attachments.importBytes(
+      "brand-mark.svg",
+      Buffer.from(svg),
+    );
+    const metadata = {
+      attachmentId: selected.attachmentId,
+      name: selected.name,
+      mimeType: selected.mimeType,
+      byteSize: selected.byteSize,
+    };
+    const host = new AgentReferenceHost(attachments);
+    host.registerRun(request("Import the attached SVG", [metadata]));
+
+    await expect(
+      host.materializeSvg(
+        selected.attachmentId,
+        context,
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ attachment: metadata, svg });
+
+    host.releaseRun(context.runId);
+    await expect(
+      host.materializeSvg(
+        selected.attachmentId,
+        context,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("not authorized for this run");
   });
 
   it("fetches an explicit image URL without credentials and content-addresses it", async () => {

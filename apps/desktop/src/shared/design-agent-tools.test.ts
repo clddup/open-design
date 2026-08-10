@@ -9,9 +9,12 @@ import {
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
+  IMPORT_SVG_TOOL_NAME,
+  INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
+  isAgentSvgImportResult,
   isPreparedAgentSvgExport,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
@@ -188,6 +191,92 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(EXPORT_SVG_TOOL_NAME, {
         ...input,
         simplifyStroke: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("imports only a run-scoped SVG handle into an explicit inspected target", () => {
+    const tool = DESIGN_AGENT_TOOL_SPECS.find(
+      (candidate) => candidate.name === IMPORT_SVG_TOOL_NAME,
+    );
+    const input = {
+      attachmentId: `svg_${"a".repeat(64)}`,
+      pageId: "page_brand",
+      parentId: "brand_frame",
+      index: 2,
+      x: 120,
+      y: 80,
+    };
+
+    expect(tool).toMatchObject({ risk: "design_write", approval: "never" });
+    expect(tool?.description).toContain("editable OpenDesign vector tree");
+    expect(JSON.stringify(tool?.inputSchema)).not.toContain("filePath");
+    expect(JSON.stringify(tool?.inputSchema)).not.toContain('"svg"');
+    expect(validateDesignAgentToolInput(IMPORT_SVG_TOOL_NAME, input)).toBe(
+      true,
+    );
+    for (const attachmentId of [
+      `image_${"a".repeat(64)}`,
+      "C:\\Users\\designer\\brand.svg",
+      "<svg />",
+    ]) {
+      expect(
+        validateDesignAgentToolInput(IMPORT_SVG_TOOL_NAME, {
+          ...input,
+          attachmentId,
+        }),
+      ).toBe(false);
+    }
+    expect(
+      validateDesignAgentToolInput(IMPORT_SVG_TOOL_NAME, {
+        ...input,
+        selectedNodeId: "live_selection",
+      }),
+    ).toBe(false);
+
+    const internal = {
+      ...input,
+      name: "Brand mark.svg",
+      svg: '<svg viewBox="0 0 20 20" />',
+      idPrefix: "agent_svg_deadbeef",
+    };
+    expect(
+      validateDesignAgentToolInput(INTERNAL_IMPORT_SVG_TOOL_NAME, internal),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(INTERNAL_IMPORT_SVG_TOOL_NAME, {
+        ...internal,
+        idPrefix: "../unsafe",
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only bounded path-free SVG import results", () => {
+    const result = {
+      kind: "svg-import-result",
+      version: 1,
+      ok: true,
+      format: "svg",
+      attachmentId: `svg_${"a".repeat(64)}`,
+      name: "Brand mark.svg",
+      pageId: "page_brand",
+      parentId: "brand_frame",
+      rootNodeId: "agent_svg_root",
+      importedNodeIds: ["agent_svg_root", "agent_svg_path"],
+      revision: 5,
+      atomic: true,
+      issues: [],
+    };
+
+    expect(isAgentSvgImportResult(result)).toBe(true);
+    expect(isAgentSvgImportResult({ ...result, svg: "<svg />" })).toBe(false);
+    expect(
+      isAgentSvgImportResult({ ...result, filePath: "/tmp/brand.svg" }),
+    ).toBe(false);
+    expect(
+      isAgentSvgImportResult({
+        ...result,
+        importedNodeIds: ["agent_svg_root", "agent_svg_root"],
       }),
     ).toBe(false);
   });
