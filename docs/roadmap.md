@@ -27,13 +27,13 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-A：macOS 与 Windows 一级平台可用
 
-当前仓库已配置 `.github/workflows/native-desktop.yml`：macOS 与 Windows 原生 runner 分别执行共享 `pnpm verify`、目标平台 protected build/安装包、产物内容校验，并直接启动打包后的 `OpenDesign.app` / `OpenDesign.exe` 执行无窗口 Agent smoke；不启动开发 Electron 入口。macOS arm64 已在本机生成未签名 DMG/ZIP，并通过 bytecode、ASAR/extraResources、产物命名与 sourcemap 检查。原生 workflow 的 Windows 与远端 macOS 运行结果尚未写入验证证据，下面的完整 P0-A 门禁仍未完成。
+当前仓库已配置 `.github/workflows/native-desktop.yml`：macOS 与 Windows 原生 runner 分别执行共享 `pnpm verify`、目标平台 protected build/安装包、产物内容校验，并直接启动打包后的 `OpenDesign.app` / `OpenDesign.exe` 执行无窗口 Agent smoke；不启动开发 Electron 入口。原生 workflow [31384519288](https://github.com/clddup/open-design/actions/runs/31384519288) 已在两个平台通过并上传产物，macOS arm64 也已在本机生成未签名 DMG/ZIP。自动化 packaged smoke 不能替代干净安装、签名、升级/卸载和人工 GUI 产品 smoke，下面的完整 P0-A 发布门禁仍未完成。
 
-- 建立 macOS 与 Windows 原生 CI/发布矩阵；共享 `pnpm verify`，并分别在原生 runner 构建 protected bundle 和安装包。V8 bytecode 不能跨操作系统复用。
-- macOS 产出 DMG/ZIP，Windows 产出 NSIS installer；分别验证干净安装、首次启动、升级覆盖、卸载和用户数据保留策略。
-- 两个平台共同执行：窗口/菜单/快捷键、Leafer 画布鼠标与触控板/滚轮、文本输入、文件选择、Project 保存重开、Agent utilityProcess、`safeStorage`、附件、Provider 调用、取消和崩溃恢复 smoke。
-- 审计并移除只在 macOS 成立的路径、菜单、图标、快捷键和 shell 假设；平台差异通过窄 adapter 处理。
-- Windows 原生 smoke 未通过前，不得把桌面版描述为跨平台可发布。Linux 保留目标和构建边界，但当前不阻塞此里程碑。
+- [x] 建立 macOS 与 Windows 原生 CI/发布矩阵；共享 `pnpm verify`，并分别在原生 runner 构建 protected bundle 和安装包。V8 bytecode 不跨操作系统复用。
+- [ ] macOS 产出 DMG/ZIP，Windows 产出 NSIS installer；分别验证干净安装、首次启动、升级覆盖、卸载和用户数据保留策略。当前只证明产物已生成并通过包内容校验。
+- [ ] 两个平台共同执行：窗口/菜单/快捷键、Leafer 画布鼠标与触控板/滚轮、文本输入、文件选择、Project 保存重开、Agent utilityProcess、`safeStorage`、附件、Provider 调用、取消和崩溃恢复 GUI smoke。当前只完成打包程序的无窗口 Agent smoke。
+- [ ] 审计并移除只在 macOS 成立的路径、菜单、图标、快捷键和 shell 假设；平台差异通过窄 adapter 处理。
+- [ ] Windows 安装后产品 smoke 未通过前，不得把桌面版描述为跨平台可发布。Linux 保留目标和构建边界，但当前不阻塞此里程碑。
 
 完成条件：macOS 与 Windows 的同一 commit 都有 `verify + native package + install/start/product smoke` 证据，并写入 `verification.md`。
 
