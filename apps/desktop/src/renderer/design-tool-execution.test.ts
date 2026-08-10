@@ -36,6 +36,45 @@ const pageContext = {
 };
 
 describe("Renderer design tool scope", () => {
+  it("keeps viewport zoom outside document concurrency control", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setViewport({
+      panX: -120,
+      panY: -80,
+      zoom: 1.25,
+      width: 1_920,
+      height: 1_140,
+    });
+
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "apply_after_zoom",
+        call: {
+          toolCallId: "tool_apply_after_zoom",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Refine after viewport zoom",
+            commands: [
+              {
+                commandId: "rename_after_zoom",
+                type: "update_properties",
+                nodeId: "feature_one",
+                name: "Refined feature",
+              },
+            ],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response.ok).toBe(true);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.getSnapshot().state.viewport.zoom).toBe(1.25);
+  });
+
   it("refreshes a stale read context but still rejects a stale write", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const applied = runtime.apply({

@@ -6,6 +6,7 @@ import type { LeaferEngineCallbacks, LeaferEngineSyncInput } from "./types.js";
 
 const leaferHarness = vi.hoisted(() => ({
   app: null as FakeApp | null,
+  appConfig: null as Record<string, unknown> | null,
   boxMatches: [] as FakeElement[],
 }));
 
@@ -156,9 +157,10 @@ class FakeApp extends FakeEventTarget {
   mode = "normal";
   destroy = vi.fn();
 
-  constructor() {
+  constructor(config: Record<string, unknown>) {
     super();
     leaferHarness.app = this;
+    leaferHarness.appConfig = config;
   }
 }
 
@@ -207,6 +209,7 @@ let animationFrameSequence = 0;
 describe("Leafer engine selection bounds synchronization", () => {
   beforeEach(() => {
     leaferHarness.app = null;
+    leaferHarness.appConfig = null;
     leaferHarness.boxMatches = [];
     animationFrames.clear();
     animationFrameSequence = 0;
@@ -232,6 +235,19 @@ describe("Leafer engine selection bounds synchronization", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("uses restrained cross-platform wheel zoom bounds", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+
+    expect(leaferHarness.appConfig).toMatchObject({
+      wheel: { zoomSpeed: 0.16 },
+      zoom: { min: 0.1, max: 8 },
+    });
+    adapter.dispose();
   });
 
   it("refreshes an unchanged selection after revisions and viewport gestures", async () => {

@@ -56,6 +56,9 @@ interface BoxSelectSession {
 
 const MATRIX_EPSILON = 0.000_001;
 const MIN_DRAW_DISTANCE = 4;
+const MIN_VIEWPORT_ZOOM = 0.1;
+const MAX_VIEWPORT_ZOOM = 8;
+const WHEEL_ZOOM_SPEED = 0.16;
 
 export async function createLeaferEngineAdapter(
   host: HTMLElement,
@@ -97,6 +100,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#app = new leafer.App({
       view: host,
       type: "design",
+      wheel: {
+        zoomSpeed: WHEEL_ZOOM_SPEED,
+      },
+      zoom: {
+        min: MIN_VIEWPORT_ZOOM,
+        max: MAX_VIEWPORT_ZOOM,
+      },
       editor: {
         editSize: "size",
         multipleSelect: true,
