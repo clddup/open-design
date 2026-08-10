@@ -17,6 +17,7 @@ describe("RendererDesignToolHost", () => {
         documentId: "document_1",
         revision: 0,
         scope: { kind: "document", selectedNodeIds: [] },
+        mutationTarget: { kind: "document" },
       },
       new AbortController().signal,
     );

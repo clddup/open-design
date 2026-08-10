@@ -92,4 +92,45 @@ describe("ParentModelGateway", () => {
       value: undefined,
     });
   });
+
+  it("terminates the stream when Main returns an invalid correlated response", async () => {
+    const messages: unknown[] = [];
+    const gateway = new ParentModelGateway({
+      postMessage: (message) => messages.push(message),
+    });
+    const stream = gateway.stream({
+      attemptId: "attempt_invalid",
+      modelSelection: {
+        providerId: "provider_1",
+        modelId: "design-model",
+      },
+      system: "System",
+      messages: [{ role: "user", content: "Hello" }],
+      tools: [],
+      signal: new AbortController().signal,
+    });
+    const iterator = stream[Symbol.asyncIterator]();
+    const first = iterator.next();
+    await Promise.resolve();
+    const request = messages[0] as { requestId: string };
+
+    expect(
+      gateway.handleMessage({
+        type: "model.response",
+        requestId: request.requestId,
+        ok: "yes",
+      }),
+    ).toBe(true);
+    await expect(first).resolves.toMatchObject({
+      done: false,
+      value: {
+        type: "attempt.failed",
+        error: { code: "model_bridge_invalid_response" },
+      },
+    });
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+  });
 });

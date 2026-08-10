@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentHost, createAgentEnvironment } from "./agent-host";
+import {
+  AgentHost,
+  createAgentEnvironment,
+  FatalAgentRunError,
+} from "./agent-host";
 
 const electron = vi.hoisted(() => {
   const listeners = new Map<string, (...args: unknown[]) => void>();
@@ -120,6 +124,156 @@ describe("AgentHost model bridge", () => {
         requestId: "model_request_1",
         ok: true,
       });
+    });
+  });
+
+  it("returns a terminal bridge error instead of dropping an invalid model request", () => {
+    const handler = vi.fn(async function* () {
+      await Promise.resolve();
+      yield {
+        type: "block.started",
+        attemptId: "attempt_1",
+        blockId: "block_1",
+        kind: "text",
+      } as const;
+    });
+    const host = new AgentHost();
+    host.setModelRequestHandler(handler);
+    host.start();
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    postToHost({
+      ...modelRequest,
+      request: {
+        ...modelRequest.request,
+        tools: [
+          {
+            name: "oversized_tool",
+            description: "Invalid oversized test tool",
+            inputSchema: {
+              type: "object",
+              description: "x".repeat(512_001),
+            },
+          },
+        ],
+      },
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(
+      "Rejected invalid model request: tools[0] is invalid",
+    );
+    expect(electron.child.postMessage).toHaveBeenCalledWith({
+      type: "model.response",
+      requestId: "model_request_1",
+      ok: false,
+      error: "Model request rejected by the host: tools[0] is invalid",
+    });
+  });
+
+  it("returns a terminal bridge error instead of dropping an invalid design tool request", () => {
+    const host = new AgentHost();
+    host.start();
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    postToHost({
+      type: "design-tool.request",
+      requestId: "design_tool_request_1",
+      call: {
+        toolCallId: "tool_1",
+        toolName: "opendesign_inspect_document",
+        input: { unexpected: true },
+      },
+      context: {
+        runId: "run_1",
+        sessionId: "session_1",
+        documentId: "document_1",
+        revision: 0,
+        scope: { kind: "document", selectedNodeIds: [] },
+        mutationTarget: { kind: "document" },
+      },
+    });
+
+    expect(error).toHaveBeenCalledWith("Rejected invalid design tool request");
+    expect(electron.child.postMessage).toHaveBeenCalledWith({
+      type: "design-tool.response",
+      requestId: "design_tool_request_1",
+      ok: false,
+      error: "Design tool request rejected by the host",
+    });
+  });
+
+  it("turns an invalid run event into a visible correlated Agent error", () => {
+    const host = new AgentHost();
+    const events: unknown[] = [];
+    host.on((event) => events.push(event));
+    host.start();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    postToHost({
+      type: "message.completed",
+      runId: "run_invalid_event",
+      messageId: "message_1",
+      blocks: "invalid",
+    });
+
+    expect(events).toContainEqual({
+      type: "agent.error",
+      code: "invalid_event",
+      message: "Agent returned an invalid event",
+      runId: "run_invalid_event",
+    });
+    expect(electron.child.postMessage).toHaveBeenCalledWith({
+      type: "run.cancel",
+      runId: "run_invalid_event",
+    });
+  });
+
+  it("terminates a Run when its trusted host binding no longer exists", async () => {
+    const host = new AgentHost();
+    const events: unknown[] = [];
+    host.on((event) => events.push(event));
+    host.setDesignToolRequestHandler(() => {
+      throw new FatalAgentRunError(
+        "run_context_invalid",
+        "Design tool requires an active registered Run",
+      );
+    });
+    host.start();
+
+    postToHost({
+      type: "design-tool.request",
+      requestId: "design_tool_fatal_1",
+      call: {
+        toolCallId: "tool_fatal_1",
+        toolName: "opendesign_inspect_document",
+        input: {},
+      },
+      context: {
+        runId: "run_fatal_1",
+        sessionId: "session_1",
+        documentId: "document_1",
+        revision: 0,
+        scope: { kind: "document", selectedNodeIds: [] },
+        mutationTarget: { kind: "document" },
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(electron.child.postMessage).toHaveBeenCalledWith({
+        type: "run.cancel",
+        runId: "run_fatal_1",
+      });
+    });
+    expect(events).toContainEqual({
+      type: "agent.error",
+      code: "run_context_invalid",
+      message: "Design tool requires an active registered Run",
+      runId: "run_fatal_1",
     });
   });
 

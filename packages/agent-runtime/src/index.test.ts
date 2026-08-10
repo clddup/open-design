@@ -31,6 +31,7 @@ const request: AgentRunRequest = {
     primaryNodeId: "node_trusted",
     pageId: "page_trusted",
   },
+  mutationTarget: { kind: "page", pageId: "page_trusted" },
   modelSelection: {
     providerId: "mock",
     modelId: "design",
@@ -379,6 +380,7 @@ describe("AgentRuntime", () => {
       documentId: "document_trusted",
       revision: 4,
       scope: request.scope,
+      mutationTarget: request.mutationTarget,
     });
     expect(gateway.requests[0]?.tools).toEqual([
       {
@@ -406,6 +408,7 @@ describe("AgentRuntime", () => {
     expect(history.find((item) => item.type === "user.message")).toMatchObject({
       content: request.prompt,
       scope: request.scope,
+      mutationTarget: request.mutationTarget,
     });
     expect(
       history.find(
@@ -570,6 +573,84 @@ describe("AgentRuntime", () => {
     expect(events.at(-1)).toMatchObject({
       type: "run.completed",
       stopReason: "budget",
+    });
+  });
+
+  it("returns recoverable tool execution errors to the model for replanning", async () => {
+    const store = new MemorySessionStore();
+    const requests: ModelRequest[] = [];
+    const mockGateway = new MockModelGateway([
+      {
+        blocks: [
+          {
+            id: "missing_node_call",
+            type: "tool_call",
+            toolCallId: "tool_missing_node",
+            name: "design.move",
+            input: { dx: 12 },
+          },
+        ],
+        stopReason: "tool_use",
+      },
+      {
+        blocks: [
+          {
+            id: "replanned_reply",
+            type: "text",
+            text: "The target node no longer exists, so I did not modify the canvas.",
+          },
+        ],
+        stopReason: "complete",
+      },
+    ]);
+    const gateway: ModelGateway = {
+      async *stream(modelRequest) {
+        requests.push({
+          ...modelRequest,
+          messages: modelRequest.messages.map((message) => ({ ...message })),
+        });
+        yield* mockGateway.stream(modelRequest);
+      },
+    };
+    const runtime = new AgentRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      toolCatalog: { listTools: () => [tool] },
+      toolExecutor: {
+        execute: () => ({
+          [Symbol.asyncIterator]: () => ({
+            next: async () => {
+              await Promise.resolve();
+              throw new Error("Target node no longer exists");
+            },
+          }),
+        }),
+      },
+    });
+
+    const events = await collect(runtime);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool.failed",
+        toolCallId: "tool_missing_node",
+        code: "tool_error",
+        message: "Target node no longer exists",
+      }),
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "complete",
+    });
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.messages.at(-1)).toMatchObject({
+      role: "tool",
+      toolCallId: "tool_missing_node",
+      isError: true,
+      content: {
+        code: "tool_error",
+        message: "Target node no longer exists",
+      },
     });
   });
 

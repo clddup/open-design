@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
+  AgentAttachment,
   AgentEvent,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
@@ -521,6 +522,88 @@ describe("AgentTimeline", () => {
     );
   });
 
+  it("replaces the streaming caret with a stopping state immediately", async () => {
+    const user = userEvent.setup();
+    const onStop = vi.fn(() => new Promise<boolean>(() => undefined));
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_1"
+        conversationId="conversation_1"
+        conversationTitle="Conversation 1"
+        error={null}
+        events={[
+          {
+            type: "message.delta",
+            runId: "run_1",
+            messageId: "message_1",
+            blockId: "block_1",
+            delta: "Partial response",
+          },
+        ]}
+        onStop={onStop}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(
+      container.querySelector(
+        ".agent-thread__item--assistant.agent-thread__item--active",
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    expect(onStop).toHaveBeenCalledOnce();
+    expect(screen.getByText("Stopping request")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stopping…" })).toBeDisabled();
+    expect(
+      container.querySelector(
+        ".agent-thread__item--assistant.agent-thread__item--active",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector(
+        ".agent-thread__item--assistant.agent-thread__item--stopping",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("finalizes a partial assistant message when its Run is cancelled", () => {
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation 1"
+        error={null}
+        events={[
+          {
+            type: "message.delta",
+            runId: "run_1",
+            messageId: "message_1",
+            blockId: "block_1",
+            delta: "Partial response",
+          },
+          {
+            type: "run.completed",
+            runId: "run_1",
+            finishedAt: now,
+            stopReason: "cancelled",
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(screen.getByText("Partial response")).toBeInTheDocument();
+    expect(screen.getByText("Task stopped")).toBeInTheDocument();
+    expect(
+      container.querySelector(
+        ".agent-thread__item--assistant.agent-thread__item--active",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("sends with Enter, keeps Shift+Enter as a newline, and shows selection scope", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(true);
@@ -856,5 +939,244 @@ describe("AgentTimeline", () => {
         },
       ],
     );
+  });
+
+  it("imports pasted and dropped files but submits only safe attachment metadata", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    const pastedId = `image_${"c".repeat(64)}`;
+    const droppedId = `file_${"d".repeat(64)}`;
+    const pastedBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const droppedBytes = new TextEncoder().encode("# Product brief");
+    const pastedFile = new File([pastedBytes], "pasted.png", {
+      type: "image/png",
+    });
+    const droppedFile = new File([droppedBytes], "brief.md", {
+      type: "text/markdown",
+    });
+    Object.defineProperty(pastedFile, "arrayBuffer", {
+      value: vi.fn().mockResolvedValue(pastedBytes.buffer),
+    });
+    Object.defineProperty(droppedFile, "arrayBuffer", {
+      value: vi.fn().mockResolvedValue(droppedBytes.buffer),
+    });
+    const importAgentAttachments = vi
+      .fn<DesktopApi["importAgentAttachments"]>()
+      .mockImplementation(([attachment]) => {
+        if (attachment?.name === "pasted.png") {
+          return Promise.resolve([
+            {
+              attachmentId: pastedId,
+              name: "pasted.png",
+              mimeType: "image/png",
+              byteSize: pastedBytes.byteLength,
+              previewDataUrl: "data:image/png;base64,iVBORw==",
+            },
+          ]);
+        }
+        return Promise.resolve([
+          {
+            attachmentId: droppedId,
+            name: "brief.md",
+            mimeType: "text/markdown",
+            byteSize: droppedBytes.byteLength,
+          },
+        ]);
+      });
+    window.desktop = {
+      getModelProviderCatalog: vi.fn().mockResolvedValue({
+        version: 1,
+        providers: [
+          {
+            providerId: "provider_1",
+            name: "Primary",
+            enabled: true,
+            apiFormat: "openai-responses",
+            authMode: "bearer",
+            baseUrl: "https://api.openai.com/v1",
+            models: [
+              {
+                modelId: "vision-model",
+                name: "Vision model",
+                contextWindow: 200_000,
+                maxOutputTokens: 16_384,
+                capabilities: {
+                  toolUse: true,
+                  imageInput: true,
+                  reasoning: false,
+                },
+                reasoningEfforts: ["off"],
+              },
+            ],
+            hasApiKey: true,
+            updatedAt: now,
+          },
+        ],
+        defaultSelection: {
+          providerId: "provider_1",
+          modelId: "vision-model",
+          reasoningEffort: "off",
+        },
+      }),
+      onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),
+      importAgentAttachments,
+      getAgentAttachmentPreview: vi.fn(),
+    } as unknown as DesktopApi;
+
+    render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={onSubmit}
+        timeline={[]}
+      />,
+    );
+
+    const prompt = screen.getByLabelText("Continue the task");
+    fireEvent.paste(prompt, { clipboardData: { files: [pastedFile] } });
+    expect(
+      await screen.findByRole("img", { name: "pasted.png" }),
+    ).toBeInTheDocument();
+    expect(importAgentAttachments).toHaveBeenNthCalledWith(1, [
+      { name: "pasted.png", bytes: pastedBytes },
+    ]);
+
+    const dropTarget = prompt.closest(".agent-prompt__editor");
+    expect(dropTarget).not.toBeNull();
+    fireEvent.drop(dropTarget!, {
+      dataTransfer: { files: [droppedFile], types: ["Files"] },
+    });
+    expect(await screen.findByText("brief.md")).toBeInTheDocument();
+    expect(importAgentAttachments).toHaveBeenNthCalledWith(2, [
+      { name: "brief.md", bytes: droppedBytes },
+    ]);
+
+    const plainPathPaste = new Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(plainPathPaste, "clipboardData", {
+      value: {
+        files: [],
+        getData: () => "C:\\Users\\designer\\reference.png",
+      },
+    });
+    fireEvent(prompt, plainPathPaste);
+    expect(plainPathPaste.defaultPrevented).toBe(false);
+    expect(importAgentAttachments).toHaveBeenCalledTimes(2);
+
+    await user.type(prompt, "Use both references");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      "Use both references",
+      {
+        providerId: "provider_1",
+        modelId: "vision-model",
+        reasoningEffort: "off",
+      },
+      [
+        {
+          attachmentId: pastedId,
+          name: "pasted.png",
+          mimeType: "image/png",
+          byteSize: pastedBytes.byteLength,
+        },
+        {
+          attachmentId: droppedId,
+          name: "brief.md",
+          mimeType: "text/markdown",
+          byteSize: droppedBytes.byteLength,
+        },
+      ],
+    );
+    const submittedAttachments = (onSubmit.mock.calls[0]?.[2] ??
+      []) as AgentAttachment[];
+    expect(
+      submittedAttachments.every((attachment) =>
+        Object.keys(attachment).every((key) =>
+          ["attachmentId", "name", "mimeType", "byteSize"].includes(key),
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("follows new activity only while the reader remains near the bottom", () => {
+    window.desktop = {
+      getModelProviderCatalog: vi.fn().mockResolvedValue({
+        version: 1,
+        providers: [],
+      }),
+      onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),
+    } as unknown as DesktopApi;
+    const message = (
+      sequence: number,
+      content: string,
+    ): SessionTimelineItem => ({
+      itemId: `message:user_${sequence}`,
+      sessionId: "conversation_1",
+      runId: `run_${sequence}`,
+      sequence,
+      createdAt: now,
+      updatedAt: now,
+      type: "user.message",
+      messageId: `user_${sequence}`,
+      content,
+      documentId: "document_1",
+      revision: 0,
+      scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId: "page_1" },
+    });
+    const renderTimeline = (timeline: SessionTimelineItem[]) => (
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={timeline}
+      />
+    );
+    const { rerender } = render(renderTimeline([message(1, "First")]));
+    const thread = screen.getByRole("list");
+    let scrollHeight = 400;
+    Object.defineProperties(thread, {
+      clientHeight: { configurable: true, get: () => 100 },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+    });
+
+    rerender(renderTimeline([message(1, "First"), message(2, "Second")]));
+    expect(thread.scrollTop).toBe(400);
+
+    thread.scrollTop = 100;
+    fireEvent.scroll(thread);
+    scrollHeight = 500;
+    rerender(
+      renderTimeline([
+        message(1, "First"),
+        message(2, "Second"),
+        message(3, "Third"),
+      ]),
+    );
+    expect(thread.scrollTop).toBe(100);
+
+    thread.scrollTop = 400;
+    fireEvent.scroll(thread);
+    scrollHeight = 700;
+    rerender(
+      renderTimeline([
+        message(1, "First"),
+        message(2, "Second"),
+        message(3, "Third"),
+        message(4, "Fourth"),
+      ]),
+    );
+    expect(thread.scrollTop).toBe(700);
   });
 });

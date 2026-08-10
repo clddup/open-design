@@ -16,7 +16,8 @@ UI 设计是首要能力和最先打磨的工作流，但不是产品边界。�
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask、高级描边和事务化图片 asset 的公共设计语义及属性检查器/Leafer 映射。
 - 运行于 `utilityProcess` 的持续 Agent Conversation、取消/恢复、多 Provider Catalog、OpenAI Responses、OpenAI Chat Completions、Anthropic Messages adapter 和 Main-only `safeStorage` 凭据。
 - `opendesign_inspect_document`、`opendesign_apply_transaction`、`opendesign_read_image` 与 `opendesign_place_image` 四个 typed tools；图片/文档附件、剪贴板/拖放，以及受限读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL 的多模态链路。
-- Renderer/Preload/Main/Agent 的运行时校验、最小环境变量 allowlist 和按 run 绑定 Design File/revision/scope 的设计工具桥。
+- Renderer/Preload/Main/Agent 的运行时校验、最小环境变量 allowlist，以及按 run 分别冻结 Design File/revision、选区上下文与单一 Mutation Target 的设计工具桥。
+- Main-owned 结构化诊断 JSONL、按 Conversation/Run/Request/Tool Call 关联的右下角通知与单条诊断复制；Agent 对话在用户位于底部附近时跟随新消息和流式状态，用户上翻后暂停跟随。
 
 当前自动化与普通生产构建只在 macOS arm64 上验证。Windows 虽已有 electron-builder 配置和 NSIS 入口，但尚未取得原生构建、安装和产品 smoke 证据，属于 P0 发布阻塞项。尚未完成的其他主要目标包括：完整 Working Set/Mutation Targets/Capabilities、attached roots、通用 per-run resource handles、Main approval/audit/sandbox 执行链、跨 Project 多目标、完整 MCP 产品链、`fetch_reference`/隔离 `capture_reference`，以及能力基线中列出的专业矢量、布局、组件、变量、富文本和导入导出。
 
@@ -158,7 +159,7 @@ Main 负责可信调度和系统能力，所有入口校验来源、参数、资
 
 ### 7.3 Agent utilityProcess
 
-Agent Runtime 使用 TypeScript 并运行于 Electron `utilityProcess`。当前 `AgentRequest 3.2` 的 `run.start` 包含 `sessionId`（承载产品 `conversationId`）、`runId`、prompt、model selection、可选附件、单个 `documentId`、revision 与选区；`homeProjectId` 仍由 Main-owned Conversation descriptor 和 Global Task 目标校验承载。目标协议还需要加入 Working Set、Mutation Targets、能力快照、审批和多目标结果，这些扩展需要协议升级和存量会话迁移。
+Agent Runtime 使用 TypeScript 并运行于 Electron `utilityProcess`。当前 `AgentRequest 3.3` 的 `run.start` 包含 `sessionId`（承载产品 `conversationId`）、`runId`、prompt、model selection、可选附件、单个 `documentId`、revision、发送时的选区上下文与独立的单一 `mutationTarget`。选区只帮助模型理解用户当时关注的节点，不授予也不缩小写入范围；Mutation Target 通常固定为发送时的活动 Page，任务开始后 Renderer 的选区和活动页面变化不会改变它。新 `run.start` 必须携带 Mutation Target；历史 `message.user` journal 允许缺省该字段以继续读取 3.2 及更早会话，不会从旧选区反推或补授写权限。`homeProjectId` 仍由 Main-owned Conversation descriptor 和 Global Task 目标校验承载。目标协议还需要加入完整 Working Set、多 Mutation Targets、能力快照、审批和多目标结果，这些扩展需要后续协议升级和存量会话迁移。
 
 主进程负责启动、健康检查、限流、取消和异常重启。utilityProcess 默认不继承渲染页面权限，也不直接访问引擎、文件系统、shell 或凭据；所有工具执行都通过主机侧 Tool Runtime 进行策略判断和代理。详细决策见 [ADR-0002](adr/0002-agent-utility-process.md) 与 [ADR-0006](adr/0006-project-conversation-agent-scope.md)。
 
@@ -192,13 +193,27 @@ Agent 参考 Pi/OpenCode 的工程思路：保持核心循环小而透明，以�
 
 桌面设置页实现版本化 `ModelProviderCatalog v1`。每个 Provider profile 分别保存稳定 ID、名称、启用状态、API 格式、鉴权方式、Base URL 和模型能力列表；当前 API 格式为 OpenAI Responses、OpenAI Chat Completions 与 Anthropic Messages。API Key 按 `providerId` 由 Electron `safeStorage` 加密后存入 Main-only `WorkspaceStore`，Renderer 只能读取 `hasApiKey`，不会收到明文或密文。
 
-Agent composer 在每个 Conversation 中选择 `Provider/Model` 和模型支持的 reasoning effort。`AgentRequest 3.2` 把选择和可选的内容寻址附件显式放入 `run.start`，run journal 保存选择与附件元数据；Main 只解析并执行该选择，不用隐藏全局值覆盖。一条消息最多包含 6 个附件，单个不超过 16 MB、合计不超过 32 MB。Main 按真实内容自动识别图片和受支持文档，不要求用户预先选择类型；图片使用 `image_<sha256>`，文档使用绑定 MIME 的 `file_<sha256>`。PDF/DOCX/UTF-8 文本文档在 Main 中提取为最多 200,000 字符的只读参考上下文，DOCX 先经过条目数、展开大小、压缩比、加密和路径检查。只有包含图片的请求才要求模型声明 `imageInput`；纯文档请求可以发送给文本模型。文件选择器、魔数/大小校验、SHA-256 存储和完整性复验都在 Main 中完成，模型 bridge 不接受 utility process 提交 inline base64 或任意路径。`ParentModelGateway` 通过内部、受校验的 model bridge 把可序列化请求交给 Main；Main 在发起网络请求时才解密对应 Provider 凭据、解析获准附件 ID，把图片转成原生多模态 block、把文档转成带不可信边界标记的 text block，再通过固定 adapter 适配三种协议。取消通过关联 `requestId` 的 `AbortController` 传递。该链路不授予 Agent 原始凭据、任意网络入口或文件系统能力。当前四个内置设计/图片工具只操作 Main 绑定到 run 的活动 Design File 或当前 run 明示引用，并通过受校验的事务/附件桥执行；每次 run 的完整外发数据预览、Main approval bridge 和完整工具审计策略链仍未实现。详细决策见 [ADR-0007](adr/0007-main-hosted-model-provider.md) 与 [ADR-0008](adr/0008-multi-provider-model-catalog.md)。
+Agent composer 在每个 Conversation 中选择 `Provider/Model` 和模型支持的 reasoning effort。`AgentRequest 3.3` 把选择、发送时选区、单一 Mutation Target 和可选的内容寻址附件显式放入 `run.start`，run journal 保存对应快照与附件元数据；Main 只解析并执行该选择，不用隐藏全局值覆盖。一条消息最多包含 6 个附件，单个不超过 16 MB、合计不超过 32 MB。Main 按真实内容自动识别图片和受支持文档，不要求用户预先选择类型；图片使用 `image_<sha256>`，文档使用绑定 MIME 的 `file_<sha256>`。PDF/DOCX/UTF-8 文本文档在 Main 中提取为最多 200,000 字符的只读参考上下文，DOCX 先经过条目数、展开大小、压缩比、加密和路径检查。只有包含图片的请求才要求模型声明 `imageInput`；纯文档请求可以发送给文本模型。文件选择器、魔数/大小校验、SHA-256 存储和完整性复验都在 Main 中完成，模型 bridge 不接受 utility process 提交 inline base64 或任意路径。`ParentModelGateway` 通过内部、受校验的 model bridge 把可序列化请求交给 Main；Main 在发起网络请求时才解密对应 Provider 凭据、解析获准附件 ID，把图片转成原生多模态 block、把文档转成带不可信边界标记的 text block，再通过固定 adapter 适配三种协议。模型桥接受完整生产设计工具契约，并同时限制单工具 schema 与工具集合总大小；任何跨进程请求/响应校验失败都会回传可关联的失败终态，不能只写日志后丢弃。取消通过关联 `requestId` 的 `AbortController` 传递。生产模型流由 Main 同时执行 180 秒首响应、120 秒流空闲和 15 分钟总时限 watchdog；任一时限触发都会 abort 实际 Provider fetch，并通过 Agent 终态解除 UI active Run。应用启动时还会把 JSONL 中孤立的 started Run 和 pending tool 终结为可恢复错误，避免重启后保留假运行状态。该链路不授予 Agent 原始凭据、任意网络入口或文件系统能力。当前四个内置设计/图片工具只操作 Main 绑定到 run 的活动 Design File、固定 Mutation Target 或当前 run 明示引用，并通过受校验的事务/附件桥执行；每次 run 的完整外发数据预览、Main approval bridge 和完整工具审计策略链仍未实现。详细决策见 [ADR-0007](adr/0007-main-hosted-model-provider.md) 与 [ADR-0008](adr/0008-multi-provider-model-catalog.md)。
+
+用户请求停止后，Renderer 立即把对应 Run 显示为“正在停止”并去除流式活动光标，但在 `run.completed` 或失败终态到达前仍保持并发占用。终态会兜底结束该 Run 遗留的 partial message、tool 与 approval 活动态，避免对话中残留看似仍在运行的蓝色光标。
+
+失败按“是否还能可靠地继续模型循环”分类，而不是按任意一层是否抛错分类：
+
+- 可恢复工具/业务失败：参数校验、节点不存在、目标越界、revision conflict、审批拒绝、Renderer 工具超时或设计工具桥拒绝。它们写入 `tool.failed`，作为结构化 tool result 回给仍可用的模型；模型可以重新检查、修正参数、换方案或向用户解释，Run 不由中间层直接终结。
+- 需要用户动作但模型仍可回复：活动 Design File 已切换、目标不可用或用户拒绝授权。工具失败仍回给模型，由模型说明需要的用户动作并自然完成本轮。
+- 不可继续的 Run/基础设施失败：模型请求或响应桥损坏、Provider watchdog 超时、Agent 进程/协议事件异常、Run 注册/可信绑定丢失。此时已经无法安全地继续同一循环，Main 取消对应 Run，发送可关联的 `agent.error`/终态，Renderer 解除输入和画布的运行状态并向用户显示错误。
+
+任何一类失败都不得只写终端日志。能继续的必须进入模型上下文，不能继续的必须进入用户可见终态；同一 `requestId`/`runId` 用于关联、审计和释放资源。
+
+Main 在应用 `userData/diagnostics/events.jsonl` 中维护有大小上限和单代轮转的结构化诊断日志。事件只包含时间、级别、来源、稳定错误码、错误消息、应用/平台版本，以及可用的 Conversation、Run、Request、Tool Call、Project 和 Design File ID；不记录 Prompt、附件正文、设计正文、Provider 凭据或工具参数。不可继续的错误和明确系统通知通过同一事件投影为右下角通知，错误在用户关闭前保持；用户可一键复制当前事件的完整关联信息交给 Agent 排查。可由模型自行恢复的工具失败仍写日志，但默认静默，避免重规划过程中连续弹窗。
 
 Agent composer 还支持粘贴和拖入图片/文件。模型可按需调用 `opendesign_read_image` 读取当前 run 已附加的图片，或用户在当前 prompt 中精确明示的绝对路径、`file:` URL 和 HTTP(S) 图片 URL；Main 只做 source 授权、受限读取、内容寻址和完整性校验，识别由模型完成。tool result 内保存 attachment metadata，下一轮由 Model Gateway 解析成真实多模态图片块。`opendesign_place_image` 可把同一 attachment 以受信任的 asset + image node 原子事务嵌入画布。远程读取不携带 Cookie 或 Provider 凭据，并限制协议、重定向、超时与大小。通用网页文本读取和隔离截图仍是后续 `fetch_reference` / `capture_reference` 能力，不把仅获取 HTML 描述为已经看见页面视觉。
 
 ### 9.1 Conversation 与 `homeProjectId`
 
 Conversation 是持久会话。目标模型为每个 Conversation 保存 `conversationId` 和创建时确定的 `homeProjectId`；后者只提供默认浏览位置、相对引用起点、策略提示和 UI 归档位置，不构成 sandbox 或文件权限。Conversation 后续可以引用其他 Project，且不改变 `homeProjectId`，也不把外部目录自动附加到 home Project。
+
+Conversation 列表按 `updatedAt` 降序排列。Main 在接受新 Run 以及收到 assistant/tool/终态活动时推进持久时间，Renderer 在同一事件链中立即重排本地投影；因此发送消息后当前会话马上置顶，重启后顺序与持久状态一致。
 
 每个 run 保存其实际作用域和权限快照。Project 被移动或归档后，会话审计记录仍应有效；旧会话迁移到默认 Project 时，不得把历史路径自动转成 attached root 或持久授权。
 
@@ -279,7 +294,7 @@ OpenPencil vendor/runtime、旧 Canvas2D 产品包、手写 React 画布交互�
 - 当前每个 Provider 的 API Key 由 Main 使用 Electron `safeStorage` 分别加密；Renderer 与 Agent 只看到脱敏 Catalog 或 canonical model events。密钥不写入 Project、日志、提示词或 Renderer 存储。
 - 用户明确选择的 Agent 附件默认保存在本机 `~/.opendesign/attachments`；只有在发送包含该附件的 Conversation 消息时，Main 才把对应图片内容或本地提取的文档文本交给当前选择的外部模型。图片要求模型声明 `imageInput`，文档不授予原文件或目录访问。项目正文、Utility journal 和 model bridge 不保存原始路径或 inline base64。
 - 发送给外部模型或 MCP 的每段数据都带来源、Working Set 与资源作用域，并受 provider 配置、Capability 和 Approval 约束。
-- 日志默认去除设计正文、提示词、令牌和个人数据。诊断导出应允许用户预览。
+- 日志默认去除设计正文、提示词、令牌、附件内容和工具参数。当前支持从通知复制单条结构化诊断；后续批量诊断导出必须先允许用户预览。
 - Agent 与 MCP 写操作逐目标记录主体、Conversation/run、工具、参数摘要、Project、Design File、base/current revision、结果和撤销句柄。
 
 ## 15. 质量属性
@@ -287,6 +302,8 @@ OpenPencil vendor/runtime、旧 Canvas2D 产品包、手写 React 画布交互�
 ### 响应性
 
 指针、键盘、缩放和选区更新不得等待 Agent 或远程服务。长任务异步执行、可取消，并以渐进状态更新 UI。
+
+当前 Leafer adapter 直接消费 `DesignTransaction` 的 `DesignChangeSet`。相邻 revision 只遍历活动 Page 的结构 ID，并为 added/changed/removed 节点及引用变更 asset 的节点重建投影 spec；未变 spec 保持引用稳定，reconcile 只访问该 affected set，只对实际变化的 data、transform 和父子顺序调用 Leafer。普通 revision 不再隐藏 Editor、重放整棵场景或强制更新 tree bounds；只有变化与当前选区存在祖先/后代关系时，才刷新对应选中元素的 bounds。首次挂载、Design File/Page 切换、revision 断档和交互失败恢复仍使用全量可丢弃投影作为正确性回退。固定节点规模、效果复杂度和帧时间的真实 Electron 基准仍需持续记录；不能通过建立第二份可写状态、跳过 revision 或牺牲选区准确性换取表面流畅。
 
 ### 可恢复性
 

@@ -18,9 +18,12 @@ import { join } from "node:path";
 import {
   isModelBridgeCancel,
   isModelBridgeRequest,
+  modelBridgeRequestId,
+  modelBridgeRequestValidationError,
   type ModelBridgeResponse,
 } from "../../shared/model-bridge";
 import {
+  designToolBridgeRequestId,
   isDesignToolBridgeCancel,
   isDesignToolBridgeRequest,
   type DesignToolBridgeResponse,
@@ -43,6 +46,16 @@ export interface DesignToolRequestHandler {
     context: TrustedToolContext,
     signal: AbortSignal,
   ): Promise<TrustedToolResult>;
+}
+
+export class FatalAgentRunError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "FatalAgentRunError";
+  }
 }
 
 const AGENT_ENVIRONMENT_ALLOWLIST = [
@@ -167,6 +180,17 @@ export class AgentHost {
       );
       return;
     }
+    const rejectedDesignToolRequestId = designToolBridgeRequestId(message);
+    if (rejectedDesignToolRequestId) {
+      console.error("Rejected invalid design tool request");
+      this.#process?.postMessage({
+        type: "design-tool.response",
+        requestId: rejectedDesignToolRequestId,
+        ok: false,
+        error: "Design tool request rejected by the host",
+      } satisfies DesignToolBridgeResponse);
+      return;
+    }
     if (isDesignToolBridgeCancel(message)) {
       const controller = this.#designToolRequests.get(message.requestId);
       controller?.abort();
@@ -179,6 +203,18 @@ export class AgentHost {
       void this.handleModelRequest(message.requestId, message.request);
       return;
     }
+    const rejectedModelRequestId = modelBridgeRequestId(message);
+    if (rejectedModelRequestId) {
+      const error = modelBridgeRequestValidationError(message);
+      console.error(`Rejected invalid model request: ${error}`);
+      this.#process?.postMessage({
+        type: "model.response",
+        requestId: rejectedModelRequestId,
+        ok: false,
+        error: `Model request rejected by the host: ${error}`,
+      } satisfies ModelBridgeResponse);
+      return;
+    }
     if (isModelBridgeCancel(message)) {
       const controller = this.#modelRequests.get(message.requestId);
       controller?.abort();
@@ -189,6 +225,19 @@ export class AgentHost {
     }
     if (!isAgentEvent(message)) {
       console.error("Rejected invalid Agent event");
+      const run = candidateRunId(message);
+      if (run.runId) {
+        this.#process?.postMessage({
+          type: "run.cancel",
+          runId: run.runId,
+        } satisfies AgentRequest);
+      }
+      this.emit({
+        type: "agent.error",
+        code: "invalid_event",
+        message: "Agent returned an invalid event",
+        ...run,
+      });
       return;
     }
     const event = message;
@@ -325,6 +374,18 @@ export class AgentHost {
         error:
           error instanceof Error ? error.message : "Design tool request failed",
       } satisfies DesignToolBridgeResponse);
+      if (error instanceof FatalAgentRunError) {
+        child.postMessage({
+          type: "run.cancel",
+          runId: context.runId,
+        } satisfies AgentRequest);
+        this.emit({
+          type: "agent.error",
+          code: error.code,
+          message: error.message,
+          runId: context.runId,
+        });
+      }
     } finally {
       if (this.#designToolRequests.get(requestId) === controller) {
         this.#designToolRequests.delete(requestId);
@@ -338,4 +399,12 @@ export class AgentHost {
     }
     this.#designToolRequests.clear();
   }
+}
+
+function candidateRunId(value: unknown): { runId?: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const runId = (value as { runId?: unknown }).runId;
+  return typeof runId === "string" && runId.length > 0 && runId.length <= 256
+    ? { runId }
+    : {};
 }

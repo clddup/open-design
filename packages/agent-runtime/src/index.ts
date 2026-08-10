@@ -4,6 +4,7 @@ import {
   type AgentAttachment,
   type ApprovalDecision,
   type AssistantTimelineBlock,
+  type DesignMutationTarget,
   type RunStopReason,
   type SelectionScope,
   type SessionTimelineItem,
@@ -29,6 +30,7 @@ export interface AgentRunRequest {
   documentId: string;
   revision: number;
   scope: SelectionScope;
+  mutationTarget: DesignMutationTarget;
   modelSelection: ModelSelection;
 }
 
@@ -55,6 +57,7 @@ export interface TrustedToolContext {
   documentId: string;
   revision: number;
   scope: SelectionScope;
+  mutationTarget: DesignMutationTarget;
 }
 
 export type ToolExecutionEvent =
@@ -190,6 +193,7 @@ export class AgentRuntime {
         documentId: request.documentId,
         revision: currentRevision,
         scope: request.scope,
+        mutationTarget: request.mutationTarget,
       });
       messages.push(
         canonicalUserMessage(request.prompt, request.attachments ?? []),
@@ -1017,6 +1021,7 @@ function snapshotRunRequest(request: AgentRunRequest): AgentRunRequest {
       ...request.scope,
       selectedNodeIds: [...request.scope.selectedNodeIds],
     },
+    mutationTarget: { ...request.mutationTarget },
   };
 }
 
@@ -1100,6 +1105,7 @@ function createTrustedContext(
     documentId: request.documentId,
     revision,
     scope,
+    mutationTarget: Object.freeze({ ...request.mutationTarget }),
   });
 }
 

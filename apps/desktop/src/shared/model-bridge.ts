@@ -7,6 +7,9 @@ import type {
 } from "@opendesign/model-gateway";
 import { MAX_AGENT_ATTACHMENT_BYTES } from "@opendesign/agent-contracts";
 
+const MAX_MODEL_TOOL_SCHEMA_BYTES = 512_000;
+const MAX_MODEL_TOOLS_BYTES = 2_000_000;
+
 export type SerializableModelRequest = Omit<ModelRequest, "signal">;
 
 export type ModelBridgeRequest = {
@@ -41,22 +44,50 @@ export type ModelBridgeResponse =
 export function isModelBridgeRequest(
   value: unknown,
 ): value is ModelBridgeRequest {
-  if (!record(value) || value.type !== "model.request") return false;
+  return modelBridgeRequestValidationError(value) === null;
+}
+
+export function modelBridgeRequestValidationError(
+  value: unknown,
+): string | null {
+  if (!record(value) || value.type !== "model.request") {
+    return "message is not a model.request object";
+  }
   const request = value.request;
-  return (
-    safeId(value.requestId) &&
-    record(request) &&
-    safeId(request.attemptId) &&
-    (request.sessionId === undefined || safeId(request.sessionId)) &&
-    isModelSelection(request.modelSelection) &&
-    safeText(request.system, 200_000) &&
-    Array.isArray(request.messages) &&
-    request.messages.length <= 1_000 &&
-    request.messages.every(isCanonicalMessage) &&
-    Array.isArray(request.tools) &&
-    request.tools.length <= 256 &&
-    request.tools.every(isCanonicalTool)
+  if (!safeId(value.requestId)) return "requestId is invalid";
+  if (!record(request)) return "request is not an object";
+  if (!safeId(request.attemptId)) return "attemptId is invalid";
+  if (request.sessionId !== undefined && !safeId(request.sessionId)) {
+    return "sessionId is invalid";
+  }
+  if (!isModelSelection(request.modelSelection)) {
+    return "modelSelection is invalid";
+  }
+  if (!safeText(request.system, 200_000)) return "system is invalid";
+  if (!Array.isArray(request.messages) || request.messages.length > 1_000) {
+    return "messages are invalid";
+  }
+  const invalidMessage = request.messages.findIndex(
+    (message) => !isCanonicalMessage(message),
   );
+  if (invalidMessage >= 0) return `messages[${invalidMessage}] is invalid`;
+  if (!Array.isArray(request.tools) || request.tools.length > 256) {
+    return "tools are invalid";
+  }
+  if (!jsonSizeWithin(request.tools, MAX_MODEL_TOOLS_BYTES)) {
+    return "tools exceed the aggregate size limit";
+  }
+  const invalidTool = request.tools.findIndex((tool) => !isCanonicalTool(tool));
+  if (invalidTool >= 0) return `tools[${invalidTool}] is invalid`;
+  return null;
+}
+
+export function modelBridgeRequestId(value: unknown): string | null {
+  return record(value) &&
+    value.type === "model.request" &&
+    safeId(value.requestId)
+    ? value.requestId
+    : null;
 }
 
 export function isModelBridgeCancel(
@@ -70,22 +101,39 @@ export function isModelBridgeCancel(
 export function isModelBridgeResponse(
   value: unknown,
 ): value is ModelBridgeResponse {
+  return modelBridgeResponseValidationError(value) === null;
+}
+
+export function modelBridgeResponseValidationError(
+  value: unknown,
+): string | null {
   if (
     !record(value) ||
     !safeId(value.requestId) ||
     (value.type !== "model.event" && value.type !== "model.response")
   ) {
-    return false;
+    return "message is not a correlated model response";
   }
   if (value.type === "model.event") {
-    return isCanonicalStreamEvent(value.event);
+    return isCanonicalStreamEvent(value.event) ? null : "event is invalid";
   }
-  if (typeof value.ok !== "boolean") return false;
-  return value.ok
-    ? Object.keys(value).every((key) =>
-        ["type", "requestId", "ok"].includes(key),
-      )
-    : safeText(value.error, 20_000);
+  if (typeof value.ok !== "boolean") return "response status is invalid";
+  if (value.ok) {
+    return Object.keys(value).every((key) =>
+      ["type", "requestId", "ok"].includes(key),
+    )
+      ? null
+      : "successful response contains unexpected fields";
+  }
+  return safeText(value.error, 20_000) ? null : "response error is invalid";
+}
+
+export function modelBridgeResponseId(value: unknown): string | null {
+  return record(value) &&
+    (value.type === "model.event" || value.type === "model.response") &&
+    safeId(value.requestId)
+    ? value.requestId
+    : null;
 }
 
 function isCanonicalMessage(value: unknown): value is CanonicalMessage {
@@ -165,7 +213,7 @@ function isCanonicalTool(value: unknown): value is CanonicalTool {
     safeId(value.name) &&
     safeText(value.description, 20_000) &&
     record(value.inputSchema) &&
-    jsonSizeWithin(value.inputSchema, 200_000)
+    jsonSizeWithin(value.inputSchema, MAX_MODEL_TOOL_SCHEMA_BYTES)
   );
 }
 

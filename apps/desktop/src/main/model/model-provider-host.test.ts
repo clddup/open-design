@@ -70,7 +70,112 @@ function chatResponse(text = "Ready") {
   );
 }
 
+function partialChatResponse() {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({
+              id: "chat_partial",
+              object: "chat.completion.chunk",
+              created: 1,
+              model: "design-model",
+              choices: [
+                {
+                  index: 0,
+                  delta: { role: "assistant", content: "Starting" },
+                  finish_reason: null,
+                },
+              ],
+            })}\n\n`,
+          ),
+        );
+      },
+    }),
+    { status: 200, headers: { "Content-Type": "text/event-stream" } },
+  );
+}
+
 describe("ModelProviderHost", () => {
+  it("aborts a production model stream that produces no response events", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi.fn<typeof globalThis.fetch>(() => new Promise(() => {}));
+    const host = new ModelProviderHost(store, cipher, fetch, undefined, {
+      firstResponseTimeoutMs: 50,
+      idleTimeoutMs: 100,
+      totalTimeoutMs: 500,
+    });
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        {
+          attemptId: "attempt_stalled",
+          sessionId: "session_stalled",
+          modelSelection: selection,
+          system: "System",
+          messages: [{ role: "user", content: "Design a settings page" }],
+          tools: [],
+        },
+        new AbortController().signal,
+      );
+      const rejected = expect(pending).rejects.toThrow(
+        "Model provider timed out after 50 ms waiting for a response",
+      );
+
+      await vi.advanceTimersByTimeAsync(51);
+
+      await rejected;
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts a production model stream that stops making progress", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(partialChatResponse());
+    const host = new ModelProviderHost(store, cipher, fetch, undefined, {
+      firstResponseTimeoutMs: 100,
+      idleTimeoutMs: 50,
+      totalTimeoutMs: 500,
+    });
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        {
+          attemptId: "attempt_idle",
+          sessionId: "session_idle",
+          modelSelection: selection,
+          system: "System",
+          messages: [{ role: "user", content: "Design a settings page" }],
+          tools: [],
+        },
+        new AbortController().signal,
+      );
+      const rejected = expect(pending).rejects.toThrow(
+        "Model provider stream timed out after 50 ms without activity",
+      );
+
+      await vi.advanceTimersByTimeAsync(101);
+
+      await rejected;
+      expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
   it("resolves approved image IDs only for an image-capable model", async () => {
     const store = new WorkspaceStore(":memory:");
     const fetch = vi

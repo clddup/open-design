@@ -890,6 +890,7 @@ textarea {
   padding: 8px 6px 5px;
 }
 .layer-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -911,7 +912,7 @@ textarea {
   height: 100%;
   align-items: center;
   gap: 5px;
-  padding: 0 2px 0 calc(4px + var(--layer-depth) * 13px);
+  padding: 0 2px 0 calc(22px + var(--layer-depth) * 13px);
   border: 0;
   outline-offset: -2px;
   color: inherit;
@@ -923,9 +924,22 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.layer-row__indent {
-  width: 13px;
-  flex: none;
+.layer-row__disclosure {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: calc(3px + var(--layer-depth) * 13px);
+  display: grid;
+  width: 18px;
+  padding: 0;
+  border: 0;
+  place-items: center;
+  color: inherit;
+  background: transparent;
+}
+.layer-row__disclosure:hover {
+  color: var(--ui-text);
 }
 .layer-row__actions {
   display: flex;
@@ -942,7 +956,8 @@ textarea {
 }
 .layer-row:hover .ui-icon-button,
 .layer-row:focus-within .ui-icon-button,
-.layer-row[aria-selected="true"] .ui-icon-button {
+.layer-row[aria-selected="true"] .ui-icon-button,
+.layer-row .ui-icon-button.layer-row__lock--active {
   opacity: 1;
 }
 .asset-list {
@@ -1870,6 +1885,11 @@ textarea {
   background: var(--ui-accent);
   box-shadow: 0 0 0 3px var(--ui-accent-soft);
 }
+.agent-thread__item--stopping .agent-activity__indicator {
+  border-color: var(--ui-text-muted);
+  background: transparent;
+  box-shadow: none;
+}
 .agent-thread__item--error .agent-activity {
   padding: 7px 8px;
   border: 1px solid;
@@ -2097,6 +2117,115 @@ textarea {
   50% {
     opacity: 0;
   }
+}
+
+.diagnostic-notifications {
+  position: fixed;
+  z-index: 80;
+  right: 14px;
+  bottom: 36px;
+  display: flex;
+  width: min(360px, calc(100vw - 28px));
+  max-height: calc(100vh - 72px);
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  pointer-events: none;
+  scrollbar-width: thin;
+}
+.diagnostic-notification {
+  flex: none;
+  padding: 10px 11px 9px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 7px;
+  color: var(--ui-text);
+  background: color-mix(in srgb, var(--ui-panel) 97%, transparent);
+  box-shadow: var(--ui-shadow-lg);
+  pointer-events: auto;
+}
+.diagnostic-notification > header {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 7px;
+}
+.diagnostic-notification > header strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diagnostic-notification > header .ui-icon-button {
+  width: 24px;
+  height: 24px;
+}
+.diagnostic-notification__mark {
+  width: 7px;
+  height: 7px;
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 60%, transparent);
+  border-radius: 50%;
+  background: var(--ui-accent);
+}
+.diagnostic-notification--warning .diagnostic-notification__mark {
+  border-color: color-mix(in srgb, var(--ui-warning) 60%, transparent);
+  background: var(--ui-warning);
+}
+.diagnostic-notification--error {
+  border-color: color-mix(in srgb, var(--ui-danger) 45%, var(--ui-border));
+}
+.diagnostic-notification--error .diagnostic-notification__mark {
+  border-color: color-mix(in srgb, var(--ui-danger) 60%, transparent);
+  background: var(--ui-danger);
+}
+.diagnostic-notification__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 31px 0 15px;
+  color: var(--ui-text-faint);
+  font-size: 9px;
+}
+.diagnostic-notification__identity span {
+  text-transform: capitalize;
+}
+.diagnostic-notification__identity code {
+  overflow: hidden;
+  color: var(--ui-text-muted);
+  font-family: var(--ui-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diagnostic-notification > p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 8px 3px 0 15px;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+.diagnostic-notification > small {
+  display: block;
+  overflow: hidden;
+  margin: 7px 3px 0 15px;
+  color: var(--ui-text-faint);
+  font: 9px/1.4 var(--ui-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diagnostic-notification > footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 7px;
+}
+.diagnostic-notification > footer .ui-button {
+  min-height: 24px;
+  padding: 0 7px;
+  font-size: 9px;
 }
 
 .statusbar {

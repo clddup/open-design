@@ -32,6 +32,8 @@ import {
   isLocalePreference,
   isSaveModelProviderProfileRequest,
   isDeleteModelProviderProfileRequest,
+  isDiagnosticEvent,
+  isRendererDiagnosticReport,
   isTestModelProviderConnectionRequest,
   type CreateConversationRequest,
   type AgentAttachmentPreviewRequest,
@@ -51,6 +53,8 @@ import {
   type SaveDesignFileRequest,
   type SaveModelProviderProfileRequest,
   type DeleteModelProviderProfileRequest,
+  type DiagnosticEvent,
+  type RendererDiagnosticReport,
   type TestModelProviderConnectionRequest,
   type SaveProjectDesignFileRequest,
   type ThemePreference,
@@ -85,6 +89,31 @@ function validateArray<T>(
 
 const desktopApi: DesktopApi = Object.freeze({
   getPlatformInfo: () => ipcRenderer.invoke(channels.platformInfo),
+  getPendingDiagnostics: async () => {
+    const result: unknown = await ipcRenderer.invoke(
+      channels.getPendingDiagnostics,
+    );
+    return validateArray<DiagnosticEvent>(
+      result,
+      isDiagnosticEvent,
+      "Invalid pending diagnostics response",
+    );
+  },
+  reportDiagnostic: async (report: RendererDiagnosticReport) => {
+    validate(report, isRendererDiagnosticReport, "Invalid diagnostic report");
+    await ipcRenderer.invoke(channels.reportDiagnostic, report);
+  },
+  onDiagnosticEvent: (listener: (event: DiagnosticEvent) => void) => {
+    const subscription = (
+      _event: Electron.IpcRendererEvent,
+      value: unknown,
+    ) => {
+      if (isDiagnosticEvent(value)) listener(value);
+    };
+    ipcRenderer.on(channels.diagnosticEvent, subscription);
+    return () =>
+      ipcRenderer.removeListener(channels.diagnosticEvent, subscription);
+  },
   onOpenSettings: (listener: () => void) => {
     const subscription = () => listener();
     ipcRenderer.on(channels.openSettings, subscription);

@@ -1,4 +1,5 @@
 import type {
+  DesignChangeSet,
   DesignDocument,
   DesignOperation,
   SelectionState,
@@ -38,6 +39,7 @@ export interface LeaferEngineCallbacks {
 
 export interface LeaferEngineSyncInput {
   document: DesignDocument;
+  changes?: DesignChangeSet;
   pageId: string;
   selection: SelectionState;
   tool: LeaferCanvasTool;

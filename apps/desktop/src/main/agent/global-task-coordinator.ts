@@ -1,5 +1,9 @@
-import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
-import type { SelectionScope } from "@opendesign/agent-contracts";
+import type {
+  AgentEvent,
+  AgentRequest,
+  DesignMutationTarget,
+  SelectionScope,
+} from "@opendesign/agent-contracts";
 import type { TrustedToolContext } from "@opendesign/agent-runtime";
 import type { DesignDocument } from "@opendesign/design-contracts";
 import {
@@ -28,16 +32,18 @@ export class GlobalTaskCoordinator {
       documentId: string;
       revision: number;
       scope: SelectionScope;
+      mutationTarget: DesignMutationTarget;
     }
   >();
 
   constructor(
     private readonly projectHost: ProjectHost,
     private readonly workspaceStore: WorkspaceStore,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   reconcileInterruptedTasks(): void {
-    const timestamp = new Date().toISOString();
+    const timestamp = this.now().toISOString();
     for (const task of this.workspaceStore.listGlobalTasks()) {
       if (!activeLifecycles.has(task.lifecycle)) continue;
       this.workspaceStore.saveGlobalTask({
@@ -45,6 +51,7 @@ export class GlobalTaskCoordinator {
         lifecycle: "interrupted",
         updatedAt: timestamp,
       });
+      this.#touchConversation(task.conversationId, timestamp);
     }
   }
 
@@ -85,9 +92,10 @@ export class GlobalTaskCoordinator {
     if (request.revision < opened.document.revision) {
       throw new Error("Agent run revision is stale");
     }
-    const scopedPageId =
-      "pageId" in request.scope ? request.scope.pageId : null;
-    const pageId = scopedPageId ?? opened.document.pageOrder[0];
+    const pageId =
+      request.mutationTarget.kind === "page"
+        ? request.mutationTarget.pageId
+        : (request.scope.pageId ?? opened.document.pageOrder[0]);
     if (!pageId || !opened.document.pagesById[pageId]) {
       throw new Error("Agent run requires a valid target page");
     }
@@ -99,7 +107,7 @@ export class GlobalTaskCoordinator {
     ) {
       throw new Error("Agent run selection is outside the target page");
     }
-    const timestamp = new Date().toISOString();
+    const timestamp = this.now().toISOString();
     const primaryTarget = {
       targetId: `target_${request.runId}`,
       projectId: match.project.projectId,
@@ -124,6 +132,10 @@ export class GlobalTaskCoordinator {
       createdAt: timestamp,
       updatedAt: timestamp,
     };
+    this.workspaceStore.saveConversation({
+      ...conversation,
+      updatedAt: timestamp,
+    });
     this.workspaceStore.saveGlobalTask(task);
     this.#tasksByRunId.set(request.runId, task);
     this.#toolBindingsByRunId.set(request.runId, {
@@ -131,6 +143,7 @@ export class GlobalTaskCoordinator {
       documentId: request.documentId,
       revision: request.revision,
       scope: structuredClone(request.scope),
+      mutationTarget: structuredClone(request.mutationTarget),
     });
     return task;
   }
@@ -143,7 +156,8 @@ export class GlobalTaskCoordinator {
     if (
       binding.conversationId !== context.sessionId ||
       binding.documentId !== context.documentId ||
-      !sameScope(binding.scope, context.scope)
+      !sameScope(binding.scope, context.scope) ||
+      !sameMutationTarget(binding.mutationTarget, context.mutationTarget)
     ) {
       throw new Error("Design tool context does not match its registered Run");
     }
@@ -155,7 +169,7 @@ export class GlobalTaskCoordinator {
   }
 
   handleAgentEvent(event: AgentEvent): void {
-    if (event.type === "agent.error" && event.code === "process_exited") {
+    if (event.type === "agent.error" && event.runId === undefined) {
       this.#interruptActiveTasks();
       return;
     }
@@ -172,12 +186,14 @@ export class GlobalTaskCoordinator {
     }
     const task = this.#tasksByRunId.get(runId);
     if (!task) return;
+    const activityAt = conversationActivityAt(event, this.now);
+    if (activityAt) this.#touchConversation(task.conversationId, activityAt);
     const lifecycle = projectLifecycle({ ...event, runId }, task.lifecycle);
     if (lifecycle === task.lifecycle) return;
     const updated: GlobalTaskProjection = {
       ...task,
       lifecycle,
-      updatedAt: new Date().toISOString(),
+      updatedAt: this.now().toISOString(),
     };
     this.workspaceStore.saveGlobalTask(updated);
     if (activeLifecycles.has(lifecycle)) {
@@ -191,7 +207,7 @@ export class GlobalTaskCoordinator {
   }
 
   #interruptActiveTasks(): void {
-    const timestamp = new Date().toISOString();
+    const timestamp = this.now().toISOString();
     for (const [runId, task] of this.#tasksByRunId) {
       this.workspaceStore.saveGlobalTask({
         ...task,
@@ -200,8 +216,43 @@ export class GlobalTaskCoordinator {
       });
       this.#tasksByRunId.delete(runId);
       this.#toolBindingsByRunId.delete(runId);
+      this.#touchConversation(task.conversationId, timestamp);
     }
   }
+
+  #touchConversation(conversationId: string, updatedAt: string): void {
+    const conversation = this.workspaceStore.getConversation(conversationId);
+    if (!conversation || conversation.updatedAt >= updatedAt) return;
+    this.workspaceStore.saveConversation({ ...conversation, updatedAt });
+  }
+}
+
+function sameMutationTarget(
+  left: DesignMutationTarget,
+  right: DesignMutationTarget,
+): boolean {
+  return (
+    left.kind === right.kind &&
+    (left.kind !== "page" ||
+      (right.kind === "page" && left.pageId === right.pageId))
+  );
+}
+
+function conversationActivityAt(
+  event: AgentEvent,
+  now: () => Date,
+): string | null {
+  if (event.type === "run.started") return event.startedAt;
+  if (event.type === "run.completed") return event.finishedAt;
+  if (
+    event.type === "message.completed" ||
+    event.type === "tool.completed" ||
+    event.type === "tool.failed" ||
+    event.type === "agent.error"
+  ) {
+    return now().toISOString();
+  }
+  return null;
 }
 
 function sameScope(left: SelectionScope, right: SelectionScope): boolean {

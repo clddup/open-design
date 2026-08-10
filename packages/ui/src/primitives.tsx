@@ -25,6 +25,7 @@ export type GlyphName =
   | "image"
   | "layers"
   | "lock"
+  | "unlock"
   | "maximize"
   | "minimize"
   | "moon"
@@ -121,6 +122,12 @@ const paths: Record<GlyphName, ReactNode> = {
       <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
     </>
   ),
+  unlock: (
+    <>
+      <rect x="5" y="10" width="14" height="10" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 7.4-2.1M12 14v2" />
+    </>
+  ),
   maximize: <rect x="6" y="6" width="12" height="12" rx="1" />,
   minimize: <path d="M6 12h12" />,
   moon: <path d="M20 15.3A8 8 0 0 1 8.7 4 8.2 8.2 0 1 0 20 15.3Z" />,
@@ -196,6 +203,7 @@ export function Glyph({ name, size = 16 }: { name: GlyphName; size?: number }) {
     <svg
       aria-hidden="true"
       className="ui-glyph"
+      data-glyph={name}
       height={size}
       viewBox="0 0 24 24"
       width={size}

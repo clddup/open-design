@@ -1,4 +1,5 @@
 import type {
+  DesignChangeSet,
   DesignDocument,
   DesignNode,
   Effect,
@@ -21,6 +22,7 @@ export interface LeaferElementSpec {
 }
 
 export interface LeaferSceneProjection {
+  affectedNodeIds?: ReadonlySet<string>;
   elementsById: ReadonlyMap<string, LeaferElementSpec>;
   pageId: string;
   revision: number;
@@ -59,6 +61,159 @@ export function projectDesignPage(
   };
 }
 
+export function projectDesignPageIncrementally(
+  previous: LeaferSceneProjection,
+  document: DesignDocument,
+  pageId: string,
+  changes: DesignChangeSet,
+): LeaferSceneProjection {
+  if (
+    previous.pageId !== pageId ||
+    previous.revision !== changes.fromRevision ||
+    document.documentId !== changes.documentId ||
+    document.revision !== changes.toRevision
+  ) {
+    return projectDesignPage(document, pageId);
+  }
+  const page = document.pagesById[pageId];
+  if (!page) throw new Error(`Page ${pageId} does not exist`);
+
+  const activeNodeIds = collectPageNodeIds(document, page.rootNodeIds);
+  const affectedNodeIds = new Set([
+    ...changes.addedNodeIds,
+    ...changes.changedNodeIds,
+    ...changes.removedNodeIds,
+  ]);
+  const affectedAssetIds = new Set([
+    ...(changes.addedAssetIds ?? []),
+    ...(changes.changedAssetIds ?? []),
+    ...(changes.removedAssetIds ?? []),
+  ]);
+  if (affectedAssetIds.size > 0) {
+    activeNodeIds.forEach((nodeId) => {
+      const node = document.nodesById[nodeId];
+      if (node && referencesAnyAsset(node, affectedAssetIds)) {
+        affectedNodeIds.add(nodeId);
+      }
+    });
+  }
+
+  for (const nodeId of [...affectedNodeIds]) {
+    const node = document.nodesById[nodeId];
+    if (!node || !activeNodeIds.has(nodeId)) continue;
+    const previousSpec = previous.elementsById.get(nodeId);
+    const effectiveLockChanged =
+      previousSpec?.data.locked !== isEffectivelyLocked(document, node);
+    const parentChanged = previousSpec?.parentId !== node.parentId;
+    if (
+      changes.addedNodeIds.includes(nodeId) ||
+      effectiveLockChanged ||
+      parentChanged
+    ) {
+      collectNodeSubtreeIds(document, nodeId).forEach((descendantId) =>
+        affectedNodeIds.add(descendantId),
+      );
+    }
+  }
+
+  const elementsById = new Map(previous.elementsById);
+  for (const nodeId of elementsById.keys()) {
+    if (!activeNodeIds.has(nodeId)) {
+      elementsById.delete(nodeId);
+      affectedNodeIds.add(nodeId);
+    }
+  }
+
+  const warnings = previous.warnings.filter(
+    (warning) =>
+      activeNodeIds.has(warning.nodeId) && !affectedNodeIds.has(warning.nodeId),
+  );
+  for (const nodeId of affectedNodeIds) {
+    if (!activeNodeIds.has(nodeId)) {
+      elementsById.delete(nodeId);
+      continue;
+    }
+    const node = document.nodesById[nodeId];
+    if (!node) {
+      elementsById.delete(nodeId);
+      continue;
+    }
+    elementsById.set(nodeId, toElementSpec(document, node, warnings));
+  }
+
+  return {
+    affectedNodeIds,
+    elementsById,
+    pageId,
+    revision: document.revision,
+    rootIds: [...page.rootNodeIds],
+    warnings,
+  };
+}
+
+function collectPageNodeIds(
+  document: DesignDocument,
+  rootNodeIds: readonly string[],
+): Set<string> {
+  const result = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (result.has(nodeId)) return;
+    const node = document.nodesById[nodeId];
+    if (!node) return;
+    result.add(nodeId);
+    node.childIds.forEach(visit);
+  };
+  rootNodeIds.forEach(visit);
+  return result;
+}
+
+function collectNodeSubtreeIds(
+  document: DesignDocument,
+  rootNodeId: string,
+): Set<string> {
+  const result = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (result.has(nodeId)) return;
+    const node = document.nodesById[nodeId];
+    if (!node) return;
+    result.add(nodeId);
+    node.childIds.forEach(visit);
+  };
+  visit(rootNodeId);
+  return result;
+}
+
+function isEffectivelyLocked(
+  document: DesignDocument,
+  node: DesignNode,
+): boolean {
+  const visited = new Set<string>();
+  let current: DesignNode | undefined = node;
+  while (current && !visited.has(current.id)) {
+    if (current.locked) return true;
+    visited.add(current.id);
+    current = current.parentId
+      ? document.nodesById[current.parentId]
+      : undefined;
+  }
+  return false;
+}
+
+function referencesAnyAsset(
+  value: unknown,
+  assetIds: ReadonlySet<string>,
+): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => referencesAnyAsset(item, assetIds));
+  }
+  if (value === null || typeof value !== "object") return false;
+  return Object.entries(value).some(
+    ([key, item]) =>
+      (key === "assetId" && typeof item === "string" && assetIds.has(item)) ||
+      referencesAnyAsset(item, assetIds),
+  );
+}
+
 function toElementSpec(
   document: DesignDocument,
   node: DesignNode,
@@ -69,7 +224,7 @@ function toElementSpec(
     name: node.name,
     opacity: node.opacity,
     visible: node.visible,
-    locked: node.locked,
+    locked: isEffectivelyLocked(document, node),
     editable: true,
     ...mapNodeAppearance(node, warnings),
     data: { opendesignNodeId: node.id, opendesignNodeKind: node.kind },

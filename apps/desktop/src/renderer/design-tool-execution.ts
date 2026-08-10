@@ -1,4 +1,7 @@
-import type { SelectionScope } from "@opendesign/agent-contracts";
+import type {
+  DesignMutationTarget,
+  SelectionScope,
+} from "@opendesign/agent-contracts";
 import type {
   DesignDocument,
   DesignOperation,
@@ -21,7 +24,7 @@ import type {
 export async function executeDesignToolRequest(
   request: RendererDesignToolRequest,
   runtime: EditorRuntime,
-  activePageId: string,
+  _activePageId: string,
   options: {
     signal?: AbortSignal;
     stageDelayMs?: number;
@@ -45,9 +48,8 @@ export async function executeDesignToolRequest(
         observedRevision: document.revision,
         content: createScopedInspection(
           document,
+          request.context.mutationTarget,
           request.context.scope,
-          activePageId,
-          snapshot.state.selection,
         ),
       },
     };
@@ -67,11 +69,10 @@ export async function executeDesignToolRequest(
   )) {
     throw new Error(`Unsupported design tool: ${request.call.toolName}`);
   }
-  assertCommandsWithinScope(
+  assertCommandsWithinMutationTarget(
     document,
     request.call.input.commands,
-    request.context.scope,
-    activePageId,
+    request.context.mutationTarget,
   );
   const transactionId = `transaction_agent_${request.call.toolCallId}_${Date.now()}`;
   const transaction = {
@@ -247,15 +248,14 @@ function waitForDelay(
 
 function createScopedInspection(
   document: DesignDocument,
-  scope: SelectionScope,
-  activePageId: string,
-  selection: { nodeIds: readonly string[]; anchorNodeId?: string },
+  mutationTarget: DesignMutationTarget,
+  selectionContext: SelectionScope,
 ) {
-  const nodeIds = readableNodeIds(document, scope, activePageId);
+  const nodeIds = mutationTargetNodeIds(document, mutationTarget);
   const pageIds =
-    scope.kind === "document"
+    mutationTarget.kind === "document"
       ? [...document.pageOrder]
-      : [requiredScopePageId(document, scope, activePageId)];
+      : [requiredMutationPageId(document, mutationTarget)];
   const pagesById = Object.fromEntries(
     pageIds.map((pageId) => {
       const page = document.pagesById[pageId];
@@ -265,10 +265,7 @@ function createScopedInspection(
         {
           id: page.id,
           name: page.name,
-          rootNodeIds:
-            scope.kind === "selection"
-              ? [...scope.selectedNodeIds]
-              : page.rootNodeIds.filter((nodeId) => nodeIds.has(nodeId)),
+          rootNodeIds: page.rootNodeIds.filter((nodeId) => nodeIds.has(nodeId)),
         },
       ];
     }),
@@ -318,31 +315,34 @@ function createScopedInspection(
         tokens: Object.keys(document.tokensById),
       },
     },
-    activePageId: requiredScopePageId(document, scope, activePageId),
-    requestedScope: structuredClone(scope),
+    activePageId: inspectionPageId(document, mutationTarget, selectionContext),
+    mutationTarget: structuredClone(mutationTarget),
+    selectionContext: structuredClone(selectionContext),
     selection: {
-      nodeIds: selection.nodeIds.filter((nodeId) => nodeIds.has(nodeId)),
+      nodeIds: selectionContext.selectedNodeIds.filter((nodeId) =>
+        nodeIds.has(nodeId),
+      ),
       anchorNodeId:
-        selection.anchorNodeId && nodeIds.has(selection.anchorNodeId)
-          ? selection.anchorNodeId
+        selectionContext.primaryNodeId &&
+        nodeIds.has(selectionContext.primaryNodeId)
+          ? selectionContext.primaryNodeId
           : null,
     },
   };
 }
 
-function assertCommandsWithinScope(
+function assertCommandsWithinMutationTarget(
   document: DesignDocument,
   commands: readonly DesignOperation[],
-  scope: SelectionScope,
-  activePageId: string,
+  mutationTarget: DesignMutationTarget,
 ): void {
-  if (scope.kind === "document") return;
-  const pageId = requiredScopePageId(document, scope, activePageId);
-  const allowedNodeIds = readableNodeIds(document, scope, activePageId);
+  if (mutationTarget.kind === "document") return;
+  const pageId = requiredMutationPageId(document, mutationTarget);
+  const allowedNodeIds = mutationTargetNodeIds(document, mutationTarget);
   const assertNode = (nodeId: string, commandId: string) => {
     if (!allowedNodeIds.has(nodeId)) {
       throw new Error(
-        `Agent command ${commandId} exceeds the registered ${scope.kind} scope: ${nodeId}`,
+        `Agent command ${commandId} exceeds the registered page mutation target: ${nodeId}`,
       );
     }
   };
@@ -356,13 +356,9 @@ function assertCommandsWithinScope(
         `Agent command ${commandId} targets Page ${targetPageId} outside the registered scope`,
       );
     }
-    if (
-      parentId !== null
-        ? !allowedNodeIds.has(parentId)
-        : scope.kind === "selection"
-    ) {
+    if (parentId !== null && !allowedNodeIds.has(parentId)) {
       throw new Error(
-        `Agent command ${commandId} targets a parent outside the registered ${scope.kind} scope`,
+        `Agent command ${commandId} targets a parent outside the registered page mutation target`,
       );
     }
   };
@@ -387,42 +383,42 @@ function assertCommandsWithinScope(
   }
 }
 
-function readableNodeIds(
+function mutationTargetNodeIds(
   document: DesignDocument,
-  scope: SelectionScope,
-  activePageId: string,
+  mutationTarget: DesignMutationTarget,
 ): Set<string> {
-  if (scope.kind === "document") {
+  if (mutationTarget.kind === "document") {
     return new Set(Object.keys(document.nodesById));
   }
-  if (scope.kind === "page") {
-    return pageNodeIds(document, scope.pageId);
-  }
-  requiredScopePageId(document, scope, activePageId);
-  const result = new Set<string>();
-  for (const nodeId of scope.selectedNodeIds) {
-    collectSubtreeNodeIds(document, nodeId, result);
-  }
-  return result;
+  return pageNodeIds(document, mutationTarget.pageId);
 }
 
-function requiredScopePageId(
+function requiredMutationPageId(
   document: DesignDocument,
-  scope: SelectionScope,
-  activePageId: string,
+  mutationTarget: DesignMutationTarget,
 ): string {
-  if (scope.kind === "page") return scope.pageId;
-  if (scope.kind === "selection") {
-    const pageId =
-      scope.pageId ?? nodePageId(document, scope.selectedNodeIds[0]);
-    if (!pageId) throw new Error("Selection scope is not bound to a Page");
-    const pageNodes = pageNodeIds(document, pageId);
-    if (scope.selectedNodeIds.some((nodeId) => !pageNodes.has(nodeId))) {
-      throw new Error("Selection scope contains a node outside its Page");
-    }
-    return pageId;
+  if (mutationTarget.kind !== "page") {
+    throw new Error("A page mutation target is required");
   }
-  if (activePageId && document.pagesById[activePageId]) return activePageId;
+  if (!document.pagesById[mutationTarget.pageId]) {
+    throw new Error(
+      `Design mutation target Page not found: ${mutationTarget.pageId}`,
+    );
+  }
+  return mutationTarget.pageId;
+}
+
+function inspectionPageId(
+  document: DesignDocument,
+  mutationTarget: DesignMutationTarget,
+  selectionContext: SelectionScope,
+): string {
+  if (mutationTarget.kind === "page") {
+    return requiredMutationPageId(document, mutationTarget);
+  }
+  if (selectionContext.pageId && document.pagesById[selectionContext.pageId]) {
+    return selectionContext.pageId;
+  }
   const firstPageId = document.pageOrder[0];
   if (!firstPageId) throw new Error("Design document has no active Page");
   return firstPageId;
@@ -452,14 +448,4 @@ function collectSubtreeNodeIds(
     result.add(nodeId);
     pending.push(...node.childIds);
   }
-}
-
-function nodePageId(
-  document: DesignDocument,
-  nodeId: string | undefined,
-): string | undefined {
-  if (!nodeId) return undefined;
-  return document.pageOrder.find((pageId) =>
-    pageNodeIds(document, pageId).has(nodeId),
-  );
 }

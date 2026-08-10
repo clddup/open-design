@@ -26,8 +26,8 @@ pnpm format:check  passed
 pnpm lint          passed
 pnpm typecheck     passed（15 个 workspace package 执行 typecheck）
 pnpm test          passed
-├── package tests  11 files / 83 tests
-└── desktop tests  27 files / 165 tests
+├── package tests  11 files / 90 tests
+└── desktop tests  30 files / 193 tests
 pnpm build         passed
 ├── Renderer
 ├── Electron Main
@@ -38,11 +38,17 @@ pnpm build         passed
 测试覆盖的关键路径包括：
 
 - DesignDocument schema/migration、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
-- Leafer 文档投影、复杂外观映射，以及“同一选中元素跨 revision 后仍强制刷新 editBox bounds”的回归。
+- Leafer 文档投影、复杂外观映射和 change-set 增量同步：未变节点保持 spec/元素 identity，不调用 `set()`；无关新增、删除和 revision 不刷新 tree/Editor，也不取消进行中的直接操作；选中节点变化只刷新该元素 bounds 并更新 editBox；asset change 会精确重投影引用节点。
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog、凭据边界和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
-- 图片/文档附件、内容识别、完整性、大小限制、多模态 `image_ref`、显式本地路径/HTTP(S) 图片读取和未明示 source 拒绝。
-- Renderer Agent 对话、属性检查器、设计工具 scope/revision、取消/继续、i18n 和桌面控件交互。
+- 生产 Provider stream 的首响应、空闲和总时限 watchdog 会 abort 实际 fetch；timeout 与 Agent process exit 都会解除 Renderer active Run、恢复可编辑输入并显示可重试错误。
+- 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
+- 工具执行、业务校验和设计工具桥失败会作为 `tool.failed` 回到下一轮模型上下文供其重试或解释；模型桥、Provider、Agent 进程/协议和可信 Run binding 失败才会取消 Run。两类路径分别有“继续第二个模型回合”和“相关 Run 终结/解锁”测试。
+- JSONL 启动恢复会一次性终结孤立 started Run 和 pending tool；Global Task 同步转为 interrupted。Conversation 在 Run 注册和后续 Agent 活动时更新持久 `updatedAt`，Renderer 立即按最近活动重排。
+- Main-owned 诊断事件经过严格跨进程校验，按大小轮转写入 JSONL，且不接受任意上下文字段；右下角错误通知会显示稳定错误码和关联 Run，并复制包含 Conversation/Run/Request/Tool Call ID、应用版本和平台的诊断文本。
+- 图片/文档附件、内容识别、完整性、大小限制、多模态 `image_ref`、显式本地路径/HTTP(S) 图片读取和未明示 source 拒绝；远程 body stream 的 15 秒超时、用户取消和流式超过 16 MB 均覆盖到 reader 生命周期。
+- Renderer Agent 对话、属性检查器、设计工具 selection context / Mutation Target / revision、取消/继续、i18n 和桌面控件交互；对话在底部时跟随新消息与状态，用户上翻后保持阅读位置，回到底部后恢复跟随；剪贴板文件与拖放文件经 Preload API 导入，run 只接收安全附件元数据，纯文本路径粘贴保持普通输入行为。
+- host-only 图片放置以单个 Page-targeted `put_asset + insert_element(image)` 事务进入 `EditorRuntime`；测试验证单次 revision、发送时存在选区也能在固定 Page 新增 asset/node、当前活动页面变化不漂移目标，以及一次 undo 同时移除 asset/node。
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。
 
@@ -52,11 +58,11 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 
 | 产物             |        大小 |      gzip |
 | ---------------- | ----------: | --------: |
-| Renderer 主 JS   |   651.25 kB | 192.59 kB |
+| Renderer 主 JS   |   661.50 kB | 195.65 kB |
 | Leafer Web chunk |   302.16 kB | 100.55 kB |
-| Electron Main    | 2,030.10 kB | 405.97 kB |
-| Preload          |   225.34 kB |  35.70 kB |
-| Agent            |   259.29 kB |  45.39 kB |
+| Electron Main    | 2,068.74 kB | 414.39 kB |
+| Preload          |   229.02 kB |  36.34 kB |
+| Agent            |   265.14 kB |  46.61 kB |
 
 构建提示 Renderer/Main 存在超过 500 kB 的 chunk。当前不影响构建成功，但需要在性能阶段评估动态加载与 Rolldown code splitting，不能通过移除 sourcemap 或隐藏警告冒充优化。
 

@@ -17,6 +17,16 @@ const selectionContext = {
     selectedNodeIds: ["feature_one"],
     primaryNodeId: "feature_one",
   },
+  mutationTarget: { kind: "page" as const, pageId: "page_welcome" },
+};
+
+const pageContext = {
+  ...selectionContext,
+  scope: {
+    kind: "page" as const,
+    pageId: "page_welcome",
+    selectedNodeIds: [],
+  },
 };
 
 describe("Renderer design tool scope", () => {
@@ -82,7 +92,7 @@ describe("Renderer design tool scope", () => {
     ).rejects.toThrow("expected 0, current 1");
   });
 
-  it("returns only the registered selection subtree", async () => {
+  it("returns the immutable target page plus the send-time selection context", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = await executeDesignToolRequest(
       {
@@ -102,11 +112,18 @@ describe("Renderer design tool scope", () => {
     if (!response.ok) return;
     const serialized = JSON.stringify(response.result.content);
     expect(serialized).toContain('"feature_one"');
-    expect(serialized).not.toContain('"title_welcome"');
-    expect(serialized).not.toContain('"feature_two"');
+    expect(serialized).toContain('"title_welcome"');
+    expect(serialized).toContain('"feature_two"');
+    expect(response.result.content).toMatchObject({
+      mutationTarget: { kind: "page", pageId: "page_welcome" },
+      selection: {
+        nodeIds: ["feature_one"],
+        anchorNodeId: "feature_one",
+      },
+    });
   });
 
-  it("rejects a write outside the registered selection", async () => {
+  it("allows a page-targeted write outside the contextual selection", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const request: RendererDesignToolRequest = {
       requestId: "apply_1",
@@ -129,11 +146,11 @@ describe("Renderer design tool scope", () => {
     };
 
     await expect(
-      executeDesignToolRequest(request, runtime, "page_welcome"),
-    ).rejects.toThrow("exceeds the registered selection scope");
-    expect(runtime.getSnapshot().document.revision).toBe(0);
+      executeDesignToolRequest(request, runtime, "page_changed_after_send"),
+    ).resolves.toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.revision).toBe(1);
     expect(runtime.getSnapshot().document.nodesById.title_welcome?.name).toBe(
-      "Title",
+      "Out of scope",
     );
   });
 
@@ -168,6 +185,110 @@ describe("Renderer design tool scope", () => {
     expect(runtime.getSnapshot().document.nodesById.feature_one?.name).toBe(
       "Selected card",
     );
+  });
+
+  it("places an image asset and node as one page-scoped undoable transaction", async () => {
+    const commands = [
+      {
+        commandId: "put_reference_asset",
+        type: "put_asset" as const,
+        asset: {
+          id: "asset_reference",
+          kind: "image" as const,
+          name: "Reference",
+          mimeType: "image/png",
+          source: { type: "data" as const, value: "aW1hZ2U=" },
+          size: { width: 640, height: 480 },
+          extensions: {},
+        },
+      },
+      {
+        commandId: "insert_reference_image",
+        type: "insert_element" as const,
+        pageId: "page_welcome",
+        parentId: null,
+        index: 1,
+        node: {
+          id: "image_reference",
+          kind: "image" as const,
+          name: "Reference",
+          parentId: null,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 120, 160] as const,
+          size: { width: 320, height: 240 },
+          opacity: 1,
+          properties: {
+            assetId: "asset_reference",
+            fit: "cover" as const,
+            altText: "Reference",
+            cornerRadius: 0,
+          },
+          extensions: {},
+        },
+      },
+    ];
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "place_image",
+        call: {
+          toolCallId: "tool_place_image",
+          toolName: "opendesign_internal_apply_transaction",
+          input: { label: "Place reference image", commands },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: { revision: 1, stages: 1 },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    const placed = runtime.getSnapshot();
+    expect(placed.document.assetsById.asset_reference).toMatchObject({
+      kind: "image",
+      mimeType: "image/png",
+    });
+    expect(placed.document.nodesById.image_reference).toMatchObject({
+      kind: "image",
+      properties: { assetId: "asset_reference" },
+    });
+    expect(placed.state.history.undo).toHaveLength(1);
+
+    expect(runtime.undo().ok).toBe(true);
+    const undone = runtime.getSnapshot();
+    expect(undone.document.assetsById.asset_reference).toBeUndefined();
+    expect(undone.document.nodesById.image_reference).toBeUndefined();
+    expect(undone.document.pagesById.page_welcome?.rootNodeIds).toEqual([
+      "frame_welcome",
+    ]);
+
+    const selectedRuntime = new EditorRuntime(createWelcomeDocument());
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "place_image_with_selection_context",
+          call: {
+            toolCallId: "tool_place_image_with_selection_context",
+            toolName: "opendesign_internal_apply_transaction",
+            input: { label: "Place reference image", commands },
+          },
+          context: selectionContext,
+        },
+        selectedRuntime,
+        "page_changed_after_send",
+      ),
+    ).resolves.toMatchObject({ ok: true });
+    expect(
+      selectedRuntime.getSnapshot().document.assetsById.asset_reference,
+    ).toBeDefined();
   });
 
   it("renders a large tool transaction in visible stages with one undo entry", async () => {

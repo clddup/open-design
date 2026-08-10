@@ -27,6 +27,7 @@ const validStart = {
     primaryNodeId: "node_1",
     pageId: "page_1",
   },
+  mutationTarget: { kind: "page", pageId: "page_1" },
 } as const;
 
 describe("Agent contracts", () => {
@@ -143,6 +144,25 @@ describe("Agent contracts", () => {
     expect(isAgentRequest({ ...validStart, scope: semanticMismatch })).toBe(
       false,
     );
+  });
+
+  it("keeps selection context separate from the immutable write target", () => {
+    expect(
+      isAgentRequest({
+        ...validStart,
+        scope: {
+          ...validStart.scope,
+          selectedNodeIds: ["node_2"],
+          primaryNodeId: "node_2",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isAgentRequest({
+        ...validStart,
+        mutationTarget: { kind: "page", pageId: "page_other" },
+      }),
+    ).toBe(false);
   });
 
   it("represents a strict recoverable session history response", () => {

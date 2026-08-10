@@ -1,4 +1,5 @@
-import { isAgentRequest } from "@opendesign/agent-contracts";
+import { isAgentRequest, type AgentEvent } from "@opendesign/agent-contracts";
+import { JsonlSessionStore } from "@opendesign/session-store";
 import {
   app,
   BrowserWindow,
@@ -21,7 +22,7 @@ import {
 import { basename, dirname, extname, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { AgentHost } from "./agent/agent-host";
+import { AgentHost, FatalAgentRunError } from "./agent/agent-host";
 import { AgentAttachmentHost } from "./agent/agent-attachment-host";
 import { AgentReferenceHost } from "./agent/agent-reference-host";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
@@ -36,11 +37,13 @@ import { ProjectIpcService } from "./project/project-ipc";
 import { WorkspaceStore } from "./project/workspace-store";
 import { ModelProviderHost } from "./model/model-provider-host";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
+import { DiagnosticLog } from "./diagnostics/diagnostic-log";
 import { resolveRendererUrl } from "./renderer-url";
 import { isRendererDesignToolResponse } from "../shared/design-tool-bridge";
 import {
   channels,
   isDeleteModelProviderProfileRequest,
+  isRendererDiagnosticReport,
   isAgentAttachmentImport,
   isAgentAttachmentPreviewRequest,
   isLocalePreference,
@@ -51,6 +54,11 @@ import {
   isWindowAction,
   type ThemePreference,
 } from "../shared/desktop-api";
+import type {
+  DiagnosticContext,
+  DiagnosticEvent,
+  DiagnosticInput,
+} from "../shared/diagnostics";
 import { DEFAULT_APP_LOCALE, type AppLocale } from "../shared/i18n/locale";
 import { translate } from "../shared/i18n/messages";
 import {
@@ -95,6 +103,74 @@ let globalTaskCoordinator: GlobalTaskCoordinator | null = null;
 let modelProviderHost: ModelProviderHost | null = null;
 let agentAttachmentHost: AgentAttachmentHost | null = null;
 let agentReferenceHost: AgentReferenceHost | null = null;
+let diagnosticLog: DiagnosticLog | null = null;
+const pendingDiagnosticEvents: DiagnosticEvent[] = [];
+const conversationIdByRunId = new Map<string, string>();
+const conversationIdByRequestId = new Map<string, string>();
+
+function publishDiagnostic(input: DiagnosticInput): void {
+  const event = diagnosticLog?.record(input);
+  if (!event) {
+    console.error(`[${input.source}:${input.code}] ${input.message}`);
+    return;
+  }
+  const window = mainWindow;
+  if (window && !window.isDestroyed()) {
+    window.webContents.send(channels.diagnosticEvent, event);
+    return;
+  }
+  if (event.presentation === "toast") {
+    pendingDiagnosticEvents.push(event);
+    if (pendingDiagnosticEvents.length > 20) pendingDiagnosticEvents.shift();
+  }
+}
+
+function diagnosticContextForAgentEvent(
+  event: AgentEvent,
+): DiagnosticContext | undefined {
+  const runId = "runId" in event ? event.runId : undefined;
+  const requestId = "requestId" in event ? event.requestId : undefined;
+  const toolCallId = "toolCallId" in event ? event.toolCallId : undefined;
+  const conversationId = runId
+    ? conversationIdByRunId.get(runId)
+    : requestId
+      ? conversationIdByRequestId.get(requestId)
+      : event.type === "session.history"
+        ? event.sessionId
+        : undefined;
+  if (!conversationId && !runId && !requestId && !toolCallId) return undefined;
+  return {
+    ...(conversationId ? { conversationId } : {}),
+    ...(runId ? { runId } : {}),
+    ...(requestId ? { requestId } : {}),
+    ...(toolCallId ? { toolCallId } : {}),
+  };
+}
+
+function recordAgentDiagnostic(event: AgentEvent): void {
+  if (event.type === "agent.error") {
+    publishDiagnostic({
+      level: "error",
+      source: "agent",
+      presentation: "toast",
+      code: event.code,
+      message: event.message,
+      ...(diagnosticContextForAgentEvent(event)
+        ? { context: diagnosticContextForAgentEvent(event) }
+        : {}),
+    });
+  }
+  if (event.type === "tool.failed") {
+    publishDiagnostic({
+      level: "warning",
+      source: "design-tool",
+      presentation: "silent",
+      code: event.code,
+      message: event.message,
+      context: diagnosticContextForAgentEvent(event),
+    });
+  }
+}
 
 function assertMainRenderer(event: Electron.IpcMainInvokeEvent) {
   if (event.sender !== mainWindow?.webContents) {
@@ -338,6 +414,23 @@ function registerIpc() {
     platform: process.platform,
     version: app.getVersion(),
   }));
+  ipcMain.handle(
+    channels.getPendingDiagnostics,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 0);
+      return pendingDiagnosticEvents.splice(0);
+    },
+  );
+  ipcMain.handle(channels.reportDiagnostic, (event, ...args: unknown[]) => {
+    assertMainRenderer(event);
+    assertArgumentCount(args, 1);
+    const report = args[0];
+    if (!isRendererDiagnosticReport(report)) {
+      throw new TypeError("Invalid diagnostic report");
+    }
+    publishDiagnostic({ ...report, source: "renderer" });
+  });
   ipcMain.handle(channels.getLocale, (event, ...args: unknown[]) => {
     assertMainRenderer(event);
     assertArgumentCount(args, 0);
@@ -578,9 +671,11 @@ function registerIpc() {
       }
       await globalTaskCoordinator.registerRun(request);
       requireAgentReferenceHost().registerRun(request);
+      conversationIdByRunId.set(request.runId, request.sessionId);
       try {
         agentHost.send(request);
       } catch (error) {
+        conversationIdByRunId.delete(request.runId);
         requireAgentReferenceHost().releaseRun(request.runId);
         globalTaskCoordinator.handleAgentEvent({
           type: "agent.error",
@@ -593,11 +688,29 @@ function registerIpc() {
       }
       return;
     }
-    agentHost.send(request);
+    if (request.type === "session.history") {
+      conversationIdByRequestId.set(request.requestId, request.sessionId);
+    }
+    try {
+      agentHost.send(request);
+    } catch (error) {
+      if (request.type === "session.history") {
+        conversationIdByRequestId.delete(request.requestId);
+      }
+      throw error;
+    }
   });
   agentHost.on((event) => {
+    recordAgentDiagnostic(event);
+    if (event.type === "session.history") {
+      conversationIdByRequestId.delete(event.requestId);
+    }
+    if (event.type === "agent.error" && event.requestId) {
+      conversationIdByRequestId.delete(event.requestId);
+    }
     if (event.type === "run.completed") {
       agentReferenceHost?.releaseRun(event.runId);
+      conversationIdByRunId.delete(event.runId);
     }
     globalTaskCoordinator?.handleAgentEvent(event);
     mainWindow?.webContents.send(channels.agentEvent, event);
@@ -656,6 +769,7 @@ void app.whenReady().then(async () => {
           documentId: "smoke_document",
           revision: 0,
           scope: { kind: "document", selectedNodeIds: [] },
+          mutationTarget: { kind: "document" },
           modelSelection: {
             providerId: "smoke",
             modelId: "smoke",
@@ -677,6 +791,10 @@ void app.whenReady().then(async () => {
   const workspaceDatabase = await prepareGlobalWorkspaceDatabase(
     homedir(),
     app.getPath("userData"),
+  );
+  diagnosticLog = new DiagnosticLog(
+    join(app.getPath("userData"), "diagnostics"),
+    { appVersion: app.getVersion(), platform: process.platform },
   );
   workspaceStore = new WorkspaceStore(workspaceDatabase);
   agentAttachmentHost = new AgentAttachmentHost(
@@ -701,9 +819,21 @@ void app.whenReady().then(async () => {
   );
   agentHost.setDesignToolRequestHandler(async (call, context, signal) => {
     if (!globalTaskCoordinator) {
-      throw new Error("Global Task services are not initialized");
+      throw new FatalAgentRunError(
+        "run_services_unavailable",
+        "Global Task services are not initialized",
+      );
     }
-    globalTaskCoordinator.assertDesignToolContext(context);
+    try {
+      globalTaskCoordinator.assertDesignToolContext(context);
+    } catch (error) {
+      throw new FatalAgentRunError(
+        "run_context_invalid",
+        error instanceof Error
+          ? error.message
+          : "Design tool Run context is invalid",
+      );
+    }
     if (call.toolName === READ_IMAGE_TOOL_NAME) {
       if (!isReadImageToolInput(call.input)) {
         throw new TypeError("Invalid read image tool input");
@@ -811,6 +941,37 @@ void app.whenReady().then(async () => {
     workspaceStore,
   );
   globalTaskCoordinator.reconcileInterruptedTasks();
+  try {
+    const recovered = await new JsonlSessionStore(
+      join(homedir(), ".opendesign", "sessions", "events.jsonl"),
+    ).reconcileInterruptedRuns();
+    if (recovered.recoveredRuns > 0) {
+      console.info(
+        `Recovered ${recovered.recoveredRuns} interrupted Agent run(s) and ${recovered.recoveredTools} tool call(s)`,
+      );
+      publishDiagnostic({
+        level: "info",
+        source: "storage",
+        presentation: "toast",
+        code: "agent_runs_recovered",
+        message: `Recovered ${recovered.recoveredRuns} interrupted Agent run(s) and ${recovered.recoveredTools} tool call(s).`,
+      });
+    }
+  } catch (error) {
+    console.error(
+      `Agent session recovery failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    publishDiagnostic({
+      level: "error",
+      source: "storage",
+      presentation: "toast",
+      code: "agent_session_recovery_failed",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Agent session recovery failed",
+    });
+  }
   registerIpc();
   agentHost.start();
   createWindow();
@@ -877,6 +1038,8 @@ app.on("before-quit", () => {
   rendererDesignToolHost.rejectAll("OpenDesign is shutting down");
   workspaceStore?.close();
   workspaceStore = null;
+  conversationIdByRunId.clear();
+  conversationIdByRequestId.clear();
 });
 
 app.on("window-all-closed", () => {

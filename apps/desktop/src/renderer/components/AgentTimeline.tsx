@@ -10,6 +10,7 @@ import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
 import { Button, DesktopSelect, Glyph, IconButton } from "@opendesign/ui";
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -37,7 +38,7 @@ type TimelineItem = {
   id: string;
   runId?: string;
   kind?: "assistant" | "user" | "tool" | "run" | "approval" | "system";
-  state: "done" | "active" | "queued" | "error";
+  state: "done" | "active" | "stopping" | "queued" | "error";
   time: string;
   title: string;
   detail?: string;
@@ -62,7 +63,7 @@ export type AgentTimelineProps = {
     selection: ModelSelection,
     attachments: readonly AgentAttachment[],
   ) => Promise<boolean>;
-  onStop: () => void;
+  onStop: () => boolean | void | Promise<boolean | void>;
   scope?:
     { kind: "page"; name?: string } | { kind: "selection"; count: number };
 };
@@ -449,6 +450,18 @@ function projectEvents(
       });
     }
     if (event.type === "run.completed") {
+      items.forEach((item, itemId) => {
+        if (
+          item.runId === event.runId &&
+          (item.state === "active" || item.state === "queued")
+        ) {
+          items.set(itemId, {
+            ...item,
+            state: "done",
+            ...(item.kind === "assistant" ? {} : { routine: true }),
+          });
+        }
+      });
       const failed =
         event.stopReason === "error" || event.stopReason === "budget";
       updateEvent(`run:${event.runId}`, {
@@ -483,6 +496,7 @@ function mergeTimeline(
   timeline: SessionTimelineItem[],
   events: AgentEvent[],
   activeRunId: string | null,
+  stoppingRunId: string | null,
   locale: AppLocale,
   t: Translate,
 ): TimelineItem[] {
@@ -510,6 +524,12 @@ function mergeTimeline(
     });
   }
   return [...merged.values()]
+    .map((item) =>
+      item.runId === stoppingRunId &&
+      (item.state === "active" || item.state === "queued")
+        ? { ...item, state: "stopping" as const }
+        : item,
+    )
     .filter((item) => !item.routine)
     .sort((left, right) => {
       const leftRunOrder = left.runId ? runOrder.get(left.runId) : undefined;
@@ -549,14 +569,50 @@ export function AgentTimeline({
   );
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [attachmentDropActive, setAttachmentDropActive] = useState(false);
+  const [stopRequestedRunId, setStopRequestedRunId] = useState<string | null>(
+    null,
+  );
   const [catalog, setCatalog] = useState<ModelProviderCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [modelSelection, setModelSelection] = useState<ModelSelection | null>(
     null,
   );
   const initializedConversation = useRef<string | null>(null);
-  const items = mergeTimeline(timeline, events, activeRunId, locale, t);
+  const thread = useRef<HTMLOListElement | null>(null);
+  const followsLatest = useRef(true);
+  const renderedConversation = useRef<string | null>(conversationId);
+  const stopping = activeRunId !== null && stopRequestedRunId === activeRunId;
+  const items = mergeTimeline(
+    timeline,
+    events,
+    activeRunId,
+    stopping ? activeRunId : null,
+    locale,
+    t,
+  );
+  const timelineRenderMarker = items
+    .map(
+      (item) =>
+        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}`,
+    )
+    .join("|");
   const hasConversation = conversationTitle !== null;
+
+  useLayoutEffect(() => {
+    const element = thread.current;
+    if (!element) return;
+    if (renderedConversation.current !== conversationId) {
+      renderedConversation.current = conversationId;
+      followsLatest.current = true;
+    }
+    if (followsLatest.current) element.scrollTop = element.scrollHeight;
+  }, [conversationId, timelineRenderMarker]);
+
+  useEffect(() => {
+    if (stopRequestedRunId && stopRequestedRunId !== activeRunId) {
+      setStopRequestedRunId(null);
+    }
+  }, [activeRunId, stopRequestedRunId]);
 
   useEffect(() => {
     let active = true;
@@ -632,6 +688,7 @@ export function AgentTimeline({
     )
       return;
     setSubmitting(true);
+    followsLatest.current = true;
     try {
       if (
         await onSubmit(
@@ -651,11 +708,13 @@ export function AgentTimeline({
 
   const status = !hasConversation
     ? t("agent.selectConversation")
-    : activeRunId
-      ? t("agent.requestProgress")
-      : error
-        ? t("agent.requestFailed")
-        : conversationTitle;
+    : stopping
+      ? t("agent.stoppingRequest")
+      : activeRunId
+        ? t("agent.requestProgress")
+        : error
+          ? t("agent.requestFailed")
+          : conversationTitle;
   const selectedCatalogModel =
     catalog && modelSelection
       ? resolveCatalogModel(catalog, modelSelection)
@@ -816,6 +875,21 @@ export function AgentTimeline({
     }
   };
 
+  const stop = async () => {
+    if (!activeRunId || stopping) return;
+    const runId = activeRunId;
+    setStopRequestedRunId(runId);
+    try {
+      if ((await onStop()) === false) {
+        setStopRequestedRunId((current) =>
+          current === runId ? null : current,
+        );
+      }
+    } catch {
+      setStopRequestedRunId((current) => (current === runId ? null : current));
+    }
+  };
+
   return (
     <section aria-label={t("agent.timeline")} className="agent-panel">
       <header className="agent-panel__header">
@@ -863,7 +937,17 @@ export function AgentTimeline({
               : t("agent.newConversation")}
           </Button>
         </div>
-        <ol aria-live="polite" className="agent-thread">
+        <ol
+          aria-live="polite"
+          className="agent-thread"
+          onScroll={(event) => {
+            const element = event.currentTarget;
+            followsLatest.current =
+              element.scrollHeight - element.scrollTop - element.clientHeight <=
+              48;
+          }}
+          ref={thread}
+        >
           {items.length === 0 ? (
             <li className="agent-thread__empty">
               <strong>
@@ -1012,12 +1096,13 @@ export function AgentTimeline({
               {activeRunId ? (
                 <Button
                   className="agent-prompt__stop"
+                  disabled={stopping}
                   icon="stop"
-                  onClick={onStop}
+                  onClick={() => void stop()}
                   tone="quiet"
                   type="button"
                 >
-                  {t("common.stop")}
+                  {t(stopping ? "common.stopping" : "common.stop")}
                 </Button>
               ) : (
                 <Button

@@ -1,4 +1,7 @@
-import { isSelectionScope } from "@opendesign/agent-contracts";
+import {
+  isDesignMutationTarget,
+  isSelectionScope,
+} from "@opendesign/agent-contracts";
 import type {
   ToolCallRequest,
   TrustedToolContext,
@@ -57,6 +60,14 @@ export function isDesignToolBridgeRequest(
   );
 }
 
+export function designToolBridgeRequestId(value: unknown): string | null {
+  return record(value) &&
+    value.type === "design-tool.request" &&
+    safeId(value.requestId)
+    ? value.requestId
+    : null;
+}
+
 export function isDesignToolBridgeCancel(
   value: unknown,
 ): value is DesignToolBridgeCancel {
@@ -81,6 +92,14 @@ export function isDesignToolBridgeResponse(
   return value.ok
     ? isTrustedToolResult(value.result)
     : safeText(value.error, 20_000);
+}
+
+export function designToolBridgeResponseId(value: unknown): string | null {
+  return record(value) &&
+    value.type === "design-tool.response" &&
+    safeId(value.requestId)
+    ? value.requestId
+    : null;
 }
 
 export function isRendererDesignToolRequest(
@@ -140,8 +159,16 @@ function isTrustedContext(value: unknown): value is TrustedToolContext {
     Number.isInteger(value.revision) &&
     Number(value.revision) >= 0 &&
     isSelectionScope(value.scope) &&
+    isDesignMutationTarget(value.mutationTarget) &&
     Object.keys(value).every((key) =>
-      ["runId", "sessionId", "documentId", "revision", "scope"].includes(key),
+      [
+        "runId",
+        "sessionId",
+        "documentId",
+        "revision",
+        "scope",
+        "mutationTarget",
+      ].includes(key),
     )
   );
 }

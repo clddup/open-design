@@ -4,7 +4,7 @@ import type {
   NodeKind,
 } from "@opendesign/design-contracts";
 import { Glyph, IconButton, type GlyphName } from "@opendesign/ui";
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
 import type { SidebarTab } from "../state/editor";
@@ -52,11 +52,14 @@ const nodeKindKeys: Record<NodeKind, MessageKey> = {
 type TreeEntry = {
   node: DesignNode;
   depth: number;
+  effectiveLocked: boolean;
+  inheritedLocked: boolean;
 };
 
 function flattenPageTree(
   document: DesignDocument,
   pageId: string | undefined,
+  collapsedNodeIds: ReadonlySet<string>,
 ): TreeEntry[] {
   if (!pageId) return [];
   const page = document.pagesById[pageId];
@@ -64,18 +67,37 @@ function flattenPageTree(
 
   const entries: TreeEntry[] = [];
   const visited = new Set<string>();
-  const visit = (nodeId: string, depth: number) => {
+  const visit = (nodeId: string, depth: number, inheritedLocked: boolean) => {
     if (visited.has(nodeId)) return;
     const node = document.nodesById[nodeId];
     if (!node) return;
 
     visited.add(nodeId);
-    entries.push({ node, depth });
-    for (const childId of node.childIds) visit(childId, depth + 1);
+    const effectiveLocked = node.locked || inheritedLocked;
+    entries.push({ node, depth, effectiveLocked, inheritedLocked });
+    if (collapsedNodeIds.has(nodeId)) return;
+    for (const childId of node.childIds) {
+      visit(childId, depth + 1, effectiveLocked);
+    }
   };
 
-  for (const rootNodeId of page.rootNodeIds) visit(rootNodeId, 0);
+  for (const rootNodeId of page.rootNodeIds) visit(rootNodeId, 0, false);
   return entries;
+}
+
+function collectAncestorIds(
+  document: DesignDocument,
+  nodeIds: readonly string[],
+): Set<string> {
+  const ancestors = new Set<string>();
+  nodeIds.forEach((nodeId) => {
+    let parentId = document.nodesById[nodeId]?.parentId;
+    while (parentId && !ancestors.has(parentId)) {
+      ancestors.add(parentId);
+      parentId = document.nodesById[parentId]?.parentId;
+    }
+  });
+  return ancestors;
 }
 
 export function LeftSidebar({
@@ -102,11 +124,52 @@ export function LeftSidebar({
   onToggleVisibility: (nodeId: string) => void;
 }) {
   const { t } = useI18n();
-  const layers = flattenPageTree(document, activePageId);
+  const [collapsedNodeIds, setCollapsedNodeIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const revealedSelectionKey = useRef<string | null>(null);
+  const layers = flattenPageTree(document, activePageId, collapsedNodeIds);
   const selectedIds = new Set(selectedNodeIds);
   const firstFocusableId =
     layers.find(({ node }) => selectedIds.has(node.id))?.node.id ??
     layers[0]?.node.id;
+
+  useEffect(() => {
+    const selectionKey = `${document.documentId}:${activePageId}:${selectedNodeIds.join("\u0000")}`;
+    if (revealedSelectionKey.current === selectionKey) return;
+    revealedSelectionKey.current = selectionKey;
+    const ancestors = collectAncestorIds(document, selectedNodeIds);
+    if (ancestors.size === 0) return;
+    setCollapsedNodeIds((current) => {
+      if (![...ancestors].some((nodeId) => current.has(nodeId))) return current;
+      const next = new Set(current);
+      ancestors.forEach((nodeId) => next.delete(nodeId));
+      return next;
+    });
+  }, [activePageId, document, selectedNodeIds]);
+
+  useEffect(() => {
+    setCollapsedNodeIds(new Set());
+    revealedSelectionKey.current = null;
+  }, [activePageId, document.documentId]);
+
+  const expandNode = (nodeId: string) => {
+    setCollapsedNodeIds((current) => {
+      if (!current.has(nodeId)) return current;
+      const next = new Set(current);
+      next.delete(nodeId);
+      return next;
+    });
+  };
+
+  const toggleNode = (nodeId: string) => {
+    setCollapsedNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  };
 
   return (
     <aside aria-label={t("sidebar.navigation")} className="left-sidebar">
@@ -181,12 +244,13 @@ export function LeftSidebar({
             role="tree"
           >
             <span className="layer-tree__heading">{t("sidebar.layers")}</span>
-            {layers.map(({ node, depth }) => {
+            {layers.map(({ node, depth, effectiveLocked, inheritedLocked }) => {
               const selected = selectedIds.has(node.id);
               const hasChildren = node.childIds.length > 0;
+              const collapsed = collapsedNodeIds.has(node.id);
               return (
                 <div
-                  aria-expanded={hasChildren ? true : undefined}
+                  aria-expanded={hasChildren ? !collapsed : undefined}
                   aria-level={depth + 1}
                   aria-selected={selected}
                   className="layer-row"
@@ -194,17 +258,33 @@ export function LeftSidebar({
                   role="treeitem"
                   style={{ "--layer-depth": depth } as CSSProperties}
                 >
+                  {hasChildren && (
+                    <button
+                      aria-label={t(
+                        collapsed
+                          ? "sidebar.expandNode"
+                          : "sidebar.collapseNode",
+                        { name: node.name || t(nodeKindKeys[node.kind]) },
+                      )}
+                      className="layer-row__disclosure"
+                      onClick={() => toggleNode(node.id)}
+                      type="button"
+                    >
+                      <Glyph
+                        name={collapsed ? "chevron-right" : "chevron-down"}
+                        size={13}
+                      />
+                    </button>
+                  )}
                   <button
                     className="layer-row__main"
-                    onClick={() => onSelect(node.id)}
+                    onClick={() => {
+                      if (hasChildren) expandNode(node.id);
+                      onSelect(node.id);
+                    }}
                     tabIndex={node.id === firstFocusableId ? 0 : -1}
                     type="button"
                   >
-                    {hasChildren ? (
-                      <Glyph name="chevron-down" size={13} />
-                    ) : (
-                      <span className="layer-row__indent" />
-                    )}
                     <Glyph name={nodeIcons[node.kind]} size={14} />
                     <span>
                       {node.name ||
@@ -215,13 +295,21 @@ export function LeftSidebar({
                   </button>
                   <span className="layer-row__actions">
                     <IconButton
-                      icon="lock"
+                      className={
+                        effectiveLocked ? "layer-row__lock--active" : ""
+                      }
+                      disabled={inheritedLocked && !node.locked}
+                      icon={effectiveLocked ? "lock" : "unlock"}
                       label={t(
-                        node.locked ? "sidebar.unlockNode" : "sidebar.lockNode",
+                        node.locked
+                          ? "sidebar.unlockNode"
+                          : inheritedLocked
+                            ? "sidebar.lockedByParent"
+                            : "sidebar.lockNode",
                         { name: node.name || t(nodeKindKeys[node.kind]) },
                       )}
                       onClick={() => onToggleLock(node.id)}
-                      selected={node.locked}
+                      selected={effectiveLocked}
                     />
                     <IconButton
                       icon={node.visible ? "eye" : "eye-off"}

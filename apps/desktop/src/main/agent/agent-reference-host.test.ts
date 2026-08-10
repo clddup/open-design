@@ -13,6 +13,7 @@ const context = {
   documentId: "document_reference",
   revision: 0,
   scope: { kind: "document" as const, selectedNodeIds: [] },
+  mutationTarget: { kind: "document" as const },
 };
 
 function request(prompt: string) {
@@ -24,6 +25,7 @@ function request(prompt: string) {
     documentId: context.documentId,
     revision: 0,
     scope: context.scope,
+    mutationTarget: context.mutationTarget,
     modelSelection: { providerId: "test", modelId: "vision" },
   };
 }
@@ -88,5 +90,117 @@ describe("AgentReferenceHost", () => {
       sourceKind: "url",
       attachment: { mimeType: "image/png" },
     });
+  });
+
+  it("keeps the timeout active while the remote response body is streaming", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-reference-"));
+    const cancel = vi.fn();
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(png);
+          },
+          cancel,
+        }),
+        { status: 200, headers: { "content-type": "image/png" } },
+      ),
+    );
+    const host = new AgentReferenceHost(
+      new AgentAttachmentHost(join(root, "attachments")),
+      fetch,
+      10,
+    );
+    const source = "https://design.example/slow.png";
+    host.registerRun(request(`Inspect ${source}`));
+    vi.useFakeTimers();
+    try {
+      const pending = host.readImage(
+        { source },
+        context,
+        new AbortController().signal,
+      );
+      const rejected = expect(pending).rejects.toMatchObject({
+        name: "TimeoutError",
+      });
+
+      await vi.advanceTimersByTimeAsync(11);
+
+      await rejected;
+      expect(cancel).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels a remote body that streams beyond the 16 MB limit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-reference-"));
+    const cancel = vi.fn();
+    const chunk = new Uint8Array(8 * 1024 * 1024);
+    chunk.set(png);
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(chunk);
+            controller.enqueue(chunk);
+            controller.enqueue(new Uint8Array([0]));
+          },
+          cancel,
+        }),
+        { status: 200, headers: { "content-type": "image/png" } },
+      ),
+    );
+    const host = new AgentReferenceHost(
+      new AgentAttachmentHost(join(root, "attachments")),
+      fetch,
+    );
+    const source = "https://design.example/oversized.png";
+    host.registerRun(request(`Inspect ${source}`));
+
+    await expect(
+      host.readImage({ source }, context, new AbortController().signal),
+    ).rejects.toThrow("Remote image exceeds the 16 MB limit");
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("cancels the remote body when the user stops the run", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-reference-"));
+    const cancel = vi.fn();
+    let markBodyReadStarted: (() => void) | undefined;
+    const bodyReadStarted = new Promise<void>((resolve) => {
+      markBodyReadStarted = resolve;
+    });
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(png);
+          },
+          pull() {
+            markBodyReadStarted?.();
+          },
+          cancel,
+        }),
+        { status: 200, headers: { "content-type": "image/png" } },
+      ),
+    );
+    const host = new AgentReferenceHost(
+      new AgentAttachmentHost(join(root, "attachments")),
+      fetch,
+    );
+    const source = "https://design.example/cancelled.png";
+    const controller = new AbortController();
+    host.registerRun(request(`Inspect ${source}`));
+
+    const pending = host.readImage({ source }, context, controller.signal);
+    const rejected = expect(pending).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    await bodyReadStarted;
+    controller.abort();
+
+    await rejected;
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });

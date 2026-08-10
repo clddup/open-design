@@ -75,6 +75,7 @@ export type SessionTimelineItem =
       documentId: string;
       revision: number;
       scope: SelectionScope;
+      mutationTarget?: DesignMutationTarget;
     })
   | (TimelineBase & {
       type: "assistant.message";
@@ -142,6 +143,9 @@ export type SelectionScope =
       primaryNodeId?: string;
       pageId?: string;
     };
+
+export type DesignMutationTarget =
+  { kind: "page"; pageId: string } | { kind: "document" };
 
 export type ToolRisk = "read" | "design_write" | "external" | "destructive";
 export type ApprovalDecision = "allow_once" | "allow_session" | "deny";
@@ -353,6 +357,116 @@ export class JsonlSessionStore implements SessionStore {
   async project(sessionId: string): Promise<SessionProjection> {
     return projectEvents(sessionId, await this.read(sessionId));
   }
+
+  reconcileInterruptedRuns(
+    finishedAt = new Date().toISOString(),
+  ): Promise<{ recoveredRuns: number; recoveredTools: number }> {
+    if (Number.isNaN(new Date(finishedAt).valueOf())) {
+      throw new TypeError("Interrupted Run recovery requires a timestamp");
+    }
+    return enqueueJsonl(this.path, async () => {
+      const events = await readAllJsonlEvents(this.path);
+      const runs = new Map<
+        string,
+        {
+          sessionId: string;
+          runId: string;
+          startedAt: string;
+          latestStatus: RunStatePayload["status"];
+          pendingToolIds: Set<string>;
+        }
+      >();
+      const nextSequenceBySession = new Map<string, number>();
+      for (const event of events) {
+        nextSequenceBySession.set(
+          event.sessionId,
+          Math.max(
+            nextSequenceBySession.get(event.sessionId) ?? 0,
+            event.sequence,
+          ),
+        );
+        if (!event.runId) continue;
+        const key = `${event.sessionId}\u0000${event.runId}`;
+        if (event.type === "run.state") {
+          const payload = event.payload as RunStatePayload;
+          const current = runs.get(key);
+          runs.set(key, {
+            sessionId: event.sessionId,
+            runId: event.runId,
+            startedAt: current?.startedAt ?? payload.startedAt,
+            latestStatus: payload.status,
+            pendingToolIds: current?.pendingToolIds ?? new Set(),
+          });
+          continue;
+        }
+        const current = runs.get(key);
+        if (!current) continue;
+        if (event.type === "tool.requested") {
+          current.pendingToolIds.add(
+            (event.payload as ToolRequestedPayload).toolCallId,
+          );
+        }
+        if (event.type === "tool.completed" || event.type === "tool.failed") {
+          current.pendingToolIds.delete(
+            (event.payload as ToolCompletedPayload | ToolFailedPayload)
+              .toolCallId,
+          );
+        }
+      }
+
+      let recoveredRuns = 0;
+      let recoveredTools = 0;
+      const interrupted = [...runs.values()]
+        .filter((run) => run.latestStatus === "started")
+        .sort(
+          (left, right) =>
+            left.sessionId.localeCompare(right.sessionId) ||
+            left.runId.localeCompare(right.runId),
+        );
+      for (const run of interrupted) {
+        let nextSequence = nextSequenceBySession.get(run.sessionId) ?? 0;
+        for (const toolCallId of [...run.pendingToolIds].sort()) {
+          nextSequence += 1;
+          const event: JournalEvent<ToolFailedPayload> = {
+            eventId: `${run.runId}_recovery_${nextSequence}`,
+            sessionId: run.sessionId,
+            runId: run.runId,
+            sequence: nextSequence,
+            type: "tool.failed",
+            createdAt: finishedAt,
+            payload: {
+              toolCallId,
+              code: "run_interrupted",
+              message: "Tool call was interrupted when OpenDesign stopped",
+            },
+          };
+          assertJournalEvent(event);
+          await appendJsonlEvent(this.path, event);
+          recoveredTools += 1;
+        }
+        nextSequence += 1;
+        const event: JournalEvent<RunStatePayload> = {
+          eventId: `${run.runId}_recovery_${nextSequence}`,
+          sessionId: run.sessionId,
+          runId: run.runId,
+          sequence: nextSequence,
+          type: "run.state",
+          createdAt: finishedAt,
+          payload: {
+            status: "error",
+            startedAt: run.startedAt,
+            finishedAt,
+            stopReason: "error",
+          },
+        };
+        assertJournalEvent(event);
+        await appendJsonlEvent(this.path, event);
+        nextSequenceBySession.set(run.sessionId, nextSequence);
+        recoveredRuns += 1;
+      }
+      return { recoveredRuns, recoveredTools };
+    });
+  }
 }
 
 export function projectTimeline(
@@ -420,6 +534,9 @@ export function projectTimeline(
         documentId: payload.documentId,
         revision: payload.revision,
         scope: payload.scope,
+        ...(payload.mutationTarget === undefined
+          ? {}
+          : { mutationTarget: payload.mutationTarget }),
       });
       continue;
     }
@@ -698,6 +815,12 @@ async function readJsonlEvents(
   path: string,
   sessionId: string,
 ): Promise<JournalEvent[]> {
+  return (await readAllJsonlEvents(path)).filter(
+    (event) => event.sessionId === sessionId,
+  );
+}
+
+async function readAllJsonlEvents(path: string): Promise<JournalEvent[]> {
   let content: string;
   try {
     content = await readFile(path, "utf8");
@@ -712,9 +835,7 @@ async function readJsonlEvents(
     .flatMap((line) => {
       try {
         const candidate: unknown = JSON.parse(line);
-        return isJournalEvent(candidate) && candidate.sessionId === sessionId
-          ? [candidate]
-          : [];
+        return isJournalEvent(candidate) ? [candidate] : [];
       } catch {
         return [];
       }
@@ -780,7 +901,9 @@ function isJournalEvent(value: unknown): value is JournalEvent {
             payload.attachments.every(isAttachment))) &&
         isNonEmptyString(payload.documentId) &&
         isRevision(payload.revision) &&
-        isSelectionScope(payload.scope)
+        isSelectionScope(payload.scope) &&
+        (payload.mutationTarget === undefined ||
+          isDesignMutationTarget(payload.mutationTarget))
       );
     case "message.assistant":
       return (
@@ -882,6 +1005,16 @@ function isSelectionScope(value: unknown): value is SelectionScope {
     primaryNodeId === undefined ||
     (typeof primaryNodeId === "string" &&
       value.selectedNodeIds.includes(primaryNodeId))
+  );
+}
+
+function isDesignMutationTarget(value: unknown): value is DesignMutationTarget {
+  return (
+    isRecord(value) &&
+    ((value.kind === "document" && Object.keys(value).length === 1) ||
+      (value.kind === "page" &&
+        isNonEmptyString(value.pageId) &&
+        Object.keys(value).length === 2))
   );
 }
 
@@ -1003,6 +1136,7 @@ interface UserMessagePayload {
   documentId: string;
   revision: number;
   scope: SelectionScope;
+  mutationTarget?: DesignMutationTarget;
 }
 
 function isAttachment(value: unknown): value is SessionAttachment {

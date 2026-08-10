@@ -51,6 +51,10 @@ Agent、MCP、skills、Main 和 utility process 不获得 Leafer `App`、`UI` �
 
 稳定 OpenDesign `node.id` 必须保留在 Leafer 元素 ID 与适配器索引中。fills、strokes、opacity、corner radius、transform、size、visibility、lock、clip 与文本属性进行显式映射；未验证语义返回 fidelity warning 或 `unsupported`，不得静默丢失。
 
+锁定采用层级语义：节点自身或任意祖先锁定时，该节点在画布中的有效状态均为 locked。锁定节点仍可被命中并加入单选选区，用于检查属性和作为 Agent 上下文，但不得直接变换、文本编辑或作为新建图层容器。图层导航同样可选中锁定节点；自身锁定可直接解锁，纯继承锁定必须从对应祖先解除。相邻 revision 改变锁定或父子关系时，只增量重投影受影响子树，并取消其中正在进行的直接操作。
+
+相邻 revision 的正常同步必须消费 `DesignChangeSet`，保留未变投影 spec 与 Leafer 元素 identity，只 reconcile affected nodes、变更父子关系和引用变更 asset 的节点。选区 bounds 只对与变化存在祖先/后代关系的选中元素失效；不得以 revision 变化为理由隐藏 Editor、重放全部 `set()` 或无条件刷新 tree bounds。首次挂载、Design File/Page 切换、revision 断档和交互失败恢复允许从权威快照全量重建，作为可验证的正确性回退而不是常规更新路径。
+
 复杂外观与图片能力不以 Leafer 私有 JSON 进入公共契约。渐变、图片 Paint、光晕、阴影、模糊、混合模式与蒙版采用 ADR-0010 的 OpenDesign `1.1.0` 语义，再由本适配器投影到 Leafer。
 
 Leafer Flow 自动布局当前不能与 Editor 元素直接混用，因此不把其作为本次迁移已完成能力。OpenDesign 布局语义必须在独立兼容性验证后再进入公共契约。

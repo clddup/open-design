@@ -30,6 +30,18 @@ const emptyCatalog: ModelProviderCatalog = {
   providers: [],
 };
 
+export type ModelStreamTimeouts = {
+  firstResponseTimeoutMs: number;
+  idleTimeoutMs: number;
+  totalTimeoutMs: number;
+};
+
+const defaultModelStreamTimeouts: ModelStreamTimeouts = {
+  firstResponseTimeoutMs: 180_000,
+  idleTimeoutMs: 120_000,
+  totalTimeoutMs: 900_000,
+};
+
 export interface CredentialCipher {
   available(): boolean;
   encrypt(value: string): Buffer;
@@ -62,7 +74,10 @@ export class ModelProviderHost {
     private readonly cipher: CredentialCipher,
     private readonly fetch: typeof globalThis.fetch = globalThis.fetch,
     private readonly attachmentResolver?: ModelAttachmentResolver,
-  ) {}
+    private readonly streamTimeouts: ModelStreamTimeouts = defaultModelStreamTimeouts,
+  ) {
+    assertModelStreamTimeouts(streamTimeouts);
+  }
 
   getCatalog(): ModelProviderCatalog {
     const stored = this.store.getPreference(catalogKey);
@@ -217,7 +232,63 @@ export class ModelProviderHost {
     signal: AbortSignal,
   ): AsyncIterable<CanonicalStreamEvent> {
     const resolved = await this.resolveAttachmentReferences(request);
-    yield* this.gateway(request.modelSelection).stream({ ...resolved, signal });
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal.reason);
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    const source = this.gateway(request.modelSelection).stream({
+      ...resolved,
+      signal: controller.signal,
+    });
+    const iterator = source[Symbol.asyncIterator]();
+    const startedAt = Date.now();
+    let waitingForFirstResponse = true;
+    let completed = false;
+    try {
+      while (true) {
+        const elapsed = Date.now() - startedAt;
+        const totalRemaining = this.streamTimeouts.totalTimeoutMs - elapsed;
+        if (totalRemaining <= 0) {
+          throw modelTimeout(
+            `Model provider timed out after the ${this.streamTimeouts.totalTimeoutMs} ms total time limit`,
+          );
+        }
+        const phaseTimeout = waitingForFirstResponse
+          ? this.streamTimeouts.firstResponseTimeoutMs
+          : this.streamTimeouts.idleTimeoutMs;
+        const totalExpiresFirst = totalRemaining <= phaseTimeout;
+        const timeoutMs = Math.min(phaseTimeout, totalRemaining);
+        const timeoutError = modelTimeout(
+          totalExpiresFirst
+            ? `Model provider timed out after the ${this.streamTimeouts.totalTimeoutMs} ms total time limit`
+            : waitingForFirstResponse
+              ? `Model provider timed out after ${this.streamTimeouts.firstResponseTimeoutMs} ms waiting for a response`
+              : `Model provider stream timed out after ${this.streamTimeouts.idleTimeoutMs} ms without activity`,
+        );
+        const result = await nextModelEvent(
+          iterator,
+          controller,
+          timeoutMs,
+          timeoutError,
+        );
+        if (result.done) {
+          completed = true;
+          return;
+        }
+        if (result.value.type !== "attempt.started") {
+          waitingForFirstResponse = false;
+        }
+        yield result.value;
+      }
+    } finally {
+      signal.removeEventListener("abort", abort);
+      if (!completed && !controller.signal.aborted) {
+        controller.abort(
+          new DOMException("Model provider stream closed", "AbortError"),
+        );
+      }
+      if (!completed) void iterator.return?.().catch(() => undefined);
+    }
   }
 
   private async resolveAttachmentReferences(
@@ -438,6 +509,78 @@ export class ModelProviderHost {
     } catch {
       return null;
     }
+  }
+}
+
+function nextModelEvent(
+  iterator: AsyncIterator<CanonicalStreamEvent>,
+  controller: AbortController,
+  timeoutMs: number,
+  timeoutError: DOMException,
+): Promise<IteratorResult<CanonicalStreamEvent>> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timeout);
+      controller.signal.removeEventListener("abort", aborted);
+    };
+    const finish = (
+      action: (value: IteratorResult<CanonicalStreamEvent>) => void,
+      value: IteratorResult<CanonicalStreamEvent>,
+    ) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      action(value);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(
+        error instanceof Error ? error : new Error("Model provider failed"),
+      );
+    };
+    const aborted = () => {
+      fail(
+        controller.signal.reason instanceof Error
+          ? controller.signal.reason
+          : new DOMException("Model request cancelled", "AbortError"),
+      );
+    };
+    const timeout = setTimeout(
+      () => {
+        fail(timeoutError);
+        controller.abort(timeoutError);
+      },
+      Math.max(1, Math.ceil(timeoutMs)),
+    );
+    controller.signal.addEventListener("abort", aborted, { once: true });
+    if (controller.signal.aborted) {
+      aborted();
+      return;
+    }
+    void iterator.next().then(
+      (result) => finish(resolve, result),
+      (error: unknown) => fail(error),
+    );
+  });
+}
+
+function modelTimeout(message: string): DOMException {
+  return new DOMException(message, "TimeoutError");
+}
+
+function assertModelStreamTimeouts(timeouts: ModelStreamTimeouts): void {
+  for (const value of Object.values(timeouts)) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new RangeError("Model stream timeouts must be positive");
+    }
+  }
+  if (timeouts.totalTimeoutMs < timeouts.firstResponseTimeoutMs) {
+    throw new RangeError(
+      "Model total timeout cannot be shorter than the first response timeout",
+    );
   }
 }
 

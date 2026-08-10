@@ -96,6 +96,9 @@ beforeEach(() => {
     getPlatformInfo: vi
       .fn()
       .mockResolvedValue({ platform: "darwin", version: "0.0.0" }),
+    getPendingDiagnostics: vi.fn().mockResolvedValue([]),
+    reportDiagnostic: vi.fn().mockResolvedValue(undefined),
+    onDiagnosticEvent: vi.fn().mockReturnValue(() => undefined),
     onOpenSettings: vi.fn().mockImplementation((listener: () => void) => {
       requestOpenSettings = listener;
       return () => undefined;
@@ -618,6 +621,37 @@ describe("App", () => {
     );
   });
 
+  it("moves the submitted Conversation to the front immediately", async () => {
+    const recent = conversationDescriptor({
+      conversationId: "conversation_recent",
+      title: "Recent Conversation",
+      updatedAt: "2026-08-08T12:00:00.000Z",
+    });
+    const older = conversationDescriptor({
+      conversationId: "conversation_older",
+      title: "Older Conversation",
+      updatedAt: "2026-08-07T12:00:00.000Z",
+    });
+    const { user } = await openProjectWithConversations([recent, older]);
+    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
+    const conversationSelect = screen.getByRole("combobox", {
+      name: "Conversation",
+    });
+    conversationSelect.focus();
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(conversationSelect).toHaveTextContent("Older Conversation");
+
+    await user.type(screen.getByLabelText("Continue the task"), "Move me up");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(conversationSelect);
+
+    expect(
+      [...document.querySelectorAll(".ui-select__item-text")].map((option) =>
+        option.textContent?.trim(),
+      ),
+    ).toEqual(["Older Conversation", "Recent Conversation"]);
+  });
+
   it("ignores an older history response after a newer request", async () => {
     const first = conversationDescriptor({
       conversationId: "conversation_a",
@@ -965,6 +999,13 @@ describe("App", () => {
     ).toBe(42);
     expect(runtimeOutput()).toHaveAttribute("data-revision", "1");
     expect(runtimeOutput()).toHaveAttribute("data-dirty", "true");
+    await waitFor(() =>
+      expect(leaferHarness.input?.changes).toMatchObject({
+        fromRevision: 0,
+        toRevision: 1,
+        changedNodeIds: ["feature_one"],
+      }),
+    );
 
     await user.click(screen.getByRole("button", { name: "Undo" }));
     expect(
@@ -995,7 +1036,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
   });
 
-  it("selects a canvas node and freezes that selection into the Agent request", async () => {
+  it("freezes selection as context while keeping the mutation target page-wide", async () => {
     const { user } = await openProjectConversation();
     act(() =>
       leaferCallbacks().onSelectionChange(["feature_one"], "feature_one"),
@@ -1026,6 +1067,7 @@ describe("App", () => {
         primaryNodeId: "feature_one",
         selectedNodeIds: ["feature_one"],
       },
+      mutationTarget: { kind: "page", pageId: "page_welcome" },
     });
   });
 
@@ -1557,6 +1599,7 @@ describe("App", () => {
           pageId: "page_welcome",
           selectedNodeIds: [],
         },
+        mutationTarget: { kind: "page", pageId: "page_welcome" },
       }),
     );
     const request = vi
@@ -1608,6 +1651,75 @@ describe("App", () => {
       await screen.findByText("Agent process is not ready"),
     ).toBeInTheDocument();
     expect(prompt).toHaveValue("Create a pricing card");
+  });
+
+  it("unlocks the composer when a production model stream times out", async () => {
+    const { user } = await openProjectConversation();
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Design a profile page",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const request = runRequests("conversation_mobile").at(-1);
+    if (!request) throw new Error("Agent run request is missing");
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: request.runId,
+        startedAt: now,
+      });
+      emitAgentEvent?.({
+        type: "agent.error",
+        code: "run_failed",
+        runId: request.runId,
+        message:
+          "Model provider timed out after 180000 ms waiting for a response",
+      });
+    });
+
+    expect(
+      screen.getByText("The model took too long to respond. Try again."),
+    ).toBeInTheDocument();
+    const retryPrompt = screen.getByLabelText("Continue the task");
+    expect(retryPrompt).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Stop" }),
+    ).not.toBeInTheDocument();
+    await user.type(retryPrompt, "Retry with a simpler plan");
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  });
+
+  it("unlocks every active Conversation when the Agent process exits", async () => {
+    const { user } = await openProjectConversation();
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Design a profile page",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const request = runRequests("conversation_mobile").at(-1);
+    if (!request) throw new Error("Agent run request is missing");
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: request.runId,
+        startedAt: now,
+      });
+      emitAgentEvent?.({
+        type: "agent.error",
+        code: "process_exited",
+        message: "Agent process exited with code 1",
+      });
+    });
+
+    expect(
+      screen.getByText("Agent process exited with code 1"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Continue the task")).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Stop" }),
+    ).not.toBeInTheDocument();
   });
 
   it("saves the structured document and checkpoints only on success", async () => {
@@ -1672,6 +1784,7 @@ describe("App", () => {
           documentId: current.documentId,
           revision: current.revision,
           scope: { kind: "document", selectedNodeIds: [] },
+          mutationTarget: { kind: "document" },
         },
       });
     });

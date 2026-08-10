@@ -5,6 +5,7 @@ import type {
   TrustedToolContext,
 } from "@opendesign/agent-runtime";
 import {
+  designToolBridgeResponseId,
   isDesignToolBridgeResponse,
   type DesignToolBridgeRequest,
   type DesignToolBridgeResponse,
@@ -25,10 +26,20 @@ export class ParentDesignToolExecutor implements ToolExecutorPort {
   constructor(private readonly port: ParentPortLike) {}
 
   handleMessage(message: unknown): boolean {
-    if (!isDesignToolBridgeResponse(message)) return false;
-    const pending = this.#pending.get(message.requestId);
+    const requestId = designToolBridgeResponseId(message);
+    if (!requestId) return false;
+    const pending = this.#pending.get(requestId);
     if (!pending) return true;
-    this.#pending.delete(message.requestId);
+    this.#pending.delete(requestId);
+    if (!isDesignToolBridgeResponse(message)) {
+      pending.resolve({
+        type: "design-tool.response",
+        requestId,
+        ok: false,
+        error: "Design tool host returned an invalid response",
+      });
+      return true;
+    }
     pending.resolve(message);
     return true;
   }

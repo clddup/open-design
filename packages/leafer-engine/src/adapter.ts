@@ -1,4 +1,5 @@
 import type {
+  DesignChangeSet,
   DesignOperation,
   Transform,
   ViewportState,
@@ -6,6 +7,8 @@ import type {
 import type * as LeaferEditorModule from "leafer-editor";
 import {
   projectDesignPage,
+  projectDesignPageIncrementally,
+  type LeaferElementSpec,
   type LeaferElementTag,
   type LeaferSceneProjection,
 } from "./mapping.js";
@@ -73,6 +76,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #transform: TransformSession | null = null;
   #viewportFrame: number | null = null;
   #editorFrame: number | null = null;
+  #editorRefreshNeedsTreeBounds = false;
+  readonly #editorRefreshNodeBounds = new Set<string>();
 
   constructor(
     host: HTMLElement,
@@ -110,25 +115,73 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (this.#disposed) return;
     const previous = this.#input;
     this.#input = input;
-    const sceneChanged =
+    const identityChanged =
       !previous ||
       previous.document.documentId !== input.document.documentId ||
-      previous.document.revision !== input.document.revision ||
       previous.pageId !== input.pageId;
+    const sceneChanged =
+      identityChanged ||
+      previous?.document.revision !== input.document.revision;
 
     this.#synchronizing = true;
     try {
       if (sceneChanged) {
-        this.#editor.visible = false;
-        this.#cancelDraw();
-        this.#transform = null;
-        if (this.#editor.innerEditing) this.#editor.closeInnerEditor();
-        this.#reconcile(projectDesignPage(input.document, input.pageId));
+        const contiguousChanges =
+          !identityChanged &&
+          previous &&
+          input.changes?.documentId === input.document.documentId &&
+          input.changes.fromRevision === previous.document.revision &&
+          input.changes.toRevision === input.document.revision;
+        const changedNodeIds = input.changes
+          ? changeSetNodeIds(input.changes)
+          : new Set<string>();
+        const projection =
+          previous && this.#projection && input.changes
+            ? projectDesignPageIncrementally(
+                this.#projection,
+                input.document,
+                input.pageId,
+                input.changes,
+              )
+            : projectDesignPage(input.document, input.pageId);
+        const invalidatesInteraction = (nodeId: string) =>
+          changedNodeIds.has(nodeId) ||
+          (projection.affectedNodeIds?.has(nodeId) === true &&
+            projection.elementsById.get(nodeId)?.data.locked === true);
+        if (identityChanged) this.#editor.visible = false;
+        if (
+          identityChanged ||
+          !contiguousChanges ||
+          (this.#draw?.parentId !== undefined &&
+            this.#draw?.parentId !== null &&
+            invalidatesInteraction(this.#draw.parentId))
+        ) {
+          this.#cancelDraw();
+        }
+        if (
+          identityChanged ||
+          !contiguousChanges ||
+          (this.#transform &&
+            [...this.#transform.before.keys()].some((nodeId) =>
+              invalidatesInteraction(nodeId),
+            ))
+        ) {
+          this.#transform = null;
+        }
+        if (
+          this.#editor.innerEditing &&
+          (identityChanged ||
+            !contiguousChanges ||
+            (this.#textBefore &&
+              invalidatesInteraction(this.#textBefore.nodeId)))
+        ) {
+          this.#editor.closeInnerEditor();
+        }
+        this.#reconcile(projection);
       }
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection.nodeIds);
-      this.#scheduleEditorRefresh();
     } catch (error) {
       this.#report(error);
     } finally {
@@ -144,6 +197,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (this.#editorFrame !== null) cancelAnimationFrame(this.#editorFrame);
     this.#viewportFrame = null;
     this.#editorFrame = null;
+    this.#editorRefreshNeedsTreeBounds = false;
+    this.#editorRefreshNodeBounds.clear();
     window.removeEventListener("keydown", this.#onWindowKeyDown, true);
     this.#host.removeEventListener("contextlost", this.#onContextLost, true);
     this.#app.destroy();
@@ -210,33 +265,81 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#host.addEventListener("contextlost", this.#onContextLost, true);
   }
 
-  #reconcile(projection: LeaferSceneProjection): void {
-    this.#projection = projection;
+  #reconcile(
+    projection: LeaferSceneProjection,
+    options: { reapplyAll?: boolean } = {},
+  ): void {
+    const previous = this.#projection;
+    const changedNodeIds = new Set<string>();
+    const parentsToAttach = new Set<string | null>();
+    const reapplyAll = options.reapplyAll === true;
     projection.warnings.forEach((warning) =>
       this.#callbacks.onWarning?.(warning),
     );
 
-    for (const [nodeId, element] of this.#elements) {
+    const candidateNodeIds =
+      projection.affectedNodeIds ?? this.#elements.keys();
+    for (const nodeId of candidateNodeIds) {
+      const element = this.#elements.get(nodeId);
+      if (!element) continue;
       if (projection.elementsById.has(nodeId)) continue;
+      changedNodeIds.add(nodeId);
+      parentsToAttach.add(previous?.elementsById.get(nodeId)?.parentId ?? null);
       if (this.#editor.hasItem(element)) this.#editor.removeItem(element);
       element.remove();
       element.destroy();
       this.#elements.delete(nodeId);
     }
 
-    for (const spec of projection.elementsById.values()) {
-      const existing = this.#elements.get(spec.id);
+    const candidateSpecs: LeaferElementSpec[] = [];
+    if (projection.affectedNodeIds) {
+      projection.affectedNodeIds.forEach((nodeId) => {
+        const spec = projection.elementsById.get(nodeId);
+        if (spec) candidateSpecs.push(spec);
+      });
+    } else {
+      candidateSpecs.push(...projection.elementsById.values());
+    }
+    for (const spec of candidateSpecs) {
+      const previousSpec = previous?.elementsById.get(spec.id);
+      let existing = this.#elements.get(spec.id);
+      let replaced = false;
       if (existing && this.#tag(existing) !== spec.tag) {
         if (this.#editor.hasItem(existing)) this.#editor.removeItem(existing);
         existing.remove();
         existing.destroy();
         this.#elements.delete(spec.id);
+        existing = undefined;
+        replaced = true;
       }
-      const element =
-        this.#elements.get(spec.id) ?? this.#createElement(spec.tag);
+      const created = existing === undefined;
+      const element = existing ?? this.#createElement(spec.tag);
       this.#elements.set(spec.id, element);
-      element.set(spec.data);
-      element.setTransform(toMatrix(spec.transform));
+      const dataChanged =
+        reapplyAll ||
+        created ||
+        !sameProjectionValue(previousSpec?.data, spec.data);
+      const transformChanged =
+        reapplyAll ||
+        created ||
+        !previousSpec ||
+        !sameTransform(previousSpec.transform, spec.transform);
+      const parentChanged =
+        !previousSpec || previousSpec.parentId !== spec.parentId;
+      const childrenChanged =
+        !previousSpec || !sameStringList(previousSpec.childIds, spec.childIds);
+      if (dataChanged) element.set(spec.data);
+      if (transformChanged) element.setTransform(toMatrix(spec.transform));
+      if (dataChanged || transformChanged || parentChanged || replaced) {
+        changedNodeIds.add(spec.id);
+      }
+      if (parentChanged || created || replaced) {
+        parentsToAttach.add(previousSpec?.parentId ?? null);
+        parentsToAttach.add(spec.parentId);
+      }
+      if (childrenChanged || created || replaced || reapplyAll) {
+        parentsToAttach.add(spec.id);
+      }
     }
 
     const attachChildren = (
@@ -251,18 +354,73 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         }
       });
     };
-    for (const spec of projection.elementsById.values()) {
-      const element = this.#elements.get(spec.id);
-      if (element && "children" in element) {
+    if (
+      reapplyAll ||
+      !previous ||
+      !sameStringList(previous.rootIds, projection.rootIds)
+    ) {
+      parentsToAttach.add(null);
+    }
+    this.#projection = projection;
+    for (const parentId of parentsToAttach) {
+      if (parentId === null) {
+        attachChildren(
+          this.#app.tree as unknown as LeaferGroup,
+          projection.rootIds,
+        );
+        continue;
+      }
+      const spec = projection.elementsById.get(parentId);
+      const element = this.#elements.get(parentId);
+      if (spec && element && "children" in element) {
         attachChildren(element as LeaferGroup, spec.childIds);
       }
     }
-    attachChildren(
-      this.#app.tree as unknown as LeaferGroup,
-      projection.rootIds,
-    );
-    this.#app.tree.forceUpdate("bounds");
-    this.#scheduleEditorRefresh();
+    if (reapplyAll || !previous) {
+      this.#scheduleEditorRefresh({ treeBounds: true });
+    } else {
+      const selectionBounds = this.#selectionBoundsAffected(
+        changedNodeIds,
+        previous,
+        projection,
+      );
+      if (selectionBounds.size > 0) {
+        this.#scheduleEditorRefresh({ nodeBounds: selectionBounds });
+      }
+    }
+  }
+
+  #selectionBoundsAffected(
+    changedNodeIds: ReadonlySet<string>,
+    previous: LeaferSceneProjection,
+    projection: LeaferSceneProjection,
+  ): Set<string> {
+    const selection = this.#input?.selection.nodeIds;
+    if (!selection || changedNodeIds.size === 0 || selection.length === 0)
+      return new Set();
+    const affectedSelection = new Set<string>();
+    const selectedNodeIds = new Set(selection);
+    for (const selectedNodeId of selectedNodeIds) {
+      if (
+        lineage(selectedNodeId, previous).some((nodeId) =>
+          changedNodeIds.has(nodeId),
+        ) ||
+        lineage(selectedNodeId, projection).some((nodeId) =>
+          changedNodeIds.has(nodeId),
+        )
+      ) {
+        affectedSelection.add(selectedNodeId);
+      }
+    }
+    for (const changedNodeId of changedNodeIds) {
+      for (const nodeId of [
+        ...lineage(changedNodeId, previous),
+        ...lineage(changedNodeId, projection),
+      ]) {
+        if (selectedNodeIds.has(nodeId)) affectedSelection.add(nodeId);
+      }
+    }
+    return affectedSelection;
   }
 
   #createElement(tag: LeaferElementTag): LeaferElement {
@@ -278,9 +436,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #syncTool(tool: LeaferCanvasTool): void {
     const drawing = tool !== "select";
-    this.#app.mode = drawing ? "draw" : "normal";
-    this.#editor.visible = !drawing;
-    this.#editor.hittable = !drawing;
+    const mode = drawing ? "draw" : "normal";
+    if (this.#app.mode !== mode) this.#app.mode = mode;
+    if (this.#editor.visible !== !drawing) this.#editor.visible = !drawing;
+    if (this.#editor.hittable !== !drawing) this.#editor.hittable = !drawing;
     if (drawing) this.#editor.hoverTarget = null as never;
   }
 
@@ -310,14 +469,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #syncSelection(nodeIds: readonly string[]): void {
     const target = nodeIds.flatMap((nodeId) => {
       const element = this.#elements.get(nodeId);
-      return element && !element.locked ? [element] : [];
+      return element ? [element] : [];
     });
     const current = this.#editor.list;
     if (
       current.length === target.length &&
       current.every((element, index) => element === target[index])
     ) {
-      this.#scheduleEditorRefresh();
       return;
     }
     this.#editor.target = target.length === 0 ? (null as never) : target;
@@ -335,6 +493,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #beginTransform(): void {
     if (this.#synchronizing || this.#transform || this.#disposed) return;
+    if (this.#selectionHasLockedElement()) return;
     const nodeIds = this.#selectedSubtreeIds();
     if (nodeIds.length === 0) return;
     this.#transform = {
@@ -347,7 +506,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #markTransformChanged(): void {
     if (this.#synchronizing || this.#disposed) return;
     this.#beginTransform();
-    if (!this.#transform) return;
+    if (!this.#transform) {
+      if (this.#selectionHasLockedElement()) this.#restoreProjection();
+      return;
+    }
     this.#transform.changed = true;
     if (!this.#editor.editBox.dragging && !this.#editor.editBox.gesturing) {
       queueMicrotask(() => this.#finishTransform());
@@ -387,7 +549,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     for (const [nodeId, previous] of before) {
       const node = document.nodesById[nodeId];
       const element = this.#elements.get(nodeId);
-      if (!node || !element) continue;
+      const spec = this.#projection?.elementsById.get(nodeId);
+      if (!node || !element || spec?.data.locked === true) continue;
       const current = this.#readElementState(element);
       const transformChanged = !sameTransform(
         previous.transform,
@@ -460,13 +623,25 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     return "transform";
   }
 
+  #selectionHasLockedElement(): boolean {
+    return this.#editor.list.some((element) => {
+      const nodeId = this.#nodeId(element as LeaferElement);
+      return (
+        nodeId !== undefined &&
+        this.#projection?.elementsById.get(nodeId)?.data.locked === true
+      );
+    });
+  }
+
   #finishTextEdit(): void {
     const before = this.#textBefore;
     this.#textBefore = null;
     if (!before || this.#synchronizing || this.#disposed) return;
     const element = this.#elements.get(before.nodeId);
     const node = this.#input?.document.nodesById[before.nodeId];
-    if (!element || !node || node.kind !== "text") return;
+    const spec = this.#projection?.elementsById.get(before.nodeId);
+    if (!element || !node || node.kind !== "text" || spec?.data.locked === true)
+      return;
     const content = readElementText(element);
     if (this.#cancelTextEdit) {
       (element as LeaferElement & { text: string }).text = before.text;
@@ -494,6 +669,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       return;
     const drag = asLeaferEvent(event);
     const parentId = this.#resolveDrawParent(drag.target, input.tool);
+    if (parentId === undefined) return;
     const parent = parentId
       ? (this.#elements.get(parentId) as LeaferGroup | undefined)
       : (this.#app.tree as unknown as LeaferGroup);
@@ -574,12 +750,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #resolveDrawParent(
     target: unknown,
     tool: Exclude<LeaferCanvasTool, "select">,
-  ): string | null {
+  ): string | null | undefined {
     if (tool === "frame") return null;
     let element = isElement(target) ? target : undefined;
     while (element) {
       const nodeId = this.#nodeId(element);
-      const spec = nodeId && this.#projection?.elementsById.get(nodeId);
+      const spec = nodeId
+        ? this.#projection?.elementsById.get(nodeId)
+        : undefined;
+      if (spec?.data.locked === true) return undefined;
       if (spec && (spec.kind === "frame" || spec.kind === "group")) {
         return spec.id;
       }
@@ -605,13 +784,34 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
   }
 
-  #scheduleEditorRefresh(): void {
+  #scheduleEditorRefresh(
+    options: {
+      nodeBounds?: Iterable<string>;
+      treeBounds?: boolean;
+    } = {},
+  ): void {
+    this.#editorRefreshNeedsTreeBounds ||= options.treeBounds === true;
+    if (options.nodeBounds) {
+      for (const nodeId of options.nodeBounds) {
+        this.#editorRefreshNodeBounds.add(nodeId);
+      }
+    }
     if (this.#disposed || this.#editorFrame !== null) return;
     this.#editorFrame = requestAnimationFrame(() => {
       this.#editorFrame = null;
       if (this.#disposed) return;
       try {
-        this.#app.tree.forceUpdate("bounds");
+        const refreshTreeBounds = this.#editorRefreshNeedsTreeBounds;
+        const refreshNodeBounds = [...this.#editorRefreshNodeBounds];
+        this.#editorRefreshNeedsTreeBounds = false;
+        this.#editorRefreshNodeBounds.clear();
+        if (refreshTreeBounds) {
+          this.#app.tree.forceUpdate("bounds");
+        } else {
+          refreshNodeBounds.forEach((nodeId) =>
+            this.#elements.get(nodeId)?.forceUpdate("bounds"),
+          );
+        }
         this.#editor.update();
       } catch (error) {
         this.#report(error);
@@ -641,6 +841,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     try {
       this.#reconcile(
         projectDesignPage(this.#input.document, this.#input.pageId),
+        {
+          reapplyAll: true,
+        },
       );
       this.#syncViewport(this.#input.viewport);
       this.#syncSelection(this.#input.selection.nodeIds);
@@ -685,6 +888,14 @@ function toMatrix(transform: Transform) {
   };
 }
 
+function changeSetNodeIds(changes: DesignChangeSet): Set<string> {
+  return new Set([
+    ...changes.addedNodeIds,
+    ...changes.changedNodeIds,
+    ...changes.removedNodeIds,
+  ]);
+}
+
 function normalizeTransform(transform: Transform): Transform {
   return transform.map(normalizeNumber) as Transform;
 }
@@ -701,6 +912,57 @@ function nearlyEqual(left: number, right: number): boolean {
 
 function sameTransform(left: Transform, right: Transform): boolean {
   return left.every((value, index) => nearlyEqual(value, right[index] ?? 0));
+}
+
+function sameStringList(left: readonly string[], right: readonly string[]) {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+function sameProjectionValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => sameProjectionValue(value, right[index]))
+    );
+  }
+  if (
+    left === null ||
+    right === null ||
+    typeof left !== "object" ||
+    typeof right !== "object"
+  ) {
+    return false;
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) =>
+        Object.hasOwn(rightRecord, key) &&
+        sameProjectionValue(leftRecord[key], rightRecord[key]),
+    )
+  );
+}
+
+function lineage(nodeId: string, projection: LeaferSceneProjection): string[] {
+  const result: string[] = [];
+  const visited = new Set<string>();
+  let currentId: string | null = nodeId;
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    result.push(currentId);
+    currentId = projection.elementsById.get(currentId)?.parentId ?? null;
+  }
+  return result;
 }
 
 function sameViewport(left: ViewportState, right: ViewportState): boolean {

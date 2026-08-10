@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
-import { projectDesignPage } from "./mapping.js";
+import {
+  projectDesignPage,
+  projectDesignPageIncrementally,
+} from "./mapping.js";
 
 describe("Leafer scene projection", () => {
   it("projects the authoritative page tree with stable ids and local transforms", () => {
@@ -28,6 +31,125 @@ describe("Leafer scene projection", () => {
         verticalAlign: "top",
       },
     });
+  });
+
+  it("reprojects only nodes named by a contiguous transaction change set", () => {
+    const document = createWelcomeDocument();
+    const previous = projectDesignPage(document, "page_welcome");
+    const next = structuredClone(document);
+    next.revision += 1;
+    const node = next.nodesById.feature_two;
+    const previousNode = document.nodesById.feature_two;
+    if (!node || !previousNode) throw new Error("Missing fixture node");
+    node.opacity = 0.45;
+
+    const projection = projectDesignPageIncrementally(
+      previous,
+      next,
+      "page_welcome",
+      {
+        documentId: next.documentId,
+        fromRevision: document.revision,
+        toRevision: next.revision,
+        addedNodeIds: [],
+        changedNodeIds: [node.id],
+        removedNodeIds: [],
+        changes: [
+          {
+            type: "updated",
+            nodeId: node.id,
+            before: previousNode,
+            after: node,
+            changedFields: ["opacity"],
+          },
+        ],
+      },
+    );
+
+    expect(projection.elementsById.get("feature_one")).toBe(
+      previous.elementsById.get("feature_one"),
+    );
+    expect(projection.elementsById.get("feature_two")).not.toBe(
+      previous.elementsById.get("feature_two"),
+    );
+    expect(projection.elementsById.get("feature_two")?.data.opacity).toBe(0.45);
+    expect(projection.affectedNodeIds).toEqual(new Set(["feature_two"]));
+  });
+
+  it("projects ancestor locks onto the whole subtree and updates that subtree incrementally", () => {
+    const document = createWelcomeDocument();
+    const previous = projectDesignPage(document, "page_welcome");
+    const lockedDocument = structuredClone(document);
+    lockedDocument.revision += 1;
+    const previousFrame = document.nodesById.frame_welcome;
+    const lockedFrame = lockedDocument.nodesById.frame_welcome;
+    if (!previousFrame || !lockedFrame) throw new Error("Missing root frame");
+    lockedFrame.locked = true;
+
+    const lockedProjection = projectDesignPageIncrementally(
+      previous,
+      lockedDocument,
+      "page_welcome",
+      {
+        documentId: lockedDocument.documentId,
+        fromRevision: document.revision,
+        toRevision: lockedDocument.revision,
+        addedNodeIds: [],
+        changedNodeIds: [lockedFrame.id],
+        removedNodeIds: [],
+        changes: [
+          {
+            type: "updated",
+            nodeId: lockedFrame.id,
+            before: previousFrame,
+            after: lockedFrame,
+            changedFields: ["locked"],
+          },
+        ],
+      },
+    );
+
+    expect(
+      lockedProjection.elementsById.get("frame_welcome")?.data.locked,
+    ).toBe(true);
+    expect(lockedProjection.elementsById.get("feature_one")?.data.locked).toBe(
+      true,
+    );
+    expect(lockedProjection.affectedNodeIds).toContain("feature_one");
+
+    const unlockedDocument = structuredClone(lockedDocument);
+    unlockedDocument.revision += 1;
+    const beforeUnlock = lockedDocument.nodesById.frame_welcome;
+    const unlockedFrame = unlockedDocument.nodesById.frame_welcome;
+    if (!beforeUnlock || !unlockedFrame) throw new Error("Missing root frame");
+    unlockedFrame.locked = false;
+    const unlockedProjection = projectDesignPageIncrementally(
+      lockedProjection,
+      unlockedDocument,
+      "page_welcome",
+      {
+        documentId: unlockedDocument.documentId,
+        fromRevision: lockedDocument.revision,
+        toRevision: unlockedDocument.revision,
+        addedNodeIds: [],
+        changedNodeIds: [unlockedFrame.id],
+        removedNodeIds: [],
+        changes: [
+          {
+            type: "updated",
+            nodeId: unlockedFrame.id,
+            before: beforeUnlock,
+            after: unlockedFrame,
+            changedFields: ["locked"],
+          },
+        ],
+      },
+    );
+
+    expect(
+      unlockedProjection.elementsById.get("feature_one")?.data.locked,
+    ).toBe(false);
+    expect(unlockedProjection.affectedNodeIds).toContain("feature_one");
   });
 
   it("does not expose a URI image source directly to the renderer", () => {
@@ -69,6 +191,39 @@ describe("Leafer scene projection", () => {
       fill: "#d9dce2",
     });
     expect(projection.warnings).toContainEqual(
+      expect.objectContaining({ code: "missing-image", nodeId: "image" }),
+    );
+
+    const next = structuredClone(document);
+    next.revision += 1;
+    const nextAsset = next.assetsById.hero;
+    if (!nextAsset || nextAsset.kind !== "image") {
+      throw new Error("Missing image asset fixture");
+    }
+    nextAsset.source = { type: "data", value: "aW1hZ2U=" };
+    const incremental = projectDesignPageIncrementally(
+      projection,
+      next,
+      "page_welcome",
+      {
+        documentId: next.documentId,
+        fromRevision: document.revision,
+        toRevision: next.revision,
+        addedNodeIds: [],
+        changedNodeIds: [],
+        removedNodeIds: [],
+        changedAssetIds: ["hero"],
+        changes: [],
+      },
+    );
+    expect(incremental.elementsById.get("feature_one")).toBe(
+      projection.elementsById.get("feature_one"),
+    );
+    expect(incremental.elementsById.get("image")?.data.fill).toMatchObject({
+      type: "image",
+      url: "data:image/png;base64,aW1hZ2U=",
+    });
+    expect(incremental.warnings).not.toContainEqual(
       expect.objectContaining({ code: "missing-image", nodeId: "image" }),
     );
   });

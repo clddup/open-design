@@ -29,6 +29,7 @@ export class AgentReferenceHost {
   constructor(
     private readonly attachments: AgentAttachmentHost,
     private readonly fetchImplementation: typeof globalThis.fetch = globalThis.fetch,
+    private readonly fetchTimeoutMs = FETCH_TIMEOUT_MS,
   ) {}
 
   registerRun(request: RunStartRequest): void {
@@ -148,54 +149,62 @@ export class AgentReferenceHost {
   ): Promise<AgentImageAttachment> {
     let url = initialUrl;
     for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
-      if (signal.aborted)
-        throw new DOMException("Image read cancelled", "AbortError");
+      throwIfAborted(signal);
       const controller = new AbortController();
-      const abort = () => controller.abort();
+      const abort = () => controller.abort(signal.reason);
       signal.addEventListener("abort", abort, { once: true });
-      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-      let response: Response;
+      const timeout = setTimeout(
+        () =>
+          controller.abort(
+            new DOMException("Remote image read timed out", "TimeoutError"),
+          ),
+        this.fetchTimeoutMs,
+      );
       try {
-        response = await this.fetchImplementation(url, {
+        const response = await this.fetchImplementation(url, {
           redirect: "manual",
           signal: controller.signal,
           headers: {
             accept: "image/avif,image/webp,image/png,image/jpeg,image/gif",
           },
         });
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get("location");
+          if (!location || redirect === MAX_REDIRECTS) {
+            throw new Error("Image URL exceeded the redirect limit");
+          }
+          url = requireHttpUrl(new URL(location, url));
+          continue;
+        }
+        if (!response.ok) {
+          throw new Error(`Image URL returned HTTP ${response.status}`);
+        }
+        const declaredLength = Number(response.headers.get("content-length"));
+        if (
+          Number.isFinite(declaredLength) &&
+          declaredLength > MAX_AGENT_ATTACHMENT_BYTES
+        ) {
+          throw new RangeError("Remote image exceeds the 16 MB limit");
+        }
+        const bytes = await readBoundedBody(
+          response,
+          MAX_AGENT_ATTACHMENT_BYTES,
+          controller.signal,
+        );
+        const selected = await this.attachments.importImageBytes(
+          basename(url.pathname) || "remote-image",
+          bytes,
+        );
+        return {
+          attachmentId: selected.attachmentId,
+          name: selected.name,
+          mimeType: selected.mimeType,
+          byteSize: selected.byteSize,
+        };
       } finally {
         clearTimeout(timeout);
         signal.removeEventListener("abort", abort);
       }
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location");
-        if (!location || redirect === MAX_REDIRECTS) {
-          throw new Error("Image URL exceeded the redirect limit");
-        }
-        url = requireHttpUrl(new URL(location, url));
-        continue;
-      }
-      if (!response.ok) {
-        throw new Error(`Image URL returned HTTP ${response.status}`);
-      }
-      const declaredLength = Number(response.headers.get("content-length"));
-      if (
-        Number.isFinite(declaredLength) &&
-        declaredLength > MAX_AGENT_ATTACHMENT_BYTES
-      ) {
-        throw new RangeError("Remote image exceeds the 16 MB limit");
-      }
-      const bytes = await readBoundedBody(response, MAX_AGENT_ATTACHMENT_BYTES);
-      const selected = await this.attachments.importImageBytes(
-        basename(url.pathname) || "remote-image",
-        bytes,
-      );
-      return {
-        attachmentId: selected.attachmentId,
-        name: selected.name,
-        mimeType: selected.mimeType,
-        byteSize: selected.byteSize,
-      };
     }
     throw new Error("Image URL could not be resolved");
   }
@@ -234,9 +243,12 @@ function requireHttpUrl(url: URL): URL {
 async function readBoundedBody(
   response: Response,
   maximum: number,
+  signal: AbortSignal,
 ): Promise<Uint8Array> {
+  throwIfAborted(signal);
   if (!response.body) {
     const bytes = new Uint8Array(await response.arrayBuffer());
+    throwIfAborted(signal);
     if (bytes.byteLength > maximum) {
       throw new RangeError("Remote image exceeds the 16 MB limit");
     }
@@ -245,15 +257,32 @@ async function readBoundedBody(
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  while (true) {
-    const result = await reader.read();
-    if (result.done) break;
-    total += result.value.byteLength;
-    if (total > maximum) {
-      await reader.cancel();
-      throw new RangeError("Remote image exceeds the 16 MB limit");
+  const abort = () => {
+    void reader.cancel(signal.reason).catch(() => undefined);
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    throwIfAborted(signal);
+    while (true) {
+      let result: ReadableStreamReadResult<Uint8Array>;
+      try {
+        result = await reader.read();
+      } catch (error) {
+        throwIfAborted(signal);
+        throw error;
+      }
+      throwIfAborted(signal);
+      if (result.done) break;
+      total += result.value.byteLength;
+      if (total > maximum) {
+        await reader.cancel();
+        throw new RangeError("Remote image exceeds the 16 MB limit");
+      }
+      chunks.push(result.value);
     }
-    chunks.push(result.value);
+  } finally {
+    signal.removeEventListener("abort", abort);
+    reader.releaseLock();
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -262,4 +291,10 @@ async function readBoundedBody(
     offset += chunk.byteLength;
   }
   return bytes;
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new DOMException("Image read cancelled", "AbortError");
 }

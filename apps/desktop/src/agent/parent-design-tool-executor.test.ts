@@ -19,6 +19,7 @@ describe("ParentDesignToolExecutor", () => {
         documentId: "document_1",
         revision: 0,
         scope: { kind: "document", selectedNodeIds: [] },
+        mutationTarget: { kind: "document" },
       },
       new AbortController().signal,
     );
@@ -54,5 +55,45 @@ describe("ParentDesignToolExecutor", () => {
       done: true,
       value: undefined,
     });
+  });
+
+  it("terminates a tool call when Main returns an invalid correlated response", async () => {
+    const messages: unknown[] = [];
+    const executor = new ParentDesignToolExecutor({
+      postMessage: (message) => messages.push(message),
+    });
+    const stream = executor.execute(
+      {
+        toolCallId: "tool_call_invalid",
+        toolName: "opendesign_inspect_document",
+        input: {},
+      },
+      {
+        runId: "run_invalid",
+        sessionId: "conversation_invalid",
+        documentId: "document_invalid",
+        revision: 0,
+        scope: { kind: "document", selectedNodeIds: [] },
+        mutationTarget: { kind: "document" },
+      },
+      new AbortController().signal,
+    );
+    const iterator = stream[Symbol.asyncIterator]();
+
+    await expect(iterator.next()).resolves.toMatchObject({
+      done: false,
+      value: { type: "progress" },
+    });
+    const request = messages[0] as { requestId: string };
+    expect(
+      executor.handleMessage({
+        type: "design-tool.response",
+        requestId: request.requestId,
+        ok: "yes",
+      }),
+    ).toBe(true);
+    await expect(iterator.next()).rejects.toThrow(
+      "Design tool host returned an invalid response",
+    );
   });
 });

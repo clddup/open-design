@@ -1,4 +1,5 @@
 import type {
+  DesignChangeSet,
   DesignNode,
   EllipseNode,
   FrameNode,
@@ -35,6 +36,7 @@ export function Canvas({
   const host = useRef<HTMLElement>(null);
   const adapter = useRef<LeaferEngineAdapter | null>(null);
   const latestInput = useRef<LeaferEngineSyncInput | null>(null);
+  const changesByRevision = useRef(new Map<number, DesignChangeSet>());
   const transactionSequence = useRef(0);
   const [renderError, setRenderError] = useState<string | null>(null);
   const tool = isTool(snapshot.state.tool) ? snapshot.state.tool : "select";
@@ -120,6 +122,22 @@ export function Canvas({
   );
 
   useEffect(() => {
+    changesByRevision.current.clear();
+    return runtime.subscribe((event) => {
+      if (event.type !== "document.changed") return;
+      changesByRevision.current.set(
+        event.result.changes.toRevision,
+        event.result.changes,
+      );
+      if (changesByRevision.current.size <= 8) return;
+      const oldest = [...changesByRevision.current.keys()].sort(
+        (left, right) => left - right,
+      )[0];
+      if (oldest !== undefined) changesByRevision.current.delete(oldest);
+    });
+  }, [runtime]);
+
+  useEffect(() => {
     const element = host.current;
     if (!element) return;
     let disposed = false;
@@ -161,8 +179,10 @@ export function Canvas({
   }, [applyOperations, createNode, runtime, t, updateViewport]);
 
   useEffect(() => {
+    const changes = changesByRevision.current.get(snapshot.document.revision);
     const input: LeaferEngineSyncInput = {
       document: snapshot.document,
+      ...(changes ? { changes } : {}),
       pageId: activePageId,
       selection: snapshot.state.selection,
       tool,

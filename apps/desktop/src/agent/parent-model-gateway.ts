@@ -5,6 +5,8 @@ import type {
 } from "@opendesign/model-gateway";
 import {
   isModelBridgeResponse,
+  modelBridgeResponseId,
+  modelBridgeResponseValidationError,
   type ModelBridgeRequest,
 } from "../shared/model-bridge.js";
 
@@ -26,9 +28,23 @@ export class ParentModelGateway implements ModelGateway {
   constructor(private readonly port: ParentPortLike) {}
 
   handleMessage(message: unknown): boolean {
-    if (!isModelBridgeResponse(message)) return false;
-    const pending = this.#pending.get(message.requestId);
+    const requestId = modelBridgeResponseId(message);
+    if (!requestId) return false;
+    const pending = this.#pending.get(requestId);
     if (!pending) return true;
+    if (!isModelBridgeResponse(message)) {
+      enqueue(pending, {
+        type: "attempt.failed",
+        attemptId: pending.attemptId,
+        error: {
+          code: "model_bridge_invalid_response",
+          message: `Model host returned an invalid response: ${modelBridgeResponseValidationError(message)}`,
+          retryable: true,
+        },
+      });
+      complete(pending);
+      return true;
+    }
     if (message.type === "model.event") {
       enqueue(pending, message.event);
       return true;

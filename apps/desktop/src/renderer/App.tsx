@@ -32,10 +32,16 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import type { RecentProject, ThemePreference } from "../shared/desktop-api";
+import type {
+  DiagnosticContext,
+  DiagnosticEvent,
+  RecentProject,
+  ThemePreference,
+} from "../shared/desktop-api";
 import type { MessageKey } from "../shared/i18n/messages";
 import { AgentTimeline } from "./components/AgentTimeline";
 import { Canvas } from "./components/Canvas";
+import { DiagnosticNotifications } from "./components/DiagnosticNotifications";
 import { DesignFileTabs } from "./components/DesignFileTabs";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { ProjectHome } from "./components/ProjectHome";
@@ -136,6 +142,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     null,
   );
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
+    [],
+  );
   const runCounter = useRef(0);
   const settingsReturnView = useRef<Exclude<AppView, "settings">>("workspace");
   const transactionCounter = useRef(0);
@@ -173,15 +182,53 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       ?.listRecentProjects()
       .then(setRecentProjects)
       .catch((error: unknown) => {
-        setWorkspaceError(errorMessage(error, t("error.loadRecentProjects")));
+        setWorkspaceError(
+          reportRendererError(
+            "recent_projects_load_failed",
+            error,
+            t("error.loadRecentProjects"),
+          ),
+        );
       });
     void window.desktop
       ?.listGlobalTasks()
       .then(setGlobalTasks)
       .catch((error: unknown) => {
-        setWorkspaceError(errorMessage(error, t("error.loadGlobalTasks")));
+        setWorkspaceError(
+          reportRendererError(
+            "global_tasks_load_failed",
+            error,
+            t("error.loadGlobalTasks"),
+          ),
+        );
       });
   }, [t]);
+
+  useEffect(() => {
+    const desktop = window.desktop;
+    if (!desktop || typeof desktop.onDiagnosticEvent !== "function") return;
+    let active = true;
+    const receive = (event: DiagnosticEvent) => {
+      if (!active || event.presentation !== "toast") return;
+      setDiagnosticEvents((current) =>
+        [
+          ...current.filter((candidate) => candidate.eventId !== event.eventId),
+          event,
+        ].slice(-4),
+      );
+    };
+    const unsubscribe = desktop.onDiagnosticEvent(receive);
+    if (typeof desktop.getPendingDiagnostics === "function") {
+      void desktop
+        .getPendingDiagnostics()
+        .then((events) => events.forEach(receive))
+        .catch(() => undefined);
+    }
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     return window.desktop?.onNativeThemeChange((isDark) => {
@@ -233,8 +280,27 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       if (!conversationId) {
         if (event.type === "agent.error") {
           setAgentRuntimeError(event.message);
+          if (event.runId === undefined && event.requestId === undefined) {
+            setAgentByConversationId((current) =>
+              Object.fromEntries(
+                Object.entries(current).map(([id, state]) => [
+                  id,
+                  state.activeRunId
+                    ? { ...state, activeRunId: null, error: event.message }
+                    : state,
+                ]),
+              ),
+            );
+          }
         }
         return;
+      }
+
+      const activityAt = agentEventActivityAt(event);
+      if (activityAt) {
+        setConversationsByProjectId((current) =>
+          touchConversationCollections(current, conversationId, activityAt),
+        );
       }
 
       if (
@@ -294,12 +360,26 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         )
         .then(
           (response) => desktop.resolveDesignToolRequest(response),
-          (error: unknown) =>
-            desktop.resolveDesignToolRequest({
+          (error: unknown) => {
+            const message = reportRendererError(
+              "design_tool_execution_failed",
+              error,
+              "Design tool execution failed",
+              {
+                conversationId: request.context.sessionId,
+                runId: request.context.runId,
+                requestId: request.requestId,
+                toolCallId: request.call.toolCallId,
+              },
+              "silent",
+              "warning",
+            );
+            return desktop.resolveDesignToolRequest({
               requestId: request.requestId,
               ok: false,
-              error: errorMessage(error, "Design tool execution failed"),
-            }),
+              error: message,
+            });
+          },
         )
         .finally(() => {
           if (
@@ -597,7 +677,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         setAgentByConversationId((current) =>
           updateConversationAgentState(current, conversationId, (previous) => ({
             ...previous,
-            error: errorMessage(error, t("error.loadConversationHistory")),
+            error: reportRendererError(
+              "conversation_history_load_failed",
+              error,
+              t("error.loadConversationHistory"),
+              { conversationId, requestId },
+            ),
           })),
         );
       }
@@ -634,7 +719,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         if (selectedId) void requestConversationHistory(selectedId);
       } catch (error) {
         setWorkspaceError(
-          errorMessage(error, t("error.loadProjectConversations")),
+          reportRendererError(
+            "project_conversations_load_failed",
+            error,
+            t("error.loadProjectConversations"),
+            { projectId },
+          ),
         );
       }
     },
@@ -673,7 +763,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         await refreshRecentProjects();
         return true;
       } catch (error) {
-        setWorkspaceError(errorMessage(error, t("error.createProject")));
+        setWorkspaceError(
+          reportRendererError(
+            "project_create_failed",
+            error,
+            t("error.createProject"),
+          ),
+        );
         return false;
       } finally {
         setWorkspaceBusy(false);
@@ -692,7 +788,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       showProject(manifest);
       await refreshRecentProjects();
     } catch (error) {
-      setWorkspaceError(errorMessage(error, t("error.openProject")));
+      setWorkspaceError(
+        reportRendererError(
+          "project_open_failed",
+          error,
+          t("error.openProject"),
+        ),
+      );
     } finally {
       setWorkspaceBusy(false);
     }
@@ -708,7 +810,14 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         showProject(manifest);
         await refreshRecentProjects();
       } catch (error) {
-        setWorkspaceError(errorMessage(error, t("error.reopenProject")));
+        setWorkspaceError(
+          reportRendererError(
+            "recent_project_open_failed",
+            error,
+            t("error.reopenProject"),
+            { projectId },
+          ),
+        );
       } finally {
         setWorkspaceBusy(false);
       }
@@ -728,7 +837,14 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         setRecentProjects(projects);
         return true;
       } catch (error) {
-        setWorkspaceError(errorMessage(error, t("error.removeProject")));
+        setWorkspaceError(
+          reportRendererError(
+            "recent_project_remove_failed",
+            error,
+            t("error.removeProject"),
+            { projectId },
+          ),
+        );
         return false;
       } finally {
         setWorkspaceBusy(false);
@@ -743,7 +859,14 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       void window.desktop
         ?.revealRecentProject({ projectId })
         .catch((error: unknown) => {
-          setWorkspaceError(errorMessage(error, t("error.revealProject")));
+          setWorkspaceError(
+            reportRendererError(
+              "recent_project_reveal_failed",
+              error,
+              t("error.revealProject"),
+              { projectId },
+            ),
+          );
         });
     },
     [t],
@@ -774,7 +897,14 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         void requestConversationHistory(conversation.conversationId);
         return true;
       } catch (error) {
-        setWorkspaceError(errorMessage(error, t("error.createConversation")));
+        setWorkspaceError(
+          reportRendererError(
+            "conversation_create_failed",
+            error,
+            t("error.createConversation"),
+            { projectId: activeProject.projectId },
+          ),
+        );
         return false;
       } finally {
         setWorkspaceBusy(false);
@@ -811,7 +941,18 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         showProject(manifest, task.conversationId);
         await refreshRecentProjects();
       } catch (error) {
-        setWorkspaceError(errorMessage(error, t("error.openAgentTask")));
+        setWorkspaceError(
+          reportRendererError(
+            "agent_task_open_failed",
+            error,
+            t("error.openAgentTask"),
+            {
+              projectId: task.homeProjectId,
+              conversationId: task.conversationId,
+              runId: task.runId,
+            },
+          ),
+        );
       } finally {
         setWorkspaceBusy(false);
       }
@@ -846,7 +987,14 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         setFileName(file.descriptor.name);
         setView("editor");
       } catch (error) {
-        setWorkspaceError(errorMessage(error, t("error.openDesignFile")));
+        setWorkspaceError(
+          reportRendererError(
+            "design_file_open_failed",
+            error,
+            t("error.openDesignFile"),
+            { projectId: activeProject.projectId, designFileId },
+          ),
+        );
       } finally {
         setWorkspaceBusy(false);
       }
@@ -865,7 +1013,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       setFileName(file.name);
       setView("editor");
     } catch (error) {
-      setEditorError(errorMessage(error, t("error.openDesignDocument")));
+      setEditorError(
+        reportRendererError(
+          "design_document_open_failed",
+          error,
+          t("error.openDesignDocument"),
+        ),
+      );
     }
   };
 
@@ -918,7 +1072,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       );
       runtime.checkpoint(t("history.saved", { name: result.name }));
     } catch (error) {
-      setEditorError(errorMessage(error, t("error.saveDesignDocument")));
+      setEditorError(
+        reportRendererError(
+          "design_document_save_failed",
+          error,
+          t("error.saveDesignDocument"),
+          {
+            projectId: workspaceSnapshot.activeProjectId,
+            designFileId: workspaceSnapshot.activeDesignFileId,
+          },
+        ),
+      );
     }
   };
 
@@ -951,6 +1115,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       documentId: current.document.documentId,
       revision: current.document.revision,
       scope: selectionScope(current, activePageId),
+      mutationTarget: activePageId
+        ? { kind: "page", pageId: activePageId }
+        : { kind: "document" },
       modelSelection,
     };
     conversationIdByRunId.current.set(runId, conversationId);
@@ -980,6 +1147,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           documentId: current.document.documentId,
           revision: current.document.revision,
           scope: request.scope,
+          mutationTarget: request.mutationTarget,
         };
         return {
           ...previous,
@@ -996,6 +1164,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     );
     try {
       await window.desktop.sendAgentRequest(request);
+      setConversationsByProjectId((conversations) =>
+        touchConversationCollections(conversations, conversationId, createdAt),
+      );
       void refreshGlobalTasks();
       return true;
     } catch (error) {
@@ -1008,7 +1179,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             ...previous,
             activeRunId:
               previous.activeRunId === runId ? null : previous.activeRunId,
-            error: errorMessage(error, t("error.agentRuntime")),
+            error: reportRendererError(
+              "agent_request_failed",
+              error,
+              t("error.agentRuntime"),
+              { conversationId, runId },
+            ),
           }),
         ),
       );
@@ -1016,73 +1192,102 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     }
   };
 
-  const stopAgentTask = () => {
+  const stopAgentTask = async () => {
     const runId = activeAgentState.activeRunId;
-    if (!runId || !activeConversation) return;
+    if (!runId || !activeConversation || !window.desktop) return false;
     const conversationId = activeConversation.conversationId;
-    void window.desktop
-      ?.sendAgentRequest({ type: "run.cancel", runId })
-      .catch((error: unknown) => {
-        setAgentByConversationId((current) =>
-          updateConversationAgentState(current, conversationId, (previous) => ({
-            ...previous,
-            error: errorMessage(error, t("error.stopAgent")),
-          })),
-        );
-      });
+    try {
+      await window.desktop.sendAgentRequest({ type: "run.cancel", runId });
+      return true;
+    } catch (error) {
+      setAgentByConversationId((current) =>
+        updateConversationAgentState(current, conversationId, (previous) => ({
+          ...previous,
+          error: reportRendererError(
+            "agent_cancel_failed",
+            error,
+            t("error.stopAgent"),
+            { conversationId, runId },
+          ),
+        })),
+      );
+      return false;
+    }
   };
+
+  const dismissDiagnostic = useCallback((eventId: string) => {
+    setDiagnosticEvents((current) =>
+      current.filter((event) => event.eventId !== eventId),
+    );
+  }, []);
+
+  const notifications = (
+    <DiagnosticNotifications
+      events={diagnosticEvents}
+      onDismiss={dismissDiagnostic}
+    />
+  );
 
   if (view === "settings") {
     return (
-      <SettingsPage
-        onClose={() => setView(settingsReturnView.current)}
-        onThemeChange={changeTheme}
-        theme={theme}
-      />
+      <>
+        <SettingsPage
+          onClose={() => setView(settingsReturnView.current)}
+          onThemeChange={changeTheme}
+          theme={theme}
+        />
+        {notifications}
+      </>
     );
   }
 
   if (view === "workspace") {
     return (
-      <WorkspaceHome
-        busy={workspaceBusy}
-        error={workspaceError}
-        globalTasks={globalTasks}
-        onCreateProject={createProject}
-        onOpenDesignFile={() => void openDocument()}
-        onOpenGlobalTask={(task) => void openGlobalTask(task)}
-        onOpenProject={() => void openProject()}
-        onOpenRecentProject={(projectId) => void openRecentProject(projectId)}
-        onRemoveRecentProject={removeRecentProject}
-        onRevealRecentProject={revealRecentProject}
-        onSettings={openSettings}
-        onThemeChange={changeTheme}
-        platform={platform}
-        recentProjects={recentProjects}
-        theme={theme}
-      />
+      <>
+        <WorkspaceHome
+          busy={workspaceBusy}
+          error={workspaceError}
+          globalTasks={globalTasks}
+          onCreateProject={createProject}
+          onOpenDesignFile={() => void openDocument()}
+          onOpenGlobalTask={(task) => void openGlobalTask(task)}
+          onOpenProject={() => void openProject()}
+          onOpenRecentProject={(projectId) => void openRecentProject(projectId)}
+          onRemoveRecentProject={removeRecentProject}
+          onRevealRecentProject={revealRecentProject}
+          onSettings={openSettings}
+          onThemeChange={changeTheme}
+          platform={platform}
+          recentProjects={recentProjects}
+          theme={theme}
+        />
+        {notifications}
+      </>
     );
   }
 
   if (view === "project" && activeProject) {
     return (
-      <ProjectHome
-        activeConversationId={activeConversationId}
-        busy={workspaceBusy}
-        conversations={projectConversations}
-        error={workspaceError}
-        manifest={activeProject}
-        onBack={() => setView("workspace")}
-        onCreateConversation={createConversation}
-        onOpenDesignFile={(designFileId) =>
-          void openProjectDesignFile(designFileId)
-        }
-        onSelectConversation={selectConversation}
-        onSettings={openSettings}
-        onThemeChange={changeTheme}
-        platform={platform}
-        theme={theme}
-      />
+      <>
+        <ProjectHome
+          activeConversationId={activeConversationId}
+          busy={workspaceBusy}
+          conversations={projectConversations}
+          error={workspaceError}
+          manifest={activeProject}
+          onBack={() => setView("workspace")}
+          onCreateConversation={createConversation}
+          onOpenDesignFile={(designFileId) =>
+            void openProjectDesignFile(designFileId)
+          }
+          onSelectConversation={selectConversation}
+          onSettings={openSettings}
+          onThemeChange={changeTheme}
+          platform={platform}
+          theme={theme}
+        />
+        {notifications}
+      </>
     );
   }
 
@@ -1092,196 +1297,199 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const pageName = designDocument.pagesById[activePageId]?.name;
 
   return (
-    <div
-      className="app-shell"
-      style={
-        {
-          "--left-width": `${leftWidth}px`,
-          "--utility-width": `${utilityWidth}px`,
-        } as CSSProperties
-      }
-    >
-      <Titlebar
-        dirty={state.dirty}
-        documentName={documentName}
-        onOpen={activeProject ? undefined : () => void openDocument()}
-        onProject={activeProject ? () => setView("project") : undefined}
-        onSave={() => void saveDocument(false)}
-        onSaveAs={activeProject ? undefined : () => void saveDocument(true)}
-        onSettings={openSettings}
-        onThemeChange={changeTheme}
-        onWorkspace={() => setView("workspace")}
-        pageName={pageName}
-        platform={platform}
-        projectName={activeProject?.name}
-        theme={theme}
-      />
-      <Toolbar
-        canDelete={state.selection.nodeIds.length > 0}
-        canDuplicate={state.selection.nodeIds.length > 0}
-        canRedo={state.history.canRedo}
-        canUndo={state.history.canUndo}
-        onDelete={() => deleteNodes(state.selection.nodeIds)}
-        onDuplicate={duplicateSelection}
-        onRedo={() => runtime.redo()}
-        onToolChange={(next) => runtime.setTool(next)}
-        onUndo={() => runtime.undo()}
-        tool={tool}
-      />
-      <div className="workspace">
-        <LeftSidebar
-          activePageId={activePageId}
-          document={designDocument}
-          onPageChange={activatePage}
-          onDelete={(nodeId) => deleteNodes([nodeId])}
-          onSelect={(nodeId) => runtime.setSelection([nodeId], nodeId)}
-          onTabChange={setSidebarTab}
-          onToggleLock={(nodeId) => {
-            const node = designDocument.nodesById[nodeId];
-            if (node) updateNode(nodeId, { locked: !node.locked });
-          }}
-          onToggleVisibility={(nodeId) => {
-            const node = designDocument.nodesById[nodeId];
-            if (node) updateNode(nodeId, { visible: !node.visible });
-          }}
-          selectedNodeIds={state.selection.nodeIds}
-          tab={sidebarTab}
+    <>
+      <div
+        className="app-shell"
+        style={
+          {
+            "--left-width": `${leftWidth}px`,
+            "--utility-width": `${utilityWidth}px`,
+          } as CSSProperties
+        }
+      >
+        <Titlebar
+          dirty={state.dirty}
+          documentName={documentName}
+          onOpen={activeProject ? undefined : () => void openDocument()}
+          onProject={activeProject ? () => setView("project") : undefined}
+          onSave={() => void saveDocument(false)}
+          onSaveAs={activeProject ? undefined : () => void saveDocument(true)}
+          onSettings={openSettings}
+          onThemeChange={changeTheme}
+          onWorkspace={() => setView("workspace")}
+          pageName={pageName}
+          platform={platform}
+          projectName={activeProject?.name}
+          theme={theme}
         />
-        <ResizeHandle
-          label={t("resize.documentSidebar")}
-          max={360}
-          min={184}
-          onChange={setLeftWidth}
-          orientation="vertical"
-          value={leftWidth}
+        <Toolbar
+          canDelete={state.selection.nodeIds.length > 0}
+          canDuplicate={state.selection.nodeIds.length > 0}
+          canRedo={state.history.canRedo}
+          canUndo={state.history.canUndo}
+          onDelete={() => deleteNodes(state.selection.nodeIds)}
+          onDuplicate={duplicateSelection}
+          onRedo={() => runtime.redo()}
+          onToolChange={(next) => runtime.setTool(next)}
+          onUndo={() => runtime.undo()}
+          tool={tool}
         />
-        <div className="workspace__center">
-          <DesignFileTabs
-            onActivate={activateDesignFile}
-            snapshot={workspaceSnapshot}
-          />
-          <Canvas
+        <div className="workspace">
+          <LeftSidebar
             activePageId={activePageId}
-            onTransactionError={setEditorError}
-            runtime={runtime}
-            snapshot={snapshot}
+            document={designDocument}
+            onPageChange={activatePage}
+            onDelete={(nodeId) => deleteNodes([nodeId])}
+            onSelect={(nodeId) => runtime.setSelection([nodeId], nodeId)}
+            onTabChange={setSidebarTab}
+            onToggleLock={(nodeId) => {
+              const node = designDocument.nodesById[nodeId];
+              if (node) updateNode(nodeId, { locked: !node.locked });
+            }}
+            onToggleVisibility={(nodeId) => {
+              const node = designDocument.nodesById[nodeId];
+              if (node) updateNode(nodeId, { visible: !node.visible });
+            }}
+            selectedNodeIds={state.selection.nodeIds}
+            tab={sidebarTab}
+          />
+          <ResizeHandle
+            label={t("resize.documentSidebar")}
+            max={360}
+            min={184}
+            onChange={setLeftWidth}
+            orientation="vertical"
+            value={leftWidth}
+          />
+          <div className="workspace__center">
+            <DesignFileTabs
+              onActivate={activateDesignFile}
+              snapshot={workspaceSnapshot}
+            />
+            <Canvas
+              activePageId={activePageId}
+              onTransactionError={setEditorError}
+              runtime={runtime}
+              snapshot={snapshot}
+            />
+          </div>
+          <ResizeHandle
+            invert
+            label={t("resize.utilityDock")}
+            max={400}
+            min={280}
+            onChange={setUtilityWidth}
+            orientation="vertical"
+            value={utilityWidth}
+          />
+          <UtilityDock
+            activeTab={utilityTab}
+            agent={
+              <AgentTimeline
+                activeRunId={activeAgentState.activeRunId}
+                conversationId={activeConversation?.conversationId ?? null}
+                conversationTitle={activeConversation?.title ?? null}
+                conversations={projectConversations}
+                error={activeAgentState.error ?? agentRuntimeError}
+                events={activeAgentState.events}
+                onCreateConversation={
+                  activeProject
+                    ? () =>
+                        createConversation(
+                          t("agent.defaultConversationTitle", {
+                            count: projectConversations.length + 1,
+                          }),
+                        )
+                    : undefined
+                }
+                onSelectConversation={selectConversation}
+                onStop={stopAgentTask}
+                onSubmit={submitAgentTask}
+                scope={
+                  state.selection.nodeIds.length > 0
+                    ? {
+                        kind: "selection",
+                        count: state.selection.nodeIds.length,
+                      }
+                    : { kind: "page", ...(pageName ? { name: pageName } : {}) }
+                }
+                timeline={activeAgentState.timeline}
+              />
+            }
+            agentRunning={Boolean(activeAgentState.activeRunId)}
+            onTabChange={setUtilityTab}
+            properties={
+              <PropertiesPanel
+                node={selectedNode}
+                onAlign={alignSelection}
+                onDelete={() => deleteNodes(state.selection.nodeIds)}
+                onDuplicate={duplicateSelection}
+                onUpdate={(updates) => {
+                  if (selectedNode) updateNode(selectedNode.id, updates);
+                }}
+                selectionCount={state.selection.nodeIds.length}
+              />
+            }
           />
         </div>
-        <ResizeHandle
-          invert
-          label={t("resize.utilityDock")}
-          max={400}
-          min={280}
-          onChange={setUtilityWidth}
-          orientation="vertical"
-          value={utilityWidth}
-        />
-        <UtilityDock
-          activeTab={utilityTab}
-          agent={
-            <AgentTimeline
-              activeRunId={activeAgentState.activeRunId}
-              conversationId={activeConversation?.conversationId ?? null}
-              conversationTitle={activeConversation?.title ?? null}
-              conversations={projectConversations}
-              error={activeAgentState.error ?? agentRuntimeError}
-              events={activeAgentState.events}
-              onCreateConversation={
-                activeProject
-                  ? () =>
-                      createConversation(
-                        t("agent.defaultConversationTitle", {
-                          count: projectConversations.length + 1,
-                        }),
-                      )
-                  : undefined
-              }
-              onSelectConversation={selectConversation}
-              onStop={stopAgentTask}
-              onSubmit={submitAgentTask}
-              scope={
-                state.selection.nodeIds.length > 0
-                  ? {
-                      kind: "selection",
-                      count: state.selection.nodeIds.length,
-                    }
-                  : { kind: "page", ...(pageName ? { name: pageName } : {}) }
-              }
-              timeline={activeAgentState.timeline}
-            />
-          }
-          agentRunning={Boolean(activeAgentState.activeRunId)}
-          onTabChange={setUtilityTab}
-          properties={
-            <PropertiesPanel
-              node={selectedNode}
-              onAlign={alignSelection}
-              onDelete={() => deleteNodes(state.selection.nodeIds)}
-              onDuplicate={duplicateSelection}
-              onUpdate={(updates) => {
-                if (selectedNode) updateNode(selectedNode.id, updates);
-              }}
-              selectionCount={state.selection.nodeIds.length}
-            />
-          }
-        />
-      </div>
-      <footer className="statusbar">
-        <span className={editorError ? "statusbar__error" : undefined}>
-          <i />
-          {editorError ??
-            (state.dirty ? t("title.unsaved") : t("status.allSaved"))}
-        </span>
-        <span className="statusbar__center">
-          {selectedNode
-            ? t("status.selectedNode", {
-                name: selectedNode.name,
-                kind: t(nodeKindKeys[selectedNode.kind] ?? "node.frame"),
-              })
-            : state.selection.nodeIds.length > 1
-              ? t("status.layersSelected", {
-                  count: state.selection.nodeIds.length,
+        <footer className="statusbar">
+          <span className={editorError ? "statusbar__error" : undefined}>
+            <i />
+            {editorError ??
+              (state.dirty ? t("title.unsaved") : t("status.allSaved"))}
+          </span>
+          <span className="statusbar__center">
+            {selectedNode
+              ? t("status.selectedNode", {
+                  name: selectedNode.name,
+                  kind: t(nodeKindKeys[selectedNode.kind] ?? "node.frame"),
                 })
-              : t("status.revision", { revision: designDocument.revision })}
-        </span>
-        <span>
-          {t("status.canvas")}{" "}
-          <button
-            aria-label={t("status.fitPage")}
-            onClick={() => fitCanvas("page")}
-          >
-            {t("status.fit")}
-          </button>
-          {state.selection.nodeIds.length > 0 && (
+              : state.selection.nodeIds.length > 1
+                ? t("status.layersSelected", {
+                    count: state.selection.nodeIds.length,
+                  })
+                : t("status.revision", { revision: designDocument.revision })}
+          </span>
+          <span>
+            {t("status.canvas")}{" "}
             <button
-              aria-label={t("status.fitSelection")}
-              onClick={() => fitCanvas("selection")}
+              aria-label={t("status.fitPage")}
+              onClick={() => fitCanvas("page")}
             >
-              {t("status.selection")}
+              {t("status.fit")}
             </button>
-          )}
-          <button
-            aria-label={t("status.zoomOut")}
-            onClick={() => changeZoom(state.viewport.zoom * 0.9)}
-          >
-            −
-          </button>
-          <button
-            aria-label={t("status.zoomReset")}
-            className="zoom-value"
-            onClick={() => changeZoom(1)}
-          >
-            {Math.round(state.viewport.zoom * 100)}%
-          </button>
-          <button
-            aria-label={t("status.zoomIn")}
-            onClick={() => changeZoom(state.viewport.zoom * 1.1)}
-          >
-            +
-          </button>
-        </span>
-      </footer>
-    </div>
+            {state.selection.nodeIds.length > 0 && (
+              <button
+                aria-label={t("status.fitSelection")}
+                onClick={() => fitCanvas("selection")}
+              >
+                {t("status.selection")}
+              </button>
+            )}
+            <button
+              aria-label={t("status.zoomOut")}
+              onClick={() => changeZoom(state.viewport.zoom * 0.9)}
+            >
+              −
+            </button>
+            <button
+              aria-label={t("status.zoomReset")}
+              className="zoom-value"
+              onClick={() => changeZoom(1)}
+            >
+              {Math.round(state.viewport.zoom * 100)}%
+            </button>
+            <button
+              aria-label={t("status.zoomIn")}
+              onClick={() => changeZoom(state.viewport.zoom * 1.1)}
+            >
+              +
+            </button>
+          </span>
+        </footer>
+      </div>
+      {notifications}
+    </>
   );
 }
 
@@ -1481,6 +1689,54 @@ function updateConversationAgentState(
   };
 }
 
+function touchConversationCollections(
+  current: Readonly<Record<string, ConversationDescriptor[]>>,
+  conversationId: string,
+  updatedAt: string,
+): Readonly<Record<string, ConversationDescriptor[]>> {
+  let changed = false;
+  const collections = Object.fromEntries(
+    Object.entries(current).map(([projectId, conversations]) => {
+      const conversation = conversations.find(
+        (candidate) => candidate.conversationId === conversationId,
+      );
+      if (!conversation || conversation.updatedAt >= updatedAt) {
+        return [projectId, conversations];
+      }
+      changed = true;
+      return [
+        projectId,
+        conversations
+          .map((candidate) =>
+            candidate.conversationId === conversationId
+              ? { ...candidate, updatedAt }
+              : candidate,
+          )
+          .sort(
+            (left, right) =>
+              right.updatedAt.localeCompare(left.updatedAt) ||
+              left.conversationId.localeCompare(right.conversationId),
+          ),
+      ];
+    }),
+  );
+  return changed ? collections : current;
+}
+
+function agentEventActivityAt(event: AgentEvent): string | null {
+  if (event.type === "run.started") return event.startedAt;
+  if (event.type === "run.completed") return event.finishedAt;
+  if (
+    event.type === "message.completed" ||
+    event.type === "tool.completed" ||
+    event.type === "tool.failed" ||
+    event.type === "agent.error"
+  ) {
+    return new Date().toISOString();
+  }
+  return null;
+}
+
 function errorMessage(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
   const message = error.message
@@ -1494,5 +1750,26 @@ function errorMessage(error: unknown, fallback: string) {
   ) {
     return fallback;
   }
+  return message;
+}
+
+function reportRendererError(
+  code: string,
+  error: unknown,
+  fallback: string,
+  context?: DiagnosticContext,
+  presentation: "silent" | "toast" = "toast",
+  level: "warning" | "error" = "error",
+): string {
+  const message = errorMessage(error, fallback);
+  void window.desktop
+    ?.reportDiagnostic?.({
+      level,
+      presentation,
+      code,
+      message,
+      ...(context ? { context } : {}),
+    })
+    .catch(() => undefined);
   return message;
 }

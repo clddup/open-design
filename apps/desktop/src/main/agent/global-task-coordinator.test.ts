@@ -42,6 +42,48 @@ async function setup() {
 }
 
 describe("GlobalTaskCoordinator", () => {
+  it("moves the active Conversation to the front when a new Run starts", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    store.createConversation({
+      conversationId: "conversation_recent",
+      homeProjectId: "project_acme",
+      title: "A newer idle conversation",
+      createdAt: "2026-08-08T12:00:00.000Z",
+      updatedAt: "2026-08-08T12:00:00.000Z",
+      lifecycle: "active",
+    });
+    const coordinator = new GlobalTaskCoordinator(
+      host,
+      store,
+      () => new Date("2026-08-10T01:00:00.000Z"),
+    );
+
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_reorder",
+      sessionId: "conversation_mobile",
+      prompt: "Continue the older Conversation",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+
+    expect(
+      store
+        .listConversations("project_acme")
+        .map((conversation) => [
+          conversation.conversationId,
+          conversation.updatedAt,
+        ]),
+    ).toEqual([
+      ["conversation_mobile", "2026-08-10T01:00:00.000Z"],
+      ["conversation_recent", "2026-08-08T12:00:00.000Z"],
+    ]);
+    store.close();
+  });
+
   it("persists trusted run identity and terminal lifecycle transitions", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
@@ -54,6 +96,7 @@ describe("GlobalTaskCoordinator", () => {
       revision: opened.document.revision,
       modelSelection,
       scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
     });
 
     expect(task).toMatchObject({
@@ -77,6 +120,7 @@ describe("GlobalTaskCoordinator", () => {
       documentId: file.documentId,
       revision: opened.document.revision,
       scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
     };
     expect(() =>
       coordinator.assertDesignToolContext(toolContext),
@@ -154,6 +198,7 @@ describe("GlobalTaskCoordinator", () => {
         revision: opened.document.revision,
         modelSelection,
         scope: { kind: "page", pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId },
       }),
     ).rejects.toThrow("Agent run requires an active Conversation");
     await expect(
@@ -166,6 +211,7 @@ describe("GlobalTaskCoordinator", () => {
         revision: opened.document.revision - 1,
         modelSelection,
         scope: { kind: "page", pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId },
       }),
     ).rejects.toThrow("Agent run revision is stale");
     await expect(
@@ -178,6 +224,7 @@ describe("GlobalTaskCoordinator", () => {
         revision: opened.document.revision + 1,
         modelSelection,
         scope: { kind: "page", pageId, selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId },
       }),
     ).resolves.toMatchObject({
       runId: "run_live_unsaved",
@@ -200,6 +247,7 @@ describe("GlobalTaskCoordinator", () => {
           selectedNodeIds: ["node_missing"],
           primaryNodeId: "node_missing",
         },
+        mutationTarget: { kind: "page", pageId },
       }),
     ).rejects.toThrow("Agent run selection is outside the target page");
 
@@ -212,8 +260,34 @@ describe("GlobalTaskCoordinator", () => {
       revision: opened.document.revision,
       modelSelection,
       scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
     });
     new GlobalTaskCoordinator(host, store).reconcileInterruptedTasks();
+    expect(store.listGlobalTasks()[0]?.lifecycle).toBe("interrupted");
+    store.close();
+  });
+
+  it("interrupts every active task when a process-level Agent error has no run ID", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_process_error",
+      sessionId: "conversation_mobile",
+      prompt: "Start a durable task",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+
+    coordinator.handleAgentEvent({
+      type: "agent.error",
+      code: "process_error",
+      message: "Agent process transport failed",
+    });
+
     expect(store.listGlobalTasks()[0]?.lifecycle).toBe("interrupted");
     store.close();
   });

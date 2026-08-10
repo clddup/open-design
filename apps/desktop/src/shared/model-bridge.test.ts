@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { DESIGN_AGENT_TOOL_SPECS } from "./design-agent-tools";
 import { isModelBridgeRequest } from "./model-bridge";
 
 const attachmentId = `image_${"a".repeat(64)}`;
 const documentId = `file_${"b".repeat(64)}`;
 
-function requestWith(content: unknown) {
+function requestWith(content: unknown, tools: unknown[] = []) {
   return {
     type: "model.request",
     requestId: "request_1",
@@ -18,7 +19,7 @@ function requestWith(content: unknown) {
       },
       system: "OpenDesign visual design agent",
       messages: [{ role: "user", content }],
-      tools: [],
+      tools,
     },
   };
 }
@@ -100,5 +101,34 @@ describe("Model bridge request guard", () => {
         ]),
       ),
     ).toBe(false);
+  });
+
+  it("accepts the complete production design tool contract", () => {
+    const request = requestWith(
+      "Create a structured design",
+      DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      })),
+    );
+
+    expect(isModelBridgeRequest(request)).toBe(true);
+  });
+
+  it("rejects an excessive aggregate tool payload", () => {
+    const request = requestWith(
+      "Create a structured design",
+      Array.from({ length: 8 }, (_, index) => ({
+        name: `tool_${index}`,
+        description: "Bounded test tool",
+        inputSchema: {
+          type: "object",
+          description: "x".repeat(300_000),
+        },
+      })),
+    );
+
+    expect(isModelBridgeRequest(request)).toBe(false);
   });
 });

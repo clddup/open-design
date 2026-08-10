@@ -30,6 +30,19 @@ import type {
   RendererDesignToolCancel,
   RendererDesignToolResponse,
 } from "./design-tool-bridge";
+import type { DiagnosticEvent, RendererDiagnosticReport } from "./diagnostics";
+
+export {
+  formatDiagnosticReport,
+  isDiagnosticEvent,
+  isRendererDiagnosticReport,
+  type DiagnosticContext,
+  type DiagnosticEvent,
+  type DiagnosticLevel,
+  type DiagnosticPresentation,
+  type DiagnosticSource,
+  type RendererDiagnosticReport,
+} from "./diagnostics";
 
 export {
   DEFAULT_APP_LOCALE,
@@ -184,6 +197,9 @@ export type ProjectDesignFile = {
 
 export interface DesktopApi {
   getPlatformInfo: () => Promise<PlatformInfo>;
+  getPendingDiagnostics: () => Promise<DiagnosticEvent[]>;
+  reportDiagnostic: (report: RendererDiagnosticReport) => Promise<void>;
+  onDiagnosticEvent: (listener: (event: DiagnosticEvent) => void) => () => void;
   onOpenSettings: (listener: () => void) => () => void;
   getLocale: () => Promise<AppLocale>;
   setLocale: (locale: AppLocale) => Promise<AppLocale>;
@@ -260,6 +276,9 @@ export interface DesktopApi {
 
 export const channels = {
   platformInfo: "app:platform-info",
+  getPendingDiagnostics: "diagnostic:get-pending",
+  reportDiagnostic: "diagnostic:report",
+  diagnosticEvent: "diagnostic:event",
   openSettings: "settings:open",
   getLocale: "locale:get",
   setLocale: "locale:set",

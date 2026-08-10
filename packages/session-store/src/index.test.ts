@@ -172,6 +172,48 @@ async function expectHigherHostRevisionProjection(
 }
 
 describe("session journal recovery", () => {
+  it("terminally recovers interrupted JSONL runs and pending tools once", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opendesign-session-"));
+    const store = new JsonlSessionStore(join(directory, "events.jsonl"));
+    await store.append(
+      event(1, "run.state", {
+        status: "started",
+        startedAt: "2026-08-09T12:00:00.000Z",
+      }),
+    );
+    await store.append(
+      event(2, "tool.requested", {
+        toolCallId: "tool_interrupted",
+        toolName: "opendesign_apply_transaction",
+        input: {},
+        risk: "design_write",
+      }),
+    );
+
+    await expect(
+      store.reconcileInterruptedRuns("2026-08-10T01:00:00.000Z"),
+    ).resolves.toEqual({ recoveredRuns: 1, recoveredTools: 1 });
+    const timeline = await store.readTimeline("session_1");
+    expect(timeline.find((item) => item.type === "run")).toMatchObject({
+      type: "run",
+      runId: "run_1",
+      status: "error",
+      finishedAt: "2026-08-10T01:00:00.000Z",
+      stopReason: "error",
+    });
+    expect(timeline.find((item) => item.type === "tool")).toMatchObject({
+      type: "tool",
+      toolCallId: "tool_interrupted",
+      status: "failed",
+      error: { code: "run_interrupted" },
+    });
+
+    await expect(
+      store.reconcileInterruptedRuns("2026-08-10T02:00:00.000Z"),
+    ).resolves.toEqual({ recoveredRuns: 0, recoveredTools: 0 });
+    await expect(store.read("session_1")).resolves.toHaveLength(4);
+  });
+
   it("rejects attachment metadata that contains a local path", () => {
     const store = new SqliteSessionStore(":memory:");
     expect(() =>

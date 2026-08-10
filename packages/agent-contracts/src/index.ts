@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const AGENT_PROTOCOL_VERSION = "3.2.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.3.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
@@ -154,6 +154,22 @@ export const SelectionScopeSchema = Type.Union([
   ),
 ]);
 
+export const DesignMutationTargetSchema = Type.Union([
+  Type.Object(
+    {
+      kind: Type.Literal("page"),
+      pageId: IdSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("document"),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
 export const ApprovalDecisionSchema = Type.Union([
   Type.Literal("allow_once"),
   Type.Literal("allow_session"),
@@ -225,6 +241,7 @@ export const UserMessageTimelineItemSchema = Type.Object(
     documentId: IdSchema,
     revision: RevisionSchema,
     scope: SelectionScopeSchema,
+    mutationTarget: Type.Optional(DesignMutationTargetSchema),
   },
   { additionalProperties: false },
 );
@@ -382,6 +399,7 @@ export const DurableTimelineEventSchema = Type.Union([
           documentId: IdSchema,
           revision: RevisionSchema,
           scope: SelectionScopeSchema,
+          mutationTarget: Type.Optional(DesignMutationTargetSchema),
         },
         { additionalProperties: false },
       ),
@@ -560,6 +578,7 @@ export const AgentRequestSchema = Type.Union([
       documentId: IdSchema,
       revision: RevisionSchema,
       scope: SelectionScopeSchema,
+      mutationTarget: DesignMutationTargetSchema,
       modelSelection: ModelSelectionSchema,
     },
     { additionalProperties: false },
@@ -729,6 +748,7 @@ export const AgentEventSchema = Type.Union([
 ]);
 
 export type SelectionScope = Static<typeof SelectionScopeSchema>;
+export type DesignMutationTarget = Static<typeof DesignMutationTargetSchema>;
 export type ApprovalDecision = Static<typeof ApprovalDecisionSchema>;
 export type ToolRisk = Static<typeof ToolRiskSchema>;
 export type RunStopReason = Static<typeof RunStopReasonSchema>;
@@ -759,6 +779,12 @@ export function isSelectionScope(value: unknown): value is SelectionScope {
   );
 }
 
+export function isDesignMutationTarget(
+  value: unknown,
+): value is DesignMutationTarget {
+  return Value.Check(DesignMutationTargetSchema, value);
+}
+
 export function isDurableTimelineEvent(
   value: unknown,
 ): value is DurableTimelineEvent {
@@ -771,7 +797,12 @@ export function isDurableTimelineEvent(
 export function isAgentRequest(value: unknown): value is AgentRequest {
   return (
     Value.Check(AgentRequestSchema, value) &&
-    (value.type !== "run.start" || isSelectionScope(value.scope))
+    (value.type !== "run.start" ||
+      (isSelectionScope(value.scope) &&
+        isDesignMutationTarget(value.mutationTarget) &&
+        (value.mutationTarget.kind !== "page" ||
+          value.scope.pageId === undefined ||
+          value.scope.pageId === value.mutationTarget.pageId)))
   );
 }
 
