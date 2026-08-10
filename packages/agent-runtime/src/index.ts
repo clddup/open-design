@@ -23,6 +23,13 @@ import {
 } from "@opendesign/model-gateway";
 import type { JournalEvent, SessionStore } from "@opendesign/session-store";
 import { appendRunJournalEvent } from "./run-journal-writer.js";
+import {
+  createTrustedToolContext,
+  projectToolResultForModel,
+  toolResultAttachments,
+  validateDesignRevision,
+  validateObservedRevision,
+} from "./tool-execution-semantics.js";
 
 export interface AgentRunRequest {
   runId: string;
@@ -154,10 +161,6 @@ const DEFAULT_LIMITS: AgentRuntimeLimits = {
   maxCompletionGuardRejections: 3,
   maxContextCharacters: 240_000,
 };
-
-const MAX_MODEL_TOOL_RESULT_STRING_CHARACTERS = 16_000;
-const MAX_MODEL_TOOL_RESULT_CHARACTERS = 50_000;
-const MAX_MODEL_TOOL_RESULT_EXCERPT_CHARACTERS = 32_000;
 
 class ContextBudgetError extends Error {
   constructor(message: string) {
@@ -617,7 +620,10 @@ export class AgentRuntime {
             throw new Error("Validated tool dependencies became unavailable");
           }
           const toolExecutor = this.options.toolExecutor;
-          const trustedContext = createTrustedContext(request, currentRevision);
+          const trustedContext = createTrustedToolContext(
+            request,
+            currentRevision,
+          );
           if (definition.approval === "required") {
             const approvalId = `${call.toolCallId}_approval`;
             const approval = {
@@ -1912,58 +1918,6 @@ function canonicalUserMessage(
   };
 }
 
-function projectToolResultForModel(value: unknown): unknown {
-  const projected = projectToolResultValue(value);
-  const projectedCharacters = jsonCharacterLength(projected);
-  if (projectedCharacters <= MAX_MODEL_TOOL_RESULT_CHARACTERS) return projected;
-  const excerpt = JSON.stringify(projected).slice(
-    0,
-    MAX_MODEL_TOOL_RESULT_EXCERPT_CHARACTERS,
-  );
-  return {
-    notice: `[OpenDesign omitted part of an oversized structured tool result (${projectedCharacters} projected characters; model projection limit ${MAX_MODEL_TOOL_RESULT_CHARACTERS})]`,
-    summary: summarizeContextValue(projected),
-    excerpt,
-  };
-}
-
-function projectToolResultValue(value: unknown, depth = 0): unknown {
-  if (typeof value === "string") {
-    if (value.length <= MAX_MODEL_TOOL_RESULT_STRING_CHARACTERS) return value;
-    return `[OpenDesign omitted ${value.length} characters from an oversized tool-result field]`;
-  }
-  if (
-    value === null ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
-  if (depth >= 32) return "[OpenDesign omitted deeply nested tool result]";
-  if (Array.isArray(value)) {
-    return value.map((item) => projectToolResultValue(item, depth + 1));
-  }
-  if (typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        projectToolResultValue(child, depth + 1),
-      ]),
-    );
-  }
-  return `[OpenDesign omitted unsupported ${typeof value} tool-result value]`;
-}
-
-function toolResultAttachments(content: unknown): AgentAttachment[] {
-  if (!content || typeof content !== "object" || Array.isArray(content)) {
-    return [];
-  }
-  const attachments = (content as { attachments?: unknown }).attachments;
-  return Array.isArray(attachments)
-    ? attachments.filter(isAgentAttachment)
-    : [];
-}
-
 function isResolvedModelIdentity(
   value: unknown,
 ): value is ResolvedModelIdentity {
@@ -1988,51 +1942,6 @@ function isResolvedModelIdentity(
     (identity.responseId === undefined ||
       typeof identity.responseId === "string")
   );
-}
-
-function createTrustedContext(
-  request: AgentRunRequest,
-  revision: number,
-): TrustedToolContext {
-  const scope = Object.freeze({
-    ...request.scope,
-    selectedNodeIds: Object.freeze([...request.scope.selectedNodeIds]),
-  }) as unknown as SelectionScope;
-  return Object.freeze({
-    runId: request.runId,
-    sessionId: request.sessionId,
-    documentId: request.documentId,
-    revision,
-    scope,
-    mutationTarget: Object.freeze({ ...request.mutationTarget }),
-  });
-}
-
-function validateDesignRevision(
-  revision: TrustedToolResult["designRevision"],
-  currentRevision: number,
-): TrustedToolResult["designRevision"] {
-  if (revision === undefined) return undefined;
-  if (
-    revision.previousRevision !== currentRevision ||
-    !Number.isInteger(revision.revision) ||
-    revision.revision <= currentRevision ||
-    revision.transactionId.length === 0
-  ) {
-    throw new RangeError("Tool returned an invalid design revision transition");
-  }
-  return revision;
-}
-
-function validateObservedRevision(
-  revision: TrustedToolResult["observedRevision"],
-  currentRevision: number,
-): number | undefined {
-  if (revision === undefined) return undefined;
-  if (!Number.isInteger(revision) || revision < currentRevision) {
-    throw new RangeError("Tool returned an invalid observed design revision");
-  }
-  return revision;
 }
 
 function usageTokens(usage: ModelUsage): number {

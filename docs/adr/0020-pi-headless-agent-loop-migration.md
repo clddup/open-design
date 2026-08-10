@@ -99,6 +99,10 @@ Pi run event adapter 使用和旧 Runtime 相同的原子 journal writer，把 P
 - 覆盖可恢复 tool failure、不可恢复 bridge failure、停止、max turns、max tool calls 和 total token budget。
 - 把现有 plan/review completion guard 接到 Pi turn 生命周期，不能只依赖 system prompt。
 
+截至 2026-08-11，第一项与 `max tool calls` 已完成。一个通用 Pi tool adapter 直接复用十二个生产工具的原始标准 JSON Schema、OpenDesign 业务 validator、`ToolExecutorPort`、`ApprovalPort`、可信 Run context 和顺序执行，不为每个工具建立分支实现，也不把 TypeBox 私有标记发送给 Provider。Pi tool lifecycle 会写入现有 `tool.requested/progress/completed/failed`、approval 和 `design.revision` journal，并生成相同 `AgentEvent 3.4`；结构化结果仍按单字段/总量上限投影给模型，原始结果及内容寻址附件元数据进入 journal，inline base64 不进入 Pi transcript。测试覆盖成功的两轮工具循环、progress、revision、附件、业务 validator、审批拒绝、工具预算和非法 revision；桌面生产目录门禁证明十二个公开工具全部注册且两个 internal host 工具未暴露。迁移实现只从 `@opendesign/agent-runtime/pi-migration` 子入口导出，正式切换前不会因根 barrel 让旧生产 Agent bundle 提前包含未启用的 Pi loop。
+
+阶段 2 尚未整体完成：completion guard、max turns、total token budget、停止期间 pending tool 的最终化，以及不可恢复 bridge failure 与业务 tool failure 的完整 parity 仍是下一门禁。图片附件在本阶段只保留内容寻址元数据和文字投影；下一阶段的 Context adapter 才能把获准附件解析为下一 Provider turn 的多模态输入。
+
 ### 阶段 3：上下文、持久化和恢复 parity
 
 - 从同一 OpenDesign journal 构建 Pi 模型投影，不创建 Pi session 文件或第二份 durable transcript。

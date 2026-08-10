@@ -24,6 +24,10 @@ const runEventAdapter = await readFile(
   join(runtimeRoot, "src/pi-run-event-adapter.ts"),
   "utf8",
 );
+const toolAdapter = await readFile(
+  join(runtimeRoot, "src/pi-tool-adapter.ts"),
+  "utf8",
+);
 const currentRuntime = await readFile(
   join(runtimeRoot, "src/index.ts"),
   "utf8",
@@ -77,6 +81,15 @@ if (
 ) {
   throw new Error(
     "Pi model bridge must use OpenDesign ModelGateway without direct provider or credential access",
+  );
+}
+if (
+  !/\bToolExecutorPort\b/.test(toolAdapter) ||
+  !/\bApprovalPort\b/.test(toolAdapter) ||
+  /\bUnsafe\s*[<(]/.test(toolAdapter)
+) {
+  throw new Error(
+    "Pi tools must reuse OpenDesign host ports and unmodified standard JSON Schema",
   );
 }
 if (

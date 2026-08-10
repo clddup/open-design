@@ -1,4 +1,9 @@
-import type { AgentEvent as PiAgentEvent } from "@earendil-works/pi-agent-core";
+import type {
+  AgentEvent as PiAgentEvent,
+  AgentTool,
+  BeforeToolCallContext,
+  BeforeToolCallResult,
+} from "@earendil-works/pi-agent-core";
 import type {
   AgentEvent,
   AssistantTimelineBlock,
@@ -10,29 +15,42 @@ import type {
 } from "@opendesign/model-gateway";
 import type { SessionStore } from "@opendesign/session-store";
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
-import type { AgentRunRequest } from "./index.js";
+import type {
+  AgentRunRequest,
+  AgentToolCallRecord,
+  AgentToolDefinition,
+  ApprovalPort,
+  ToolExecutorPort,
+} from "./index.js";
+import {
+  OpenDesignPiToolAdapter,
+  type PiToolApprovalRequested,
+  type PiToolApprovalResolved,
+} from "./pi-tool-adapter.js";
 import { appendRunJournalEvent } from "./run-journal-writer.js";
 
 export interface PiRunEventAdapterOptions {
   request: AgentRunRequest;
   sessionStore: SessionStore;
   emit: (event: AgentEvent) => Promise<void> | void;
+  toolDefinitions?: readonly AgentToolDefinition[];
+  toolExecutor?: ToolExecutorPort;
+  approvalPort?: ApprovalPort;
+  maxToolCalls?: number;
   now?: () => Date;
 }
 
 interface ActiveAssistantMessage {
   messageId: string;
-  turn: number;
 }
 
 /**
  * Projects Pi's ephemeral loop events into OpenDesign's versioned renderer
  * events and durable Conversation journal.
  *
- * This stage intentionally accepts only model/message lifecycle events. Tool
- * events fail closed until the production ToolExecutor adapter can attach
- * trusted risk, approval, revision and attachment metadata in migration stage
- * 2. The adapter never creates a Pi session or a second durable transcript.
+ * Model and tool lifecycle events reuse OpenDesign's existing AgentEvent,
+ * ToolExecutor, approval, revision, attachment and journal semantics. The
+ * adapter never creates a Pi session or a second durable transcript.
  */
 export class PiRunEventAdapter {
   readonly #emit: PiRunEventAdapterOptions["emit"];
@@ -40,6 +58,7 @@ export class PiRunEventAdapter {
   readonly #request: AgentRunRequest;
   readonly #sessionStore: SessionStore;
   #activeAssistant: ActiveAssistantMessage | undefined;
+  #activeToolResultCallId: string | undefined;
   #activeUserMessage = false;
   #ended = false;
   #initialPromptConsumed = false;
@@ -48,6 +67,7 @@ export class PiRunEventAdapter {
   #lastAssistantStopReason: AssistantMessage["stopReason"] | undefined;
   #started = false;
   #startedAt = "";
+  readonly #toolAdapter: OpenDesignPiToolAdapter | undefined;
   #turn = 0;
   #userMessageSequence = 0;
 
@@ -56,7 +76,43 @@ export class PiRunEventAdapter {
     this.#sessionStore = options.sessionStore;
     this.#emit = options.emit;
     this.#now = options.now ?? (() => new Date());
+    if (options.toolDefinitions !== undefined) {
+      this.#toolAdapter = new OpenDesignPiToolAdapter({
+        request: this.#request,
+        definitions: options.toolDefinitions,
+        ...(options.toolExecutor === undefined
+          ? {}
+          : { toolExecutor: options.toolExecutor }),
+        ...(options.approvalPort === undefined
+          ? {}
+          : { approvalPort: options.approvalPort }),
+        maxToolCalls: options.maxToolCalls ?? 32,
+        now: this.#now,
+        lifecycle: {
+          approvalRequested: (approval) =>
+            this.#recordApprovalRequested(approval),
+          approvalResolved: (approval) =>
+            this.#recordApprovalResolved(approval),
+        },
+      });
+    }
   }
+
+  get tools(): readonly AgentTool[] {
+    return this.#toolAdapter?.tools ?? [];
+  }
+
+  get toolCallRecords(): readonly AgentToolCallRecord[] {
+    return this.#toolAdapter?.toolCallRecords ?? [];
+  }
+
+  readonly beforeToolCall = (
+    context: BeforeToolCallContext,
+    signal?: AbortSignal,
+  ): Promise<BeforeToolCallResult | undefined> => {
+    if (this.#toolAdapter === undefined) return Promise.resolve(undefined);
+    return this.#toolAdapter.beforeToolCall(context, signal);
+  };
 
   async accept(event: PiAgentEvent): Promise<void> {
     if (this.#ended) {
@@ -87,9 +143,8 @@ export class PiRunEventAdapter {
       event.type === "tool_execution_update" ||
       event.type === "tool_execution_end"
     ) {
-      throw new Error(
-        "Pi tool events require the OpenDesign production tool adapter",
-      );
+      await this.#acceptToolEvent(event);
+      return;
     }
     if (event.type === "agent_end") {
       await this.#endRun();
@@ -129,9 +184,16 @@ export class PiRunEventAdapter {
 
   #startMessage(message: PiAgentEventMessage): void {
     if (message.role === "toolResult") {
-      throw new Error(
-        "Pi tool-result messages require the OpenDesign production tool adapter",
-      );
+      if (this.#toolAdapter === undefined) {
+        throw new Error(
+          "Pi tool-result messages require the OpenDesign production tool adapter",
+        );
+      }
+      if (this.#activeToolResultCallId !== undefined) {
+        throw new Error("Pi started overlapping tool-result messages");
+      }
+      this.#activeToolResultCallId = message.toolCallId;
+      return;
     }
     if (message.role === "user") {
       if (this.#activeUserMessage || this.#activeAssistant !== undefined) {
@@ -147,7 +209,6 @@ export class PiRunEventAdapter {
     this.#turn += 1;
     this.#activeAssistant = {
       messageId: `${this.#request.runId}_assistant_${this.#turn}`,
-      turn: this.#turn,
     };
   }
 
@@ -179,9 +240,11 @@ export class PiRunEventAdapter {
 
   async #endMessage(message: PiAgentEventMessage): Promise<void> {
     if (message.role === "toolResult") {
-      throw new Error(
-        "Pi tool-result messages require the OpenDesign production tool adapter",
-      );
+      if (this.#activeToolResultCallId !== message.toolCallId) {
+        throw new Error("Pi ended an unexpected tool-result message");
+      }
+      this.#activeToolResultCallId = undefined;
+      return;
     }
     if (message.role === "user") {
       if (!this.#activeUserMessage) {
@@ -247,7 +310,7 @@ export class PiRunEventAdapter {
       messageId: `${this.#request.runId}_user_${this.#userMessageSequence}`,
       content,
       documentId: this.#request.documentId,
-      revision: this.#request.revision,
+      revision: this.#toolAdapter?.currentRevision ?? this.#request.revision,
       scope: this.#request.scope,
       mutationTarget: this.#request.mutationTarget,
     });
@@ -257,10 +320,18 @@ export class PiRunEventAdapter {
     if (this.#activeAssistant !== undefined || this.#activeUserMessage) {
       throw new Error("Pi ended a run with an active message");
     }
-    const stopReason = toRunStopReason(
-      this.#lastAssistantStopReason,
-      this.#lastAssistantHadToolCalls,
-    );
+    if (
+      this.#activeToolResultCallId !== undefined ||
+      this.#toolAdapter?.hasPendingTools === true
+    ) {
+      throw new Error("Pi ended a run with an active tool call");
+    }
+    const stopReason =
+      this.#toolAdapter?.forcedStopReason ??
+      toRunStopReason(
+        this.#lastAssistantStopReason,
+        this.#lastAssistantHadToolCalls,
+      );
     if (stopReason === "error") {
       const invalidToolStop =
         this.#lastAssistantStopReason === "toolUse" &&
@@ -310,6 +381,133 @@ export class PiRunEventAdapter {
 
   async #publish(event: AgentEvent): Promise<void> {
     await this.#emit(event);
+  }
+
+  async #acceptToolEvent(
+    event: Extract<
+      PiAgentEvent,
+      {
+        type:
+          | "tool_execution_start"
+          | "tool_execution_update"
+          | "tool_execution_end";
+      }
+    >,
+  ): Promise<void> {
+    const adapter = this.#toolAdapter;
+    if (adapter === undefined) {
+      throw new Error(
+        "Pi tool events require the OpenDesign production tool adapter",
+      );
+    }
+    if (event.type === "tool_execution_start") {
+      const requested = adapter.beginToolCall(event);
+      if (requested.duplicate) return;
+      await this.#append("tool.requested", {
+        toolCallId: requested.toolCallId,
+        toolName: requested.toolName,
+        input: requested.input,
+        risk: requested.risk,
+      });
+      await this.#publish({
+        type: "tool.requested",
+        runId: this.#request.runId,
+        toolCallId: requested.toolCallId,
+        toolName: requested.toolName,
+        input: requested.input,
+        risk: requested.risk,
+      });
+      return;
+    }
+    if (event.type === "tool_execution_update") {
+      const progress = adapter.updateToolCall(event);
+      if (progress === undefined) return;
+      await this.#append("tool.progress", progress);
+      await this.#publish({
+        type: "tool.progress",
+        runId: this.#request.runId,
+        ...progress,
+      });
+      return;
+    }
+
+    const terminal = adapter.endToolCall(event);
+    if (terminal === undefined) return;
+    if (terminal.status === "failed") {
+      const failure = {
+        toolCallId: terminal.toolCallId,
+        code: terminal.code,
+        message: terminal.message,
+      };
+      await this.#append("tool.failed", failure);
+      await this.#publish({
+        type: "tool.failed",
+        runId: this.#request.runId,
+        ...failure,
+      });
+      return;
+    }
+
+    const nextRevision =
+      terminal.designRevision?.revision ?? terminal.observedRevision;
+    const completion = {
+      toolCallId: terminal.toolCallId,
+      result: terminal.content,
+      ...(nextRevision === undefined ||
+      nextRevision === terminal.previousRevision
+        ? {}
+        : {
+            revision: nextRevision,
+            ...(terminal.designRevision === undefined
+              ? {}
+              : { transactionId: terminal.designRevision.transactionId }),
+          }),
+    };
+    await this.#append("tool.completed", completion);
+    if (terminal.designRevision !== undefined) {
+      await this.#append("design.revision", {
+        documentId: this.#request.documentId,
+        previousRevision: terminal.designRevision.previousRevision,
+        revision: terminal.designRevision.revision,
+        transactionId: terminal.designRevision.transactionId,
+        toolCallId: terminal.toolCallId,
+      });
+    }
+    await this.#publish({
+      type: "tool.completed",
+      runId: this.#request.runId,
+      ...completion,
+    });
+  }
+
+  async #recordApprovalRequested(
+    approval: PiToolApprovalRequested,
+  ): Promise<void> {
+    await this.#append("approval.requested", {
+      approvalId: approval.approvalId,
+      toolCallId: approval.toolCallId,
+      title: approval.title,
+      summary: approval.summary,
+    });
+    await this.#publish({
+      type: "approval.requested",
+      runId: this.#request.runId,
+      approvalId: approval.approvalId,
+      toolCallId: approval.toolCallId,
+      title: approval.title,
+      summary: approval.summary,
+    });
+  }
+
+  async #recordApprovalResolved(
+    approval: PiToolApprovalResolved,
+  ): Promise<void> {
+    await this.#append("approval.resolved", approval, approval.resolvedAt);
+    await this.#publish({
+      type: "approval.resolved",
+      runId: this.#request.runId,
+      ...approval,
+    });
   }
 }
 
