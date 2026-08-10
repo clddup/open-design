@@ -45,6 +45,7 @@ export interface PiRunEventAdapterOptions {
   maxTurns?: number;
   maxTotalTokens?: number;
   maxCompletionGuardRejections?: number;
+  priorToolCallIds?: readonly string[];
   now?: () => Date;
 }
 
@@ -139,6 +140,9 @@ export class PiRunEventAdapter {
           ? {}
           : { approvalPort: options.approvalPort }),
         maxToolCalls: options.maxToolCalls ?? 32,
+        ...(options.priorToolCallIds === undefined
+          ? {}
+          : { priorToolCallIds: options.priorToolCallIds }),
         now: this.#now,
         lifecycle: {
           approvalRequested: (approval) =>

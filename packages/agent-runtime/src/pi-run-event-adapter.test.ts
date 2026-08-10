@@ -12,14 +12,11 @@ import {
   type SessionStore,
 } from "@opendesign/session-store";
 import { describe, expect, it } from "vitest";
-import {
-  AgentRuntime,
-  type AgentRunRequest,
-  type ToolExecutionEvent,
-} from "./index.js";
+import { type AgentRunRequest, type ToolExecutionEvent } from "./index.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
+import { OpenDesignPiRuntime } from "./pi-runtime.js";
 
 const request: AgentRunRequest = {
   runId: "run_pi_parity",
@@ -88,7 +85,7 @@ class MemorySessionStore implements SessionStore {
 }
 
 describe("Pi run event adapter", () => {
-  it("matches the current Runtime's public events and durable journal for a model turn", async () => {
+  it("matches the composed production runtime's public events and durable journal for a model turn", async () => {
     const response = {
       blocks: [
         {
@@ -106,14 +103,14 @@ describe("Pi run event adapter", () => {
       stopReason: "complete" as const,
       providerRequestId: "response_parity",
     };
-    const legacy = await runLegacy(new MockModelGateway(response));
+    const production = await runProduction(new MockModelGateway(response));
     const pi = await runPi(new MockModelGateway(response));
 
     expect(normalizePublicEvents(pi.events)).toEqual(
-      normalizePublicEvents(legacy.events),
+      normalizePublicEvents(production.events),
     );
     expect(normalizeJournal(pi.store.events)).toEqual(
-      normalizeJournal(legacy.store.events),
+      normalizeJournal(production.store.events),
     );
     expect(await pi.store.readTimeline(request.sessionId)).toMatchObject([
       { type: "run", status: "completed" },
@@ -135,14 +132,14 @@ describe("Pi run event adapter", () => {
   });
 
   it("matches the current Runtime's visible error and terminal journal state", async () => {
-    const legacy = await runLegacy(createFailingGateway());
+    const production = await runProduction(createFailingGateway());
     const pi = await runPi(createFailingGateway());
 
     expect(normalizePublicEvents(pi.events)).toEqual(
-      normalizePublicEvents(legacy.events),
+      normalizePublicEvents(production.events),
     );
     expect(normalizeJournal(pi.store.events)).toEqual(
-      normalizeJournal(legacy.store.events),
+      normalizeJournal(production.store.events),
     );
     expect(pi.events).toContainEqual({
       type: "agent.error",
@@ -156,7 +153,7 @@ describe("Pi run event adapter", () => {
     });
   });
 
-  it("surfaces a tool-use stop without a tool call on both runtimes", async () => {
+  it("surfaces a tool-use stop without a tool call through the production composition", async () => {
     const response = {
       blocks: [
         {
@@ -167,14 +164,14 @@ describe("Pi run event adapter", () => {
       ],
       stopReason: "tool_use" as const,
     };
-    const legacy = await runLegacy(new MockModelGateway(response));
+    const production = await runProduction(new MockModelGateway(response));
     const pi = await runPi(new MockModelGateway(response));
 
     expect(normalizePublicEvents(pi.events)).toEqual(
-      normalizePublicEvents(legacy.events),
+      normalizePublicEvents(production.events),
     );
     expect(normalizeJournal(pi.store.events)).toEqual(
-      normalizeJournal(legacy.store.events),
+      normalizeJournal(production.store.events),
     );
     expect(pi.events).toContainEqual({
       type: "agent.error",
@@ -275,9 +272,9 @@ describe("Pi run event adapter", () => {
   });
 });
 
-async function runLegacy(modelGateway: ModelGateway) {
+async function runProduction(modelGateway: ModelGateway) {
   const store = new MemorySessionStore();
-  const runtime = new AgentRuntime({
+  const runtime = new OpenDesignPiRuntime({
     modelGateway,
     sessionStore: store,
     now: fixedNow,

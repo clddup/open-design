@@ -1,4 +1,4 @@
-import { AgentRuntime } from "@opendesign/agent-runtime";
+import { OpenDesignPiRuntime } from "@opendesign/agent-runtime/pi-migration";
 import {
   AGENT_PROTOCOL_VERSION,
   isAgentRequest,
@@ -25,7 +25,7 @@ const port = process.parentPort;
 
 const parentModelGateway = new ParentModelGateway(port);
 const parentDesignToolExecutor = new ParentDesignToolExecutor(port);
-const runtime = new AgentRuntime({
+const runtime = new OpenDesignPiRuntime({
   modelGateway:
     process.env.OPENDESIGN_AGENT_SMOKE === "1"
       ? new MockModelGateway(

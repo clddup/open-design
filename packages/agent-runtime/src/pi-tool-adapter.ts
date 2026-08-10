@@ -57,6 +57,7 @@ export interface OpenDesignPiToolAdapterOptions {
   approvalPort?: ApprovalPort;
   lifecycle: PiToolLifecyclePort;
   maxToolCalls: number;
+  priorToolCallIds?: readonly string[];
   now?: () => Date;
 }
 
@@ -149,6 +150,12 @@ export class OpenDesignPiToolAdapter {
     this.#lifecycle = options.lifecycle;
     this.#maxToolCalls = options.maxToolCalls;
     this.#now = options.now ?? (() => new Date());
+    for (const toolCallId of options.priorToolCallIds ?? []) {
+      if (typeof toolCallId !== "string" || toolCallId.length === 0) {
+        throw new TypeError("Prior Pi tool-call IDs must be non-empty strings");
+      }
+      this.#seen.add(toolCallId);
+    }
 
     const safeDefinitions = selectSafeDefinitions(options.definitions);
     for (const definition of safeDefinitions) {

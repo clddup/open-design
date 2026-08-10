@@ -21,3 +21,4 @@ export {
   PiRunEventAdapter,
   type PiRunEventAdapterOptions,
 } from "./pi-run-event-adapter.js";
+export { OpenDesignPiRuntime } from "./pi-runtime.js";

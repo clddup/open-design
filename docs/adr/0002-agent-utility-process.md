@@ -11,7 +11,7 @@ OpenDesign 的 Agent 需要维护会话、调用模型、加载 skills、连接 
 
 ## 决策
 
-Agent Runtime 使用 TypeScript，并由 Electron Main 通过 `utilityProcess` 启动和监督。初始核心循环参考 Pi/OpenCode 的小内核、事件化会话、工具驱动和可扩展 provider 思路；任何代码复用都必须单独完成来源与许可证审查。ADR-0020 已接受固定 `@earendil-works/pi-agent-core 0.84.1` 的 headless `Agent` 分阶段迁移，但 OpenDesign adapter、Main 权限和 Conversation/Design 事实边界保持不变；Pi Coding Agent、TUI 和固定版本中尚未实现的 `AgentHarness` 不进入产品路径。
+Agent Runtime 使用 TypeScript，并由 Electron Main 通过 `utilityProcess` 启动和监督。初始核心循环参考 Pi/OpenCode 的小内核、事件化会话、工具驱动和可扩展 provider 思路；任何代码复用都必须单独完成来源与许可证审查。ADR-0020 已将固定 `@earendil-works/pi-agent-core 0.84.1` 的 headless `Agent` 切为 utilityProcess 唯一通用循环，旧自研 turn/tool loop 已删除；OpenDesign adapter、Main 权限和 Conversation/Design 事实边界保持不变。Pi Coding Agent、TUI 和固定版本中尚未实现的 `AgentHarness` 不进入产品路径。
 
 主进程与 Agent 使用版本化消息协议。每条消息至少包含协议版本、请求 ID、会话 ID、类型、时间/顺序信息和结构化负载；设计相关请求还包含文档 ID、基准版本与选区作用域。协议支持流式事件、取消、超时、背压、健康检查和分类错误。
 

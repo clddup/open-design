@@ -1,5 +1,4 @@
 import {
-  AgentRuntime,
   type AgentRunRequest,
   type AgentToolDefinition,
   type ToolExecutionEvent,
@@ -7,6 +6,7 @@ import {
 import {
   createOpenDesignPiAgent,
   createPiModelGatewayStreamFn,
+  OpenDesignPiRuntime,
   PiRunEventAdapter,
   prepareOpenDesignPiContext,
 } from "@opendesign/agent-runtime/pi-migration";
@@ -46,7 +46,7 @@ describe("production Agent context budget", () => {
       const gateway = new RecordingGateway(
         new MockModelGateway("Production context accepted"),
       );
-      const runtime = new AgentRuntime({
+      const runtime = new OpenDesignPiRuntime({
         modelGateway: gateway,
         sessionStore: new JsonlSessionStore(join(directory, "events.jsonl")),
         systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
@@ -142,7 +142,7 @@ describe("production Agent context budget", () => {
           byteSize: 1_024,
         })),
       };
-      const runtime = new AgentRuntime({
+      const runtime = new OpenDesignPiRuntime({
         modelGateway: gateway,
         sessionStore,
         systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,

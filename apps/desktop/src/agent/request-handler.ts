@@ -1,12 +1,19 @@
-import type { AgentRunRequest, AgentRuntime } from "@opendesign/agent-runtime";
+import type { AgentRunRequest } from "@opendesign/agent-runtime";
 import {
   AGENT_PROTOCOL_VERSION,
   type AgentEvent,
   type AgentRequest,
+  type SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 
+export interface AgentRuntimePort {
+  cancel(runId: string): boolean;
+  loadSessionHistory(sessionId: string): Promise<SessionTimelineItem[]>;
+  run(input: AgentRunRequest): AsyncIterable<AgentEvent>;
+}
+
 export interface AgentRequestHandlerOptions {
-  runtime: Pick<AgentRuntime, "cancel" | "loadSessionHistory" | "run">;
+  runtime: AgentRuntimePort;
   postMessage: (event: AgentEvent) => void;
 }
 

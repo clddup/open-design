@@ -18,8 +18,6 @@ import type {
 } from "@opendesign/model-gateway";
 import type { SessionStore } from "@opendesign/session-store";
 import {
-  ContextBudgetError,
-  ModelContextCompatibilityError,
   canonicalUserMessage,
   compactInRunMessagesForProvider,
   contextBudgetExceededMessage,
@@ -57,6 +55,7 @@ export interface PreparedOpenDesignPiContext {
   initialMessages: Message[];
   promptMessage: UserMessage;
   systemPrompt: string;
+  priorToolCallIds: string[];
   compactedThroughSequence?: number;
 }
 
@@ -114,6 +113,7 @@ export async function prepareOpenDesignPiContext(
   }
 
   const restored = restoreModelMessages(priorEvents);
+  const priorToolCallIds = collectPriorToolCallIds(priorEvents);
   const context = new OpenDesignPiContextAdapter({
     budget,
     model: options.model,
@@ -152,6 +152,7 @@ export async function prepareOpenDesignPiContext(
     initialMessages,
     promptMessage,
     systemPrompt: options.systemPrompt,
+    priorToolCallIds,
     ...(compactedThroughSequence === undefined
       ? {}
       : { compactedThroughSequence }),
@@ -490,12 +491,6 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function toContextFailure(error: unknown): PiContextFailure {
-  if (error instanceof ModelContextCompatibilityError) {
-    return { code: "model_context_incompatible", message: error.message };
-  }
-  if (error instanceof ContextBudgetError) {
-    return { code: "context_budget_exceeded", message: error.message };
-  }
   return {
     code: "context_projection_failed",
     message:
@@ -507,4 +502,18 @@ function toContextFailure(error: unknown): PiContextFailure {
 
 function snapshotRequest(request: AgentRunRequest): AgentRunRequest {
   return structuredClone(request);
+}
+
+function collectPriorToolCallIds(
+  events: readonly { type: string; payload: unknown }[],
+): string[] {
+  const ids = new Set<string>();
+  for (const event of events) {
+    if (event.type !== "tool.requested") continue;
+    const toolCallId = (event.payload as { toolCallId?: unknown }).toolCallId;
+    if (typeof toolCallId === "string" && toolCallId.length > 0) {
+      ids.add(toolCallId);
+    }
+  }
+  return [...ids];
 }

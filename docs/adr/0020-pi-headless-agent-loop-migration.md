@@ -86,12 +86,12 @@ Pi 导出的 compaction 纯函数可以作为后续语义 compactor provider，�
 ### 阶段 1：模型和事件 parity
 
 - 适配 ParentModelGateway 的 streaming、reasoning、tool call、usage、identity、取消和错误。
-- 对同一 mock transcript 比较现有 Runtime 与 Pi adapter 的 OpenDesign Agent events 和 journal 终态。
+- 在切换前对同一 mock transcript 比较旧 Runtime 与 Pi adapter 的 OpenDesign Agent events 和 journal 终态；切换后由生产 runner composition test 固化结果。
 - 覆盖 OpenAI Responses、Chat Completions 和 Anthropic Messages 的 canonical 行为，不直接比较 Provider 私有 payload。
 
 截至 2026-08-11，阶段 1 已完成 contract/parity tests。ModelGateway bridge 将 Pi user/assistant/tool-result context 转换为 OpenDesign canonical message，并把 canonical reasoning/text/tool-call stream 按相同 block 生命周期转换回 Pi event；identity、response ID、原始 stop reason、usage、取消、content filter 和失败均有明确终态。桥接器拒绝错 `attemptId`、重复/未知/未完成 block、block 类型漂移和 utility process 内的 inline image/base64，并已通过 `Pi Agent → ModelGateway → OpenDesign tool → 第二个 Provider turn` 的端到端测试。OpenAI Responses、OpenAI Chat Completions 与 Anthropic Messages 的 Pi/canonical API identity 往返均有独立覆盖。它不解析凭据，也不绕过 ParentModelGateway。
 
-Pi run event adapter 使用和旧 Runtime 相同的原子 journal writer，把 Pi model/message lifecycle 投影为现有 `AgentEvent 3.4`、`message.user`、`message.assistant` 和终态 `run.state`。同一成功 transcript、Provider failure 和“tool-use stop 但没有 tool call”的旧/Pi 双路径测试会比较用户可见事件和持久 journal 语义；后者现在也会产生可见 `invalid_model_response`，不再只留下 error 状态。阶段 2 完成前，Pi tool execution/tool-result event 明确失败并终结 Run，不能缺少 risk、approval、revision 和附件元数据却静默写 journal。图片和文档必须在后续 Context adapter 中由内容寻址引用解析，不能因当前 bridge 拒绝 inline image 而被描述为永久不支持多模态。
+Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message lifecycle 投影为现有 `AgentEvent 3.4`、`message.user`、`message.assistant` 和终态 `run.state`。切换前的双路径测试固定了成功 transcript、Provider failure 和“tool-use stop 但没有 tool call”的用户可见事件与 journal 语义；切换后 production composition test 直接比较完整 `OpenDesignPiRuntime` 和底层 adapter，旧循环与双路径测试已经删除。“tool-use stop 但没有 tool call”产生可见 `invalid_model_response`，不只留下 error 状态。
 
 ### 阶段 2：工具和完成策略 parity
 
@@ -122,6 +122,8 @@ Pi run event adapter 使用和旧 Runtime 相同的原子 journal writer，把 P
 - 在 macOS/Windows protected Agent build 和 packaged smoke 中运行相同 transcript。
 - 将共享 Context 投影从旧 Runtime 模块抽成独立边界，切换唯一生产入口，随后删除旧通用循环和无用依赖/适配代码，不保留长期双循环或 fallback。
 - 更新验证文档、包体基线、第三方清单和所有受影响 ADR。
+
+唯一生产入口切换与删除已完成：`apps/desktop/src/agent/index.ts` 只实例化 `OpenDesignPiRuntime`，旧 `AgentRuntime` 类、执行循环及旧专属测试已删除；根 Agent Runtime 模块只保留 OpenDesign 端口契约和共享 Context 投影。生产 runner 持有 run cancellation、同 Conversation 串行、Context 准备和 Pi 生命周期组合，并从 journal 预加载历史 tool-call ID，禁止模型重放旧 ID 时二次执行。普通构建、本机 protected Vite 8 build、请求处理和生产 transcript 自动化已通过。当前阶段只剩同一 commit 的 macOS/Windows 原生 package 与 packaged Agent smoke；本地遵循不启动应用约束，没有把 protected build 冒充 packaged smoke。
 
 ## 切换门禁
 

@@ -28,8 +28,20 @@ const toolAdapter = await readFile(
   join(runtimeRoot, "src/pi-tool-adapter.ts"),
   "utf8",
 );
-const currentRuntime = await readFile(
+const contextAdapter = await readFile(
+  join(runtimeRoot, "src/pi-context-adapter.ts"),
+  "utf8",
+);
+const productionRuntime = await readFile(
+  join(runtimeRoot, "src/pi-runtime.ts"),
+  "utf8",
+);
+const runtimeContracts = await readFile(
   join(runtimeRoot, "src/index.ts"),
+  "utf8",
+);
+const desktopAgentEntry = await readFile(
+  join(root, "apps/desktop/src/agent/index.ts"),
   "utf8",
 );
 
@@ -94,11 +106,37 @@ if (
 }
 if (
   !/\bappendRunJournalEvent\b/.test(runEventAdapter) ||
-  !/\bappendRunJournalEvent\b/.test(currentRuntime) ||
   !/\bCompletionGuardPort\b/.test(runEventAdapter)
 ) {
   throw new Error(
     "Pi runs must preserve OpenDesign journal and completion-guard boundaries",
+  );
+}
+if (
+  !/\bprepareOpenDesignPiContext\b/.test(contextAdapter) ||
+  !/\btransformContext\b/.test(contextAdapter) ||
+  !/\b(?:image_ref|document_ref)\b/.test(contextAdapter)
+) {
+  throw new Error(
+    "Pi Context adapter must preserve OpenDesign journal, budget and content-addressed attachment projection",
+  );
+}
+if (
+  !/class OpenDesignPiRuntime\b/.test(productionRuntime) ||
+  !/createOpenDesignPiAgent\s*\(/.test(productionRuntime) ||
+  !/new OpenDesignPiRuntime\s*\(/.test(desktopAgentEntry)
+) {
+  throw new Error(
+    "The Agent utility process must use the unique OpenDesign Pi production runtime",
+  );
+}
+if (
+  /class AgentRuntime\b/.test(runtimeContracts) ||
+  /ModelResponseAccumulator/.test(runtimeContracts) ||
+  /new AgentRuntime\s*\(/.test(desktopAgentEntry)
+) {
+  throw new Error(
+    "The removed custom Agent loop or a production fallback was reintroduced",
   );
 }
 
