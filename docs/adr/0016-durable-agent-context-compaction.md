@@ -4,6 +4,7 @@
 - 日期：2026-08-10
 - 关联：ADR-0006、ADR-0007、ADR-0012、ADR-0015
 - Context checkpoint：`2`
+- Token 预算裁决已由 [ADR-0017](0017-model-token-budget-authority.md) 修正：有可信 Model Profile 时字符上限不再作为并列硬门禁。
 
 ## 背景
 
@@ -29,7 +30,7 @@ Main 根据可信 Model Profile 解析所选模型的 `contextWindow` 与 `maxOu
 
 checkpoint v1 是有界 JSON，包含：近期用户请求摘录、Agent 结果摘录、附件元数据、工具调用计数、最新 DesignDocument revision/transaction 和 run 终态统计。它不包含二进制、data URI、完整工具结果或原始凭据。Agent 摘录不是执行证明，设计状态仍以重新 `inspect_document` 和 Main 执行结果为准。
 
-若旧 journal 中已经存在超长工具字段，模型投影会先把单字段替换为显式省略标记。若累计压缩后当前输入仍超过所选模型输入预算或本地 Conversation 字符上限，Run 在 Provider I/O 前以 `context_budget_exceeded` 可见失败，保留用户消息和失败终态。
+若旧 journal 中已经存在超长工具字段，模型投影会先把单字段替换为显式省略标记。若累计压缩后当前输入仍超过所选模型输入预算，Run 在 Provider I/O 前以 `context_budget_exceeded` 可见失败，保留用户消息和失败终态；只有缺少可信 Model Profile 窗口时才使用本地 Conversation 字符保底。
 
 ### 后续精确预算与语义压缩
 

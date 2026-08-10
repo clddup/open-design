@@ -1471,12 +1471,14 @@ function modelContextFits(
   tools: readonly CanonicalTool[],
   budget: ContextBudget,
 ): boolean {
-  if (estimateMessagesCharacters(messages) > budget.maxConversationCharacters) {
-    return false;
+  if (budget.maxInputTokens !== undefined) {
+    return (
+      estimateModelContextTokens(messages, system, tools) <=
+      budget.maxInputTokens
+    );
   }
   return (
-    budget.maxInputTokens === undefined ||
-    estimateModelContextTokens(messages, system, tools) <= budget.maxInputTokens
+    estimateMessagesCharacters(messages) <= budget.maxConversationCharacters
   );
 }
 
@@ -1604,7 +1606,7 @@ function contextBudgetExceededMessage(
     system,
     tools,
   );
-  return `Conversation context remains too large ${phase} (${estimatedInputTokens} estimated input tokens; model input budget ${budget.maxInputTokens}; ${messageCharacters} estimated conversation characters; local conversation limit ${budget.maxConversationCharacters}). Reduce the current message or attached document size.`;
+  return `Conversation context remains too large ${phase} (${estimatedInputTokens} estimated input tokens; model input budget ${budget.maxInputTokens}). Reduce the current message or attached document size.`;
 }
 
 function jsonCharacterLength(value: unknown): number {

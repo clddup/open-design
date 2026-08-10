@@ -587,6 +587,38 @@ describe("AgentRuntime", () => {
     );
   });
 
+  it("uses a trusted model token budget instead of rejecting a fitting request by character count", async () => {
+    const store = new MemorySessionStore();
+    const gateway = new RecordingGateway(
+      new MockModelGateway("Token-budgeted request accepted"),
+    );
+    const runtime = new AgentRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      limits: { maxContextCharacters: 1_000 },
+    });
+
+    const events = await collect(runtime, {
+      ...request,
+      prompt: "X".repeat(250_000),
+      modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
+    });
+
+    expect(gateway.requests).toHaveLength(1);
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: "agent.error",
+        code: "context_budget_exceeded",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "run.completed",
+        stopReason: "complete",
+      }),
+    );
+  });
+
   it("distinguishes an incompatible model window from conversation growth", async () => {
     const store = new MemorySessionStore();
     const gateway = new RecordingGateway(new MockModelGateway("unused"));
