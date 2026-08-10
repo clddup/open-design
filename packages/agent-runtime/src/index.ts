@@ -22,6 +22,7 @@ import {
   type ResolvedModelIdentity,
 } from "@opendesign/model-gateway";
 import type { JournalEvent, SessionStore } from "@opendesign/session-store";
+import { appendRunJournalEvent } from "./run-journal-writer.js";
 
 export interface AgentRunRequest {
   runId: string;
@@ -474,8 +475,17 @@ export class AgentRuntime {
         }
 
         if (toolCalls.length === 0) {
-          stopReason =
-            response.stopReason === "tool_use" ? "error" : "complete";
+          if (response.stopReason === "tool_use") {
+            stopReason = "error";
+            yield {
+              type: "agent.error",
+              code: "invalid_model_response",
+              message: "Model stopped for tool use without a tool call",
+              runId: request.runId,
+            };
+          } else {
+            stopReason = "complete";
+          }
           break;
         }
 
@@ -949,34 +959,12 @@ export class AgentRuntime {
     payload: unknown,
     createdAt = this.#now().toISOString(),
   ): Promise<number> {
-    const createEvent = (sequence: number): JournalEvent => ({
-      eventId: `${request.runId}_event_${sequence}`,
-      sessionId: request.sessionId,
-      runId: request.runId,
-      sequence,
-      type,
-      createdAt,
-      payload,
-    });
-    if (this.options.sessionStore.appendNext !== undefined) {
-      const event = await this.options.sessionStore.appendNext(
-        request.sessionId,
-        createEvent,
-      );
-      return event.sequence;
-    }
-
-    return serializeStoreAppend(
+    return appendRunJournalEvent(
       this.options.sessionStore,
-      request.sessionId,
-      async () => {
-        const projection = await this.options.sessionStore.project(
-          request.sessionId,
-        );
-        const event = createEvent(projection.lastSequence + 1);
-        await this.options.sessionStore.append(event);
-        return event.sequence;
-      },
+      request,
+      type,
+      payload,
+      createdAt,
     );
   }
 }
@@ -2090,34 +2078,6 @@ async function acquireSessionLock(
       locks.delete(sessionId);
     }
   };
-}
-
-const storeAppendLocks = new WeakMap<
-  SessionStore,
-  Map<string, Promise<void>>
->();
-
-async function serializeStoreAppend<T>(
-  store: SessionStore,
-  sessionId: string,
-  operation: () => Promise<T>,
-): Promise<T> {
-  let locks = storeAppendLocks.get(store);
-  if (locks === undefined) {
-    locks = new Map();
-    storeAppendLocks.set(store, locks);
-  }
-  const previous = locks.get(sessionId) ?? Promise.resolve();
-  const result = previous.then(operation);
-  const queued = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  locks.set(sessionId, queued);
-  void queued.then(() => {
-    if (locks?.get(sessionId) === queued) locks.delete(sessionId);
-  });
-  return result;
 }
 
 function runStatus(

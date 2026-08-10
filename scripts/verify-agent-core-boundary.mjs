@@ -20,6 +20,14 @@ const modelBridge = await readFile(
   join(runtimeRoot, "src/pi-model-gateway-adapter.ts"),
   "utf8",
 );
+const runEventAdapter = await readFile(
+  join(runtimeRoot, "src/pi-run-event-adapter.ts"),
+  "utf8",
+);
+const currentRuntime = await readFile(
+  join(runtimeRoot, "src/index.ts"),
+  "utf8",
+);
 
 const component = baseline.components.agentCore;
 if (!component || component.role !== "headless-agent-loop-engine") {
@@ -69,6 +77,14 @@ if (
 ) {
   throw new Error(
     "Pi model bridge must use OpenDesign ModelGateway without direct provider or credential access",
+  );
+}
+if (
+  !/\bappendRunJournalEvent\b/.test(runEventAdapter) ||
+  !/\bappendRunJournalEvent\b/.test(currentRuntime)
+) {
+  throw new Error(
+    "Current and Pi Agent paths must share the OpenDesign run journal writer",
   );
 }
 

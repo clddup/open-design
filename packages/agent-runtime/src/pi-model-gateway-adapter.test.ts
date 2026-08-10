@@ -1,11 +1,13 @@
 import {
   MockModelGateway,
   type CanonicalStreamEvent,
+  type ModelApiFormat,
   type ModelGateway,
   type ModelRequest,
 } from "@opendesign/model-gateway";
 import {
   fauxAssistantMessage,
+  type Api,
   type AssistantMessageEvent,
   type Context,
   type Model,
@@ -242,6 +244,52 @@ describe("Pi ModelGateway adapter", () => {
     });
   });
 
+  it("round-trips every supported Pi and canonical API identity", async () => {
+    const variants: Array<{
+      piApi: Api;
+      canonicalApi: ModelApiFormat;
+    }> = [
+      {
+        piApi: "openai-responses",
+        canonicalApi: "openai-responses",
+      },
+      {
+        piApi: "openai-completions",
+        canonicalApi: "openai-chat-completions",
+      },
+      {
+        piApi: "anthropic-messages",
+        canonicalApi: "anthropic-messages",
+      },
+    ];
+
+    for (const variant of variants) {
+      const gateway = new RecordingGateway(
+        identityGateway(variant.canonicalApi),
+      );
+      const streamFn = createPiModelGatewayStreamFn({
+        modelGateway: gateway,
+      });
+      const prior = {
+        ...fauxAssistantMessage("Prior response"),
+        api: variant.piApi,
+        provider: model.provider,
+        model: model.id,
+      };
+      const result = await streamFn(
+        { ...model, api: variant.piApi },
+        { messages: [prior] },
+      ).result();
+
+      expect(result.api).toBe(variant.piApi);
+      const replayed = gateway.requests[0]?.messages[0];
+      if (replayed?.role !== "assistant") {
+        throw new Error("Expected replayed assistant identity");
+      }
+      expect(replayed.source?.apiFormat).toBe(variant.canonicalApi);
+    }
+  });
+
   it("encodes gateway failures and forbidden inline images as Pi error events", async () => {
     const failedGateway: ModelGateway = {
       async *stream(request): AsyncIterable<CanonicalStreamEvent> {
@@ -408,3 +456,40 @@ describe("Pi ModelGateway adapter", () => {
     }
   });
 });
+
+function identityGateway(apiFormat: ModelApiFormat): ModelGateway {
+  return {
+    async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+      await Promise.resolve();
+      yield {
+        type: "attempt.started",
+        attemptId: request.attemptId,
+        model: request.modelSelection.modelId,
+        identity: { ...request.modelSelection, apiFormat },
+      };
+      yield {
+        type: "block.started",
+        attemptId: request.attemptId,
+        blockId: "identity_text",
+        kind: "text",
+      };
+      yield {
+        type: "block.completed",
+        attemptId: request.attemptId,
+        block: { id: "identity_text", type: "text", text: "Identity" },
+      };
+      yield {
+        type: "attempt.completed",
+        attemptId: request.attemptId,
+        stopReason: "complete",
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          reasoningTokens: 0,
+        },
+      };
+    },
+  };
+}
