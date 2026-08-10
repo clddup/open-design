@@ -10,6 +10,8 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
+    "capabilities:check": "node scripts/generate-capability-doc.mjs --check",
+    "capabilities:generate": "node scripts/generate-capability-doc.mjs",
     "dev": "pnpm --filter @opendesign/desktop dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -17,7 +19,7 @@
     "test": "vitest run && pnpm --filter @opendesign/desktop test",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm capabilities:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

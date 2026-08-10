@@ -378,6 +378,94 @@ describe("AgentRuntime", () => {
     });
   });
 
+  it("keeps oversized tool-result fields out of current and restored model context", async () => {
+    const store = new MemorySessionStore();
+    const oversizedValue = `data:image/png;base64,${"A".repeat(20_000)}`;
+    const inspectTool: AgentToolDefinition = {
+      name: "design.inspect",
+      description: "Inspect a design",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      risk: "read",
+      approval: "never",
+      validateInput: () => true,
+    };
+    const firstGateway = new RecordingGateway(
+      new MockModelGateway([
+        {
+          blocks: [
+            {
+              id: "inspect_block",
+              type: "tool_call",
+              toolCallId: "inspect_oversized_1",
+              name: inspectTool.name,
+              input: {},
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        { blocks: [{ id: "done", type: "text", text: "Inspected." }] },
+      ]),
+    );
+    const runtime = new AgentRuntime({
+      modelGateway: firstGateway,
+      sessionStore: store,
+      toolCatalog: { listTools: () => [inspectTool] },
+      toolExecutor: {
+        async *execute(): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield {
+            type: "completed",
+            result: {
+              content: {
+                ok: true,
+                document: {
+                  assetsById: {
+                    asset_large: {
+                      source: { type: "data", value: oversizedValue },
+                    },
+                  },
+                },
+              },
+            },
+          };
+        },
+      },
+    });
+
+    await collect(runtime);
+    const currentProjection = JSON.stringify(
+      firstGateway.requests[1]?.messages,
+    );
+    expect(currentProjection).not.toContain(oversizedValue);
+    expect(currentProjection).toContain("OpenDesign omitted");
+
+    const restoredGateway = new RecordingGateway(
+      new MockModelGateway({
+        blocks: [{ id: "restored", type: "text", text: "Recovered." }],
+      }),
+    );
+    const restoredRuntime = new AgentRuntime({
+      modelGateway: restoredGateway,
+      sessionStore: store,
+      toolCatalog: { listTools: () => [inspectTool] },
+    });
+    await collect(restoredRuntime, {
+      ...request,
+      runId: "run_restored_after_oversized_tool",
+      prompt: "Continue from the inspection",
+    });
+
+    const restoredProjection = JSON.stringify(
+      restoredGateway.requests[0]?.messages,
+    );
+    expect(restoredProjection).not.toContain(oversizedValue);
+    expect(restoredProjection).toContain("OpenDesign omitted");
+  });
+
   it("runs a multi-turn text/tool loop and persists a recoverable history", async () => {
     const store = new MemorySessionStore();
     const gateway = new RecordingGateway(

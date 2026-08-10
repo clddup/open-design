@@ -464,6 +464,93 @@ describe("Renderer design tool scope", () => {
     ).toBeDefined();
   });
 
+  it("returns bounded image asset metadata without copying source bytes into model context", async () => {
+    const sourceValue = `data:image/png;base64,${"A".repeat(1_000_000)}`;
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const placed = runtime.apply({
+      transactionId: "transaction_large_image",
+      documentId: "document_welcome",
+      baseRevision: 0,
+      actor: { type: "system", id: "test" },
+      commands: [
+        {
+          commandId: "put_large_image",
+          type: "put_asset",
+          asset: {
+            id: "asset_large_image",
+            kind: "image",
+            name: "Large image",
+            mimeType: "image/png",
+            source: { type: "data", value: sourceValue },
+            size: { width: 1_024, height: 1_024 },
+            extensions: { attachmentId: `image_${"a".repeat(64)}` },
+          },
+        },
+        {
+          commandId: "insert_large_image",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: null,
+          index: 1,
+          node: {
+            id: "image_large",
+            kind: "image",
+            name: "Large image",
+            parentId: null,
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 120, 160],
+            size: { width: 320, height: 240 },
+            opacity: 1,
+            properties: {
+              assetId: "asset_large_image",
+              fit: "cover",
+              altText: "Large image",
+              cornerRadius: 0,
+            },
+            extensions: {},
+          },
+        },
+      ],
+    });
+    expect(placed.ok).toBe(true);
+
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "inspect_large_image",
+        call: {
+          toolCallId: "tool_inspect_large_image",
+          toolName: "opendesign_inspect_document",
+          input: {},
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response.ok).toBe(true);
+    if (!response.ok) return;
+    const serialized = JSON.stringify(response.result.content);
+    expect(serialized).not.toContain(sourceValue);
+    expect(serialized.length).toBeLessThan(20_000);
+    expect(response.result.content).toMatchObject({
+      document: {
+        assetsById: {
+          asset_large_image: {
+            id: "asset_large_image",
+            kind: "image",
+            mimeType: "image/png",
+            sourceType: "data",
+            size: { width: 1_024, height: 1_024 },
+            extensionKeys: ["attachmentId"],
+          },
+        },
+      },
+    });
+  });
+
   it("renders a large tool transaction in visible stages with one undo entry", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = executeDesignToolRequest(

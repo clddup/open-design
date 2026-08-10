@@ -6,7 +6,7 @@ UI 设计是第一个质量标杆，但不是产品边界。文档协议和能�
 
 OpenDesign 定位为跨平台桌面产品。**macOS 与 Windows 是一级支持平台，两者都必须可安装、启动、编辑、运行 Agent、保存并恢复项目，任一平台不满足门禁都不能视为桌面版本可发布。** Linux 保留在跨平台目标中，但当前阶段不作为发布阻塞项。
 
-> 当前处于早期开发阶段，不是可发布版本。已实现能力、缺口和验证状态分别以[产品与架构](docs/product-and-architecture.md)、[专业设计能力基线](docs/design-capability-baseline.md)、[路线图](docs/roadmap.md)和[验证状态](docs/verification.md)为准。
+> 当前处于早期开发阶段，不是可发布版本。已实现能力、缺口和验证状态分别以[版本化能力事实清单](docs/generated/design-capabilities.md)、[产品与架构](docs/product-and-architecture.md)、[专业设计能力基线](docs/design-capability-baseline.md)、[路线图](docs/roadmap.md)和[验证状态](docs/verification.md)为准。
 
 ## 架构概览
 
@@ -34,7 +34,7 @@ Agent utilityProcess ── Conversation / Provider / typed design tools
 - LeaferJS 场景投影、pan/zoom、命中、框选、多选、move/resize/rotate/skew 和文本内编辑。
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask 和事务化图片 asset 的公共语义。
 - 持久 Conversation、可取消 Agent run、只管理对话模型的 `ModelProviderCatalog v3`，以及 OpenAI Responses、OpenAI Chat Completions 和 Anthropic Messages adapter；独立的应用级图片生成配置拥有自己的 adapter、Base URL、鉴权、凭据和模型 ID，不受任何 Conversation 模型影响，当前 OpenAI Images adapter 已用 GPT Image 2 验证。
-- `inspect_document`、`capture_canvas`、`apply_transaction`、`read_image`、`generate_image` 和 `place_image` typed tools；Agent 可把当前画布预览和生成图片作为多模态结果回读，而不是只凭节点坐标判断视觉质量。
+- `get_capabilities`、`inspect_document`、`capture_canvas`、`apply_transaction`、`read_image`、`generate_image` 和 `place_image` typed tools；Agent 从与帮助文档和发布摘要相同的 manifest 获取能力事实，并可把当前画布预览和生成图片作为多模态结果回读，而不是只凭节点坐标判断视觉质量。
 - 图片/文档附件、剪贴板/拖放导入，以及按需读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL 的受限链路。
 
 未完成的专业矢量、布局、组件、变量、富文本、导入导出、完整 Capability/Approval/Audit/Sandbox 和跨项目多目标能力不会被描述成已经支持；详见能力基线与路线图。

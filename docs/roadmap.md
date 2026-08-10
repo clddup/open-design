@@ -58,7 +58,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [ ] 使用当前仓库启动的 Electron 实例执行 `OD-PENGUIN-01` 和 `OD-POSTER-01`，保存原始 prompt、最终 `.opendesign` 文件、两次 `capture_canvas`、中间 refinement、截图、Conversation/Run ID 和相关诊断。
 - [ ] 建立专业样张 fixture 与跨平台视觉 baseline；测试必须从干净文档重放，不能依赖某个开发会话的临时状态。
 - [ ] 为 Path、渐变、光晕、模糊、blend、mask、图片和文字建立渲染诊断，至少识别空路径、不可见节点、丢失 asset、非有限 bounds、完全越界和异常根图层碎片。
-- [ ] 建立版本化 capability manifest。每项能力记录 `available / degraded / unavailable`、provider、限制、自动化证据和实机证据；设置页、Agent tool catalog、帮助文档和发布说明读取同一事实来源。
+- [x] 建立版本化 capability manifest。每项能力记录 `available / degraded / unavailable`、provider、限制、六个产品表面、自动化证据和实机证据；Agent system context、`get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON 事实来源，`capabilities:check` 阻止生成物漂移。能力状态不是设置项，不进入设置页。
 - [ ] 让验证文档的协议版本、测试数量、构建产物和平台证据由门禁命令更新或校验，禁止 `verification.md` 与当前工作树长期漂移。
 
 `OD-POSTER-01` 的首轮重放 prompt 固定为：
@@ -90,7 +90,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P3-A：文字、图片与海报交付
 
 - 建立 Text/Font service，支持富文本 runs、paragraph、列表、OpenType/variable font、字体 asset、缺失字体替换和共享文本样式。文字测量与 shaping 必须在 macOS 和 Windows 上产生明确的兼容结果或 fidelity warning。
-- 建立 Image service，支持 crop、focal point、mask、replace、透明背景、基础 adjustments/filter、资源变体、引用恢复和大图生命周期。原图和派生资源必须分离并可追溯。
+- 建立 Image service，支持 crop、focal point、mask、replace、透明背景、基础 adjustments/filter、资源变体、引用恢复和大图生命周期。增加独立 `edit_image` adapter/tool，支持局部重绘、扩图、背景替换、重打光和风格统一；参考图、原图和 AI 派生资源必须分离并可追溯，任何编辑都不得覆盖原始 asset。
 - 建立首个专业导出切片，支持选区或 Frame 的 PNG/JPEG/WebP、多倍图、透明背景和颜色配置。导出读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
 - 为人工属性面板和 Agent 增加文字、裁剪、替换、调整和导出的语义命令；长任务必须展示进度、支持取消并返回稳定产物或明确失败。
 

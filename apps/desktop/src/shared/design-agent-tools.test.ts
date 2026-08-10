@@ -2,11 +2,31 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_APPLY_TOOL_NAME,
+  DESIGN_CAPABILITIES_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
 
 describe("design Agent tool contract", () => {
+  it("exposes the trusted capability manifest as a read-only tool", () => {
+    const capabilities = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_CAPABILITIES_TOOL_NAME,
+    );
+
+    expect(capabilities).toMatchObject({ risk: "read", approval: "never" });
+    expect(capabilities?.description).toContain(
+      "versioned OpenDesign professional design capability manifest",
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_CAPABILITIES_TOOL_NAME, {}),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_CAPABILITIES_TOOL_NAME, {
+        capability: "pretend-supported",
+      }),
+    ).toBe(false);
+  });
+
   it("exposes formal SVG path appearance semantics to the model", () => {
     const apply = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,

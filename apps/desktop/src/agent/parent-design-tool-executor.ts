@@ -4,6 +4,8 @@ import type {
   ToolExecutorPort,
   TrustedToolContext,
 } from "@opendesign/agent-runtime";
+import { capabilityManifestForAgent } from "@opendesign/design-capabilities";
+import { DESIGN_CAPABILITIES_TOOL_NAME } from "../shared/design-agent-tools.js";
 import {
   designToolBridgeResponseId,
   isDesignToolBridgeResponse,
@@ -49,6 +51,18 @@ export class ParentDesignToolExecutor implements ToolExecutorPort {
     context: TrustedToolContext,
     signal: AbortSignal,
   ): AsyncIterable<ToolExecutionEvent> {
+    if (call.toolName === DESIGN_CAPABILITIES_TOOL_NAME) {
+      if (signal.aborted) {
+        throw signal.reason instanceof Error
+          ? signal.reason
+          : new DOMException("Capability query cancelled", "AbortError");
+      }
+      yield {
+        type: "completed",
+        result: { content: capabilityManifestForAgent() },
+      };
+      return;
+    }
     const requestId = `tool_${process.pid}_${Date.now()}_${++this.#sequence}`;
     const response = new Promise<DesignToolBridgeResponse>((resolve) => {
       this.#pending.set(requestId, { resolve });

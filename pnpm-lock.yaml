@@ -50,6 +50,9 @@ importers:
       '@opendesign/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
+      '@opendesign/design-capabilities':
+        specifier: workspace:*
+        version: link:../../packages/design-capabilities
       '@opendesign/design-contracts':
         specifier: workspace:*
         version: link:../../packages/design-contracts
@@ -154,6 +157,12 @@ importers:
       '@opendesign/tool-runtime':
         specifier: workspace:*
         version: link:../tool-runtime
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/design-capabilities:
     devDependencies:
       typescript:
         specifier: 'catalog:'

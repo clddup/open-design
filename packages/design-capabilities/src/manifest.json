@@ -1,0 +1,578 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-10",
+  "documentSchemaVersion": "1.2.0",
+  "engineBaseline": "leafer-editor@2.2.9",
+  "categories": [
+    {
+      "id": "foundation",
+      "label": { "en": "Foundation", "zh-CN": "基础工作流" }
+    },
+    {
+      "id": "vector",
+      "label": { "en": "Vector", "zh-CN": "矢量" }
+    },
+    {
+      "id": "appearance",
+      "label": { "en": "Appearance", "zh-CN": "外观与合成" }
+    },
+    {
+      "id": "image",
+      "label": { "en": "Image", "zh-CN": "图片" }
+    },
+    {
+      "id": "text",
+      "label": { "en": "Text", "zh-CN": "文字" }
+    },
+    {
+      "id": "responsive",
+      "label": { "en": "Responsive layout", "zh-CN": "响应式布局" }
+    },
+    {
+      "id": "design-system",
+      "label": { "en": "Design system", "zh-CN": "设计系统" }
+    },
+    {
+      "id": "delivery",
+      "label": { "en": "Delivery", "zh-CN": "交付" }
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "document.lifecycle",
+      "category": "foundation",
+      "status": "degraded",
+      "label": { "en": "Document lifecycle", "zh-CN": "文档生命周期" },
+      "description": {
+        "en": "Open, save, reopen, and version native Design Files without treating chat as document state.",
+        "zh-CN": "打开、保存、重开并版本化原生设计文件，聊天记录不充当设计事实。"
+      },
+      "provider": "OpenDesign Workspace + EditorRuntime",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent"],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "degraded",
+        "human": "degraded",
+        "agent": "unavailable",
+        "render": "available",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "Agent tools cannot create, rename, duplicate, reorder, archive, or delete Projects, Design Files, or Pages.",
+          "zh-CN": "Agent 工具不能创建、重命名、复制、排序、归档或删除 Project、Design File 与 Page。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "packages/editor-runtime/src/index.test.ts",
+          "apps/desktop/src/main/project/project-host.test.ts"
+        ],
+        "manual": []
+      },
+      "references": []
+    },
+    {
+      "id": "canvas.navigation-selection",
+      "category": "foundation",
+      "status": "degraded",
+      "label": {
+        "en": "Canvas navigation and selection",
+        "zh-CN": "画布导航与选择"
+      },
+      "description": {
+        "en": "Pan, zoom, hit test, box-select, multi-select, and transform objects on the production Leafer canvas.",
+        "zh-CN": "在生产 Leafer 画布中平移、缩放、命中、框选、多选并变换对象。"
+      },
+      "provider": "@opendesign/leafer-engine / leafer-editor@2.2.9",
+      "requiredSurfaces": ["runtime", "human", "render"],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "available",
+        "human": "available",
+        "agent": "degraded",
+        "render": "available",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "Real Electron pan/zoom/edit-box stability and high-node-count performance are not yet accepted on macOS and Windows.",
+          "zh-CN": "macOS 与 Windows 上的真实 Electron 平移、缩放、选框稳定性和大节点量性能尚未完成验收。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "packages/leafer-engine/src/adapter.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx"
+        ],
+        "manual": []
+      },
+      "references": []
+    },
+    {
+      "id": "layers.hierarchy",
+      "category": "foundation",
+      "status": "degraded",
+      "label": { "en": "Layer hierarchy", "zh-CN": "图层层级" },
+      "description": {
+        "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, and ordered transactions.",
+        "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定和有序事务。"
+      },
+      "provider": "DesignDocument 1.2.0 + EditorRuntime",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "available",
+        "human": "degraded",
+        "agent": "available",
+        "render": "available",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "The full keyboard command set for duplicate, group, ungroup, cross-container move, align, and distribute is incomplete.",
+          "zh-CN": "复制、编组、解组、跨容器移动、对齐和分布的完整键盘命令仍未补齐。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "packages/editor-runtime/src/index.test.ts",
+          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
+        ],
+        "manual": []
+      },
+      "references": []
+    },
+    {
+      "id": "vector.path-rendering",
+      "category": "vector",
+      "status": "degraded",
+      "label": { "en": "SVG path rendering", "zh-CN": "SVG Path 渲染" },
+      "description": {
+        "en": "Persist and render portable SVG path data with fills, strokes, gradients, effects, masks, and blend modes.",
+        "zh-CN": "持久化并渲染可移植 SVG Path 数据及其填充、描边、渐变、效果、蒙版和混合模式。"
+      },
+      "provider": "DesignDocument 1.2.0 + Leafer Path adapter",
+      "requiredSurfaces": ["contract", "runtime", "agent", "render"],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "available",
+        "human": "unavailable",
+        "agent": "available",
+        "render": "available",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "Single-path SVG data is supported, but there is no Pen tool, point/handle editing, multi-contour vector network, or SVG round-trip.",
+          "zh-CN": "当前支持单路径 SVG 数据，但没有 Pen、节点/手柄编辑、多轮廓矢量网络或 SVG 往返。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/leafer-engine/src/mapping.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts"
+        ],
+        "manual": []
+      },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks"
+      ]
+    },
+    {
+      "id": "vector.pen-node-editing",
+      "category": "vector",
+      "status": "unavailable",
+      "label": { "en": "Pen and node editing", "zh-CN": "Pen 与节点编辑" },
+      "description": {
+        "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles.",
+        "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。"
+      },
+      "provider": "Not implemented",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent"],
+      "surfaces": {
+        "contract": "unavailable",
+        "runtime": "unavailable",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "degraded",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "The toolbar Pen entry remains disabled; editing requires a future geometry service and formal vector-network schema.",
+          "zh-CN": "工具栏 Pen 仍禁用；需要后续 geometry service 和正式矢量网络 schema。"
+        }
+      ],
+      "evidence": { "automated": [], "manual": [] },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks"
+      ]
+    },
+    {
+      "id": "vector.boolean-operations",
+      "category": "vector",
+      "status": "unavailable",
+      "label": { "en": "Boolean operations", "zh-CN": "布尔运算" },
+      "description": {
+        "en": "Non-destructive union, subtract, intersect, and exclude groups whose source layers remain editable.",
+        "zh-CN": "非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。"
+      },
+      "provider": "Not implemented",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "unavailable",
+        "runtime": "unavailable",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "unavailable",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "No boolean-group schema or geometry kernel exists; flattening shapes manually is not treated as equivalent.",
+          "zh-CN": "当前没有 boolean group schema 或 geometry kernel；手工扁平化不能冒充等价能力。"
+        }
+      ],
+      "evidence": { "automated": [], "manual": [] },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations"
+      ]
+    },
+    {
+      "id": "appearance.paints-effects-masks",
+      "category": "appearance",
+      "status": "degraded",
+      "label": {
+        "en": "Paints, effects, and masks",
+        "zh-CN": "填充、效果与蒙版"
+      },
+      "description": {
+        "en": "Apply multiple paints and strokes, gradients, shadows, glows, blur, blend modes, masks, and advanced stroke properties.",
+        "zh-CN": "应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。"
+      },
+      "provider": "DesignDocument 1.2.0 + PropertiesPanel + Leafer adapter",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "available",
+        "human": "available",
+        "agent": "available",
+        "render": "available",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "Complex combinations still need Electron visual baselines, and professional color picking/styles are incomplete.",
+          "zh-CN": "复杂组合仍需 Electron 视觉基线，专业取色器和共享颜色样式尚未完成。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/leafer-engine/src/mapping.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx"
+        ],
+        "manual": []
+      },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360041488473-Apply-effects-to-layers",
+        "https://help.figma.com/hc/en-us/articles/360040450253-Masks"
+      ]
+    },
+    {
+      "id": "image.import-generation-placement",
+      "category": "image",
+      "status": "degraded",
+      "label": {
+        "en": "Image import, generation, and placement",
+        "zh-CN": "图片导入、生成与放置"
+      },
+      "description": {
+        "en": "Read explicit image references, paste or drop images, generate raster artwork, and place content-addressed assets on the canvas.",
+        "zh-CN": "读取明示图片引用、粘贴或拖放图片、生成位图素材，并把内容寻址 asset 放入画布。"
+      },
+      "provider": "AgentAttachmentHost + ImageGenerationHost + EditorRuntime",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "available",
+        "human": "degraded",
+        "agent": "available",
+        "render": "available",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "Image generation requires separate global configuration; direct canvas replacement, background removal, and asset management UI are incomplete.",
+          "zh-CN": "图片生成需要独立全局配置；画布内直接替换、移除背景和资源管理 UI 尚未完成。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "apps/desktop/src/main/model/image-generation-host.test.ts",
+          "apps/desktop/src/main/agent/agent-attachment-host.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts"
+        ],
+        "manual": []
+      },
+      "references": []
+    },
+    {
+      "id": "image.crop-adjustments",
+      "category": "image",
+      "status": "degraded",
+      "label": {
+        "en": "Image crop and adjustments",
+        "zh-CN": "图片裁剪与调整"
+      },
+      "description": {
+        "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
+        "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
+      },
+      "provider": "Partial ImagePaint transform semantics",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "degraded",
+        "runtime": "degraded",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "degraded",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "ImagePaint offset/scale/fit is not a complete crop, focal-point, replace, or adjustment workflow.",
+          "zh-CN": "ImagePaint 的 offset/scale/fit 不是完整的裁剪、焦点、替换或调整工作流。"
+        }
+      ],
+      "evidence": {
+        "automated": ["packages/design-contracts/src/index.test.ts"],
+        "manual": []
+      },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360040675194-Crop-an-image"
+      ]
+    },
+    {
+      "id": "image.ai-editing",
+      "category": "image",
+      "status": "unavailable",
+      "label": { "en": "AI image editing", "zh-CN": "AI 图片编辑" },
+      "description": {
+        "en": "Create traced variants from one or more source images using masks, inpainting, outpainting, background replacement, relighting, or style harmonization.",
+        "zh-CN": "基于一张或多张源图，通过蒙版、局部重绘、扩图、背景替换、重打光或风格统一生成可追溯变体。"
+      },
+      "provider": "Not implemented",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "unavailable",
+        "runtime": "unavailable",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "unavailable",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "The current global adapter only generates new images. Future edits must create derived assets with source provenance and must never overwrite the original asset.",
+          "zh-CN": "当前全局 adapter 只能生成新图；后续编辑必须创建带来源追踪的派生 asset，绝不能覆盖原始 asset。"
+        }
+      ],
+      "evidence": { "automated": [], "manual": [] },
+      "references": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+      ]
+    },
+    {
+      "id": "text.single-style",
+      "category": "text",
+      "status": "degraded",
+      "label": { "en": "Single-style text", "zh-CN": "单样式文字" },
+      "description": {
+        "en": "Create, render, transform, and edit a text layer with one shared font style and alignment.",
+        "zh-CN": "创建、渲染、变换和编辑使用单一共享字体样式与对齐方式的文字图层。"
+      },
+      "provider": "DesignDocument 1.2.0 + Leafer TextEditor",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "available",
+        "human": "available",
+        "agent": "available",
+        "render": "available",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "Font availability, cross-platform shaping, overflow, and visual fidelity still need macOS/Windows acceptance.",
+          "zh-CN": "字体可用性、跨平台 shaping、溢出和视觉保真仍需 macOS/Windows 验收。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "packages/leafer-engine/src/adapter.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx"
+        ],
+        "manual": []
+      },
+      "references": []
+    },
+    {
+      "id": "text.rich-typography",
+      "category": "text",
+      "status": "unavailable",
+      "label": { "en": "Rich typography", "zh-CN": "专业富文本排版" },
+      "description": {
+        "en": "Style text runs and paragraphs with lists, indentation, decoration, OpenType, variable fonts, and reusable text styles.",
+        "zh-CN": "按文字 run 与段落设置列表、缩进、装饰、OpenType、可变字体和共享文字样式。"
+      },
+      "provider": "Not implemented",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent"],
+      "surfaces": {
+        "contract": "unavailable",
+        "runtime": "unavailable",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "degraded",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "A Text/Font service and formal rich-text schema are required before this can be exposed.",
+          "zh-CN": "需要 Text/Font service 和正式富文本 schema 后才能开放。"
+        }
+      ],
+      "evidence": { "automated": [], "manual": [] },
+      "references": []
+    },
+    {
+      "id": "layout.auto-layout",
+      "category": "responsive",
+      "status": "unavailable",
+      "label": { "en": "Auto layout", "zh-CN": "Auto Layout" },
+      "description": {
+        "en": "Lay out Frames responsively with direction, wrap, padding, gap, alignment, hug, fill, fixed, min/max, and absolute children.",
+        "zh-CN": "通过方向、换行、padding、gap、对齐、hug、fill、fixed、min/max 和 absolute child 响应式布局 Frame。"
+      },
+      "provider": "Not implemented",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "unavailable",
+        "runtime": "unavailable",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "unavailable",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "No OpenDesign-owned layout schema or solver exists; Leafer Flow state is not accepted as document truth.",
+          "zh-CN": "当前没有 OpenDesign 自有布局 schema 与 solver；Leafer Flow 状态不能作为文档事实。"
+        }
+      ],
+      "evidence": { "automated": [], "manual": [] },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout"
+      ]
+    },
+    {
+      "id": "components.instances-variants",
+      "category": "design-system",
+      "status": "unavailable",
+      "label": {
+        "en": "Components, instances, and variants",
+        "zh-CN": "组件、实例与 Variants"
+      },
+      "description": {
+        "en": "Create main components, instances, nested instances, overrides, component properties, and variant sets.",
+        "zh-CN": "创建主组件、实例、嵌套实例、override、组件属性与 Variant Set。"
+      },
+      "provider": "Not implemented",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "unavailable",
+        "runtime": "unavailable",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "unavailable",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "Current component, variant, and instance fields are placeholders and do not define usable semantics.",
+          "zh-CN": "当前 component、variant 和 instance 字段只是占位，不具备可用语义。"
+        }
+      ],
+      "evidence": { "automated": [], "manual": [] },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma",
+        "https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants"
+      ]
+    },
+    {
+      "id": "variables.collections-modes",
+      "category": "design-system",
+      "status": "unavailable",
+      "label": {
+        "en": "Variables, collections, and modes",
+        "zh-CN": "Variables、Collections 与 Modes"
+      },
+      "description": {
+        "en": "Define typed variables, collections, modes, aliases, scopes, bindings, and deterministic mode switching.",
+        "zh-CN": "定义类型化 variable、collection、mode、alias、scope、binding 和确定性模式切换。"
+      },
+      "provider": "Not implemented",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "surfaces": {
+        "contract": "unavailable",
+        "runtime": "unavailable",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "unavailable",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "Token collection fields are untyped placeholders and cannot be bound to design properties.",
+          "zh-CN": "Token collection 字段仍是无类型占位，不能绑定到设计属性。"
+        }
+      ],
+      "evidence": { "automated": [], "manual": [] },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/14506821864087-Overview-of-variables-collections-and-modes"
+      ]
+    },
+    {
+      "id": "export.static-formats",
+      "category": "delivery",
+      "status": "unavailable",
+      "label": { "en": "Professional static export", "zh-CN": "专业静态导出" },
+      "description": {
+        "en": "Export selected layers, Frames, or Slices to PNG, JPEG, WebP, SVG, or PDF with scale and transparency settings.",
+        "zh-CN": "按倍率和透明背景设置，把选中图层、Frame 或 Slice 导出为 PNG、JPEG、WebP、SVG 或 PDF。"
+      },
+      "provider": "Not implemented",
+      "requiredSurfaces": ["contract", "runtime", "human", "agent", "export"],
+      "surfaces": {
+        "contract": "unavailable",
+        "runtime": "unavailable",
+        "human": "unavailable",
+        "agent": "unavailable",
+        "render": "degraded",
+        "export": "unavailable"
+      },
+      "limitations": [
+        {
+          "en": "Canvas screenshots are diagnostic previews and are not accepted as professional export artifacts.",
+          "zh-CN": "画布截图只是诊断预览，不能作为专业导出产物。"
+        }
+      ],
+      "evidence": { "automated": [], "manual": [] },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360040028114-Export-static-designs-from-Figma"
+      ]
+    }
+  ]
+}

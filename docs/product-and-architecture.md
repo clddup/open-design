@@ -15,7 +15,8 @@ UI 设计是首要能力和最先打磨的工作流，但不是产品边界。�
 - 固定 `leafer-editor@2.2.9` 的唯一生产画布路径，覆盖场景投影、pan/zoom、命中、选择、move/resize/rotate/skew 和文本内编辑。旧 Canvas2D、手写选择框和 OpenPencil 运行时已移除。
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask、高级描边和事务化图片 asset 的公共设计语义及属性检查器/Leafer 映射。
 - 运行于 `utilityProcess` 的持续 Agent Conversation、取消/恢复、多 Provider Catalog、OpenAI Responses、OpenAI Chat Completions、Anthropic Messages adapter 和 Main-only `safeStorage` 凭据。
-- `opendesign_inspect_document`、`opendesign_capture_canvas`、`opendesign_apply_transaction`、`opendesign_read_image`、`opendesign_generate_image` 与 `opendesign_place_image` 六个 typed tools；Agent 可把活动画布视口和全局 GPT Image 2 生成结果作为有界、内容寻址的多模态图片回读，图片/文档附件支持剪贴板/拖放，以及受限读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL。实质设计写入必须经过“截图 → 修正写入 → 再截图”的 Runtime 完成门禁。
+- 版本化 `DesignCapabilityManifest v1`，按 contract/runtime/human/agent/render/export 六个表面记录 provider、限制与证据；Agent system context、`opendesign_get_capabilities`、生成式帮助文档和发布摘要读取同一事实源。能力状态不是设置项，不进入设置页。
+- `opendesign_get_capabilities`、`opendesign_inspect_document`、`opendesign_capture_canvas`、`opendesign_apply_transaction`、`opendesign_read_image`、`opendesign_generate_image` 与 `opendesign_place_image` 七个 typed tools；Agent 可把活动画布视口和全局 GPT Image 2 生成结果作为有界、内容寻址的多模态图片回读，图片/文档附件支持剪贴板/拖放，以及受限读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL。实质设计写入必须经过“截图 → 修正写入 → 再截图”的 Runtime 完成门禁。
 - Renderer/Preload/Main/Agent 的运行时校验、最小环境变量 allowlist，以及按 run 分别冻结 Design File/revision、选区上下文与单一 Mutation Target 的设计工具桥。
 - Main-owned 结构化诊断 JSONL、按 Conversation/Run/Request/Tool Call 关联的右下角通知与单条诊断复制；Agent 对话在用户位于底部附近时跟随新消息和流式状态，用户上翻后暂停跟随。
 
@@ -132,18 +133,19 @@ Renderer 不直接接触 Node.js、Electron、模型密钥或引擎私有 API。
 
 ## 6. 逻辑组件
 
-| 组件               | 职责                                                      | 明确不负责                        |
-| ------------------ | --------------------------------------------------------- | --------------------------------- |
-| Desktop Shell      | 窗口、菜单、生命周期、路径/句柄、凭据、权限与安全 IPC     | 模型推理、具体设计语义            |
-| Renderer Workbench | 面板、命令、画布交互、可视化状态                          | 任意本地文件和密钥访问            |
-| Resource Registry  | Workspace/Project/Design File 身份、attached roots        | 把 Project 当作授权 sandbox       |
-| Design Contracts   | 通用节点、命令、事务、快照、诊断和版本                    | 具体渲染后端私有结构              |
-| Editor Runtime     | 权威文档、事务、revision、history 与 editor session state | 产品 UI、模型供应商逻辑、画布渲染 |
-| Leafer Adapter     | 场景投影、绘制、viewport、命中、选择和直接操作            | 持久化事实、history、Agent        |
-| Agent Runtime      | Conversation/run、上下文组装、计划、工具循环和恢复        | Electron 主进程特权、裸 fs/Bash   |
-| Tool Runtime       | 工具注册、schema、Capability、Approval、审计与派发        | 自动扩大 skill 或 MCP 权限        |
-| MCP Gateway        | 客户端和服务端传输、能力映射、身份与会话                  | 绕过 Tool Runtime 或事务入口      |
-| Persistence        | 原子保存、恢复、版本迁移、会话日志和本地索引              | 把聊天文本当作设计状态            |
+| 组件                | 职责                                                      | 明确不负责                        |
+| ------------------- | --------------------------------------------------------- | --------------------------------- |
+| Desktop Shell       | 窗口、菜单、生命周期、路径/句柄、凭据、权限与安全 IPC     | 模型推理、具体设计语义            |
+| Renderer Workbench  | 面板、命令、画布交互、可视化状态                          | 任意本地文件和密钥访问            |
+| Resource Registry   | Workspace/Project/Design File 身份、attached roots        | 把 Project 当作授权 sandbox       |
+| Design Contracts    | 通用节点、命令、事务、快照、诊断和版本                    | 具体渲染后端私有结构              |
+| Design Capabilities | 版本化能力状态、产品表面、provider、限制和验证证据        | 根据提示词或占位字段推断支持      |
+| Editor Runtime      | 权威文档、事务、revision、history 与 editor session state | 产品 UI、模型供应商逻辑、画布渲染 |
+| Leafer Adapter      | 场景投影、绘制、viewport、命中、选择和直接操作            | 持久化事实、history、Agent        |
+| Agent Runtime       | Conversation/run、上下文组装、计划、工具循环和恢复        | Electron 主进程特权、裸 fs/Bash   |
+| Tool Runtime        | 工具注册、schema、Capability、Approval、审计与派发        | 自动扩大 skill 或 MCP 权限        |
+| MCP Gateway         | 客户端和服务端传输、能力映射、身份与会话                  | 绕过 Tool Runtime 或事务入口      |
+| Persistence         | 原子保存、恢复、版本迁移、会话日志和本地索引              | 把聊天文本当作设计状态            |
 
 这些名称描述目标边界，不保证相应目录当前已完整实现。仓库中的包结构可以逐步承载这些职责，但应保持依赖方向从产品层指向契约层，而不是反向引用桌面实现。
 
@@ -179,7 +181,7 @@ OpenDesign 设计内核的目标能力族包括：
 - 视图：Leafer 实现命中测试、缩放、视口、覆盖层和渲染失效；OpenDesign 只持久化产品需要的 session state，并通过适配器同步。
 - 事件：文档变化、选区变化、历史变化、资源状态、诊断和崩溃恢复。
 
-这些是跨 Contracts、EditorRuntime、Main host 和专业 service 的产品能力，不是 `@opendesign/leafer-engine` 单包接口清单；当前尚未实现的导入导出、组件、布局等能力必须通过 capability manifest 明确返回 `unavailable` 或 `degraded`。
+这些是跨 Contracts、EditorRuntime、Main host 和专业 service 的产品能力，不是 `@opendesign/leafer-engine` 单包接口清单。当前 `@opendesign/design-capabilities` 固定 `DesignCapabilityManifest v1`：每项能力同时记录 contract、runtime、human、agent、render 与 export 状态，只有必需表面全通且同时具备自动化和实机证据时才允许标记 `available`。尚未实现的导入导出、组件、布局等能力明确返回 `unavailable`，部分链路返回 `degraded`，不能从 schema 占位或第三方引擎说明推断支持。
 
 公共命令使用稳定 ID、预期文档版本和幂等/冲突语义。Design File 是 revision 与提交冲突的边界：不同文件可以并行；同一文件的权威 runtime 在短提交区间内串行处理，并对过期 `baseRevision` 返回结构化 `conflict`，不得静默覆盖。引擎缺少某项能力时返回 `unsupported`，不允许调用者猜测私有 API。详细决策见 [ADR-0003](adr/0003-design-engine-adapter.md) 与 [ADR-0006](adr/0006-project-conversation-agent-scope.md)。
 
@@ -195,7 +197,7 @@ Agent 参考 Pi/OpenCode 的工程思路：保持核心循环小而透明，以�
 
 Agent composer 在每个 Conversation 中选择 `Provider/Model` 和模型支持的 reasoning effort。`AgentRequest 3.3` 把选择、发送时选区、单一 Mutation Target 和可选的内容寻址附件显式放入 `run.start`，run journal 保存对应快照与附件元数据；Main 只解析并执行该会话选择。图片生成由独立的应用级 `GlobalImageGenerationSettings v1` 配置，拥有启用状态、API adapter、Base URL、鉴权方式、独立 API Key 和用户模型 ID。它位于设置页单独的“图片生成”入口，不写入 Project、Conversation、`run.start` 或生图 tool 参数；切换、保存或删除 Conversation Provider 都不能覆盖或补全生图配置。当前 adapter 为 `openai-images`，使用 `/images/generations`，首个验证模型是 `gpt-image-2`，但模型 ID 由用户填写且没有运行时名称分支。后续不同协议通过版本化窄 adapter 增加，不改变 Agent tool 参数或重新并入 Provider Catalog。
 
-一条消息最多包含 6 个附件，单个不超过 16 MB、合计不超过 32 MB。Main 按真实内容自动识别图片和受支持文档，不要求用户预先选择类型；图片使用 `image_<sha256>`，文档使用绑定 MIME 的 `file_<sha256>`。PDF/DOCX/UTF-8 文本文档在 Main 中提取为最多 200,000 字符的只读参考上下文，DOCX 先经过条目数、展开大小、压缩比、加密和路径检查。只有包含图片的请求才要求模型声明 `imageInput`；纯文档请求可以发送给文本模型。文件选择器、魔数/大小校验、SHA-256 存储和完整性复验都在 Main 中完成，模型 bridge 不接受 utility process 提交 inline base64 或任意路径。`ParentModelGateway` 通过内部、受校验的 model bridge 把可序列化请求交给 Main；Main 在发起网络请求时才解密对应 Conversation Provider 凭据、解析获准附件 ID，把图片转成原生多模态 block、把文档转成带不可信边界标记的 text block，再通过固定 adapter 适配三种协议。生图请求则由独立 `ImageGenerationHost` 解密独立凭据并执行。模型桥接受完整生产设计工具契约，并同时限制单工具 schema 与工具集合总大小；任何跨进程请求/响应校验失败都会回传可关联的失败终态，不能只写日志后丢弃。取消通过关联 `requestId` 的 `AbortController` 传递。生产模型流由 Main 同时执行 180 秒首响应、120 秒流空闲和 15 分钟总时限 watchdog；图片生成有独立 10 分钟上限，二者都会向实际 fetch 传播取消。应用启动时还会把 JSONL 中孤立的 started Run 和 pending tool 终结为可恢复错误，避免重启后保留假运行状态。该链路不授予 Agent 原始凭据、任意网络入口或文件系统能力。当前六个内置设计/图片工具只操作 Main 绑定到 run 的活动 Design File、活动画布视口、固定 Mutation Target、当前 run 明示引用或独立全局生图配置，并通过受校验的事务/附件桥执行；每次 run 的完整外发数据预览、Main approval bridge 和完整工具审计策略链仍未实现。详细决策见 [ADR-0007](adr/0007-main-hosted-model-provider.md)、[ADR-0008](adr/0008-multi-provider-model-catalog.md)、[ADR-0013](adr/0013-global-gpt-image-generation.md) 与 [ADR-0014](adr/0014-standalone-global-image-generation-settings.md)。
+一条消息最多包含 6 个附件，单个不超过 16 MB、合计不超过 32 MB。Main 按真实内容自动识别图片和受支持文档，不要求用户预先选择类型；图片使用 `image_<sha256>`，文档使用绑定 MIME 的 `file_<sha256>`。PDF/DOCX/UTF-8 文本文档在 Main 中提取为最多 200,000 字符的只读参考上下文，DOCX 先经过条目数、展开大小、压缩比、加密和路径检查。只有包含图片的请求才要求模型声明 `imageInput`；纯文档请求可以发送给文本模型。文件选择器、魔数/大小校验、SHA-256 存储和完整性复验都在 Main 中完成，模型 bridge 不接受 utility process 提交 inline base64 或任意路径。`ParentModelGateway` 通过内部、受校验的 model bridge 把可序列化请求交给 Main；Main 在发起网络请求时才解密对应 Conversation Provider 凭据、解析获准附件 ID，把图片转成原生多模态 block、把文档转成带不可信边界标记的 text block，再通过固定 adapter 适配三种协议。生图请求则由独立 `ImageGenerationHost` 解密独立凭据并执行。模型桥接受完整生产设计工具契约，并同时限制单工具 schema 与工具集合总大小；任何跨进程请求/响应校验失败都会回传可关联的失败终态，不能只写日志后丢弃。取消通过关联 `requestId` 的 `AbortController` 传递。生产模型流由 Main 同时执行 180 秒首响应、120 秒流空闲和 15 分钟总时限 watchdog；图片生成有独立 10 分钟上限，二者都会向实际 fetch 传播取消。应用启动时还会把 JSONL 中孤立的 started Run 和 pending tool 终结为可恢复错误，避免重启后保留假运行状态。该链路不授予 Agent 原始凭据、任意网络入口或文件系统能力。六个设计/图片工具只操作 Main 绑定到 run 的活动 Design File、活动画布视口、固定 Mutation Target、当前 run 明示引用或独立全局生图配置，并通过受校验的事务/附件桥执行；第七个 `opendesign_get_capabilities` 在 utility process 中只读返回打包时校验的 manifest，不请求 Main 特权或网络。每次 run 的完整外发数据预览、Main approval bridge 和完整工具审计策略链仍未实现。详细决策见 [ADR-0007](adr/0007-main-hosted-model-provider.md)、[ADR-0008](adr/0008-multi-provider-model-catalog.md)、[ADR-0013](adr/0013-global-gpt-image-generation.md)、[ADR-0014](adr/0014-standalone-global-image-generation-settings.md) 与 [ADR-0015](adr/0015-versioned-design-capability-manifest.md)。
 
 用户请求停止后，Renderer 立即把对应 Run 显示为“正在停止”并去除流式活动光标，但在 `run.completed` 或失败终态到达前仍保持并发占用。终态会兜底结束该 Run 遗留的 partial message、tool 与 approval 活动态，避免对话中残留看似仍在运行的蓝色光标。
 
@@ -209,9 +211,11 @@ Agent composer 在每个 Conversation 中选择 `Provider/Model` 和模型支持
 
 Main 在应用 `userData/diagnostics/events.jsonl` 中维护有大小上限和单代轮转的结构化诊断日志。事件只包含时间、级别、来源、稳定错误码、错误消息、应用/平台版本，以及可用的 Conversation、Run、Request、Tool Call、Project 和 Design File ID；不记录 Prompt、附件正文、设计正文、Provider 凭据或工具参数。不可继续的错误和明确系统通知通过同一事件投影为不透明桌面通知，编辑器视图中停靠在画布右下并避开 Agent composer，其他视图停靠窗口右下；错误在用户关闭前保持，用户可一键复制当前事件的完整关联信息交给 Agent 排查。可由模型自行恢复的工具失败仍写日志，但默认静默，避免重规划过程中连续弹窗。
 
-Agent composer 还支持粘贴和拖入图片/文件。模型可按需调用 `opendesign_read_image` 读取当前 run 已附加的图片，或用户在当前 prompt 中精确明示的绝对路径、`file:` URL 和 HTTP(S) 图片 URL；Main 只做 source 授权、受限读取、内容寻址和完整性校验，识别由模型完成。tool result 内保存 attachment metadata，下一轮由 Model Gateway 解析成真实多模态图片块。`opendesign_place_image` 可把同一 attachment 以受信任的 asset + image node 原子事务嵌入画布。远程读取不携带 Cookie 或 Provider 凭据，并限制协议、重定向、超时与大小。通用网页文本读取和隔离截图仍是后续 `fetch_reference` / `capture_reference` 能力，不把仅获取 HTML 描述为已经看见页面视觉。
+Agent composer 还支持粘贴和拖入图片/文件。模型可按需调用 `opendesign_read_image` 读取当前 run 已附加的图片，或用户在当前 prompt 中精确明示的绝对路径、`file:` URL 和 HTTP(S) 图片 URL；Main 只做 source 授权、受限读取、内容寻址和完整性校验，识别由模型完成。tool result 内保存 attachment metadata，下一轮由 Model Gateway 解析成真实多模态图片块。`opendesign_place_image` 可把同一 attachment 以受信任的 asset + image node 原子事务嵌入画布。`inspect_document` 只返回引用 asset 的名称、类型、尺寸、source 类型和扩展键，不把 data URI、外部 URI 或像素内容复制进工具结果；Agent Runtime 对当前轮和旧 journal 中意外出现的超长工具字段还会在模型投影时省略，避免一张图片把下一轮上下文顶爆。远程读取不携带 Cookie 或 Provider 凭据，并限制协议、重定向、超时与大小。通用网页文本读取和隔离截图仍是后续 `fetch_reference` / `capture_reference` 能力，不把仅获取 HTML 描述为已经看见页面视觉。
 
-当设计需要原创位图时，模型可调用 `opendesign_generate_image`。工具输入只有 prompt、size、quality 和 output format，不能指定 Provider/Model；Main 使用全局生图选择、该 Provider 配置的图片 API adapter 和 Main-only 凭据执行。当前 `openai-images` adapter 已用 GPT Image 2 验证，但请求中的模型 ID 完全来自用户配置；同协议的新模型不需要增加模型名分支。Main 校验 HTTP/JSON/base64/大小/取消，把结果写入现有内容寻址 attachment store 并只授权给当前 Run。结果返回 attachment metadata 和多模态引用，但不会自动修改文档；模型必须继续调用 `opendesign_place_image`，才能通过 `put_asset + insert_element(image)` 的同一事务、revision 和 undo 历史进入画布。未配置全局生图模型时工具明确失败，不回退到 Conversation 模型。
+当设计需要原创位图时，模型可调用 `opendesign_generate_image`。工具输入只有 prompt、size、quality 和 output format，不能指定 Provider/Model；Main 只读取独立 `GlobalImageGenerationSettings v1` 的 adapter、Base URL、鉴权、凭据和用户模型 ID。当前 `openai-images` adapter 已用 GPT Image 2 验证；同协议的新模型不需要增加模型名分支。Main 校验 HTTP/JSON/base64/大小/取消，把结果写入现有内容寻址 attachment store 并只授权给当前 Run。结果返回 attachment metadata 和多模态引用，但不会自动修改文档；模型必须继续调用 `opendesign_place_image`，才能通过 `put_asset + insert_element(image)` 的同一事务、revision 和 undo 历史进入画布。未配置全局生图服务时工具明确失败，不回退到 Conversation Provider。
+
+参考图分析、确定性图片处理和 AI 图片编辑是三个不同边界。`read_image` 只让多模态模型理解参考图；crop、mask、focal point、replace、adjustment/filter 应由未来 Image service 产生确定性可撤销事务；局部重绘、扩图、背景替换、重打光和风格统一则由未来独立 `edit_image` adapter/tool 创建新的派生 asset。当前 `openai-images` 只实现新图生成，尚未实现编辑；原始 asset 与任何 AI 派生 asset 必须分离并记录来源，禁止覆盖原图。
 
 `opendesign_capture_canvas` 只捕获当前绑定 Design File 的活动画布视口，并在 Renderer 内缩放、编码后通过 Main 的附件导入边界成为内容寻址图片；它不会截取整个桌面、其他窗口或应用。Agent 在实质设计写入后可把该图片作为多模态结果回读，再根据实际渲染结果迭代。该能力不等同于网页抓取或外部页面截图，后两者仍属于后续 `fetch_reference` / `capture_reference`。
 
@@ -325,6 +329,6 @@ Renderer、Agent 或引擎子系统异常后，主进程应隔离故障并尽可
 
 ## 16. 演进顺序
 
-当前演进顺序由 [`roadmap.md`](roadmap.md) 维护：先稳定 `1.2.0` Path/Vector、Leafer、图片/引用链与 Agent 视觉验收，再建立 capability manifest 与其余专业基础协议，随后按精确矢量 → 布局/文字/设计系统 → 导入导出/交付 → 完整 Agent 权限与 MCP 的依赖顺序推进。
+当前演进顺序由 [`roadmap.md`](roadmap.md) 维护：在已经建立 capability manifest 后，先完成固定样张、渲染诊断与实机证据，再按精确矢量 → 图片/文字/海报交付 → 布局/组件/变量 → 导入导出 → 完整 Agent 权限与 MCP 的依赖顺序推进。
 
 阶段顺序不承诺发布日期，但每一阶段必须保持唯一事实状态、可运行、可验证、可撤销，并且不得恢复旧引擎作为过渡入口。

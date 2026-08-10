@@ -1,0 +1,33 @@
+<!-- Generated from packages/design-capabilities/src/manifest.json. Do not edit by hand. -->
+
+# Design capability release summary
+
+Manifest v1 (2026-08-10) · 0 available · 8 degraded · 8 unavailable
+
+This block is the release-note view of the same manifest used by the built-in Agent and generated help. It must not be edited by hand.
+
+## Available
+
+- None
+
+## Degraded
+
+- `document.lifecycle` — Document lifecycle
+- `canvas.navigation-selection` — Canvas navigation and selection
+- `layers.hierarchy` — Layer hierarchy
+- `vector.path-rendering` — SVG path rendering
+- `appearance.paints-effects-masks` — Paints, effects, and masks
+- `image.import-generation-placement` — Image import, generation, and placement
+- `image.crop-adjustments` — Image crop and adjustments
+- `text.single-style` — Single-style text
+
+## Unavailable
+
+- `vector.pen-node-editing` — Pen and node editing
+- `vector.boolean-operations` — Boolean operations
+- `image.ai-editing` — AI image editing
+- `text.rich-typography` — Rich typography
+- `layout.auto-layout` — Auto layout
+- `components.instances-variants` — Components, instances, and variants
+- `variables.collections-modes` — Variables, collections, and modes
+- `export.static-formats` — Professional static export

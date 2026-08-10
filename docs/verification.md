@@ -24,10 +24,10 @@ macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。
 ```text
 pnpm format:check  passed
 pnpm lint          passed
-pnpm typecheck     passed（15 个 workspace package 执行 typecheck）
+pnpm typecheck     passed（16 个 workspace package 执行 typecheck）
 pnpm test          passed
-├── package tests  11 files / 100 tests
-└── desktop tests  34 files / 220 tests
+├── package tests  12 files / 105 tests
+└── desktop tests  34 files / 223 tests
 pnpm build         passed
 ├── Renderer
 ├── Electron Main
@@ -38,6 +38,8 @@ pnpm build         passed
 测试覆盖的关键路径包括：
 
 - DesignDocument 1.2 schema/migration、正式 Path/Vector 外观、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
+- `DesignCapabilityManifest v1` 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context、只读 `get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON，`capabilities:check` 会拒绝文档漂移。
+- `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
 - Leafer 文档投影、Path 实例、复杂外观映射和 change-set 增量同步：未变节点保持 spec/元素 identity，不调用 `set()`；无关新增、删除和 revision 不刷新 tree/Editor，也不取消进行中的直接操作；选中节点变化只刷新该元素 bounds 并更新 editBox；asset change 会精确重投影引用节点。
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
@@ -55,9 +57,9 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignDocument 1.2.0`、EditorRuntime、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置和视觉复核的基础路径。该路径解除“只能稳定使用椭圆和矩形”的限制，但自动化尚未证明完整专业设计工作流。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、8 项降级可用和 8 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.2.0`、EditorRuntime、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置和视觉复核的基础路径。该路径解除“只能稳定使用椭圆和矩形”的限制，但自动化尚未证明完整专业设计工作流。
 
-仓库当前没有独立的 Geometry、Layout、Text/Font、Image 或 Import/Export service 包。`packages/editor-runtime/src/geometry.ts` 只提供矩阵、坐标转换和 bounds 计算，不包含 Pen 节点编辑、布尔运算、flatten、outline stroke、吸附或路径诊断；组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。
+仓库当前没有独立的 Geometry、Layout、Text/Font、Image 或 Import/Export service 包。`packages/editor-runtime/src/geometry.ts` 只提供矩阵、坐标转换和 bounds 计算，不包含 Pen 节点编辑、布尔运算、flatten、outline stroke、吸附或路径诊断；组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。图片链当前只支持分析参考图、生成新图和放置；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系均明确标记为不可用。
 
 Agent Runtime 当前强制执行“实质写入 → `capture_canvas` → refinement → `capture_canvas`”，但截图次数不能单独保证审美、图层结构、文字可读性或交付保真。后续交付必须按照 [`roadmap.md`](roadmap.md) 的固定样张、capability manifest、专业 service 和结构/渲染诊断门禁推进。
 
@@ -67,11 +69,11 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 
 | 产物             |        大小 |      gzip |
 | ---------------- | ----------: | --------: |
-| Renderer 主 JS   |   678.88 kB | 199.71 kB |
+| Renderer 主 JS   |   679.07 kB | 199.76 kB |
 | Leafer Web chunk |   302.16 kB | 100.55 kB |
-| Electron Main    | 2,094.83 kB | 418.96 kB |
-| Preload          |   232.98 kB |  36.99 kB |
-| Agent            |   276.42 kB |  49.81 kB |
+| Electron Main    | 2,094.94 kB | 418.97 kB |
+| Preload          |   233.09 kB |  37.00 kB |
+| Agent            |   306.82 kB |  58.18 kB |
 
 构建提示 Renderer/Main 存在超过 500 kB 的 chunk。当前不影响构建成功，但需要在性能阶段评估动态加载与 Rolldown code splitting，不能通过移除 sourcemap 或隐藏警告冒充优化。
 

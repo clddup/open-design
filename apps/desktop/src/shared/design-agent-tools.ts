@@ -3,7 +3,7 @@ import {
   isDesignOperation,
   type DesignOperation,
 } from "@opendesign/design-contracts";
-
+export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
 export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
@@ -45,9 +45,21 @@ export type DesignApplyToolInput = {
 
 export const DESIGN_AGENT_TOOL_SPECS = [
   {
+    name: DESIGN_CAPABILITIES_TOOL_NAME,
+    description:
+      "Read the trusted, versioned OpenDesign professional design capability manifest. It reports available, degraded, and unavailable workflows across contract, runtime, human UI, Agent, render, and export surfaces, including providers, limitations, and evidence counts. Call this before planning work that may require Pen editing, boolean operations, Auto Layout, components, variables, rich typography, image crop, AI image editing, or export.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+    risk: "read" as const,
+    approval: "never" as const,
+  },
+  {
     name: DESIGN_INSPECT_TOOL_NAME,
     description:
-      "Read the currently bound OpenDesign Design File, active Page, node tree, selection, and revision before planning a design change. This does not inspect project files, source code, directories, or other Design Files. Call this instead of guessing canvas structure.",
+      "Read the currently bound OpenDesign Design File, active Page, node tree, referenced asset metadata, selection, and revision before planning a design change. Asset source bytes and URIs are intentionally omitted; use opendesign_capture_canvas for bounded visual inspection. This does not inspect project files, source code, directories, or other Design Files. Call this instead of guessing canvas structure.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -176,6 +188,9 @@ export function validateDesignAgentToolInput(
   toolName: string,
   input: unknown,
 ): boolean {
+  if (toolName === DESIGN_CAPABILITIES_TOOL_NAME) {
+    return isRecord(input) && Object.keys(input).length === 0;
+  }
   if (toolName === DESIGN_INSPECT_TOOL_NAME) {
     return isRecord(input) && Object.keys(input).length === 0;
   }

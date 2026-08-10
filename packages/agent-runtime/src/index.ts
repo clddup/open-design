@@ -150,6 +150,8 @@ const DEFAULT_LIMITS: AgentRuntimeLimits = {
   maxCompletionGuardRejections: 3,
 };
 
+const MAX_MODEL_TOOL_RESULT_STRING_CHARACTERS = 16_000;
+
 const EMPTY_TOOL_CATALOG: ToolCatalogPort = { listTools: () => [] };
 
 export class AgentRuntime {
@@ -709,7 +711,7 @@ export class AgentRuntime {
             messages.push({
               role: "tool",
               toolCallId: call.toolCallId,
-              content: completedResult.content,
+              content: projectToolResultForModel(completedResult.content),
               isError: false,
             });
             const toolAttachments = toolResultAttachments(
@@ -924,7 +926,7 @@ function restoreModelMessages(events: JournalEvent[]): CanonicalMessage[] {
       messages.push({
         role: "tool",
         toolCallId,
-        content: terminal.content,
+        content: projectToolResultForModel(terminal.content),
         isError: terminal.isError,
       });
       if (!terminal.isError) {
@@ -1147,6 +1149,33 @@ function canonicalUserMessage(
       ),
     ],
   };
+}
+
+function projectToolResultForModel(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") {
+    if (value.length <= MAX_MODEL_TOOL_RESULT_STRING_CHARACTERS) return value;
+    return `[OpenDesign omitted ${value.length} characters from an oversized tool-result field]`;
+  }
+  if (
+    value === null ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (depth >= 32) return "[OpenDesign omitted deeply nested tool result]";
+  if (Array.isArray(value)) {
+    return value.map((item) => projectToolResultForModel(item, depth + 1));
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [
+        key,
+        projectToolResultForModel(child, depth + 1),
+      ]),
+    );
+  }
+  return `[OpenDesign omitted unsupported ${typeof value} tool-result value]`;
 }
 
 function toolResultAttachments(content: unknown): AgentAttachment[] {

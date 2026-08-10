@@ -2,7 +2,7 @@
 
 > 本文定义产品必须覆盖的完整专业设计能力，不是按用户反馈逐项追加的愿望清单。实现可以分批交付，但文档协议、事务、引擎适配和 UI 不得把未交付能力永久封死。当前状态以磁盘代码和实际验证为准，宣传页与第三方引擎能力说明不能代替验收。
 
-规范架构见 [ADR-0011](adr/0011-professional-design-capability-architecture.md)，实施顺序见 [`roadmap.md`](roadmap.md)。
+规范架构见 [ADR-0011](adr/0011-professional-design-capability-architecture.md)，实施顺序见 [`roadmap.md`](roadmap.md)。当前可执行状态以 `packages/design-capabilities/src/manifest.json` 为唯一事实源，并生成[用户能力说明](generated/design-capabilities.md)与[发布摘要](generated/design-capability-release-summary.md)；本文件继续定义完整产品边界，不能反向把未实现能力从范围中删除。
 
 ## 1. 状态定义
 
@@ -48,7 +48,7 @@ OpenDesign DesignDocument / DesignTransaction / revision / history
 | 外观与合成        | 多 fill/stroke、纯色、线性/径向/角度渐变、图片填充、透明度、blend、描边位置/cap/join/dash、圆角、阴影、内阴影、光晕、模糊、灰度、蒙版、clip                | `DesignDocument 1.2.0`、EditorRuntime、属性面板和 Leafer 映射已实现主要语义；复杂组合的视觉与导出保真待实机/基线验证                                                                                                       |
 | 颜色系统          | Color picker、HEX/RGB/HSL/alpha、渐变编辑器、吸色、最近色、共享颜色样式、变量绑定、色彩空间与无障碍对比                                                    | 基础颜色输入和渐变 stop 已实现；专业 picker、吸色、共享样式/变量、色彩空间待实现                                                                                                                                           |
 | 文字              | 文本框、自动宽/高、基础字体属性、段落对齐、文字内编辑、富文本 runs、列表、缩进、装饰、大小写、OpenType/variable font、文本样式、缺失字体替换、text-on-path | 基础单样式文本与 Leafer TextEditor 已实现；其余专业排版和字体资产管理待实现                                                                                                                                                |
-| 图片              | 选择/粘贴/拖放/路径/URL 导入、AI 生成、内容寻址 asset、嵌入画布、fit、crop、焦点、蒙版、替换、滤镜、调整、透明背景、大图资源生命周期                       | attachment、`read_image`、独立应用级生图配置、GPT Image 2 `generate_image`、事务化 asset/image node、`place_image` 和基础 fit 已实现；真实 Provider/Electron 流程待实机验证；crop/调整/替换 UI 待实现                      |
+| 图片              | 选择/粘贴/拖放/路径/URL 导入、AI 生成与编辑、内容寻址 asset、来源/派生关系、嵌入画布、fit、crop、焦点、蒙版、替换、滤镜、调整、透明背景、大图资源生命周期  | attachment、`read_image`、独立应用级生图配置、GPT Image 2 `generate_image`、事务化 asset/image node、`place_image` 和基础 fit 已实现；AI 局部重绘/扩图/背景替换、派生 asset 来源链、crop/调整/替换 UI 待实现               |
 | 布局与响应式      | constraints、anchor、horizontal/vertical auto layout、wrap、padding/gap、对齐、hug/fill/fixed、min/max、absolute child、layout grid、响应式断点            | 待实现；不能直接把 Leafer Flow 私有状态作为文档事实，需 OpenDesign layout schema + 可替换 solver                                                                                                                           |
 | 组件与设计系统    | Component、Instance、detach、nested instance、property/override、Variant/State、样式、token/variable、collection/mode、alias、发布/更新                    | 文档仅有占位容器，不能描述为已支持；需正式 schema、解析器、事务、检查器和 Agent 工具                                                                                                                                       |
 | 原型与交互        | 页面连接、触发器、动作、overlay、scroll behavior、transition、preview                                                                                      | 文档只有占位容器；待实现，不属于当前渲染画布的隐式职责                                                                                                                                                                     |

@@ -333,7 +333,27 @@ function createScopedInspection(
   const assetsById = Object.fromEntries(
     [...assetIds].flatMap((assetId) => {
       const asset = document.assetsById[assetId];
-      return asset ? [[assetId, structuredClone(asset)]] : [];
+      if (!asset) return [];
+      // Inspection is model context, not an asset transport. Returning a data
+      // URI here duplicates the full binary as tool-result text and can exceed
+      // the model context window after a single image is placed. Pixels remain
+      // available through the bounded canvas capture tool.
+      return [
+        [
+          assetId,
+          {
+            id: asset.id,
+            kind: asset.kind,
+            name: asset.name,
+            mimeType: asset.mimeType,
+            sourceType: asset.source.type,
+            ...(asset.size === undefined
+              ? {}
+              : { size: structuredClone(asset.size) }),
+            extensionKeys: Object.keys(asset.extensions),
+          },
+        ],
+      ];
     }),
   );
 

@@ -48,6 +48,15 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "does not prove rendered visual quality",
     );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Current OpenDesign design capability manifest v1",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "[unavailable] layout.auto-layout",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "[degraded] appearance.paints-effects-masks",
+    );
   });
 
   it("names the exact current operation and product limits", () => {
@@ -60,8 +69,9 @@ describe("OpenDesign Agent system prompt", () => {
     ]) {
       expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(operation);
     }
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("document.lifecycle");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "Creating, renaming, duplicating, reordering, archiving, or deleting Projects, Design Files, or Pages",
+      "Agent tools cannot create, rename, duplicate, reorder, archive, or delete Projects, Design Files, or Pages",
     );
   });
 });

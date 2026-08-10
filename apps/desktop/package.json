@@ -20,6 +20,7 @@
   "dependencies": {
     "@opendesign/agent-contracts": "workspace:*",
     "@opendesign/agent-runtime": "workspace:*",
+    "@opendesign/design-capabilities": "workspace:*",
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/editor-runtime": "workspace:*",
     "@opendesign/leafer-engine": "workspace:*",
