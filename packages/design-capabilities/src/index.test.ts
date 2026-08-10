@@ -33,8 +33,8 @@ describe("design capability manifest", () => {
   it("does not mark evidence-free professional workflows available", () => {
     expect(summarizeCapabilityStatuses()).toEqual({
       available: 0,
-      degraded: 9,
-      unavailable: 8,
+      degraded: 10,
+      unavailable: 7,
     });
     expect(getDesignCapability("appearance.paints-effects-masks")?.status).toBe(
       "degraded",
@@ -48,7 +48,7 @@ describe("design capability manifest", () => {
     const summary = formatAgentCapabilitySummary();
     expect(summary).toContain("manifest v1");
     expect(summary).toContain("[degraded] vector.path-rendering");
-    expect(summary).toContain("[unavailable] vector.boolean-operations");
+    expect(summary).toContain("[degraded] vector.boolean-operations");
     expect(summary).toContain("opendesign_get_capabilities");
 
     const agentManifest = capabilityManifestForAgent() as {

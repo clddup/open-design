@@ -817,6 +817,7 @@ function updateProperties(
 ): void {
   const node = document.nodesById[command.nodeId];
   if (!node) throw notFound(command.commandId, command.nodeId);
+  assertBooleanOperandUpdateAllowed(document, node, command);
   const fields = [
     "name",
     "visible",
@@ -955,7 +956,11 @@ function targetChildren(
   }
   const parent = document.nodesById[parentId];
   if (!parent) throw notFound(commandId, parentId);
-  if (parent.kind !== "frame" && parent.kind !== "group") {
+  if (
+    parent.kind !== "frame" &&
+    parent.kind !== "group" &&
+    parent.kind !== "boolean"
+  ) {
     throw new OperationError(
       commandId,
       `${parent.kind} nodes cannot contain children`,
@@ -1146,7 +1151,8 @@ function nodeAssetIds(node: DesignNode): string[] {
     node.kind === "ellipse" ||
     node.kind === "text" ||
     node.kind === "path" ||
-    node.kind === "vector"
+    node.kind === "vector" ||
+    node.kind === "boolean"
   ) {
     for (const paint of [
       ...node.properties.fills,
@@ -1156,6 +1162,43 @@ function nodeAssetIds(node: DesignNode): string[] {
     }
   }
   return ids;
+}
+
+function assertBooleanOperandUpdateAllowed(
+  document: DesignDocument,
+  node: DesignNode,
+  command: Extract<DesignOperation, { type: "update_properties" }>,
+): void {
+  const parent = node.parentId ? document.nodesById[node.parentId] : undefined;
+  if (parent?.kind !== "boolean") return;
+  if (
+    command.opacity !== undefined ||
+    command.blendMode !== undefined ||
+    command.effects !== undefined ||
+    command.maskMode !== undefined
+  ) {
+    throw new OperationError(
+      command.commandId,
+      "Boolean operand appearance is controlled by its Boolean parent",
+    );
+  }
+  const properties = command.properties;
+  if (!properties) return;
+  const appearanceFields = [
+    "fills",
+    "strokes",
+    "strokeWidth",
+    "strokeAlign",
+    "strokeCap",
+    "strokeJoin",
+    "dashPattern",
+  ];
+  if (appearanceFields.some((field) => Object.hasOwn(properties, field))) {
+    throw new OperationError(
+      command.commandId,
+      "Boolean operand fill and stroke are controlled by its Boolean parent",
+    );
+  }
 }
 
 function nodeChangedFields(before: DesignNode, after: DesignNode): string[] {

@@ -47,7 +47,7 @@ Provider 初始化必须显式提供浏览器 `locateFile` 或已授权宿主读
 - 非法 path、非有限 stroke 和预算限制；
 - 独立子入口证明基础桌面 bundle 不增长。
 
-这不等于 Pen、节点编辑或 boolean operations 已可用。capability manifest 中相关能力继续保持 `unavailable`，直到版本化 vector-network/boolean-group schema、迁移、EditorRuntime planner、人工 UI、Agent tool、Leafer 投影、保存重开、undo/redo、SVG 往返和双平台产品证据全部完成。
+这不等于 Pen、节点编辑或 boolean operations 已可用。在本 ADR 只完成 provider 基础时，相关 capability 保持 `unavailable`；后续 ADR-0022 完成 Boolean contract/runtime 后按 manifest 规则进入 `degraded`，但人工 UI、Agent tool、Leafer 派生投影、SVG 往返和双平台产品证据未完成前仍不是可用产品功能。
 
 ## 后续门禁
 

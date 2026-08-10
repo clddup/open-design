@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.3.0",
+    "documentSchemaVersion": "1.4.0",
     "runtimeProtocolVersion": "0.1.0"
   },
   "components": {

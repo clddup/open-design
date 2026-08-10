@@ -25,7 +25,16 @@ export type UpdatePropertiesPatch = Omit<
 
 type FillNode = Extract<
   DesignNode,
-  { kind: "ellipse" | "frame" | "path" | "rectangle" | "text" | "vector" }
+  {
+    kind:
+      | "boolean"
+      | "ellipse"
+      | "frame"
+      | "path"
+      | "rectangle"
+      | "text"
+      | "vector";
+  }
 >;
 type CornerNode = Extract<
   DesignNode,
@@ -35,6 +44,7 @@ type CornerNode = Extract<
 const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
   frame: "frame",
   group: "layers",
+  boolean: "boolean",
   rectangle: "rectangle",
   ellipse: "ellipse",
   text: "text",
@@ -47,6 +57,7 @@ const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
 const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   frame: "node.frame",
   group: "node.group",
+  boolean: "node.boolean",
   rectangle: "node.rectangle",
   ellipse: "node.ellipse",
   text: "node.text",
@@ -90,6 +101,7 @@ function formatNumber(value: number) {
 
 function isFillNode(node: DesignNode): node is FillNode {
   return (
+    node.kind === "boolean" ||
     node.kind === "ellipse" ||
     node.kind === "frame" ||
     node.kind === "path" ||
@@ -848,6 +860,27 @@ function SelectedNodeProperties({
           </div>
         </div>
       </Section>
+      {node.kind === "boolean" && (
+        <Section title={t("properties.booleanGroup")}>
+          <label className="property-select">
+            <span>{t("properties.booleanOperation")}</span>
+            <select
+              aria-label={t("properties.booleanOperation")}
+              disabled
+              value={node.properties.operation}
+            >
+              <option value="union">{t("properties.booleanUnion")}</option>
+              <option value="subtract">
+                {t("properties.booleanSubtract")}
+              </option>
+              <option value="intersect">
+                {t("properties.booleanIntersect")}
+              </option>
+              <option value="exclude">{t("properties.booleanExclude")}</option>
+            </select>
+          </label>
+        </Section>
+      )}
       <Section title={t("properties.layout")}>
         <div className="property-grid">
           <Field
@@ -869,6 +902,7 @@ function SelectedNodeProperties({
             value={formatNumber(node.transform[5])}
           />
           <Field
+            disabled={node.kind === "boolean"}
             label="W"
             min={0}
             onCommit={(draft) =>
@@ -882,6 +916,7 @@ function SelectedNodeProperties({
             value={formatNumber(node.size.width)}
           />
           <Field
+            disabled={node.kind === "boolean"}
             label="H"
             min={0}
             onCommit={(draft) =>

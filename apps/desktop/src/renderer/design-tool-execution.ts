@@ -671,7 +671,10 @@ function createScopedInspection(
       node.kind === "frame" ||
       node.kind === "rectangle" ||
       node.kind === "ellipse" ||
-      node.kind === "text"
+      node.kind === "text" ||
+      node.kind === "path" ||
+      node.kind === "vector" ||
+      node.kind === "boolean"
     ) {
       for (const paint of [
         ...node.properties.fills,

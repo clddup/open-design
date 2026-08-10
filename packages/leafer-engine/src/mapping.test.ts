@@ -33,6 +33,88 @@ describe("Leafer scene projection", () => {
     });
   });
 
+  it("keeps Boolean operands structural and hidden until derived geometry is supplied", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    document.nodesById.boolean_mark = {
+      id: "boolean_mark",
+      kind: "boolean",
+      name: "Boolean mark",
+      parentId: frame.id,
+      childIds: ["boolean_base", "boolean_cutout"],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 840, 72],
+      size: { width: 120, height: 120 },
+      opacity: 1,
+      properties: {
+        operation: "subtract",
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    document.nodesById.boolean_base = {
+      id: "boolean_base",
+      kind: "path",
+      name: "Base",
+      parentId: "boolean_mark",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 120, height: 120 },
+      opacity: 1,
+      properties: {
+        path: "M0 0H120V120H0Z",
+        fills: [{ type: "solid", color: "#ef4444", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    document.nodesById.boolean_cutout = {
+      id: "boolean_cutout",
+      kind: "path",
+      name: "Cutout",
+      parentId: "boolean_mark",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 30, 30],
+      size: { width: 60, height: 60 },
+      opacity: 1,
+      properties: {
+        path: "M0 0H60V60H0Z",
+        fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    frame.childIds.push("boolean_mark");
+
+    const projection = projectDesignPage(document, "page_welcome");
+    expect(projection.elementsById.get("boolean_mark")).toMatchObject({
+      tag: "Group",
+      childIds: ["boolean_base", "boolean_cutout"],
+    });
+    expect(projection.elementsById.get("boolean_base")?.data.visible).toBe(
+      false,
+    );
+    expect(projection.elementsById.get("boolean_cutout")?.data.visible).toBe(
+      false,
+    );
+    expect(projection.warnings).toContainEqual({
+      code: "unsupported-node",
+      message:
+        "Boolean node boolean_mark is structural until its derived PathKit projection is available",
+      nodeId: "boolean_mark",
+    });
+  });
+
   it("reprojects only nodes named by a contiguous transaction change set", () => {
     const document = createWelcomeDocument();
     const previous = projectDesignPage(document, "page_welcome");

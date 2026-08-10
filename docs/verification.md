@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.3.0`
+- 文档协议：`DesignDocument 1.4.0`
 - Agent 协议：`3.4.0`
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
@@ -38,8 +38,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   27 files / 175 tests
-└── desktop tests   38 files / 270 tests
+├── package tests   28 files / 185 tests
+└── desktop tests   38 files / 271 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -90,9 +90,9 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、8 项降级可用和 8 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.3.0`、EditorRuntime、Image service、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement、来源替换和视觉复核的基础路径。两个固定专业 fixture 进一步证明这些语义可以组成完整企鹅层级和复杂海报文档，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、真实 Electron 像素截图、Agent 重放和专业导出仍未完成，因此不能据此把完整工作流标为可用。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、10 项降级可用和 7 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.4.0`、EditorRuntime、Image service、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement、来源替换和视觉复核的基础路径。两个固定专业 fixture 进一步证明这些语义可以组成完整企鹅层级和复杂海报文档，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、真实 Electron 像素截图、Agent 重放和专业导出仍未完成，因此不能据此把完整工作流标为可用。
 
-仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify 和 outline stroke 的底层计算边界。它尚未进入 DesignDocument、EditorRuntime、人工 UI、Agent、Leafer 投影或导入导出，所以 Pen 节点编辑、非破坏 Boolean Group、flatten 和 outline stroke 仍不是可用产品能力。仓库也没有独立 Layout、Text/Font 或 Import/Export service 包；`packages/editor-runtime/src/geometry.ts` 仍只负责矩阵、坐标转换和 bounds 计算，组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
+仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify 和 outline stroke 的底层计算边界。`DesignDocument 1.4.0` 与 EditorRuntime 也已建立非破坏 Boolean Group 的独立节点、迁移、创建/切换/解组 planner、组级外观、源层保护、持久化和 undo/redo；它没有持久化 provider 派生 path。递归几何 resolver、PathKit 派生 Leafer result、人工命令、Agent typed tool、文字 outline、SVG 往返和双平台产品证据仍未完成，所以 Boolean capability 为 `degraded` 且产品功能尚不可用，Pen、flatten 和 outline stroke 也仍不是可用产品能力。仓库也没有独立 Layout、Text/Font 或 Import/Export service 包；`packages/editor-runtime/src/geometry.ts` 仍只负责矩阵、坐标转换和 bounds 计算，组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
 
 Agent Runtime 与 Main 当前强制执行“inspect → typed plan → 实质初稿 → `capture_canvas` → typed visual review → refinement → `capture_canvas`”。所有新 composition 必须位于计划 Frame 内；全局生图只能使用计划声明的 role，默认不能用一张 raster 替代可编辑设计。该流程显著收紧敷衍路径，但仍不能单独保证审美、文字可读性或交付保真；后续交付必须按照 [`roadmap.md`](roadmap.md) 的像素基线、固定样张、capability manifest、专业 service 和人工验收推进。
 

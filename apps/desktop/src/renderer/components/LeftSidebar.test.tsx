@@ -6,6 +6,80 @@ import { I18nProvider } from "../i18n";
 import { LeftSidebar } from "./LeftSidebar";
 
 describe("LeftSidebar layer tree", () => {
+  it("presents Boolean groups as named, collapsible vector containers", async () => {
+    const user = userEvent.setup();
+    const document = structuredClone(createWelcomeDocument());
+    const parent = document.nodesById.feature_group;
+    const first = document.nodesById.feature_one;
+    const second = document.nodesById.feature_two;
+    if (
+      !parent ||
+      parent.kind !== "group" ||
+      !first ||
+      !second ||
+      first.kind !== "rectangle" ||
+      second.kind !== "rectangle"
+    ) {
+      throw new Error("Missing Boolean tree fixtures");
+    }
+    document.nodesById.boolean_cards = {
+      id: "boolean_cards",
+      kind: "boolean",
+      name: "Boolean cards",
+      parentId: parent.id,
+      childIds: [first.id, second.id],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 640, height: 220 },
+      opacity: 1,
+      properties: {
+        operation: "union",
+        fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    first.parentId = "boolean_cards";
+    second.parentId = "boolean_cards";
+    parent.childIds = ["boolean_cards", "feature_three"];
+
+    render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          activePageId="page_welcome"
+          document={document}
+          onDelete={vi.fn()}
+          onPageChange={vi.fn()}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={vi.fn()}
+          onTabChange={vi.fn()}
+          onToggleLock={vi.fn()}
+          onToggleVisibility={vi.fn()}
+          selectedNodeIds={[]}
+          tab="layers"
+        />
+      </I18nProvider>,
+    );
+
+    const booleanLayer = screen.getByRole("button", {
+      name: "Boolean cards",
+    });
+    expect(
+      booleanLayer.querySelector('[data-glyph="boolean"]'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: first.name }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Collapse Boolean cards" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: first.name }),
+    ).not.toBeInTheDocument();
+  });
+
   it("distinguishes own, inherited, and unlocked layer states", async () => {
     const user = userEvent.setup();
     const document = structuredClone(createWelcomeDocument());

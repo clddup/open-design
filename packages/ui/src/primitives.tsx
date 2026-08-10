@@ -18,6 +18,7 @@ export type GlyphName =
   | "align-top"
   | "align-v-center"
   | "assets"
+  | "boolean"
   | "chevron-down"
   | "chevron-right"
   | "close"
@@ -115,6 +116,12 @@ const paths: Record<GlyphName, ReactNode> = {
       <rect x="13" y="4" width="7" height="7" rx="1.5" />
       <rect x="4" y="13" width="7" height="7" rx="1.5" />
       <path d="m16.5 13 3.5 7h-7z" />
+    </>
+  ),
+  boolean: (
+    <>
+      <circle cx="9" cy="12" r="6" />
+      <circle cx="15" cy="12" r="6" />
     </>
   ),
   "chevron-down": <path d="m7 9 5 5 5-5" />,

@@ -200,6 +200,47 @@ describe("design contract schemas", () => {
     ).toBe(false);
   });
 
+  it("defines a non-destructive Boolean container without persisting derived provider geometry", () => {
+    const booleanNode = {
+      id: "boolean_logo",
+      name: "Logo cutout",
+      parentId: null,
+      childIds: ["path_base", "path_cutout"],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 160, height: 160 },
+      opacity: 1,
+      effects: [
+        {
+          type: "outer-glow",
+          color: "#5b8cff",
+          opacity: 0.45,
+          radius: 20,
+          spread: 2,
+        },
+      ],
+      extensions: {},
+      kind: "boolean",
+      properties: {
+        operation: "subtract",
+        fillRule: "evenodd",
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+    };
+
+    expect(Value.Check(DesignNodeSchema, booleanNode)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...booleanNode,
+        properties: { ...booleanNode.properties, operation: "divide" },
+      }),
+    ).toBe(false);
+    expect(booleanNode.properties).not.toHaveProperty("path");
+  });
+
   it("migrates 1.0 documents to the versioned appearance contract", () => {
     const legacy = {
       format: DESIGN_FORMAT,
@@ -362,5 +403,36 @@ describe("design contract schemas", () => {
     expect(
       image.extensions["dev.opendesign.image-placement.migration"],
     ).toEqual({ sourceSchemaVersion: "1.2.0", legacyFit: fit });
+  });
+
+  it("migrates a 1.3 document to 1.4 without inventing Boolean state", () => {
+    const imagePlacementDocument = {
+      format: DESIGN_FORMAT,
+      schemaVersion: "1.3.0",
+      documentId: "document_image_placement",
+      revision: 7,
+      pageOrder: ["page_1"],
+      pagesById: {
+        page_1: {
+          id: "page_1",
+          name: "Page 1",
+          rootNodeIds: [],
+          extensions: {},
+        },
+      },
+      nodesById: {},
+      componentsById: {},
+      variantSetsById: {},
+      tokenCollectionsById: {},
+      tokensById: {},
+      interactionsById: {},
+      assetsById: {},
+      extensions: { source: "1.3-fixture" },
+    };
+
+    expect(migrateDesignDocument(imagePlacementDocument)).toEqual({
+      ...imagePlacementDocument,
+      schemaVersion: DESIGN_SCHEMA_VERSION,
+    });
   });
 });

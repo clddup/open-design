@@ -38,7 +38,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 完成条件：macOS 与 Windows 的同一 commit 都有 `verify + native package + install/start/product smoke` 证据，并写入 `verification.md`。
 
-## P0-B：稳定当前 `1.3.0` 与 Leafer 迁移
+## P0-B：稳定当前 `1.4.0` 与 Leafer 迁移
 
 - [x] 为 host-only `put_asset + insert_element(image)` 内部事务补 Renderer 集成测试，验证单次 revision、Page/Selection scope 和一次 undo 同时移除 asset/node。
 - [x] 为 Agent composer 的剪贴板粘贴和文件拖放补交互测试，验证 Renderer 通过窄 Preload API 提交 bytes，最终 run 只携带安全附件元数据；纯文本路径粘贴不被拦截或提前读取。
@@ -93,6 +93,9 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 - [x] 建立 `@opendesign/geometry-service` 的首个纯排列 provider；多层对齐、固定两端均分和明确一维间距由 EditorRuntime 转成单次事务，人工 Inspector 与 Agent typed tool 共用，不在 React、prompt 或 Leafer adapter 中重复计算。
 - [ ] 针对 Path/Vector 通过维护状态、许可证、包体积、确定性、WASM/原生要求和 macOS/Windows 兼容基准选择固定版本的成熟 geometry kernel；已固定 BSD-3-Clause 的 `pathkit-wasm 1.0.0` 并通过真实 WASM 的 cubic PathOps、孔洞、空结果、simplify、outline stroke、输入预算与基础 bundle 隔离测试，裁决见 ADR-0021。剩余门禁是同一 corpus 的 macOS/Windows 原生加载、性能与内存基准，通过前不勾选完成，也不把 provider 基础描述为可用 Boolean/Pen 功能。
+- [x] 将非破坏 Boolean Group 固定为 `DesignDocument 1.4.0` 的独立 `boolean` 容器；源层保持可编辑，组持有统一外观，Union/Intersect/Exclude 初始继承顶层、Subtract 初始继承底层。EditorRuntime planner 覆盖创建、operation 切换、解组、锁定、revision、保存重开和 undo/redo，不持久化 PathKit 派生 path；当前 capability 为 `degraded`，产品功能尚不可用。
+- [ ] 建立递归 Boolean geometry resolver 和 PathKit 派生投影，纳入源层 fill+stroke、局部/世界 transform、嵌套 Boolean、空结果、缓存失效与资源释放；Leafer 必须渲染独立 result projection 并继续在图层树保留源层，不能把源层逐个绘制冒充结果。
+- [ ] 让人工工具栏/菜单/快捷键与 Agent typed tool 共用 Boolean planner；补 operation 切换、进入源层编辑、解组、取消、warning、undo 和 macOS/Windows 行为。文字 operand 在 Text/Font service 能提供确定性 outline 前保持不可用。
 - 增加正式 Line/Arrow/Polygon/Star/Slice 与可编辑 Path/Vector 轮廓；实现 Pen、节点/手柄、开放/闭合、连接/断开、路径反转、布尔 union/subtract/intersect/exclude、flatten 和 outline stroke。
 - 扩展剩余图层与精确变换工作流：重命名、批量属性、单层相对父级对齐、二维 Tidy up/画布间距手柄、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
 - 人工命令与 Agent typed tools 调用同一 geometry service，并把结果作为一个可预览、可撤销的 `DesignTransaction` 应用。SVG 导入导出必须经过同一公共 Path 语义，不能泄漏 provider 私有命令。

@@ -71,7 +71,12 @@ export function diagnoseDesignPages(
     }
     const rootFragments = page.rootNodeIds.filter((nodeId) => {
       const node = document.nodesById[nodeId];
-      return node && node.kind !== "frame" && node.kind !== "group";
+      return (
+        node &&
+        node.kind !== "frame" &&
+        node.kind !== "group" &&
+        node.kind !== "boolean"
+      );
     });
     if (rootFragments.length >= FRAGMENTED_ROOT_THRESHOLD) {
       items.push({
@@ -79,7 +84,7 @@ export function diagnoseDesignPages(
         severity: "warning",
         pageId,
         relatedNodeIds: rootFragments.slice(0, 32),
-        message: `Page ${pageId} has ${rootFragments.length} ungrouped root layers; composite artwork should use a named Frame or Group`,
+        message: `Page ${pageId} has ${rootFragments.length} ungrouped root layers; composite artwork should use a named Frame, Group, or Boolean`,
       });
     }
 
@@ -246,7 +251,13 @@ function diagnoseAsset(
 }
 
 function countFeatures(node: DesignNode, summary: DesignFeatureSummary): void {
-  if (node.kind === "path" || node.kind === "vector") summary.paths += 1;
+  if (
+    node.kind === "path" ||
+    node.kind === "vector" ||
+    node.kind === "boolean"
+  ) {
+    summary.paths += 1;
+  }
   if (node.kind === "image") summary.images += 1;
   if (node.kind === "text") summary.text += 1;
   if (node.blendMode && node.blendMode !== "normal") summary.blends += 1;
@@ -278,7 +289,8 @@ function nodePaints(node: DesignNode): readonly Paint[] {
     node.kind === "ellipse" ||
     node.kind === "text" ||
     node.kind === "path" ||
-    node.kind === "vector"
+    node.kind === "vector" ||
+    node.kind === "boolean"
   ) {
     return [...node.properties.fills, ...node.properties.strokes];
   }
@@ -292,7 +304,8 @@ function hasVisibleAppearance(node: DesignNode): boolean {
     node.kind !== "ellipse" &&
     node.kind !== "text" &&
     node.kind !== "path" &&
-    node.kind !== "vector"
+    node.kind !== "vector" &&
+    node.kind !== "boolean"
   ) {
     return true;
   }
@@ -327,7 +340,8 @@ function isDrawableShape(node: DesignNode): boolean {
     node.kind === "ellipse" ||
     node.kind === "text" ||
     node.kind === "path" ||
-    node.kind === "vector"
+    node.kind === "vector" ||
+    node.kind === "boolean"
   );
 }
 

@@ -18,6 +18,7 @@ import type { SidebarTab } from "../state/editor";
 const nodeIcons: Record<NodeKind, GlyphName> = {
   frame: "frame",
   group: "layers",
+  boolean: "boolean",
   rectangle: "rectangle",
   ellipse: "ellipse",
   text: "text",
@@ -46,6 +47,7 @@ const assets = [
 const nodeKindKeys: Record<NodeKind, MessageKey> = {
   frame: "node.frame",
   group: "node.group",
+  boolean: "node.boolean",
   rectangle: "node.rectangle",
   ellipse: "node.ellipse",
   text: "node.text",

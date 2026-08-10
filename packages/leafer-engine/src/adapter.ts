@@ -595,6 +595,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       );
       const sizeChanged =
         node.kind !== "group" &&
+        node.kind !== "boolean" &&
         node.kind !== "instance" &&
         (!nearlyEqual(previous.size.width, current.size.width) ||
           !nearlyEqual(previous.size.height, current.size.height));

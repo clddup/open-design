@@ -95,6 +95,23 @@ export function validateDocumentInvariants(
         message: `${node.kind} nodes cannot contain children`,
       });
     }
+    if (node.kind === "boolean") {
+      if (node.childIds.length < 2) {
+        issues.push({
+          path: `/nodesById/${nodeId}/childIds`,
+          message: "boolean nodes require at least two operands",
+        });
+      }
+      for (const [index, childId] of node.childIds.entries()) {
+        const child = ownValue(document.nodesById, childId);
+        if (child && !isBooleanOperand(child)) {
+          issues.push({
+            path: `/nodesById/${nodeId}/childIds/${index}`,
+            message: `${child.kind} nodes cannot be boolean operands`,
+          });
+        }
+      }
+    }
     if (node.kind === "image") {
       const asset = ownValue(document.assetsById, node.properties.assetId);
       if (!asset || asset.kind !== "image") {
@@ -108,7 +125,10 @@ export function validateDocumentInvariants(
       node.kind === "frame" ||
       node.kind === "rectangle" ||
       node.kind === "ellipse" ||
-      node.kind === "text"
+      node.kind === "text" ||
+      node.kind === "path" ||
+      node.kind === "vector" ||
+      node.kind === "boolean"
     ) {
       for (const [paintIndex, paint] of [
         ...node.properties.fills,
@@ -510,7 +530,20 @@ function ownValue<T>(record: Record<string, T>, key: string): T | undefined {
 }
 
 function isContainer(node: DesignNode): boolean {
-  return node.kind === "frame" || node.kind === "group";
+  return (
+    node.kind === "frame" || node.kind === "group" || node.kind === "boolean"
+  );
+}
+
+function isBooleanOperand(node: DesignNode): boolean {
+  return (
+    node.kind === "rectangle" ||
+    node.kind === "ellipse" ||
+    node.kind === "text" ||
+    node.kind === "path" ||
+    node.kind === "vector" ||
+    node.kind === "boolean"
+  );
 }
 
 export type { ImageNode };

@@ -2,9 +2,9 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-10 · 文档协议：`1.3.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-11 · 文档协议：`1.4.0` · 画布基线：`leafer-editor@2.2.9`
 
-当前状态：可用 0 项，降级可用 9 项，不可用 8 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
+当前状态：可用 0 项，降级可用 10 项，不可用 7 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
 ## 基础工作流
 
@@ -33,7 +33,7 @@
 创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。
 
 - ID：`layers.hierarchy`
-- 实现方：DesignDocument 1.3.0 + EditorRuntime
+- 实现方：DesignDocument 1.4.0 + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
 - 证据：自动化 7 项；实机 0 项
 - 限制：画布直接操作时的自动归属仍未补齐；图层面板中的显式跨容器重挂载目前以指针拖放为主。
@@ -59,7 +59,7 @@
 持久化并渲染可移植 SVG Path 数据及其填充、描边、渐变、效果、蒙版和混合模式。
 
 - ID：`vector.path-rendering`
-- 实现方：DesignDocument 1.3.0 + Leafer Path adapter
+- 实现方：DesignDocument 1.4.0 + Leafer Path adapter
 - 表面：contract=available；runtime=available；human=unavailable；agent=available；render=available；export=unavailable
 - 证据：自动化 6 项；实机 0 项
 - 限制：当前支持单路径 SVG 数据，但没有 Pen、节点/手柄编辑、多轮廓矢量网络或 SVG 往返。
@@ -76,15 +76,16 @@
 - 限制：工具栏 Pen 仍禁用；PathKit 不提供 OpenDesign 所需的节点、边、手柄、命中测试或矢量网络交互语义。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 
-### 布尔运算 — 不可用
+### 布尔运算 — 降级可用
 
 非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。
 
 - ID：`vector.boolean-operations`
-- 实现方：Skia PathKit provider foundation; OpenDesign product semantics not implemented
-- 表面：contract=unavailable；runtime=unavailable；human=unavailable；agent=unavailable；render=unavailable；export=unavailable
-- 证据：自动化 1 项；实机 0 项
-- 限制：受限的 Skia PathKit provider 已通过几何契约测试，但 OpenDesign boolean group schema、planner、UI、Agent 命令、渲染生命周期、持久化和 undo/redo 尚未实现；手工扁平化不能冒充等价能力。
+- 实现方：DesignDocument 1.4.0 + EditorRuntime Boolean planner + Skia PathKit provider foundation
+- 表面：contract=available；runtime=available；human=unavailable；agent=unavailable；render=unavailable；export=unavailable
+- 证据：自动化 5 项；实机 0 项
+- 限制：DesignDocument 1.4.0 与 EditorRuntime 已在不持久化 provider 派生路径的前提下支持可编辑源层、组级外观、兼容 Figma 的初始外观继承、operation 切换、持久化、undo/redo、解组、锁定和 revision 冲突。
+- 限制：PathKit 派生渲染、创建/切换/解组 UI、Agent typed tool、文字轮廓、SVG 往返和 macOS/Windows 产品证据仍不可用；当前 Leafer 结构投影会主动隐藏源层并报告 warning，不绘制错误 fallback。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations)
 
 ## 外观与合成
@@ -94,7 +95,7 @@
 应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。
 
 - ID：`appearance.paints-effects-masks`
-- 实现方：DesignDocument 1.3.0 + PropertiesPanel + Leafer adapter
+- 实现方：DesignDocument 1.4.0 + PropertiesPanel + Leafer adapter
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
 - 证据：自动化 6 项；实机 0 项
 - 限制：复杂组合仍需 Electron 视觉基线，专业取色器和共享颜色样式尚未完成。
@@ -118,7 +119,7 @@
 非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。
 
 - ID：`image.crop-adjustments`
-- 实现方：DesignDocument 1.3.0 + OpenDesign Image service crop geometry + Leafer projection
+- 实现方：DesignDocument 1.4.0 + OpenDesign Image service crop geometry + Leafer projection
 - 表面：contract=degraded；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=unavailable
 - 证据：自动化 7 项；实机 0 项
 - 限制：检查器与专用 Agent 工具已共用非破坏 placement 和来源替换语义，但画布直接裁剪控件、调整滤镜、导出保真及 macOS/Windows 原生交互证据仍未完成。
@@ -142,7 +143,7 @@
 创建、渲染、变换和编辑使用单一共享字体样式与对齐方式的文字图层。
 
 - ID：`text.single-style`
-- 实现方：DesignDocument 1.3.0 + Leafer TextEditor
+- 实现方：DesignDocument 1.4.0 + Leafer TextEditor
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
 - 证据：自动化 5 项；实机 0 项
 - 限制：字体可用性、跨平台 shaping、溢出和视觉保真仍需 macOS/Windows 验收。

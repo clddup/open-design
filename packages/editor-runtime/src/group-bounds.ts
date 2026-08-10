@@ -41,7 +41,9 @@ function collectGroupAncestors(
   let node = startNodeId ? document.nodesById[startNodeId] : undefined;
   while (node && !visited.has(node.id)) {
     visited.add(node.id);
-    if (node.kind === "group") result.push(node.id);
+    if (node.kind === "group" || node.kind === "boolean") {
+      result.push(node.id);
+    }
     node = node.parentId ? document.nodesById[node.parentId] : undefined;
   }
   return result;
@@ -64,12 +66,16 @@ function normalizeGroupInPlace(
   groupId: string,
 ): GroupBoundsNormalizationResult {
   const group = document.nodesById[groupId];
-  if (!group || group.kind !== "group") {
-    return failure("not-found", `Group ${groupId} does not exist`);
+  if (!group || (group.kind !== "group" && group.kind !== "boolean")) {
+    return failure("not-found", `Dynamic container ${groupId} does not exist`);
   }
   const children = group.childIds.map((nodeId) => document.nodesById[nodeId]);
-  if (children.length === 0) {
-    return failure("invalid-target", `Group ${groupId} cannot be left empty`);
+  const minimumChildren = group.kind === "boolean" ? 2 : 1;
+  if (children.length < minimumChildren) {
+    return failure(
+      "invalid-target",
+      `${group.kind === "boolean" ? "Boolean" : "Group"} ${groupId} requires at least ${minimumChildren} child${minimumChildren === 1 ? "" : "ren"}`,
+    );
   }
   if (children.some((node) => !node)) {
     return failure("not-found", `Group ${groupId} has a missing child`);

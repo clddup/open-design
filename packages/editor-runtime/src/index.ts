@@ -44,6 +44,15 @@ export {
 } from "./arrange-operations.js";
 export { MAX_ARRANGEMENT_SPACING } from "@opendesign/geometry-service";
 export {
+  canCreateBooleanGroup,
+  canUngroupBooleanGroup,
+  planCreateBooleanGroup,
+  planSetBooleanOperation,
+  planUngroupBooleanGroup,
+  type BooleanOperationFailureCode,
+  type BooleanOperationPlan,
+} from "./boolean-operations.js";
+export {
   planImageNodeUpdate,
   type ImageUpdateFailureCode,
   type ImageUpdateOperation,

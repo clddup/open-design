@@ -97,6 +97,7 @@ type AppView = "workspace" | "project" | "editor" | "settings";
 const nodeKindKeys: Record<string, MessageKey> = {
   frame: "node.frame",
   group: "node.group",
+  boolean: "node.boolean",
   rectangle: "node.rectangle",
   ellipse: "node.ellipse",
   text: "node.text",

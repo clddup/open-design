@@ -1,7 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.3.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.4.0" as const;
+export const IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION = "1.3.0" as const;
 export const PATH_DESIGN_SCHEMA_VERSION = "1.2.0" as const;
 export const APPEARANCE_DESIGN_SCHEMA_VERSION = "1.1.0" as const;
 export const LEGACY_DESIGN_SCHEMA_VERSION = "1.0.0" as const;
@@ -24,6 +25,7 @@ export const JsonObjectSchema = Type.Record(Type.String(), JsonValueSchema);
 export const NodeKindSchema = Type.Union([
   Type.Literal("frame"),
   Type.Literal("group"),
+  Type.Literal("boolean"),
   Type.Literal("rectangle"),
   Type.Literal("ellipse"),
   Type.Literal("text"),
@@ -409,6 +411,24 @@ export const PathPropertiesSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const BooleanOperationSchema = Type.Union([
+  Type.Literal("union"),
+  Type.Literal("subtract"),
+  Type.Literal("intersect"),
+  Type.Literal("exclude"),
+]);
+
+export const BooleanPropertiesSchema = Type.Object(
+  {
+    ...ShapeProperties,
+    operation: BooleanOperationSchema,
+    fillRule: Type.Optional(
+      Type.Union([Type.Literal("nonzero"), Type.Literal("evenodd")]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 const NodeBaseProperties = {
   id: Type.String({ minLength: 1 }),
   name: Type.String(),
@@ -439,6 +459,15 @@ export const GroupNodeSchema = Type.Object(
     ...NodeBaseProperties,
     kind: Type.Literal("group"),
     properties: GroupPropertiesSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const BooleanNodeSchema = Type.Object(
+  {
+    ...NodeBaseProperties,
+    kind: Type.Literal("boolean"),
+    properties: BooleanPropertiesSchema,
   },
   { additionalProperties: false },
 );
@@ -512,6 +541,7 @@ export const FutureNodeSchema = Type.Union([
 export const DesignNodeSchema = Type.Union([
   FrameNodeSchema,
   GroupNodeSchema,
+  BooleanNodeSchema,
   RectangleNodeSchema,
   EllipseNodeSchema,
   TextNodeSchema,
@@ -1048,8 +1078,10 @@ export type ImagePlacement = Static<typeof ImagePlacementSchema>;
 export type Paint = Static<typeof PaintSchema>;
 export type Effect = Static<typeof EffectSchema>;
 export type MaskMode = Static<typeof MaskModeSchema>;
+export type BooleanOperation = Static<typeof BooleanOperationSchema>;
 export type FrameNode = Static<typeof FrameNodeSchema>;
 export type GroupNode = Static<typeof GroupNodeSchema>;
+export type BooleanNode = Static<typeof BooleanNodeSchema>;
 export type RectangleNode = Static<typeof RectangleNodeSchema>;
 export type EllipseNode = Static<typeof EllipseNodeSchema>;
 export type TextNode = Static<typeof TextNodeSchema>;
@@ -1172,14 +1204,18 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     Array.isArray(value) ||
     (schemaVersion !== LEGACY_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== APPEARANCE_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== PATH_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== PATH_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
   try {
     const migrated = structuredClone(value) as Record<string, unknown>;
     migrated.schemaVersion = DESIGN_SCHEMA_VERSION;
-    if (schemaVersion !== PATH_DESIGN_SCHEMA_VERSION) {
+    if (
+      schemaVersion === LEGACY_DESIGN_SCHEMA_VERSION ||
+      schemaVersion === APPEARANCE_DESIGN_SCHEMA_VERSION
+    ) {
       migratePathNodes(migrated, schemaVersion);
     }
     migrateImageNodes(migrated, schemaVersion);

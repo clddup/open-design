@@ -53,7 +53,10 @@ export function planGroupNodes(
       `Node ${options.groupId} already exists`,
     );
   }
-  const eligibility = analyzeGroupSelection(document, pageId, nodeIds);
+  const eligibility = analyzeContainerSelection(document, pageId, nodeIds, {
+    action: "Grouping",
+    minimum: 2,
+  });
   if (!eligibility.ok) return eligibility;
   const { bounds, ordered, parentId, siblings } = eligibility;
   if (1 + ordered.length * 2 > MAX_TRANSACTION_COMMANDS) {
@@ -161,7 +164,10 @@ export function canGroupNodes(
   pageId: string,
   nodeIds: readonly string[],
 ): boolean {
-  const eligibility = analyzeGroupSelection(document, pageId, nodeIds);
+  const eligibility = analyzeContainerSelection(document, pageId, nodeIds, {
+    action: "Grouping",
+    minimum: 2,
+  });
   return (
     eligibility.ok &&
     1 + eligibility.ordered.length * 2 <= MAX_TRANSACTION_COMMANDS
@@ -355,16 +361,23 @@ export function planReparentNodes(
       `Target index ${options.index} is outside the final parent range 0..${targetWithoutSelection.length}`,
     );
   }
-  if (
-    sourceParentId !== options.parentId &&
-    sourceParentId &&
-    document.nodesById[sourceParentId]?.kind === "group" &&
-    sourceSiblings.every((nodeId) => selected.has(nodeId))
-  ) {
-    return failure(
-      "invalid-target",
-      "Moving these layers would leave their source Group empty; move or ungroup the Group instead",
-    );
+  if (sourceParentId !== options.parentId && sourceParentId) {
+    const sourceParent = document.nodesById[sourceParentId];
+    const remainingChildren = sourceSiblings.filter(
+      (nodeId) => !selected.has(nodeId),
+    ).length;
+    if (sourceParent?.kind === "group" && remainingChildren === 0) {
+      return failure(
+        "invalid-target",
+        "Moving these layers would leave their source Group empty; move or ungroup the Group instead",
+      );
+    }
+    if (sourceParent?.kind === "boolean" && remainingChildren < 2) {
+      return failure(
+        "invalid-target",
+        "Moving these layers would leave fewer than two Boolean operands; ungroup the Boolean instead",
+      );
+    }
   }
 
   const targetOrder = [
@@ -523,7 +536,7 @@ export function planReparentNodes(
   };
 }
 
-type GroupSelectionAnalysis =
+export type ContainerSelectionAnalysis =
   | {
       ok: true;
       bounds: { x: number; y: number; width: number; height: number };
@@ -595,11 +608,12 @@ function analyzeReorderSelection(
   };
 }
 
-function analyzeGroupSelection(
+export function analyzeContainerSelection(
   document: DesignDocument,
   pageId: string,
   nodeIds: readonly string[],
-): GroupSelectionAnalysis {
+  options: { action: string; minimum: number },
+): ContainerSelectionAnalysis {
   if (!document.pagesById[pageId]) {
     return failure("not-found", `Page ${pageId} does not exist`);
   }
@@ -608,10 +622,10 @@ function analyzeGroupSelection(
     return failure("not-found", "One or more selected layers do not exist");
   }
   const selected = topLevelSelection(document, uniqueNodeIds);
-  if (selected.length < 2) {
+  if (selected.length < options.minimum) {
     return failure(
       "invalid-selection",
-      "Grouping requires at least two layers",
+      `${options.action} requires at least ${options.minimum} layers`,
     );
   }
   if (selected.some((nodeId) => !nodeBelongsToPage(document, pageId, nodeId))) {
@@ -629,7 +643,10 @@ function analyzeGroupSelection(
     );
   }
   if (nodes.some((node) => isEffectivelyLocked(document, node.id))) {
-    return failure("locked", "Locked layers cannot be grouped");
+    return failure(
+      "locked",
+      `Locked layers cannot participate in ${options.action.toLowerCase()}`,
+    );
   }
   const siblings = childIds(document, pageId, parentId);
   if (!siblings || selected.some((nodeId) => !siblings.includes(nodeId))) {
@@ -725,7 +742,7 @@ function topLevelSelection(
   });
 }
 
-function childIds(
+export function childIds(
   document: DesignDocument,
   pageId: string,
   parentId: string | null,
@@ -734,7 +751,7 @@ function childIds(
   return document.pagesById[pageId]?.rootNodeIds;
 }
 
-function nodeBelongsToPage(
+export function nodeBelongsToPage(
   document: DesignDocument,
   pageId: string,
   nodeId: string,
@@ -863,7 +880,10 @@ function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
   );
 }
 
-function isEffectivelyLocked(document: DesignDocument, nodeId: string) {
+export function isEffectivelyLocked(
+  document: DesignDocument,
+  nodeId: string,
+): boolean {
   const visited = new Set<string>();
   let node: DesignNode | undefined = document.nodesById[nodeId];
   while (node && !visited.has(node.id)) {

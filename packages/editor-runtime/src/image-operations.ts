@@ -191,7 +191,8 @@ function nodeReferencesAsset(node: DesignNode, assetId: string): boolean {
     node.kind !== "ellipse" &&
     node.kind !== "text" &&
     node.kind !== "path" &&
-    node.kind !== "vector"
+    node.kind !== "vector" &&
+    node.kind !== "boolean"
   ) {
     return false;
   }

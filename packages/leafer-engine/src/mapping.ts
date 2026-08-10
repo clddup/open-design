@@ -222,11 +222,13 @@ function toElementSpec(
   warnings: LeaferFidelityWarning[],
 ): LeaferElementSpec {
   const effectivelyLocked = isEffectivelyLocked(document, node);
+  const parent = node.parentId ? document.nodesById[node.parentId] : undefined;
+  const hiddenBooleanOperand = parent?.kind === "boolean";
   const base = {
     id: node.id,
     name: node.name,
     opacity: node.opacity,
-    visible: node.visible,
+    visible: node.visible && !hiddenBooleanOperand,
     // Leafer's native `locked` flag also removes the node from click and box
     // selection. OpenDesign lock semantics keep layers selectable and only
     // reject direct manipulation, so interaction locking stays in our adapter.
@@ -256,6 +258,15 @@ function toElementSpec(
     case "group":
       tag = "Group";
       data = { ...base, hitChildren: true };
+      break;
+    case "boolean":
+      tag = "Group";
+      data = { ...base, hitChildren: true };
+      warnings.push({
+        code: "unsupported-node",
+        message: `Boolean node ${node.id} is structural until its derived PathKit projection is available`,
+        nodeId: node.id,
+      });
       break;
     case "rectangle":
       tag = "Rect";
