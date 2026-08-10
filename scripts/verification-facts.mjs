@@ -51,6 +51,7 @@ const documentSchemaVersion = capture(
 );
 const engineVersion = baseline.components.leafer.version;
 const agentCoreVersion = baseline.components.agentCore.version;
+const agentCoreStatus = baseline.components.agentCore.productionStatus;
 
 assertEqual(
   baseline.contracts.documentSchemaVersion,
@@ -94,7 +95,7 @@ const blocks = {
     `- 环境基线：Node.js ${nodeVersion}、pnpm ${packageManager}、Electron ${electronVersion}、Vite ${viteVersion}`,
     `- 文档协议：\`DesignDocument ${documentSchemaVersion}\``,
     `- Agent 协议：\`${agentProtocol}\``,
-    `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（contract spike）`,
+    `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（${agentCoreStatus}）`,
     `- 生产画布：\`${baseline.components.leafer.dependency} ${engineVersion}\``,
   ].join("\n"),
   tests: [

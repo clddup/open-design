@@ -16,6 +16,10 @@ const adapter = await readFile(
   join(runtimeRoot, "src/pi-core-adapter.ts"),
   "utf8",
 );
+const modelBridge = await readFile(
+  join(runtimeRoot, "src/pi-model-gateway-adapter.ts"),
+  "utf8",
+);
 
 const component = baseline.components.agentCore;
 if (!component || component.role !== "headless-agent-loop-engine") {
@@ -28,6 +32,11 @@ assertEqual(
 );
 assertEqual(corePackage.version, component.version, "installed Agent core");
 assertEqual(corePackage.license, component.license, "Agent core license");
+assertEqual(
+  runtimePackage.dependencies["@earendil-works/pi-ai"],
+  component.version,
+  "Agent Runtime Pi message dependency pin",
+);
 
 for (const manifest of [runtimePackage, desktopPackage]) {
   const dependencies = {
@@ -52,6 +61,14 @@ if (!/toolExecution:\s*"sequential"/.test(adapter)) {
 if (!/OPENDESIGN_TOOL_PREFIX/.test(adapter)) {
   throw new Error(
     "Pi adapter must reject tools outside the OpenDesign namespace",
+  );
+}
+if (
+  !/\bModelGateway\b/.test(modelBridge) ||
+  /\b(?:fetch|streamSimple|getApiKey)\s*\(/.test(modelBridge)
+) {
+  throw new Error(
+    "Pi model bridge must use OpenDesign ModelGateway without direct provider or credential access",
   );
 }
 

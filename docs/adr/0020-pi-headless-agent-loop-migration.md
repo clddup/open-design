@@ -89,6 +89,10 @@ Pi 导出的 compaction 纯函数可以作为后续语义 compactor provider，�
 - 对同一 mock transcript 比较现有 Runtime 与 Pi adapter 的 OpenDesign Agent events 和 journal 终态。
 - 覆盖 OpenAI Responses、Chat Completions 和 Anthropic Messages 的 canonical 行为，不直接比较 Provider 私有 payload。
 
+截至 2026-08-11，第一项的 ModelGateway bridge 已完成 contract tests：Pi user/assistant/tool-result context 会转换为 OpenDesign canonical message，canonical reasoning/text/tool-call stream 会按相同 block 生命周期转换回 Pi event，identity、response ID、原始 stop reason、usage、取消、content filter 和失败均有明确终态。桥接器拒绝错 `attemptId`、重复/未知/未完成 block、block 类型漂移和 utility process 内的 inline image/base64，并已通过 `Pi Agent → ModelGateway → OpenDesign tool → 第二个 Provider turn` 的端到端测试。它不解析凭据，也不绕过 ParentModelGateway。
+
+阶段 1 尚未整体完成：OpenDesign `AgentEvent 3.4`、journal 终态与旧 Runtime 的同 transcript parity 仍待实现；图片和文档也必须在 Context adapter 中由内容寻址引用解析，不能因当前 bridge 拒绝 inline image 而被描述为永久不支持多模态。
+
 ### 阶段 2：工具和完成策略 parity
 
 - 包装十二个生产设计工具，并保留参数验证、审批、progress、revision 和附件结果。

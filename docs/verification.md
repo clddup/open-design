@@ -7,7 +7,7 @@
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.3.0`
 - Agent 协议：`3.4.0`
-- Agent Core：`@earendil-works/pi-agent-core 0.84.1`（contract spike）
+- Agent Core：`@earendil-works/pi-agent-core 0.84.1`（stage-1-contract）
 - 生产画布：`leafer-editor 2.2.9`
 
 <!-- verification-facts:baseline:end -->
@@ -38,7 +38,7 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   21 files / 166 tests
+├── package tests   22 files / 172 tests
 └── desktop tests   37 files / 268 tests
 pnpm build          passed
 ├── Renderer
@@ -60,7 +60,7 @@ pnpm build          passed
 - Leafer 文档投影、Path 实例、复杂外观映射和 change-set 增量同步：未变节点保持 spec/元素 identity，不调用 `set()`；无关新增、删除和 revision 不刷新 tree/Editor，也不取消进行中的直接操作；选中节点变化只刷新该元素 bounds 并更新 editBox；asset change 会精确重投影引用节点。
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
-- 固定 `@earendil-works/pi-agent-core 0.84.1` 的 contract spike 使用已实现的 headless `Agent` 完成两轮模型调用和一个显式 `opendesign_` 工具；adapter 强制顺序执行、逐轮 `transformContext`、单条 steering/follow-up，并拒绝裸 `bash` 与重复工具。`agent-core:check` 同时阻止 `pi-coding-agent`、`pi-tui` 和当前未实现的 `AgentHarness` 进入适配器；该证据尚不表示生产 Agent loop 已完成切换。
+- 固定 `@earendil-works/pi-agent-core 0.84.1` 的 contract tests 使用已实现的 headless `Agent` 完成两轮模型调用和一个显式 `opendesign_` 工具；adapter 强制顺序执行、逐轮 `transformContext`、单条 steering/follow-up，并拒绝裸 `bash` 与重复工具。新增 ModelGateway bridge 进一步完成 `Pi Agent → canonical ModelGateway → OpenDesign tool → 第二个 Provider turn`，覆盖 Pi/canonical user、assistant、tool result 转换，reasoning/text/tool-call 流、partial tool arguments、identity、response ID、usage、取消、content filter 与 Provider failure；错 attempt、畸形 block 生命周期和 inline image/base64 会显式失败。`agent-core:check` 同时阻止 `pi-coding-agent`、`pi-tui` 和当前未实现的 `AgentHarness` 进入适配器；OpenDesign `AgentEvent 3.4`/journal、十二个生产工具、context/recovery parity 尚未完成，因此该证据不表示生产 Agent loop 已切换。
 - 生产 Provider stream 的首响应、空闲和总时限 watchdog 会 abort 实际 fetch；timeout 与 Agent process exit 都会解除 Renderer active Run、恢复可编辑输入并显示可重试错误。
 - 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。生产回归使用完整 system prompt、十二个工具和 200K Model Profile，既证明短消息会进入 Provider，也证明含多模态结果的八轮工具循环会在 Run 内压缩后完成。模型可见 `apply_transaction` Schema 不依赖 `$ref/$defs`，本地仍用完整 `DesignOperationSchema` 校验。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
 - 工具执行、业务校验和设计工具桥失败会作为 `tool.failed` 回到下一轮模型上下文供其重试或解释；模型桥、Provider、Agent 进程/协议和可信 Run binding 失败才会取消 Run。两类路径分别有“继续第二个模型回合”和“相关 Run 终结/解锁”测试。

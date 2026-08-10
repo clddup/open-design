@@ -1,5 +1,10 @@
 import { type AgentEvent, type AgentTool } from "@earendil-works/pi-agent-core";
 import {
+  MockModelGateway,
+  type ModelGateway,
+  type ModelRequest,
+} from "@opendesign/model-gateway";
+import {
   createFauxCore,
   fauxAssistantMessage,
   fauxToolCall,
@@ -7,11 +12,23 @@ import {
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
+import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
 
 const ProbeParameters = Type.Object(
   { value: Type.String({ minLength: 1 }) },
   { additionalProperties: false },
 );
+
+class RecordingGateway implements ModelGateway {
+  readonly requests: ModelRequest[] = [];
+
+  constructor(private readonly delegate: ModelGateway) {}
+
+  stream(request: ModelRequest) {
+    this.requests.push(request);
+    return this.delegate.stream(request);
+  }
+}
 
 describe("OpenDesign Pi core adapter", () => {
   it("runs a headless sequential tool loop with only explicit design tools", async () => {
@@ -106,6 +123,95 @@ describe("OpenDesign Pi core adapter", () => {
       agent.abort();
       await agent.waitForIdle();
     }
+  });
+
+  it("runs the Pi loop through the existing canonical ModelGateway", async () => {
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        {
+          blocks: [
+            {
+              id: "probe_tool",
+              type: "tool_call",
+              toolCallId: "gateway_probe_call",
+              name: "opendesign_probe",
+              input: { value: "gateway" },
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        {
+          blocks: [
+            {
+              id: "probe_complete",
+              type: "text",
+              text: "Canonical gateway loop completed",
+            },
+          ],
+          stopReason: "complete",
+        },
+      ]),
+    );
+    const executions: string[] = [];
+    const tool: AgentTool<typeof ProbeParameters> = {
+      name: "opendesign_probe",
+      label: "OpenDesign probe",
+      description: "Exercise the canonical model and host tool adapters.",
+      parameters: ProbeParameters,
+      execute: (_toolCallId, parameters) => {
+        executions.push(parameters.value);
+        return Promise.resolve({
+          content: [{ type: "text", text: "Canonical host result" }],
+          details: {},
+        });
+      },
+    };
+    const agent = createOpenDesignPiAgent({
+      initialState: {
+        messages: [],
+        model: {
+          id: "design-model",
+          name: "Design model",
+          api: "openai-responses",
+          provider: "configured-provider",
+          baseUrl: "https://provider.invalid/v1",
+          reasoning: true,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 200_000,
+          maxTokens: 16_384,
+        },
+        systemPrompt: "OpenDesign canonical integration",
+        thinkingLevel: "medium",
+        tools: [tool],
+      },
+      sessionId: "conversation_canonical_integration",
+      streamFn: createPiModelGatewayStreamFn({
+        modelGateway: gateway,
+        nextAttemptId: (() => {
+          let sequence = 0;
+          return () => `canonical_attempt_${++sequence}`;
+        })(),
+      }),
+    });
+
+    await agent.prompt("Use the canonical gateway");
+
+    expect(executions).toEqual(["gateway"]);
+    expect(gateway.requests).toHaveLength(2);
+    expect(gateway.requests[0]?.modelSelection).toEqual({
+      providerId: "configured-provider",
+      modelId: "design-model",
+      reasoningEffort: "medium",
+    });
+    expect(
+      gateway.requests[1]?.messages.map((message) => message.role),
+    ).toEqual(["user", "assistant", "tool"]);
+    expect(agent.state.messages.at(-1)).toMatchObject({
+      role: "assistant",
+      stopReason: "stop",
+      content: [{ type: "text", text: "Canonical gateway loop completed" }],
+    });
   });
 
   it("rejects non-OpenDesign and duplicate tool registrations", () => {

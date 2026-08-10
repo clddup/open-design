@@ -145,6 +145,9 @@ importers:
       '@earendil-works/pi-agent-core':
         specifier: 0.84.1
         version: 0.84.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.3)(zod@4.4.3)
+      '@earendil-works/pi-ai':
+        specifier: 0.84.1
+        version: 0.84.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.3)(zod@4.4.3)
       '@opendesign/agent-contracts':
         specifier: workspace:*
         version: link:../agent-contracts
@@ -158,9 +161,6 @@ importers:
         specifier: workspace:*
         version: link:../tool-runtime
     devDependencies:
-      '@earendil-works/pi-ai':
-        specifier: 0.84.1
-        version: 0.84.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(ws@8.21.3)(zod@4.4.3)
       typebox:
         specifier: 1.3.7
         version: 1.3.7
