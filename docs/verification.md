@@ -1,9 +1,15 @@
 # OpenDesign 验证状态
 
 - 日期：2026-08-10
-- 环境：macOS arm64、Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
+
+<!-- verification-facts:baseline:start -->
+
+- 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.2.0`
+- Agent 协议：`3.4.0`
 - 生产画布：`leafer-editor 2.2.9`
+
+<!-- verification-facts:baseline:end -->
 
 本文只记录当前工作树实际执行的证据。计划命令、历史会话结果和第三方能力说明不算通过。
 
@@ -21,20 +27,25 @@ macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。
 
 当前工作树通过：
 
+<!-- verification-facts:tests:start -->
+
 ```text
-pnpm format:check  passed
-pnpm fixtures:check passed（7 个生成文件）
-pnpm lint          passed
-pnpm typecheck     passed（16 个 workspace package 执行 typecheck）
-pnpm test          passed
-├── package tests  15 files / 119 tests
-└── desktop tests  35 files / 225 tests
-pnpm build         passed
+pnpm format:check   passed
+pnpm capabilities:check passed
+pnpm fixtures:check passed
+pnpm lint           passed
+pnpm typecheck      passed
+pnpm test           passed
+├── package tests   15 files / 119 tests
+└── desktop tests   35 files / 225 tests
+pnpm build          passed
 ├── Renderer
 ├── Electron Main
 ├── Preload
 └── Agent utilityProcess
 ```
+
+<!-- verification-facts:tests:end -->
 
 测试覆盖的关键路径包括：
 
@@ -80,15 +91,19 @@ Agent Runtime 当前强制执行“实质写入 → `capture_canvas` → refinem
 
 ## 构建结果
 
-Vite 生产构建完成四个环境。当前主要输出约为：
+Vite 生产构建完成四个环境。下表由实际 `out/` 文件生成；十进制大小只用于阅读，字节数用于精确漂移检查：
 
-| 产物             |        大小 |      gzip |
-| ---------------- | ----------: | --------: |
-| Renderer 主 JS   |   684.10 kB | 201.25 kB |
-| Leafer Web chunk |   302.16 kB | 100.55 kB |
-| Electron Main    | 2,095.70 kB | 419.14 kB |
-| Preload          |   233.36 kB |  37.06 kB |
-| Agent            |   331.44 kB |  63.22 kB |
+<!-- verification-facts:build:start -->
+
+| 产物             | 实际字节数 | 十进制大小 |
+| ---------------- | ---------: | ---------: |
+| Renderer 主 JS   |     684100 |  684.10 kB |
+| Leafer Web chunk |     302166 |  302.17 kB |
+| Electron Main    |    2095748 | 2095.75 kB |
+| Preload          |     233361 |  233.36 kB |
+| Agent            |     331440 |  331.44 kB |
+
+<!-- verification-facts:build:end -->
 
 构建提示 Renderer/Main 存在超过 500 kB 的 chunk。当前不影响构建成功，但需要在性能阶段评估动态加载与 Rolldown code splitting，不能通过移除 sourcemap 或隐藏警告冒充优化。
 

@@ -21,7 +21,9 @@
     "test": "vitest run && pnpm --filter @opendesign/desktop test",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
-    "verify": "pnpm format:check && pnpm capabilities:check && pnpm fixtures:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verification:check": "node scripts/verification-facts.mjs --check",
+    "verification:generate": "node scripts/verification-facts.mjs --write",
+    "verify": "pnpm format:check && pnpm capabilities:check && pnpm fixtures:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verification:check"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
