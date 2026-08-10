@@ -6,11 +6,13 @@ import { describe, expect, it } from "vitest";
 import {
   EditorRuntime,
   canGroupNodes,
+  canReorderNodes,
   canUngroupNode,
   createWelcomeDocument,
   getWorldTransform,
   normalizeDesignDocument,
   planGroupNodes,
+  planReorderNodes,
   planUngroupNode,
 } from "./index.js";
 
@@ -334,5 +336,187 @@ describe("layer hierarchy operations", () => {
 
     expect(plan).toMatchObject({ ok: false, code: "operation-limit" });
     expect(canGroupNodes(normalized, "page_welcome", childIds)).toBe(false);
+  });
+
+  it("moves one or more sibling layers through the four standard stacking actions", () => {
+    const applyOrder = (
+      nodeIds: readonly string[],
+      action:
+        "bring-forward" | "bring-to-front" | "send-backward" | "send-to-back",
+    ) => {
+      const runtime = new EditorRuntime(createWelcomeDocument());
+      const plan = planReorderNodes(
+        runtime.getSnapshot().document,
+        "page_welcome",
+        nodeIds,
+        action,
+        action,
+      );
+      expect(plan.ok).toBe(true);
+      if (!plan.ok) throw new Error(plan.message);
+      expect(
+        runtime.apply(
+          transaction(runtime, `transaction_${action}`, plan.commands),
+        ).ok,
+      ).toBe(true);
+      return runtime;
+    };
+
+    expect(
+      applyOrder(["title_welcome"], "bring-forward").getSnapshot().document
+        .nodesById.frame_welcome?.childIds,
+    ).toEqual([
+      "shape_accent",
+      "subtitle_welcome",
+      "title_welcome",
+      "feature_group",
+    ]);
+    expect(
+      applyOrder(
+        ["shape_accent", "subtitle_welcome"],
+        "bring-to-front",
+      ).getSnapshot().document.nodesById.frame_welcome?.childIds,
+    ).toEqual([
+      "title_welcome",
+      "feature_group",
+      "shape_accent",
+      "subtitle_welcome",
+    ]);
+    expect(
+      applyOrder(["subtitle_welcome"], "send-backward").getSnapshot().document
+        .nodesById.frame_welcome?.childIds,
+    ).toEqual([
+      "shape_accent",
+      "subtitle_welcome",
+      "title_welcome",
+      "feature_group",
+    ]);
+    expect(
+      applyOrder(
+        ["title_welcome", "feature_group"],
+        "send-to-back",
+      ).getSnapshot().document.nodesById.frame_welcome?.childIds,
+    ).toEqual([
+      "title_welcome",
+      "feature_group",
+      "shape_accent",
+      "subtitle_welcome",
+    ]);
+  });
+
+  it("keeps order edits atomic, preserves transforms and selection, and round-trips undo/redo", () => {
+    const runtime = new EditorRuntime(transformedWelcomeDocument());
+    runtime.setSelection(
+      ["title_welcome", "subtitle_welcome"],
+      "subtitle_welcome",
+    );
+    const before = runtime.getSnapshot();
+    const transforms = Object.fromEntries(
+      before.state.selection.nodeIds.map((nodeId) => [
+        nodeId,
+        getWorldTransform(before.document, nodeId),
+      ]),
+    );
+    const plan = planReorderNodes(
+      before.document,
+      "page_welcome",
+      before.state.selection.nodeIds,
+      "bring-to-front",
+      "bring_copy_to_front",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+
+    expect(
+      runtime.apply(transaction(runtime, "bring_copy_to_front", plan.commands))
+        .ok,
+    ).toBe(true);
+    const reordered = runtime.getSnapshot();
+    expect(reordered.document.nodesById.frame_welcome?.childIds).toEqual([
+      "shape_accent",
+      "feature_group",
+      "title_welcome",
+      "subtitle_welcome",
+    ]);
+    expect(reordered.state.selection).toEqual(before.state.selection);
+    for (const nodeId of before.state.selection.nodeIds) {
+      const expectedTransform = transforms[nodeId];
+      if (!expectedTransform)
+        throw new Error(`Missing transform for ${nodeId}`);
+      expectTransformClose(
+        getWorldTransform(reordered.document, nodeId),
+        expectedTransform,
+      );
+    }
+    expect(reordered.state.history.undo).toHaveLength(1);
+
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome?.childIds,
+    ).toEqual(before.document.nodesById.frame_welcome?.childIds);
+    expect(runtime.redo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome?.childIds,
+    ).toEqual(reordered.document.nodesById.frame_welcome?.childIds);
+  });
+
+  it("rejects no-op, mixed-parent, cross-page, and locked layer order requests", () => {
+    const document = createWelcomeDocument();
+    expect(
+      planReorderNodes(
+        document,
+        "page_welcome",
+        ["feature_group"],
+        "bring-to-front",
+        "noop_front",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-selection" });
+    expect(
+      planReorderNodes(
+        document,
+        "page_welcome",
+        ["title_welcome", "feature_one"],
+        "send-to-back",
+        "mixed_parent",
+      ),
+    ).toMatchObject({ ok: false, code: "mixed-parent" });
+    expect(
+      planReorderNodes(
+        document,
+        "page_missing",
+        ["title_welcome"],
+        "bring-forward",
+        "missing_page",
+      ),
+    ).toMatchObject({ ok: false, code: "not-found" });
+
+    const locked = structuredClone(document);
+    const lockedFrame = locked.nodesById.frame_welcome;
+    if (!lockedFrame) throw new Error("Welcome frame is missing");
+    lockedFrame.locked = true;
+    expect(
+      planReorderNodes(
+        locked,
+        "page_welcome",
+        ["title_welcome"],
+        "bring-forward",
+        "locked_layer",
+      ),
+    ).toMatchObject({ ok: false, code: "locked" });
+    expect(
+      canReorderNodes(
+        document,
+        "page_welcome",
+        ["title_welcome"],
+        "bring-forward",
+      ),
+    ).toBe(true);
+    expect(
+      canReorderNodes(
+        document,
+        "page_welcome",
+        ["feature_group"],
+        "bring-to-front",
+      ),
+    ).toBe(false);
   });
 });

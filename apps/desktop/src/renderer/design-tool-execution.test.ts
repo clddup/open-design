@@ -824,6 +824,65 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(ungrouped.state.history.undo).toHaveLength(1);
   });
 
+  it("reorders explicit sibling IDs atomically without reading or resetting selection", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["feature_three"], "feature_three");
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_reorder",
+        call: {
+          toolCallId: "tool_hierarchy_reorder",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "reorder",
+            label: "Bring welcome copy to front",
+            pageId: "page_welcome",
+            nodeIds: ["title_welcome", "subtitle_welcome"],
+            order: "bring-to-front",
+          },
+        },
+        context: selectionContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "reorder",
+          order: "bring-to-front",
+          nodeIds: ["title_welcome", "subtitle_welcome"],
+          siblingOrder: [
+            "shape_accent",
+            "feature_group",
+            "title_welcome",
+            "subtitle_welcome",
+          ],
+          revision: 1,
+          atomic: true,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    const reordered = runtime.getSnapshot();
+    expect(reordered.state.selection).toEqual({
+      nodeIds: ["feature_three"],
+      anchorNodeId: "feature_three",
+    });
+    expect(reordered.state.history.undo).toHaveLength(1);
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome?.childIds,
+    ).toEqual([
+      "shape_accent",
+      "title_welcome",
+      "subtitle_welcome",
+      "feature_group",
+    ]);
+  });
+
   it("returns scoped planner failures without partially changing the document", async () => {
     const mixedRuntime = new EditorRuntime(createWelcomeDocument());
     await expect(

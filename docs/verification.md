@@ -36,8 +36,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   16 files / 125 tests
-└── desktop tests   35 files / 234 tests
+├── package tests   16 files / 128 tests
+└── desktop tests   35 files / 237 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -67,7 +67,7 @@ pnpm build          passed
 - `openai-images` adapter 只使用独立应用级配置的 Base URL、鉴权、凭据和任意 model ID 调用 `/images/generations`，GPT Image 2 是首个验证模型；链路校验 `data[0].b64_json`、响应/图片大小、格式、凭据和取消。tool schema 不接受 Provider/Model 覆盖，也不会借用 Conversation Provider；旧 v2 选择和密文迁移已有回归测试。
 - Renderer Agent 对话、属性检查器、设计工具 selection context / Mutation Target / revision、`capture_canvas` 内容寻址多模态结果、取消/继续、i18n 和桌面控件交互；对话在底部时跟随新消息与状态，用户上翻后保持阅读位置，回到底部后恢复跟随；剪贴板文件与拖放文件经 Preload API 导入，run 只接收安全附件元数据，纯文本路径粘贴保持普通输入行为。
 - host-only 图片放置以单个 Page-targeted `put_asset + insert_element(image)` 事务进入 `EditorRuntime`；测试验证单次 revision、发送时存在选区也能在固定 Page 新增 asset/node、当前活动页面变化不漂移目标，以及一次 undo 同时移除 asset/node。
-- `opendesign_edit_hierarchy` 对现有兄弟节点提供显式 ID 的编组/解组语义；宿主复用人工命令的无损 planner，保持世界 transform 与层序，以一个原子事务写入并一次撤销。测试覆盖选区不作为写目标、实时选区不被重设、stale revision、Page Mutation Target、锁定、混合父级、视觉损失与提交前取消。
+- `opendesign_edit_hierarchy` 对现有兄弟节点提供显式 ID 的编组/解组和前移、后移、置顶、置底语义；宿主复用人工命令的 planner，保持世界 transform 与多选内部顺序，以一个原子事务写入并一次撤销。人工入口提供紧凑 Layer order 菜单以及 macOS `⌘/⌥⌘ + [ ]`、Windows `Ctrl/Ctrl+Shift + [ ]` 快捷键。测试覆盖选区不作为写目标、实时选区不被重设、stale revision、Page Mutation Target、锁定、混合父级、无效顺序、视觉损失与提交前取消。
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。
 

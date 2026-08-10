@@ -1,4 +1,12 @@
-import { Divider, IconButton, type GlyphName } from "@opendesign/ui";
+import type { LayerOrderAction } from "@opendesign/editor-runtime";
+import {
+  Divider,
+  DropdownMenu,
+  DropdownMenuItem,
+  Glyph,
+  IconButton,
+  type GlyphName,
+} from "@opendesign/ui";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
 import type { Tool } from "../state/editor";
@@ -36,6 +44,7 @@ export function Toolbar({
   onToolChange,
   hierarchyAction,
   canHierarchyAction,
+  canReorder,
   canDelete,
   canDuplicate,
   canUndo,
@@ -43,6 +52,7 @@ export function Toolbar({
   onDelete,
   onDuplicate,
   onGroup,
+  onReorder,
   onUndo,
   onUngroup,
   onRedo,
@@ -52,6 +62,7 @@ export function Toolbar({
   onToolChange: (tool: Tool) => void;
   hierarchyAction: "group" | "ungroup";
   canHierarchyAction: boolean;
+  canReorder: Readonly<Record<LayerOrderAction, boolean>>;
   canDelete: boolean;
   canDuplicate: boolean;
   canUndo: boolean;
@@ -59,6 +70,7 @@ export function Toolbar({
   onDelete: () => void;
   onDuplicate: () => void;
   onGroup: () => void;
+  onReorder: (action: LayerOrderAction) => void;
   onUndo: () => void;
   onUngroup: () => void;
   onRedo: () => void;
@@ -67,8 +79,33 @@ export function Toolbar({
   const { t } = useI18n();
   const shortcuts =
     platform === "darwin"
-      ? { duplicate: "⌘D", group: "⌘G", ungroup: "⇧⌘G" }
-      : { duplicate: "Ctrl+D", group: "Ctrl+G", ungroup: "Ctrl+Shift+G" };
+      ? {
+          duplicate: "⌘D",
+          group: "⌘G",
+          ungroup: "⇧⌘G",
+          "bring-forward": "⌘]",
+          "bring-to-front": "⌥⌘]",
+          "send-backward": "⌘[",
+          "send-to-back": "⌥⌘[",
+        }
+      : {
+          duplicate: "Ctrl+D",
+          group: "Ctrl+G",
+          ungroup: "Ctrl+Shift+G",
+          "bring-forward": "Ctrl+]",
+          "bring-to-front": "Ctrl+Shift+]",
+          "send-backward": "Ctrl+[",
+          "send-to-back": "Ctrl+Shift+[",
+        };
+  const orderItems: ReadonlyArray<{
+    action: LayerOrderAction;
+    label: MessageKey;
+  }> = [
+    { action: "bring-forward", label: "toolbar.bringForward" },
+    { action: "bring-to-front", label: "toolbar.bringToFront" },
+    { action: "send-backward", label: "toolbar.sendBackward" },
+    { action: "send-to-back", label: "toolbar.sendToBack" },
+  ];
   const hierarchyLabel =
     hierarchyAction === "ungroup"
       ? `${t("toolbar.ungroup")} (${shortcuts.ungroup})`
@@ -111,6 +148,22 @@ export function Toolbar({
           label={hierarchyLabel}
           onClick={hierarchyAction === "ungroup" ? onUngroup : onGroup}
         />
+        <DropdownMenu
+          disabled={!orderItems.some(({ action }) => canReorder[action])}
+          icon={<Glyph name="more" />}
+          label={t("toolbar.layerOrder")}
+        >
+          {orderItems.map(({ action, label }) => (
+            <DropdownMenuItem
+              disabled={!canReorder[action]}
+              key={action}
+              onSelect={() => onReorder(action)}
+              shortcut={shortcuts[action]}
+            >
+              {t(label)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenu>
         <IconButton
           disabled={!canDelete}
           icon="trash"

@@ -55,6 +55,9 @@ describe("OpenDesign Agent system prompt", () => {
       "Do not calculate reparenting transforms yourself",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "bring-forward, bring-to-front, send-backward, or send-to-back",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "does not prove rendered visual quality",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

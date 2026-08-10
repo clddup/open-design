@@ -14,14 +14,17 @@ import type {
 } from "@opendesign/design-contracts";
 import {
   canGroupNodes,
+  canReorderNodes,
   canUngroupNode,
   getNodeBounds,
   getSelectionBounds,
   getWorldTransform,
   invertTransform,
   planGroupNodes,
+  planReorderNodes,
   planUngroupNode,
   screenToDocument,
+  type LayerOrderAction,
 } from "@opendesign/editor-runtime";
 import type {
   ConversationDescriptor,
@@ -67,6 +70,20 @@ import {
 import { useI18n } from "./i18n";
 import { executeDesignToolRequest } from "./design-tool-execution";
 import { isTool, type SidebarTab, type Tool } from "./state/editor";
+
+const LAYER_ORDER_ACTIONS: readonly LayerOrderAction[] = [
+  "bring-forward",
+  "bring-to-front",
+  "send-backward",
+  "send-to-back",
+];
+
+const LAYER_ORDER_HISTORY_KEYS: Record<LayerOrderAction, MessageKey> = {
+  "bring-forward": "history.bringForward",
+  "bring-to-front": "history.bringToFront",
+  "send-backward": "history.sendBackward",
+  "send-to-back": "history.sendToBack",
+};
 
 type AppView = "workspace" | "project" | "editor" | "settings";
 
@@ -173,6 +190,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     activePageId,
     state.selection.nodeIds,
   );
+  const layerOrderAvailability = Object.fromEntries(
+    LAYER_ORDER_ACTIONS.map((action) => [
+      action,
+      canReorderNodes(
+        designDocument,
+        activePageId,
+        state.selection.nodeIds,
+        action,
+      ),
+    ]),
+  ) as Record<LayerOrderAction, boolean>;
   const projectConversations = activeProject
     ? (conversationsByProjectId[activeProject.projectId] ?? [])
     : [];
@@ -603,6 +631,26 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     }
   }, [activePageId, applyCommands, runtime, t]);
 
+  const reorderSelection = useCallback(
+    (action: LayerOrderAction) => {
+      const current = runtime.getSnapshot();
+      const operationId = `reorder_${action}_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planReorderNodes(
+        current.document,
+        activePageId,
+        current.state.selection.nodeIds,
+        action,
+        operationId,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t(LAYER_ORDER_HISTORY_KEYS[action]), plan.commands);
+    },
+    [activePageId, applyCommands, runtime, t],
+  );
+
   const alignSelection = useCallback(
     (alignment: Alignment) => {
       const current = runtime.getSnapshot();
@@ -715,6 +763,32 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         else groupSelection();
         return;
       }
+      const bracket =
+        event.code === "BracketRight" || event.key === "]" || event.key === "}"
+          ? "right"
+          : event.code === "BracketLeft" ||
+              event.key === "[" ||
+              event.key === "{"
+            ? "left"
+            : null;
+      if (
+        modifier &&
+        bracket &&
+        (platform === "darwin" ? !event.shiftKey : !event.altKey)
+      ) {
+        event.preventDefault();
+        const terminal = platform === "darwin" ? event.altKey : event.shiftKey;
+        reorderSelection(
+          bracket === "right"
+            ? terminal
+              ? "bring-to-front"
+              : "bring-forward"
+            : terminal
+              ? "send-to-back"
+              : "send-backward",
+        );
+        return;
+      }
       if (
         (event.key === "Delete" || event.key === "Backspace") &&
         state.selection.nodeIds.length > 0
@@ -755,6 +829,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     duplicateSelection,
     fitCanvas,
     groupSelection,
+    platform,
+    reorderSelection,
     runtime,
     state.selection.nodeIds,
     ungroupSelection,
@@ -1426,6 +1502,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         />
         <Toolbar
           canHierarchyAction={canUngroupSelection || canGroupSelection}
+          canReorder={layerOrderAvailability}
           canDelete={state.selection.nodeIds.length > 0}
           canDuplicate={state.selection.nodeIds.length > 0}
           canRedo={state.history.canRedo}
@@ -1434,6 +1511,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           onDelete={() => deleteNodes(state.selection.nodeIds)}
           onDuplicate={duplicateSelection}
           onGroup={groupSelection}
+          onReorder={reorderSelection}
           onRedo={() => runtime.redo()}
           onToolChange={(next) => runtime.setTool(next)}
           onUndo={() => runtime.undo()}

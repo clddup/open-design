@@ -11,6 +11,7 @@ import type {
 import {
   diagnoseDesignPages,
   planGroupNodes,
+  planReorderNodes,
   planUngroupNode,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
@@ -123,7 +124,20 @@ export async function executeDesignToolRequest(
             name: input.name,
             commandPrefix,
           })
-        : planUngroupNode(document, input.pageId, input.groupId, commandPrefix);
+        : input.action === "ungroup"
+          ? planUngroupNode(
+              document,
+              input.pageId,
+              input.groupId,
+              commandPrefix,
+            )
+          : planReorderNodes(
+              document,
+              input.pageId,
+              input.nodeIds,
+              input.order,
+              commandPrefix,
+            );
     if (!plan.ok) {
       throw new Error(`hierarchy.${plan.code}: ${plan.message}`);
     }
@@ -163,7 +177,22 @@ export async function executeDesignToolRequest(
       input.action === "group"
         ? (runtime.getSnapshot().document.nodesById[input.groupId]?.childIds ??
           [])
-        : plan.selectionNodeIds;
+        : input.action === "ungroup"
+          ? plan.selectionNodeIds
+          : undefined;
+    const reorderedNode =
+      input.action === "reorder"
+        ? runtime.getSnapshot().document.nodesById[
+            plan.selectionNodeIds[0] ?? ""
+          ]
+        : undefined;
+    const siblingOrder =
+      input.action === "reorder"
+        ? reorderedNode?.parentId
+          ? runtime.getSnapshot().document.nodesById[reorderedNode.parentId]
+              ?.childIds
+          : runtime.getSnapshot().document.pagesById[input.pageId]?.rootNodeIds
+        : undefined;
     return {
       requestId: request.requestId,
       ok: true,
@@ -173,8 +202,13 @@ export async function executeDesignToolRequest(
           action: input.action,
           label: input.label,
           pageId: input.pageId,
-          groupId: input.groupId,
-          childNodeIds,
+          ...(input.action === "reorder"
+            ? {
+                order: input.order,
+                nodeIds: plan.selectionNodeIds,
+                siblingOrder: siblingOrder ?? [],
+              }
+            : { groupId: input.groupId, childNodeIds }),
           revision: result.revision.revision,
           atomic: true,
           changes: result.changes,

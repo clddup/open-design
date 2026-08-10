@@ -1439,6 +1439,102 @@ describe("App", () => {
     expect(snapshot.state.history.undo).toHaveLength(2);
   });
 
+  it("reorders selected siblings from the layer-order menu and macOS shortcuts", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    act(() => runtime().setSelection(["title_welcome"], "title_welcome"));
+
+    await user.click(screen.getByRole("button", { name: "Layer order" }));
+    await user.click(screen.getByRole("menuitem", { name: "Bring forward" }));
+    expect(
+      runtime().getSnapshot().document.nodesById.frame_welcome?.childIds,
+    ).toEqual([
+      "shape_accent",
+      "subtitle_welcome",
+      "title_welcome",
+      "feature_group",
+    ]);
+    expect(runtime().getSnapshot().state.selection).toEqual({
+      nodeIds: ["title_welcome"],
+      anchorNodeId: "title_welcome",
+    });
+
+    fireEvent.keyDown(window, {
+      key: "]",
+      code: "BracketRight",
+      metaKey: true,
+      altKey: true,
+    });
+    expect(
+      runtime().getSnapshot().document.nodesById.frame_welcome?.childIds,
+    ).toEqual([
+      "shape_accent",
+      "subtitle_welcome",
+      "feature_group",
+      "title_welcome",
+    ]);
+
+    fireEvent.keyDown(window, {
+      key: "[",
+      code: "BracketLeft",
+      metaKey: true,
+      altKey: true,
+    });
+    const snapshot = runtime().getSnapshot();
+    expect(snapshot.document.nodesById.frame_welcome?.childIds).toEqual([
+      "title_welcome",
+      "shape_accent",
+      "subtitle_welcome",
+      "feature_group",
+    ]);
+    expect(snapshot.document.revision).toBe(3);
+    expect(snapshot.state.history.undo).toHaveLength(3);
+  });
+
+  it("uses Windows layer-order shortcuts without stealing editable input", async () => {
+    vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
+      platform: "win32",
+      version: "0.0.0",
+    });
+    renderApp();
+    act(() => runtime().setSelection(["title_welcome"], "title_welcome"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Layer order" })).toBeEnabled(),
+    );
+
+    const input = document.createElement("input");
+    document.body.append(input);
+    fireEvent.keyDown(input, {
+      key: "}",
+      code: "BracketRight",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    input.remove();
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+
+    fireEvent.keyDown(window, {
+      key: "}",
+      code: "BracketRight",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    expect(
+      runtime().getSnapshot().document.nodesById.frame_welcome?.childIds,
+    ).toEqual([
+      "shape_accent",
+      "subtitle_welcome",
+      "feature_group",
+      "title_welcome",
+    ]);
+    expect(runtime().getSnapshot().document.revision).toBe(1);
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Layer order" }));
+    expect(screen.getByText("Ctrl+Shift+[")).toBeInTheDocument();
+  });
+
   it("uses Windows hierarchy shortcuts and labels without stealing text input", async () => {
     vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
       platform: "win32",

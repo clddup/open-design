@@ -15,6 +15,9 @@ export type LayerOperationFailureCode =
   | "operation-limit"
   | "visual-fidelity";
 
+export type LayerOrderAction =
+  "bring-forward" | "bring-to-front" | "send-backward" | "send-to-back";
+
 export type LayerOperationPlan =
   | {
       ok: true;
@@ -169,6 +172,103 @@ export function canUngroupNode(
   );
 }
 
+export function planReorderNodes(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  action: LayerOrderAction,
+  commandPrefix: string,
+): LayerOperationPlan {
+  const eligibility = analyzeReorderSelection(document, pageId, nodeIds);
+  if (!eligibility.ok) return eligibility;
+  const { ordered, siblings } = eligibility;
+  const selected = new Set(ordered);
+  const working = [...siblings];
+  const moves: Array<{ nodeId: string; index: number }> = [];
+  const move = (nodeId: string, index: number) => {
+    const currentIndex = working.indexOf(nodeId);
+    if (currentIndex < 0 || currentIndex === index) return;
+    working.splice(currentIndex, 1);
+    working.splice(index, 0, nodeId);
+    moves.push({ nodeId, index });
+  };
+
+  if (action === "bring-forward") {
+    for (let index = working.length - 2; index >= 0; index -= 1) {
+      const nodeId = working[index];
+      const nextNodeId = working[index + 1];
+      if (
+        nodeId &&
+        nextNodeId &&
+        selected.has(nodeId) &&
+        !selected.has(nextNodeId)
+      ) {
+        move(nodeId, index + 1);
+      }
+    }
+  } else if (action === "send-backward") {
+    for (let index = 1; index < working.length; index += 1) {
+      const nodeId = working[index];
+      const previousNodeId = working[index - 1];
+      if (
+        nodeId &&
+        previousNodeId &&
+        selected.has(nodeId) &&
+        !selected.has(previousNodeId)
+      ) {
+        move(nodeId, index - 1);
+      }
+    }
+  } else if (action === "bring-to-front") {
+    for (let index = ordered.length - 1; index >= 0; index -= 1) {
+      const nodeId = ordered[index];
+      if (nodeId) move(nodeId, working.length - ordered.length + index);
+    }
+  } else {
+    for (const [index, nodeId] of ordered.entries()) move(nodeId, index);
+  }
+
+  if (moves.length === 0) {
+    return failure(
+      "invalid-selection",
+      `Selected layers cannot move ${layerOrderDirection(action)}`,
+    );
+  }
+  if (moves.length > MAX_TRANSACTION_COMMANDS) {
+    return failure(
+      "operation-limit",
+      `Reordering ${ordered.length} layers exceeds the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+    );
+  }
+  return {
+    ok: true,
+    commands: moves.map(({ nodeId, index }, moveIndex) => ({
+      commandId: `${commandPrefix}_move_${moveIndex}`,
+      type: "move_element",
+      nodeId,
+      pageId,
+      parentId: eligibility.parentId,
+      index,
+    })),
+    selectionNodeIds: ordered,
+  };
+}
+
+export function canReorderNodes(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  action: LayerOrderAction,
+): boolean {
+  return planReorderNodes(
+    document,
+    pageId,
+    nodeIds,
+    action,
+    "reorder_eligibility",
+  ).ok;
+}
+
 type GroupSelectionAnalysis =
   | {
       ok: true;
@@ -178,6 +278,68 @@ type GroupSelectionAnalysis =
       siblings: readonly string[];
     }
   | LayerOperationFailure;
+
+type ReorderSelectionAnalysis =
+  | {
+      ok: true;
+      ordered: string[];
+      parentId: string | null;
+      siblings: readonly string[];
+    }
+  | LayerOperationFailure;
+
+function analyzeReorderSelection(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+): ReorderSelectionAnalysis {
+  if (!document.pagesById[pageId]) {
+    return failure("not-found", `Page ${pageId} does not exist`);
+  }
+  const uniqueNodeIds = [...new Set(nodeIds)];
+  if (uniqueNodeIds.some((nodeId) => !document.nodesById[nodeId])) {
+    return failure("not-found", "One or more selected layers do not exist");
+  }
+  const selected = topLevelSelection(document, uniqueNodeIds);
+  if (selected.length === 0) {
+    return failure(
+      "invalid-selection",
+      "Reordering requires at least one layer",
+    );
+  }
+  if (selected.some((nodeId) => !nodeBelongsToPage(document, pageId, nodeId))) {
+    return failure(
+      "invalid-selection",
+      "Selected layers do not belong to the target page hierarchy",
+    );
+  }
+  const nodes = selected.map((nodeId) => document.nodesById[nodeId]!);
+  const parentId = nodes[0]?.parentId ?? null;
+  if (nodes.some((node) => node.parentId !== parentId)) {
+    return failure(
+      "mixed-parent",
+      "Selected layers must share the same parent before reordering",
+    );
+  }
+  if (nodes.some((node) => isEffectivelyLocked(document, node.id))) {
+    return failure("locked", "Locked layers cannot be reordered");
+  }
+  const siblings = childIds(document, pageId, parentId);
+  if (!siblings || selected.some((nodeId) => !siblings.includes(nodeId))) {
+    return failure(
+      "invalid-selection",
+      "Selected layers do not belong to the target page hierarchy",
+    );
+  }
+  return {
+    ok: true,
+    ordered: [...selected].sort(
+      (left, right) => siblings.indexOf(left) - siblings.indexOf(right),
+    ),
+    parentId,
+    siblings,
+  };
+}
 
 function analyzeGroupSelection(
   document: DesignDocument,
@@ -386,4 +548,11 @@ function failure(
   message: string,
 ): LayerOperationFailure {
   return { ok: false, code, message };
+}
+
+function layerOrderDirection(action: LayerOrderAction): string {
+  if (action === "bring-forward") return "further forward";
+  if (action === "bring-to-front") return "to the front";
+  if (action === "send-backward") return "further backward";
+  return "to the back";
 }

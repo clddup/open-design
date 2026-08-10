@@ -116,8 +116,8 @@
       "status": "degraded",
       "label": { "en": "Layer hierarchy", "zh-CN": "图层层级" },
       "description": {
-        "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, and ordered transactions; human commands and the Agent can group or ungroup existing layers through the same lossless hierarchy planner.",
-        "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定和有序事务；人工命令与 Agent 可通过同一无损层级 planner 编组或解组现有图层。"
+        "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
+        "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序和有序事务；人工命令与 Agent 共用同一套层级 planner。"
       },
       "provider": "DesignDocument 1.2.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
@@ -131,8 +131,8 @@
       },
       "limitations": [
         {
-          "en": "Cross-container move, complete layer reordering, distribute, and equal-spacing commands remain incomplete.",
-          "zh-CN": "跨容器移动、完整图层排序、分布与等间距命令仍未补齐。"
+          "en": "Cross-container reparenting, Layers-panel drag and drop, distribute, and equal-spacing commands remain incomplete.",
+          "zh-CN": "跨容器重挂载、图层面板拖放、分布与等间距命令仍未补齐。"
         },
         {
           "en": "Ungrouping explicitly rejects Group-level visibility, opacity, blend, effects, or masks that cannot be preserved without changing rendered output.",

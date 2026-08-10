@@ -30,13 +30,13 @@
 
 ### 图层层级 — 降级可用
 
-创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定和有序事务；人工命令与 Agent 可通过同一无损层级 planner 编组或解组现有图层。
+创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序和有序事务；人工命令与 Agent 共用同一套层级 planner。
 
 - ID：`layers.hierarchy`
 - 实现方：DesignDocument 1.2.0 + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
 - 证据：自动化 7 项；实机 0 项
-- 限制：跨容器移动、完整图层排序、分布与等间距命令仍未补齐。
+- 限制：跨容器重挂载、图层面板拖放、分布与等间距命令仍未补齐。
 - 限制：当 Group 级可见性、不透明度、混合、效果或蒙版无法在解组后保持视觉一致时，解组会明确拒绝。
 
 ## 矢量

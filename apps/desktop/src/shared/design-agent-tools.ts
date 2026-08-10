@@ -57,6 +57,14 @@ export type DesignHierarchyToolInput =
       label: string;
       pageId: string;
       groupId: string;
+    }
+  | {
+      action: "reorder";
+      label: string;
+      pageId: string;
+      nodeIds: string[];
+      order:
+        "bring-forward" | "bring-to-front" | "send-backward" | "send-to-back";
     };
 
 // The canonical DesignOperation schema is deliberately exhaustive and is used
@@ -395,20 +403,30 @@ const MODEL_APPLY_TRANSACTION_SCHEMA = {
 const MODEL_HIERARCHY_SCHEMA = {
   type: "object",
   description:
-    "For group, nodeIds and name are required. For ungroup, omit nodeIds and name. Runtime validation enforces the action-specific shape.",
+    "For group, nodeIds, groupId, and name are required. For ungroup, groupId is required. For reorder, nodeIds and order are required. Runtime validation enforces the action-specific shape.",
   properties: {
-    action: { enum: ["group", "ungroup"] },
+    action: { enum: ["group", "ungroup", "reorder"] },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     nodeIds: {
       type: "array",
-      minItems: 2,
-      maxItems: 249,
+      minItems: 1,
+      maxItems: 500,
       uniqueItems: true,
       items: { type: "string", minLength: 1, maxLength: 256 },
-      description: "Explicit sibling layer IDs; required only for group.",
+      description:
+        "Explicit sibling layer IDs; required for group (2..249) and reorder (1..500).",
     },
     groupId: { type: "string", minLength: 1, maxLength: 256 },
+    order: {
+      enum: [
+        "bring-forward",
+        "bring-to-front",
+        "send-backward",
+        "send-to-back",
+      ],
+      description: "Stacking action; required only for reorder.",
+    },
     name: {
       type: "string",
       minLength: 1,
@@ -416,7 +434,7 @@ const MODEL_HIERARCHY_SCHEMA = {
       description: "Name for the new Group; required only for group.",
     },
   },
-  required: ["action", "label", "pageId", "groupId"],
+  required: ["action", "label", "pageId"],
   additionalProperties: false,
 } as const;
 
@@ -540,7 +558,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_HIERARCHY_TOOL_NAME,
     description:
-      "Group existing sibling layers or ungroup one existing Group in the currently bound Design File without asking the model to calculate transform changes. Targets are explicit stable node IDs on an explicit existing Page; the send-time or live user selection is context only and is never used as an implicit target. The host computes lossless local transforms, preserves sibling order and world geometry, previews the complete change, and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, and ungrouping that would lose Group-level appearance.",
+      "Edit existing layer hierarchy in the currently bound Design File without asking the model to calculate low-level move commands or transform changes. It can group sibling layers, ungroup one Group, or reorder one or more siblings with bring-forward, bring-to-front, send-backward, and send-to-back semantics. Targets are explicit stable node IDs on an explicit existing Page; the send-time or live user selection is context only and is never used as an implicit target. The host preserves sibling order and world geometry where applicable, previews the complete change, and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, no-op order changes, and ungrouping that would lose Group-level appearance.",
     inputSchema: MODEL_HIERARCHY_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -696,19 +714,40 @@ export function isDesignHierarchyToolInput(
 ): input is DesignHierarchyToolInput {
   if (!isRecord(input)) return false;
   const common =
-    (input.action === "group" || input.action === "ungroup") &&
+    (input.action === "group" ||
+      input.action === "ungroup" ||
+      input.action === "reorder") &&
     typeof input.label === "string" &&
     input.label.trim().length > 0 &&
     input.label.length <= 256 &&
-    safeId(input.pageId) &&
-    safeId(input.groupId);
+    safeId(input.pageId);
   if (!common) return false;
   if (input.action === "ungroup") {
-    return Object.keys(input).every((key) =>
-      ["action", "label", "pageId", "groupId"].includes(key),
+    return (
+      safeId(input.groupId) &&
+      Object.keys(input).every((key) =>
+        ["action", "label", "pageId", "groupId"].includes(key),
+      )
+    );
+  }
+  if (input.action === "reorder") {
+    return (
+      Array.isArray(input.nodeIds) &&
+      input.nodeIds.length >= 1 &&
+      input.nodeIds.length <= 500 &&
+      input.nodeIds.every(safeId) &&
+      new Set(input.nodeIds).size === input.nodeIds.length &&
+      (input.order === "bring-forward" ||
+        input.order === "bring-to-front" ||
+        input.order === "send-backward" ||
+        input.order === "send-to-back") &&
+      Object.keys(input).every((key) =>
+        ["action", "label", "pageId", "nodeIds", "order"].includes(key),
+      )
     );
   }
   return (
+    safeId(input.groupId) &&
     typeof input.name === "string" &&
     input.name.trim().length > 0 &&
     input.name.length <= 256 &&

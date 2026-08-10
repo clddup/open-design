@@ -146,6 +146,13 @@ describe("design Agent tool contract", () => {
       pageId: "page_1",
       groupId: "mascot_group",
     };
+    const reorder = {
+      action: "reorder",
+      label: "Bring mascot details forward",
+      pageId: "page_1",
+      nodeIds: ["face", "scarf"],
+      order: "bring-forward",
+    };
 
     expect(hierarchy).toMatchObject({
       risk: "design_write",
@@ -158,6 +165,9 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, ungroup),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, reorder),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
@@ -181,6 +191,24 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
         ...ungroup,
         nodeIds: ["body"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...reorder,
+        order: "move-up-somehow",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...reorder,
+        nodeIds: [],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...reorder,
+        groupId: "must_not_be_accepted",
       }),
     ).toBe(false);
   });

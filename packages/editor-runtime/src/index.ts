@@ -21,10 +21,13 @@ export {
   transformPoint,
 } from "./geometry.js";
 export {
+  canReorderNodes,
   canGroupNodes,
   canUngroupNode,
   planGroupNodes,
+  planReorderNodes,
   planUngroupNode,
+  type LayerOrderAction,
   type LayerOperationFailureCode,
   type LayerOperationPlan,
 } from "./layer-operations.js";
