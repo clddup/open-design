@@ -1,4 +1,9 @@
-import type { Rect } from "@opendesign/design-contracts";
+// Source consumers compile this workspace entry directly, so keep its private
+// PathKit declarations attached to the entry rather than leaking them globally.
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="./pathkit-wasm.d.ts" />
+
+import type { Rect, Transform } from "@opendesign/design-contracts";
 import PathKitInit, {
   type PathKitEnumValue,
   type PathKitInitOptions,
@@ -25,6 +30,12 @@ export interface VectorStrokeOptions {
   cap: VectorStrokeCap;
   join: VectorStrokeJoin;
   miterLimit: number;
+}
+
+export interface VectorDashOptions {
+  on: number;
+  off: number;
+  phase: number;
 }
 
 export type VectorGeometryFailureCode =
@@ -54,6 +65,8 @@ export interface VectorGeometryProvider {
     operation: VectorBooleanOperation,
   ): VectorGeometryResult;
   normalize(path: VectorPathInput): VectorGeometryResult;
+  transform(path: VectorPathInput, transform: Transform): VectorGeometryResult;
+  dash(path: VectorPathInput, options: VectorDashOptions): VectorGeometryResult;
   outlineStroke(
     path: VectorPathInput,
     options: VectorStrokeOptions,
@@ -76,6 +89,9 @@ const MAX_TOTAL_PATH_CHARACTERS = 2_000_000;
 const MAX_BOOLEAN_INPUTS = 128;
 const MAX_STROKE_WIDTH = 1_000_000;
 const MAX_MITER_LIMIT = 1_000;
+const MAX_DASH_LENGTH = 1_000_000;
+const MAX_DASH_PHASE = 1_000_000_000;
+const MAX_TRANSFORM_COMPONENT = 1_000_000_000;
 
 export async function createPathKitGeometryProvider(
   options: CreatePathKitGeometryProviderOptions,
@@ -155,6 +171,77 @@ class PathKitGeometryProvider implements VectorGeometryProvider {
     try {
       if (source === undefined || source.simplify() === null) {
         return failure("operation-failed", "PathKit could not simplify path");
+      }
+      return pathResult(source);
+    } finally {
+      opened.paths.forEach((candidate) => candidate.delete());
+    }
+  }
+
+  transform(path: VectorPathInput, transform: Transform): VectorGeometryResult {
+    const validated = validatePathInputs([path]);
+    if (!validated.ok) return validated;
+    if (
+      transform.length !== 6 ||
+      !transform.every(
+        (value) =>
+          Number.isFinite(value) && Math.abs(value) <= MAX_TRANSFORM_COMPONENT,
+      )
+    ) {
+      return failure(
+        "invalid-input",
+        "Vector transform is outside supported finite limits",
+      );
+    }
+    const opened = this.#openPaths(validated.paths);
+    if (!opened.ok) return opened.failure;
+    const source = opened.paths[0];
+    try {
+      if (source === undefined) {
+        return failure("operation-failed", "Vector source path is missing");
+      }
+      const [a, b, c, d, e, f] = transform;
+      // PathKit accepts a row-major 3x3 matrix. OpenDesign stores the common
+      // Canvas/SVG tuple [a, b, c, d, e, f].
+      if (source.transform(a, c, e, b, d, f, 0, 0, 1) === null) {
+        return failure("operation-failed", "PathKit could not transform path");
+      }
+      return pathResult(source);
+    } finally {
+      opened.paths.forEach((candidate) => candidate.delete());
+    }
+  }
+
+  dash(
+    path: VectorPathInput,
+    options: VectorDashOptions,
+  ): VectorGeometryResult {
+    const validated = validatePathInputs([path]);
+    if (!validated.ok) return validated;
+    if (
+      !Number.isFinite(options.on) ||
+      options.on <= 0 ||
+      options.on > MAX_DASH_LENGTH ||
+      !Number.isFinite(options.off) ||
+      options.off <= 0 ||
+      options.off > MAX_DASH_LENGTH ||
+      !Number.isFinite(options.phase) ||
+      Math.abs(options.phase) > MAX_DASH_PHASE
+    ) {
+      return failure(
+        "invalid-input",
+        "Dash options are outside supported finite limits",
+      );
+    }
+    const opened = this.#openPaths(validated.paths);
+    if (!opened.ok) return opened.failure;
+    const source = opened.paths[0];
+    try {
+      if (
+        source === undefined ||
+        source.dash(options.on, options.off, options.phase) === null
+      ) {
+        return failure("operation-failed", "PathKit could not dash path");
       }
       return pathResult(source);
     } finally {

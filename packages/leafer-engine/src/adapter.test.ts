@@ -1,7 +1,9 @@
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import type { DesignChangeSet } from "@opendesign/design-contracts";
+import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLeaferEngineAdapter } from "./adapter.js";
+import { booleanResultElementId } from "./mapping.js";
 import type { LeaferEngineCallbacks, LeaferEngineSyncInput } from "./types.js";
 
 const leaferHarness = vi.hoisted(() => ({
@@ -397,6 +399,189 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("loads PathKit only for Boolean pages and maps synthetic hits to the source Boolean", async () => {
+    let resolveProvider:
+      ((provider: VectorGeometryProvider) => void) | undefined;
+    const providerPromise = new Promise<VectorGeometryProvider>((resolve) => {
+      resolveProvider = resolve;
+    });
+    const loader = vi.fn(() => providerPromise);
+    const onSelectionChange = vi.fn();
+    const callbacks = { ...createCallbacks(), onSelectionChange };
+    const adapter = await createLeaferEngineAdapter(createHost(), callbacks, {
+      loadVectorGeometryProvider: loader,
+    });
+    const ordinary = createInput();
+    adapter.sync(ordinary);
+    expect(loader).not.toHaveBeenCalled();
+
+    const booleanInput = withBooleanFixture(ordinary);
+    adapter.sync(booleanInput);
+    expect(loader).toHaveBeenCalledTimes(1);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const resultId = booleanResultElementId("boolean_mark");
+    expect(findElement(app.tree, resultId)).toBeUndefined();
+
+    resolveProvider?.(fakeVectorGeometryProvider());
+    await flushMicrotasks();
+    flushAnimationFrames();
+
+    const group = findElement(app.tree, "boolean_mark");
+    const result = findElement(app.tree, resultId);
+    const base = findElement(app.tree, "boolean_base");
+    const cutout = findElement(app.tree, "boolean_cutout");
+    expect(group).toBeInstanceOf(FakeGroup);
+    expect(result).toBeInstanceOf(FakePath);
+    expect((group as FakeGroup).children.map((child) => child.id)).toEqual([
+      resultId,
+      "boolean_base",
+      "boolean_cutout",
+    ]);
+    expect(result).toMatchObject({
+      editable: false,
+      fill: [{ type: "solid", color: "#111827", opacity: 1 }],
+      visible: true,
+    });
+    expect(base).toMatchObject({ visible: false });
+    expect(cutout).toMatchObject({ visible: false });
+
+    app.editor.target = [result!];
+    app.editor.emit("editor.select");
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      ["boolean_mark"],
+      "boolean_mark",
+    );
+    adapter.dispose();
+  });
+
+  it("recomputes only an affected Boolean result after contiguous changes", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+      {
+        loadVectorGeometryProvider: () =>
+          Promise.resolve(fakeVectorGeometryProvider()),
+      },
+    );
+    const first = withBooleanFixture(createInput());
+    adapter.sync(first);
+    await flushMicrotasks();
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const result = findElement(
+      app.tree,
+      booleanResultElementId("boolean_mark"),
+    );
+    const unrelated = findElement(app.tree, "feature_two");
+    if (!result || !unrelated) throw new Error("Missing projected fixtures");
+    const resultSetCalls = result.setCalls;
+    const unrelatedSetCalls = unrelated.setCalls;
+
+    const secondDocument = structuredClone(first.document);
+    secondDocument.revision += 1;
+    const feature = secondDocument.nodesById.feature_two;
+    if (!feature) throw new Error("Missing unrelated feature");
+    feature.opacity = 0.5;
+    adapter.sync({
+      ...first,
+      document: secondDocument,
+      changes: changedNodeSet(first.document, secondDocument, "feature_two"),
+    });
+    flushAnimationFrames();
+    expect(result.setCalls).toBe(resultSetCalls);
+    expect(unrelated.setCalls).toBe(unrelatedSetCalls + 1);
+
+    const thirdDocument = structuredClone(secondDocument);
+    thirdDocument.revision += 1;
+    const cutout = thirdDocument.nodesById.boolean_cutout;
+    if (!cutout) throw new Error("Missing Boolean cutout");
+    cutout.transform = [1, 0, 0, 1, 44, 36];
+    adapter.sync({
+      ...first,
+      document: thirdDocument,
+      changes: changedNodeSet(
+        secondDocument,
+        thirdDocument,
+        "boolean_cutout",
+        "transform",
+      ),
+    });
+    flushAnimationFrames();
+    expect(result.setCalls).toBe(resultSetCalls + 1);
+    expect(unrelated.setCalls).toBe(unrelatedSetCalls + 1);
+
+    const fourthDocument = structuredClone(thirdDocument);
+    fourthDocument.revision += 1;
+    const frame = fourthDocument.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    frame.childIds = frame.childIds.filter(
+      (nodeId) => nodeId !== "boolean_mark",
+    );
+    delete fourthDocument.nodesById.boolean_mark;
+    delete fourthDocument.nodesById.boolean_base;
+    delete fourthDocument.nodesById.boolean_cutout;
+    adapter.sync({
+      ...first,
+      document: fourthDocument,
+      changes: {
+        addedNodeIds: [],
+        changedNodeIds: [frame.id],
+        changes: [],
+        documentId: fourthDocument.documentId,
+        fromRevision: thirdDocument.revision,
+        removedNodeIds: ["boolean_mark", "boolean_base", "boolean_cutout"],
+        toRevision: fourthDocument.revision,
+      },
+    });
+    flushAnimationFrames();
+    expect(
+      findElement(app.tree, booleanResultElementId("boolean_mark")),
+    ).toBeUndefined();
+    expect(findElement(app.tree, "boolean_mark")).toBeUndefined();
+    adapter.dispose();
+  });
+
+  it("surfaces lazy geometry load failures and ignores providers that arrive after dispose", async () => {
+    const loadError = new Error("WASM unavailable");
+    const onError = vi.fn();
+    const onWarning = vi.fn();
+    const failedAdapter = await createLeaferEngineAdapter(
+      createHost(),
+      { ...createCallbacks(), onError, onWarning },
+      { loadVectorGeometryProvider: async () => Promise.reject(loadError) },
+    );
+    failedAdapter.sync(withBooleanFixture(createInput()));
+    await flushMicrotasks();
+    expect(onError).toHaveBeenCalledWith(loadError);
+    expect(onWarning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "boolean-geometry-failed",
+        nodeId: "boolean_mark",
+      }),
+    );
+    failedAdapter.dispose();
+
+    let resolveProvider:
+      ((provider: VectorGeometryProvider) => void) | undefined;
+    const pending = new Promise<VectorGeometryProvider>((resolve) => {
+      resolveProvider = resolve;
+    });
+    const lateError = vi.fn();
+    const disposedAdapter = await createLeaferEngineAdapter(
+      createHost(),
+      { ...createCallbacks(), onError: lateError },
+      { loadVectorGeometryProvider: () => pending },
+    );
+    disposedAdapter.sync(withBooleanFixture(createInput()));
+    disposedAdapter.dispose();
+    resolveProvider?.(fakeVectorGeometryProvider());
+    await flushMicrotasks();
+    expect(lateError).not.toHaveBeenCalled();
+  });
+
   it("does not cancel a direct manipulation when a contiguous revision changes an unrelated node", async () => {
     const onOperations = vi.fn(() => true);
     const host = createHost();
@@ -677,6 +862,122 @@ function createInput(): LeaferEngineSyncInput {
     tool: "select",
     viewport: { panX: 0, panY: 0, zoom: 1, width: 1024, height: 768 },
   };
+}
+
+function withBooleanFixture(
+  input: LeaferEngineSyncInput,
+): LeaferEngineSyncInput {
+  const document = structuredClone(input.document);
+  document.revision += 1;
+  const frame = document.nodesById.frame_welcome;
+  if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+  document.nodesById.boolean_mark = {
+    childIds: ["boolean_base", "boolean_cutout"],
+    extensions: {},
+    id: "boolean_mark",
+    kind: "boolean",
+    locked: false,
+    name: "Boolean mark",
+    opacity: 1,
+    parentId: frame.id,
+    properties: {
+      fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+      operation: "subtract",
+      strokes: [],
+      strokeWidth: 0,
+    },
+    size: { width: 120, height: 120 },
+    transform: [1, 0, 0, 1, 840, 72],
+    visible: true,
+  };
+  document.nodesById.boolean_base = {
+    childIds: [],
+    extensions: {},
+    id: "boolean_base",
+    kind: "path",
+    locked: false,
+    name: "Base",
+    opacity: 1,
+    parentId: "boolean_mark",
+    properties: {
+      fills: [{ type: "solid", color: "#ef4444", opacity: 1 }],
+      path: "M0 0H120V120H0Z",
+      strokes: [],
+      strokeWidth: 0,
+    },
+    size: { width: 120, height: 120 },
+    transform: [1, 0, 0, 1, 0, 0],
+    visible: true,
+  };
+  document.nodesById.boolean_cutout = {
+    childIds: [],
+    extensions: {},
+    id: "boolean_cutout",
+    kind: "path",
+    locked: false,
+    name: "Cutout",
+    opacity: 1,
+    parentId: "boolean_mark",
+    properties: {
+      fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+      path: "M0 0H60V60H0Z",
+      strokes: [],
+      strokeWidth: 0,
+    },
+    size: { width: 60, height: 60 },
+    transform: [1, 0, 0, 1, 30, 30],
+    visible: true,
+  };
+  frame.childIds.push("boolean_mark");
+  return {
+    ...input,
+    document,
+    selection: { nodeIds: ["boolean_mark"], anchorNodeId: "boolean_mark" },
+  };
+}
+
+function fakeVectorGeometryProvider(): VectorGeometryProvider {
+  const result = (
+    path: string,
+    fillRule: "nonzero" | "evenodd" = "nonzero",
+  ) => ({
+    bounds: path.length === 0 ? null : { x: 0, y: 0, width: 120, height: 120 },
+    empty: path.length === 0,
+    fillRule,
+    ok: true as const,
+    path,
+    provider: "skia-pathkit" as const,
+    providerVersion: "1.0.0" as const,
+  });
+  return {
+    id: "skia-pathkit",
+    version: "1.0.0",
+    combine: (paths, operation) =>
+      result(
+        `${operation}(${paths.map((item) => item.path).join("|")})`,
+        paths[0]?.fillRule ?? "nonzero",
+      ),
+    dash: (path, options) =>
+      result(
+        `dash(${options.on},${options.off},${options.phase},${path.path})`,
+        path.fillRule ?? "nonzero",
+      ),
+    normalize: (path) => result(path.path, path.fillRule ?? "nonzero"),
+    outlineStroke: (path, options) =>
+      result(
+        `stroke(${options.width},${path.path})`,
+        path.fillRule ?? "nonzero",
+      ),
+    transform: (path, transform) =>
+      result(
+        `transform(${transform.join(",")},${path.path})`,
+        path.fillRule ?? "nonzero",
+      ),
+  };
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 6; index += 1) await Promise.resolve();
 }
 
 function createCallbacks(): LeaferEngineCallbacks {

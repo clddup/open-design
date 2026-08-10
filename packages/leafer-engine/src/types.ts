@@ -5,6 +5,7 @@ import type {
   SelectionState,
   ViewportState,
 } from "@opendesign/design-contracts";
+import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 
 export type LeaferCanvasTool =
   "select" | "frame" | "rectangle" | "ellipse" | "text";
@@ -48,12 +49,19 @@ export interface LeaferEngineSyncInput {
 
 export interface LeaferFidelityWarning {
   code:
+    | "boolean-geometry-failed"
+    | "boolean-geometry-pending"
+    | "boolean-geometry-unsupported"
     | "invalid-path"
     | "missing-image"
     | "unsupported-color-alpha"
     | "unsupported-node";
   message: string;
   nodeId: string;
+}
+
+export interface LeaferEngineOptions {
+  loadVectorGeometryProvider?: () => Promise<VectorGeometryProvider>;
 }
 
 export interface LeaferEngineAdapter {

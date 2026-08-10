@@ -184,9 +184,19 @@ async function buildArtifacts() {
     assets.filter((name) => /^web\.esm\.min-[^.]+\.js$/.test(name)),
     "Leafer web JavaScript",
   );
+  const vectorGeometry = one(
+    assets.filter((name) => /^browser-vector-path-[^.]+\.js$/.test(name)),
+    "lazy vector geometry JavaScript",
+  );
+  const pathkitWasm = one(
+    assets.filter((name) => /^pathkit-[^.]+\.wasm$/.test(name)),
+    "lazy PathKit WASM",
+  );
   const files = [
     ["Renderer 主 JS", join(assetDirectory, renderer)],
     ["Leafer Web chunk", join(assetDirectory, leafer)],
+    ["按需 Vector geometry chunk", join(assetDirectory, vectorGeometry)],
+    ["按需 PathKit WASM", join(assetDirectory, pathkitWasm)],
     ["Electron Main", join(desktopRoot, "out/main/index.cjs")],
     ["Preload", join(desktopRoot, "out/preload/index.cjs")],
     ["Agent", join(desktopRoot, "out/agent/index.cjs")],

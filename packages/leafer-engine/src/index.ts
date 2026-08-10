@@ -4,6 +4,7 @@ export type {
   LeaferCreateRequest,
   LeaferEngineAdapter,
   LeaferEngineCallbacks,
+  LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferFidelityWarning,
   LeaferOperationKind,

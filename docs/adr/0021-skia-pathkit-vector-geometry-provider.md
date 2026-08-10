@@ -1,6 +1,6 @@
 # ADR-0021：固定 Skia PathKit 作为矢量几何计算 provider
 
-- 状态：已接受（provider 基础完成，产品链路尚未完成）
+- 状态：已接受（provider 与 Boolean 派生渲染完成，完整产品链路尚未完成）
 - 日期：2026-08-11
 - 补充：ADR-0003、ADR-0009、ADR-0011、ADR-0012
 - 固定依赖：`pathkit-wasm 1.0.0`
@@ -27,9 +27,9 @@ CanvasKit 使用 BSD-3-Clause，持续维护并覆盖完整 Skia 绘制、文字
 
 ## 决策
 
-固定 `pathkit-wasm 1.0.0`，只通过 `@opendesign/geometry-service/vector-path` 子入口暴露 OpenDesign-owned `VectorGeometryProvider`。公共输入输出只包含普通 path 字符串、fill rule、操作枚举、stroke 参数、bounds、provider identity 和结构化失败；PathKit module、Path 对象、enum、WASM 指针和私有命令不进入 Design Contracts、EditorRuntime、Renderer 状态、Agent schema 或持久化文档。
+固定 `pathkit-wasm 1.0.0`，只通过 `@opendesign/geometry-service/vector-path` 子入口暴露 OpenDesign-owned `VectorGeometryProvider`。公共输入输出只包含普通 path 字符串、fill rule、操作枚举、transform、dash、stroke 参数、bounds、provider identity 和结构化失败；PathKit module、Path 对象、enum、WASM 指针和私有命令不进入 Design Contracts、EditorRuntime、Renderer 状态、Agent schema 或持久化文档。
 
-Provider 初始化必须显式提供浏览器 `locateFile` 或已授权宿主读取的 `wasmBinary`。geometry-service 根入口继续只加载轻量排列契约；未进入矢量工作流时，Renderer/Main/Agent 基础 bundle 不得包含 PathKit loader 或 WASM。后续 Pen/Boolean UI 使用动态子入口和受控 asset URL 加载，不允许 Renderer 获得任意文件系统能力。
+Provider 初始化必须显式提供浏览器 `locateFile` 或已授权宿主读取的 `wasmBinary`。geometry-service 根入口继续只加载轻量排列契约；未进入矢量工作流时，Renderer/Main/Agent 基础 bundle 不得包含 PathKit loader 或 WASM。Leafer adapter 只在当前 Page 存在 Boolean 时动态导入 `browser-vector-path`，Vite 将 loader 与 324 KB WASM 输出为独立按需产物；Renderer CSP 只增加 Chromium 编译 WASM 所需的 `'wasm-unsafe-eval'`，不开放通用 `'unsafe-eval'`，也不因此获得文件系统能力。
 
 每次操作创建短生命周期 PathKit path，并在所有成功、失败和提前返回路径中调用 `delete()`。服务限制单路径、总字符数、输入数量、stroke width 和 miter limit，拒绝非有限参数与非 SVG path 字符。空 intersection 是合法的 `empty` 结果，不伪装为 parser failure。
 
@@ -42,20 +42,20 @@ Provider 初始化必须显式提供浏览器 `locateFile` 或已授权宿主读
 - cubic union、subtract、intersect、exclude；
 - compound/hole 与 honest empty result；
 - self-intersection simplify；
-- open stroke 到闭合 outline；
+- Canvas/SVG transform、精确两段 dash、open stroke 到闭合 outline；
 - tight bounds、fill rule、确定性字符串结果；
 - 非法 path、非有限 stroke 和预算限制；
-- 独立子入口证明基础桌面 bundle 不增长。
+- 独立浏览器子入口和 Vite chunk 证明普通 Page 不初始化 WASM；
+- `boolean-resolver` 递归消费 provider，Leafer 仅保存可丢弃 synthetic result。
 
-这不等于 Pen、节点编辑或 boolean operations 已可用。在本 ADR 只完成 provider 基础时，相关 capability 保持 `unavailable`；后续 ADR-0022 完成 Boolean contract/runtime 后按 manifest 规则进入 `degraded`，但人工 UI、Agent tool、Leafer 派生投影、SVG 往返和双平台产品证据未完成前仍不是可用产品功能。
+这不等于 Pen、节点编辑或完整 Boolean 产品工作流已经可用。ADR-0022 的 contract/runtime/render 表面已有实现，Boolean capability 为 `degraded`；人工 UI、Agent tool、SVG 往返、像素基线和双平台产品证据未完成前仍不能描述为完整可用。
 
 ## 后续门禁
 
 1. 在 macOS/Windows 原生 CI 对同一 PathOps corpus 校验结构结果、耗时、峰值内存和 WASM 加载。
-2. 设计 OpenDesign-owned 多轮廓/vector-network 与非破坏 boolean-group schema，不采用 PathKit 私有表示。
-3. 先实现 EditorRuntime boolean planner 和单事务 undo/redo，再开放人工命令与 Agent tool。
-4. Pen/vector edit mode 另行实现点、边、手柄、开放/闭合和 hit testing；PathKit 只提供几何计算，不接管交互状态。
-5. 完成 flatten、outline stroke 与 SVG import/export 往返后，使用 `OD-PENGUIN-01` 和 `OD-BRAND-01` 做结构与像素验收。
+2. 为已完成的非破坏 Boolean planner 与派生渲染开放人工命令和 Agent typed tool。
+3. Pen/vector edit mode 另行实现点、边、手柄、开放/闭合和 hit testing；PathKit 只提供几何计算，不接管交互状态。
+4. 完成 flatten、outline stroke 与 SVG import/export 往返后，使用 `OD-PENGUIN-01` 和 `OD-BRAND-01` 做结构与像素验收。
 
 ## 参考
 

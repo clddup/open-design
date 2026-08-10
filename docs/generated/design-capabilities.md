@@ -81,11 +81,11 @@
 非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。
 
 - ID：`vector.boolean-operations`
-- 实现方：DesignDocument 1.4.0 + EditorRuntime Boolean planner + Skia PathKit provider foundation
-- 表面：contract=available；runtime=available；human=unavailable；agent=unavailable；render=unavailable；export=unavailable
-- 证据：自动化 5 项；实机 0 项
-- 限制：DesignDocument 1.4.0 与 EditorRuntime 已在不持久化 provider 派生路径的前提下支持可编辑源层、组级外观、兼容 Figma 的初始外观继承、operation 切换、持久化、undo/redo、解组、锁定和 revision 冲突。
-- 限制：PathKit 派生渲染、创建/切换/解组 UI、Agent typed tool、文字轮廓、SVG 往返和 macOS/Windows 产品证据仍不可用；当前 Leafer 结构投影会主动隐藏源层并报告 warning，不绘制错误 fallback。
+- 实现方：DesignDocument 1.4.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection
+- 表面：contract=available；runtime=available；human=unavailable；agent=unavailable；render=available；export=unavailable
+- 证据：自动化 7 项；实机 0 项
+- 限制：递归 resolver 会把 Rectangle、Ellipse、Path、Vector 与嵌套 Boolean 转换为包含 fill+stroke 的 PathKit 几何，应用局部 transform、保留真实空结果，并在不持久化 provider 输出的前提下投影稳定的 Leafer synthetic Path。
+- 限制：创建/切换/解组 UI、Agent typed tool、文字轮廓、SVG 往返、像素基线和 macOS/Windows 产品证据仍不可用；超过两段的 dash pattern、带 mask 的 operand 和开放路径的非居中描边会明确失败，不做静默近似。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations)
 
 ## 外观与合成

@@ -112,6 +112,29 @@ describe("Skia PathKit geometry provider", () => {
     expect(outlined.bounds?.height).toBeGreaterThan(12);
   });
 
+  it("transforms Canvas tuples and preserves exact two-value dash geometry", () => {
+    const transformed = provider.transform(
+      { path: "M0 0H10V20H0Z" },
+      [2, 0, 0, 3, 5, 7],
+    );
+    expect(transformed).toMatchObject({
+      ok: true,
+      bounds: { x: 5, y: 7, width: 20, height: 60 },
+    });
+
+    const dashed = provider.dash(
+      { path: "M0 0H100" },
+      { on: 10, off: 5, phase: 0 },
+    );
+    expect(dashed).toMatchObject({
+      ok: true,
+      empty: false,
+      bounds: { x: 0, y: 0, width: 100, height: 0 },
+    });
+    if (!dashed.ok) throw new Error(dashed.message);
+    expect(dashed.path.match(/M/g)?.length).toBe(7);
+  });
+
   it("normalizes self-intersections and rejects malformed or unsafe inputs", () => {
     expect(
       provider.normalize({ path: "M0 0L100 100L0 100L100 0Z" }),
@@ -153,6 +176,19 @@ describe("Skia PathKit geometry provider", () => {
         { path: "M0 0L10 10" },
         { width: Number.NaN, cap: "butt", join: "miter", miterLimit: 4 },
       ),
+    ).toMatchObject({ ok: false, code: "invalid-input" });
+    expect(
+      provider.transform({ path: "M0 0H10V10H0Z" }, [
+        1,
+        0,
+        0,
+        1,
+        Number.POSITIVE_INFINITY,
+        0,
+      ]),
+    ).toMatchObject({ ok: false, code: "invalid-input" });
+    expect(
+      provider.dash({ path: "M0 0H10" }, { on: 0, off: 4, phase: 0 }),
     ).toMatchObject({ ok: false, code: "invalid-input" });
   });
 });

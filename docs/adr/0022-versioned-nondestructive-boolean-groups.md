@@ -1,6 +1,6 @@
 # ADR-0022：版本化非破坏 Boolean Group 语义
 
-- 状态：已接受（contract/runtime 完成，派生渲染与产品入口待完成）
+- 状态：已接受（contract/runtime/派生渲染完成，产品入口待完成）
 - 日期：2026-08-11
 - 补充：ADR-0003、ADR-0009、ADR-0012、ADR-0015、ADR-0021
 - 文档协议：`DesignDocument 1.4.0`
@@ -26,7 +26,9 @@ Figma 的公开产品语义作为行为参考：Boolean operation 把多个图�
 
 创建、operation 切换和解组均生成普通 `DesignOperation[]`，由唯一 `EditorRuntime.apply(DesignTransaction)` 原子应用。创建时 Union/Intersect/Exclude 复制顶层 operand 外观，Subtract 复制底层 operand 外观；之后 operation 切换不重置用户已修改的组外观。planner 保持源层世界 transform、兄弟顺序和单次 revision，保存重开、undo/redo、锁定与 stale `baseRevision` 使用现有 Runtime 语义。
 
-PathKit 的派生结果不进入 `DesignDocument`。后续 resolver 根据当前 revision、operand 顺序、geometry、fill/stroke 和 transform 递归计算短生命周期 result path，并交给 Leafer 可丢弃投影。当前 Leafer 只建立结构 Boolean Group、隐藏正常模式下的源 operand 并报告明确 warning；在 result projection 完成前，Human、Agent、Render 与 Export capability 均保持 `unavailable`，不绘制逐层叠加的错误 fallback。
+PathKit 的派生结果不进入 `DesignDocument`。`boolean-resolver` 根据 operand 顺序、geometry、fill/stroke、visibility 与 transform 递归计算短生命周期 result path，并以精确 fingerprint 缓存；无关 revision 复用，源几何变化只失效对应 Boolean 及祖先。Leafer 为每个成功结果创建稳定 `__opendesign_boolean_result__:<id>` Path，源 operand 保持 identity 但在正常模式隐藏，synthetic hit 映射回原 Boolean ID。空结果保持不可见空 Path，失败返回明确 fidelity warning，不绘制逐层叠加 fallback。
+
+浏览器 PathKit 通过受控动态子入口按需加载。加载期间画布和结构投影保持响应；成功后在同一文档 revision 上只 reconcile Boolean 与 synthetic result，失败调用 `onError` 并投影结构化 warning，dispose 后忽略迟到 provider。WASM 路径由 Vite 受控 asset URL 提供，不进入 `DesignDocument` 或 Renderer 文件权限。
 
 ## 迁移
 
@@ -38,15 +40,16 @@ PathKit 的派生结果不进入 `DesignDocument`。后续 resolver 根据当前
 - Runtime 测试覆盖层级顺序、顶/底外观继承、源层世界 transform、几何可编辑与单层外观拒绝；
 - 保存重开、undo/redo、operation 切换、解组、锁定、mask、非法 operation 和 stale revision；
 - 图层树使用独立 Boolean 图标和可折叠 children；属性面板只读展示 operation，尺寸字段在派生 bounds 模式下禁用；
-- Leafer 在派生 geometry 未接入时隐藏 operands 并产生 `unsupported-node` warning。
+- 真实 PathKit 测试覆盖 Rectangle、Ellipse、Path/Vector 原始局部坐标、嵌套 Boolean、fill+stroke、inside/center/outside stroke、精确两段 dash、transform、空结果与不支持样式；
+- resolver cache 测试证明颜色或无关节点变化复用结果，operand transform 只重新计算对应祖先；
+- Leafer 使用独立 synthetic Path，保留源节点层级与选择身份；测试覆盖按需加载、失败 warning、dispose 后迟到结果、无关增量不 `set()`、精确重算与删除清理；
+- Vite 8 构建产生独立 `browser-vector-path` chunk 与 `pathkit.wasm`，Main/Preload/Agent 不包含该实现。
 
 ## 后续门禁
 
-1. 实现 Rectangle/Ellipse/Path/Vector/嵌套 Boolean 到统一 PathKit 输入的递归 resolver，包括 fill+stroke geometry、transform 与空结果。
-2. 使用受控 WASM asset 动态初始化；基础桌面 bundle 继续不包含 PathKit，provider 生命周期可取消并释放。
-3. Leafer 为 Boolean Group 投影独立 result Path，同时保留源节点 ID、选择和 edit mode，不建立第二份可写状态。
-4. 人工菜单、工具栏和 macOS/Windows 快捷键与 Agent typed tool 复用同一 planner。
-5. 完成 SVG 往返、flatten、outline stroke、像素基线和双平台产品 smoke 后再提升 capability 状态。
+1. 人工菜单、工具栏和 macOS/Windows 快捷键与 Agent typed tool 复用同一 planner。
+2. 增加进入源层编辑模式、operation 切换、解组、warning、取消和 undo 的完整产品交互。
+3. 完成 SVG 往返、flatten、outline stroke、像素基线和双平台产品 smoke 后再提升 capability 状态。
 
 ## 参考
 

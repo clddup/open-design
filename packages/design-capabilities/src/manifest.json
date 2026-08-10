@@ -279,24 +279,24 @@
         "en": "Non-destructive union, subtract, intersect, and exclude groups whose source layers remain editable.",
         "zh-CN": "非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。"
       },
-      "provider": "DesignDocument 1.4.0 + EditorRuntime Boolean planner + Skia PathKit provider foundation",
+      "provider": "DesignDocument 1.4.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
         "runtime": "available",
         "human": "unavailable",
         "agent": "unavailable",
-        "render": "unavailable",
+        "render": "available",
         "export": "unavailable"
       },
       "limitations": [
         {
-          "en": "DesignDocument 1.4.0 and EditorRuntime now preserve editable operands, group-owned appearance, Figma-compatible initial appearance inheritance, operation changes, persistence, undo/redo, ungrouping, locks, and revision conflicts without storing derived provider paths.",
-          "zh-CN": "DesignDocument 1.4.0 与 EditorRuntime 已在不持久化 provider 派生路径的前提下支持可编辑源层、组级外观、兼容 Figma 的初始外观继承、operation 切换、持久化、undo/redo、解组、锁定和 revision 冲突。"
+          "en": "The recursive resolver converts Rectangle, Ellipse, Path, Vector, and nested Boolean operands into fill-plus-stroke PathKit geometry, applies local transforms, preserves honest empty results, and projects a stable synthetic Leafer Path without persisting provider output.",
+          "zh-CN": "递归 resolver 会把 Rectangle、Ellipse、Path、Vector 与嵌套 Boolean 转换为包含 fill+stroke 的 PathKit 几何，应用局部 transform、保留真实空结果，并在不持久化 provider 输出的前提下投影稳定的 Leafer synthetic Path。"
         },
         {
-          "en": "PathKit-derived rendering, create/change/ungroup UI, a typed Agent tool, text outlines, SVG round-trip, and macOS/Windows product evidence remain unavailable; the structural Leafer projection deliberately hides operands and reports a warning instead of drawing an incorrect fallback.",
-          "zh-CN": "PathKit 派生渲染、创建/切换/解组 UI、Agent typed tool、文字轮廓、SVG 往返和 macOS/Windows 产品证据仍不可用；当前 Leafer 结构投影会主动隐藏源层并报告 warning，不绘制错误 fallback。"
+          "en": "Create/change/ungroup UI, a typed Agent tool, text outlines, SVG round-trip, pixel baselines, and macOS/Windows product evidence remain unavailable. Dash patterns longer than two values, masked operands, and non-center strokes on open paths fail explicitly instead of being approximated.",
+          "zh-CN": "创建/切换/解组 UI、Agent typed tool、文字轮廓、SVG 往返、像素基线和 macOS/Windows 产品证据仍不可用；超过两段的 dash pattern、带 mask 的 operand 和开放路径的非居中描边会明确失败，不做静默近似。"
         }
       ],
       "evidence": {
@@ -304,7 +304,9 @@
           "packages/design-contracts/src/index.test.ts",
           "packages/editor-runtime/src/boolean-operations.test.ts",
           "packages/geometry-service/src/vector-path.test.ts",
+          "packages/geometry-service/src/boolean-resolver.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
         ],
         "manual": []

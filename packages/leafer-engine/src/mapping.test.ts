@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import {
+  booleanResultElementId,
   projectDesignPage,
   projectDesignPageIncrementally,
+  projectResolvedBooleanGeometry,
 } from "./mapping.js";
 
 describe("Leafer scene projection", () => {
@@ -33,7 +35,7 @@ describe("Leafer scene projection", () => {
     });
   });
 
-  it("keeps Boolean operands structural and hidden until derived geometry is supplied", () => {
+  it("keeps Boolean operands hidden and projects a stable synthetic result", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;
     if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
@@ -108,11 +110,60 @@ describe("Leafer scene projection", () => {
       false,
     );
     expect(projection.warnings).toContainEqual({
-      code: "unsupported-node",
+      code: "boolean-geometry-pending",
       message:
-        "Boolean node boolean_mark is structural until its derived PathKit projection is available",
+        "Boolean node boolean_mark is waiting for its derived PathKit projection",
       nodeId: "boolean_mark",
     });
+
+    const resultId = booleanResultElementId("boolean_mark");
+    const resolved = projectResolvedBooleanGeometry(projection, document, {
+      computedNodeIds: ["boolean_mark"],
+      issues: [],
+      pageId: "page_welcome",
+      resolverVersion: 1,
+      resultsByNodeId: new Map([
+        [
+          "boolean_mark",
+          {
+            bounds: { x: 0, y: 0, width: 120, height: 120 },
+            empty: false,
+            fillRule: "evenodd",
+            nodeId: "boolean_mark",
+            path: "M0 0H120V120H0ZM30 30H90V90H30Z",
+            provider: "skia-pathkit",
+            providerVersion: "1.0.0",
+          },
+        ],
+      ]),
+      reusedNodeIds: [],
+    });
+    expect(resolved.elementsById.get("boolean_mark")?.childIds).toEqual([
+      resultId,
+      "boolean_base",
+      "boolean_cutout",
+    ]);
+    expect(resolved.elementsById.get(resultId)).toMatchObject({
+      id: resultId,
+      kind: "path",
+      parentId: "boolean_mark",
+      tag: "Path",
+      transform: [1, 0, 0, 1, 0, 0],
+      data: {
+        id: resultId,
+        editable: false,
+        fill: [{ type: "solid", color: "#111827", opacity: 1 }],
+        path: "M0 0H120V120H0ZM30 30H90V90H30Z",
+        windingRule: "evenodd",
+        data: {
+          opendesignNodeId: "boolean_mark",
+          opendesignSynthetic: true,
+        },
+      },
+    });
+    expect(resolved.warnings).not.toContainEqual(
+      expect.objectContaining({ code: "boolean-geometry-pending" }),
+    );
   });
 
   it("reprojects only nodes named by a contiguous transaction change set", () => {

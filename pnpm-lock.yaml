@@ -257,6 +257,9 @@ importers:
       '@opendesign/design-contracts':
         specifier: workspace:*
         version: link:../design-contracts
+      '@opendesign/geometry-service':
+        specifier: workspace:*
+        version: link:../geometry-service
       '@opendesign/image-service':
         specifier: workspace:*
         version: link:../image-service

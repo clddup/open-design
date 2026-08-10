@@ -9,9 +9,11 @@ OpenDesign-owned, versioned geometry provider boundary. Contract v2 contains det
 
 The root entry accepts plain IDs and bounds and returns pure placement deltas. It does not read or save `DesignDocument`, modify Leafer objects, infer the live selection, or own history. `EditorRuntime` resolves world/parent transforms, maintains dynamic Group bounds, validates the resulting `DesignOperation[]`, and applies one transaction.
 
-The `@opendesign/geometry-service/vector-path` sub-entry fixes Skia `pathkit-wasm 1.0.0` behind a plain-data `VectorGeometryProvider`. It currently proves cubic boolean operations, simplify, outline stroke, fill rules, tight bounds, deterministic output, bounded input and explicit WASM initialization. The sub-entry is not loaded by arrangement consumers, so the base desktop bundles do not include PathKit. Every PathKit object remains adapter-private and is explicitly deleted.
+The `@opendesign/geometry-service/vector-path` sub-entry fixes Skia `pathkit-wasm 1.0.0` behind a plain-data `VectorGeometryProvider`. It covers cubic Boolean operations, simplify, Canvas/SVG transforms, exact two-value dash geometry, outline stroke, fill rules, tight bounds, deterministic output, bounded input and explicit WASM initialization. Every PathKit object remains adapter-private and is explicitly deleted.
 
-This provider foundation does not yet make boolean or Pen editing a product capability. OpenDesign still needs a formal vector-network/boolean-group schema, hierarchy/appearance planner, dynamic WASM asset loading, EditorRuntime transactions, human commands, Agent tools, Leafer projection, persistence, undo/redo, SVG round-trip and macOS/Windows evidence. Capability status remains `unavailable` until those surfaces are complete.
+The `boolean-resolver` sub-entry recursively converts Rectangle, Ellipse, Path, Vector and nested Boolean nodes to derived fill-plus-stroke geometry without mutating `DesignDocument`. The `browser-vector-path` sub-entry is dynamically imported by Leafer only when the active Page contains Boolean nodes, so Vite emits the provider and WASM as separate on-demand assets. Resolver output is a disposable projection with bounded exact fingerprints; it is never a second writable document state.
+
+Boolean contract/runtime/render surfaces are now present, but the overall capability remains `degraded`: human commands, the typed Agent tool, text outlines, Pen/node editing, SVG round-trip, pixel baselines and macOS/Windows product evidence are still required.
 
 Behavioral references:
 

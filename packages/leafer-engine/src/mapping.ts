@@ -8,7 +8,11 @@ import type {
   Transform,
 } from "@opendesign/design-contracts";
 import { resolveImagePlacement } from "@opendesign/image-service";
+import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
 import type { LeaferFidelityWarning } from "./types.js";
+
+export const BOOLEAN_RESULT_ELEMENT_PREFIX =
+  "__opendesign_boolean_result__:" as const;
 
 export type LeaferElementTag =
   "Ellipse" | "Frame" | "Group" | "Image" | "Path" | "Rect" | "Text";
@@ -30,6 +34,11 @@ export interface LeaferSceneProjection {
   revision: number;
   rootIds: string[];
   warnings: LeaferFidelityWarning[];
+}
+
+export interface BooleanProjectionOptions {
+  affectedBooleanNodeIds?: ReadonlySet<string>;
+  removedBooleanNodeIds?: ReadonlySet<string>;
 }
 
 export function projectDesignPage(
@@ -261,10 +270,24 @@ function toElementSpec(
       break;
     case "boolean":
       tag = "Group";
-      data = { ...base, hitChildren: true };
+      data = {
+        ...base,
+        // The structural group owns transforms and selection only. Its
+        // synthetic Path child owns the Boolean appearance so opacity and
+        // effects are never applied twice.
+        backgroundBlur: 0,
+        blendMode: "pass-through",
+        blur: 0,
+        grayscale: 0,
+        hitChildren: true,
+        innerShadow: null,
+        mask: false,
+        opacity: 1,
+        shadow: null,
+      };
       warnings.push({
-        code: "unsupported-node",
-        message: `Boolean node ${node.id} is structural until its derived PathKit projection is available`,
+        code: "boolean-geometry-pending",
+        message: `Boolean node ${node.id} is waiting for its derived PathKit projection`,
         nodeId: node.id,
       });
       break;
@@ -385,6 +408,124 @@ function toElementSpec(
     tag,
     transform: [...node.transform],
   };
+}
+
+export function projectResolvedBooleanGeometry(
+  base: LeaferSceneProjection,
+  document: DesignDocument,
+  resolution: BooleanGeometryResolution,
+  options: BooleanProjectionOptions = {},
+): LeaferSceneProjection {
+  if (base.pageId !== resolution.pageId) {
+    throw new Error(
+      `Boolean geometry for ${resolution.pageId} cannot project page ${base.pageId}`,
+    );
+  }
+  const elementsById = new Map(base.elementsById);
+  const warnings = base.warnings.filter(
+    (warning) => warning.code !== "boolean-geometry-pending",
+  );
+  const affectedNodeIds =
+    base.affectedNodeIds ||
+    options.affectedBooleanNodeIds ||
+    options.removedBooleanNodeIds
+      ? new Set(base.affectedNodeIds ?? [])
+      : undefined;
+  const affectedBooleans = new Set(options.affectedBooleanNodeIds ?? []);
+  base.affectedNodeIds?.forEach((nodeId) => {
+    if (document.nodesById[nodeId]?.kind === "boolean") {
+      affectedBooleans.add(nodeId);
+    }
+  });
+
+  for (const spec of base.elementsById.values()) {
+    if (spec.kind !== "boolean") continue;
+    const node = document.nodesById[spec.id];
+    if (!node || node.kind !== "boolean") continue;
+    const result = resolution.resultsByNodeId.get(node.id);
+    if (!result) {
+      const issue = resolution.issues.find(
+        (candidate) =>
+          candidate.nodeId === node.id ||
+          candidate.message.includes(`Boolean ${node.id}`),
+      );
+      warnings.push({
+        code:
+          issue?.code === "unsupported-operand" ||
+          issue?.code === "unsupported-style"
+            ? "boolean-geometry-unsupported"
+            : "boolean-geometry-failed",
+        message:
+          issue?.message ??
+          `Boolean node ${node.id} has no derived geometry result`,
+        nodeId: node.id,
+      });
+      continue;
+    }
+    const resultId = booleanResultElementId(node.id);
+    const resultWarnings: LeaferFidelityWarning[] = [];
+    const resultSpec: LeaferElementSpec = {
+      childIds: [],
+      data: {
+        id: resultId,
+        name: `${node.name} result`,
+        opacity: node.opacity,
+        visible: node.visible && !result.empty,
+        locked: false,
+        editable: false,
+        hittable: !result.empty,
+        ...mapNodeAppearance(node, resultWarnings),
+        ...mapShapeProperties(
+          document,
+          node.id,
+          node.properties,
+          resultWarnings,
+        ),
+        editConfig: { editSize: "scale" },
+        path: result.empty ? null : result.path,
+        windingRule: node.properties.fillRule ?? result.fillRule,
+        data: {
+          opendesignLocked: isEffectivelyLocked(document, node),
+          opendesignNodeId: node.id,
+          opendesignNodeKind: node.kind,
+          opendesignProjectionId: resultId,
+          opendesignSynthetic: true,
+        },
+      },
+      id: resultId,
+      kind: "path",
+      parentId: node.id,
+      tag: "Path",
+      transform: [1, 0, 0, 1, 0, 0],
+    };
+    elementsById.set(node.id, {
+      ...spec,
+      childIds: [resultId, ...node.childIds],
+    });
+    elementsById.set(resultId, resultSpec);
+    warnings.push(...resultWarnings);
+    if (affectedBooleans.has(node.id)) {
+      affectedNodeIds?.add(node.id);
+      affectedNodeIds?.add(resultId);
+    }
+  }
+
+  options.removedBooleanNodeIds?.forEach((nodeId) => {
+    affectedNodeIds?.add(nodeId);
+    affectedNodeIds?.add(booleanResultElementId(nodeId));
+  });
+  return {
+    ...(affectedNodeIds === undefined ? {} : { affectedNodeIds }),
+    elementsById,
+    pageId: base.pageId,
+    revision: base.revision,
+    rootIds: base.rootIds,
+    warnings,
+  };
+}
+
+export function booleanResultElementId(booleanNodeId: string): string {
+  return `${BOOLEAN_RESULT_ELEMENT_PREFIX}${booleanNodeId}`;
 }
 
 function mapImageNodePlacement(document: DesignDocument, node: ImageNode) {

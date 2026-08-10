@@ -19,6 +19,7 @@ declare module "pathkit-wasm/bin/pathkit.js" {
     addPath(path: PathKitPath): PathKitPath;
     computeTightBounds(): PathKitRect;
     copy(): PathKitPath;
+    dash(on: number, off: number, phase: number): PathKitPath | null;
     delete(): void;
     getFillTypeString(): "evenodd" | "nonzero";
     op(path: PathKitPath, operation: PathKitEnumValue): PathKitPath | null;
@@ -30,6 +31,17 @@ declare module "pathkit-wasm/bin/pathkit.js" {
       join: PathKitEnumValue;
       miter_limit: number;
     }): PathKitPath | null;
+    transform(
+      scaleX: number,
+      skewX: number,
+      translateX: number,
+      skewY: number,
+      scaleY: number,
+      translateY: number,
+      perspective0: number,
+      perspective1: number,
+      perspective2: number,
+    ): PathKitPath | null;
     toSVGString(): string;
   }
 

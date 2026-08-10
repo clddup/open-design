@@ -38,8 +38,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   28 files / 185 tests
-└── desktop tests   38 files / 271 tests
+├── package tests   29 files / 194 tests
+└── desktop tests   38 files / 272 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -51,11 +51,12 @@ pnpm build          passed
 
 测试覆盖的关键路径包括：
 
-- DesignDocument 1.3 schema/migration、正式 Path/Vector 外观、非破坏 Image placement、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
+- DesignDocument 1.4 schema/migration、正式 Path/Vector 外观、非破坏 Image placement 与 Boolean Group、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
 - `DesignCapabilityManifest v1` 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context、只读 `get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON，`capabilities:check` 会拒绝文档漂移。
 - `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
 - Agent Runtime 在完整 run 边界生成累计 `context.compacted` checkpoint，并在同一 Run 的每个 Provider turn 前重新预算；旧 assistant/tool 段超限时变成临时有界 checkpoint，当前用户原文和最近完整 tool call/result 段继续保留。测试覆盖原始 Timeline 不删除、checkpoint 范围单调增加、旧全文退出模型投影、第八轮自动恢复，以及单次当前输入或最小必要段仍超预算时才返回 `context_budget_exceeded`。模型投影同时限制超长单字段和超过 `50000` 字符的完整结构化工具结果，原始 journal 不丢失；预算错误按 system、tool schemas、Conversation/tool results 和 framing 分账。Main 从可信 Model Profile 注入窗口和输出预算；可信 token 预算存在时不会再被固定字符阈值误杀，缺少模型窗口时才使用字符保底；固定协议无法适配小窗口时返回独立的 `model_context_incompatible`。
 - `OD-PENGUIN-01` 与 `OD-POSTER-01` 专业 fixture 从固定 prompt 生成初稿、refinement 事务、最终 `.opendesign` 和 SHA-256 manifest；`fixtures:check` 阻止生成物漂移。EditorRuntime 测试验证命名 Group、主体/翅膀/脚/围巾正式 Path、1440×1024 海报画板、复杂特性下限、零结构诊断、JSON 保存重开及 apply/undo/redo；Leafer 测试验证所有权威节点可达、Path/渐变/效果/mask/内嵌图片映射且没有 fidelity warning。
+- Boolean resolver 使用真实 PathKit WASM 覆盖有序四类运算、圆角 Rectangle、Ellipse、Path/Vector 原始坐标、嵌套组、fill+stroke、stroke align、transform、dash、空结果和精确缓存；Leafer adapter 测试覆盖按需加载、稳定 synthetic ID、源层隐藏、命中映射、失败 warning、dispose 后迟到结果、无关 revision 复用和删除清理。
 - EditorRuntime 设计预检覆盖 Path/渐变/光晕/模糊/blend/mask/图片/文字特性计数，以及空内容、不可见/无外观、缺失或不受支持图片源、非有限 bounds、clipping Frame 完全越界和根层碎片；同一报告经 `inspect_document` 交给 Agent。
 - Leafer 文档投影、Path 实例、复杂外观映射和 change-set 增量同步：未变节点保持 spec/元素 identity，不调用 `set()`；无关新增、删除和 revision 不刷新 tree/Editor，也不取消进行中的直接操作；选中节点变化只刷新该元素 bounds 并更新 editBox；asset change 会精确重投影引用节点。
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
@@ -73,7 +74,7 @@ pnpm build          passed
 - 人工检查器与 `opendesign_update_image` 共用 `planImageNodeUpdate`：明确 Page/node ID 的 placement 与来源替换进入单个事务，保留现有 placement，未共享的旧 asset 可安全清理，共享 Image/Path/Vector paint 资源不会误删；文件选择取消/失败不产生 revision，Agent 执行不读取发送时或实时选区。
 - `opendesign_edit_hierarchy` 对现有节点提供显式 ID 的编组/解组、前移/后移/置顶/置底和跨 Page root/Frame/Group 重挂载语义；宿主与人工 UI 复用同一 planner，保持世界 transform 与多选内部顺序，固定 Frame 尺寸，自底向上重算受影响 Group bounds，并以一个原子事务写入和一次撤销。人工入口包含 Layer order 菜单、macOS `⌘/⌥⌘ + [ ]`、Windows `Ctrl/Ctrl+Shift + [ ]` 快捷键，以及图层树 before/inside/after 指针拖放。测试覆盖两个平台状态下的拖放、选区保持、保存重开、undo/redo、stale revision、Page Mutation Target、锁定、混合父级、cycle、空来源 Group、不可逆 transform、无效 index、外部拖放数据拒绝、继承外观 warning 与提交前取消；这仍是自动化 DOM/Runtime 证据，不冒充 Electron 实机指针验证。
 - `@opendesign/geometry-service` contract v2 的根入口提供不持有文档状态的纯排列结果；EditorRuntime 的 `planArrangeNodes` 将六向多层对齐、固定两端横/纵均分和明确正数/零/负数间距映射为一个原子事务，并自底向上维护 Group bounds。Inspector 与 `opendesign_arrange_layers` 共用该 planner；Agent 必须提供检查所得的稳定 Page/node IDs，发送时或实时选区不作为写目标。测试覆盖不等尺寸、旋转/缩放父级、负间距、两端固定、Group rebase、保存重开、undo/redo、锁定、不可逆 transform、Page scope、无操作拒绝，以及 macOS/Windows Renderer 状态；尚未执行真实 Electron 指针/键盘产品 smoke。
-- 隔离的 `@opendesign/geometry-service/vector-path` 子入口固定 `pathkit-wasm 1.0.0`；实际 WASM corpus 覆盖 cubic union/subtract/intersect/exclude、复合孔洞、合法空结果、self-intersection simplify、开放路径 outline stroke、fill rule、tight bounds、确定性输出、非法输入和资源预算。所有 PathKit 对象显式释放，公共结果不暴露 WASM/Skia 对象，基础 Renderer/Main/Preload/Agent 构建不引入该子入口。当前证据仅建立 geometry provider，不等于 Boolean Group 或 Pen 产品链；同一 corpus 的 macOS/Windows 原生加载、性能与内存门禁仍待 CI。
+- 隔离的 `@opendesign/geometry-service/vector-path` 子入口固定 `pathkit-wasm 1.0.0`；实际 WASM corpus 覆盖 cubic union/subtract/intersect/exclude、复合孔洞、合法空结果、self-intersection simplify、Canvas/SVG transform、精确两段 dash、开放路径 outline stroke、fill rule、tight bounds、确定性输出、非法输入和资源预算。`boolean-resolver` 递归覆盖 Rectangle/Ellipse/Path/Vector/嵌套 Boolean、源层 fill+stroke、inside/center/outside stroke、visibility、空结果和精确 cache invalidation。所有 PathKit 对象显式释放，公共结果不暴露 WASM/Skia 对象。Renderer 仅在 Page 存在 Boolean 时加载独立 `browser-vector-path` 与 WASM 产物；Main/Preload/Agent 不包含该实现。同一 corpus 的 macOS/Windows 原生加载、性能与内存门禁仍待 CI。
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。
 
@@ -92,7 +93,7 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、10 项降级可用和 7 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.4.0`、EditorRuntime、Image service、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement、来源替换和视觉复核的基础路径。两个固定专业 fixture 进一步证明这些语义可以组成完整企鹅层级和复杂海报文档，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、真实 Electron 像素截图、Agent 重放和专业导出仍未完成，因此不能据此把完整工作流标为可用。
 
-仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify 和 outline stroke 的底层计算边界。`DesignDocument 1.4.0` 与 EditorRuntime 也已建立非破坏 Boolean Group 的独立节点、迁移、创建/切换/解组 planner、组级外观、源层保护、持久化和 undo/redo；它没有持久化 provider 派生 path。递归几何 resolver、PathKit 派生 Leafer result、人工命令、Agent typed tool、文字 outline、SVG 往返和双平台产品证据仍未完成，所以 Boolean capability 为 `degraded` 且产品功能尚不可用，Pen、flatten 和 outline stroke 也仍不是可用产品能力。仓库也没有独立 Layout、Text/Font 或 Import/Export service 包；`packages/editor-runtime/src/geometry.ts` 仍只负责矩阵、坐标转换和 bounds 计算，组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
+仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify、transform、dash 和 outline stroke 的底层计算边界。`DesignDocument 1.4.0` 与 EditorRuntime 建立非破坏 Boolean Group 的独立节点、迁移、创建/切换/解组 planner、组级外观、源层保护、持久化和 undo/redo；递归 resolver 与 Leafer synthetic result 已让 Render 表面可用，且没有持久化 provider 派生 path。人工命令、Agent typed tool、文字 outline、SVG 往返、像素基线和双平台产品证据仍未完成，所以 Boolean capability 保持 `degraded`，不能描述为完整产品功能；Pen、flatten 和 outline stroke 也仍不是可用产品能力。仓库没有独立 Layout、Text/Font 或 Import/Export service 包；`packages/editor-runtime/src/geometry.ts` 仍只负责矩阵、坐标转换和 bounds 计算，组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
 
 Agent Runtime 与 Main 当前强制执行“inspect → typed plan → 实质初稿 → `capture_canvas` → typed visual review → refinement → `capture_canvas`”。所有新 composition 必须位于计划 Frame 内；全局生图只能使用计划声明的 role，默认不能用一张 raster 替代可编辑设计。该流程显著收紧敷衍路径，但仍不能单独保证审美、文字可读性或交付保真；后续交付必须按照 [`roadmap.md`](roadmap.md) 的像素基线、固定样张、capability manifest、专业 service 和人工验收推进。
 
@@ -102,25 +103,27 @@ Vite 生产构建完成四个环境。共享门禁从实际 `out/` 检查每个�
 
 <!-- verification-facts:build:start -->
 
-| 产物             | 共享门禁   |
-| ---------------- | ---------- |
-| Renderer 主 JS   | 存在且非空 |
-| Leafer Web chunk | 存在且非空 |
-| Electron Main    | 存在且非空 |
-| Preload          | 存在且非空 |
-| Agent            | 存在且非空 |
+| 产物                       | 共享门禁   |
+| -------------------------- | ---------- |
+| Renderer 主 JS             | 存在且非空 |
+| Leafer Web chunk           | 存在且非空 |
+| 按需 Vector geometry chunk | 存在且非空 |
+| 按需 PathKit WASM          | 存在且非空 |
+| Electron Main              | 存在且非空 |
+| Preload                    | 存在且非空 |
+| Agent                      | 存在且非空 |
 
 <!-- verification-facts:build:end -->
 
 构建提示 Renderer/Main 存在超过 500 kB 的 chunk。当前不影响构建成功，但需要在性能阶段评估动态加载与 Rolldown code splitting，不能通过移除 sourcemap 或隐藏警告冒充优化。
 
-构建图不包含 OpenPencil、旧 canvas preload、旧 Canvas2D 产品包、CanvasKit/WASM 或隐藏本地设计 server。
+构建图不包含 OpenPencil、旧 canvas preload、旧 Canvas2D 产品包、CanvasKit 及其 WASM 或隐藏本地设计 server。固定 PathKit WASM 仅作为上表所列的 Renderer 按需资产存在。
 
 ## Electron 安全基线
 
 当前代码保持：
 
-- `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`、`webSecurity: true`。
+- `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`、`webSecurity: true`；Renderer CSP 仅为按需 PathKit 增加 `'wasm-unsafe-eval'`，不允许通用 `'unsafe-eval'`。
 - Preload 暴露窄、类型化且运行时校验的产品 API，不暴露原始 `ipcRenderer`。
 - Renderer 导航使用精确开发 origin/打包入口；新窗口默认拒绝，HTTP(S) 外链交给操作系统。
 - Conversation Provider 与全局图片生成凭据使用不同的 Main-only `safeStorage` 槽；Renderer 和 Agent utilityProcess 都不接收密钥。

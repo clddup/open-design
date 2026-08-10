@@ -16,4 +16,14 @@ describe("desktop packaging configuration", () => {
       /(?:^|\n)nsis:\n(?:[ \t].*\n)*[ \t]+allowToChangeInstallationDirectory:[ \t]+true(?:\n|$)/,
     );
   });
+
+  it("allows the isolated PathKit WASM without enabling general script eval", async () => {
+    const html = await readFile(
+      resolve(import.meta.dirname, "../renderer/index.html"),
+      "utf8",
+    );
+    expect(html).toContain("script-src 'self' 'wasm-unsafe-eval'");
+    expect(html).not.toMatch(/script-src[^;]*'unsafe-eval'/);
+    expect(html).toContain("object-src 'none'");
+  });
 });
