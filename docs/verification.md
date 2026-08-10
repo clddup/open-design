@@ -99,7 +99,7 @@ Vite 生产构建完成四个环境。下表由实际 `out/` 文件生成；十�
 | ---------------- | ---------: | ---------: |
 | Renderer 主 JS   |     690869 |  690.87 kB |
 | Leafer Web chunk |     302166 |  302.17 kB |
-| Electron Main    |    2096062 | 2096.06 kB |
+| Electron Main    |    2096105 | 2096.11 kB |
 | Preload          |     233361 |  233.36 kB |
 | Agent            |     331831 |  331.83 kB |
 

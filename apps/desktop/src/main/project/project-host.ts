@@ -1036,6 +1036,10 @@ async function removeDurably(path: string): Promise<void> {
 }
 
 async function syncDirectory(path: string): Promise<void> {
+  // Windows does not support fsync on directory handles. The temporary file
+  // itself is still flushed before rename; directory metadata flushing is the
+  // additional POSIX durability step.
+  if (process.platform === "win32") return;
   const directory = await open(path, "r");
   try {
     await directory.sync();
