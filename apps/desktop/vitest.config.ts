@@ -8,5 +8,6 @@ export default defineConfig({
     setupFiles: ["./src/renderer/test-setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     css: false,
+    maxWorkers: "50%",
   },
 });
