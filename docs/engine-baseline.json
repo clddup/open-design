@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 3,
-  "recordedAt": "2026-08-10",
+  "schemaVersion": 4,
+  "recordedAt": "2026-08-11",
   "policy": {
     "allowFloatingRefs": false,
     "upgradeRequiresCompatibilityReview": true
@@ -11,6 +11,19 @@
     "runtimeProtocolVersion": "0.1.0"
   },
   "components": {
+    "agentCore": {
+      "role": "headless-agent-loop-engine",
+      "adapterPackage": "@opendesign/agent-runtime",
+      "adapterPath": "packages/agent-runtime",
+      "dependency": "@earendil-works/pi-agent-core",
+      "version": "0.84.1",
+      "source": "https://github.com/earendil-works/pi/tree/main/packages/agent",
+      "license": "MIT",
+      "productionStatus": "contract-spike",
+      "entrypoint": "Agent",
+      "rejectedEntrypoint": "AgentHarness",
+      "rejectedReason": "AgentHarness.prompt throws HarnessNotImplemented at the pinned version"
+    },
     "editorRuntime": {
       "role": "opendesign-owned-editor-runtime",
       "package": "@opendesign/editor-runtime",
@@ -27,6 +40,7 @@
     }
   },
   "verification": {
+    "agentCore": "pnpm agent-core:check && pnpm exec vitest run packages/agent-runtime/src/pi-core-adapter.test.ts",
     "contracts": "pnpm exec vitest run packages/design-contracts/src/index.test.ts",
     "editorRuntime": "pnpm exec vitest run packages/editor-runtime/src/index.test.ts",
     "leafer": "pnpm exec vitest run packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts"

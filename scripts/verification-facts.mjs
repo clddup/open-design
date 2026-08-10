@@ -50,6 +50,7 @@ const documentSchemaVersion = capture(
   "DesignDocument schema version",
 );
 const engineVersion = baseline.components.leafer.version;
+const agentCoreVersion = baseline.components.agentCore.version;
 
 assertEqual(
   baseline.contracts.documentSchemaVersion,
@@ -65,6 +66,13 @@ assertEqual(
   leaferPackage.version,
   baseline.contracts.runtimeProtocolVersion,
   "Leafer adapter protocol",
+);
+assertEqual(
+  (await json("packages/agent-runtime/package.json")).dependencies[
+    baseline.components.agentCore.dependency
+  ],
+  agentCoreVersion,
+  "Agent core dependency pin",
 );
 assertEqual(
   desktopPackage.devDependencies.electron.replace(/^\^/, ""),
@@ -86,11 +94,13 @@ const blocks = {
     `- 环境基线：Node.js ${nodeVersion}、pnpm ${packageManager}、Electron ${electronVersion}、Vite ${viteVersion}`,
     `- 文档协议：\`DesignDocument ${documentSchemaVersion}\``,
     `- Agent 协议：\`${agentProtocol}\``,
+    `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（contract spike）`,
     `- 生产画布：\`${baseline.components.leafer.dependency} ${engineVersion}\``,
   ].join("\n"),
   tests: [
     "```text",
     "pnpm format:check   passed",
+    "pnpm agent-core:check passed",
     "pnpm capabilities:check passed",
     "pnpm fixtures:check passed",
     "pnpm lint           passed",

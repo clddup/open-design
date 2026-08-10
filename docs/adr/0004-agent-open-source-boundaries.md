@@ -17,6 +17,8 @@ OpenDesign 希望借鉴 Pi/OpenCode 等开放 Agent 项目的成熟思路，并�
 
 无法确认许可证兼容性时，只能独立实现公开思想，不复制表达或代码。项目名称和界面不得暗示与 Pi、OpenCode 或其他参考项目存在官方关联。
 
+ADR-0020 完成了首个 Pi 代码复用审查：OpenDesign 固定 MIT License 的 `@earendil-works/pi-agent-core 0.84.1`，只通过自有 adapter 迁移已实现的 headless `Agent`。固定版本的 `AgentHarness` contract test 证明其 `prompt()` 尚未实现，因此拒绝接入；`@earendil-works/pi-coding-agent` 和 `@earendil-works/pi-tui` 也保持禁止。该裁决不会把 Pi 的文件、shell、凭据、资源发现或 session 权限带入 OpenDesign。
+
 ### 核心与扩展边界
 
 开放的稳定边界包括版本化 Agent 消息、工具 schema、Design Contracts、MCP 标准接口和 skill 清单格式。Electron 特权 API、凭据存储、原始引擎句柄、内部遥测和未公开文件格式不属于扩展 API。

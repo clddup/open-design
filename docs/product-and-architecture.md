@@ -193,7 +193,7 @@ OpenDesign 的主产品路径是应用内部的垂直设计 Agent，而不是等
 
 新建设计的 plan 与视觉 review 是 Run-scoped、可丢弃的执行投影，不是第二份可写文档状态。Main 要求所有新 composition 明确一个 Frame/Artboard、构图和视觉系统，并在第一笔创建事务前完成 plan；所有新图层进入该 Frame。Web/UI 与海报使用同一门禁：UI 额外强调 grid、density、typographic hierarchy、control state、form language 与 surface/depth，不能把重复圆角卡片或普通方块拼接描述为完成。首次渲染截图后必须先记录结构化 review，才允许下一笔 refinement。详细决策见 [ADR-0018](adr/0018-agent-design-plan-and-visual-review.md)。
 
-Agent 参考 Pi/OpenCode 的工程思路：保持核心循环小而透明，以消息、工具、事件和持久会话为基础，通过 provider adapter、skills 和 MCP Client 扩展。这里的“参考”表示借鉴架构原则，不表示复制代码、品牌、协议或许可证未确认的实现。
+Agent 参考 Pi/OpenCode 的工程思路：保持核心循环小而透明，以消息、工具、事件和持久会话为基础，通过 provider adapter、skills 和 MCP Client 扩展。生产 Model Gateway 已通过 OpenDesign canonical adapter 使用固定 `@earendil-works/pi-ai 0.84.1`；ADR-0020 还接受固定 `@earendil-works/pi-agent-core 0.84.1` 的 headless `Agent` 分阶段迁移。当前 contract spike 已证明顺序工具循环、逐轮 `transformContext` 和非法工具拒绝，但生产入口仍使用现有 Runtime，直到模型、事件、工具、上下文、恢复和双平台门禁全部等价。固定版本的 `AgentHarness.prompt()` 仍抛出 `HarnessNotImplemented`，Pi Coding Agent、TUI、文件/shell 工具、凭据和资源发现不进入产品路径。详细裁决见 [ADR-0020](adr/0020-pi-headless-agent-loop-migration.md)。
 
 ### 当前模型 Provider 边界
 
