@@ -27,6 +27,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-A：macOS 与 Windows 一级平台可用
 
+当前仓库已配置 `.github/workflows/native-desktop.yml`：macOS 与 Windows 原生 runner 分别执行共享 `pnpm verify`、目标平台 protected build/安装包、产物内容校验，并直接启动打包后的 `OpenDesign.app` / `OpenDesign.exe` 执行无窗口 Agent smoke；不启动开发 Electron 入口。macOS arm64 已在本机生成未签名 DMG/ZIP，并通过 bytecode、ASAR/extraResources、产物命名与 sourcemap 检查。由于本次没有 push，workflow 尚未产生 Windows 或远端 macOS 运行证据，下面的完整 P0-A 门禁仍未完成。
+
 - 建立 macOS 与 Windows 原生 CI/发布矩阵；共享 `pnpm verify`，并分别在原生 runner 构建 protected bundle 和安装包。V8 bytecode 不能跨操作系统复用。
 - macOS 产出 DMG/ZIP，Windows 产出 NSIS installer；分别验证干净安装、首次启动、升级覆盖、卸载和用户数据保留策略。
 - 两个平台共同执行：窗口/菜单/快捷键、Leafer 画布鼠标与触控板/滚轮、文本输入、文件选择、Project 保存重开、Agent utilityProcess、`safeStorage`、附件、Provider 调用、取消和崩溃恢复 smoke。

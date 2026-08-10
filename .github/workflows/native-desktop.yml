@@ -1,0 +1,89 @@
+name: Native desktop
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-package:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS package and smoke
+            os: macos-14
+            package-command: package:mac
+            verify-command: verify:package:mac
+            artifact-pattern: |
+              apps/desktop/release/*.dmg
+              apps/desktop/release/*.zip
+          - name: Windows package and smoke
+            os: windows-2022
+            package-command: package:win
+            verify-command: verify:package:win
+            artifact-pattern: |
+              apps/desktop/release/*.exe
+              apps/desktop/release/*.blockmap
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      CI: "true"
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run shared verification
+        run: pnpm verify
+
+      - name: Build native protected package
+        run: pnpm --filter @opendesign/desktop ${{ matrix.package-command }}
+
+      - name: Verify native package contents
+        run: pnpm --filter @opendesign/desktop ${{ matrix.verify-command }}
+
+      - name: Run packaged Agent smoke on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: OPENDESIGN_AGENT_SMOKE=1 apps/desktop/release/mac*/OpenDesign.app/Contents/MacOS/OpenDesign
+
+      - name: Run packaged Agent smoke on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:OPENDESIGN_AGENT_SMOKE = "1"
+          & "apps/desktop/release/win-unpacked/OpenDesign.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload native installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenDesign-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ matrix.artifact-pattern }}
+          if-no-files-found: error
+          retention-days: 14

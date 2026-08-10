@@ -9,11 +9,11 @@
 
 ## 平台支持矩阵
 
-| 平台    | 产品级别 | 当前证据                                                                       | 发布状态       |
-| ------- | -------- | ------------------------------------------------------------------------------ | -------------- |
-| macOS   | 一级支持 | arm64 源码门禁与普通生产 build 通过；本次未复验 DMG/ZIP、安装和 packaged smoke | 未达到发布门禁 |
-| Windows | 一级支持 | 已配置 NSIS 与 `package:win`；尚无 Windows 原生 verify、安装包或产品 smoke     | **P0 阻塞**    |
-| Linux   | 目标平台 | 保留 electron-builder 配置，当前无原生验证                                     | 当前阶段不阻塞 |
+| 平台    | 产品级别 | 当前证据                                                                                                          | 发布状态       |
+| ------- | -------- | ----------------------------------------------------------------------------------------------------------------- | -------------- |
+| macOS   | 一级支持 | arm64 verify、protected Vite build、未签名 DMG/ZIP、bytecode 与包内容检查通过；安装、签名和 packaged smoke 未验证 | 未达到发布门禁 |
+| Windows | 一级支持 | 已配置 Windows 原生 workflow、NSIS、直接 packaged executable smoke 与包内容检查；尚无 runner 执行证据             | **P0 阻塞**    |
+| Linux   | 目标平台 | 保留 electron-builder 配置，当前无原生验证                                                                        | 当前阶段不阻塞 |
 
 macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。Electron、TypeScript 和共享测试通过不等于另一操作系统可用，protected V8 bytecode 也不能跨系统构建后复用。
 
@@ -27,8 +27,8 @@ pnpm fixtures:check passed（7 个生成文件）
 pnpm lint          passed
 pnpm typecheck     passed（16 个 workspace package 执行 typecheck）
 pnpm test          passed
-├── package tests  15 files / 117 tests
-└── desktop tests  34 files / 223 tests
+├── package tests  15 files / 119 tests
+└── desktop tests  35 files / 225 tests
 pnpm build         passed
 ├── Renderer
 ├── Electron Main
@@ -84,11 +84,11 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 
 | 产物             |        大小 |      gzip |
 | ---------------- | ----------: | --------: |
-| Renderer 主 JS   |   683.92 kB | 201.21 kB |
+| Renderer 主 JS   |   684.10 kB | 201.25 kB |
 | Leafer Web chunk |   302.16 kB | 100.55 kB |
-| Electron Main    | 2,094.94 kB | 418.97 kB |
-| Preload          |   233.09 kB |  37.00 kB |
-| Agent            |   316.96 kB |  60.47 kB |
+| Electron Main    | 2,095.70 kB | 419.14 kB |
+| Preload          |   233.36 kB |  37.06 kB |
+| Agent            |   331.44 kB |  63.22 kB |
 
 构建提示 Renderer/Main 存在超过 500 kB 的 chunk。当前不影响构建成功，但需要在性能阶段评估动态加载与 Rolldown code splitting，不能通过移除 sourcemap 或隐藏警告冒充优化。
 
@@ -120,13 +120,19 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 
 ## 发布验证状态
 
-本次没有重新执行以下发布门禁：
+本次在 macOS arm64 命令行执行 `package:mac`，由 Vite 8.2.1 在当前平台重新生成 Main/Agent `.jsc`，electron-builder 26.15.3 生成以下未签名产物：
 
-- `build:protected` 与 V8 bytecode startup。
-- `package:dir`、ASAR/extraResources 内容审计和 packaged Agent smoke。
-- Developer ID 签名、hardened runtime、notarization、DMG/ZIP。
-- Windows 原生 verify、protected bytecode、NSIS 安装/升级/卸载与产品 smoke。
+- `OpenDesign-0.0.0-mac-arm64.dmg`
+- `OpenDesign-0.0.0-mac-arm64.zip`
+
+`verify:package:mac` 已检查目标平台/架构命名、非空 DMG/ZIP、unpacked `app.asar`、`icon.png`、`THIRD_PARTY_NOTICES.md`、Main/Agent bytecode wrapper、`.jsc`、bytenode runtime，以及 protected output 中不存在 sourcemap。打包过程没有启动 OpenDesign 窗口；按用户要求，本次未运行 packaged executable smoke。
+
+仓库新增 macOS/Windows 原生 workflow，目标顺序为 `verify → native protected package → package content verification → packaged Agent smoke → artifact upload`。但 workflow 尚未 push 或运行，因此以下发布门禁仍未完成：
+
+- Windows 原生 verify、protected bytecode、NSIS、packaged smoke、安装/升级/卸载和用户数据保留。
+- macOS packaged Agent smoke、干净安装、升级/卸载、Developer ID 签名、hardened runtime 和 notarization。
+- 两个平台的窗口、菜单、输入、画布、文件、`safeStorage`、Provider 与崩溃恢复产品 smoke。
 - Linux 原生构建和 protected bytecode（当前不阻塞 macOS/Windows 里程碑）。
 - 从实际发行物生成的完整第三方许可证清单。
 
-因此当前结果只证明源码门禁与普通生产构建通过，不代表可发布安装包已经完成。
+因此当前证据证明 macOS arm64 可生成并通过静态内容检查的未签名安装包，不代表 macOS 或 Windows 已达到可发布状态。

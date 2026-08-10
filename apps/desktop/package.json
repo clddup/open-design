@@ -13,7 +13,8 @@
     "package:mac": "pnpm build:protected && electron-builder --mac --publish never",
     "package:win": "pnpm build:protected && electron-builder --win --publish never",
     "preview": "vite preview",
-    "smoke:agent": "OPENDESIGN_AGENT_SMOKE=1 electron out/main/index.cjs",
+    "verify:package:mac": "node scripts/verify-native-package.mjs --platform darwin",
+    "verify:package:win": "node scripts/verify-native-package.mjs --platform win32",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
