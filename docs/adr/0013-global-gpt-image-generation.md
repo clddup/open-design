@@ -1,9 +1,11 @@
 # ADR-0013：全局 GPT Image 2 配置与 Agent 生图工具
 
-- 状态：已接受
+- 状态：已接受；配置归属部分由 ADR-0014 取代
 - 日期：2026-08-10
 - 关联：ADR-0007、ADR-0008、ADR-0010、ADR-0012
 - Provider Catalog：`2`
+
+> 取代说明：本 ADR 中关于 `defaultImageGenerationSelection`、Provider 级图片 API 和模型级 `imageGeneration` capability 的设计只记录历史实现，已由 [ADR-0014](0014-standalone-global-image-generation-settings.md) 取代。`generate_image → attachment → place_image` 工具与事务链继续有效。
 
 ## 背景
 

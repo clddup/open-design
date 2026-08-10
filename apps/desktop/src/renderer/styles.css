@@ -2437,6 +2437,17 @@ textarea {
   display: grid;
   gap: 18px;
 }
+.settings-global-image {
+  display: grid;
+  gap: 18px;
+}
+.settings-global-image__form {
+  max-width: 760px;
+  padding: 20px 22px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-surface);
+}
 .settings-provider__workspace {
   display: grid;
   min-height: 480px;
@@ -2546,6 +2557,15 @@ textarea {
   grid-template-columns: minmax(0, 1fr) auto;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--ui-border-subtle);
+}
+.settings-provider__detail-heading > span {
+  display: grid;
+  gap: 4px;
+}
+.settings-provider__detail-heading > span small {
+  color: var(--ui-text-faint);
+  font-size: 10px;
+  line-height: 1.45;
 }
 .settings-provider__grid {
   display: grid;

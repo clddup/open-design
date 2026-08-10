@@ -27,7 +27,7 @@ pnpm lint          passed
 pnpm typecheck     passed（15 个 workspace package 执行 typecheck）
 pnpm test          passed
 ├── package tests  11 files / 100 tests
-└── desktop tests  33 files / 217 tests
+└── desktop tests  34 files / 220 tests
 pnpm build         passed
 ├── Renderer
 ├── Electron Main
@@ -39,7 +39,7 @@ pnpm build         passed
 
 - DesignDocument 1.2 schema/migration、正式 Path/Vector 外观、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
 - Leafer 文档投影、Path 实例、复杂外观映射和 change-set 增量同步：未变节点保持 spec/元素 identity，不调用 `set()`；无关新增、删除和 revision 不刷新 tree/Editor，也不取消进行中的直接操作；选中节点变化只刷新该元素 bounds 并更新 editBox；asset change 会精确重投影引用节点。
-- Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v2/v1 迁移、独立全局图片生成选择、凭据边界和跨进程对象校验。
+- Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
 - 生产 Provider stream 的首响应、空闲和总时限 watchdog 会 abort 实际 fetch；timeout 与 Agent process exit 都会解除 Renderer active Run、恢复可编辑输入并显示可重试错误。
 - 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
@@ -47,7 +47,7 @@ pnpm build         passed
 - JSONL 启动恢复会一次性终结孤立 started Run 和 pending tool；Global Task 同步转为 interrupted。Conversation 在 Run 注册和后续 Agent 活动时更新持久 `updatedAt`，Renderer 立即按最近活动重排。
 - Main-owned 诊断事件经过严格跨进程校验，按大小轮转写入 JSONL，且不接受任意上下文字段；右下角错误通知会显示稳定错误码和关联 Run，并复制包含 Conversation/Run/Request/Tool Call ID、应用版本和平台的诊断文本。
 - 图片/文档附件、内容识别、完整性、大小限制、多模态 `image_ref`、显式本地路径/HTTP(S) 图片读取和未明示 source 拒绝；远程 body stream 的 15 秒超时、用户取消和流式超过 16 MB 均覆盖到 reader 生命周期。
-- `openai-images` adapter 使用全局配置的任意 model ID 调用 `/images/generations`，GPT Image 2 是首个验证模型；链路校验 `data[0].b64_json`、响应/图片大小、格式、凭据和取消。tool schema 不接受 Provider/Model 覆盖，会话默认模型与全局生图模型分别持久化和解析。
+- `openai-images` adapter 只使用独立应用级配置的 Base URL、鉴权、凭据和任意 model ID 调用 `/images/generations`，GPT Image 2 是首个验证模型；链路校验 `data[0].b64_json`、响应/图片大小、格式、凭据和取消。tool schema 不接受 Provider/Model 覆盖，也不会借用 Conversation Provider；旧 v2 选择和密文迁移已有回归测试。
 - Renderer Agent 对话、属性检查器、设计工具 selection context / Mutation Target / revision、`capture_canvas` 内容寻址多模态结果、取消/继续、i18n 和桌面控件交互；对话在底部时跟随新消息与状态，用户上翻后保持阅读位置，回到底部后恢复跟随；剪贴板文件与拖放文件经 Preload API 导入，run 只接收安全附件元数据，纯文本路径粘贴保持普通输入行为。
 - host-only 图片放置以单个 Page-targeted `put_asset + insert_element(image)` 事务进入 `EditorRuntime`；测试验证单次 revision、发送时存在选区也能在固定 Page 新增 asset/node、当前活动页面变化不漂移目标，以及一次 undo 同时移除 asset/node。
 
@@ -67,10 +67,10 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 
 | 产物             |        大小 |      gzip |
 | ---------------- | ----------: | --------: |
-| Renderer 主 JS   |   673.42 kB | 199.06 kB |
+| Renderer 主 JS   |   678.88 kB | 199.71 kB |
 | Leafer Web chunk |   302.16 kB | 100.55 kB |
-| Electron Main    | 2,088.45 kB | 417.93 kB |
-| Preload          |   232.77 kB |  36.98 kB |
+| Electron Main    | 2,094.83 kB | 418.96 kB |
+| Preload          |   232.98 kB |  36.99 kB |
 | Agent            |   276.42 kB |  49.81 kB |
 
 构建提示 Renderer/Main 存在超过 500 kB 的 chunk。当前不影响构建成功，但需要在性能阶段评估动态加载与 Rolldown code splitting，不能通过移除 sourcemap 或隐藏警告冒充优化。
@@ -84,7 +84,7 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 - `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`、`webSecurity: true`。
 - Preload 暴露窄、类型化且运行时校验的产品 API，不暴露原始 `ipcRenderer`。
 - Renderer 导航使用精确开发 origin/打包入口；新窗口默认拒绝，HTTP(S) 外链交给操作系统。
-- Provider 凭据由 Main 使用 `safeStorage` 托管；Renderer 和 Agent utilityProcess 不接收密钥。
+- Conversation Provider 与全局图片生成凭据使用不同的 Main-only `safeStorage` 槽；Renderer 和 Agent utilityProcess 都不接收密钥。
 - 附件由 Main 校验内容、大小、MIME、摘要和存储完整性；utility/model bridge 不接受任意路径或 inline base64。
 - 模型设计写入必须经过 typed tool、Main run binding、Renderer scope/revision 校验和唯一 `EditorRuntime.apply()`。
 

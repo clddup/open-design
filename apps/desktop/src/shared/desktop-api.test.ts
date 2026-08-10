@@ -12,6 +12,7 @@ import {
   isAgentAttachmentPreviewRequest,
   isAgentAttachmentPreviewResult,
   isAgentAttachmentSelection,
+  isGlobalImageGenerationSettings,
   isGlobalTaskProjectionResult,
   isListProjectConversationsRequest,
   isModelProviderCatalog,
@@ -21,6 +22,7 @@ import {
   isProjectManifestResult,
   isRecentProject,
   isSaveDesignFileRequest,
+  isSaveGlobalImageGenerationSettingsRequest,
   isSaveModelProviderProfileRequest,
   isSaveProjectDesignFileRequest,
 } from "./desktop-api";
@@ -44,7 +46,6 @@ describe("Model provider desktop API guards", () => {
         capabilities: {
           toolUse: true,
           imageInput: true,
-          imageGeneration: false,
           reasoning: true,
         },
         reasoningEfforts: ["off", "medium", "high"],
@@ -55,7 +56,7 @@ describe("Model provider desktop API guards", () => {
   it("accepts a sanitized catalog and rejects returned credentials", () => {
     expect(
       isModelProviderCatalog({
-        version: 2,
+        version: 3,
         providers: [{ ...profile, hasApiKey: true, updatedAt: now }],
         defaultSelection: {
           providerId: "provider_1",
@@ -66,7 +67,7 @@ describe("Model provider desktop API guards", () => {
     ).toBe(true);
     expect(
       isModelProviderCatalog({
-        version: 2,
+        version: 3,
         providers: [
           { ...profile, hasApiKey: true, updatedAt: now, apiKey: "secret" },
         ],
@@ -74,7 +75,7 @@ describe("Model provider desktop API guards", () => {
     ).toBe(false);
   });
 
-  it("migrates v1 catalogs without silently enabling image generation", () => {
+  it("migrates v1 catalogs into a conversation-only v3 catalog", () => {
     const migrated = migrateModelProviderCatalog({
       version: 1,
       providers: [
@@ -99,11 +100,51 @@ describe("Model provider desktop API guards", () => {
       },
     });
 
-    expect(migrated?.version).toBe(2);
-    expect(
-      migrated?.providers[0]?.models[0]?.capabilities.imageGeneration,
-    ).toBe(false);
-    expect(migrated?.defaultImageGenerationSelection).toBeUndefined();
+    expect(migrated?.version).toBe(3);
+    expect(migrated?.providers[0]?.models[0]?.capabilities).toEqual({
+      toolUse: true,
+      imageInput: true,
+      reasoning: true,
+    });
+  });
+
+  it("strips legacy image-generation fields while migrating v2 catalogs", () => {
+    const migrated = migrateModelProviderCatalog({
+      version: 2,
+      providers: [
+        {
+          ...profile,
+          imageGenerationApiFormat: "openai-images",
+          models: profile.models.map((model) => ({
+            ...model,
+            capabilities: {
+              ...model.capabilities,
+              imageGeneration: true,
+            },
+          })),
+          hasApiKey: true,
+          updatedAt: now,
+        },
+      ],
+      defaultSelection: {
+        providerId: "provider_1",
+        modelId: "design-model",
+        reasoningEffort: "medium",
+      },
+      defaultImageGenerationSelection: {
+        providerId: "provider_1",
+        modelId: "design-model",
+      },
+    });
+
+    expect(migrated).toMatchObject({ version: 3 });
+    expect(migrated?.providers[0]).not.toHaveProperty(
+      "imageGenerationApiFormat",
+    );
+    expect(migrated?.providers[0]?.models[0]?.capabilities).not.toHaveProperty(
+      "imageGeneration",
+    );
+    expect(migrated).not.toHaveProperty("defaultImageGenerationSelection");
   });
 
   it("validates protocol profiles, local URLs and secret-bearing save requests", () => {
@@ -125,6 +166,63 @@ describe("Model provider desktop API guards", () => {
       isSaveModelProviderProfileRequest({
         ...profile,
         baseUrl: "https://secret@models.example/v1",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("Global image-generation desktop API guards", () => {
+  const settings = {
+    version: 1,
+    enabled: true,
+    apiFormat: "openai-images",
+    authMode: "bearer",
+    baseUrl: "https://images.example/v1",
+    modelId: "future-image-model",
+    hasApiKey: true,
+    updatedAt: now,
+  };
+
+  it("accepts only the standalone sanitized settings shape", () => {
+    expect(isGlobalImageGenerationSettings(settings)).toBe(true);
+    expect(
+      isGlobalImageGenerationSettings({
+        ...settings,
+        providerId: "provider_1",
+      }),
+    ).toBe(false);
+    expect(
+      isGlobalImageGenerationSettings({ ...settings, apiKey: "secret" }),
+    ).toBe(false);
+  });
+
+  it("validates independent settings writes without a Provider selection", () => {
+    expect(
+      isSaveGlobalImageGenerationSettingsRequest({
+        enabled: true,
+        apiFormat: "openai-images",
+        authMode: "x-api-key",
+        baseUrl: "https://images.example/v1",
+        modelId: "future-image-model",
+        apiKey: "image-secret",
+      }),
+    ).toBe(true);
+    expect(
+      isSaveGlobalImageGenerationSettingsRequest({
+        enabled: false,
+        apiFormat: "openai-images",
+        authMode: "bearer",
+        baseUrl: "https://images.example/v1",
+        modelId: "",
+      }),
+    ).toBe(true);
+    expect(
+      isSaveGlobalImageGenerationSettingsRequest({
+        enabled: true,
+        apiFormat: "openai-images",
+        authMode: "bearer",
+        baseUrl: "https://images.example/v1",
+        modelId: "",
       }),
     ).toBe(false);
   });

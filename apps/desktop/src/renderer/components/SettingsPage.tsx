@@ -10,19 +10,20 @@ import {
 } from "react";
 import type { ModelApiFormat, ModelAuthMode } from "@opendesign/model-gateway";
 import type {
-  ImageGenerationSelection,
+  GlobalImageGenerationSettings,
   ImageGenerationApiFormat,
   ModelProfile,
   ModelProviderCatalog,
   ModelProviderProfile,
   ProviderConnectionResult,
   SaveModelProviderProfileRequest,
+  SaveGlobalImageGenerationSettingsRequest,
   ThemePreference,
 } from "../../shared/desktop-api";
 import type { AppLocale } from "../../shared/i18n/locale";
 import { useI18n } from "../i18n";
 
-type SettingsTab = "general" | "models";
+type SettingsTab = "general" | "models" | "image-generation";
 
 type SettingsPageProps = {
   onClose: () => void;
@@ -30,7 +31,11 @@ type SettingsPageProps = {
   theme: ThemePreference;
 };
 
-const settingsTabs: readonly SettingsTab[] = ["general", "models"];
+const settingsTabs: readonly SettingsTab[] = [
+  "general",
+  "models",
+  "image-generation",
+];
 
 export function SettingsPage(props: SettingsPageProps) {
   const { t } = useI18n();
@@ -119,8 +124,22 @@ function SettingsPageContent({
                 tabIndex={activeTab === tab ? 0 : -1}
                 type="button"
               >
-                <Glyph name={tab === "general" ? "settings" : "agent"} />
-                {t(tab === "general" ? "settings.general" : "settings.models")}
+                <Glyph
+                  name={
+                    tab === "general"
+                      ? "settings"
+                      : tab === "models"
+                        ? "agent"
+                        : "assets"
+                  }
+                />
+                {t(
+                  tab === "general"
+                    ? "settings.general"
+                    : tab === "models"
+                      ? "settings.models"
+                      : "settings.imageGeneration",
+                )}
               </button>
             ))}
           </div>
@@ -170,6 +189,14 @@ function SettingsPageContent({
             role="tabpanel"
           >
             <ModelProviderForm />
+          </div>
+          <div
+            aria-labelledby="settings-image-generation-tab"
+            hidden={activeTab !== "image-generation"}
+            id="settings-image-generation-panel"
+            role="tabpanel"
+          >
+            <GlobalImageGenerationForm />
           </div>
         </section>
       </main>
@@ -297,6 +324,294 @@ function SegmentedControl<Value extends string>({
   );
 }
 
+type ImageGenerationDraft = Pick<
+  GlobalImageGenerationSettings,
+  "enabled" | "apiFormat" | "authMode" | "baseUrl" | "modelId"
+>;
+
+function GlobalImageGenerationForm() {
+  const { t } = useI18n();
+  const translateRef = useRef(t);
+  const [draft, setDraft] = useState<ImageGenerationDraft | null>(null);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [clearApiKey, setClearApiKey] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<
+    { tone: "success" | "error"; message: string } | undefined
+  >();
+
+  useEffect(() => {
+    translateRef.current = t;
+  }, [t]);
+
+  useEffect(() => {
+    let active = true;
+    const desktop = window.desktop;
+    if (
+      !desktop ||
+      typeof desktop.getGlobalImageGenerationSettings !== "function"
+    ) {
+      setStatus({
+        tone: "error",
+        message: translateRef.current("settings.serviceUnavailable"),
+      });
+      setLoading(false);
+      return;
+    }
+    void desktop
+      .getGlobalImageGenerationSettings()
+      .then((settings) => {
+        if (!active) return;
+        setDraft(imageGenerationDraft(settings));
+        setHasApiKey(settings.hasApiKey);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setStatus({
+          tone: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : translateRef.current("settings.imageGenerationLoadFailed"),
+        });
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const updateDraft = (
+    update: (current: ImageGenerationDraft) => ImageGenerationDraft,
+  ) => setDraft((current) => (current ? update(current) : current));
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const desktop = window.desktop;
+    if (!draft || saving) return;
+    if (
+      !desktop ||
+      typeof desktop.saveGlobalImageGenerationSettings !== "function"
+    ) {
+      setStatus({ tone: "error", message: t("settings.serviceUnavailable") });
+      return;
+    }
+    setSaving(true);
+    setStatus(undefined);
+    try {
+      const request: SaveGlobalImageGenerationSettingsRequest = {
+        ...draft,
+        baseUrl: draft.baseUrl.trim(),
+        modelId: draft.modelId.trim(),
+        ...(apiKey ? { apiKey } : {}),
+        ...(clearApiKey ? { clearApiKey: true } : {}),
+      };
+      const saved = await desktop.saveGlobalImageGenerationSettings(request);
+      setDraft(imageGenerationDraft(saved));
+      setHasApiKey(saved.hasApiKey);
+      setApiKey("");
+      setClearApiKey(false);
+      setStatus({
+        tone: "success",
+        message: t("settings.imageGenerationSaved"),
+      });
+    } catch (error) {
+      setStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : t("settings.imageGenerationSaveFailed"),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const valid =
+    draft !== null &&
+    draft.baseUrl.trim().length > 0 &&
+    (!draft.enabled || draft.modelId.trim().length > 0);
+
+  return (
+    <form
+      className="settings-global-image"
+      onSubmit={(event) => void save(event)}
+    >
+      <SettingsHeading
+        description={t("settings.imageGenerationDescription")}
+        title={t("settings.imageGenerationTitle")}
+      />
+      {status && (
+        <p className={`settings-feedback is-${status.tone}`} role="status">
+          {status.message}
+        </p>
+      )}
+      {loading || !draft ? (
+        <div className="settings-provider__empty-detail">
+          <strong>{t("settings.loadingImageGeneration")}</strong>
+        </div>
+      ) : (
+        <section className="settings-global-image__form">
+          <div className="settings-provider__detail-heading">
+            <span>
+              <strong>{t("settings.globalImageGeneration")}</strong>
+              <small>{t("settings.globalImageGenerationHint")}</small>
+            </span>
+            <label className="settings-checkbox">
+              <input
+                checked={draft.enabled}
+                disabled={saving}
+                onChange={(event) =>
+                  updateDraft((current) => ({
+                    ...current,
+                    enabled: event.target.checked,
+                  }))
+                }
+                type="checkbox"
+              />
+              <span>{t("settings.enabled")}</span>
+            </label>
+          </div>
+          <div className="settings-provider__grid">
+            <label className="settings-field is-wide">
+              <span>{t("settings.baseUrl")}</span>
+              <input
+                aria-label={t("settings.imageGenerationBaseUrl")}
+                autoComplete="url"
+                disabled={saving}
+                maxLength={2_048}
+                onChange={(event) =>
+                  updateDraft((current) => ({
+                    ...current,
+                    baseUrl: event.target.value,
+                  }))
+                }
+                type="url"
+                value={draft.baseUrl}
+              />
+              <small>{t("settings.baseUrlHint")}</small>
+            </label>
+            <label className="settings-field">
+              <span>{t("settings.imageGenerationApi")}</span>
+              <select
+                aria-label={t("settings.imageGenerationApi")}
+                disabled={saving}
+                onChange={(event) =>
+                  updateDraft((current) => ({
+                    ...current,
+                    apiFormat: event.target.value as ImageGenerationApiFormat,
+                  }))
+                }
+                value={draft.apiFormat}
+              >
+                <option value="openai-images">
+                  {t("settings.apiOpenAIImages")}
+                </option>
+              </select>
+            </label>
+            <label className="settings-field">
+              <span>{t("settings.authMode")}</span>
+              <select
+                aria-label={t("settings.imageGenerationAuthMode")}
+                disabled={saving}
+                onChange={(event) =>
+                  updateDraft((current) => ({
+                    ...current,
+                    authMode: event.target.value as ModelAuthMode,
+                  }))
+                }
+                value={draft.authMode}
+              >
+                <option value="bearer">{t("settings.authBearer")}</option>
+                <option value="x-api-key">{t("settings.authApiKey")}</option>
+                <option value="none">{t("settings.authNone")}</option>
+              </select>
+            </label>
+            <label className="settings-field is-wide">
+              <span>{t("settings.imageGenerationModelId")}</span>
+              <input
+                aria-label={t("settings.imageGenerationModelId")}
+                disabled={saving}
+                maxLength={256}
+                onChange={(event) =>
+                  updateDraft((current) => ({
+                    ...current,
+                    modelId: event.target.value,
+                  }))
+                }
+                placeholder="gpt-image-2"
+                value={draft.modelId}
+              />
+              <small>{t("settings.imageGenerationModelHint")}</small>
+            </label>
+            <label className="settings-field is-wide">
+              <span>{t("settings.apiKey")}</span>
+              <input
+                aria-label={t("settings.imageGenerationApiKey")}
+                autoComplete="off"
+                disabled={saving || clearApiKey || draft.authMode === "none"}
+                maxLength={8_192}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder={t("settings.apiKeyPlaceholder")}
+                type="password"
+                value={apiKey}
+              />
+              <small>
+                {hasApiKey
+                  ? t("settings.apiKeyConfigured")
+                  : t("settings.apiKeyOptional")}
+              </small>
+            </label>
+          </div>
+          {hasApiKey && draft.authMode !== "none" && (
+            <label className="settings-checkbox">
+              <input
+                checked={clearApiKey}
+                disabled={saving}
+                onChange={(event) => {
+                  setClearApiKey(event.target.checked);
+                  if (event.target.checked) setApiKey("");
+                }}
+                type="checkbox"
+              />
+              <span>{t("settings.clearApiKey")}</span>
+            </label>
+          )}
+          <p className="settings-security-note">
+            <Glyph name="lock" size={14} />
+            {t("settings.imageGenerationCredentialBoundary")}
+          </p>
+          <footer className="settings-provider__actions">
+            <span />
+            <span />
+            <span />
+            <Button disabled={saving || !valid} tone="primary" type="submit">
+              {saving ? t("settings.saving") : t("settings.save")}
+            </Button>
+          </footer>
+        </section>
+      )}
+    </form>
+  );
+}
+
+function imageGenerationDraft(
+  settings: GlobalImageGenerationSettings,
+): ImageGenerationDraft {
+  return {
+    enabled: settings.enabled,
+    apiFormat: settings.apiFormat,
+    authMode: settings.authMode,
+    baseUrl: settings.baseUrl,
+    modelId: settings.modelId,
+  };
+}
+
 function ModelProviderForm() {
   const { t } = useI18n();
   const translateRef = useRef(t);
@@ -314,8 +629,6 @@ function ModelProviderForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [defaultImageGenerationSelection, setDefaultImageGenerationSelection] =
-    useState<ImageGenerationSelection | null>(null);
   const [status, setStatus] = useState<
     { tone: "success" | "error"; message: string } | undefined
   >();
@@ -340,9 +653,6 @@ function ModelProviderForm() {
       .then((value) => {
         if (!active) return;
         setCatalog(value);
-        setDefaultImageGenerationSelection(
-          value.defaultImageGenerationSelection ?? null,
-        );
         const first = value.providers[0];
         if (first) loadProvider(first);
       })
@@ -418,28 +728,8 @@ function ModelProviderForm() {
         ...(clearApiKey ? { clearApiKey: true } : {}),
         ...(setAsDefault ? { setAsDefault: true } : {}),
       };
-      let saved = await desktop.saveModelProviderProfile(request);
-      const desiredImageGenerationSelection = imageGenerationSelectionAfterSave(
-        defaultImageGenerationSelection,
-        request,
-      );
-      if (
-        !sameImageGenerationSelection(
-          saved.defaultImageGenerationSelection ?? null,
-          desiredImageGenerationSelection,
-        )
-      ) {
-        if (typeof desktop.setDefaultImageGenerationSelection !== "function") {
-          throw new Error(t("settings.serviceUnavailable"));
-        }
-        saved = await desktop.setDefaultImageGenerationSelection({
-          selection: desiredImageGenerationSelection,
-        });
-      }
+      const saved = await desktop.saveModelProviderProfile(request);
       setCatalog(saved);
-      setDefaultImageGenerationSelection(
-        saved.defaultImageGenerationSelection ?? null,
-      );
       const savedProfile = saved.providers.find(
         (provider) => provider.providerId === request.providerId,
       );
@@ -526,9 +816,6 @@ function ModelProviderForm() {
         providerId: selectedProviderId,
       });
       setCatalog(nextCatalog);
-      setDefaultImageGenerationSelection(
-        nextCatalog.defaultImageGenerationSelection ?? null,
-      );
       const next = nextCatalog.providers[0];
       if (next) loadProvider(next);
       else {
@@ -687,33 +974,6 @@ function ModelProviderForm() {
                   </select>
                 </label>
                 <label className="settings-field">
-                  <span>{t("settings.imageGenerationApi")}</span>
-                  <select
-                    aria-label={t("settings.imageGenerationApi")}
-                    disabled={busy}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      updateDraft((current) => {
-                        const rest: ProviderDraft = { ...current };
-                        delete rest.imageGenerationApiFormat;
-                        return value
-                          ? {
-                              ...rest,
-                              imageGenerationApiFormat:
-                                value as ImageGenerationApiFormat,
-                            }
-                          : rest;
-                      });
-                    }}
-                    value={draft.imageGenerationApiFormat ?? ""}
-                  >
-                    <option value="">{t("settings.notConfigured")}</option>
-                    <option value="openai-images">
-                      {t("settings.apiOpenAIImages")}
-                    </option>
-                  </select>
-                </label>
-                <label className="settings-field">
                   <span>{t("settings.authMode")}</span>
                   <select
                     aria-label={t("settings.authMode")}
@@ -768,21 +1028,10 @@ function ModelProviderForm() {
               )}
               <ModelListEditor
                 busy={busy}
-                defaultImageGenerationSelection={
-                  defaultImageGenerationSelection
-                }
-                imageGenerationAdapterConfigured={
-                  draft.imageGenerationApiFormat !== undefined
-                }
                 models={draft.models}
                 onChange={(models) =>
                   updateDraft((current) => ({ ...current, models }))
                 }
-                onDefaultImageGenerationSelectionChange={(selection) => {
-                  setDefaultImageGenerationSelection(selection);
-                  setDirty(true);
-                }}
-                providerId={draft.providerId}
               />
               <p className="settings-security-note">
                 <Glyph name="lock" size={14} />
@@ -843,22 +1092,12 @@ type ProviderDraft = Omit<ModelProviderProfile, "hasApiKey" | "updatedAt">;
 
 function ModelListEditor({
   busy,
-  defaultImageGenerationSelection,
-  imageGenerationAdapterConfigured,
   models,
   onChange,
-  onDefaultImageGenerationSelectionChange,
-  providerId,
 }: {
   busy: boolean;
-  defaultImageGenerationSelection: ImageGenerationSelection | null;
-  imageGenerationAdapterConfigured: boolean;
   models: ModelProfile[];
   onChange: (models: ModelProfile[]) => void;
-  onDefaultImageGenerationSelectionChange: (
-    selection: ImageGenerationSelection | null,
-  ) => void;
-  providerId: string;
 }) {
   const { t } = useI18n();
   const update = (index: number, model: ModelProfile) =>
@@ -891,18 +1130,9 @@ function ModelListEditor({
               aria-label={`${t("settings.modelId")} ${index + 1}`}
               disabled={busy}
               maxLength={256}
-              onChange={(event) => {
-                const modelId = event.target.value;
-                update(index, { ...model, modelId });
-                if (
-                  defaultImageGenerationSelection?.providerId === providerId &&
-                  defaultImageGenerationSelection.modelId === model.modelId
-                ) {
-                  onDefaultImageGenerationSelectionChange(
-                    modelId ? { providerId, modelId } : null,
-                  );
-                }
-              }}
+              onChange={(event) =>
+                update(index, { ...model, modelId: event.target.value })
+              }
               placeholder={t("settings.modelPlaceholder")}
               value={model.modelId}
             />
@@ -990,41 +1220,6 @@ function ModelListEditor({
             </label>
             <label className="settings-checkbox">
               <input
-                checked={
-                  defaultImageGenerationSelection?.providerId === providerId &&
-                  defaultImageGenerationSelection.modelId === model.modelId
-                }
-                disabled={
-                  busy ||
-                  !imageGenerationAdapterConfigured ||
-                  !model.modelId.trim()
-                }
-                onChange={(event) => {
-                  const selected = event.target.checked;
-                  onChange(
-                    models.map((candidate, modelIndex) => ({
-                      ...candidate,
-                      capabilities: {
-                        ...candidate.capabilities,
-                        imageGeneration:
-                          modelIndex === index
-                            ? selected
-                            : candidate.capabilities.imageGeneration,
-                      },
-                    })),
-                  );
-                  onDefaultImageGenerationSelectionChange(
-                    selected
-                      ? { providerId, modelId: model.modelId.trim() }
-                      : null,
-                  );
-                }}
-                type="checkbox"
-              />
-              <span>{t("settings.useForGlobalImageGeneration")}</span>
-            </label>
-            <label className="settings-checkbox">
-              <input
                 checked={model.capabilities.reasoning}
                 disabled={busy}
                 onChange={(event) =>
@@ -1049,12 +1244,6 @@ function ModelListEditor({
             icon="close"
             label={`${t("settings.removeModel")} ${model.name || index + 1}`}
             onClick={() => {
-              if (
-                defaultImageGenerationSelection?.providerId === providerId &&
-                defaultImageGenerationSelection.modelId === model.modelId
-              ) {
-                onDefaultImageGenerationSelectionChange(null);
-              }
               onChange(models.filter((_, modelIndex) => modelIndex !== index));
             }}
           />
@@ -1070,11 +1259,6 @@ function profileDraft(profile: ModelProviderProfile): ProviderDraft {
     name: profile.name,
     enabled: profile.enabled,
     apiFormat: profile.apiFormat,
-    ...(profile.imageGenerationApiFormat === undefined
-      ? {}
-      : {
-          imageGenerationApiFormat: profile.imageGenerationApiFormat,
-        }),
     authMode: profile.authMode,
     baseUrl: profile.baseUrl,
     models: profile.models.map((model) => ({
@@ -1092,7 +1276,6 @@ function newProviderDraft(): ProviderDraft {
     name: "Custom provider",
     enabled: true,
     apiFormat: "openai-responses",
-    imageGenerationApiFormat: "openai-images",
     authMode: "bearer",
     baseUrl: "https://api.openai.com/v1",
     models: [newModelProfile()],
@@ -1108,7 +1291,6 @@ function newModelProfile(): ModelProfile {
     capabilities: {
       toolUse: true,
       imageInput: false,
-      imageGeneration: false,
       reasoning: true,
     },
     reasoningEfforts: ["off", "low", "medium", "high", "xhigh"],
@@ -1129,32 +1311,6 @@ function validProviderDraft(draft: ProviderDraft): boolean {
         Number.isInteger(model.maxOutputTokens) &&
         model.maxOutputTokens >= 1,
     )
-  );
-}
-
-function imageGenerationSelectionAfterSave(
-  selection: ImageGenerationSelection | null,
-  request: SaveModelProviderProfileRequest,
-): ImageGenerationSelection | null {
-  if (!selection || selection.providerId !== request.providerId)
-    return selection;
-  const selectedModelId = selection.modelId.trim();
-  const model = request.models.find(
-    (candidate) => candidate.modelId === selectedModelId,
-  );
-  return request.enabled &&
-    request.imageGenerationApiFormat !== undefined &&
-    model?.capabilities.imageGeneration
-    ? { providerId: selection.providerId, modelId: selectedModelId }
-    : null;
-}
-
-function sameImageGenerationSelection(
-  left: ImageGenerationSelection | null,
-  right: ImageGenerationSelection | null,
-): boolean {
-  return (
-    left?.providerId === right?.providerId && left?.modelId === right?.modelId
   );
 }
 

@@ -117,7 +117,7 @@ beforeEach(() => {
     getTheme: vi.fn().mockResolvedValue("dark"),
     setTheme: vi.fn().mockImplementation((theme) => Promise.resolve(theme)),
     getModelProviderCatalog: vi.fn().mockResolvedValue({
-      version: 2,
+      version: 3,
       providers: [
         {
           providerId: "provider_1",
@@ -135,7 +135,6 @@ beforeEach(() => {
               capabilities: {
                 toolUse: true,
                 imageInput: false,
-                imageGeneration: false,
                 reasoning: true,
               },
               reasoningEfforts: ["off", "medium", "high"],
@@ -151,9 +150,19 @@ beforeEach(() => {
         reasoningEffort: "medium",
       },
     }),
+    getGlobalImageGenerationSettings: vi.fn().mockResolvedValue({
+      version: 1,
+      enabled: false,
+      apiFormat: "openai-images",
+      authMode: "bearer",
+      baseUrl: "https://api.openai.com/v1",
+      modelId: "",
+      hasApiKey: false,
+      updatedAt: null,
+    }),
+    saveGlobalImageGenerationSettings: vi.fn(),
     saveModelProviderProfile: vi.fn(),
     deleteModelProviderProfile: vi.fn(),
-    setDefaultImageGenerationSelection: vi.fn(),
     testModelProviderConnection: vi.fn(),
     onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),
     selectAgentAttachments: vi.fn().mockResolvedValue([]),
@@ -1085,7 +1094,7 @@ describe("App", () => {
     const attachmentId = `image_${"b".repeat(64)}`;
     const previewDataUrl = "data:image/png;base64,aW1hZ2U=";
     vi.mocked(window.desktop!.getModelProviderCatalog).mockResolvedValue({
-      version: 2,
+      version: 3,
       providers: [
         {
           providerId: "provider_1",
@@ -1103,7 +1112,6 @@ describe("App", () => {
               capabilities: {
                 toolUse: true,
                 imageInput: true,
-                imageGeneration: false,
                 reasoning: false,
               },
               reasoningEfforts: ["off"],

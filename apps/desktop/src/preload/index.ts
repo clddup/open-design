@@ -31,7 +31,8 @@ import {
   isSaveProjectDesignFileRequest,
   isLocalePreference,
   isSaveModelProviderProfileRequest,
-  isSetDefaultImageGenerationSelectionRequest,
+  isGlobalImageGenerationSettings,
+  isSaveGlobalImageGenerationSettingsRequest,
   isDeleteModelProviderProfileRequest,
   isDiagnosticEvent,
   isRendererDiagnosticReport,
@@ -47,13 +48,14 @@ import {
   type ListProjectConversationsRequest,
   type OpenRecentProjectRequest,
   type ModelProviderCatalog,
+  type GlobalImageGenerationSettings,
   type ProviderConnectionResult,
   type ProjectDesignFile,
   type ProjectDesignFileRequest,
   type RecentProject,
   type SaveDesignFileRequest,
   type SaveModelProviderProfileRequest,
-  type SetDefaultImageGenerationSelectionRequest,
+  type SaveGlobalImageGenerationSettingsRequest,
   type DeleteModelProviderProfileRequest,
   type DiagnosticEvent,
   type RendererDiagnosticReport,
@@ -158,6 +160,34 @@ const desktopApi: DesktopApi = Object.freeze({
       "Invalid model provider catalog response",
     );
   },
+  getGlobalImageGenerationSettings: async () => {
+    const result: unknown = await ipcRenderer.invoke(
+      channels.getGlobalImageGenerationSettings,
+    );
+    return validate<GlobalImageGenerationSettings>(
+      result,
+      isGlobalImageGenerationSettings,
+      "Invalid global image-generation settings response",
+    );
+  },
+  saveGlobalImageGenerationSettings: async (
+    request: SaveGlobalImageGenerationSettingsRequest,
+  ) => {
+    validate(
+      request,
+      isSaveGlobalImageGenerationSettingsRequest,
+      "Invalid global image-generation settings request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.saveGlobalImageGenerationSettings,
+      request,
+    );
+    return validate<GlobalImageGenerationSettings>(
+      result,
+      isGlobalImageGenerationSettings,
+      "Invalid global image-generation settings response",
+    );
+  },
   saveModelProviderProfile: async (
     request: SaveModelProviderProfileRequest,
   ) => {
@@ -186,24 +216,6 @@ const desktopApi: DesktopApi = Object.freeze({
     );
     const result: unknown = await ipcRenderer.invoke(
       channels.deleteModelProviderProfile,
-      request,
-    );
-    return validate<ModelProviderCatalog>(
-      result,
-      isModelProviderCatalog,
-      "Invalid model provider catalog response",
-    );
-  },
-  setDefaultImageGenerationSelection: async (
-    request: SetDefaultImageGenerationSelectionRequest,
-  ) => {
-    validate(
-      request,
-      isSetDefaultImageGenerationSelectionRequest,
-      "Invalid default image-generation selection request",
-    );
-    const result: unknown = await ipcRenderer.invoke(
-      channels.setDefaultImageGenerationSelection,
       request,
     );
     return validate<ModelProviderCatalog>(

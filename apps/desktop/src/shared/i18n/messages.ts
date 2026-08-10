@@ -39,6 +39,7 @@ export const enMessages = {
   "settings.close": "Close Settings",
   "settings.general": "General",
   "settings.models": "Models",
+  "settings.imageGeneration": "Image generation",
   "settings.generalTitle": "Language and appearance",
   "settings.generalDescription":
     "Choose how OpenDesign looks and which language it uses.",
@@ -54,6 +55,26 @@ export const enMessages = {
   "settings.modelsTitle": "Model provider",
   "settings.modelsDescription":
     "Manage provider profiles, API protocols, credentials, and Agent models.",
+  "settings.imageGenerationTitle": "Global image generation",
+  "settings.imageGenerationDescription":
+    "Configure one application-wide image-generation service. It is independent of every conversation model and Provider profile.",
+  "settings.globalImageGeneration": "Global service",
+  "settings.globalImageGenerationHint":
+    "The Agent uses this configuration whenever it calls the image-generation tool.",
+  "settings.loadingImageGeneration": "Loading image-generation settings…",
+  "settings.imageGenerationBaseUrl": "Image-generation Base URL",
+  "settings.imageGenerationAuthMode": "Image-generation authentication",
+  "settings.imageGenerationModelId": "Image-generation model ID",
+  "settings.imageGenerationModelHint":
+    "Enter the exact model ID accepted by the configured endpoint.",
+  "settings.imageGenerationApiKey": "Image-generation API key",
+  "settings.imageGenerationCredentialBoundary":
+    "This credential is stored separately from conversation Provider credentials, encrypted by the operating system, and never returned to the Renderer or Agent process.",
+  "settings.imageGenerationSaved": "Global image-generation settings saved",
+  "settings.imageGenerationLoadFailed":
+    "Could not load global image-generation settings",
+  "settings.imageGenerationSaveFailed":
+    "Could not save global image-generation settings",
   "settings.providers": "Providers",
   "settings.addProvider": "Add provider",
   "settings.noProviders": "No model providers configured",
@@ -78,7 +99,7 @@ export const enMessages = {
   "settings.modelPlaceholder": "Model identifier",
   "settings.modelList": "Models",
   "settings.modelListDescription":
-    "Configure conversation capabilities and mark one model as the global image generator. It is independent of conversation model choices.",
+    "Configure capabilities used by conversation models and Agent tool calling.",
   "settings.addModel": "Add model",
   "settings.removeModel": "Remove model",
   "settings.modelId": "Model ID",
@@ -87,7 +108,6 @@ export const enMessages = {
   "settings.maxOutput": "Max output",
   "settings.toolUse": "Tool use",
   "settings.imageInput": "Image input",
-  "settings.useForGlobalImageGeneration": "Use globally for image generation",
   "settings.reasoning": "Reasoning",
   "settings.useAsDefault": "Use first model as default",
   "settings.deleteProvider": "Delete provider",
@@ -572,6 +592,7 @@ const zhCNMessages = {
   "settings.close": "关闭设置",
   "settings.general": "通用",
   "settings.models": "模型",
+  "settings.imageGeneration": "图片生成",
   "settings.generalTitle": "语言与外观",
   "settings.generalDescription": "选择 OpenDesign 的显示语言与界面外观。",
   "settings.language": "语言",
@@ -585,6 +606,23 @@ const zhCNMessages = {
   "settings.modelsTitle": "模型服务",
   "settings.modelsDescription":
     "管理 Provider、API 协议、凭据和可供 Agent 选择的模型。",
+  "settings.imageGenerationTitle": "全局图片生成",
+  "settings.imageGenerationDescription":
+    "配置一套应用级图片生成服务。它与所有会话模型和 Provider 配置完全独立。",
+  "settings.globalImageGeneration": "全局服务",
+  "settings.globalImageGenerationHint":
+    "Agent 调用图片生成工具时只读取这里的配置。",
+  "settings.loadingImageGeneration": "正在加载图片生成配置…",
+  "settings.imageGenerationBaseUrl": "图片生成 Base URL",
+  "settings.imageGenerationAuthMode": "图片生成鉴权方式",
+  "settings.imageGenerationModelId": "图片生成模型 ID",
+  "settings.imageGenerationModelHint": "填写该接口实际接受的模型 ID。",
+  "settings.imageGenerationApiKey": "图片生成 API Key",
+  "settings.imageGenerationCredentialBoundary":
+    "该凭据与会话 Provider 凭据分开保存，由操作系统加密，绝不会返回 Renderer 或 Agent 进程。",
+  "settings.imageGenerationSaved": "全局图片生成配置已保存",
+  "settings.imageGenerationLoadFailed": "无法加载全局图片生成配置",
+  "settings.imageGenerationSaveFailed": "无法保存全局图片生成配置",
   "settings.providers": "Provider",
   "settings.addProvider": "添加 Provider",
   "settings.noProviders": "尚未配置模型 Provider",
@@ -607,8 +645,7 @@ const zhCNMessages = {
   "settings.model": "模型",
   "settings.modelPlaceholder": "模型标识符",
   "settings.modelList": "模型列表",
-  "settings.modelListDescription":
-    "配置会话模型能力，并直接指定一个全局生图模型；它不受各会话模型选择影响。",
+  "settings.modelListDescription": "配置会话模型与 Agent 工具调用需要的能力。",
   "settings.addModel": "添加模型",
   "settings.removeModel": "移除模型",
   "settings.modelId": "模型 ID",
@@ -617,7 +654,6 @@ const zhCNMessages = {
   "settings.maxOutput": "最大输出",
   "settings.toolUse": "工具调用",
   "settings.imageInput": "图片输入",
-  "settings.useForGlobalImageGeneration": "设为全局生图模型",
   "settings.reasoning": "推理能力",
   "settings.useAsDefault": "将第一个模型设为默认",
   "settings.deleteProvider": "删除 Provider",

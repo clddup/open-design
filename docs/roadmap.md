@@ -45,7 +45,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 修复生产设计工具 schema 被 model bridge 尺寸守卫静默拒绝的问题；完整工具契约必须穿过真实跨进程守卫测试，请求/响应拒绝与畸形 Agent 事件必须返回可见终态并解除 Run。
 - [x] 将 `AgentRequest 3.3` 的发送时选区上下文与单一 Mutation Target 分离；默认写目标冻结为发送时活动 Page，用户之后改变选区或活动页面不缩小、不漂移该 Run 的事务目标。
 - [x] 建立 Main-owned 结构化诊断 JSONL 与大小轮转；错误通过 Conversation/Run/Request/Tool Call ID 关联到右下角通知，并可一键复制。Agent 对话仅在用户贴近底部时自动跟随消息、流式增量和工具状态，上翻查看历史时不强制回底。
-- [x] 将 Provider Catalog 升级到 v2，增加与 Conversation 模型完全解耦的全局 GPT Image 2 选择和 `generate_image` tool；生成结果进入内容寻址附件并由 `place_image` 通过唯一事务放入画布，旧 v1 模型不会被迁移为可生图。
+- [x] 将 Provider Catalog 升级到只管理对话模型的 v3，并建立独立 `GlobalImageGenerationSettings v1`：生图服务拥有自己的启用状态、adapter、Base URL、鉴权、凭据和用户模型 ID，不受 Conversation Provider/Model 影响；`generate_image` 结果进入内容寻址附件并由 `place_image` 通过唯一事务放入画布。旧 v2 生图选择确定性迁移后从 Catalog 剥离。
 - [ ] 在本仓库启动的 Electron 实例中复验：Agent 渐进事务期间 pan/zoom/resize 后 Leafer editBox 始终贴合选区，不出现巨大蓝色角、残影或输入锁死。
 - [ ] 实机复验复杂渐变/光晕/模糊、属性检查器同步、`capture_canvas` 多模态视觉回读、本地路径/URL `read_image`、全局 GPT Image 2 `generate_image`、粘贴/拖放附件和 `place_image`。
 - [x] 将 Leafer revision 同步改为 transaction change set 驱动的 affected-node 增量投影与 reconcile：未变节点不再 `set()`，无关 revision 不再隐藏 Editor、取消直接操作或刷新 tree bounds；选区相关变化只刷新对应元素 bounds，断档/切页/恢复才全量回退。

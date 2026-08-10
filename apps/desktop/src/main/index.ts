@@ -36,6 +36,7 @@ import { ProjectHost } from "./project/project-host";
 import { ProjectIpcService } from "./project/project-ipc";
 import { WorkspaceStore } from "./project/workspace-store";
 import { ModelProviderHost } from "./model/model-provider-host";
+import { ImageGenerationHost } from "./model/image-generation-host";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
 import { DiagnosticLog } from "./diagnostics/diagnostic-log";
 import { resolveRendererUrl } from "./renderer-url";
@@ -43,12 +44,12 @@ import { isRendererDesignToolResponse } from "../shared/design-tool-bridge";
 import {
   channels,
   isDeleteModelProviderProfileRequest,
+  isSaveGlobalImageGenerationSettingsRequest,
   isRendererDiagnosticReport,
   isAgentAttachmentImport,
   isAgentAttachmentPreviewRequest,
   isLocalePreference,
   isSaveModelProviderProfileRequest,
-  isSetDefaultImageGenerationSelectionRequest,
   isTestModelProviderConnectionRequest,
   isSaveDesignFileRequest,
   isThemePreference,
@@ -104,6 +105,7 @@ let projectHost: ProjectHost | null = null;
 let projectIpc: ProjectIpcService | null = null;
 let globalTaskCoordinator: GlobalTaskCoordinator | null = null;
 let modelProviderHost: ModelProviderHost | null = null;
+let imageGenerationHost: ImageGenerationHost | null = null;
 let agentAttachmentHost: AgentAttachmentHost | null = null;
 let agentReferenceHost: AgentReferenceHost | null = null;
 let diagnosticLog: DiagnosticLog | null = null;
@@ -313,6 +315,13 @@ function requireModelProviderHost(): ModelProviderHost {
   return modelProviderHost;
 }
 
+function requireImageGenerationHost(): ImageGenerationHost {
+  if (!imageGenerationHost) {
+    throw new Error("Global image generation is not initialized");
+  }
+  return imageGenerationHost;
+}
+
 function assertArgumentCount(args: unknown[], count: number) {
   if (args.length !== count) throw new TypeError("Unexpected IPC arguments");
 }
@@ -469,6 +478,26 @@ function registerIpc() {
     },
   );
   ipcMain.handle(
+    channels.getGlobalImageGenerationSettings,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 0);
+      return requireImageGenerationHost().getSettings();
+    },
+  );
+  ipcMain.handle(
+    channels.saveGlobalImageGenerationSettings,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      const request = args[0];
+      if (!isSaveGlobalImageGenerationSettingsRequest(request)) {
+        throw new TypeError("Invalid global image-generation settings");
+      }
+      return requireImageGenerationHost().saveSettings(request);
+    },
+  );
+  ipcMain.handle(
     channels.saveModelProviderProfile,
     (event, ...args: unknown[]) => {
       assertMainRenderer(event);
@@ -495,24 +524,6 @@ function registerIpc() {
         throw new TypeError("Invalid model provider delete request");
       }
       const catalog = requireModelProviderHost().deleteProfile(request);
-      mainWindow?.webContents.send(
-        channels.modelProviderCatalogChanged,
-        catalog,
-      );
-      return catalog;
-    },
-  );
-  ipcMain.handle(
-    channels.setDefaultImageGenerationSelection,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isSetDefaultImageGenerationSelectionRequest(request)) {
-        throw new TypeError("Invalid default image-generation selection");
-      }
-      const catalog =
-        requireModelProviderHost().setDefaultImageGenerationSelection(request);
       mainWindow?.webContents.send(
         channels.modelProviderCatalogChanged,
         catalog,
@@ -825,13 +836,20 @@ void app.whenReady().then(async () => {
   const persistedLocale = workspaceStore.getPreference("locale");
   if (isLocalePreference(persistedLocale)) localePreference = persistedLocale;
   installApplicationMenu();
+  const credentialCipher = {
+    available: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (value: string) => safeStorage.encryptString(value),
+    decrypt: (value: Buffer) => safeStorage.decryptString(value),
+  };
+  imageGenerationHost = new ImageGenerationHost(
+    workspaceStore,
+    credentialCipher,
+    globalThis.fetch,
+  );
+  imageGenerationHost.getSettings();
   modelProviderHost = new ModelProviderHost(
     workspaceStore,
-    {
-      available: () => safeStorage.isEncryptionAvailable(),
-      encrypt: (value) => safeStorage.encryptString(value),
-      decrypt: (value) => safeStorage.decryptString(value),
-    },
+    credentialCipher,
     globalThis.fetch,
     requireAgentAttachmentHost(),
   );
@@ -869,7 +887,7 @@ void app.whenReady().then(async () => {
       if (!isGenerateImageToolInput(call.input)) {
         throw new TypeError("Invalid generate image tool input");
       }
-      const generated = await requireModelProviderHost().generateImage(
+      const generated = await requireImageGenerationHost().generateImage(
         call.input,
         signal,
       );
@@ -890,7 +908,7 @@ void app.whenReady().then(async () => {
         content: {
           ok: true,
           sourceKind: "generated",
-          providerId: generated.providerId,
+          apiFormat: generated.apiFormat,
           modelId: generated.modelId,
           ...(generated.providerRequestId
             ? { providerRequestId: generated.providerRequestId }
@@ -1090,6 +1108,7 @@ app.on("before-quit", () => {
   globalTaskCoordinator = null;
   projectHost = null;
   modelProviderHost = null;
+  imageGenerationHost = null;
   agentAttachmentHost = null;
   agentReferenceHost = null;
   agentHost.setModelRequestHandler(null);

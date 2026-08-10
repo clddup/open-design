@@ -673,7 +673,7 @@ describe("AgentTimeline", () => {
     const onSubmit = vi.fn().mockResolvedValue(true);
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 2,
+        version: 3,
         providers: [
           {
             providerId: "provider_1",
@@ -691,7 +691,6 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: false,
-                  imageGeneration: false,
                   reasoning: false,
                 },
                 reasoningEfforts: ["off"],
@@ -745,7 +744,7 @@ describe("AgentTimeline", () => {
     const onSubmit = vi.fn().mockResolvedValue(true);
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 2,
+        version: 3,
         providers: [
           {
             providerId: "provider_1",
@@ -763,7 +762,6 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: false,
-                  imageGeneration: false,
                   reasoning: true,
                 },
                 reasoningEfforts: ["off", "medium", "high"],
@@ -824,7 +822,7 @@ describe("AgentTimeline", () => {
     const attachmentId = `image_${"a".repeat(64)}`;
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 2,
+        version: 3,
         providers: [
           {
             providerId: "provider_1",
@@ -842,7 +840,6 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: true,
-                  imageGeneration: false,
                   reasoning: false,
                 },
                 reasoningEfforts: ["off"],
@@ -921,7 +918,7 @@ describe("AgentTimeline", () => {
     const attachmentId = `file_${"b".repeat(64)}`;
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 2,
+        version: 3,
         providers: [
           {
             providerId: "provider_1",
@@ -939,7 +936,6 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: false,
-                  imageGeneration: false,
                   reasoning: false,
                 },
                 reasoningEfforts: ["off"],
@@ -1053,7 +1049,7 @@ describe("AgentTimeline", () => {
       });
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 2,
+        version: 3,
         providers: [
           {
             providerId: "provider_1",
@@ -1071,7 +1067,6 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: true,
-                  imageGeneration: false,
                   reasoning: false,
                 },
                 reasoningEfforts: ["off"],
@@ -1177,7 +1172,7 @@ describe("AgentTimeline", () => {
   it("follows new activity only while the reader remains near the bottom", () => {
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 2,
+        version: 3,
         providers: [],
       }),
       onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),
