@@ -35,6 +35,56 @@ function renderTitlebar() {
 }
 
 describe("Titlebar behavior primitives", () => {
+  it("only reserves the native traffic-light area on macOS", () => {
+    const { rerender } = render(
+      <TooltipProvider delayDuration={0}>
+        <I18nProvider initialLocale="en">
+          <Titlebar
+            dirty={false}
+            documentName="Welcome.opendesign"
+            onSave={vi.fn()}
+            onSettings={vi.fn()}
+            onThemeChange={vi.fn()}
+            onWorkspace={vi.fn()}
+            platform="win32"
+            theme="light"
+          />
+        </I18nProvider>
+      </TooltipProvider>,
+    );
+
+    expect(document.querySelector(".titlebar")).toHaveAttribute(
+      "data-platform",
+      "win32",
+    );
+    expect(
+      screen.getByRole("group", { name: "Window controls" }),
+    ).toBeVisible();
+
+    rerender(
+      <TooltipProvider delayDuration={0}>
+        <I18nProvider initialLocale="en">
+          <Titlebar
+            dirty={false}
+            documentName="Welcome.opendesign"
+            onSave={vi.fn()}
+            onSettings={vi.fn()}
+            onThemeChange={vi.fn()}
+            onWorkspace={vi.fn()}
+            platform="darwin"
+            theme="light"
+          />
+        </I18nProvider>
+      </TooltipProvider>,
+    );
+
+    expect(document.querySelector(".titlebar")).toHaveAttribute(
+      "data-platform",
+      "darwin",
+    );
+    expect(screen.queryByRole("group", { name: "Window controls" })).toBeNull();
+  });
+
   it("keeps the menu open when its parent rerenders during the pointer gesture", async () => {
     const user = userEvent.setup();
 

@@ -1445,6 +1445,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         <SettingsPage
           onClose={() => setView(settingsReturnView.current)}
           onThemeChange={changeTheme}
+          platform={platform}
           theme={theme}
         />
         {notifications}

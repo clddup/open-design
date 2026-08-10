@@ -22,12 +22,14 @@ import type {
 } from "../../shared/desktop-api";
 import type { AppLocale } from "../../shared/i18n/locale";
 import { useI18n } from "../i18n";
+import { WindowControls } from "./WindowControls";
 
 type SettingsTab = "general" | "models" | "image-generation";
 
 type SettingsPageProps = {
   onClose: () => void;
   onThemeChange: (theme: ThemePreference) => void;
+  platform: NodeJS.Platform;
   theme: ThemePreference;
 };
 
@@ -44,6 +46,7 @@ export function SettingsPage(props: SettingsPageProps) {
       closeLabel={t("settings.close")}
       description={t("settings.renderFailedDescription")}
       onClose={props.onClose}
+      platform={props.platform}
       retryLabel={t("settings.retry")}
       title={t("settings.renderFailedTitle")}
     >
@@ -55,6 +58,7 @@ export function SettingsPage(props: SettingsPageProps) {
 function SettingsPageContent({
   onClose,
   onThemeChange,
+  platform,
   theme,
 }: SettingsPageProps) {
   const { locale, setLocale, t } = useI18n();
@@ -88,7 +92,10 @@ function SettingsPageContent({
 
   return (
     <div className="settings-shell">
-      <header className="home-titlebar settings-titlebar">
+      <header
+        className="home-titlebar settings-titlebar"
+        data-platform={platform}
+      >
         <div aria-hidden="true" className="titlebar__native-safe-zone" />
         <div className="home-titlebar__brand">
           <span className="brand-mark">
@@ -102,6 +109,7 @@ function SettingsPageContent({
             label={t("settings.close")}
             onClick={onClose}
           />
+          {platform !== "darwin" && <WindowControls />}
         </div>
       </header>
       <main className="settings-workbench">
@@ -210,6 +218,7 @@ class SettingsErrorBoundary extends Component<
     closeLabel: string;
     description: string;
     onClose: () => void;
+    platform: NodeJS.Platform;
     retryLabel: string;
     title: string;
   },
@@ -225,7 +234,10 @@ class SettingsErrorBoundary extends Component<
     if (!this.state.failed) return this.props.children;
     return (
       <div className="settings-shell">
-        <header className="home-titlebar settings-titlebar">
+        <header
+          className="home-titlebar settings-titlebar"
+          data-platform={this.props.platform}
+        >
           <div aria-hidden="true" className="titlebar__native-safe-zone" />
           <div className="home-titlebar__brand">
             <span className="brand-mark">
@@ -239,6 +251,7 @@ class SettingsErrorBoundary extends Component<
               label={this.props.closeLabel}
               onClick={this.props.onClose}
             />
+            {this.props.platform !== "darwin" && <WindowControls />}
           </div>
         </header>
         <main className="settings-recovery" role="alert">

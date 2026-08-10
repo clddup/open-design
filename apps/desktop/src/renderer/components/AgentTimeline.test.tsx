@@ -700,6 +700,9 @@ describe("AgentTimeline", () => {
         ".agent-thread__item--assistant.agent-thread__item--active",
       ),
     ).toBeInTheDocument();
+    const caret = container.querySelector(".agent-message__caret");
+    expect(caret).toBeInTheDocument();
+    expect(caret?.parentElement?.tagName).toBe("P");
     await user.click(screen.getByRole("button", { name: "Stop" }));
     expect(onStop).toHaveBeenCalledOnce();
     expect(screen.getByText("Stopping request")).toBeInTheDocument();
@@ -714,6 +717,7 @@ describe("AgentTimeline", () => {
         ".agent-thread__item--assistant.agent-thread__item--stopping",
       ),
     ).toBeInTheDocument();
+    expect(container.querySelector(".agent-message__caret")).toBeNull();
   });
 
   it("finalizes a partial assistant message when its Run is cancelled", () => {

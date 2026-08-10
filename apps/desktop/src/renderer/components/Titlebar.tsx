@@ -8,6 +8,7 @@ import {
 } from "@opendesign/ui";
 import type { ThemePreference } from "../../shared/desktop-api";
 import { useI18n } from "../i18n";
+import { WindowControls } from "./WindowControls";
 
 export function Titlebar({
   theme,
@@ -40,14 +41,8 @@ export function Titlebar({
 }) {
   const { t } = useI18n();
   const nextTheme = theme === "dark" ? "light" : "dark";
-  const runWindowAction = (
-    action: "minimize" | "toggle-maximize" | "close",
-  ) => {
-    void window.desktop?.windowAction(action);
-  };
-
   return (
-    <header className="titlebar">
+    <header className="titlebar" data-platform={platform}>
       <div aria-hidden="true" className="titlebar__native-safe-zone" />
       <div className="titlebar__project">
         <button
@@ -117,30 +112,7 @@ export function Titlebar({
           label={t(nextTheme === "dark" ? "theme.useDark" : "theme.useLight")}
           onClick={() => onThemeChange(nextTheme)}
         />
-        {platform !== "darwin" && (
-          <div
-            className="window-controls"
-            role="group"
-            aria-label={t("window.controls")}
-          >
-            <IconButton
-              icon="minimize"
-              label={t("window.minimize")}
-              onClick={() => runWindowAction("minimize")}
-            />
-            <IconButton
-              icon="maximize"
-              label={t("window.maximize")}
-              onClick={() => runWindowAction("toggle-maximize")}
-            />
-            <IconButton
-              className="window-control--close"
-              icon="close"
-              label={t("window.close")}
-              onClick={() => runWindowAction("close")}
-            />
-          </div>
-        )}
+        {platform !== "darwin" && <WindowControls />}
       </div>
     </header>
   );

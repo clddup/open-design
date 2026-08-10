@@ -14,6 +14,7 @@ import { useState } from "react";
 import type { RecentProject, ThemePreference } from "../../shared/desktop-api";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
+import { WindowControls } from "./WindowControls";
 
 export type WorkspaceHomeProps = {
   busy: boolean;
@@ -81,7 +82,7 @@ export function WorkspaceHome({
 
   return (
     <div className="home-shell">
-      <header className="home-titlebar">
+      <header className="home-titlebar" data-platform={platform}>
         <div aria-hidden="true" className="titlebar__native-safe-zone" />
         <div className="home-titlebar__brand">
           <span className="brand-mark">
@@ -329,39 +330,6 @@ export function WorkspaceHome({
           {t("workspace.openStandalone")}
         </button>
       </main>
-    </div>
-  );
-}
-
-function WindowControls() {
-  const { t } = useI18n();
-  const runWindowAction = (
-    action: "minimize" | "toggle-maximize" | "close",
-  ) => {
-    void window.desktop?.windowAction(action);
-  };
-  return (
-    <div
-      aria-label={t("window.controls")}
-      className="window-controls"
-      role="group"
-    >
-      <IconButton
-        icon="minimize"
-        label={t("window.minimize")}
-        onClick={() => runWindowAction("minimize")}
-      />
-      <IconButton
-        icon="maximize"
-        label={t("window.maximize")}
-        onClick={() => runWindowAction("toggle-maximize")}
-      />
-      <IconButton
-        className="window-control--close"
-        icon="close"
-        label={t("window.close")}
-        onClick={() => runWindowAction("close")}
-      />
     </div>
   );
 }

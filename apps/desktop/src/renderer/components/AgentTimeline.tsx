@@ -990,7 +990,15 @@ export function AgentTimeline({
               >
                 {item.kind === "user" || item.kind === "assistant" ? (
                   <article className="agent-message" title={item.time}>
-                    <p>{item.detail}</p>
+                    <p>
+                      {item.detail}
+                      {item.kind === "assistant" && item.state === "active" && (
+                        <span
+                          aria-hidden="true"
+                          className="agent-message__caret"
+                        />
+                      )}
+                    </p>
                     {item.attachments && item.attachments.length > 0 && (
                       <TimelineAttachments attachments={item.attachments} />
                     )}

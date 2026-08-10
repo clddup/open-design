@@ -85,7 +85,12 @@ function renderSettings() {
   render(
     <TooltipProvider delayDuration={0}>
       <I18nProvider initialLocale="en">
-        <SettingsPage onClose={onClose} onThemeChange={vi.fn()} theme="dark" />
+        <SettingsPage
+          onClose={onClose}
+          onThemeChange={vi.fn()}
+          platform="darwin"
+          theme="dark"
+        />
       </I18nProvider>
     </TooltipProvider>,
   );
