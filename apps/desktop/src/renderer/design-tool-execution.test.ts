@@ -116,6 +116,18 @@ describe("Renderer design tool scope", () => {
     expect(serialized).toContain('"feature_two"');
     expect(response.result.content).toMatchObject({
       mutationTarget: { kind: "page", pageId: "page_welcome" },
+      diagnostics: {
+        version: 1,
+        pageIds: ["page_welcome"],
+        errorCount: 0,
+        warningCount: 0,
+        features: {
+          gradients: 0,
+          images: 0,
+          paths: 0,
+          text: 2,
+        },
+      },
       selection: {
         nodeIds: ["feature_one"],
         anchorNodeId: "feature_one",

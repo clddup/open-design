@@ -172,7 +172,8 @@
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
-          "apps/desktop/src/shared/design-agent-tools.test.ts"
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "packages/editor-runtime/src/diagnostics.test.ts"
         ],
         "manual": []
       },
@@ -272,7 +273,8 @@
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
-          "apps/desktop/src/renderer/App.test.tsx"
+          "apps/desktop/src/renderer/App.test.tsx",
+          "packages/editor-runtime/src/diagnostics.test.ts"
         ],
         "manual": []
       },
@@ -313,7 +315,8 @@
         "automated": [
           "apps/desktop/src/main/model/image-generation-host.test.ts",
           "apps/desktop/src/main/agent/agent-attachment-host.test.ts",
-          "apps/desktop/src/renderer/design-tool-execution.test.ts"
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "packages/editor-runtime/src/diagnostics.test.ts"
         ],
         "manual": []
       },
@@ -413,7 +416,8 @@
       "evidence": {
         "automated": [
           "packages/leafer-engine/src/adapter.test.ts",
-          "apps/desktop/src/renderer/App.test.tsx"
+          "apps/desktop/src/renderer/App.test.tsx",
+          "packages/editor-runtime/src/diagnostics.test.ts"
         ],
         "manual": []
       },

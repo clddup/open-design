@@ -22,6 +22,9 @@ describe("OpenDesign Agent system prompt", () => {
       "first call opendesign_inspect_document",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Resolve every error-level finding",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "Use native structured tool calls only",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

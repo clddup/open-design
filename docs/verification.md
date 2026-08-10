@@ -26,7 +26,7 @@ pnpm format:check  passed
 pnpm lint          passed
 pnpm typecheck     passed（16 个 workspace package 执行 typecheck）
 pnpm test          passed
-├── package tests  12 files / 105 tests
+├── package tests  13 files / 107 tests
 └── desktop tests  34 files / 223 tests
 pnpm build         passed
 ├── Renderer
@@ -40,6 +40,7 @@ pnpm build         passed
 - DesignDocument 1.2 schema/migration、正式 Path/Vector 外观、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
 - `DesignCapabilityManifest v1` 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context、只读 `get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON，`capabilities:check` 会拒绝文档漂移。
 - `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
+- EditorRuntime 设计预检覆盖 Path/渐变/光晕/模糊/blend/mask/图片/文字特性计数，以及空内容、不可见/无外观、缺失或不受支持图片源、非有限 bounds、clipping Frame 完全越界和根层碎片；同一报告经 `inspect_document` 交给 Agent。
 - Leafer 文档投影、Path 实例、复杂外观映射和 change-set 增量同步：未变节点保持 spec/元素 identity，不调用 `set()`；无关新增、删除和 revision 不刷新 tree/Editor，也不取消进行中的直接操作；选中节点变化只刷新该元素 bounds 并更新 editBox；asset change 会精确重投影引用节点。
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
@@ -69,11 +70,11 @@ Vite 生产构建完成四个环境。当前主要输出约为：
 
 | 产物             |        大小 |      gzip |
 | ---------------- | ----------: | --------: |
-| Renderer 主 JS   |   679.07 kB | 199.76 kB |
+| Renderer 主 JS   |   683.92 kB | 201.21 kB |
 | Leafer Web chunk |   302.16 kB | 100.55 kB |
 | Electron Main    | 2,094.94 kB | 418.97 kB |
 | Preload          |   233.09 kB |  37.00 kB |
-| Agent            |   306.82 kB |  58.18 kB |
+| Agent            |   307.58 kB |  58.43 kB |
 
 构建提示 Renderer/Main 存在超过 500 kB 的 chunk。当前不影响构建成功，但需要在性能阶段评估动态加载与 Rolldown code splitting，不能通过移除 sourcemap 或隐藏警告冒充优化。
 

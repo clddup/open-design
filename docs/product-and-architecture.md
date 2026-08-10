@@ -219,6 +219,8 @@ Agent composer 还支持粘贴和拖入图片/文件。模型可按需调用 `op
 
 `opendesign_capture_canvas` 只捕获当前绑定 Design File 的活动画布视口，并在 Renderer 内缩放、编码后通过 Main 的附件导入边界成为内容寻址图片；它不会截取整个桌面、其他窗口或应用。Agent 在实质设计写入后可把该图片作为多模态结果回读，再根据实际渲染结果迭代。该能力不等同于网页抓取或外部页面截图，后两者仍属于后续 `fetch_reference` / `capture_reference`。
 
+`EditorRuntime` 提供版本化、引擎无关的设计预检，`inspect_document` 对当前 Mutation Target 返回 Path、渐变、光晕、模糊、blend、mask、图片和文字的实际特性计数，并识别空内容、不可见/无绘制外观、缺失资源、非有限世界 bounds、完全越出 clipping Frame 与根图层碎片。该预检不替代 Leafer 绘制或像素视觉基线；它用于在调用 `capture_canvas` 前排除结构上必然失败的结果。
+
 ### 9.1 Conversation 与 `homeProjectId`
 
 Conversation 是持久会话。目标模型为每个 Conversation 保存 `conversationId` 和创建时确定的 `homeProjectId`；后者只提供默认浏览位置、相对引用起点、策略提示和 UI 归档位置，不构成 sandbox 或文件权限。Conversation 后续可以引用其他 Project，且不改变 `homeProjectId`，也不把外部目录自动附加到 home Project。

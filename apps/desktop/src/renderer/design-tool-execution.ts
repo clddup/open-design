@@ -8,7 +8,10 @@ import type {
   DesignTransaction,
   DesignTransactionSuccess,
 } from "@opendesign/design-contracts";
-import type { EditorRuntime } from "@opendesign/editor-runtime";
+import {
+  diagnoseDesignPages,
+  type EditorRuntime,
+} from "@opendesign/editor-runtime";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
@@ -356,6 +359,7 @@ function createScopedInspection(
       ];
     }),
   );
+  const diagnostics = diagnoseDesignPages(document, pageIds);
 
   return {
     document: {
@@ -374,6 +378,7 @@ function createScopedInspection(
     },
     activePageId: inspectionPageId(document, mutationTarget, selectionContext),
     mutationTarget: structuredClone(mutationTarget),
+    diagnostics,
     selectionContext: structuredClone(selectionContext),
     selection: {
       nodeIds: selectionContext.selectedNodeIds.filter((nodeId) =>

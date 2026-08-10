@@ -21,6 +21,15 @@ export {
   transformPoint,
 } from "./geometry.js";
 export {
+  DESIGN_DIAGNOSTIC_REPORT_VERSION,
+  diagnoseDesignPages,
+  type DesignDiagnostic,
+  type DesignDiagnosticCode,
+  type DesignDiagnosticReport,
+  type DesignDiagnosticSeverity,
+  type DesignFeatureSummary,
+} from "./diagnostics.js";
+export {
   EditorRuntime,
   diffDocuments,
   type EditorRuntimeListener,

@@ -47,7 +47,7 @@
 - ID：`vector.path-rendering`
 - 实现方：DesignDocument 1.2.0 + Leafer Path adapter
 - 表面：contract=available；runtime=available；human=unavailable；agent=available；render=available；export=unavailable
-- 证据：自动化 3 项；实机 0 项
+- 证据：自动化 4 项；实机 0 项
 - 限制：当前支持单路径 SVG 数据，但没有 Pen、节点/手柄编辑、多轮廓矢量网络或 SVG 往返。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 
@@ -82,7 +82,7 @@
 - ID：`appearance.paints-effects-masks`
 - 实现方：DesignDocument 1.2.0 + PropertiesPanel + Leafer adapter
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
-- 证据：自动化 3 项；实机 0 项
+- 证据：自动化 4 项；实机 0 项
 - 限制：复杂组合仍需 Electron 视觉基线，专业取色器和共享颜色样式尚未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360041488473-Apply-effects-to-layers)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450253-Masks)
@@ -96,7 +96,7 @@
 - ID：`image.import-generation-placement`
 - 实现方：AgentAttachmentHost + ImageGenerationHost + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
-- 证据：自动化 3 项；实机 0 项
+- 证据：自动化 4 项；实机 0 项
 - 限制：图片生成需要独立全局配置；画布内直接替换、移除背景和资源管理 UI 尚未完成。
 
 ### 图片裁剪与调整 — 降级可用
@@ -130,7 +130,7 @@
 - ID：`text.single-style`
 - 实现方：DesignDocument 1.2.0 + Leafer TextEditor
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
-- 证据：自动化 2 项；实机 0 项
+- 证据：自动化 3 项；实机 0 项
 - 限制：字体可用性、跨平台 shaping、溢出和视觉保真仍需 macOS/Windows 验收。
 
 ### 专业富文本排版 — 不可用
