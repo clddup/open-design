@@ -10,14 +10,18 @@ import type {
 } from "@opendesign/design-contracts";
 import {
   diagnoseDesignPages,
+  planGroupNodes,
+  planUngroupNode,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
+  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   isDesignApplyToolInput,
+  isDesignHierarchyToolInput,
   isInternalDesignApplyToolInput,
 } from "../shared/design-agent-tools";
 import type {
@@ -101,6 +105,90 @@ export async function executeDesignToolRequest(
     );
   }
 
+  if (
+    request.call.toolName === DESIGN_HIERARCHY_TOOL_NAME &&
+    isDesignHierarchyToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertHierarchyPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+    );
+    const commandPrefix =
+      `hierarchy_${input.action}_${request.call.toolCallId}`.slice(0, 200);
+    const plan =
+      input.action === "group"
+        ? planGroupNodes(document, input.pageId, input.nodeIds, {
+            groupId: input.groupId,
+            name: input.name,
+            commandPrefix,
+          })
+        : planUngroupNode(document, input.pageId, input.groupId, commandPrefix);
+    if (!plan.ok) {
+      throw new Error(`hierarchy.${plan.code}: ${plan.message}`);
+    }
+    assertCommandsWithinMutationTarget(
+      document,
+      plan.commands,
+      request.context.mutationTarget,
+    );
+    const transactionId =
+      `transaction_agent_hierarchy_${request.call.toolCallId}_${Date.now()}`.slice(
+        0,
+        256,
+      );
+    const transaction = {
+      transactionId,
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: {
+        type: "agent",
+        id: `agent_${request.context.sessionId}`,
+        displayName: "OpenDesign Agent",
+      },
+      label: input.label,
+      commands: plan.commands,
+    } satisfies DesignTransaction;
+    throwIfAborted(options.signal);
+    const preview = runtime.preview(transaction);
+    if (!preview.ok) {
+      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+    }
+    throwIfAborted(options.signal);
+    const result = runtime.apply(transaction);
+    if (!result.ok) {
+      throw new Error(`${result.error.code}: ${result.error.message}`);
+    }
+    const childNodeIds =
+      input.action === "group"
+        ? (runtime.getSnapshot().document.nodesById[input.groupId]?.childIds ??
+          [])
+        : plan.selectionNodeIds;
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        content: {
+          ok: true,
+          action: input.action,
+          label: input.label,
+          pageId: input.pageId,
+          groupId: input.groupId,
+          childNodeIds,
+          revision: result.revision.revision,
+          atomic: true,
+          changes: result.changes,
+          warnings: result.warnings,
+        },
+        designRevision: {
+          previousRevision: transaction.baseRevision,
+          revision: result.revision.revision,
+          transactionId: transaction.transactionId,
+        },
+      },
+    };
+  }
+
   if (!(
     (request.call.toolName === DESIGN_APPLY_TOOL_NAME &&
       isDesignApplyToolInput(request.call.input)) ||
@@ -141,6 +229,18 @@ export async function executeDesignToolRequest(
     options.signal,
     options.stageDelayMs ?? 100,
   );
+}
+
+function assertHierarchyPageWithinMutationTarget(
+  pageId: string,
+  mutationTarget: DesignMutationTarget,
+): void {
+  if (mutationTarget.kind === "document") return;
+  if (pageId !== mutationTarget.pageId) {
+    throw new Error(
+      `Hierarchy operation targets Page ${pageId} outside the registered page mutation target`,
+    );
+  }
 }
 
 async function applyProgressively(

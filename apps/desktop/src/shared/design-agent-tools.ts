@@ -6,6 +6,7 @@ export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
 export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
+export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
 export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
 export const GENERATE_IMAGE_TOOL_NAME = "opendesign_generate_image";
 export const PLACE_IMAGE_TOOL_NAME = "opendesign_place_image";
@@ -41,6 +42,22 @@ export type DesignApplyToolInput = {
   summary?: string;
   commands: DesignOperation[];
 };
+
+export type DesignHierarchyToolInput =
+  | {
+      action: "group";
+      label: string;
+      pageId: string;
+      nodeIds: string[];
+      groupId: string;
+      name: string;
+    }
+  | {
+      action: "ungroup";
+      label: string;
+      pageId: string;
+      groupId: string;
+    };
 
 // The canonical DesignOperation schema is deliberately exhaustive and is used
 // for the trusted runtime validation below. Serializing that TypeBox union into
@@ -375,6 +392,34 @@ const MODEL_APPLY_TRANSACTION_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_HIERARCHY_SCHEMA = {
+  type: "object",
+  description:
+    "For group, nodeIds and name are required. For ungroup, omit nodeIds and name. Runtime validation enforces the action-specific shape.",
+  properties: {
+    action: { enum: ["group", "ungroup"] },
+    label: { type: "string", minLength: 1, maxLength: 256 },
+    pageId: { type: "string", minLength: 1, maxLength: 256 },
+    nodeIds: {
+      type: "array",
+      minItems: 2,
+      maxItems: 249,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 256 },
+      description: "Explicit sibling layer IDs; required only for group.",
+    },
+    groupId: { type: "string", minLength: 1, maxLength: 256 },
+    name: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description: "Name for the new Group; required only for group.",
+    },
+  },
+  required: ["action", "label", "pageId", "groupId"],
+  additionalProperties: false,
+} as const;
+
 export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_CAPABILITIES_TOOL_NAME,
@@ -493,6 +538,14 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_HIERARCHY_TOOL_NAME,
+    description:
+      "Group existing sibling layers or ungroup one existing Group in the currently bound Design File without asking the model to calculate transform changes. Targets are explicit stable node IDs on an explicit existing Page; the send-time or live user selection is context only and is never used as an implicit target. The host computes lossless local transforms, preserves sibling order and world geometry, previews the complete change, and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, and ungrouping that would lose Group-level appearance.",
+    inputSchema: MODEL_HIERARCHY_SCHEMA,
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: DESIGN_APPLY_TOOL_NAME,
     description:
       "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. For organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with portable SVG path data in properties.path; they support the same fills, strokes, gradients, effects, and advanced stroke fields as other shapes. Path coordinates are local to the node and should fit its declared size. Composite designs should create a named Frame or Group before inserting its children later in the same ordered transaction; do not flatten their parts into Page-root layers. It does not create, rename, duplicate, or delete Projects, Design Files, or Pages. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input.",
@@ -530,6 +583,9 @@ export function validateDesignAgentToolInput(
     return isGenerateImageToolInput(input);
   }
   if (toolName === PLACE_IMAGE_TOOL_NAME) return isPlaceImageToolInput(input);
+  if (toolName === DESIGN_HIERARCHY_TOOL_NAME) {
+    return isDesignHierarchyToolInput(input);
+  }
   if (
     (toolName !== DESIGN_APPLY_TOOL_NAME &&
       toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME) ||
@@ -633,6 +689,38 @@ export function isDesignApplyToolInput(
   input: unknown,
 ): input is DesignApplyToolInput {
   return validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input);
+}
+
+export function isDesignHierarchyToolInput(
+  input: unknown,
+): input is DesignHierarchyToolInput {
+  if (!isRecord(input)) return false;
+  const common =
+    (input.action === "group" || input.action === "ungroup") &&
+    typeof input.label === "string" &&
+    input.label.trim().length > 0 &&
+    input.label.length <= 256 &&
+    safeId(input.pageId) &&
+    safeId(input.groupId);
+  if (!common) return false;
+  if (input.action === "ungroup") {
+    return Object.keys(input).every((key) =>
+      ["action", "label", "pageId", "groupId"].includes(key),
+    );
+  }
+  return (
+    typeof input.name === "string" &&
+    input.name.trim().length > 0 &&
+    input.name.length <= 256 &&
+    Array.isArray(input.nodeIds) &&
+    input.nodeIds.length >= 2 &&
+    input.nodeIds.length <= 249 &&
+    input.nodeIds.every(safeId) &&
+    new Set(input.nodeIds).size === input.nodeIds.length &&
+    Object.keys(input).every((key) =>
+      ["action", "label", "pageId", "nodeIds", "groupId", "name"].includes(key),
+    )
+  );
 }
 
 export function isInternalDesignApplyToolInput(

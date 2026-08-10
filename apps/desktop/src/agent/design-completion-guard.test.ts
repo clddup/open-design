@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_HIERARCHY_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 import { reviewDesignCompletion } from "./design-completion-guard";
@@ -113,6 +114,30 @@ describe("design completion guard", () => {
     expect(
       reviewDesignCompletion(
         context([placeImage, firstCapture, refinementWrite, finalCapture]),
+      ),
+    ).toEqual({ allow: true });
+  });
+
+  it("accepts a semantic hierarchy edit as a post-review refinement without making it a material draft", () => {
+    const hierarchyWrite: AgentToolCallRecord = {
+      toolCallId: "hierarchy_1",
+      toolName: DESIGN_HIERARCHY_TOOL_NAME,
+      input: {
+        action: "group",
+        pageId: "page_1",
+        nodeIds: ["body", "face"],
+        groupId: "mascot",
+      },
+      status: "completed",
+      revision: 6,
+    };
+
+    expect(reviewDesignCompletion(context([hierarchyWrite]))).toEqual({
+      allow: true,
+    });
+    expect(
+      reviewDesignCompletion(
+        context([materialWrite, firstCapture, hierarchyWrite, finalCapture]),
       ),
     ).toEqual({ allow: true });
   });

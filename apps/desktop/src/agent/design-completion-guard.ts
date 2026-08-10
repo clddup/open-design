@@ -7,6 +7,7 @@ import type {
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_HIERARCHY_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools.js";
 
@@ -88,6 +89,7 @@ function findMaterialWriteIndex(
 function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
   return (
     call.toolName === PLACE_IMAGE_TOOL_NAME ||
+    call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
     (call.toolName === DESIGN_APPLY_TOOL_NAME &&
       readCommands(call.input).length > 0)
   );

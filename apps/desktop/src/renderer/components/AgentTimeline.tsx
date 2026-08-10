@@ -28,6 +28,7 @@ import type { AppLocale } from "../../shared/i18n/locale";
 import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import {
   DESIGN_APPLY_TOOL_NAME,
+  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
 } from "../../shared/design-agent-tools";
 import { useI18n } from "../i18n";
@@ -89,7 +90,9 @@ function assistantText(blocks: AssistantTimelineBlock[]): string {
 
 function isNativeDesignTool(toolName: string | undefined): boolean {
   return (
-    toolName === DESIGN_INSPECT_TOOL_NAME || toolName === DESIGN_APPLY_TOOL_NAME
+    toolName === DESIGN_INSPECT_TOOL_NAME ||
+    toolName === DESIGN_APPLY_TOOL_NAME ||
+    toolName === DESIGN_HIERARCHY_TOOL_NAME
   );
 }
 
@@ -136,6 +139,11 @@ function toolTitle(
     return state === "done"
       ? t("agent.canvasUpdated")
       : t("agent.buildingCanvas");
+  }
+  if (toolName === DESIGN_HIERARCHY_TOOL_NAME) {
+    return state === "done"
+      ? t("agent.hierarchyUpdated")
+      : t("agent.organizingLayers");
   }
   return state === "done" ? t("agent.changeCompleted") : toolName;
 }

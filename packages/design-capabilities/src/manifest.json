@@ -116,8 +116,8 @@
       "status": "degraded",
       "label": { "en": "Layer hierarchy", "zh-CN": "图层层级" },
       "description": {
-        "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, and ordered transactions.",
-        "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定和有序事务。"
+        "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, and ordered transactions; human commands and the Agent can group or ungroup existing layers through the same lossless hierarchy planner.",
+        "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定和有序事务；人工命令与 Agent 可通过同一无损层级 planner 编组或解组现有图层。"
       },
       "provider": "DesignDocument 1.2.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
@@ -144,6 +144,8 @@
           "packages/editor-runtime/src/index.test.ts",
           "packages/editor-runtime/src/layer-operations.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
           "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
         ],

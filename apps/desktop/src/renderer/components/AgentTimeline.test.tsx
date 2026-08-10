@@ -308,6 +308,49 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("run_canvas_1");
   });
 
+  it("shows semantic hierarchy work as native layer activity", () => {
+    const events: AgentEvent[] = [
+      {
+        type: "tool.requested",
+        runId: "run_hierarchy_1",
+        toolCallId: "tool_hierarchy_1",
+        toolName: "opendesign_edit_hierarchy",
+        input: {
+          action: "group",
+          pageId: "page_1",
+          nodeIds: ["body", "face"],
+          groupId: "mascot",
+        },
+        risk: "design_write",
+      },
+      {
+        type: "tool.completed",
+        runId: "run_hierarchy_1",
+        toolCallId: "tool_hierarchy_1",
+        result: { action: "group", groupId: "mascot" },
+        revision: 4,
+        transactionId: "transaction_hierarchy_1",
+      },
+    ];
+
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={events}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(screen.getByText("Layer structure updated")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("opendesign_edit_hierarchy");
+    expect(container).not.toHaveTextContent("transaction_hierarchy_1");
+  });
+
   it("replaces internal model attempt failures with one recoverable status", () => {
     const events: AgentEvent[] = [
       {

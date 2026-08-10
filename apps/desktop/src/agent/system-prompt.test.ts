@@ -46,7 +46,13 @@ describe("OpenDesign Agent system prompt", () => {
       "call opendesign_capture_canvas",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "Build every composite object",
+      "Build every new composite object",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "use opendesign_edit_hierarchy with the explicit stable Page and node IDs",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Do not calculate reparenting transforms yourself",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "does not prove rendered visual quality",

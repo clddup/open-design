@@ -1,8 +1,10 @@
 import {
   createWelcomeDocument,
   EditorRuntime,
+  getWorldTransform,
 } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
+import { DESIGN_HIERARCHY_TOOL_NAME } from "../shared/design-agent-tools";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
 import { executeDesignToolRequest } from "./design-tool-execution";
 
@@ -690,5 +692,297 @@ describe("Renderer design tool scope", () => {
     );
     expect(snapshot.state.history.canUndo).toBe(false);
     expect(snapshot.state.dirty).toBe(false);
+  });
+});
+
+describe("Renderer semantic hierarchy tool", () => {
+  it("groups explicit sibling IDs atomically without using or changing the live selection", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["feature_three"], "feature_three");
+    const before = runtime.getSnapshot().document;
+    const titleWorld = getWorldTransform(before, "title_welcome");
+    const subtitleWorld = getWorldTransform(before, "subtitle_welcome");
+
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_group",
+        call: {
+          toolCallId: "tool_hierarchy_group",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "group",
+            label: "Group welcome copy",
+            pageId: "page_welcome",
+            nodeIds: ["subtitle_welcome", "title_welcome"],
+            groupId: "welcome_copy_group",
+            name: "Welcome copy",
+          },
+        },
+        // This send-time selection points somewhere else. It is context, not
+        // an implicit hierarchy target.
+        context: selectionContext,
+      },
+      runtime,
+      "page_changed_after_send",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "group",
+          atomic: true,
+          groupId: "welcome_copy_group",
+          childNodeIds: ["title_welcome", "subtitle_welcome"],
+          revision: 1,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    const grouped = runtime.getSnapshot();
+    expect(grouped.document.nodesById.welcome_copy_group).toMatchObject({
+      kind: "group",
+      parentId: "frame_welcome",
+      childIds: ["title_welcome", "subtitle_welcome"],
+    });
+    expect(getWorldTransform(grouped.document, "title_welcome")).toEqual(
+      titleWorld,
+    );
+    expect(getWorldTransform(grouped.document, "subtitle_welcome")).toEqual(
+      subtitleWorld,
+    );
+    expect(grouped.state.selection).toEqual({
+      nodeIds: ["feature_three"],
+      anchorNodeId: "feature_three",
+    });
+    expect(grouped.state.history.undo).toHaveLength(1);
+
+    expect(runtime.undo().ok).toBe(true);
+    const undone = runtime.getSnapshot();
+    expect(undone.document.nodesById.welcome_copy_group).toBeUndefined();
+    expect(undone.document.nodesById.title_welcome?.parentId).toBe(
+      "frame_welcome",
+    );
+    expect(undone.document.nodesById.subtitle_welcome?.parentId).toBe(
+      "frame_welcome",
+    );
+  });
+
+  it("ungroups an explicit neutral Group in one revision and preserves child world transforms", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const before = runtime.getSnapshot().document;
+    const childIds = ["feature_one", "feature_two", "feature_three"];
+    const worldTransforms = Object.fromEntries(
+      childIds.map((nodeId) => [nodeId, getWorldTransform(before, nodeId)]),
+    );
+
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_ungroup",
+        call: {
+          toolCallId: "tool_hierarchy_ungroup",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "ungroup",
+            label: "Ungroup capability cards",
+            pageId: "page_welcome",
+            groupId: "feature_group",
+          },
+        },
+        context: selectionContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "ungroup",
+          atomic: true,
+          childNodeIds: childIds,
+          revision: 1,
+        },
+      },
+    });
+    const ungrouped = runtime.getSnapshot();
+    expect(ungrouped.document.nodesById.feature_group).toBeUndefined();
+    for (const nodeId of childIds) {
+      expect(ungrouped.document.nodesById[nodeId]?.parentId).toBe(
+        "frame_welcome",
+      );
+      expect(getWorldTransform(ungrouped.document, nodeId)).toEqual(
+        worldTransforms[nodeId],
+      );
+    }
+    expect(ungrouped.state.selection).toEqual({
+      nodeIds: ["title_welcome"],
+      anchorNodeId: "title_welcome",
+    });
+    expect(ungrouped.state.history.undo).toHaveLength(1);
+  });
+
+  it("returns scoped planner failures without partially changing the document", async () => {
+    const mixedRuntime = new EditorRuntime(createWelcomeDocument());
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "hierarchy_mixed_parent",
+          call: {
+            toolCallId: "tool_hierarchy_mixed_parent",
+            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            input: {
+              action: "group",
+              label: "Invalid mixed parent group",
+              pageId: "page_welcome",
+              nodeIds: ["title_welcome", "feature_one"],
+              groupId: "invalid_group",
+              name: "Invalid group",
+            },
+          },
+          context: pageContext,
+        },
+        mixedRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("hierarchy.mixed-parent");
+    expect(mixedRuntime.getSnapshot().document.revision).toBe(0);
+    expect(mixedRuntime.getSnapshot().state.history.canUndo).toBe(false);
+
+    const lockedDocument = structuredClone(createWelcomeDocument());
+    lockedDocument.nodesById.frame_welcome.locked = true;
+    const lockedRuntime = new EditorRuntime(lockedDocument);
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "hierarchy_locked",
+          call: {
+            toolCallId: "tool_hierarchy_locked",
+            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            input: {
+              action: "group",
+              label: "Group locked copy",
+              pageId: "page_welcome",
+              nodeIds: ["title_welcome", "subtitle_welcome"],
+              groupId: "locked_group",
+              name: "Locked group",
+            },
+          },
+          context: pageContext,
+        },
+        lockedRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("hierarchy.locked");
+    expect(lockedRuntime.getSnapshot().document.revision).toBe(0);
+
+    const lossyDocument = structuredClone(createWelcomeDocument());
+    lossyDocument.nodesById.feature_group.opacity = 0.5;
+    const lossyRuntime = new EditorRuntime(lossyDocument);
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "hierarchy_lossy",
+          call: {
+            toolCallId: "tool_hierarchy_lossy",
+            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            input: {
+              action: "ungroup",
+              label: "Ungroup styled container",
+              pageId: "page_welcome",
+              groupId: "feature_group",
+            },
+          },
+          context: pageContext,
+        },
+        lossyRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("hierarchy.visual-fidelity");
+    expect(lossyRuntime.getSnapshot().document.revision).toBe(0);
+  });
+
+  it("rejects stale, out-of-target, and already-cancelled hierarchy writes", async () => {
+    const staleRuntime = new EditorRuntime(createWelcomeDocument());
+    expect(
+      staleRuntime.apply({
+        transactionId: "user_changed_before_hierarchy",
+        documentId: "document_welcome",
+        baseRevision: 0,
+        actor: { type: "user", id: "local-user" },
+        label: "Rename before Agent write",
+        commands: [
+          {
+            commandId: "rename_before_hierarchy",
+            type: "update_properties",
+            nodeId: "title_welcome",
+            name: "New title",
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+    const groupInput = {
+      action: "group" as const,
+      label: "Group welcome copy",
+      pageId: "page_welcome",
+      nodeIds: ["title_welcome", "subtitle_welcome"],
+      groupId: "welcome_copy_group",
+      name: "Welcome copy",
+    };
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "hierarchy_stale",
+          call: {
+            toolCallId: "tool_hierarchy_stale",
+            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            input: groupInput,
+          },
+          context: pageContext,
+        },
+        staleRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("expected 0, current 1");
+
+    const scopedRuntime = new EditorRuntime(createWelcomeDocument());
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "hierarchy_wrong_page",
+          call: {
+            toolCallId: "tool_hierarchy_wrong_page",
+            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            input: { ...groupInput, pageId: "page_other" },
+          },
+          context: pageContext,
+        },
+        scopedRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("outside the registered page mutation target");
+
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "hierarchy_cancelled",
+          call: {
+            toolCallId: "tool_hierarchy_cancelled",
+            toolName: DESIGN_HIERARCHY_TOOL_NAME,
+            input: groupInput,
+          },
+          context: pageContext,
+        },
+        scopedRuntime,
+        "page_welcome",
+        { signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(scopedRuntime.getSnapshot().document.revision).toBe(0);
+    expect(scopedRuntime.getSnapshot().state.history.canUndo).toBe(false);
   });
 });

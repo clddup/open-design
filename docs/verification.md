@@ -15,11 +15,11 @@
 
 ## 平台支持矩阵
 
-| 平台    | 产品级别 | 当前证据                                                                                                          | 发布状态       |
-| ------- | -------- | ----------------------------------------------------------------------------------------------------------------- | -------------- |
-| macOS   | 一级支持 | arm64 verify、protected Vite build、未签名 DMG/ZIP、bytecode 与包内容检查通过；安装、签名和 packaged smoke 未验证 | 未达到发布门禁 |
-| Windows | 一级支持 | 已配置 Windows 原生 workflow、NSIS、直接 packaged executable smoke 与包内容检查；尚无 runner 执行证据             | **P0 阻塞**    |
-| Linux   | 目标平台 | 保留 electron-builder 配置，当前无原生验证                                                                        | 当前阶段不阻塞 |
+| 平台    | 产品级别 | 当前证据                                                                                                                                                                                           | 发布状态                    |
+| ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| macOS   | 一级支持 | 原生 workflow [31384519288](https://github.com/clddup/open-design/actions/runs/31384519288) 已通过 verify、protected Vite build、未签名 DMG/ZIP、包内容检查、packaged Agent smoke 与 artifact 上传 | 自动化通过；签名/安装待验收 |
+| Windows | 一级支持 | 同一 workflow 已在 Windows runner 通过 verify、protected Vite build、NSIS、包内容检查、packaged executable/Agent smoke 与 artifact 上传；已产出 `OpenDesign-Windows-X64`                           | 自动化通过；实机安装待验收  |
+| Linux   | 目标平台 | 保留 electron-builder 配置，当前无原生验证                                                                                                                                                         | 当前阶段不阻塞              |
 
 macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。Electron、TypeScript 和共享测试通过不等于另一操作系统可用，protected V8 bytecode 也不能跨系统构建后复用。
 
@@ -37,7 +37,7 @@ pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
 ├── package tests   16 files / 125 tests
-└── desktop tests   35 files / 227 tests
+└── desktop tests   35 files / 234 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -59,7 +59,7 @@ pnpm build          passed
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
 - 生产 Provider stream 的首响应、空闲和总时限 watchdog 会 abort 实际 fetch；timeout 与 Agent process exit 都会解除 Renderer active Run、恢复可编辑输入并显示可重试错误。
-- 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。生产回归还使用完整 system prompt、七个工具、200K Model Profile 和短消息证明 Provider 确实被调用。模型可见 `apply_transaction` Schema 为 25,222 字符且不依赖 `$ref/$defs`，本地仍用完整 `DesignOperationSchema` 校验。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
+- 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。生产回归还使用完整 system prompt、八个工具、200K Model Profile 和短消息证明 Provider 确实被调用。模型可见 `apply_transaction` Schema 为 25,222 字符且不依赖 `$ref/$defs`，本地仍用完整 `DesignOperationSchema` 校验。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
 - 工具执行、业务校验和设计工具桥失败会作为 `tool.failed` 回到下一轮模型上下文供其重试或解释；模型桥、Provider、Agent 进程/协议和可信 Run binding 失败才会取消 Run。两类路径分别有“继续第二个模型回合”和“相关 Run 终结/解锁”测试。
 - JSONL 启动恢复会一次性终结孤立 started Run 和 pending tool；Global Task 同步转为 interrupted。Conversation 在 Run 注册和后续 Agent 活动时更新持久 `updatedAt`，Renderer 立即按最近活动重排。
 - Main-owned 诊断事件经过严格跨进程校验，按大小轮转写入 JSONL，且不接受任意上下文字段；右下角错误通知会显示稳定错误码和关联 Run，并复制包含 Conversation/Run/Request/Tool Call ID、应用版本和平台的诊断文本。
@@ -67,6 +67,7 @@ pnpm build          passed
 - `openai-images` adapter 只使用独立应用级配置的 Base URL、鉴权、凭据和任意 model ID 调用 `/images/generations`，GPT Image 2 是首个验证模型；链路校验 `data[0].b64_json`、响应/图片大小、格式、凭据和取消。tool schema 不接受 Provider/Model 覆盖，也不会借用 Conversation Provider；旧 v2 选择和密文迁移已有回归测试。
 - Renderer Agent 对话、属性检查器、设计工具 selection context / Mutation Target / revision、`capture_canvas` 内容寻址多模态结果、取消/继续、i18n 和桌面控件交互；对话在底部时跟随新消息与状态，用户上翻后保持阅读位置，回到底部后恢复跟随；剪贴板文件与拖放文件经 Preload API 导入，run 只接收安全附件元数据，纯文本路径粘贴保持普通输入行为。
 - host-only 图片放置以单个 Page-targeted `put_asset + insert_element(image)` 事务进入 `EditorRuntime`；测试验证单次 revision、发送时存在选区也能在固定 Page 新增 asset/node、当前活动页面变化不漂移目标，以及一次 undo 同时移除 asset/node。
+- `opendesign_edit_hierarchy` 对现有兄弟节点提供显式 ID 的编组/解组语义；宿主复用人工命令的无损 planner，保持世界 transform 与层序，以一个原子事务写入并一次撤销。测试覆盖选区不作为写目标、实时选区不被重设、stale revision、Page Mutation Target、锁定、混合父级、视觉损失与提交前取消。
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。
 

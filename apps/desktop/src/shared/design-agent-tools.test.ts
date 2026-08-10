@@ -3,6 +3,7 @@ import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_CAPABILITIES_TOOL_NAME,
+  DESIGN_HIERARCHY_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
@@ -123,6 +124,63 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(GENERATE_IMAGE_TOOL_NAME, {
         prompt: "A poster",
         size: "8192x8192",
+      }),
+    ).toBe(false);
+  });
+
+  it("exposes strict semantic group and ungroup inputs without selection-derived targets", () => {
+    const hierarchy = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_HIERARCHY_TOOL_NAME,
+    );
+    const group = {
+      action: "group",
+      label: "Group mascot layers",
+      pageId: "page_1",
+      nodeIds: ["body", "face", "scarf"],
+      groupId: "mascot_group",
+      name: "Mascot",
+    };
+    const ungroup = {
+      action: "ungroup",
+      label: "Ungroup mascot",
+      pageId: "page_1",
+      groupId: "mascot_group",
+    };
+
+    expect(hierarchy).toMatchObject({
+      risk: "design_write",
+      approval: "never",
+    });
+    expect(hierarchy?.description).toContain("explicit stable node IDs");
+    expect(hierarchy?.description).toContain("one atomic undoable");
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, group),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, ungroup),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...group,
+        nodeIds: ["body", "body"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...group,
+        nodeIds: Array.from({ length: 250 }, (_, index) => `node_${index}`),
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...group,
+        selectedNodeIds: ["different_live_selection"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...ungroup,
+        nodeIds: ["body"],
       }),
     ).toBe(false);
   });
