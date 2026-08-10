@@ -35,6 +35,8 @@ import {
 import { ProjectHost } from "./project/project-host";
 import { ProjectIpcService } from "./project/project-ipc";
 import { WorkspaceStore } from "./project/workspace-store";
+import { registerSvgFileIpc } from "./svg/svg-file-ipc";
+import { SvgFileService } from "./svg/svg-file-service";
 import { ModelProviderHost } from "./model/model-provider-host";
 import { ImageGenerationHost } from "./model/image-generation-host";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
@@ -253,6 +255,44 @@ async function selectProjectDirectory(
   return result.filePaths[0] ?? null;
 }
 
+async function selectSvgOpenFile(): Promise<string | null> {
+  const window = mainWindow;
+  if (!window) return null;
+  const result = await dialog.showOpenDialog(window, {
+    title: translate(localePreference, "main.openSvgTitle"),
+    buttonLabel: translate(localePreference, "main.openSvgButton"),
+    properties: ["openFile"],
+    filters: [
+      {
+        name: translate(localePreference, "main.svgFilter"),
+        extensions: ["svg"],
+      },
+    ],
+  });
+  if (result.canceled || result.filePaths.length !== 1) return null;
+  return result.filePaths[0] ?? null;
+}
+
+async function selectSvgSaveFile(
+  suggestedName: string,
+): Promise<string | null> {
+  const window = mainWindow;
+  if (!window) return null;
+  const result = await dialog.showSaveDialog(window, {
+    title: translate(localePreference, "main.saveSvgTitle"),
+    buttonLabel: translate(localePreference, "main.saveSvgButton"),
+    defaultPath: suggestedName,
+    filters: [
+      {
+        name: translate(localePreference, "main.svgFilter"),
+        extensions: ["svg"],
+      },
+    ],
+  });
+  if (result.canceled || !result.filePath) return null;
+  return result.filePath;
+}
+
 function resolveApplicationIconPath() {
   return app.isPackaged
     ? join(process.resourcesPath, "icon.png")
@@ -435,6 +475,14 @@ function registerProjectIpc() {
 
 function registerIpc() {
   registerProjectIpc();
+  registerSvgFileIpc({
+    ipc: ipcMain,
+    assertRenderer: assertMainRenderer,
+    service: new SvgFileService({
+      selectOpenFile: selectSvgOpenFile,
+      selectSaveFile: selectSvgSaveFile,
+    }),
+  });
   ipcMain.handle(channels.platformInfo, () => ({
     platform: process.platform,
     version: app.getVersion(),

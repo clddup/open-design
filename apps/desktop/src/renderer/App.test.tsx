@@ -189,6 +189,8 @@ beforeEach(() => {
     onNativeThemeChange: vi.fn().mockReturnValue(() => undefined),
     openDesignFile: vi.fn().mockResolvedValue(null),
     saveDesignFile: vi.fn().mockResolvedValue(null),
+    openSvgFile: vi.fn().mockResolvedValue(null),
+    saveSvgFile: vi.fn().mockResolvedValue(null),
     createProject: vi.fn().mockResolvedValue(null),
     openProject: vi.fn().mockResolvedValue(null),
     openRecentProject: vi.fn(),

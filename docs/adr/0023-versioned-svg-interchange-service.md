@@ -1,6 +1,6 @@
 # ADR-0023：版本化 SVG 交换服务与显式保真边界
 
-- 状态：已接受（纯 service 与 EditorRuntime 导入/导出 planner 完成，产品入口待完成）
+- 状态：已接受（纯 service、EditorRuntime planner 与 Main 文件桥完成，产品入口待完成）
 - 日期：2026-08-11
 - 补充：ADR-0011、ADR-0012、ADR-0015、ADR-0021、ADR-0022
 - 固定依赖：`@xmldom/xmldom 0.8.13`、`transformation-matrix 3.1.0`
@@ -32,6 +32,8 @@ Paper.js 拥有 Project/Layer/Item 和渲染场景，ADR-0021 已因第二份编
 - 失败时的明确 issue code，不返回部分成功文档冒充完整结果。
 
 service 不读取或写入文件，不持有 `EditorRuntime`，不创建第二份持久文档，不访问 Leafer、Electron、项目路径、网络、凭据或 Agent 权限。`EditorRuntime.planSvgImport()` 已把成功候选树转换成父节点优先的标准 `insert_element` 命令，并保持 service 与文档状态分离；后续人工 UI、Agent 与 MCP 只能复用该 planner，把候选 nodes 包装成普通 `DesignTransaction` 进入唯一 `EditorRuntime.apply()`。`EditorRuntime.planSvgExportRequest()` 从显式 Page、稳定 root IDs 和 `baseRevision` 生成 origin-normalized 的纯 `SvgExportRequest`；它不读取实时选区、Renderer 对象或文件路径。
+
+Electron Main 另以 `SvgFileService` 提供路径不出 Main 的窄文件桥：Renderer 只能请求原生打开对话框，或提交 `suggestedName + contents` 请求原生保存对话框；不能提交或接收 `filePath`。打开只接受一个 regular `.svg` 文件，并在读取前后校验共享字符/UTF-8 字节预算，使用 fatal UTF-8 解码；保存只接受 `.svg`，缺少扩展名时追加，并使用同目录临时文件后 rename。Preload 对请求与响应再次执行 exact-shape 校验，取消统一返回 `null`。POSIX 与 Windows path semantics、伪造路径字段、未知发送方、额外 IPC 参数、非法 UTF-8 和超预算文件均有自动化回归。
 
 ### 导出目标与设置语义
 
@@ -78,15 +80,15 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - 导入候选树可组成合法 `DesignDocument`；
 - EditorRuntime planner 校验显式 Page/Frame/Group 目标、锁定祖先、插入位置、候选 schema、唯一根、可达性、parent/child 对称、ID 冲突、asset 引用和事务命令上限；成功树按 parent-first 顺序进入一个 revision，一次 undo 删除整棵 SVG，保存重开与 redo 保持一致；
 - EditorRuntime 导出 planner 校验显式根层、Page 归属、ancestor/descendant 重复选择、base revision、设置预算与 Boolean snapshot；嵌套变换、Group/Frame bounds、stroke 防裁切、padding、Page paint order 和 0-origin viewport 通过纯 service 产物测试；
+- Main 文件桥只从原生对话框取得绝对路径，不向 Renderer 返回路径；打开/保存的扩展名、regular file、fatal UTF-8、字符/字节预算、原子写入、取消、发送方与参数数量均有专项测试，并覆盖 Windows `win32` 路径规则；
 - DOCTYPE/ENTITY、script、stylesheet、external URL 和缺失 Boolean geometry 均产生稳定失败；
 - service typecheck、lint、fixture 和全仓验证纳入统一门禁。
 
 ## 后续门禁
 
-1. Main 通过窄 IPC 读取用户选择的 `.svg` 和写入用户选择的目标，不让 Renderer 获得原始路径能力。
-2. 人工 UI 与 Agent typed tools 复用同一 planner/service、fidelity report、取消与诊断；MCP 后续复用同一入口。
-3. 接入 outline stroke、text glyph、effects/filter、mask/clip、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
-4. 在 `OD-BRAND-01` 上保存导出产物、re-import 文档、真实 Leafer像素 baseline，并完成 macOS/Windows 打包产品 smoke。
+1. 人工 UI 与 Agent typed tools 复用同一 planner/service、fidelity report、取消与诊断；MCP 后续复用同一入口。
+2. 接入 outline stroke、text glyph、effects/filter、mask/clip、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
+3. 在 `OD-BRAND-01` 上保存导出产物、re-import 文档、真实 Leafer像素 baseline，并完成 macOS/Windows 打包产品 smoke。
 
 ## 参考
 

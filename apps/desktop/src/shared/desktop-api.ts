@@ -9,6 +9,7 @@ import type {
   ModelReasoningEffort,
   ModelSelection,
 } from "@opendesign/model-gateway";
+import { SVG_MAX_CHARACTERS } from "@opendesign/import-export-service/limits";
 import {
   isDesignAsset,
   isDesignDocument,
@@ -74,6 +75,20 @@ export type SaveDesignFileRequest = {
 };
 
 export type SaveDesignFileResult = {
+  name: string;
+};
+
+export type OpenSvgFile = {
+  name: string;
+  contents: string;
+};
+
+export type SaveSvgFileRequest = {
+  suggestedName: string;
+  contents: string;
+};
+
+export type SaveSvgFileResult = {
   name: string;
 };
 
@@ -276,6 +291,10 @@ export interface DesktopApi {
   saveDesignFile: (
     request: SaveDesignFileRequest,
   ) => Promise<SaveDesignFileResult | null>;
+  openSvgFile: () => Promise<OpenSvgFile | null>;
+  saveSvgFile: (
+    request: SaveSvgFileRequest,
+  ) => Promise<SaveSvgFileResult | null>;
   createProject: (
     request: CreateProjectRequest,
   ) => Promise<ProjectManifest | null>;
@@ -338,6 +357,8 @@ export const channels = {
   windowAction: "window:action",
   openDesignFile: "design-file:open",
   saveDesignFile: "design-file:save",
+  openSvgFile: "svg-file:open",
+  saveSvgFile: "svg-file:save",
   createProject: "project:create",
   openProject: "project:open",
   openRecentProject: "project:open-recent",
@@ -727,6 +748,36 @@ export function isSaveDesignFileRequest(
     Object.keys(request).every((key) =>
       ["suggestedName", "contents", "saveAs"].includes(key),
     )
+  );
+}
+
+export function isOpenSvgFile(value: unknown): value is OpenSvgFile {
+  if (!isRecord(value)) return false;
+  return (
+    isSvgFileName(value.name) &&
+    isBoundedSvgContents(value.contents) &&
+    hasExactKeys(value, ["name", "contents"])
+  );
+}
+
+export function isSaveSvgFileRequest(
+  value: unknown,
+): value is SaveSvgFileRequest {
+  if (!isRecord(value)) return false;
+  return (
+    isSuggestedFileName(value.suggestedName) &&
+    isBoundedSvgContents(value.contents) &&
+    hasExactKeys(value, ["suggestedName", "contents"])
+  );
+}
+
+export function isSaveSvgFileResult(
+  value: unknown,
+): value is SaveSvgFileResult {
+  return (
+    isRecord(value) &&
+    isSvgFileName(value.name) &&
+    hasExactKeys(value, ["name"])
   );
 }
 
@@ -1139,6 +1190,31 @@ function hasControlCharacter(value: string): boolean {
     const codePoint = character.codePointAt(0);
     return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
   });
+}
+
+function isBoundedSvgContents(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= SVG_MAX_CHARACTERS
+  );
+}
+
+function isSuggestedFileName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 255 &&
+    value !== "." &&
+    value !== ".." &&
+    !value.includes("/") &&
+    !value.includes("\\") &&
+    !hasControlCharacter(value)
+  );
+}
+
+function isSvgFileName(value: unknown): value is string {
+  return isSuggestedFileName(value) && value.toLowerCase().endsWith(".svg");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

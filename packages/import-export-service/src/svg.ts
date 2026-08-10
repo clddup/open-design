@@ -20,12 +20,12 @@ import {
   translate,
   type Matrix,
 } from "transformation-matrix";
+import { SVG_MAX_CHARACTERS } from "./limits.js";
 
 export const SVG_INTERCHANGE_VERSION = 1 as const;
 export const SVG_MIME_TYPE = "image/svg+xml" as const;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-const MAX_SVG_CHARACTERS = 2_000_000;
 const MAX_SVG_ELEMENTS = 10_000;
 const MAX_SVG_DEPTH = 64;
 const MAX_IMPORTED_NODES = 8_192;
@@ -295,10 +295,10 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
       undefined,
       { requireWellFormed: true },
     );
-    if (svg.length > MAX_SVG_CHARACTERS) {
+    if (svg.length > SVG_MAX_CHARACTERS) {
       return failure(
         "size-limit",
-        `SVG export exceeds ${MAX_SVG_CHARACTERS} characters`,
+        `SVG export exceeds ${SVG_MAX_CHARACTERS} characters`,
       );
     }
     return {
@@ -322,10 +322,10 @@ export function importSvg(
   request: SvgImportRequest,
   geometry: VectorGeometryProvider,
 ): SvgImportResult {
-  if (request.svg.length === 0 || request.svg.length > MAX_SVG_CHARACTERS) {
+  if (request.svg.length === 0 || request.svg.length > SVG_MAX_CHARACTERS) {
     return failure(
       "size-limit",
-      `SVG import must contain between 1 and ${MAX_SVG_CHARACTERS} characters`,
+      `SVG import must contain between 1 and ${SVG_MAX_CHARACTERS} characters`,
     );
   }
   if (

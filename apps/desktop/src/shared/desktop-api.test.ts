@@ -22,10 +22,13 @@ import {
   isProjectDesignFileRequest,
   isProjectManifestResult,
   isRecentProject,
+  isOpenSvgFile,
   isSaveDesignFileRequest,
   isSaveGlobalImageGenerationSettingsRequest,
   isSaveModelProviderProfileRequest,
   isSaveProjectDesignFileRequest,
+  isSaveSvgFileRequest,
+  isSaveSvgFileResult,
 } from "./desktop-api";
 
 const now = "2026-08-07T12:00:00.000Z";
@@ -561,6 +564,60 @@ describe("isSaveDesignFileRequest", () => {
       isSaveDesignFileRequest({
         suggestedName: "Untitled",
         contents: "x".repeat(64 * 1024 * 1024 + 1),
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("SVG file desktop API guards", () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" />';
+
+  it("accepts path-free bounded open and save values", () => {
+    expect(isOpenSvgFile({ name: "Brand.svg", contents: svg })).toBe(true);
+    expect(
+      isSaveSvgFileRequest({ suggestedName: "Brand mark", contents: svg }),
+    ).toBe(true);
+    expect(isSaveSvgFileResult({ name: "Brand mark.SVG" })).toBe(true);
+  });
+
+  it("rejects renderer paths, controls, unknown fields, and non-SVG results", () => {
+    expect(
+      isSaveSvgFileRequest({
+        suggestedName: "../Brand.svg",
+        contents: svg,
+      }),
+    ).toBe(false);
+    expect(
+      isSaveSvgFileRequest({
+        suggestedName: "Brand\u0000.svg",
+        contents: svg,
+      }),
+    ).toBe(false);
+    expect(
+      isSaveSvgFileRequest({
+        suggestedName: "Brand",
+        contents: svg,
+        filePath: "C:\\Users\\designer\\Brand.svg",
+      }),
+    ).toBe(false);
+    expect(
+      isOpenSvgFile({
+        name: "Brand.svg",
+        contents: svg,
+        path: "/tmp/Brand.svg",
+      }),
+    ).toBe(false);
+    expect(isSaveSvgFileResult({ name: "Brand.png" })).toBe(false);
+  });
+
+  it("rejects empty and over-budget SVG text", () => {
+    expect(isSaveSvgFileRequest({ suggestedName: "Brand", contents: "" })).toBe(
+      false,
+    );
+    expect(
+      isSaveSvgFileRequest({
+        suggestedName: "Brand",
+        contents: "x".repeat(2_000_001),
       }),
     ).toBe(false);
   });

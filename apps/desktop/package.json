@@ -24,6 +24,7 @@
     "@opendesign/design-capabilities": "workspace:*",
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/editor-runtime": "workspace:*",
+    "@opendesign/import-export-service": "workspace:*",
     "@opendesign/leafer-engine": "workspace:*",
     "@opendesign/model-gateway": "workspace:*",
     "@opendesign/session-store": "workspace:*",

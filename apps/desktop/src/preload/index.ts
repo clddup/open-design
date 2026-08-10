@@ -29,7 +29,10 @@ import {
   isProjectDesignFileRequest,
   isProjectManifestResult,
   isRecentProject,
+  isOpenSvgFile,
   isSaveProjectDesignFileRequest,
+  isSaveSvgFileRequest,
+  isSaveSvgFileResult,
   isLocalePreference,
   isSaveModelProviderProfileRequest,
   isGlobalImageGenerationSettings,
@@ -56,6 +59,7 @@ import {
   type ProjectDesignFileRequest,
   type RecentProject,
   type SaveDesignFileRequest,
+  type OpenSvgFile,
   type SaveModelProviderProfileRequest,
   type SaveGlobalImageGenerationSettingsRequest,
   type DeleteModelProviderProfileRequest,
@@ -63,6 +67,8 @@ import {
   type RendererDiagnosticReport,
   type TestModelProviderConnectionRequest,
   type SaveProjectDesignFileRequest,
+  type SaveSvgFileRequest,
+  type SaveSvgFileResult,
   type ThemePreference,
   type WindowAction,
 } from "../shared/desktop-api";
@@ -341,6 +347,28 @@ const desktopApi: DesktopApi = Object.freeze({
   openDesignFile: () => ipcRenderer.invoke(channels.openDesignFile),
   saveDesignFile: (request: SaveDesignFileRequest) =>
     ipcRenderer.invoke(channels.saveDesignFile, request),
+  openSvgFile: async () => {
+    const result: unknown = await ipcRenderer.invoke(channels.openSvgFile);
+    if (result === null) return null;
+    return validate<OpenSvgFile>(
+      result,
+      isOpenSvgFile,
+      "Invalid SVG file response",
+    );
+  },
+  saveSvgFile: async (request: SaveSvgFileRequest) => {
+    validate(request, isSaveSvgFileRequest, "Invalid SVG save request");
+    const result: unknown = await ipcRenderer.invoke(
+      channels.saveSvgFile,
+      request,
+    );
+    if (result === null) return null;
+    return validate<SaveSvgFileResult>(
+      result,
+      isSaveSvgFileResult,
+      "Invalid SVG save response",
+    );
+  },
   createProject: async (request: CreateProjectRequest) => {
     validate(request, isCreateProjectRequest, "Invalid Project create request");
     const result: unknown = await ipcRenderer.invoke(
