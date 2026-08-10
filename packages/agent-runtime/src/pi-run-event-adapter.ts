@@ -391,14 +391,24 @@ export class PiRunEventAdapter {
     if (this.#activeAssistant !== undefined || this.#activeUserMessage) {
       throw new Error("Pi ended a run with an active message");
     }
-    if (
-      this.#activeToolResultCallId !== undefined ||
-      this.#toolAdapter?.hasPendingTools === true
-    ) {
-      throw new Error("Pi ended a run with an active tool call");
-    }
     if (this.#pendingCompletion !== undefined) {
-      throw new Error("Pi ended a run before completion review settled");
+      await this.#publishProvisionalClear(
+        this.#pendingCompletion.active.messageId,
+      );
+      this.#pendingCompletion = undefined;
+      this.#forcedStopReason = "error";
+      this.#forcedError = {
+        code: "completion_guard_interrupted",
+        message: "Pi Agent ended before completion review settled",
+      };
+    }
+    if (this.#activeToolResultCallId !== undefined) {
+      this.#activeToolResultCallId = undefined;
+      this.#forcedStopReason = "error";
+      this.#forcedError = {
+        code: "tool_result_interrupted",
+        message: "Pi Agent ended during a tool-result message",
+      };
     }
     const stopReason =
       this.#forcedStopReason ??
@@ -407,6 +417,10 @@ export class PiRunEventAdapter {
         this.#lastAssistantStopReason,
         this.#lastAssistantHadToolCalls,
       );
+    for (const failure of this.#toolAdapter?.finalizePendingTools(stopReason) ??
+      []) {
+      await this.#recordToolFailure(failure);
+    }
     if (stopReason === "error") {
       const invalidToolStop =
         this.#lastAssistantStopReason === "toolUse" &&
@@ -612,19 +626,14 @@ export class PiRunEventAdapter {
     }
 
     const terminal = adapter.endToolCall(event);
-    if (terminal === undefined) return;
+    if (terminal === undefined) {
+      adapter.acknowledgeToolCall(event.toolCallId);
+      return;
+    }
     if (terminal.status === "failed") {
-      const failure = {
-        toolCallId: terminal.toolCallId,
-        code: terminal.code,
-        message: terminal.message,
-      };
-      await this.#append("tool.failed", failure);
-      await this.#publish({
-        type: "tool.failed",
-        runId: this.#request.runId,
-        ...failure,
-      });
+      await this.#recordToolFailure(terminal, () =>
+        adapter.acknowledgeToolCall(event.toolCallId),
+      );
       return;
     }
 
@@ -653,10 +662,33 @@ export class PiRunEventAdapter {
         toolCallId: terminal.toolCallId,
       });
     }
+    adapter.acknowledgeToolCall(event.toolCallId);
     await this.#publish({
       type: "tool.completed",
       runId: this.#request.runId,
       ...completion,
+    });
+  }
+
+  async #recordToolFailure(
+    failure: {
+      toolCallId: string;
+      code: string;
+      message: string;
+    },
+    acknowledge?: () => void,
+  ): Promise<void> {
+    const payload = {
+      toolCallId: failure.toolCallId,
+      code: failure.code,
+      message: failure.message,
+    };
+    await this.#append("tool.failed", payload);
+    acknowledge?.();
+    await this.#publish({
+      type: "tool.failed",
+      runId: this.#request.runId,
+      ...payload,
     });
   }
 

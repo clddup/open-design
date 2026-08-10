@@ -19,7 +19,7 @@
       "version": "0.84.1",
       "source": "https://github.com/earendil-works/pi/tree/main/packages/agent",
       "license": "MIT",
-      "productionStatus": "stage-2-guard",
+      "productionStatus": "stage-2-parity",
       "entrypoint": "Agent",
       "rejectedEntrypoint": "AgentHarness",
       "rejectedReason": "AgentHarness.prompt throws HarnessNotImplemented at the pinned version"

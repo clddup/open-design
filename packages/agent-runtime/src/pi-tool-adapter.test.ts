@@ -384,6 +384,40 @@ describe("OpenDesign Pi tool adapter", () => {
       stopReason: "budget",
     });
   });
+
+  it("finalizes a tool requested at cancellation without calling the executor", async () => {
+    const cancelled = await runPiToolLoop({
+      gateway: new RecordingGateway(
+        new MockModelGateway({
+          blocks: [
+            {
+              id: "cancel_move",
+              type: "tool_call",
+              toolCallId: "cancel_move_1",
+              name: moveTool.name,
+              input: { dx: 4 },
+            },
+          ],
+          stopReason: "tool_use",
+        }),
+      ),
+      definitions: [moveTool],
+      toolExecutor: neverToolExecutor(),
+      abortOnToolRequested: true,
+    });
+
+    expect(cancelled.events).toContainEqual(
+      expect.objectContaining({
+        type: "tool.failed",
+        toolCallId: "cancel_move_1",
+        code: "run_cancelled",
+      }),
+    );
+    expect(cancelled.events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "cancelled",
+    });
+  });
 });
 
 async function runPiToolLoop(options: {
@@ -404,14 +438,24 @@ async function runPiToolLoop(options: {
     ) => Promise<"allow_once" | "allow_session" | "deny">;
   };
   maxToolCalls?: number;
+  abortOnToolRequested?: boolean;
 }) {
   const store = new MemorySessionStore();
   const events: AgentEvent[] = [];
+  const agentRef: {
+    current?: ReturnType<typeof createOpenDesignPiAgent>;
+  } = {};
   const adapter = new PiRunEventAdapter({
     request,
     sessionStore: store,
     emit: (event) => {
       events.push(event);
+      if (
+        options.abortOnToolRequested === true &&
+        event.type === "tool.requested"
+      ) {
+        queueMicrotask(() => agentRef.current?.abort());
+      }
     },
     toolDefinitions: options.definitions,
     toolExecutor: options.toolExecutor,
@@ -453,6 +497,7 @@ async function runPiToolLoop(options: {
     beforeToolCall: adapter.beforeToolCall,
     shouldStopAfterTurn: adapter.shouldStopAfterTurn,
   });
+  agentRef.current = agent;
   const unsubscribe = agent.subscribe((event) => adapter.accept(event));
   try {
     await agent.prompt(request.prompt);

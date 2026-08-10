@@ -12,7 +12,11 @@ import {
   type SessionStore,
 } from "@opendesign/session-store";
 import { describe, expect, it } from "vitest";
-import { AgentRuntime, type AgentRunRequest } from "./index.js";
+import {
+  AgentRuntime,
+  type AgentRunRequest,
+  type ToolExecutionEvent,
+} from "./index.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
@@ -204,6 +208,70 @@ describe("Pi run event adapter", () => {
         args: {},
       }),
     ).rejects.toThrow("production tool adapter");
+  });
+
+  it("finalizes a pending adapted tool when Pi reaches agent_end unexpectedly", async () => {
+    const store = new MemorySessionStore();
+    const events: AgentEvent[] = [];
+    const definition = {
+      name: "opendesign_probe",
+      description: "Probe pending tool recovery.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      risk: "read" as const,
+      approval: "never" as const,
+      validateInput: (input: unknown) =>
+        !!input && typeof input === "object" && Object.keys(input).length === 0,
+    };
+    const adapter = new PiRunEventAdapter({
+      request,
+      sessionStore: store,
+      emit: (event) => {
+        events.push(event);
+      },
+      toolDefinitions: [definition],
+      toolExecutor: {
+        async *execute(): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield { type: "progress", message: "Unexpected", progress: 0 };
+          throw new Error("Tool executor should not run");
+        },
+      },
+      now: fixedNow,
+    });
+
+    await adapter.accept({ type: "agent_start" });
+    await adapter.accept({
+      type: "message_start",
+      message: { role: "user", content: request.prompt, timestamp: 1 },
+    });
+    await adapter.accept({
+      type: "message_end",
+      message: { role: "user", content: request.prompt, timestamp: 1 },
+    });
+    await adapter.accept({
+      type: "tool_execution_start",
+      toolCallId: "pending_probe",
+      toolName: definition.name,
+      args: {},
+    });
+    await adapter.accept({ type: "agent_end", messages: [] });
+
+    expect(events).toContainEqual({
+      type: "tool.failed",
+      runId: request.runId,
+      toolCallId: "pending_probe",
+      code: "run_error",
+      message: "Tool call did not complete because the run ended",
+    });
+    expect(events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "error",
+    });
+    expect(store.events.map((event) => event.type)).toContain("tool.failed");
   });
 });
 

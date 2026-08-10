@@ -103,7 +103,9 @@ Pi run event adapter 使用和旧 Runtime 相同的原子 journal writer，把 P
 
 现有 plan/review `CompletionGuardPort` 也已接到 Pi `turn_end`：无工具的候选完成在 review 决定前保持 provisional，不写 journal；拒绝时发送空 `message.completed` 清除临时内容，把可信反馈作为不持久化的内部 steering 注入同一 Run，允许后才持久化最终 assistant。拒绝上限、guard failure、max turns 与累计 total token budget 都产生明确 stop/error 状态。专项测试证明首轮拒绝后会发起第二次 Provider call，journal 只保留最终获准消息；达到上限时不会留下虚假完成。
 
-阶段 2 尚未整体完成：用户停止/Provider abort 期间 pending tool 的最终化，以及不可恢复 bridge failure 与可恢复业务 tool failure 的完整 parity 仍是下一门禁。图片附件在本阶段只保留内容寻址元数据和文字投影；下一阶段的 Context adapter 才能把获准附件解析为下一 Provider turn 的多模态输入。
+阶段 2 已完成。用户停止或 signal abort 会把工具终态标为 `run_cancelled` 并将 Run 终结为 `cancelled`；若 Pi 因 listener、协议或 bridge 异常在 `tool_execution_end` 前进入 `agent_end`，adapter 会按工具开始顺序补齐唯一 `run_error` 终态，而不是留下 pending tool。工具终态采用“先投影、journal 成功后确认”的两阶段处理，fatal bridge/model failure 终止 Run，可恢复的 validation、approval、revision 和业务 tool failure 则作为 `tool.failed` 回到下一模型轮次。对应测试覆盖取消发生在 requested 与 execution 之间、异常 `agent_end` 的 pending tool 恢复、Provider failure 和业务失败继续。
+
+图片附件在阶段 2 只保留内容寻址元数据和文字投影；阶段 3 的 Context adapter 才能把获准附件解析为下一 Provider turn 的多模态输入，并迁移逐轮预算、压缩、journal 恢复和重启语义。
 
 ### 阶段 3：上下文、持久化和恢复 parity
 

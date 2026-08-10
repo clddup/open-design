@@ -97,6 +97,7 @@ export type PiToolTerminalProjection =
 interface ActiveToolCall extends PiToolStartProjection {
   budgetExceeded: boolean;
   revisionAtStart: number;
+  sequence: number;
 }
 
 interface PiToolSuccessDetails {
@@ -135,6 +136,7 @@ export class OpenDesignPiToolAdapter {
   #currentRevision: number;
   #forcedStopReason: RunStopReason | undefined;
   #toolCallCount = 0;
+  #toolSequence = 0;
 
   constructor(options: OpenDesignPiToolAdapterOptions) {
     if (!Number.isInteger(options.maxToolCalls) || options.maxToolCalls < 0) {
@@ -193,6 +195,7 @@ export class OpenDesignPiToolAdapter {
       duplicate,
       budgetExceeded,
       revisionAtStart: this.#currentRevision,
+      sequence: ++this.#toolSequence,
       toolCallId: event.toolCallId,
       toolName: event.toolName,
       input: event.args,
@@ -223,7 +226,6 @@ export class OpenDesignPiToolAdapter {
     isError: boolean;
   }): PiToolTerminalProjection | undefined {
     const active = this.#requireActive(event.toolCallId);
-    this.#active.delete(event.toolCallId);
     if (active.toolName !== event.toolName) {
       throw new Error(
         `Pi changed tool name for ${event.toolCallId}: ${active.toolName} -> ${event.toolName}`,
@@ -234,7 +236,6 @@ export class OpenDesignPiToolAdapter {
       const failure =
         this.#failures.get(event.toolCallId) ??
         inferPiToolFailure(active, event.result);
-      this.#failures.delete(event.toolCallId);
       return {
         status: "failed",
         toolCallId: event.toolCallId,
@@ -257,7 +258,6 @@ export class OpenDesignPiToolAdapter {
     ) {
       throw new Error("Pi tool result contains inconsistent revisions");
     }
-    this.#failures.delete(event.toolCallId);
     return {
       status: "completed",
       toolCallId: event.toolCallId,
@@ -266,6 +266,39 @@ export class OpenDesignPiToolAdapter {
       ...(observedRevision === undefined ? {} : { observedRevision }),
       ...(revision === undefined ? {} : { designRevision: revision }),
     };
+  }
+
+  acknowledgeToolCall(toolCallId: string): void {
+    this.#requireActive(toolCallId);
+    this.#active.delete(toolCallId);
+    this.#failures.delete(toolCallId);
+  }
+
+  finalizePendingTools(
+    stopReason: RunStopReason,
+  ): Array<Extract<PiToolTerminalProjection, { status: "failed" }>> {
+    const code = stopReason === "cancelled" ? "run_cancelled" : "run_error";
+    const message =
+      stopReason === "cancelled"
+        ? "Tool call was cancelled before completion"
+        : "Tool call did not complete because the run ended";
+    const failures = [...this.#active.values()]
+      .sort((left, right) => left.sequence - right.sequence)
+      .flatMap((active) =>
+        active.duplicate
+          ? []
+          : [
+              {
+                status: "failed" as const,
+                toolCallId: active.toolCallId,
+                code,
+                message,
+              },
+            ],
+      );
+    this.#active.clear();
+    this.#failures.clear();
+    return failures;
   }
 
   readonly beforeToolCall = async (
@@ -312,6 +345,7 @@ export class OpenDesignPiToolAdapter {
       );
     }
     if (signal?.aborted) {
+      this.#forcedStopReason = "cancelled";
       return this.#block(
         active.toolCallId,
         "run_cancelled",
@@ -351,6 +385,7 @@ export class OpenDesignPiToolAdapter {
       resolvedAt,
     });
     if (signal?.aborted) {
+      this.#forcedStopReason = "cancelled";
       return this.#block(
         active.toolCallId,
         "run_cancelled",
@@ -478,6 +513,7 @@ export class OpenDesignPiToolAdapter {
         details,
       };
     } catch (error) {
+      if (signal.aborted) this.#forcedStopReason = "cancelled";
       const code = signal.aborted
         ? "run_cancelled"
         : error instanceof RangeError
