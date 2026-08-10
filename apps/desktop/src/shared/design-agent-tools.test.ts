@@ -388,6 +388,28 @@ describe("design Agent tool contract", () => {
       parentId: "poster_frame",
       index: 2,
     };
+    const createBoolean = {
+      action: "create-boolean",
+      label: "Subtract logo cutout",
+      pageId: "page_1",
+      nodeIds: ["logo_base", "logo_cutout"],
+      booleanId: "logo_boolean",
+      name: "Logo mark",
+      operation: "subtract",
+    };
+    const setBooleanOperation = {
+      action: "set-boolean-operation",
+      label: "Intersect logo shapes",
+      pageId: "page_1",
+      booleanId: "logo_boolean",
+      operation: "intersect",
+    };
+    const ungroupBoolean = {
+      action: "ungroup-boolean",
+      label: "Release logo shapes",
+      pageId: "page_1",
+      booleanId: "logo_boolean",
+    };
 
     expect(hierarchy).toMatchObject({
       risk: "design_write",
@@ -395,6 +417,7 @@ describe("design Agent tool contract", () => {
     });
     expect(hierarchy?.description).toContain("explicit stable node IDs");
     expect(hierarchy?.description).toContain("one atomic undoable");
+    expect(hierarchy?.description).toContain("non-destructive Boolean");
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, group),
     ).toBe(true);
@@ -406,6 +429,18 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, reparent),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, createBoolean),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(
+        DESIGN_HIERARCHY_TOOL_NAME,
+        setBooleanOperation,
+      ),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, ungroupBoolean),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
@@ -472,6 +507,24 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
         ...reparent,
         groupId: "not_part_of_reparent",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...createBoolean,
+        nodeIds: ["logo_base", "logo_base"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...setBooleanOperation,
+        operation: "divide",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...ungroupBoolean,
+        groupId: "wrong_field",
       }),
     ).toBe(false);
   });

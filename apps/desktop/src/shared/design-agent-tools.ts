@@ -2,6 +2,7 @@ import {
   isDesignAsset,
   isDesignOperation,
   isImagePlacement,
+  type BooleanOperation,
   type DesignAsset,
   type DesignOperation,
   type ImagePlacement,
@@ -151,6 +152,28 @@ export type DesignHierarchyToolInput =
       label: string;
       pageId: string;
       groupId: string;
+    }
+  | {
+      action: "create-boolean";
+      label: string;
+      pageId: string;
+      nodeIds: string[];
+      booleanId: string;
+      name: string;
+      operation: BooleanOperation;
+    }
+  | {
+      action: "set-boolean-operation";
+      label: string;
+      pageId: string;
+      booleanId: string;
+      operation: BooleanOperation;
+    }
+  | {
+      action: "ungroup-boolean";
+      label: string;
+      pageId: string;
+      booleanId: string;
     }
   | {
       action: "reorder";
@@ -588,9 +611,19 @@ const MODEL_APPLY_TRANSACTION_SCHEMA = {
 const MODEL_HIERARCHY_SCHEMA = {
   type: "object",
   description:
-    "For group, nodeIds, groupId, and name are required. For ungroup, groupId is required. For reorder, nodeIds and order are required. For reparent, nodeIds, parentId, and final index are required. Runtime validation enforces the action-specific shape.",
+    "For group, nodeIds, groupId, and name are required. For ungroup, groupId is required. For create-boolean, nodeIds, booleanId, name, and operation are required. For set-boolean-operation and ungroup-boolean, booleanId is required. For reorder, nodeIds and order are required. For reparent, nodeIds, parentId, and final index are required. Runtime validation enforces the action-specific shape.",
   properties: {
-    action: { enum: ["group", "ungroup", "reorder", "reparent"] },
+    action: {
+      enum: [
+        "group",
+        "ungroup",
+        "create-boolean",
+        "set-boolean-operation",
+        "ungroup-boolean",
+        "reorder",
+        "reparent",
+      ],
+    },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     nodeIds: {
@@ -600,9 +633,21 @@ const MODEL_HIERARCHY_SCHEMA = {
       uniqueItems: true,
       items: { type: "string", minLength: 1, maxLength: 256 },
       description:
-        "Explicit same-parent layer IDs; required for group (2..249), reorder (1..500), and reparent (1..500).",
+        "Explicit same-parent layer IDs; required for group and create-boolean (2..249), reorder (1..500), and reparent (1..500).",
     },
     groupId: { type: "string", minLength: 1, maxLength: 256 },
+    booleanId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description:
+        "Stable new ID for create-boolean or existing Boolean ID for set-boolean-operation and ungroup-boolean.",
+    },
+    operation: {
+      enum: ["union", "subtract", "intersect", "exclude"],
+      description:
+        "Boolean operation for create-boolean or set-boolean-operation.",
+    },
     parentId: {
       anyOf: [
         { type: "string", minLength: 1, maxLength: 256 },
@@ -630,7 +675,8 @@ const MODEL_HIERARCHY_SCHEMA = {
       type: "string",
       minLength: 1,
       maxLength: 256,
-      description: "Name for the new Group; required only for group.",
+      description:
+        "Name for the new Group or Boolean group; required for group and create-boolean.",
     },
   },
   required: ["action", "label", "pageId"],
@@ -1056,7 +1102,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_HIERARCHY_TOOL_NAME,
     description:
-      "Edit existing layer hierarchy in the currently bound Design File without asking the model to calculate low-level move commands or transform changes. It can group siblings, ungroup one Group, reorder siblings, or reparent one or more same-parent layers to an explicit Page-root, Frame, or Group insertion index. Reparenting preserves world transforms and dynamically recomputes affected Group bounds; Frame sizes remain fixed. Targets are explicit stable node IDs on an explicit existing Page, never the send-time or live user selection. The host previews the complete change and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, cycles, empty source Groups, non-invertible targets, no-op changes, and visually lossy ungrouping; inherited clipping or appearance changes return a visual-review warning.",
+      "Edit existing layer hierarchy and non-destructive Boolean groups in the currently bound Design File without asking the model to calculate low-level move commands, transforms, or derived paths. It can group siblings, ungroup one Group, create union/subtract/intersect/exclude from explicit supported siblings, change a Boolean operation, ungroup one Boolean, reorder siblings, or reparent layers to an explicit Page-root, Frame, or Group insertion index. Source Boolean operands remain editable and the provider-derived result is never model-authored or persisted. Reparenting preserves world transforms and dynamically recomputes affected Group bounds; Frame sizes remain fixed. Targets are explicit stable node IDs on an explicit existing Page, never the send-time or live user selection. The host previews the complete change and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, unsupported or masked Boolean operands, cycles, empty source Groups, non-invertible targets, no-op changes, and visually lossy ungrouping; inherited clipping or appearance changes return a visual-review warning.",
     inputSchema: MODEL_HIERARCHY_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -1414,6 +1460,9 @@ export function isDesignHierarchyToolInput(
   const common =
     (input.action === "group" ||
       input.action === "ungroup" ||
+      input.action === "create-boolean" ||
+      input.action === "set-boolean-operation" ||
+      input.action === "ungroup-boolean" ||
       input.action === "reorder" ||
       input.action === "reparent") &&
     typeof input.label === "string" &&
@@ -1421,6 +1470,48 @@ export function isDesignHierarchyToolInput(
     input.label.length <= 256 &&
     safeId(input.pageId);
   if (!common) return false;
+  if (input.action === "set-boolean-operation") {
+    return (
+      safeId(input.booleanId) &&
+      isBooleanOperation(input.operation) &&
+      Object.keys(input).every((key) =>
+        ["action", "label", "pageId", "booleanId", "operation"].includes(key),
+      )
+    );
+  }
+  if (input.action === "ungroup-boolean") {
+    return (
+      safeId(input.booleanId) &&
+      Object.keys(input).every((key) =>
+        ["action", "label", "pageId", "booleanId"].includes(key),
+      )
+    );
+  }
+  if (input.action === "create-boolean") {
+    return (
+      safeId(input.booleanId) &&
+      typeof input.name === "string" &&
+      input.name.trim().length > 0 &&
+      input.name.length <= 256 &&
+      isBooleanOperation(input.operation) &&
+      Array.isArray(input.nodeIds) &&
+      input.nodeIds.length >= 2 &&
+      input.nodeIds.length <= 249 &&
+      input.nodeIds.every(safeId) &&
+      new Set(input.nodeIds).size === input.nodeIds.length &&
+      Object.keys(input).every((key) =>
+        [
+          "action",
+          "label",
+          "pageId",
+          "nodeIds",
+          "booleanId",
+          "name",
+          "operation",
+        ].includes(key),
+      )
+    );
+  }
   if (input.action === "ungroup") {
     return (
       safeId(input.groupId) &&
@@ -1475,6 +1566,15 @@ export function isDesignHierarchyToolInput(
     Object.keys(input).every((key) =>
       ["action", "label", "pageId", "nodeIds", "groupId", "name"].includes(key),
     )
+  );
+}
+
+function isBooleanOperation(value: unknown): value is BooleanOperation {
+  return (
+    value === "union" ||
+    value === "subtract" ||
+    value === "intersect" ||
+    value === "exclude"
   );
 }
 

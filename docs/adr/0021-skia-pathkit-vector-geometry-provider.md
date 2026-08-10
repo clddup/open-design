@@ -48,12 +48,12 @@ Provider 初始化必须显式提供浏览器 `locateFile` 或已授权宿主读
 - 独立浏览器子入口和 Vite chunk 证明普通 Page 不初始化 WASM；
 - `boolean-resolver` 递归消费 provider，Leafer 仅保存可丢弃 synthetic result。
 
-这不等于 Pen、节点编辑或完整 Boolean 产品工作流已经可用。ADR-0022 的 contract/runtime/render 表面已有实现，Boolean capability 为 `degraded`；人工 UI、Agent tool、SVG 往返、像素基线和双平台产品证据未完成前仍不能描述为完整可用。
+这不等于 Pen、节点编辑或完整 Boolean 产品工作流已经可用。ADR-0022 的 contract/runtime/render、基础人工 UI 与 Agent tool 表面已有实现，Boolean capability 仍为 `degraded`；专用源层编辑模式、SVG 往返、像素基线和双平台打包产品证据未完成前仍不能描述为完整可用。
 
 ## 后续门禁
 
 1. 在 macOS/Windows 原生 CI 对同一 PathOps corpus 校验结构结果、耗时、峰值内存和 WASM 加载。
-2. 为已完成的非破坏 Boolean planner 与派生渲染开放人工命令和 Agent typed tool。
+2. 为已完成的非破坏 Boolean planner 与派生渲染补齐专用源层编辑模式、像素基线与双平台产品 smoke。
 3. Pen/vector edit mode 另行实现点、边、手柄、开放/闭合和 hit testing；PathKit 只提供几何计算，不接管交互状态。
 4. 完成 flatten、outline stroke 与 SVG import/export 往返后，使用 `OD-PENGUIN-01` 和 `OD-BRAND-01` 做结构与像素验收。
 

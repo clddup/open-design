@@ -13,7 +13,7 @@ The `@opendesign/geometry-service/vector-path` sub-entry fixes Skia `pathkit-was
 
 The `boolean-resolver` sub-entry recursively converts Rectangle, Ellipse, Path, Vector and nested Boolean nodes to derived fill-plus-stroke geometry without mutating `DesignDocument`. The `browser-vector-path` sub-entry is dynamically imported by Leafer only when the active Page contains Boolean nodes, so Vite emits the provider and WASM as separate on-demand assets. Resolver output is a disposable projection with bounded exact fingerprints; it is never a second writable document state.
 
-Boolean contract/runtime/render surfaces are now present, but the overall capability remains `degraded`: human commands, the typed Agent tool, text outlines, Pen/node editing, SVG round-trip, pixel baselines and macOS/Windows product evidence are still required.
+Boolean contract/runtime/render surfaces, human create/change/ungroup commands, and typed Agent actions are now present, but the overall capability remains `degraded`: a dedicated source-layer canvas edit mode, text outlines, Pen/node editing, SVG round-trip, pixel baselines and macOS/Windows packaged product evidence are still required.
 
 Behavioral references:
 

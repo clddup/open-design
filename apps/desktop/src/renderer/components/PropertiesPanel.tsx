@@ -1,5 +1,6 @@
 import type {
   BlendMode,
+  BooleanOperation,
   DesignNode,
   Effect,
   ImageNode,
@@ -777,12 +778,16 @@ function EffectEditor({
 
 function SelectedNodeProperties({
   node,
+  booleanOperationEditable,
+  onBooleanOperationChange,
   onDelete,
   onDuplicate,
   onReplaceImage,
   onUpdate,
 }: {
   node: DesignNode;
+  booleanOperationEditable: boolean;
+  onBooleanOperationChange: (operation: BooleanOperation) => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onReplaceImage: () => void;
@@ -866,7 +871,10 @@ function SelectedNodeProperties({
             <span>{t("properties.booleanOperation")}</span>
             <select
               aria-label={t("properties.booleanOperation")}
-              disabled
+              disabled={!booleanOperationEditable}
+              onChange={(event) =>
+                onBooleanOperationChange(event.target.value as BooleanOperation)
+              }
               value={node.properties.operation}
             >
               <option value="union">{t("properties.booleanUnion")}</option>
@@ -1475,7 +1483,9 @@ function ImagePlacementEditor({
 export function PropertiesPanel({
   node,
   arrangement,
+  booleanOperationEditable,
   onArrange,
+  onBooleanOperationChange,
   onDelete,
   onDuplicate,
   onReplaceImage,
@@ -1484,7 +1494,9 @@ export function PropertiesPanel({
 }: {
   node: DesignNode | undefined;
   arrangement: ArrangementSelectionMetrics | null;
+  booleanOperationEditable: boolean;
   onArrange: (operation: ArrangeOperation) => void;
+  onBooleanOperationChange: (operation: BooleanOperation) => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onReplaceImage: () => void;
@@ -1530,6 +1542,8 @@ export function PropertiesPanel({
           <SelectedNodeProperties
             key={node.id}
             node={node}
+            booleanOperationEditable={booleanOperationEditable}
+            onBooleanOperationChange={onBooleanOperationChange}
             onDelete={onDelete}
             onDuplicate={onDuplicate}
             onReplaceImage={onReplaceImage}

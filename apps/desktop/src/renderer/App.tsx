@@ -7,13 +7,16 @@ import type {
 } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
 import type {
+  BooleanOperation,
   DesignDocument,
   DesignOperation,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import {
+  canCreateBooleanGroup,
   canGroupNodes,
   canReorderNodes,
+  canUngroupBooleanGroup,
   canUngroupNode,
   getArrangementSelectionMetrics,
   getNodeBounds,
@@ -21,10 +24,13 @@ import {
   getWorldTransform,
   invertTransform,
   planArrangeNodes,
+  planCreateBooleanGroup,
   planGroupNodes,
   planImageNodeUpdate,
   planReparentNodes,
   planReorderNodes,
+  planSetBooleanOperation,
+  planUngroupBooleanGroup,
   planUngroupNode,
   screenToDocument,
   type ArrangeOperation,
@@ -91,6 +97,20 @@ const LAYER_ORDER_HISTORY_KEYS: Record<LayerOrderAction, MessageKey> = {
   "send-backward": "history.sendBackward",
   "send-to-back": "history.sendToBack",
 };
+
+const BOOLEAN_OPERATION_HISTORY_KEYS: Record<BooleanOperation, MessageKey> = {
+  union: "history.booleanUnion",
+  subtract: "history.booleanSubtract",
+  intersect: "history.booleanIntersect",
+  exclude: "history.booleanExclude",
+};
+
+const BOOLEAN_OPERATIONS: readonly BooleanOperation[] = [
+  "union",
+  "subtract",
+  "intersect",
+  "exclude",
+];
 
 type AppView = "workspace" | "project" | "editor" | "settings";
 
@@ -198,6 +218,29 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     activePageId,
     state.selection.nodeIds,
   );
+  const canCreateBooleanSelection = canCreateBooleanGroup(
+    designDocument,
+    activePageId,
+    state.selection.nodeIds,
+  );
+  const canUngroupBooleanSelection = canUngroupBooleanGroup(
+    designDocument,
+    activePageId,
+    state.selection.nodeIds,
+  );
+  const canChangeSelectedBoolean =
+    selectedNode?.kind === "boolean" &&
+    BOOLEAN_OPERATIONS.some(
+      (operation) =>
+        operation !== selectedNode.properties.operation &&
+        planSetBooleanOperation(
+          designDocument,
+          activePageId,
+          selectedNode.id,
+          operation,
+          "boolean_capability_check",
+        ).ok,
+    );
   const layerOrderAvailability = Object.fromEntries(
     LAYER_ORDER_ACTIONS.map((action) => [
       action,
@@ -662,15 +705,24 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
 
   const ungroupSelection = useCallback(() => {
     const current = runtime.getSnapshot();
-    const groupId = current.state.selection.nodeIds[0];
-    if (!groupId) return;
+    const containerId = current.state.selection.nodeIds[0];
+    if (!containerId) return;
     const operationId = `ungroup_${Date.now()}_${++transactionCounter.current}`;
-    const plan = planUngroupNode(
-      current.document,
-      activePageId,
-      groupId,
-      operationId,
-    );
+    const container = current.document.nodesById[containerId];
+    const plan =
+      container?.kind === "boolean"
+        ? planUngroupBooleanGroup(
+            current.document,
+            activePageId,
+            containerId,
+            operationId,
+          )
+        : planUngroupNode(
+            current.document,
+            activePageId,
+            containerId,
+            operationId,
+          );
     if (!plan.ok) {
       setEditorError(plan.message);
       return;
@@ -679,6 +731,57 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       runtime.setSelection(plan.selectionNodeIds, plan.selectionNodeIds.at(-1));
     }
   }, [activePageId, applyCommands, runtime, t]);
+
+  const applyBooleanOperation = useCallback(
+    (operation: BooleanOperation) => {
+      const current = runtime.getSnapshot();
+      const selectedIds = current.state.selection.nodeIds;
+      const selected =
+        selectedIds.length === 1
+          ? current.document.nodesById[selectedIds[0] ?? ""]
+          : undefined;
+      const operationId = `boolean_${operation}_${Date.now()}_${++transactionCounter.current}`;
+      const plan =
+        selected?.kind === "boolean"
+          ? selected.properties.operation === operation
+            ? null
+            : planSetBooleanOperation(
+                current.document,
+                activePageId,
+                selected.id,
+                operation,
+                operationId,
+              )
+          : planCreateBooleanGroup(
+              current.document,
+              activePageId,
+              selectedIds,
+              operation,
+              {
+                booleanId: operationId,
+                name: t("canvas.newNode", { kind: t("node.boolean") }),
+                commandPrefix: operationId,
+              },
+            );
+      if (!plan) return;
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return;
+      }
+      if (
+        applyCommands(
+          t(BOOLEAN_OPERATION_HISTORY_KEYS[operation]),
+          plan.commands,
+        )
+      ) {
+        runtime.setSelection(
+          plan.selectionNodeIds,
+          plan.selectionNodeIds.at(-1),
+        );
+      }
+    },
+    [activePageId, applyCommands, runtime, t],
+  );
 
   const reorderSelection = useCallback(
     (action: LayerOrderAction) => {
@@ -834,6 +937,34 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         else groupSelection();
         return;
       }
+      const booleanShortcut =
+        (
+          {
+            KeyU: "union",
+            KeyS: "subtract",
+            KeyI: "intersect",
+            KeyE: "exclude",
+          } as const
+        )[event.code as "KeyU" | "KeyS" | "KeyI" | "KeyE"] ??
+        (
+          {
+            u: "union",
+            s: "subtract",
+            i: "intersect",
+            e: "exclude",
+          } as const
+        )[event.key.toLowerCase() as "u" | "s" | "i" | "e"];
+      if (
+        booleanShortcut &&
+        event.altKey &&
+        event.shiftKey &&
+        !event.metaKey &&
+        !event.ctrlKey
+      ) {
+        event.preventDefault();
+        applyBooleanOperation(booleanShortcut);
+        return;
+      }
       const bracket =
         event.code === "BracketRight" || event.key === "]" || event.key === "}"
           ? "right"
@@ -896,6 +1027,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     return () => window.removeEventListener("keydown", handleKey);
   }, [
     changeZoom,
+    applyBooleanOperation,
     deleteNodes,
     duplicateSelection,
     fitCanvas,
@@ -1573,13 +1705,30 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           theme={theme}
         />
         <Toolbar
-          canHierarchyAction={canUngroupSelection || canGroupSelection}
+          booleanOperation={
+            selectedNode?.kind === "boolean"
+              ? selectedNode.properties.operation
+              : null
+          }
+          canBooleanAction={
+            canCreateBooleanSelection || canChangeSelectedBoolean
+          }
+          canHierarchyAction={
+            canUngroupBooleanSelection ||
+            canUngroupSelection ||
+            canGroupSelection
+          }
           canReorder={layerOrderAvailability}
           canDelete={state.selection.nodeIds.length > 0}
           canDuplicate={state.selection.nodeIds.length > 0}
           canRedo={state.history.canRedo}
           canUndo={state.history.canUndo}
-          hierarchyAction={selectedNode?.kind === "group" ? "ungroup" : "group"}
+          hierarchyAction={
+            selectedNode?.kind === "group" || selectedNode?.kind === "boolean"
+              ? "ungroup"
+              : "group"
+          }
+          onBooleanOperation={applyBooleanOperation}
           onDelete={() => deleteNodes(state.selection.nodeIds)}
           onDuplicate={duplicateSelection}
           onGroup={groupSelection}
@@ -1680,8 +1829,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             properties={
               <PropertiesPanel
                 arrangement={arrangementMetrics}
+                booleanOperationEditable={canChangeSelectedBoolean}
                 node={selectedNode}
                 onArrange={arrangeSelection}
+                onBooleanOperationChange={applyBooleanOperation}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
                 onDuplicate={duplicateSelection}
                 onReplaceImage={() => void replaceSelectedImage()}

@@ -1,6 +1,6 @@
 # ADR-0022：版本化非破坏 Boolean Group 语义
 
-- 状态：已接受（contract/runtime/派生渲染完成，产品入口待完成）
+- 状态：已接受（contract/runtime/派生渲染与基础产品入口完成，完整专业工作流待完成）
 - 日期：2026-08-11
 - 补充：ADR-0003、ADR-0009、ADR-0012、ADR-0015、ADR-0021
 - 文档协议：`DesignDocument 1.4.0`
@@ -39,7 +39,9 @@ PathKit 的派生结果不进入 `DesignDocument`。`boolean-resolver` 根据 op
 - contract 校验 operation、统一外观与无派生 path 的持久化形状；
 - Runtime 测试覆盖层级顺序、顶/底外观继承、源层世界 transform、几何可编辑与单层外观拒绝；
 - 保存重开、undo/redo、operation 切换、解组、锁定、mask、非法 operation 和 stale revision；
-- 图层树使用独立 Boolean 图标和可折叠 children；属性面板只读展示 operation，尺寸字段在派生 bounds 模式下禁用；
+- 图层树使用独立 Boolean 图标和可折叠 children；工具栏菜单、Inspector operation 控件和解组入口复用同一 planner，尺寸字段在派生 bounds 模式下禁用；
+- macOS `⌥⇧U/S/I/E` 与 Windows `Alt+Shift+U/S/I/E` 创建或切换四类 operation，快捷键不劫持文本输入；
+- `opendesign_edit_hierarchy` 通过 `create-boolean`、`set-boolean-operation`、`ungroup-boolean` 对显式稳定 ID 执行 preview 和单次原子 apply，不读取发送时或实时选区，也不允许模型提交派生 path；
 - 真实 PathKit 测试覆盖 Rectangle、Ellipse、Path/Vector 原始局部坐标、嵌套 Boolean、fill+stroke、inside/center/outside stroke、精确两段 dash、transform、空结果与不支持样式；
 - resolver cache 测试证明颜色或无关节点变化复用结果，operand transform 只重新计算对应祖先；
 - Leafer 使用独立 synthetic Path，保留源节点层级与选择身份；测试覆盖按需加载、失败 warning、dispose 后迟到结果、无关增量不 `set()`、精确重算与删除清理；
@@ -47,9 +49,8 @@ PathKit 的派生结果不进入 `DesignDocument`。`boolean-resolver` 根据 op
 
 ## 后续门禁
 
-1. 人工菜单、工具栏和 macOS/Windows 快捷键与 Agent typed tool 复用同一 planner。
-2. 增加进入源层编辑模式、operation 切换、解组、warning、取消和 undo 的完整产品交互。
-3. 完成 SVG 往返、flatten、outline stroke、像素基线和双平台产品 smoke 后再提升 capability 状态。
+1. 增加进入源层编辑模式、派生 warning 与恢复入口的完整产品交互。
+2. 完成 SVG 往返、flatten、outline stroke、像素基线和双平台打包产品 smoke 后再提升 capability 状态。
 
 ## 参考
 

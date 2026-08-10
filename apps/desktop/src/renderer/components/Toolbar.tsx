@@ -1,3 +1,4 @@
+import type { BooleanOperation } from "@opendesign/design-contracts";
 import type { LayerOrderAction } from "@opendesign/editor-runtime";
 import {
   Divider,
@@ -42,6 +43,8 @@ const tools: ToolbarItem[] = [
 export function Toolbar({
   tool,
   onToolChange,
+  booleanOperation,
+  canBooleanAction,
   hierarchyAction,
   canHierarchyAction,
   canReorder,
@@ -50,6 +53,7 @@ export function Toolbar({
   canUndo,
   canRedo,
   onDelete,
+  onBooleanOperation,
   onDuplicate,
   onGroup,
   onReorder,
@@ -60,6 +64,8 @@ export function Toolbar({
 }: {
   tool: Tool;
   onToolChange: (tool: Tool) => void;
+  booleanOperation: BooleanOperation | null;
+  canBooleanAction: boolean;
   hierarchyAction: "group" | "ungroup";
   canHierarchyAction: boolean;
   canReorder: Readonly<Record<LayerOrderAction, boolean>>;
@@ -68,6 +74,7 @@ export function Toolbar({
   canUndo: boolean;
   canRedo: boolean;
   onDelete: () => void;
+  onBooleanOperation: (operation: BooleanOperation) => void;
   onDuplicate: () => void;
   onGroup: () => void;
   onReorder: (action: LayerOrderAction) => void;
@@ -87,6 +94,10 @@ export function Toolbar({
           "bring-to-front": "⌥⌘]",
           "send-backward": "⌘[",
           "send-to-back": "⌥⌘[",
+          union: "⌥⇧U",
+          subtract: "⌥⇧S",
+          intersect: "⌥⇧I",
+          exclude: "⌥⇧E",
         }
       : {
           duplicate: "Ctrl+D",
@@ -96,6 +107,10 @@ export function Toolbar({
           "bring-to-front": "Ctrl+Shift+]",
           "send-backward": "Ctrl+[",
           "send-to-back": "Ctrl+Shift+[",
+          union: "Alt+Shift+U",
+          subtract: "Alt+Shift+S",
+          intersect: "Alt+Shift+I",
+          exclude: "Alt+Shift+E",
         };
   const orderItems: ReadonlyArray<{
     action: LayerOrderAction;
@@ -110,6 +125,15 @@ export function Toolbar({
     hierarchyAction === "ungroup"
       ? `${t("toolbar.ungroup")} (${shortcuts.ungroup})`
       : `${t("toolbar.group")} (${shortcuts.group})`;
+  const booleanItems: ReadonlyArray<{
+    operation: BooleanOperation;
+    label: MessageKey;
+  }> = [
+    { operation: "union", label: "properties.booleanUnion" },
+    { operation: "subtract", label: "properties.booleanSubtract" },
+    { operation: "intersect", label: "properties.booleanIntersect" },
+    { operation: "exclude", label: "properties.booleanExclude" },
+  ];
   return (
     <nav aria-label={t("toolbar.designTools")} className="toolbar">
       <div
@@ -148,6 +172,22 @@ export function Toolbar({
           label={hierarchyLabel}
           onClick={hierarchyAction === "ungroup" ? onUngroup : onGroup}
         />
+        <DropdownMenu
+          disabled={!canBooleanAction}
+          icon={<Glyph name="boolean" />}
+          label={t("toolbar.booleanOperations")}
+        >
+          {booleanItems.map(({ operation, label }) => (
+            <DropdownMenuItem
+              disabled={booleanOperation === operation}
+              key={operation}
+              onSelect={() => onBooleanOperation(operation)}
+              shortcut={shortcuts[operation]}
+            >
+              {t(label)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenu>
         <DropdownMenu
           disabled={!orderItems.some(({ action }) => canReorder[action])}
           icon={<Glyph name="more" />}

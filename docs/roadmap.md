@@ -93,9 +93,10 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 - [x] 建立 `@opendesign/geometry-service` 的首个纯排列 provider；多层对齐、固定两端均分和明确一维间距由 EditorRuntime 转成单次事务，人工 Inspector 与 Agent typed tool 共用，不在 React、prompt 或 Leafer adapter 中重复计算。
 - [ ] 针对 Path/Vector 通过维护状态、许可证、包体积、确定性、WASM/原生要求和 macOS/Windows 兼容基准选择固定版本的成熟 geometry kernel；已固定 BSD-3-Clause 的 `pathkit-wasm 1.0.0` 并通过真实 WASM 的 cubic PathOps、孔洞、空结果、simplify、outline stroke、输入预算与基础 bundle 隔离测试，裁决见 ADR-0021。剩余门禁是同一 corpus 的 macOS/Windows 原生加载、性能与内存基准，通过前不勾选完成，也不把 provider 基础描述为可用 Boolean/Pen 功能。
-- [x] 将非破坏 Boolean Group 固定为 `DesignDocument 1.4.0` 的独立 `boolean` 容器；源层保持可编辑，组持有统一外观，Union/Intersect/Exclude 初始继承顶层、Subtract 初始继承底层。EditorRuntime planner 覆盖创建、operation 切换、解组、锁定、revision、保存重开和 undo/redo，不持久化 PathKit 派生 path；当前 capability 为 `degraded`，产品功能尚不可用。
+- [x] 将非破坏 Boolean Group 固定为 `DesignDocument 1.4.0` 的独立 `boolean` 容器；源层保持可编辑，组持有统一外观，Union/Intersect/Exclude 初始继承顶层、Subtract 初始继承底层。EditorRuntime planner 覆盖创建、operation 切换、解组、锁定、revision、保存重开和 undo/redo，不持久化 PathKit 派生 path；当前 capability 为 `degraded`。
 - [x] 建立递归 Boolean geometry resolver 和 PathKit 派生投影：Rectangle/Ellipse/Path/Vector/嵌套 Boolean 统一进入真实 PathKit，源层 fill+stroke、局部 transform、空结果、精确缓存失效和短生命周期资源释放已有自动化；Leafer 按需加载独立 WASM chunk，只 reconcile 稳定 synthetic result，并将命中映射回原 Boolean，未把派生 path 写入文档或逐层绘制源层冒充结果。
-- [ ] 让人工工具栏/菜单/快捷键与 Agent typed tool 共用 Boolean planner；补 operation 切换、进入源层编辑、解组、取消、warning、undo 和 macOS/Windows 行为。文字 operand 在 Text/Font service 能提供确定性 outline 前保持不可用。
+- [x] 让人工工具栏/菜单、Inspector operation 控件、解组与 macOS `⌥⇧U/S/I/E`、Windows `Alt+Shift+U/S/I/E` 快捷键复用 Boolean planner；`opendesign_edit_hierarchy` 增加显式 `create-boolean`、`set-boolean-operation`、`ungroup-boolean` typed actions，不读取用户实时选区、不接受派生 path，并以 preview + 单次原子 apply 支持 undo。
+- [ ] 增加专用源层画布编辑模式、派生失败的上下文 warning/恢复入口、Boolean 像素基线、SVG 往返和 macOS/Windows 打包产品 smoke。文字 operand 在 Text/Font service 能提供确定性 outline 前保持不可用。
 - 增加正式 Line/Arrow/Polygon/Star/Slice 与可编辑 Path/Vector 轮廓；实现 Pen、节点/手柄、开放/闭合、连接/断开、路径反转、布尔 union/subtract/intersect/exclude、flatten 和 outline stroke。
 - 扩展剩余图层与精确变换工作流：重命名、批量属性、单层相对父级对齐、二维 Tidy up/画布间距手柄、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
 - 人工命令与 Agent typed tools 调用同一 geometry service，并把结果作为一个可预览、可撤销的 `DesignTransaction` 应用。SVG 导入导出必须经过同一公共 Path 语义，不能泄漏 provider 私有命令。

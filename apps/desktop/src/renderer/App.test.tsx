@@ -1670,6 +1670,101 @@ describe("App", () => {
     expect(snapshot.state.history.undo).toHaveLength(2);
   });
 
+  it("creates a non-destructive Boolean from the toolbar, changes it in the inspector, and ungroups it", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    act(() =>
+      runtime().setSelection(["feature_one", "feature_two"], "feature_one"),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Boolean operations" }),
+    );
+    expect(screen.getByText("⌥⇧U")).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Union" }));
+
+    let snapshot = runtime().getSnapshot();
+    const booleanNode = Object.values(snapshot.document.nodesById).find(
+      (node) =>
+        node.kind === "boolean" && node.childIds.includes("feature_one"),
+    );
+    expect(booleanNode).toMatchObject({
+      kind: "boolean",
+      childIds: ["feature_one", "feature_two"],
+      properties: { operation: "union" },
+    });
+    expect(snapshot.state.selection.nodeIds).toEqual([booleanNode?.id]);
+    expect(snapshot.document.revision).toBe(1);
+
+    await user.click(screen.getByRole("tab", { name: "Properties" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Operation" }),
+      "intersect",
+    );
+    snapshot = runtime().getSnapshot();
+    expect(
+      snapshot.document.nodesById[booleanNode?.id ?? "missing"],
+    ).toMatchObject({ properties: { operation: "intersect" } });
+    expect(snapshot.document.revision).toBe(2);
+
+    await user.click(
+      screen.getByRole("button", { name: "Ungroup selection (⇧⌘G)" }),
+    );
+    snapshot = runtime().getSnapshot();
+    expect(
+      snapshot.document.nodesById[booleanNode?.id ?? "missing"],
+    ).toBeUndefined();
+    expect(snapshot.state.selection.nodeIds).toEqual([
+      "feature_one",
+      "feature_two",
+    ]);
+    expect(snapshot.document.revision).toBe(3);
+    expect(snapshot.state.history.undo).toHaveLength(3);
+  });
+
+  it("uses Windows Boolean shortcuts without stealing editable input", async () => {
+    vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
+      platform: "win32",
+      version: "0.0.0",
+    });
+    renderApp();
+    act(() =>
+      runtime().setSelection(["feature_one", "feature_two"], "feature_one"),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Boolean operations" }),
+      ).toBeEnabled(),
+    );
+
+    const input = document.createElement("input");
+    document.body.append(input);
+    fireEvent.keyDown(input, { key: "u", altKey: true, shiftKey: true });
+    input.remove();
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+
+    fireEvent.keyDown(window, { key: "s", altKey: true, shiftKey: true });
+    let snapshot = runtime().getSnapshot();
+    const booleanNode = Object.values(snapshot.document.nodesById).find(
+      (node) => node.kind === "boolean",
+    );
+    expect(booleanNode).toMatchObject({
+      properties: { operation: "subtract" },
+    });
+
+    fireEvent.keyDown(window, { key: "i", altKey: true, shiftKey: true });
+    snapshot = runtime().getSnapshot();
+    expect(
+      snapshot.document.nodesById[booleanNode?.id ?? "missing"],
+    ).toMatchObject({ properties: { operation: "intersect" } });
+    expect(snapshot.document.revision).toBe(2);
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Boolean operations" }));
+    expect(screen.getByText("Alt+Shift+U")).toBeInTheDocument();
+  });
+
   it("reorders selected siblings from the layer-order menu and macOS shortcuts", async () => {
     const user = userEvent.setup();
     renderApp();

@@ -11,10 +11,13 @@ import type {
 import {
   diagnoseDesignPages,
   planArrangeNodes,
+  planCreateBooleanGroup,
   planGroupNodes,
   planImageNodeUpdate,
   planReparentNodes,
   planReorderNodes,
+  planSetBooleanOperation,
+  planUngroupBooleanGroup,
   planUngroupNode,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
@@ -139,19 +142,46 @@ export async function executeDesignToolRequest(
               input.groupId,
               commandPrefix,
             )
-          : input.action === "reorder"
-            ? planReorderNodes(
+          : input.action === "create-boolean"
+            ? planCreateBooleanGroup(
                 document,
                 input.pageId,
                 input.nodeIds,
-                input.order,
-                commandPrefix,
+                input.operation,
+                {
+                  booleanId: input.booleanId,
+                  name: input.name,
+                  commandPrefix,
+                },
               )
-            : planReparentNodes(document, input.pageId, input.nodeIds, {
-                parentId: input.parentId,
-                index: input.index,
-                commandPrefix,
-              });
+            : input.action === "set-boolean-operation"
+              ? planSetBooleanOperation(
+                  document,
+                  input.pageId,
+                  input.booleanId,
+                  input.operation,
+                  commandPrefix,
+                )
+              : input.action === "ungroup-boolean"
+                ? planUngroupBooleanGroup(
+                    document,
+                    input.pageId,
+                    input.booleanId,
+                    commandPrefix,
+                  )
+                : input.action === "reorder"
+                  ? planReorderNodes(
+                      document,
+                      input.pageId,
+                      input.nodeIds,
+                      input.order,
+                      commandPrefix,
+                    )
+                  : planReparentNodes(document, input.pageId, input.nodeIds, {
+                      parentId: input.parentId,
+                      index: input.index,
+                      commandPrefix,
+                    });
     if (!plan.ok) {
       throw new Error(`hierarchy.${plan.code}: ${plan.message}`);
     }
@@ -193,7 +223,12 @@ export async function executeDesignToolRequest(
         ? (appliedDocument.nodesById[input.groupId]?.childIds ?? [])
         : input.action === "ungroup"
           ? plan.selectionNodeIds
-          : undefined;
+          : input.action === "create-boolean" ||
+              input.action === "set-boolean-operation"
+            ? (appliedDocument.nodesById[input.booleanId]?.childIds ?? [])
+            : input.action === "ungroup-boolean"
+              ? plan.selectionNodeIds
+              : undefined;
     const resultParentId =
       input.action === "reparent"
         ? input.parentId
@@ -221,10 +256,19 @@ export async function executeDesignToolRequest(
               index: input.index,
               siblingOrder: siblingOrder ?? [],
             }
-          : { groupId: input.groupId, childNodeIds };
-    const warnings = [
-      ...new Set([...(plan.warnings ?? []), ...result.warnings]),
-    ];
+          : input.action === "create-boolean" ||
+              input.action === "set-boolean-operation"
+            ? {
+                booleanId: input.booleanId,
+                operation: input.operation,
+                childNodeIds,
+              }
+            : input.action === "ungroup-boolean"
+              ? { booleanId: input.booleanId, childNodeIds }
+              : { groupId: input.groupId, childNodeIds };
+    const planWarnings: readonly string[] =
+      "warnings" in plan && Array.isArray(plan.warnings) ? plan.warnings : [];
+    const warnings = [...new Set([...planWarnings, ...result.warnings])];
     return {
       requestId: request.requestId,
       ok: true,

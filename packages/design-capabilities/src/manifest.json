@@ -284,8 +284,8 @@
       "surfaces": {
         "contract": "available",
         "runtime": "available",
-        "human": "unavailable",
-        "agent": "unavailable",
+        "human": "degraded",
+        "agent": "available",
         "render": "available",
         "export": "unavailable"
       },
@@ -295,8 +295,8 @@
           "zh-CN": "递归 resolver 会把 Rectangle、Ellipse、Path、Vector 与嵌套 Boolean 转换为包含 fill+stroke 的 PathKit 几何，应用局部 transform、保留真实空结果，并在不持久化 provider 输出的前提下投影稳定的 Leafer synthetic Path。"
         },
         {
-          "en": "Create/change/ungroup UI, a typed Agent tool, text outlines, SVG round-trip, pixel baselines, and macOS/Windows product evidence remain unavailable. Dash patterns longer than two values, masked operands, and non-center strokes on open paths fail explicitly instead of being approximated.",
-          "zh-CN": "创建/切换/解组 UI、Agent typed tool、文字轮廓、SVG 往返、像素基线和 macOS/Windows 产品证据仍不可用；超过两段的 dash pattern、带 mask 的 operand 和开放路径的非居中描边会明确失败，不做静默近似。"
+          "en": "The toolbar/menu, macOS and Windows shortcuts, Inspector operation control, ungroup command, and typed Agent hierarchy actions reuse the same previewed atomic planners. A dedicated source-layer canvas edit mode, text outlines, SVG round-trip, pixel baselines, and macOS/Windows packaged product evidence remain unavailable. Dash patterns longer than two values, masked operands, and non-center strokes on open paths fail explicitly instead of being approximated.",
+          "zh-CN": "工具栏/菜单、macOS 与 Windows 快捷键、Inspector operation 控件、解组命令和 Agent hierarchy typed actions 已复用同一套经过 preview 的原子 planner。专用源层画布编辑模式、文字轮廓、SVG 往返、像素基线和 macOS/Windows 打包产品证据仍不可用；超过两段的 dash pattern、带 mask 的 operand 和开放路径的非居中描边会明确失败，不做静默近似。"
         }
       ],
       "evidence": {
@@ -307,7 +307,10 @@
           "packages/geometry-service/src/boolean-resolver.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
-          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
+          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx"
         ],
         "manual": []
       },

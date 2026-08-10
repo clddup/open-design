@@ -1018,6 +1018,132 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(ungrouped.state.history.undo).toHaveLength(1);
   });
 
+  it("creates, changes, and ungroups a non-destructive Boolean without reading the live selection", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["feature_three"], "feature_three");
+    const before = runtime.getSnapshot().document;
+    const sourceIds = ["feature_one", "feature_two"];
+    const worldTransforms = Object.fromEntries(
+      sourceIds.map((nodeId) => [nodeId, getWorldTransform(before, nodeId)]),
+    );
+
+    const created = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_create_boolean",
+        call: {
+          toolCallId: "tool_hierarchy_create_boolean",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "create-boolean",
+            label: "Subtract capability shapes",
+            pageId: "page_welcome",
+            nodeIds: sourceIds,
+            booleanId: "capability_boolean",
+            name: "Capability mark",
+            operation: "subtract",
+          },
+        },
+        context: selectionContext,
+      },
+      runtime,
+      "page_changed_after_send",
+    );
+
+    expect(created).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "create-boolean",
+          atomic: true,
+          booleanId: "capability_boolean",
+          operation: "subtract",
+          childNodeIds: sourceIds,
+          revision: 1,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.capability_boolean,
+    ).toMatchObject({
+      kind: "boolean",
+      childIds: sourceIds,
+      properties: { operation: "subtract" },
+    });
+
+    const changed = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_set_boolean",
+        call: {
+          toolCallId: "tool_hierarchy_set_boolean",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "set-boolean-operation",
+            label: "Intersect capability shapes",
+            pageId: "page_welcome",
+            booleanId: "capability_boolean",
+            operation: "intersect",
+          },
+        },
+        context: { ...selectionContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(changed).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-boolean-operation",
+          booleanId: "capability_boolean",
+          operation: "intersect",
+          revision: 2,
+        },
+      },
+    });
+
+    const ungrouped = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_ungroup_boolean",
+        call: {
+          toolCallId: "tool_hierarchy_ungroup_boolean",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "ungroup-boolean",
+            label: "Release capability shapes",
+            pageId: "page_welcome",
+            booleanId: "capability_boolean",
+          },
+        },
+        context: { ...selectionContext, revision: 2 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(ungrouped).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "ungroup-boolean",
+          booleanId: "capability_boolean",
+          childNodeIds: sourceIds,
+          revision: 3,
+        },
+      },
+    });
+    const after = runtime.getSnapshot();
+    expect(after.document.nodesById.capability_boolean).toBeUndefined();
+    for (const nodeId of sourceIds) {
+      expect(getWorldTransform(after.document, nodeId)).toEqual(
+        worldTransforms[nodeId],
+      );
+    }
+    expect(after.state.selection).toEqual({
+      nodeIds: ["feature_three"],
+      anchorNodeId: "feature_three",
+    });
+    expect(after.state.history.undo).toHaveLength(3);
+  });
+
   it("reorders explicit sibling IDs atomically without reading or resetting selection", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     runtime.setSelection(["feature_three"], "feature_three");
