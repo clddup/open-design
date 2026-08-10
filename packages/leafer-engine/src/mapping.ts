@@ -103,7 +103,7 @@ export function projectDesignPageIncrementally(
     if (!node || !activeNodeIds.has(nodeId)) continue;
     const previousSpec = previous.elementsById.get(nodeId);
     const effectiveLockChanged =
-      previousSpec?.data.locked !== isEffectivelyLocked(document, node);
+      projectionLockState(previousSpec) !== isEffectivelyLocked(document, node);
     const parentChanged = previousSpec?.parentId !== node.parentId;
     if (
       changes.addedNodeIds.includes(nodeId) ||
@@ -219,15 +219,23 @@ function toElementSpec(
   node: DesignNode,
   warnings: LeaferFidelityWarning[],
 ): LeaferElementSpec {
+  const effectivelyLocked = isEffectivelyLocked(document, node);
   const base = {
     id: node.id,
     name: node.name,
     opacity: node.opacity,
     visible: node.visible,
-    locked: isEffectivelyLocked(document, node),
+    // Leafer's native `locked` flag also removes the node from click and box
+    // selection. OpenDesign lock semantics keep layers selectable and only
+    // reject direct manipulation, so interaction locking stays in our adapter.
+    locked: false,
     editable: true,
     ...mapNodeAppearance(node, warnings),
-    data: { opendesignNodeId: node.id, opendesignNodeKind: node.kind },
+    data: {
+      opendesignLocked: effectivelyLocked,
+      opendesignNodeId: node.id,
+      opendesignNodeKind: node.kind,
+    },
   };
   let tag: LeaferElementTag;
   let data: Record<string, unknown>;
@@ -332,12 +340,12 @@ function toElementSpec(
       }
       data = {
         ...base,
+        ...mapShapeProperties(document, node.id, node.properties, warnings),
         width: node.size.width,
         height: node.size.height,
-        fill: null,
-        stroke: null,
         editConfig: { editSize: "scale" },
         path: path ?? null,
+        windingRule: node.properties.fillRule ?? "nonzero",
       };
       break;
     }
@@ -361,6 +369,15 @@ function toElementSpec(
     tag,
     transform: [...node.transform],
   };
+}
+
+function projectionLockState(spec: LeaferElementSpec | undefined): boolean {
+  const metadata = spec?.data.data;
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    (metadata as Record<string, unknown>).opendesignLocked === true
+  );
 }
 
 function mapPaints(
@@ -569,13 +586,7 @@ function resolveImageDataUrl(
   return `data:${asset.mimeType};base64,${asset.source.value}`;
 }
 
-function readPath(value: unknown): string | number[] | undefined {
+function readPath(value: unknown): string | undefined {
   if (typeof value === "string" && value.length > 0) return value;
-  if (!Array.isArray(value) || value.length === 0) return undefined;
-  const path: number[] = [];
-  for (const entry of value) {
-    if (typeof entry !== "number" || !Number.isFinite(entry)) return undefined;
-    path.push(entry);
-  }
-  return path;
+  return undefined;
 }

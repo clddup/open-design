@@ -25,7 +25,12 @@ const profile: SaveModelProviderProfileRequest = {
       name: "Design model",
       contextWindow: 200_000,
       maxOutputTokens: 16_384,
-      capabilities: { toolUse: true, imageInput: false, reasoning: true },
+      capabilities: {
+        toolUse: true,
+        imageInput: false,
+        imageGeneration: false,
+        reasoning: true,
+      },
       reasoningEfforts: ["off", "low", "medium", "high"],
     },
   ],
@@ -98,7 +103,215 @@ function partialChatResponse() {
   );
 }
 
+function requestJson(
+  call: Parameters<typeof globalThis.fetch> | undefined,
+): Record<string, unknown> {
+  const body = call?.[1]?.body;
+  if (typeof body !== "string") throw new Error("Expected string body");
+  const parsed: unknown = JSON.parse(body);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Expected JSON object");
+  }
+  return parsed as Record<string, unknown>;
+}
+
 describe("ModelProviderHost", () => {
+  it("uses the global GPT Image 2 selection independently of the conversation model", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const generatedBytes = Buffer.from("generated-image-bytes");
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: generatedBytes.toString("base64") }],
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": "image_request_1",
+          },
+        },
+      ),
+    );
+    const host = new ModelProviderHost(store, cipher, fetch);
+    host.saveProfile({
+      ...profile,
+      imageGenerationApiFormat: "openai-images",
+      apiKey: "provider-secret",
+      models: [
+        ...profile.models,
+        {
+          modelId: "gpt-image-2",
+          name: "GPT Image 2",
+          contextWindow: 128_000,
+          maxOutputTokens: 16_384,
+          capabilities: {
+            toolUse: false,
+            imageInput: true,
+            imageGeneration: true,
+            reasoning: false,
+          },
+          reasoningEfforts: ["off"],
+        },
+      ],
+    });
+    host.setDefaultImageGenerationSelection({
+      selection: { providerId: "provider_1", modelId: "gpt-image-2" },
+    });
+
+    const result = await host.generateImage(
+      {
+        prompt: "A cinematic campaign poster with a luminous penguin mascot",
+        size: "1536x1024",
+        quality: "high",
+        outputFormat: "webp",
+      },
+      new AbortController().signal,
+    );
+
+    expect(Buffer.from(result.bytes)).toEqual(generatedBytes);
+    expect(result).toMatchObject({
+      providerId: "provider_1",
+      modelId: "gpt-image-2",
+      providerRequestId: "image_request_1",
+      size: "1536x1024",
+      quality: "high",
+      outputFormat: "webp",
+    });
+    const request = fetch.mock.calls[0];
+    expect(requestUrl(request?.[0])).toBe(
+      "https://models.example/v1/images/generations",
+    );
+    expect(new Headers(request?.[1]?.headers).get("authorization")).toBe(
+      "Bearer provider-secret",
+    );
+    expect(requestJson(request)).toEqual({
+      model: "gpt-image-2",
+      prompt: "A cinematic campaign poster with a luminous penguin mascot",
+      n: 1,
+      size: "1536x1024",
+      quality: "high",
+      output_format: "webp",
+    });
+    expect(host.getCatalog().defaultSelection).toEqual(selection);
+    expect(host.getCatalog().defaultImageGenerationSelection).toEqual({
+      providerId: "provider_1",
+      modelId: "gpt-image-2",
+    });
+    store.close();
+  });
+
+  it("fails explicitly when no global image-generation model is configured", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const host = new ModelProviderHost(store, cipher, fetch);
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    await expect(
+      host.generateImage(
+        { prompt: "Generate a poster" },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("No global image-generation model is configured");
+    expect(fetch).not.toHaveBeenCalled();
+    store.close();
+  });
+
+  it("clears the global image-generation selection when its model is disabled", () => {
+    const store = new WorkspaceStore(":memory:");
+    const host = new ModelProviderHost(store, cipher);
+    const imageModel = {
+      modelId: "gpt-image-2",
+      name: "GPT Image 2",
+      contextWindow: 128_000,
+      maxOutputTokens: 16_384,
+      capabilities: {
+        toolUse: false,
+        imageInput: true,
+        imageGeneration: true,
+        reasoning: false,
+      },
+      reasoningEfforts: ["off" as const],
+    };
+    host.saveProfile({
+      ...profile,
+      imageGenerationApiFormat: "openai-images",
+      models: [...profile.models, imageModel],
+    });
+    host.setDefaultImageGenerationSelection({
+      selection: {
+        providerId: profile.providerId,
+        modelId: imageModel.modelId,
+      },
+    });
+
+    const catalog = host.saveProfile({
+      ...profile,
+      imageGenerationApiFormat: "openai-images",
+      models: [
+        ...profile.models,
+        {
+          ...imageModel,
+          capabilities: {
+            ...imageModel.capabilities,
+            imageGeneration: false,
+          },
+        },
+      ],
+    });
+
+    expect(catalog.defaultImageGenerationSelection).toBeUndefined();
+    store.close();
+  });
+
+  it("uses a configured OpenAI Images model ID without a model-name branch", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: Buffer.from("future-image").toString("base64") }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const host = new ModelProviderHost(store, cipher, fetch);
+    host.saveProfile({
+      ...profile,
+      imageGenerationApiFormat: "openai-images",
+      apiKey: "provider-secret",
+      models: [
+        ...profile.models,
+        {
+          modelId: "future-image-model",
+          name: "Future image model",
+          contextWindow: 128_000,
+          maxOutputTokens: 16_384,
+          capabilities: {
+            toolUse: false,
+            imageInput: false,
+            imageGeneration: true,
+            reasoning: false,
+          },
+          reasoningEfforts: ["off"],
+        },
+      ],
+    });
+    host.setDefaultImageGenerationSelection({
+      selection: {
+        providerId: "provider_1",
+        modelId: "future-image-model",
+      },
+    });
+
+    await host.generateImage(
+      { prompt: "A configurable image model" },
+      new AbortController().signal,
+    );
+
+    expect(requestJson(fetch.mock.calls[0]).model).toBe("future-image-model");
+    store.close();
+  });
+
   it("aborts a production model stream that produces no response events", async () => {
     vi.useFakeTimers();
     const store = new WorkspaceStore(":memory:");
@@ -368,7 +581,7 @@ describe("ModelProviderHost", () => {
     const saved = host.saveProfile({ ...profile, apiKey: "provider-secret" });
 
     expect(saved).toMatchObject({
-      version: 1,
+      version: 2,
       defaultSelection: selection,
       providers: [
         {
@@ -380,7 +593,7 @@ describe("ModelProviderHost", () => {
       ],
     });
     expect(JSON.stringify(saved)).not.toContain("provider-secret");
-    expect(store.getPreference("model.provider.catalog.v1")).not.toContain(
+    expect(store.getPreference("model.provider.catalog.v2")).not.toContain(
       "provider-secret",
     );
     store.close();
@@ -461,6 +674,48 @@ describe("ModelProviderHost", () => {
     });
     expect(store.getPreference("model.provider.settings")).toBeNull();
     expect(store.getPreference("model.provider.credential")).toBeNull();
+    store.close();
+  });
+
+  it("migrates the v1 provider catalog without enabling image generation", () => {
+    const store = new WorkspaceStore(":memory:");
+    store.setPreference(
+      "model.provider.catalog.v1",
+      JSON.stringify({
+        version: 1,
+        providers: [
+          {
+            providerId: "provider_1",
+            name: "Primary",
+            enabled: true,
+            apiFormat: "openai-chat-completions",
+            authMode: "bearer",
+            baseUrl: "https://models.example/v1",
+            models: profile.models.map((model) => ({
+              ...model,
+              capabilities: {
+                toolUse: model.capabilities.toolUse,
+                imageInput: model.capabilities.imageInput,
+                reasoning: model.capabilities.reasoning,
+              },
+            })),
+            hasApiKey: false,
+            updatedAt: "2026-08-09T00:00:00.000Z",
+          },
+        ],
+        defaultSelection: selection,
+      }),
+    );
+
+    const catalog = new ModelProviderHost(store, cipher).getCatalog();
+
+    expect(catalog.version).toBe(2);
+    expect(catalog.providers[0]?.models[0]?.capabilities.imageGeneration).toBe(
+      false,
+    );
+    expect(catalog.defaultImageGenerationSelection).toBeUndefined();
+    expect(store.getPreference("model.provider.catalog.v1")).toBeNull();
+    expect(store.getPreference("model.provider.catalog.v2")).not.toBeNull();
     store.close();
   });
 

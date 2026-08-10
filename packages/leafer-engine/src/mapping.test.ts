@@ -110,10 +110,19 @@ describe("Leafer scene projection", () => {
     );
 
     expect(
-      lockedProjection.elementsById.get("frame_welcome")?.data.locked,
+      (
+        lockedProjection.elementsById.get("frame_welcome")?.data.data as
+          Record<string, unknown> | undefined
+      )?.opendesignLocked,
+    ).toBe(true);
+    expect(
+      (
+        lockedProjection.elementsById.get("feature_one")?.data.data as
+          Record<string, unknown> | undefined
+      )?.opendesignLocked,
     ).toBe(true);
     expect(lockedProjection.elementsById.get("feature_one")?.data.locked).toBe(
-      true,
+      false,
     );
     expect(lockedProjection.affectedNodeIds).toContain("feature_one");
 
@@ -147,7 +156,10 @@ describe("Leafer scene projection", () => {
     );
 
     expect(
-      unlockedProjection.elementsById.get("feature_one")?.data.locked,
+      (
+        unlockedProjection.elementsById.get("feature_one")?.data.data as
+          Record<string, unknown> | undefined
+      )?.opendesignLocked,
     ).toBe(false);
     expect(unlockedProjection.affectedNodeIds).toContain("feature_one");
   });
@@ -286,6 +298,98 @@ describe("Leafer scene projection", () => {
           ],
         },
       ],
+    });
+  });
+
+  it("projects portable path geometry with fills, strokes and winding rule", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing fixture");
+    document.nodesById.penguin_path = {
+      id: "penguin_path",
+      name: "Penguin silhouette",
+      parentId: frame.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 40, 40],
+      size: { width: 160, height: 220 },
+      opacity: 1,
+      effects: [
+        {
+          type: "outer-glow",
+          color: "#22d3ee",
+          opacity: 0.65,
+          radius: 18,
+          spread: 2,
+        },
+      ],
+      extensions: {},
+      kind: "path",
+      properties: {
+        path: "M 80 4 C 126 4 154 46 148 108 C 143 171 118 214 80 216 C 42 214 17 171 12 108 C 6 46 34 4 80 4 Z",
+        fillRule: "evenodd",
+        fills: [
+          {
+            type: "linear-gradient",
+            opacity: 1,
+            from: { x: 0, y: 0 },
+            to: { x: 1, y: 1 },
+            stops: [
+              { offset: 0, color: "#111827", opacity: 1 },
+              { offset: 1, color: "#312e81", opacity: 1 },
+            ],
+          },
+        ],
+        strokes: [{ type: "solid", color: "#f9fafb", opacity: 0.75 }],
+        strokeWidth: 4,
+        strokeAlign: "inside",
+        strokeCap: "round",
+        strokeJoin: "round",
+      },
+    };
+    frame.childIds.push("penguin_path");
+
+    expect(
+      projectDesignPage(document, "page_welcome").elementsById.get(
+        "penguin_path",
+      ),
+    ).toMatchObject({
+      tag: "Path",
+      data: {
+        path: document.nodesById.penguin_path.properties.path,
+        fill: [
+          {
+            type: "linear",
+            opacity: 1,
+            stops: [
+              { offset: 0, color: "#111827" },
+              { offset: 1, color: "#312e81" },
+            ],
+          },
+        ],
+        stroke: [
+          {
+            type: "solid",
+            color: "#f9fafb",
+            opacity: 0.75,
+          },
+        ],
+        strokeWidth: 4,
+        strokeAlign: "inside",
+        strokeCap: "round",
+        strokeJoin: "round",
+        windingRule: "evenodd",
+        shadow: [
+          {
+            x: 0,
+            y: 0,
+            blur: 18,
+            spread: 2,
+            color: { r: 34, g: 211, b: 238, a: 0.65 },
+          },
+        ],
+      },
     });
   });
 });

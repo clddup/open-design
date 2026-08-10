@@ -39,6 +39,15 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "Do not stop after summarizing the attachment",
     );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "call opendesign_capture_canvas",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Build every composite object",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "does not prove rendered visual quality",
+    );
   });
 
   it("names the exact current operation and product limits", () => {

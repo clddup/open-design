@@ -6,19 +6,20 @@ import type { LeaferEngineCallbacks, LeaferEngineSyncInput } from "./types.js";
 
 const leaferHarness = vi.hoisted(() => ({
   app: null as FakeApp | null,
+  boxMatches: [] as FakeElement[],
 }));
 
 class FakeEventTarget {
-  readonly listeners = new Map<string, Set<() => void>>();
+  readonly listeners = new Map<string, Set<(event?: unknown) => void>>();
 
-  on(type: string, listener: () => void): void {
+  on(type: string, listener: (event?: unknown) => void): void {
     const listeners = this.listeners.get(type) ?? new Set();
     listeners.add(listener);
     this.listeners.set(type, listeners);
   }
 
-  emit(type: string): void {
-    this.listeners.get(type)?.forEach((listener) => listener());
+  emit(type: string, event?: unknown): void {
+    this.listeners.get(type)?.forEach((listener) => listener(event));
   }
 }
 
@@ -114,6 +115,7 @@ class FakeEditor extends FakeEventTarget {
     dragging: boolean;
     gesturing: boolean;
   };
+  readonly selector = { dragging: false };
   list: FakeElement[] = [];
   visible = true;
   hittable = true;
@@ -162,8 +164,19 @@ class FakeApp extends FakeEventTarget {
 
 vi.mock("leafer-editor", () => ({
   App: FakeApp,
+  Bounds: class FakeBounds {
+    constructor(
+      readonly x: number,
+      readonly y: number,
+      readonly width: number,
+      readonly height: number,
+    ) {}
+  },
   DragEvent: { START: "drag.start", DRAG: "drag.drag", END: "drag.end" },
   EditorEvent: { SELECT: "editor.select" },
+  EditSelectHelper: {
+    findByBounds: vi.fn(() => leaferHarness.boxMatches),
+  },
   EditorMoveEvent: { BEFORE_MOVE: "editor.before-move", MOVE: "editor.move" },
   EditorRotateEvent: {
     BEFORE_ROTATE: "editor.before-rotate",
@@ -194,6 +207,7 @@ let animationFrameSequence = 0;
 describe("Leafer engine selection bounds synchronization", () => {
   beforeEach(() => {
     leaferHarness.app = null;
+    leaferHarness.boxMatches = [];
     animationFrames.clear();
     animationFrameSequence = 0;
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -318,6 +332,55 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("instantiates visible Leafer paths with OpenDesign appearance data", async () => {
+    const host = createHost();
+    const adapter = await createLeaferEngineAdapter(host, createCallbacks());
+    const initialInput = createInput();
+    const document = structuredClone(initialInput.document);
+    const input = { ...initialInput, document };
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    const mascotPath =
+      "M 80 4 C 126 4 154 46 148 108 C 143 171 118 214 80 216 C 42 214 17 171 12 108 C 6 46 34 4 80 4 Z";
+    document.nodesById.mascot_path = {
+      id: "mascot_path",
+      name: "Mascot silhouette",
+      parentId: frame.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 24, 32],
+      size: { width: 160, height: 220 },
+      opacity: 1,
+      extensions: {},
+      kind: "path",
+      properties: {
+        path: mascotPath,
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [{ type: "solid", color: "#ffffff", opacity: 0.8 }],
+        strokeWidth: 3,
+        fillRule: "evenodd",
+      },
+    };
+    frame.childIds.push("mascot_path");
+
+    adapter.sync(input);
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const path = findElement(app.tree, "mascot_path");
+    expect(path).toBeInstanceOf(FakePath);
+    expect(path).toMatchObject({
+      path: mascotPath,
+      fill: [{ type: "solid", color: "#111827", opacity: 1 }],
+      stroke: [{ type: "solid", color: "#ffffff", opacity: 0.8 }],
+      strokeWidth: 3,
+      windingRule: "evenodd",
+    });
+    adapter.dispose();
+  });
+
   it("does not cancel a direct manipulation when a contiguous revision changes an unrelated node", async () => {
     const onOperations = vi.fn(() => true);
     const host = createHost();
@@ -404,7 +467,7 @@ describe("Leafer engine selection bounds synchronization", () => {
       ),
     });
 
-    expect(selected.locked).toBe(true);
+    expect(selected.locked).toBe(false);
     expect(app.editor.list).toEqual([selected]);
     app.editor.emit("editor.select");
     expect(onSelectionChange).toHaveBeenCalledWith(
@@ -439,6 +502,61 @@ describe("Leafer engine selection bounds synchronization", () => {
 
     expect(selected.locked).toBe(false);
     expect(app.editor.list).toEqual([selected]);
+    adapter.dispose();
+  });
+
+  it("clears stale hover chrome when a hovered layer becomes locked", async () => {
+    const host = createHost();
+    const adapter = await createLeaferEngineAdapter(host, createCallbacks());
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const frame = findElement(app.tree, "frame_welcome");
+    if (!frame) throw new Error("Missing frame fixture");
+    app.editor.hoverTarget = frame;
+
+    const lockedDocument = structuredClone(first.document);
+    lockedDocument.revision += 1;
+    const lockedFrame = lockedDocument.nodesById.frame_welcome;
+    if (!lockedFrame) throw new Error("Missing frame fixture");
+    lockedFrame.locked = true;
+    adapter.sync({
+      ...first,
+      document: lockedDocument,
+      changes: changedNodeSet(
+        first.document,
+        lockedDocument,
+        "frame_welcome",
+        "locked",
+      ),
+    });
+
+    expect(app.editor.hoverTarget).toBeNull();
+    adapter.dispose();
+  });
+
+  it("recomputes box selection from the pointer-up bounds", async () => {
+    const host = createHost();
+    const adapter = await createLeaferEngineAdapter(host, createCallbacks());
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const firstCard = findElement(app.tree, "feature_one");
+    const secondCard = findElement(app.tree, "feature_two");
+    if (!firstCard || !secondCard) throw new Error("Missing card fixtures");
+    leaferHarness.boxMatches = [firstCard, secondCard];
+    app.editor.selector.dragging = true;
+    app.emit("drag.start", boxDragEvent(20, 20));
+    app.editor.selector.dragging = false;
+    app.emit("drag.end", boxDragEvent(640, 360));
+
+    expect(app.editor.list).toEqual([firstCard, secondCard]);
     adapter.dispose();
   });
 
@@ -561,6 +679,16 @@ function createHost(): HTMLElement {
     getBoundingClientRect: vi.fn(() => ({ width: 1024, height: 768 })),
     removeEventListener: vi.fn(),
   } as unknown as HTMLElement;
+}
+
+function boxDragEvent(x: number, y: number) {
+  return {
+    clientX: x,
+    clientY: y,
+    getInnerPoint: () => ({ x, y }),
+    shiftKey: false,
+    target: {},
+  };
 }
 
 function flushAnimationFrames(): void {

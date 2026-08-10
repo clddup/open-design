@@ -518,6 +518,12 @@ function mergeTimeline(
   const merged = new Map(durable.map((item) => [item.id, item]));
   for (const item of projectEvents(events, maximumSequence, locale, t)) {
     const durableItem = merged.get(item.id);
+    if (durableItem?.kind === "assistant" && durableItem.state === "done") {
+      // A bounded live-event window can begin in the middle of a streamed
+      // message. Once the journal has the completed message, that durable text
+      // is authoritative and must not be replaced by a suffix-only projection.
+      continue;
+    }
     merged.set(item.id, {
       ...item,
       order: durableItem?.order ?? item.order,

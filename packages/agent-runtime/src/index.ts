@@ -103,6 +103,32 @@ export interface AgentRuntimeLimits {
   maxTurns: number;
   maxToolCalls: number;
   maxTotalTokens: number;
+  maxCompletionGuardRejections: number;
+}
+
+export interface AgentToolCallRecord {
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  status: "completed";
+  revision?: number;
+}
+
+export interface AgentCompletionContext {
+  request: Readonly<AgentRunRequest>;
+  currentRevision: number;
+  turn: number;
+  rejectionCount: number;
+  toolCalls: readonly AgentToolCallRecord[];
+}
+
+export type AgentCompletionDecision =
+  { allow: true } | { allow: false; message: string };
+
+export interface CompletionGuardPort {
+  review(
+    context: AgentCompletionContext,
+  ): AgentCompletionDecision | Promise<AgentCompletionDecision>;
 }
 
 export interface AgentRuntimeOptions {
@@ -111,6 +137,7 @@ export interface AgentRuntimeOptions {
   toolCatalog?: ToolCatalogPort;
   toolExecutor?: ToolExecutorPort;
   approvalPort?: ApprovalPort;
+  completionGuard?: CompletionGuardPort;
   limits?: Partial<AgentRuntimeLimits>;
   systemPrompt?: string;
   now?: () => Date;
@@ -120,6 +147,7 @@ const DEFAULT_LIMITS: AgentRuntimeLimits = {
   maxTurns: 8,
   maxToolCalls: 32,
   maxTotalTokens: 200_000,
+  maxCompletionGuardRejections: 3,
 };
 
 const EMPTY_TOOL_CATALOG: ToolCatalogPort = { listTools: () => [] };
@@ -135,7 +163,8 @@ export class AgentRuntime {
     if (
       this.#limits.maxTurns < 1 ||
       this.#limits.maxToolCalls < 0 ||
-      this.#limits.maxTotalTokens < 1
+      this.#limits.maxTotalTokens < 1 ||
+      this.#limits.maxCompletionGuardRejections < 0
     ) {
       throw new RangeError("Agent runtime limits must be positive");
     }
@@ -163,7 +192,6 @@ export class AgentRuntime {
       const priorEvents = await this.options.sessionStore.read(
         request.sessionId,
       );
-      assertCurrentHostRevision(priorEvents, request);
       const messages = restoreModelMessages(priorEvents);
       const tools = await this.loadSafeTools();
       const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
@@ -171,6 +199,9 @@ export class AgentRuntime {
       let currentRevision = request.revision;
       let toolCallCount = 0;
       let totalTokens = 0;
+      let completionGuardFeedback: string | undefined;
+      let completionGuardRejections = 0;
+      const toolCallRecords: AgentToolCallRecord[] = [];
 
       startedAt = this.#now().toISOString();
       await this.append(
@@ -211,13 +242,16 @@ export class AgentRuntime {
         const accumulator = new ModelResponseAccumulator(attemptId);
         const blockKinds = new Map<string, CanonicalContentBlock["type"]>();
 
+        const baseSystemPrompt =
+          this.options.systemPrompt ??
+          "You are the OpenDesign design agent. Use only the provided tools and respect the host-bound modification scope.";
         for await (const event of this.options.modelGateway.stream({
           attemptId,
           sessionId: request.sessionId,
           modelSelection: request.modelSelection,
-          system:
-            this.options.systemPrompt ??
-            "You are the OpenDesign design agent. Use only the provided tools and respect the host-bound modification scope.",
+          system: completionGuardFeedback
+            ? `${baseSystemPrompt}\n\nTrusted host completion review for this turn:\n${completionGuardFeedback}`
+            : baseSystemPrompt,
           messages,
           tools: tools.map(toCanonicalTool),
           signal: controller.signal,
@@ -248,6 +282,71 @@ export class AgentRuntime {
         const response = accumulator.result();
         totalTokens += usageTokens(response.usage);
         const timelineBlocks = toTimelineBlocks(response.blocks);
+        const assistantMessage: Extract<
+          CanonicalMessage,
+          { role: "assistant" }
+        > = {
+          role: "assistant",
+          blocks: response.blocks,
+          ...(response.identity === undefined
+            ? {}
+            : { source: response.identity }),
+        };
+
+        const toolCalls = response.blocks.filter(
+          (
+            block,
+          ): block is Extract<CanonicalContentBlock, { type: "tool_call" }> =>
+            block.type === "tool_call",
+        );
+        const canReviewCompletion =
+          toolCalls.length === 0 &&
+          response.stopReason !== "tool_use" &&
+          response.stopReason !== "length" &&
+          response.stopReason !== "cancelled" &&
+          response.stopReason !== "content_filter" &&
+          response.stopReason !== "error" &&
+          totalTokens <= this.#limits.maxTotalTokens;
+        if (canReviewCompletion && this.options.completionGuard) {
+          const decision = await this.options.completionGuard.review({
+            request,
+            currentRevision,
+            turn,
+            rejectionCount: completionGuardRejections,
+            toolCalls: [...toolCallRecords],
+          });
+          if (!decision.allow) {
+            messages.push(assistantMessage);
+            completionGuardRejections += 1;
+            completionGuardFeedback = decision.message;
+            // Streaming deltas may already have reached the renderer. Complete
+            // that provisional message with no blocks so it disappears instead
+            // of presenting an untrusted completion claim as the final result.
+            yield {
+              type: "message.completed",
+              runId: request.runId,
+              messageId,
+              blocks: [],
+            };
+            if (
+              completionGuardRejections >
+                this.#limits.maxCompletionGuardRejections ||
+              turn === this.#limits.maxTurns
+            ) {
+              stopReason = "error";
+              yield {
+                type: "agent.error",
+                code: "completion_guard_blocked",
+                message: decision.message,
+                runId: request.runId,
+              };
+              break;
+            }
+            continue;
+          }
+        }
+        completionGuardFeedback = undefined;
+
         await this.append(request, "message.assistant", {
           messageId,
           blocks: timelineBlocks,
@@ -261,13 +360,7 @@ export class AgentRuntime {
           messageId,
           blocks: timelineBlocks,
         };
-        messages.push({
-          role: "assistant",
-          blocks: response.blocks,
-          ...(response.identity === undefined
-            ? {}
-            : { source: response.identity }),
-        });
+        messages.push(assistantMessage);
 
         if (
           response.stopReason === "length" ||
@@ -288,12 +381,6 @@ export class AgentRuntime {
           break;
         }
 
-        const toolCalls = response.blocks.filter(
-          (
-            block,
-          ): block is Extract<CanonicalContentBlock, { type: "tool_call" }> =>
-            block.type === "tool_call",
-        );
         if (toolCalls.length === 0) {
           stopReason =
             response.stopReason === "tool_use" ? "error" : "complete";
@@ -606,6 +693,13 @@ export class AgentRuntime {
               });
             }
             if (nextRevision !== undefined) currentRevision = nextRevision;
+            toolCallRecords.push({
+              toolCallId: call.toolCallId,
+              toolName: call.name,
+              input: call.input,
+              status: "completed",
+              ...(nextRevision === undefined ? {} : { revision: nextRevision }),
+            });
             pendingTools.delete(call.toolCallId);
             yield {
               type: "tool.completed",
@@ -1107,43 +1201,6 @@ function createTrustedContext(
     scope,
     mutationTarget: Object.freeze({ ...request.mutationTarget }),
   });
-}
-
-function assertCurrentHostRevision(
-  events: JournalEvent[],
-  request: AgentRunRequest,
-): void {
-  const latestRevisionByDocumentId = new Map<string, number>();
-  for (const event of sortEvents(events)) {
-    if (event.type !== "message.user" && event.type !== "design.revision") {
-      continue;
-    }
-    const payload = event.payload as {
-      documentId?: unknown;
-      revision?: unknown;
-    };
-    if (
-      typeof payload.documentId !== "string" ||
-      typeof payload.revision !== "number" ||
-      !Number.isInteger(payload.revision)
-    ) {
-      continue;
-    }
-    latestRevisionByDocumentId.set(
-      payload.documentId,
-      Math.max(
-        latestRevisionByDocumentId.get(payload.documentId) ?? 0,
-        payload.revision,
-      ),
-    );
-  }
-
-  const latestRevision = latestRevisionByDocumentId.get(request.documentId);
-  if (latestRevision !== undefined && request.revision < latestRevision) {
-    throw new RangeError(
-      `Run revision ${request.revision} is stale; latest document revision is ${latestRevision}`,
-    );
-  }
 }
 
 function validateDesignRevision(

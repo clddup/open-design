@@ -10,6 +10,7 @@ import type {
 } from "@opendesign/design-contracts";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import {
+  DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
@@ -26,6 +27,16 @@ export async function executeDesignToolRequest(
   runtime: EditorRuntime,
   _activePageId: string,
   options: {
+    captureCanvas?: () => Promise<{
+      attachment: {
+        attachmentId: string;
+        byteSize: number;
+        mimeType: "image/jpeg";
+        name: string;
+      };
+      height: number;
+      width: number;
+    }>;
     signal?: AbortSignal;
     stageDelayMs?: number;
   } = {},
@@ -51,6 +62,32 @@ export async function executeDesignToolRequest(
           request.context.mutationTarget,
           request.context.scope,
         ),
+      },
+    };
+  }
+  if (request.call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
+    if (document.revision < request.context.revision) {
+      throw new Error(
+        `Design revision conflict: expected at least ${request.context.revision}, current ${document.revision}`,
+      );
+    }
+    if (!options.captureCanvas) {
+      throw new Error("Canvas preview capture is unavailable");
+    }
+    const preview = await options.captureCanvas();
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        observedRevision: document.revision,
+        content: {
+          ok: true,
+          revision: document.revision,
+          width: preview.width,
+          height: preview.height,
+          attachment: preview.attachment,
+          attachments: [preview.attachment],
+        },
       },
     };
   }
@@ -370,6 +407,11 @@ function assertCommandsWithinMutationTarget(
     }
     if (command.type === "insert_element") {
       assertTarget(command.pageId, command.parentId, command.commandId);
+      // Commands are executed in order. A composite design may create its
+      // container first and then insert children into that new container in
+      // the same transaction. Once an insertion has been proven to target
+      // this Page, its node becomes an in-scope parent for later commands.
+      allowedNodeIds.add(command.node.id);
       continue;
     }
     if (command.type === "move_element") {
@@ -380,6 +422,9 @@ function assertCommandsWithinMutationTarget(
     const nodeId =
       command.type === "replace_subtree" ? command.rootNodeId : command.nodeId;
     assertNode(nodeId, command.commandId);
+    if (command.type === "replace_subtree") {
+      command.nodes.forEach((node) => allowedNodeIds.add(node.id));
+    }
   }
 }
 

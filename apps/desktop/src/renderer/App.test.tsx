@@ -38,6 +38,7 @@ import {
 } from "./editor-runtime";
 import { I18nProvider } from "./i18n";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
+import type { DiagnosticEvent } from "../shared/diagnostics";
 
 const leaferHarness = vi.hoisted(() => ({
   callbacks: null as LeaferEngineCallbacks | null,
@@ -69,12 +70,14 @@ let requestOpenSettings: (() => void) | undefined;
 let observedRuntime: EditorRuntime | undefined;
 let requestDesignTool:
   ((request: RendererDesignToolRequest) => void) | undefined;
+let emitDiagnosticEvent: ((event: DiagnosticEvent) => void) | undefined;
 
 beforeEach(() => {
   emitAgentEvent = undefined;
   requestOpenSettings = undefined;
   observedRuntime = undefined;
   requestDesignTool = undefined;
+  emitDiagnosticEvent = undefined;
   leaferHarness.callbacks = null;
   leaferHarness.input = null;
   leaferHarness.sync.mockClear();
@@ -98,7 +101,12 @@ beforeEach(() => {
       .mockResolvedValue({ platform: "darwin", version: "0.0.0" }),
     getPendingDiagnostics: vi.fn().mockResolvedValue([]),
     reportDiagnostic: vi.fn().mockResolvedValue(undefined),
-    onDiagnosticEvent: vi.fn().mockReturnValue(() => undefined),
+    onDiagnosticEvent: vi
+      .fn()
+      .mockImplementation((listener: (event: DiagnosticEvent) => void) => {
+        emitDiagnosticEvent = listener;
+        return () => undefined;
+      }),
     onOpenSettings: vi.fn().mockImplementation((listener: () => void) => {
       requestOpenSettings = listener;
       return () => undefined;
@@ -109,7 +117,7 @@ beforeEach(() => {
     getTheme: vi.fn().mockResolvedValue("dark"),
     setTheme: vi.fn().mockImplementation((theme) => Promise.resolve(theme)),
     getModelProviderCatalog: vi.fn().mockResolvedValue({
-      version: 1,
+      version: 2,
       providers: [
         {
           providerId: "provider_1",
@@ -127,6 +135,7 @@ beforeEach(() => {
               capabilities: {
                 toolUse: true,
                 imageInput: false,
+                imageGeneration: false,
                 reasoning: true,
               },
               reasoningEfforts: ["off", "medium", "high"],
@@ -144,6 +153,7 @@ beforeEach(() => {
     }),
     saveModelProviderProfile: vi.fn(),
     deleteModelProviderProfile: vi.fn(),
+    setDefaultImageGenerationSelection: vi.fn(),
     testModelProviderConnection: vi.fn(),
     onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),
     selectAgentAttachments: vi.fn().mockResolvedValue([]),
@@ -1075,7 +1085,7 @@ describe("App", () => {
     const attachmentId = `image_${"b".repeat(64)}`;
     const previewDataUrl = "data:image/png;base64,aW1hZ2U=";
     vi.mocked(window.desktop!.getModelProviderCatalog).mockResolvedValue({
-      version: 1,
+      version: 2,
       providers: [
         {
           providerId: "provider_1",
@@ -1093,6 +1103,7 @@ describe("App", () => {
               capabilities: {
                 toolUse: true,
                 imageInput: true,
+                imageGeneration: false,
                 reasoning: false,
               },
               reasoningEfforts: ["off"],
@@ -1439,6 +1450,7 @@ describe("App", () => {
     await user.type(content, "Poster headline");
     fireEvent.blur(content);
     const size = screen.getByLabelText("Font size");
+    expect(size.closest(".property-grid--typography")).not.toBeNull();
     await user.clear(size);
     await user.type(size, "64{Enter}");
 
@@ -1817,6 +1829,34 @@ describe("App", () => {
     );
     expect(runtime().getSnapshot().document).toBe(before.document);
     expect(runtime().getSnapshot().document.revision).toBe(0);
+  });
+
+  it("positions diagnostic notifications in the editor workspace instead of the Agent composer", () => {
+    renderApp();
+    if (!emitDiagnosticEvent) throw new Error("Diagnostic listener is missing");
+
+    act(() => {
+      emitDiagnosticEvent?.({
+        version: 1,
+        eventId: "diagnostic_revision_conflict",
+        occurredAt: now,
+        level: "error",
+        source: "agent",
+        presentation: "toast",
+        code: "request_failed",
+        message: "Run revision 136 is stale",
+        appVersion: "0.0.0",
+        platform: "darwin",
+        context: { conversationId: "conversation_1", runId: "run_1" },
+      });
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Run revision 136 is stale");
+    expect(
+      alert.closest(".diagnostic-notifications")?.parentElement,
+    ).toHaveClass("app-shell");
+    expect(alert.closest(".agent-prompt")).toBeNull();
   });
 
   it("keeps the current document when an opened file is malformed", async () => {

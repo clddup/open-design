@@ -127,8 +127,8 @@ describe("AgentTimeline", () => {
     expect(screen.queryByText("Task completed")).not.toBeInTheDocument();
     expect(screen.queryByText("Agent response")).not.toBeInTheDocument();
     expect(screen.getAllByText("Design change completed")).toHaveLength(1);
-    expect(screen.getByText("Live response")).toBeInTheDocument();
-    expect(screen.queryByText("Durable response")).not.toBeInTheDocument();
+    expect(screen.getByText("Durable response")).toBeInTheDocument();
+    expect(screen.queryByText("Live response")).not.toBeInTheDocument();
   });
 
   it("keeps a live reply before the next optimistic user message", () => {
@@ -187,6 +187,70 @@ describe("AgentTimeline", () => {
         (element) => element.textContent,
       ),
     ).toEqual(["First request", "First reply", "Second request"]);
+  });
+
+  it("keeps a complete durable reply when the live window has only its suffix", () => {
+    const messageId = "message_run_complete_assistant";
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "message:run_complete_user",
+        sessionId: "conversation_1",
+        runId: "run_complete",
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "user.message",
+        messageId: "run_complete_user",
+        content: "Why did this happen?",
+        documentId: "document_1",
+        revision: 0,
+        scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+      },
+      {
+        itemId: `message:${messageId}`,
+        sessionId: "conversation_1",
+        runId: "run_complete",
+        sequence: 2,
+        createdAt: now,
+        updatedAt: now,
+        type: "assistant.message",
+        messageId,
+        blocks: [
+          {
+            blockId: "block_complete",
+            type: "text",
+            text: "Complete opening paragraph.\n\n- First point\n- Final point",
+          },
+        ],
+      },
+    ];
+    const events: AgentEvent[] = [
+      {
+        type: "message.delta",
+        runId: "run_complete",
+        messageId,
+        blockId: "block_complete",
+        delta: "- Final point",
+      },
+      { type: "run.started", runId: "run_next", startedAt: now },
+    ];
+
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_next"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={events}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={timeline}
+      />,
+    );
+
+    expect(container.querySelectorAll(".agent-message p")[1]).toHaveTextContent(
+      "Complete opening paragraph. - First point - Final point",
+    );
   });
 
   it("shows native design tools as one user-facing canvas activity", () => {
@@ -609,7 +673,7 @@ describe("AgentTimeline", () => {
     const onSubmit = vi.fn().mockResolvedValue(true);
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 1,
+        version: 2,
         providers: [
           {
             providerId: "provider_1",
@@ -627,6 +691,7 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: false,
+                  imageGeneration: false,
                   reasoning: false,
                 },
                 reasoningEfforts: ["off"],
@@ -680,7 +745,7 @@ describe("AgentTimeline", () => {
     const onSubmit = vi.fn().mockResolvedValue(true);
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 1,
+        version: 2,
         providers: [
           {
             providerId: "provider_1",
@@ -698,6 +763,7 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: false,
+                  imageGeneration: false,
                   reasoning: true,
                 },
                 reasoningEfforts: ["off", "medium", "high"],
@@ -758,7 +824,7 @@ describe("AgentTimeline", () => {
     const attachmentId = `image_${"a".repeat(64)}`;
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 1,
+        version: 2,
         providers: [
           {
             providerId: "provider_1",
@@ -776,6 +842,7 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: true,
+                  imageGeneration: false,
                   reasoning: false,
                 },
                 reasoningEfforts: ["off"],
@@ -854,7 +921,7 @@ describe("AgentTimeline", () => {
     const attachmentId = `file_${"b".repeat(64)}`;
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 1,
+        version: 2,
         providers: [
           {
             providerId: "provider_1",
@@ -872,6 +939,7 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: false,
+                  imageGeneration: false,
                   reasoning: false,
                 },
                 reasoningEfforts: ["off"],
@@ -985,7 +1053,7 @@ describe("AgentTimeline", () => {
       });
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 1,
+        version: 2,
         providers: [
           {
             providerId: "provider_1",
@@ -1003,6 +1071,7 @@ describe("AgentTimeline", () => {
                 capabilities: {
                   toolUse: true,
                   imageInput: true,
+                  imageGeneration: false,
                   reasoning: false,
                 },
                 reasoningEfforts: ["off"],
@@ -1108,7 +1177,7 @@ describe("AgentTimeline", () => {
   it("follows new activity only while the reader remains near the bottom", () => {
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
-        version: 1,
+        version: 2,
         providers: [],
       }),
       onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),

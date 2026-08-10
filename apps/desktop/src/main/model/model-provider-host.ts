@@ -10,18 +10,28 @@ import {
   MODEL_PROVIDER_CATALOG_VERSION,
   isModelProviderCatalog,
   isSaveModelProviderProfileRequest,
+  migrateModelProviderCatalog,
   normalizeProviderBaseUrl,
   type DeleteModelProviderProfileRequest,
+  type ImageGenerationSelection,
   type ModelProfile,
   type ModelProviderCatalog,
   type ModelProviderProfile,
   type ProviderConnectionResult,
   type SaveModelProviderProfileRequest,
+  type SetDefaultImageGenerationSelectionRequest,
   type TestModelProviderConnectionRequest,
 } from "../../shared/desktop-api";
+import type {
+  GenerateImageToolInput,
+  ImageGenerationOutputFormat,
+  ImageGenerationQuality,
+  ImageGenerationSize,
+} from "../../shared/design-agent-tools";
 import type { WorkspaceStore } from "../project/workspace-store";
 
-const catalogKey = "model.provider.catalog.v1";
+const catalogKey = "model.provider.catalog.v2";
+const previousCatalogKey = "model.provider.catalog.v1";
 const legacySettingsKey = "model.provider.settings";
 const legacyCredentialKey = "model.provider.credential";
 const legacyProviderId = "migrated-openai-compatible";
@@ -40,6 +50,19 @@ const defaultModelStreamTimeouts: ModelStreamTimeouts = {
   firstResponseTimeoutMs: 180_000,
   idleTimeoutMs: 120_000,
   totalTimeoutMs: 900_000,
+};
+const IMAGE_GENERATION_TIMEOUT_MS = 10 * 60_000;
+const MAX_IMAGE_GENERATION_RESPONSE_BYTES = 24 * 1024 * 1024;
+const MAX_GENERATED_IMAGE_BYTES = 16 * 1024 * 1024;
+
+export type GeneratedImage = {
+  bytes: Uint8Array;
+  providerId: string;
+  modelId: string;
+  providerRequestId?: string;
+  size: ImageGenerationSize;
+  quality: ImageGenerationQuality;
+  outputFormat: ImageGenerationOutputFormat;
 };
 
 export interface CredentialCipher {
@@ -90,7 +113,11 @@ export class ModelProviderHost {
         // Invalid persisted settings are ignored without exposing their contents.
       }
     }
-    return this.migrateLegacyCatalog() ?? emptyCatalog;
+    return (
+      this.migratePreviousCatalog() ??
+      this.migrateLegacyCatalog() ??
+      emptyCatalog
+    );
   }
 
   saveProfile(request: SaveModelProviderProfileRequest): ModelProviderCatalog {
@@ -116,6 +143,11 @@ export class ModelProviderHost {
       name: request.name.trim(),
       enabled: request.enabled,
       apiFormat: request.apiFormat,
+      ...(request.imageGenerationApiFormat === undefined
+        ? {}
+        : {
+            imageGenerationApiFormat: request.imageGenerationApiFormat,
+          }),
       authMode: request.authMode,
       baseUrl: normalizeProviderBaseUrl(request.baseUrl),
       models: request.models.map(snapshotModel),
@@ -142,6 +174,12 @@ export class ModelProviderHost {
         : current.defaultSelection === undefined
           ? {}
           : { defaultSelection: current.defaultSelection }),
+      ...(current.defaultImageGenerationSelection === undefined
+        ? {}
+        : {
+            defaultImageGenerationSelection:
+              current.defaultImageGenerationSelection,
+          }),
     });
     this.persistCatalog(catalog);
     return this.withCredentialState(catalog);
@@ -165,9 +203,129 @@ export class ModelProviderHost {
       ...(current.defaultSelection === undefined
         ? {}
         : { defaultSelection: current.defaultSelection }),
+      ...(current.defaultImageGenerationSelection === undefined
+        ? {}
+        : {
+            defaultImageGenerationSelection:
+              current.defaultImageGenerationSelection,
+          }),
     });
     this.persistCatalog(catalog);
     return this.withCredentialState(catalog);
+  }
+
+  setDefaultImageGenerationSelection(
+    request: SetDefaultImageGenerationSelectionRequest,
+  ): ModelProviderCatalog {
+    const current = this.getCatalog();
+    if (request.selection !== null) {
+      this.resolveImageGenerationSelection(request.selection, current);
+    }
+    const catalog = normalizeCatalog({
+      version: MODEL_PROVIDER_CATALOG_VERSION,
+      providers: current.providers,
+      ...(current.defaultSelection === undefined
+        ? {}
+        : { defaultSelection: current.defaultSelection }),
+      ...(request.selection === null
+        ? {}
+        : { defaultImageGenerationSelection: request.selection }),
+    });
+    this.persistCatalog(catalog);
+    return this.withCredentialState(catalog);
+  }
+
+  async generateImage(
+    input: GenerateImageToolInput,
+    signal: AbortSignal,
+  ): Promise<GeneratedImage> {
+    const catalog = this.getCatalog();
+    const selection = catalog.defaultImageGenerationSelection;
+    if (!selection) {
+      throw new Error("No global image-generation model is configured");
+    }
+    const { provider, model } = this.resolveImageGenerationSelection(
+      selection,
+      catalog,
+    );
+    if (provider.imageGenerationApiFormat !== "openai-images") {
+      throw new Error(
+        "The selected image-generation provider has no supported image API adapter",
+      );
+    }
+    const size = input.size ?? "auto";
+    const quality = input.quality ?? "auto";
+    const outputFormat = input.outputFormat ?? "png";
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal.reason);
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(
+      () =>
+        controller.abort(
+          new DOMException(
+            "Image generation timed out after 10 minutes",
+            "TimeoutError",
+          ),
+        ),
+      IMAGE_GENERATION_TIMEOUT_MS,
+    );
+    try {
+      const response = await this.fetch(
+        `${provider.baseUrl}/images/generations`,
+        {
+          method: "POST",
+          headers: this.providerHeaders(provider),
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: model.modelId,
+            prompt: input.prompt.trim(),
+            n: 1,
+            size,
+            quality,
+            output_format: outputFormat,
+          }),
+        },
+      );
+      const payloadText = await readBoundedResponseText(
+        response,
+        MAX_IMAGE_GENERATION_RESPONSE_BYTES,
+        controller.signal,
+      );
+      let payload: unknown;
+      try {
+        payload = JSON.parse(payloadText);
+      } catch {
+        throw new Error("Image-generation provider returned invalid JSON");
+      }
+      if (!response.ok) {
+        throw new Error(
+          `Image generation failed with HTTP ${response.status}: ${providerErrorMessage(payload)}`,
+        );
+      }
+      const encoded = imageResponseBase64(payload);
+      const bytes = decodeBoundedBase64(encoded, MAX_GENERATED_IMAGE_BYTES);
+      const providerRequestId = response.headers.get("x-request-id")?.trim();
+      return {
+        bytes,
+        providerId: provider.providerId,
+        modelId: model.modelId,
+        ...(providerRequestId ? { providerRequestId } : {}),
+        size,
+        quality,
+        outputFormat,
+      };
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw controller.signal.reason instanceof Error
+          ? controller.signal.reason
+          : new DOMException("Image generation cancelled", "AbortError");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+    }
   }
 
   async testConnection(
@@ -412,6 +570,51 @@ export class ModelProviderHost {
     return { provider, model };
   }
 
+  private resolveImageGenerationSelection(
+    selection: ImageGenerationSelection,
+    catalog = this.getCatalog(),
+  ): { provider: ModelProviderProfile; model: ModelProfile } {
+    const provider = catalog.providers.find(
+      (candidate) => candidate.providerId === selection.providerId,
+    );
+    if (!provider || !provider.enabled) {
+      throw new Error(
+        "Global image-generation provider is unavailable or disabled",
+      );
+    }
+    if (provider.imageGenerationApiFormat === undefined) {
+      throw new Error(
+        "Global image-generation provider has no image API adapter configured",
+      );
+    }
+    const model = provider.models.find(
+      (candidate) => candidate.modelId === selection.modelId,
+    );
+    if (!model || !model.capabilities.imageGeneration) {
+      throw new Error(
+        "Global image-generation model is unavailable or lacks image-generation capability",
+      );
+    }
+    return { provider, model };
+  }
+
+  private providerHeaders(provider: ModelProviderProfile): Headers {
+    const headers = new Headers({
+      accept: "application/json",
+      "content-type": "application/json",
+    });
+    const credential = this.credential(provider.providerId);
+    if (provider.authMode !== "none" && !credential) {
+      throw new Error("Image-generation provider credential is not configured");
+    }
+    if (provider.authMode === "bearer" && credential) {
+      headers.set("authorization", `Bearer ${credential}`);
+    } else if (provider.authMode === "x-api-key" && credential) {
+      headers.set("x-api-key", credential);
+    }
+    return headers;
+  }
+
   private withCredentialState(
     catalog: ModelProviderCatalog,
   ): ModelProviderCatalog {
@@ -426,6 +629,13 @@ export class ModelProviderHost {
       ...(catalog.defaultSelection === undefined
         ? {}
         : { defaultSelection: { ...catalog.defaultSelection } }),
+      ...(catalog.defaultImageGenerationSelection === undefined
+        ? {}
+        : {
+            defaultImageGenerationSelection: {
+              ...catalog.defaultImageGenerationSelection,
+            },
+          }),
     };
   }
 
@@ -465,6 +675,7 @@ export class ModelProviderHost {
               capabilities: {
                 toolUse: true,
                 imageInput: false,
+                imageGeneration: false,
                 reasoning: false,
               },
               reasoningEfforts: ["off" as const],
@@ -505,6 +716,21 @@ export class ModelProviderHost {
       this.persistCatalog(catalog);
       this.store.deletePreference(legacySettingsKey);
       this.store.deletePreference(legacyCredentialKey);
+      return this.withCredentialState(catalog);
+    } catch {
+      return null;
+    }
+  }
+
+  private migratePreviousCatalog(): ModelProviderCatalog | null {
+    const raw = this.store.getPreference(previousCatalogKey);
+    if (!raw) return null;
+    try {
+      const migrated = migrateModelProviderCatalog(JSON.parse(raw));
+      if (!migrated) return null;
+      const catalog = normalizeCatalog(migrated);
+      this.persistCatalog(catalog);
+      this.store.deletePreference(previousCatalogKey);
       return this.withCredentialState(catalog);
     } catch {
       return null;
@@ -611,7 +837,9 @@ function normalizeCatalog(catalog: ModelProviderCatalog): ModelProviderCatalog {
         provider.enabled &&
         provider.providerId === catalog.defaultSelection?.providerId &&
         provider.models.some(
-          (model) => model.modelId === catalog.defaultSelection?.modelId,
+          (model) =>
+            model.modelId === catalog.defaultSelection?.modelId &&
+            model.capabilities.toolUse,
         ),
     )
       ? catalog.defaultSelection
@@ -620,6 +848,23 @@ function normalizeCatalog(catalog: ModelProviderCatalog): ModelProviderCatalog {
     .filter((provider) => provider.enabled)
     .map(defaultSelection)
     .find((selection) => selection !== undefined);
+  const validImageGeneration =
+    catalog.defaultImageGenerationSelection &&
+    catalog.providers.some(
+      (provider) =>
+        provider.enabled &&
+        provider.imageGenerationApiFormat !== undefined &&
+        provider.providerId ===
+          catalog.defaultImageGenerationSelection?.providerId &&
+        provider.models.some(
+          (model) =>
+            model.modelId ===
+              catalog.defaultImageGenerationSelection?.modelId &&
+            model.capabilities.imageGeneration,
+        ),
+    )
+      ? catalog.defaultImageGenerationSelection
+      : undefined;
   return {
     version: MODEL_PROVIDER_CATALOG_VERSION,
     providers: catalog.providers.map((provider) => ({
@@ -629,7 +874,116 @@ function normalizeCatalog(catalog: ModelProviderCatalog): ModelProviderCatalog {
     ...((validCurrent ?? fallback)
       ? { defaultSelection: { ...(validCurrent ?? fallback)! } }
       : {}),
+    ...(validImageGeneration
+      ? {
+          defaultImageGenerationSelection: { ...validImageGeneration },
+        }
+      : {}),
   };
+}
+
+async function readBoundedResponseText(
+  response: Response,
+  maximum: number,
+  signal: AbortSignal,
+): Promise<string> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maximum) {
+    throw new RangeError("Image-generation response exceeds the 24 MB limit");
+  }
+  if (!response.body) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > maximum) {
+      throw new RangeError("Image-generation response exceeds the 24 MB limit");
+    }
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const abort = () => {
+    void reader.cancel(signal.reason).catch(() => undefined);
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    while (true) {
+      if (signal.aborted) {
+        throw signal.reason instanceof Error
+          ? signal.reason
+          : new DOMException("Image generation cancelled", "AbortError");
+      }
+      const result = await reader.read();
+      if (result.done) break;
+      total += result.value.byteLength;
+      if (total > maximum) {
+        await reader.cancel();
+        throw new RangeError(
+          "Image-generation response exceeds the 24 MB limit",
+        );
+      }
+      chunks.push(result.value);
+    }
+  } finally {
+    signal.removeEventListener("abort", abort);
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
+function imageResponseBase64(value: unknown): string {
+  if (!isRecord(value) || !Array.isArray(value.data)) {
+    throw new Error("Image-generation provider returned no image data");
+  }
+  const data = value.data as unknown[];
+  const first: unknown = data[0];
+  if (!isRecord(first) || typeof first.b64_json !== "string") {
+    throw new Error(
+      "Image-generation provider did not return data[0].b64_json",
+    );
+  }
+  return first.b64_json;
+}
+
+function decodeBoundedBase64(value: string, maximum: number): Uint8Array {
+  const maximumEncodedLength = Math.ceil(maximum / 3) * 4;
+  if (
+    value.length === 0 ||
+    value.length > maximumEncodedLength ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      value,
+    )
+  ) {
+    throw new TypeError("Image-generation provider returned invalid base64");
+  }
+  const bytes = Buffer.from(value, "base64");
+  if (bytes.byteLength === 0 || bytes.byteLength > maximum) {
+    throw new RangeError("Generated image exceeds the 16 MB limit");
+  }
+  if (bytes.toString("base64") !== value) {
+    throw new TypeError("Image-generation provider returned invalid base64");
+  }
+  return new Uint8Array(bytes);
+}
+
+function providerErrorMessage(value: unknown): string {
+  if (
+    isRecord(value) &&
+    isRecord(value.error) &&
+    typeof value.error.message === "string"
+  ) {
+    return value.error.message.slice(0, 2_000);
+  }
+  return "Provider rejected the image-generation request";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function defaultSelection(

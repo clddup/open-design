@@ -120,6 +120,7 @@ class RecordingGateway implements ModelGateway {
   readonly requests: Array<{
     tools: ModelRequest["tools"];
     messages: ModelRequest["messages"];
+    system: string;
   }> = [];
 
   constructor(private readonly delegate: ModelGateway) {}
@@ -128,6 +129,7 @@ class RecordingGateway implements ModelGateway {
     this.requests.push({
       tools: modelRequest.tools,
       messages: structuredClone(modelRequest.messages),
+      system: modelRequest.system,
     });
     return this.delegate.stream(modelRequest);
   }
@@ -143,6 +145,86 @@ async function collect(
 }
 
 describe("AgentRuntime", () => {
+  it("keeps a rejected completion provisional and feeds trusted review back privately", async () => {
+    const store = new MemorySessionStore();
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        {
+          blocks: [
+            {
+              id: "premature_completion",
+              type: "text",
+              text: "The first draft is finished.",
+            },
+          ],
+        },
+        {
+          blocks: [
+            {
+              id: "reviewed_completion",
+              type: "text",
+              text: "The reviewed result is finished.",
+            },
+          ],
+        },
+      ]),
+    );
+    let reviews = 0;
+    const runtime = new AgentRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      completionGuard: {
+        review: () =>
+          ++reviews === 1
+            ? {
+                allow: false as const,
+                message: "Capture and refine the rendered result first.",
+              }
+            : { allow: true as const },
+      },
+    });
+
+    const events = await collect(runtime);
+    const messages = store.events.filter(
+      (event) => event.type === "message.assistant",
+    );
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "message.completed",
+          messageId: "run_1_assistant_1",
+          blocks: [],
+        }),
+        expect.objectContaining({
+          type: "message.completed",
+          messageId: "run_1_assistant_2",
+          blocks: [
+            expect.objectContaining({
+              text: "The reviewed result is finished.",
+            }),
+          ],
+        }),
+      ]),
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.payload).toMatchObject({
+      blocks: [
+        expect.objectContaining({ text: "The reviewed result is finished." }),
+      ],
+    });
+    expect(gateway.requests[1]?.system).toContain(
+      "Capture and refine the rendered result first.",
+    );
+    expect(
+      gateway.requests[1]?.messages.some(
+        (message) =>
+          message.role === "user" &&
+          message.content === "Capture and refine the rendered result first.",
+      ),
+    ).toBe(false);
+  });
+
   it("preserves image references across Conversation runs", async () => {
     const store = new MemorySessionStore();
     const gateway = new RecordingGateway(
@@ -1157,7 +1239,7 @@ describe("AgentRuntime", () => {
     );
   });
 
-  it("rejects stale per-document revisions and accepts another host-bound document", async () => {
+  it("trusts the host-bound revision when journal history reached a higher revision", async () => {
     const store = new MemorySessionStore();
     store.events.push(
       {
@@ -1197,8 +1279,13 @@ describe("AgentRuntime", () => {
     });
 
     await expect(
-      collect(runtime, { ...request, runId: "run_stale", revision: 6 }),
-    ).rejects.toThrow("stale");
+      collect(runtime, { ...request, runId: "run_restored", revision: 6 }),
+    ).resolves.toContainEqual(
+      expect.objectContaining({
+        type: "run.completed",
+        stopReason: "complete",
+      }),
+    );
     await expect(
       collect(runtime, {
         ...request,
@@ -1229,7 +1316,18 @@ describe("AgentRuntime", () => {
         stopReason: "complete",
       }),
     );
-    expect(gateway.requests).toHaveLength(2);
+    expect(gateway.requests).toHaveLength(3);
+    expect(
+      store.events.find(
+        (event) =>
+          event.runId === "run_restored" && event.type === "message.user",
+      ),
+    ).toMatchObject({
+      payload: {
+        documentId: request.documentId,
+        revision: 6,
+      },
+    });
     expect(
       store.events.find(
         (event) =>

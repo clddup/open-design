@@ -10,6 +10,8 @@ import {
 } from "react";
 import type { ModelApiFormat, ModelAuthMode } from "@opendesign/model-gateway";
 import type {
+  ImageGenerationSelection,
+  ImageGenerationApiFormat,
   ModelProfile,
   ModelProviderCatalog,
   ModelProviderProfile,
@@ -312,6 +314,8 @@ function ModelProviderForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [defaultImageGenerationSelection, setDefaultImageGenerationSelection] =
+    useState<ImageGenerationSelection | null>(null);
   const [status, setStatus] = useState<
     { tone: "success" | "error"; message: string } | undefined
   >();
@@ -336,6 +340,9 @@ function ModelProviderForm() {
       .then((value) => {
         if (!active) return;
         setCatalog(value);
+        setDefaultImageGenerationSelection(
+          value.defaultImageGenerationSelection ?? null,
+        );
         const first = value.providers[0];
         if (first) loadProvider(first);
       })
@@ -411,8 +418,28 @@ function ModelProviderForm() {
         ...(clearApiKey ? { clearApiKey: true } : {}),
         ...(setAsDefault ? { setAsDefault: true } : {}),
       };
-      const saved = await desktop.saveModelProviderProfile(request);
+      let saved = await desktop.saveModelProviderProfile(request);
+      const desiredImageGenerationSelection = imageGenerationSelectionAfterSave(
+        defaultImageGenerationSelection,
+        request,
+      );
+      if (
+        !sameImageGenerationSelection(
+          saved.defaultImageGenerationSelection ?? null,
+          desiredImageGenerationSelection,
+        )
+      ) {
+        if (typeof desktop.setDefaultImageGenerationSelection !== "function") {
+          throw new Error(t("settings.serviceUnavailable"));
+        }
+        saved = await desktop.setDefaultImageGenerationSelection({
+          selection: desiredImageGenerationSelection,
+        });
+      }
       setCatalog(saved);
+      setDefaultImageGenerationSelection(
+        saved.defaultImageGenerationSelection ?? null,
+      );
       const savedProfile = saved.providers.find(
         (provider) => provider.providerId === request.providerId,
       );
@@ -422,7 +449,9 @@ function ModelProviderForm() {
       setDirty(false);
       setStatus({ tone: "success", message: t("settings.saved") });
       if (testAfterSave) {
-        const model = savedProfile?.models[0];
+        const model = savedProfile?.models.find(
+          (candidate) => candidate.capabilities.toolUse,
+        );
         if (model && savedProfile) {
           await testConnection(savedProfile, model);
         }
@@ -497,6 +526,9 @@ function ModelProviderForm() {
         providerId: selectedProviderId,
       });
       setCatalog(nextCatalog);
+      setDefaultImageGenerationSelection(
+        nextCatalog.defaultImageGenerationSelection ?? null,
+      );
       const next = nextCatalog.providers[0];
       if (next) loadProvider(next);
       else {
@@ -655,6 +687,33 @@ function ModelProviderForm() {
                   </select>
                 </label>
                 <label className="settings-field">
+                  <span>{t("settings.imageGenerationApi")}</span>
+                  <select
+                    aria-label={t("settings.imageGenerationApi")}
+                    disabled={busy}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      updateDraft((current) => {
+                        const rest: ProviderDraft = { ...current };
+                        delete rest.imageGenerationApiFormat;
+                        return value
+                          ? {
+                              ...rest,
+                              imageGenerationApiFormat:
+                                value as ImageGenerationApiFormat,
+                            }
+                          : rest;
+                      });
+                    }}
+                    value={draft.imageGenerationApiFormat ?? ""}
+                  >
+                    <option value="">{t("settings.notConfigured")}</option>
+                    <option value="openai-images">
+                      {t("settings.apiOpenAIImages")}
+                    </option>
+                  </select>
+                </label>
+                <label className="settings-field">
                   <span>{t("settings.authMode")}</span>
                   <select
                     aria-label={t("settings.authMode")}
@@ -709,10 +768,21 @@ function ModelProviderForm() {
               )}
               <ModelListEditor
                 busy={busy}
+                defaultImageGenerationSelection={
+                  defaultImageGenerationSelection
+                }
+                imageGenerationAdapterConfigured={
+                  draft.imageGenerationApiFormat !== undefined
+                }
                 models={draft.models}
                 onChange={(models) =>
                   updateDraft((current) => ({ ...current, models }))
                 }
+                onDefaultImageGenerationSelectionChange={(selection) => {
+                  setDefaultImageGenerationSelection(selection);
+                  setDirty(true);
+                }}
+                providerId={draft.providerId}
               />
               <p className="settings-security-note">
                 <Glyph name="lock" size={14} />
@@ -773,12 +843,22 @@ type ProviderDraft = Omit<ModelProviderProfile, "hasApiKey" | "updatedAt">;
 
 function ModelListEditor({
   busy,
+  defaultImageGenerationSelection,
+  imageGenerationAdapterConfigured,
   models,
   onChange,
+  onDefaultImageGenerationSelectionChange,
+  providerId,
 }: {
   busy: boolean;
+  defaultImageGenerationSelection: ImageGenerationSelection | null;
+  imageGenerationAdapterConfigured: boolean;
   models: ModelProfile[];
   onChange: (models: ModelProfile[]) => void;
+  onDefaultImageGenerationSelectionChange: (
+    selection: ImageGenerationSelection | null,
+  ) => void;
+  providerId: string;
 }) {
   const { t } = useI18n();
   const update = (index: number, model: ModelProfile) =>
@@ -811,9 +891,18 @@ function ModelListEditor({
               aria-label={`${t("settings.modelId")} ${index + 1}`}
               disabled={busy}
               maxLength={256}
-              onChange={(event) =>
-                update(index, { ...model, modelId: event.target.value })
-              }
+              onChange={(event) => {
+                const modelId = event.target.value;
+                update(index, { ...model, modelId });
+                if (
+                  defaultImageGenerationSelection?.providerId === providerId &&
+                  defaultImageGenerationSelection.modelId === model.modelId
+                ) {
+                  onDefaultImageGenerationSelectionChange(
+                    modelId ? { providerId, modelId } : null,
+                  );
+                }
+              }}
               placeholder={t("settings.modelPlaceholder")}
               value={model.modelId}
             />
@@ -901,6 +990,41 @@ function ModelListEditor({
             </label>
             <label className="settings-checkbox">
               <input
+                checked={
+                  defaultImageGenerationSelection?.providerId === providerId &&
+                  defaultImageGenerationSelection.modelId === model.modelId
+                }
+                disabled={
+                  busy ||
+                  !imageGenerationAdapterConfigured ||
+                  !model.modelId.trim()
+                }
+                onChange={(event) => {
+                  const selected = event.target.checked;
+                  onChange(
+                    models.map((candidate, modelIndex) => ({
+                      ...candidate,
+                      capabilities: {
+                        ...candidate.capabilities,
+                        imageGeneration:
+                          modelIndex === index
+                            ? selected
+                            : candidate.capabilities.imageGeneration,
+                      },
+                    })),
+                  );
+                  onDefaultImageGenerationSelectionChange(
+                    selected
+                      ? { providerId, modelId: model.modelId.trim() }
+                      : null,
+                  );
+                }}
+                type="checkbox"
+              />
+              <span>{t("settings.useForGlobalImageGeneration")}</span>
+            </label>
+            <label className="settings-checkbox">
+              <input
                 checked={model.capabilities.reasoning}
                 disabled={busy}
                 onChange={(event) =>
@@ -924,9 +1048,15 @@ function ModelListEditor({
             disabled={busy || models.length === 1}
             icon="close"
             label={`${t("settings.removeModel")} ${model.name || index + 1}`}
-            onClick={() =>
-              onChange(models.filter((_, modelIndex) => modelIndex !== index))
-            }
+            onClick={() => {
+              if (
+                defaultImageGenerationSelection?.providerId === providerId &&
+                defaultImageGenerationSelection.modelId === model.modelId
+              ) {
+                onDefaultImageGenerationSelectionChange(null);
+              }
+              onChange(models.filter((_, modelIndex) => modelIndex !== index));
+            }}
           />
         </div>
       ))}
@@ -940,6 +1070,11 @@ function profileDraft(profile: ModelProviderProfile): ProviderDraft {
     name: profile.name,
     enabled: profile.enabled,
     apiFormat: profile.apiFormat,
+    ...(profile.imageGenerationApiFormat === undefined
+      ? {}
+      : {
+          imageGenerationApiFormat: profile.imageGenerationApiFormat,
+        }),
     authMode: profile.authMode,
     baseUrl: profile.baseUrl,
     models: profile.models.map((model) => ({
@@ -957,6 +1092,7 @@ function newProviderDraft(): ProviderDraft {
     name: "Custom provider",
     enabled: true,
     apiFormat: "openai-responses",
+    imageGenerationApiFormat: "openai-images",
     authMode: "bearer",
     baseUrl: "https://api.openai.com/v1",
     models: [newModelProfile()],
@@ -969,7 +1105,12 @@ function newModelProfile(): ModelProfile {
     name: "",
     contextWindow: 200_000,
     maxOutputTokens: 16_384,
-    capabilities: { toolUse: true, imageInput: false, reasoning: true },
+    capabilities: {
+      toolUse: true,
+      imageInput: false,
+      imageGeneration: false,
+      reasoning: true,
+    },
     reasoningEfforts: ["off", "low", "medium", "high", "xhigh"],
   };
 }
@@ -988,6 +1129,32 @@ function validProviderDraft(draft: ProviderDraft): boolean {
         Number.isInteger(model.maxOutputTokens) &&
         model.maxOutputTokens >= 1,
     )
+  );
+}
+
+function imageGenerationSelectionAfterSave(
+  selection: ImageGenerationSelection | null,
+  request: SaveModelProviderProfileRequest,
+): ImageGenerationSelection | null {
+  if (!selection || selection.providerId !== request.providerId)
+    return selection;
+  const selectedModelId = selection.modelId.trim();
+  const model = request.models.find(
+    (candidate) => candidate.modelId === selectedModelId,
+  );
+  return request.enabled &&
+    request.imageGenerationApiFormat !== undefined &&
+    model?.capabilities.imageGeneration
+    ? { providerId: selection.providerId, modelId: selectedModelId }
+    : null;
+}
+
+function sameImageGenerationSelection(
+  left: ImageGenerationSelection | null,
+  right: ImageGenerationSelection | null,
+): boolean {
+  return (
+    left?.providerId === right?.providerId && left?.modelId === right?.modelId
   );
 }
 

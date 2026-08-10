@@ -21,7 +21,7 @@ export type Alignment =
 
 type FillNode = Extract<
   DesignNode,
-  { kind: "ellipse" | "frame" | "rectangle" | "text" }
+  { kind: "ellipse" | "frame" | "path" | "rectangle" | "text" | "vector" }
 >;
 type CornerNode = Extract<
   DesignNode,
@@ -88,8 +88,10 @@ function isFillNode(node: DesignNode): node is FillNode {
   return (
     node.kind === "ellipse" ||
     node.kind === "frame" ||
+    node.kind === "path" ||
     node.kind === "rectangle" ||
-    node.kind === "text"
+    node.kind === "text" ||
+    node.kind === "vector"
   );
 }
 
@@ -959,7 +961,7 @@ function SelectedNodeProperties({
               onCommit={(content) => onUpdate({ properties: { content } })}
               value={node.properties.content}
             />
-            <div className="property-grid">
+            <div className="property-grid property-grid--typography">
               <Field
                 accessibleLabel={t("properties.fontFamily")}
                 label="Font"

@@ -75,13 +75,21 @@ export type SaveDesignFileResult = {
   name: string;
 };
 
-export const MODEL_PROVIDER_CATALOG_VERSION = 1 as const;
+export const MODEL_PROVIDER_CATALOG_VERSION = 2 as const;
+
+export type ImageGenerationApiFormat = "openai-images";
 
 export type ModelCapabilities = {
   toolUse: boolean;
   imageInput: boolean;
+  imageGeneration: boolean;
   reasoning: boolean;
 };
+
+export type ImageGenerationSelection = Pick<
+  ModelSelection,
+  "providerId" | "modelId"
+>;
 
 export type ModelProfile = {
   modelId: string;
@@ -97,6 +105,7 @@ export type ModelProviderProfile = {
   name: string;
   enabled: boolean;
   apiFormat: ModelApiFormat;
+  imageGenerationApiFormat?: ImageGenerationApiFormat;
   authMode: ModelAuthMode;
   baseUrl: string;
   models: ModelProfile[];
@@ -108,6 +117,7 @@ export type ModelProviderCatalog = {
   version: typeof MODEL_PROVIDER_CATALOG_VERSION;
   providers: ModelProviderProfile[];
   defaultSelection?: ModelSelection;
+  defaultImageGenerationSelection?: ImageGenerationSelection;
 };
 
 export type SaveModelProviderProfileRequest = {
@@ -115,6 +125,7 @@ export type SaveModelProviderProfileRequest = {
   name: string;
   enabled: boolean;
   apiFormat: ModelApiFormat;
+  imageGenerationApiFormat?: ImageGenerationApiFormat;
   authMode: ModelAuthMode;
   baseUrl: string;
   models: ModelProfile[];
@@ -124,6 +135,10 @@ export type SaveModelProviderProfileRequest = {
 };
 
 export type DeleteModelProviderProfileRequest = { providerId: string };
+
+export type SetDefaultImageGenerationSelectionRequest = {
+  selection: ImageGenerationSelection | null;
+};
 
 export type TestModelProviderConnectionRequest = ModelSelection;
 
@@ -213,6 +228,9 @@ export interface DesktopApi {
   deleteModelProviderProfile: (
     request: DeleteModelProviderProfileRequest,
   ) => Promise<ModelProviderCatalog>;
+  setDefaultImageGenerationSelection: (
+    request: SetDefaultImageGenerationSelectionRequest,
+  ) => Promise<ModelProviderCatalog>;
   testModelProviderConnection: (
     request: TestModelProviderConnectionRequest,
   ) => Promise<ProviderConnectionResult>;
@@ -289,6 +307,8 @@ export const channels = {
   getModelProviderCatalog: "model-provider:get-catalog",
   saveModelProviderProfile: "model-provider:save-profile",
   deleteModelProviderProfile: "model-provider:delete-profile",
+  setDefaultImageGenerationSelection:
+    "model-provider:set-default-image-generation",
   testModelProviderConnection: "model-provider:test-connection",
   modelProviderCatalogChanged: "model-provider:catalog-changed",
   selectAgentAttachments: "agent-attachment:select",
@@ -395,9 +415,16 @@ export function isModelProviderCatalog(
 ): value is ModelProviderCatalog {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const catalog = value as Record<string, unknown>;
-  const allowedKeys = ["version", "providers", "defaultSelection"];
+  const allowedKeys = [
+    "version",
+    "providers",
+    "defaultSelection",
+    "defaultImageGenerationSelection",
+  ];
   const providers = catalog.providers;
   const defaultSelection = catalog.defaultSelection;
+  const defaultImageGenerationSelection =
+    catalog.defaultImageGenerationSelection;
   return (
     catalog.version === MODEL_PROVIDER_CATALOG_VERSION &&
     Array.isArray(providers) &&
@@ -412,11 +439,55 @@ export function isModelProviderCatalog(
             provider.enabled &&
             provider.providerId === defaultSelection.providerId &&
             provider.models.some(
-              (model) => model.modelId === defaultSelection.modelId,
+              (model) =>
+                model.modelId === defaultSelection.modelId &&
+                model.capabilities.toolUse,
+            ),
+        ))) &&
+    (defaultImageGenerationSelection === undefined ||
+      (isImageGenerationSelection(defaultImageGenerationSelection) &&
+        providers.some(
+          (provider) =>
+            provider.enabled &&
+            provider.imageGenerationApiFormat !== undefined &&
+            provider.providerId ===
+              defaultImageGenerationSelection.providerId &&
+            provider.models.some(
+              (model) =>
+                model.modelId === defaultImageGenerationSelection.modelId &&
+                model.capabilities.imageGeneration,
             ),
         ))) &&
     Object.keys(catalog).every((key) => allowedKeys.includes(key))
   );
+}
+
+export function migrateModelProviderCatalog(
+  value: unknown,
+): ModelProviderCatalog | null {
+  if (isModelProviderCatalog(value)) return snapshotCatalog(value);
+  if (!isRecord(value) || value.version !== 1) return null;
+  if (!Array.isArray(value.providers) || value.providers.length > 64) {
+    return null;
+  }
+  const providers = value.providers.map(migrateV1Provider);
+  if (providers.some((provider) => provider === null)) return null;
+  const candidate = {
+    version: MODEL_PROVIDER_CATALOG_VERSION,
+    providers: providers as ModelProviderProfile[],
+    ...(value.defaultSelection === undefined
+      ? {}
+      : { defaultSelection: value.defaultSelection }),
+  };
+  if (
+    !Object.keys(value).every((key) =>
+      ["version", "providers", "defaultSelection"].includes(key),
+    ) ||
+    !isModelProviderCatalog(candidate)
+  ) {
+    return null;
+  }
+  return snapshotCatalog(candidate);
 }
 
 export function isModelProviderProfile(
@@ -429,6 +500,8 @@ export function isModelProviderProfile(
     isDisplayName(profile.name) &&
     typeof profile.enabled === "boolean" &&
     isModelApiFormat(profile.apiFormat) &&
+    (profile.imageGenerationApiFormat === undefined ||
+      isImageGenerationApiFormat(profile.imageGenerationApiFormat)) &&
     isModelAuthMode(profile.authMode) &&
     isProviderBaseUrl(profile.baseUrl) &&
     Array.isArray(profile.models) &&
@@ -438,17 +511,20 @@ export function isModelProviderProfile(
       profile.models.length &&
     typeof profile.hasApiKey === "boolean" &&
     isNullableTimestamp(profile.updatedAt) &&
-    hasExactKeys(profile, [
-      "providerId",
-      "name",
-      "enabled",
-      "apiFormat",
-      "authMode",
-      "baseUrl",
-      "models",
-      "hasApiKey",
-      "updatedAt",
-    ])
+    Object.keys(profile).every((key) =>
+      [
+        "providerId",
+        "name",
+        "enabled",
+        "apiFormat",
+        "imageGenerationApiFormat",
+        "authMode",
+        "baseUrl",
+        "models",
+        "hasApiKey",
+        "updatedAt",
+      ].includes(key),
+    )
   );
 }
 
@@ -462,6 +538,7 @@ export function isSaveModelProviderProfileRequest(
     "name",
     "enabled",
     "apiFormat",
+    "imageGenerationApiFormat",
     "authMode",
     "baseUrl",
     "models",
@@ -474,6 +551,8 @@ export function isSaveModelProviderProfileRequest(
     isDisplayName(request.name) &&
     typeof request.enabled === "boolean" &&
     isModelApiFormat(request.apiFormat) &&
+    (request.imageGenerationApiFormat === undefined ||
+      isImageGenerationApiFormat(request.imageGenerationApiFormat)) &&
     isModelAuthMode(request.authMode) &&
     isProviderBaseUrl(request.baseUrl) &&
     Array.isArray(request.models) &&
@@ -502,6 +581,16 @@ export function isDeleteModelProviderProfileRequest(
   );
 }
 
+export function isSetDefaultImageGenerationSelectionRequest(
+  value: unknown,
+): value is SetDefaultImageGenerationSelectionRequest {
+  return (
+    isRecord(value) &&
+    (value.selection === null || isImageGenerationSelection(value.selection)) &&
+    hasExactKeys(value, ["selection"])
+  );
+}
+
 export function isModelSelection(value: unknown): value is ModelSelection {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const selection = value as Record<string, unknown>;
@@ -512,6 +601,17 @@ export function isModelSelection(value: unknown): value is ModelSelection {
     (selection.reasoningEffort === undefined ||
       isModelReasoningEffort(selection.reasoningEffort)) &&
     Object.keys(selection).every((key) => allowedKeys.includes(key))
+  );
+}
+
+export function isImageGenerationSelection(
+  value: unknown,
+): value is ImageGenerationSelection {
+  return (
+    isRecord(value) &&
+    isProviderId(value.providerId) &&
+    isModelName(value.modelId, false) &&
+    hasExactKeys(value, ["providerId", "modelId"])
   );
 }
 
@@ -746,6 +846,12 @@ function isModelApiFormat(value: unknown): value is ModelApiFormat {
   );
 }
 
+function isImageGenerationApiFormat(
+  value: unknown,
+): value is ImageGenerationApiFormat {
+  return value === "openai-images";
+}
+
 function isModelAuthMode(value: unknown): value is ModelAuthMode {
   return value === "bearer" || value === "x-api-key" || value === "none";
 }
@@ -780,10 +886,13 @@ function isModelProfile(value: unknown): value is ModelProfile {
     !Array.isArray(capabilities) &&
     typeof (capabilities as Record<string, unknown>).toolUse === "boolean" &&
     typeof (capabilities as Record<string, unknown>).imageInput === "boolean" &&
+    typeof (capabilities as Record<string, unknown>).imageGeneration ===
+      "boolean" &&
     typeof (capabilities as Record<string, unknown>).reasoning === "boolean" &&
     hasExactKeys(capabilities as Record<string, unknown>, [
       "toolUse",
       "imageInput",
+      "imageGeneration",
       "reasoning",
     ]) &&
     Array.isArray(model.reasoningEfforts) &&
@@ -802,6 +911,78 @@ function isModelProfile(value: unknown): value is ModelProfile {
       "reasoningEfforts",
     ])
   );
+}
+
+function migrateV1Provider(value: unknown): ModelProviderProfile | null {
+  if (!isRecord(value) || !Array.isArray(value.models)) return null;
+  if (
+    !hasExactKeys(value, [
+      "providerId",
+      "name",
+      "enabled",
+      "apiFormat",
+      "authMode",
+      "baseUrl",
+      "models",
+      "hasApiKey",
+      "updatedAt",
+    ])
+  ) {
+    return null;
+  }
+  const models = value.models.map(migrateV1Model);
+  if (models.some((model) => model === null)) return null;
+  const candidate = { ...value, models };
+  return isModelProviderProfile(candidate) ? candidate : null;
+}
+
+function migrateV1Model(value: unknown): ModelProfile | null {
+  if (!isRecord(value) || !isRecord(value.capabilities)) return null;
+  if (
+    !hasExactKeys(value, [
+      "modelId",
+      "name",
+      "contextWindow",
+      "maxOutputTokens",
+      "capabilities",
+      "reasoningEfforts",
+    ]) ||
+    !hasExactKeys(value.capabilities, ["toolUse", "imageInput", "reasoning"])
+  ) {
+    return null;
+  }
+  const candidate = {
+    ...value,
+    capabilities: {
+      ...value.capabilities,
+      imageGeneration: false,
+    },
+  };
+  return isModelProfile(candidate) ? candidate : null;
+}
+
+function snapshotCatalog(catalog: ModelProviderCatalog): ModelProviderCatalog {
+  return {
+    ...catalog,
+    providers: catalog.providers.map((provider) => ({
+      ...provider,
+      models: provider.models.map((model) => ({
+        ...model,
+        capabilities: { ...model.capabilities },
+        reasoningEfforts: [...model.reasoningEfforts],
+      })),
+    })),
+    ...(catalog.defaultSelection === undefined
+      ? {}
+      : { defaultSelection: { ...catalog.defaultSelection } }),
+    ...(catalog.defaultImageGenerationSelection === undefined
+      ? {}
+      : {
+          defaultImageGenerationSelection: {
+            ...catalog.defaultImageGenerationSelection,
+          },
+        }),
+  };
 }
 
 function isNullableTimestamp(value: unknown): value is string | null {

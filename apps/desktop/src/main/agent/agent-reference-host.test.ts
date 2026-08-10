@@ -31,6 +31,34 @@ function request(prompt: string) {
 }
 
 describe("AgentReferenceHost", () => {
+  it("authorizes a generated image only for its active run", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-reference-"));
+    const attachments = new AgentAttachmentHost(join(root, "attachments"));
+    const host = new AgentReferenceHost(attachments);
+    host.registerRun(request("Generate a poster image"));
+    const imported = await attachments.importImageBytes("generated.png", png);
+    const attachment = {
+      attachmentId: imported.attachmentId,
+      name: imported.name,
+      mimeType: imported.mimeType,
+      byteSize: imported.byteSize,
+    };
+
+    expect(host.registerGeneratedImage(attachment, context)).toEqual(
+      attachment,
+    );
+    await expect(
+      host.materializeImage(attachment.attachmentId, context),
+    ).resolves.toMatchObject({
+      attachment,
+      mimeType: "image/png",
+    });
+    host.releaseRun(context.runId);
+    expect(() => host.registerGeneratedImage(attachment, context)).toThrow(
+      "no longer active",
+    );
+  });
+
   it("reads only an exact local image path declared by the user", async () => {
     const root = await mkdtemp(join(tmpdir(), "opendesign-reference-"));
     const source = join(root, "reference.png");

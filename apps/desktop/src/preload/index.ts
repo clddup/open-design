@@ -31,6 +31,7 @@ import {
   isSaveProjectDesignFileRequest,
   isLocalePreference,
   isSaveModelProviderProfileRequest,
+  isSetDefaultImageGenerationSelectionRequest,
   isDeleteModelProviderProfileRequest,
   isDiagnosticEvent,
   isRendererDiagnosticReport,
@@ -52,6 +53,7 @@ import {
   type RecentProject,
   type SaveDesignFileRequest,
   type SaveModelProviderProfileRequest,
+  type SetDefaultImageGenerationSelectionRequest,
   type DeleteModelProviderProfileRequest,
   type DiagnosticEvent,
   type RendererDiagnosticReport,
@@ -184,6 +186,24 @@ const desktopApi: DesktopApi = Object.freeze({
     );
     const result: unknown = await ipcRenderer.invoke(
       channels.deleteModelProviderProfile,
+      request,
+    );
+    return validate<ModelProviderCatalog>(
+      result,
+      isModelProviderCatalog,
+      "Invalid model provider catalog response",
+    );
+  },
+  setDefaultImageGenerationSelection: async (
+    request: SetDefaultImageGenerationSelectionRequest,
+  ) => {
+    validate(
+      request,
+      isSetDefaultImageGenerationSelectionRequest,
+      "Invalid default image-generation selection request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.setDefaultImageGenerationSelection,
       request,
     );
     return validate<ModelProviderCatalog>(

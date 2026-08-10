@@ -123,6 +123,52 @@ describe("Renderer design tool scope", () => {
     });
   });
 
+  it("returns a bounded multimodal canvas preview without editing the document", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const attachment = {
+      attachmentId: `image_${"a".repeat(64)}`,
+      name: "OpenDesign canvas r0.jpg",
+      mimeType: "image/jpeg" as const,
+      byteSize: 2_048,
+    };
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "capture_canvas",
+        call: {
+          toolCallId: "tool_capture_canvas",
+          toolName: "opendesign_capture_canvas",
+          input: {},
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        captureCanvas: () =>
+          Promise.resolve({
+            attachment,
+            height: 768,
+            width: 1_024,
+          }),
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        observedRevision: 0,
+        content: {
+          revision: 0,
+          width: 1_024,
+          height: 768,
+          attachment,
+          attachments: [attachment],
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+  });
+
   it("allows a page-targeted write outside the contextual selection", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const request: RendererDesignToolRequest = {
@@ -152,6 +198,133 @@ describe("Renderer design tool scope", () => {
     expect(runtime.getSnapshot().document.nodesById.title_welcome?.name).toBe(
       "Out of scope",
     );
+  });
+
+  it("allows later commands to target a container inserted earlier in the same page transaction", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "apply_composite",
+        call: {
+          toolCallId: "tool_apply_composite",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Create a grouped mascot",
+            commands: [
+              {
+                commandId: "insert_mascot_frame",
+                type: "insert_element",
+                pageId: "page_welcome",
+                parentId: null,
+                index: 1,
+                node: {
+                  id: "mascot_frame",
+                  kind: "frame",
+                  name: "Mascot",
+                  parentId: null,
+                  childIds: [],
+                  visible: true,
+                  locked: false,
+                  transform: [1, 0, 0, 1, 900, 80],
+                  size: { width: 280, height: 320 },
+                  opacity: 1,
+                  extensions: {},
+                  properties: {
+                    fills: [],
+                    strokes: [],
+                    strokeWidth: 0,
+                    cornerRadius: 0,
+                    clipsContent: false,
+                  },
+                },
+              },
+              {
+                commandId: "insert_mascot_body",
+                type: "insert_element",
+                pageId: "page_welcome",
+                parentId: "mascot_frame",
+                index: 0,
+                node: {
+                  id: "mascot_body",
+                  kind: "ellipse",
+                  name: "Mascot body",
+                  parentId: "mascot_frame",
+                  childIds: [],
+                  visible: true,
+                  locked: false,
+                  transform: [1, 0, 0, 1, 40, 30],
+                  size: { width: 200, height: 260 },
+                  opacity: 1,
+                  extensions: {},
+                  properties: {
+                    fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+                    strokes: [],
+                    strokeWidth: 0,
+                  },
+                },
+              },
+            ],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      { stageDelayMs: 0 },
+    );
+
+    expect(response).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.nodesById.mascot_frame?.childIds,
+    ).toEqual(["mascot_body"]);
+    expect(runtime.getSnapshot().document.nodesById.mascot_body?.parentId).toBe(
+      "mascot_frame",
+    );
+  });
+
+  it("still rejects a parent that was not on the target page or created earlier", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "apply_missing_parent",
+          call: {
+            toolCallId: "tool_apply_missing_parent",
+            toolName: "opendesign_apply_transaction",
+            input: {
+              label: "Invalid composite",
+              commands: [
+                {
+                  commandId: "insert_child_before_parent",
+                  type: "insert_element",
+                  pageId: "page_welcome",
+                  parentId: "future_parent",
+                  index: 0,
+                  node: {
+                    id: "early_child",
+                    kind: "ellipse",
+                    name: "Early child",
+                    parentId: "future_parent",
+                    childIds: [],
+                    visible: true,
+                    locked: false,
+                    transform: [1, 0, 0, 1, 0, 0],
+                    size: { width: 20, height: 20 },
+                    opacity: 1,
+                    extensions: {},
+                    properties: { fills: [], strokes: [], strokeWidth: 0 },
+                  },
+                },
+              ],
+            },
+          },
+          context: pageContext,
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("parent outside the registered page mutation target");
   });
 
   it("applies a write inside the registered selection", async () => {

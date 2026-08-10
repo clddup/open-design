@@ -48,6 +48,7 @@ import {
   isAgentAttachmentPreviewRequest,
   isLocalePreference,
   isSaveModelProviderProfileRequest,
+  isSetDefaultImageGenerationSelectionRequest,
   isTestModelProviderConnectionRequest,
   isSaveDesignFileRequest,
   isThemePreference,
@@ -63,6 +64,8 @@ import { DEFAULT_APP_LOCALE, type AppLocale } from "../shared/i18n/locale";
 import { translate } from "../shared/i18n/messages";
 import {
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  GENERATE_IMAGE_TOOL_NAME,
+  isGenerateImageToolInput,
   isPlaceImageToolInput,
   isReadImageToolInput,
   PLACE_IMAGE_TOOL_NAME,
@@ -500,6 +503,24 @@ function registerIpc() {
     },
   );
   ipcMain.handle(
+    channels.setDefaultImageGenerationSelection,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      const request = args[0];
+      if (!isSetDefaultImageGenerationSelectionRequest(request)) {
+        throw new TypeError("Invalid default image-generation selection");
+      }
+      const catalog =
+        requireModelProviderHost().setDefaultImageGenerationSelection(request);
+      mainWindow?.webContents.send(
+        channels.modelProviderCatalogChanged,
+        catalog,
+      );
+      return catalog;
+    },
+  );
+  ipcMain.handle(
     channels.testModelProviderConnection,
     (event, ...args: unknown[]) => {
       assertMainRenderer(event);
@@ -843,6 +864,44 @@ void app.whenReady().then(async () => {
         context,
         signal,
       );
+    }
+    if (call.toolName === GENERATE_IMAGE_TOOL_NAME) {
+      if (!isGenerateImageToolInput(call.input)) {
+        throw new TypeError("Invalid generate image tool input");
+      }
+      const generated = await requireModelProviderHost().generateImage(
+        call.input,
+        signal,
+      );
+      const attachment = await requireAgentAttachmentHost().importImageBytes(
+        `generated-image.${generated.outputFormat}`,
+        generated.bytes,
+      );
+      const authorized = requireAgentReferenceHost().registerGeneratedImage(
+        {
+          attachmentId: attachment.attachmentId,
+          name: attachment.name,
+          mimeType: attachment.mimeType,
+          byteSize: attachment.byteSize,
+        },
+        context,
+      );
+      return {
+        content: {
+          ok: true,
+          sourceKind: "generated",
+          providerId: generated.providerId,
+          modelId: generated.modelId,
+          ...(generated.providerRequestId
+            ? { providerRequestId: generated.providerRequestId }
+            : {}),
+          size: generated.size,
+          quality: generated.quality,
+          outputFormat: generated.outputFormat,
+          attachment: authorized,
+          attachments: [authorized],
+        },
+      };
     }
     if (call.toolName === PLACE_IMAGE_TOOL_NAME) {
       if (!isPlaceImageToolInput(call.input)) {

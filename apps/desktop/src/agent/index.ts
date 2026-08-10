@@ -16,6 +16,7 @@ import {
   validateDesignAgentToolInput,
 } from "../shared/design-agent-tools.js";
 import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt.js";
+import { DESIGN_VISUAL_COMPLETION_GUARD } from "./design-completion-guard.js";
 
 if (!process.parentPort) {
   throw new Error("OpenDesign Agent must run as an Electron utility process");
@@ -44,6 +45,7 @@ const runtime = new AgentRuntime({
       })),
   },
   toolExecutor: parentDesignToolExecutor,
+  completionGuard: DESIGN_VISUAL_COMPLETION_GUARD,
   systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
 });
 

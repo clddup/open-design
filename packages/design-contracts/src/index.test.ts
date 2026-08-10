@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
+  DesignNodeSchema,
   DesignOperationSchema,
   DesignTransactionSchema,
   EffectSchema,
@@ -111,6 +112,41 @@ describe("design contract schemas", () => {
     ).toBe(true);
   });
 
+  it("defines portable SVG path geometry with the same appearance semantics as shapes", () => {
+    const pathNode = {
+      id: "path_penguin",
+      name: "Penguin silhouette",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 160, height: 220 },
+      opacity: 1,
+      extensions: {},
+      kind: "path",
+      properties: {
+        path: "M 80 4 C 126 4 154 46 148 108 C 143 171 118 214 80 216 C 42 214 17 171 12 108 C 6 46 34 4 80 4 Z",
+        fillRule: "evenodd",
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [{ type: "solid", color: "#030712", opacity: 0.8 }],
+        strokeWidth: 3,
+        strokeAlign: "inside",
+        strokeCap: "round",
+        strokeJoin: "round",
+        dashPattern: [],
+      },
+    };
+
+    expect(Value.Check(DesignNodeSchema, pathNode)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...pathNode,
+        properties: { ...pathNode.properties, path: "<script>bad()</script>" },
+      }),
+    ).toBe(false);
+  });
+
   it("migrates 1.0 documents to the versioned appearance contract", () => {
     const legacy = {
       format: DESIGN_FORMAT,
@@ -141,5 +177,67 @@ describe("design contract schemas", () => {
     expect(
       migrateDesignDocument({ ...legacy, schemaVersion: "0.9.0" }),
     ).toBeNull();
+  });
+
+  it("migrates 1.1 path placeholders without losing their legacy payload", () => {
+    const legacyPathProperties = {
+      path: [1, 10, 10, 2, 80, 80, 11],
+      customGeometryHint: "legacy compact command stream",
+    };
+    const legacy = {
+      format: DESIGN_FORMAT,
+      schemaVersion: "1.1.0",
+      documentId: "document_path_legacy",
+      revision: 3,
+      pageOrder: ["page_1"],
+      pagesById: {
+        page_1: {
+          id: "page_1",
+          name: "Page 1",
+          rootNodeIds: ["path_1"],
+          extensions: {},
+        },
+      },
+      nodesById: {
+        path_1: {
+          id: "path_1",
+          name: "Legacy path",
+          parentId: null,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 0, 0],
+          size: { width: 100, height: 100 },
+          opacity: 1,
+          extensions: {},
+          kind: "path",
+          properties: legacyPathProperties,
+        },
+      },
+      componentsById: {},
+      variantSetsById: {},
+      tokenCollectionsById: {},
+      tokensById: {},
+      interactionsById: {},
+      assetsById: {},
+      extensions: {},
+    };
+
+    const migrated = migrateDesignDocument(legacy);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    const path = migrated?.nodesById.path_1;
+    expect(path?.kind).toBe("path");
+    if (!path || path.kind !== "path") throw new Error("Missing path node");
+    expect(path.properties).toMatchObject({
+      path: "M 0 0",
+      fills: [],
+      strokes: [],
+      strokeWidth: 0,
+    });
+    expect(path.extensions["dev.opendesign.path.migration"]).toEqual({
+      sourceSchemaVersion: "1.1.0",
+      originalProperties: legacyPathProperties,
+      usedPlaceholderPath: true,
+    });
   });
 });

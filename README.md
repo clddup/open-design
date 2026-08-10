@@ -30,11 +30,11 @@ Agent utilityProcess ── Conversation / Provider / typed design tools
 ## 当前已实现
 
 - Workspace、Project、Design File、Page 与 Layers 的基础工作流和本地持久化。
-- `DesignDocument 1.1.0`、原子事务、单调 revision、preview、undo/redo、checkpoint 与冲突检查。
+- `DesignDocument 1.2.0`、正式 SVG Path/Vector 外观语义、原子事务、单调 revision、preview、undo/redo、checkpoint 与冲突检查。
 - LeaferJS 场景投影、pan/zoom、命中、框选、多选、move/resize/rotate/skew 和文本内编辑。
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask 和事务化图片 asset 的公共语义。
-- 持久 Conversation、可取消 Agent run、多 Provider Catalog，以及 OpenAI Responses、OpenAI Chat Completions 和 Anthropic Messages adapter。
-- `inspect_document`、`apply_transaction`、`read_image` 和 `place_image` typed tools。
+- 持久 Conversation、可取消 Agent run、`ModelProviderCatalog v2`，以及 OpenAI Responses、OpenAI Chat Completions 和 Anthropic Messages adapter；可配置的全局生图选择与各 Conversation 模型完全解耦，当前 OpenAI Images adapter 已用 GPT Image 2 验证。
+- `inspect_document`、`capture_canvas`、`apply_transaction`、`read_image`、`generate_image` 和 `place_image` typed tools；Agent 可把当前画布预览和生成图片作为多模态结果回读，而不是只凭节点坐标判断视觉质量。
 - 图片/文档附件、剪贴板/拖放导入，以及按需读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL 的受限链路。
 
 未完成的专业矢量、布局、组件、变量、富文本、导入导出、完整 Capability/Approval/Audit/Sandbox 和跨项目多目标能力不会被描述成已经支持；详见能力基线与路线图。

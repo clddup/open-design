@@ -10,7 +10,7 @@ import type {
 import { I18nProvider } from "../i18n";
 import { SettingsPage } from "./SettingsPage";
 
-const emptyCatalog: ModelProviderCatalog = { version: 1, providers: [] };
+const emptyCatalog: ModelProviderCatalog = { version: 2, providers: [] };
 
 beforeEach(() => {
   window.desktop = {
@@ -23,13 +23,18 @@ beforeEach(() => {
       .fn()
       .mockImplementation((request: SaveModelProviderProfileRequest) =>
         Promise.resolve({
-          version: 1,
+          version: 2,
           providers: [
             {
               providerId: request.providerId,
               name: request.name,
               enabled: request.enabled,
               apiFormat: request.apiFormat,
+              ...(request.imageGenerationApiFormat === undefined
+                ? {}
+                : {
+                    imageGenerationApiFormat: request.imageGenerationApiFormat,
+                  }),
               authMode: request.authMode,
               baseUrl: request.baseUrl,
               models: request.models,
@@ -45,6 +50,7 @@ beforeEach(() => {
         } satisfies ModelProviderCatalog),
       ),
     deleteModelProviderProfile: vi.fn().mockResolvedValue(emptyCatalog),
+    setDefaultImageGenerationSelection: vi.fn().mockResolvedValue(emptyCatalog),
     testModelProviderConnection: vi.fn().mockResolvedValue({
       ok: true,
       message: "Provider connection succeeded",
@@ -74,6 +80,136 @@ async function openNewProvider(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("SettingsPage", () => {
+  it("sets one global image-generation model independently of conversations", async () => {
+    const catalog: ModelProviderCatalog = {
+      version: 2,
+      providers: [
+        {
+          providerId: "openai",
+          name: "OpenAI",
+          enabled: true,
+          apiFormat: "openai-responses",
+          imageGenerationApiFormat: "openai-images",
+          authMode: "bearer",
+          baseUrl: "https://api.openai.com/v1",
+          models: [
+            {
+              modelId: "gpt-image-2",
+              name: "GPT Image 2",
+              contextWindow: 128_000,
+              maxOutputTokens: 16_384,
+              capabilities: {
+                toolUse: false,
+                imageInput: true,
+                imageGeneration: true,
+                reasoning: false,
+              },
+              reasoningEfforts: ["off"],
+            },
+          ],
+          hasApiKey: true,
+          updatedAt: "2026-08-09T00:00:00.000Z",
+        },
+      ],
+    };
+    vi.mocked(window.desktop!.getModelProviderCatalog).mockResolvedValue(
+      catalog,
+    );
+    vi.mocked(
+      window.desktop!.setDefaultImageGenerationSelection,
+    ).mockImplementation((request) =>
+      Promise.resolve({
+        ...catalog,
+        ...(request.selection
+          ? { defaultImageGenerationSelection: request.selection }
+          : {}),
+      }),
+    );
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(screen.getByRole("tab", { name: "Models" }));
+    await user.click(
+      await screen.findByRole("checkbox", {
+        name: "Use globally for image generation",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+
+    const request = vi.mocked(window.desktop!.saveModelProviderProfile).mock
+      .calls[0]?.[0];
+    expect(request?.providerId).toBe("openai");
+    expect(request?.imageGenerationApiFormat).toBe("openai-images");
+    expect(request?.models[0]?.modelId).toBe("gpt-image-2");
+    expect(request?.models[0]?.capabilities.imageGeneration).toBe(true);
+    expect(
+      window.desktop!.setDefaultImageGenerationSelection,
+    ).toHaveBeenCalledWith({
+      selection: { providerId: "openai", modelId: "gpt-image-2" },
+    });
+    expect(
+      await screen.findByText(
+        "Configure conversation capabilities and mark one model as the global image generator. It is independent of conversation model choices.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("disables global image generation by clearing the model-row checkbox and saving", async () => {
+    const catalog: ModelProviderCatalog = {
+      version: 2,
+      providers: [
+        {
+          providerId: "openai",
+          name: "OpenAI",
+          enabled: true,
+          apiFormat: "openai-responses",
+          imageGenerationApiFormat: "openai-images",
+          authMode: "bearer",
+          baseUrl: "https://api.openai.com/v1",
+          models: [
+            {
+              modelId: "gpt-image-2",
+              name: "GPT Image 2",
+              contextWindow: 128_000,
+              maxOutputTokens: 16_384,
+              capabilities: {
+                toolUse: false,
+                imageInput: true,
+                imageGeneration: true,
+                reasoning: false,
+              },
+              reasoningEfforts: ["off"],
+            },
+          ],
+          hasApiKey: true,
+          updatedAt: "2026-08-09T00:00:00.000Z",
+        },
+      ],
+      defaultImageGenerationSelection: {
+        providerId: "openai",
+        modelId: "gpt-image-2",
+      },
+    };
+    vi.mocked(window.desktop!.getModelProviderCatalog).mockResolvedValue(
+      catalog,
+    );
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(screen.getByRole("tab", { name: "Models" }));
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Use globally for image generation",
+    });
+    expect(checkbox).toBeChecked();
+    await user.click(checkbox);
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+
+    const request = vi.mocked(window.desktop!.saveModelProviderProfile).mock
+      .calls[0]?.[0];
+    expect(request?.models[0]?.capabilities.imageGeneration).toBe(false);
+    expect(checkbox).not.toBeChecked();
+  });
+
   it("shows a restart message instead of crashing with an older preload", async () => {
     window.desktop = {
       ...window.desktop,

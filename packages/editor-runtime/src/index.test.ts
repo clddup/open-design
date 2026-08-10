@@ -1,5 +1,6 @@
 import type {
   DesignTransaction,
+  PathNode,
   RectangleNode,
 } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
@@ -32,6 +33,31 @@ function rectangle(id: string, parentId: string | null = null): RectangleNode {
       strokes: [],
       strokeWidth: 0,
       cornerRadius: 0,
+    },
+    extensions: {},
+  };
+}
+
+function pathNode(id: string, parentId: string | null = null): PathNode {
+  return {
+    id,
+    kind: "path",
+    name: id,
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 24, 32],
+    size: { width: 160, height: 220 },
+    opacity: 1,
+    properties: {
+      path: "M 80 4 C 126 4 154 46 148 108 C 143 171 118 214 80 216 C 42 214 17 171 12 108 C 6 46 34 4 80 4 Z",
+      fillRule: "nonzero",
+      fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+      strokes: [{ type: "solid", color: "#ffffff", opacity: 0.8 }],
+      strokeWidth: 3,
+      strokeAlign: "inside",
+      strokeJoin: "round",
     },
     extensions: {},
   };
@@ -111,6 +137,50 @@ describe("document normalization", () => {
 });
 
 describe("EditorRuntime transactions", () => {
+  it("previews, persists, undoes, and redoes formal path nodes", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const change = transaction(runtime, "transaction_path", [
+      {
+        commandId: "insert_path",
+        type: "insert_element",
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        index: 4,
+        node: pathNode("mascot_path", "frame_welcome"),
+      },
+    ]);
+
+    expect(runtime.preview(change)).toMatchObject({
+      ok: true,
+      mode: "preview",
+      changes: { addedNodeIds: ["mascot_path"] },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.mascot_path,
+    ).toBeUndefined();
+    expect(runtime.apply(change)).toMatchObject({
+      ok: true,
+      mode: "apply",
+      changes: { addedNodeIds: ["mascot_path"] },
+    });
+
+    const reopened = normalizeDesignDocument(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expect(reopened.nodesById.mascot_path).toEqual(
+      runtime.getSnapshot().document.nodesById.mascot_path,
+    );
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.mascot_path,
+    ).toBeUndefined();
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    expect(runtime.getSnapshot().document.nodesById.mascot_path).toMatchObject({
+      kind: "path",
+      properties: { fillRule: "nonzero", strokeWidth: 3 },
+    });
+  });
+
   it("rolls back every command when an atomic apply fails", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const before = runtime.getSnapshot();

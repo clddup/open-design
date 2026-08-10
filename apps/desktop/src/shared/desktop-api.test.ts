@@ -15,6 +15,7 @@ import {
   isGlobalTaskProjectionResult,
   isListProjectConversationsRequest,
   isModelProviderCatalog,
+  migrateModelProviderCatalog,
   isProjectDesignFile,
   isProjectDesignFileRequest,
   isProjectManifestResult,
@@ -40,7 +41,12 @@ describe("Model provider desktop API guards", () => {
         name: "Design model",
         contextWindow: 200_000,
         maxOutputTokens: 16_384,
-        capabilities: { toolUse: true, imageInput: true, reasoning: true },
+        capabilities: {
+          toolUse: true,
+          imageInput: true,
+          imageGeneration: false,
+          reasoning: true,
+        },
         reasoningEfforts: ["off", "medium", "high"],
       },
     ],
@@ -49,7 +55,7 @@ describe("Model provider desktop API guards", () => {
   it("accepts a sanitized catalog and rejects returned credentials", () => {
     expect(
       isModelProviderCatalog({
-        version: 1,
+        version: 2,
         providers: [{ ...profile, hasApiKey: true, updatedAt: now }],
         defaultSelection: {
           providerId: "provider_1",
@@ -60,12 +66,44 @@ describe("Model provider desktop API guards", () => {
     ).toBe(true);
     expect(
       isModelProviderCatalog({
-        version: 1,
+        version: 2,
         providers: [
           { ...profile, hasApiKey: true, updatedAt: now, apiKey: "secret" },
         ],
       }),
     ).toBe(false);
+  });
+
+  it("migrates v1 catalogs without silently enabling image generation", () => {
+    const migrated = migrateModelProviderCatalog({
+      version: 1,
+      providers: [
+        {
+          ...profile,
+          models: profile.models.map((model) => ({
+            ...model,
+            capabilities: {
+              toolUse: model.capabilities.toolUse,
+              imageInput: model.capabilities.imageInput,
+              reasoning: model.capabilities.reasoning,
+            },
+          })),
+          hasApiKey: true,
+          updatedAt: now,
+        },
+      ],
+      defaultSelection: {
+        providerId: "provider_1",
+        modelId: "design-model",
+        reasoningEffort: "medium",
+      },
+    });
+
+    expect(migrated?.version).toBe(2);
+    expect(
+      migrated?.providers[0]?.models[0]?.capabilities.imageGeneration,
+    ).toBe(false);
+    expect(migrated?.defaultImageGenerationSelection).toBeUndefined();
   });
 
   it("validates protocol profiles, local URLs and secret-bearing save requests", () => {

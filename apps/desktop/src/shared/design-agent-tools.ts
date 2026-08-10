@@ -5,13 +5,24 @@ import {
 } from "@opendesign/design-contracts";
 
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
+export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
 export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
 export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
+export const GENERATE_IMAGE_TOOL_NAME = "opendesign_generate_image";
 export const PLACE_IMAGE_TOOL_NAME = "opendesign_place_image";
 export const INTERNAL_DESIGN_APPLY_TOOL_NAME =
   "opendesign_internal_apply_transaction";
 
 export type ReadImageToolInput = { source: string };
+export type ImageGenerationSize = "auto" | `${number}x${number}`;
+export type ImageGenerationQuality = "auto" | "low" | "medium" | "high";
+export type ImageGenerationOutputFormat = "png" | "jpeg" | "webp";
+export type GenerateImageToolInput = {
+  prompt: string;
+  size?: ImageGenerationSize;
+  quality?: ImageGenerationQuality;
+  outputFormat?: ImageGenerationOutputFormat;
+};
 export type PlaceImageToolInput = {
   attachmentId: string;
   pageId: string;
@@ -46,6 +57,18 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_CAPTURE_TOOL_NAME,
+    description:
+      "Capture the currently bound OpenDesign canvas viewport as a bounded image and return it as multimodal content. Use this after a material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before claiming visual quality. This captures only the active design canvas; it does not capture other applications, windows, files, or screens.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+    risk: "read" as const,
+    approval: "never" as const,
+  },
+  {
     name: READ_IMAGE_TOOL_NAME,
     description:
       "Read an image that the user explicitly referenced in the current prompt or attached to the current run. source must be the exact attachment ID, absolute local path, file URL, or HTTP(S) image URL written by the user. The host resolves it as a bounded, content-addressed image attachment and returns multimodal content. This tool cannot enumerate directories, discover neighboring files, use browser cookies, or read an unmentioned source.",
@@ -61,9 +84,32 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: GENERATE_IMAGE_TOOL_NAME,
+    description:
+      "Generate one original raster image with OpenDesign's globally configured image-generation model. This selection is application-wide and independent of the current conversation model. Use it when a poster, campaign visual, textured background, illustration, product scene, or other design requires generated imagery. The result is a content-addressed image attachment; call opendesign_place_image to add it to the current Design File. If visual inspection is needed, the generated attachment is also returned as multimodal content. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", minLength: 1, maxLength: 32_000 },
+        size: {
+          type: "string",
+          pattern: "^(auto|[1-9][0-9]{2,3}x[1-9][0-9]{2,3})$",
+          description:
+            "Output resolution. Popular values include 1024x1024, 1536x1024, 1024x1536, 2048x2048, 2048x1152, 3840x2160, 2160x3840, and auto.",
+        },
+        quality: { enum: ["auto", "low", "medium", "high"] },
+        outputFormat: { enum: ["png", "jpeg", "webp"] },
+      },
+      required: ["prompt"],
+      additionalProperties: false,
+    },
+    risk: "external" as const,
+    approval: "never" as const,
+  },
+  {
     name: PLACE_IMAGE_TOOL_NAME,
     description:
-      "Place an image attachment returned by opendesign_read_image or explicitly attached by the user into the currently bound Design File. The host imports the approved attachment as a durable project image asset and inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
+      "Place an image attachment returned by opendesign_read_image, opendesign_generate_image, or explicitly attached by the user into the currently bound Design File. The host imports the approved attachment as a durable project image asset and inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
     inputSchema: {
       type: "object",
       properties: {
@@ -105,7 +151,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_APPLY_TOOL_NAME,
     description:
-      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. It does not create, rename, duplicate, or delete Projects, Design Files, or Pages. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input.",
+      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. For organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with portable SVG path data in properties.path; they support the same fills, strokes, gradients, effects, and advanced stroke fields as other shapes. Path coordinates are local to the node and should fit its declared size. Composite designs should create a named Frame or Group before inserting its children later in the same ordered transaction; do not flatten their parts into Page-root layers. It does not create, rename, duplicate, or delete Projects, Design Files, or Pages. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input.",
     inputSchema: {
       type: "object",
       properties: {
@@ -133,6 +179,9 @@ export function validateDesignAgentToolInput(
   if (toolName === DESIGN_INSPECT_TOOL_NAME) {
     return isRecord(input) && Object.keys(input).length === 0;
   }
+  if (toolName === DESIGN_CAPTURE_TOOL_NAME) {
+    return isRecord(input) && Object.keys(input).length === 0;
+  }
   if (toolName === READ_IMAGE_TOOL_NAME) {
     return (
       isRecord(input) &&
@@ -141,6 +190,9 @@ export function validateDesignAgentToolInput(
       input.source.length <= 4_096 &&
       Object.keys(input).every((key) => key === "source")
     );
+  }
+  if (toolName === GENERATE_IMAGE_TOOL_NAME) {
+    return isGenerateImageToolInput(input);
   }
   if (toolName === PLACE_IMAGE_TOOL_NAME) return isPlaceImageToolInput(input);
   if (
@@ -177,6 +229,29 @@ export function isReadImageToolInput(
   input: unknown,
 ): input is ReadImageToolInput {
   return validateDesignAgentToolInput(READ_IMAGE_TOOL_NAME, input);
+}
+
+export function isGenerateImageToolInput(
+  input: unknown,
+): input is GenerateImageToolInput {
+  if (!isRecord(input)) return false;
+  const allowed = ["prompt", "size", "quality", "outputFormat"];
+  return (
+    typeof input.prompt === "string" &&
+    input.prompt.trim().length > 0 &&
+    input.prompt.length <= 32_000 &&
+    (input.size === undefined || isImageGenerationSize(input.size)) &&
+    (input.quality === undefined ||
+      input.quality === "auto" ||
+      input.quality === "low" ||
+      input.quality === "medium" ||
+      input.quality === "high") &&
+    (input.outputFormat === undefined ||
+      input.outputFormat === "png" ||
+      input.outputFormat === "jpeg" ||
+      input.outputFormat === "webp") &&
+    Object.keys(input).every((key) => allowed.includes(key))
+  );
 }
 
 export function isPlaceImageToolInput(
@@ -245,4 +320,24 @@ function finite(value: unknown): value is number {
 
 function positive(value: unknown): value is number {
   return finite(value) && value > 0;
+}
+
+function isImageGenerationSize(value: unknown): value is ImageGenerationSize {
+  if (value === "auto") return true;
+  if (typeof value !== "string") return false;
+  const match = /^(\d{3,4})x(\d{3,4})$/.exec(value);
+  const width = Number(match?.[1]);
+  const height = Number(match?.[2]);
+  if (!match || !Number.isInteger(width) || !Number.isInteger(height)) {
+    return false;
+  }
+  const longEdge = Math.max(width, height);
+  const shortEdge = Math.min(width, height);
+  const pixels = width * height;
+  return (
+    shortEdge >= 256 &&
+    longEdge <= 4_096 &&
+    longEdge / shortEdge <= 4 &&
+    pixels <= 16_777_216
+  );
 }

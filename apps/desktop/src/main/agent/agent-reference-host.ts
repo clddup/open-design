@@ -48,6 +48,22 @@ export class AgentReferenceHost {
     this.#runs.delete(runId);
   }
 
+  registerGeneratedImage(
+    attachment: AgentImageAttachment,
+    context: TrustedToolContext,
+  ): AgentImageAttachment {
+    const references = this.#runs.get(context.runId);
+    if (!references) {
+      throw new Error("Image-generation run is no longer active");
+    }
+    if (!isImageAttachment(attachment)) {
+      throw new TypeError("Generated attachment is not an image");
+    }
+    const snapshot = { ...attachment };
+    references.attachments.set(snapshot.attachmentId, snapshot);
+    return snapshot;
+  }
+
   async readImage(
     input: ReadImageToolInput,
     context: TrustedToolContext,

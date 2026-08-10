@@ -40,7 +40,7 @@ import type {
 } from "../shared/desktop-api";
 import type { MessageKey } from "../shared/i18n/messages";
 import { AgentTimeline } from "./components/AgentTimeline";
-import { Canvas } from "./components/Canvas";
+import { Canvas, type CanvasPreviewCapture } from "./components/Canvas";
 import { DiagnosticNotifications } from "./components/DiagnosticNotifications";
 import { DesignFileTabs } from "./components/DesignFileTabs";
 import { LeftSidebar } from "./components/LeftSidebar";
@@ -152,6 +152,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const conversationIdByHistoryRequestId = useRef(new Map<string, string>());
   const latestHistoryRequestId = useRef(new Map<string, string>());
   const designToolControllers = useRef(new Map<string, AbortController>());
+  const canvasPreviewCapture = useRef<CanvasPreviewCapture | null>(null);
   const { document: designDocument, state } = snapshot;
   const tool: Tool = isTool(state.tool) ? state.tool : "select";
   const selectedNode =
@@ -172,6 +173,45 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     ? (agentByConversationId[activeConversation.conversationId] ??
       EMPTY_AGENT_STATE)
     : EMPTY_AGENT_STATE;
+
+  const requestConversationHistory = useCallback(
+    async (conversationId: string) => {
+      if (!window.desktop) return;
+      const requestId = `history_${Date.now()}_${crypto.randomUUID().replaceAll("-", "")}`;
+      latestHistoryRequestId.current.set(conversationId, requestId);
+      conversationIdByHistoryRequestId.current.set(requestId, conversationId);
+      setAgentByConversationId((current) =>
+        updateConversationAgentState(current, conversationId, (previous) => ({
+          ...previous,
+          error: null,
+        })),
+      );
+      try {
+        await window.desktop.sendAgentRequest({
+          type: "session.history",
+          requestId,
+          sessionId: conversationId,
+        });
+      } catch (error) {
+        conversationIdByHistoryRequestId.current.delete(requestId);
+        if (latestHistoryRequestId.current.get(conversationId) !== requestId)
+          return;
+        latestHistoryRequestId.current.delete(conversationId);
+        setAgentByConversationId((current) =>
+          updateConversationAgentState(current, conversationId, (previous) => ({
+            ...previous,
+            error: reportRendererError(
+              "conversation_history_load_failed",
+              error,
+              t("error.loadConversationHistory"),
+              { conversationId, requestId },
+            ),
+          })),
+        );
+      }
+    },
+    [t],
+  );
 
   useEffect(() => {
     void window.desktop?.getTheme().then(setTheme);
@@ -258,15 +298,20 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         latestHistoryRequestId.current.delete(event.sessionId);
         conversationIdByHistoryRequestId.current.delete(event.requestId);
         setAgentByConversationId((current) =>
-          updateConversationAgentState(
-            current,
-            event.sessionId,
-            (previous) => ({
+          updateConversationAgentState(current, event.sessionId, (previous) => {
+            const activeRunId = previous.activeRunId;
+            return {
               ...previous,
               timeline: event.timeline,
+              events: activeRunId
+                ? previous.events.filter(
+                    (candidate) =>
+                      "runId" in candidate && candidate.runId === activeRunId,
+                  )
+                : [],
               error: null,
-            }),
-          ),
+            };
+          }),
         );
         return;
       }
@@ -332,13 +377,16 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         })),
       );
       if (event.type === "run.completed" || event.type === "agent.error") {
+        if (event.type === "run.completed") {
+          void requestConversationHistory(conversationId);
+        }
         if (runId) conversationIdByRunId.current.delete(runId);
         if (event.type === "agent.error" && event.requestId) {
           conversationIdByHistoryRequestId.current.delete(event.requestId);
         }
       }
     });
-  }, []);
+  }, [requestConversationHistory]);
 
   useEffect(() => {
     const desktop = window.desktop;
@@ -355,6 +403,35 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       void Promise.resolve()
         .then(() =>
           executeDesignToolRequest(request, runtime, activePageId, {
+            captureCanvas: async () => {
+              const capture = canvasPreviewCapture.current;
+              if (!capture) throw new Error("Canvas preview is not ready");
+              const preview = await capture();
+              const selected = await desktop.importAgentAttachments([
+                {
+                  name: `OpenDesign canvas r${runtime.getSnapshot().document.revision}.jpg`,
+                  bytes: preview.bytes,
+                },
+              ]);
+              const attachment = selected[0];
+              if (
+                !attachment ||
+                !attachment.attachmentId.startsWith("image_") ||
+                attachment.mimeType !== preview.mimeType
+              ) {
+                throw new Error("Canvas preview attachment import failed");
+              }
+              return {
+                attachment: {
+                  attachmentId: attachment.attachmentId,
+                  name: attachment.name,
+                  mimeType: attachment.mimeType,
+                  byteSize: attachment.byteSize,
+                },
+                height: preview.height,
+                width: preview.width,
+              };
+            },
             signal: controller.signal,
           }),
         )
@@ -650,45 +727,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     const tasks = await window.desktop?.listGlobalTasks();
     if (tasks) setGlobalTasks(tasks);
   }, []);
-
-  const requestConversationHistory = useCallback(
-    async (conversationId: string) => {
-      if (!window.desktop) return;
-      const requestId = `history_${Date.now()}_${crypto.randomUUID().replaceAll("-", "")}`;
-      latestHistoryRequestId.current.set(conversationId, requestId);
-      conversationIdByHistoryRequestId.current.set(requestId, conversationId);
-      setAgentByConversationId((current) =>
-        updateConversationAgentState(current, conversationId, (previous) => ({
-          ...previous,
-          error: null,
-        })),
-      );
-      try {
-        await window.desktop.sendAgentRequest({
-          type: "session.history",
-          requestId,
-          sessionId: conversationId,
-        });
-      } catch (error) {
-        conversationIdByHistoryRequestId.current.delete(requestId);
-        if (latestHistoryRequestId.current.get(conversationId) !== requestId)
-          return;
-        latestHistoryRequestId.current.delete(conversationId);
-        setAgentByConversationId((current) =>
-          updateConversationAgentState(current, conversationId, (previous) => ({
-            ...previous,
-            error: reportRendererError(
-              "conversation_history_load_failed",
-              error,
-              t("error.loadConversationHistory"),
-              { conversationId, requestId },
-            ),
-          })),
-        );
-      }
-    },
-    [t],
-  );
 
   const loadProjectConversations = useCallback(
     async (projectId: string, preferredConversationId?: string) => {
@@ -1368,6 +1406,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             />
             <Canvas
               activePageId={activePageId}
+              captureRef={canvasPreviewCapture}
               onTransactionError={setEditorError}
               runtime={runtime}
               snapshot={snapshot}
@@ -1487,8 +1526,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             </button>
           </span>
         </footer>
+        {notifications}
       </div>
-      {notifications}
     </>
   );
 }

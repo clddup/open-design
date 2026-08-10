@@ -1068,7 +1068,7 @@ textarea {
   padding: 14px 16px;
   border: 1px solid var(--ui-border);
   border-radius: 7px;
-  background: color-mix(in srgb, var(--ui-panel) 94%, transparent);
+  background: var(--ui-surface-raised);
   box-shadow: var(--ui-shadow-lg);
   translate: -50% -50%;
 }
@@ -1383,6 +1383,11 @@ textarea {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 5px;
+}
+.property-grid--typography .property-field,
+.property-grid--typography .property-select {
+  grid-template-columns: minmax(38px, max-content) minmax(0, 1fr);
+  column-gap: 6px;
 }
 .property-stack {
   display: grid;
@@ -2033,8 +2038,14 @@ textarea {
   font-size: 8px;
 }
 .agent-prompt > .agent-prompt__editor:focus-within {
-  border-color: var(--ui-focus);
-  box-shadow: 0 0 0 1px var(--ui-focus);
+  border-color: color-mix(
+    in srgb,
+    var(--ui-focus) 34%,
+    var(--ui-border-strong)
+  );
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--ui-text) 7%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--ui-focus) 8%, transparent);
 }
 .agent-prompt textarea {
   min-width: 0;
@@ -2139,9 +2150,13 @@ textarea {
   border: 1px solid var(--ui-border-strong);
   border-radius: 7px;
   color: var(--ui-text);
-  background: color-mix(in srgb, var(--ui-panel) 97%, transparent);
+  background: var(--ui-surface-raised);
   box-shadow: var(--ui-shadow-lg);
   pointer-events: auto;
+}
+.app-shell > .diagnostic-notifications {
+  right: min(calc(var(--utility-width) + 14px), calc(100vw - 294px));
+  width: min(360px, max(280px, calc(100vw - var(--utility-width) - 28px)));
 }
 .diagnostic-notification > header {
   display: grid;

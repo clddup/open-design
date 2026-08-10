@@ -1,7 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.1.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.2.0" as const;
+export const APPEARANCE_DESIGN_SCHEMA_VERSION = "1.1.0" as const;
 export const LEGACY_DESIGN_SCHEMA_VERSION = "1.0.0" as const;
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
 export const MAX_TRANSACTION_COMMANDS = 500;
@@ -360,6 +361,23 @@ export const ImagePropertiesSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const PathDataSchema = Type.String({
+  minLength: 1,
+  maxLength: 200_000,
+  pattern: "^[\\t\\n\\r ,.+\\-0-9AaCcEeHhLlMmQqSsTtVvZz]+$",
+});
+
+export const PathPropertiesSchema = Type.Object(
+  {
+    ...ShapeProperties,
+    path: PathDataSchema,
+    fillRule: Type.Optional(
+      Type.Union([Type.Literal("nonzero"), Type.Literal("evenodd")]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 const NodeBaseProperties = {
   id: Type.String({ minLength: 1 }),
   name: Type.String(),
@@ -430,20 +448,30 @@ export const ImageNodeSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const VectorNodeSchema = Type.Object(
+  {
+    ...NodeBaseProperties,
+    kind: Type.Literal("vector"),
+    properties: PathPropertiesSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const PathNodeSchema = Type.Object(
+  {
+    ...NodeBaseProperties,
+    kind: Type.Literal("path"),
+    properties: PathPropertiesSchema,
+  },
+  { additionalProperties: false },
+);
+
 const FutureNodeProperties = {
   ...NodeBaseProperties,
   properties: JsonObjectSchema,
 };
 
 export const FutureNodeSchema = Type.Union([
-  Type.Object(
-    { ...FutureNodeProperties, kind: Type.Literal("vector") },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    { ...FutureNodeProperties, kind: Type.Literal("path") },
-    { additionalProperties: false },
-  ),
   Type.Object(
     { ...FutureNodeProperties, kind: Type.Literal("instance") },
     { additionalProperties: false },
@@ -457,6 +485,8 @@ export const DesignNodeSchema = Type.Union([
   EllipseNodeSchema,
   TextNodeSchema,
   ImageNodeSchema,
+  VectorNodeSchema,
+  PathNodeSchema,
   FutureNodeSchema,
 ]);
 
@@ -835,7 +865,7 @@ const EditorEventBaseProperties = {
   revision: Type.Integer({ minimum: 0 }),
 };
 
-export const EditorEventSchema = Type.Union([
+export const EditorEventSchema: TSchema = Type.Union([
   Type.Object(
     {
       ...EditorEventBaseProperties,
@@ -991,6 +1021,8 @@ export type RectangleNode = Static<typeof RectangleNodeSchema>;
 export type EllipseNode = Static<typeof EllipseNodeSchema>;
 export type TextNode = Static<typeof TextNodeSchema>;
 export type ImageNode = Static<typeof ImageNodeSchema>;
+export type VectorNode = Static<typeof VectorNodeSchema>;
+export type PathNode = Static<typeof PathNodeSchema>;
 export type DesignNode = Static<typeof DesignNodeSchema>;
 export type DesignPage = Static<typeof DesignPageSchema>;
 export type DesignAsset = Static<typeof DesignAssetSchema>;
@@ -1030,7 +1062,32 @@ export type HistoryState = Static<typeof HistoryStateSchema>;
 export type SelectionState = Static<typeof SelectionStateSchema>;
 export type ViewportState = Static<typeof ViewportStateSchema>;
 export type EditorState = Static<typeof EditorStateSchema>;
-export type EditorEvent = Static<typeof EditorEventSchema>;
+type EditorEventBase = {
+  eventId: string;
+  sequence: number;
+  occurredAt: string;
+  documentId: string;
+  revision: number;
+};
+export type EditorEvent = EditorEventBase &
+  (
+    | { type: "document.changed"; result: DesignTransactionSuccess }
+    | { type: "selection.changed"; selection: SelectionState }
+    | { type: "tool.changed"; tool: string }
+    | { type: "viewport.changed"; viewport: ViewportState }
+    | { type: "history.changed"; history: HistoryState }
+    | {
+        type: "dirty.changed";
+        dirty: boolean;
+        checkpointRevision: number;
+      }
+    | {
+        type: "checkpoint.created";
+        checkpointRevision: number;
+        label?: string;
+      }
+    | { type: "runtime.error"; error: DesignError }
+  );
 export type DesignCapabilities = Static<typeof DesignCapabilitiesSchema>;
 export type ExportArtifact = Static<typeof ExportArtifactSchema>;
 export type AtomicChildCommand = DesignOperation;
@@ -1064,21 +1121,106 @@ export function isDesignDocument(value: unknown): value is DesignDocument {
 
 export function migrateDesignDocument(value: unknown): DesignDocument | null {
   if (isDesignDocument(value)) return structuredClone(value);
+  const schemaVersion =
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as { schemaVersion?: unknown }).schemaVersion
+      : undefined;
   if (
     typeof value !== "object" ||
     value === null ||
     Array.isArray(value) ||
-    (value as { schemaVersion?: unknown }).schemaVersion !==
-      LEGACY_DESIGN_SCHEMA_VERSION
+    (schemaVersion !== LEGACY_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== APPEARANCE_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
   try {
     const migrated = structuredClone(value) as Record<string, unknown>;
     migrated.schemaVersion = DESIGN_SCHEMA_VERSION;
+    migratePathNodes(migrated, schemaVersion);
     return isDesignDocument(migrated) ? migrated : null;
   } catch {
     return null;
+  }
+}
+
+function migratePathNodes(
+  document: Record<string, unknown>,
+  sourceSchemaVersion: string,
+): void {
+  const nodes = document.nodesById;
+  if (!nodes || typeof nodes !== "object" || Array.isArray(nodes)) return;
+  for (const value of Object.values(nodes)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const node = value as Record<string, unknown>;
+    if (node.kind !== "path" && node.kind !== "vector") continue;
+    const legacy =
+      node.properties &&
+      typeof node.properties === "object" &&
+      !Array.isArray(node.properties)
+        ? (node.properties as Record<string, unknown>)
+        : {};
+    const path =
+      typeof legacy.path === "string" &&
+      checkSchema(PathDataSchema, legacy.path)
+        ? legacy.path
+        : "M 0 0";
+    const extensions =
+      node.extensions &&
+      typeof node.extensions === "object" &&
+      !Array.isArray(node.extensions)
+        ? (node.extensions as Record<string, unknown>)
+        : {};
+    extensions["dev.opendesign.path.migration"] = {
+      sourceSchemaVersion,
+      originalProperties: legacy,
+      usedPlaceholderPath: path !== legacy.path,
+    };
+    node.extensions = extensions;
+    node.properties = {
+      path,
+      fills:
+        Array.isArray(legacy.fills) &&
+        legacy.fills.every((paint) => checkSchema(PaintSchema, paint))
+          ? legacy.fills
+          : [],
+      strokes:
+        Array.isArray(legacy.strokes) &&
+        legacy.strokes.every((paint) => checkSchema(PaintSchema, paint))
+          ? legacy.strokes
+          : [],
+      strokeWidth:
+        typeof legacy.strokeWidth === "number" &&
+        Number.isFinite(legacy.strokeWidth) &&
+        legacy.strokeWidth >= 0
+          ? legacy.strokeWidth
+          : 0,
+      ...(legacy.strokeAlign === "inside" ||
+      legacy.strokeAlign === "center" ||
+      legacy.strokeAlign === "outside"
+        ? { strokeAlign: legacy.strokeAlign }
+        : {}),
+      ...(legacy.strokeCap === "none" ||
+      legacy.strokeCap === "round" ||
+      legacy.strokeCap === "square"
+        ? { strokeCap: legacy.strokeCap }
+        : {}),
+      ...(legacy.strokeJoin === "miter" ||
+      legacy.strokeJoin === "round" ||
+      legacy.strokeJoin === "bevel"
+        ? { strokeJoin: legacy.strokeJoin }
+        : {}),
+      ...(Array.isArray(legacy.dashPattern) &&
+      legacy.dashPattern.every(
+        (entry) =>
+          typeof entry === "number" && Number.isFinite(entry) && entry >= 0,
+      )
+        ? { dashPattern: legacy.dashPattern }
+        : {}),
+      ...(legacy.fillRule === "nonzero" || legacy.fillRule === "evenodd"
+        ? { fillRule: legacy.fillRule }
+        : {}),
+    };
   }
 }
 

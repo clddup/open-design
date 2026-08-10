@@ -48,6 +48,12 @@ interface DrawSession {
   tool: Exclude<LeaferCanvasTool, "select">;
 }
 
+interface BoxSelectSession {
+  additiveNodeIds: Set<string>;
+  start: { x: number; y: number };
+  startClient: { x: number; y: number };
+}
+
 const MATRIX_EPSILON = 0.000_001;
 const MIN_DRAW_DISTANCE = 4;
 
@@ -67,6 +73,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #editor: LeaferEditor;
   readonly #elements = new Map<string, LeaferElement>();
   #disposed = false;
+  #boxSelect: BoxSelectSession | null = null;
   #draw: DrawSession | null = null;
   #input: LeaferEngineSyncInput | null = null;
   #projection: LeaferSceneProjection | null = null;
@@ -147,7 +154,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         const invalidatesInteraction = (nodeId: string) =>
           changedNodeIds.has(nodeId) ||
           (projection.affectedNodeIds?.has(nodeId) === true &&
-            projection.elementsById.get(nodeId)?.data.locked === true);
+            isLockedSpec(projection.elementsById.get(nodeId)));
         if (identityChanged) this.#editor.visible = false;
         if (
           identityChanged ||
@@ -156,6 +163,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
             this.#draw?.parentId !== null &&
             invalidatesInteraction(this.#draw.parentId))
         ) {
+          this.#boxSelect = null;
           this.#cancelDraw();
         }
         if (
@@ -177,6 +185,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         ) {
           this.#editor.closeInnerEditor();
         }
+        const hoveredNodeId = this.#editor.hoverTarget
+          ? this.#nodeId(this.#editor.hoverTarget as LeaferElement)
+          : undefined;
+        if (
+          this.#editor.hoverTarget &&
+          (identityChanged ||
+            !contiguousChanges ||
+            (hoveredNodeId !== undefined &&
+              invalidatesInteraction(hoveredNodeId)))
+        ) {
+          this.#editor.hoverTarget = null as never;
+        }
         this.#reconcile(projection);
       }
       this.#syncTool(input.tool);
@@ -192,6 +212,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#boxSelect = null;
     this.#cancelDraw();
     if (this.#viewportFrame !== null) cancelAnimationFrame(this.#viewportFrame);
     if (this.#editorFrame !== null) cancelAnimationFrame(this.#editorFrame);
@@ -247,9 +268,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
     this.#editor.on(InnerEditorEvent.CLOSE, () => this.#finishTextEdit());
 
-    this.#app.on(DragEvent.START, (event: unknown) => this.#startDraw(event));
+    this.#app.on(DragEvent.START, (event: unknown) => {
+      this.#startBoxSelect(event);
+      this.#startDraw(event);
+    });
     this.#app.on(DragEvent.DRAG, (event: unknown) => this.#updateDraw(event));
-    this.#app.on(DragEvent.END, (event: unknown) => this.#finishDraw(event));
+    this.#app.on(DragEvent.END, (event: unknown) => {
+      this.#finishBoxSelect(event);
+      this.#finishDraw(event);
+    });
 
     const viewportChanged = () => {
       this.#scheduleViewport();
@@ -550,7 +577,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const node = document.nodesById[nodeId];
       const element = this.#elements.get(nodeId);
       const spec = this.#projection?.elementsById.get(nodeId);
-      if (!node || !element || spec?.data.locked === true) continue;
+      if (!node || !element || isLockedSpec(spec)) continue;
       const current = this.#readElementState(element);
       const transformChanged = !sameTransform(
         previous.transform,
@@ -628,7 +655,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const nodeId = this.#nodeId(element as LeaferElement);
       return (
         nodeId !== undefined &&
-        this.#projection?.elementsById.get(nodeId)?.data.locked === true
+        isLockedSpec(this.#projection?.elementsById.get(nodeId))
       );
     });
   }
@@ -640,8 +667,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const element = this.#elements.get(before.nodeId);
     const node = this.#input?.document.nodesById[before.nodeId];
     const spec = this.#projection?.elementsById.get(before.nodeId);
-    if (!element || !node || node.kind !== "text" || spec?.data.locked === true)
-      return;
+    if (!element || !node || node.kind !== "text" || isLockedSpec(spec)) return;
     const content = readElementText(element);
     if (this.#cancelTextEdit) {
       (element as LeaferElement & { text: string }).text = before.text;
@@ -661,6 +687,81 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       ],
     });
     if (!accepted) this.#restoreProjection();
+  }
+
+  #startBoxSelect(event: unknown): void {
+    const input = this.#input;
+    if (
+      !input ||
+      input.tool !== "select" ||
+      !this.#editor.selector.dragging ||
+      this.#disposed
+    ) {
+      return;
+    }
+    const drag = asLeaferEvent(event);
+    this.#boxSelect = {
+      additiveNodeIds: new Set(
+        drag.shiftKey
+          ? this.#editor.list.flatMap((element) => {
+              const nodeId = this.#nodeId(element as LeaferElement);
+              return nodeId ? [nodeId] : [];
+            })
+          : [],
+      ),
+      start: drag.getInnerPoint(this.#editor.selector),
+      startClient: { x: drag.clientX, y: drag.clientY },
+    };
+  }
+
+  #finishBoxSelect(event: unknown): void {
+    const session = this.#boxSelect;
+    this.#boxSelect = null;
+    if (!session || this.#disposed) return;
+    const drag = asLeaferEvent(event);
+    if (
+      drag.isCancel ||
+      Math.hypot(
+        drag.clientX - session.startClient.x,
+        drag.clientY - session.startClient.y,
+      ) < MIN_DRAW_DISTANCE
+    ) {
+      return;
+    }
+    const end = drag.getInnerPoint(this.#editor.selector);
+    const rect = rectFromPoints(session.start, end, false);
+    const bounds = new this.#leafer.Bounds(
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height,
+    );
+    const selected = this.#leafer.EditSelectHelper.findByBounds(
+      this.#app as unknown as LeaferElement,
+      bounds,
+      "hit",
+    ).flatMap((element) => {
+      const nodeId = this.#nodeId(element as LeaferElement);
+      return nodeId ? [{ element: element as LeaferElement, nodeId }] : [];
+    });
+    const selectedNodeIds = new Set(selected.map(({ nodeId }) => nodeId));
+    const targetNodeIds = new Set(session.additiveNodeIds);
+    for (const nodeId of selectedNodeIds) {
+      if (targetNodeIds.has(nodeId)) targetNodeIds.delete(nodeId);
+      else targetNodeIds.add(nodeId);
+    }
+    const target = [...targetNodeIds].flatMap((nodeId) => {
+      const element = this.#elements.get(nodeId);
+      return element ? [element] : [];
+    });
+    const current = this.#editor.list;
+    if (
+      current.length !== target.length ||
+      current.some((element, index) => element !== target[index])
+    ) {
+      this.#editor.target = target.length === 0 ? (null as never) : target;
+      this.#scheduleEditorRefresh();
+    }
   }
 
   #startDraw(event: unknown): void {
@@ -758,7 +859,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const spec = nodeId
         ? this.#projection?.elementsById.get(nodeId)
         : undefined;
-      if (spec?.data.locked === true) return undefined;
+      if (isLockedSpec(spec)) return undefined;
       if (spec && (spec.kind === "frame" || spec.kind === "group")) {
         return spec.id;
       }
@@ -894,6 +995,15 @@ function changeSetNodeIds(changes: DesignChangeSet): Set<string> {
     ...changes.changedNodeIds,
     ...changes.removedNodeIds,
   ]);
+}
+
+function isLockedSpec(spec: LeaferElementSpec | undefined): boolean {
+  const metadata = spec?.data.data;
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    (metadata as Record<string, unknown>).opendesignLocked === true
+  );
 }
 
 function normalizeTransform(transform: Transform): Transform {
