@@ -44,11 +44,11 @@
 通过人工 UI 与 Agent 共用的 planner 对齐多层对象、固定两端均分横向或纵向间隙，并设置正数、零或负数的一维精确间距。
 
 - ID：`transform.precise-arrangement`
-- 实现方：@opendesign/geometry-service contract v1 + EditorRuntime
+- 实现方：@opendesign/geometry-service contract v2 + EditorRuntime
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
 - 证据：自动化 5 项；实机 0 项
 - 限制：单层相对父级对齐、二维 Tidy up、Smart Selection 画布间距手柄、翻转/原点、吸附、参考线、标尺和像素网格取整仍未补齐。
-- 限制：geometry-service 当前只提供确定性排列；尚未选择或宣称支持路径布尔、flatten、outline 或 Bézier kernel。
+- 限制：排列产品链与隔离的 PathKit 矢量 provider 保持明确分离；本能力不据此宣称任何矢量产品能力。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-dimensions-rotation-and-position)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection)
 
@@ -73,7 +73,7 @@
 - 实现方：Not implemented
 - 表面：contract=unavailable；runtime=unavailable；human=unavailable；agent=unavailable；render=degraded；export=unavailable
 - 证据：自动化 0 项；实机 0 项
-- 限制：工具栏 Pen 仍禁用；需要后续 geometry service 和正式矢量网络 schema。
+- 限制：工具栏 Pen 仍禁用；PathKit 不提供 OpenDesign 所需的节点、边、手柄、命中测试或矢量网络交互语义。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 
 ### 布尔运算 — 不可用
@@ -81,10 +81,10 @@
 非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。
 
 - ID：`vector.boolean-operations`
-- 实现方：Not implemented
+- 实现方：Skia PathKit provider foundation; OpenDesign product semantics not implemented
 - 表面：contract=unavailable；runtime=unavailable；human=unavailable；agent=unavailable；render=unavailable；export=unavailable
-- 证据：自动化 0 项；实机 0 项
-- 限制：当前没有 boolean group schema 或 geometry kernel；手工扁平化不能冒充等价能力。
+- 证据：自动化 1 项；实机 0 项
+- 限制：受限的 Skia PathKit provider 已通过几何契约测试，但 OpenDesign boolean group schema、planner、UI、Agent 命令、渲染生命周期、持久化和 undo/redo 尚未实现；手工扁平化不能冒充等价能力。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations)
 
 ## 外观与合成

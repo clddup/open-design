@@ -8,13 +8,13 @@ UI 设计是首要能力和最先打磨的工作流，但不是产品边界。�
 
 ### 1.1 当前实现
 
-截至 2026-08-10，仓库当前具备：
+截至 2026-08-11，仓库当前具备：
 
 - OpenDesign 自有的 `DesignDocument 1.3.0`、正式 SVG Path/Vector 外观语义、非破坏图片 placement、多 Page、事务、preview、单调 revision、diff、history、undo/redo、checkpoint，以及 `1.0.0` / `1.1.0` / `1.2.0 → 1.3.0` 迁移。
 - Workspace/Project/Design File 持久化与导航、持久 Conversation、按 Conversation 隔离的时间线和单目标 Global Task 投影。
 - 固定 `leafer-editor@2.2.9` 的唯一生产画布路径，覆盖场景投影、pan/zoom、命中、选择、move/resize/rotate/skew 和文本内编辑。旧 Canvas2D、手写选择框和 OpenPencil 运行时已移除。
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask、高级描边和事务化图片 asset 的公共设计语义及属性检查器/Leafer 映射。
-- 独立的 `@opendesign/geometry-service` contract v1 首个确定性排列 provider，以及 EditorRuntime 的原子 arrange planner；人工 Inspector 与 Agent 共用多层对齐、固定两端的横/纵均分和正数/零/负数明确间距语义，受影响 Group 自动重算 bounds。该包尚未选择或宣称支持路径布尔、flatten、outline 或 Bézier kernel。
+- 独立的 `@opendesign/geometry-service` contract v2：根入口提供确定性排列，EditorRuntime 的原子 arrange planner 由人工 Inspector 与 Agent 共用；隔离的 `vector-path` 子入口固定 `pathkit-wasm 1.0.0`，以短生命周期、纯数据 provider 通过真实 WASM 的 cubic PathOps、孔洞、空结果、simplify、outline stroke、fill rule、bounds、预算和确定性测试。PathKit 不持有文档或交互状态，普通桌面 bundle 不加载该子入口；Boolean/Pen 的 OpenDesign schema、planner、UI、Agent、投影、持久化、撤销和双平台产品证据仍未实现，因此能力继续标记为不可用。
 - 运行于 `utilityProcess` 的持续 Agent Conversation、取消/恢复、多 Provider Catalog、OpenAI Responses、OpenAI Chat Completions、Anthropic Messages adapter 和 Main-only `safeStorage` 凭据。
 - 版本化 `DesignCapabilityManifest v1`，按 contract/runtime/human/agent/render/export 六个表面记录 provider、限制与证据；Agent system context、`opendesign_get_capabilities`、生成式帮助文档和发布摘要读取同一事实源。能力状态不是设置项，不进入设置页。
 - `opendesign_get_capabilities`、`opendesign_inspect_document`、`opendesign_define_design_plan`、`opendesign_capture_canvas`、`opendesign_record_visual_review`、`opendesign_edit_hierarchy`、`opendesign_arrange_layers`、`opendesign_apply_transaction`、`opendesign_read_image`、`opendesign_generate_image`、`opendesign_place_image` 与 `opendesign_update_image` 十二个 typed tools；其中 `edit_hierarchy` 对现有节点执行宿主计算的无损编组/解组、保持多选内部顺序的前移/后移/置顶/置底，以及在 Page root、Frame 和 Group 之间保持世界坐标的跨容器重挂载；`arrange_layers` 对显式稳定节点执行多层对齐、固定两端均分和明确一维间距，不让模型手算 transform；`update_image` 对明确 Page/node ID 执行非破坏 placement 或替换已授权来源。人工图层树使用同一 hierarchy planner 提供 before/inside/after 拖放，Inspector 与 Agent 使用同一 arrange/image planner；这些操作均以单次 revision 和单次撤销提交，并安全维护 Group bounds 或 asset 引用。专业层级、排列与图片操作不从用户选区隐式推导写目标。Agent 可把活动画布视口和全局 GPT Image 2 生成结果作为有界、内容寻址的多模态图片回读，图片/文档附件支持剪贴板/拖放，以及受限读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL。新建设计必须经过“读取 → typed plan → 实质初稿 → 截图 → typed review → 修正 → 再截图”的 Runtime/Main 双门禁。

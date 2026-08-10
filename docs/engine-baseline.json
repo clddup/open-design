@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "recordedAt": "2026-08-11",
   "policy": {
     "allowFloatingRefs": false,
@@ -29,6 +29,17 @@
       "package": "@opendesign/editor-runtime",
       "path": "packages/editor-runtime"
     },
+    "vectorGeometry": {
+      "role": "vector-path-geometry-provider",
+      "adapterPackage": "@opendesign/geometry-service",
+      "adapterPath": "packages/geometry-service",
+      "dependency": "pathkit-wasm",
+      "version": "1.0.0",
+      "source": "https://github.com/google/skia/tree/main/modules/pathkit",
+      "license": "BSD-3-Clause",
+      "productionStatus": "provider-contract-native-gate-pending",
+      "entrypoint": "@opendesign/geometry-service/vector-path"
+    },
     "leafer": {
       "role": "production-rendering-and-interaction-engine",
       "adapterPackage": "@opendesign/leafer-engine",
@@ -43,6 +54,7 @@
     "agentCore": "pnpm agent-core:check && pnpm exec vitest run packages/agent-runtime/src/pi-core-adapter.test.ts packages/agent-runtime/src/pi-model-gateway-adapter.test.ts packages/agent-runtime/src/pi-run-event-adapter.test.ts packages/agent-runtime/src/pi-tool-adapter.test.ts packages/agent-runtime/src/pi-completion-guard-adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/agent/pi-production-tool-adapter.test.ts",
     "contracts": "pnpm exec vitest run packages/design-contracts/src/index.test.ts",
     "editorRuntime": "pnpm exec vitest run packages/editor-runtime/src/index.test.ts",
+    "vectorGeometry": "pnpm --filter @opendesign/geometry-service typecheck && pnpm exec vitest run packages/geometry-service/src/vector-path.test.ts",
     "leafer": "pnpm exec vitest run packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts"
   }
 }

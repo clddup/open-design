@@ -4,13 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./vector-path": "./src/vector-path.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@opendesign/design-contracts": "workspace:*"
+    "@opendesign/design-contracts": "workspace:*",
+    "pathkit-wasm": "1.0.0"
   },
   "devDependencies": {
     "typescript": "catalog:",

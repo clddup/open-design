@@ -38,7 +38,7 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   26 files / 169 tests
+├── package tests   27 files / 175 tests
 └── desktop tests   38 files / 270 tests
 pnpm build          passed
 ├── Renderer
@@ -72,7 +72,8 @@ pnpm build          passed
 - host-only 图片放置以单个 Page-targeted `put_asset + insert_element(image)` 事务进入 `EditorRuntime`；测试验证单次 revision、发送时存在选区也能在固定 Page 新增 asset/node、当前活动页面变化不漂移目标，以及一次 undo 同时移除 asset/node。
 - 人工检查器与 `opendesign_update_image` 共用 `planImageNodeUpdate`：明确 Page/node ID 的 placement 与来源替换进入单个事务，保留现有 placement，未共享的旧 asset 可安全清理，共享 Image/Path/Vector paint 资源不会误删；文件选择取消/失败不产生 revision，Agent 执行不读取发送时或实时选区。
 - `opendesign_edit_hierarchy` 对现有节点提供显式 ID 的编组/解组、前移/后移/置顶/置底和跨 Page root/Frame/Group 重挂载语义；宿主与人工 UI 复用同一 planner，保持世界 transform 与多选内部顺序，固定 Frame 尺寸，自底向上重算受影响 Group bounds，并以一个原子事务写入和一次撤销。人工入口包含 Layer order 菜单、macOS `⌘/⌥⌘ + [ ]`、Windows `Ctrl/Ctrl+Shift + [ ]` 快捷键，以及图层树 before/inside/after 指针拖放。测试覆盖两个平台状态下的拖放、选区保持、保存重开、undo/redo、stale revision、Page Mutation Target、锁定、混合父级、cycle、空来源 Group、不可逆 transform、无效 index、外部拖放数据拒绝、继承外观 warning 与提交前取消；这仍是自动化 DOM/Runtime 证据，不冒充 Electron 实机指针验证。
-- `@opendesign/geometry-service` 提供不持有文档状态的纯排列结果；EditorRuntime 的 `planArrangeNodes` 将六向多层对齐、固定两端横/纵均分和明确正数/零/负数间距映射为一个原子事务，并自底向上维护 Group bounds。Inspector 与 `opendesign_arrange_layers` 共用该 planner；Agent 必须提供检查所得的稳定 Page/node IDs，发送时或实时选区不作为写目标。测试覆盖不等尺寸、旋转/缩放父级、负间距、两端固定、Group rebase、保存重开、undo/redo、锁定、不可逆 transform、Page scope、无操作拒绝，以及 macOS/Windows Renderer 状态；尚未执行真实 Electron 指针/键盘产品 smoke。
+- `@opendesign/geometry-service` contract v2 的根入口提供不持有文档状态的纯排列结果；EditorRuntime 的 `planArrangeNodes` 将六向多层对齐、固定两端横/纵均分和明确正数/零/负数间距映射为一个原子事务，并自底向上维护 Group bounds。Inspector 与 `opendesign_arrange_layers` 共用该 planner；Agent 必须提供检查所得的稳定 Page/node IDs，发送时或实时选区不作为写目标。测试覆盖不等尺寸、旋转/缩放父级、负间距、两端固定、Group rebase、保存重开、undo/redo、锁定、不可逆 transform、Page scope、无操作拒绝，以及 macOS/Windows Renderer 状态；尚未执行真实 Electron 指针/键盘产品 smoke。
+- 隔离的 `@opendesign/geometry-service/vector-path` 子入口固定 `pathkit-wasm 1.0.0`；实际 WASM corpus 覆盖 cubic union/subtract/intersect/exclude、复合孔洞、合法空结果、self-intersection simplify、开放路径 outline stroke、fill rule、tight bounds、确定性输出、非法输入和资源预算。所有 PathKit 对象显式释放，公共结果不暴露 WASM/Skia 对象，基础 Renderer/Main/Preload/Agent 构建不引入该子入口。当前证据仅建立 geometry provider，不等于 Boolean Group 或 Pen 产品链；同一 corpus 的 macOS/Windows 原生加载、性能与内存门禁仍待 CI。
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。
 
@@ -91,7 +92,7 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、8 项降级可用和 8 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.3.0`、EditorRuntime、Image service、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement、来源替换和视觉复核的基础路径。两个固定专业 fixture 进一步证明这些语义可以组成完整企鹅层级和复杂海报文档，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、真实 Electron 像素截图、Agent 重放和专业导出仍未完成，因此不能据此把完整工作流标为可用。
 
-仓库当前已有独立 `@opendesign/geometry-service`，但只提供确定性排列；尚未选定 Pen 节点编辑、布尔运算、flatten、outline stroke 或 Bézier 所需的成熟 geometry kernel，也没有独立 Layout、Text/Font 或 Import/Export service 包。`packages/editor-runtime/src/geometry.ts` 仍只负责矩阵、坐标转换和 bounds 计算；组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
+仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify 和 outline stroke 的底层计算边界。它尚未进入 DesignDocument、EditorRuntime、人工 UI、Agent、Leafer 投影或导入导出，所以 Pen 节点编辑、非破坏 Boolean Group、flatten 和 outline stroke 仍不是可用产品能力。仓库也没有独立 Layout、Text/Font 或 Import/Export service 包；`packages/editor-runtime/src/geometry.ts` 仍只负责矩阵、坐标转换和 bounds 计算，组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
 
 Agent Runtime 与 Main 当前强制执行“inspect → typed plan → 实质初稿 → `capture_canvas` → typed visual review → refinement → `capture_canvas`”。所有新 composition 必须位于计划 Frame 内；全局生图只能使用计划声明的 role，默认不能用一张 raster 替代可编辑设计。该流程显著收紧敷衍路径，但仍不能单独保证审美、文字可读性或交付保真；后续交付必须按照 [`roadmap.md`](roadmap.md) 的像素基线、固定样张、capability manifest、专业 service 和人工验收推进。
 
