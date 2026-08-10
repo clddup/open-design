@@ -9,10 +9,11 @@ import type {
 } from "@opendesign/design-contracts";
 import { resolveImagePlacement } from "@opendesign/image-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
-import type { LeaferFidelityWarning } from "./types.js";
+import type { LeaferBooleanEditScope, LeaferFidelityWarning } from "./types.js";
 
 export const BOOLEAN_RESULT_ELEMENT_PREFIX =
   "__opendesign_boolean_result__:" as const;
+export const LEAFER_EDITOR_SELECTION_COLOR = "#4f7fff" as const;
 
 export type LeaferElementTag =
   "Ellipse" | "Frame" | "Group" | "Image" | "Path" | "Rect" | "Text";
@@ -39,6 +40,11 @@ export interface LeaferSceneProjection {
 export interface BooleanProjectionOptions {
   affectedBooleanNodeIds?: ReadonlySet<string>;
   removedBooleanNodeIds?: ReadonlySet<string>;
+}
+
+export interface BooleanEditProjectionOptions {
+  affectedBooleanNodeIds?: ReadonlySet<string>;
+  forceAffected?: boolean;
 }
 
 export function projectDesignPage(
@@ -451,10 +457,12 @@ export function projectResolvedBooleanGeometry(
       );
       warnings.push({
         code:
-          issue?.code === "unsupported-operand" ||
-          issue?.code === "unsupported-style"
-            ? "boolean-geometry-unsupported"
-            : "boolean-geometry-failed",
+          issue?.code === "provider-failure"
+            ? "boolean-geometry-provider-failed"
+            : issue?.code === "unsupported-operand" ||
+                issue?.code === "unsupported-style"
+              ? "boolean-geometry-unsupported"
+              : "boolean-geometry-failed",
         message:
           issue?.message ??
           `Boolean node ${node.id} has no derived geometry result`,
@@ -524,8 +532,130 @@ export function projectResolvedBooleanGeometry(
   };
 }
 
+/**
+ * Adds disposable operand outlines for a selection-derived Boolean edit scope.
+ * The resolved result remains visible and authoritative; no provider path or
+ * interaction state is written back to DesignDocument.
+ */
+export function projectBooleanEditScope(
+  base: LeaferSceneProjection,
+  document: DesignDocument,
+  scope: LeaferBooleanEditScope | undefined,
+  options: BooleanEditProjectionOptions = {},
+): LeaferSceneProjection {
+  const elementsById = new Map(base.elementsById);
+  const affectedNodeIds =
+    base.affectedNodeIds ||
+    (options.forceAffected && options.affectedBooleanNodeIds)
+      ? new Set(base.affectedNodeIds ?? [])
+      : undefined;
+
+  options.affectedBooleanNodeIds?.forEach((booleanId) => {
+    const node = document.nodesById[booleanId];
+    if (!node || node.kind !== "boolean") return;
+    node.childIds.forEach((childId) => {
+      affectedNodeIds?.add(childId);
+      const child = document.nodesById[childId];
+      if (child?.kind === "boolean") {
+        affectedNodeIds?.add(booleanResultElementId(child.id));
+      }
+    });
+  });
+
+  if (!scope) {
+    return {
+      ...base,
+      ...(affectedNodeIds === undefined ? {} : { affectedNodeIds }),
+      elementsById,
+    };
+  }
+  const boolean = document.nodesById[scope.booleanId];
+  if (!boolean || boolean.kind !== "boolean") return base;
+  const selected = new Set(scope.selectedOperandIds);
+  for (const operandId of boolean.childIds) {
+    const operand = document.nodesById[operandId];
+    const spec = elementsById.get(operandId);
+    if (!operand || !spec) continue;
+    const visible = operand.visible || selected.has(operand.id);
+    affectedNodeIds?.add(operand.id);
+    elementsById.set(operand.id, {
+      ...spec,
+      data:
+        operand.kind === "boolean"
+          ? {
+              ...spec.data,
+              hittable: visible,
+              visible,
+              data: booleanEditMetadata(spec.data.data, scope, operand.id),
+            }
+          : booleanOperandOutlineData(spec.data, scope, operand.id, visible),
+    });
+    if (operand.kind !== "boolean") continue;
+    const resultId = booleanResultElementId(operand.id);
+    const resultSpec = elementsById.get(resultId);
+    if (!resultSpec) continue;
+    affectedNodeIds?.add(resultId);
+    elementsById.set(resultId, {
+      ...resultSpec,
+      data: booleanOperandOutlineData(
+        resultSpec.data,
+        scope,
+        operand.id,
+        visible,
+      ),
+    });
+  }
+  return {
+    ...base,
+    ...(affectedNodeIds === undefined ? {} : { affectedNodeIds }),
+    elementsById,
+  };
+}
+
 export function booleanResultElementId(booleanNodeId: string): string {
   return `${BOOLEAN_RESULT_ELEMENT_PREFIX}${booleanNodeId}`;
+}
+
+function booleanOperandOutlineData(
+  data: Record<string, unknown>,
+  scope: LeaferBooleanEditScope,
+  operandId: string,
+  visible: boolean,
+): Record<string, unknown> {
+  return {
+    ...data,
+    backgroundBlur: 0,
+    blendMode: "normal",
+    blur: 0,
+    dashPattern: [],
+    fill: null,
+    grayscale: 0,
+    hittable: visible,
+    innerShadow: null,
+    mask: false,
+    opacity: 1,
+    shadow: null,
+    stroke: LEAFER_EDITOR_SELECTION_COLOR,
+    strokeAlign: "center",
+    strokeCap: "none",
+    strokeJoin: "miter",
+    strokeWidth: 1,
+    visible,
+    data: booleanEditMetadata(data.data, scope, operandId),
+  };
+}
+
+function booleanEditMetadata(
+  metadata: unknown,
+  scope: LeaferBooleanEditScope,
+  operandId: string,
+): Record<string, unknown> {
+  return {
+    ...(typeof metadata === "object" && metadata !== null ? metadata : {}),
+    opendesignBooleanEditScopeId: scope.booleanId,
+    opendesignBooleanOperandId: operandId,
+    opendesignBooleanReadOnly: scope.readOnly,
+  };
 }
 
 function mapImageNodePlacement(document: DesignDocument, node: ImageNode) {

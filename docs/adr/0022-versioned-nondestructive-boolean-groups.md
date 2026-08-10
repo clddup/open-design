@@ -28,7 +28,9 @@ Figma 的公开产品语义作为行为参考：Boolean operation 把多个图�
 
 PathKit 的派生结果不进入 `DesignDocument`。`boolean-resolver` 根据 operand 顺序、geometry、fill/stroke、visibility 与 transform 递归计算短生命周期 result path，并以精确 fingerprint 缓存；无关 revision 复用，源几何变化只失效对应 Boolean 及祖先。Leafer 为每个成功结果创建稳定 `__opendesign_boolean_result__:<id>` Path，源 operand 保持 identity 但在正常模式隐藏，synthetic hit 映射回原 Boolean ID。空结果保持不可见空 Path，失败返回明确 fidelity warning，不绘制逐层叠加 fallback。
 
-浏览器 PathKit 通过受控动态子入口按需加载。加载期间画布和结构投影保持响应；成功后在同一文档 revision 上只 reconcile Boolean 与 synthetic result，失败调用 `onError` 并投影结构化 warning，dispose 后忽略迟到 provider。WASM 路径由 Vite 受控 asset URL 提供，不进入 `DesignDocument` 或 Renderer 文件权限。
+源层编辑 scope 是由当前选区确定性推导的短生命周期交互状态，不写入文档、revision、history 或第二份场景。Enter、双击或图层树选择进入 direct operand，Shift+Enter、Escape 或 Done 返回 Boolean，Tab 在同级 operand 间移动。scope 中权威 synthetic result 保持可见，operand 只增加不可持久化的选择色轮廓；直接操作继续写回源节点 transform/size。拖拽中的 Leafer 状态按 animation frame 生成仅替换受影响节点的浅层临时文档，并调用同一 resolver 更新 synthetic preview；松手后仍只通过一个正式 `DesignTransaction` 提交。组锁定时 scope 保持可检查，但 adapter 根据继承锁阻止变换。Inspector 禁用 opacity、blend、mask、fill、stroke 与 effects，并继续开放名称、可见性、锁定、transform、size 和适用的 corner radius。
+
+浏览器 PathKit 通过受控动态子入口按需加载。加载期间画布和结构投影保持响应；成功后在同一文档 revision 上只 reconcile Boolean、synthetic result 与当前 edit scope 的 operands。provider 加载失败和不支持几何通过上下文 warning 暴露，允许进入源层或重试 provider，不再把整个 Canvas 标为不可用；dispose 后忽略迟到 provider。WASM 路径由 Vite 受控 asset URL 提供，不进入 `DesignDocument` 或 Renderer 文件权限。
 
 ## 迁移
 
@@ -42,6 +44,8 @@ PathKit 的派生结果不进入 `DesignDocument`。`boolean-resolver` 根据 op
 - 图层树使用独立 Boolean 图标和可折叠 children；工具栏菜单、Inspector operation 控件和解组入口复用同一 planner，尺寸字段在派生 bounds 模式下禁用；
 - macOS `⌥⇧U/S/I/E` 与 Windows `Alt+Shift+U/S/I/E` 创建或切换四类 operation，快捷键不劫持文本输入；
 - `opendesign_edit_hierarchy` 通过 `create-boolean`、`set-boolean-operation`、`ungroup-boolean` 对显式稳定 ID 执行 preview 和单次原子 apply，不读取发送时或实时选区，也不允许模型提交派生 path；
+- 源层 edit scope 覆盖 Enter/双击/图层树进入、Shift+Enter/Escape/Done 退出、Tab sibling 导航、受控外观 Inspector、最小二 operand 删除保护和锁定只读状态；
+- adapter 测试证明 edit scope 只更新 operand outline、不刷新无关节点，拖拽逐帧更新 synthetic result、松手只提交源 operand，provider 失败可见且可重试；
 - 真实 PathKit 测试覆盖 Rectangle、Ellipse、Path/Vector 原始局部坐标、嵌套 Boolean、fill+stroke、inside/center/outside stroke、精确两段 dash、transform、空结果与不支持样式；
 - resolver cache 测试证明颜色或无关节点变化复用结果，operand transform 只重新计算对应祖先；
 - Leafer 使用独立 synthetic Path，保留源节点层级与选择身份；测试覆盖按需加载、失败 warning、dispose 后迟到结果、无关增量不 `set()`、精确重算与删除清理；
@@ -49,11 +53,11 @@ PathKit 的派生结果不进入 `DesignDocument`。`boolean-resolver` 根据 op
 
 ## 后续门禁
 
-1. 增加进入源层编辑模式、派生 warning 与恢复入口的完整产品交互。
-2. 完成 SVG 往返、flatten、outline stroke、像素基线和双平台打包产品 smoke 后再提升 capability 状态。
+1. 完成 SVG 往返、flatten、outline stroke、像素基线和双平台打包产品 smoke 后再提升 capability 状态。
 
 ## 参考
 
 - [Figma Boolean operations](https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations)
+- [Figma selection and nested layers](https://help.figma.com/hc/en-us/articles/360040449873-Select-layers-and-objects)
 - [Figma REST API node types](https://developers.figma.com/docs/rest-api/file-node-types/#boolean_operation)
 - [Skia PathKit](https://skia.org/docs/user/modules/pathkit/)

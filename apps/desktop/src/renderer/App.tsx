@@ -14,6 +14,7 @@ import type {
 } from "@opendesign/design-contracts";
 import {
   canCreateBooleanGroup,
+  canDeleteNodes,
   canGroupNodes,
   canReorderNodes,
   canUngroupBooleanGroup,
@@ -208,6 +209,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     state.selection.nodeIds.length === 1
       ? designDocument.nodesById[state.selection.nodeIds[0] ?? ""]
       : undefined;
+  const selectedBooleanParent = selectedNode?.parentId
+    ? designDocument.nodesById[selectedNode.parentId]
+    : undefined;
   const canGroupSelection = canGroupNodes(
     designDocument,
     activePageId,
@@ -226,6 +230,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const canUngroupBooleanSelection = canUngroupBooleanGroup(
     designDocument,
     activePageId,
+    state.selection.nodeIds,
+  );
+  const canDeleteSelection = canDeleteNodes(
+    designDocument,
     state.selection.nodeIds,
   );
   const canChangeSelectedBoolean =
@@ -646,6 +654,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const deleteNodes = useCallback(
     (nodeIds: readonly string[]) => {
       const current = runtime.getSnapshot();
+      if (!canDeleteNodes(current.document, nodeIds)) return false;
       const roots = filterTopLevelNodeIds(current.document, nodeIds);
       if (roots.length === 0) return false;
       const deleted = applyCommands(
@@ -993,7 +1002,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       }
       if (
         (event.key === "Delete" || event.key === "Backspace") &&
-        state.selection.nodeIds.length > 0
+        canDeleteSelection
       ) {
         event.preventDefault();
         deleteNodes(state.selection.nodeIds);
@@ -1026,6 +1035,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
+    canDeleteSelection,
     changeZoom,
     applyBooleanOperation,
     deleteNodes,
@@ -1719,7 +1729,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             canGroupSelection
           }
           canReorder={layerOrderAvailability}
-          canDelete={state.selection.nodeIds.length > 0}
+          canDelete={canDeleteSelection}
           canDuplicate={state.selection.nodeIds.length > 0}
           canRedo={state.history.canRedo}
           canUndo={state.history.canUndo}
@@ -1830,12 +1840,24 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               <PropertiesPanel
                 arrangement={arrangementMetrics}
                 booleanOperationEditable={canChangeSelectedBoolean}
+                booleanOperandParent={
+                  selectedBooleanParent?.kind === "boolean"
+                    ? {
+                        id: selectedBooleanParent.id,
+                        name: selectedBooleanParent.name,
+                      }
+                    : undefined
+                }
+                canDelete={canDeleteSelection}
                 node={selectedNode}
                 onArrange={arrangeSelection}
                 onBooleanOperationChange={applyBooleanOperation}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
                 onDuplicate={duplicateSelection}
                 onReplaceImage={() => void replaceSelectedImage()}
+                onSelectBooleanParent={(nodeId) =>
+                  runtime.setSelection([nodeId], nodeId)
+                }
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}

@@ -37,7 +37,7 @@
       "version": "1.0.0",
       "source": "https://github.com/google/skia/tree/main/modules/pathkit",
       "license": "BSD-3-Clause",
-      "productionStatus": "boolean-render-projection-native-gate-pending",
+      "productionStatus": "boolean-edit-projection-native-gate-pending",
       "entrypoint": "@opendesign/geometry-service/vector-path",
       "resolverEntrypoint": "@opendesign/geometry-service/boolean-resolver",
       "browserEntrypoint": "@opendesign/geometry-service/browser-vector-path"

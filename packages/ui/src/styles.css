@@ -22,6 +22,9 @@
   --ui-success: #2f8a62;
   --ui-danger: #c53d3d;
   --ui-warning: #a56719;
+  --ui-warning-border: #d5b27c;
+  --ui-warning-soft: #fff4df;
+  --ui-warning-text: #83500f;
   --ui-selection: #dbe6ff;
   --ui-focus: #4a78e8;
   --ui-input-bg: #ffffff;
@@ -53,6 +56,9 @@
   --ui-success: #63b991;
   --ui-danger: #f07171;
   --ui-warning: #d9a050;
+  --ui-warning-border: #70542f;
+  --ui-warning-soft: #352a1d;
+  --ui-warning-text: #efbc70;
   --ui-selection: #283758;
   --ui-focus: #83a4ff;
   --ui-input-bg: #191a1b;

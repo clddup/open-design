@@ -36,9 +36,17 @@ export interface LeaferEngineCallbacks {
   onSelectionChange(nodeIds: string[], anchorNodeId?: string): void;
   onViewportChange(viewport: ViewportState): void;
   onWarning?(warning: LeaferFidelityWarning): void;
+  onWarningsChange?(warnings: readonly LeaferFidelityWarning[]): void;
+}
+
+export interface LeaferBooleanEditScope {
+  booleanId: string;
+  readOnly: boolean;
+  selectedOperandIds: readonly string[];
 }
 
 export interface LeaferEngineSyncInput {
+  booleanEditScope?: LeaferBooleanEditScope;
   document: DesignDocument;
   changes?: DesignChangeSet;
   pageId: string;
@@ -51,6 +59,7 @@ export interface LeaferFidelityWarning {
   code:
     | "boolean-geometry-failed"
     | "boolean-geometry-pending"
+    | "boolean-geometry-provider-failed"
     | "boolean-geometry-unsupported"
     | "invalid-path"
     | "missing-image"
@@ -66,5 +75,6 @@ export interface LeaferEngineOptions {
 
 export interface LeaferEngineAdapter {
   dispose(): void;
+  retryBooleanGeometry(): boolean;
   sync(input: LeaferEngineSyncInput): void;
 }

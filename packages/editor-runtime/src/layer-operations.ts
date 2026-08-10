@@ -742,6 +742,59 @@ function topLevelSelection(
   });
 }
 
+export function canDeleteNodes(
+  document: DesignDocument,
+  nodeIds: readonly string[],
+): boolean {
+  const uniqueNodeIds = [...new Set(nodeIds)];
+  if (
+    uniqueNodeIds.length === 0 ||
+    uniqueNodeIds.some((nodeId) => !document.nodesById[nodeId])
+  ) {
+    return false;
+  }
+  const roots = topLevelSelection(document, uniqueNodeIds);
+  if (roots.length === 0) return false;
+  const selected = new Set(roots);
+  if (
+    roots.some(
+      (nodeId) =>
+        isEffectivelyLocked(document, nodeId) ||
+        subtreeContainsOwnLock(document, nodeId),
+    )
+  ) {
+    return false;
+  }
+  return roots.every((nodeId) => {
+    const node = document.nodesById[nodeId];
+    const parent = node?.parentId
+      ? document.nodesById[node.parentId]
+      : undefined;
+    return (
+      !parent ||
+      parent.kind !== "boolean" ||
+      selected.has(parent.id) ||
+      parent.childIds.filter((childId) => !selected.has(childId)).length >= 2
+    );
+  });
+}
+
+function subtreeContainsOwnLock(
+  document: DesignDocument,
+  nodeId: string,
+): boolean {
+  const visited = new Set<string>();
+  const visit = (currentId: string): boolean => {
+    if (visited.has(currentId)) return false;
+    visited.add(currentId);
+    const node = document.nodesById[currentId];
+    return Boolean(
+      node && (node.locked || node.childIds.some((childId) => visit(childId))),
+    );
+  };
+  return visit(nodeId);
+}
+
 export function childIds(
   document: DesignDocument,
   pageId: string,

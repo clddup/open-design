@@ -779,18 +779,24 @@ function EffectEditor({
 function SelectedNodeProperties({
   node,
   booleanOperationEditable,
+  booleanOperandParent,
+  canDelete,
   onBooleanOperationChange,
   onDelete,
   onDuplicate,
   onReplaceImage,
+  onSelectBooleanParent,
   onUpdate,
 }: {
   node: DesignNode;
   booleanOperationEditable: boolean;
+  booleanOperandParent?: { id: string; name: string };
+  canDelete: boolean;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onReplaceImage: () => void;
+  onSelectBooleanParent: (nodeId: string) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
 }) {
   const { t } = useI18n();
@@ -823,12 +829,35 @@ function SelectedNodeProperties({
             onClick={onDuplicate}
           />
           <IconButton
+            disabled={!canDelete}
             icon="trash"
             label={t("properties.deleteLayer")}
             onClick={onDelete}
           />
         </span>
       </div>
+      {booleanOperandParent && (
+        <Section title={t("properties.booleanSourceLayer")}>
+          <div className="property-context-note">
+            <Glyph name="boolean" size={15} />
+            <span>
+              <strong>{t("properties.booleanAppearanceControlled")}</strong>
+              <small>
+                {t("properties.booleanAppearanceControlledDetail", {
+                  name:
+                    booleanOperandParent.name || t("properties.booleanGroup"),
+                })}
+              </small>
+            </span>
+            <button
+              onClick={() => onSelectBooleanParent(booleanOperandParent.id)}
+              type="button"
+            >
+              {t("properties.selectBooleanGroup")}
+            </button>
+          </div>
+        </Section>
+      )}
       <Section title={t("properties.layer")}>
         <div className="property-stack">
           <Field
@@ -943,6 +972,7 @@ function SelectedNodeProperties({
         <div className="property-grid">
           <Field
             accessibleLabel={t("properties.opacity")}
+            disabled={booleanOperandParent !== undefined}
             label="O"
             max={100}
             min={0}
@@ -978,6 +1008,7 @@ function SelectedNodeProperties({
             <span>{t("properties.blendMode")}</span>
             <select
               aria-label={t("properties.blendMode")}
+              disabled={booleanOperandParent !== undefined}
               onChange={(event) =>
                 onUpdate({ blendMode: event.target.value as BlendMode })
               }
@@ -994,6 +1025,7 @@ function SelectedNodeProperties({
             <span>{t("properties.maskMode")}</span>
             <select
               aria-label={t("properties.maskMode")}
+              disabled={booleanOperandParent !== undefined}
               onChange={(event) =>
                 onUpdate({ maskMode: event.target.value as MaskMode })
               }
@@ -1121,7 +1153,7 @@ function SelectedNodeProperties({
           </div>
         </Section>
       )}
-      {isFillNode(node) && (
+      {isFillNode(node) && !booleanOperandParent && (
         <Section title={t("properties.fill")}>
           {node.properties.fills.map((paint, index) => (
             <PaintEditor
@@ -1167,7 +1199,7 @@ function SelectedNodeProperties({
           </button>
         </Section>
       )}
-      {isFillNode(node) && (
+      {isFillNode(node) && !booleanOperandParent && (
         <Section title={t("properties.stroke")}>
           {node.properties.strokes.map((paint, index) => (
             <PaintEditor
@@ -1232,55 +1264,59 @@ function SelectedNodeProperties({
           </button>
         </Section>
       )}
-      <Section title={t("properties.effects")}>
-        {(node.effects ?? []).map((effect, index) => (
-          <EffectEditor
-            effect={effect}
-            index={index}
-            key={`${node.id}-effect-${index}`}
-            onChange={(next) =>
-              onUpdate({
-                effects: (node.effects ?? []).map((candidate, effectIndex) =>
-                  effectIndex === index ? next : candidate,
-                ),
-              })
-            }
-            onRemove={() =>
-              onUpdate({
-                effects: (node.effects ?? []).filter(
-                  (_, effectIndex) => effectIndex !== index,
-                ),
-              })
-            }
-          />
-        ))}
-        <label className="property-select property-effect-add">
-          <span>{t("properties.addEffect")}</span>
-          <select
-            aria-label={t("properties.addEffect")}
-            onChange={(event) => {
-              const type = event.target.value as Effect["type"] | "";
-              if (!type) return;
-              onUpdate({
-                effects: [...(node.effects ?? []), defaultEffect(type)],
-              });
-              event.target.value = "";
-            }}
-            value=""
-          >
-            <option value="">{t("properties.chooseEffect")}</option>
-            <option value="drop-shadow">{t("properties.dropShadow")}</option>
-            <option value="inner-shadow">{t("properties.innerShadow")}</option>
-            <option value="outer-glow">{t("properties.outerGlow")}</option>
-            <option value="inner-glow">{t("properties.innerGlow")}</option>
-            <option value="layer-blur">{t("properties.layerBlur")}</option>
-            <option value="background-blur">
-              {t("properties.backgroundBlur")}
-            </option>
-            <option value="grayscale">{t("properties.grayscale")}</option>
-          </select>
-        </label>
-      </Section>
+      {!booleanOperandParent && (
+        <Section title={t("properties.effects")}>
+          {(node.effects ?? []).map((effect, index) => (
+            <EffectEditor
+              effect={effect}
+              index={index}
+              key={`${node.id}-effect-${index}`}
+              onChange={(next) =>
+                onUpdate({
+                  effects: (node.effects ?? []).map((candidate, effectIndex) =>
+                    effectIndex === index ? next : candidate,
+                  ),
+                })
+              }
+              onRemove={() =>
+                onUpdate({
+                  effects: (node.effects ?? []).filter(
+                    (_, effectIndex) => effectIndex !== index,
+                  ),
+                })
+              }
+            />
+          ))}
+          <label className="property-select property-effect-add">
+            <span>{t("properties.addEffect")}</span>
+            <select
+              aria-label={t("properties.addEffect")}
+              onChange={(event) => {
+                const type = event.target.value as Effect["type"] | "";
+                if (!type) return;
+                onUpdate({
+                  effects: [...(node.effects ?? []), defaultEffect(type)],
+                });
+                event.target.value = "";
+              }}
+              value=""
+            >
+              <option value="">{t("properties.chooseEffect")}</option>
+              <option value="drop-shadow">{t("properties.dropShadow")}</option>
+              <option value="inner-shadow">
+                {t("properties.innerShadow")}
+              </option>
+              <option value="outer-glow">{t("properties.outerGlow")}</option>
+              <option value="inner-glow">{t("properties.innerGlow")}</option>
+              <option value="layer-blur">{t("properties.layerBlur")}</option>
+              <option value="background-blur">
+                {t("properties.backgroundBlur")}
+              </option>
+              <option value="grayscale">{t("properties.grayscale")}</option>
+            </select>
+          </label>
+        </Section>
+      )}
     </div>
   );
 }
@@ -1484,22 +1520,28 @@ export function PropertiesPanel({
   node,
   arrangement,
   booleanOperationEditable,
+  booleanOperandParent,
+  canDelete,
   onArrange,
   onBooleanOperationChange,
   onDelete,
   onDuplicate,
   onReplaceImage,
+  onSelectBooleanParent,
   onUpdate,
   selectionCount,
 }: {
   node: DesignNode | undefined;
   arrangement: ArrangementSelectionMetrics | null;
   booleanOperationEditable: boolean;
+  booleanOperandParent?: { id: string; name: string };
+  canDelete: boolean;
   onArrange: (operation: ArrangeOperation) => void;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onReplaceImage: () => void;
+  onSelectBooleanParent: (nodeId: string) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   selectionCount: number;
 }) {
@@ -1543,10 +1585,13 @@ export function PropertiesPanel({
             key={node.id}
             node={node}
             booleanOperationEditable={booleanOperationEditable}
+            booleanOperandParent={booleanOperandParent}
+            canDelete={canDelete}
             onBooleanOperationChange={onBooleanOperationChange}
             onDelete={onDelete}
             onDuplicate={onDuplicate}
             onReplaceImage={onReplaceImage}
+            onSelectBooleanParent={onSelectBooleanParent}
             onUpdate={onUpdate}
           />
         ) : selectionCount > 1 ? (

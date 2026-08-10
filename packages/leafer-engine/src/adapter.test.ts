@@ -97,6 +97,7 @@ class FakeImage extends FakeElement {
 
 class FakePath extends FakeElement {
   override readonly tag: string = "Path";
+  path: unknown = null;
 }
 
 class FakeText extends FakeElement {
@@ -455,6 +456,149 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("projects only Boolean operand outlines in edit scope and writes transforms to the source operand", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      { ...createCallbacks(), onOperations },
+      {
+        loadVectorGeometryProvider: () =>
+          Promise.resolve(fakeVectorGeometryProvider()),
+      },
+    );
+    const input = withBooleanFixture(createInput());
+    adapter.sync(input);
+    await flushMicrotasks();
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const base = findElement(app.tree, "boolean_base");
+    const cutout = findElement(app.tree, "boolean_cutout");
+    const result = findElement(
+      app.tree,
+      booleanResultElementId("boolean_mark"),
+    );
+    const unrelated = findElement(app.tree, "feature_two");
+    if (!base || !cutout || !(result instanceof FakePath) || !unrelated) {
+      throw new Error("Missing Boolean edit fixtures");
+    }
+    const resultSetCalls = result.setCalls;
+    const unrelatedSetCalls = unrelated.setCalls;
+
+    adapter.sync({
+      ...input,
+      booleanEditScope: {
+        booleanId: "boolean_mark",
+        readOnly: false,
+        selectedOperandIds: ["boolean_base"],
+      },
+      selection: { nodeIds: ["boolean_base"], anchorNodeId: "boolean_base" },
+    });
+    flushAnimationFrames();
+
+    expect(base).toMatchObject({
+      fill: null,
+      hittable: true,
+      opacity: 1,
+      stroke: "#4f7fff",
+      visible: true,
+    });
+    expect(cutout).toMatchObject({
+      fill: null,
+      hittable: true,
+      stroke: "#4f7fff",
+      visible: true,
+    });
+    expect(result.setCalls).toBe(resultSetCalls);
+    expect(unrelated.setCalls).toBe(unrelatedSetCalls);
+    expect(app.editor.list).toEqual([base]);
+
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    const resultPathBeforeMove = result.path;
+    base.localTransform.e = 18;
+    app.editor.emit("editor.move");
+    flushAnimationFrames();
+    expect(result.path).not.toBe(resultPathBeforeMove);
+    expect(result.setCalls).toBe(resultSetCalls + 1);
+    expect(unrelated.setCalls).toBe(unrelatedSetCalls);
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onOperations).toHaveBeenCalledWith({
+      kind: "move",
+      operations: [
+        expect.objectContaining({
+          nodeId: "boolean_base",
+          transform: [1, 0, 0, 1, 18, 0],
+          type: "update_properties",
+        }),
+      ],
+    });
+    const previewResultSetCalls = result.setCalls;
+
+    adapter.sync(input);
+    flushAnimationFrames();
+    expect(base).toMatchObject({
+      fill: [{ type: "solid", color: "#ef4444", opacity: 1 }],
+      visible: false,
+    });
+    expect(result.setCalls).toBe(previewResultSetCalls);
+    expect(unrelated.setCalls).toBe(unrelatedSetCalls);
+    expect(app.editor.list).toEqual([findElement(app.tree, "boolean_mark")]);
+    adapter.dispose();
+  });
+
+  it("keeps locked Boolean operands selectable in edit scope without submitting direct manipulation", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      { ...createCallbacks(), onOperations },
+      {
+        loadVectorGeometryProvider: () =>
+          Promise.resolve(fakeVectorGeometryProvider()),
+      },
+    );
+    const input = withBooleanFixture(createInput());
+    const document = structuredClone(input.document);
+    const boolean = document.nodesById.boolean_mark;
+    if (!boolean || boolean.kind !== "boolean") {
+      throw new Error("Missing Boolean fixture");
+    }
+    boolean.locked = true;
+    adapter.sync({
+      ...input,
+      booleanEditScope: {
+        booleanId: boolean.id,
+        readOnly: true,
+        selectedOperandIds: ["boolean_base"],
+      },
+      document,
+      selection: { nodeIds: ["boolean_base"], anchorNodeId: "boolean_base" },
+    });
+    await flushMicrotasks();
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    const base = app && findElement(app.tree, "boolean_base");
+    if (!app || !base) throw new Error("Missing locked operand projection");
+    expect(base).toMatchObject({
+      locked: false,
+      stroke: "#4f7fff",
+      visible: true,
+    });
+    expect(app.editor.list).toEqual([base]);
+
+    app.editor.moving = true;
+    base.localTransform.e = 64;
+    app.editor.emit("editor.before-move");
+    app.editor.emit("editor.move");
+    expect(base.localTransform.e).toBe(0);
+    expect(onOperations).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("recomputes only an affected Boolean result after contiguous changes", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
@@ -548,20 +692,40 @@ describe("Leafer engine selection bounds synchronization", () => {
     const loadError = new Error("WASM unavailable");
     const onError = vi.fn();
     const onWarning = vi.fn();
+    const onWarningsChange = vi.fn();
+    const loader = vi
+      .fn<() => Promise<VectorGeometryProvider>>()
+      .mockRejectedValueOnce(loadError)
+      .mockResolvedValueOnce(fakeVectorGeometryProvider());
     const failedAdapter = await createLeaferEngineAdapter(
       createHost(),
-      { ...createCallbacks(), onError, onWarning },
-      { loadVectorGeometryProvider: async () => Promise.reject(loadError) },
+      { ...createCallbacks(), onError, onWarning, onWarningsChange },
+      { loadVectorGeometryProvider: loader },
     );
     failedAdapter.sync(withBooleanFixture(createInput()));
     await flushMicrotasks();
-    expect(onError).toHaveBeenCalledWith(loadError);
+    expect(onError).not.toHaveBeenCalled();
     expect(onWarning).toHaveBeenCalledWith(
       expect.objectContaining({
-        code: "boolean-geometry-failed",
+        code: "boolean-geometry-provider-failed",
         nodeId: "boolean_mark",
       }),
     );
+    expect(onWarningsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ code: "boolean-geometry-provider-failed" }),
+    ]);
+    expect(failedAdapter.retryBooleanGeometry()).toBe(true);
+    await flushMicrotasks();
+    flushAnimationFrames();
+    expect(loader).toHaveBeenCalledTimes(2);
+    expect(onWarningsChange).toHaveBeenLastCalledWith([]);
+    expect(
+      findElement(
+        leaferHarness.app!.tree,
+        booleanResultElementId("boolean_mark"),
+      ),
+    ).toBeInstanceOf(FakePath);
+    expect(failedAdapter.retryBooleanGeometry()).toBe(false);
     failedAdapter.dispose();
 
     let resolveProvider:

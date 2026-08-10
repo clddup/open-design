@@ -83,9 +83,9 @@
 - ID：`vector.boolean-operations`
 - 实现方：DesignDocument 1.4.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
-- 证据：自动化 10 项；实机 0 项
+- 证据：自动化 11 项；实机 0 项
 - 限制：递归 resolver 会把 Rectangle、Ellipse、Path、Vector 与嵌套 Boolean 转换为包含 fill+stroke 的 PathKit 几何，应用局部 transform、保留真实空结果，并在不持久化 provider 输出的前提下投影稳定的 Leafer synthetic Path。
-- 限制：工具栏/菜单、macOS 与 Windows 快捷键、Inspector operation 控件、解组命令和 Agent hierarchy typed actions 已复用同一套经过 preview 的原子 planner。专用源层画布编辑模式、文字轮廓、SVG 往返、像素基线和 macOS/Windows 打包产品证据仍不可用；超过两段的 dash pattern、带 mask 的 operand 和开放路径的非居中描边会明确失败，不做静默近似。
+- 限制：工具栏/菜单、macOS 与 Windows 快捷键、Inspector operation 控件、解组命令和 Agent hierarchy typed actions 已复用同一套经过 preview 的原子 planner。Enter、双击、图层树选择、Shift+Enter、Escape 与 Tab 已提供短生命周期的源 operand 编辑、派生结果实时预览、锁定只读状态、受控外观字段和上下文失败恢复。文字轮廓、SVG 往返、像素基线和 macOS/Windows 打包产品证据仍不可用；超过两段的 dash pattern、带 mask 的 operand 和开放路径的非居中描边会明确失败，不做静默近似。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations)
 
 ## 外观与合成

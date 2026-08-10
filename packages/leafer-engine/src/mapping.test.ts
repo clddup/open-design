@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import {
   booleanResultElementId,
+  projectBooleanEditScope,
   projectDesignPage,
   projectDesignPageIncrementally,
   projectResolvedBooleanGeometry,
@@ -164,6 +165,56 @@ describe("Leafer scene projection", () => {
     expect(resolved.warnings).not.toContainEqual(
       expect.objectContaining({ code: "boolean-geometry-pending" }),
     );
+
+    const editing = projectBooleanEditScope(resolved, document, {
+      booleanId: "boolean_mark",
+      readOnly: false,
+      selectedOperandIds: ["boolean_cutout"],
+    });
+    expect(editing.elementsById.get(resultId)).toBe(
+      resolved.elementsById.get(resultId),
+    );
+    expect(editing.elementsById.get("boolean_base")?.data).toMatchObject({
+      fill: null,
+      hittable: true,
+      opacity: 1,
+      stroke: "#4f7fff",
+      visible: true,
+      data: {
+        opendesignBooleanEditScopeId: "boolean_mark",
+        opendesignBooleanOperandId: "boolean_base",
+        opendesignBooleanReadOnly: false,
+      },
+    });
+    expect(editing.elementsById.get("boolean_cutout")?.data).toMatchObject({
+      fill: null,
+      hittable: true,
+      stroke: "#4f7fff",
+      visible: true,
+    });
+
+    const entering = projectBooleanEditScope(
+      resolved,
+      document,
+      {
+        booleanId: "boolean_mark",
+        readOnly: false,
+        selectedOperandIds: ["boolean_cutout"],
+      },
+      {
+        affectedBooleanNodeIds: new Set(["boolean_mark"]),
+        forceAffected: true,
+      },
+    );
+    expect(entering.affectedNodeIds).toEqual(
+      new Set(["boolean_base", "boolean_cutout"]),
+    );
+    const exited = projectBooleanEditScope(resolved, document, undefined, {
+      affectedBooleanNodeIds: new Set(["boolean_mark"]),
+      forceAffected: true,
+    });
+    expect(exited.elementsById.get("boolean_base")?.data.visible).toBe(false);
+    expect(exited.elementsById.get("boolean_cutout")?.data.visible).toBe(false);
   });
 
   it("reprojects only nodes named by a contiguous transaction change set", () => {

@@ -22,6 +22,7 @@ export {
   transformPoint,
 } from "./geometry.js";
 export {
+  canDeleteNodes,
   canReorderNodes,
   canGroupNodes,
   canUngroupNode,
@@ -52,6 +53,12 @@ export {
   type BooleanOperationFailureCode,
   type BooleanOperationPlan,
 } from "./boolean-operations.js";
+export {
+  navigateBooleanSelection,
+  resolveBooleanEditScope,
+  type BooleanEditScope,
+  type BooleanSelectionDirection,
+} from "./selection-navigation.js";
 export {
   planImageNodeUpdate,
   type ImageUpdateFailureCode,

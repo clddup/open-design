@@ -9,14 +9,27 @@ import type {
 } from "@opendesign/design-contracts";
 import type { EditorRuntime, EditorSnapshot } from "@opendesign/editor-runtime";
 import {
+  navigateBooleanSelection,
+  resolveBooleanEditScope,
+} from "@opendesign/editor-runtime";
+import {
   createLeaferEngineAdapter,
   type LeaferCreateRequest,
   type LeaferEngineAdapter,
   type LeaferEngineSyncInput,
+  type LeaferFidelityWarning,
   type LeaferOperationKind,
   type LeaferOperationRequest,
 } from "@opendesign/leafer-engine";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import type { MutableRefObject } from "react";
 import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
@@ -42,7 +55,79 @@ export function Canvas({
   const changesByRevision = useRef(new Map<number, DesignChangeSet>());
   const transactionSequence = useRef(0);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [fidelityWarnings, setFidelityWarnings] = useState<
+    readonly LeaferFidelityWarning[]
+  >([]);
   const tool = isTool(snapshot.state.tool) ? snapshot.state.tool : "select";
+  const booleanEditScope = useMemo(
+    () =>
+      resolveBooleanEditScope(
+        snapshot.document,
+        activePageId,
+        snapshot.state.selection.nodeIds,
+      ),
+    [activePageId, snapshot.document, snapshot.state.selection.nodeIds],
+  );
+
+  const selectBooleanTarget = useCallback(
+    (
+      nodeIds: readonly string[],
+      direction: "enter" | "exit" | "next-operand" | "previous-operand",
+    ) => {
+      const current = runtime.getSnapshot();
+      const target = navigateBooleanSelection(
+        current.document,
+        activePageId,
+        nodeIds,
+        direction,
+      );
+      if (!target) return false;
+      runtime.setSelection([target], target);
+      return true;
+    },
+    [activePageId, runtime],
+  );
+
+  const handleCanvasKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>) => {
+      if (event.target !== event.currentTarget) return;
+      const currentSelection = runtime.getSnapshot().state.selection.nodeIds;
+      const direction =
+        event.key === "Enter"
+          ? event.shiftKey
+            ? "exit"
+            : "enter"
+          : event.key === "Escape"
+            ? "exit"
+            : event.key === "Tab"
+              ? event.shiftKey
+                ? "previous-operand"
+                : "next-operand"
+              : null;
+      if (!direction || !selectBooleanTarget(currentSelection, direction)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [runtime, selectBooleanTarget],
+  );
+
+  const handleCanvasDoubleClick = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".canvas-context-stack")
+      ) {
+        return;
+      }
+      const currentSelection = runtime.getSnapshot().state.selection.nodeIds;
+      if (!selectBooleanTarget(currentSelection, "enter")) return;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [runtime, selectBooleanTarget],
+  );
 
   useEffect(() => {
     const element = host.current;
@@ -166,6 +251,11 @@ export function Canvas({
       onSelectionChange: (nodeIds, anchorNodeId) => {
         runtime.setSelection(nodeIds, anchorNodeId);
       },
+      onWarningsChange: (warnings) => {
+        setFidelityWarnings((current) =>
+          sameFidelityWarnings(current, warnings) ? current : [...warnings],
+        );
+      },
       onViewportChange: updateViewport,
     })
       .then((engine) => {
@@ -194,6 +284,15 @@ export function Canvas({
   useEffect(() => {
     const changes = changesByRevision.current.get(snapshot.document.revision);
     const input: LeaferEngineSyncInput = {
+      ...(booleanEditScope
+        ? {
+            booleanEditScope: {
+              booleanId: booleanEditScope.booleanId,
+              readOnly: booleanEditScope.readOnly,
+              selectedOperandIds: booleanEditScope.selectedOperandIds,
+            },
+          }
+        : {}),
       document: snapshot.document,
       ...(changes ? { changes } : {}),
       pageId: activePageId,
@@ -205,16 +304,43 @@ export function Canvas({
     adapter.current?.sync(input);
   }, [
     activePageId,
+    booleanEditScope,
     snapshot.document,
     snapshot.state.selection,
     snapshot.state.viewport,
     tool,
   ]);
 
+  const seriousBooleanWarnings = fidelityWarnings.filter(
+    (warning) =>
+      warning.code === "boolean-geometry-failed" ||
+      warning.code === "boolean-geometry-provider-failed" ||
+      warning.code === "boolean-geometry-unsupported",
+  );
+  const selectedBooleanId =
+    booleanEditScope?.booleanId ??
+    (snapshot.state.selection.nodeIds.length === 1 &&
+    snapshot.document.nodesById[snapshot.state.selection.nodeIds[0] ?? ""]
+      ?.kind === "boolean"
+      ? snapshot.state.selection.nodeIds[0]
+      : undefined);
+  const activeWarning =
+    seriousBooleanWarnings.find(
+      (warning) => warning.nodeId === selectedBooleanId,
+    ) ?? seriousBooleanWarnings[0];
+  const warningBoolean = activeWarning
+    ? snapshot.document.nodesById[activeWarning.nodeId]
+    : undefined;
+  const editScopeBoolean = booleanEditScope
+    ? snapshot.document.nodesById[booleanEditScope.booleanId]
+    : undefined;
+
   return (
     <main
       aria-label={t("canvas.label")}
       className="canvas-area canvas-area--leafer"
+      onDoubleClick={handleCanvasDoubleClick}
+      onKeyDown={handleCanvasKeyDown}
       onPointerDown={() => host.current?.focus()}
       ref={host}
       tabIndex={0}
@@ -224,6 +350,74 @@ export function Canvas({
           <span className="canvas-status__mark" />
           <strong>{t("canvas.unavailable")}</strong>
           <small>{renderError}</small>
+        </div>
+      )}
+      {(booleanEditScope || activeWarning) && (
+        <div className="canvas-context-stack">
+          {booleanEditScope && editScopeBoolean?.kind === "boolean" && (
+            <div className="canvas-edit-scope" role="status">
+              <span className="canvas-edit-scope__mark" />
+              <span>
+                <strong>
+                  {t("canvas.booleanEditing", {
+                    name: editScopeBoolean.name || t("node.boolean"),
+                  })}
+                </strong>
+                <small>
+                  {booleanEditScope.readOnly
+                    ? t("canvas.booleanEditingReadOnly")
+                    : t("canvas.booleanEditingHint")}
+                </small>
+              </span>
+              <button
+                aria-label={t("canvas.exitBooleanEditing")}
+                onClick={() => {
+                  runtime.setSelection(
+                    [booleanEditScope.booleanId],
+                    booleanEditScope.booleanId,
+                  );
+                  requestAnimationFrame(() => host.current?.focus());
+                }}
+                type="button"
+              >
+                {t("common.done")}
+                <kbd>Esc</kbd>
+              </button>
+            </div>
+          )}
+          {activeWarning && warningBoolean?.kind === "boolean" && (
+            <div className="canvas-fidelity-warning" role="alert">
+              <span className="canvas-fidelity-warning__mark">!</span>
+              <span>
+                <strong>{t("canvas.booleanRenderWarning")}</strong>
+                <small>{activeWarning.message}</small>
+              </span>
+              <span className="canvas-fidelity-warning__actions">
+                {!booleanEditScope && (
+                  <button
+                    onClick={() => {
+                      selectBooleanTarget([warningBoolean.id], "enter");
+                      requestAnimationFrame(() => host.current?.focus());
+                    }}
+                    type="button"
+                  >
+                    {t("canvas.editBooleanSources")}
+                  </button>
+                )}
+                {activeWarning.code === "boolean-geometry-provider-failed" && (
+                  <button
+                    onClick={() => {
+                      adapter.current?.retryBooleanGeometry();
+                      requestAnimationFrame(() => host.current?.focus());
+                    }}
+                    type="button"
+                  >
+                    {t("canvas.retryBooleanRendering")}
+                  </button>
+                )}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </main>
@@ -380,5 +574,20 @@ function sameViewport(left: ViewportState, right: ViewportState) {
     Math.abs(left.zoom - right.zoom) < 0.000_001 &&
     Math.abs(left.width - right.width) < 0.000_001 &&
     Math.abs(left.height - right.height) < 0.000_001
+  );
+}
+
+function sameFidelityWarnings(
+  left: readonly LeaferFidelityWarning[],
+  right: readonly LeaferFidelityWarning[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (warning, index) =>
+        warning.code === right[index]?.code &&
+        warning.message === right[index]?.message &&
+        warning.nodeId === right[index]?.nodeId,
+    )
   );
 }

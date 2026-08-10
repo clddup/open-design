@@ -47,6 +47,7 @@ const leaferHarness = vi.hoisted(() => ({
   callbacks: null as LeaferEngineCallbacks | null,
   input: null as LeaferEngineSyncInput | null,
   sync: vi.fn(),
+  retryBooleanGeometry: vi.fn(() => true),
 }));
 
 vi.mock("@opendesign/leafer-engine", () => ({
@@ -59,6 +60,7 @@ vi.mock("@opendesign/leafer-engine", () => ({
       host.append(canvas);
       return Promise.resolve({
         dispose: () => canvas.remove(),
+        retryBooleanGeometry: leaferHarness.retryBooleanGeometry,
         sync: (input: LeaferEngineSyncInput) => {
           leaferHarness.input = input;
           leaferHarness.sync(input);
@@ -84,6 +86,7 @@ beforeEach(() => {
   leaferHarness.callbacks = null;
   leaferHarness.input = null;
   leaferHarness.sync.mockClear();
+  leaferHarness.retryBooleanGeometry.mockClear();
   Object.defineProperties(HTMLElement.prototype, {
     hasPointerCapture: {
       configurable: true,
@@ -1763,6 +1766,163 @@ describe("App", () => {
       .setup()
       .click(screen.getByRole("button", { name: "Boolean operations" }));
     expect(screen.getByText("Alt+Shift+U")).toBeInTheDocument();
+  });
+
+  it("edits Boolean source geometry through canvas nesting, exposes read-only lock state, and exits cleanly", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    act(() =>
+      runtime().setSelection(["feature_one", "feature_two"], "feature_one"),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Boolean operations" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Union" }));
+    const created = runtime().getSnapshot();
+    const booleanNode = Object.values(created.document.nodesById).find(
+      (node) => node.kind === "boolean",
+    );
+    if (!booleanNode || booleanNode.kind !== "boolean") {
+      throw new Error("Missing Boolean fixture");
+    }
+
+    const canvas = screen.getByRole("main", { name: "Design canvas" });
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Enter" });
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      "feature_two",
+    ]);
+    await waitFor(() =>
+      expect(leaferHarness.input?.booleanEditScope).toEqual({
+        booleanId: booleanNode.id,
+        readOnly: false,
+        selectedOperandIds: ["feature_two"],
+      }),
+    );
+    expect(screen.getByText(`Editing ${booleanNode.name}`)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Properties" }));
+    expect(
+      screen.getByText("Appearance is controlled by the Boolean group"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "Opacity" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Blend mode" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Mask mode" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Fill" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stroke" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Effects" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Delete layer" })).toBeDisabled();
+    const revisionBeforeDelete = runtime().getSnapshot().document.revision;
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Delete" });
+    expect(runtime().getSnapshot().document.revision).toBe(
+      revisionBeforeDelete,
+    );
+
+    act(() => {
+      leaferCallbacks().onOperations({
+        kind: "move",
+        operations: [
+          {
+            commandId: "move_boolean_operand",
+            type: "update_properties",
+            nodeId: "feature_two",
+            transform: [1, 0, 0, 1, 320, 12],
+          },
+        ],
+      });
+    });
+    expect(
+      runtime().getSnapshot().document.nodesById.feature_two?.transform,
+    ).toEqual([1, 0, 0, 1, 320, 12]);
+    expect(runtime().getSnapshot().document.revision).toBe(2);
+
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Tab", shiftKey: true });
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      "feature_one",
+    ]);
+    fireEvent.keyDown(canvas, { key: "Escape" });
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      booleanNode.id,
+    ]);
+    expect(
+      screen.queryByText(`Editing ${booleanNode.name}`),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Atomic changes" }));
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      "feature_two",
+    ]);
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Enter", shiftKey: true });
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      booleanNode.id,
+    ]);
+
+    fireEvent.doubleClick(canvas);
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      "feature_two",
+    ]);
+    await user.click(
+      screen.getByRole("button", { name: "Finish editing Boolean sources" }),
+    );
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      booleanNode.id,
+    ]);
+
+    await user.click(
+      screen.getByRole("button", { name: `Lock ${booleanNode.name}` }),
+    );
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Enter" });
+    expect(
+      screen.getByText("Read-only · The Boolean group is locked"),
+    ).toBeInTheDocument();
+    expect(leaferHarness.input?.booleanEditScope).toMatchObject({
+      booleanId: booleanNode.id,
+      readOnly: true,
+    });
+  });
+
+  it("surfaces Boolean fidelity warnings with source-edit and provider-retry recovery", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    act(() =>
+      runtime().setSelection(["feature_one", "feature_two"], "feature_one"),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Boolean operations" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Subtract" }));
+    const booleanNode = Object.values(
+      runtime().getSnapshot().document.nodesById,
+    ).find((node) => node.kind === "boolean");
+    if (!booleanNode || booleanNode.kind !== "boolean") {
+      throw new Error("Missing Boolean fixture");
+    }
+
+    act(() => {
+      leaferCallbacks().onWarningsChange?.([
+        {
+          code: "boolean-geometry-provider-failed",
+          message: "Boolean geometry provider failed to load: WASM unavailable",
+          nodeId: booleanNode.id,
+        },
+      ]);
+    });
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Boolean result unavailable",
+    );
+    expect(screen.getByRole("alert").textContent).toContain("WASM unavailable");
+
+    await user.click(screen.getByRole("button", { name: "Retry rendering" }));
+    expect(leaferHarness.retryBooleanGeometry).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Edit sources" }));
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      "feature_two",
+    ]);
+    expect(screen.getByText(`Editing ${booleanNode.name}`)).toBeInTheDocument();
   });
 
   it("reorders selected siblings from the layer-order menu and macOS shortcuts", async () => {

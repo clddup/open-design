@@ -3,6 +3,10 @@ import type {
   DesignNode,
   NodeKind,
 } from "@opendesign/design-contracts";
+import {
+  canDeleteNodes,
+  resolveBooleanEditScope,
+} from "@opendesign/editor-runtime";
 import { Glyph, IconButton, type GlyphName } from "@opendesign/ui";
 import {
   useEffect,
@@ -228,6 +232,11 @@ export function LeftSidebar({
   const revealedSelectionKey = useRef<string | null>(null);
   const layers = flattenPageTree(document, activePageId, collapsedNodeIds);
   const selectedIds = new Set(selectedNodeIds);
+  const booleanEditScope = resolveBooleanEditScope(
+    document,
+    activePageId,
+    selectedNodeIds,
+  );
   const firstFocusableId =
     layers.find(({ node }) => selectedIds.has(node.id))?.node.id ??
     layers[0]?.node.id;
@@ -436,6 +445,12 @@ export function LeftSidebar({
                   aria-level={depth + 1}
                   aria-selected={selected}
                   className={`layer-row${
+                    booleanEditScope?.booleanId === node.id
+                      ? " layer-row--edit-scope-parent"
+                      : node.parentId === booleanEditScope?.booleanId
+                        ? " layer-row--edit-scope-operand"
+                        : ""
+                  }${
                     activeDrop?.nodeId === node.id
                       ? ` layer-row--drop-${activeDrop.position}`
                       : ""
@@ -545,6 +560,7 @@ export function LeftSidebar({
                       onClick={() => onToggleVisibility(node.id)}
                     />
                     <IconButton
+                      disabled={!canDeleteNodes(document, [node.id])}
                       icon="trash"
                       label={t("sidebar.deleteNode", {
                         name: node.name || t(nodeKindKeys[node.kind]),

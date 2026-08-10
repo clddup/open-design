@@ -1,6 +1,7 @@
 export { createLeaferEngineAdapter } from "./adapter.js";
 export type {
   LeaferCanvasTool,
+  LeaferBooleanEditScope,
   LeaferCreateRequest,
   LeaferEngineAdapter,
   LeaferEngineCallbacks,
