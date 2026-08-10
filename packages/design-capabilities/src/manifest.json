@@ -131,14 +131,20 @@
       },
       "limitations": [
         {
-          "en": "The full keyboard command set for duplicate, group, ungroup, cross-container move, align, and distribute is incomplete.",
-          "zh-CN": "复制、编组、解组、跨容器移动、对齐和分布的完整键盘命令仍未补齐。"
+          "en": "Cross-container move, complete layer reordering, distribute, and equal-spacing commands remain incomplete.",
+          "zh-CN": "跨容器移动、完整图层排序、分布与等间距命令仍未补齐。"
+        },
+        {
+          "en": "Ungrouping explicitly rejects Group-level visibility, opacity, blend, effects, or masks that cannot be preserved without changing rendered output.",
+          "zh-CN": "当 Group 级可见性、不透明度、混合、效果或蒙版无法在解组后保持视觉一致时，解组会明确拒绝。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/editor-runtime/src/index.test.ts",
+          "packages/editor-runtime/src/layer-operations.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx",
           "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
         ],
         "manual": []

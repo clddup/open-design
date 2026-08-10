@@ -13,10 +13,14 @@ import type {
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import {
+  canGroupNodes,
+  canUngroupNode,
   getNodeBounds,
   getSelectionBounds,
   getWorldTransform,
   invertTransform,
+  planGroupNodes,
+  planUngroupNode,
   screenToDocument,
 } from "@opendesign/editor-runtime";
 import type {
@@ -159,6 +163,16 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     state.selection.nodeIds.length === 1
       ? designDocument.nodesById[state.selection.nodeIds[0] ?? ""]
       : undefined;
+  const canGroupSelection = canGroupNodes(
+    designDocument,
+    activePageId,
+    state.selection.nodeIds,
+  );
+  const canUngroupSelection = canUngroupNode(
+    designDocument,
+    activePageId,
+    state.selection.nodeIds,
+  );
   const projectConversations = activeProject
     ? (conversationsByProjectId[activeProject.projectId] ?? [])
     : [];
@@ -547,6 +561,48 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     }
   }, [activePageId, applyCommands, runtime, t]);
 
+  const groupSelection = useCallback(() => {
+    const current = runtime.getSnapshot();
+    const operationId = `group_${Date.now()}_${++transactionCounter.current}`;
+    const plan = planGroupNodes(
+      current.document,
+      activePageId,
+      current.state.selection.nodeIds,
+      {
+        groupId: operationId,
+        name: t("canvas.newNode", { kind: t("node.group") }),
+        commandPrefix: operationId,
+      },
+    );
+    if (!plan.ok) {
+      setEditorError(plan.message);
+      return;
+    }
+    if (applyCommands(t("history.groupLayers"), plan.commands)) {
+      runtime.setSelection(plan.selectionNodeIds, plan.selectionNodeIds.at(-1));
+    }
+  }, [activePageId, applyCommands, runtime, t]);
+
+  const ungroupSelection = useCallback(() => {
+    const current = runtime.getSnapshot();
+    const groupId = current.state.selection.nodeIds[0];
+    if (!groupId) return;
+    const operationId = `ungroup_${Date.now()}_${++transactionCounter.current}`;
+    const plan = planUngroupNode(
+      current.document,
+      activePageId,
+      groupId,
+      operationId,
+    );
+    if (!plan.ok) {
+      setEditorError(plan.message);
+      return;
+    }
+    if (applyCommands(t("history.ungroupLayers"), plan.commands)) {
+      runtime.setSelection(plan.selectionNodeIds, plan.selectionNodeIds.at(-1));
+    }
+  }, [activePageId, applyCommands, runtime, t]);
+
   const alignSelection = useCallback(
     (alignment: Alignment) => {
       const current = runtime.getSnapshot();
@@ -653,6 +709,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         duplicateSelection();
         return;
       }
+      if (modifier && event.key.toLowerCase() === "g") {
+        event.preventDefault();
+        if (event.shiftKey) ungroupSelection();
+        else groupSelection();
+        return;
+      }
       if (
         (event.key === "Delete" || event.key === "Backspace") &&
         state.selection.nodeIds.length > 0
@@ -692,8 +754,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     deleteNodes,
     duplicateSelection,
     fitCanvas,
+    groupSelection,
     runtime,
     state.selection.nodeIds,
+    ungroupSelection,
   ]);
 
   const changeTheme = (value: ThemePreference) => {
@@ -1361,15 +1425,20 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           theme={theme}
         />
         <Toolbar
+          canHierarchyAction={canUngroupSelection || canGroupSelection}
           canDelete={state.selection.nodeIds.length > 0}
           canDuplicate={state.selection.nodeIds.length > 0}
           canRedo={state.history.canRedo}
           canUndo={state.history.canUndo}
+          hierarchyAction={selectedNode?.kind === "group" ? "ungroup" : "group"}
           onDelete={() => deleteNodes(state.selection.nodeIds)}
           onDuplicate={duplicateSelection}
+          onGroup={groupSelection}
           onRedo={() => runtime.redo()}
           onToolChange={(next) => runtime.setTool(next)}
           onUndo={() => runtime.undo()}
+          onUngroup={ungroupSelection}
+          platform={platform}
           tool={tool}
         />
         <div className="workspace">

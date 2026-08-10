@@ -34,27 +34,45 @@ const tools: ToolbarItem[] = [
 export function Toolbar({
   tool,
   onToolChange,
+  hierarchyAction,
+  canHierarchyAction,
   canDelete,
   canDuplicate,
   canUndo,
   canRedo,
   onDelete,
   onDuplicate,
+  onGroup,
   onUndo,
+  onUngroup,
   onRedo,
+  platform,
 }: {
   tool: Tool;
   onToolChange: (tool: Tool) => void;
+  hierarchyAction: "group" | "ungroup";
+  canHierarchyAction: boolean;
   canDelete: boolean;
   canDuplicate: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onDelete: () => void;
   onDuplicate: () => void;
+  onGroup: () => void;
   onUndo: () => void;
+  onUngroup: () => void;
   onRedo: () => void;
+  platform: NodeJS.Platform;
 }) {
   const { t } = useI18n();
+  const shortcuts =
+    platform === "darwin"
+      ? { duplicate: "⌘D", group: "⌘G", ungroup: "⇧⌘G" }
+      : { duplicate: "Ctrl+D", group: "Ctrl+G", ungroup: "Ctrl+Shift+G" };
+  const hierarchyLabel =
+    hierarchyAction === "ungroup"
+      ? `${t("toolbar.ungroup")} (${shortcuts.ungroup})`
+      : `${t("toolbar.group")} (${shortcuts.group})`;
   return (
     <nav aria-label={t("toolbar.designTools")} className="toolbar">
       <div
@@ -84,8 +102,14 @@ export function Toolbar({
         <IconButton
           disabled={!canDuplicate}
           icon="duplicate"
-          label={`${t("toolbar.duplicate")} (⌘D)`}
+          label={`${t("toolbar.duplicate")} (${shortcuts.duplicate})`}
           onClick={onDuplicate}
+        />
+        <IconButton
+          disabled={!canHierarchyAction}
+          icon="layers"
+          label={hierarchyLabel}
+          onClick={hierarchyAction === "ungroup" ? onUngroup : onGroup}
         />
         <IconButton
           disabled={!canDelete}

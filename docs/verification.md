@@ -36,8 +36,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   15 files / 119 tests
-└── desktop tests   35 files / 225 tests
+├── package tests   16 files / 125 tests
+└── desktop tests   35 files / 227 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -97,11 +97,11 @@ Vite 生产构建完成四个环境。下表由实际 `out/` 文件生成；十�
 
 | 产物             | 实际字节数 | 十进制大小 |
 | ---------------- | ---------: | ---------: |
-| Renderer 主 JS   |     684100 |  684.10 kB |
+| Renderer 主 JS   |     690869 |  690.87 kB |
 | Leafer Web chunk |     302166 |  302.17 kB |
-| Electron Main    |    2095748 | 2095.75 kB |
+| Electron Main    |    2096062 | 2096.06 kB |
 | Preload          |     233361 |  233.36 kB |
-| Agent            |     331440 |  331.44 kB |
+| Agent            |     331831 |  331.83 kB |
 
 <!-- verification-facts:build:end -->
 

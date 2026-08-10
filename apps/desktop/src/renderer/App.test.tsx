@@ -1404,6 +1404,82 @@ describe("App", () => {
     expect(snapshot.state.selection.nodeIds).toEqual([duplicatedGroup?.id]);
   });
 
+  it("groups and ungroups the current selection as undoable transactions", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    act(() =>
+      runtime().setSelection(
+        ["title_welcome", "subtitle_welcome"],
+        "title_welcome",
+      ),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Group selection (⌘G)" }),
+    );
+    let snapshot = runtime().getSnapshot();
+    const group = Object.values(snapshot.document.nodesById).find(
+      (node) =>
+        node.kind === "group" && node.childIds.includes("title_welcome"),
+    );
+    expect(group?.childIds).toEqual(["title_welcome", "subtitle_welcome"]);
+    expect(snapshot.state.selection.nodeIds).toEqual([group?.id]);
+    expect(snapshot.document.revision).toBe(1);
+
+    await user.click(
+      screen.getByRole("button", { name: "Ungroup selection (⇧⌘G)" }),
+    );
+    snapshot = runtime().getSnapshot();
+    expect(snapshot.document.nodesById[group?.id ?? "missing"]).toBeUndefined();
+    expect(snapshot.state.selection.nodeIds).toEqual([
+      "title_welcome",
+      "subtitle_welcome",
+    ]);
+    expect(snapshot.document.revision).toBe(2);
+    expect(snapshot.state.history.undo).toHaveLength(2);
+  });
+
+  it("uses Windows hierarchy shortcuts and labels without stealing text input", async () => {
+    vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
+      platform: "win32",
+      version: "0.0.0",
+    });
+    renderApp();
+    act(() =>
+      runtime().setSelection(
+        ["title_welcome", "subtitle_welcome"],
+        "title_welcome",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Group selection (Ctrl+G)" }),
+      ).toBeEnabled(),
+    );
+
+    const input = document.createElement("input");
+    document.body.append(input);
+    fireEvent.keyDown(input, { key: "g", ctrlKey: true });
+    input.remove();
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+
+    fireEvent.keyDown(window, { key: "g", ctrlKey: true });
+    let snapshot = runtime().getSnapshot();
+    const group = Object.values(snapshot.document.nodesById).find(
+      (node) =>
+        node.kind === "group" && node.childIds.includes("title_welcome"),
+    );
+    expect(snapshot.state.selection.nodeIds).toEqual([group?.id]);
+
+    fireEvent.keyDown(window, { key: "g", ctrlKey: true, shiftKey: true });
+    snapshot = runtime().getSnapshot();
+    expect(snapshot.document.nodesById[group?.id ?? "missing"]).toBeUndefined();
+    expect(snapshot.state.selection.nodeIds).toEqual([
+      "title_welcome",
+      "subtitle_welcome",
+    ]);
+  });
+
   it("moves and aligns multiple selected layers in single transactions", async () => {
     const user = userEvent.setup();
     renderApp();

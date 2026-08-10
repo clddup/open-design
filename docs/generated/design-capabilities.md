@@ -35,8 +35,9 @@
 - ID：`layers.hierarchy`
 - 实现方：DesignDocument 1.2.0 + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
-- 证据：自动化 3 项；实机 0 项
-- 限制：复制、编组、解组、跨容器移动、对齐和分布的完整键盘命令仍未补齐。
+- 证据：自动化 5 项；实机 0 项
+- 限制：跨容器移动、完整图层排序、分布与等间距命令仍未补齐。
+- 限制：当 Group 级可见性、不透明度、混合、效果或蒙版无法在解组后保持视觉一致时，解组会明确拒绝。
 
 ## 矢量
 

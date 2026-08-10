@@ -21,6 +21,14 @@ export {
   transformPoint,
 } from "./geometry.js";
 export {
+  canGroupNodes,
+  canUngroupNode,
+  planGroupNodes,
+  planUngroupNode,
+  type LayerOperationFailureCode,
+  type LayerOperationPlan,
+} from "./layer-operations.js";
+export {
   DESIGN_DIAGNOSTIC_REPORT_VERSION,
   diagnoseDesignPages,
   type DesignDiagnostic,
