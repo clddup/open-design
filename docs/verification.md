@@ -91,17 +91,17 @@ Agent Runtime 当前强制执行“实质写入 → `capture_canvas` → refinem
 
 ## 构建结果
 
-Vite 生产构建完成四个环境。下表由实际 `out/` 文件生成；十进制大小只用于阅读，字节数用于精确漂移检查：
+Vite 生产构建完成四个环境。共享门禁从实际 `out/` 检查每个预期产物唯一、存在且非空，不要求 macOS 与 Windows 的输出和某次本机构建保持精确字节相等。包体治理应使用明确的大小预算或回归阈值，并按目标平台分别记录，不能拿单个平台的一次构建字节数阻断其他平台。
 
 <!-- verification-facts:build:start -->
 
-| 产物             | 实际字节数 | 十进制大小 |
-| ---------------- | ---------: | ---------: |
-| Renderer 主 JS   |     690869 |  690.87 kB |
-| Leafer Web chunk |     302166 |  302.17 kB |
-| Electron Main    |    2096105 | 2096.11 kB |
-| Preload          |     233361 |  233.36 kB |
-| Agent            |     331831 |  331.83 kB |
+| 产物             | 共享门禁   |
+| ---------------- | ---------- |
+| Renderer 主 JS   | 存在且非空 |
+| Leafer Web chunk | 存在且非空 |
+| Electron Main    | 存在且非空 |
+| Preload          | 存在且非空 |
+| Agent            | 存在且非空 |
 
 <!-- verification-facts:build:end -->
 

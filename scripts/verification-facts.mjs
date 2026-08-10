@@ -106,11 +106,10 @@ const blocks = {
     "```",
   ].join("\n"),
   build: [
-    "| 产物             | 实际字节数 | 十进制大小 |",
-    "| ---------------- | ---------: | ---------: |",
+    "| 产物             | 共享门禁   |",
+    "| ---------------- | ---------- |",
     ...artifacts.map(
-      (artifact) =>
-        `| ${artifact.label.padEnd(16, " ")} | ${String(artifact.bytes).padStart(10, " ")} | ${formatKilobytes(artifact.bytes).padStart(10, " ")} |`,
+      (artifact) => `| ${artifact.label.padEnd(16, " ")} | 存在且非空 |`,
     ),
   ].join("\n"),
 };
@@ -182,10 +181,12 @@ async function buildArtifacts() {
     ["Agent", join(desktopRoot, "out/agent/index.cjs")],
   ];
   return Promise.all(
-    files.map(async ([label, path]) => ({
-      label,
-      bytes: (await readFile(path)).byteLength,
-    })),
+    files.map(async ([label, path]) => {
+      if ((await readFile(path)).byteLength === 0) {
+        throw new Error(`${label} build artifact is empty`);
+      }
+      return { label };
+    }),
   );
 }
 
@@ -221,10 +222,6 @@ function one(values, label) {
     );
   }
   return values[0];
-}
-
-function formatKilobytes(bytes) {
-  return `${(bytes / 1_000).toFixed(2)} kB`;
 }
 
 function escape(value) {
