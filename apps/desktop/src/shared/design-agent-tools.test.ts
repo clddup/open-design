@@ -8,6 +8,7 @@ import {
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
+  PLACE_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
 
@@ -218,6 +219,49 @@ describe("design Agent tool contract", () => {
         prompt: "A poster",
         role: "hero",
         size: "8192x8192",
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts versioned non-destructive placement when placing an image", () => {
+    const input = {
+      attachmentId: `image_${"a".repeat(64)}`,
+      pageId: "page_1",
+      parentId: "poster_frame",
+      index: 2,
+      nodeId: "hero_image",
+      name: "Hero image",
+      role: "hero",
+      x: 120,
+      y: 80,
+      width: 640,
+      height: 480,
+      placement: {
+        mode: "crop",
+        focalPoint: { x: 0.42, y: 0.36 },
+        zoom: 1.2,
+        rotation: -8,
+        flipHorizontal: false,
+        flipVertical: false,
+      },
+    };
+
+    expect(validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
+        ...input,
+        placement: {
+          ...input.placement,
+          focalPoint: { x: -0.1, y: 0.36 },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
+        ...input,
+        fit: "cover",
       }),
     ).toBe(false);
   });

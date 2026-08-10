@@ -23,7 +23,7 @@ describe("professional design fixtures", () => {
   it("pins the fixture and engine contract", () => {
     expect(manifest).toMatchObject({
       version: 1,
-      documentSchemaVersion: "1.2.0",
+      documentSchemaVersion: "1.3.0",
       engineBaseline: "leafer-editor@2.2.9",
     });
     expect(manifest.fixtures.map((fixture) => fixture.id)).toEqual([

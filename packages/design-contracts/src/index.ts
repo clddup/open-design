@@ -1,7 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.2.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.3.0" as const;
+export const PATH_DESIGN_SCHEMA_VERSION = "1.2.0" as const;
 export const APPEARANCE_DESIGN_SCHEMA_VERSION = "1.1.0" as const;
 export const LEGACY_DESIGN_SCHEMA_VERSION = "1.0.0" as const;
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
@@ -53,6 +54,14 @@ export const PointSchema = Type.Object(
   {
     x: Type.Number(),
     y: Type.Number(),
+  },
+  { additionalProperties: false },
+);
+
+export const NormalizedPointSchema = Type.Object(
+  {
+    x: Type.Number({ minimum: 0, maximum: 1 }),
+    y: Type.Number({ minimum: 0, maximum: 1 }),
   },
   { additionalProperties: false },
 );
@@ -347,14 +356,36 @@ export const TextPropertiesSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ImagePlacementSchema = Type.Union([
+  Type.Object(
+    { mode: Type.Literal("stretch") },
+    { additionalProperties: false },
+  ),
+  Type.Object({ mode: Type.Literal("fit") }, { additionalProperties: false }),
+  Type.Object(
+    {
+      mode: Type.Literal("fill"),
+      focalPoint: NormalizedPointSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      mode: Type.Literal("crop"),
+      focalPoint: NormalizedPointSchema,
+      zoom: Type.Number({ minimum: 1, maximum: 64 }),
+      rotation: Type.Number({ minimum: -360, maximum: 360 }),
+      flipHorizontal: Type.Boolean(),
+      flipVertical: Type.Boolean(),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
 export const ImagePropertiesSchema = Type.Object(
   {
     assetId: Type.String({ minLength: 1 }),
-    fit: Type.Union([
-      Type.Literal("fill"),
-      Type.Literal("contain"),
-      Type.Literal("cover"),
-    ]),
+    placement: ImagePlacementSchema,
     altText: Type.String(),
     cornerRadius: Type.Number({ minimum: 0 }),
   },
@@ -1004,6 +1035,7 @@ export type NodeKind = Static<typeof NodeKindSchema>;
 export type Transform = Static<typeof TransformSchema>;
 export type Size = Static<typeof SizeSchema>;
 export type Point = Static<typeof PointSchema>;
+export type NormalizedPoint = Static<typeof NormalizedPointSchema>;
 export type Rect = Static<typeof RectSchema>;
 export type BlendMode = Static<typeof BlendModeSchema>;
 export type SolidPaint = Static<typeof SolidPaintSchema>;
@@ -1012,6 +1044,7 @@ export type LinearGradientPaint = Static<typeof LinearGradientPaintSchema>;
 export type RadialGradientPaint = Static<typeof RadialGradientPaintSchema>;
 export type AngularGradientPaint = Static<typeof AngularGradientPaintSchema>;
 export type ImagePaint = Static<typeof ImagePaintSchema>;
+export type ImagePlacement = Static<typeof ImagePlacementSchema>;
 export type Paint = Static<typeof PaintSchema>;
 export type Effect = Static<typeof EffectSchema>;
 export type MaskMode = Static<typeof MaskModeSchema>;
@@ -1119,6 +1152,10 @@ export function isDesignDocument(value: unknown): value is DesignDocument {
   return checkSchema(DesignDocumentSchema, value);
 }
 
+export function isImagePlacement(value: unknown): value is ImagePlacement {
+  return checkSchema(ImagePlacementSchema, value);
+}
+
 export function migrateDesignDocument(value: unknown): DesignDocument | null {
   if (isDesignDocument(value)) return structuredClone(value);
   const schemaVersion =
@@ -1130,17 +1167,67 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     value === null ||
     Array.isArray(value) ||
     (schemaVersion !== LEGACY_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== APPEARANCE_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== APPEARANCE_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== PATH_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
   try {
     const migrated = structuredClone(value) as Record<string, unknown>;
     migrated.schemaVersion = DESIGN_SCHEMA_VERSION;
-    migratePathNodes(migrated, schemaVersion);
+    if (schemaVersion !== PATH_DESIGN_SCHEMA_VERSION) {
+      migratePathNodes(migrated, schemaVersion);
+    }
+    migrateImageNodes(migrated, schemaVersion);
     return isDesignDocument(migrated) ? migrated : null;
   } catch {
     return null;
+  }
+}
+
+function migrateImageNodes(
+  document: Record<string, unknown>,
+  sourceSchemaVersion: string,
+): void {
+  const nodes = document.nodesById;
+  if (!nodes || typeof nodes !== "object" || Array.isArray(nodes)) return;
+  for (const value of Object.values(nodes)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const node = value as Record<string, unknown>;
+    if (node.kind !== "image") continue;
+    const properties =
+      node.properties &&
+      typeof node.properties === "object" &&
+      !Array.isArray(node.properties)
+        ? (node.properties as Record<string, unknown>)
+        : null;
+    if (!properties) continue;
+    const legacyFit = properties.fit;
+    if (
+      legacyFit !== "fill" &&
+      legacyFit !== "contain" &&
+      legacyFit !== "cover"
+    ) {
+      continue;
+    }
+    properties.placement =
+      legacyFit === "fill"
+        ? { mode: "stretch" }
+        : legacyFit === "contain"
+          ? { mode: "fit" }
+          : { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } };
+    delete properties.fit;
+    const extensions =
+      node.extensions &&
+      typeof node.extensions === "object" &&
+      !Array.isArray(node.extensions)
+        ? (node.extensions as Record<string, unknown>)
+        : {};
+    extensions["dev.opendesign.image-placement.migration"] = {
+      sourceSchemaVersion,
+      legacyFit,
+    };
+    node.extensions = extensions;
   }
 }
 

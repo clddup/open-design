@@ -1061,7 +1061,10 @@ void app.whenReady().then(async () => {
                   opacity: 1,
                   properties: {
                     assetId,
-                    fit: call.input.fit ?? "cover",
+                    placement: call.input.placement ?? {
+                      mode: "fill",
+                      focalPoint: { x: 0.5, y: 0.5 },
+                    },
                     altText: call.input.name,
                     cornerRadius: 0,
                   },

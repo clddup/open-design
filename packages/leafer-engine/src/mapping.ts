@@ -3,9 +3,11 @@ import type {
   DesignDocument,
   DesignNode,
   Effect,
+  ImageNode,
   Paint,
   Transform,
 } from "@opendesign/design-contracts";
+import { resolveImagePlacement } from "@opendesign/image-service";
 import type { LeaferFidelityWarning } from "./types.js";
 
 export type LeaferElementTag =
@@ -306,6 +308,7 @@ function toElementSpec(
           nodeId: node.id,
         });
       }
+      const placement = mapImageNodePlacement(document, node);
       data = {
         ...base,
         width: node.size.width,
@@ -316,12 +319,14 @@ function toElementSpec(
           ? {
               type: "image",
               url,
-              mode:
-                node.properties.fit === "contain"
-                  ? "fit"
-                  : node.properties.fit === "cover"
-                    ? "cover"
-                    : "stretch",
+              mode: placement.mode,
+              ...(placement.mode === "clip"
+                ? {
+                    offset: placement.offset,
+                    scale: placement.scale,
+                    rotation: placement.rotation,
+                  }
+                : {}),
             }
           : "#d9dce2",
       };
@@ -369,6 +374,27 @@ function toElementSpec(
     tag,
     transform: [...node.transform],
   };
+}
+
+function mapImageNodePlacement(document: DesignDocument, node: ImageNode) {
+  const asset = document.assetsById[node.properties.assetId];
+  const sourceSize = asset?.kind === "image" ? asset.size : undefined;
+  if (
+    !sourceSize ||
+    sourceSize.width <= 0 ||
+    sourceSize.height <= 0 ||
+    node.size.width <= 0 ||
+    node.size.height <= 0
+  ) {
+    return node.properties.placement.mode === "fit"
+      ? ({ mode: "fit" } as const)
+      : ({ mode: "stretch" } as const);
+  }
+  return resolveImagePlacement({
+    placement: node.properties.placement,
+    sourceSize,
+    targetSize: node.size,
+  });
 }
 
 function projectionLockState(spec: LeaferElementSpec | undefined): boolean {

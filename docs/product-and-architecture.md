@@ -10,7 +10,7 @@ UI 设计是首要能力和最先打磨的工作流，但不是产品边界。�
 
 截至 2026-08-10，仓库当前具备：
 
-- OpenDesign 自有的 `DesignDocument 1.2.0`、正式 SVG Path/Vector 外观语义、多 Page、事务、preview、单调 revision、diff、history、undo/redo、checkpoint，以及 `1.0.0` / `1.1.0 → 1.2.0` 迁移。
+- OpenDesign 自有的 `DesignDocument 1.3.0`、正式 SVG Path/Vector 外观语义、非破坏图片 placement、多 Page、事务、preview、单调 revision、diff、history、undo/redo、checkpoint，以及 `1.0.0` / `1.1.0` / `1.2.0 → 1.3.0` 迁移。
 - Workspace/Project/Design File 持久化与导航、持久 Conversation、按 Conversation 隔离的时间线和单目标 Global Task 投影。
 - 固定 `leafer-editor@2.2.9` 的唯一生产画布路径，覆盖场景投影、pan/zoom、命中、选择、move/resize/rotate/skew 和文本内编辑。旧 Canvas2D、手写选择框和 OpenPencil 运行时已移除。
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask、高级描边和事务化图片 asset 的公共设计语义及属性检查器/Leafer 映射。
@@ -173,7 +173,7 @@ OpenDesign 自己拥有文档模型与 `EditorRuntime`；`DesignDocument`、`Des
 
 Leafer 场景不是第二份可保存状态。手势期间 Leafer 可以临时改变投影以保证逐帧反馈；手势结束时，适配器只返回稳定节点 ID 和候选 `DesignOperation[]`。Renderer 使用当前 `documentId` 与 `baseRevision` 提交一条事务：成功后从新 revision 同步，冲突、取消或失败则从权威快照恢复。Agent、MCP、Main 和 utility process 永远不获得 Leafer 对象或私有 JSON。
 
-`DesignDocument 1.2.0` 已把纯色、线性/径向/角度渐变、图片 Paint、多色标、投影、内阴影、内外光晕、图层/背景模糊、灰度、混合模式、蒙版、高级描边，以及正式 SVG Path/Vector 定义为 OpenDesign 公共语义。属性检查器与 Agent 共用这些字段，Leafer adapter 只负责投影。图片使用事务化 `DesignAsset`；`put_asset` 与 image node 可以在同一 revision 中应用和撤销，被节点或 image paint 引用的 asset 不得删除。外观规范见 [ADR-0010](adr/0010-open-design-appearance-image-and-reference-semantics.md)，路径与视觉复核规范见 [ADR-0012](adr/0012-formal-path-vector-and-visual-review.md)。
+`DesignDocument 1.3.0` 已把纯色、线性/径向/角度渐变、图片 Paint、多色标、投影、内阴影、内外光晕、图层/背景模糊、灰度、混合模式、蒙版、高级描边、正式 SVG Path/Vector，以及 Image 节点的 `Stretch / Fit / Fill / Crop` 非破坏 placement 定义为 OpenDesign 公共语义。Crop 保存归一化焦点、缩放、旋转和翻转；原始 asset 不被改写。`@opendesign/image-service` 负责确定性裁剪几何，Leafer adapter 只消费投影。图片继续使用事务化 `DesignAsset`；`put_asset` 与 image node 可以在同一 revision 中应用和撤销，被节点或 image paint 引用的 asset 不得删除。外观规范见 [ADR-0010](adr/0010-open-design-appearance-image-and-reference-semantics.md)，路径与视觉复核规范见 [ADR-0012](adr/0012-formal-path-vector-and-visual-review.md)，图片 placement 规范见 [ADR-0019](adr/0019-versioned-image-placement-and-crop.md)。
 
 OpenDesign 设计内核的目标能力族包括：
 
@@ -223,7 +223,7 @@ Agent composer 还支持粘贴和拖入图片/文件。模型可按需调用 `op
 
 当设计需要原创位图时，模型可调用 `opendesign_generate_image`。工具输入只有 prompt、计划中声明的 role、size、quality 和 output format，不能指定 Provider/Model；Main 只读取独立 `GlobalImageGenerationSettings v1` 的 adapter、Base URL、鉴权、凭据和用户模型 ID。当前 `openai-images` adapter 已用 GPT Image 2 验证；同协议的新模型不需要增加模型名分支。Main 校验 plan/role、HTTP/JSON/base64/大小/取消，把结果写入现有内容寻址 attachment store 并只授权给当前 Run。结果返回 attachment metadata 和多模态引用，但不会自动修改文档；模型必须继续调用带相同 role 的 `opendesign_place_image`，才能通过 `put_asset + insert_element(image)` 的同一事务、revision 和 undo 历史进入计划 Frame。`editable-composition` 不允许 `final-single-image`；单图模式必须引用用户当前消息中明确要求扁平图片的原文。未配置全局生图服务时工具明确失败，不回退到 Conversation Provider。
 
-参考图分析、确定性图片处理和 AI 图片编辑是三个不同边界。`read_image` 只让多模态模型理解参考图；crop、mask、focal point、replace、adjustment/filter 应由未来 Image service 产生确定性可撤销事务；局部重绘、扩图、背景替换、重打光和风格统一则由未来独立 `edit_image` adapter/tool 创建新的派生 asset。当前 `openai-images` 只实现新图生成，尚未实现编辑；原始 asset 与任何 AI 派生 asset 必须分离并记录来源，禁止覆盖原图。
+参考图分析、确定性图片处理和 AI 图片编辑是三个不同边界。`read_image` 只让多模态模型理解参考图；当前 Image service 已提供 Image 节点的非破坏 placement/crop 几何，后续 mask、replace、adjustment/filter 继续由该服务产生确定性可撤销结果；局部重绘、扩图、背景替换、重打光和风格统一则由未来独立 `edit_image` adapter/tool 创建新的派生 asset。当前 `openai-images` 只实现新图生成，尚未实现编辑；原始 asset 与任何 AI 派生 asset 必须分离并记录来源，禁止覆盖原图。
 
 `opendesign_capture_canvas` 只捕获当前绑定 Design File 的活动画布视口，并在 Renderer 内缩放、编码后通过 Main 的附件导入边界成为内容寻址图片；它不会截取整个桌面、其他窗口或应用。Agent 在实质设计写入后可把该图片作为多模态结果回读，再根据实际渲染结果迭代。该能力不等同于网页抓取或外部页面截图，后两者仍属于后续 `fetch_reference` / `capture_reference`。
 

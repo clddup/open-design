@@ -37,7 +37,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 完成条件：macOS 与 Windows 的同一 commit 都有 `verify + native package + install/start/product smoke` 证据，并写入 `verification.md`。
 
-## P0-B：稳定当前 `1.2.0` 与 Leafer 迁移
+## P0-B：稳定当前 `1.3.0` 与 Leafer 迁移
 
 - [x] 为 host-only `put_asset + insert_element(image)` 内部事务补 Renderer 集成测试，验证单次 revision、Page/Selection scope 和一次 undo 同时移除 asset/node。
 - [x] 为 Agent composer 的剪贴板粘贴和文件拖放补交互测试，验证 Renderer 通过窄 Preload API 提交 bytes，最终 run 只携带安全附件元数据；纯文本路径粘贴不被拦截或提前读取。
@@ -99,7 +99,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P3-A：文字、图片与海报交付
 
 - 建立 Text/Font service，支持富文本 runs、paragraph、列表、OpenType/variable font、字体 asset、缺失字体替换和共享文本样式。文字测量与 shaping 必须在 macOS 和 Windows 上产生明确的兼容结果或 fidelity warning。
-- 建立 Image service，支持 crop、focal point、mask、replace、透明背景、基础 adjustments/filter、资源变体、引用恢复和大图生命周期。增加独立 `edit_image` adapter/tool，支持局部重绘、扩图、背景替换、重打光和风格统一；参考图、原图和 AI 派生资源必须分离并可追溯，任何编辑都不得覆盖原始 asset。
+- 扩展已建立的 Image service：当前已有 Image 节点的版本化 placement、crop/focal 几何和 Leafer 投影；下一步补齐画布直接 Crop、检查器、replace、mask、透明背景、基础 adjustments/filter、资源变体、引用恢复和大图生命周期。增加独立 `edit_image` adapter/tool，支持局部重绘、扩图、背景替换、重打光和风格统一；参考图、原图和 AI 派生资源必须分离并可追溯，任何编辑都不得覆盖原始 asset。
 - 建立首个专业导出切片，支持选区或 Frame 的 PNG/JPEG/WebP、多倍图、透明背景和颜色配置。导出读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
 - 为人工属性面板和 Agent 增加文字、裁剪、替换、调整和导出的语义命令；长任务必须展示进度、支持取消并返回稳定产物或明确失败。
 

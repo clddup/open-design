@@ -188,7 +188,7 @@ describe("Leafer scene projection", () => {
       extensions: {},
       properties: {
         assetId: "hero",
-        fit: "cover",
+        placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
         altText: "Hero",
         cornerRadius: 8,
       },
@@ -238,6 +238,56 @@ describe("Leafer scene projection", () => {
     expect(incremental.warnings).not.toContainEqual(
       expect.objectContaining({ code: "missing-image", nodeId: "image" }),
     );
+  });
+
+  it("projects non-destructive crop geometry through Leafer image fills", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.assetsById.hero = {
+      id: "hero",
+      kind: "image",
+      name: "Hero",
+      mimeType: "image/png",
+      source: { type: "data", value: "aW1hZ2U=" },
+      size: { width: 400, height: 200 },
+      extensions: {},
+    };
+    document.nodesById.image = {
+      id: "image",
+      name: "Image",
+      kind: "image",
+      parentId: "frame_welcome",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 100, height: 100 },
+      opacity: 1,
+      extensions: {},
+      properties: {
+        assetId: "hero",
+        placement: {
+          mode: "crop",
+          focalPoint: { x: 0.5, y: 0.5 },
+          zoom: 1,
+          rotation: 0,
+          flipHorizontal: false,
+          flipVertical: false,
+        },
+        altText: "Hero",
+        cornerRadius: 8,
+      },
+    };
+    document.nodesById.frame_welcome?.childIds.push("image");
+
+    const projection = projectDesignPage(document, "page_welcome");
+
+    expect(projection.elementsById.get("image")?.data.fill).toMatchObject({
+      type: "image",
+      mode: "clip",
+      scale: { x: 0.5, y: 0.5 },
+      offset: { x: -50, y: 0 },
+      rotation: 0,
+    });
   });
 
   it("projects gradients, glow, blur, blend and mask semantics to Leafer", () => {

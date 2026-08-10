@@ -88,6 +88,59 @@ describe("design contract schemas", () => {
     ).toBe(false);
   });
 
+  it("validates explicit non-destructive image placement modes", () => {
+    const base = {
+      id: "image_1",
+      name: "Hero",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 640, height: 360 },
+      opacity: 1,
+      extensions: {},
+      kind: "image",
+      properties: {
+        assetId: "asset_1",
+        altText: "Hero image",
+        cornerRadius: 0,
+      },
+    };
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...base,
+        properties: {
+          ...base.properties,
+          placement: {
+            mode: "crop",
+            focalPoint: { x: 0.3, y: 0.65 },
+            zoom: 1.4,
+            rotation: -12,
+            flipHorizontal: false,
+            flipVertical: true,
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...base,
+        properties: {
+          ...base.properties,
+          placement: {
+            mode: "crop",
+            focalPoint: { x: 1.1, y: 0.5 },
+            zoom: 0.5,
+            rotation: 0,
+            flipHorizontal: false,
+            flipVertical: false,
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
   it("accepts complex paints and effects as engine-independent design semantics", () => {
     expect(
       Value.Check(PaintSchema, {
@@ -239,5 +292,75 @@ describe("design contract schemas", () => {
       originalProperties: legacyPathProperties,
       usedPlaceholderPath: true,
     });
+  });
+
+  it.each([
+    ["fill", { mode: "stretch" }],
+    ["contain", { mode: "fit" }],
+    ["cover", { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } }],
+  ])("migrates 1.2 image fit %s to explicit placement", (fit, placement) => {
+    const legacy = {
+      format: DESIGN_FORMAT,
+      schemaVersion: "1.2.0",
+      documentId: `document_image_${fit}`,
+      revision: 2,
+      pageOrder: ["page_1"],
+      pagesById: {
+        page_1: {
+          id: "page_1",
+          name: "Page 1",
+          rootNodeIds: ["image_1"],
+          extensions: {},
+        },
+      },
+      nodesById: {
+        image_1: {
+          id: "image_1",
+          name: "Legacy image",
+          parentId: null,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 0, 0],
+          size: { width: 320, height: 240 },
+          opacity: 1,
+          extensions: {},
+          kind: "image",
+          properties: {
+            assetId: "asset_1",
+            fit,
+            altText: "Legacy image",
+            cornerRadius: 0,
+          },
+        },
+      },
+      componentsById: {},
+      variantSetsById: {},
+      tokenCollectionsById: {},
+      tokensById: {},
+      interactionsById: {},
+      assetsById: {
+        asset_1: {
+          id: "asset_1",
+          kind: "image",
+          name: "Legacy asset",
+          mimeType: "image/png",
+          source: { type: "data", value: "aW1hZ2U=" },
+          size: { width: 640, height: 480 },
+          extensions: {},
+        },
+      },
+      extensions: {},
+    };
+
+    const migrated = migrateDesignDocument(legacy);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    const image = migrated?.nodesById.image_1;
+    expect(image?.kind).toBe("image");
+    if (!image || image.kind !== "image") throw new Error("Missing image");
+    expect(image.properties.placement).toEqual(placement);
+    expect(
+      image.extensions["dev.opendesign.image-placement.migration"],
+    ).toEqual({ sourceSchemaVersion: "1.2.0", legacyFit: fit });
   });
 });

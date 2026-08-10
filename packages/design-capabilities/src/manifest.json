@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-10",
-  "documentSchemaVersion": "1.2.0",
+  "documentSchemaVersion": "1.3.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -119,7 +119,7 @@
         "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, cross-container reparenting, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
         "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。"
       },
-      "provider": "DesignDocument 1.2.0 + EditorRuntime",
+      "provider": "DesignDocument 1.3.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -209,7 +209,7 @@
         "en": "Persist and render portable SVG path data with fills, strokes, gradients, effects, masks, and blend modes.",
         "zh-CN": "持久化并渲染可移植 SVG Path 数据及其填充、描边、渐变、效果、蒙版和混合模式。"
       },
-      "provider": "DesignDocument 1.2.0 + Leafer Path adapter",
+      "provider": "DesignDocument 1.3.0 + Leafer Path adapter",
       "requiredSurfaces": ["contract", "runtime", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -312,7 +312,7 @@
         "en": "Apply multiple paints and strokes, gradients, shadows, glows, blur, blend modes, masks, and advanced stroke properties.",
         "zh-CN": "应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。"
       },
-      "provider": "DesignDocument 1.2.0 + PropertiesPanel + Leafer adapter",
+      "provider": "DesignDocument 1.3.0 + PropertiesPanel + Leafer adapter",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -396,7 +396,7 @@
         "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
         "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
       },
-      "provider": "Partial ImagePaint transform semantics",
+      "provider": "DesignDocument 1.3.0 + OpenDesign Image service crop geometry + Leafer projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "degraded",
@@ -408,12 +408,16 @@
       },
       "limitations": [
         {
-          "en": "ImagePaint offset/scale/fit is not a complete crop, focal-point, replace, or adjustment workflow.",
-          "zh-CN": "ImagePaint 的 offset/scale/fit 不是完整的裁剪、焦点、替换或调整工作流。"
+          "en": "Image nodes now have versioned non-destructive placement and deterministic crop geometry, but direct canvas crop controls, replacement UI, adjustment filters, export fidelity, and a dedicated Agent edit workflow remain incomplete.",
+          "zh-CN": "Image 节点已有版本化非破坏 placement 与确定性裁剪几何，但画布直接裁剪控件、替换 UI、调整滤镜、导出保真和专用 Agent 编辑工作流仍未完成。"
         }
       ],
       "evidence": {
-        "automated": ["packages/design-contracts/src/index.test.ts"],
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/image-service/src/index.test.ts",
+          "packages/leafer-engine/src/mapping.test.ts"
+        ],
         "manual": []
       },
       "references": [
@@ -459,7 +463,7 @@
         "en": "Create, render, transform, and edit a text layer with one shared font style and alignment.",
         "zh-CN": "创建、渲染、变换和编辑使用单一共享字体样式与对齐方式的文字图层。"
       },
-      "provider": "DesignDocument 1.2.0 + Leafer TextEditor",
+      "provider": "DesignDocument 1.3.0 + Leafer TextEditor",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",

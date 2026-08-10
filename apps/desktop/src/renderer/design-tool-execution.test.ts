@@ -451,7 +451,10 @@ describe("Renderer design tool scope", () => {
           opacity: 1,
           properties: {
             assetId: "asset_reference",
-            fit: "cover" as const,
+            placement: {
+              mode: "fill" as const,
+              focalPoint: { x: 0.5, y: 0.5 },
+            },
             altText: "Reference",
             cornerRadius: 0,
           },
@@ -562,7 +565,10 @@ describe("Renderer design tool scope", () => {
             opacity: 1,
             properties: {
               assetId: "asset_large_image",
-              fit: "cover",
+              placement: {
+                mode: "fill",
+                focalPoint: { x: 0.5, y: 0.5 },
+              },
               altText: "Large image",
               cornerRadius: 0,
             },

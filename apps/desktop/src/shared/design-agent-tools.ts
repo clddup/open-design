@@ -1,6 +1,8 @@
 import {
   isDesignOperation,
+  isImagePlacement,
   type DesignOperation,
+  type ImagePlacement,
 } from "@opendesign/design-contracts";
 export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
@@ -94,7 +96,7 @@ export type PlaceImageToolInput = {
   y: number;
   width?: number;
   height?: number;
-  fit?: "fill" | "contain" | "cover";
+  placement?: ImagePlacement;
 };
 
 export type DesignApplyToolInput = {
@@ -300,7 +302,7 @@ const MODEL_SHAPE_PROPERTIES = {
 const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
   type: "object",
   description:
-    "Properties must match node.kind. frame: shape fields + cornerRadius + clipsContent; group: empty object; rectangle: shape fields + cornerRadius; ellipse: shape fields; text: content/fontFamily/fontSize/fontWeight/lineHeight/letterSpacing/textAlignHorizontal/textAlignVertical + shape fields; image: assetId/fit/altText/cornerRadius; path or vector: shape fields + SVG path and optional fillRule.",
+    "Properties must match node.kind. frame: shape fields + cornerRadius + clipsContent; group: empty object; rectangle: shape fields + cornerRadius; ellipse: shape fields; text: content/fontFamily/fontSize/fontWeight/lineHeight/letterSpacing/textAlignHorizontal/textAlignVertical + shape fields; image: assetId/placement/altText/cornerRadius; path or vector: shape fields + SVG path and optional fillRule.",
   properties: {
     ...MODEL_SHAPE_PROPERTIES,
     cornerRadius: { type: "number", minimum: 0 },
@@ -316,7 +318,67 @@ const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
     },
     textAlignVertical: { enum: ["top", "center", "bottom"] },
     assetId: { type: "string", minLength: 1 },
-    fit: { enum: ["fill", "contain", "cover"] },
+    placement: {
+      anyOf: [
+        {
+          type: "object",
+          properties: { mode: { const: "stretch" } },
+          required: ["mode"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: { mode: { const: "fit" } },
+          required: ["mode"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: {
+            mode: { const: "fill" },
+            focalPoint: {
+              type: "object",
+              properties: {
+                x: { type: "number", minimum: 0, maximum: 1 },
+                y: { type: "number", minimum: 0, maximum: 1 },
+              },
+              required: ["x", "y"],
+              additionalProperties: false,
+            },
+          },
+          required: ["mode", "focalPoint"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: {
+            mode: { const: "crop" },
+            focalPoint: {
+              type: "object",
+              properties: {
+                x: { type: "number", minimum: 0, maximum: 1 },
+                y: { type: "number", minimum: 0, maximum: 1 },
+              },
+              required: ["x", "y"],
+              additionalProperties: false,
+            },
+            zoom: { type: "number", minimum: 1, maximum: 64 },
+            rotation: { type: "number", minimum: -360, maximum: 360 },
+            flipHorizontal: { type: "boolean" },
+            flipVertical: { type: "boolean" },
+          },
+          required: [
+            "mode",
+            "focalPoint",
+            "zoom",
+            "rotation",
+            "flipHorizontal",
+            "flipVertical",
+          ],
+          additionalProperties: false,
+        },
+      ],
+    },
     altText: { type: "string" },
     path: {
       type: "string",
@@ -909,7 +971,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
         y: { type: "number" },
         width: { type: "number", exclusiveMinimum: 0 },
         height: { type: "number", exclusiveMinimum: 0 },
-        fit: { enum: ["fill", "contain", "cover"] },
+        placement: MODEL_NODE_KIND_PROPERTIES_SCHEMA.properties.placement,
       },
       required: [
         "attachmentId",
@@ -1067,7 +1129,7 @@ export function isPlaceImageToolInput(
     "y",
     "width",
     "height",
-    "fit",
+    "placement",
   ];
   return (
     typeof input.attachmentId === "string" &&
@@ -1085,10 +1147,7 @@ export function isPlaceImageToolInput(
     finite(input.y) &&
     (input.width === undefined || positive(input.width)) &&
     (input.height === undefined || positive(input.height)) &&
-    (input.fit === undefined ||
-      input.fit === "fill" ||
-      input.fit === "contain" ||
-      input.fit === "cover") &&
+    (input.placement === undefined || isImagePlacement(input.placement)) &&
     Object.keys(input).every((key) => allowed.includes(key))
   );
 }

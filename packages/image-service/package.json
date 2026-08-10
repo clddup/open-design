@@ -1,5 +1,5 @@
 {
-  "name": "@opendesign/leafer-engine",
+  "name": "@opendesign/image-service",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,12 +10,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@opendesign/design-contracts": "workspace:*",
-    "@opendesign/image-service": "workspace:*",
-    "leafer-editor": "2.2.9"
+    "@opendesign/design-contracts": "workspace:*"
   },
   "devDependencies": {
-    "@opendesign/editor-runtime": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

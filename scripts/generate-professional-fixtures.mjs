@@ -86,7 +86,7 @@ for (const source of fixtureSources) {
 const manifest = {
   version: 1,
   generatedBy: generatorPath,
-  documentSchemaVersion: "1.2.0",
+  documentSchemaVersion: "1.3.0",
   engineBaseline: "leafer-editor@2.2.9",
   sourceAssets: [
     {
@@ -274,7 +274,7 @@ function buildPosterFixture({ iconBase64, promptSha256 }) {
     transform: [1, 0, 0, 1, 1238, 74],
     size: { width: 104, height: 104 },
     assetId: textureAsset.id,
-    fit: "contain",
+    placement: { mode: "fit" },
     opacity: 0.34,
     blendMode: "screen",
     effects: [outerGlow("#6de8ff", 0.48, 30, 2)],
@@ -1047,7 +1047,7 @@ function document({
 }) {
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.2.0",
+    schemaVersion: "1.3.0",
     documentId,
     revision: 0,
     pageOrder: [pageId],
@@ -1279,10 +1279,16 @@ function text({
   };
 }
 
-function image({ assetId, fit, altText = "", cornerRadius = 0, ...base }) {
+function image({
+  assetId,
+  placement,
+  altText = "",
+  cornerRadius = 0,
+  ...base
+}) {
   return {
     ...nodeBase({ ...base, kind: "image" }),
-    properties: { assetId, fit, altText, cornerRadius },
+    properties: { assetId, placement, altText, cornerRadius },
   };
 }
 

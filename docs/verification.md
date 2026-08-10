@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.2.0`
+- 文档协议：`DesignDocument 1.3.0`
 - Agent 协议：`3.4.0`
 - 生产画布：`leafer-editor 2.2.9`
 
@@ -36,8 +36,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   18 files / 147 tests
-└── desktop tests   35 files / 257 tests
+├── package tests   19 files / 157 tests
+└── desktop tests   35 files / 258 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -49,7 +49,7 @@ pnpm build          passed
 
 测试覆盖的关键路径包括：
 
-- DesignDocument 1.2 schema/migration、正式 Path/Vector 外观、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
+- DesignDocument 1.3 schema/migration、正式 Path/Vector 外观、非破坏 Image placement、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
 - `DesignCapabilityManifest v1` 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context、只读 `get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON，`capabilities:check` 会拒绝文档漂移。
 - `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
 - Agent Runtime 在完整 run 边界生成累计 `context.compacted` checkpoint；测试覆盖原始 Timeline 不删除、checkpoint 范围单调增加、旧全文退出模型投影，以及单次输入或当前 Run 工具结果在任一后续轮仍超预算时，在对应 Provider I/O 前返回 `context_budget_exceeded`。固定 system/tool 协议与 Conversation 分账，Main 从可信 Model Profile 注入窗口和输出预算；可信 token 预算存在时不会再被固定字符阈值误杀，缺少模型窗口时才使用字符保底；固定协议无法适配小窗口时返回独立的 `model_context_incompatible`。
@@ -85,7 +85,7 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、8 项降级可用和 8 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.2.0`、EditorRuntime、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置和视觉复核的基础路径。两个固定专业 fixture 进一步证明这些语义可以组成完整企鹅层级和复杂海报文档，而不是只能稳定使用椭圆和矩形；它们尚未提供真实 Electron 像素截图、Agent 重放或专业导出，因此不能据此把完整工作流标为可用。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、8 项降级可用和 8 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.3.0`、EditorRuntime、Image service、Leafer adapter、属性检查器和 Agent tools 已经打通 Path/Vector、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement 和视觉复核的基础路径。两个固定专业 fixture 进一步证明这些语义可以组成完整企鹅层级和复杂海报文档，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、来源替换、真实 Electron 像素截图、Agent 重放和专业导出仍未完成，因此不能据此把完整工作流标为可用。
 
 仓库当前已有独立 `@opendesign/geometry-service`，但只提供确定性排列；尚未选定 Pen 节点编辑、布尔运算、flatten、outline stroke 或 Bézier 所需的成熟 geometry kernel，也没有独立 Layout、Text/Font、Image 或 Import/Export service 包。`packages/editor-runtime/src/geometry.ts` 仍只负责矩阵、坐标转换和 bounds 计算；组件、Variant 和 Token 仍为占位数据，专业导出也没有可达产品路径。图片链当前只支持分析参考图、生成新图和放置；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系均明确标记为不可用。
 

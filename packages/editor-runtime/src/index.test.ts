@@ -741,7 +741,10 @@ describe("EditorRuntime transactions", () => {
             opacity: 1,
             properties: {
               assetId: "asset_photo",
-              fit: "cover",
+              placement: {
+                mode: "fill",
+                focalPoint: { x: 0.5, y: 0.5 },
+              },
               altText: "Photo",
               cornerRadius: 0,
             },

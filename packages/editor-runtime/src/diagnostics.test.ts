@@ -141,7 +141,7 @@ function brokenDocument(): DesignDocument {
       ...baseNode("image_missing", "image", null),
       properties: {
         assetId: "asset_missing",
-        fit: "cover",
+        placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
         altText: "Missing",
         cornerRadius: 0,
       },
@@ -150,7 +150,7 @@ function brokenDocument(): DesignDocument {
       ...baseNode("image_external", "image", null),
       properties: {
         assetId: "asset_external",
-        fit: "contain",
+        placement: { mode: "fit" },
         altText: "External",
         cornerRadius: 0,
       },
