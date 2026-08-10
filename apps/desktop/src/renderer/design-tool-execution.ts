@@ -10,6 +10,7 @@ import type {
 } from "@opendesign/design-contracts";
 import {
   diagnoseDesignPages,
+  planArrangeNodes,
   planGroupNodes,
   planReparentNodes,
   planReorderNodes,
@@ -17,11 +18,13 @@ import {
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import {
+  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  isDesignArrangeToolInput,
   isDesignApplyToolInput,
   isDesignHierarchyToolInput,
   isInternalDesignApplyToolInput,
@@ -112,9 +115,10 @@ export async function executeDesignToolRequest(
     isDesignHierarchyToolInput(request.call.input)
   ) {
     const input = request.call.input;
-    assertHierarchyPageWithinMutationTarget(
+    assertPageWithinMutationTarget(
       input.pageId,
       request.context.mutationTarget,
+      "Hierarchy",
     );
     const commandPrefix =
       `hierarchy_${input.action}_${request.call.toolCallId}`.slice(0, 200);
@@ -242,6 +246,92 @@ export async function executeDesignToolRequest(
     };
   }
 
+  if (
+    request.call.toolName === DESIGN_ARRANGE_TOOL_NAME &&
+    isDesignArrangeToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "Arrangement",
+    );
+    const operation =
+      input.action === "set-horizontal-spacing" ||
+      input.action === "set-vertical-spacing"
+        ? { action: input.action, spacing: input.spacing }
+        : { action: input.action };
+    const commandPrefix =
+      `arrange_${input.action}_${request.call.toolCallId}`.slice(0, 200);
+    const plan = planArrangeNodes(
+      document,
+      input.pageId,
+      input.nodeIds,
+      operation,
+      commandPrefix,
+    );
+    if (!plan.ok) {
+      throw new Error(`arrange.${plan.code}: ${plan.message}`);
+    }
+    assertCommandsWithinMutationTarget(
+      document,
+      plan.commands,
+      request.context.mutationTarget,
+    );
+    const transaction = {
+      transactionId:
+        `transaction_agent_arrange_${request.call.toolCallId}_${Date.now()}`.slice(
+          0,
+          256,
+        ),
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: {
+        type: "agent",
+        id: `agent_${request.context.sessionId}`,
+        displayName: "OpenDesign Agent",
+      },
+      label: input.label,
+      commands: plan.commands,
+    } satisfies DesignTransaction;
+    throwIfAborted(options.signal);
+    const preview = runtime.preview(transaction);
+    if (!preview.ok) {
+      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+    }
+    throwIfAborted(options.signal);
+    const result = runtime.apply(transaction);
+    if (!result.ok) {
+      throw new Error(`${result.error.code}: ${result.error.message}`);
+    }
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        content: {
+          ok: true,
+          action: input.action,
+          label: input.label,
+          pageId: input.pageId,
+          nodeIds: plan.selectionNodeIds,
+          orderedNodeIds: plan.orderedNodeIds,
+          ...(plan.resolvedSpacing === undefined
+            ? {}
+            : { resolvedSpacing: plan.resolvedSpacing }),
+          revision: result.revision.revision,
+          atomic: true,
+          changes: result.changes,
+          warnings: result.warnings,
+        },
+        designRevision: {
+          previousRevision: transaction.baseRevision,
+          revision: result.revision.revision,
+          transactionId: transaction.transactionId,
+        },
+      },
+    };
+  }
+
   if (!(
     (request.call.toolName === DESIGN_APPLY_TOOL_NAME &&
       isDesignApplyToolInput(request.call.input)) ||
@@ -284,14 +374,15 @@ export async function executeDesignToolRequest(
   );
 }
 
-function assertHierarchyPageWithinMutationTarget(
+function assertPageWithinMutationTarget(
   pageId: string,
   mutationTarget: DesignMutationTarget,
+  operationName: string,
 ): void {
   if (mutationTarget.kind === "document") return;
   if (pageId !== mutationTarget.pageId) {
     throw new Error(
-      `Hierarchy operation targets Page ${pageId} outside the registered page mutation target`,
+      `${operationName} operation targets Page ${pageId} outside the registered page mutation target`,
     );
   }
 }

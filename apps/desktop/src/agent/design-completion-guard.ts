@@ -6,6 +6,7 @@ import type {
 } from "@opendesign/agent-runtime";
 import {
   DESIGN_APPLY_TOOL_NAME,
+  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -89,6 +90,7 @@ function findMaterialWriteIndex(
 function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
   return (
     call.toolName === PLACE_IMAGE_TOOL_NAME ||
+    call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
     call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
     (call.toolName === DESIGN_APPLY_TOOL_NAME &&
       readCommands(call.input).length > 0)

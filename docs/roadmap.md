@@ -87,9 +87,10 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P2：精确图层、变换与矢量
 
-- 建立 `@opendesign/geometry-service` 边界，并通过维护状态、许可证、包体积、确定性、WASM/原生要求和 macOS/Windows 兼容基准选择固定版本的成熟 geometry kernel。React、Agent prompt 和 Leafer adapter 不得承载几何算法。
+- [x] 建立 `@opendesign/geometry-service` 的首个纯排列 provider；多层对齐、固定两端均分和明确一维间距由 EditorRuntime 转成单次事务，人工 Inspector 与 Agent typed tool 共用，不在 React、prompt 或 Leafer adapter 中重复计算。
+- [ ] 针对 Path/Vector 通过维护状态、许可证、包体积、确定性、WASM/原生要求和 macOS/Windows 兼容基准选择固定版本的成熟 geometry kernel；当前 arrangement provider 不等于已具备路径布尔或 Bézier kernel。
 - 增加正式 Line/Arrow/Polygon/Star/Slice 与可编辑 Path/Vector 轮廓；实现 Pen、节点/手柄、开放/闭合、连接/断开、路径反转、布尔 union/subtract/intersect/exclude、flatten 和 outline stroke。
-- 扩展剩余图层与精确变换工作流：重命名、批量属性、分布、等间距、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
+- 扩展剩余图层与精确变换工作流：重命名、批量属性、单层相对父级对齐、二维 Tidy up/画布间距手柄、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
 - 人工命令与 Agent typed tools 调用同一 geometry service，并把结果作为一个可预览、可撤销的 `DesignTransaction` 应用。SVG 导入导出必须经过同一公共 Path 语义，不能泄漏 provider 私有命令。
 
 完成条件：`OD-PENGUIN-01` 可以通过人工 Pen 和 Agent 工具继续编辑，不需要重建整个轮廓；`OD-BRAND-01` 的布尔、outline 和 SVG 往返保持结构、bounds 与视觉基线；所有动作支持保存重开和 undo/redo。

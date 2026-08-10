@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_APPLY_TOOL_NAME,
+  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
@@ -245,6 +246,68 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
         ...reparent,
         groupId: "not_part_of_reparent",
+      }),
+    ).toBe(false);
+  });
+
+  it("exposes bounded deterministic arrangement without model-computed transforms", () => {
+    const arrange = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_ARRANGE_TOOL_NAME,
+    );
+    const distribute = {
+      action: "distribute-horizontal",
+      label: "Distribute poster cards",
+      pageId: "page_1",
+      nodeIds: ["card_one", "card_two", "card_three"],
+    };
+    const spacing = {
+      action: "set-vertical-spacing",
+      label: "Set list rhythm",
+      pageId: "page_1",
+      nodeIds: ["row_one", "row_two"],
+      spacing: 24,
+    };
+
+    expect(arrange).toMatchObject({
+      risk: "design_write",
+      approval: "never",
+    });
+    expect(arrange?.description).toContain("host-computed geometry");
+    expect(arrange?.description).toContain("not 2D Tidy up");
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, distribute),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, spacing),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...distribute,
+        nodeIds: ["card_one", "card_two"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...spacing,
+        spacing: Number.NaN,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...spacing,
+        spacing: 1_000_001,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...distribute,
+        spacing: undefined,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...spacing,
+        selectedNodeIds: ["live_selection"],
       }),
     ).toBe(false);
   });

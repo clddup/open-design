@@ -28,6 +28,7 @@ import type { AppLocale } from "../../shared/i18n/locale";
 import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import {
   DESIGN_APPLY_TOOL_NAME,
+  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
 } from "../../shared/design-agent-tools";
@@ -92,6 +93,7 @@ function isNativeDesignTool(toolName: string | undefined): boolean {
   return (
     toolName === DESIGN_INSPECT_TOOL_NAME ||
     toolName === DESIGN_APPLY_TOOL_NAME ||
+    toolName === DESIGN_ARRANGE_TOOL_NAME ||
     toolName === DESIGN_HIERARCHY_TOOL_NAME
   );
 }
@@ -144,6 +146,11 @@ function toolTitle(
     return state === "done"
       ? t("agent.hierarchyUpdated")
       : t("agent.organizingLayers");
+  }
+  if (toolName === DESIGN_ARRANGE_TOOL_NAME) {
+    return state === "done"
+      ? t("agent.arrangementUpdated")
+      : t("agent.arrangingLayers");
   }
   return state === "done" ? t("agent.changeCompleted") : toolName;
 }

@@ -10,12 +10,20 @@ import { Tooltip } from "./overlays";
 
 export type GlyphName =
   | "agent"
+  | "align-bottom"
   | "align-center"
+  | "align-h-center"
+  | "align-left"
+  | "align-right"
+  | "align-top"
+  | "align-v-center"
   | "assets"
   | "chevron-down"
   | "chevron-right"
   | "close"
   | "comment"
+  | "distribute-horizontal"
+  | "distribute-vertical"
   | "duplicate"
   | "ellipse"
   | "eye"
@@ -54,9 +62,51 @@ const paths: Record<GlyphName, ReactNode> = {
       <path d="M9.5 11.5h.01M14.5 11.5h.01M9.5 15h5" />
     </>
   ),
+  "align-bottom": (
+    <>
+      <path d="M4 20h16" />
+      <rect x="5" y="7" width="5" height="11" rx="1" />
+      <rect x="12" y="3" width="7" height="15" rx="1" />
+    </>
+  ),
   "align-center": (
     <>
       <path d="M4 6h16M7 10h10M5 14h14M8 18h8" />
+    </>
+  ),
+  "align-h-center": (
+    <>
+      <path d="M12 3v18" />
+      <rect x="5" y="5" width="14" height="5" rx="1" />
+      <rect x="7" y="13" width="10" height="5" rx="1" />
+    </>
+  ),
+  "align-left": (
+    <>
+      <path d="M4 3v18" />
+      <rect x="6" y="5" width="13" height="5" rx="1" />
+      <rect x="6" y="13" width="9" height="5" rx="1" />
+    </>
+  ),
+  "align-right": (
+    <>
+      <path d="M20 3v18" />
+      <rect x="5" y="5" width="13" height="5" rx="1" />
+      <rect x="9" y="13" width="9" height="5" rx="1" />
+    </>
+  ),
+  "align-top": (
+    <>
+      <path d="M4 4h16" />
+      <rect x="5" y="6" width="5" height="11" rx="1" />
+      <rect x="12" y="6" width="7" height="15" rx="1" />
+    </>
+  ),
+  "align-v-center": (
+    <>
+      <path d="M3 12h18" />
+      <rect x="5" y="5" width="5" height="14" rx="1" />
+      <rect x="13" y="7" width="6" height="10" rx="1" />
     </>
   ),
   assets: (
@@ -77,6 +127,20 @@ const paths: Record<GlyphName, ReactNode> = {
     <>
       <rect x="8" y="8" width="11" height="11" rx="2" />
       <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </>
+  ),
+  "distribute-horizontal": (
+    <>
+      <rect x="3" y="6" width="5" height="12" rx="1" />
+      <rect x="16" y="6" width="5" height="12" rx="1" />
+      <path d="M10 12h4M11 10l-2 2 2 2M13 10l2 2-2 2" />
+    </>
+  ),
+  "distribute-vertical": (
+    <>
+      <rect x="6" y="3" width="12" height="5" rx="1" />
+      <rect x="6" y="16" width="12" height="5" rx="1" />
+      <path d="M12 10v4M10 11l2-2 2 2M10 13l2 2 2-2" />
     </>
   ),
   ellipse: <ellipse cx="12" cy="12" rx="8" ry="6.5" />,

@@ -7,11 +7,12 @@ import type {
 import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
 import {
   getWorldTransform,
+  getLocalSelectionBounds,
   IDENTITY_TRANSFORM,
   invertTransform,
   multiplyTransforms,
-  transformPoint,
 } from "./geometry.js";
+import { normalizeGroupAncestorsInPlace } from "./group-bounds.js";
 
 export type LayerOperationFailureCode =
   | "invalid-selection"
@@ -449,17 +450,11 @@ export function planReparentNodes(
   }
 
   if (sourceParentId !== options.parentId) {
-    const affectedGroups = new Set([
-      ...groupAncestorIds(document, sourceParentId),
-      ...groupAncestorIds(projected, options.parentId),
+    const normalized = normalizeGroupAncestorsInPlace(projected, [
+      sourceParentId,
+      options.parentId,
     ]);
-    const deepestFirst = [...affectedGroups].sort(
-      (left, right) => nodeDepth(projected, right) - nodeDepth(projected, left),
-    );
-    for (const groupId of deepestFirst) {
-      const normalized = normalizeGroupInPlace(projected, groupId);
-      if (!normalized.ok) return normalized;
-    }
+    if (!normalized.ok) return normalized;
   }
 
   const updates: DesignOperation[] = [];
@@ -646,7 +641,7 @@ function analyzeGroupSelection(
   const ordered = [...selected].sort(
     (left, right) => siblings.indexOf(left) - siblings.indexOf(right),
   );
-  const bounds = localSelectionBounds(
+  const bounds = getLocalSelectionBounds(
     ordered.map((nodeId) => document.nodesById[nodeId]!),
   );
   if (!bounds) {
@@ -782,68 +777,6 @@ function mutableChildIds(
   return document.pagesById[pageId]?.rootNodeIds;
 }
 
-function groupAncestorIds(
-  document: DesignDocument,
-  startNodeId: string | null,
-): string[] {
-  const result: string[] = [];
-  const visited = new Set<string>();
-  let node = startNodeId ? document.nodesById[startNodeId] : undefined;
-  while (node && !visited.has(node.id)) {
-    visited.add(node.id);
-    if (node.kind === "group") result.push(node.id);
-    node = node.parentId ? document.nodesById[node.parentId] : undefined;
-  }
-  return result;
-}
-
-function nodeDepth(document: DesignDocument, nodeId: string): number {
-  let depth = 0;
-  const visited = new Set<string>();
-  let node = document.nodesById[nodeId];
-  while (node?.parentId && !visited.has(node.id)) {
-    visited.add(node.id);
-    depth += 1;
-    node = document.nodesById[node.parentId];
-  }
-  return depth;
-}
-
-function normalizeGroupInPlace(
-  document: DesignDocument,
-  groupId: string,
-): { ok: true } | LayerOperationFailure {
-  const group = document.nodesById[groupId];
-  if (!group || group.kind !== "group") {
-    return failure("not-found", `Group ${groupId} does not exist`);
-  }
-  const children = group.childIds.map((nodeId) => document.nodesById[nodeId]);
-  if (children.length === 0) {
-    return failure("invalid-target", `Group ${groupId} cannot be left empty`);
-  }
-  if (children.some((node) => !node)) {
-    return failure("not-found", `Group ${groupId} has a missing child`);
-  }
-  const bounds = localSelectionBounds(
-    children.filter((node): node is DesignNode => node !== undefined),
-  );
-  if (!bounds) {
-    return failure(
-      "visual-fidelity",
-      `Group ${groupId} children have invalid bounds`,
-    );
-  }
-  const offset: Transform = [1, 0, 0, 1, bounds.x, bounds.y];
-  const compensate: Transform = [1, 0, 0, 1, -bounds.x, -bounds.y];
-  group.transform = multiplyTransforms(group.transform, offset);
-  group.size = { width: bounds.width, height: bounds.height };
-  for (const child of children) {
-    if (child)
-      child.transform = multiplyTransforms(compensate, child.transform);
-  }
-  return { ok: true };
-}
-
 function planBlockMoves(
   sourceOrder: readonly string[],
   targetOrder: readonly string[],
@@ -928,30 +861,6 @@ function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
     left.length === right.length &&
     left.every((value, index) => value === right[index])
   );
-}
-
-function localSelectionBounds(nodes: readonly DesignNode[]) {
-  const points = nodes.flatMap((node) => [
-    transformPoint({ x: 0, y: 0 }, node.transform),
-    transformPoint({ x: node.size.width, y: 0 }, node.transform),
-    transformPoint({ x: 0, y: node.size.height }, node.transform),
-    transformPoint({ x: node.size.width, y: node.size.height }, node.transform),
-  ]);
-  if (
-    points.length === 0 ||
-    points.some(
-      (point) => !Number.isFinite(point.x) || !Number.isFinite(point.y),
-    )
-  ) {
-    return null;
-  }
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const minX = Math.min(...xs);
-  const minY = Math.min(...ys);
-  const maxX = Math.max(...xs);
-  const maxY = Math.max(...ys);
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 function isEffectivelyLocked(document: DesignDocument, nodeId: string) {

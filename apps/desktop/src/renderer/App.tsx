@@ -8,7 +8,6 @@ import type {
 import type { ModelSelection } from "@opendesign/model-gateway";
 import type {
   DesignDocument,
-  DesignNode,
   DesignOperation,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
@@ -16,15 +15,18 @@ import {
   canGroupNodes,
   canReorderNodes,
   canUngroupNode,
+  getArrangementSelectionMetrics,
   getNodeBounds,
   getSelectionBounds,
   getWorldTransform,
   invertTransform,
+  planArrangeNodes,
   planGroupNodes,
   planReparentNodes,
   planReorderNodes,
   planUngroupNode,
   screenToDocument,
+  type ArrangeOperation,
   type LayerOrderAction,
 } from "@opendesign/editor-runtime";
 import type {
@@ -60,7 +62,6 @@ import { ProjectHome } from "./components/ProjectHome";
 import { SettingsPage } from "./components/SettingsPage";
 import {
   PropertiesPanel,
-  type Alignment,
   type UpdatePropertiesPatch,
 } from "./components/PropertiesPanel";
 import { Titlebar } from "./components/Titlebar";
@@ -206,6 +207,11 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       ),
     ]),
   ) as Record<LayerOrderAction, boolean>;
+  const arrangementMetrics = getArrangementSelectionMetrics(
+    designDocument,
+    activePageId,
+    state.selection.nodeIds,
+  );
   const projectConversations = activeProject
     ? (conversationsByProjectId[activeProject.projectId] ?? [])
     : [];
@@ -696,47 +702,29 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     [activePageId, applyCommands, runtime, t],
   );
 
-  const alignSelection = useCallback(
-    (alignment: Alignment) => {
+  const arrangeSelection = useCallback(
+    (operation: ArrangeOperation) => {
       const current = runtime.getSnapshot();
-      const nodeIds = filterTopLevelNodeIds(
+      const operationId = `arrange_${operation.action}_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planArrangeNodes(
         current.document,
+        activePageId,
         current.state.selection.nodeIds,
+        operation,
+        operationId,
       );
-      const selectionBounds = getSelectionBounds(current.document, nodeIds);
-      if (!selectionBounds || nodeIds.length < 2) return;
-      const commands = nodeIds.flatMap((nodeId, index): DesignOperation[] => {
-        const node = current.document.nodesById[nodeId];
-        const bounds = getNodeBounds(current.document, nodeId);
-        if (!node || node.locked || !bounds) return [];
-        const documentDelta = alignmentDelta(
-          alignment,
-          bounds,
-          selectionBounds,
-        );
-        const delta = documentDeltaToParent(
-          current.document,
-          node.parentId,
-          documentDelta,
-        );
-        if (delta.x === 0 && delta.y === 0) return [];
-        const transform: DesignNode["transform"] = [...node.transform];
-        transform[4] += delta.x;
-        transform[5] += delta.y;
-        return [
-          {
-            commandId: `align_${nodeId}_${index}`,
-            type: "update_properties",
-            nodeId,
-            transform,
-          },
-        ];
-      });
-      if (commands.length > 0) {
-        applyCommands(t("history.alignLayers"), commands);
+      if (!plan.ok) {
+        setEditorError(plan.code === "no-op" ? null : plan.message);
+        return;
       }
+      const historyKey = operation.action.startsWith("align-")
+        ? "history.alignLayers"
+        : operation.action.startsWith("distribute-")
+          ? "history.distributeLayers"
+          : "history.setLayerSpacing";
+      applyCommands(t(historyKey), plan.commands);
     },
-    [applyCommands, runtime, t],
+    [activePageId, applyCommands, runtime, t],
   );
 
   const changeZoom = useCallback(
@@ -1652,8 +1640,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             onTabChange={setUtilityTab}
             properties={
               <PropertiesPanel
+                arrangement={arrangementMetrics}
                 node={selectedNode}
-                onAlign={alignSelection}
+                onArrange={arrangeSelection}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
                 onDuplicate={duplicateSelection}
                 onUpdate={(updates) => {
@@ -1823,37 +1812,6 @@ function documentDeltaToParent(
   return {
     x: inverse[0] * delta.x + inverse[2] * delta.y,
     y: inverse[1] * delta.x + inverse[3] * delta.y,
-  };
-}
-
-function alignmentDelta(
-  alignment: Alignment,
-  bounds: { x: number; y: number; width: number; height: number },
-  selection: { x: number; y: number; width: number; height: number },
-) {
-  if (alignment === "left") return { x: selection.x - bounds.x, y: 0 };
-  if (alignment === "horizontal-center") {
-    return {
-      x: selection.x + selection.width / 2 - (bounds.x + bounds.width / 2),
-      y: 0,
-    };
-  }
-  if (alignment === "right") {
-    return {
-      x: selection.x + selection.width - (bounds.x + bounds.width),
-      y: 0,
-    };
-  }
-  if (alignment === "top") return { x: 0, y: selection.y - bounds.y };
-  if (alignment === "vertical-center") {
-    return {
-      x: 0,
-      y: selection.y + selection.height / 2 - (bounds.y + bounds.height / 2),
-    };
-  }
-  return {
-    x: 0,
-    y: selection.y + selection.height - (bounds.y + bounds.height),
   };
 }
 

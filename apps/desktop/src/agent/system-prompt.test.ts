@@ -64,6 +64,15 @@ describe("OpenDesign Agent system prompt", () => {
       "recomputes affected Group bounds",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "use opendesign_arrange_layers with explicit stable Page and node IDs",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "preserves the two outermost layers",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "does not provide 2D Tidy up",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "does not prove rendered visual quality",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

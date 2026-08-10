@@ -1,10 +1,14 @@
 import {
   createWelcomeDocument,
   EditorRuntime,
+  getNodeBounds,
   getWorldTransform,
 } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
-import { DESIGN_HIERARCHY_TOOL_NAME } from "../shared/design-agent-tools";
+import {
+  DESIGN_ARRANGE_TOOL_NAME,
+  DESIGN_HIERARCHY_TOOL_NAME,
+} from "../shared/design-agent-tools";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
 import { executeDesignToolRequest } from "./design-tool-execution";
 
@@ -1011,6 +1015,153 @@ describe("Renderer semantic hierarchy tool", () => {
         },
       },
     });
+  });
+
+  it("arranges explicit layers atomically without using or resetting selection", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const before = runtime.getSnapshot().document;
+    const firstWorld = getWorldTransform(before, "feature_one");
+    const thirdWorld = getWorldTransform(before, "feature_three");
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "arrange_distribute",
+        call: {
+          toolCallId: "tool_arrange_distribute",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "distribute-horizontal",
+            label: "Distribute capability cards",
+            pageId: "page_welcome",
+            nodeIds: ["feature_one", "feature_two", "feature_three"],
+          },
+        },
+        context: selectionContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "distribute-horizontal",
+          nodeIds: ["feature_one", "feature_two", "feature_three"],
+          orderedNodeIds: ["feature_one", "feature_two", "feature_three"],
+          resolvedSpacing: 56,
+          revision: 1,
+          atomic: true,
+          warnings: [],
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    const arranged = runtime.getSnapshot();
+    expect(arranged.document.nodesById.feature_group?.size).toEqual({
+      width: 892,
+      height: 220,
+    });
+    expect(getNodeBounds(arranged.document, "feature_two")?.x).toBe(504);
+    expect(getWorldTransform(arranged.document, "feature_one")).toEqual(
+      firstWorld,
+    );
+    expect(getWorldTransform(arranged.document, "feature_three")).toEqual(
+      thirdWorld,
+    );
+    expect(arranged.state.selection).toEqual({
+      nodeIds: ["title_welcome"],
+      anchorNodeId: "title_welcome",
+    });
+    expect(arranged.state.history.undo).toHaveLength(1);
+  });
+
+  it("sets exact negative Agent spacing and rejects locked or out-of-scope arrangement", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "arrange_spacing",
+        call: {
+          toolCallId: "tool_arrange_spacing",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-horizontal-spacing",
+            label: "Overlap capability cards",
+            pageId: "page_welcome",
+            nodeIds: ["feature_one", "feature_two", "feature_three"],
+            spacing: -20,
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-horizontal-spacing",
+          resolvedSpacing: -20,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.feature_group?.size.width,
+    ).toBe(740);
+
+    const locked = structuredClone(createWelcomeDocument());
+    locked.nodesById.feature_group.locked = true;
+    const lockedRuntime = new EditorRuntime(locked);
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "arrange_locked",
+          call: {
+            toolCallId: "tool_arrange_locked",
+            toolName: DESIGN_ARRANGE_TOOL_NAME,
+            input: {
+              action: "distribute-horizontal",
+              label: "Invalid locked arrangement",
+              pageId: "page_welcome",
+              nodeIds: ["feature_one", "feature_two", "feature_three"],
+            },
+          },
+          context: pageContext,
+        },
+        lockedRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("arrange.locked");
+    expect(lockedRuntime.getSnapshot().document.revision).toBe(0);
+
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "arrange_scope",
+          call: {
+            toolCallId: "tool_arrange_scope",
+            toolName: DESIGN_ARRANGE_TOOL_NAME,
+            input: {
+              action: "align-left",
+              label: "Wrong Page",
+              pageId: "page_welcome",
+              nodeIds: ["feature_one", "feature_two"],
+            },
+          },
+          context: {
+            ...pageContext,
+            mutationTarget: {
+              kind: "page",
+              pageId: "page_other",
+            },
+          },
+        },
+        new EditorRuntime(createWelcomeDocument()),
+        "page_welcome",
+      ),
+    ).rejects.toThrow("Arrangement operation targets Page page_welcome");
   });
 
   it("returns scoped planner failures without partially changing the document", async () => {

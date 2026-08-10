@@ -6,6 +6,11 @@ import type {
   Paint,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
+import type {
+  ArrangeOperation,
+  ArrangementSelectionMetrics,
+} from "@opendesign/editor-runtime";
+import { MAX_ARRANGEMENT_SPACING } from "@opendesign/editor-runtime";
 import { Glyph, IconButton, type GlyphName } from "@opendesign/ui";
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
@@ -15,9 +20,6 @@ export type UpdatePropertiesPatch = Omit<
   UpdatePropertiesCommand,
   "commandId" | "nodeId" | "type"
 >;
-
-export type Alignment =
-  "left" | "horizontal-center" | "right" | "top" | "vertical-center" | "bottom";
 
 type FillNode = Extract<
   DesignNode,
@@ -108,6 +110,8 @@ function Field({
   suffix,
   min,
   max,
+  disabled = false,
+  placeholder,
   type = "number",
   onCommit,
 }: {
@@ -117,6 +121,8 @@ function Field({
   suffix?: string;
   min?: number;
   max?: number;
+  disabled?: boolean;
+  placeholder?: string;
   type?: "number" | "text";
   onCommit: (draft: string) => string | null;
 }) {
@@ -135,17 +141,19 @@ function Field({
   };
 
   return (
-    <label className="property-field">
+    <label className={`property-field${disabled ? " is-disabled" : ""}`}>
       <span>{label}</span>
       <span className="property-field__control">
         <input
           aria-label={accessibleLabel}
+          disabled={disabled}
           inputMode={type === "number" ? "decimal" : undefined}
           max={max}
           min={min}
           onBlur={commit}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
+          placeholder={placeholder}
           type={type}
           value={draft}
         />
@@ -1225,14 +1233,16 @@ function SelectedNodeProperties({
 
 export function PropertiesPanel({
   node,
-  onAlign,
+  arrangement,
+  onArrange,
   onDelete,
   onDuplicate,
   onUpdate,
   selectionCount,
 }: {
   node: DesignNode | undefined;
-  onAlign: (alignment: Alignment) => void;
+  arrangement: ArrangementSelectionMetrics | null;
+  onArrange: (operation: ArrangeOperation) => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
@@ -1288,32 +1298,127 @@ export function PropertiesPanel({
               <strong>
                 {t("properties.layersSelected", { count: selectionCount })}
               </strong>
-              <span>{t("properties.alignSelection")}</span>
+              <span>{t("properties.arrangeSelection")}</span>
             </div>
-            <div
-              aria-label={t("properties.alignment")}
-              className="alignment-grid"
-              role="group"
-            >
-              {(
-                [
-                  ["left", "L", "properties.alignLeft"],
-                  ["horizontal-center", "C", "properties.alignHCenter"],
-                  ["right", "R", "properties.alignRight"],
-                  ["top", "T", "properties.alignTop"],
-                  ["vertical-center", "M", "properties.alignVCenter"],
-                  ["bottom", "B", "properties.alignBottom"],
-                ] as const
-              ).map(([alignment, label, key]) => (
+            <div className="multi-selection-section">
+              <span className="multi-selection-section__heading">
+                {t("properties.alignment")}
+              </span>
+              <div
+                aria-label={t("properties.alignment")}
+                className="alignment-grid"
+                role="group"
+              >
+                {(
+                  [
+                    ["align-left", "align-left", "properties.alignLeft"],
+                    [
+                      "align-horizontal-center",
+                      "align-h-center",
+                      "properties.alignHCenter",
+                    ],
+                    ["align-right", "align-right", "properties.alignRight"],
+                    ["align-top", "align-top", "properties.alignTop"],
+                    [
+                      "align-vertical-center",
+                      "align-v-center",
+                      "properties.alignVCenter",
+                    ],
+                    ["align-bottom", "align-bottom", "properties.alignBottom"],
+                  ] as const
+                ).map(([action, icon, key]) => (
+                  <button
+                    aria-label={t(key)}
+                    disabled={!arrangement}
+                    key={action}
+                    onClick={() => onArrange({ action })}
+                    type="button"
+                  >
+                    <Glyph name={icon} size={15} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="multi-selection-section">
+              <span className="multi-selection-section__heading">
+                {t("properties.distribution")}
+              </span>
+              <div
+                aria-label={t("properties.distribution")}
+                className="distribution-grid"
+                role="group"
+              >
                 <button
-                  aria-label={t(key)}
-                  key={alignment}
-                  onClick={() => onAlign(alignment)}
+                  aria-label={t("properties.distributeHorizontal")}
+                  disabled={!arrangement?.canDistributeHorizontal}
+                  onClick={() => onArrange({ action: "distribute-horizontal" })}
                   type="button"
                 >
-                  {label}
+                  <Glyph name="distribute-horizontal" size={15} />
+                  {t("properties.horizontal")}
                 </button>
-              ))}
+                <button
+                  aria-label={t("properties.distributeVertical")}
+                  disabled={!arrangement?.canDistributeVertical}
+                  onClick={() => onArrange({ action: "distribute-vertical" })}
+                  type="button"
+                >
+                  <Glyph name="distribute-vertical" size={15} />
+                  {t("properties.vertical")}
+                </button>
+              </div>
+              <div className="spacing-grid">
+                <Field
+                  accessibleLabel={t("properties.horizontalSpacing")}
+                  disabled={!arrangement}
+                  label="H"
+                  max={MAX_ARRANGEMENT_SPACING}
+                  min={-MAX_ARRANGEMENT_SPACING}
+                  onCommit={(draft) => {
+                    if (draft.trim() === "") return null;
+                    const spacing = Number(draft);
+                    if (
+                      !Number.isFinite(spacing) ||
+                      Math.abs(spacing) > MAX_ARRANGEMENT_SPACING
+                    )
+                      return null;
+                    onArrange({ action: "set-horizontal-spacing", spacing });
+                    return formatNumber(spacing);
+                  }}
+                  placeholder={t("properties.mixed")}
+                  suffix="px"
+                  value={
+                    arrangement?.horizontalSpacing === null || !arrangement
+                      ? ""
+                      : formatNumber(arrangement.horizontalSpacing)
+                  }
+                />
+                <Field
+                  accessibleLabel={t("properties.verticalSpacing")}
+                  disabled={!arrangement}
+                  label="V"
+                  max={MAX_ARRANGEMENT_SPACING}
+                  min={-MAX_ARRANGEMENT_SPACING}
+                  onCommit={(draft) => {
+                    if (draft.trim() === "") return null;
+                    const spacing = Number(draft);
+                    if (
+                      !Number.isFinite(spacing) ||
+                      Math.abs(spacing) > MAX_ARRANGEMENT_SPACING
+                    )
+                      return null;
+                    onArrange({ action: "set-vertical-spacing", spacing });
+                    return formatNumber(spacing);
+                  }}
+                  placeholder={t("properties.mixed")}
+                  suffix="px"
+                  value={
+                    arrangement?.verticalSpacing === null || !arrangement
+                      ? ""
+                      : formatNumber(arrangement.verticalSpacing)
+                  }
+                />
+              </div>
             </div>
             <div className="multi-selection-actions">
               <button onClick={onDuplicate} type="button">

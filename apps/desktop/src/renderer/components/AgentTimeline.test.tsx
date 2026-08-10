@@ -351,6 +351,48 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("transaction_hierarchy_1");
   });
 
+  it("shows precise arrangement as native layer activity", () => {
+    const events: AgentEvent[] = [
+      {
+        type: "tool.requested",
+        runId: "run_arrange_1",
+        toolCallId: "tool_arrange_1",
+        toolName: "opendesign_arrange_layers",
+        input: {
+          action: "distribute-horizontal",
+          pageId: "page_1",
+          nodeIds: ["one", "two", "three"],
+        },
+        risk: "design_write",
+      },
+      {
+        type: "tool.completed",
+        runId: "run_arrange_1",
+        toolCallId: "tool_arrange_1",
+        result: { action: "distribute-horizontal", resolvedSpacing: 24 },
+        revision: 5,
+        transactionId: "transaction_arrange_1",
+      },
+    ];
+
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={events}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(screen.getByText("Layer arrangement updated")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("opendesign_arrange_layers");
+    expect(container).not.toHaveTextContent("transaction_arrange_1");
+  });
+
   it("replaces internal model attempt failures with one recoverable status", () => {
     const events: AgentEvent[] = [
       {

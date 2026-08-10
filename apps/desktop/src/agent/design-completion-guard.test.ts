@@ -5,6 +5,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_APPLY_TOOL_NAME,
+  DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -138,6 +139,30 @@ describe("design completion guard", () => {
     expect(
       reviewDesignCompletion(
         context([materialWrite, firstCapture, hierarchyWrite, finalCapture]),
+      ),
+    ).toEqual({ allow: true });
+  });
+
+  it("accepts a precise arrangement as a post-review refinement without making it a material draft", () => {
+    const arrangeWrite: AgentToolCallRecord = {
+      toolCallId: "arrange_1",
+      toolName: DESIGN_ARRANGE_TOOL_NAME,
+      input: {
+        action: "set-horizontal-spacing",
+        pageId: "page_1",
+        nodeIds: ["card_one", "card_two"],
+        spacing: 24,
+      },
+      status: "completed",
+      revision: 7,
+    };
+
+    expect(reviewDesignCompletion(context([arrangeWrite]))).toEqual({
+      allow: true,
+    });
+    expect(
+      reviewDesignCompletion(
+        context([materialWrite, firstCapture, arrangeWrite, finalCapture]),
       ),
     ).toEqual({ allow: true });
   });

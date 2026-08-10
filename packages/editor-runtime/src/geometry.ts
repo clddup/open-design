@@ -121,3 +121,29 @@ export function getSelectionBounds(
   const maxY = Math.max(...bounds.map((rect) => rect.y + rect.height));
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
+
+export function getLocalSelectionBounds(
+  nodes: readonly DesignNode[],
+): Rect | null {
+  const points = nodes.flatMap((node) => [
+    transformPoint({ x: 0, y: 0 }, node.transform),
+    transformPoint({ x: node.size.width, y: 0 }, node.transform),
+    transformPoint({ x: 0, y: node.size.height }, node.transform),
+    transformPoint({ x: node.size.width, y: node.size.height }, node.transform),
+  ]);
+  if (
+    points.length === 0 ||
+    points.some(
+      (point) => !Number.isFinite(point.x) || !Number.isFinite(point.y),
+    )
+  ) {
+    return null;
+  }
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}

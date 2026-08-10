@@ -16,6 +16,7 @@ import type {
 import {
   createEmptyDesignDocument,
   createWelcomeDocument,
+  getNodeBounds,
   getWorldTransform,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
@@ -1733,9 +1734,85 @@ describe("App", () => {
     await user.click(screen.getByRole("tab", { name: "Properties" }));
     await user.click(screen.getByRole("button", { name: "Align left" }));
     snapshot = runtime().getSnapshot();
-    expect(snapshot.document.nodesById.feature_two?.transform[4]).toBe(20);
+    expect(getNodeBounds(snapshot.document, "feature_two")?.x).toBeCloseTo(
+      getNodeBounds(snapshot.document, "feature_one")?.x ?? Number.NaN,
+      9,
+    );
     expect(snapshot.document.revision).toBe(2);
   });
+
+  it.each(["darwin", "win32"] as const)(
+    "distributes and sets exact negative spacing from the inspector on %s",
+    async (platform) => {
+      vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
+        platform,
+        version: "0.0.0",
+      });
+      const user = userEvent.setup();
+      renderApp();
+      act(() =>
+        runtime().setSelection(
+          ["feature_one", "feature_two", "feature_three"],
+          "feature_one",
+        ),
+      );
+      const before = runtime().getSnapshot();
+      const firstWorld = getWorldTransform(before.document, "feature_one");
+      const thirdWorld = getWorldTransform(before.document, "feature_three");
+
+      await user.click(screen.getByRole("tab", { name: "Properties" }));
+      const distribute = screen.getByRole("button", {
+        name: "Distribute horizontal spacing",
+      });
+      expect(distribute).toBeEnabled();
+      expect(
+        distribute.querySelector('[data-glyph="distribute-horizontal"]'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Distribute vertical spacing" }),
+      ).toBeDisabled();
+      expect(screen.getByLabelText("Horizontal space between")).toHaveAttribute(
+        "placeholder",
+        "Mixed",
+      );
+
+      await user.click(distribute);
+      let snapshot = runtime().getSnapshot();
+      expect(snapshot.document.revision).toBe(1);
+      expect(snapshot.state.history.undo).toHaveLength(1);
+      expect(snapshot.document.nodesById.feature_group?.size).toEqual({
+        width: 892,
+        height: 220,
+      });
+      expect(getNodeBounds(snapshot.document, "feature_two")?.x).toBe(504);
+      expect(getWorldTransform(snapshot.document, "feature_one")).toEqual(
+        firstWorld,
+      );
+      expect(getWorldTransform(snapshot.document, "feature_three")).toEqual(
+        thirdWorld,
+      );
+
+      const spacing = screen.getByLabelText("Horizontal space between");
+      await user.clear(spacing);
+      await user.type(spacing, "-20{Enter}");
+      snapshot = runtime().getSnapshot();
+      expect(snapshot.document.revision).toBe(2);
+      expect(snapshot.state.history.undo).toHaveLength(2);
+      expect(snapshot.document.nodesById.feature_group?.size.width).toBe(740);
+      expect(getNodeBounds(snapshot.document, "feature_two")?.x).toBe(428);
+      expect(getNodeBounds(snapshot.document, "feature_three")?.x).toBe(712);
+      expect(snapshot.state.selection.nodeIds).toEqual([
+        "feature_one",
+        "feature_two",
+        "feature_three",
+      ]);
+
+      await user.click(screen.getByRole("button", { name: "Undo" }));
+      expect(
+        runtime().getSnapshot().document.nodesById.feature_group?.size.width,
+      ).toBe(892);
+    },
+  );
 
   it("edits text content and typography through the inspector", async () => {
     const user = userEvent.setup();

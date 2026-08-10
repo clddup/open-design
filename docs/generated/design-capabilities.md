@@ -4,7 +4,7 @@
 
 能力清单版本：`1` · 更新日期：2026-08-10 · 文档协议：`1.2.0` · 画布基线：`leafer-editor@2.2.9`
 
-当前状态：可用 0 项，降级可用 8 项，不可用 8 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
+当前状态：可用 0 项，降级可用 9 项，不可用 8 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
 ## 基础工作流
 
@@ -36,8 +36,21 @@
 - 实现方：DesignDocument 1.2.0 + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
 - 证据：自动化 7 项；实机 0 项
-- 限制：分布、等间距和画布直接操作时的自动归属命令仍未补齐；图层面板中的显式跨容器重挂载目前以指针拖放为主。
+- 限制：画布直接操作时的自动归属仍未补齐；图层面板中的显式跨容器重挂载目前以指针拖放为主。
 - 限制：当 Group 级可见性、不透明度、混合、效果或蒙版无法在解组后保持视觉一致时，解组会明确拒绝。
+
+### 精确排列 — 降级可用
+
+通过人工 UI 与 Agent 共用的 planner 对齐多层对象、固定两端均分横向或纵向间隙，并设置正数、零或负数的一维精确间距。
+
+- ID：`transform.precise-arrangement`
+- 实现方：@opendesign/geometry-service contract v1 + EditorRuntime
+- 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
+- 证据：自动化 5 项；实机 0 项
+- 限制：单层相对父级对齐、二维 Tidy up、Smart Selection 画布间距手柄、翻转/原点、吸附、参考线、标尺和像素网格取整仍未补齐。
+- 限制：geometry-service 当前只提供确定性排列；尚未选择或宣称支持路径布尔、flatten、outline 或 Bézier kernel。
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-dimensions-rotation-and-position)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection)
 
 ## 矢量
 

@@ -1,5 +1,5 @@
 {
-  "name": "@opendesign/editor-runtime",
+  "name": "@opendesign/geometry-service",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,8 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@opendesign/design-contracts": "workspace:*",
-    "@opendesign/geometry-service": "workspace:*"
+    "@opendesign/design-contracts": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",

@@ -7,6 +7,7 @@ export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
 export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
 export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
+export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
 export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
 export const GENERATE_IMAGE_TOOL_NAME = "opendesign_generate_image";
 export const PLACE_IMAGE_TOOL_NAME = "opendesign_place_image";
@@ -73,6 +74,29 @@ export type DesignHierarchyToolInput =
       nodeIds: string[];
       parentId: string | null;
       index: number;
+    };
+
+export type DesignArrangeToolInput =
+  | {
+      action:
+        | "align-left"
+        | "align-horizontal-center"
+        | "align-right"
+        | "align-top"
+        | "align-vertical-center"
+        | "align-bottom"
+        | "distribute-horizontal"
+        | "distribute-vertical";
+      label: string;
+      pageId: string;
+      nodeIds: string[];
+    }
+  | {
+      action: "set-horizontal-spacing" | "set-vertical-spacing";
+      label: string;
+      pageId: string;
+      nodeIds: string[];
+      spacing: number;
     };
 
 // The canonical DesignOperation schema is deliberately exhaustive and is used
@@ -460,6 +484,48 @@ const MODEL_HIERARCHY_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_ARRANGE_SCHEMA = {
+  type: "object",
+  description:
+    "Align requires at least two explicit layers. Distribute requires at least three and preserves the two outermost layers on that axis. Set-spacing requires at least two and a finite spacing value; negative spacing intentionally overlaps layers.",
+  properties: {
+    action: {
+      enum: [
+        "align-left",
+        "align-horizontal-center",
+        "align-right",
+        "align-top",
+        "align-vertical-center",
+        "align-bottom",
+        "distribute-horizontal",
+        "distribute-vertical",
+        "set-horizontal-spacing",
+        "set-vertical-spacing",
+      ],
+    },
+    label: { type: "string", minLength: 1, maxLength: 256 },
+    pageId: { type: "string", minLength: 1, maxLength: 256 },
+    nodeIds: {
+      type: "array",
+      minItems: 2,
+      maxItems: 500,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 256 },
+      description:
+        "Explicit stable layer IDs from inspection. Selection is context only and is never an implicit target.",
+    },
+    spacing: {
+      type: "number",
+      minimum: -1_000_000,
+      maximum: 1_000_000,
+      description:
+        "Exact pixels between adjacent bounds; required only for set-horizontal-spacing and set-vertical-spacing.",
+    },
+  },
+  required: ["action", "label", "pageId", "nodeIds"],
+  additionalProperties: false,
+} as const;
+
 export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_CAPABILITIES_TOOL_NAME,
@@ -586,6 +652,14 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_ARRANGE_TOOL_NAME,
+    description:
+      "Precisely arrange explicit existing layers in the currently bound Design File using host-computed geometry. It aligns selection bounds, distributes horizontal or vertical spacing while preserving the two outermost layers, or sets an exact positive, zero, or negative 1D spacing from the leading layer. The host handles rotated/scaled parent transforms, dynamically recomputes affected Group bounds, previews the complete change, and applies one atomic undoable transaction. Targets are stable Page and layer IDs returned by inspection, never the send-time or live user selection. It rejects locked, missing, stale, out-of-scope, non-invertible, ambiguous, no-op, and over-limit operations. This is deterministic 1D arrangement, not 2D Tidy up or Auto Layout.",
+    inputSchema: MODEL_ARRANGE_SCHEMA,
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: DESIGN_APPLY_TOOL_NAME,
     description:
       "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. For organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with portable SVG path data in properties.path; they support the same fills, strokes, gradients, effects, and advanced stroke fields as other shapes. Path coordinates are local to the node and should fit its declared size. Composite designs should create a named Frame or Group before inserting its children later in the same ordered transaction; do not flatten their parts into Page-root layers. It does not create, rename, duplicate, or delete Projects, Design Files, or Pages. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input.",
@@ -625,6 +699,9 @@ export function validateDesignAgentToolInput(
   if (toolName === PLACE_IMAGE_TOOL_NAME) return isPlaceImageToolInput(input);
   if (toolName === DESIGN_HIERARCHY_TOOL_NAME) {
     return isDesignHierarchyToolInput(input);
+  }
+  if (toolName === DESIGN_ARRANGE_TOOL_NAME) {
+    return isDesignArrangeToolInput(input);
   }
   if (
     (toolName !== DESIGN_APPLY_TOOL_NAME &&
@@ -798,6 +875,50 @@ export function isDesignHierarchyToolInput(
     new Set(input.nodeIds).size === input.nodeIds.length &&
     Object.keys(input).every((key) =>
       ["action", "label", "pageId", "nodeIds", "groupId", "name"].includes(key),
+    )
+  );
+}
+
+export function isDesignArrangeToolInput(
+  input: unknown,
+): input is DesignArrangeToolInput {
+  if (!isRecord(input)) return false;
+  const action = input.action;
+  const actions = [
+    "align-left",
+    "align-horizontal-center",
+    "align-right",
+    "align-top",
+    "align-vertical-center",
+    "align-bottom",
+    "distribute-horizontal",
+    "distribute-vertical",
+    "set-horizontal-spacing",
+    "set-vertical-spacing",
+  ] as const;
+  if (!actions.includes(action as (typeof actions)[number])) return false;
+  const setSpacing =
+    action === "set-horizontal-spacing" || action === "set-vertical-spacing";
+  const distribute =
+    action === "distribute-horizontal" || action === "distribute-vertical";
+  return (
+    typeof input.label === "string" &&
+    input.label.trim().length > 0 &&
+    input.label.length <= 256 &&
+    safeId(input.pageId) &&
+    Array.isArray(input.nodeIds) &&
+    input.nodeIds.length >= (distribute ? 3 : 2) &&
+    input.nodeIds.length <= 500 &&
+    input.nodeIds.every(safeId) &&
+    new Set(input.nodeIds).size === input.nodeIds.length &&
+    (setSpacing
+      ? finite(input.spacing) && Math.abs(Number(input.spacing)) <= 1_000_000
+      : input.spacing === undefined) &&
+    Object.keys(input).every((key) =>
+      (setSpacing
+        ? ["action", "label", "pageId", "nodeIds", "spacing"]
+        : ["action", "label", "pageId", "nodeIds"]
+      ).includes(key),
     )
   );
 }
