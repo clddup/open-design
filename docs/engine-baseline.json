@@ -70,7 +70,7 @@
         }
       ],
       "geometryProvider": "@opendesign/geometry-service/vector-path",
-      "productionStatus": "main-file-bridge-ui-agent-pending"
+      "productionStatus": "human-interchange-agent-export-available-agent-import-native-gate-pending"
     }
   },
   "verification": {
@@ -79,6 +79,6 @@
     "editorRuntime": "pnpm exec vitest run packages/editor-runtime/src/index.test.ts",
     "vectorGeometry": "pnpm --filter @opendesign/geometry-service typecheck && pnpm exec vitest run packages/geometry-service/src/vector-path.test.ts packages/geometry-service/src/boolean-resolver.test.ts",
     "leafer": "pnpm exec vitest run packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts packages/leafer-engine/src/professional-fixtures.test.ts",
-    "svgInterchange": "pnpm --filter @opendesign/import-export-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/import-export-service/src/svg.test.ts packages/editor-runtime/src/svg-import-operations.test.ts packages/editor-runtime/src/svg-export-operations.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/desktop-api.test.ts src/main/svg/svg-file-service.test.ts src/main/svg/svg-file-ipc.test.ts"
+    "svgInterchange": "pnpm --filter @opendesign/import-export-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/import-export-service/src/svg.test.ts packages/editor-runtime/src/svg-import-operations.test.ts packages/editor-runtime/src/svg-export-operations.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/desktop-api.test.ts src/shared/design-agent-tools.test.ts src/main/svg/svg-file-service.test.ts src/main/svg/svg-file-ipc.test.ts src/renderer/design-tool-execution.test.ts src/main/agent/agent-svg-export-host.test.ts src/main/agent/global-task-coordinator.test.ts src/agent/pi-production-tool-adapter.test.ts src/agent/production-context-budget.test.ts"
   }
 }

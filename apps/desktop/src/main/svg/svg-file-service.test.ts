@@ -47,6 +47,32 @@ describe("SvgFileService", () => {
     ).resolves.toBeNull();
   });
 
+  it("does not write after an Agent run is cancelled while the dialog is open", async () => {
+    const directory = await temporaryDirectory();
+    const selectedPath = join(directory, "Cancelled.svg");
+    let finishSelection!: (path: string | null) => void;
+    const selection = new Promise<string | null>((resolve) => {
+      finishSelection = resolve;
+    });
+    const service = new SvgFileService({
+      selectOpenFile: () => Promise.resolve(null),
+      selectSaveFile: () => selection,
+    });
+    const controller = new AbortController();
+    const saving = service.saveSvgFile(
+      { suggestedName: "Cancelled", contents: "<svg />" },
+      controller.signal,
+    );
+
+    controller.abort();
+    finishSelection(selectedPath);
+
+    await expect(saving).rejects.toMatchObject({ name: "AbortError" });
+    await expect(readFile(selectedPath, "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
   it("opens one regular SVG as fatal UTF-8 and exposes only name and text", async () => {
     const directory = await temporaryDirectory();
     const filePath = join(directory, "企鹅.SVG");

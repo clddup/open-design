@@ -7,10 +7,12 @@ import {
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
+  EXPORT_SVG_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
+  isPreparedAgentSvgExport,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
 
@@ -136,6 +138,94 @@ describe("design Agent tool contract", () => {
     expect(schema.length).toBeLessThan(64_000);
     expect(schema).not.toContain('"$ref"');
     expect(schema).not.toContain('"$defs"');
+  });
+
+  it("exports explicit SVG roots without accepting paths or fake settings", () => {
+    const tool = DESIGN_AGENT_TOOL_SPECS.find(
+      (candidate) => candidate.name === EXPORT_SVG_TOOL_NAME,
+    );
+    const input = {
+      pageId: "page_brand",
+      rootNodeIds: ["brand_mark", "brand_wordmark"],
+      suggestedName: "Acme brand",
+      includeLayerIds: true,
+      padding: 24,
+    };
+
+    expect(tool).toMatchObject({ risk: "external", approval: "never" });
+    expect(tool?.description).toContain("never receives a local path");
+    expect(JSON.stringify(tool?.inputSchema)).not.toContain("outlineText");
+    expect(validateDesignAgentToolInput(EXPORT_SVG_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(EXPORT_SVG_TOOL_NAME, {
+        ...input,
+        suggestedName: "C:\\Users\\designer\\brand.svg",
+      }),
+    ).toBe(false);
+    for (const suggestedName of ["CON.svg", "poster.", "poster:final.svg"]) {
+      expect(
+        validateDesignAgentToolInput(EXPORT_SVG_TOOL_NAME, {
+          ...input,
+          suggestedName,
+        }),
+      ).toBe(false);
+    }
+    expect(
+      validateDesignAgentToolInput(EXPORT_SVG_TOOL_NAME, {
+        ...input,
+        rootNodeIds: ["brand_mark", "brand_mark"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(EXPORT_SVG_TOOL_NAME, {
+        ...input,
+        padding: 100_001,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(EXPORT_SVG_TOOL_NAME, {
+        ...input,
+        simplifyStroke: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("validates the bounded Renderer SVG preparation before Main saves it", () => {
+    const prepared = {
+      kind: "svg-export-preparation",
+      version: 1,
+      suggestedName: "Acme brand.svg",
+      svg: '<svg viewBox="0 0 120 80" />',
+      revision: 4,
+      exportedNodeIds: ["brand_mark"],
+      issues: [
+        {
+          code: "boolean-flattened",
+          message: "Boolean operands were flattened into one standard path",
+          severity: "warning",
+          nodeId: "brand_mark",
+        },
+      ],
+    };
+
+    expect(isPreparedAgentSvgExport(prepared)).toBe(true);
+    expect(
+      isPreparedAgentSvgExport({ ...prepared, filePath: "/tmp/brand.svg" }),
+    ).toBe(false);
+    expect(
+      isPreparedAgentSvgExport({
+        ...prepared,
+        issues: [{ ...prepared.issues[0], code: "invented-warning" }],
+      }),
+    ).toBe(false);
+    expect(
+      isPreparedAgentSvgExport({
+        ...prepared,
+        exportedNodeIds: ["brand_mark", "brand_mark"],
+      }),
+    ).toBe(false);
   });
 
   it("accepts a path node transaction and rejects non-path markup", () => {

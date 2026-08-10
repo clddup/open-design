@@ -25,6 +25,7 @@ import { pathToFileURL } from "node:url";
 import { AgentHost, FatalAgentRunError } from "./agent/agent-host";
 import { AgentAttachmentHost } from "./agent/agent-attachment-host";
 import { AgentReferenceHost } from "./agent/agent-reference-host";
+import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { GlobalTaskCoordinator } from "./agent/global-task-coordinator";
@@ -73,12 +74,14 @@ import {
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
+  EXPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   isDesignApplyToolInput,
   isDesignPlanToolInput,
   isDesignVisualReviewToolInput,
   isGenerateImageToolInput,
+  isExportSvgToolInput,
   isPlaceImageToolInput,
   isReadImageToolInput,
   isUpdateImageToolInput,
@@ -123,6 +126,8 @@ let modelProviderHost: ModelProviderHost | null = null;
 let imageGenerationHost: ImageGenerationHost | null = null;
 let agentAttachmentHost: AgentAttachmentHost | null = null;
 let agentReferenceHost: AgentReferenceHost | null = null;
+let agentSvgExportHost: AgentSvgExportHost | null = null;
+let svgFileService: SvgFileService | null = null;
 let diagnosticLog: DiagnosticLog | null = null;
 const pendingDiagnosticEvents: DiagnosticEvent[] = [];
 const conversationIdByRunId = new Map<string, string>();
@@ -210,6 +215,13 @@ function requireAgentReferenceHost(): AgentReferenceHost {
     throw new Error("Agent reference services are not initialized");
   }
   return agentReferenceHost;
+}
+
+function requireAgentSvgExportHost(): AgentSvgExportHost {
+  if (!agentSvgExportHost) {
+    throw new Error("Agent SVG export services are not initialized");
+  }
+  return agentSvgExportHost;
 }
 
 function assertDesignFilePath(path: string) {
@@ -483,14 +495,19 @@ function registerProjectIpc() {
 }
 
 function registerIpc() {
+  svgFileService = new SvgFileService({
+    selectOpenFile: selectSvgOpenFile,
+    selectSaveFile: selectSvgSaveFile,
+  });
+  agentSvgExportHost = new AgentSvgExportHost(
+    rendererDesignToolHost,
+    svgFileService,
+  );
   registerProjectIpc();
   registerSvgFileIpc({
     ipc: ipcMain,
     assertRenderer: assertMainRenderer,
-    service: new SvgFileService({
-      selectOpenFile: selectSvgOpenFile,
-      selectSaveFile: selectSvgSaveFile,
-    }),
+    service: svgFileService,
   });
   ipcMain.handle(channels.platformInfo, () => ({
     platform: process.platform,
@@ -1038,6 +1055,13 @@ void app.whenReady().then(async () => {
         },
       };
     }
+    if (call.toolName === EXPORT_SVG_TOOL_NAME) {
+      if (!isExportSvgToolInput(call.input)) {
+        throw new TypeError("Invalid SVG export tool input");
+      }
+      globalTaskCoordinator.assertDocumentInspected(context);
+      return await requireAgentSvgExportHost().execute(call, context, signal);
+    }
     if (call.toolName === READ_IMAGE_TOOL_NAME) {
       if (!isReadImageToolInput(call.input)) {
         throw new TypeError("Invalid read image tool input");
@@ -1403,6 +1427,8 @@ app.on("before-quit", () => {
   imageGenerationHost = null;
   agentAttachmentHost = null;
   agentReferenceHost = null;
+  agentSvgExportHost = null;
+  svgFileService = null;
   agentHost.setModelRequestHandler(null);
   agentHost.setDesignToolRequestHandler(null);
   rendererDesignToolHost.rejectAll("OpenDesign is shutting down");

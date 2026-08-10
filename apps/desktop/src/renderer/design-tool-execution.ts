@@ -24,6 +24,7 @@ import {
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  EXPORT_SVG_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
@@ -32,6 +33,7 @@ import {
   isDesignArrangeToolInput,
   isDesignApplyToolInput,
   isDesignHierarchyToolInput,
+  isExportSvgToolInput,
   isInternalDesignApplyToolInput,
   isInternalUpdateImageToolInput,
 } from "../shared/design-agent-tools";
@@ -39,6 +41,7 @@ import type {
   RendererDesignToolRequest,
   RendererDesignToolResponse,
 } from "../shared/design-tool-bridge";
+import { runSvgExportInWorker } from "./svg-interchange";
 
 export async function executeDesignToolRequest(
   request: RendererDesignToolRequest,
@@ -55,6 +58,7 @@ export async function executeDesignToolRequest(
       height: number;
       width: number;
     }>;
+    exportSvg?: typeof runSvgExportInWorker;
     signal?: AbortSignal;
     stageDelayMs?: number;
   } = {},
@@ -114,6 +118,48 @@ export async function executeDesignToolRequest(
     throw new Error(
       `Design revision conflict: expected ${request.context.revision}, current ${document.revision}`,
     );
+  }
+
+  if (
+    request.call.toolName === EXPORT_SVG_TOOL_NAME &&
+    isExportSvgToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "SVG export",
+    );
+    throwIfAborted(options.signal);
+    const exported = await (options.exportSvg ?? runSvgExportInWorker)(
+      {
+        document,
+        pageId: input.pageId,
+        rootNodeIds: [...input.rootNodeIds],
+        settings: {
+          includeLayerIds: input.includeLayerIds ?? false,
+          padding: input.padding ?? 0,
+        },
+      },
+      options.signal,
+    );
+    throwIfAborted(options.signal);
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        observedRevision: exported.revision,
+        content: {
+          kind: "svg-export-preparation",
+          version: 1,
+          suggestedName: input.suggestedName,
+          svg: exported.svg,
+          revision: exported.revision,
+          exportedNodeIds: [...exported.exportedNodeIds],
+          issues: exported.issues.map((issue) => ({ ...issue })),
+        },
+      },
+    };
   }
 
   if (

@@ -34,6 +34,7 @@ import type {
   RendererDesignToolResponse,
 } from "./design-tool-bridge";
 import type { DiagnosticEvent, RendererDiagnosticReport } from "./diagnostics";
+import { isPortableFileName } from "./portable-file-name";
 
 export {
   formatDiagnosticReport,
@@ -1205,16 +1206,7 @@ function isBoundedSvgContents(value: unknown): value is string {
 }
 
 function isSuggestedFileName(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 255 &&
-    value !== "." &&
-    value !== ".." &&
-    !value.includes("/") &&
-    !value.includes("\\") &&
-    !hasControlCharacter(value)
-  );
+  return isPortableFileName(value);
 }
 
 function isSvgFileName(value: unknown): value is string {

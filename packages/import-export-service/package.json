@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./limits": "./src/limits.ts",
+    "./svg-issues": "./src/svg-issues.ts",
     "./svg": "./src/svg.ts"
   },
   "scripts": {

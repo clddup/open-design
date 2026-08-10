@@ -608,6 +608,11 @@ describe("SVG file desktop API guards", () => {
       }),
     ).toBe(false);
     expect(isSaveSvgFileResult({ name: "Brand.png" })).toBe(false);
+    for (const suggestedName of ["CON.svg", "Brand.", "Brand:final.svg"]) {
+      expect(isSaveSvgFileRequest({ suggestedName, contents: svg })).toBe(
+        false,
+      );
+    }
   });
 
   it("rejects empty and over-budget SVG text", () => {

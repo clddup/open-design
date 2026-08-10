@@ -16,7 +16,12 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { exportSvg, importSvg, resolvedBooleanPathsForSvg } from "./svg.js";
+import {
+  exportSvg,
+  importSvg,
+  isSvgInterchangeIssue,
+  resolvedBooleanPathsForSvg,
+} from "./svg.js";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const require = createRequire(import.meta.url);
@@ -29,6 +34,21 @@ beforeAll(async () => {
 });
 
 describe("versioned SVG interchange", () => {
+  it("validates structured fidelity issues at process boundaries", () => {
+    const issue = {
+      code: "effect-omitted",
+      message: "SVG filters are outside the current editable subset",
+      severity: "warning",
+      nodeId: "hero_glow",
+    };
+
+    expect(isSvgInterchangeIssue(issue)).toBe(true);
+    expect(isSvgInterchangeIssue({ ...issue, code: "made-up" })).toBe(false);
+    expect(isSvgInterchangeIssue({ ...issue, filePath: "/tmp/a.svg" })).toBe(
+      false,
+    );
+  });
+
   it("exports the OD-BRAND Boolean master as one standard path and reimports editable geometry", () => {
     const document = readBrandFixture();
     const resolution = createBooleanGeometryResolver(geometry).resolve(

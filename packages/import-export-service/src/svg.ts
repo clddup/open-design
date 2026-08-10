@@ -21,6 +21,13 @@ import {
   type Matrix,
 } from "transformation-matrix";
 import { SVG_MAX_CHARACTERS } from "./limits.js";
+import type {
+  SvgInterchangeIssue,
+  SvgInterchangeIssueCode,
+  SvgInterchangeIssueSeverity,
+} from "./svg-issues.js";
+
+export * from "./svg-issues.js";
 
 export const SVG_INTERCHANGE_VERSION = 1 as const;
 export const SVG_MIME_TYPE = "image/svg+xml" as const;
@@ -32,41 +39,6 @@ const MAX_IMPORTED_NODES = 8_192;
 const MAX_ID_PREFIX_CHARACTERS = 80;
 const SAFE_ID_PREFIX = /^[A-Za-z][A-Za-z0-9_-]*$/;
 const BLOCKED_XML_PATTERN = /<!\s*(?:DOCTYPE|ENTITY)\b/i;
-
-export type SvgInterchangeIssueSeverity = "error" | "warning";
-
-export type SvgInterchangeIssueCode =
-  | "angular-gradient-flattened"
-  | "boolean-flattened"
-  | "depth-limit"
-  | "effect-omitted"
-  | "element-limit"
-  | "empty-geometry"
-  | "external-reference"
-  | "frame-clipping-omitted"
-  | "invalid-dimension"
-  | "invalid-geometry"
-  | "invalid-root"
-  | "invalid-transform"
-  | "malformed-svg"
-  | "mask-omitted"
-  | "missing-boolean-geometry"
-  | "multiple-paints-flattened"
-  | "size-limit"
-  | "stroke-alignment-flattened"
-  | "unsupported-css"
-  | "unsupported-element"
-  | "unsupported-gradient"
-  | "unsupported-paint"
-  | "unsafe-xml";
-
-export interface SvgInterchangeIssue {
-  code: SvgInterchangeIssueCode;
-  message: string;
-  nodeId?: string;
-  severity: SvgInterchangeIssueSeverity;
-  sourceElement?: string;
-}
 
 export interface SvgResolvedBooleanPath {
   bounds: Rect | null;

@@ -7,6 +7,12 @@ import {
   type DesignOperation,
   type ImagePlacement,
 } from "@opendesign/design-contracts";
+import {
+  isSvgInterchangeIssue,
+  type SvgInterchangeIssue,
+} from "@opendesign/import-export-service/svg-issues";
+import { SVG_MAX_CHARACTERS } from "@opendesign/import-export-service/limits";
+import { isPortableFileName } from "./portable-file-name";
 export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
@@ -19,6 +25,7 @@ export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
 export const GENERATE_IMAGE_TOOL_NAME = "opendesign_generate_image";
 export const PLACE_IMAGE_TOOL_NAME = "opendesign_place_image";
 export const UPDATE_IMAGE_TOOL_NAME = "opendesign_update_image";
+export const EXPORT_SVG_TOOL_NAME = "opendesign_export_svg";
 export const INTERNAL_DESIGN_APPLY_TOOL_NAME =
   "opendesign_internal_apply_transaction";
 export const INTERNAL_UPDATE_IMAGE_TOOL_NAME =
@@ -120,6 +127,24 @@ export type UpdateImageToolInput =
       attachmentId: string;
       placement?: ImagePlacement;
     };
+
+export type ExportSvgToolInput = {
+  pageId: string;
+  rootNodeIds: string[];
+  suggestedName: string;
+  includeLayerIds?: boolean;
+  padding?: number;
+};
+
+export type PreparedAgentSvgExport = {
+  kind: "svg-export-preparation";
+  version: 1;
+  suggestedName: string;
+  svg: string;
+  revision: number;
+  exportedNodeIds: string[];
+  issues: SvgInterchangeIssue[];
+};
 
 export type InternalUpdateImageToolInput =
   | Extract<UpdateImageToolInput, { action: "set-placement" }>
@@ -1100,6 +1125,37 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: EXPORT_SVG_TOOL_NAME,
+    description:
+      "Export explicit existing layers from the currently bound Design File as one SVG through OpenDesign's versioned interchange service. pageId and rootNodeIds must be stable IDs returned by opendesign_inspect_document; the tool never reads the live user selection. It freezes the current revision, resolves Boolean geometry in a cancellable Renderer worker, reports fidelity limitations, and opens the native save dialog owned by Main. Call this only when the user explicitly asks to export or deliver SVG. The user chooses or cancels the destination; the model never receives a local path. Only implemented includeLayerIds and padding settings are exposed. Text, images, effects, masks, angular gradients, multiple paints, inside/outside strokes, and Boolean source operands may be omitted or flattened with explicit fidelity notes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string", minLength: 1, maxLength: 256 },
+        rootNodeIds: {
+          type: "array",
+          minItems: 1,
+          maxItems: 512,
+          uniqueItems: true,
+          items: { type: "string", minLength: 1, maxLength: 256 },
+        },
+        suggestedName: {
+          type: "string",
+          minLength: 1,
+          maxLength: 255,
+          description:
+            "Portable file name only, never a path. OpenDesign appends .svg when needed.",
+        },
+        includeLayerIds: { type: "boolean" },
+        padding: { type: "number", minimum: 0, maximum: 100_000 },
+      },
+      required: ["pageId", "rootNodeIds", "suggestedName"],
+      additionalProperties: false,
+    },
+    risk: "external" as const,
+    approval: "never" as const,
+  },
+  {
     name: DESIGN_HIERARCHY_TOOL_NAME,
     description:
       "Edit existing layer hierarchy and non-destructive Boolean groups in the currently bound Design File without asking the model to calculate low-level move commands, transforms, or derived paths. It can group siblings, ungroup one Group, create union/subtract/intersect/exclude from explicit supported siblings, change a Boolean operation, ungroup one Boolean, reorder siblings, or reparent layers to an explicit Page-root, Frame, or Group insertion index. Source Boolean operands remain editable and the provider-derived result is never model-authored or persisted. Reparenting preserves world transforms and dynamically recomputes affected Group bounds; Frame sizes remain fixed. Targets are explicit stable node IDs on an explicit existing Page, never the send-time or live user selection. The host previews the complete change and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, unsupported or masked Boolean operands, cycles, empty source Groups, non-invertible targets, no-op changes, and visually lossy ungrouping; inherited clipping or appearance changes return a visual-review warning.",
@@ -1158,6 +1214,7 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === PLACE_IMAGE_TOOL_NAME) return isPlaceImageToolInput(input);
   if (toolName === UPDATE_IMAGE_TOOL_NAME) return isUpdateImageToolInput(input);
+  if (toolName === EXPORT_SVG_TOOL_NAME) return isExportSvgToolInput(input);
   if (toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME) {
     return isInternalUpdateImageToolInput(input);
   }
@@ -1303,6 +1360,69 @@ export function isUpdateImageToolInput(
     );
   }
   return false;
+}
+
+export function isExportSvgToolInput(
+  input: unknown,
+): input is ExportSvgToolInput {
+  if (!isRecord(input)) return false;
+  return (
+    safeId(input.pageId) &&
+    Array.isArray(input.rootNodeIds) &&
+    input.rootNodeIds.length > 0 &&
+    input.rootNodeIds.length <= 512 &&
+    input.rootNodeIds.every(safeId) &&
+    new Set(input.rootNodeIds).size === input.rootNodeIds.length &&
+    isPortableFileName(input.suggestedName) &&
+    (input.includeLayerIds === undefined ||
+      typeof input.includeLayerIds === "boolean") &&
+    (input.padding === undefined ||
+      (finite(input.padding) &&
+        input.padding >= 0 &&
+        input.padding <= 100_000)) &&
+    Object.keys(input).every((key) =>
+      [
+        "pageId",
+        "rootNodeIds",
+        "suggestedName",
+        "includeLayerIds",
+        "padding",
+      ].includes(key),
+    )
+  );
+}
+
+export function isPreparedAgentSvgExport(
+  value: unknown,
+): value is PreparedAgentSvgExport {
+  if (!isRecord(value)) return false;
+  return (
+    value.kind === "svg-export-preparation" &&
+    value.version === 1 &&
+    isPortableFileName(value.suggestedName) &&
+    typeof value.svg === "string" &&
+    value.svg.length > 0 &&
+    value.svg.length <= SVG_MAX_CHARACTERS &&
+    Number.isInteger(value.revision) &&
+    Number(value.revision) >= 0 &&
+    Array.isArray(value.exportedNodeIds) &&
+    value.exportedNodeIds.length > 0 &&
+    value.exportedNodeIds.length <= 10_000 &&
+    value.exportedNodeIds.every(safeId) &&
+    new Set(value.exportedNodeIds).size === value.exportedNodeIds.length &&
+    Array.isArray(value.issues) &&
+    value.issues.length <= 1_000 &&
+    value.issues.every(isSvgInterchangeIssue) &&
+    exactKeys(value, [
+      "kind",
+      "version",
+      "suggestedName",
+      "svg",
+      "revision",
+      "exportedNodeIds",
+      "issues",
+    ])
+  );
 }
 
 export function isInternalUpdateImageToolInput(

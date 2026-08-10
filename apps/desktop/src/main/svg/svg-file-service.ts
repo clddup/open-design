@@ -79,19 +79,29 @@ export class SvgFileService {
     return { name, contents };
   }
 
-  async saveSvgFile(request: unknown): Promise<SaveSvgFileResult | null> {
+  async saveSvgFile(
+    request: unknown,
+    signal?: AbortSignal,
+  ): Promise<SaveSvgFileResult | null> {
     if (!isSaveSvgFileRequest(request)) {
       throw new TypeError("Invalid SVG save request");
     }
+    throwIfAborted(signal);
     assertSvgCharacterSize(request.contents);
     assertSvgByteSize(Buffer.byteLength(request.contents, "utf8"));
 
     const suggestedName = suggestSvgFileName(request.suggestedName);
     const selectedPath = await this.options.selectSaveFile(suggestedName);
+    throwIfAborted(signal);
     if (selectedPath === null) return null;
     const filePath = resolveSvgSavePath(selectedPath, this.#path);
     const name = svgFileName(filePath, this.#path);
-    await writeSvgFileAtomically(filePath, request.contents, this.#path);
+    await writeSvgFileAtomically(
+      filePath,
+      request.contents,
+      this.#path,
+      signal,
+    );
     return { name };
   }
 }
@@ -200,8 +210,10 @@ async function writeSvgFileAtomically(
   filePath: string,
   contents: string,
   pathOperations: SvgPathOperations,
+  signal?: AbortSignal,
 ): Promise<void> {
   assertSvgFilePath(filePath, pathOperations);
+  throwIfAborted(signal);
   const temporaryPath = pathOperations.join(
     pathOperations.dirname(filePath),
     `.opendesign-svg-${randomUUID()}.tmp`,
@@ -210,9 +222,17 @@ async function writeSvgFileAtomically(
     await writeFile(temporaryPath, contents, {
       encoding: "utf8",
       flag: "wx",
+      signal,
     });
+    throwIfAborted(signal);
     await rename(temporaryPath, filePath);
   } finally {
     await rm(temporaryPath, { force: true });
   }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new DOMException("SVG save was cancelled", "AbortError");
 }

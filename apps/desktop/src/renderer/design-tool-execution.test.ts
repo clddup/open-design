@@ -7,11 +7,13 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
+  EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
 import { executeDesignToolRequest } from "./design-tool-execution";
+import type { runSvgExportInWorker } from "./svg-interchange";
 
 const selectionContext = {
   runId: "run_1",
@@ -225,6 +227,72 @@ describe("Renderer design tool scope", () => {
       },
     });
     expect(runtime.getSnapshot().document.revision).toBe(0);
+  });
+
+  it("prepares an explicit SVG export in a cancellable worker without changing revision", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    let workerInput: Parameters<typeof runSvgExportInWorker>[0] | undefined;
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "export_svg",
+        call: {
+          toolCallId: "tool_export_svg",
+          toolName: EXPORT_SVG_TOOL_NAME,
+          input: {
+            pageId: "page_welcome",
+            rootNodeIds: ["feature_one"],
+            suggestedName: "Structured editing",
+            includeLayerIds: true,
+            padding: 16,
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        exportSvg: (input) => {
+          workerInput = input;
+          return Promise.resolve({
+            svg: '<svg viewBox="0 0 336 252"><rect /></svg>',
+            issues: [
+              {
+                code: "effect-omitted",
+                message: "One effect was omitted",
+                severity: "warning",
+              },
+            ],
+            exportedNodeIds: ["feature_one"],
+            revision: 0,
+            sourceBounds: { x: 0, y: 0, width: 336, height: 252 },
+          });
+        },
+      },
+    );
+
+    expect(workerInput).toMatchObject({
+      pageId: "page_welcome",
+      rootNodeIds: ["feature_one"],
+      settings: { includeLayerIds: true, padding: 16 },
+      document: { documentId: "document_welcome", revision: 0 },
+    });
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        observedRevision: 0,
+        content: {
+          kind: "svg-export-preparation",
+          version: 1,
+          suggestedName: "Structured editing",
+          revision: 0,
+          exportedNodeIds: ["feature_one"],
+          issues: [{ code: "effect-omitted" }],
+        },
+      },
+    });
+    expect(JSON.stringify(response)).not.toContain("filePath");
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+    expect(runtime.getSnapshot().state.history.canUndo).toBe(false);
   });
 
   it("allows a page-targeted write outside the contextual selection", async () => {

@@ -249,6 +249,15 @@ export class GlobalTaskCoordinator {
     this.#inspectedRuns.add(context.runId);
   }
 
+  assertDocumentInspected(context: TrustedToolContext): void {
+    this.assertDesignToolContext(context);
+    if (!this.#inspectedRuns.has(context.runId)) {
+      throw new Error(
+        "Inspect the bound design document before using stable design targets",
+      );
+    }
+  }
+
   recordCanvasCapture(context: TrustedToolContext): void {
     const state = this.#designPlansByRunId.get(context.runId);
     if (!state?.materialWriteCompleted) return;

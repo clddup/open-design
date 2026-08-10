@@ -120,7 +120,11 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.registerDesignPlan(context, { ...designPlan, pageId }),
     ).toThrow("Inspect the bound design document");
+    expect(() => coordinator.assertDocumentInspected(context)).toThrow(
+      "Inspect the bound design document",
+    );
     coordinator.recordDocumentInspection(context);
+    expect(() => coordinator.assertDocumentInspected(context)).not.toThrow();
     coordinator.registerDesignPlan(context, { ...designPlan, pageId });
     expect(() =>
       coordinator.assertDesignPlanForRaster(context, "hero"),
