@@ -548,6 +548,12 @@ describe("Renderer design tool scope", () => {
             label: "Break a stroke invariant",
             commands: [
               {
+                commandId: "rename_feature_first",
+                type: "update_properties",
+                nodeId: "feature_one",
+                name: "Feature prepared for styling",
+              },
+              {
                 commandId: "break_feature_stroke",
                 type: "update_properties",
                 nodeId: "feature_one",
@@ -587,8 +593,13 @@ describe("Renderer design tool scope", () => {
     if (response.ok) throw new Error("Invalid transaction unexpectedly passed");
     const details = response.error.details;
     expect(details?.fingerprint).toMatch(/^design_[a-f0-9]{8}$/);
-    expect(details?.issues[0]?.path).toContain("/nodesById/feature_one");
-    expect(typeof details?.issues[0]?.message).toBe("string");
+    expect(details?.issues[0]).toMatchObject({
+      commandId: "break_feature_stroke",
+      nodeId: "feature_one",
+      path: "/nodesById/feature_one/properties/strokeWidth",
+      message: "Expected number to be greater or equal to 0",
+    });
+    expect(response.error.message).not.toContain("Expected union value");
     expect(runtime.getSnapshot().document.revision).toBe(0);
     expect(
       (

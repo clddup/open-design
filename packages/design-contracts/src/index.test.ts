@@ -68,6 +68,64 @@ describe("design contract schemas", () => {
     ]);
   });
 
+  it("expands discriminated node union failures to actionable fields", () => {
+    const invalidFrame = {
+      id: "frame_invalid",
+      name: "Invalid frame",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 100, height: 100 },
+      opacity: 1,
+      extensions: {},
+      kind: "frame",
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+      },
+    };
+
+    const issues = schemaValidationIssues(DesignNodeSchema, invalidFrame);
+
+    expect(issues).toContainEqual({
+      path: "/properties/clipsContent",
+      message: "Expected required property",
+    });
+    expect(
+      issues.some((issue) => issue.message === "Expected union value"),
+    ).toBe(false);
+
+    const transactionIssues = schemaValidationIssues(DesignTransactionSchema, {
+      transactionId: "transaction_invalid_frame",
+      documentId: "document_1",
+      baseRevision: 0,
+      actor,
+      commands: [
+        {
+          commandId: "insert_invalid_frame",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: null,
+          index: 0,
+          node: invalidFrame,
+        },
+      ],
+    });
+    expect(transactionIssues).toContainEqual({
+      path: "/commands/0/node/properties/clipsContent",
+      message: "Expected required property",
+    });
+    expect(
+      transactionIssues.some(
+        (issue) => issue.message === "Expected union value",
+      ),
+    ).toBe(false);
+  });
+
   it("enforces a non-empty command list capped at 500", () => {
     const transaction = {
       transactionId: "transaction_1",

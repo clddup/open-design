@@ -110,6 +110,33 @@ function assistantText(blocks: AssistantTimelineBlock[]): string {
     .join("\n");
 }
 
+function assistantReasoningSummary(blocks: AssistantTimelineBlock[]): string {
+  return blocks
+    .map((block) =>
+      block.type === "reasoning_summary" &&
+      block.status === "completed" &&
+      block.summary
+        ? block.summary
+            .replace(/^\s*#{1,6}\s+/gm, "")
+            .replace(/\*\*([^*]+)\*\*/g, "$1")
+            .trim()
+        : "",
+    )
+    .filter(Boolean)
+    .join("\n");
+}
+
+function assistantVisibleDetail(
+  blocks: AssistantTimelineBlock[],
+  t: Translate,
+): string {
+  const reasoning = assistantReasoningSummary(blocks);
+  const text = assistantText(blocks);
+  return [reasoning ? `${t("agent.designThinking")}\n${reasoning}` : "", text]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function isNativeDesignTool(toolName: string | undefined): boolean {
   return (
     toolName === DESIGN_INSPECT_TOOL_NAME ||
@@ -382,7 +409,7 @@ function projectTimeline(
       };
     }
     if (item.type === "assistant.message") {
-      const detail = assistantText(item.blocks);
+      const detail = assistantVisibleDetail(item.blocks, t);
       return {
         ...base,
         routine: detail.length === 0,
@@ -633,7 +660,7 @@ function projectEvents(
     }
     if (event.type === "message.completed") {
       hideGenericRunStatus(event.runId);
-      const detail = assistantText(event.blocks);
+      const detail = assistantVisibleDetail(event.blocks, t);
       updateEvent(`message:${event.messageId}`, {
         routine: detail.length === 0,
         state: "done",
@@ -819,6 +846,13 @@ function mergeTimeline(
           historical: true,
           title: t("agent.previousRunFailed"),
         };
+      }
+      if (
+        item.kind === "run" &&
+        item.state === "done" &&
+        item.runId !== latestRunId
+      ) {
+        return { ...item, routine: true };
       }
       return item;
     })

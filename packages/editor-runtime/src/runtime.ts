@@ -1,4 +1,5 @@
 import {
+  DesignNodeSchema,
   DesignTransactionSchema,
   ViewportStateSchema,
   isDesignTransaction,
@@ -715,15 +716,20 @@ export class EditorRuntime {
 class OperationError extends Error {
   readonly commandId: string;
   readonly code: DesignError["code"];
+  readonly path: string | undefined;
+  readonly details: DesignError["details"] | undefined;
 
   constructor(
     commandId: string,
     message: string,
     code: DesignError["code"] = "invalid",
+    options: { path?: string; details?: DesignError["details"] } = {},
   ) {
     super(message);
     this.commandId = commandId;
     this.code = code;
+    this.path = options.path;
+    this.details = options.details;
   }
 }
 
@@ -959,6 +965,23 @@ function updateProperties(
     } else {
       Object.assign(node, { [field]: structuredClone(value) });
     }
+  }
+  const schemaIssues = schemaValidationIssues(DesignNodeSchema, node);
+  if (schemaIssues.length > 0) {
+    const details = schemaIssues.slice(0, 128).map((issue) => ({
+      path: `/nodesById/${escapeJsonPointer(node.id)}${issue.path}`,
+      message: issue.message,
+    }));
+    const firstIssue = details[0];
+    throw new OperationError(
+      command.commandId,
+      `Properties are invalid for ${node.kind} node ${node.id}: ${firstIssue?.message ?? "node does not match its kind"}`,
+      "invalid",
+      {
+        ...(firstIssue ? { path: firstIssue.path } : {}),
+        details,
+      },
+    );
   }
 }
 
@@ -1466,7 +1489,9 @@ function operationError(error: unknown): DesignError {
       code: error.code,
       message: error.message,
       commandId: error.commandId,
+      ...(error.path === undefined ? {} : { path: error.path }),
       retryable: false,
+      ...(error.details === undefined ? {} : { details: error.details }),
     };
   }
   if (error instanceof DocumentValidationError) {
@@ -1485,6 +1510,10 @@ function operationError(error: unknown): DesignError {
     message: error instanceof Error ? error.message : "Unknown runtime failure",
     retryable: false,
   };
+}
+
+function escapeJsonPointer(value: string): string {
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }
 
 function notFound(commandId: string, nodeId: string): OperationError {

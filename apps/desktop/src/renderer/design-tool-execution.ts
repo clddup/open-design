@@ -1026,25 +1026,27 @@ function commandIdForNode(
   nodeId: string | undefined,
 ): string | undefined {
   if (!nodeId) return undefined;
-  return commands.find((command) => valueReferencesNode(command, nodeId))
-    ?.commandId;
+  return [...commands]
+    .reverse()
+    .find((command) => commandDirectlyTargetsNode(command, nodeId))?.commandId;
 }
 
-function valueReferencesNode(
-  value: unknown,
+function commandDirectlyTargetsNode(
+  command: DesignOperation,
   nodeId: string,
-  depth = 0,
 ): boolean {
-  if (depth > 8) return false;
-  if (value === nodeId) return true;
-  if (Array.isArray(value)) {
-    return value.some((child) => valueReferencesNode(child, nodeId, depth + 1));
+  switch (command.type) {
+    case "insert_element":
+      return command.node.id === nodeId;
+    case "update_properties":
+    case "move_element":
+    case "delete_element":
+      return command.nodeId === nodeId;
+    case "replace_subtree":
+      return command.nodes.some((node) => node.id === nodeId);
+    default:
+      return false;
   }
-  const record = recordValue(value);
-  if (!record) return false;
-  return Object.values(record).some((child) =>
-    valueReferencesNode(child, nodeId, depth + 1),
-  );
 }
 
 function recordValue(value: unknown): Record<string, unknown> | null {

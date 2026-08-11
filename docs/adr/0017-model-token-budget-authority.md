@@ -14,15 +14,19 @@ ADR-0016 同时使用可信 Model Profile 的输入 token 预算和固定 Conver
 
 字符数仍可用于诊断和压缩启发，但不得凌驾于可信 token 预算。Token 错误按 system、tool schemas、Conversation/tool results 和请求 framing 显示估算分账；字符错误只展示实际参与拒绝决策的字符限制，避免混入一个并未生效的门禁。
 
+同一 Run 的防失控预算与每轮输入预算分开。`maxTurns` 和 `maxToolCalls` 继续限制循环结构，`maxGeneratedTokens` 累计 Provider `usage.output`；该字段已经包含 reasoning token，因此不再重复相加。每轮重复发送的 input/context 由上述 context window、compaction 和单轮门禁负责，不能在每次工具往返时再次累计进 Run 生成预算。否则一个始终低于模型窗口的合法长设计任务也会仅因重复上下文在 `reviewed → refined → verified` 途中稳定停止。
+
 ## 结果
 
 - 低于模型输入预算的长请求不会被固定 `240000` 字符阈值误杀。
 - 超过 token 预算的请求仍会在 Provider I/O 前压缩或明确失败。
 - 诊断可以区分固定协议膨胀和 Conversation/tool result 膨胀，不再只显示一个无法定位来源的总数。
 - 未提供 Model Profile 窗口的测试、离线和兼容路径仍受字符保底保护。
+- 多轮设计只按实际生成量消耗 Run 生成预算；重复的有界 input 不再导致交付账本未完成时提前 `stopReason=budget`。
 
 ## 验证
 
 - 单测以远低于测试字符上限、但低于可信 token 预算的请求证明 Provider 会被调用。
 - 既有测试继续证明无模型窗口时字符保底会阻止超限请求。
 - 单测证明可信 token 预算错误包含固定协议和 Conversation 分账，并证明第八个 Provider turn 可以在压缩后继续。
+- Completion guard 集成测试使用两轮各 `180000` input token 的有界上下文，证明它们不会重复消耗 `maxGeneratedTokens`，而超出实际 output 上限仍产生 budget 终态。

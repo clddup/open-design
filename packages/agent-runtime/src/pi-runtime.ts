@@ -26,7 +26,7 @@ const DEFAULT_LIMITS: AgentRuntimeLimits = {
   // healthy multi-target delivery after the first few screens.
   maxTurns: 160,
   maxToolCalls: 320,
-  maxTotalTokens: 200_000,
+  maxGeneratedTokens: 200_000,
   maxCompletionGuardRejections: 32,
   maxContextCharacters: 240_000,
 };
@@ -58,8 +58,8 @@ export class OpenDesignPiRuntime {
       this.#limits.maxTurns < 1 ||
       !Number.isInteger(this.#limits.maxToolCalls) ||
       this.#limits.maxToolCalls < 0 ||
-      !Number.isInteger(this.#limits.maxTotalTokens) ||
-      this.#limits.maxTotalTokens < 1 ||
+      !Number.isInteger(this.#limits.maxGeneratedTokens) ||
+      this.#limits.maxGeneratedTokens < 1 ||
       !Number.isInteger(this.#limits.maxCompletionGuardRejections) ||
       this.#limits.maxCompletionGuardRejections < 0 ||
       !Number.isInteger(this.#limits.maxContextCharacters) ||
@@ -156,7 +156,7 @@ export class OpenDesignPiRuntime {
           agentReference.current?.steer(message),
         maxToolCalls: this.#limits.maxToolCalls,
         maxTurns: this.#limits.maxTurns,
-        maxTotalTokens: this.#limits.maxTotalTokens,
+        maxGeneratedTokens: this.#limits.maxGeneratedTokens,
         maxCompletionGuardRejections: this.#limits.maxCompletionGuardRejections,
         priorToolCallIds: prepared.priorToolCallIds,
         now: this.#now,

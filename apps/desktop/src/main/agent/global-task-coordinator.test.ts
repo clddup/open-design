@@ -698,6 +698,15 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.assertDesignPlanForApply(context, misplacedDraft),
     ).toThrow("declared position and dimensions");
+    expect(() =>
+      coordinator.assertDesignPlanForApply(context, {
+        ...plannedDraft,
+        commands: [plannedDraft.commands[0]],
+      }),
+    ).toThrow("design_workflow.empty_artboard_draft");
+    expect(coordinator.getDeliveryLedger(context.runId)?.targets).toMatchObject(
+      [{ targetId: "workspace_artboard", status: "pending" }],
+    );
     const authorization = coordinator.assertDesignPlanForApply(
       context,
       plannedDraft,
@@ -764,6 +773,39 @@ describe("GlobalTaskCoordinator", () => {
             size: { width: 1376, height: 72 },
             opacity: 1,
             properties: {},
+            extensions: {},
+          },
+        },
+        {
+          commandId: "insert_navigation_label",
+          type: "insert_element",
+          pageId,
+          parentId: "workspace_navigation",
+          index: 0,
+          node: {
+            id: "workspace_navigation_label",
+            kind: "text",
+            name: "Navigation label",
+            parentId: "workspace_navigation",
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 16, 16],
+            size: { width: 240, height: 32 },
+            opacity: 1,
+            properties: {
+              content: "Workspace navigation",
+              fontFamily: "Inter",
+              fontSize: 16,
+              fontWeight: 600,
+              lineHeight: 24,
+              letterSpacing: 0,
+              textAlignHorizontal: "left",
+              textAlignVertical: "top",
+              fills: [{ type: "solid", color: "#0f172a", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+            },
             extensions: {},
           },
         },
@@ -1021,13 +1063,19 @@ describe("GlobalTaskCoordinator", () => {
           command.node.id !== "frame_home_material",
       ),
     };
+    expect(() =>
+      coordinator.assertDesignPlanForApply(context, emptyDraft),
+    ).toThrow("design_workflow.empty_region_draft");
+    expect(coordinator.getDeliveryLedger(context.runId)?.targets).toMatchObject(
+      [{ targetId: "target_home", status: "pending" }],
+    );
     const authorization = coordinator.assertDesignPlanForApply(
       context,
-      emptyDraft,
+      fullDraft,
     );
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      emptyDraft,
+      fullDraft,
       authorization,
       1,
     );

@@ -795,7 +795,7 @@ describe("AgentTimeline", () => {
     ).not.toBeNull();
   });
 
-  it("hides reasoning summaries and native tool plumbing from durable history", () => {
+  it("shows provider reasoning summaries but hides native tool plumbing", () => {
     const timeline: SessionTimelineItem[] = [
       {
         itemId: "message:reasoning_only",
@@ -848,7 +848,8 @@ describe("AgentTimeline", () => {
     );
 
     expect(screen.getByText("Canvas updated")).toBeInTheDocument();
-    expect(container).not.toHaveTextContent("Planning internal");
+    expect(container).toHaveTextContent("Design rationale");
+    expect(container).toHaveTextContent("Planning internal");
     expect(container).not.toHaveTextContent("revision");
     expect(container).not.toHaveTextContent("Response completed");
   });
@@ -1242,6 +1243,49 @@ describe("AgentTimeline", () => {
         ".agent-thread__item--assistant.agent-thread__item--active",
       ),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not present an older cancelled Run as the active task outcome", () => {
+    render(
+      <AgentTimeline
+        activeRunId="run_2"
+        conversationId="conversation_1"
+        conversationTitle="Conversation 1"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[
+          {
+            itemId: "run:run_1",
+            sessionId: "conversation_1",
+            runId: "run_1",
+            sequence: 1,
+            createdAt: now,
+            updatedAt: now,
+            type: "run",
+            status: "cancelled",
+            startedAt: now,
+            finishedAt: now,
+            stopReason: "cancelled",
+          },
+          {
+            itemId: "run:run_2",
+            sessionId: "conversation_1",
+            runId: "run_2",
+            sequence: 2,
+            createdAt: now,
+            updatedAt: now,
+            type: "run",
+            status: "started",
+            startedAt: now,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText("Task stopped")).not.toBeInTheDocument();
+    expect(screen.getByText("Working on your design")).toBeInTheDocument();
   });
 
   it("sends with Enter, keeps Shift+Enter as a newline, and shows selection scope", async () => {

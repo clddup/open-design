@@ -1330,6 +1330,7 @@ function assertPlannedArtboardWrite(
       }
     }
     assertPlannedRegionWrites(inserts, state.planned);
+    assertInitialArtboardMaterial(inserts, state.planned);
     return;
   }
   const insertedParents = new Map(
@@ -1382,7 +1383,76 @@ function assertPlannedRegionWrites(
         `Planned region ${region.nodeId} must be an axis-aligned Group or Frame directly inside the artboard at its declared bounds`,
       );
     }
+    if (!insertedSubtreeHasMaterialNode(inserts, region.nodeId)) {
+      throw new Error(
+        `design_workflow.empty_region_draft: Planned region ${region.nodeId} must include at least one real editable content layer in the same transaction; do not commit empty Group or Frame scaffolding`,
+      );
+    }
   }
+}
+
+function assertInitialArtboardMaterial(
+  inserts: readonly Extract<
+    DesignApplyToolInput["commands"][number],
+    { type: "insert_element" }
+  >[],
+  target: DesignPlanTarget,
+): void {
+  if (insertedSubtreeHasMaterialNode(inserts, target.artboard.frameId)) return;
+  throw new Error(
+    `design_workflow.empty_artboard_draft: The first transaction for ${target.artboard.frameId} must include at least one real editable content layer; do not commit an empty artboard and defer all visible content to a later call`,
+  );
+}
+
+function insertedSubtreeHasMaterialNode(
+  inserts: readonly Extract<
+    DesignApplyToolInput["commands"][number],
+    { type: "insert_element" }
+  >[],
+  rootNodeId: string,
+): boolean {
+  const insertedParents = new Map(
+    inserts.map((command) => [command.node.id, command.parentId]),
+  );
+  return inserts.some(
+    (command) =>
+      command.node.id !== rootNodeId &&
+      isVisibleMaterialDraftNode(command.node) &&
+      parentChainReaches(
+        command.parentId,
+        rootNodeId,
+        insertedParents,
+        new Set(),
+      ),
+  );
+}
+
+function isVisibleMaterialDraftNode(
+  node: Extract<
+    DesignApplyToolInput["commands"][number],
+    { type: "insert_element" }
+  >["node"],
+): boolean {
+  if (
+    node.kind === "group" ||
+    node.kind === "frame" ||
+    !node.visible ||
+    node.opacity <= 0 ||
+    node.size.width <= 0 ||
+    node.size.height <= 0
+  ) {
+    return false;
+  }
+  if (node.kind === "text") return node.properties.content.trim().length > 0;
+  if (node.kind === "image") return true;
+  if (node.kind === "instance") return false;
+  const visiblePaint = (paint: (typeof node.properties.fills)[number]) =>
+    paint.visible !== false && paint.opacity > 0;
+  return (
+    node.properties.fills.some(visiblePaint) ||
+    (node.properties.strokeWidth > 0 &&
+      node.properties.strokes.some(visiblePaint))
+  );
 }
 
 function parentChainReaches(

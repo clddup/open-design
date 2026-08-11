@@ -46,7 +46,7 @@ reveal ID、时间、线框、临时 opacity 和 animation frame 不进入 `Desi
 
 `DesignPlanToolInput version: 3` 在正式写入前按用户请求声明 `1..N` 个交付 target，每项包含画板 Page 坐标、尺寸，以及主要区域的稳定 `nodeId`、角色和画板局部 bounds。Renderer 会临时记录 Provider 的 `tool.requested`，但只有 Main 对同一 Run/tool call 返回字段完全匹配的 `tool.completed { status: "accepted" }` 后，才允许 Leafer 在独立 `sky` 层展示当前活动 Page 中首个未完成 target 的骨架。version 2 历史 tool/journal 继续按单 target 投影；失败、畸形或不匹配结果不会显示未经信任的结构。
 
-骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架切换到权威 Frame transform；声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。Main 同时要求区域根是画板直属、轴对齐并匹配计划 bounds，因此临时结构和正式层级使用同一组稳定 ID/几何。
+骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架切换到权威 Frame transform；声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。Main 同时要求区域根是画板直属、轴对齐并匹配计划 bounds；新 target 的首个正式事务必须带真实内容，而某个计划区域首次写入正式文档时也必须在同一事务包含真实内容。纯空画板/区域只允许作为这里的可丢弃骨架存在，不能先进入 revision 再依赖后续视觉审查发现问题。
 
 骨架 ID、标签、填充、虚线和完成状态与 reveal 一样只属于当前 Run 的可丢弃展示。它们不进入文档、revision、history、selection、保存、结构化导出或截图，也不成为另一份可写设计状态。
 
@@ -57,6 +57,8 @@ reveal ID、时间、线框、临时 opacity 和 animation frame 不进入 `Desi
 Leafer 在独立于 skeleton、reveal 和 selection 的 `sky` layer 上显示固定屏幕尺寸的紫色 Agent cursor 与文字标签。正式写入前，它锚定第一个未完成计划区域；每个 Agent revision 提交后，Renderer 从权威文档计算新增节点中心，cursor 只沿这些已提交 focus points 移动。它不会根据 token、推理文本、自由文本进度或尚未执行的节点猜测位置。pan/zoom 只重算 screen projection，不修改 document revision 或 mutation target；离开视口时 cursor 隐藏而不是错误吸附到窗口边缘。
 
 普通模式下 cursor 在低频语义目标之间做 180 ms 短位移；Reduced Motion 直接跳到已提交目标。阶段文字同时投影为只读 `aria-live` status，因此状态不只依赖紫色。cursor 不命中、不改变用户选区，也不进入 `DesignDocument`、revision、history、保存、导出或 Conversation journal。
+
+Conversation Timeline 可以显示 Provider 明确返回并已进入 `AssistantTimelineBlock.reasoning_summary` 的有界摘要，使用低权重“设计思路”标签帮助用户理解方向、取舍和下一步。它不是模型隐藏思维链，也不能从加密/省略 reasoning 反推内容；没有 summary 时只显示 typed plan、tool、review 和 delivery 状态。摘要不参与权限、事务、完成判断或画布语义，Provider prose 仍不能驱动 cursor、阶段或完成状态。
 
 ### 生命周期与可信截图
 

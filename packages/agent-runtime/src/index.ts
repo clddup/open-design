@@ -123,7 +123,7 @@ export interface ApprovalPort {
 export interface AgentRuntimeLimits {
   maxTurns: number;
   maxToolCalls: number;
-  maxTotalTokens: number;
+  maxGeneratedTokens: number;
   maxCompletionGuardRejections: number;
   maxContextCharacters: number;
 }

@@ -241,6 +241,38 @@ describe("document normalization", () => {
 });
 
 describe("EditorRuntime transactions", () => {
+  it("rejects kind-incompatible property patches at the responsible command", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const result = runtime.preview(
+      transaction(runtime, "transaction_invalid_group_paint", [
+        {
+          commandId: "paint_group",
+          type: "update_properties",
+          nodeId: "feature_group",
+          properties: {
+            fills: [{ type: "solid", color: "#000000", opacity: 1 }],
+          },
+        },
+      ]),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid",
+        commandId: "paint_group",
+        path: "/nodesById/feature_group/properties/fills",
+        details: [
+          {
+            path: "/nodesById/feature_group/properties/fills",
+            message: "Unexpected property",
+          },
+        ],
+      },
+    });
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+  });
+
   it("previews, persists, undoes, and redoes formal path nodes", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const change = transaction(runtime, "transaction_path", [

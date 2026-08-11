@@ -372,6 +372,11 @@ describe("design Agent tool contract", () => {
     expect(schema).toContain('"fillRule"');
     expect(schema).toContain('"fills"');
     expect(schema).toContain('"strokes"');
+    expect(schema).toContain('"const":"solid"');
+    expect(schema).toContain('"required":["type","color","opacity"]');
+    expect(schema).toContain(
+      '"required":["type","color","opacity","offset","blur","spread"]',
+    );
     expect(schema.length).toBeLessThan(64_000);
     expect(schema).not.toContain('"$ref"');
     expect(schema).not.toContain('"$defs"');

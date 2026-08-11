@@ -162,6 +162,39 @@ describe("Pi completion guard adapter", () => {
     });
   });
 
+  it("does not charge repeated bounded input context against delivery generation", async () => {
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        {
+          blocks: [{ id: "draft", type: "text", text: "Draft reviewed." }],
+          usage: { inputTokens: 180_000, outputTokens: 8 },
+        },
+        {
+          blocks: [{ id: "final", type: "text", text: "Delivery verified." }],
+          usage: { inputTokens: 180_000, outputTokens: 8 },
+        },
+      ]),
+    );
+    let reviews = 0;
+    const result = await runGuardedAgent({
+      gateway,
+      completionGuard: {
+        review: () =>
+          ++reviews === 1
+            ? { allow: false, message: "Apply the reviewed refinement." }
+            : { allow: true },
+      },
+      maxGeneratedTokens: 32,
+    });
+
+    expect(gateway.requests).toHaveLength(2);
+    expect(reviews).toBe(2);
+    expect(result.events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "complete",
+    });
+  });
+
   it("returns a visible terminal error when the guard rejection limit is reached", async () => {
     const gateway = new RecordingGateway(
       new MockModelGateway("The unreviewed draft is finished."),
@@ -198,7 +231,7 @@ describe("Pi completion guard adapter", () => {
     ).toBe(false);
   });
 
-  it("enforces total token budget before asking the completion guard", async () => {
+  it("enforces generated-token budget before asking the completion guard", async () => {
     let reviews = 0;
     const gateway = new RecordingGateway(
       new MockModelGateway({
@@ -214,7 +247,7 @@ describe("Pi completion guard adapter", () => {
           return { allow: true };
         },
       },
-      maxTotalTokens: 50,
+      maxGeneratedTokens: 30,
     });
 
     expect(reviews).toBe(0);
@@ -235,7 +268,7 @@ async function runGuardedAgent(options: {
   gateway: RecordingGateway;
   completionGuard: CompletionGuardPort;
   maxCompletionGuardRejections?: number;
-  maxTotalTokens?: number;
+  maxGeneratedTokens?: number;
 }) {
   const store = new MemorySessionStore();
   const events: AgentEvent[] = [];
@@ -260,9 +293,9 @@ async function runGuardedAgent(options: {
       : {
           maxCompletionGuardRejections: options.maxCompletionGuardRejections,
         }),
-    ...(options.maxTotalTokens === undefined
+    ...(options.maxGeneratedTokens === undefined
       ? {}
-      : { maxTotalTokens: options.maxTotalTokens }),
+      : { maxGeneratedTokens: options.maxGeneratedTokens }),
     now: () => new Date("2026-08-11T03:04:05.000Z"),
   });
   const agent = createOpenDesignPiAgent({

@@ -429,79 +429,130 @@ const MODEL_TRANSFORM_SCHEMA = {
   description: "Affine matrix [a,b,c,d,tx,ty].",
 } as const;
 
+const MODEL_PAINT_BASE_PROPERTIES = {
+  opacity: { type: "number", minimum: 0, maximum: 1 },
+  visible: { type: "boolean" },
+  blendMode: { enum: MODEL_BLEND_MODES },
+} as const;
+
+const MODEL_GRADIENT_PROPERTIES = {
+  ...MODEL_PAINT_BASE_PROPERTIES,
+  stops: {
+    type: "array",
+    minItems: 2,
+    items: {
+      type: "object",
+      properties: {
+        offset: { type: "number", minimum: 0, maximum: 1 },
+        color: { type: "string", minLength: 1 },
+        opacity: { type: "number", minimum: 0, maximum: 1 },
+      },
+      required: ["offset", "color", "opacity"],
+      additionalProperties: false,
+    },
+  },
+  from: MODEL_POINT_SCHEMA,
+  to: MODEL_POINT_SCHEMA,
+  rotation: { type: "number" },
+  stretch: { type: "number", exclusiveMinimum: 0 },
+} as const;
+
 const MODEL_PAINT_SCHEMA = {
-  type: "object",
   description:
     "A solid, linear-gradient, radial-gradient, angular-gradient, or image paint. solid requires color; gradients require stops and may use from/to/rotation/stretch; image requires assetId and fit. opacity is always required.",
-  properties: {
-    type: {
-      enum: [
-        "solid",
-        "linear-gradient",
-        "radial-gradient",
-        "angular-gradient",
-        "image",
-      ],
-    },
-    color: { type: "string", minLength: 1 },
-    opacity: { type: "number", minimum: 0, maximum: 1 },
-    visible: { type: "boolean" },
-    blendMode: { enum: MODEL_BLEND_MODES },
-    stops: {
-      type: "array",
-      minItems: 2,
-      items: {
-        type: "object",
-        properties: {
-          offset: { type: "number", minimum: 0, maximum: 1 },
-          color: { type: "string", minLength: 1 },
-          opacity: { type: "number", minimum: 0, maximum: 1 },
-        },
-        required: ["offset", "color", "opacity"],
-        additionalProperties: false,
+  anyOf: [
+    {
+      type: "object",
+      properties: {
+        type: { const: "solid" },
+        color: { type: "string", minLength: 1 },
+        ...MODEL_PAINT_BASE_PROPERTIES,
       },
+      required: ["type", "color", "opacity"],
+      additionalProperties: false,
     },
-    from: MODEL_POINT_SCHEMA,
-    to: MODEL_POINT_SCHEMA,
-    rotation: { type: "number" },
-    stretch: { type: "number", exclusiveMinimum: 0 },
-    assetId: { type: "string", minLength: 1 },
-    fit: { enum: ["fill", "contain", "cover", "tile"] },
-    scale: MODEL_POINT_SCHEMA,
-    offset: MODEL_POINT_SCHEMA,
-  },
-  required: ["type", "opacity"],
-  additionalProperties: false,
+    ...(
+      ["linear-gradient", "radial-gradient", "angular-gradient"] as const
+    ).map((type) => ({
+      type: "object" as const,
+      properties: {
+        type: { const: type },
+        ...MODEL_GRADIENT_PROPERTIES,
+      },
+      required: ["type", "opacity", "stops"],
+      additionalProperties: false,
+    })),
+    {
+      type: "object",
+      properties: {
+        type: { const: "image" },
+        assetId: { type: "string", minLength: 1 },
+        fit: { enum: ["fill", "contain", "cover", "tile"] },
+        ...MODEL_PAINT_BASE_PROPERTIES,
+        rotation: { type: "number" },
+        scale: MODEL_POINT_SCHEMA,
+        offset: MODEL_POINT_SCHEMA,
+      },
+      required: ["type", "assetId", "fit", "opacity"],
+      additionalProperties: false,
+    },
+  ],
 } as const;
 
 const MODEL_EFFECT_SCHEMA = {
-  type: "object",
   description:
     "An OpenDesign effect. Shadows require color, opacity, offset, blur, and spread; glows require color, opacity, radius, and spread; blur requires radius; grayscale requires amount.",
-  properties: {
-    type: {
-      enum: [
-        "drop-shadow",
-        "inner-shadow",
-        "outer-glow",
-        "inner-glow",
-        "layer-blur",
-        "background-blur",
-        "grayscale",
-      ],
+  anyOf: [
+    ...(["drop-shadow", "inner-shadow"] as const).map((type) => ({
+      type: "object" as const,
+      properties: {
+        type: { const: type },
+        color: { type: "string", minLength: 1 },
+        opacity: { type: "number", minimum: 0, maximum: 1 },
+        offset: MODEL_POINT_SCHEMA,
+        blur: { type: "number", minimum: 0 },
+        spread: { type: "number" },
+        visible: { type: "boolean" },
+        blendMode: { enum: MODEL_BLEND_MODES },
+      },
+      required: ["type", "color", "opacity", "offset", "blur", "spread"],
+      additionalProperties: false,
+    })),
+    ...(["outer-glow", "inner-glow"] as const).map((type) => ({
+      type: "object" as const,
+      properties: {
+        type: { const: type },
+        color: { type: "string", minLength: 1 },
+        opacity: { type: "number", minimum: 0, maximum: 1 },
+        radius: { type: "number", minimum: 0 },
+        spread: { type: "number" },
+        visible: { type: "boolean" },
+        blendMode: { enum: MODEL_BLEND_MODES },
+      },
+      required: ["type", "color", "opacity", "radius", "spread"],
+      additionalProperties: false,
+    })),
+    ...(["layer-blur", "background-blur"] as const).map((type) => ({
+      type: "object" as const,
+      properties: {
+        type: { const: type },
+        radius: { type: "number", minimum: 0 },
+        visible: { type: "boolean" },
+      },
+      required: ["type", "radius"],
+      additionalProperties: false,
+    })),
+    {
+      type: "object",
+      properties: {
+        type: { const: "grayscale" },
+        amount: { type: "number", minimum: 0, maximum: 1 },
+        visible: { type: "boolean" },
+      },
+      required: ["type", "amount"],
+      additionalProperties: false,
     },
-    color: { type: "string", minLength: 1 },
-    opacity: { type: "number", minimum: 0, maximum: 1 },
-    offset: MODEL_POINT_SCHEMA,
-    blur: { type: "number", minimum: 0 },
-    spread: { type: "number" },
-    radius: { type: "number", minimum: 0 },
-    amount: { type: "number", minimum: 0, maximum: 1 },
-    visible: { type: "boolean" },
-    blendMode: { enum: MODEL_BLEND_MODES },
-  },
-  required: ["type"],
-  additionalProperties: false,
+  ],
 } as const;
 
 const MODEL_SHAPE_PROPERTIES = {
@@ -626,121 +677,140 @@ const MODEL_VECTOR_NETWORK_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_IMAGE_PLACEMENT_SCHEMA = {
+  anyOf: [
+    {
+      type: "object",
+      properties: { mode: { const: "stretch" } },
+      required: ["mode"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: { mode: { const: "fit" } },
+      required: ["mode"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        mode: { const: "fill" },
+        focalPoint: MODEL_NORMALIZED_POINT_SCHEMA,
+      },
+      required: ["mode", "focalPoint"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        mode: { const: "crop" },
+        focalPoint: MODEL_NORMALIZED_POINT_SCHEMA,
+        zoom: { type: "number", minimum: 1, maximum: 64 },
+        rotation: { type: "number", minimum: -360, maximum: 360 },
+        flipHorizontal: { type: "boolean" },
+        flipVertical: { type: "boolean" },
+      },
+      required: [
+        "mode",
+        "focalPoint",
+        "zoom",
+        "rotation",
+        "flipHorizontal",
+        "flipVertical",
+      ],
+      additionalProperties: false,
+    },
+  ],
+} as const;
+
+const MODEL_LINE_PROPERTIES = {
+  fills: { type: "array", maxItems: 0, items: MODEL_PAINT_SCHEMA },
+  strokes: MODEL_SHAPE_PROPERTIES.strokes,
+  strokeWidth: MODEL_SHAPE_PROPERTIES.strokeWidth,
+  strokeAlign: { const: "center" },
+  strokeCap: MODEL_SHAPE_PROPERTIES.strokeCap,
+  strokeJoin: MODEL_SHAPE_PROPERTIES.strokeJoin,
+  dashPattern: MODEL_SHAPE_PROPERTIES.dashPattern,
+  start: MODEL_NORMALIZED_POINT_SCHEMA,
+  end: MODEL_NORMALIZED_POINT_SCHEMA,
+  startEndpoint: {
+    enum: [
+      "none",
+      "line-arrow",
+      "triangle-arrow",
+      "reversed-triangle-arrow",
+      "circle",
+      "diamond",
+    ],
+  },
+  endEndpoint: {
+    enum: [
+      "none",
+      "line-arrow",
+      "triangle-arrow",
+      "reversed-triangle-arrow",
+      "circle",
+      "diamond",
+    ],
+  },
+} as const;
+
+const MODEL_TEXT_PROPERTIES = {
+  content: { type: "string" },
+  fontFamily: { type: "string", minLength: 1 },
+  fontSize: { type: "number", exclusiveMinimum: 0 },
+  fontWeight: { type: "integer", minimum: 1, maximum: 1_000 },
+  lineHeight: { type: "number", exclusiveMinimum: 0 },
+  letterSpacing: { type: "number" },
+  textAlignHorizontal: { enum: ["left", "center", "right", "justify"] },
+  textAlignVertical: { enum: ["top", "center", "bottom"] },
+  ...MODEL_SHAPE_PROPERTIES,
+} as const;
+
+const MODEL_PATH_PROPERTY = {
+  type: "string",
+  minLength: 1,
+  maxLength: 200_000,
+  pattern: "^[\\t\\n\\r ,.+\\-0-9AaCcEeHhLlMmQqSsTtVvZz]+$",
+  description: "Portable SVG path data in the node's local coordinates.",
+} as const;
+
 const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
   type: "object",
   description:
-    "Properties must match node.kind. frame: shape fields + cornerRadius + clipsContent; group: empty object; rectangle: shape fields + cornerRadius; ellipse: shape fields; line: empty fills + center stroke fields + normalized directed start/end + independent startEndpoint/endEndpoint; text: content/fontFamily/fontSize/fontWeight/lineHeight/letterSpacing/textAlignHorizontal/textAlignVertical + shape fields; image: assetId/placement/altText/cornerRadius; path or vector: shape fields + exactly one geometry source (portable SVG path for exact imported data, or network for editable vertices/segments) + optional fillRule.",
+    "Properties must match the inspected node kind. Frame requires shape fields, cornerRadius, and clipsContent; Group requires an empty object; Rectangle requires shape fields and cornerRadius; Ellipse requires shape fields; Line requires empty fills, stroke fields, start/end, and endpoints; Polygon/Star require their semantic fields; Text requires typography plus shape fields; Image requires assetId, placement, altText, and cornerRadius; Path/Vector require shape fields and exactly one geometry source. The trusted host validates the complete discriminated node before writing.",
   properties: {
     ...MODEL_SHAPE_PROPERTIES,
     cornerRadius: { type: "number", minimum: 0 },
     clipsContent: { type: "boolean" },
-    content: { type: "string" },
-    fontFamily: { type: "string", minLength: 1 },
-    fontSize: { type: "number", exclusiveMinimum: 0 },
-    fontWeight: { type: "integer", minimum: 1, maximum: 1_000 },
-    lineHeight: { type: "number", exclusiveMinimum: 0 },
-    letterSpacing: { type: "number" },
-    textAlignHorizontal: {
-      enum: ["left", "center", "right", "justify"],
-    },
-    textAlignVertical: { enum: ["top", "center", "bottom"] },
+    content: MODEL_TEXT_PROPERTIES.content,
+    fontFamily: MODEL_TEXT_PROPERTIES.fontFamily,
+    fontSize: MODEL_TEXT_PROPERTIES.fontSize,
+    fontWeight: MODEL_TEXT_PROPERTIES.fontWeight,
+    lineHeight: MODEL_TEXT_PROPERTIES.lineHeight,
+    letterSpacing: MODEL_TEXT_PROPERTIES.letterSpacing,
+    textAlignHorizontal: MODEL_TEXT_PROPERTIES.textAlignHorizontal,
+    textAlignVertical: MODEL_TEXT_PROPERTIES.textAlignVertical,
     assetId: { type: "string", minLength: 1 },
-    placement: {
-      anyOf: [
-        {
-          type: "object",
-          properties: { mode: { const: "stretch" } },
-          required: ["mode"],
-          additionalProperties: false,
-        },
-        {
-          type: "object",
-          properties: { mode: { const: "fit" } },
-          required: ["mode"],
-          additionalProperties: false,
-        },
-        {
-          type: "object",
-          properties: {
-            mode: { const: "fill" },
-            focalPoint: {
-              type: "object",
-              properties: {
-                x: { type: "number", minimum: 0, maximum: 1 },
-                y: { type: "number", minimum: 0, maximum: 1 },
-              },
-              required: ["x", "y"],
-              additionalProperties: false,
-            },
-          },
-          required: ["mode", "focalPoint"],
-          additionalProperties: false,
-        },
-        {
-          type: "object",
-          properties: {
-            mode: { const: "crop" },
-            focalPoint: {
-              type: "object",
-              properties: {
-                x: { type: "number", minimum: 0, maximum: 1 },
-                y: { type: "number", minimum: 0, maximum: 1 },
-              },
-              required: ["x", "y"],
-              additionalProperties: false,
-            },
-            zoom: { type: "number", minimum: 1, maximum: 64 },
-            rotation: { type: "number", minimum: -360, maximum: 360 },
-            flipHorizontal: { type: "boolean" },
-            flipVertical: { type: "boolean" },
-          },
-          required: [
-            "mode",
-            "focalPoint",
-            "zoom",
-            "rotation",
-            "flipHorizontal",
-            "flipVertical",
-          ],
-          additionalProperties: false,
-        },
-      ],
-    },
+    placement: MODEL_IMAGE_PLACEMENT_SCHEMA,
     altText: { type: "string" },
-    path: {
-      type: "string",
-      minLength: 1,
-      maxLength: 200_000,
-      description: "Portable SVG path data in the node's local coordinates.",
-    },
+    path: MODEL_PATH_PROPERTY,
     network: MODEL_VECTOR_NETWORK_SCHEMA,
     fillRule: { enum: ["nonzero", "evenodd"] },
-    start: MODEL_NORMALIZED_POINT_SCHEMA,
-    end: MODEL_NORMALIZED_POINT_SCHEMA,
-    startEndpoint: {
-      enum: [
-        "none",
-        "line-arrow",
-        "triangle-arrow",
-        "reversed-triangle-arrow",
-        "circle",
-        "diamond",
-      ],
-    },
-    endEndpoint: {
-      enum: [
-        "none",
-        "line-arrow",
-        "triangle-arrow",
-        "reversed-triangle-arrow",
-        "circle",
-        "diamond",
-      ],
-    },
+    start: MODEL_LINE_PROPERTIES.start,
+    end: MODEL_LINE_PROPERTIES.end,
+    startEndpoint: MODEL_LINE_PROPERTIES.startEndpoint,
+    endEndpoint: MODEL_LINE_PROPERTIES.endEndpoint,
     pointCount: { type: "integer", minimum: 3, maximum: 60 },
     innerRadius: { type: "number", minimum: 0, maximum: 1 },
   },
   additionalProperties: false,
+} as const;
+
+const MODEL_NODE_PROPERTY_PATCH_SCHEMA = {
+  ...MODEL_NODE_KIND_PROPERTIES_SCHEMA,
+  description:
+    "A partial property patch. It must contain only fields supported by the inspected target node kind; the host validates the merged node before any revision is written.",
 } as const;
 
 const MODEL_NODE_SCHEMA = {
@@ -844,7 +914,7 @@ const MODEL_NODE_OPERATION_SCHEMA = {
         maskMode: {
           enum: ["none", "alpha", "luminance", "clipping", "outline"],
         },
-        properties: MODEL_NODE_KIND_PROPERTIES_SCHEMA,
+        properties: MODEL_NODE_PROPERTY_PATCH_SCHEMA,
         extensions: { type: "object" },
       },
       required: ["commandId", "type", "nodeId"],
@@ -1410,7 +1480,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
         y: { type: "number" },
         width: { type: "number", exclusiveMinimum: 0 },
         height: { type: "number", exclusiveMinimum: 0 },
-        placement: MODEL_NODE_KIND_PROPERTIES_SCHEMA.properties.placement,
+        placement: MODEL_IMAGE_PLACEMENT_SCHEMA,
       },
       required: [
         "attachmentId",
@@ -1449,7 +1519,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
           description: "Required only for replace-source.",
         },
         placement: {
-          ...MODEL_NODE_KIND_PROPERTIES_SCHEMA.properties.placement,
+          ...MODEL_IMAGE_PLACEMENT_SCHEMA,
           description:
             "Required for set-placement and optional for replace-source.",
         },
@@ -1594,7 +1664,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_APPLY_TOOL_NAME,
     description:
-      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are local to the node and must fit its declared size. Composite designs should create a named Frame or Group before inserting its children later in the same ordered transaction; do not flatten their parts into Page-root layers. This node tool does not manage Projects, Design Files, or Pages; use opendesign_manage_pages for Page lifecycle changes. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect the current document and revise the failing command instead of repeating the same transaction.",
+      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are local to the node and must fit its declared size. A new artboard must include real editable content in its first transaction, and every inserted planned Group/Frame region must include real editable content in that same transaction; empty scaffolding is rejected before it becomes a revision. Composite designs should create a named Frame or Group together with its children in the same ordered transaction; do not flatten their parts into Page-root layers. This node tool does not manage Projects, Design Files, or Pages; use opendesign_manage_pages for Page lifecycle changes. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect the current document and revise the failing command instead of repeating the same transaction.",
     inputSchema: {
       ...MODEL_APPLY_TRANSACTION_SCHEMA,
     },

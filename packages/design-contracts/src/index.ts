@@ -1498,15 +1498,86 @@ export function schemaValidationIssues(
   value: unknown,
 ): SchemaValidationIssue[] {
   try {
-    return [...Value.Errors(schema, value)].map((error) => ({
-      path: error.path,
-      message: error.message,
-    }));
+    return [...Value.Errors(schema, value)].flatMap((error) =>
+      actionableSchemaErrors(error).map((actionable) => ({
+        path: actionable.path,
+        message: actionable.message,
+      })),
+    );
   } catch {
     return [
       { path: "", message: "Value contains an unsupported cyclic structure" },
     ];
   }
+}
+
+type NestedSchemaError = {
+  path: string;
+  message: string;
+  schema: TSchema;
+  value: unknown;
+  errors: Iterable<Iterable<NestedSchemaError>>;
+};
+
+function actionableSchemaErrors(error: NestedSchemaError): NestedSchemaError[] {
+  const branches = [...error.errors].map((branch) =>
+    [...branch].flatMap(actionableSchemaErrors),
+  );
+  if (branches.length === 0) return [error];
+
+  const variants = Array.isArray((error.schema as { anyOf?: unknown }).anyOf)
+    ? ((error.schema as unknown as { anyOf: TSchema[] }).anyOf ?? [])
+    : [];
+  const discriminatedBranch = variants.findIndex((variant) =>
+    schemaDiscriminatorMatches(variant, error),
+  );
+  if (discriminatedBranch >= 0) {
+    return branches[discriminatedBranch] ?? [error];
+  }
+
+  if (
+    typeof error.value === "object" &&
+    error.value !== null &&
+    !Array.isArray(error.value)
+  ) {
+    return (
+      branches
+        .filter((branch) => branch.length > 0)
+        .sort(compareSchemaErrorBranches)[0] ?? [error]
+    );
+  }
+  return [error];
+}
+
+function schemaDiscriminatorMatches(
+  schema: TSchema,
+  error: NestedSchemaError,
+): boolean {
+  const value = error.value;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const properties = (schema as { properties?: Record<string, unknown> })
+    .properties;
+  if (!properties) return false;
+  return Object.entries(properties).some(([key, property]) => {
+    const expected = (property as { const?: unknown } | undefined)?.const;
+    return (
+      expected !== undefined &&
+      Object.prototype.hasOwnProperty.call(value, key) &&
+      (value as Record<string, unknown>)[key] === expected
+    );
+  });
+}
+
+function compareSchemaErrorBranches(
+  left: readonly NestedSchemaError[],
+  right: readonly NestedSchemaError[],
+): number {
+  if (left.length !== right.length) return left.length - right.length;
+  const leftDepth = left.reduce((sum, issue) => sum + issue.path.length, 0);
+  const rightDepth = right.reduce((sum, issue) => sum + issue.path.length, 0);
+  return rightDepth - leftDepth;
 }
 
 export function isDesignDocument(value: unknown): value is DesignDocument {

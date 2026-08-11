@@ -48,7 +48,7 @@ export interface PiRunEventAdapterOptions {
   requestContinuation?: (message: UserMessage) => void;
   maxToolCalls?: number;
   maxTurns?: number;
-  maxTotalTokens?: number;
+  maxGeneratedTokens?: number;
   maxCompletionGuardRejections?: number;
   priorToolCallIds?: readonly string[];
   now?: () => Date;
@@ -77,7 +77,7 @@ export class PiRunEventAdapter {
   readonly #completionGuard: CompletionGuardPort | undefined;
   readonly #contextFailurePort: PiContextFailurePort | undefined;
   readonly #maxCompletionGuardRejections: number;
-  readonly #maxTotalTokens: number;
+  readonly #maxGeneratedTokens: number;
   readonly #maxTurns: number;
   readonly #modelFailurePort: PiModelFailurePort | undefined;
   readonly #now: () => Date;
@@ -101,7 +101,7 @@ export class PiRunEventAdapter {
   #stopAfterTurn = false;
   readonly #toolAdapter: OpenDesignPiToolAdapter | undefined;
   #turn = 0;
-  #totalTokens = 0;
+  #generatedTokens = 0;
   readonly #trustedContinuations: string[] = [];
   #userMessageSequence = 0;
 
@@ -115,14 +115,14 @@ export class PiRunEventAdapter {
     this.#modelFailurePort = options.modelFailurePort;
     this.#requestContinuation = options.requestContinuation;
     this.#maxTurns = options.maxTurns ?? 8;
-    this.#maxTotalTokens = options.maxTotalTokens ?? 200_000;
+    this.#maxGeneratedTokens = options.maxGeneratedTokens ?? 200_000;
     this.#maxCompletionGuardRejections =
       options.maxCompletionGuardRejections ?? 3;
     if (
       !Number.isInteger(this.#maxTurns) ||
       this.#maxTurns < 1 ||
-      !Number.isInteger(this.#maxTotalTokens) ||
-      this.#maxTotalTokens < 1 ||
+      !Number.isInteger(this.#maxGeneratedTokens) ||
+      this.#maxGeneratedTokens < 1 ||
       !Number.isInteger(this.#maxCompletionGuardRejections) ||
       this.#maxCompletionGuardRejections < 0
     ) {
@@ -345,7 +345,7 @@ export class PiRunEventAdapter {
     this.#lastAssistantHadToolCalls = assistantMessage.content.some(
       (block) => block.type === "toolCall",
     );
-    this.#totalTokens += usageTokens(assistantMessage);
+    this.#generatedTokens += generatedTokens(assistantMessage);
     if (
       assistantMessage.stopReason === "error" ||
       assistantMessage.stopReason === "aborted"
@@ -358,7 +358,7 @@ export class PiRunEventAdapter {
       this.#completionGuard !== undefined &&
       assistantMessage.stopReason === "stop" &&
       !this.#lastAssistantHadToolCalls &&
-      this.#totalTokens <= this.#maxTotalTokens;
+      this.#generatedTokens <= this.#maxGeneratedTokens;
     if (canReviewCompletion) {
       this.#pendingCompletion = {
         active,
@@ -370,7 +370,7 @@ export class PiRunEventAdapter {
     await this.#finalizeAssistant(active, assistantMessage, blocks);
     if (
       assistantMessage.stopReason === "length" ||
-      this.#totalTokens > this.#maxTotalTokens
+      this.#generatedTokens > this.#maxGeneratedTokens
     ) {
       this.#forcedStopReason = "budget";
     }
@@ -888,10 +888,11 @@ function snapshotRequest(request: AgentRunRequest): AgentRunRequest {
   return structuredClone(request);
 }
 
-function usageTokens(message: AssistantMessage): number {
-  return (
-    message.usage.input + message.usage.output + (message.usage.reasoning ?? 0)
-  );
+function generatedTokens(message: AssistantMessage): number {
+  // Provider output usage already includes reasoning tokens. Repeated input
+  // context is bounded per turn by PiContextAdapter and must not consume the
+  // Run's generation budget again on every tool round-trip.
+  return message.usage.output;
 }
 
 function errorMessage(error: unknown): string {
