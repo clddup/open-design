@@ -77,6 +77,7 @@ import {
 } from "./components/LeftSidebar";
 import { ProjectHome } from "./components/ProjectHome";
 import { SettingsPage } from "./components/SettingsPage";
+import { Statusbar } from "./components/Statusbar";
 import {
   PropertiesPanel,
   type ExportFormat,
@@ -154,22 +155,6 @@ const BOOLEAN_OPERATIONS: readonly BooleanOperation[] = [
 const HISTORY_SYNC_DEBOUNCE_MS = 80;
 
 type AppView = "workspace" | "project" | "editor" | "settings";
-
-const nodeKindKeys: Record<string, MessageKey> = {
-  frame: "node.frame",
-  group: "node.group",
-  boolean: "node.boolean",
-  rectangle: "node.rectangle",
-  ellipse: "node.ellipse",
-  line: "node.line",
-  polygon: "node.polygon",
-  star: "node.star",
-  text: "node.text",
-  image: "node.image",
-  vector: "node.vector",
-  path: "node.path",
-  instance: "node.instance",
-};
 
 type ConversationAgentState = {
   timeline: SessionTimelineItem[];
@@ -2504,6 +2489,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     <DiagnosticNotifications
       events={diagnosticEvents}
       onDismiss={dismissDiagnostic}
+      placement={view === "editor" ? "editor" : "window"}
     />
   );
 
@@ -2801,64 +2787,21 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             }
           />
         </div>
-        <footer className="statusbar">
-          <span
-            className={editorError ? "statusbar__error" : undefined}
-            role="status"
-          >
-            <i />
-            {editorError ??
-              (state.dirty ? t("title.unsaved") : t("status.allSaved"))}
-          </span>
-          <span className="statusbar__center">
-            {selectedNode
-              ? t("status.selectedNode", {
-                  name: selectedNode.name,
-                  kind: t(nodeKindKeys[selectedNode.kind] ?? "node.frame"),
-                })
-              : state.selection.nodeIds.length > 1
-                ? t("status.layersSelected", {
-                    count: state.selection.nodeIds.length,
-                  })
-                : t("status.revision", { revision: designDocument.revision })}
-          </span>
-          <span>
-            {t("status.canvas")}{" "}
-            <button
-              aria-label={t("status.fitPage")}
-              onClick={() => fitCanvas("page")}
-            >
-              {t("status.fit")}
-            </button>
-            {state.selection.nodeIds.length > 0 && (
-              <button
-                aria-label={t("status.fitSelection")}
-                onClick={() => fitCanvas("selection")}
-              >
-                {t("status.selection")}
-              </button>
-            )}
-            <button
-              aria-label={t("status.zoomOut")}
-              onClick={() => changeZoom(state.viewport.zoom * 0.9)}
-            >
-              −
-            </button>
-            <button
-              aria-label={t("status.zoomReset")}
-              className="zoom-value"
-              onClick={() => changeZoom(1)}
-            >
-              {Math.round(state.viewport.zoom * 100)}%
-            </button>
-            <button
-              aria-label={t("status.zoomIn")}
-              onClick={() => changeZoom(state.viewport.zoom * 1.1)}
-            >
-              +
-            </button>
-          </span>
-        </footer>
+        <Statusbar
+          dirty={state.dirty}
+          error={editorError}
+          onFitPage={() => fitCanvas("page")}
+          onFitSelection={() => fitCanvas("selection")}
+          onZoomChange={changeZoom}
+          revision={designDocument.revision}
+          selection={{
+            count: state.selection.nodeIds.length,
+            node: selectedNode
+              ? { kind: selectedNode.kind, name: selectedNode.name }
+              : undefined,
+          }}
+          zoom={state.viewport.zoom}
+        />
         {notifications}
       </div>
     </>

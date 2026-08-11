@@ -4,11 +4,17 @@ import { Button, IconButton } from "@opendesign/ui";
 import { useEffect, useState } from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
+import styles from "./DiagnosticNotifications.module.scss";
 
 export type DiagnosticNotificationsProps = {
   events: readonly DiagnosticEvent[];
   onDismiss: (eventId: string) => void;
+  placement?: "editor" | "window";
 };
+
+function cx(...classNames: Array<string | false | null | undefined>): string {
+  return classNames.filter(Boolean).join(" ");
+}
 
 function titleKey(level: DiagnosticEvent["level"]): MessageKey {
   if (level === "error") return "diagnostic.errorTitle";
@@ -80,11 +86,16 @@ function DiagnosticNotification({
   return (
     <section
       aria-atomic="true"
-      className={`diagnostic-notification diagnostic-notification--${event.level}`}
+      className={cx(
+        styles.notification,
+        event.level === "warning" && styles.warning,
+        event.level === "error" && styles.error,
+      )}
+      data-level={event.level}
       role={event.level === "error" ? "alert" : "status"}
     >
       <header>
-        <span aria-hidden="true" className="diagnostic-notification__mark" />
+        <span aria-hidden="true" className={styles.mark} />
         <strong>{t(titleKey(event.level))}</strong>
         <IconButton
           icon="close"
@@ -92,7 +103,7 @@ function DiagnosticNotification({
           onClick={() => onDismiss(event.eventId)}
         />
       </header>
-      <div className="diagnostic-notification__identity">
+      <div className={styles.identity}>
         <span>{event.source}</span>
         <code>{event.code}</code>
       </div>
@@ -116,13 +127,18 @@ function DiagnosticNotification({
 export function DiagnosticNotifications({
   events,
   onDismiss,
+  placement = "window",
 }: DiagnosticNotificationsProps) {
   const { t } = useI18n();
   if (events.length === 0) return null;
   return (
     <aside
       aria-label={t("diagnostic.notifications")}
-      className="diagnostic-notifications"
+      className={cx(
+        styles.root,
+        placement === "editor" && styles.editorPlacement,
+      )}
+      data-placement={placement}
     >
       {events.map((event) => (
         <DiagnosticNotification

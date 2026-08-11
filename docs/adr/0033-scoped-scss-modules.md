@@ -31,6 +31,10 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
   `.agent-*` 机械搬入单一大模块。运行徽标、消息状态、历史终态、流式 caret、
   reasoning、审批、附件与模型选择测试改用结构化 `data-state/data-kind` 或
   accessible role/label，不再把样式类名当业务协议。
+- DiagnosticNotifications 使用显式 `placement="editor" | "window"` 选择定位，
+  不再通过 `.app-shell > .diagnostic-notifications` 跨组件猜测父容器；Statusbar
+  从 App 提取为只接收 persistence/error、selection、revision、zoom 和命令回调的
+  展示组件。两者的错误、窄窗口、按钮 focus 与工作台定位进入各自 module。
 - `sass` 固定为 `1.102.0`，仅用于 Vite 编译期；许可记录进入第三方声明。
 - TypeScript 通过 `vite/client` 读取 module 类型，Vite 生产构建验证 SCSS Modules 可编译和合并。
 - 后续迁移需保持键盘/焦点、主题、窄窗口、Reduced Motion 和视觉状态测试；仅减少全局行数不构成完成证据。

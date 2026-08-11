@@ -39,6 +39,9 @@ describe("DiagnosticNotifications", () => {
   it("shows the error code, message and correlated run", () => {
     renderNotifications();
 
+    expect(
+      screen.getByRole("complementary", { name: "System notifications" }),
+    ).toHaveAttribute("data-placement", "window");
     expect(screen.getByRole("alert")).toHaveTextContent(
       "OpenDesign encountered an error",
     );

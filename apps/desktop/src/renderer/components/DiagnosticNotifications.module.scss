@@ -1,0 +1,128 @@
+.root {
+  position: fixed;
+  z-index: 80;
+  right: 14px;
+  bottom: 36px;
+  display: flex;
+  width: min(360px, calc(100vw - 28px));
+  max-height: calc(100vh - 72px);
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  pointer-events: none;
+  scrollbar-width: thin;
+}
+
+.editorPlacement {
+  right: min(calc(var(--utility-width) + 14px), calc(100vw - 294px));
+  width: min(360px, max(280px, calc(100vw - var(--utility-width) - 28px)));
+}
+
+.notification {
+  flex: none;
+  padding: 10px 11px 9px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 7px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  box-shadow: var(--ui-shadow-lg);
+  pointer-events: auto;
+
+  > header {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) 24px;
+    align-items: center;
+    gap: 7px;
+
+    strong {
+      overflow: hidden;
+      font-size: 11px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :global(.ui-icon-button) {
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  > p {
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 8px 3px 0 15px;
+    overflow-wrap: anywhere;
+    color: var(--ui-text-muted);
+    font-size: 10px;
+    line-height: 1.45;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+  }
+
+  > small {
+    display: block;
+    overflow: hidden;
+    margin: 7px 3px 0 15px;
+    color: var(--ui-text-faint);
+    font: 9px/1.4 var(--ui-mono);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  > footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 7px;
+
+    :global(.ui-button) {
+      min-height: 24px;
+      padding: 0 7px;
+      font-size: 9px;
+    }
+  }
+}
+
+.mark {
+  width: 7px;
+  height: 7px;
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 60%, transparent);
+  border-radius: 50%;
+  background: var(--ui-accent);
+}
+
+.warning .mark {
+  border-color: color-mix(in srgb, var(--ui-warning) 60%, transparent);
+  background: var(--ui-warning);
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--ui-danger) 45%, var(--ui-border));
+
+  .mark {
+    border-color: color-mix(in srgb, var(--ui-danger) 60%, transparent);
+    background: var(--ui-danger);
+  }
+}
+
+.identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 31px 0 15px;
+  color: var(--ui-text-faint);
+  font-size: 9px;
+
+  span {
+    text-transform: capitalize;
+  }
+
+  code {
+    overflow: hidden;
+    color: var(--ui-text-muted);
+    font-family: var(--ui-mono);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

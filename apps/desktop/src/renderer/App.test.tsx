@@ -4828,9 +4828,9 @@ describe("App", () => {
 
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Run revision 136 is stale");
-    expect(
-      alert.closest(".diagnostic-notifications")?.parentElement,
-    ).toHaveClass("app-shell");
+    const notifications = alert.closest("aside");
+    expect(notifications).toHaveAttribute("data-placement", "editor");
+    expect(notifications?.parentElement).toHaveClass("app-shell");
     expect(alert.closest("[data-agent-prompt]")).toBeNull();
   });
 

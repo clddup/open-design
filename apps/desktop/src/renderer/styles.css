@@ -1093,164 +1093,6 @@ textarea {
   font-size: 10px;
 }
 
-.diagnostic-notifications {
-  position: fixed;
-  z-index: 80;
-  right: 14px;
-  bottom: 36px;
-  display: flex;
-  width: min(360px, calc(100vw - 28px));
-  max-height: calc(100vh - 72px);
-  flex-direction: column;
-  gap: 8px;
-  overflow: auto;
-  pointer-events: none;
-  scrollbar-width: thin;
-}
-.diagnostic-notification {
-  flex: none;
-  padding: 10px 11px 9px;
-  border: 1px solid var(--ui-border-strong);
-  border-radius: 7px;
-  color: var(--ui-text);
-  background: var(--ui-surface-raised);
-  box-shadow: var(--ui-shadow-lg);
-  pointer-events: auto;
-}
-.app-shell > .diagnostic-notifications {
-  right: min(calc(var(--utility-width) + 14px), calc(100vw - 294px));
-  width: min(360px, max(280px, calc(100vw - var(--utility-width) - 28px)));
-}
-.diagnostic-notification > header {
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) 24px;
-  align-items: center;
-  gap: 7px;
-}
-.diagnostic-notification > header strong {
-  overflow: hidden;
-  font-size: 11px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.diagnostic-notification > header .ui-icon-button {
-  width: 24px;
-  height: 24px;
-}
-.diagnostic-notification__mark {
-  width: 7px;
-  height: 7px;
-  border: 1px solid color-mix(in srgb, var(--ui-accent) 60%, transparent);
-  border-radius: 50%;
-  background: var(--ui-accent);
-}
-.diagnostic-notification--warning .diagnostic-notification__mark {
-  border-color: color-mix(in srgb, var(--ui-warning) 60%, transparent);
-  background: var(--ui-warning);
-}
-.diagnostic-notification--error {
-  border-color: color-mix(in srgb, var(--ui-danger) 45%, var(--ui-border));
-}
-.diagnostic-notification--error .diagnostic-notification__mark {
-  border-color: color-mix(in srgb, var(--ui-danger) 60%, transparent);
-  background: var(--ui-danger);
-}
-.diagnostic-notification__identity {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-  margin: 4px 31px 0 15px;
-  color: var(--ui-text-faint);
-  font-size: 9px;
-}
-.diagnostic-notification__identity span {
-  text-transform: capitalize;
-}
-.diagnostic-notification__identity code {
-  overflow: hidden;
-  color: var(--ui-text-muted);
-  font-family: var(--ui-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.diagnostic-notification > p {
-  display: -webkit-box;
-  overflow: hidden;
-  margin: 8px 3px 0 15px;
-  color: var(--ui-text-muted);
-  font-size: 10px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-}
-.diagnostic-notification > small {
-  display: block;
-  overflow: hidden;
-  margin: 7px 3px 0 15px;
-  color: var(--ui-text-faint);
-  font: 9px/1.4 var(--ui-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.diagnostic-notification > footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 7px;
-}
-.diagnostic-notification > footer .ui-button {
-  min-height: 24px;
-  padding: 0 7px;
-  font-size: 9px;
-}
-
-.statusbar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 10px;
-  padding: 0 8px;
-  border-top: 1px solid var(--ui-border);
-  color: var(--ui-text-faint);
-  background: var(--ui-surface-sunken);
-  font-size: 9px;
-  user-select: none;
-}
-.statusbar > span {
-  display: flex;
-  align-items: center;
-}
-.statusbar > span:last-child {
-  justify-content: end;
-}
-.statusbar i {
-  width: 6px;
-  height: 6px;
-  margin-right: 5px;
-  border-radius: 50%;
-  background: var(--ui-success);
-}
-.statusbar button {
-  height: 19px;
-  min-width: 22px;
-  margin-left: 2px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: 3px;
-  color: var(--ui-text-muted);
-  background: transparent;
-  font-size: 9px;
-}
-.statusbar button:hover {
-  color: var(--ui-text);
-  background: var(--ui-surface-raised);
-}
-.statusbar .zoom-value {
-  min-width: 35px;
-}
-
 .settings-shell {
   display: grid;
   width: 100%;
@@ -1752,17 +1594,13 @@ textarea {
   }
 }
 @media (max-width: 860px) {
-  .titlebar__status,
-  .statusbar__center {
+  .titlebar__status {
     display: none;
   }
   .workspace {
     grid-template-columns:
       min(120px, var(--left-width)) 1px minmax(0, 1fr)
       1px var(--utility-width);
-  }
-  .statusbar {
-    grid-template-columns: 1fr 1fr;
   }
   .artboard-wrap,
   .artboard {
