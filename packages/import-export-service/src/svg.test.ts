@@ -437,6 +437,296 @@ describe("versioned SVG interchange", () => {
     );
   });
 
+  it("round-trips Frame clipsContent as a rounded local clip without creating a background layer", () => {
+    const document = frameDocument();
+    const first = exportSvg({
+      document,
+      rootNodeIds: ["frame_card"],
+      viewport: { x: 0, y: 0, width: 240, height: 180 },
+      includeLayerIds: true,
+    });
+    const second = exportSvg({
+      document,
+      rootNodeIds: ["frame_card"],
+      viewport: { x: 0, y: 0, width: 240, height: 180 },
+      includeLayerIds: true,
+    });
+    expect(first).toEqual(second);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.issues).toEqual([]);
+    expect(first.svg).toContain('data-opendesign-frame-clip="true"');
+    expect(first.svg).toContain('data-opendesign-frame-content="true"');
+    expect(first.svg).toContain('clipPathUnits="userSpaceOnUse"');
+    expect(first.svg).toContain('<rect width="180" height="120" rx="24"');
+
+    const imported = importSvg(
+      { svg: first.svg, idPrefix: "frame_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    const frame = findImportedSource(imported.nodes, "frame_card");
+    expect(frame).toMatchObject({
+      kind: "frame",
+      size: { width: 180, height: 120 },
+      properties: {
+        cornerRadius: 24,
+        clipsContent: true,
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+      },
+    });
+    expect(frame?.childIds).toHaveLength(2);
+    expect(
+      imported.nodes.filter(
+        (node) =>
+          node.extensions.svgImport &&
+          typeof node.extensions.svgImport === "object" &&
+          !Array.isArray(node.extensions.svgImport) &&
+          node.extensions.svgImport.sourceElement === "rect",
+      ),
+    ).toHaveLength(2);
+    expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
+      isDesignDocument,
+    );
+    const tampered = importSvg(
+      {
+        svg: first.svg.replace(
+          '<rect width="180" height="120" rx="24"',
+          '<rect width="179" height="120" rx="24"',
+        ),
+        idPrefix: "frame_tampered",
+      },
+      geometry,
+    );
+    expect(tampered.ok).toBe(false);
+    expect(tampered.issues.some((issue) => issue.code === "mask-omitted")).toBe(
+      true,
+    );
+
+    const unclippedDocument = frameDocument();
+    const unclippedFrame = unclippedDocument.nodesById.frame_card;
+    if (!unclippedFrame || unclippedFrame.kind !== "frame") {
+      throw new Error("Missing unclipped Frame fixture");
+    }
+    unclippedFrame.properties.clipsContent = false;
+    const unclippedExport = exportSvg({
+      document: unclippedDocument,
+      rootNodeIds: ["frame_card"],
+      viewport: { x: 0, y: 0, width: 240, height: 180 },
+      includeLayerIds: true,
+    });
+    expect(unclippedExport.ok).toBe(true);
+    if (!unclippedExport.ok) return;
+    expect(unclippedExport.svg).not.toContain("data-opendesign-frame-clip");
+    const unclippedImport = importSvg(
+      { svg: unclippedExport.svg, idPrefix: "frame_unclipped" },
+      geometry,
+    );
+    expect(unclippedImport.ok).toBe(true);
+    if (!unclippedImport.ok) return;
+    expect(
+      findImportedSource(unclippedImport.nodes, "frame_card"),
+    ).toMatchObject({ kind: "frame", properties: { clipsContent: false } });
+  });
+
+  it("round-trips ordered sibling mask runs for alpha, luminance, outline, and visible clipping modes", () => {
+    const document = maskDocument();
+    const exported = exportSvg({
+      document,
+      rootNodeIds: ["mask_stage"],
+      viewport: { x: 0, y: 0, width: 420, height: 180 },
+      includeLayerIds: true,
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues).toEqual([]);
+    expect(exported.exportedNodeIds).toEqual([
+      "mask_stage",
+      "alpha_source",
+      "alpha_target",
+      "luminance_source",
+      "luminance_target",
+      "outline_source",
+      "outline_target",
+      "clipping_source",
+      "clipping_target",
+    ]);
+    expect(new Set(exported.exportedNodeIds).size).toBe(
+      exported.exportedNodeIds.length,
+    );
+    expect(exported.svg.match(/<mask(?:\s|>)/g)).toHaveLength(3);
+    expect(exported.svg.match(/<clipPath(?:\s|>)/g)).toHaveLength(1);
+    expect(exported.svg.match(/mask-type="alpha"/g)).toHaveLength(2);
+    expect(exported.svg.match(/mask-type="luminance"/g)).toHaveLength(1);
+    expect(exported.svg).toMatch(
+      /<mask[^>]+data-opendesign-mask-mode="alpha"[^>]+x="-32"[^>]+width="146"/,
+    );
+    expect(exported.svg.match(/data-opendesign-mask-run="true"/g)).toHaveLength(
+      4,
+    );
+    expect(
+      exported.svg.match(/data-opendesign-id="clipping_source"/g),
+    ).toHaveLength(1);
+
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "mask_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    const stage = findImportedSource(imported.nodes, "mask_stage");
+    expect(stage?.kind).toBe("group");
+    const orderedSources = stage?.childIds.map(
+      (id) =>
+        imported.nodes.find((node) => node.id === id)?.extensions.svgImport,
+    );
+    expect(
+      orderedSources?.map((source) =>
+        typeof source === "object" && source !== null && !Array.isArray(source)
+          ? source.sourceId
+          : undefined,
+      ),
+    ).toEqual([
+      "alpha_source",
+      "alpha_target",
+      "luminance_source",
+      "luminance_target",
+      "outline_source",
+      "outline_target",
+      "clipping_source",
+      "clipping_target",
+    ]);
+    expect(findImportedSource(imported.nodes, "alpha_source")?.maskMode).toBe(
+      "alpha",
+    );
+    expect(findImportedSource(imported.nodes, "alpha_source")?.effects).toEqual(
+      [{ type: "layer-blur", radius: 12 }],
+    );
+    expect(
+      findImportedSource(imported.nodes, "luminance_source")?.maskMode,
+    ).toBe("luminance");
+    expect(findImportedSource(imported.nodes, "outline_source")?.maskMode).toBe(
+      "outline",
+    );
+    expect(
+      findImportedSource(imported.nodes, "clipping_source")?.maskMode,
+    ).toBe("clipping");
+    expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
+      isDesignDocument,
+    );
+    const tampered = importSvg(
+      {
+        svg: exported.svg.replace('fill="#0f172a"', 'fill="#ffffff"'),
+        idPrefix: "mask_tampered",
+      },
+      geometry,
+    );
+    expect(tampered.ok).toBe(false);
+    expect(
+      tampered.issues.some(
+        (issue) =>
+          issue.code === "mask-omitted" &&
+          /does not match/i.test(issue.message),
+      ),
+    ).toBe(true);
+
+    const withoutLayerIds = exportSvg({
+      document,
+      rootNodeIds: ["mask_stage"],
+      viewport: { x: 0, y: 0, width: 420, height: 180 },
+      includeLayerIds: false,
+    });
+    expect(withoutLayerIds.ok).toBe(true);
+    if (!withoutLayerIds.ok) return;
+    expect(withoutLayerIds.svg).not.toContain("data-opendesign-id");
+    const importedWithoutLayerIds = importSvg(
+      { svg: withoutLayerIds.svg, idPrefix: "mask_without_ids" },
+      geometry,
+    );
+    expect(importedWithoutLayerIds.ok).toBe(true);
+    if (!importedWithoutLayerIds.ok) return;
+    expect(importedWithoutLayerIds.issues).toEqual([]);
+    expect(
+      importedWithoutLayerIds.nodes.filter(
+        (node) => node.maskMode && node.maskMode !== "none",
+      ),
+    ).toHaveLength(4);
+
+    const detachedMaskSource = exportSvg({
+      document,
+      rootNodeIds: ["alpha_source"],
+      viewport: { x: 0, y: 0, width: 120, height: 150 },
+    });
+    expect(detachedMaskSource.ok).toBe(true);
+    if (!detachedMaskSource.ok) return;
+    expect(detachedMaskSource.issues).toMatchObject([
+      { code: "mask-omitted", severity: "warning", nodeId: "alpha_source" },
+    ]);
+    expect(detachedMaskSource.issues[0]?.message).toMatch(
+      /parent sibling run/i,
+    );
+  });
+
+  it("imports bounded standard local mask and clipPath references as editable sibling mask groups", () => {
+    const imported = importSvg(
+      {
+        idPrefix: "standard_masks",
+        svg: `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120">
+            <defs>
+              <clipPath id="round_clip" clipPathUnits="userSpaceOnUse">
+                <circle cx="50" cy="50" r="38"/>
+              </clipPath>
+              <mask id="alpha_fade" maskContentUnits="userSpaceOnUse" mask-type="alpha">
+                <rect x="120" y="10" width="100" height="90" fill="#ffffff" fill-opacity="0.65"/>
+              </mask>
+            </defs>
+            <rect id="clipped_card" x="10" y="10" width="90" height="90" fill="#6d5dfc" clip-path="url(#round_clip)"/>
+            <g id="masked_group" transform="translate(10 5)" mask="url(#alpha_fade)">
+              <ellipse id="masked_orb" cx="170" cy="55" rx="55" ry="40" fill="#22d3ee"/>
+            </g>
+          </svg>
+        `,
+      },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    const maskSources = imported.nodes.filter(
+      (node) => node.maskMode && node.maskMode !== "none",
+    );
+    expect(maskSources.map((node) => node.maskMode).sort()).toEqual([
+      "alpha",
+      "outline",
+    ]);
+    const clipped = findImportedSource(imported.nodes, "clipped_card");
+    const masked = findImportedSource(imported.nodes, "masked_group");
+    expect(clipped?.parentId).not.toBe(imported.rootNodeId);
+    expect(masked?.parentId).not.toBe(imported.rootNodeId);
+    expect(
+      imported.nodes.find((node) => node.id === clipped?.parentId)?.kind,
+    ).toBe("group");
+    expect(
+      imported.nodes.find((node) => node.id === masked?.parentId)?.kind,
+    ).toBe("group");
+    const maskedWrapper = imported.nodes.find(
+      (node) => node.id === masked?.parentId,
+    );
+    const alphaSource = maskedWrapper?.childIds
+      .map((id) => imported.nodes.find((node) => node.id === id))
+      .find((node) => node?.maskMode === "alpha");
+    expect(alphaSource).toBeDefined();
+    expect(alphaSource!.transform[4] - masked!.transform[4]).toBeCloseTo(5, 8);
+    expect(alphaSource!.transform[5] - masked!.transform[5]).toBeCloseTo(-5, 8);
+    expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
+      isDesignDocument,
+    );
+  });
+
   it("retains valid empty path layers as invisible editable vectors with an explicit warning", () => {
     const imported = importSvg(
       {
@@ -519,6 +809,77 @@ describe("versioned SVG interchange", () => {
     expect(
       externalFilter.issues.some(
         (issue) => issue.code === "external-reference",
+      ),
+    ).toBe(true);
+
+    const externalMask = importSvg(
+      {
+        idPrefix: "external_mask",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" mask="url(https://example.test/masks.svg#alpha)"/></svg>`,
+      },
+      geometry,
+    );
+    expect(externalMask.ok).toBe(false);
+    expect(
+      externalMask.issues.some((issue) => issue.code === "external-reference"),
+    ).toBe(true);
+
+    const rootClip = importSvg(
+      {
+        idPrefix: "root_clip",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" clip-path="url(#clip)"><defs><clipPath id="clip"><rect width="5" height="5"/></clipPath></defs><rect width="10" height="10"/></svg>`,
+      },
+      geometry,
+    );
+    expect(rootClip.ok).toBe(false);
+    expect(
+      rootClip.issues.some(
+        (issue) =>
+          issue.code === "mask-omitted" && /root-level/i.test(issue.message),
+      ),
+    ).toBe(true);
+
+    const objectBoundingBoxClip = importSvg(
+      {
+        idPrefix: "bbox_clip",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><defs><clipPath id="clip" clipPathUnits="objectBoundingBox"><rect width="1" height="1"/></clipPath></defs><rect width="10" height="10" clip-path="url(#clip)"/></svg>`,
+      },
+      geometry,
+    );
+    expect(objectBoundingBoxClip.ok).toBe(false);
+    expect(
+      objectBoundingBoxClip.issues.some(
+        (issue) => issue.code === "mask-omitted",
+      ),
+    ).toBe(true);
+
+    const collidingMaskId = importSvg(
+      {
+        idPrefix: "colliding_mask",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><defs><linearGradient id="shared"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient><mask id="shared" mask-type="alpha"><rect width="20" height="20" fill="#fff"/></mask></defs><rect width="20" height="20" mask="url(#shared)"/></svg>`,
+      },
+      geometry,
+    );
+    expect(collidingMaskId.ok).toBe(false);
+    expect(
+      collidingMaskId.issues.some(
+        (issue) =>
+          issue.code === "mask-omitted" && /collides/i.test(issue.message),
+      ),
+    ).toBe(true);
+
+    const cyclicMask = importSvg(
+      {
+        idPrefix: "cyclic_mask",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><defs><mask id="cycle" mask-type="alpha"><rect width="20" height="20" mask="url(#cycle)"/></mask></defs><rect width="20" height="20" mask="url(#cycle)"/></svg>`,
+      },
+      geometry,
+    );
+    expect(cyclicMask.ok).toBe(false);
+    expect(
+      cyclicMask.issues.some(
+        (issue) =>
+          issue.code === "mask-omitted" && /cycle/i.test(issue.message),
       ),
     ).toBe(true);
 
@@ -609,6 +970,204 @@ function asDocument(
         id: "page",
         name: "SVG",
         rootNodeIds: [rootNodeId],
+        extensions: {},
+      },
+    },
+    nodesById: Object.fromEntries(nodes.map((node) => [node.id, node])),
+    componentsById: {},
+    variantSetsById: {},
+    tokenCollectionsById: {},
+    tokensById: {},
+    interactionsById: {},
+    assetsById: {},
+    extensions: {},
+  };
+}
+
+function frameDocument(): DesignDocument {
+  const nodes: DesignNode[] = [
+    {
+      id: "frame_card",
+      kind: "frame",
+      name: "Clipped card",
+      parentId: null,
+      childIds: ["frame_glow", "frame_overflow"],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 20, 20],
+      size: { width: 180, height: 120 },
+      opacity: 1,
+      properties: {
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [{ type: "solid", color: "#334155", opacity: 0.8 }],
+        strokeWidth: 2,
+        strokeAlign: "center",
+        cornerRadius: 24,
+        clipsContent: true,
+      },
+      extensions: {},
+    },
+    simpleRectangle(
+      "frame_glow",
+      "frame_card",
+      [1, 0, 0, 1, 16, 18],
+      { width: 72, height: 72 },
+      "#22d3ee",
+    ),
+    simpleRectangle(
+      "frame_overflow",
+      "frame_card",
+      [1, 0, 0, 1, 132, 70],
+      { width: 96, height: 72 },
+      "#8b5cf6",
+    ),
+  ];
+  return documentFromNodes("svg_frame_document", nodes, ["frame_card"]);
+}
+
+function maskDocument(): DesignDocument {
+  const childIds = [
+    "alpha_source",
+    "alpha_target",
+    "luminance_source",
+    "luminance_target",
+    "outline_source",
+    "outline_target",
+    "clipping_source",
+    "clipping_target",
+  ];
+  const nodes: DesignNode[] = [
+    {
+      id: "mask_stage",
+      kind: "group",
+      name: "Mask stage",
+      parentId: null,
+      childIds,
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 10, 10],
+      size: { width: 400, height: 150 },
+      opacity: 1,
+      properties: {},
+      extensions: {},
+    },
+    simpleRectangle(
+      "alpha_source",
+      "mask_stage",
+      [1, 0, 0, 1, 0, 12],
+      { width: 82, height: 110 },
+      "#ffffff",
+      "alpha",
+      0.7,
+    ),
+    simpleRectangle(
+      "alpha_target",
+      "mask_stage",
+      [1, 0, 0, 1, -8, 4],
+      { width: 98, height: 126 },
+      "#7c3aed",
+    ),
+    simpleRectangle(
+      "luminance_source",
+      "mask_stage",
+      [1, 0, 0, 1, 104, 12],
+      { width: 82, height: 110 },
+      "#d1d5db",
+      "luminance",
+    ),
+    simpleRectangle(
+      "luminance_target",
+      "mask_stage",
+      [1, 0, 0, 1, 96, 4],
+      { width: 98, height: 126 },
+      "#06b6d4",
+    ),
+    simpleRectangle(
+      "outline_source",
+      "mask_stage",
+      [1, 0, 0, 1, 208, 12],
+      { width: 82, height: 110 },
+      "#ffffff",
+      "outline",
+      0.8,
+    ),
+    simpleRectangle(
+      "outline_target",
+      "mask_stage",
+      [1, 0, 0, 1, 200, 4],
+      { width: 98, height: 126 },
+      "#f97316",
+    ),
+    simpleRectangle(
+      "clipping_source",
+      "mask_stage",
+      [1, 0, 0, 1, 312, 12],
+      { width: 82, height: 110 },
+      "#0f172a",
+      "clipping",
+      0.65,
+    ),
+    simpleRectangle(
+      "clipping_target",
+      "mask_stage",
+      [1, 0, 0, 1, 304, 4],
+      { width: 98, height: 126 },
+      "#ec4899",
+    ),
+  ];
+  const alphaSource = nodes.find((node) => node.id === "alpha_source");
+  if (!alphaSource) throw new Error("Missing alpha mask source");
+  alphaSource.effects = [{ type: "layer-blur", radius: 12 }];
+  return documentFromNodes("svg_mask_document", nodes, ["mask_stage"]);
+}
+
+function simpleRectangle(
+  id: string,
+  parentId: string,
+  transform: [number, number, number, number, number, number],
+  size: { width: number; height: number },
+  color: string,
+  maskMode?: "alpha" | "clipping" | "luminance" | "outline",
+  opacity = 1,
+): Extract<DesignNode, { kind: "rectangle" }> {
+  return {
+    id,
+    kind: "rectangle",
+    name: id,
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform,
+    size,
+    opacity,
+    ...(maskMode ? { maskMode } : {}),
+    properties: {
+      fills: [{ type: "solid", color, opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+      cornerRadius: 18,
+    },
+    extensions: {},
+  };
+}
+
+function documentFromNodes(
+  documentId: string,
+  nodes: readonly DesignNode[],
+  rootNodeIds: readonly string[],
+): DesignDocument {
+  return {
+    format: DESIGN_FORMAT,
+    schemaVersion: DESIGN_SCHEMA_VERSION,
+    documentId,
+    revision: 0,
+    pageOrder: ["page"],
+    pagesById: {
+      page: {
+        id: "page",
+        name: "SVG",
+        rootNodeIds: [...rootNodeIds],
         extensions: {},
       },
     },

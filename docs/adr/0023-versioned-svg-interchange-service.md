@@ -56,13 +56,30 @@ Figma 当前允许导出 layer、Frame、Group、Section、Slice 和 Page，默�
 
 当前导入/导出覆盖：
 
-- Group、Rectangle、Ellipse、Path、Vector；外部 line/polyline/polygon 转为正式 Vector path；
+- Frame、Group、Rectangle、Ellipse、Path、Vector；外部 line/polyline/polygon 转为正式 Vector path；
 - 层级、可见性、opacity、SVG transform list、viewBox、solid、linear/radial gradient、fill rule、center stroke、cap/join/dash；
+- 圆角 Frame `clipsContent`，以及按父容器 child order 分段的 alpha、luminance、outline、clipping sibling mask；受支持的外部本地 user-space `<mask>/<clipPath>` 引用展开为可编辑同级蒙版组；
 - 最多八个普通混合、零 spread 的 drop shadow 与一层 layer blur；效果数组顺序和 `visible` 可确定性往返，标准单个 `feDropShadow`/`feGaussianBlur` 可直接导入；
 - 固定字符数、元素数、节点数与深度预算；确定性 ID 和输出顺序；
 - 导入结果重新通过完整 `DesignDocument` schema/invariant 校验测试。
 
-当前仍明确报告或拒绝：Text、Image、Instance、stylesheet、`use`、clip/mask、inner shadow、background blur、inner/outer glow、grayscale、shadow spread/非普通 blend、复杂 filter graph、image paint、angular gradient、多个叠加 paint、inside/outside stroke、user-space gradient、复杂 gradient transform 和外部 URL。这里的“拒绝”是保真边界，不把危险或无法表达的数据保存到 `extensions` 后继续执行。
+当前仍明确报告或拒绝：Text、Image、Instance、stylesheet、`use`、SVG root-level mask/clip、同一元素组合 `mask + clip-path`、`objectBoundingBox` clipPath、包含不受支持 Text/Image source 的 mask、inner shadow、background blur、inner/outer glow、grayscale、shadow spread/非普通 blend、复杂 filter/mask graph、image paint、angular gradient、多个叠加 paint、inside/outside stroke、user-space gradient、复杂 gradient transform 和外部 URL。这里的“拒绝”是保真边界，不把危险或无法表达的数据保存到 `extensions` 后继续执行。
+
+### Frame clipping 与 sibling mask 语义
+
+Figma 的公开语义是非破坏 sibling mask：mask source 位于被遮罩层下方，向上影响同一父容器内的后续 siblings，直到下一个 mask、父 Frame/Group 边界或 clipping Frame。Mask source 与被遮罩层相互独立移动，不形成父子关系。OpenDesign 文档的 `maskMode` 与 Leafer 投影采用同一顺序语义，而标准 SVG 把 `mask="url(#id)"` / `clip-path="url(#id)"` 写在“被遮罩的渲染对象”上，因此不能把 `maskMode` 直接翻译成当前节点属性。
+
+导出器按每个 Frame/Group 的 `childIds` 识别 mask runs，并生成受控标准结构：
+
+- `alpha` 与 `luminance` source 分别进入显式 `mask-type="alpha|luminance"` 的 user-space `<mask>`；
+- `outline` source 进入 user-space `<clipPath>`，source opacity 作用于整个 masked run；
+- `clipping` 保留可见 source，并用去除重复 layer identity 的 source 副本建立 alpha `<mask>`，避免同一 SVG 文档产生重复 `id`；
+- 每个 run 的 masked siblings 放入引用对应 definition 的透明 `<g>`；遇到下一 mask 或父容器边界立即结束；
+- user-space mask region 取 source/targets 变换后 bounds 的并集，并按可见描边、blur、drop shadow/glow 的保守扩张量放大，避免专业效果在 mask 边界被默认 region 截断；
+- Frame background 仍作为自身外观绘制，children 单独进入与 Frame 尺寸/圆角一致的本地 `<clipPath>` wrapper，因此 `clipsContent` 不会错误裁掉 Frame background；
+- source 与 targets 只各计入一次 `exportedNodeIds`，definitions 不建立第二份文档状态。
+
+导入 OpenDesign 自己生成的 graph 时，importer 会校验版本、mode、local reference、Frame clip bounds、outline opacity，以及 clipping 可见 source 与 definition 副本的结构一致性，再恢复正式 sibling source + targets；受控 wrapper 不进入文档层级。普通第三方 SVG 的单一本地 user-space `<mask>` / `<clipPath>` 会展开为一个可编辑 Group，内部仍是 sibling mask source 与原 target，不保留隐式共享 definition。外部 URL、缺失/重复 definition、循环引用、`objectBoundingBox` clipPath、组合 mask+clip 和无法导入的 source 稳定失败，不能静默返回未遮罩内容。
 
 ### 基础 SVG filter effects 语义
 
@@ -87,13 +104,14 @@ W3C `feDropShadow` 是包含输入图像再次合成的 shorthand。若为多个
 
 ### XML 与引用安全
 
-SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/`ENTITY`，并拒绝 script、foreignObject、stylesheet、`use`、外部 paint URL 和未解析引用。XML DOM、Matrix、Element 与 provider 对象不进入公共结果。后续图片、字体、CSS 或 linked resource 只能通过 Main 签发的资源句柄和独立 capability 引入，不能在 SVG parser 中直接 fetch 或读路径。
+SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/`ENTITY`，并拒绝 script、foreignObject、stylesheet、`use`、外部 paint/filter/mask URL、未解析或循环引用。XML DOM、Matrix、Element 与 provider 对象不进入公共结果。后续图片、字体、CSS 或 linked resource 只能通过 Main 签发的资源句柄和独立 capability 引入，不能在 SVG parser 中直接 fetch 或读路径。
 
 ## 当前证据
 
 - `OD-BRAND-01` 的真实 PathKit Boolean result 导出为单一 SVG path，源 operand 不进入 SVG；
 - re-import 返回可编辑 Vector，重应用 transform 后与原 Boolean result 的 normalized path、fill rule 和 bounds 一致；
 - Path/Vector/Rectangle/Ellipse、group hierarchy、transform、solid/linear gradient、stroke 和 dash 确定性往返；
+- 圆角 Frame `clipsContent` 与四种 ordered sibling mask mode 可确定性往返且不产生 background 假图层；受支持的外部本地 mask/clipPath 展开为合法可编辑树，篡改 definition、外部 URL、objectBoundingBox clip 与循环引用稳定失败；
 - 多个 drop shadow、layer blur、effect visibility/order、filter region 与标准 shorthand 确定性往返；spread、inner/background/glow/grayscale 和复杂 graph 均返回明确保真报告，外部 filter URL 稳定拒绝；
 - 导入候选树可组成合法 `DesignDocument`；
 - EditorRuntime planner 校验显式 Page/Frame/Group 目标、锁定祖先、插入位置、候选 schema、唯一根、可达性、parent/child 对称、ID 冲突、asset 引用和事务命令上限；成功树按 parent-first 顺序进入一个 revision，一次 undo 删除整棵 SVG，保存重开与 redo 保持一致；
@@ -102,13 +120,13 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - 原生/标题栏 File 菜单和 Properties Inspector 已接通人工导入导出；专项测试覆盖 Page/Frame/Group 居中目标、revision stale 拒绝、ancestor/descendant 选区规范化、Windows-safe 文件名、worker 协议/崩溃/取消、设置禁用、保真报告、单 revision、自动选中新根和一次 undo；
 - Renderer CSP 显式限制 `worker-src 'self'`；worker 只接收版本化 pure-data 请求，不获得 Electron、路径、凭据或第二份持久文档状态；
 - Agent import/export contract、run-scoped SVG attachment/reference host、Renderer 原子 import 与 export preparation、Main import/delivery host 已覆盖无路径参数、先 inspect、显式稳定目标、revision 匹配、worker 取消、伪造 response 拒绝、单次 undo、自动选中新根、原生保存取消、fidelity result 有界化和源码不回传；十四个生产工具仍通过完整 prompt/tool context budget 与 Pi adapter 门禁；
-- DOCTYPE/ENTITY、script、stylesheet、external URL 和缺失 Boolean geometry 均产生稳定失败；
+- DOCTYPE/ENTITY、script、stylesheet、external URL、循环/缺失 mask reference 和缺失 Boolean geometry 均产生稳定失败；
 - service typecheck、lint、fixture 和全仓验证纳入统一门禁。
 
 ## 后续门禁
 
 1. MCP 后续复用同一版本化 SVG import/export service、资源句柄和事务入口，不新增任意 `filePath` 通道。
-2. 接入 outline stroke、text glyph、inner/background/glow/spread/blend 等剩余 filter 语义、mask/clip、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
+2. 接入 outline stroke、text glyph、inner/background/glow/spread/blend 等剩余 filter 语义、复杂组合 mask graph、Text/Image mask source、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
 3. 在 `OD-BRAND-01` 上保存导出产物、re-import 文档、真实 Leafer 像素 baseline，并完成 macOS/Windows 打包产品 smoke。
 
 ## 参考
@@ -117,7 +135,9 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - [Figma export static designs：Layer、Frame、Group、Slice 与批量导出](https://help.figma.com/hc/en-us/articles/360040028114-Export-static-designs-from-Figma)
 - [Figma export formats and SVG settings](https://help.figma.com/hc/en-us/articles/13402894554519-Export-formats-and-settings)
 - [Figma effects](https://help.figma.com/hc/en-us/articles/360041488473-Apply-effects-to-layers)
+- [Figma masks](https://help.figma.com/hc/en-us/articles/360040450253-Masks)
 - [Figma Boolean operations](https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations)
+- [W3C CSS Masking Module Level 1](https://www.w3.org/TR/css-masking-1/)
 - [W3C Filter Effects Module Level 1](https://www.w3.org/TR/filter-effects-1/)
 - [xmldom](https://github.com/xmldom/xmldom)
 - [transformation-matrix](https://github.com/chrvadala/transformation-matrix)

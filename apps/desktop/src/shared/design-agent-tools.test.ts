@@ -157,6 +157,7 @@ describe("design Agent tool contract", () => {
 
     expect(tool).toMatchObject({ risk: "external", approval: "never" });
     expect(tool?.description).toContain("never receives a local path");
+    expect(tool?.description).toContain("ordered sibling masks");
     expect(JSON.stringify(tool?.inputSchema)).not.toContain("outlineText");
     expect(validateDesignAgentToolInput(EXPORT_SVG_TOOL_NAME, input)).toBe(
       true,
@@ -210,6 +211,7 @@ describe("design Agent tool contract", () => {
 
     expect(tool).toMatchObject({ risk: "design_write", approval: "never" });
     expect(tool?.description).toContain("editable OpenDesign vector tree");
+    expect(tool?.description).toContain("ordered sibling masks");
     expect(JSON.stringify(tool?.inputSchema)).not.toContain("filePath");
     expect(JSON.stringify(tool?.inputSchema)).not.toContain('"svg"');
     expect(validateDesignAgentToolInput(IMPORT_SVG_TOOL_NAME, input)).toBe(

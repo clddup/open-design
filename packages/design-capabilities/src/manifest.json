@@ -333,7 +333,7 @@
         "en": "Apply multiple paints and strokes, gradients, shadows, glows, blur, blend modes, masks, and advanced stroke properties.",
         "zh-CN": "应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。"
       },
-      "provider": "DesignDocument 1.4.0 + PropertiesPanel + Leafer adapter + SVG filter adapter",
+      "provider": "DesignDocument 1.4.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -352,8 +352,8 @@
       },
       "limitations": [
         {
-          "en": "The editable SVG boundary now preserves up to eight normal zero-spread drop shadows, one layer blur, effect order, and effect visibility. Inner shadows, background blur, glow, shadow spread/blend, masks, complex filter graphs, Electron visual baselines, and professional color picking/styles remain incomplete.",
-          "zh-CN": "可编辑 SVG 边界现可保留最多八个普通零 spread 投影、一层 layer blur、效果顺序和效果可见性；内阴影、背景模糊、光晕、阴影 spread/blend、蒙版、复杂 filter graph、Electron 视觉基线、专业取色器和共享颜色样式仍未完成。"
+          "en": "The editable SVG boundary now preserves up to eight normal zero-spread drop shadows, one layer blur, effect order/visibility, rounded Frame clipsContent, and ordered alpha/luminance/outline/clipping sibling mask runs. Inner shadows, background blur, glow, shadow spread/blend, arbitrary combined mask graphs, Electron visual baselines, and professional color picking/styles remain incomplete.",
+          "zh-CN": "可编辑 SVG 边界现可保留最多八个普通零 spread 投影、一层 layer blur、效果顺序/可见性、圆角 Frame clipsContent，以及有序的 alpha/luminance/outline/clipping 同级蒙版段；内阴影、背景模糊、光晕、阴影 spread/blend、任意组合蒙版图、Electron 视觉基线、专业取色器和共享颜色样式仍未完成。"
         }
       ],
       "evidence": {
@@ -658,8 +658,8 @@
         "zh-CN": "可编辑 SVG 交换"
       },
       "description": {
-        "en": "Import supported SVG structure and basic filter effects as editable OpenDesign vectors, and export Path, Vector, basic shapes, effects, and resolved Boolean results with explicit fidelity reporting.",
-        "zh-CN": "把受支持的 SVG 结构与基础滤镜效果导入为可编辑 OpenDesign 矢量，并以显式保真报告导出 Path、Vector、基础图形、效果和已解析 Boolean 结果。"
+        "en": "Import supported SVG structure, Frame clipping, masks, and basic filter effects as editable OpenDesign layers, and export the same supported semantics plus resolved Boolean results with explicit fidelity reporting.",
+        "zh-CN": "把受支持的 SVG 结构、Frame 裁剪、蒙版与基础滤镜效果导入为可编辑 OpenDesign 图层，并以显式保真报告导出同一受支持语义和已解析 Boolean 结果。"
       },
       "provider": "@opendesign/import-export-service SVG v1 + EditorRuntime planners + cancellable Renderer worker + Main path-free file bridge + run-scoped Agent import/export hosts + PathKit geometry",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "export"],
@@ -677,8 +677,8 @@
           "zh-CN": "文件菜单与属性检查器可把 SVG 导入冻结的 Page/Frame/Group 目标，并通过可取消 Renderer worker 导出冻结的显式选区根。Agent 只能把当前 Run 内容寻址的 SVG 句柄导入检查所得目标的明确局部坐标，并通过同一 worker 导出稳定 Page/root ID。Main 会校验授权与 Renderer 结果；模型既不接收 SVG 源码，也不接收本地路径。macOS/Windows 打包产品 smoke 仍待完成。"
         },
         {
-          "en": "The current subset covers groups, rectangles, ellipses, Path/Vector, transforms, solid and linear/radial gradients, center strokes, up to eight normal zero-spread drop shadows, and one layer blur. Effect visibility and order round-trip deterministically; standard single feDropShadow/feGaussianBlur filters import directly. Text, images, inner/background effects, glow, spread/blend, masks, stylesheets, angular gradients, multiple paints, complex filter graphs, and inside/outside stroke fidelity remain unavailable.",
-          "zh-CN": "当前子集覆盖 Group、Rectangle、Ellipse、Path/Vector、transform、纯色与线性/径向渐变、居中描边、最多八个普通零 spread 投影和一层 layer blur；效果可见性与顺序可确定性往返，并可直接导入标准单个 feDropShadow/feGaussianBlur filter。文字、图片、内阴影/背景效果、光晕、spread/blend、蒙版、stylesheet、角度渐变、多 paint、复杂 filter graph 与内外描边保真仍不可用。"
+          "en": "The current subset covers Frame/Group, rectangles, ellipses, Path/Vector, transforms, solid and linear/radial gradients, center strokes, rounded Frame clipsContent, ordered alpha/luminance/outline/clipping sibling mask runs, up to eight normal zero-spread drop shadows, and one layer blur. Supported local userSpaceOnUse mask/clipPath references import as editable sibling mask groups. Text, images, root-level or combined mask+clip, objectBoundingBox clipPath, inner/background effects, glow, spread/blend, stylesheets, angular gradients, multiple paints, complex filter graphs, and inside/outside stroke fidelity remain unavailable.",
+          "zh-CN": "当前子集覆盖 Frame/Group、Rectangle、Ellipse、Path/Vector、transform、纯色与线性/径向渐变、居中描边、圆角 Frame clipsContent、有序 alpha/luminance/outline/clipping 同级蒙版段、最多八个普通零 spread 投影和一层 layer blur；受支持的本地 userSpaceOnUse mask/clipPath 引用会导入为可编辑同级蒙版组。文字、图片、root-level 或 mask+clip 组合、objectBoundingBox clipPath、内阴影/背景效果、光晕、spread/blend、stylesheet、角度渐变、多 paint、复杂 filter graph 与内外描边保真仍不可用。"
         },
         {
           "en": "Standard SVG cannot retain OpenDesign Boolean operands. Export consumes a disposable resolved path, reports boolean-flattened, and re-imports it as an editable Vector without inventing lost source layers.",

@@ -26,6 +26,22 @@ import {
   collectSvgFilterDefinitions,
   readSvgFilterEffects,
 } from "./svg-filter-effects.js";
+import {
+  activeSvgMaskMode,
+  appendSvgFrameClipDefinition,
+  collectSvgMaskDefinitions,
+  controlledSvgClippingSourcesMatch,
+  createSvgMaskDefinition,
+  parseLocalSvgUrlReference,
+  readSerializedSvgMaskMode,
+  readVisibleSvgMaskSourceReference,
+  resolveControlledSvgMaskRun,
+  resolveStandardSvgMaskReference,
+  stripSvgExportedLayerIdentity,
+  validateSvgFrameClipDefinition,
+  type SvgMaskMode,
+  type SvgMaskReference,
+} from "./svg-mask-clip.js";
 import type {
   SvgInterchangeIssue,
   SvgInterchangeIssueCode,
@@ -38,9 +54,13 @@ export const SVG_INTERCHANGE_VERSION = 1 as const;
 export const SVG_MIME_TYPE = "image/svg+xml" as const;
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-const MAX_SVG_ELEMENTS = 10_000;
 const MAX_SVG_DEPTH = 64;
 const MAX_IMPORTED_NODES = 8_192;
+// OpenDesign mask/clip serialization adds bounded definition and wrapper
+// elements without adding editable nodes. Keep the XML budget high enough for
+// a maximum-size editable tree while the character and node budgets remain the
+// decisive memory limits.
+const MAX_SVG_ELEMENTS = MAX_IMPORTED_NODES * 4;
 const MAX_ID_PREFIX_CHARACTERS = 80;
 const SAFE_ID_PREFIX = /^[A-Za-z][A-Za-z0-9_-]*$/;
 const BLOCKED_XML_PATTERN = /<!\s*(?:DOCTYPE|ENTITY)\b/i;
@@ -129,22 +149,47 @@ interface ExportContext {
   definitions: Element;
   document: Document;
   exportedNodeIds: string[];
+  frameClipSequence: number;
   gradientSequence: number;
   filterSequence: number;
   issues: SvgInterchangeIssue[];
+  maskSequence: number;
   request: SvgExportRequest;
   visiting: Set<string>;
 }
 
 interface ImportContext {
+  activeMaskReferences: Set<string>;
   filterDefinitions: ReadonlyMap<string, Element>;
   geometry: VectorGeometryProvider;
   gradientDefinitions: ReadonlyMap<string, Element>;
   idPrefix: string;
   issues: SvgInterchangeIssue[];
+  maskDefinitions: ReadonlyMap<string, Element>;
   nodeSequence: number;
   nodes: DesignNode[];
+  rootStyle: ImportedStyle;
 }
+
+interface ExportNodeOptions {
+  maskSource?: boolean;
+  selectedRoot?: boolean;
+}
+
+type ImportedNodeBase = Pick<
+  Extract<DesignNode, { kind: "group" }>,
+  | "blendMode"
+  | "childIds"
+  | "effects"
+  | "extensions"
+  | "id"
+  | "locked"
+  | "maskMode"
+  | "name"
+  | "opacity"
+  | "parentId"
+  | "visible"
+>;
 
 interface ImportedStyle {
   fill: string;
@@ -254,14 +299,16 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
     definitions,
     document: xmlDocument,
     exportedNodeIds: [],
+    frameClipSequence: 0,
     filterSequence: 0,
     gradientSequence: 0,
     issues,
+    maskSequence: 0,
     request,
     visiting: new Set(),
   };
   for (const rootNodeId of request.rootNodeIds) {
-    const element = exportNode(context, rootNodeId, true);
+    const element = exportNode(context, rootNodeId, { selectedRoot: true });
     if (element) root.appendChild(element);
   }
   if (definitions.childNodes.length > 0) {
@@ -354,14 +401,31 @@ export function importSvg(
 
   const issues: SvgInterchangeIssue[] = [];
   const rootStyle = readImportedStyle(root, DEFAULT_IMPORTED_STYLE, issues);
+  for (const property of ["mask", "clip-path"] as const) {
+    const value = readStyleOrAttribute(root, property);
+    if (value && value.trim().toLowerCase() !== "none") {
+      issues.push(
+        svgIssue(
+          "mask-omitted",
+          "error",
+          `SVG root-level ${property} requires a later viewport compositing slice`,
+          { sourceElement: root.localName },
+        ),
+      );
+    }
+  }
+  const maskDefinitions = collectSvgMaskDefinitions(root, issues);
   const context: ImportContext = {
+    activeMaskReferences: new Set(),
     filterDefinitions: collectSvgFilterDefinitions(root),
     geometry,
     gradientDefinitions: collectGradientDefinitions(root),
     idPrefix: request.idPrefix,
     issues,
+    maskDefinitions,
     nodeSequence: 0,
     nodes: [],
+    rootStyle,
   };
   const rootNodeId = nextImportedNodeId(context, "root");
   const rootEffects = readSvgFilterEffects({
@@ -370,11 +434,13 @@ export function importSvg(
     nodeId: rootNodeId,
   });
   issues.push(...rootEffects.issues);
-  const childIds: string[] = [];
-  for (const child of elementChildren(root)) {
-    const childId = importElement(context, child, rootNodeId, rootStyle, 1);
-    if (childId) childIds.push(childId);
-  }
+  const childIds = importContainerChildren(
+    context,
+    elementChildren(root),
+    rootNodeId,
+    rootStyle,
+    1,
+  );
   if (hasErrors(issues)) return failed(issues);
   if (childIds.length === 0) {
     return failure(
@@ -432,7 +498,7 @@ export function importSvg(
 function exportNode(
   context: ExportContext,
   nodeId: string,
-  selectedRoot: boolean,
+  options: ExportNodeOptions = {},
 ): Element | null {
   const node = context.request.document.nodesById[nodeId];
   if (!node) {
@@ -457,8 +523,13 @@ function exportNode(
     if (node.kind === "group" || node.kind === "frame") {
       const group = context.document.createElementNS(SVG_NAMESPACE, "g");
       applyExportMetadata(context, group, node);
-      applyExportTransform(context, group, node, selectedRoot);
-      applyExportNodeAppearance(context, group, node);
+      applyExportTransform(context, group, node, options.selectedRoot === true);
+      applyExportNodeAppearance(
+        context,
+        group,
+        node,
+        options.maskSource === true,
+      );
       if (node.kind === "frame") {
         const background = context.document.createElementNS(
           SVG_NAMESPACE,
@@ -479,19 +550,17 @@ function exportNode(
         );
         group.appendChild(background);
         if (node.properties.clipsContent) {
-          context.issues.push(
-            svgIssue(
-              "frame-clipping-omitted",
-              "warning",
-              `Frame ${node.id} clipping is not preserved by the current SVG slice`,
-              { nodeId: node.id },
-            ),
-          );
+          const clipId = appendFrameClipDefinition(context, node);
+          const content = context.document.createElementNS(SVG_NAMESPACE, "g");
+          content.setAttribute("data-opendesign-frame-content", "true");
+          content.setAttribute("clip-path", `url(#${clipId})`);
+          exportContainerChildren(context, content, node.childIds);
+          group.appendChild(content);
+        } else {
+          exportContainerChildren(context, group, node.childIds);
         }
-      }
-      for (const childId of node.childIds) {
-        const child = exportNode(context, childId, false);
-        if (child) group.appendChild(child);
+      } else {
+        exportContainerChildren(context, group, node.childIds);
       }
       return group;
     }
@@ -522,8 +591,13 @@ function exportNode(
         resolved.providerVersion,
       );
       applyExportMetadata(context, path, node);
-      applyExportTransform(context, path, node, selectedRoot);
-      applyExportNodeAppearance(context, path, node);
+      applyExportTransform(context, path, node, options.selectedRoot === true);
+      applyExportNodeAppearance(
+        context,
+        path,
+        node,
+        options.maskSource === true,
+      );
       applyExportShapeAppearance(context, path, node.id, node.properties);
       context.issues.push(
         svgIssue(
@@ -564,13 +638,224 @@ function exportNode(
       return null;
     }
     applyExportMetadata(context, element, node);
-    applyExportTransform(context, element, node, selectedRoot);
-    applyExportNodeAppearance(context, element, node);
+    applyExportTransform(context, element, node, options.selectedRoot === true);
+    applyExportNodeAppearance(
+      context,
+      element,
+      node,
+      options.maskSource === true,
+    );
     applyExportShapeAppearance(context, element, node.id, node.properties);
     return element;
   } finally {
     context.visiting.delete(nodeId);
   }
+}
+
+function exportContainerChildren(
+  context: ExportContext,
+  parent: Element,
+  childIds: readonly string[],
+): void {
+  let index = 0;
+  while (index < childIds.length) {
+    const childId = childIds[index]!;
+    const childNode = context.request.document.nodesById[childId];
+    const mode = activeSvgMaskMode(childNode);
+    if (!mode) {
+      const child = exportNode(context, childId);
+      if (child) parent.appendChild(child);
+      index += 1;
+      continue;
+    }
+
+    let runEnd = index + 1;
+    while (runEnd < childIds.length) {
+      const candidate = context.request.document.nodesById[childIds[runEnd]!];
+      if (activeSvgMaskMode(candidate)) break;
+      runEnd += 1;
+    }
+    const maskedNodeIds = childIds.slice(index + 1, runEnd);
+    const source = exportNode(context, childId, { maskSource: true });
+    if (!source) {
+      index = runEnd;
+      continue;
+    }
+
+    const referenceId = `od_${mode === "outline" ? "clip" : "mask"}_${++context.maskSequence}_${sanitizeXmlId(childId)}`;
+    source.setAttribute("data-opendesign-mask-source", "true");
+    source.setAttribute("data-opendesign-mask-mode", mode);
+    source.setAttribute("data-opendesign-mask-reference", referenceId);
+
+    const definition = appendMaskDefinition(
+      context,
+      referenceId,
+      mode,
+      childId,
+      maskedNodeIds,
+    );
+    if (mode === "clipping") {
+      parent.appendChild(source);
+      const definitionSource = source.cloneNode(true) as Element;
+      stripSvgExportedLayerIdentity(definitionSource);
+      definition.appendChild(definitionSource);
+    } else {
+      definition.appendChild(source);
+    }
+    context.definitions.appendChild(definition);
+
+    const run = context.document.createElementNS(SVG_NAMESPACE, "g");
+    run.setAttribute("data-opendesign-mask-run", "true");
+    run.setAttribute("data-opendesign-mask-mode", mode);
+    run.setAttribute("data-opendesign-mask-reference", referenceId);
+    run.setAttribute(
+      mode === "outline" ? "clip-path" : "mask",
+      `url(#${referenceId})`,
+    );
+    if (mode === "outline" && childNode && childNode.opacity !== 1) {
+      run.setAttribute("opacity", formatNumber(childNode.opacity));
+    }
+    for (const maskedNodeId of maskedNodeIds) {
+      const masked = exportNode(context, maskedNodeId);
+      if (masked) run.appendChild(masked);
+    }
+    parent.appendChild(run);
+    index = runEnd;
+  }
+}
+
+function appendFrameClipDefinition(
+  context: ExportContext,
+  node: Extract<DesignNode, { kind: "frame" }>,
+): string {
+  const clipId = `od_frame_clip_${++context.frameClipSequence}_${sanitizeXmlId(node.id)}`;
+  appendSvgFrameClipDefinition({
+    definitions: context.definitions,
+    document: context.document,
+    height: node.size.height,
+    id: clipId,
+    radius: node.properties.cornerRadius,
+    width: node.size.width,
+  });
+  return clipId;
+}
+
+function appendMaskDefinition(
+  context: ExportContext,
+  referenceId: string,
+  mode: SvgMaskMode,
+  sourceNodeId: string,
+  maskedNodeIds: readonly string[],
+): Element {
+  return createSvgMaskDefinition({
+    document: context.document,
+    id: referenceId,
+    mode,
+    region: exportMaskRegion(context, [sourceNodeId, ...maskedNodeIds]),
+  });
+}
+
+function exportMaskRegion(
+  context: ExportContext,
+  nodeIds: readonly string[],
+): Rect | null {
+  let bounds: Rect | null = null;
+  for (const nodeId of nodeIds) {
+    const node = context.request.document.nodesById[nodeId];
+    if (!node) continue;
+    const candidate = transformedNodeBounds(node);
+    bounds = bounds ? unionRects(bounds, candidate) : candidate;
+  }
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0) return null;
+  const padding = Math.max(
+    1,
+    Math.max(bounds.width, bounds.height) * 0.01,
+    svgMaskVisualPadding(context.request.document, nodeIds),
+  );
+  return {
+    x: bounds.x - padding,
+    y: bounds.y - padding,
+    width: bounds.width + padding * 2,
+    height: bounds.height + padding * 2,
+  };
+}
+
+function svgMaskVisualPadding(
+  document: DesignDocument,
+  nodeIds: readonly string[],
+): number {
+  let maximum = 0;
+  const visiting = new Set<string>();
+  const visit = (nodeId: string, inheritedScale: number): void => {
+    if (visiting.has(nodeId)) return;
+    const node = document.nodesById[nodeId];
+    if (!node) return;
+    visiting.add(nodeId);
+    const [a, b, c, d] = node.transform;
+    const scale =
+      inheritedScale * Math.max(Math.hypot(a, b), Math.hypot(c, d), 1e-6);
+    if (
+      node.kind !== "group" &&
+      node.kind !== "image" &&
+      node.kind !== "instance" &&
+      node.properties.strokes.length > 0
+    ) {
+      const strokeFactor =
+        node.properties.strokeAlign === "outside"
+          ? 1
+          : node.properties.strokeAlign === "inside"
+            ? 0
+            : 0.5;
+      maximum = Math.max(
+        maximum,
+        node.properties.strokeWidth * strokeFactor * scale,
+      );
+    }
+    for (const effect of node.effects ?? []) {
+      if (effect.visible === false) continue;
+      let expansion = 0;
+      if (effect.type === "layer-blur" || effect.type === "background-blur") {
+        expansion = effect.radius * 2;
+      } else if (effect.type === "drop-shadow") {
+        expansion =
+          Math.max(Math.abs(effect.offset.x), Math.abs(effect.offset.y)) +
+          effect.blur * 2 +
+          Math.max(0, effect.spread);
+      } else if (effect.type === "outer-glow") {
+        expansion = effect.radius * 2 + Math.max(0, effect.spread);
+      }
+      maximum = Math.max(maximum, expansion * scale);
+    }
+    for (const childId of node.childIds) visit(childId, scale);
+    visiting.delete(nodeId);
+  };
+  for (const nodeId of nodeIds) visit(nodeId, 1);
+  return maximum;
+}
+
+function transformedNodeBounds(node: DesignNode): Rect {
+  const matrix = toMatrix(node.transform);
+  const corners = [
+    applyToPoint(matrix, { x: 0, y: 0 }),
+    applyToPoint(matrix, { x: node.size.width, y: 0 }),
+    applyToPoint(matrix, { x: 0, y: node.size.height }),
+    applyToPoint(matrix, { x: node.size.width, y: node.size.height }),
+  ];
+  const xs = corners.map((point) => point.x);
+  const ys = corners.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function unionRects(left: Rect, right: Rect): Rect {
+  const x = Math.min(left.x, right.x);
+  const y = Math.min(left.y, right.y);
+  const maxX = Math.max(left.x + left.width, right.x + right.width);
+  const maxY = Math.max(left.y + left.height, right.y + right.height);
+  return { x, y, width: maxX - x, height: maxY - y };
 }
 
 function applyExportMetadata(
@@ -603,6 +888,7 @@ function applyExportNodeAppearance(
   context: ExportContext,
   element: Element,
   node: DesignNode,
+  maskSource: boolean,
 ): void {
   if (node.opacity !== 1) {
     element.setAttribute("opacity", formatNumber(node.opacity));
@@ -623,12 +909,12 @@ function applyExportNodeAppearance(
       element.setAttribute("filter", `url(#${result.filterId})`);
     }
   }
-  if (node.maskMode && node.maskMode !== "none") {
+  if (!maskSource && node.maskMode && node.maskMode !== "none") {
     context.issues.push(
       svgIssue(
         "mask-omitted",
         "warning",
-        `Mask mode ${node.maskMode} on ${node.id} is not preserved by the current SVG slice`,
+        `Mask source ${node.id} was exported without its parent sibling run, so mode ${node.maskMode} could not be preserved`,
         { nodeId: node.id },
       ),
     );
@@ -774,12 +1060,373 @@ function applyExportPaint(
   }
 }
 
+function importContainerChildren(
+  context: ImportContext,
+  children: readonly Element[],
+  parentId: string,
+  inheritedStyle: ImportedStyle,
+  depth: number,
+): string[] {
+  const childIds: string[] = [];
+  const visibleMaskSources = new Map<
+    string,
+    { element: Element; nodeId: string }
+  >();
+  const consumedMaskReferences = new Set<string>();
+
+  for (const child of children) {
+    if (child.getAttribute("data-opendesign-mask-run") === "true") {
+      const reference = resolveControlledSvgMaskRun(
+        child,
+        context.maskDefinitions,
+        context.issues,
+      );
+      if (!reference) continue;
+      if (consumedMaskReferences.has(reference.id)) {
+        context.issues.push(
+          svgIssue(
+            "mask-omitted",
+            "error",
+            `SVG mask run #${reference.id} is repeated in one container`,
+            { sourceElement: child.localName },
+          ),
+        );
+        continue;
+      }
+      consumedMaskReferences.add(reference.id);
+
+      let sourceId: string | null;
+      if (reference.mode === "clipping") {
+        const visibleSource = visibleMaskSources.get(reference.id);
+        sourceId = visibleSource?.nodeId ?? null;
+        if (!sourceId || !visibleSource) {
+          context.issues.push(
+            svgIssue(
+              "mask-omitted",
+              "error",
+              `SVG clipping mask run #${reference.id} is missing its visible sibling source`,
+              { sourceElement: child.localName },
+            ),
+          );
+          continue;
+        }
+        if (
+          !controlledSvgClippingSourcesMatch(
+            visibleSource.element,
+            reference.definition,
+          )
+        ) {
+          context.issues.push(
+            svgIssue(
+              "mask-omitted",
+              "error",
+              `SVG clipping mask definition #${reference.id} does not match its visible source`,
+              { nodeId: sourceId, sourceElement: child.localName },
+            ),
+          );
+          continue;
+        }
+        visibleMaskSources.delete(reference.id);
+      } else {
+        sourceId = importMaskDefinitionSource(
+          context,
+          reference,
+          parentId,
+          depth,
+        );
+        if (sourceId) childIds.push(sourceId);
+      }
+
+      for (const maskedElement of elementChildren(child)) {
+        const maskedId = importElement(
+          context,
+          maskedElement,
+          parentId,
+          inheritedStyle,
+          depth,
+        );
+        if (maskedId) childIds.push(maskedId);
+      }
+      continue;
+    }
+
+    const sourceReference = readVisibleSvgMaskSourceReference(
+      child,
+      context.maskDefinitions,
+      context.issues,
+    );
+    const childId = importElement(
+      context,
+      child,
+      parentId,
+      inheritedStyle,
+      depth,
+    );
+    if (!childId) continue;
+    childIds.push(childId);
+    if (sourceReference) {
+      if (visibleMaskSources.has(sourceReference.id)) {
+        context.issues.push(
+          svgIssue(
+            "mask-omitted",
+            "error",
+            `SVG clipping mask #${sourceReference.id} has multiple visible sources`,
+            { nodeId: childId, sourceElement: child.localName },
+          ),
+        );
+      } else {
+        visibleMaskSources.set(sourceReference.id, {
+          element: child,
+          nodeId: childId,
+        });
+      }
+    }
+  }
+
+  for (const [referenceId, source] of visibleMaskSources) {
+    context.issues.push(
+      svgIssue(
+        "mask-omitted",
+        "error",
+        `SVG clipping mask source #${referenceId} is not followed by its mask run`,
+        { nodeId: source.nodeId },
+      ),
+    );
+  }
+  return childIds;
+}
+
+function importMaskedElement(
+  context: ImportContext,
+  element: Element,
+  parentId: string,
+  inheritedStyle: ImportedStyle,
+  depth: number,
+  reference: SvgMaskReference,
+): string | null {
+  const checkpoint = context.nodes.length;
+  const groupId = nextImportedNodeId(context, "mask-group");
+  const sourceId = importMaskDefinitionSource(
+    context,
+    reference,
+    groupId,
+    depth + 1,
+  );
+  const source = sourceId
+    ? context.nodes.find((node) => node.id === sourceId)
+    : undefined;
+  if (source) {
+    source.transform = fromMatrix(
+      compose(
+        toMatrix(readElementTransform(element, context.issues)),
+        toMatrix(source.transform),
+      ),
+    );
+  }
+  const targetId = importElement(
+    context,
+    element,
+    groupId,
+    inheritedStyle,
+    depth + 1,
+    { ignoreMaskReference: true },
+  );
+  const exceedsNodeBudget = context.nodes.length >= MAX_IMPORTED_NODES;
+  if (!sourceId || !targetId || exceedsNodeBudget) {
+    context.nodes.splice(checkpoint);
+    if (exceedsNodeBudget) {
+      context.issues.push(
+        svgIssue(
+          "element-limit",
+          "error",
+          `SVG import exceeds ${MAX_IMPORTED_NODES} editable nodes`,
+          { sourceElement: element.localName },
+        ),
+      );
+    }
+    return null;
+  }
+  const childIds = [sourceId, targetId];
+  const bounds = importedGroupBounds(context.nodes, childIds);
+  rebaseImportedChildren(context.nodes, childIds, bounds.x, bounds.y);
+  const group: DesignNode = {
+    id: groupId,
+    kind: "group",
+    name: `${readSvgName(element) || capitalize(element.localName)} Mask`,
+    parentId,
+    childIds,
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, bounds.x, bounds.y],
+    size: { width: bounds.width, height: bounds.height },
+    opacity: 1,
+    properties: {},
+    extensions: {
+      svgImport: {
+        version: SVG_INTERCHANGE_VERSION,
+        sourceElement: "mask-wrapper",
+        maskReference: reference.id,
+      },
+    },
+  };
+  context.nodes.push(group);
+  return groupId;
+}
+
+function importMaskDefinitionSource(
+  context: ImportContext,
+  reference: SvgMaskReference,
+  parentId: string,
+  depth: number,
+): string | null {
+  if (context.activeMaskReferences.has(reference.id)) {
+    context.issues.push(
+      svgIssue(
+        "mask-omitted",
+        "error",
+        `SVG mask reference cycle detected at #${reference.id}`,
+        { sourceElement: reference.definition.localName },
+      ),
+    );
+    return null;
+  }
+  context.activeMaskReferences.add(reference.id);
+  try {
+    const definitionStyle = readImportedStyle(
+      reference.definition,
+      context.rootStyle,
+      context.issues,
+    );
+    const definitionTransform = readElementTransform(
+      reference.definition,
+      context.issues,
+    );
+    const sourceElements = elementChildren(reference.definition).filter(
+      (child) =>
+        !["title", "desc", "metadata", "defs"].includes(
+          child.localName.toLowerCase(),
+        ),
+    );
+    if (sourceElements.length === 0) {
+      context.issues.push(
+        svgIssue(
+          "mask-omitted",
+          "error",
+          `SVG mask definition #${reference.id} contains no editable graphics`,
+          { sourceElement: reference.definition.localName },
+        ),
+      );
+      return null;
+    }
+    if (sourceElements.length === 1) {
+      const sourceId = importElement(
+        context,
+        sourceElements[0]!,
+        parentId,
+        definitionStyle,
+        depth,
+      );
+      const source = sourceId
+        ? context.nodes.find((node) => node.id === sourceId)
+        : undefined;
+      if (!source) return null;
+      source.maskMode = reference.mode;
+      if (
+        reference.mode === "outline" &&
+        reference.definition.getAttribute("data-opendesign-mask-version") !==
+          "1"
+      ) {
+        source.opacity = 1;
+      }
+      source.transform = fromMatrix(
+        compose(toMatrix(definitionTransform), toMatrix(source.transform)),
+      );
+      return sourceId;
+    }
+
+    if (context.nodes.length >= MAX_IMPORTED_NODES) {
+      context.issues.push(
+        svgIssue(
+          "element-limit",
+          "error",
+          `SVG import exceeds ${MAX_IMPORTED_NODES} editable nodes`,
+          { sourceElement: reference.definition.localName },
+        ),
+      );
+      return null;
+    }
+    const groupId = nextImportedNodeId(context, "mask-source");
+    const checkpoint = context.nodes.length;
+    const childIds = importContainerChildren(
+      context,
+      sourceElements,
+      groupId,
+      definitionStyle,
+      depth + 1,
+    );
+    const exceedsNodeBudget = context.nodes.length >= MAX_IMPORTED_NODES;
+    if (childIds.length === 0 || exceedsNodeBudget) {
+      context.nodes.splice(checkpoint);
+      if (exceedsNodeBudget) {
+        context.issues.push(
+          svgIssue(
+            "element-limit",
+            "error",
+            `SVG import exceeds ${MAX_IMPORTED_NODES} editable nodes`,
+            { sourceElement: reference.definition.localName },
+          ),
+        );
+      } else {
+        context.issues.push(
+          svgIssue(
+            "mask-omitted",
+            "error",
+            `SVG mask definition #${reference.id} contains no supported source layers`,
+            { sourceElement: reference.definition.localName },
+          ),
+        );
+      }
+      return null;
+    }
+    const bounds = importedGroupBounds(context.nodes, childIds);
+    rebaseImportedChildren(context.nodes, childIds, bounds.x, bounds.y);
+    const group: DesignNode = {
+      id: groupId,
+      kind: "group",
+      name: readSvgName(reference.definition) || "Mask Source",
+      parentId,
+      childIds,
+      visible: true,
+      locked: false,
+      transform: fromMatrix(
+        compose(toMatrix(definitionTransform), translate(bounds.x, bounds.y)),
+      ),
+      size: { width: bounds.width, height: bounds.height },
+      opacity: 1,
+      maskMode: reference.mode,
+      properties: {},
+      extensions: {
+        svgImport: {
+          version: SVG_INTERCHANGE_VERSION,
+          sourceElement: reference.definition.localName.toLowerCase(),
+          sourceId: reference.id,
+        },
+      },
+    };
+    context.nodes.push(group);
+    return groupId;
+  } finally {
+    context.activeMaskReferences.delete(reference.id);
+  }
+}
+
 function importElement(
   context: ImportContext,
   element: Element,
   parentId: string,
   inheritedStyle: ImportedStyle,
   depth: number,
+  options: { ignoreMaskReference?: boolean } = {},
 ): string | null {
   const tag = element.localName.toLowerCase();
   if (
@@ -851,6 +1498,25 @@ function importElement(
     return null;
   }
 
+  if (!options.ignoreMaskReference) {
+    const maskReference = resolveStandardSvgMaskReference(
+      element,
+      context.maskDefinitions,
+      context.issues,
+    );
+    if (maskReference === null) return null;
+    if (maskReference) {
+      return importMaskedElement(
+        context,
+        element,
+        parentId,
+        inheritedStyle,
+        depth,
+        maskReference,
+      );
+    }
+  }
+
   const localStyle = readImportedStyle(element, inheritedStyle, context.issues);
   const nodeId = nextImportedNodeId(context, tag);
   const filterEffects = readSvgFilterEffects({
@@ -859,9 +1525,13 @@ function importElement(
     nodeId,
   });
   context.issues.push(...filterEffects.issues);
-  reportUnsupportedElementAttributes(element, context.issues);
+  reportUnsupportedElementAttributes(
+    element,
+    context.issues,
+    options.ignoreMaskReference === true,
+  );
   const transform = readElementTransform(element, context.issues);
-  const common = {
+  const common: ImportedNodeBase = {
     id: nodeId,
     name: readSvgName(element) || `${capitalize(tag)} ${context.nodeSequence}`,
     parentId,
@@ -874,6 +1544,7 @@ function importElement(
     ...(filterEffects.effects.length === 0
       ? {}
       : { effects: [...filterEffects.effects] }),
+    ...readSerializedSvgMaskMode(element),
     extensions: {
       svgImport: {
         version: SVG_INTERCHANGE_VERSION,
@@ -886,17 +1557,24 @@ function importElement(
   };
 
   if (tag === "g") {
-    const childIds: string[] = [];
-    for (const child of elementChildren(element)) {
-      const childId = importElement(
+    if (element.getAttribute("data-opendesign-kind") === "frame") {
+      return importFrameElement(
         context,
-        child,
+        element,
         nodeId,
+        common,
         localStyle,
-        depth + 1,
+        transform,
+        depth,
       );
-      if (childId) childIds.push(childId);
     }
+    const childIds = importContainerChildren(
+      context,
+      elementChildren(element),
+      nodeId,
+      localStyle,
+      depth + 1,
+    );
     if (childIds.length === 0) return null;
     const bounds = importedGroupBounds(context.nodes, childIds);
     rebaseImportedChildren(context.nodes, childIds, bounds.x, bounds.y);
@@ -1072,6 +1750,176 @@ function importElement(
     },
   };
   context.nodes.push(node);
+  return nodeId;
+}
+
+function importFrameElement(
+  context: ImportContext,
+  element: Element,
+  nodeId: string,
+  common: ImportedNodeBase,
+  inheritedStyle: ImportedStyle,
+  transform: Transform,
+  depth: number,
+): string | null {
+  const structuralChildren = elementChildren(element).filter(
+    (child) =>
+      !["defs", "title", "desc", "metadata"].includes(
+        child.localName.toLowerCase(),
+      ),
+  );
+  const backgrounds = structuralChildren.filter(
+    (child) =>
+      child.localName.toLowerCase() === "rect" &&
+      child.getAttribute("data-opendesign-frame-background") === "true",
+  );
+  if (backgrounds.length !== 1 || structuralChildren[0] !== backgrounds[0]) {
+    context.issues.push(
+      svgIssue(
+        "unsupported-element",
+        "error",
+        "OpenDesign SVG Frame requires exactly one leading frame background rect",
+        { nodeId, sourceElement: element.localName },
+      ),
+    );
+    return null;
+  }
+  const background = backgrounds[0]!;
+  if (
+    background.hasAttribute("transform") ||
+    background.hasAttribute("filter") ||
+    background.hasAttribute("mask") ||
+    background.hasAttribute("clip-path") ||
+    readOpacity(background.getAttribute("opacity"), 1) !== 1
+  ) {
+    context.issues.push(
+      svgIssue(
+        "unsupported-element",
+        "error",
+        "OpenDesign SVG Frame background contains unsupported structural appearance",
+        { nodeId, sourceElement: background.localName },
+      ),
+    );
+    return null;
+  }
+  const x = readLength(background, "x", 0, context.issues);
+  const y = readLength(background, "y", 0, context.issues);
+  const width = readLength(background, "width", null, context.issues);
+  const height = readLength(background, "height", null, context.issues);
+  const radius = readLength(background, "rx", 0, context.issues);
+  if (
+    x !== 0 ||
+    y !== 0 ||
+    !isPositive(width) ||
+    !isPositive(height) ||
+    radius === null ||
+    radius < 0
+  ) {
+    context.issues.push(
+      svgIssue(
+        "invalid-dimension",
+        "error",
+        "OpenDesign SVG Frame background requires origin-zero positive bounds and a non-negative corner radius",
+        { nodeId, sourceElement: background.localName },
+      ),
+    );
+    return null;
+  }
+  const backgroundStyle = readImportedStyle(
+    background,
+    inheritedStyle,
+    context.issues,
+  );
+  const shape = importShapeProperties(
+    context,
+    background,
+    backgroundStyle,
+    nodeId,
+  );
+  if (!shape) return null;
+
+  const contentElements = structuralChildren.slice(1);
+  const contentWrappers = contentElements.filter(
+    (child) => child.getAttribute("data-opendesign-frame-content") === "true",
+  );
+  let clipsContent = false;
+  let children: readonly Element[] = contentElements;
+  if (contentWrappers.length > 0) {
+    if (contentWrappers.length !== 1 || contentElements.length !== 1) {
+      context.issues.push(
+        svgIssue(
+          "mask-omitted",
+          "error",
+          "OpenDesign SVG Frame clipping wrapper must be the only content container",
+          { nodeId, sourceElement: element.localName },
+        ),
+      );
+      return null;
+    }
+    const wrapper = contentWrappers[0]!;
+    if (
+      wrapper.hasAttribute("transform") ||
+      wrapper.hasAttribute("filter") ||
+      wrapper.hasAttribute("mask") ||
+      wrapper.hasAttribute("opacity") ||
+      wrapper.hasAttribute("display") ||
+      wrapper.hasAttribute("visibility")
+    ) {
+      context.issues.push(
+        svgIssue(
+          "mask-omitted",
+          "error",
+          "OpenDesign SVG Frame clipping wrapper contains unsupported appearance or transform",
+          { nodeId, sourceElement: wrapper.localName },
+        ),
+      );
+      return null;
+    }
+    const referenceId = parseLocalSvgUrlReference(
+      readStyleOrAttribute(wrapper, "clip-path"),
+    );
+    const definition = referenceId
+      ? context.maskDefinitions.get(referenceId)
+      : undefined;
+    if (
+      !referenceId ||
+      !definition ||
+      !validateSvgFrameClipDefinition(definition, width, height, radius)
+    ) {
+      context.issues.push(
+        svgIssue(
+          "mask-omitted",
+          "error",
+          "OpenDesign SVG Frame clipping definition is missing or does not match the Frame bounds",
+          { nodeId, sourceElement: wrapper.localName },
+        ),
+      );
+      return null;
+    }
+    clipsContent = true;
+    children = elementChildren(wrapper);
+  }
+
+  const childIds = importContainerChildren(
+    context,
+    children,
+    nodeId,
+    inheritedStyle,
+    depth + 1,
+  );
+  const frame: DesignNode = {
+    ...common,
+    kind: "frame",
+    childIds,
+    transform,
+    size: { width, height },
+    properties: {
+      ...shape,
+      cornerRadius: radius,
+      clipsContent,
+    },
+  };
+  context.nodes.push(frame);
   return nodeId;
 }
 
@@ -1265,10 +2113,13 @@ function readImportedStyle(
     declarations.get(name) ??
     (element.hasAttribute(name) ? element.getAttribute(name) : null);
   const supported = new Set([
+    "clip-path",
     "fill",
     "fill-opacity",
     "fill-rule",
     "filter",
+    "mask",
+    "mask-type",
     "stroke",
     "stroke-opacity",
     "stroke-width",
@@ -1462,6 +2313,7 @@ function rebaseImportedChildren(
 function reportUnsupportedElementAttributes(
   element: Element,
   issues: SvgInterchangeIssue[],
+  ignoreMaskReference: boolean,
 ): void {
   for (let index = 0; index < element.attributes.length; index += 1) {
     const attribute = element.attributes.item(index);
@@ -1490,14 +2342,7 @@ function reportUnsupportedElementAttributes(
       continue;
     }
     if (name === "mask" || name === "clip-path") {
-      issues.push(
-        svgIssue(
-          "mask-omitted",
-          "warning",
-          `SVG ${attribute.name} is not preserved by the current import slice`,
-          { sourceElement: element.localName },
-        ),
-      );
+      if (ignoreMaskReference) continue;
     }
   }
 }

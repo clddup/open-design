@@ -95,10 +95,10 @@
 应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。
 
 - ID：`appearance.paints-effects-masks`
-- 实现方：DesignDocument 1.4.0 + PropertiesPanel + Leafer adapter + SVG filter adapter
+- 实现方：DesignDocument 1.4.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 7 项；实机 0 项
-- 限制：可编辑 SVG 边界现可保留最多八个普通零 spread 投影、一层 layer blur、效果顺序和效果可见性；内阴影、背景模糊、光晕、阴影 spread/blend、蒙版、复杂 filter graph、Electron 视觉基线、专业取色器和共享颜色样式仍未完成。
+- 限制：可编辑 SVG 边界现可保留最多八个普通零 spread 投影、一层 layer blur、效果顺序/可见性、圆角 Frame clipsContent，以及有序的 alpha/luminance/outline/clipping 同级蒙版段；内阴影、背景模糊、光晕、阴影 spread/blend、任意组合蒙版图、Electron 视觉基线、专业取色器和共享颜色样式仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360041488473-Apply-effects-to-layers)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450253-Masks)
 
@@ -200,14 +200,14 @@
 
 ### 可编辑 SVG 交换 — 降级可用
 
-把受支持的 SVG 结构与基础滤镜效果导入为可编辑 OpenDesign 矢量，并以显式保真报告导出 Path、Vector、基础图形、效果和已解析 Boolean 结果。
+把受支持的 SVG 结构、Frame 裁剪、蒙版与基础滤镜效果导入为可编辑 OpenDesign 图层，并以显式保真报告导出同一受支持语义和已解析 Boolean 结果。
 
 - ID：`delivery.svg-interchange`
 - 实现方：@opendesign/import-export-service SVG v1 + EditorRuntime planners + cancellable Renderer worker + Main path-free file bridge + run-scoped Agent import/export hosts + PathKit geometry
 - 表面：contract=available；runtime=available；human=degraded；agent=degraded；render=degraded；export=degraded
 - 证据：自动化 21 项；实机 0 项
 - 限制：文件菜单与属性检查器可把 SVG 导入冻结的 Page/Frame/Group 目标，并通过可取消 Renderer worker 导出冻结的显式选区根。Agent 只能把当前 Run 内容寻址的 SVG 句柄导入检查所得目标的明确局部坐标，并通过同一 worker 导出稳定 Page/root ID。Main 会校验授权与 Renderer 结果；模型既不接收 SVG 源码，也不接收本地路径。macOS/Windows 打包产品 smoke 仍待完成。
-- 限制：当前子集覆盖 Group、Rectangle、Ellipse、Path/Vector、transform、纯色与线性/径向渐变、居中描边、最多八个普通零 spread 投影和一层 layer blur；效果可见性与顺序可确定性往返，并可直接导入标准单个 feDropShadow/feGaussianBlur filter。文字、图片、内阴影/背景效果、光晕、spread/blend、蒙版、stylesheet、角度渐变、多 paint、复杂 filter graph 与内外描边保真仍不可用。
+- 限制：当前子集覆盖 Frame/Group、Rectangle、Ellipse、Path/Vector、transform、纯色与线性/径向渐变、居中描边、圆角 Frame clipsContent、有序 alpha/luminance/outline/clipping 同级蒙版段、最多八个普通零 spread 投影和一层 layer blur；受支持的本地 userSpaceOnUse mask/clipPath 引用会导入为可编辑同级蒙版组。文字、图片、root-level 或 mask+clip 组合、objectBoundingBox clipPath、内阴影/背景效果、光晕、spread/blend、stylesheet、角度渐变、多 paint、复杂 filter graph 与内外描边保真仍不可用。
 - 限制：标准 SVG 不能保留 OpenDesign Boolean operands；导出使用可丢弃 resolved path 并报告 boolean-flattened，重新导入为可编辑 Vector，不伪造已丢失的源层。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040028034-Add-images-and-videos-to-designs)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040028114-Export-static-designs-from-Figma)
