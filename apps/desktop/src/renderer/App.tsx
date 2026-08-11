@@ -2680,6 +2680,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               generationSkeleton={generationSkeleton}
               onTransactionError={setEditorError}
               onAssetDrop={placeImageAssetAtPoint}
+              onTextLayoutProviderReady={workspace.setTextLayoutProvider}
               runtime={runtime}
               snapshot={snapshot}
             />

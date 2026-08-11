@@ -70,6 +70,12 @@ class FakeElement extends FakeEventTarget {
   constructor(data?: Record<string, unknown>) {
     super();
     if (data) this.set(data);
+    if (!data || !Object.hasOwn(data, "width")) {
+      this.width = undefined as unknown as number;
+    }
+    if (!data || !Object.hasOwn(data, "height")) {
+      this.height = undefined as unknown as number;
+    }
   }
 
   set(data: Record<string, unknown>): void {
@@ -185,6 +191,23 @@ class FakeText extends FakeElement {
     super();
     if (data) this.set(data);
   }
+
+  get boxBounds() {
+    return {
+      x: 0,
+      y: 0,
+      width: this.width || this.text.length * 12,
+      height: this.height || 32,
+    };
+  }
+
+  override getBounds(
+    boundsType?: string,
+    coordinateType?: string,
+  ): { x: number; y: number; width: number; height: number } {
+    if (boundsType === "box") return this.boxBounds;
+    return super.getBounds(boundsType, coordinateType);
+  }
 }
 
 class FakeStroker extends FakeElement {
@@ -265,6 +288,8 @@ class FakeApp extends FakeEventTarget {
   readonly tree = new FakeTree();
   readonly sky = new FakeGroup();
   readonly editor = new FakeEditor();
+  readonly children: Array<FakeTree | FakeGroup> = [this.tree, this.sky];
+  readonly presentationRoots: FakeTree[] = [];
   mode = "normal";
   destroy = vi.fn();
 
@@ -272,6 +297,13 @@ class FakeApp extends FakeEventTarget {
     super();
     leaferHarness.app = this;
     leaferHarness.appConfig = config;
+  }
+
+  add(root: FakeTree, index = this.children.length): void {
+    const current = this.children.indexOf(root);
+    if (current >= 0) this.children.splice(current, 1);
+    else this.presentationRoots.push(root);
+    this.children.splice(index, 0, root);
   }
 }
 
@@ -306,6 +338,7 @@ vi.mock("leafer-editor", () => ({
   Group: FakeGroup,
   Image: FakeImage,
   InnerEditorEvent: { BEFORE_OPEN: "inner.before-open", CLOSE: "inner.close" },
+  Leafer: FakeTree,
   MoveEvent: { MOVE: "viewport.move", END: "viewport.move-end" },
   Path: FakePath,
   PointerEvent: {
@@ -538,7 +571,9 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.sync({ ...first, generationSkeleton: skeleton });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    const layer = app.sky.children[0] as FakeGroup | undefined;
+    expect(app.children).toEqual([app.tree, app.presentationRoots[0], app.sky]);
+    const layer = app.presentationRoots[0]?.children[0] as
+      FakeGroup | undefined;
     const artboard = layer?.children[0] as FakeGroup | undefined;
     expect(layer).toMatchObject({
       visible: true,
@@ -652,7 +687,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
-  it("keeps generation presentation aligned when Leafer sky follows the viewport", async () => {
+  it("keeps generation presentation aligned on an isolated render plane while the editor sky moves independently", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
       createCallbacks(),
@@ -692,8 +727,11 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    const skeletonLayer = app.sky.children[0] as FakeGroup | undefined;
-    const activityLayer = app.sky.children[1] as FakeGroup | undefined;
+    const presentationRoot = app.presentationRoots[0];
+    const skeletonLayer = presentationRoot?.children[0] as
+      FakeGroup | undefined;
+    const activityLayer = presentationRoot?.children[1] as
+      FakeGroup | undefined;
 
     const viewport = {
       a: 0.5,
@@ -707,14 +745,14 @@ describe("Leafer engine selection bounds synchronization", () => {
     app.sky.localTransform = { ...viewport };
     app.emit("viewport.move");
 
-    expect(skeletonLayer?.localTransform).toEqual(identityMatrix());
+    expect(skeletonLayer?.localTransform).toEqual(viewport);
     expect(activityLayer?.localTransform).toEqual({
-      a: 2,
+      a: 1,
       b: 0,
       c: 0,
-      d: 2,
-      e: 1_450,
-      f: 240,
+      d: 1,
+      e: 425,
+      f: 160,
     });
     expect(skeletonLayer?.children[0]?.localTransform).toEqual({
       a: 1,
@@ -728,7 +766,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
-  it("reconciles generation presentation after Leafer settles the sky transform", async () => {
+  it("does not double-apply continuous viewport movement when the editor sky settles later", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
       createCallbacks(),
@@ -767,8 +805,11 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    const skeletonLayer = app.sky.children[0] as FakeGroup | undefined;
-    const activityLayer = app.sky.children[1] as FakeGroup | undefined;
+    const presentationRoot = app.presentationRoots[0];
+    const skeletonLayer = presentationRoot?.children[0] as
+      FakeGroup | undefined;
+    const activityLayer = presentationRoot?.children[1] as
+      FakeGroup | undefined;
     const viewport = {
       a: 0.5,
       b: 0,
@@ -792,17 +833,41 @@ describe("Leafer engine selection bounds synchronization", () => {
       f: 160,
     });
 
+    // Keep dragging before the queued reconciliation frame. The editor sky is
+    // still on the previous viewport, but the presentation must follow the
+    // current document tree immediately instead of accumulating both pans.
     app.sky.localTransform = { ...viewport };
-    flushAnimationFrames();
-
-    expect(skeletonLayer?.localTransform).toEqual(identityMatrix());
-    expect(activityLayer?.localTransform).toEqual({
-      a: 2,
+    const continuedViewport = {
+      a: 0.5,
       b: 0,
       c: 0,
-      d: 2,
-      e: 1_450,
-      f: 240,
+      d: 0.5,
+      e: -520,
+      f: -60,
+    };
+    app.tree.localTransform = { ...continuedViewport };
+    app.emit("viewport.move");
+    expect(skeletonLayer?.localTransform).toEqual(continuedViewport);
+    expect(activityLayer?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 205,
+      f: 60,
+    });
+
+    app.sky.localTransform = { ...continuedViewport };
+    flushAnimationFrames();
+
+    expect(skeletonLayer?.localTransform).toEqual(continuedViewport);
+    expect(activityLayer?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 205,
+      f: 60,
     });
     expect(skeletonLayer?.children[0]?.localTransform).toEqual({
       a: 1,
@@ -831,7 +896,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.sync({ ...first, generationActivity: activity });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    const layer = app.sky.children[1] as FakeGroup | undefined;
+    const layer = app.presentationRoots[0]?.children[1] as
+      FakeGroup | undefined;
     expect(layer).toMatchObject({
       visible: true,
       localTransform: { a: 1, b: 0, c: 0, d: 1, e: 400, f: 300 },
@@ -1005,7 +1071,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
     const card = findElement(app.tree, "generated_card");
-    const activityLayer = app.sky.children[1] as FakeGroup | undefined;
+    const activityLayer = app.presentationRoots[0]?.children[1] as
+      FakeGroup | undefined;
     const stroker = leaferHarness.strokers[0];
     expect(card?.opacity).toBe(0);
     expect(stroker).toBeDefined();
@@ -1105,7 +1172,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(findElement(app.tree, "reduced_motion_card")?.opacity).toBe(1);
     expect(leaferHarness.strokers[0]?.target).toBeNull();
     expect(
-      (app.sky.children[1] as FakeGroup | undefined)?.localTransform,
+      (app.presentationRoots[0]?.children[1] as FakeGroup | undefined)
+        ?.localTransform,
     ).toEqual({ a: 1, b: 0, c: 0, d: 1, e: 900, f: 500 });
     adapter.sync({
       ...first,
@@ -2017,6 +2085,75 @@ describe("Leafer engine selection bounds synchronization", () => {
           type: "update_properties",
           nodeId: "feature_one",
           transform: [1, 0, 0, 1, 36, 0],
+        }),
+      ],
+    });
+    adapter.dispose();
+  });
+
+  it("keeps Auto Width text measured while moving and emits explicit bounds when resized", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const first = createInput();
+    const input = { ...first, document: structuredClone(first.document) };
+    const text = input.document.nodesById.title_welcome;
+    if (!text || text.kind !== "text") throw new Error("Missing text");
+    Object.assign(text.properties, {
+      textResize: "auto-width",
+      textWrap: "none",
+      textOverflow: "visible",
+    });
+    text.size = { width: text.properties.content.length * 12, height: 32 };
+    input.selection = { nodeIds: [text.id], anchorNodeId: text.id };
+    adapter.sync(input);
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, text.id);
+    if (!element) throw new Error("Missing text element");
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    element.localTransform.e += 24;
+    app.editor.emit("editor.move");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenLastCalledWith({
+      kind: "move",
+      operations: [
+        {
+          commandId: `leafer_transform_${text.id}`,
+          type: "update_properties",
+          nodeId: text.id,
+          transform: [1, 0, 0, 1, text.transform[4] + 24, text.transform[5]],
+        },
+      ],
+    });
+
+    onOperations.mockClear();
+    app.editor.moving = false;
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-scale");
+    element.width = 420;
+    element.height = 96;
+    app.editor.emit("editor.scale");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenLastCalledWith({
+      kind: "resize",
+      operations: [
+        expect.objectContaining({
+          commandId: `leafer_transform_${text.id}`,
+          type: "update_properties",
+          nodeId: text.id,
+          size: { width: 420, height: 96 },
         }),
       ],
     });

@@ -5,7 +5,8 @@ import {
   type Paint,
 } from "@opendesign/design-contracts";
 
-const TEXT_METADATA_VERSION = "2";
+const TEXT_METADATA_VERSION = "3";
+const FIXED_LAYOUT_TEXT_METADATA_VERSION = "2";
 const LEGACY_TEXT_METADATA_VERSION = "1";
 const VERSION_ATTRIBUTE = "data-opendesign-text-version";
 const METADATA_ATTRIBUTE = "data-opendesign-text";
@@ -105,6 +106,7 @@ export function readSvgText(element: Element): SvgTextReadResult {
   const metadataVersion = element.getAttribute(VERSION_ATTRIBUTE);
   if (
     metadataVersion !== TEXT_METADATA_VERSION &&
+    metadataVersion !== FIXED_LAYOUT_TEXT_METADATA_VERSION &&
     metadataVersion !== LEGACY_TEXT_METADATA_VERSION
   ) {
     return invalid(
@@ -128,23 +130,33 @@ export function readSvgText(element: Element): SvgTextReadResult {
   ) {
     return invalid("OpenDesign text metadata has an invalid shape");
   }
-  if (
-    metadataVersion === LEGACY_TEXT_METADATA_VERSION &&
-    isRecord(parsed.properties) &&
-    (Object.hasOwn(parsed.properties, "textWrap") ||
-      Object.hasOwn(parsed.properties, "textOverflow"))
-  ) {
-    return invalid(
-      "OpenDesign legacy text metadata contains unsupported layout fields",
-    );
+  if (isRecord(parsed.properties)) {
+    if (
+      metadataVersion === LEGACY_TEXT_METADATA_VERSION &&
+      (Object.hasOwn(parsed.properties, "textWrap") ||
+        Object.hasOwn(parsed.properties, "textOverflow") ||
+        Object.hasOwn(parsed.properties, "textResize"))
+    ) {
+      return invalid(
+        "OpenDesign legacy text metadata contains unsupported layout fields",
+      );
+    }
+    if (
+      metadataVersion === FIXED_LAYOUT_TEXT_METADATA_VERSION &&
+      Object.hasOwn(parsed.properties, "textResize")
+    ) {
+      return invalid(
+        "OpenDesign fixed-layout text metadata contains unsupported resize fields",
+      );
+    }
   }
   if (!isPositive(parsed.width) || !isPositive(parsed.height)) {
     return invalid("OpenDesign text metadata requires finite positive bounds");
   }
-  const migratedProperties =
-    metadataVersion === LEGACY_TEXT_METADATA_VERSION
-      ? migrateLegacyTextProperties(parsed.properties)
-      : parsed.properties;
+  const migratedProperties = migrateTextProperties(
+    metadataVersion,
+    parsed.properties,
+  );
   const schemaIssues = schemaValidationIssues(
     TextPropertiesSchema,
     migratedProperties,
@@ -164,13 +176,20 @@ export function readSvgText(element: Element): SvgTextReadResult {
   return mismatch ? invalid(mismatch) : { status: "valid", value };
 }
 
-function migrateLegacyTextProperties(value: unknown): unknown {
+function migrateTextProperties(version: string, value: unknown): unknown {
   if (!isRecord(value)) return value;
-  return {
-    ...value,
-    textWrap: "character",
-    textOverflow: "visible",
-  };
+  if (version === LEGACY_TEXT_METADATA_VERSION) {
+    return {
+      ...value,
+      textResize: "fixed",
+      textWrap: "character",
+      textOverflow: "visible",
+    };
+  }
+  if (version === FIXED_LAYOUT_TEXT_METADATA_VERSION) {
+    return { ...value, textResize: "fixed" };
+  }
+  return value;
 }
 
 export function svgTextShapeMatches(

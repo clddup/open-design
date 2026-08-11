@@ -1327,7 +1327,7 @@ function document({
 }) {
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.9.0",
+    schemaVersion: "1.10.0",
     documentId,
     revision: 0,
     pageOrder: [pageId],
@@ -1568,6 +1568,7 @@ function text({
   textAlignVertical = "top",
   textWrap = "word",
   textOverflow = "clip",
+  textResize = "fixed",
   ...base
 }) {
   return {
@@ -1581,6 +1582,7 @@ function text({
       letterSpacing,
       textAlignHorizontal,
       textAlignVertical,
+      textResize,
       textWrap,
       textOverflow,
       fills,

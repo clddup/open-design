@@ -735,7 +735,7 @@ function exportNode(
         svgIssue(
           "text-layout-fidelity",
           "warning",
-          `Text ${node.id} uses ${node.properties.textWrap} wrapping and ${node.properties.textOverflow} overflow inside an OpenDesign text box; standard SVG line positions cannot preserve automatic wrapping, overflow, justify, or exact font shaping without OpenDesign metadata`,
+          `Text ${node.id} uses ${node.properties.textResize} resizing, ${node.properties.textWrap} wrapping, and ${node.properties.textOverflow} overflow inside an OpenDesign text box; standard SVG line positions cannot preserve automatic sizing, wrapping, overflow, justify, or exact font shaping without OpenDesign metadata`,
           { nodeId: node.id },
         ),
       );

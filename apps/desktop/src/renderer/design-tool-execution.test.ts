@@ -6,6 +6,7 @@ import {
   getWorldTransform,
   planCreateBooleanGroup,
 } from "@opendesign/editor-runtime";
+import { memoizeTextLayoutProvider } from "@opendesign/text-service";
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
@@ -233,6 +234,95 @@ describe("Renderer design tool scope", () => {
     expect(response.ok).toBe(true);
     expect(runtime.getSnapshot().document.revision).toBe(1);
     expect(runtime.getSnapshot().state.viewport.zoom).toBe(1.25);
+  });
+
+  it("lets the Agent create measured Auto Width text without estimating bounds", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument(), {
+      textLayoutProvider: memoizeTextLayoutProvider({
+        id: "test-text-layout",
+        version: "1",
+        measure: (request) => ({
+          ok: true,
+          provider: "test-text-layout",
+          providerVersion: "1",
+          size: { width: request.content.length * 14, height: 36 },
+          warnings: [],
+        }),
+      }),
+    });
+    const frame = runtime.getSnapshot().document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    const content = "Measured by the host";
+
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "apply_auto_width_text",
+        call: {
+          toolCallId: "tool_auto_width_text",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Add Auto Width heading",
+            commands: [
+              {
+                commandId: "insert_auto_width_heading",
+                type: "insert_element",
+                pageId: "page_welcome",
+                parentId: frame.id,
+                index: frame.childIds.length,
+                node: {
+                  id: "agent_auto_heading",
+                  kind: "text",
+                  name: "Auto heading",
+                  parentId: frame.id,
+                  childIds: [],
+                  visible: true,
+                  locked: false,
+                  transform: [1, 0, 0, 1, 64, 620],
+                  size: { width: 1, height: 1 },
+                  opacity: 1,
+                  properties: {
+                    content,
+                    fontFamily: "Inter, sans-serif",
+                    fontSize: 28,
+                    fontWeight: 700,
+                    lineHeight: 36,
+                    letterSpacing: 0,
+                    textAlignHorizontal: "left",
+                    textAlignVertical: "top",
+                    textResize: "auto-width",
+                    textWrap: "none",
+                    textOverflow: "visible",
+                    fills: [{ type: "solid", color: "#151515", opacity: 1 }],
+                    strokes: [],
+                    strokeWidth: 0,
+                  },
+                  extensions: {},
+                },
+              },
+            ],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      { stageDelayMs: 0 },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          warnings: [],
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.agent_auto_heading,
+    ).toMatchObject({
+      size: { width: content.length * 14, height: 36 },
+      properties: { textResize: "auto-width" },
+    });
   });
 
   it("refreshes a stale read context but still rejects a stale write", async () => {

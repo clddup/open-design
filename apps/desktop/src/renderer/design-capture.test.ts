@@ -22,6 +22,11 @@ describe("deterministic design target capture", () => {
       retryBooleanGeometry: vi.fn(),
       setVectorPointMode: vi.fn(),
       sync,
+      textLayoutProvider: {
+        id: "test-text-layout",
+        version: "1",
+        measure: vi.fn(),
+      },
     } satisfies LeaferEngineAdapter;
     const createAdapter = vi.fn().mockResolvedValue(adapter);
     const target = {

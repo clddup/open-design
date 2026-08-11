@@ -1,5 +1,5 @@
 import { TooltipProvider } from "@opendesign/ui";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DesignNode } from "@opendesign/design-contracts";
 import type {
@@ -158,6 +158,7 @@ const textNode: DesignNode = {
     letterSpacing: 0,
     textAlignHorizontal: "left",
     textAlignVertical: "top",
+    textResize: "fixed",
     textWrap: "word",
     textOverflow: "clip",
     fills: [{ type: "solid", color: "#151515", opacity: 1 }],
@@ -379,13 +380,22 @@ describe("PropertiesPanel regular-shape workflow", () => {
 });
 
 describe("PropertiesPanel text layout workflow", () => {
-  it("edits explicit wrapping and overflow without changing text bounds", async () => {
+  it("edits resizing, wrapping, and overflow through one text section", async () => {
     const user = userEvent.setup();
     const { onUpdate } = renderPanel({ node: textNode, selectionCount: 1 });
 
+    expect(screen.getByLabelText("Text resizing")).toHaveValue("fixed");
     expect(screen.getByLabelText("Wrapping")).toHaveValue("word");
     expect(screen.getByLabelText("Overflow")).toHaveValue("clip");
     expect(screen.getByLabelText("Vertical alignment")).toHaveValue("top");
+
+    await user.selectOptions(
+      screen.getByLabelText("Text resizing"),
+      "auto-height",
+    );
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { textResize: "auto-height" },
+    });
 
     await user.selectOptions(
       screen.getByLabelText("Vertical alignment"),
@@ -405,5 +415,38 @@ describe("PropertiesPanel text layout workflow", () => {
       properties: { textOverflow: "ellipsis" },
     });
     expect(textNode.size).toEqual({ width: 320, height: 96 });
+  });
+
+  it("disables incompatible wrapping and overflow choices in Auto Size modes", () => {
+    const autoWidthText = {
+      ...textNode,
+      properties: {
+        ...textNode.properties,
+        textResize: "auto-width" as const,
+        textWrap: "none" as const,
+        textOverflow: "visible" as const,
+      },
+    };
+    renderPanel({
+      node: autoWidthText,
+      selectionCount: 1,
+    });
+    expect(screen.getByLabelText("Wrapping")).toBeDisabled();
+    expect(screen.getByLabelText("Overflow")).toBeDisabled();
+    cleanup();
+
+    const autoHeightText = {
+      ...textNode,
+      properties: {
+        ...textNode.properties,
+        textResize: "auto-height" as const,
+        textWrap: "word" as const,
+        textOverflow: "visible" as const,
+      },
+    };
+    renderPanel({ node: autoHeightText, selectionCount: 1 });
+    expect(screen.getByLabelText("Wrapping")).toBeEnabled();
+    expect(screen.getByRole("option", { name: "No wrap" })).toBeDisabled();
+    expect(screen.getByLabelText("Overflow")).toBeDisabled();
   });
 });

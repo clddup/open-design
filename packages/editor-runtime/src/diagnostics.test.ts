@@ -226,6 +226,7 @@ function brokenDocument(): DesignDocument {
         letterSpacing: 0,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
+        textResize: "fixed",
         textWrap: "word",
         textOverflow: "clip",
         fills: [{ type: "solid", color: "#000000", opacity: 1 }],

@@ -1,5 +1,6 @@
 import type { DesignDocument } from "@opendesign/design-contracts";
 import { EditorRuntime } from "@opendesign/editor-runtime";
+import type { TextLayoutProvider } from "@opendesign/text-service";
 
 export interface WorkspaceFileIdentity {
   projectId: string;
@@ -53,9 +54,12 @@ export class WorkspaceRuntime {
   #activeFileKey: string;
   #version = 0;
   #snapshot: WorkspaceSnapshot;
+  #textLayoutProvider: TextLayoutProvider | undefined;
 
   constructor(initial: WorkspaceFileIdentity & { document: DesignDocument }) {
-    const runtime = new EditorRuntime(initial.document);
+    const runtime = new EditorRuntime(initial.document, {
+      textLayoutProvider: this.#textLayoutProvider,
+    });
     const key = workspaceFileKey(initial.projectId, initial.designFileId);
     const record: WorkspaceFileRecord = {
       projectId: initial.projectId,
@@ -106,6 +110,13 @@ export class WorkspaceRuntime {
     return null;
   }
 
+  setTextLayoutProvider = (provider: TextLayoutProvider): void => {
+    this.#textLayoutProvider = provider;
+    for (const file of this.#files.values()) {
+      file.runtime.setTextLayoutProvider(provider);
+    }
+  };
+
   openFile(
     identity: WorkspaceFileIdentity,
     document: DesignDocument,
@@ -129,7 +140,9 @@ export class WorkspaceRuntime {
 
     this.#assertDocumentIdentityAvailable(document.documentId, key);
 
-    const runtime = new EditorRuntime(document);
+    const runtime = new EditorRuntime(document, {
+      textLayoutProvider: this.#textLayoutProvider,
+    });
     const record: WorkspaceFileRecord = {
       ...identity,
       runtime,
@@ -153,7 +166,9 @@ export class WorkspaceRuntime {
     if (active.retainedByRunIds.size > 0) {
       throw new Error("Cannot replace a design file used by background runs");
     }
-    const runtime = new EditorRuntime(document);
+    const runtime = new EditorRuntime(document, {
+      textLayoutProvider: this.#textLayoutProvider,
+    });
     const key = workspaceFileKey(identity.projectId, identity.designFileId);
     if (key !== this.#activeFileKey && this.#files.has(key)) {
       throw new Error(

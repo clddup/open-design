@@ -14,6 +14,7 @@ import type {
   RasterExportMimeType,
   RasterExportRequest,
 } from "@opendesign/import-export-service/raster";
+import type { TextLayoutProvider } from "@opendesign/text-service";
 
 export type LeaferCanvasTool =
   | "select"
@@ -206,4 +207,5 @@ export interface LeaferEngineAdapter {
   retryBooleanGeometry(): boolean;
   setVectorPointMode(mode: VectorPointMode): boolean;
   sync(input: LeaferEngineSyncInput): void;
+  readonly textLayoutProvider: TextLayoutProvider;
 }

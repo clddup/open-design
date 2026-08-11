@@ -6,7 +6,8 @@ import {
 } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.9.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.10.0" as const;
+export const TEXT_LAYOUT_DESIGN_SCHEMA_VERSION = "1.9.0" as const;
 export const VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION = "1.8.0" as const;
 export const EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION = "1.7.0" as const;
 export const REGULAR_SHAPE_DESIGN_SCHEMA_VERSION = "1.6.0" as const;
@@ -387,25 +388,37 @@ export const StarPropertiesSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const TextPropertiesSchema = Type.Object(
+const TextSharedProperties = {
+  content: Type.String(),
+  fontFamily: Type.String({ minLength: 1 }),
+  fontSize: Type.Number({ exclusiveMinimum: 0 }),
+  fontWeight: Type.Integer({ minimum: 1, maximum: 1000 }),
+  lineHeight: Type.Number({ exclusiveMinimum: 0 }),
+  letterSpacing: Type.Number(),
+  textAlignHorizontal: Type.Union([
+    Type.Literal("left"),
+    Type.Literal("center"),
+    Type.Literal("right"),
+    Type.Literal("justify"),
+  ]),
+  textAlignVertical: Type.Union([
+    Type.Literal("top"),
+    Type.Literal("center"),
+    Type.Literal("bottom"),
+  ]),
+  fills: Type.Array(PaintSchema),
+  strokes: Type.Array(PaintSchema),
+  strokeWidth: Type.Number({ minimum: 0 }),
+  strokeAlign: ShapeProperties.strokeAlign,
+  strokeCap: ShapeProperties.strokeCap,
+  strokeJoin: ShapeProperties.strokeJoin,
+  dashPattern: ShapeProperties.dashPattern,
+} as const;
+
+const FixedTextPropertiesSchema = Type.Object(
   {
-    content: Type.String(),
-    fontFamily: Type.String({ minLength: 1 }),
-    fontSize: Type.Number({ exclusiveMinimum: 0 }),
-    fontWeight: Type.Integer({ minimum: 1, maximum: 1000 }),
-    lineHeight: Type.Number({ exclusiveMinimum: 0 }),
-    letterSpacing: Type.Number(),
-    textAlignHorizontal: Type.Union([
-      Type.Literal("left"),
-      Type.Literal("center"),
-      Type.Literal("right"),
-      Type.Literal("justify"),
-    ]),
-    textAlignVertical: Type.Union([
-      Type.Literal("top"),
-      Type.Literal("center"),
-      Type.Literal("bottom"),
-    ]),
+    ...TextSharedProperties,
+    textResize: Type.Literal("fixed"),
     textWrap: Type.Union([
       Type.Literal("none"),
       Type.Literal("word"),
@@ -416,16 +429,35 @@ export const TextPropertiesSchema = Type.Object(
       Type.Literal("clip"),
       Type.Literal("ellipsis"),
     ]),
-    fills: Type.Array(PaintSchema),
-    strokes: Type.Array(PaintSchema),
-    strokeWidth: Type.Number({ minimum: 0 }),
-    strokeAlign: ShapeProperties.strokeAlign,
-    strokeCap: ShapeProperties.strokeCap,
-    strokeJoin: ShapeProperties.strokeJoin,
-    dashPattern: ShapeProperties.dashPattern,
   },
   { additionalProperties: false },
 );
+
+const AutoWidthTextPropertiesSchema = Type.Object(
+  {
+    ...TextSharedProperties,
+    textResize: Type.Literal("auto-width"),
+    textWrap: Type.Literal("none"),
+    textOverflow: Type.Literal("visible"),
+  },
+  { additionalProperties: false },
+);
+
+const AutoHeightTextPropertiesSchema = Type.Object(
+  {
+    ...TextSharedProperties,
+    textResize: Type.Literal("auto-height"),
+    textWrap: Type.Union([Type.Literal("word"), Type.Literal("character")]),
+    textOverflow: Type.Literal("visible"),
+  },
+  { additionalProperties: false },
+);
+
+export const TextPropertiesSchema = Type.Union([
+  FixedTextPropertiesSchema,
+  AutoWidthTextPropertiesSchema,
+  AutoHeightTextPropertiesSchema,
+]);
 
 export const ImagePlacementSchema = Type.Union([
   Type.Object(
@@ -1621,7 +1653,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       schemaVersion !== LINE_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== REGULAR_SHAPE_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== TEXT_LAYOUT_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
@@ -1660,6 +1693,7 @@ function migrateTextNodes(document: Record<string, unknown>): void {
     const textProperties = properties as Record<string, unknown>;
     textProperties.textWrap ??= "character";
     textProperties.textOverflow ??= "visible";
+    textProperties.textResize ??= "fixed";
   }
 }
 

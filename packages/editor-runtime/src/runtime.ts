@@ -16,12 +16,18 @@ import {
   type DesignTransactionSuccess,
   type EditorEvent,
   type EditorState,
+  type FidelityWarning,
   type HistoryEntry,
   type HistoryState,
   type Revision,
   type SelectionState,
   type ViewportState,
 } from "@opendesign/design-contracts";
+import {
+  validateTextLayoutResult,
+  type TextLayoutProvider,
+  type TextLayoutRequest,
+} from "@opendesign/text-service";
 import {
   canonicalJsonStringify,
   deepFreeze,
@@ -46,6 +52,12 @@ export interface EditorRuntimeOptions {
   onListenerError?: (error: unknown, event: EditorEvent) => void;
   initialTool?: string;
   initialViewport?: Partial<ViewportState>;
+  textLayoutProvider?: TextLayoutProvider;
+}
+
+interface OperationContext {
+  textLayoutProvider?: TextLayoutProvider;
+  warnings: FidelityWarning[];
 }
 
 interface HistoryRecord {
@@ -108,6 +120,7 @@ export class EditorRuntime {
   readonly #now: () => string;
   readonly #createId: (prefix: string) => string;
   readonly #onListenerError: (error: unknown, event: EditorEvent) => void;
+  #textLayoutProvider: TextLayoutProvider | undefined;
 
   constructor(document: unknown, options: EditorRuntimeOptions = {}) {
     this.#now = options.now ?? (() => new Date().toISOString());
@@ -115,6 +128,7 @@ export class EditorRuntime {
       options.createId ??
       ((prefix) => `${prefix}_${Date.now()}_${++this.#idSequence}`);
     this.#onListenerError = options.onListenerError ?? (() => undefined);
+    this.#textLayoutProvider = options.textLayoutProvider;
     this.#document = normalizeDesignDocument(document);
     this.#tool = options.initialTool ?? "select";
     this.#viewport = validateViewport({
@@ -135,6 +149,10 @@ export class EditorRuntime {
     return this.#snapshot;
   }
 
+  setTextLayoutProvider(provider: TextLayoutProvider): void {
+    this.#textLayoutProvider = provider;
+  }
+
   subscribe(listener: EditorRuntimeListener): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -153,6 +171,7 @@ export class EditorRuntime {
       "preview",
       executed.document,
       executed.changes,
+      executed.warnings,
     );
   }
 
@@ -193,6 +212,7 @@ export class EditorRuntime {
       "apply",
       executed.document,
       executed.changes,
+      executed.warnings,
     );
     const selectionChanged = this.#commitDocument(
       executed.document,
@@ -477,21 +497,31 @@ export class EditorRuntime {
     return null;
   }
 
-  #execute(
-    transaction: DesignTransaction,
-  ):
-    | { ok: true; document: DesignDocument; changes: DesignChangeSet }
+  #execute(transaction: DesignTransaction):
+    | {
+        ok: true;
+        document: DesignDocument;
+        changes: DesignChangeSet;
+        warnings: FidelityWarning[];
+      }
     | { ok: false; error: DesignError } {
     const draft = structuredClone(this.#document);
+    const context: OperationContext = {
+      ...(this.#textLayoutProvider
+        ? { textLayoutProvider: this.#textLayoutProvider }
+        : {}),
+      warnings: [],
+    };
     try {
       for (const command of transaction.commands)
-        applyOperation(draft, command);
+        applyOperation(draft, command, context);
       draft.revision = this.#document.revision + 1;
       const document = normalizeDesignDocument(draft);
       return {
         ok: true,
         document,
         changes: diffDocuments(this.#document, document, document.revision),
+        warnings: context.warnings,
       };
     } catch (error) {
       return {
@@ -506,6 +536,7 @@ export class EditorRuntime {
     mode: "preview" | "apply",
     document: DesignDocument,
     changes: DesignChangeSet,
+    warnings: FidelityWarning[] = [],
   ): DesignTransactionSuccess {
     return deepFreeze({
       ok: true,
@@ -520,7 +551,7 @@ export class EditorRuntime {
         transaction.actor,
       ),
       changes,
-      warnings: [],
+      warnings,
     });
   }
 
@@ -718,31 +749,38 @@ class OperationError extends Error {
   readonly code: DesignError["code"];
   readonly path: string | undefined;
   readonly details: DesignError["details"] | undefined;
+  readonly retryable: boolean;
 
   constructor(
     commandId: string,
     message: string,
     code: DesignError["code"] = "invalid",
-    options: { path?: string; details?: DesignError["details"] } = {},
+    options: {
+      path?: string;
+      details?: DesignError["details"];
+      retryable?: boolean;
+    } = {},
   ) {
     super(message);
     this.commandId = commandId;
     this.code = code;
     this.path = options.path;
     this.details = options.details;
+    this.retryable = options.retryable ?? false;
   }
 }
 
 function applyOperation(
   document: DesignDocument,
   command: DesignOperation,
+  context: OperationContext,
 ): void {
   switch (command.type) {
     case "insert_element":
-      insertElement(document, command);
+      insertElement(document, command, context);
       return;
     case "update_properties":
-      updateProperties(document, command);
+      updateProperties(document, command, context);
       return;
     case "move_element":
       moveElement(document, command);
@@ -751,7 +789,7 @@ function applyOperation(
       deleteElement(document, command);
       return;
     case "replace_subtree":
-      replaceSubtree(document, command);
+      replaceSubtree(document, command, context);
       return;
     case "put_asset":
       putAsset(document, command);
@@ -905,6 +943,7 @@ function deleteAsset(
 function insertElement(
   document: DesignDocument,
   command: Extract<DesignOperation, { type: "insert_element" }>,
+  context: OperationContext,
 ): void {
   if (document.nodesById[command.node.id]) {
     throw new OperationError(
@@ -928,12 +967,18 @@ function insertElement(
   );
   assertIndex(target, command.index, command.commandId);
   document.nodesById[command.node.id] = structuredClone(command.node);
+  const inserted = document.nodesById[command.node.id];
+  if (inserted?.kind === "text") {
+    normalizeTextResizeProperties(inserted.properties);
+    resolveTextAutoSize(inserted, command.commandId, context);
+  }
   target.splice(command.index, 0, command.node.id);
 }
 
 function updateProperties(
   document: DesignDocument,
   command: Extract<DesignOperation, { type: "update_properties" }>,
+  context: OperationContext,
 ): void {
   const node = document.nodesById[command.nodeId];
   if (!node) throw notFound(command.commandId, command.nodeId);
@@ -964,6 +1009,18 @@ function updateProperties(
       Object.assign(node[field], structuredClone(value));
     } else {
       Object.assign(node, { [field]: structuredClone(value) });
+    }
+  }
+  if (node.kind === "text") {
+    const requestedResize = command.properties?.textResize;
+    if (command.size !== undefined && requestedResize === undefined) {
+      node.properties.textResize = "fixed";
+      if (node.properties.textWrap === "none")
+        node.properties.textWrap = "word";
+    }
+    normalizeTextResizeProperties(node.properties);
+    if (textLayoutAffected(command, requestedResize)) {
+      resolveTextAutoSize(node, command.commandId, context);
     }
   }
   const schemaIssues = schemaValidationIssues(DesignNodeSchema, node);
@@ -1035,6 +1092,7 @@ function deleteElement(
 function replaceSubtree(
   document: DesignDocument,
   command: Extract<DesignOperation, { type: "replace_subtree" }>,
+  context: OperationContext,
 ): void {
   const current = document.nodesById[command.rootNodeId];
   if (!current) throw notFound(command.commandId, command.rootNodeId);
@@ -1080,6 +1138,169 @@ function replaceSubtree(
   for (const node of command.nodes) {
     document.nodesById[node.id] = structuredClone(node);
   }
+  for (const node of command.nodes) {
+    const replacementNode = document.nodesById[node.id];
+    if (replacementNode?.kind !== "text") continue;
+    normalizeTextResizeProperties(replacementNode.properties);
+    resolveTextAutoSize(replacementNode, command.commandId, context);
+  }
+}
+
+type TextNode = Extract<DesignNode, { kind: "text" }>;
+type TextProperties = TextNode["properties"];
+type MutableTextLayoutProperties = {
+  textOverflow: "visible" | "clip" | "ellipsis";
+  textResize: "auto-width" | "auto-height" | "fixed";
+  textWrap: "none" | "word" | "character";
+};
+
+function normalizeTextResizeProperties(properties: TextProperties): void {
+  const layout = properties as unknown as MutableTextLayoutProperties;
+  if (layout.textResize === "auto-width") {
+    layout.textWrap = "none";
+    layout.textOverflow = "visible";
+    return;
+  }
+  if (layout.textResize === "auto-height") {
+    if (layout.textWrap === "none") layout.textWrap = "word";
+    layout.textOverflow = "visible";
+  }
+}
+
+function textLayoutAffected(
+  command: Extract<DesignOperation, { type: "update_properties" }>,
+  requestedResize: unknown,
+): boolean {
+  if (command.size !== undefined || requestedResize !== undefined) return true;
+  const properties = command.properties;
+  if (!properties) return false;
+  return [
+    "content",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "lineHeight",
+    "letterSpacing",
+    "textWrap",
+  ].some((field) => Object.hasOwn(properties, field));
+}
+
+function resolveTextAutoSize(
+  node: TextNode,
+  commandId: string,
+  context: OperationContext,
+): void {
+  if (node.properties.textResize === "fixed") return;
+  const provider = context.textLayoutProvider;
+  if (!provider) {
+    throw new OperationError(
+      commandId,
+      "Text Auto Size is still initializing; retry after the canvas is ready",
+      "engine-failure",
+      {
+        path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
+        retryable: true,
+        details: {
+          nodeId: node.id,
+          feature: "text-auto-size",
+          recovery: "retry-after-canvas-ready",
+        },
+      },
+    );
+  }
+  const request: TextLayoutRequest = {
+    content: node.properties.content,
+    fontFamily: node.properties.fontFamily,
+    fontSize: node.properties.fontSize,
+    fontWeight: node.properties.fontWeight,
+    letterSpacing: node.properties.letterSpacing,
+    lineHeight: node.properties.lineHeight,
+    mode: node.properties.textResize,
+    textWrap: node.properties.textWrap,
+    ...(node.properties.textResize === "auto-height"
+      ? { width: node.size.width }
+      : {}),
+  };
+  let result: ReturnType<TextLayoutProvider["measure"]>;
+  try {
+    result = provider.measure(request);
+  } catch (error) {
+    throw new OperationError(
+      commandId,
+      error instanceof Error && error.message
+        ? `Text layout provider failed: ${error.message}`
+        : "Text layout provider failed",
+      "engine-failure",
+      {
+        path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
+        retryable: true,
+        details: {
+          nodeId: node.id,
+          provider: provider.id,
+          providerVersion: provider.version,
+          providerCode: "provider-threw",
+        },
+      },
+    );
+  }
+  const resultIssue = validateTextLayoutResult(result);
+  if (resultIssue) {
+    throw new OperationError(
+      commandId,
+      `Text layout provider returned an invalid result: ${resultIssue}`,
+      "engine-failure",
+      {
+        path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
+        retryable: true,
+        details: {
+          nodeId: node.id,
+          provider: provider.id,
+          providerVersion: provider.version,
+        },
+      },
+    );
+  }
+  if (!result.ok) {
+    throw new OperationError(commandId, result.message, "engine-failure", {
+      path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
+      retryable: result.retryable,
+      details: {
+        nodeId: node.id,
+        provider: provider.id,
+        providerVersion: provider.version,
+        providerCode: result.code,
+      },
+    });
+  }
+  if (
+    result.provider !== provider.id ||
+    result.providerVersion !== provider.version
+  ) {
+    throw new OperationError(
+      commandId,
+      "Text layout provider returned inconsistent identity",
+      "engine-failure",
+      {
+        path: `/nodesById/${escapeJsonPointer(node.id)}/size`,
+        details: {
+          nodeId: node.id,
+          provider: provider.id,
+          providerVersion: provider.version,
+          resultProvider: result.provider,
+          resultProviderVersion: result.providerVersion,
+        },
+      },
+    );
+  }
+  node.size = structuredClone(result.size);
+  context.warnings.push(
+    ...result.warnings.map((warning) => ({
+      nodeId: node.id,
+      feature: `text-layout.${warning.code}`,
+      fallback: warning.fallback,
+      message: warning.message,
+    })),
+  );
 }
 
 function targetChildren(
@@ -1490,7 +1711,7 @@ function operationError(error: unknown): DesignError {
       message: error.message,
       commandId: error.commandId,
       ...(error.path === undefined ? {} : { path: error.path }),
-      retryable: false,
+      retryable: error.retryable,
       ...(error.details === undefined ? {} : { details: error.details }),
     };
   }

@@ -48,6 +48,7 @@ import * as rasterExport from "./raster-export";
 import * as svgInterchange from "./svg-interchange";
 import type { SuccessfulSvgImportResult } from "./svg-interchange-contract";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
+import type { TextLayoutRequest } from "@opendesign/text-service";
 import type { ProjectDesignFile } from "../shared/desktop-api";
 import type { DiagnosticEvent } from "../shared/diagnostics";
 import {
@@ -63,6 +64,19 @@ const leaferHarness = vi.hoisted(() => ({
   sync: vi.fn(),
   retryBooleanGeometry: vi.fn(() => true),
   setVectorPointMode: vi.fn(() => true),
+  measureText: vi.fn((request: TextLayoutRequest) => ({
+    ok: true as const,
+    provider: "test-text-layout",
+    providerVersion: "1",
+    size: {
+      width:
+        request.mode === "auto-height"
+          ? (request.width ?? 240)
+          : Math.max(1, request.content.length * request.fontSize * 0.6),
+      height: request.lineHeight,
+    },
+    warnings: [],
+  })),
 }));
 
 vi.mock("@opendesign/leafer-engine", () => ({
@@ -79,6 +93,11 @@ vi.mock("@opendesign/leafer-engine", () => ({
           leaferHarness.finishGenerationPresentation,
         retryBooleanGeometry: leaferHarness.retryBooleanGeometry,
         setVectorPointMode: leaferHarness.setVectorPointMode,
+        textLayoutProvider: {
+          id: "test-text-layout",
+          version: "1",
+          measure: leaferHarness.measureText,
+        },
         sync: (input: LeaferEngineSyncInput) => {
           leaferHarness.input = input;
           leaferHarness.sync(input);
@@ -126,6 +145,7 @@ beforeEach(() => {
   leaferHarness.sync.mockClear();
   leaferHarness.retryBooleanGeometry.mockClear();
   leaferHarness.setVectorPointMode.mockClear();
+  leaferHarness.measureText.mockClear();
   svgHarness.runImport.mockReset();
   svgHarness.runExport.mockReset();
   captureHarness.capture.mockReset();
@@ -2018,6 +2038,72 @@ describe("App", () => {
     expect(snapshot.document.revision).toBe(1);
   });
 
+  it("creates clicked text as Auto Width and dragged text as Fixed size", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const before = new Set(
+      Object.keys(runtime().getSnapshot().document.nodesById),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Text (T)" }));
+    act(() => {
+      leaferCallbacks().onCreate({
+        dragged: false,
+        height: 1,
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        tool: "text",
+        width: 1,
+        x: 420,
+        y: 236,
+      });
+    });
+    let snapshot = runtime().getSnapshot();
+    const autoTextId = Object.keys(snapshot.document.nodesById).find(
+      (nodeId) => !before.has(nodeId),
+    );
+    const autoText = snapshot.document.nodesById[autoTextId ?? ""];
+    expect(autoText).toMatchObject({
+      kind: "text",
+      size: { height: 32 },
+      properties: {
+        textResize: "auto-width",
+        textWrap: "none",
+        textOverflow: "visible",
+      },
+    });
+    expect(autoText?.size.width).toBeCloseTo(115.2, 6);
+    expect(leaferHarness.measureText).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Text (T)" }));
+    act(() => {
+      leaferCallbacks().onCreate({
+        dragged: true,
+        height: 96,
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        tool: "text",
+        width: 320,
+        x: 620,
+        y: 236,
+      });
+    });
+    snapshot = runtime().getSnapshot();
+    const fixedTextId = Object.keys(snapshot.document.nodesById).find(
+      (nodeId) => !before.has(nodeId) && nodeId !== autoTextId,
+    );
+    expect(snapshot.document.nodesById[fixedTextId ?? ""]).toMatchObject({
+      kind: "text",
+      size: { width: 320, height: 96 },
+      properties: {
+        textResize: "fixed",
+        textWrap: "word",
+        textOverflow: "clip",
+      },
+    });
+    expect(leaferHarness.measureText).toHaveBeenCalledTimes(1);
+  });
+
   it("creates editable Line and Arrow nodes from toolbar and keyboard tools", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -3759,6 +3845,40 @@ describe("App", () => {
     expect(
       runtime().getSnapshot().document.nodesById.title_welcome?.properties,
     ).toMatchObject({ content: "Poster headline", fontSize: 64 });
+  });
+
+  it("reflows text from the inspector and switches Auto Size to Fixed on manual width", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(screen.getByRole("button", { name: "Title" }));
+    await user.click(screen.getByRole("tab", { name: "Properties" }));
+    const before = runtime().getSnapshot().document.nodesById.title_welcome;
+    if (!before || before.kind !== "text") throw new Error("Missing title");
+
+    await user.selectOptions(
+      screen.getByLabelText("Text resizing"),
+      "auto-height",
+    );
+    expect(
+      runtime().getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      size: { width: before.size.width, height: before.properties.lineHeight },
+      properties: {
+        textResize: "auto-height",
+        textWrap: "word",
+        textOverflow: "visible",
+      },
+    });
+
+    const width = screen.getByLabelText("Width");
+    await user.clear(width);
+    await user.type(width, "480{Enter}");
+    expect(
+      runtime().getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      size: { width: 480 },
+      properties: { textResize: "fixed" },
+    });
   });
 
   it("accepts Leafer pan state without editing the document", () => {

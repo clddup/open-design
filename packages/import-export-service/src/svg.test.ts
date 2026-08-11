@@ -232,6 +232,7 @@ describe("versioned SVG interchange", () => {
         letterSpacing: -0.4,
         textAlignHorizontal: "center",
         textAlignVertical: "center",
+        textResize: "fixed",
         textWrap: "word",
         textOverflow: "ellipsis",
         fills: [{ type: "solid", color: "#153eaa", opacity: 1 }],
@@ -269,7 +270,7 @@ describe("versioned SVG interchange", () => {
       { code: "text-layout-fidelity", severity: "warning" },
     ]);
     expect(first.svg).toContain("<text");
-    expect(first.svg).toContain('data-opendesign-text-version="2"');
+    expect(first.svg).toContain('data-opendesign-text-version="3"');
     expect(first.svg).toContain('font-family="Inter"');
     expect(first.svg).toContain('font-size="24"');
     expect(first.svg).toContain('font-weight="650"');
@@ -303,9 +304,10 @@ describe("versioned SVG interchange", () => {
 
     const legacySvg = first.svg
       .replace(
-        'data-opendesign-text-version="2"',
+        'data-opendesign-text-version="3"',
         'data-opendesign-text-version="1"',
       )
+      .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "")
       .replace("&quot;textWrap&quot;:&quot;word&quot;,", "")
       .replace("&quot;textOverflow&quot;:&quot;ellipsis&quot;,", "");
     const legacyImported = importSvg(
@@ -316,13 +318,36 @@ describe("versioned SVG interchange", () => {
     if (legacyImported.ok) {
       expect(findImportedSource(legacyImported.nodes, text.id)).toMatchObject({
         kind: "text",
-        properties: { textWrap: "character", textOverflow: "visible" },
+        properties: {
+          textResize: "fixed",
+          textWrap: "character",
+          textOverflow: "visible",
+        },
+      });
+    }
+    const fixedLayoutSvg = first.svg
+      .replace(
+        'data-opendesign-text-version="3"',
+        'data-opendesign-text-version="2"',
+      )
+      .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "");
+    const fixedLayoutImported = importSvg(
+      { svg: fixedLayoutSvg, idPrefix: "text_fixed_layout_metadata" },
+      geometry,
+    );
+    expect(fixedLayoutImported.ok).toBe(true);
+    if (fixedLayoutImported.ok) {
+      expect(
+        findImportedSource(fixedLayoutImported.nodes, text.id),
+      ).toMatchObject({
+        kind: "text",
+        properties: { textResize: "fixed" },
       });
     }
     const ambiguousLegacy = importSvg(
       {
         svg: first.svg.replace(
-          'data-opendesign-text-version="2"',
+          'data-opendesign-text-version="3"',
           'data-opendesign-text-version="1"',
         ),
         idPrefix: "text_ambiguous_legacy_metadata",
@@ -394,6 +419,92 @@ describe("versioned SVG interchange", () => {
     }
   });
 
+  it("round-trips Auto Width and Auto Height semantics through text metadata v3", () => {
+    const autoWidth: DesignNode = {
+      id: "auto_width_text",
+      kind: "text",
+      name: "Auto Width",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 12, 12],
+      size: { width: 168.5, height: 32 },
+      opacity: 1,
+      properties: {
+        content: "Auto Width",
+        fontFamily: "Inter",
+        fontSize: 24,
+        fontWeight: 600,
+        lineHeight: 32,
+        letterSpacing: 0,
+        textAlignHorizontal: "left",
+        textAlignVertical: "top",
+        textResize: "auto-width",
+        textWrap: "none",
+        textOverflow: "visible",
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    const autoHeight: DesignNode = {
+      ...autoWidth,
+      id: "auto_height_text",
+      name: "Auto Height",
+      transform: [1, 0, 0, 1, 12, 72],
+      size: { width: 180, height: 96.25 },
+      properties: {
+        ...autoWidth.properties,
+        content: "Auto Height paragraph",
+        textResize: "auto-height",
+        textWrap: "word",
+        textOverflow: "visible",
+      },
+    };
+    const document = documentFromNodes(
+      "svg_auto_text_document",
+      [autoWidth, autoHeight],
+      [autoWidth.id, autoHeight.id],
+    );
+
+    const exported = exportSvg({
+      document,
+      rootNodeIds: [autoWidth.id, autoHeight.id],
+      viewport: { x: 0, y: 0, width: 240, height: 200 },
+      includeLayerIds: true,
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(
+      exported.svg.match(/data-opendesign-text-version="3"/g),
+    ).toHaveLength(2);
+
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "auto_text_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(findImportedSource(imported.nodes, autoWidth.id)).toMatchObject({
+      size: autoWidth.size,
+      properties: {
+        textResize: "auto-width",
+        textWrap: "none",
+        textOverflow: "visible",
+      },
+    });
+    expect(findImportedSource(imported.nodes, autoHeight.id)).toMatchObject({
+      size: autoHeight.size,
+      properties: {
+        textResize: "auto-height",
+        textWrap: "word",
+        textOverflow: "visible",
+      },
+    });
+  });
+
   it("preserves controlled Text gradients and editable stroke alignment while reporting standard SVG degradation", () => {
     const text: DesignNode = {
       id: "gradient_wordmark",
@@ -415,6 +526,7 @@ describe("versioned SVG interchange", () => {
         letterSpacing: 0,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
+        textResize: "fixed",
         textWrap: "none",
         textOverflow: "visible",
         fills: [

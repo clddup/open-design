@@ -20,6 +20,62 @@ import {
 
 const actor = { type: "user" as const, id: "user_1" };
 
+function textDocumentFixture() {
+  return {
+    format: DESIGN_FORMAT,
+    schemaVersion: DESIGN_SCHEMA_VERSION,
+    documentId: "document_text_current",
+    revision: 0,
+    pageOrder: ["page_1"],
+    pagesById: {
+      page_1: {
+        id: "page_1",
+        name: "Page 1",
+        rootNodeIds: ["text_1"],
+        extensions: {},
+      },
+    },
+    nodesById: {
+      text_1: {
+        id: "text_1",
+        name: "Text",
+        parentId: null,
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, 0, 0] as const,
+        size: { width: 240, height: 64 },
+        opacity: 1,
+        extensions: {},
+        kind: "text" as const,
+        properties: {
+          content: "Text",
+          fontFamily: "Inter",
+          fontSize: 20,
+          fontWeight: 500,
+          lineHeight: 28,
+          letterSpacing: 0,
+          textAlignHorizontal: "left" as const,
+          textAlignVertical: "top" as const,
+          textResize: "fixed" as const,
+          textWrap: "word" as const,
+          textOverflow: "clip" as const,
+          fills: [{ type: "solid" as const, color: "#111827", opacity: 1 }],
+          strokes: [],
+          strokeWidth: 0,
+        },
+      },
+    },
+    componentsById: {},
+    variantSetsById: {},
+    tokenCollectionsById: {},
+    tokensById: {},
+    interactionsById: {},
+    assetsById: {},
+    extensions: {},
+  };
+}
+
 function operation() {
   return {
     commandId: "command_1",
@@ -997,6 +1053,7 @@ describe("design contract schemas", () => {
     if (!text || text.kind !== "text") throw new Error("Missing text");
     expect(text.size).toEqual(source.nodesById.text_1.size);
     expect(text.properties).toMatchObject({
+      textResize: "fixed",
       textWrap: "character",
       textOverflow: "visible",
     });
@@ -1005,6 +1062,72 @@ describe("design contract schemas", () => {
       Value.Check(DesignNodeSchema, {
         ...text,
         properties: { ...text.properties, textOverflow: "fade" },
+      }),
+    ).toBe(false);
+  });
+
+  it("migrates 1.9 fixed text boxes to explicit Fixed resizing", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.9.0" as typeof source.schemaVersion;
+    const text = Object.values(source.nodesById).find(
+      (node) => node.kind === "text",
+    );
+    if (!text || text.kind !== "text") throw new Error("Missing text");
+    delete (text.properties as Partial<typeof text.properties>).textResize;
+
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    const migratedText = migrated?.nodesById[text.id];
+    expect(migratedText).toMatchObject({
+      kind: "text",
+      size: text.size,
+      properties: { textResize: "fixed" },
+    });
+  });
+
+  it("enforces canonical wrapping and overflow for Auto Size text", () => {
+    const source = textDocumentFixture();
+    const text = Object.values(source.nodesById).find(
+      (node) => node.kind === "text",
+    );
+    if (!text || text.kind !== "text") throw new Error("Missing text");
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        properties: {
+          ...text.properties,
+          textResize: "auto-width",
+          textWrap: "none",
+          textOverflow: "visible",
+        },
+      }),
+    ).toBe(true);
+    const invalidAutoWidth = {
+      ...text,
+      properties: {
+        ...text.properties,
+        textResize: "auto-width" as const,
+        textWrap: "word" as const,
+        textOverflow: "visible" as const,
+      },
+    };
+    expect(Value.Check(DesignNodeSchema, invalidAutoWidth)).toBe(false);
+    const issues = schemaValidationIssues(DesignNodeSchema, invalidAutoWidth);
+    expect(issues.some((issue) => issue.path === "/properties/textWrap")).toBe(
+      true,
+    );
+    expect(
+      issues.some((issue) => issue.message === "Expected union value"),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        properties: {
+          ...text.properties,
+          textResize: "auto-height",
+          textWrap: "word",
+          textOverflow: "clip",
+        },
       }),
     ).toBe(false);
   });

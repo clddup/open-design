@@ -3,7 +3,7 @@
 - 状态：Accepted
 - 日期：2026-08-12
 - 文档协议：`DesignDocument 1.9.0`
-- 关联：ADR-0005、ADR-0009、ADR-0023、ADR-0034
+- 关联：ADR-0005、ADR-0009、ADR-0023、ADR-0034；Auto Size 后续由 ADR-0036 扩展
 
 ## 背景
 

@@ -30,7 +30,7 @@ Agent utilityProcess ── Conversation / Provider / typed design tools
 ## 当前已实现
 
 - Workspace、Project、Design File、Page 与 Layers 的基础工作流和本地持久化。
-- `DesignDocument 1.9.0`、正式 Line/Arrow、Polygon/Star、SVG path-data、editable Vector Network、固定文字框换行/溢出、非破坏图片 placement 与 Boolean Group，以及原子事务、单调 revision、preview、undo/redo、checkpoint 和冲突检查。
+- `DesignDocument 1.10.0`、正式 Line/Arrow、Polygon/Star、SVG path-data、editable Vector Network、Fixed/Auto Width/Auto Height 文字、换行/溢出、非破坏图片 placement 与 Boolean Group，以及原子事务、单调 revision、preview、undo/redo、checkpoint 和冲突检查。
 - LeaferJS 场景投影、pan/zoom、命中、框选、多选、move/resize/rotate/skew 和文本内编辑。
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask 和事务化图片 asset 的公共语义。
 - 持久 Conversation、可取消 Agent run、只管理对话模型的 `ModelProviderCatalog v3`，以及 OpenAI Responses、OpenAI Chat Completions 和 Anthropic Messages adapter；独立的应用级图片生成配置拥有自己的 adapter、Base URL、鉴权、凭据和模型 ID，不受任何 Conversation 模型影响，当前 OpenAI Images adapter 已用 GPT Image 2 验证。

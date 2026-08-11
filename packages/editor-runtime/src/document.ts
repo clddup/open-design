@@ -511,6 +511,7 @@ function textNode(
       letterSpacing: -0.5,
       textAlignHorizontal: "left",
       textAlignVertical: "top",
+      textResize: "fixed",
       textWrap: "word",
       textOverflow: "clip",
       fills: [solid(options.fill)],

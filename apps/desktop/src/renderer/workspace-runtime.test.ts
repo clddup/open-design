@@ -2,6 +2,7 @@ import {
   createEmptyDesignDocument,
   createWelcomeDocument,
 } from "@opendesign/editor-runtime";
+import type { TextLayoutProvider } from "@opendesign/text-service";
 import { describe, expect, it, vi } from "vitest";
 import { WorkspaceRuntime, workspaceFileKey } from "./workspace-runtime";
 
@@ -113,6 +114,88 @@ describe("WorkspaceRuntime", () => {
         history: { canUndo: true },
       },
     });
+  });
+
+  it("shares the ready text layout provider with active, background, and later-opened files", () => {
+    const workspace = createWorkspace();
+    const background = workspace.getActiveRuntime();
+    const secondDocument = structuredClone(createWelcomeDocument());
+    secondDocument.documentId = "document_website";
+    const active = workspace.openFile(
+      {
+        projectId: "project_acme",
+        designFileId: "design_website",
+        name: "Website",
+      },
+      secondDocument,
+    );
+    const measure = vi.fn<TextLayoutProvider["measure"]>((request) => ({
+      ok: true,
+      provider: "test-text-layout",
+      providerVersion: "1",
+      size: { width: request.width ?? 180, height: 88 },
+      warnings: [],
+    }));
+    workspace.setTextLayoutProvider({
+      id: "test-text-layout",
+      version: "1",
+      measure,
+    });
+
+    for (const [index, runtime] of [background, active].entries()) {
+      const document = runtime.getSnapshot().document;
+      expect(
+        runtime.apply({
+          transactionId: `auto_height_${index}`,
+          documentId: document.documentId,
+          baseRevision: document.revision,
+          actor: { type: "agent", id: "test-agent" },
+          commands: [
+            {
+              commandId: `set_auto_height_${index}`,
+              type: "update_properties",
+              nodeId: "title_welcome",
+              properties: { textResize: "auto-height" },
+            },
+          ],
+        }),
+      ).toMatchObject({ ok: true });
+      expect(
+        runtime.getSnapshot().document.nodesById.title_welcome,
+      ).toMatchObject({
+        size: { height: 88 },
+        properties: { textResize: "auto-height" },
+      });
+    }
+
+    const thirdDocument = structuredClone(createWelcomeDocument());
+    thirdDocument.documentId = "document_brand";
+    const later = workspace.openFile(
+      {
+        projectId: "project_acme",
+        designFileId: "design_brand",
+        name: "Brand",
+      },
+      thirdDocument,
+    );
+    const current = later.getSnapshot().document;
+    expect(
+      later.apply({
+        transactionId: "later_auto_height",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "local-user" },
+        commands: [
+          {
+            commandId: "later_set_auto_height",
+            type: "update_properties",
+            nodeId: "title_welcome",
+            properties: { textResize: "auto-height" },
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(measure).toHaveBeenCalledTimes(3);
   });
 
   it("tracks the active page independently and clears off-page selection", () => {

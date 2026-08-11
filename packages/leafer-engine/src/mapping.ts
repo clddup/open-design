@@ -369,8 +369,11 @@ function toElementSpec(
       data = {
         ...base,
         ...mapShapeProperties(document, node.id, node.properties, warnings),
-        width: node.size.width,
-        height: node.size.height,
+        ...(node.properties.textResize === "fixed"
+          ? { width: node.size.width, height: node.size.height }
+          : node.properties.textResize === "auto-height"
+            ? { width: node.size.width }
+            : {}),
         text: node.properties.content,
         fontFamily: node.properties.fontFamily,
         fontSize: node.properties.fontSize,

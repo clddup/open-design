@@ -63,6 +63,44 @@ describe("Leafer scene projection", () => {
     },
   );
 
+  it("projects Auto Width and Auto Height through Leafer native auto bounds", () => {
+    const autoWidthDocument = structuredClone(createWelcomeDocument());
+    const autoWidth = autoWidthDocument.nodesById.title_welcome;
+    if (!autoWidth || autoWidth.kind !== "text")
+      throw new Error("Missing text");
+    Object.assign(autoWidth.properties, {
+      textResize: "auto-width",
+      textWrap: "none",
+      textOverflow: "visible",
+    });
+    const autoWidthData = projectDesignPage(
+      autoWidthDocument,
+      "page_welcome",
+    ).elementsById.get(autoWidth.id)?.data;
+    expect(autoWidthData).toMatchObject({
+      textWrap: "none",
+      textOverflow: "show",
+    });
+    expect(Object.hasOwn(autoWidthData ?? {}, "width")).toBe(false);
+    expect(Object.hasOwn(autoWidthData ?? {}, "height")).toBe(false);
+
+    const autoHeightDocument = structuredClone(createWelcomeDocument());
+    const autoHeight = autoHeightDocument.nodesById.title_welcome;
+    if (!autoHeight || autoHeight.kind !== "text")
+      throw new Error("Missing text");
+    Object.assign(autoHeight.properties, {
+      textResize: "auto-height",
+      textWrap: "word",
+      textOverflow: "visible",
+    });
+    const autoHeightData = projectDesignPage(
+      autoHeightDocument,
+      "page_welcome",
+    ).elementsById.get(autoHeight.id)?.data;
+    expect(autoHeightData).toMatchObject({ width: autoHeight.size.width });
+    expect(Object.hasOwn(autoHeightData ?? {}, "height")).toBe(false);
+  });
+
   it("projects semantic Polygon and Star nodes through native Leafer shapes", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;

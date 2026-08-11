@@ -24,3 +24,9 @@ export type {
   LeaferVectorEditRequest,
   LeaferVectorEditScope,
 } from "./types.js";
+export {
+  createLeaferTextLayoutProvider,
+  LEAFER_TEXT_LAYOUT_PROVIDER_ID,
+  LEAFER_TEXT_LAYOUT_PROVIDER_VERSION,
+  type LeaferTextLayoutProviderOptions,
+} from "./text-layout.js";

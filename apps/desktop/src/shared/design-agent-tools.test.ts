@@ -507,6 +507,7 @@ describe("design Agent tool contract", () => {
               letterSpacing: 0,
               textAlignHorizontal: "left",
               textAlignVertical: "top",
+              textResize: "fixed",
               textWrap: "word",
               textOverflow: "ellipsis",
               fills: [{ type: "solid", color: "#151515", opacity: 1 }],
@@ -518,10 +519,11 @@ describe("design Agent tool contract", () => {
       ],
     };
 
+    expect(schema).toContain('"textResize"');
     expect(schema).toContain('"textWrap"');
     expect(schema).toContain('"textOverflow"');
     expect(apply?.description).toContain(
-      "auto sizing and max-lines are not available",
+      "measures Auto Size with the versioned Leafer Text provider",
     );
     expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
       true,

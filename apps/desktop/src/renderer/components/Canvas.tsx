@@ -34,6 +34,7 @@ import {
   type LeaferOperationRequest,
   type LeaferVectorEditRequest,
 } from "@opendesign/leafer-engine";
+import type { TextLayoutProvider } from "@opendesign/text-service";
 import {
   useCallback,
   useEffect,
@@ -60,6 +61,7 @@ export function Canvas({
   snapshot,
   onTransactionError,
   onAssetDrop,
+  onTextLayoutProviderReady,
 }: {
   activeAgentRunId: string | null;
   activePageId: string;
@@ -72,6 +74,7 @@ export function Canvas({
     assetId: string,
     documentPoint: { x: number; y: number },
   ) => { ok: boolean };
+  onTextLayoutProviderReady: (provider: TextLayoutProvider) => void;
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLElement>(null);
@@ -498,6 +501,7 @@ export function Canvas({
           return;
         }
         adapter.current = engine;
+        onTextLayoutProviderReady(engine.textLayoutProvider);
         if (latestInput.current) engine.sync(latestInput.current);
       })
       .catch((error: unknown) => {
@@ -519,6 +523,7 @@ export function Canvas({
     createNode,
     createVectorNode,
     exitVectorEdit,
+    onTextLayoutProviderReady,
     runtime,
     t,
     updateViewport,
@@ -912,6 +917,17 @@ function createDesignNode(
     };
   }
   if (tool === "text") {
+    const layout = drawnSize
+      ? ({
+          textResize: "fixed",
+          textWrap: "word",
+          textOverflow: "clip",
+        } as const)
+      : ({
+          textResize: "auto-width",
+          textWrap: "none",
+          textOverflow: "visible",
+        } as const);
     return {
       ...base,
       kind: "text",
@@ -925,8 +941,7 @@ function createDesignNode(
         letterSpacing: 0,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
-        textWrap: "word",
-        textOverflow: "clip",
+        ...layout,
         fills: [{ type: "solid", color: "#151515", opacity: 1 }],
         strokes: [],
         strokeWidth: 0,

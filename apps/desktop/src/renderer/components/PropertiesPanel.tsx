@@ -1125,6 +1125,7 @@ function SelectedNodeProperties({
             value={formatNumber(node.transform[5])}
           />
           <Field
+            accessibleLabel={t("properties.width")}
             disabled={node.kind === "boolean"}
             label="W"
             min={0}
@@ -1139,6 +1140,7 @@ function SelectedNodeProperties({
             value={formatNumber(node.size.width)}
           />
           <Field
+            accessibleLabel={t("properties.height")}
             disabled={node.kind === "boolean"}
             label="H"
             min={0}
@@ -1359,9 +1361,33 @@ function SelectedNodeProperties({
                 </select>
               </label>
               <label className={styles.select}>
+                <span>{t("properties.textResize")}</span>
+                <select
+                  aria-label={t("properties.textResize")}
+                  onChange={(event) =>
+                    onUpdate({
+                      properties: {
+                        textResize: event.target.value as
+                          "auto-width" | "auto-height" | "fixed",
+                      },
+                    })
+                  }
+                  value={node.properties.textResize}
+                >
+                  <option value="auto-width">
+                    {t("properties.textAutoWidth")}
+                  </option>
+                  <option value="auto-height">
+                    {t("properties.textAutoHeight")}
+                  </option>
+                  <option value="fixed">{t("properties.textFixed")}</option>
+                </select>
+              </label>
+              <label className={styles.select}>
                 <span>{t("properties.textWrap")}</span>
                 <select
                   aria-label={t("properties.textWrap")}
+                  disabled={node.properties.textResize === "auto-width"}
                   onChange={(event) =>
                     onUpdate({
                       properties: {
@@ -1372,7 +1398,12 @@ function SelectedNodeProperties({
                   }
                   value={node.properties.textWrap}
                 >
-                  <option value="none">{t("properties.wrapNone")}</option>
+                  <option
+                    disabled={node.properties.textResize === "auto-height"}
+                    value="none"
+                  >
+                    {t("properties.wrapNone")}
+                  </option>
                   <option value="word">{t("properties.wrapWord")}</option>
                   <option value="character">
                     {t("properties.wrapCharacter")}
@@ -1383,6 +1414,7 @@ function SelectedNodeProperties({
                 <span>{t("properties.textOverflow")}</span>
                 <select
                   aria-label={t("properties.textOverflow")}
+                  disabled={node.properties.textResize !== "fixed"}
                   onChange={(event) =>
                     onUpdate({
                       properties: {
