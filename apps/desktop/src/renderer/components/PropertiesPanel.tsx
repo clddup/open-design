@@ -31,6 +31,7 @@ import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
 import type { SvgWorkerExportSettings } from "../svg-interchange-contract";
+import styles from "./PropertiesPanel.module.scss";
 
 export type UpdatePropertiesPatch = Omit<
   UpdatePropertiesCommand,
@@ -87,6 +88,10 @@ type CornerNode = Extract<
 >;
 type RegularShapeNode = Extract<DesignNode, { kind: "polygon" | "star" }>;
 type StrokeNode = FillNode | Extract<DesignNode, { kind: "line" }>;
+
+function cx(...classNames: Array<string | false | null | undefined>): string {
+  return classNames.filter(Boolean).join(" ");
+}
 
 const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
   frame: "frame",
@@ -235,9 +240,9 @@ function Field({
   };
 
   return (
-    <label className={`property-field${disabled ? " is-disabled" : ""}`}>
+    <label className={cx(styles.field, disabled && styles.fieldDisabled)}>
       <span>{label}</span>
-      <span className="property-field__control">
+      <span className={styles.fieldControl}>
         <input
           aria-label={accessibleLabel}
           disabled={disabled}
@@ -272,7 +277,7 @@ function TextAreaField({
     if (draft !== value) onCommit(draft);
   };
   return (
-    <label className="property-textarea">
+    <label className={styles.textarea}>
       <span>{label}</span>
       <textarea
         onBlur={commit}
@@ -295,7 +300,7 @@ function ColorPicker({
   return (
     <input
       aria-label={label}
-      className="paint-color-picker"
+      className={styles.colorPicker}
       onChange={(event) => onChange(event.target.value)}
       type="color"
       value={isHexColor(value) ? value : "#000000"}
@@ -305,7 +310,7 @@ function ColorPicker({
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="property-section">
+    <section className={styles.section}>
       <header>
         <button aria-expanded="true" disabled type="button">
           <Glyph name="chevron-down" size={13} />
@@ -392,8 +397,8 @@ function PaintEditor({
     paint.type === "radial-gradient" ||
     paint.type === "angular-gradient";
   return (
-    <div className="paint-editor">
-      <div className="paint-row">
+    <div className={styles.paintEditor}>
+      <div className={styles.paintRow}>
         <ColorPicker
           label={t("properties.paintPreview", { index: index + 1 })}
           onChange={(color) => {
@@ -409,7 +414,7 @@ function PaintEditor({
           }}
           value={paintColor(paint)}
         />
-        <label className="paint-row__type">
+        <label className={styles.paintType}>
           <span className="sr-only">
             {t("properties.paintType", { index: index + 1 })}
           </span>
@@ -442,7 +447,7 @@ function PaintEditor({
         </label>
         <button
           aria-label={t("properties.removePaint", { index: index + 1 })}
-          className="paint-row__remove"
+          className={styles.paintRemove}
           onClick={onRemove}
           type="button"
         >
@@ -450,7 +455,7 @@ function PaintEditor({
         </button>
       </div>
       {paint.type === "solid" && (
-        <div className="property-grid">
+        <div className={styles.grid}>
           <Field
             accessibleLabel={t("properties.paintColor", { index: index + 1 })}
             label="C"
@@ -467,9 +472,9 @@ function PaintEditor({
         </div>
       )}
       {gradient && (
-        <div className="paint-gradient">
+        <div className={styles.gradient}>
           {paint.stops.map((stop, stopIndex) => (
-            <div className="paint-stop" key={`${index}-${stopIndex}`}>
+            <div className={styles.paintStop} key={`${index}-${stopIndex}`}>
               <ColorPicker
                 label={t("properties.gradientStopColor", {
                   index: stopIndex + 1,
@@ -542,7 +547,7 @@ function PaintEditor({
                 aria-label={t("properties.removeGradientStop", {
                   index: stopIndex + 1,
                 })}
-                className="paint-row__remove"
+                className={styles.paintRemove}
                 disabled={paint.stops.length <= 2}
                 onClick={() =>
                   onChange({
@@ -558,7 +563,7 @@ function PaintEditor({
               </button>
             </div>
           ))}
-          <div className="property-grid">
+          <div className={styles.grid}>
             <Field
               accessibleLabel={t("properties.gradientRotation")}
               label="°"
@@ -573,7 +578,7 @@ function PaintEditor({
             <PaintOpacity paint={paint} onChange={onChange} />
           </div>
           <button
-            className="property-add-paint"
+            className={styles.addPaint}
             onClick={() =>
               onChange({
                 ...paint,
@@ -591,8 +596,8 @@ function PaintEditor({
         </div>
       )}
       {paint.type === "image" && (
-        <div className="property-stack">
-          <small className="property-help">
+        <div className={styles.stack}>
+          <small className={styles.help}>
             {t("properties.imagePaintAsset", { assetId: paint.assetId })}
           </small>
           <PaintOpacity paint={paint} onChange={onChange} />
@@ -672,8 +677,8 @@ function EffectEditor({
   const shadow =
     effect.type === "drop-shadow" || effect.type === "inner-shadow";
   return (
-    <div className="effect-editor">
-      <div className="paint-row">
+    <div className={styles.effectEditor}>
+      <div className={styles.paintRow}>
         {!blur && effect.type !== "grayscale" && (
           <ColorPicker
             label={t("properties.effectColor", { index: index + 1 })}
@@ -681,8 +686,8 @@ function EffectEditor({
             value={effect.color}
           />
         )}
-        <span className="paint-row__value">{effect.type}</span>
-        <label className="effect-editor__visible">
+        <span className={styles.paintValue}>{effect.type}</span>
+        <label className={styles.effectVisible}>
           <input
             aria-label={t("properties.effectVisible", { index: index + 1 })}
             checked={effect.visible ?? true}
@@ -694,7 +699,7 @@ function EffectEditor({
         </label>
         <button
           aria-label={t("properties.removeEffect", { index: index + 1 })}
-          className="paint-row__remove"
+          className={styles.paintRemove}
           onClick={onRemove}
           type="button"
         >
@@ -702,7 +707,7 @@ function EffectEditor({
         </button>
       </div>
       {blur && (
-        <div className="property-grid">
+        <div className={styles.grid}>
           <Field
             accessibleLabel={t("properties.effectRadius")}
             label="R"
@@ -721,7 +726,7 @@ function EffectEditor({
         </div>
       )}
       {effect.type === "grayscale" && (
-        <div className="property-grid">
+        <div className={styles.grid}>
           <Field
             accessibleLabel={t("properties.effectAmount")}
             label="A"
@@ -741,7 +746,7 @@ function EffectEditor({
         </div>
       )}
       {glow && (
-        <div className="property-grid">
+        <div className={styles.grid}>
           <Field
             accessibleLabel={t("properties.effectRadius")}
             label="R"
@@ -787,7 +792,7 @@ function EffectEditor({
         </div>
       )}
       {shadow && (
-        <div className="property-grid">
+        <div className={styles.grid}>
           <Field
             accessibleLabel={t("properties.effectOffsetX")}
             label="X"
@@ -890,9 +895,9 @@ function SelectedNodeProperties({
   };
 
   return (
-    <div className="selected-node-properties">
-      <div className="selection-heading">
-        <span className="selection-heading__icon">
+    <div>
+      <div className={styles.selectionHeading}>
+        <span className={styles.selectionIcon}>
           <Glyph name={nodeIcons[node.kind]} />
         </span>
         <span>
@@ -902,7 +907,7 @@ function SelectedNodeProperties({
           </strong>
           <small>{t(nodeKindKeys[node.kind])}</small>
         </span>
-        <span className="selection-heading__actions">
+        <span className={styles.selectionActions}>
           <IconButton
             icon="duplicate"
             label={t("properties.duplicateLayer")}
@@ -918,7 +923,7 @@ function SelectedNodeProperties({
       </div>
       {booleanOperandParent && (
         <Section title={t("properties.booleanSourceLayer")}>
-          <div className="property-context-note">
+          <div className={styles.contextNote}>
             <Glyph name="boolean" size={15} />
             <span>
               <strong>{t("properties.booleanAppearanceControlled")}</strong>
@@ -939,7 +944,7 @@ function SelectedNodeProperties({
         </Section>
       )}
       <Section title={t("properties.layer")}>
-        <div className="property-stack">
+        <div className={styles.stack}>
           <Field
             accessibleLabel={t("properties.layerName")}
             label={t("properties.name")}
@@ -952,7 +957,7 @@ function SelectedNodeProperties({
             type="text"
             value={node.name}
           />
-          <div className="property-toggles">
+          <div className={styles.toggles}>
             <label>
               <input
                 checked={node.visible}
@@ -976,7 +981,7 @@ function SelectedNodeProperties({
       </Section>
       {node.kind === "boolean" && (
         <Section title={t("properties.booleanGroup")}>
-          <label className="property-select">
+          <label className={styles.select}>
             <span>{t("properties.booleanOperation")}</span>
             <select
               aria-label={t("properties.booleanOperation")}
@@ -1000,8 +1005,8 @@ function SelectedNodeProperties({
       )}
       {node.kind === "line" && (
         <Section title={t("properties.line")}>
-          <div className="property-grid">
-            <label className="property-select">
+          <div className={styles.grid}>
+            <label className={styles.select}>
               <span>{t("properties.lineStart")}</span>
               <select
                 aria-label={t("properties.lineStart")}
@@ -1021,7 +1026,7 @@ function SelectedNodeProperties({
                 ))}
               </select>
             </label>
-            <label className="property-select">
+            <label className={styles.select}>
               <span>{t("properties.lineEnd")}</span>
               <select
                 aria-label={t("properties.lineEnd")}
@@ -1059,7 +1064,7 @@ function SelectedNodeProperties({
       )}
       {isRegularShapeNode(node) && (
         <Section title={t("properties.regularShape")}>
-          <div className="property-grid">
+          <div className={styles.grid}>
             <Field
               accessibleLabel={t("properties.pointCount")}
               label={t("properties.pointCount")}
@@ -1100,7 +1105,7 @@ function SelectedNodeProperties({
         </Section>
       )}
       <Section title={t("properties.layout")}>
-        <div className="property-grid">
+        <div className={styles.grid}>
           <Field
             label="X"
             onCommit={(draft) =>
@@ -1150,7 +1155,7 @@ function SelectedNodeProperties({
         </div>
       </Section>
       <Section title={t("properties.appearance")}>
-        <div className="property-grid">
+        <div className={styles.grid}>
           <Field
             accessibleLabel={t("properties.opacity")}
             disabled={booleanOperandParent !== undefined}
@@ -1185,7 +1190,7 @@ function SelectedNodeProperties({
               value={formatNumber(node.properties.cornerRadius)}
             />
           )}
-          <label className="property-select">
+          <label className={styles.select}>
             <span>{t("properties.blendMode")}</span>
             <select
               aria-label={t("properties.blendMode")}
@@ -1202,7 +1207,7 @@ function SelectedNodeProperties({
               ))}
             </select>
           </label>
-          <label className="property-select">
+          <label className={styles.select}>
             <span>{t("properties.maskMode")}</span>
             <select
               aria-label={t("properties.maskMode")}
@@ -1230,13 +1235,17 @@ function SelectedNodeProperties({
       )}
       {node.kind === "text" && (
         <Section title={t("properties.typography")}>
-          <div className="property-stack">
+          <div className={styles.stack}>
             <TextAreaField
               label={t("properties.textContent")}
               onCommit={(content) => onUpdate({ properties: { content } })}
               value={node.properties.content}
             />
-            <div className="property-grid property-grid--typography">
+            <div
+              aria-label={t("properties.typography")}
+              className={cx(styles.grid, styles.typographyGrid)}
+              role="group"
+            >
               <Field
                 accessibleLabel={t("properties.fontFamily")}
                 label="Font"
@@ -1310,7 +1319,7 @@ function SelectedNodeProperties({
                 }
                 value={formatNumber(node.properties.letterSpacing)}
               />
-              <label className="property-select">
+              <label className={styles.select}>
                 <span>{t("properties.textAlign")}</span>
                 <select
                   aria-label={t("properties.textAlign")}
@@ -1362,7 +1371,7 @@ function SelectedNodeProperties({
             />
           ))}
           <button
-            className="property-add-paint"
+            className={styles.addPaint}
             onClick={() =>
               onUpdate({
                 properties: {
@@ -1408,7 +1417,7 @@ function SelectedNodeProperties({
               paint={paint}
             />
           ))}
-          <div className="property-grid">
+          <div className={styles.grid}>
             <Field
               accessibleLabel={t("properties.strokeWidth")}
               label="W"
@@ -1424,7 +1433,7 @@ function SelectedNodeProperties({
               suffix="px"
               value={formatNumber(node.properties.strokeWidth)}
             />
-            <label className="property-select">
+            <label className={styles.select}>
               <span>{t("properties.strokeCap")}</span>
               <select
                 aria-label={t("properties.strokeCap")}
@@ -1445,7 +1454,7 @@ function SelectedNodeProperties({
                 </option>
               </select>
             </label>
-            <label className="property-select">
+            <label className={styles.select}>
               <span>{t("properties.strokeJoin")}</span>
               <select
                 aria-label={t("properties.strokeJoin")}
@@ -1487,7 +1496,7 @@ function SelectedNodeProperties({
             />
           </div>
           <button
-            className="property-add-paint"
+            className={styles.addPaint}
             onClick={() =>
               onUpdate({
                 properties: {
@@ -1529,7 +1538,7 @@ function SelectedNodeProperties({
               }
             />
           ))}
-          <label className="property-select property-effect-add">
+          <label className={cx(styles.select, styles.effectAdd)}>
             <span>{t("properties.addEffect")}</span>
             <select
               aria-label={t("properties.addEffect")}
@@ -1601,8 +1610,8 @@ function ImagePlacementEditor({
 
   return (
     <Section title={t("properties.image")}>
-      <div className="property-stack image-placement-editor">
-        <label className="property-select">
+      <div className={cx(styles.stack, styles.imagePlacementEditor)}>
+        <label className={styles.select}>
           <span>{t("properties.imagePlacement")}</span>
           <select
             aria-label={t("properties.imagePlacement")}
@@ -1618,7 +1627,7 @@ function ImagePlacementEditor({
           </select>
         </label>
         {(placement.mode === "fill" || placement.mode === "crop") && (
-          <div className="property-grid">
+          <div className={styles.grid}>
             <Field
               accessibleLabel={t("properties.imageFocalX")}
               label="FX"
@@ -1663,7 +1672,7 @@ function ImagePlacementEditor({
         )}
         {placement.mode === "crop" && (
           <>
-            <div className="property-grid">
+            <div className={styles.grid}>
               <Field
                 accessibleLabel={t("properties.imageZoom")}
                 label="Z"
@@ -1698,12 +1707,16 @@ function ImagePlacementEditor({
             </div>
             <div
               aria-label={t("properties.imageTransform")}
-              className="image-placement-actions"
+              className={styles.imagePlacementActions}
               role="group"
             >
               <button
                 aria-pressed={placement.flipHorizontal}
-                className={placement.flipHorizontal ? "is-active" : undefined}
+                className={
+                  placement.flipHorizontal
+                    ? styles.imagePlacementActive
+                    : undefined
+                }
                 onClick={() =>
                   onChange({
                     ...placement,
@@ -1716,7 +1729,11 @@ function ImagePlacementEditor({
               </button>
               <button
                 aria-pressed={placement.flipVertical}
-                className={placement.flipVertical ? "is-active" : undefined}
+                className={
+                  placement.flipVertical
+                    ? styles.imagePlacementActive
+                    : undefined
+                }
                 onClick={() =>
                   onChange({
                     ...placement,
@@ -1746,7 +1763,7 @@ function ImagePlacementEditor({
           </>
         )}
         <button
-          className="property-add-paint image-replace-button"
+          className={cx(styles.addPaint, styles.imageReplaceButton)}
           onClick={onReplace}
           type="button"
         >
@@ -1767,9 +1784,13 @@ function SvgOperationNotice({
 }) {
   const { t } = useI18n();
   return (
-    <section aria-live="polite" className="svg-operation-notice" role="status">
-      <span aria-hidden="true" className="svg-operation-notice__indicator" />
-      <span className="svg-operation-notice__copy">
+    <section
+      aria-live="polite"
+      className={styles.operationNotice}
+      role="status"
+    >
+      <span aria-hidden="true" className={styles.operationIndicator} />
+      <span className={styles.operationCopy}>
         <strong>
           {operation.kind === "import"
             ? t("properties.importingSvg", { name: operation.name })
@@ -1799,13 +1820,9 @@ function RasterExportReport({
 }) {
   const { t } = useI18n();
   return (
-    <section
-      aria-live="polite"
-      className="svg-fidelity-report is-success"
-      role="status"
-    >
+    <section aria-live="polite" className={styles.fidelityReport} role="status">
       <header>
-        <span aria-hidden="true" className="svg-fidelity-report__mark">
+        <span aria-hidden="true" className={styles.fidelityMark}>
           ✓
         </span>
         <strong>
@@ -1842,11 +1859,11 @@ function SvgFidelityReport({
   return (
     <section
       aria-live="polite"
-      className={`svg-fidelity-report ${warning ? "is-warning" : "is-success"}`}
+      className={cx(styles.fidelityReport, warning && styles.fidelityWarning)}
       role="status"
     >
       <header>
-        <span aria-hidden="true" className="svg-fidelity-report__mark">
+        <span aria-hidden="true" className={styles.fidelityMark}>
           {warning ? "!" : "✓"}
         </span>
         <strong>
@@ -1881,7 +1898,7 @@ function SvgFidelityReport({
         </ul>
       )}
       {feedback.issues.length > visibleIssues.length && (
-        <small className="svg-fidelity-report__more">
+        <small className={styles.fidelityMore}>
           {t("properties.svgMoreIssues", {
             count: feedback.issues.length - visibleIssues.length,
           })}
@@ -1927,8 +1944,8 @@ function ExportSection({
     rasterSettings.size.mode === "height" ? rasterSettings.size.value : 1_080;
   return (
     <Section title={t("properties.export")}>
-      <div className="svg-export-settings">
-        <label className="property-select-row">
+      <div className={styles.exportSettings}>
+        <label className={styles.selectRow}>
           <span>{t("properties.exportFormat")}</span>
           <select
             aria-label={t("properties.exportFormat")}
@@ -1946,7 +1963,7 @@ function ExportSection({
         </label>
         {format === "svg" ? (
           <>
-            <label className="svg-export-toggle">
+            <label className={styles.exportToggle}>
               <input
                 checked={svgSettings.includeLayerIds}
                 disabled={busy}
@@ -1980,7 +1997,7 @@ function ExportSection({
           </>
         ) : (
           <>
-            <label className="property-select-row">
+            <label className={styles.selectRow}>
               <span>{t("properties.exportSize")}</span>
               <select
                 aria-label={t("properties.exportSize")}
@@ -2040,7 +2057,7 @@ function ExportSection({
               />
             )}
             {format !== "jpeg" && (
-              <label className="svg-export-toggle">
+              <label className={styles.exportToggle}>
                 <input
                   checked={rasterSettings.background.mode === "transparent"}
                   disabled={busy}
@@ -2059,7 +2076,7 @@ function ExportSection({
             )}
             {(format === "jpeg" ||
               rasterSettings.background.mode === "color") && (
-              <label className="property-select-row">
+              <label className={styles.selectRow}>
                 <span>{t("properties.exportBackground")}</span>
                 <ColorPicker
                   label={t("properties.exportBackground")}
@@ -2100,7 +2117,7 @@ function ExportSection({
                 value={String(Math.round(rasterSettings.quality * 100))}
               />
             )}
-            <label className="property-select-row">
+            <label className={styles.selectRow}>
               <span>{t("properties.exportResampling")}</span>
               <select
                 aria-label={t("properties.exportResampling")}
@@ -2119,20 +2136,20 @@ function ExportSection({
                 </option>
               </select>
             </label>
-            <div className="raster-export-dimensions" role="status">
+            <div className={styles.rasterDimensions} role="status">
               {dimensionPlan?.ok
                 ? `${dimensionPlan.dimensions.width} × ${dimensionPlan.dimensions.height} px`
                 : t("properties.exportDimensionsUnavailable")}
             </div>
             {!rasterTargetValid && (
-              <small className="raster-export-hint">
+              <small className={styles.rasterHint}>
                 {t("properties.exportRasterSingleTarget")}
               </small>
             )}
           </>
         )}
         <Button
-          className="svg-export-button"
+          className={styles.exportButton}
           disabled={busy || (format !== "svg" && !rasterTargetValid)}
           onClick={format === "svg" ? onExportSvg : onExportRaster}
           tone="primary"
@@ -2207,10 +2224,10 @@ export function PropertiesPanel({
 }) {
   const { t } = useI18n();
   return (
-    <section aria-label={t("properties.label")} className="properties-panel">
+    <section aria-label={t("properties.label")} className={styles.root}>
       <div
         aria-label={t("properties.views")}
-        className="properties-tabs"
+        className={styles.tabs}
         role="tablist"
       >
         <button
@@ -2236,7 +2253,7 @@ export function PropertiesPanel({
       </div>
       <div
         aria-labelledby="properties-design-tab"
-        className="properties-panel__content properties-scroll"
+        className={styles.content}
         id="properties-design-panel"
         role="tabpanel"
       >
@@ -2273,21 +2290,21 @@ export function PropertiesPanel({
             onUpdate={onUpdate}
           />
         ) : selectionCount > 1 ? (
-          <div className="multi-selection-properties">
-            <div className="no-selection" role="status">
+          <div className={styles.multiProperties}>
+            <div className={styles.noSelection} role="status">
               <Glyph name="layers" size={22} />
               <strong>
                 {t("properties.layersSelected", { count: selectionCount })}
               </strong>
               <span>{t("properties.arrangeSelection")}</span>
             </div>
-            <div className="multi-selection-section">
-              <span className="multi-selection-section__heading">
+            <div className={styles.multiSection}>
+              <span className={styles.multiHeading}>
                 {t("properties.alignment")}
               </span>
               <div
                 aria-label={t("properties.alignment")}
-                className="alignment-grid"
+                className={styles.alignmentGrid}
                 role="group"
               >
                 {(
@@ -2320,13 +2337,13 @@ export function PropertiesPanel({
                 ))}
               </div>
             </div>
-            <div className="multi-selection-section">
-              <span className="multi-selection-section__heading">
+            <div className={styles.multiSection}>
+              <span className={styles.multiHeading}>
                 {t("properties.distribution")}
               </span>
               <div
                 aria-label={t("properties.distribution")}
-                className="distribution-grid"
+                className={styles.distributionGrid}
                 role="group"
               >
                 <button
@@ -2355,7 +2372,7 @@ export function PropertiesPanel({
                         ? "properties.tidyUpVertical"
                         : "properties.tidyUpGrid",
                   )}
-                  className="tidy-up-button"
+                  className={styles.tidyUp}
                   disabled={!arrangement?.canTidyUp}
                   onClick={() => onArrange({ action: "tidy-up" })}
                   type="button"
@@ -2364,7 +2381,7 @@ export function PropertiesPanel({
                   {t("properties.tidyUp")}
                 </button>
               </div>
-              <div className="spacing-grid">
+              <div className={styles.spacingGrid}>
                 <Field
                   accessibleLabel={t("properties.horizontalSpacing")}
                   disabled={!arrangement}
@@ -2417,7 +2434,7 @@ export function PropertiesPanel({
                 />
               </div>
             </div>
-            <div className="multi-selection-actions">
+            <div className={styles.multiActions}>
               <button onClick={onDuplicate} type="button">
                 <Glyph name="duplicate" size={13} />
                 {t("properties.duplicateLayers")}
@@ -2429,7 +2446,7 @@ export function PropertiesPanel({
             </div>
           </div>
         ) : (
-          <div className="no-selection" role="status">
+          <div className={styles.noSelection} role="status">
             <Glyph name="select" size={22} />
             <strong>{t("properties.noSelection")}</strong>
             <span>{t("properties.selectLayer")}</span>

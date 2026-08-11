@@ -3750,7 +3750,9 @@ describe("App", () => {
     await user.type(content, "Poster headline");
     fireEvent.blur(content);
     const size = screen.getByLabelText("Font size");
-    expect(size.closest(".property-grid--typography")).not.toBeNull();
+    expect(
+      size.closest('[role="group"][aria-label="Typography"]'),
+    ).not.toBeNull();
     await user.clear(size);
     await user.type(size, "64{Enter}");
 
