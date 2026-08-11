@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const AGENT_PROTOCOL_VERSION = "3.5.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.6.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
@@ -14,6 +14,47 @@ const RevisionSchema = Type.Integer({ minimum: 0 });
 const SequenceSchema = Type.Integer({ minimum: 1 });
 const ProgressSchema = Type.Number({ minimum: 0, maximum: 1 });
 const EmptyObjectSchema = Type.Object({}, { additionalProperties: false });
+
+export const AgentToolFailureIssueSchema = Type.Object(
+  {
+    commandId: Type.Optional(IdSchema),
+    nodeId: Type.Optional(IdSchema),
+    path: Type.String({ maxLength: 4_000 }),
+    message: Type.String({ minLength: 1, maxLength: 20_000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentToolFailureDetailsSchema = Type.Object(
+  {
+    kind: Type.Literal("design-transaction"),
+    fingerprint: IdSchema,
+    issues: Type.Array(AgentToolFailureIssueSchema, {
+      minItems: 1,
+      maxItems: 128,
+    }),
+    recovery: Type.Object(
+      {
+        action: Type.Literal("inspect-and-revise"),
+        toolName: Type.Literal("opendesign_inspect_document"),
+        required: Type.Literal(true),
+      },
+      { additionalProperties: false },
+    ),
+    attempt: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    maxAttempts: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    retrySuppressed: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
+const ToolFailureFields = {
+  code: IdSchema,
+  message: Type.String({ minLength: 1, maxLength: 20_000 }),
+  retryable: Type.Optional(Type.Boolean()),
+  recoverable: Type.Optional(Type.Boolean()),
+  details: Type.Optional(AgentToolFailureDetailsSchema),
+};
 
 export const AgentImageAttachmentSchema = Type.Object(
   {
@@ -298,8 +339,7 @@ export const ToolTimelineItemSchema = Type.Object(
     error: Type.Optional(
       Type.Object(
         {
-          code: IdSchema,
-          message: Type.String({ minLength: 1, maxLength: 20_000 }),
+          ...ToolFailureFields,
         },
         { additionalProperties: false },
       ),
@@ -504,8 +544,7 @@ export const DurableTimelineEventSchema = Type.Union([
       payload: Type.Object(
         {
           toolCallId: ToolCallIdSchema,
-          code: IdSchema,
-          message: Type.String({ minLength: 1, maxLength: 20_000 }),
+          ...ToolFailureFields,
         },
         { additionalProperties: false },
       ),
@@ -745,8 +784,7 @@ export const AgentEventSchema = Type.Union([
       type: Type.Literal("tool.failed"),
       runId: RunIdSchema,
       toolCallId: ToolCallIdSchema,
-      code: IdSchema,
-      message: Type.String({ minLength: 1, maxLength: 20_000 }),
+      ...ToolFailureFields,
     },
     { additionalProperties: false },
   ),
@@ -791,6 +829,10 @@ export type AgentRequest = Static<typeof AgentRequestSchema>;
 export type AgentEvent = Static<typeof AgentEventSchema>;
 export type AgentModelSelection = Static<typeof ModelSelectionSchema>;
 export type AgentModelContext = Static<typeof AgentModelContextSchema>;
+export type AgentToolFailureIssue = Static<typeof AgentToolFailureIssueSchema>;
+export type AgentToolFailureDetails = Static<
+  typeof AgentToolFailureDetailsSchema
+>;
 
 export function isAgentAttachment(value: unknown): value is AgentAttachment {
   return Value.Check(AgentAttachmentSchema, value);
@@ -808,6 +850,12 @@ export function isDesignMutationTarget(
   value: unknown,
 ): value is DesignMutationTarget {
   return Value.Check(DesignMutationTargetSchema, value);
+}
+
+export function isAgentToolFailureDetails(
+  value: unknown,
+): value is AgentToolFailureDetails {
+  return Value.Check(AgentToolFailureDetailsSchema, value);
 }
 
 export function isDurableTimelineEvent(

@@ -38,7 +38,12 @@ export class ParentDesignToolExecutor implements ToolExecutorPort {
         type: "design-tool.response",
         requestId,
         ok: false,
-        error: "Design tool host returned an invalid response",
+        error: {
+          code: "invalid_tool_response",
+          message: "Design tool host returned an invalid response",
+          retryable: false,
+          recoverable: false,
+        },
       });
       return true;
     }
@@ -76,7 +81,12 @@ export class ParentDesignToolExecutor implements ToolExecutorPort {
         type: "design-tool.response",
         requestId,
         ok: false,
-        error: "Design tool request was cancelled",
+        error: {
+          code: "run_cancelled",
+          message: "Design tool request was cancelled",
+          retryable: false,
+          recoverable: false,
+        },
       });
     };
     signal.addEventListener("abort", abort, { once: true });
@@ -94,7 +104,10 @@ export class ParentDesignToolExecutor implements ToolExecutorPort {
         progress: 0.15,
       };
       const result = await response;
-      if (!result.ok) throw new Error(result.error);
+      if (!result.ok) {
+        yield { type: "failed", error: result.error };
+        return;
+      }
       yield { type: "completed", result: result.result };
     } finally {
       signal.removeEventListener("abort", abort);

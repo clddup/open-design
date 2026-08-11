@@ -12,6 +12,7 @@ import type {
 import type {
   ToolCallRequest,
   TrustedToolContext,
+  TrustedToolFailure,
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
 import { join } from "node:path";
@@ -26,6 +27,7 @@ import {
   designToolBridgeRequestId,
   isDesignToolBridgeCancel,
   isDesignToolBridgeRequest,
+  isTrustedToolFailure,
   type DesignToolBridgeResponse,
 } from "../../shared/design-tool-bridge";
 
@@ -187,7 +189,12 @@ export class AgentHost {
         type: "design-tool.response",
         requestId: rejectedDesignToolRequestId,
         ok: false,
-        error: "Design tool request rejected by the host",
+        error: {
+          code: "invalid_tool_request",
+          message: "Design tool request rejected by the host",
+          retryable: false,
+          recoverable: false,
+        },
       } satisfies DesignToolBridgeResponse);
       return;
     }
@@ -346,7 +353,12 @@ export class AgentHost {
         type: "design-tool.response",
         requestId,
         ok: false,
-        error: "Design tool host is not initialized",
+        error: {
+          code: "tool_host_unavailable",
+          message: "Design tool host is not initialized",
+          retryable: false,
+          recoverable: false,
+        },
       } satisfies DesignToolBridgeResponse);
       return;
     }
@@ -371,8 +383,7 @@ export class AgentHost {
         type: "design-tool.response",
         requestId,
         ok: false,
-        error:
-          error instanceof Error ? error.message : "Design tool request failed",
+        error: trustedToolFailureFromError(error),
       } satisfies DesignToolBridgeResponse);
       if (error instanceof FatalAgentRunError) {
         child.postMessage({
@@ -399,6 +410,24 @@ export class AgentHost {
     }
     this.#designToolRequests.clear();
   }
+}
+
+function trustedToolFailureFromError(error: unknown): TrustedToolFailure {
+  if (
+    error instanceof Error &&
+    "cause" in error &&
+    isTrustedToolFailure(error.cause)
+  ) {
+    return error.cause;
+  }
+  const fatal = error instanceof FatalAgentRunError;
+  return {
+    code: fatal ? error.code : "tool_error",
+    message:
+      error instanceof Error ? error.message : "Design tool request failed",
+    retryable: false,
+    recoverable: !fatal,
+  };
 }
 
 function candidateRunId(value: unknown): { runId?: string } {

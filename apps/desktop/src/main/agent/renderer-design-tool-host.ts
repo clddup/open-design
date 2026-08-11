@@ -81,7 +81,10 @@ export class RendererDesignToolHost {
     clearTimeout(pending.timeout);
     this.#pending.delete(response.requestId);
     if (response.ok) pending.resolve(response.result);
-    else pending.reject(new Error(response.error));
+    else
+      pending.reject(
+        new Error(response.error.message, { cause: response.error }),
+      );
     return true;
   }
 

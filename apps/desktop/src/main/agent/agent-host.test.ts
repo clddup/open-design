@@ -203,7 +203,12 @@ describe("AgentHost model bridge", () => {
       type: "design-tool.response",
       requestId: "design_tool_request_1",
       ok: false,
-      error: "Design tool request rejected by the host",
+      error: {
+        code: "invalid_tool_request",
+        message: "Design tool request rejected by the host",
+        retryable: false,
+        recoverable: false,
+      },
     });
   });
 

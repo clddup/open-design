@@ -1,4 +1,9 @@
-export const DIAGNOSTIC_EVENT_VERSION = 1 as const;
+import {
+  isAgentToolFailureDetails,
+  type AgentToolFailureDetails,
+} from "@opendesign/agent-contracts";
+
+export const DIAGNOSTIC_EVENT_VERSION = 2 as const;
 
 export type DiagnosticLevel = "info" | "warning" | "error";
 
@@ -23,6 +28,7 @@ export type DiagnosticInput = {
   code: string;
   message: string;
   context?: DiagnosticContext;
+  details?: AgentToolFailureDetails;
 };
 
 export type RendererDiagnosticReport = Omit<DiagnosticInput, "source">;
@@ -101,6 +107,7 @@ function isDiagnosticPayload(
     value.message.length > 0 &&
     value.message.length <= 20_000 &&
     (value.context === undefined || isDiagnosticContext(value.context)) &&
+    (value.details === undefined || isAgentToolFailureDetails(value.details)) &&
     hasOnlyKeys(value, allowedKeys)
   );
 }
@@ -116,6 +123,7 @@ export function isRendererDiagnosticReport(
       "code",
       "message",
       "context",
+      "details",
     ])
   );
 }
@@ -142,6 +150,7 @@ export function isDiagnosticEvent(value: unknown): value is DiagnosticEvent {
       "code",
       "message",
       "context",
+      "details",
     ])
   );
 }
@@ -170,5 +179,8 @@ export function formatDiagnosticReport(event: DiagnosticEvent): string {
     if (value) lines.push(`${label}: ${value}`);
   }
   lines.push("", "Error:", event.message);
+  if (event.details) {
+    lines.push("", "Details:", JSON.stringify(event.details, null, 2));
+  }
   return lines.join("\n");
 }

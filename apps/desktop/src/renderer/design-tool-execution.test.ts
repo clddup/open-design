@@ -536,6 +536,67 @@ describe("Renderer design tool scope", () => {
     );
   });
 
+  it("returns structured invariant details without mutating the document", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "apply_invalid_invariant",
+        call: {
+          toolCallId: "tool_invalid_invariant",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Break a stroke invariant",
+            commands: [
+              {
+                commandId: "break_feature_stroke",
+                type: "update_properties",
+                nodeId: "feature_one",
+                properties: { strokeWidth: -1 },
+              },
+            ],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "design.invalid",
+        retryable: false,
+        recoverable: true,
+        details: {
+          kind: "design-transaction",
+          fingerprint: expect.stringMatching(/^design_[a-f0-9]{8}$/),
+          issues: [
+            {
+              commandId: "break_feature_stroke",
+              nodeId: "feature_one",
+              path: expect.stringContaining("/nodesById/feature_one"),
+              message: expect.any(String),
+            },
+          ],
+          recovery: {
+            action: "inspect-and-revise",
+            toolName: "opendesign_inspect_document",
+            required: true,
+          },
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+    expect(
+      (
+        runtime.getSnapshot().document.nodesById.feature_one?.properties as {
+          strokeWidth?: number;
+        }
+      ).strokeWidth,
+    ).not.toBe(-1);
+  });
+
   it("allows later commands to target a container inserted earlier in the same page transaction", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = await executeDesignToolRequest(

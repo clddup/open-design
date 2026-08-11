@@ -149,8 +149,16 @@ describe("ParentDesignToolExecutor", () => {
         ok: "yes",
       }),
     ).toBe(true);
-    await expect(iterator.next()).rejects.toThrow(
-      "Design tool host returned an invalid response",
-    );
+    await expect(iterator.next()).resolves.toMatchObject({
+      done: false,
+      value: {
+        type: "failed",
+        error: {
+          code: "invalid_tool_response",
+          message: "Design tool host returned an invalid response",
+          recoverable: false,
+        },
+      },
+    });
   });
 });

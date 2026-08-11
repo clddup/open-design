@@ -6,6 +6,7 @@ import type {
 } from "@earendil-works/pi-agent-core";
 import type {
   AgentEvent,
+  AgentToolFailureDetails,
   AssistantTimelineBlock,
   RunStopReason,
 } from "@opendesign/agent-contracts";
@@ -689,6 +690,9 @@ export class PiRunEventAdapter {
       toolCallId: string;
       code: string;
       message: string;
+      retryable: boolean;
+      recoverable: boolean;
+      details?: AgentToolFailureDetails;
     },
     acknowledge?: () => void,
   ): Promise<void> {
@@ -696,6 +700,9 @@ export class PiRunEventAdapter {
       toolCallId: failure.toolCallId,
       code: failure.code,
       message: failure.message,
+      retryable: failure.retryable,
+      recoverable: failure.recoverable,
+      ...(failure.details === undefined ? {} : { details: failure.details }),
     };
     await this.#append("tool.failed", payload);
     acknowledge?.();

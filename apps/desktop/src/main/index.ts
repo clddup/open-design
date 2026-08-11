@@ -197,10 +197,11 @@ function recordAgentDiagnostic(event: AgentEvent): void {
     publishDiagnostic({
       level: "warning",
       source: "design-tool",
-      presentation: "silent",
+      presentation: event.details ? "toast" : "silent",
       code: event.code,
       message: event.message,
       context: diagnosticContextForAgentEvent(event),
+      ...(event.details ? { details: event.details } : {}),
     });
   }
 }

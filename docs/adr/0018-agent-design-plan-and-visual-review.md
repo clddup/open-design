@@ -34,6 +34,8 @@ inspect → define plan → material draft → capture → visual review
 
 Review 前置条件失败使用稳定 `design_workflow.material_write_required / capture_required / capture_revision_invalid` 恢复指令，明确下一步是写入还是截图；模型不得原样重试同一 review。此类可由 Agent 自行恢复的门禁反馈仍进入 journal/日志，但默认不堆叠为右侧红色失败卡；若 Run 最终无法恢复，Run 终态和诊断继续对用户可见。
 
+设计事务本身违反 `EditorRuntime` invariant 时，Renderer 不得把失败降格为 `code + message` 字符串。`AgentEvent 3.6` 的可恢复 `tool.failed` 保留每项 `commandId / nodeId / path / message`、稳定 fingerprint、是否可原样重试，以及固定 `inspect-and-revise` 恢复动作；同一结构同时进入模型上下文、append-only journal、Timeline 与可复制诊断。失败事务保持原 revision，不生成部分历史。Runtime 在该失败后冻结新的设计写，只有成功执行当前文档 inspection 才解除；相同输入或 fingerprint 的盲重试达到上限后直接返回抑制结果，不再次进入 Renderer。此门禁不把普通业务失败升级为 Run fatal；可信 Run binding、协议或基础设施损坏仍按不可恢复终态处理。
+
 ## 结果
 
 - 方案与审查成为可验证工具轨迹，不再只是模型 prose。
@@ -45,4 +47,5 @@ Review 前置条件失败使用稳定 `design_workflow.material_write_required /
 
 - Tool contract 测试覆盖 plan/review 字段、区域 bounds、重复/保留 ID、反模式与图片 role。
 - Main coordinator 测试覆盖无计划拒绝、计划 Page、首个 Frame 的位置/尺寸、existing Frame 的权威 inspection/revision/后代解析、既有锁定 Group/Frame、失败后重新 inspect、区域根的类型/直属层级/bounds、嵌套图层、根层散落、图片 role、单图用户证据、Page/Frame capture target、material/capture/review revision 顺序、baseline/重复/过期 capture 拒绝、截图后 review 冻结及终态清理。
+- Agent/Renderer/bridge 测试覆盖 invariant issue 的 command/node/path 保留、失败零 revision、模型下一轮结构化 tool result、journal/Timeline/诊断复制、重新 inspection 前写入冻结、inspection 后恢复，以及相同失败输入不重复执行。
 - Completion guard 测试覆盖 plan、两次 capture、中间 review/refinement、仅生图未写画布和 raster 主导的可编辑 composition 拒绝。

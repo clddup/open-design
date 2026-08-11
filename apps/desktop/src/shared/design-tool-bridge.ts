@@ -5,6 +5,7 @@ import {
 import type {
   ToolCallRequest,
   TrustedToolContext,
+  TrustedToolFailure,
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
 import {
@@ -35,7 +36,7 @@ export type DesignToolBridgeResponse =
       type: "design-tool.response";
       requestId: string;
       ok: false;
-      error: string;
+      error: TrustedToolFailure;
     };
 
 export type RendererDesignToolRequest = {
@@ -55,7 +56,7 @@ export type RendererDesignToolCancel = {
 
 export type RendererDesignToolResponse =
   | { requestId: string; ok: true; result: TrustedToolResult }
-  | { requestId: string; ok: false; error: string };
+  | { requestId: string; ok: false; error: TrustedToolFailure };
 
 export function isDesignToolBridgeRequest(
   value: unknown,
@@ -99,7 +100,7 @@ export function isDesignToolBridgeResponse(
   }
   return value.ok
     ? isTrustedToolResult(value.result)
-    : safeText(value.error, 20_000);
+    : isTrustedToolFailure(value.error);
 }
 
 export function designToolBridgeResponseId(value: unknown): string | null {
@@ -152,7 +153,85 @@ export function isRendererDesignToolResponse(
   }
   return value.ok
     ? isTrustedToolResult(value.result)
-    : safeText(value.error, 20_000);
+    : isTrustedToolFailure(value.error);
+}
+
+export function isTrustedToolFailure(
+  value: unknown,
+): value is TrustedToolFailure {
+  if (
+    !record(value) ||
+    !safeId(value.code) ||
+    !safeText(value.message, 20_000) ||
+    typeof value.retryable !== "boolean" ||
+    typeof value.recoverable !== "boolean" ||
+    !Object.keys(value).every((key) =>
+      ["code", "message", "retryable", "recoverable", "details"].includes(key),
+    )
+  ) {
+    return false;
+  }
+  return (
+    value.details === undefined ||
+    isDesignTransactionFailureDetails(value.details)
+  );
+}
+
+function isDesignTransactionFailureDetails(value: unknown): boolean {
+  if (
+    !record(value) ||
+    value.kind !== "design-transaction" ||
+    !safeId(value.fingerprint) ||
+    !Array.isArray(value.issues) ||
+    value.issues.length === 0 ||
+    value.issues.length > 128 ||
+    !value.issues.every(isDesignTransactionFailureIssue) ||
+    !record(value.recovery) ||
+    value.recovery.action !== "inspect-and-revise" ||
+    value.recovery.toolName !== "opendesign_inspect_document" ||
+    value.recovery.required !== true ||
+    !Object.keys(value.recovery).every((key) =>
+      ["action", "toolName", "required"].includes(key),
+    ) ||
+    !optionalBoundedInteger(value.attempt) ||
+    !optionalBoundedInteger(value.maxAttempts) ||
+    (value.retrySuppressed !== undefined &&
+      typeof value.retrySuppressed !== "boolean") ||
+    !Object.keys(value).every((key) =>
+      [
+        "kind",
+        "fingerprint",
+        "issues",
+        "recovery",
+        "attempt",
+        "maxAttempts",
+        "retrySuppressed",
+      ].includes(key),
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isDesignTransactionFailureIssue(value: unknown): boolean {
+  return (
+    record(value) &&
+    (value.commandId === undefined || safeId(value.commandId)) &&
+    (value.nodeId === undefined || safeId(value.nodeId)) &&
+    safeText(value.path, 4_000, true) &&
+    safeText(value.message, 20_000) &&
+    Object.keys(value).every((key) =>
+      ["commandId", "nodeId", "path", "message"].includes(key),
+    )
+  );
+}
+
+function optionalBoundedInteger(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 100)
+  );
 }
 
 function isToolCall(value: unknown): value is ToolCallRequest {
@@ -251,9 +330,15 @@ function safeId(value: unknown): value is string {
   );
 }
 
-function safeText(value: unknown, maximum: number): value is string {
+function safeText(
+  value: unknown,
+  maximum: number,
+  allowEmpty = false,
+): value is string {
   return (
-    typeof value === "string" && value.length > 0 && value.length <= maximum
+    typeof value === "string" &&
+    (allowEmpty || value.length > 0) &&
+    value.length <= maximum
   );
 }
 

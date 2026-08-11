@@ -26,7 +26,7 @@ Agent Runtime 在网络请求前把上下文分为两类：固定协议开销（
 
 同一 Run 的 inspect、plan、apply、capture 和 review 也会持续增加模型输入。Agent Runtime 因此在每个 Provider turn 前重新计算预算。当前 Run 超预算时，Runtime 用临时 `OpenDesign in-run context checkpoint` 替换较早的模型可见 assistant/tool 段，始终保留当前用户原文，并依次尝试保留最近两个、一个或零个完整 assistant/tool 段。临时 checkpoint 只存在于当前模型投影，不写回原始 journal；tool call 与对应 result 始终位于同一保留段或同一摘要范围。
 
-Main 根据可信 Model Profile 解析所选模型的 `contextWindow` 与 `maxOutputTokens`，拒绝 Renderer 自行提供这些字段，再以 `AgentRequest 3.5` 的 `modelContext` 元数据注入 utility process。Agent Runtime 为最大输出和请求波动保留空间，并分别估算 ASCII、CJK、其他 Unicode、图片引用和文档引用的输入 token；SVG 只按有界句柄提示计入文本，不把 XML 送入模型。当前估算是跨 Provider 的保守启发式，不宣称等价于任一模型 tokenizer。
+Main 根据可信 Model Profile 解析所选模型的 `contextWindow` 与 `maxOutputTokens`，拒绝 Renderer 自行提供这些字段，再以当前 `AgentRequest 3.6` 的 `modelContext` 元数据注入 utility process。Agent Runtime 为最大输出和请求波动保留空间，并分别估算 ASCII、CJK、其他 Unicode、图片引用和文档引用的输入 token；SVG 只按有界句柄提示计入文本，不把 XML 送入模型。当前估算是跨 Provider 的保守启发式，不宣称等价于任一模型 tokenizer。
 
 模型可见的设计工具 Schema 与可信运行时校验 Schema 分离：前者是无 `$ref/$defs`、跨 adapter 的紧凑命令契约，后者继续使用完整 `DesignOperationSchema` 验证所有不可信模型输出。不得为了缩小请求而放松运行时校验。若固定协议本身无法装入所选模型，Run 返回 `model_context_incompatible`；不得错误报告为用户 Conversation 过长。
 

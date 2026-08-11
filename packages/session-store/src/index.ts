@@ -98,7 +98,13 @@ export type SessionTimelineItem =
       progress?: number;
       progressMessage?: string;
       result?: unknown;
-      error?: { code: string; message: string };
+      error?: {
+        code: string;
+        message: string;
+        retryable?: boolean;
+        recoverable?: boolean;
+        details?: unknown;
+      };
       revision?: number;
       transactionId?: string;
     })
@@ -626,7 +632,19 @@ export function projectTimeline(
         items.set(key, {
           ...current,
           status: "failed",
-          error: { code: payload.code, message: payload.message },
+          error: {
+            code: payload.code,
+            message: payload.message,
+            ...(payload.retryable === undefined
+              ? {}
+              : { retryable: payload.retryable }),
+            ...(payload.recoverable === undefined
+              ? {}
+              : { recoverable: payload.recoverable }),
+            ...(payload.details === undefined
+              ? {}
+              : { details: payload.details }),
+          },
           updatedAt: event.createdAt,
         });
       }
@@ -948,7 +966,12 @@ function isJournalEvent(value: unknown): value is JournalEvent {
         isNonEmptyString(value.runId) &&
         isNonEmptyString(payload.toolCallId) &&
         isNonEmptyString(payload.code) &&
-        isNonEmptyString(payload.message)
+        isNonEmptyString(payload.message) &&
+        (payload.retryable === undefined ||
+          typeof payload.retryable === "boolean") &&
+        (payload.recoverable === undefined ||
+          typeof payload.recoverable === "boolean") &&
+        (payload.details === undefined || isJsonCompatible(payload.details))
       );
     case "approval.requested":
       return (
@@ -1119,6 +1142,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isJsonCompatible(value: unknown, depth = 0): boolean {
+  if (depth > 12) return false;
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return true;
+  }
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) {
+    return (
+      value.length <= 256 &&
+      value.every((child) => isJsonCompatible(child, depth + 1))
+    );
+  }
+  if (!isRecord(value) || Object.keys(value).length > 256) return false;
+  return Object.values(value).every((child) =>
+    isJsonCompatible(child, depth + 1),
+  );
+}
+
 function isMissingFile(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -1221,6 +1266,9 @@ interface ToolFailedPayload {
   toolCallId: string;
   code: string;
   message: string;
+  retryable?: boolean;
+  recoverable?: boolean;
+  details?: unknown;
 }
 
 interface ApprovalRequestedPayload {

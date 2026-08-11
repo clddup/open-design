@@ -263,6 +263,8 @@ describe("Pi run event adapter", () => {
       toolCallId: "pending_probe",
       code: "run_error",
       message: "Tool call did not complete because the run ended",
+      retryable: false,
+      recoverable: false,
     });
     expect(events.at(-1)).toMatchObject({
       type: "run.completed",

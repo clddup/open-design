@@ -9,6 +9,7 @@ import {
   type RunStopReason,
   type ToolRisk,
 } from "@opendesign/agent-contracts";
+import { TrustedToolExecutionError } from "./index.js";
 import type {
   AgentRunRequest,
   AgentToolCallRecord,
@@ -16,6 +17,7 @@ import type {
   ApprovalPort,
   ApprovalRequest,
   ToolExecutorPort,
+  TrustedToolFailure,
   TrustedToolResult,
 } from "./index.js";
 import {
@@ -93,6 +95,9 @@ export type PiToolTerminalProjection =
       toolCallId: string;
       code: string;
       message: string;
+      retryable: boolean;
+      recoverable: boolean;
+      details?: NonNullable<TrustedToolFailure["details"]>;
     };
 
 interface ActiveToolCall extends PiToolStartProjection {
@@ -125,7 +130,9 @@ export class OpenDesignPiToolAdapter {
   readonly #active = new Map<string, ActiveToolCall>();
   readonly #approvalPort: ApprovalPort | undefined;
   readonly #definitions = new Map<string, AgentToolDefinition>();
-  readonly #failures = new Map<string, { code: string; message: string }>();
+  readonly #failures = new Map<string, TrustedToolFailure>();
+  readonly #failureAttempts = new Map<string, number>();
+  readonly #blockedInputs = new Map<string, TrustedToolFailure>();
   readonly #lifecycle: PiToolLifecyclePort;
   readonly #maxToolCalls: number;
   readonly #now: () => Date;
@@ -136,6 +143,7 @@ export class OpenDesignPiToolAdapter {
   readonly tools: AgentTool[];
   #currentRevision: number;
   #forcedStopReason: RunStopReason | undefined;
+  #inspectionRequiredFailure: TrustedToolFailure | undefined;
   #toolCallCount = 0;
   #toolSequence = 0;
 
@@ -300,6 +308,8 @@ export class OpenDesignPiToolAdapter {
                 toolCallId: active.toolCallId,
                 code,
                 message,
+                retryable: false,
+                recoverable: false,
               },
             ],
       );
@@ -343,6 +353,51 @@ export class OpenDesignPiToolAdapter {
         "invalid_tool_input",
         "Tool call was rejected before execution",
       );
+    }
+    if (
+      this.#inspectionRequiredFailure &&
+      definition.risk === "design_write" &&
+      active.toolName !== "opendesign_inspect_document"
+    ) {
+      const prior = this.#inspectionRequiredFailure;
+      const failure: TrustedToolFailure = {
+        ...prior,
+        code: "design_inspection_required",
+        message:
+          "Inspect the current document before submitting another design write after an invariant failure.",
+        retryable: false,
+        recoverable: true,
+        ...(prior.details
+          ? {
+              details: { ...prior.details, retrySuppressed: true },
+            }
+          : {}),
+      };
+      this.#failures.set(active.toolCallId, failure);
+      return { block: true, reason: modelFailureText(failure) };
+    }
+    const blockedFailure = this.#blockedInputs.get(
+      toolInputFingerprint(active.toolName, context.args),
+    );
+    if (blockedFailure) {
+      const failure: TrustedToolFailure = {
+        ...blockedFailure,
+        code: "repeated_tool_failure",
+        message:
+          "The same failing tool input was suppressed. Inspect the current document and revise the transaction before retrying.",
+        retryable: false,
+        recoverable: true,
+        ...(blockedFailure.details
+          ? {
+              details: {
+                ...blockedFailure.details,
+                retrySuppressed: true,
+              },
+            }
+          : {}),
+      };
+      this.#failures.set(active.toolCallId, failure);
+      return { block: true, reason: modelFailureText(failure) };
     }
     if (this.#toolExecutor === undefined) {
       return this.#block(
@@ -470,6 +525,9 @@ export class OpenDesignPiToolAdapter {
           });
           continue;
         }
+        if (event.type === "failed") {
+          throw new TrustedToolExecutionError(event.error);
+        }
         if (completedResult !== undefined) {
           throw new Error("Tool executor completed more than once");
         }
@@ -498,6 +556,11 @@ export class OpenDesignPiToolAdapter {
       }
       const nextRevision = revision?.revision ?? observedRevision;
       if (nextRevision !== undefined) this.#currentRevision = nextRevision;
+      if (definition.name === "opendesign_inspect_document") {
+        this.#failureAttempts.clear();
+        this.#blockedInputs.clear();
+        this.#inspectionRequiredFailure = undefined;
+      }
       this.#records.push({
         toolCallId,
         toolName: definition.name,
@@ -521,15 +584,59 @@ export class OpenDesignPiToolAdapter {
       };
     } catch (error) {
       if (signal.aborted) this.#forcedStopReason = "cancelled";
-      const code = signal.aborted
-        ? "run_cancelled"
-        : error instanceof RangeError
-          ? "invalid_revision"
-          : "tool_error";
-      const message = errorMessage(error);
-      this.#failures.set(toolCallId, { code, message });
-      throw error;
+      const baseFailure: TrustedToolFailure = signal.aborted
+        ? {
+            code: "run_cancelled",
+            message: errorMessage(error),
+            retryable: false,
+            recoverable: false,
+          }
+        : error instanceof TrustedToolExecutionError
+          ? error.failure
+          : {
+              code:
+                error instanceof RangeError ? "invalid_revision" : "tool_error",
+              message: errorMessage(error),
+              retryable: false,
+              recoverable: true,
+            };
+      const failure = this.#recordFailure(
+        definition.name,
+        parameters,
+        baseFailure,
+      );
+      this.#failures.set(toolCallId, failure);
+      throw new Error(modelFailureText(failure));
     }
+  }
+
+  #recordFailure(
+    toolName: string,
+    input: unknown,
+    failure: TrustedToolFailure,
+  ): TrustedToolFailure {
+    const details = failure.details;
+    const fingerprint = details?.fingerprint;
+    if (!details || !fingerprint || !failure.recoverable) return failure;
+    const attempt = (this.#failureAttempts.get(fingerprint) ?? 0) + 1;
+    this.#failureAttempts.set(fingerprint, attempt);
+    const maxAttempts = 2;
+    const enriched: TrustedToolFailure = {
+      ...failure,
+      details: {
+        ...details,
+        attempt,
+        maxAttempts,
+        ...(attempt >= maxAttempts ? { retrySuppressed: true } : {}),
+      },
+    };
+    if (attempt >= maxAttempts) {
+      this.#blockedInputs.set(toolInputFingerprint(toolName, input), enriched);
+    }
+    if (details.recovery.required) {
+      this.#inspectionRequiredFailure = enriched;
+    }
+    return enriched;
   }
 
   #block(
@@ -538,7 +645,12 @@ export class OpenDesignPiToolAdapter {
     message: string,
     terminate = false,
   ): BeforeToolCallResult {
-    this.#failures.set(toolCallId, { code, message });
+    this.#failures.set(toolCallId, {
+      code,
+      message,
+      retryable: false,
+      recoverable: false,
+    });
     return {
       block: true,
       reason: message,
@@ -622,22 +734,32 @@ function readResultDetails(value: unknown): Record<string, unknown> {
 function inferPiToolFailure(
   active: ActiveToolCall,
   result: unknown,
-): { code: string; message: string } {
+): TrustedToolFailure {
   const message = toolResultErrorText(result);
   if (active.budgetExceeded) {
-    return { code: "tool_budget_exceeded", message };
+    return failure("tool_budget_exceeded", message, false);
   }
   if (!active.toolName.startsWith("opendesign_")) {
-    return { code: "unknown_tool", message };
+    return failure("unknown_tool", message, false);
   }
-  if (message.includes("not found")) return { code: "unknown_tool", message };
+  if (message.includes("not found")) {
+    return failure("unknown_tool", message, false);
+  }
   if (message.includes("output token limit")) {
-    return { code: "truncated_tool_call", message };
+    return failure("truncated_tool_call", message, true);
   }
   if (message.toLowerCase().includes("abort")) {
-    return { code: "run_cancelled", message };
+    return failure("run_cancelled", message, false);
   }
-  return { code: "invalid_tool_input", message };
+  return failure("invalid_tool_input", message, true);
+}
+
+function failure(
+  code: string,
+  message: string,
+  recoverable: boolean,
+): TrustedToolFailure {
+  return { code, message, retryable: false, recoverable };
 }
 
 function toolResultErrorText(value: unknown): string {
@@ -661,6 +783,36 @@ function toolResultErrorText(value: unknown): string {
 
 function modelResultText(value: unknown): string {
   return typeof value === "string" ? value : (JSON.stringify(value) ?? "null");
+}
+
+function modelFailureText(failure: TrustedToolFailure): string {
+  return JSON.stringify({ ok: false, error: failure });
+}
+
+function toolInputFingerprint(toolName: string, input: unknown): string {
+  return `${toolName}:${hashText(stableJson(input))}`;
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? String(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  return `{${Object.entries(value)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`)
+    .join(",")}}`;
+}
+
+function hashText(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function errorMessage(error: unknown): string {

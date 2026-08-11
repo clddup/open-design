@@ -1,9 +1,12 @@
 import type {
+  AgentToolFailureIssue,
   DesignMutationTarget,
   SelectionScope,
 } from "@opendesign/agent-contracts";
+import type { TrustedToolFailure } from "@opendesign/agent-runtime";
 import type {
   DesignDocument,
+  DesignError,
   DesignOperation,
   DesignTransaction,
   DesignTransactionSuccess,
@@ -54,26 +57,47 @@ import type {
 } from "../shared/design-tool-bridge";
 import { runSvgExportInWorker, runSvgImportInWorker } from "./svg-interchange";
 
+type ExecuteDesignToolOptions = {
+  captureCanvas?: (document: DesignDocument) => Promise<{
+    attachment: {
+      attachmentId: string;
+      byteSize: number;
+      mimeType: "image/jpeg";
+      name: string;
+    };
+    height: number;
+    width: number;
+  }>;
+  exportSvg?: typeof runSvgExportInWorker;
+  importSvg?: typeof runSvgImportInWorker;
+  signal?: AbortSignal;
+  stageDelayMs?: number;
+};
+
 export async function executeDesignToolRequest(
   request: RendererDesignToolRequest,
   runtime: EditorRuntime,
+  activePageId: string,
+  options: ExecuteDesignToolOptions = {},
+): Promise<RendererDesignToolResponse> {
+  try {
+    return await executeDesignToolRequestUnsafe(
+      request,
+      runtime,
+      activePageId,
+      options,
+    );
+  } catch (error) {
+    if (!(error instanceof DesignTransactionToolError)) throw error;
+    return { requestId: request.requestId, ok: false, error: error.failure };
+  }
+}
+
+async function executeDesignToolRequestUnsafe(
+  request: RendererDesignToolRequest,
+  runtime: EditorRuntime,
   _activePageId: string,
-  options: {
-    captureCanvas?: (document: DesignDocument) => Promise<{
-      attachment: {
-        attachmentId: string;
-        byteSize: number;
-        mimeType: "image/jpeg";
-        name: string;
-      };
-      height: number;
-      width: number;
-    }>;
-    exportSvg?: typeof runSvgExportInWorker;
-    importSvg?: typeof runSvgImportInWorker;
-    signal?: AbortSignal;
-    stageDelayMs?: number;
-  } = {},
+  options: ExecuteDesignToolOptions,
 ): Promise<RendererDesignToolResponse> {
   const snapshot = runtime.getSnapshot();
   const document = snapshot.document;
@@ -195,12 +219,12 @@ export async function executeDesignToolRequest(
     } satisfies DesignTransaction;
     const preview = runtime.preview(transaction);
     if (!preview.ok) {
-      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+      throw designTransactionToolError(preview.error, transaction.commands);
     }
     throwIfAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
-      throw new Error(`${result.error.code}: ${result.error.message}`);
+      throw designTransactionToolError(result.error, transaction.commands);
     }
     const applied = runtime.getSnapshot().document;
     return {
@@ -283,12 +307,12 @@ export async function executeDesignToolRequest(
     } satisfies DesignTransaction;
     const preview = runtime.preview(transaction);
     if (!preview.ok) {
-      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+      throw designTransactionToolError(preview.error, transaction.commands);
     }
     throwIfAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
-      throw new Error(`${result.error.code}: ${result.error.message}`);
+      throw designTransactionToolError(result.error, transaction.commands);
     }
     runtime.setSelection(plan.selectionNodeIds, plan.rootNodeId);
     return {
@@ -456,12 +480,12 @@ export async function executeDesignToolRequest(
     throwIfAborted(options.signal);
     const preview = runtime.preview(transaction);
     if (!preview.ok) {
-      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+      throw designTransactionToolError(preview.error, transaction.commands);
     }
     throwIfAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
-      throw new Error(`${result.error.code}: ${result.error.message}`);
+      throw designTransactionToolError(result.error, transaction.commands);
     }
     const appliedDocument = runtime.getSnapshot().document;
     const childNodeIds =
@@ -590,12 +614,12 @@ export async function executeDesignToolRequest(
     throwIfAborted(options.signal);
     const preview = runtime.preview(transaction);
     if (!preview.ok) {
-      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+      throw designTransactionToolError(preview.error, transaction.commands);
     }
     throwIfAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
-      throw new Error(`${result.error.code}: ${result.error.message}`);
+      throw designTransactionToolError(result.error, transaction.commands);
     }
     return {
       requestId: request.requestId,
@@ -696,12 +720,12 @@ export async function executeDesignToolRequest(
     throwIfAborted(options.signal);
     const preview = runtime.preview(transaction);
     if (!preview.ok) {
-      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+      throw designTransactionToolError(preview.error, transaction.commands);
     }
     throwIfAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
-      throw new Error(`${result.error.code}: ${result.error.message}`);
+      throw designTransactionToolError(result.error, transaction.commands);
     }
     const applied = runtime.getSnapshot().document.nodesById[input.nodeId];
     return {
@@ -768,7 +792,7 @@ export async function executeDesignToolRequest(
   } satisfies DesignTransaction;
   const preview = runtime.preview(transaction);
   if (!preview.ok)
-    throw new Error(`${preview.error.code}: ${preview.error.message}`);
+    throw designTransactionToolError(preview.error, transaction.commands);
   return await applyProgressively(
     request,
     runtime,
@@ -838,7 +862,7 @@ async function applyProgressively(
         },
       );
       if (!result.ok) {
-        throw new Error(`${result.error.code}: ${result.error.message}`);
+        throw designTransactionToolError(result.error, commands);
       }
       appliedStages += 1;
       lastResult = result;
@@ -911,9 +935,131 @@ function nextValidProgressiveStage(
     lastFailure = candidate;
   }
   if (lastFailure && !lastFailure.ok) {
-    throw new Error(`${lastFailure.error.code}: ${lastFailure.error.message}`);
+    throw designTransactionToolError(lastFailure.error, remainingCommands);
   }
   throw new Error("Design transaction has no document-valid visible stage");
+}
+
+class DesignTransactionToolError extends Error {
+  constructor(readonly failure: TrustedToolFailure) {
+    super(failure.message);
+    this.name = "DesignTransactionToolError";
+  }
+}
+
+function designTransactionToolError(
+  error: DesignError,
+  commands: readonly DesignOperation[],
+): DesignTransactionToolError {
+  const issues = designFailureIssues(error, commands);
+  const firstIssue = issues[0];
+  const specificMessage = firstIssue
+    ? `${error.message}: ${firstIssue.path || "document"}: ${firstIssue.message}`
+    : error.message;
+  const fingerprintSource = issues
+    .map(
+      (issue) =>
+        `${issue.commandId ?? ""}\u0000${issue.nodeId ?? ""}\u0000${issue.path}\u0000${issue.message}`,
+    )
+    .join("\u0001");
+  return new DesignTransactionToolError({
+    code: `design.${error.code}`,
+    message: specificMessage,
+    retryable: error.retryable,
+    recoverable:
+      error.code === "invalid" ||
+      error.code === "conflict" ||
+      error.code === "not-found" ||
+      error.code === "duplicate",
+    details: {
+      kind: "design-transaction",
+      fingerprint: `design_${hashFailureText(fingerprintSource)}`,
+      issues,
+      recovery: {
+        action: "inspect-and-revise",
+        toolName: "opendesign_inspect_document",
+        required: true,
+      },
+    },
+  });
+}
+
+function designFailureIssues(
+  error: DesignError,
+  commands: readonly DesignOperation[],
+): AgentToolFailureIssue[] {
+  const rawIssues = Array.isArray(error.details)
+    ? error.details.flatMap((value) => {
+        const issue = recordValue(value);
+        if (!issue) return [];
+        return typeof issue.path === "string" &&
+          typeof issue.message === "string"
+          ? [{ path: issue.path, message: issue.message }]
+          : [];
+      })
+    : [];
+  const issues =
+    rawIssues.length > 0
+      ? rawIssues
+      : [{ path: error.path ?? "", message: error.message }];
+  return issues.slice(0, 128).map((issue) => {
+    const nodeId = nodeIdFromInvariantPath(issue.path);
+    const commandId =
+      error.commandId ?? commandIdForNode(commands, nodeId) ?? undefined;
+    return {
+      ...(commandId ? { commandId } : {}),
+      ...(nodeId ? { nodeId } : {}),
+      path: issue.path.slice(0, 4_000),
+      message: issue.message.slice(0, 20_000),
+    };
+  });
+}
+
+function nodeIdFromInvariantPath(path: string): string | undefined {
+  const match = /^\/nodesById\/([^/]+)/.exec(path);
+  if (!match?.[1]) return undefined;
+  return match[1].replaceAll("~1", "/").replaceAll("~0", "~");
+}
+
+function commandIdForNode(
+  commands: readonly DesignOperation[],
+  nodeId: string | undefined,
+): string | undefined {
+  if (!nodeId) return undefined;
+  return commands.find((command) => valueReferencesNode(command, nodeId))
+    ?.commandId;
+}
+
+function valueReferencesNode(
+  value: unknown,
+  nodeId: string,
+  depth = 0,
+): boolean {
+  if (depth > 8) return false;
+  if (value === nodeId) return true;
+  if (Array.isArray(value)) {
+    return value.some((child) => valueReferencesNode(child, nodeId, depth + 1));
+  }
+  const record = recordValue(value);
+  if (!record) return false;
+  return Object.values(record).some((child) =>
+    valueReferencesNode(child, nodeId, depth + 1),
+  );
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function hashFailureText(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

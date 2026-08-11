@@ -6,7 +6,7 @@
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.8.0`
-- Agent 协议：`3.5.0`
+- Agent 协议：`3.6.0`
 - Geometry Service：`contract v4`
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
@@ -39,8 +39,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   40 files / 323 tests
-└── desktop tests   48 files / 398 tests
+├── package tests   40 files / 325 tests
+└── desktop tests   48 files / 402 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -77,7 +77,7 @@ pnpm build          passed
 - host-only 图片放置以单个 Page-targeted `put_asset + insert_element(image)` 事务进入 `EditorRuntime`；测试验证单次 revision、发送时存在选区也能在固定 Page 新增 asset/node、当前活动页面变化不漂移目标，以及一次 undo 同时移除 asset/node。
 - 人工检查器与 `opendesign_update_image` 共用 `planImageNodeUpdate`：明确 Page/node ID 的 placement 与来源替换进入单个事务，保留现有 placement，未共享的旧 asset 可安全清理，共享 Image/Path/Vector paint 资源不会误删；文件选择取消/失败不产生 revision，Agent 执行不读取发送时或实时选区。
 - `opendesign_edit_hierarchy` 对现有节点提供显式 ID 的编组/解组、前移/后移/置顶/置底和跨 Page root/Frame/Group 重挂载语义；宿主与人工 UI 复用同一 planner，保持世界 transform 与多选内部顺序，固定 Frame 尺寸，自底向上重算受影响 Group bounds，并以一个原子事务写入和一次撤销。人工入口包含 Layer order 菜单、macOS `⌘/⌥⌘ + [ ]`、Windows `Ctrl/Ctrl+Shift + [ ]` 快捷键，以及图层树 before/inside/after 指针拖放。测试覆盖两个平台状态下的拖放、选区保持、保存重开、undo/redo、stale revision、Page Mutation Target、锁定、混合父级、cycle、空来源 Group、不可逆 transform、无效 index、外部拖放数据拒绝、继承外观 warning 与提交前取消；这仍是自动化 DOM/Runtime 证据，不冒充 Electron 实机指针验证。
-- `artboard.mode=existing` 由 Main 从当前 Renderer inspection 的 document ID、observed revision、Page roots 和完整 `parentId` 链解析，不再以空后代集合开始。Main 在计划接受前拒绝缺失/非 Frame/错 Page/断裂/循环/过期层级，失败后可重新 inspect 并重定义计划；既有锁定 Group/Frame 仍可作为 Agent 数据写入容器，插入与图片放置可进入任意真实后代，但 Page-root 散落继续拒绝。`global-task-coordinator` 测试覆盖既有 Frame、两层嵌套容器、锁定、stale revision、重新 inspection 恢复和根层拒绝；尚未完成本路线图中结构化 invariant 回传、按需 Page 结构授权与多目标交付账本。
+- `artboard.mode=existing` 由 Main 从当前 Renderer inspection 的 document ID、observed revision、Page roots 和完整 `parentId` 链解析，不再以空后代集合开始。Main 在计划接受前拒绝缺失/非 Frame/错 Page/断裂/循环/过期层级，失败后可重新 inspect 并重定义计划；既有锁定 Group/Frame 仍可作为 Agent 数据写入容器，插入与图片放置可进入任意真实后代，但 Page-root 散落继续拒绝。`global-task-coordinator` 测试覆盖既有 Frame、两层嵌套容器、锁定、stale revision、重新 inspection 恢复和根层拒绝。`AgentEvent 3.6` 进一步把 invariant 的 command/node/path/message 从 Renderer 经受控桥保留到模型、journal、Timeline 和诊断复制；失败零 revision，重新 inspection 前设计写被冻结，盲重试不再次执行。尚未完成本路线图中按需 Page 结构授权与多目标交付账本。
 - `@opendesign/geometry-service` contract v4 的根入口提供不持有文档状态的纯排列结果；EditorRuntime 的 `planArrangeNodes` 将六向多层对齐、固定两端横/纵均分、明确正数/零/负数间距，以及一维/二维 Tidy up 映射为一个原子事务，并自底向上维护 Group bounds。一维 Tidy up 只修改重叠关系确定的排列轴，使用现有 gap 众数并保留另一轴；二维验证行列 overlap graph、支持不等尺寸和稀疏网格、使用两轴 gap 众数并锚定选择区域左上角。Inspector 与 `opendesign_arrange_layers` 共用该 planner；Agent 必须提供检查所得的稳定 Page/node IDs，发送时或实时选区不作为写目标。测试覆盖不等尺寸、稀疏二维网格、众数 tie-break、负间距、旋转/缩放父级、两端固定、Group rebase、保存重开、undo/redo、锁定、不可逆 transform、歧义、Page scope、无操作拒绝、事务预算，以及 macOS/Windows Renderer 状态；尚未执行真实 Electron 指针/键盘产品 smoke，Smart Selection 画布手柄和回流也尚未实现。
 - 隔离的 `@opendesign/geometry-service/vector-path` 子入口固定 `pathkit-wasm 1.0.0`；实际 WASM corpus 覆盖 cubic union/subtract/intersect/exclude、复合孔洞、合法空结果、self-intersection simplify、Canvas/SVG transform、精确两段 dash、开放路径 outline stroke、fill rule、tight bounds、确定性输出、非法输入和资源预算。`boolean-resolver` 递归覆盖 Rectangle/Ellipse/Path/Vector/嵌套 Boolean、源层 fill+stroke、inside/center/outside stroke、visibility、空结果和精确 cache invalidation。所有 PathKit 对象显式释放，公共结果不暴露 WASM/Skia 对象。Renderer 仅在 Page 存在 Boolean 时加载独立 `browser-vector-path` 与 WASM 产物；Main/Preload/Agent 不包含该实现。同一 corpus 的 macOS/Windows 原生加载、性能与内存门禁仍待 CI。
 - 同一 contract v4 的隔离 `vector-edit` 子入口提供单轮廓节点多选移动、corner/smooth/mirrored/independent 手柄耦合、point mode 与节点删除；EditorRuntime planner 负责 tight bounds 归一化、局部 offset 与原 transform 组合、锁定/Page/revision 边界和一次事务。Leafer adapter 把普通 selection、Pen 与已有路径编辑作为互斥状态，提供独立 trace/anchor/handle overlay；测试覆盖 Enter/双击进入、Shift 节点多选、手柄拖动、Delete/Backspace、Done/Escape、只读、失败恢复、增量 revision、保存重开和 undo/redo。分支、多轮廓、open/closed、connect/disconnect、reverse/cut、套索、多点变换框、像素基线与 macOS/Windows 打包交互仍未验收。

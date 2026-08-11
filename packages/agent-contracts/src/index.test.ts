@@ -240,4 +240,41 @@ describe("Agent contracts", () => {
       }),
     ).toBe(false);
   });
+
+  it("carries bounded structured tool failure recovery details", () => {
+    const failure = {
+      type: "tool.failed",
+      runId: "run_1",
+      toolCallId: "tool_1",
+      code: "design.invalid",
+      message: "Transaction would violate document invariants",
+      retryable: false,
+      recoverable: true,
+      details: {
+        kind: "design-transaction",
+        fingerprint: "design_deadbeef",
+        issues: [
+          {
+            commandId: "update_card",
+            nodeId: "card_1",
+            path: "/nodesById/card_1/properties",
+            message: "Expected union value",
+          },
+        ],
+        recovery: {
+          action: "inspect-and-revise",
+          toolName: "opendesign_inspect_document",
+          required: true,
+        },
+      },
+    };
+
+    expect(Value.Check(AgentEventSchema, failure)).toBe(true);
+    expect(
+      Value.Check(AgentEventSchema, {
+        ...failure,
+        details: { ...failure.details, filePath: "C:\\private\\draft" },
+      }),
+    ).toBe(false);
+  });
 });

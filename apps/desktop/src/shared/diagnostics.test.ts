@@ -62,4 +62,36 @@ describe("diagnostic contract", () => {
     expect(formatDiagnosticReport(event)).toContain("Tool Call ID: tool_1");
     expect(formatDiagnosticReport(event)).toContain(event.message);
   });
+
+  it("preserves invariant targets in the copy-ready diagnostic", () => {
+    const invariantEvent: DiagnosticEvent = {
+      ...event,
+      source: "design-tool",
+      code: "design.invalid",
+      details: {
+        kind: "design-transaction",
+        fingerprint: "design_deadbeef",
+        issues: [
+          {
+            commandId: "update_card",
+            nodeId: "card_1",
+            path: "/nodesById/card_1/properties",
+            message: "Expected union value",
+          },
+        ],
+        recovery: {
+          action: "inspect-and-revise",
+          toolName: "opendesign_inspect_document",
+          required: true,
+        },
+      },
+    };
+
+    expect(isDiagnosticEvent(invariantEvent)).toBe(true);
+    const report = formatDiagnosticReport(invariantEvent);
+    expect(report).toContain("Details:");
+    expect(report).toContain('"commandId": "update_card"');
+    expect(report).toContain('"nodeId": "card_1"');
+    expect(report).toContain('"path": "/nodesById/card_1/properties"');
+  });
 });

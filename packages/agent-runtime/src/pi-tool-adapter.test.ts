@@ -58,6 +58,23 @@ const moveTool: AgentToolDefinition = {
     typeof (input as { dx?: unknown }).dx === "number",
 };
 
+const inspectTool: AgentToolDefinition = {
+  name: "opendesign_inspect_document",
+  description: "Inspect the current document.",
+  inputSchema: {
+    type: "object",
+    properties: {},
+    additionalProperties: false,
+  },
+  risk: "read",
+  approval: "never",
+  validateInput: (input) =>
+    !!input &&
+    typeof input === "object" &&
+    !Array.isArray(input) &&
+    Object.keys(input).length === 0,
+};
+
 class MemorySessionStore implements SessionStore {
   readonly events: JournalEvent[] = [];
 
@@ -314,6 +331,107 @@ describe("OpenDesign Pi tool adapter", () => {
     ).toBe(false);
   });
 
+  it("requires inspection after a structured failure and suppresses blind retries", async () => {
+    let moveExecutions = 0;
+    let inspectExecutions = 0;
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        toolTurn("invalid_design_1", "invalid_design_call_1", 18),
+        toolTurn("invalid_design_2", "invalid_design_call_2", 18),
+        {
+          blocks: [
+            {
+              id: "inspect_after_failure",
+              type: "tool_call",
+              toolCallId: "inspect_after_failure_call",
+              name: inspectTool.name,
+              input: {},
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        toolTurn("invalid_design_3", "invalid_design_call_3", 18),
+        { blocks: [{ id: "stopped", type: "text", text: "Will inspect" }] },
+      ]),
+    );
+    const result = await runPiToolLoop({
+      gateway,
+      definitions: [moveTool, inspectTool],
+      toolExecutor: {
+        async *execute(call): AsyncIterable<ToolExecutionEvent> {
+          if (call.toolName === inspectTool.name) {
+            inspectExecutions += 1;
+            yield {
+              type: "completed",
+              result: {
+                content: { documentId: request.documentId, revision: 12 },
+                observedRevision: 12,
+              },
+            };
+            return;
+          }
+          moveExecutions += 1;
+          await Promise.resolve();
+          yield {
+            type: "failed",
+            error: {
+              code: "design.invalid",
+              message:
+                "Transaction would violate document invariants: /nodesById/node_tool/size: width must be positive",
+              retryable: false,
+              recoverable: true,
+              details: {
+                kind: "design-transaction",
+                fingerprint: "design_deadbeef",
+                issues: [
+                  {
+                    commandId: "resize_node_tool",
+                    nodeId: "node_tool",
+                    path: "/nodesById/node_tool/size",
+                    message: "width must be positive",
+                  },
+                ],
+                recovery: {
+                  action: "inspect-and-revise",
+                  toolName: "opendesign_inspect_document",
+                  required: true,
+                },
+              },
+            },
+          };
+        },
+      },
+    });
+
+    expect(moveExecutions).toBe(2);
+    expect(inspectExecutions).toBe(1);
+    const failures = result.events.filter(
+      (event) => event.type === "tool.failed",
+    );
+    expect(failures).toHaveLength(3);
+    expect(failures[0]).toMatchObject({
+      code: "design.invalid",
+      recoverable: true,
+      details: { attempt: 1, maxAttempts: 2 },
+    });
+    expect(failures[1]).toMatchObject({
+      code: "design_inspection_required",
+      recoverable: true,
+      details: { retrySuppressed: true },
+    });
+    expect(failures[2]).toMatchObject({
+      code: "design.invalid",
+      recoverable: true,
+      details: { attempt: 1, maxAttempts: 2 },
+    });
+    expect(JSON.stringify(gateway.requests[1]?.messages)).toContain(
+      "node_tool",
+    );
+    expect(JSON.stringify(gateway.requests[1]?.messages)).toContain(
+      "inspect-and-revise",
+    );
+  });
+
   it("preserves approval denial and a forced tool budget terminal state", async () => {
     const approvalTool = { ...moveTool, approval: "required" as const };
     const denied = await runPiToolLoop({
@@ -419,6 +537,21 @@ describe("OpenDesign Pi tool adapter", () => {
     });
   });
 });
+
+function toolTurn(id: string, toolCallId: string, dx: number) {
+  return {
+    blocks: [
+      {
+        id,
+        type: "tool_call" as const,
+        toolCallId,
+        name: moveTool.name,
+        input: { dx },
+      },
+    ],
+    stopReason: "tool_use" as const,
+  };
+}
 
 async function runPiToolLoop(options: {
   gateway: RecordingGateway;

@@ -666,6 +666,8 @@ export const enMessages = {
   "agent.changeCompleted": "Design change completed",
   "agent.changeApplied": "The structured edit was applied successfully",
   "agent.changeFailed": "Design change failed",
+  "agent.inspectRequiredBeforeRetry":
+    "Inspect the current document before another retry",
   "agent.finishedPass": "The Agent finished its current pass",
   "diagnostic.notifications": "System notifications",
   "diagnostic.errorTitle": "OpenDesign encountered an error",
@@ -1403,6 +1405,7 @@ const zhCNMessages = {
   "agent.changeCompleted": "设计更改已完成",
   "agent.changeApplied": "结构化修改已成功应用",
   "agent.changeFailed": "设计更改失败",
+  "agent.inspectRequiredBeforeRetry": "再次重试前需要重新读取当前文档",
   "agent.finishedPass": "Agent 已完成当前处理",
   "diagnostic.notifications": "系统通知",
   "diagnostic.errorTitle": "OpenDesign 遇到错误",

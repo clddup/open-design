@@ -4,7 +4,10 @@ import {
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tools";
-import { isRendererDesignToolRequest } from "./design-tool-bridge";
+import {
+  isRendererDesignToolRequest,
+  isRendererDesignToolResponse,
+} from "./design-tool-bridge";
 
 const context = {
   runId: "run_1",
@@ -145,6 +148,56 @@ describe("Renderer design tool bridge", () => {
           input: {
             ...request.call.input,
             filePath: "C:\\Users\\designer\\Brand.svg",
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only bounded structured transaction failures", () => {
+    const failure = {
+      requestId: "renderer_failure_1",
+      ok: false as const,
+      error: {
+        code: "design.invalid",
+        message: "Transaction would violate document invariants",
+        retryable: false,
+        recoverable: true,
+        details: {
+          kind: "design-transaction" as const,
+          fingerprint: "design_deadbeef",
+          issues: [
+            {
+              commandId: "update_card",
+              nodeId: "card_1",
+              path: "/nodesById/card_1/properties",
+              message: "Expected union value",
+            },
+          ],
+          recovery: {
+            action: "inspect-and-revise" as const,
+            toolName: "opendesign_inspect_document" as const,
+            required: true as const,
+          },
+        },
+      },
+    };
+
+    expect(isRendererDesignToolResponse(failure)).toBe(true);
+    expect(
+      isRendererDesignToolResponse({
+        ...failure,
+        error: { ...failure.error, filePath: "C:\\private\\draft" },
+      }),
+    ).toBe(false);
+    expect(
+      isRendererDesignToolResponse({
+        ...failure,
+        error: {
+          ...failure.error,
+          details: {
+            ...failure.error.details,
+            issues: [{ ...failure.error.details.issues[0], prompt: "hidden" }],
           },
         },
       }),

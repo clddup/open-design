@@ -2,6 +2,7 @@ import {
   isAgentAttachment,
   type AgentAttachment,
   type AgentModelContext,
+  type AgentToolFailureDetails,
   type ApprovalDecision,
   type DesignMutationTarget,
   type SelectionScope,
@@ -62,7 +63,23 @@ export interface TrustedToolContext {
 
 export type ToolExecutionEvent =
   | { type: "progress"; message: string; progress: number }
+  | { type: "failed"; error: TrustedToolFailure }
   | { type: "completed"; result: TrustedToolResult };
+
+export interface TrustedToolFailure {
+  code: string;
+  message: string;
+  retryable: boolean;
+  recoverable: boolean;
+  details?: AgentToolFailureDetails;
+}
+
+export class TrustedToolExecutionError extends Error {
+  constructor(readonly failure: TrustedToolFailure) {
+    super(failure.message);
+    this.name = "TrustedToolExecutionError";
+  }
+}
 
 export interface TrustedToolResult {
   content: unknown;
@@ -167,6 +184,9 @@ export function restoreModelMessages(
       result?: unknown;
       code?: unknown;
       message?: unknown;
+      retryable?: unknown;
+      recoverable?: unknown;
+      details?: unknown;
     };
     if (
       typeof payload.toolCallId === "string" &&
@@ -176,7 +196,19 @@ export function restoreModelMessages(
         content:
           event.type === "tool.completed"
             ? payload.result
-            : { code: payload.code, message: payload.message },
+            : {
+                code: payload.code,
+                message: payload.message,
+                ...(typeof payload.retryable === "boolean"
+                  ? { retryable: payload.retryable }
+                  : {}),
+                ...(typeof payload.recoverable === "boolean"
+                  ? { recoverable: payload.recoverable }
+                  : {}),
+                ...(payload.details === undefined
+                  ? {}
+                  : { details: payload.details }),
+              },
         isError: event.type === "tool.failed",
       });
     }

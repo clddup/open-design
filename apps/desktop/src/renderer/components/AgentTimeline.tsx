@@ -1,6 +1,7 @@
 import type {
   AgentAttachment,
   AgentEvent,
+  AgentToolFailureDetails,
   AssistantTimelineBlock,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
@@ -147,6 +148,25 @@ function friendlyAgentError(message: string, t: Translate): string {
   return message;
 }
 
+function structuredToolFailureDetail(
+  message: string,
+  details: AgentToolFailureDetails | undefined,
+  t: Translate,
+): string {
+  const friendly = friendlyAgentError(message, t);
+  const issue = details?.issues[0];
+  if (!issue) return friendly;
+  const target = [
+    issue.commandId ? `command ${issue.commandId}` : null,
+    issue.nodeId ? `node ${issue.nodeId}` : null,
+    issue.path || null,
+  ].filter(Boolean);
+  const retry = details.retrySuppressed
+    ? t("agent.inspectRequiredBeforeRetry")
+    : null;
+  return [friendly, target.join(" · "), retry].filter(Boolean).join("\n");
+}
+
 function isRecoverableDesignWorkflowFailure(message: string): boolean {
   return /^design_workflow\.(?:material_write_required|capture_required|capture_revision_invalid):/i.test(
     message,
@@ -247,7 +267,7 @@ function projectTimeline(
               ? "active"
               : "queued";
       const detail = item.error?.message
-        ? friendlyAgentError(item.error.message, t)
+        ? structuredToolFailureDetail(item.error.message, item.error.details, t)
         : state === "done" || isNativeDesignTool(item.toolName)
           ? undefined
           : item.progressMessage;
@@ -503,7 +523,7 @@ function projectEvents(
         kind: "tool",
         time: t("common.error"),
         title: t("agent.changeFailed"),
-        detail: friendlyAgentError(event.message, t),
+        detail: structuredToolFailureDetail(event.message, event.details, t),
       });
     }
     if (event.type === "approval.requested") {

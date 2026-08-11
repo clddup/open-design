@@ -805,7 +805,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             return desktop.resolveDesignToolRequest({
               requestId: request.requestId,
               ok: false,
-              error: message,
+              error: {
+                code: "design_tool_execution_failed",
+                message,
+                retryable: false,
+                recoverable: true,
+              },
             });
           },
         )

@@ -7,7 +7,7 @@ import { I18nProvider } from "../i18n";
 import { DiagnosticNotifications } from "./DiagnosticNotifications";
 
 const event: DiagnosticEvent = {
-  version: 1,
+  version: 2,
   eventId: "diagnostic_1",
   occurredAt: "2026-08-10T12:00:00.000Z",
   level: "error",

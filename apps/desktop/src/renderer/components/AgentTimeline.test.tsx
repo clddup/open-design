@@ -24,7 +24,7 @@ describe("AgentTimeline", () => {
     const user = userEvent.setup();
     const onCreateConversation = vi.fn().mockResolvedValue(true);
 
-    render(
+    const { container } = render(
       <AgentTimeline
         activeRunId={null}
         conversationId={null}
@@ -706,6 +706,71 @@ describe("AgentTimeline", () => {
     ).toBeInTheDocument();
     expect(container).not.toHaveTextContent("login-002");
     expect(container).not.toHaveTextContent("registered page scope");
+  });
+
+  it("shows the exact invariant target and retry recovery state", () => {
+    const events: AgentEvent[] = [
+      {
+        type: "tool.requested",
+        runId: "run_invariant_1",
+        toolCallId: "tool_invariant_1",
+        toolName: "opendesign_apply_transaction",
+        input: {},
+        risk: "design_write",
+      },
+      {
+        type: "tool.failed",
+        runId: "run_invariant_1",
+        toolCallId: "tool_invariant_1",
+        code: "design.invalid",
+        message: "Transaction would violate document invariants",
+        retryable: false,
+        recoverable: true,
+        details: {
+          kind: "design-transaction",
+          fingerprint: "design_deadbeef",
+          issues: [
+            {
+              commandId: "update_card",
+              nodeId: "card_1",
+              path: "/nodesById/card_1/properties",
+              message: "Expected union value",
+            },
+          ],
+          recovery: {
+            action: "inspect-and-revise",
+            toolName: "opendesign_inspect_document",
+            required: true,
+          },
+          attempt: 2,
+          maxAttempts: 2,
+          retrySuppressed: true,
+        },
+      },
+    ];
+
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_invariant_1"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={events}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(screen.getByText(/command update_card/)).toHaveTextContent(
+      "node card_1",
+    );
+    expect(screen.getByText(/command update_card/)).toHaveTextContent(
+      "/nodesById/card_1/properties",
+    );
+    expect(container).toHaveTextContent(
+      "Inspect the current document before another retry",
+    );
   });
 
   it("keeps recoverable design workflow guard retries out of the visible timeline", () => {
