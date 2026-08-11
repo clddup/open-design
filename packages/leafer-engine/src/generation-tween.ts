@@ -24,6 +24,8 @@ const TWEEN_DATA_KEYS = [
   "stroke",
   "strokeWidth",
   "text",
+  "textOverflow",
+  "textWrap",
   "visible",
   "width",
 ] as const;

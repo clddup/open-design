@@ -32,9 +32,36 @@ describe("Leafer scene projection", () => {
       data: {
         text: "Design without losing the thread.",
         verticalAlign: "top",
+        textWrap: "normal",
+        textOverflow: "hide",
       },
     });
   });
+
+  it.each([
+    ["none", "visible", "none", "show"],
+    ["word", "clip", "normal", "hide"],
+    ["character", "ellipsis", "break", "ellipsis"],
+  ] as const)(
+    "projects %s wrapping and %s overflow to Leafer Text",
+    (textWrap, textOverflow, expectedWrap, expectedOverflow) => {
+      const document = structuredClone(createWelcomeDocument());
+      const text = document.nodesById.title_welcome;
+      if (!text || text.kind !== "text") throw new Error("Missing text");
+      text.properties.textWrap = textWrap;
+      text.properties.textOverflow = textOverflow;
+
+      expect(
+        projectDesignPage(document, "page_welcome").elementsById.get(text.id),
+      ).toMatchObject({
+        tag: "Text",
+        data: {
+          textWrap: expectedWrap,
+          textOverflow: expectedOverflow,
+        },
+      });
+    },
+  );
 
   it("projects semantic Polygon and Star nodes through native Leafer shapes", () => {
     const document = structuredClone(createWelcomeDocument());

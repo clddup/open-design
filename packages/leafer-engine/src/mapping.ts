@@ -382,8 +382,18 @@ function toElementSpec(
           node.properties.textAlignVertical === "center"
             ? "middle"
             : node.properties.textAlignVertical,
-        textWrap: "break",
-        overflow: "hide",
+        textWrap:
+          node.properties.textWrap === "word"
+            ? "normal"
+            : node.properties.textWrap === "character"
+              ? "break"
+              : "none",
+        textOverflow:
+          node.properties.textOverflow === "visible"
+            ? "show"
+            : node.properties.textOverflow === "ellipsis"
+              ? "ellipsis"
+              : "hide",
       };
       break;
     case "image": {

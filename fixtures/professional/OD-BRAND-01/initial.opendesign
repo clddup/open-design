@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.8.0",
+  "schemaVersion": "1.9.0",
   "documentId": "document_od_brand_01",
   "revision": 0,
   "pageOrder": ["page_brand_01"],
@@ -239,6 +239,8 @@
         "letterSpacing": -1.8,
         "textAlignHorizontal": "left",
         "textAlignVertical": "top",
+        "textWrap": "word",
+        "textOverflow": "clip",
         "fills": [
           {
             "type": "linear-gradient",
@@ -276,6 +278,8 @@
         "letterSpacing": 2.7,
         "textAlignHorizontal": "left",
         "textAlignVertical": "top",
+        "textWrap": "word",
+        "textOverflow": "clip",
         "fills": [{ "type": "solid", "color": "#9fdff3", "opacity": 0.84 }],
         "strokes": [],
         "strokeWidth": 0
@@ -344,6 +348,8 @@
         "letterSpacing": 2.2,
         "textAlignHorizontal": "center",
         "textAlignVertical": "top",
+        "textWrap": "word",
+        "textOverflow": "clip",
         "fills": [{ "type": "solid", "color": "#8493c5", "opacity": 0.72 }],
         "strokes": [],
         "strokeWidth": 0

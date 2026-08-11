@@ -273,6 +273,50 @@ describe("EditorRuntime transactions", () => {
     expect(runtime.getSnapshot().document.revision).toBe(0);
   });
 
+  it("previews, persists, undoes, and redoes text wrapping and overflow", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const change = transaction(runtime, "transaction_text_layout", [
+      {
+        commandId: "update_text_layout",
+        type: "update_properties",
+        nodeId: "title_welcome",
+        properties: {
+          textWrap: "none",
+          textOverflow: "ellipsis",
+        },
+      },
+    ]);
+
+    expect(runtime.preview(change)).toMatchObject({
+      ok: true,
+      mode: "preview",
+      changes: { changedNodeIds: ["title_welcome"] },
+    });
+    expect(runtime.apply(change)).toMatchObject({ ok: true, mode: "apply" });
+    const applied = runtime.getSnapshot().document.nodesById.title_welcome;
+    expect(applied).toMatchObject({
+      kind: "text",
+      properties: { textWrap: "none", textOverflow: "ellipsis" },
+    });
+
+    const reopened = normalizeDesignDocument(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expect(reopened.nodesById.title_welcome).toEqual(applied);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      properties: { textWrap: "word", textOverflow: "clip" },
+    });
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      properties: { textWrap: "none", textOverflow: "ellipsis" },
+    });
+  });
+
   it("previews, persists, undoes, and redoes formal path nodes", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const change = transaction(runtime, "transaction_path", [

@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.8.0",
+  "schemaVersion": "1.9.0",
   "documentId": "document_od_penguin_01",
   "revision": 1,
   "pageOrder": ["page_penguin_01"],
@@ -801,6 +801,8 @@
         "letterSpacing": 2.4,
         "textAlignHorizontal": "center",
         "textAlignVertical": "top",
+        "textWrap": "word",
+        "textOverflow": "clip",
         "fills": [{ "type": "solid", "color": "#b7c6f8", "opacity": 0.84 }],
         "strokes": [],
         "strokeWidth": 0

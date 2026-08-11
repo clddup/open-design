@@ -1339,6 +1339,69 @@ function SelectedNodeProperties({
                   <option value="justify">{t("properties.justify")}</option>
                 </select>
               </label>
+              <label className={styles.select}>
+                <span>{t("properties.verticalAlign")}</span>
+                <select
+                  aria-label={t("properties.verticalAlign")}
+                  onChange={(event) =>
+                    onUpdate({
+                      properties: {
+                        textAlignVertical: event.target.value as
+                          "top" | "center" | "bottom",
+                      },
+                    })
+                  }
+                  value={node.properties.textAlignVertical}
+                >
+                  <option value="top">{t("properties.alignTop")}</option>
+                  <option value="center">{t("properties.alignVCenter")}</option>
+                  <option value="bottom">{t("properties.alignBottom")}</option>
+                </select>
+              </label>
+              <label className={styles.select}>
+                <span>{t("properties.textWrap")}</span>
+                <select
+                  aria-label={t("properties.textWrap")}
+                  onChange={(event) =>
+                    onUpdate({
+                      properties: {
+                        textWrap: event.target.value as
+                          "none" | "word" | "character",
+                      },
+                    })
+                  }
+                  value={node.properties.textWrap}
+                >
+                  <option value="none">{t("properties.wrapNone")}</option>
+                  <option value="word">{t("properties.wrapWord")}</option>
+                  <option value="character">
+                    {t("properties.wrapCharacter")}
+                  </option>
+                </select>
+              </label>
+              <label className={styles.select}>
+                <span>{t("properties.textOverflow")}</span>
+                <select
+                  aria-label={t("properties.textOverflow")}
+                  onChange={(event) =>
+                    onUpdate({
+                      properties: {
+                        textOverflow: event.target.value as
+                          "visible" | "clip" | "ellipsis",
+                      },
+                    })
+                  }
+                  value={node.properties.textOverflow}
+                >
+                  <option value="visible">
+                    {t("properties.overflowVisible")}
+                  </option>
+                  <option value="clip">{t("properties.overflowClip")}</option>
+                  <option value="ellipsis">
+                    {t("properties.overflowEllipsis")}
+                  </option>
+                </select>
+              </label>
             </div>
           </div>
         </Section>

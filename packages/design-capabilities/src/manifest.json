@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-11",
-  "documentSchemaVersion": "1.8.0",
+  "updatedAt": "2026-08-12",
+  "documentSchemaVersion": "1.9.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -123,7 +123,7 @@
         "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, cross-container reparenting, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
         "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。"
       },
-      "provider": "DesignDocument 1.8.0 + EditorRuntime",
+      "provider": "DesignDocument 1.9.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -217,7 +217,7 @@
         "en": "Create editable cubic contours with Pen, refine existing vertices and Bézier handles, or preserve exact SVG path data, then render all forms through one Path projection.",
         "zh-CN": "使用 Pen 创建可编辑三次曲线轮廓、继续调整已有节点和贝塞尔手柄，或精确保留 SVG Path 数据，并通过同一 Path 投影渲染。"
       },
-      "provider": "DesignDocument 1.8.0 + vector-edit geometry service + EditorRuntime vector planner + Leafer Pen/point overlay + controlled SVG metadata v2",
+      "provider": "DesignDocument 1.9.0 + vector-edit geometry service + EditorRuntime vector planner + Leafer Pen/point overlay + controlled SVG metadata v2",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -289,7 +289,7 @@
         "en": "Create and directly edit directed straight lines with independent start and end decorations, professional stroke controls, and editable SVG interchange.",
         "zh-CN": "创建并直接编辑有方向的直线，独立设置起终点装饰和专业描边，并通过 SVG 保持可编辑交换。"
       },
-      "provider": "DesignDocument 1.8.0 + Leafer Arrow / LineEditTool + SVG controlled markers",
+      "provider": "DesignDocument 1.9.0 + Leafer Arrow / LineEditTool + SVG controlled markers",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -349,7 +349,7 @@
         "en": "Create, resize, restyle, and exchange semantic regular Polygon and Star nodes without flattening them into generic paths.",
         "zh-CN": "创建、缩放、调整外观并交换语义化 Polygon 与 Star 节点，不将其扁平化为普通 Path。"
       },
-      "provider": "DesignDocument 1.8.0 + Leafer Polygon/Star + controlled SVG regular-shape metadata",
+      "provider": "DesignDocument 1.9.0 + Leafer Polygon/Star + controlled SVG regular-shape metadata",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -412,7 +412,7 @@
         "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles.",
         "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。"
       },
-      "provider": "DesignDocument 1.8.0 Vector Network + vector-edit geometry service + EditorRuntime planner + Leafer native overlays",
+      "provider": "DesignDocument 1.9.0 Vector Network + vector-edit geometry service + EditorRuntime planner + Leafer native overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",
@@ -455,7 +455,7 @@
         "en": "Non-destructive union, subtract, intersect, and exclude groups whose source layers remain editable.",
         "zh-CN": "非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。"
       },
-      "provider": "DesignDocument 1.8.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
+      "provider": "DesignDocument 1.9.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -509,7 +509,7 @@
         "en": "Apply multiple paints and strokes, gradients, shadows, glows, blur, blend modes, masks, and advanced stroke properties.",
         "zh-CN": "应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。"
       },
-      "provider": "DesignDocument 1.8.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
+      "provider": "DesignDocument 1.9.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -605,7 +605,7 @@
         "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
         "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
       },
-      "provider": "DesignDocument 1.8.0 + OpenDesign Image service crop geometry + Leafer projection",
+      "provider": "DesignDocument 1.9.0 + OpenDesign Image service crop geometry + Leafer projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "degraded",
@@ -673,10 +673,10 @@
       "status": "degraded",
       "label": { "en": "Single-style text", "zh-CN": "单样式文字" },
       "description": {
-        "en": "Create, render, transform, and edit a text layer with one shared font style and alignment.",
-        "zh-CN": "创建、渲染、变换和编辑使用单一共享字体样式与对齐方式的文字图层。"
+        "en": "Create, render, transform, and edit a fixed text box with one shared font style, alignment, explicit wrapping, and visible, clipped, or ellipsized overflow.",
+        "zh-CN": "创建、渲染、变换和编辑固定文字框，使用单一共享字体样式、对齐、明确换行以及显示、裁切或省略溢出。"
       },
-      "provider": "DesignDocument 1.8.0 + Leafer TextEditor",
+      "provider": "DesignDocument 1.9.0 + Leafer TextEditor + controlled SVG text metadata v2",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -684,25 +684,32 @@
         "human": "available",
         "agent": "available",
         "render": "available",
-        "export": "unavailable"
+        "export": "degraded"
       },
       "limitations": [
         {
-          "en": "Font availability, cross-platform shaping, overflow, and visual fidelity still need macOS/Windows acceptance.",
-          "zh-CN": "字体可用性、跨平台 shaping、溢出和视觉保真仍需 macOS/Windows 验收。"
+          "en": "Auto width/height, max-lines, font assets/replacement, exact cross-platform shaping, and macOS/Windows visual acceptance remain unavailable.",
+          "zh-CN": "自动宽高、最大行数、字体资源与替换、精确跨平台 shaping，以及 macOS/Windows 视觉验收仍未完成。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/leafer-engine/src/adapter.test.ts",
           "packages/leafer-engine/src/professional-fixtures.test.ts",
+          "packages/leafer-engine/src/mapping.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
           "packages/editor-runtime/src/diagnostics.test.ts",
-          "packages/editor-runtime/src/professional-fixtures.test.ts"
+          "packages/editor-runtime/src/professional-fixtures.test.ts",
+          "packages/import-export-service/src/svg.test.ts"
         ],
         "manual": []
       },
-      "references": []
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/27378154668951-Adjust-text-dimensions-and-resizing",
+        "https://www.leaferjs.com/ui/guide/display/Text.html"
+      ]
     },
     {
       "id": "text.rich-typography",

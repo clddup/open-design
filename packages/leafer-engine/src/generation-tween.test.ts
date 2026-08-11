@@ -86,13 +86,31 @@ describe("Agent generation property tween", () => {
 
     const plan = createGenerationTweenPlan(
       "label",
-      { data: { opacity: 1, text: "Before" }, transform: [1, 0, 0, 1, 0, 0] },
-      { data: { opacity: 1, text: "After" }, transform: [1, 0, 0, 1, 0, 0] },
+      {
+        data: {
+          opacity: 1,
+          text: "Before",
+          textOverflow: "hide",
+          textWrap: "normal",
+        },
+        transform: [1, 0, 0, 1, 0, 0],
+      },
+      {
+        data: {
+          opacity: 1,
+          text: "After",
+          textOverflow: "ellipsis",
+          textWrap: "none",
+        },
+        transform: [1, 0, 0, 1, 0, 0],
+      },
       0,
       200,
     );
     const middle = generationTweenFrame(plan!, 100);
     expect(middle.data.text).toBe("After");
+    expect(middle.data.textOverflow).toBe("ellipsis");
+    expect(middle.data.textWrap).toBe("none");
     expect(middle.data.opacity).toBeCloseTo(0.45);
     expect(JSON.stringify(middle)).not.toContain("NaN");
   });

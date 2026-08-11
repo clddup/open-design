@@ -6,7 +6,8 @@ import {
 } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.8.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.9.0" as const;
+export const VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION = "1.8.0" as const;
 export const EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION = "1.7.0" as const;
 export const REGULAR_SHAPE_DESIGN_SCHEMA_VERSION = "1.6.0" as const;
 export const LINE_DESIGN_SCHEMA_VERSION = "1.5.0" as const;
@@ -404,6 +405,16 @@ export const TextPropertiesSchema = Type.Object(
       Type.Literal("top"),
       Type.Literal("center"),
       Type.Literal("bottom"),
+    ]),
+    textWrap: Type.Union([
+      Type.Literal("none"),
+      Type.Literal("word"),
+      Type.Literal("character"),
+    ]),
+    textOverflow: Type.Union([
+      Type.Literal("visible"),
+      Type.Literal("clip"),
+      Type.Literal("ellipsis"),
     ]),
     fills: Type.Array(PaintSchema),
     strokes: Type.Array(PaintSchema),
@@ -1609,7 +1620,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       schemaVersion !== MASK_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== LINE_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== REGULAR_SHAPE_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
@@ -1623,9 +1635,31 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       migratePathNodes(migrated, schemaVersion);
     }
     migrateImageNodes(migrated, schemaVersion);
+    migrateTextNodes(migrated);
     return isDesignDocument(migrated) ? migrated : null;
   } catch {
     return null;
+  }
+}
+
+function migrateTextNodes(document: Record<string, unknown>): void {
+  const nodes = document.nodesById;
+  if (!nodes || typeof nodes !== "object" || Array.isArray(nodes)) return;
+  for (const value of Object.values(nodes)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const node = value as Record<string, unknown>;
+    if (node.kind !== "text") continue;
+    const properties = node.properties;
+    if (
+      !properties ||
+      typeof properties !== "object" ||
+      Array.isArray(properties)
+    ) {
+      continue;
+    }
+    const textProperties = properties as Record<string, unknown>;
+    textProperties.textWrap ??= "character";
+    textProperties.textOverflow ??= "visible";
   }
 }
 

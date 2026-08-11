@@ -137,6 +137,35 @@ const starNode: DesignNode = {
   },
 };
 
+const textNode: DesignNode = {
+  id: "text_1",
+  name: "Editorial summary",
+  parentId: null,
+  childIds: [],
+  visible: true,
+  locked: false,
+  transform: [1, 0, 0, 1, 120, 80],
+  size: { width: 320, height: 96 },
+  opacity: 1,
+  extensions: {},
+  kind: "text",
+  properties: {
+    content: "A deliberately long summary for a constrained text box.",
+    fontFamily: "Inter",
+    fontSize: 18,
+    fontWeight: 500,
+    lineHeight: 26,
+    letterSpacing: 0,
+    textAlignHorizontal: "left",
+    textAlignVertical: "top",
+    textWrap: "word",
+    textOverflow: "clip",
+    fills: [{ type: "solid", color: "#151515", opacity: 1 }],
+    strokes: [],
+    strokeWidth: 0,
+  },
+};
+
 describe("PropertiesPanel SVG workflow", () => {
   it("runs the shared Tidy up planner from an enabled multi-selection control", async () => {
     const user = userEvent.setup();
@@ -346,5 +375,35 @@ describe("PropertiesPanel regular-shape workflow", () => {
     expect(onUpdate).toHaveBeenCalledWith({
       properties: { pointCount: 60 },
     });
+  });
+});
+
+describe("PropertiesPanel text layout workflow", () => {
+  it("edits explicit wrapping and overflow without changing text bounds", async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = renderPanel({ node: textNode, selectionCount: 1 });
+
+    expect(screen.getByLabelText("Wrapping")).toHaveValue("word");
+    expect(screen.getByLabelText("Overflow")).toHaveValue("clip");
+    expect(screen.getByLabelText("Vertical alignment")).toHaveValue("top");
+
+    await user.selectOptions(
+      screen.getByLabelText("Vertical alignment"),
+      "center",
+    );
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { textAlignVertical: "center" },
+    });
+
+    await user.selectOptions(screen.getByLabelText("Wrapping"), "character");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { textWrap: "character" },
+    });
+
+    await user.selectOptions(screen.getByLabelText("Overflow"), "ellipsis");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { textOverflow: "ellipsis" },
+    });
+    expect(textNode.size).toEqual({ width: 320, height: 96 });
   });
 });

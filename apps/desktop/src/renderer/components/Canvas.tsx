@@ -925,6 +925,8 @@ function createDesignNode(
         letterSpacing: 0,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
+        textWrap: "word",
+        textOverflow: "clip",
         fills: [{ type: "solid", color: "#151515", opacity: 1 }],
         strokes: [],
         strokeWidth: 0,

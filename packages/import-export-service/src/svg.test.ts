@@ -232,6 +232,8 @@ describe("versioned SVG interchange", () => {
         letterSpacing: -0.4,
         textAlignHorizontal: "center",
         textAlignVertical: "center",
+        textWrap: "word",
+        textOverflow: "ellipsis",
         fills: [{ type: "solid", color: "#153eaa", opacity: 1 }],
         strokes: [{ type: "solid", color: "#ffffff", opacity: 0.5 }],
         strokeWidth: 1,
@@ -267,7 +269,7 @@ describe("versioned SVG interchange", () => {
       { code: "text-layout-fidelity", severity: "warning" },
     ]);
     expect(first.svg).toContain("<text");
-    expect(first.svg).toContain('data-opendesign-text-version="1"');
+    expect(first.svg).toContain('data-opendesign-text-version="2"');
     expect(first.svg).toContain('font-family="Inter"');
     expect(first.svg).toContain('font-size="24"');
     expect(first.svg).toContain('font-weight="650"');
@@ -298,6 +300,44 @@ describe("versioned SVG interchange", () => {
     expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
       isDesignDocument,
     );
+
+    const legacySvg = first.svg
+      .replace(
+        'data-opendesign-text-version="2"',
+        'data-opendesign-text-version="1"',
+      )
+      .replace("&quot;textWrap&quot;:&quot;word&quot;,", "")
+      .replace("&quot;textOverflow&quot;:&quot;ellipsis&quot;,", "");
+    const legacyImported = importSvg(
+      { svg: legacySvg, idPrefix: "text_legacy_metadata" },
+      geometry,
+    );
+    expect(legacyImported.ok).toBe(true);
+    if (legacyImported.ok) {
+      expect(findImportedSource(legacyImported.nodes, text.id)).toMatchObject({
+        kind: "text",
+        properties: { textWrap: "character", textOverflow: "visible" },
+      });
+    }
+    const ambiguousLegacy = importSvg(
+      {
+        svg: first.svg.replace(
+          'data-opendesign-text-version="2"',
+          'data-opendesign-text-version="1"',
+        ),
+        idPrefix: "text_ambiguous_legacy_metadata",
+      },
+      geometry,
+    );
+    expect(ambiguousLegacy.ok).toBe(false);
+    if (!ambiguousLegacy.ok) {
+      expect(ambiguousLegacy.issues).toContainEqual(
+        expect.objectContaining({
+          code: "text-fidelity-unsupported",
+          severity: "error",
+        }),
+      );
+    }
 
     const tamperedContent = importSvg(
       {
@@ -375,6 +415,8 @@ describe("versioned SVG interchange", () => {
         letterSpacing: 0,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
+        textWrap: "none",
+        textOverflow: "visible",
         fills: [
           {
             type: "solid",

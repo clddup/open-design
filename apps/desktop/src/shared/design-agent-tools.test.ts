@@ -472,6 +472,80 @@ describe("design Agent tool contract", () => {
     expect(schema).not.toContain('"$defs"');
   });
 
+  it("exposes bounded text wrapping and overflow without claiming auto sizing", () => {
+    const apply = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+    );
+    const schema = JSON.stringify(apply?.inputSchema);
+    const input = {
+      label: "Create a fixed caption",
+      commands: [
+        {
+          commandId: "insert_caption",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: null,
+          index: 0,
+          node: {
+            id: "caption_1",
+            name: "Caption",
+            parentId: null,
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 24, 24],
+            size: { width: 240, height: 64 },
+            opacity: 1,
+            extensions: {},
+            kind: "text",
+            properties: {
+              content: "A long fixed caption",
+              fontFamily: "Inter",
+              fontSize: 18,
+              fontWeight: 500,
+              lineHeight: 26,
+              letterSpacing: 0,
+              textAlignHorizontal: "left",
+              textAlignVertical: "top",
+              textWrap: "word",
+              textOverflow: "ellipsis",
+              fills: [{ type: "solid", color: "#151515", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+            },
+          },
+        },
+      ],
+    };
+
+    expect(schema).toContain('"textWrap"');
+    expect(schema).toContain('"textOverflow"');
+    expect(apply?.description).toContain(
+      "auto sizing and max-lines are not available",
+    );
+    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        commands: [
+          {
+            ...input.commands[0],
+            node: {
+              ...input.commands[0]?.node,
+              properties: {
+                ...input.commands[0]?.node.properties,
+                textWrap: "balance",
+                textOverflow: "fade",
+              },
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("exports explicit SVG roots without accepting paths or fake settings", () => {
     const tool = DESIGN_AGENT_TOOL_SPECS.find(
       (candidate) => candidate.name === EXPORT_SVG_TOOL_NAME,

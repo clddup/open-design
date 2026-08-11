@@ -5,7 +5,8 @@ import {
   type Paint,
 } from "@opendesign/design-contracts";
 
-const TEXT_METADATA_VERSION = "1";
+const TEXT_METADATA_VERSION = "2";
+const LEGACY_TEXT_METADATA_VERSION = "1";
 const VERSION_ATTRIBUTE = "data-opendesign-text-version";
 const METADATA_ATTRIBUTE = "data-opendesign-text";
 const MAX_TEXT_METADATA_CHARACTERS = 1_000_000;
@@ -101,7 +102,11 @@ export function readSvgText(element: Element): SvgTextReadResult {
   if (element.getAttribute("data-opendesign-kind") !== "text") {
     return invalid("OpenDesign text metadata requires a Text source kind");
   }
-  if (element.getAttribute(VERSION_ATTRIBUTE) !== TEXT_METADATA_VERSION) {
+  const metadataVersion = element.getAttribute(VERSION_ATTRIBUTE);
+  if (
+    metadataVersion !== TEXT_METADATA_VERSION &&
+    metadataVersion !== LEGACY_TEXT_METADATA_VERSION
+  ) {
     return invalid(
       "OpenDesign text metadata version is missing or unsupported",
     );
@@ -123,12 +128,26 @@ export function readSvgText(element: Element): SvgTextReadResult {
   ) {
     return invalid("OpenDesign text metadata has an invalid shape");
   }
+  if (
+    metadataVersion === LEGACY_TEXT_METADATA_VERSION &&
+    isRecord(parsed.properties) &&
+    (Object.hasOwn(parsed.properties, "textWrap") ||
+      Object.hasOwn(parsed.properties, "textOverflow"))
+  ) {
+    return invalid(
+      "OpenDesign legacy text metadata contains unsupported layout fields",
+    );
+  }
   if (!isPositive(parsed.width) || !isPositive(parsed.height)) {
     return invalid("OpenDesign text metadata requires finite positive bounds");
   }
+  const migratedProperties =
+    metadataVersion === LEGACY_TEXT_METADATA_VERSION
+      ? migrateLegacyTextProperties(parsed.properties)
+      : parsed.properties;
   const schemaIssues = schemaValidationIssues(
     TextPropertiesSchema,
-    parsed.properties,
+    migratedProperties,
   );
   if (schemaIssues.length > 0) {
     return invalid(
@@ -139,10 +158,19 @@ export function readSvgText(element: Element): SvgTextReadResult {
   const value: SerializedText = {
     width: parsed.width,
     height: parsed.height,
-    properties: parsed.properties as TextProperties,
+    properties: migratedProperties as TextProperties,
   };
   const mismatch = renderedTextMismatch(element, value);
   return mismatch ? invalid(mismatch) : { status: "valid", value };
+}
+
+function migrateLegacyTextProperties(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return {
+    ...value,
+    textWrap: "character",
+    textOverflow: "visible",
+  };
 }
 
 export function svgTextShapeMatches(

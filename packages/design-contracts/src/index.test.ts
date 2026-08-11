@@ -938,4 +938,74 @@ describe("design contract schemas", () => {
       source.nodesById.vector_1.properties.network.vertices,
     );
   });
+
+  it("migrates 1.8 Text to explicit wrapping and overflow without changing its bounds", () => {
+    const source = {
+      format: DESIGN_FORMAT,
+      schemaVersion: "1.8.0",
+      documentId: "document_text_1_8",
+      revision: 12,
+      pageOrder: ["page_1"],
+      pagesById: {
+        page_1: {
+          id: "page_1",
+          name: "Page 1",
+          rootNodeIds: ["text_1"],
+          extensions: {},
+        },
+      },
+      nodesById: {
+        text_1: {
+          id: "text_1",
+          name: "Legacy text box",
+          parentId: null,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 20, 24],
+          size: { width: 240, height: 64 },
+          opacity: 1,
+          extensions: {},
+          kind: "text",
+          properties: {
+            content: "A long line from an older document",
+            fontFamily: "Inter",
+            fontSize: 20,
+            fontWeight: 500,
+            lineHeight: 28,
+            letterSpacing: 0,
+            textAlignHorizontal: "left",
+            textAlignVertical: "top",
+            fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+            strokes: [],
+            strokeWidth: 0,
+          },
+        },
+      },
+      componentsById: {},
+      variantSetsById: {},
+      tokenCollectionsById: {},
+      tokensById: {},
+      interactionsById: {},
+      assetsById: {},
+      extensions: {},
+    };
+
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    const text = migrated?.nodesById.text_1;
+    if (!text || text.kind !== "text") throw new Error("Missing text");
+    expect(text.size).toEqual(source.nodesById.text_1.size);
+    expect(text.properties).toMatchObject({
+      textWrap: "character",
+      textOverflow: "visible",
+    });
+    expect(Value.Check(DesignNodeSchema, text)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        properties: { ...text.properties, textOverflow: "fade" },
+      }),
+    ).toBe(false);
+  });
 });

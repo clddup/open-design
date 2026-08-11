@@ -2,7 +2,7 @@
 
 # Design capability release summary
 
-Manifest v1 (2026-08-11) · 0 available · 15 degraded · 5 unavailable
+Manifest v1 (2026-08-12) · 0 available · 15 degraded · 5 unavailable
 
 This block is the release-note view of the same manifest used by the built-in Agent and generated help. It must not be edited by hand.
 

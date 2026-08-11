@@ -38,7 +38,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 完成条件：macOS 与 Windows 的同一 commit 都有 `verify + native package + install/start/product smoke` 证据，并写入 `verification.md`。
 
-## P0-B：稳定当前 `1.4.0` 与 Leafer 迁移
+## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
 - [x] 为 host-only `put_asset + insert_element(image)` 内部事务补 Renderer 集成测试，验证单次 revision、Page/Selection scope 和一次 undo 同时移除 asset/node。
 - [x] 为 Agent composer 的剪贴板粘贴和文件拖放补交互测试，验证 Renderer 通过窄 Preload API 提交 bytes，最终 run 只携带安全附件元数据；纯文本路径粘贴不被拦截或提前读取。
@@ -109,7 +109,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P1：专业能力契约
 
 - 把 P0-C 的初始 capability manifest 提升为版本化公共契约，并为 Renderer、Agent、MCP 和发布说明提供同一只读查询入口。未知能力必须拒绝，降级能力必须返回结构化限制和 fidelity warning。
-- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.8.0` 已统一正式 Line/Arrow、Polygon/Star、editable Vector Network / Pen 创作与已有单轮廓节点编辑，后续仍需分支与多轮廓、Slice、constraints/layout、富文本/font、图片 adjustments、Component/Instance/Variant、style/token binding 和 export settings。
+- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.9.0` 已统一正式 Line/Arrow、Polygon/Star、editable Vector Network / Pen 创作、已有单轮廓节点编辑，以及固定文字框的换行/溢出，后续仍需分支与多轮廓、Slice、constraints/layout、Text/Font auto-size 与富文本、图片 adjustments、Component/Instance/Variant、style/token binding 和 export settings。
 - 为 Geometry、Layout、Text/Font、Image 和 Import/Export service 建立窄、版本化的输入输出接口。服务只能返回纯结果、诊断或候选 `DesignOperation[]`，不能保存第二份文档或直接修改 Leafer 场景。
 - 提供确定性迁移、未知版本拒绝、保存重开、preview、undo/redo、Agent schema、provider 映射和 fidelity warning 测试；不得把长期语义藏进 `extensions`。
 
@@ -139,6 +139,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P3-A：文字、图片与海报交付
 
+- [x] 增加 `DesignDocument 1.9.0` 固定文字框换行与溢出：`none/word/character` 和 `visible/clip/ellipsis` 进入正式 schema、`1.0.0–1.8.0` 迁移、EditorRuntime preview/save reopen/undo/redo、人工 Inspector、Agent typed schema、Leafer Text 投影和受控 SVG Text metadata v2；metadata v1 继续确定性读取。旧 adapter 错把 Box `overflow` 写给 Text 的路径已删除。Auto Width/Auto Height、max-lines 与真实文字 overflow 质检必须等待跨平台 Text/Font shaping service，不用字符数估算冒充支持；见 ADR-0035。
 - 建立 Text/Font service，支持富文本 runs、paragraph、列表、OpenType/variable font、字体 asset、缺失字体替换和共享文本样式。文字测量与 shaping 必须在 macOS 和 Windows 上产生明确的兼容结果或 fidelity warning。
 - 扩展已建立的 Image service：当前已有 Image 节点的版本化 placement、crop/focal 几何、Leafer 投影、检查器、来源替换和专用 Agent update tool；下一步补齐画布直接 Crop、mask、透明背景、基础 adjustments/filter、资源变体、引用恢复和大图生命周期。增加独立 `edit_image` adapter/tool，支持局部重绘、扩图、背景替换、重打光和风格统一；参考图、原图和 AI 派生资源必须分离并可追溯，任何编辑都不得覆盖原始 asset。
 - 扩展 P0-B 已建立的专业位图导出，补海报交付所需的高级颜色、资源和格式保真；导出继续读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
