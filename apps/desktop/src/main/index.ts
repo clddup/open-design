@@ -1452,14 +1452,31 @@ void app.whenReady().then(async () => {
         context,
         call.input,
       );
+      const resolvedInput = authorization?.input ?? call.input;
       const result = await rendererDesignToolHost.execute(
-        call,
+        authorization
+          ? {
+              ...call,
+              toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+              input: {
+                ...resolvedInput,
+                ...(authorization.rebaseGuard
+                  ? { rebaseGuard: authorization.rebaseGuard }
+                  : {}),
+              },
+            }
+          : call,
         executionContext,
         signal,
       );
+      globalTaskCoordinator.assertDesignApplyResult(
+        context,
+        authorization,
+        result,
+      );
       globalTaskCoordinator.recordDesignApplyCompleted(
         context.runId,
-        call.input,
+        resolvedInput,
         authorization,
         result.designRevision?.revision,
       );

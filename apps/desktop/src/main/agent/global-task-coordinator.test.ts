@@ -695,9 +695,21 @@ describe("GlobalTaskCoordinator", () => {
       throw new Error("Planned artboard command is missing");
     }
     misplacedArtboard.node.transform = [1, 0, 0, 1, 0, 0];
-    expect(() =>
-      coordinator.assertDesignPlanForApply(context, misplacedDraft),
-    ).toThrow("declared position and dimensions");
+    const resolvedDraft = coordinator.assertDesignPlanForApply(
+      context,
+      misplacedDraft,
+    );
+    expect(resolvedDraft?.input.commands[0]).toMatchObject({
+      pageId,
+      parentId: null,
+      node: {
+        id: "workspace_artboard",
+        parentId: null,
+        transform: [1, 0, 0, 1, 120, 80],
+        size: { width: 1440, height: 1024 },
+      },
+    });
+    expect(resolvedDraft?.rebaseGuard).toBeUndefined();
     expect(() =>
       coordinator.assertDesignPlanForApply(context, {
         ...plannedDraft,
@@ -713,7 +725,7 @@ describe("GlobalTaskCoordinator", () => {
     );
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      plannedDraft,
+      authorization?.input ?? plannedDraft,
       authorization,
       1,
     );
@@ -823,9 +835,51 @@ describe("GlobalTaskCoordinator", () => {
       throw new Error("Planned region command is missing");
     }
     misplacedRegionInsert.node.transform = [1, 0, 0, 1, 48, 32];
+    const resolvedRegion = coordinator.assertDesignPlanForApply(
+      context,
+      misplacedRegion,
+    );
+    expect(resolvedRegion?.input.commands[0]).toMatchObject({
+      parentId: "workspace_artboard",
+      node: {
+        id: "workspace_navigation",
+        parentId: "workspace_artboard",
+        transform: [1, 0, 0, 1, 32, 32],
+        size: { width: 1376, height: 72 },
+      },
+    });
+    expect(resolvedRegion?.rebaseGuard).toEqual({
+      fromRevision: 0,
+      targets: [
+        {
+          frameId: "workspace_artboard",
+          pageId,
+          width: 1440,
+          height: 1024,
+        },
+      ],
+    });
     expect(() =>
-      coordinator.assertDesignPlanForApply(context, misplacedRegion),
-    ).toThrow("directly inside the artboard at its declared bounds");
+      coordinator.assertDesignApplyResult(context, resolvedRegion, {
+        content: { ok: true },
+        designRevision: {
+          previousRevision: 1,
+          rebasedFromRevision: 0,
+          revision: 2,
+          transactionId: "transaction_rebased_region",
+        },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignApplyResult(context, resolvedRegion, {
+        content: { ok: true },
+        designRevision: {
+          previousRevision: 1,
+          revision: 2,
+          transactionId: "transaction_unproven_rebase",
+        },
+      }),
+    ).toThrow("unauthorized planned design revision rebase");
     expect(() =>
       coordinator.assertDesignPlanForApply(context, scatteredDraft),
     ).toThrow("outside the planned artboard Frame");
@@ -883,6 +937,12 @@ describe("GlobalTaskCoordinator", () => {
       inspectionResult(opened.document, pageId),
     );
     const plan = multiTargetPlan(pageId);
+    const ambiguousPlan = structuredClone(plan);
+    ambiguousPlan.targets[1].composition.regions[0].nodeId =
+      ambiguousPlan.targets[0].composition.regions[0].nodeId;
+    expect(() =>
+      coordinator.registerDesignPlan(context, ambiguousPlan),
+    ).toThrow("plan_node_ambiguous");
     coordinator.registerDesignPlan(context, plan);
     expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
       activeTargetId: "target_home",

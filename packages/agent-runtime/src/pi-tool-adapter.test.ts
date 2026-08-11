@@ -332,6 +332,80 @@ describe("OpenDesign Pi tool adapter", () => {
     ).toBe(false);
   });
 
+  it("advances over a Main-authorized external revision rebase", async () => {
+    const revisions: number[] = [];
+    let execution = 0;
+    const result = await runPiToolLoop({
+      gateway: new RecordingGateway(
+        new MockModelGateway([
+          {
+            blocks: [
+              {
+                id: "rebased_insert",
+                type: "tool_call",
+                toolCallId: "rebased_insert_1",
+                name: moveTool.name,
+                input: { dx: 8 },
+              },
+            ],
+            stopReason: "tool_use",
+          },
+          {
+            blocks: [
+              {
+                id: "after_rebase",
+                type: "tool_call",
+                toolCallId: "after_rebase_1",
+                name: moveTool.name,
+                input: { dx: 4 },
+              },
+            ],
+            stopReason: "tool_use",
+          },
+          { blocks: [{ id: "done", type: "text", text: "Done" }] },
+        ]),
+      ),
+      definitions: [moveTool],
+      toolExecutor: {
+        async *execute(_call, context): AsyncIterable<ToolExecutionEvent> {
+          revisions.push(context.revision);
+          execution += 1;
+          await Promise.resolve();
+          yield execution === 1
+            ? {
+                type: "completed",
+                result: {
+                  content: { ok: true },
+                  designRevision: {
+                    previousRevision: 13,
+                    rebasedFromRevision: 12,
+                    revision: 14,
+                    transactionId: "transaction_rebased_insert",
+                  },
+                },
+              }
+            : { type: "completed", result: { content: { ok: true } } };
+        },
+      },
+    });
+
+    expect(revisions).toEqual([12, 14]);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "tool.completed",
+        toolCallId: "rebased_insert_1",
+        revision: 14,
+      }),
+    );
+    expect(
+      result.store.events.some(
+        (event) =>
+          event.type === "design.revision" &&
+          (event.payload as { revision?: unknown }).revision === 14,
+      ),
+    ).toBe(true);
+  });
+
   it("requires inspection after a structured failure and suppresses blind retries", async () => {
     let moveExecutions = 0;
     let inspectExecutions = 0;

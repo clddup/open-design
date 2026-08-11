@@ -530,7 +530,32 @@ describe("Leafer engine selection bounds synchronization", () => {
       ...first,
       generationSkeleton: {
         ...skeleton,
-        artboard: { ...skeleton.artboard, pending: false },
+        artboard: {
+          ...skeleton.artboard,
+          transform: [1, 0, 0, 1, 1_480, 240],
+        },
+      },
+      viewport: { ...first.viewport, panX: -200, panY: 40, zoom: 0.5 },
+    });
+    const movedArtboard = layer?.children[0] as FakeGroup | undefined;
+    expect(movedArtboard?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 1_480,
+      f: 240,
+    });
+
+    adapter.sync({
+      ...first,
+      generationSkeleton: {
+        ...skeleton,
+        artboard: {
+          ...skeleton.artboard,
+          pending: false,
+          transform: [1, 0, 0, 1, 1_480, 240],
+        },
         regions: [skeleton.regions[1]!],
       },
     });

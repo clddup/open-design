@@ -12,6 +12,7 @@ import {
   EXPORT_SVG_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
+  INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
@@ -110,6 +111,47 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(PAGE_STRUCTURE_ACCESS_TOOL_NAME, {
         actions: ["filesystem"],
         reason: input.reason,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps planned revision rebase guards on the trusted internal apply boundary", () => {
+    const input = {
+      label: "Continue a translated planned Frame",
+      rebaseGuard: {
+        fromRevision: 4,
+        targets: [
+          {
+            frameId: "frame_home",
+            pageId: "page_home",
+            width: 1_440,
+            height: 960,
+          },
+        ],
+      },
+      commands: [
+        {
+          commandId: "continue_home",
+          type: "update_properties",
+          nodeId: "home_title",
+          name: "Updated title",
+        },
+      ],
+    };
+
+    expect(
+      validateDesignAgentToolInput(INTERNAL_DESIGN_APPLY_TOOL_NAME, input),
+    ).toBe(true);
+    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
+      false,
+    );
+    expect(
+      validateDesignAgentToolInput(INTERNAL_DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        rebaseGuard: {
+          ...input.rebaseGuard,
+          targets: [...input.rebaseGuard.targets, input.rebaseGuard.targets[0]],
+        },
       }),
     ).toBe(false);
   });

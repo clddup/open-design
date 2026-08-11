@@ -246,6 +246,22 @@ export type DesignApplyToolInput = {
   commands: DesignOperation[];
 };
 
+export type PlannedDesignRebaseTarget = {
+  frameId: string;
+  pageId: string;
+  width: number;
+  height: number;
+};
+
+export type PlannedDesignRebaseGuard = {
+  fromRevision: number;
+  targets: PlannedDesignRebaseTarget[];
+};
+
+export type InternalDesignApplyToolInput = DesignApplyToolInput & {
+  rebaseGuard?: PlannedDesignRebaseGuard;
+};
+
 export type DesignPageToolInput =
   | {
       action: "create";
@@ -1664,7 +1680,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_APPLY_TOOL_NAME,
     description:
-      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are local to the node and must fit its declared size. A new artboard must include real editable content in its first transaction, and every inserted planned Group/Frame region must include real editable content in that same transaction; empty scaffolding is rejected before it becomes a revision. Composite designs should create a named Frame or Group together with its children in the same ordered transaction; do not flatten their parts into Page-root layers. This node tool does not manage Projects, Design Files, or Pages; use opendesign_manage_pages for Page lifecycle changes. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect the current document and revise the failing command instead of repeating the same transaction.",
+      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are parent-local and must fit the node's declared size. For an accepted plan's stable artboard and region IDs, provide the declared Frame/Group kind and real content; the trusted host compiles their canonical Page/parent/local bounds, so never convert region bounds to world coordinates after the user moves the artboard. A new artboard must include real editable content in its first transaction, and every inserted planned Group/Frame region must include real editable content in that same transaction; empty scaffolding is rejected before it becomes a revision. Composite designs should create a named Frame or Group together with its children in the same ordered transaction; do not flatten their parts into Page-root layers. This node tool does not manage Projects, Design Files, or Pages; use opendesign_manage_pages for Page lifecycle changes. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect the current document and revise the failing command instead of repeating the same transaction.",
     inputSchema: {
       ...MODEL_APPLY_TRANSACTION_SCHEMA,
     },
@@ -1752,8 +1768,16 @@ export function validateDesignAgentToolInput(
           (command.type !== "put_asset" && command.type !== "delete_asset"))
       );
     }) &&
+    (!internal ||
+      input.rebaseGuard === undefined ||
+      isPlannedDesignRebaseGuard(input.rebaseGuard)) &&
     Object.keys(input).every((key) =>
-      ["label", "summary", "commands"].includes(key),
+      [
+        "label",
+        "summary",
+        "commands",
+        ...(internal ? ["rebaseGuard"] : []),
+      ].includes(key),
     )
   );
 }
@@ -2652,8 +2676,48 @@ export function isPageStructureAccessToolInput(
 
 export function isInternalDesignApplyToolInput(
   input: unknown,
-): input is DesignApplyToolInput {
+): input is InternalDesignApplyToolInput {
   return validateDesignAgentToolInput(INTERNAL_DESIGN_APPLY_TOOL_NAME, input);
+}
+
+function isPlannedDesignRebaseGuard(
+  value: unknown,
+): value is PlannedDesignRebaseGuard {
+  if (
+    !isRecord(value) ||
+    !Number.isSafeInteger(value.fromRevision) ||
+    Number(value.fromRevision) < 0 ||
+    !Array.isArray(value.targets) ||
+    value.targets.length === 0 ||
+    value.targets.length > 32 ||
+    !value.targets.every(isPlannedDesignRebaseTarget) ||
+    !exactKeys(value, ["fromRevision", "targets"])
+  ) {
+    return false;
+  }
+  return (
+    new Set(value.targets.map((target) => target.frameId)).size ===
+    value.targets.length
+  );
+}
+
+function isPlannedDesignRebaseTarget(
+  target: unknown,
+): target is PlannedDesignRebaseTarget {
+  return (
+    isRecord(target) &&
+    safeId(target.frameId) &&
+    safeId(target.pageId) &&
+    typeof target.width === "number" &&
+    Number.isFinite(target.width) &&
+    target.width > 0 &&
+    target.width <= 100_000 &&
+    typeof target.height === "number" &&
+    Number.isFinite(target.height) &&
+    target.height > 0 &&
+    target.height <= 100_000 &&
+    exactKeys(target, ["frameId", "pageId", "width", "height"])
+  );
 }
 
 function isBoundedEmbeddedImageAsset(value: unknown): value is DesignAsset {

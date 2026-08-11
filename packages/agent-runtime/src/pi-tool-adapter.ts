@@ -84,11 +84,7 @@ export type PiToolTerminalProjection =
       content: unknown;
       previousRevision: number;
       observedRevision?: number;
-      designRevision?: {
-        previousRevision: number;
-        revision: number;
-        transactionId: string;
-      };
+      designRevision?: NonNullable<TrustedToolResult["designRevision"]>;
     }
   | {
       status: "failed";
@@ -112,11 +108,7 @@ interface PiToolSuccessDetails {
   content: unknown;
   attachments: ReturnType<typeof toolResultAttachments>;
   observedRevision?: number;
-  designRevision?: {
-    previousRevision: number;
-    revision: number;
-    transactionId: string;
-  };
+  designRevision?: NonNullable<TrustedToolResult["designRevision"]>;
 }
 
 interface PiToolProgressDetails {

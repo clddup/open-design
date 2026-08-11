@@ -151,9 +151,14 @@ async function executeDesignToolRequestUnsafe(
   }
 
   if (document.revision !== request.context.revision) {
-    throw new Error(
-      `Design revision conflict: expected ${request.context.revision}, current ${document.revision}`,
-    );
+    if (
+      document.revision < request.context.revision ||
+      !canRebasePlannedInsert(request, document)
+    ) {
+      throw new Error(
+        `Design revision conflict: expected ${request.context.revision}, current ${document.revision}`,
+      );
+    }
   }
 
   if (
@@ -803,6 +808,91 @@ async function executeDesignToolRequestUnsafe(
   );
 }
 
+function canRebasePlannedInsert(
+  request: RendererDesignToolRequest,
+  document: DesignDocument,
+): boolean {
+  if (
+    request.call.toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME ||
+    !isInternalDesignApplyToolInput(request.call.input)
+  ) {
+    return false;
+  }
+  const guard = request.call.input.rebaseGuard;
+  if (
+    !guard ||
+    guard.fromRevision !== request.context.revision ||
+    request.call.input.commands.some(
+      (command) => command.type !== "insert_element",
+    )
+  ) {
+    return false;
+  }
+  const insertedParents = new Map(
+    request.call.input.commands.map((command) => {
+      if (command.type !== "insert_element") {
+        throw new Error("Planned rebase accepts insert commands only");
+      }
+      return [command.node.id, command.parentId] as const;
+    }),
+  );
+  for (const target of guard.targets) {
+    const page = document.pagesById[target.pageId];
+    const frame = document.nodesById[target.frameId];
+    if (
+      !page?.rootNodeIds.includes(target.frameId) ||
+      frame?.kind !== "frame" ||
+      frame.parentId !== null ||
+      !isTranslationOnly(frame.transform) ||
+      frame.size.width !== target.width ||
+      frame.size.height !== target.height
+    ) {
+      return false;
+    }
+  }
+  return request.call.input.commands.every((command) => {
+    if (command.type !== "insert_element") return false;
+    return guard.targets.some((target) =>
+      currentParentChainReaches(
+        command.parentId,
+        target.frameId,
+        insertedParents,
+        document,
+      ),
+    );
+  });
+}
+
+function currentParentChainReaches(
+  parentId: string | null,
+  ancestorId: string,
+  insertedParents: ReadonlyMap<string, string | null>,
+  document: DesignDocument,
+): boolean {
+  let current = parentId;
+  const visited = new Set<string>();
+  while (current !== null && !visited.has(current)) {
+    if (current === ancestorId) return true;
+    visited.add(current);
+    current = insertedParents.has(current)
+      ? (insertedParents.get(current) ?? null)
+      : (document.nodesById[current]?.parentId ?? null);
+  }
+  return false;
+}
+
+function isTranslationOnly(transform: readonly number[]): boolean {
+  return (
+    transform.length === 6 &&
+    transform[0] === 1 &&
+    transform[1] === 0 &&
+    transform[2] === 0 &&
+    transform[3] === 1 &&
+    Number.isFinite(transform[4]) &&
+    Number.isFinite(transform[5])
+  );
+}
+
 function assertPageWithinMutationTarget(
   pageId: string,
   mutationTarget: DesignMutationTarget,
@@ -899,6 +989,9 @@ async function applyProgressively(
       },
       designRevision: {
         previousRevision: transaction.baseRevision,
+        ...(transaction.baseRevision === request.context.revision
+          ? {}
+          : { rebasedFromRevision: request.context.revision }),
         revision: lastResult.revision.revision,
         transactionId: transaction.transactionId,
       },

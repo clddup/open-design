@@ -12,6 +12,8 @@
 
 OpenPencil 的固定源码并不是把 Provider 的半截输出逐 token 写入正式文档。`batch_design` 保持一次 batch 的原子应用，过程感来自 orchestrator 的多批 apply、scaffold/cleanup 阶段、节点 reveal、stagger 和 Agent cursor。Figma [First Draft](https://help.figma.com/hc/en-us/articles/23955143044247-Use-First-Draft-with-Figma-AI) 同样先生成可编辑 wireframe/design，再允许通过 prompt 或颜色、字体、间距、圆角控制继续修改，也允许把后续 prompt 限定到选中部分；[Figma Design AI tools](https://help.figma.com/hc/en-us/articles/23870272542231-Use-AI-tools-in-Figma-Design) 继续把可编辑设计、图片处理、图层重命名和交互作为分开的能力。OpenDesign 据此采用“可编辑有效阶段 + 可丢弃展示 + 可辨识语义状态”的原则，但不复制 OpenPencil/Figma 的文档、renderer、Agent runtime 或权限模型。
 
+Figma 的 [Frame](https://help.figma.com/hc/en-us/articles/360041539473-Frames-in-Figma-Design) 是控制或影响 child objects 的父级容器，其 [parent/child 关系](https://help.figma.com/hc/en-us/articles/360039959014-Parent-child-and-sibling-relationships) 与画布上的 reparenting 分开建模。OpenDesign 因而把 Run 目标绑定到稳定 Frame/region ID 和父级局部几何；单纯移动父 Frame 不应把内部设计解释成一组新的世界坐标，也不应等同于 resize、reparent 或换 Page。
+
 ## 决策
 
 ### 正式阶段只来自已校验事务
@@ -46,7 +48,11 @@ reveal ID、时间、线框、临时 opacity 和 animation frame 不进入 `Desi
 
 `DesignPlanToolInput version: 3` 在正式写入前按用户请求声明 `1..N` 个交付 target，每项包含画板 Page 坐标、尺寸，以及主要区域的稳定 `nodeId`、角色和画板局部 bounds。Renderer 会临时记录 Provider 的 `tool.requested`，但只有 Main 对同一 Run/tool call 返回字段完全匹配的 `tool.completed { status: "accepted" }` 后，才允许 Leafer 在独立 `sky` 层展示当前活动 Page 中首个未完成 target 的骨架。version 2 历史 tool/journal 继续按单 target 投影；失败、畸形或不匹配结果不会显示未经信任的结构。
 
-骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架切换到权威 Frame transform；声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。Main 同时要求区域根是画板直属、轴对齐并匹配计划 bounds；新 target 的首个正式事务必须带真实内容，而某个计划区域首次写入正式文档时也必须在同一事务包含真实内容。纯空画板/区域只允许作为这里的可丢弃骨架存在，不能先进入 revision 再依赖后续视觉审查发现问题。
+骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架按稳定 Frame ID 切换到权威当前 transform，而不是继续持有计划时的 Page 绝对位置；用户只平移该顶层 Frame 时，区域骨架和 Agent cursor 随真实 Frame 移动。Frame 尺寸、旋转/倾斜、父级、Page 或身份改变会使结构投影失效并要求重新 inspect/replan，不能把真正的布局变化伪装成平移。声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。
+
+计划画板和区域 ID 在一个计划中全局唯一。Provider 仍声明每个区域的画板局部 bounds 和容器种类，但 Main 在执行时从已接受计划编译这些结构节点的可信 Page、parent、局部 transform 与 size；模型不再重复换算世界坐标。Main 继续要求区域根是画板直属、轴对齐并匹配计划 bounds；新 target 的首个正式事务必须带真实内容，而某个计划区域首次写入正式文档时也必须在同一事务包含真实内容。纯空画板/区域只允许作为这里的可丢弃骨架存在，不能先进入 revision 再依赖后续视觉审查发现问题。
+
+同一 Run 期间如果用户提交了新的文档 revision，普通更新、移动、删除和替换仍遵循精确 optimistic concurrency。唯一自动 rebase 是 Main 签发 guard 的已建立计划目标内纯 `insert_element` 事务：Renderer 在当前文档重新验证稳定 Page-root Frame、相同尺寸、仅平移 transform，以及每条新节点祖先链仍到达该 Frame 后，才把事务基于当前 revision 执行。用户平移因此不阻断继续搭建；resize、rotate/skew、reparent、delete、换 Page、目标外写入或任何会覆盖既有节点的命令仍拒绝并要求重新检查。可信工具结果可以报告跨过外部 revision 的单调 `previousRevision → revision`，Agent Runtime 随之推进，不静默覆盖用户状态。
 
 骨架 ID、标签、填充、虚线和完成状态与 reveal 一样只属于当前 Run 的可丢弃展示。它们不进入文档、revision、history、selection、保存、结构化导出或截图，也不成为另一份可写设计状态。
 
@@ -73,7 +79,7 @@ Conversation Timeline 可以显示 Provider 明确返回并已进入 `AssistantT
 本 ADR 当前完成三个阶段：
 
 1. 文档有效的渐进提交、新增节点 wireframe/fade、取消回滚、单次 undo、终态/错误/切页清理、Reduced Motion 和截图收口；
-2. Main accepted typed plan 驱动的 Frame/区域骨架、稳定区域 ID/几何约束、真实内容逐区替换、viewport 同步，以及停止/截图/失败/切页/dispose 清理；
+2. Main accepted typed plan 驱动的 Frame/区域骨架、全局唯一稳定 ID、可信父级局部几何编译、真实 Frame 平移跟随、受 guard 限制的纯新增 rebase、真实内容逐区替换、viewport 同步，以及停止/截图/失败/切页/dispose 清理；
 3. 绑定 accepted plan 与 typed tool 生命周期的语义阶段、绑定已提交 revision focus points 的独立 Agent cursor、固定屏幕标签、Reduced Motion、viewport/离屏行为、`aria-live` status，以及 live/durable timeline 完成态清理。
 
 以下仍是明确计划，不作为已实现能力宣传：

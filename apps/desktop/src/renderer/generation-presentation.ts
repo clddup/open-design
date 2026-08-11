@@ -308,14 +308,7 @@ export function generationSkeletonFromAcceptedPlan(
     actualArtboard?.kind === "frame" &&
     document.pagesById[pageId]?.rootNodeIds.includes(actualArtboard.id) ===
       true &&
-    sameTransform(actualArtboard.transform, [
-      1,
-      0,
-      0,
-      1,
-      artboard.x,
-      artboard.y,
-    ]) &&
+    isTranslationOnly(actualArtboard.transform) &&
     actualArtboard.size.width === artboard.width &&
     actualArtboard.size.height === artboard.height;
   if (
@@ -569,8 +562,15 @@ function isDescendantOf(
   return false;
 }
 
-function sameTransform(left: Transform, right: Transform): boolean {
-  return left.every((value, index) => value === right[index]);
+function isTranslationOnly(transform: Transform): boolean {
+  return (
+    transform[0] === 1 &&
+    transform[1] === 0 &&
+    transform[2] === 0 &&
+    transform[3] === 1 &&
+    Number.isFinite(transform[4]) &&
+    Number.isFinite(transform[5])
+  );
 }
 
 function sameJson(left: unknown, right: unknown): boolean {

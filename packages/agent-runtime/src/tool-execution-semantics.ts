@@ -63,10 +63,14 @@ export function validateDesignRevision(
   currentRevision: number,
 ): TrustedToolResult["designRevision"] {
   if (revision === undefined) return undefined;
+  const validRebase =
+    revision.previousRevision > currentRevision &&
+    revision.rebasedFromRevision === currentRevision;
   if (
-    revision.previousRevision !== currentRevision ||
+    (revision.previousRevision !== currentRevision && !validRebase) ||
+    (revision.rebasedFromRevision !== undefined && !validRebase) ||
     !Number.isInteger(revision.revision) ||
-    revision.revision <= currentRevision ||
+    revision.revision <= revision.previousRevision ||
     revision.transactionId.length === 0
   ) {
     throw new RangeError("Tool returned an invalid design revision transition");

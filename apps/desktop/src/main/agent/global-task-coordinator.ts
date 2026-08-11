@@ -11,6 +11,7 @@ import type {
 import type {
   DesignDocument,
   DesignOperation,
+  Transform,
 } from "@opendesign/design-contracts";
 import {
   DESIGN_DELIVERY_LEDGER_VERSION,
@@ -29,6 +30,7 @@ import {
   type DesignPlanTarget,
   type DesignPlanToolInput,
   type DesignVisualReviewToolInput,
+  type PlannedDesignRebaseGuard,
   type PlaceableRasterAssetRole,
   type RasterAssetRole,
 } from "../../shared/design-agent-tools.js";
@@ -73,7 +75,9 @@ type DesignWorkflowState = {
 };
 
 export type DesignPlanApplyAuthorization = {
+  input: DesignApplyToolInput;
   plan: DesignPlanToolInput;
+  rebaseGuard?: PlannedDesignRebaseGuard;
   targetIds: string[];
 };
 
@@ -335,6 +339,7 @@ export class GlobalTaskCoordinator {
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Design plan requires an active Run");
     const targets = designPlanTargets(plan);
+    assertUniquePlannedNodeIds(targets);
     const recoverableDelivery = this.getRecoverableDelivery(context);
     if (
       binding.mutationTarget.kind === "page" &&
@@ -668,13 +673,66 @@ export class GlobalTaskCoordinator {
       this.#requireDesignPlan(context);
       return undefined;
     }
-    const targetIds = [...assertPlannedTargetWrites(input, state)];
-    if (designApplyRequiresPlan(input) && targetIds.length === 0) {
+    const resolvedInput = resolvePlannedStructureGeometry(input, state);
+    const targetIds = [...assertPlannedTargetWrites(resolvedInput, state)];
+    if (designApplyRequiresPlan(resolvedInput) && targetIds.length === 0) {
       throw new Error(
         "Material design commands must target a declared delivery artboard",
       );
     }
-    return { plan: state.plan, targetIds };
+    const rebaseTargets = targetIds.flatMap((targetId) => {
+      const target = state.targetsById.get(targetId);
+      if (!target?.artboardEstablished) return [];
+      return [
+        {
+          frameId: target.planned.artboard.frameId,
+          pageId: target.planned.pageId,
+          width: target.planned.artboard.width,
+          height: target.planned.artboard.height,
+        },
+      ];
+    });
+    return {
+      input: resolvedInput,
+      plan: state.plan,
+      ...(rebaseTargets.length === targetIds.length && rebaseTargets.length > 0
+        ? {
+            rebaseGuard: {
+              fromRevision: context.revision,
+              targets: rebaseTargets,
+            },
+          }
+        : {}),
+      targetIds,
+    };
+  }
+
+  assertDesignApplyResult(
+    context: TrustedToolContext,
+    authorization: DesignPlanApplyAuthorization | undefined,
+    result: TrustedToolResult,
+  ): void {
+    this.assertDesignToolContext(context);
+    const revision = result.designRevision;
+    if (
+      !revision ||
+      (revision.previousRevision === context.revision &&
+        revision.rebasedFromRevision === undefined)
+    ) {
+      return;
+    }
+    if (
+      !authorization?.rebaseGuard ||
+      authorization.input.commands.some(
+        (command) => command.type !== "insert_element",
+      ) ||
+      revision.rebasedFromRevision !== context.revision ||
+      revision.previousRevision <= context.revision
+    ) {
+      throw new Error(
+        "Renderer returned an unauthorized planned design revision rebase",
+      );
+    }
   }
 
   recordDesignApplyCompleted(
@@ -1202,6 +1260,122 @@ function safeHierarchyId(value: unknown): value is string {
       return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
     })
   );
+}
+
+/**
+ * The accepted plan owns only the disposable structural intent. When the
+ * model materializes one of those stable IDs, Main compiles its parent-local
+ * geometry from the trusted plan instead of asking the model to repeat exact
+ * scaffold coordinates. Real content geometry remains model-authored.
+ */
+function resolvePlannedStructureGeometry(
+  input: DesignApplyToolInput,
+  state: DesignWorkflowState,
+): DesignApplyToolInput {
+  const plannedNodes = new Map<
+    string,
+    | { kind: "artboard"; target: DesignDeliveryTargetState }
+    | {
+        kind: "region";
+        region: DesignPlanTarget["composition"]["regions"][number];
+        target: DesignDeliveryTargetState;
+      }
+  >();
+  for (const target of state.targetsById.values()) {
+    registerPlannedNode(plannedNodes, target.planned.artboard.frameId, {
+      kind: "artboard",
+      target,
+    });
+    for (const region of target.planned.composition.regions) {
+      registerPlannedNode(plannedNodes, region.nodeId, {
+        kind: "region",
+        region,
+        target,
+      });
+    }
+  }
+
+  let changed = false;
+  const commands = input.commands.map((command) => {
+    if (command.type !== "insert_element") return command;
+    const planned = plannedNodes.get(command.node.id);
+    if (!planned) return command;
+    if (planned.kind === "artboard") {
+      if (command.node.kind !== "frame") return command;
+      const { artboard } = planned.target.planned;
+      changed = true;
+      return {
+        ...command,
+        pageId: planned.target.planned.pageId,
+        parentId: null,
+        node: {
+          ...command.node,
+          parentId: null,
+          transform: [1, 0, 0, 1, artboard.x, artboard.y] as Transform,
+          size: { width: artboard.width, height: artboard.height },
+        },
+      };
+    }
+    if (command.node.kind !== "group" && command.node.kind !== "frame") {
+      return command;
+    }
+    changed = true;
+    return {
+      ...command,
+      pageId: planned.target.planned.pageId,
+      parentId: planned.target.planned.artboard.frameId,
+      node: {
+        ...command.node,
+        parentId: planned.target.planned.artboard.frameId,
+        transform: [
+          1,
+          0,
+          0,
+          1,
+          planned.region.x,
+          planned.region.y,
+        ] as Transform,
+        size: {
+          width: planned.region.width,
+          height: planned.region.height,
+        },
+      },
+    };
+  });
+  return changed ? { ...input, commands } : input;
+}
+
+function registerPlannedNode<T>(
+  nodes: Map<string, T>,
+  nodeId: string,
+  value: T,
+): void {
+  if (nodes.has(nodeId)) {
+    throw new Error(
+      `design_workflow.plan_node_ambiguous: Planned node ID ${nodeId} is reused across delivery targets; inspect and define unique stable IDs`,
+    );
+  }
+  nodes.set(nodeId, value);
+}
+
+function assertUniquePlannedNodeIds(
+  targets: readonly DesignPlanTarget[],
+): void {
+  const ids = new Set<string>();
+  for (const target of targets) {
+    const plannedNodeIds = [
+      target.artboard.frameId,
+      ...target.composition.regions.map((region) => region.nodeId),
+    ];
+    for (const nodeId of plannedNodeIds) {
+      if (ids.has(nodeId)) {
+        throw new Error(
+          `design_workflow.plan_node_ambiguous: Planned node ID ${nodeId} is reused across delivery targets; inspect and define unique stable IDs`,
+        );
+      }
+      ids.add(nodeId);
+    }
+  }
 }
 
 function assertPlannedTargetWrites(

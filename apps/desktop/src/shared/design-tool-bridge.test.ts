@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
+  INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tools";
@@ -57,6 +58,32 @@ describe("Renderer design tool bridge", () => {
           toolCallId: "inspect_1",
           toolName: "opendesign_inspect_document",
           input: {},
+        },
+      }),
+    ).toBe(false);
+    const rebasedResult = {
+      requestId: request.requestId,
+      ok: true as const,
+      result: {
+        content: { ok: true },
+        designRevision: {
+          previousRevision: 6,
+          rebasedFromRevision: 4,
+          revision: 7,
+          transactionId: "transaction_rebased",
+        },
+      },
+    };
+    expect(isRendererDesignToolResponse(rebasedResult)).toBe(true);
+    expect(
+      isRendererDesignToolResponse({
+        ...rebasedResult,
+        result: {
+          ...rebasedResult.result,
+          designRevision: {
+            ...rebasedResult.result.designRevision,
+            rebasedFromRevision: 6,
+          },
         },
       }),
     ).toBe(false);
@@ -148,6 +175,61 @@ describe("Renderer design tool bridge", () => {
           input: {
             ...request.call.input,
             filePath: "C:\\Users\\designer\\Brand.svg",
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only bounded Main-issued planned rebase guards", () => {
+    const request = {
+      requestId: "renderer_planned_rebase",
+      call: {
+        toolCallId: "planned_rebase_1",
+        toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+        input: {
+          label: "Continue translated target",
+          rebaseGuard: {
+            fromRevision: 4,
+            targets: [
+              {
+                frameId: "frame_1",
+                pageId: "page_1",
+                width: 1440,
+                height: 960,
+              },
+            ],
+          },
+          commands: [
+            {
+              commandId: "update_title",
+              type: "update_properties",
+              nodeId: "title_1",
+              name: "Updated title",
+            },
+          ],
+        },
+      },
+      context,
+    };
+
+    expect(isRendererDesignToolRequest(request)).toBe(true);
+    expect(
+      isRendererDesignToolRequest({
+        ...request,
+        call: {
+          ...request.call,
+          input: {
+            ...request.call.input,
+            rebaseGuard: {
+              ...request.call.input.rebaseGuard,
+              targets: [
+                {
+                  ...request.call.input.rebaseGuard.targets[0],
+                  filePath: "C:\\private\\draft",
+                },
+              ],
+            },
           },
         },
       }),

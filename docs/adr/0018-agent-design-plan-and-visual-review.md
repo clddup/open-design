@@ -30,7 +30,7 @@ Page Mutation Target 只能计划该 Page；Document Mutation Target 可以计�
 
 所有 deliverable 默认使用 `editable-composition`。`single-raster` 只允许一个 target，且计划必须携带当前用户消息中的精确摘录，摘录本身明确要求单张扁平图片。图片生成和放置必须复用计划声明的 role；生成结果不能自行成为完成证据。
 
-新图层必须位于所属 target 的计划 Frame 内，首个创建事务必须按计划位置和尺寸创建轴对齐的 Page-root Frame，后续 Page-root 散落写入被拒绝。首个创建事务还必须同时包含至少一个非容器的真实可编辑内容层；不能先把空画板写进正式文档，再承诺由后续调用填充。每个声明区域必须使用原 `nodeId`，以计划 bounds 创建为画板直属、轴对齐的 `Group` 或 `Frame`；当某个计划区域在事务中首次出现时，同一事务必须在其子树内包含至少一个非 `Group/Frame` 的真实内容层，空区域骨架只能留在可丢弃 presentation，不能成为正式 revision。同一 ID 不得重复，也不得冒用任何 target 的画板 ID。一个操作不能跨 target 移动、组合或删除必需根节点。
+新图层必须位于所属 target 的计划 Frame 内，首个创建事务必须按计划位置和尺寸创建轴对齐的 Page-root Frame，后续 Page-root 散落写入被拒绝。首个创建事务还必须同时包含至少一个非容器的真实可编辑内容层；不能先把空画板写进正式文档，再承诺由后续调用填充。每个声明区域必须使用原 `nodeId`，以计划 bounds 创建为画板直属、轴对齐的 `Group` 或 `Frame`；当某个计划区域在事务中首次出现时，同一事务必须在其子树内包含至少一个非 `Group/Frame` 的真实内容层，空区域骨架只能留在可丢弃 presentation，不能成为正式 revision。同一 ID 不得重复，也不得冒用任何 target 的画板 ID。Main 从已接受计划编译画板/区域结构节点的 Page、parent 和父级局部几何，Provider 不重复把局部 bounds 换算成世界坐标。画板建立后只平移真实顶层 Frame 时，纯新增事务可在 Renderer 重新验证稳定 ID、尺寸、轴对齐和当前祖先链后安全 rebase；resize、rotate/skew、reparent、delete、跨 Page 或覆盖既有节点仍要求重新 inspect。一个操作不能跨 target 移动、组合或删除必需根节点。
 
 `artboard.mode=existing` 不得仅把 `artboardEstablished` 置真后等待本 Run 自己创建后代。Main 必须消费同一 Run 最近一次 `inspect_document` 返回的当前 Renderer revision，校验目标确为计划 Page 内的 Frame，并从每个节点的真实 `parentId`/`childIds` 建立完整后代集合。后续插入和图片放置可以进入画板直属层或任意既有/本 Run 新增后代容器；错 Page、缺失/非 Frame、断裂父链、循环和过期 inspection 必须在写入前明确失败并允许重新 inspect/改正计划。设计锁是人工直接操作约束，不会把已授权 Page 内的锁定既有容器从 Agent 数据写入范围中移除。
 
@@ -74,6 +74,6 @@ Review 前置条件失败使用稳定 `design_workflow.material_write_required /
 ## 验证
 
 - Tool contract 测试覆盖 version 3 的一个/多个 target、target/Page/Frame/region 字段、重复/保留 ID、单图 target 上限、反模式与图片 role；version 2 历史输入继续可读。
-- Main coordinator 测试覆盖无计划拒绝、Page/Document scope、一个与多个 target、existing Frame 权威 inspection/后代解析、既有锁定容器、区域层级/bounds、首次空画板/空区域拒绝且 ledger 保持 pending、空 region 最终拒绝、根层散落、跨 target 操作拒绝、图片 role、capture target、revision 顺序、持久账本与中断恢复。
+- Main coordinator 测试覆盖无计划拒绝、Page/Document scope、一个与多个 target、计划节点全局 ID 唯一、existing Frame 权威 inspection/后代解析、既有锁定容器、可信结构几何编译、区域层级/bounds、首次空画板/空区域拒绝且 ledger 保持 pending、空 region 最终拒绝、根层散落、跨 target 操作拒绝、图片 role、capture target、revision 顺序、持久账本与中断恢复。Renderer 测试另覆盖顶层 Frame 平移后的纯新增 rebase，以及 resize 时拒绝沿用旧布局条件。
 - Contract/Runtime/Agent/Renderer/bridge 测试覆盖 discriminated union 具体字段、kind-incompatible property patch、准确 command/node/path、失败零 revision、模型结构化 tool result、journal/Timeline/诊断复制、重新 inspection 后恢复，以及相同失败输入不重复执行。
 - Completion guard 测试覆盖 plan、两次 capture、中间 review/refinement、`N/M` 未完成拒绝、全部 verified 完成、仅生图未写画布和 raster 主导的可编辑 composition 拒绝。

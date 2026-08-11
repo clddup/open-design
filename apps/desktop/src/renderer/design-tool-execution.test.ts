@@ -12,6 +12,7 @@ import {
   EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
@@ -44,6 +45,59 @@ const pageContext = {
     selectedNodeIds: [],
   },
 };
+
+function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
+  return {
+    requestId: `apply_${nodeId}`,
+    call: {
+      toolCallId: `tool_${nodeId}`,
+      toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+      input: {
+        label: "Continue the planned target",
+        rebaseGuard: {
+          fromRevision: 0,
+          targets: [
+            {
+              frameId: "frame_welcome",
+              pageId: "page_welcome",
+              width: 1_120,
+              height: 720,
+            },
+          ],
+        },
+        commands: [
+          {
+            commandId: `insert_${nodeId}`,
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 4,
+            node: {
+              id: nodeId,
+              kind: "rectangle",
+              name: "Continued content",
+              parentId: "frame_welcome",
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 720, 620],
+              size: { width: 240, height: 64 },
+              opacity: 1,
+              properties: {
+                fills: [{ type: "solid", color: "#7c6ee6", opacity: 1 }],
+                strokes: [],
+                strokeWidth: 0,
+                cornerRadius: 12,
+              },
+              extensions: {},
+            },
+          },
+        ],
+      },
+    },
+    context: pageContext,
+  };
+}
 
 describe("Renderer design tool scope", () => {
   it("applies host-ID Page lifecycle operations only within their explicit mutation scope", async () => {
@@ -237,6 +291,162 @@ describe("Renderer design tool scope", () => {
           context: selectionContext,
         },
         runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("expected 0, current 1");
+  });
+
+  it("rebases planned insert-only work onto a user-translated stable Frame", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const moved = runtime.apply({
+      transactionId: "transaction_user_moves_target",
+      documentId: "document_welcome",
+      baseRevision: 0,
+      actor: { type: "user", id: "local-user" },
+      label: "Move the target Frame while the Agent is working",
+      commands: [
+        {
+          commandId: "move_target_frame",
+          type: "update_properties",
+          nodeId: "frame_welcome",
+          transform: [1, 0, 0, 1, 400, 280],
+        },
+      ],
+    });
+    expect(moved.ok).toBe(true);
+
+    const response = await executeDesignToolRequest(
+      plannedInsertRequest("continued_content"),
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        designRevision: {
+          previousRevision: 1,
+          rebasedFromRevision: 0,
+          revision: 2,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome?.transform,
+    ).toEqual([1, 0, 0, 1, 400, 280]);
+    expect(
+      runtime.getSnapshot().document.nodesById.continued_content?.transform,
+    ).toEqual([1, 0, 0, 1, 720, 620]);
+  });
+
+  it("requires a fresh inspection when the planned Frame is resized", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const resized = runtime.apply({
+      transactionId: "transaction_user_resizes_target",
+      documentId: "document_welcome",
+      baseRevision: 0,
+      actor: { type: "user", id: "local-user" },
+      label: "Resize the target Frame while the Agent is working",
+      commands: [
+        {
+          commandId: "resize_target_frame",
+          type: "update_properties",
+          nodeId: "frame_welcome",
+          size: { width: 1_200, height: 720 },
+        },
+      ],
+    });
+    expect(resized.ok).toBe(true);
+
+    await expect(
+      executeDesignToolRequest(
+        plannedInsertRequest("stale_layout_content"),
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("expected 0, current 1");
+    expect(
+      runtime.getSnapshot().document.nodesById.stale_layout_content,
+    ).toBeUndefined();
+  });
+
+  it("requires a fresh inspection when the planned Frame is deleted or reparented", async () => {
+    const deletedRuntime = new EditorRuntime(createWelcomeDocument());
+    expect(
+      deletedRuntime.apply({
+        transactionId: "transaction_user_deletes_target",
+        documentId: "document_welcome",
+        baseRevision: 0,
+        actor: { type: "user", id: "local-user" },
+        label: "Delete the target Frame while the Agent is working",
+        commands: [
+          {
+            commandId: "delete_target_frame",
+            type: "delete_element",
+            nodeId: "frame_welcome",
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+    await expect(
+      executeDesignToolRequest(
+        plannedInsertRequest("content_after_delete"),
+        deletedRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("expected 0, current 1");
+
+    const reparentedRuntime = new EditorRuntime(createWelcomeDocument());
+    expect(
+      reparentedRuntime.apply({
+        transactionId: "transaction_user_reparents_target",
+        documentId: "document_welcome",
+        baseRevision: 0,
+        actor: { type: "user", id: "local-user" },
+        label: "Reparent the target Frame while the Agent is working",
+        commands: [
+          {
+            commandId: "insert_outer_frame",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: null,
+            index: 1,
+            node: {
+              id: "outer_frame",
+              kind: "frame",
+              name: "Outer frame",
+              parentId: null,
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 20, 20],
+              size: { width: 1_400, height: 1_000 },
+              opacity: 1,
+              properties: {
+                fills: [],
+                strokes: [],
+                strokeWidth: 0,
+                cornerRadius: 0,
+                clipsContent: false,
+              },
+              extensions: {},
+            },
+          },
+          {
+            commandId: "reparent_target_frame",
+            type: "move_element",
+            nodeId: "frame_welcome",
+            pageId: "page_welcome",
+            parentId: "outer_frame",
+            index: 0,
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+    await expect(
+      executeDesignToolRequest(
+        plannedInsertRequest("content_after_reparent"),
+        reparentedRuntime,
         "page_welcome",
       ),
     ).rejects.toThrow("expected 0, current 1");

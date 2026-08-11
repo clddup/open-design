@@ -302,9 +302,19 @@ function isTrustedToolResult(value: unknown): value is TrustedToolResult {
       Number(revision.previousRevision) < 0 ||
       !Number.isInteger(revision.revision) ||
       Number(revision.revision) <= Number(revision.previousRevision) ||
+      (revision.rebasedFromRevision !== undefined &&
+        (!Number.isInteger(revision.rebasedFromRevision) ||
+          Number(revision.rebasedFromRevision) < 0 ||
+          Number(revision.rebasedFromRevision) >=
+            Number(revision.previousRevision))) ||
       !safeId(revision.transactionId) ||
       !Object.keys(revision).every((key) =>
-        ["previousRevision", "revision", "transactionId"].includes(key),
+        [
+          "previousRevision",
+          "rebasedFromRevision",
+          "revision",
+          "transactionId",
+        ].includes(key),
       ) ||
       (observedRevision !== undefined &&
         Number(observedRevision) !== Number(revision.revision)))

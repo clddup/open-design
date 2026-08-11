@@ -90,6 +90,7 @@ export interface TrustedToolResult {
   observedRevision?: number;
   designRevision?: {
     previousRevision: number;
+    rebasedFromRevision?: number;
     revision: number;
     transactionId: string;
   };

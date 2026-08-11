@@ -551,7 +551,7 @@ describe("Renderer typed plan skeleton presentation", () => {
     ).toEqual(["poster_title"]);
   });
 
-  it("does not present an existing or conflicting artboard plan as trusted geometry", () => {
+  it("follows a translated stable artboard but rejects structural geometry changes", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const existing = {
       id: "run_existing:tool_plan",
@@ -570,12 +570,12 @@ describe("Renderer typed plan skeleton presentation", () => {
       ),
     ).toBeUndefined();
 
-    const conflicting = runtime.apply({
-      transactionId: "transaction_conflicting_artboard",
+    const translated = runtime.apply({
+      transactionId: "transaction_translated_artboard",
       documentId: "document_welcome",
       baseRevision: 0,
       actor: { type: "user", id: "user_local" },
-      label: "Create conflicting artboard",
+      label: "Create then move the planned artboard",
       commands: [
         {
           commandId: "insert_conflicting_artboard",
@@ -585,12 +585,53 @@ describe("Renderer typed plan skeleton presentation", () => {
           index: 1,
           node: {
             ...frameNode(),
-            transform: [1, 0, 0, 1, 1_280, 80],
+            transform: [1, 0, 0, 1, 1_480, 240],
           },
         },
       ],
     });
-    expect(conflicting.ok).toBe(true);
+    expect(translated.ok).toBe(true);
+    expect(
+      generationSkeletonFromAcceptedPlan(
+        { ...existing, plan: generationPlan },
+        runtime.getSnapshot().document,
+        "page_welcome",
+      ),
+    ).toMatchObject({
+      artboard: {
+        pending: false,
+        transform: [1, 0, 0, 1, 1_480, 240],
+      },
+    });
+    expect(
+      generationActivityFromAcceptedPlan(
+        { ...existing, plan: generationPlan },
+        {
+          id: "run_existing:tool_apply",
+          phase: "building",
+          runId: "run_existing",
+        },
+        runtime.getSnapshot().document,
+        "page_welcome",
+      )?.target,
+    ).toEqual({ x: 1_880, y: 600 });
+
+    const resized = runtime.apply({
+      transactionId: "transaction_resized_artboard",
+      documentId: "document_welcome",
+      baseRevision: 1,
+      actor: { type: "user", id: "user_local" },
+      label: "Resize the planned artboard",
+      commands: [
+        {
+          commandId: "resize_conflicting_artboard",
+          type: "update_properties",
+          nodeId: "poster_artboard",
+          size: { width: 820, height: 1_000 },
+        },
+      ],
+    });
+    expect(resized.ok).toBe(true);
     expect(
       generationSkeletonFromAcceptedPlan(
         { ...existing, plan: generationPlan },
