@@ -728,6 +728,94 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("reconciles generation presentation after Leafer settles the sky transform", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    const skeleton: LeaferGenerationSkeleton = {
+      id: "run_plan:tool_plan:target_home",
+      artboard: {
+        frameId: "home_artboard",
+        height: 900,
+        pending: true,
+        transform: [1, 0, 0, 1, 1_240, 80],
+        width: 420,
+      },
+      regions: [
+        {
+          height: 120,
+          id: "home_header",
+          name: "Header",
+          role: "structure",
+          width: 372,
+          x: 24,
+          y: 24,
+        },
+      ],
+    };
+    adapter.sync({
+      ...first,
+      generationActivity: {
+        id: "run_plan:tool_apply:requested",
+        label: "AI · Building the design",
+        phase: "building",
+        target: { x: 1_450, y: 240 },
+      },
+      generationSkeleton: skeleton,
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const skeletonLayer = app.sky.children[0] as FakeGroup | undefined;
+    const activityLayer = app.sky.children[1] as FakeGroup | undefined;
+    const viewport = {
+      a: 0.5,
+      b: 0,
+      c: 0,
+      d: 0.5,
+      e: -300,
+      f: 40,
+    };
+
+    // Production Leafer can emit MoveEvent.MOVE after the tree has moved but
+    // before the editor sky copies that viewport transform.
+    app.tree.localTransform = { ...viewport };
+    app.emit("viewport.move");
+    expect(skeletonLayer?.localTransform).toEqual(viewport);
+    expect(activityLayer?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 425,
+      f: 160,
+    });
+
+    app.sky.localTransform = { ...viewport };
+    flushAnimationFrames();
+
+    expect(skeletonLayer?.localTransform).toEqual(identityMatrix());
+    expect(activityLayer?.localTransform).toEqual({
+      a: 2,
+      b: 0,
+      c: 0,
+      d: 2,
+      e: 1_450,
+      f: 240,
+    });
+    expect(skeletonLayer?.children[0]?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 1_240,
+      f: 80,
+    });
+
+    adapter.dispose();
+  });
+
   it("shows a non-interactive Agent cursor for trusted semantic activity", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),

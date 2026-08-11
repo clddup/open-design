@@ -277,6 +277,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #generationReveals = new Map<string, ScheduledGenerationReveal>();
   readonly #generationTweens = new Map<string, ActiveGenerationTween>();
   readonly #processedGenerationRevealIds = new Set<string>();
+  #generationViewportFrame: number | null = null;
   #generationSkeletonFingerprint: string | null = null;
   #generationSkeletonId: string | null = null;
   readonly #generationSkeletonStrokes: LeaferElement[] = [];
@@ -758,9 +759,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.finishGenerationPresentation();
     if (this.#viewportFrame !== null) cancelAnimationFrame(this.#viewportFrame);
     if (this.#editorFrame !== null) cancelAnimationFrame(this.#editorFrame);
+    if (this.#generationViewportFrame !== null) {
+      cancelAnimationFrame(this.#generationViewportFrame);
+    }
     this.#cancelBooleanPreview();
     this.#viewportFrame = null;
     this.#editorFrame = null;
+    this.#generationViewportFrame = null;
     this.#editorRefreshNeedsTreeBounds = false;
     this.#editorRefreshNodeBounds.clear();
     this.#generationActivityLayer.remove();
@@ -914,6 +919,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#renderVectorEditOverlay();
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
+      this.#scheduleGenerationViewportSync();
     };
     // Viewport gestures are emitted by the App interaction dispatcher. The
     // tree is the transformed zoom layer, not the event owner. Listening on
@@ -1276,6 +1282,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
     this.#syncGenerationSkeletonViewport();
     this.#syncGenerationActivityViewport();
+    this.#scheduleGenerationViewportSync();
     this.#scheduleEditorRefresh();
   }
 
@@ -2727,6 +2734,25 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         y: label.y + 5 * inverseZoom,
       });
     }
+  }
+
+  #scheduleGenerationViewportSync(): void {
+    if (
+      this.#disposed ||
+      this.#generationViewportFrame !== null ||
+      (!this.#generationSkeletonId && !this.#generationActivityId)
+    ) {
+      return;
+    }
+    this.#generationViewportFrame = requestAnimationFrame(() => {
+      this.#generationViewportFrame = null;
+      if (this.#disposed) return;
+      // Leafer can emit the viewport event before its editor sky has copied
+      // the final tree transform. Re-read both layers on the settled frame so
+      // sky-relative world overlays never retain an intermediate transform.
+      this.#syncGenerationSkeletonViewport();
+      this.#syncGenerationActivityViewport();
+    });
   }
 
   #clearGenerationSkeleton(suppress: boolean): void {

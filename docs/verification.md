@@ -39,7 +39,7 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   44 files / 365 tests
+├── package tests   44 files / 366 tests
 └── desktop tests   57 files / 476 tests
 pnpm build          passed
 ├── Renderer
