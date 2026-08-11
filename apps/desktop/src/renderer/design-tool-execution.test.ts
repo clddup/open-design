@@ -2325,6 +2325,76 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
   });
 
+  it("divides a closed vector with a node-local line into host-named sibling layers", async () => {
+    const runtime = createClosedEditableVectorRuntime();
+    runtime.setSelection(["title_welcome"], "title_welcome");
+
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_line_cut",
+        call: {
+          toolCallId: "tool/vector line cut",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "cut-with-line",
+            end: { x: 130, y: 40 },
+            label: "Divide the logo contour",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            start: { x: -10, y: 40 },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_changed_after_send",
+    );
+
+    const resultNodeId = "vector_cut_tool_vector_line_cut_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "cut-with-line",
+          atomic: true,
+          intersectionCount: 2,
+          nodeId: "editable_logo_contour",
+          pageId: "page_welcome",
+          resultNodeIds: ["editable_logo_contour", resultNodeId],
+          revision: 1,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    const document = runtime.getSnapshot().document;
+    const frame = document.nodesById.frame_welcome;
+    const extracted = document.nodesById[resultNodeId];
+    expect(frame?.kind === "frame" ? frame.childIds : []).toEqual(
+      expect.arrayContaining(["editable_logo_contour", resultNodeId]),
+    );
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    expect(frame.childIds.indexOf(resultNodeId)).toBe(
+      frame.childIds.indexOf("editable_logo_contour") + 1,
+    );
+    expect(extracted).toMatchObject({
+      id: resultNodeId,
+      kind: "vector",
+      parentId: "frame_welcome",
+    });
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toBeUndefined();
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toBeDefined();
+  });
+
   it("rejects no-op, locked, out-of-scope, and stale Agent vector edits", async () => {
     const noOpRuntime = createEditableVectorRuntime();
     await expect(
@@ -2828,6 +2898,36 @@ function createEditableVectorRuntime(): EditorRuntime {
   };
   document.nodesById[vector.id] = vector;
   frame.childIds.push(vector.id);
+  return new EditorRuntime(document);
+}
+
+function createClosedEditableVectorRuntime(): EditorRuntime {
+  const runtime = createEditableVectorRuntime();
+  const document = structuredClone(runtime.getSnapshot().document);
+  const vector = document.nodesById.editable_logo_contour;
+  if (
+    !vector ||
+    vector.kind !== "vector" ||
+    !("network" in vector.properties)
+  ) {
+    throw new Error("Missing editable vector fixture");
+  }
+  vector.properties.network.segments.push({
+    id: "segment_ca",
+    startVertexId: "vertex_c",
+    endVertexId: "vertex_a",
+  });
+  const path = vector.properties.network.paths[0];
+  if (!path) throw new Error("Missing editable vector path fixture");
+  path.segments.push({ segmentId: "segment_ca", reversed: false });
+  path.closed = true;
+  vector.properties.network.regions = [
+    {
+      id: "region_logo",
+      windingRule: "nonzero",
+      loops: [{ pathId: path.id, reversed: false }],
+    },
+  ];
   return new EditorRuntime(document);
 }
 

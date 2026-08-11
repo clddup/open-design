@@ -207,10 +207,19 @@ type VectorEditDrag =
       reference: VectorHandleReference;
       startClient: Point;
       vertexId: string;
+    }
+  | {
+      clickTarget?: { at: VectorCutLocation; pathId: string };
+      currentLocal: Point;
+      kind: "cut";
+      moved: boolean;
+      startClient: Point;
+      startLocal: Point;
     };
 
 interface VectorEditSession {
   anchorControls: LeaferElement[];
+  cutGuidePath: LeaferElement;
   cutHitPath: LeaferElement;
   drag: VectorEditDrag | null;
   handleControls: LeaferElement[];
@@ -231,6 +240,7 @@ const PEN_CLOSE_DISTANCE = 10;
 const MIN_VIEWPORT_ZOOM = 0.1;
 const MAX_VIEWPORT_ZOOM = 8;
 const WHEEL_ZOOM_SPEED = 0.16;
+const VECTOR_CUT_GUIDE_COLOR = "#f248b5";
 const GENERATION_REVEAL_COLOR = "#6574ff";
 const MAX_PROCESSED_GENERATION_REVEALS = 128;
 const GENERATION_SKELETON_COLOR = "#7c6ee6";
@@ -1787,6 +1797,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         hittable: scope.tool === "cut" && !scope.readOnly,
         stroke: "rgba(0, 0, 0, 0.001)",
       }) as LeaferElement;
+      const cutGuidePath = new this.#leafer.Path({
+        editable: false,
+        fill: null,
+        hittable: false,
+        stroke: VECTOR_CUT_GUIDE_COLOR,
+        strokeCap: "round",
+        visible: false,
+      }) as LeaferElement;
       const handlePath = new this.#leafer.Path({
         editable: false,
         fill: null,
@@ -1796,9 +1814,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       overlayGroup.add(cutHitPath);
       overlayGroup.add(tracePath);
       overlayGroup.add(handlePath);
+      overlayGroup.add(cutGuidePath);
       parent.add(overlayGroup);
       session = {
         anchorControls: [],
+        cutGuidePath,
         cutHitPath,
         drag: null,
         handleControls: [],
@@ -1814,6 +1834,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       };
       this.#vectorEdit = session;
     } else {
+      if (
+        session.drag?.kind === "cut" &&
+        (scope.tool !== "cut" || scope.readOnly)
+      ) {
+        this.#cancelVectorEditDrag(session);
+      }
       session.pathElement = pathElement;
       session.readOnly = scope.readOnly;
       session.selectedVertexIds = selectedVertexIds;
@@ -1847,6 +1873,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       strokeWidth: 14 / zoom,
     });
     session.tracePath.set({ path: serialized.path, strokeWidth: 1.5 / zoom });
+    session.cutGuidePath.set({ strokeWidth: 1.5 / zoom });
+    this.#renderVectorCutGuide(session);
     session.anchorControls.forEach((control) => {
       control.remove();
       control.destroy();
@@ -1950,30 +1978,41 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const control = target ? this.#vectorEditControls.get(target) : undefined;
     if (session.tool === "cut") {
       if (session.readOnly) return;
+      let clickTarget: { at: VectorCutLocation; pathId: string } | undefined;
       if (control?.kind === "vertex") {
         const pathId = findVectorPathIdForVertex(
           session.network,
           control.vertexId,
         );
         if (pathId) {
-          this.#submitVectorCut(pathId, {
-            kind: "vertex",
-            vertexId: control.vertexId,
-          });
+          clickTarget = {
+            at: { kind: "vertex", vertexId: control.vertexId },
+            pathId,
+          };
         }
-        return;
-      }
-      if (target === session.cutHitPath) {
+      } else if (target === session.cutHitPath) {
         const local = pointer.getInnerPoint(session.pathElement);
         const hit = nearestVectorSegmentPoint(session.network, local);
         if (hit) {
-          this.#submitVectorCut(hit.pathId, {
-            kind: "segment",
-            segmentId: hit.segmentId,
-            t: hit.t,
-          });
+          clickTarget = {
+            at: {
+              kind: "segment",
+              segmentId: hit.segmentId,
+              t: hit.t,
+            },
+            pathId: hit.pathId,
+          };
         }
       }
+      const startLocal = pointer.getInnerPoint(session.pathElement);
+      session.drag = {
+        ...(clickTarget ? { clickTarget } : {}),
+        currentLocal: startLocal,
+        kind: "cut",
+        moved: false,
+        startClient: eventClientPoint(pointer),
+        startLocal,
+      };
       return;
     }
     if (!control) {
@@ -2029,6 +2068,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     drag.moved ||= pointDistance(drag.startClient, client) >= MIN_DRAW_DISTANCE;
     if (!drag.moved) return;
     const local = pointer.getInnerPoint(session.pathElement);
+    if (drag.kind === "cut") {
+      drag.currentLocal = local;
+      this.#renderVectorCutGuide(session);
+      return;
+    }
     const result =
       drag.kind === "vertices"
         ? moveVectorVertices(drag.before, drag.vertexIds, {
@@ -2062,11 +2106,49 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const session = this.#vectorEdit;
     const drag = session?.drag;
     if (!session || !drag) return;
+    const pointer = asLeaferEvent(event);
+    if (pointer.isCancel) {
+      this.#cancelVectorEditDrag(session);
+      this.#renderVectorEditOverlay();
+      return;
+    }
     this.#vectorEditPointerMove(event);
     const moved = drag.moved;
+    if (drag.kind === "cut") {
+      const end = drag.currentLocal;
+      const clickTarget = drag.clickTarget;
+      const start = drag.startLocal;
+      session.drag = null;
+      this.#renderVectorCutGuide(session);
+      if (moved) this.#submitVectorLineCut(start, end);
+      else if (clickTarget) {
+        this.#submitVectorCut(clickTarget.pathId, clickTarget.at);
+      }
+      return;
+    }
     const network = session.network;
     session.drag = null;
     if (moved) this.#submitVectorEdit(network);
+  }
+
+  #renderVectorCutGuide(session: VectorEditSession): void {
+    const drag = session.drag;
+    if (!drag || drag.kind !== "cut" || !drag.moved) {
+      session.cutGuidePath.set({ path: "", visible: false });
+      return;
+    }
+    session.cutGuidePath.set({
+      path: `M ${drag.startLocal.x} ${drag.startLocal.y} L ${drag.currentLocal.x} ${drag.currentLocal.y}`,
+      visible: true,
+    });
+  }
+
+  #cancelVectorEditDrag(session: VectorEditSession): void {
+    const drag = session.drag;
+    if (!drag) return;
+    if (drag.kind !== "cut") session.network = drag.before;
+    session.drag = null;
+    session.cutGuidePath.set({ path: "", visible: false });
   }
 
   #submitVectorEdit(network: VectorNetwork): boolean {
@@ -2112,6 +2194,25 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#callbacks.onVectorEditSelectionChange?.(response.selectedVertexIds);
       this.#renderVectorEditOverlay();
     }
+    return true;
+  }
+
+  #submitVectorLineCut(start: Point, end: Point): boolean {
+    const session = this.#vectorEdit;
+    if (!session || !this.#callbacks.onVectorLineCut) {
+      this.#report(new Error("Vector line Cut callback is unavailable"));
+      return false;
+    }
+    const response = this.#callbacks.onVectorLineCut({
+      end,
+      nodeId: session.nodeId,
+      start,
+    });
+    if (!response.ok) {
+      this.#restoreProjection();
+      return false;
+    }
+    this.#callbacks.onVectorEditExit?.();
     return true;
   }
 
@@ -3467,9 +3568,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         event.preventDefault();
         event.stopImmediatePropagation();
         if (this.#vectorEdit.drag) {
-          this.#vectorEdit.network = this.#vectorEdit.drag.before;
-          this.#vectorEdit.drag = null;
+          this.#cancelVectorEditDrag(this.#vectorEdit);
           this.#renderVectorEditOverlay();
+          if (event.code === "Escape") return;
         }
         this.#callbacks.onVectorEditExit?.();
         return;

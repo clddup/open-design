@@ -37,6 +37,8 @@ import {
   type LeaferVectorCutRequest,
   type LeaferVectorCutResponse,
   type LeaferVectorEditTool,
+  type LeaferVectorLineCutRequest,
+  type LeaferVectorLineCutResponse,
 } from "@opendesign/leafer-engine";
 import type { TextLayoutProvider } from "@opendesign/text-service";
 import {
@@ -412,6 +414,46 @@ export function Canvas({
     [activePageId, applyOperations, onTransactionError, runtime, t],
   );
 
+  const applyVectorLineCut = useCallback(
+    (request: LeaferVectorLineCutRequest): LeaferVectorLineCutResponse => {
+      const current = runtime.getSnapshot();
+      const resultNodeId = `vector_cut_${crypto.randomUUID().replaceAll("-", "")}`;
+      const plan = planVectorSemanticEdit(
+        current.document,
+        activePageId,
+        request.nodeId,
+        {
+          action: "cut-with-line",
+          end: request.end,
+          resultNodeId,
+          start: request.start,
+        },
+      );
+      if (!plan.ok || !plan.lineCutResult) {
+        onTransactionError(
+          plan.ok ? t("canvas.vectorLineCutUnavailable") : plan.message,
+        );
+        return { ok: false };
+      }
+      const accepted = applyOperations({
+        kind: "vector",
+        operations: [...plan.operations],
+      });
+      if (!accepted) return { ok: false };
+      const resultNodeIds = plan.lineCutResult.resultNodeIds;
+      const applied = runtime.getSnapshot().document;
+      if (resultNodeIds.some((nodeId) => !applied.nodesById[nodeId])) {
+        onTransactionError(t("canvas.vectorLineCutApplyMissing"));
+        return { ok: false };
+      }
+      setVectorEditState(null);
+      runtime.setSelection([...resultNodeIds], resultNodeIds[1]);
+      requestAnimationFrame(() => host.current?.focus());
+      return { ok: true, resultNodeIds };
+    },
+    [activePageId, applyOperations, onTransactionError, runtime, t],
+  );
+
   const createNode = useCallback(
     (request: LeaferCreateRequest) => {
       const current = runtime.getSnapshot();
@@ -591,6 +633,7 @@ export function Canvas({
       onVectorCut: applyVectorCut,
       onVectorEdit: applyVectorEdit,
       onVectorEditExit: exitVectorEdit,
+      onVectorLineCut: applyVectorLineCut,
       onVectorEditSelectionChange: (selectedVertexIds) => {
         setVectorEditState((current) =>
           current
@@ -631,6 +674,7 @@ export function Canvas({
     applyOperations,
     applyVectorCut,
     applyVectorEdit,
+    applyVectorLineCut,
     createNode,
     createVectorNode,
     exitVectorEdit,

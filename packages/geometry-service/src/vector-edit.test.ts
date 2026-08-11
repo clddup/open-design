@@ -1,6 +1,7 @@
 import type { VectorNetwork } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import {
+  cutVectorNetworkByLine,
   cutVectorPath,
   deleteVectorVertices,
   findVectorPathIdForVertex,
@@ -106,6 +107,117 @@ function twoContourNetwork(): VectorNetwork {
     ],
     regions: [],
   };
+}
+
+function sameSegmentDoubleCrossingNetwork(): VectorNetwork {
+  return {
+    vertices: [
+      { id: "vertex_a", x: 0, y: 50 },
+      { id: "vertex_b", x: 100, y: 50 },
+      { id: "vertex_c", x: 100, y: 150 },
+      { id: "vertex_d", x: 0, y: 150 },
+    ],
+    segments: [
+      {
+        id: "segment_curve",
+        startVertexId: "vertex_a",
+        endVertexId: "vertex_b",
+        tangentStart: { x: 0, y: -150 },
+        tangentEnd: { x: 0, y: -150 },
+      },
+      { id: "segment_bc", startVertexId: "vertex_b", endVertexId: "vertex_c" },
+      { id: "segment_cd", startVertexId: "vertex_c", endVertexId: "vertex_d" },
+      { id: "segment_da", startVertexId: "vertex_d", endVertexId: "vertex_a" },
+    ],
+    paths: [
+      {
+        id: "path_closed",
+        closed: true,
+        segments: [
+          { segmentId: "segment_curve", reversed: false },
+          { segmentId: "segment_bc", reversed: false },
+          { segmentId: "segment_cd", reversed: false },
+          { segmentId: "segment_da", reversed: false },
+        ],
+      },
+    ],
+    regions: [
+      {
+        id: "region_face",
+        windingRule: "evenodd",
+        loops: [{ pathId: "path_closed", reversed: true }],
+      },
+    ],
+  };
+}
+
+function twoClosedContourNetwork(): VectorNetwork {
+  const first = closedNetwork();
+  return {
+    vertices: [
+      ...first.vertices,
+      { id: "vertex_e", x: 140, y: 0 },
+      { id: "vertex_f", x: 240, y: 0 },
+      { id: "vertex_g", x: 240, y: 80 },
+      { id: "vertex_h", x: 140, y: 80 },
+    ],
+    segments: [
+      ...first.segments,
+      { id: "segment_ef", startVertexId: "vertex_e", endVertexId: "vertex_f" },
+      { id: "segment_fg", startVertexId: "vertex_f", endVertexId: "vertex_g" },
+      { id: "segment_gh", startVertexId: "vertex_g", endVertexId: "vertex_h" },
+      { id: "segment_he", startVertexId: "vertex_h", endVertexId: "vertex_e" },
+    ],
+    paths: [
+      ...first.paths,
+      {
+        id: "path_second",
+        closed: true,
+        segments: [
+          { segmentId: "segment_ef", reversed: false },
+          { segmentId: "segment_fg", reversed: false },
+          { segmentId: "segment_gh", reversed: false },
+          { segmentId: "segment_he", reversed: false },
+        ],
+      },
+    ],
+    regions: [
+      ...first.regions,
+      {
+        id: "region_second",
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_second", reversed: false }],
+      },
+    ],
+  };
+}
+
+function compoundRegionNetwork(): VectorNetwork {
+  const source = closedNetwork();
+  source.vertices.push(
+    { id: "vertex_e", x: 30, y: 20 },
+    { id: "vertex_f", x: 70, y: 20 },
+    { id: "vertex_g", x: 70, y: 60 },
+    { id: "vertex_h", x: 30, y: 60 },
+  );
+  source.segments.push(
+    { id: "segment_ef", startVertexId: "vertex_e", endVertexId: "vertex_f" },
+    { id: "segment_fg", startVertexId: "vertex_f", endVertexId: "vertex_g" },
+    { id: "segment_gh", startVertexId: "vertex_g", endVertexId: "vertex_h" },
+    { id: "segment_he", startVertexId: "vertex_h", endVertexId: "vertex_e" },
+  );
+  source.paths.push({
+    id: "path_hole",
+    closed: true,
+    segments: [
+      { segmentId: "segment_ef", reversed: false },
+      { segmentId: "segment_fg", reversed: false },
+      { segmentId: "segment_gh", reversed: false },
+      { segmentId: "segment_he", reversed: false },
+    ],
+  });
+  source.regions[0]!.loops.push({ pathId: "path_hole", reversed: true });
+  return source;
 }
 
 describe("editable vector point operations", () => {
@@ -429,6 +541,157 @@ describe("editable vector point operations", () => {
     expect(
       moved.network.vertices.find((vertex) => vertex.id === "vertex_edit_1"),
     ).toMatchObject({ x: 132, y: 8 });
+  });
+
+  it("divides a closed object with one finite drag line into two closed networks", () => {
+    const result = cutVectorNetworkByLine(
+      closedNetwork(),
+      { x: -20, y: 40 },
+      { x: 120, y: 40 },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      retainedPathIds: ["path_closed"],
+      extractedPathIds: ["path_edit_1"],
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.intersections).toHaveLength(2);
+    expect(
+      result.intersections.map((intersection) => intersection.point),
+    ).toEqual([
+      { x: 0, y: 40 },
+      { x: 100, y: 40 },
+    ]);
+    expect(result.retainedNetwork.paths).toEqual([
+      expect.objectContaining({ id: "path_closed", closed: true }),
+    ]);
+    expect(result.extractedNetwork.paths).toEqual([
+      expect.objectContaining({ id: "path_edit_1", closed: true }),
+    ]);
+    expect(result.retainedNetwork.regions).toEqual([
+      {
+        id: "region_face",
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_closed", reversed: false }],
+      },
+    ]);
+    expect(result.extractedNetwork.regions).toHaveLength(1);
+    for (const divided of [result.retainedNetwork, result.extractedNetwork]) {
+      expect(vectorNetworkEditability(divided)).toEqual({ editable: true });
+      const cutEdges = divided.segments.filter((segment) => {
+        const start = divided.vertices.find(
+          (vertex) => vertex.id === segment.startVertexId,
+        );
+        const end = divided.vertices.find(
+          (vertex) => vertex.id === segment.endVertexId,
+        );
+        return start?.y === 40 && end?.y === 40;
+      });
+      expect(cutEdges).toHaveLength(1);
+    }
+  });
+
+  it("solves two crossings on one cubic before remapping the second split", () => {
+    const result = cutVectorNetworkByLine(
+      sameSegmentDoubleCrossingNetwork(),
+      { x: -20, y: 0 },
+      { x: 120, y: 0 },
+    );
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.intersections).toHaveLength(2);
+    expect(
+      result.intersections.every(
+        (intersection) =>
+          intersection.location.kind === "segment" &&
+          intersection.location.segmentId === "segment_curve",
+      ),
+    ).toBe(true);
+    expect(result.intersections[0]!.point.x).toBeLessThan(
+      result.intersections[1]!.point.x,
+    );
+    expect(result.retainedNetwork.regions[0]).toMatchObject({
+      id: "region_face",
+      windingRule: "evenodd",
+      loops: [{ pathId: "path_closed", reversed: true }],
+    });
+    expect(result.extractedNetwork.paths[0]?.segments).toHaveLength(2);
+    expect(vectorNetworkEditability(result.extractedNetwork)).toEqual({
+      editable: true,
+    });
+  });
+
+  it("divides multiple independent closed contours into one retained and one extracted network", () => {
+    const result = cutVectorNetworkByLine(
+      twoClosedContourNetwork(),
+      { x: -20, y: 40 },
+      { x: 260, y: 40 },
+    );
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.intersections).toHaveLength(4);
+    expect(result.retainedPathIds).toEqual(["path_closed", "path_second"]);
+    expect(result.extractedPathIds).toEqual(["path_edit_1", "path_edit_2"]);
+    expect(result.retainedNetwork.paths).toHaveLength(2);
+    expect(result.extractedNetwork.paths).toHaveLength(2);
+    expect(result.retainedNetwork.regions).toHaveLength(2);
+    expect(result.extractedNetwork.regions).toHaveLength(2);
+    expect(vectorNetworkEditability(result.retainedNetwork)).toEqual({
+      editable: true,
+    });
+    expect(vectorNetworkEditability(result.extractedNetwork)).toEqual({
+      editable: true,
+    });
+  });
+
+  it("preserves a closed stroke-only contour without inventing fill regions", () => {
+    const source = closedNetwork();
+    source.regions = [];
+    const result = cutVectorNetworkByLine(
+      source,
+      { x: -20, y: 40 },
+      { x: 120, y: 40 },
+    );
+    if (!result.ok) throw new Error(result.message);
+    expect(result.retainedNetwork.regions).toEqual([]);
+    expect(result.extractedNetwork.regions).toEqual([]);
+    expect(result.retainedNetwork.paths[0]?.closed).toBe(true);
+    expect(result.extractedNetwork.paths[0]?.closed).toBe(true);
+  });
+
+  it("rejects open, overlapping, non-crossing, and multi-face drag cuts explicitly", () => {
+    expect(
+      cutVectorNetworkByLine(
+        openNetwork(),
+        { x: 90, y: -100 },
+        { x: 90, y: 100 },
+      ),
+    ).toMatchObject({ ok: false, code: "unsupported-topology" });
+    expect(
+      cutVectorNetworkByLine(
+        closedNetwork(),
+        { x: -20, y: 0 },
+        { x: 120, y: 0 },
+      ),
+    ).toMatchObject({ ok: false, code: "unsupported-topology" });
+    expect(
+      cutVectorNetworkByLine(
+        closedNetwork(),
+        { x: -20, y: -20 },
+        { x: 120, y: -20 },
+      ),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    const compound = cutVectorNetworkByLine(
+      compoundRegionNetwork(),
+      { x: -20, y: 40 },
+      { x: 120, y: 40 },
+    );
+    expect(compound).toMatchObject({
+      ok: false,
+      code: "unsupported-topology",
+    });
+    if (compound.ok) throw new Error("Compound region Cut should fail");
+    expect(compound.message).toContain("hole redistribution");
   });
 
   it("splits line and reversed cubic segments exactly with stable directed IDs", () => {

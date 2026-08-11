@@ -70,3 +70,4 @@
 | [0036](adr/0036-versioned-text-auto-size-and-layout-service.md)          | 已接受     | Text Auto Size 与可替换 Text Layout Service                        |
 | [0037](adr/0037-versioned-vector-topology-operations.md)                 | 已接受     | 单轮廓 Open/Close/Reverse 与开放 region 语义                       |
 | [0038](adr/0038-versioned-vector-click-cut.md)                           | 已接受     | 点击 Cut、精确 cubic 拆分与互不连接多轮廓编辑                      |
+| [0039](adr/0039-versioned-vector-drag-cut.md)                            | 已接受     | 拖拽 Cut、真实闭合连接边与独立结果图层                             |

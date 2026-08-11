@@ -1490,6 +1490,14 @@ describe("design Agent tool contract", () => {
       pageId: "page_brand",
       pathId: "path_logo",
     };
+    const lineCut = {
+      action: "cut-with-line",
+      end: { x: 128, y: 48 },
+      label: "Divide the logo contour",
+      nodeId: "logo_contour",
+      pageId: "page_brand",
+      start: { x: -8, y: 48 },
+    };
 
     expect(tool).toMatchObject({
       risk: "design_write",
@@ -1498,6 +1506,7 @@ describe("design Agent tool contract", () => {
     expect(tool?.description).toContain(
       "stable Page, node, path, vertex, and segment IDs",
     );
+    expect(tool?.description).toContain("host-created sibling Vector layer");
     expect(tool?.description).toContain("one atomic undoable");
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, close)).toBe(
       true,
@@ -1506,6 +1515,9 @@ describe("design Agent tool contract", () => {
       true,
     );
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, cut)).toBe(
+      true,
+    );
+    expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, lineCut)).toBe(
       true,
     );
     expect(
@@ -1542,6 +1554,24 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
         ...close,
         selectedNodeId: "live_selection",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...lineCut,
+        start: { x: Number.NaN, y: 48 },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...lineCut,
+        end: { x: 1_000_001, y: 48 },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...lineCut,
+        resultNodeId: "model_authored_result",
       }),
     ).toBe(false);
   });

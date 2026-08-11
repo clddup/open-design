@@ -75,11 +75,24 @@ export interface LeaferVectorCutRequest {
   pathId: string;
 }
 
+export interface LeaferVectorLineCutRequest {
+  end: Point;
+  nodeId: string;
+  start: Point;
+}
+
 export type LeaferVectorCutResponse =
   | {
       ok: true;
       network: VectorNetwork;
       selectedVertexIds: readonly [string, string];
+    }
+  | { ok: false };
+
+export type LeaferVectorLineCutResponse =
+  | {
+      ok: true;
+      resultNodeIds: readonly [string, string];
     }
   | { ok: false };
 
@@ -90,6 +103,9 @@ export interface LeaferEngineCallbacks {
   onOperations(request: LeaferOperationRequest): boolean;
   onSelectionChange(nodeIds: string[], anchorNodeId?: string): void;
   onVectorCut?(request: LeaferVectorCutRequest): LeaferVectorCutResponse;
+  onVectorLineCut?(
+    request: LeaferVectorLineCutRequest,
+  ): LeaferVectorLineCutResponse;
   onVectorEdit?(request: LeaferVectorEditRequest): boolean;
   onVectorEditExit?(): void;
   onVectorEditSelectionChange?(vertexIds: readonly string[]): void;

@@ -39,6 +39,42 @@ function network(): VectorNetwork {
   };
 }
 
+function closedNetwork(): VectorNetwork {
+  return {
+    vertices: [
+      { id: "vertex_a", x: 0, y: 0, handleMode: "corner" },
+      { id: "vertex_b", x: 100, y: 0, handleMode: "corner" },
+      { id: "vertex_c", x: 100, y: 100, handleMode: "corner" },
+      { id: "vertex_d", x: 0, y: 100, handleMode: "corner" },
+    ],
+    segments: [
+      { id: "segment_ab", startVertexId: "vertex_a", endVertexId: "vertex_b" },
+      { id: "segment_bc", startVertexId: "vertex_b", endVertexId: "vertex_c" },
+      { id: "segment_cd", startVertexId: "vertex_c", endVertexId: "vertex_d" },
+      { id: "segment_da", startVertexId: "vertex_d", endVertexId: "vertex_a" },
+    ],
+    paths: [
+      {
+        id: "path_closed",
+        closed: true,
+        segments: [
+          { segmentId: "segment_ab", reversed: false },
+          { segmentId: "segment_bc", reversed: false },
+          { segmentId: "segment_cd", reversed: false },
+          { segmentId: "segment_da", reversed: false },
+        ],
+      },
+    ],
+    regions: [
+      {
+        id: "region_face",
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_closed", reversed: false }],
+      },
+    ],
+  };
+}
+
 function documentWithVector(): DesignDocument {
   const document = structuredClone(createWelcomeDocument());
   const frame = document.nodesById.frame_welcome;
@@ -350,6 +386,128 @@ describe("vector editing runtime plans", () => {
     expect(vectorNetworkFrom(reopened)).toEqual(vectorNetworkFrom(runtime));
   });
 
+  it("divides a closed vector into adjacent layers with tight local bounds in one revision", () => {
+    const document = documentWithVector();
+    const source = document.nodesById.vector_editable;
+    if (
+      !source ||
+      source.kind !== "vector" ||
+      !("network" in source.properties)
+    ) {
+      throw new Error("Missing editable vector");
+    }
+    source.properties.network = closedNetwork();
+    const runtime = new EditorRuntime(document);
+    const before = runtime.getSnapshot();
+    const plan = planVectorSemanticEdit(
+      before.document,
+      "page_welcome",
+      "vector_editable",
+      {
+        action: "cut-with-line",
+        start: { x: -20, y: 40 },
+        end: { x: 120, y: 40 },
+        resultNodeId: "vector_cut_result",
+      },
+    );
+    expect(plan).toMatchObject({
+      ok: true,
+      lineCutResult: {
+        extractedPathIds: ["path_edit_1"],
+        intersectionCount: 2,
+        resultNodeIds: ["vector_editable", "vector_cut_result"],
+        retainedPathIds: ["path_closed"],
+      },
+      operations: [
+        {
+          type: "update_properties",
+          nodeId: "vector_editable",
+          transform: [0, 1, -1, 0, 100, 200],
+          size: { width: 100, height: 40 },
+        },
+        {
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: "frame_welcome",
+          index: 5,
+          node: {
+            id: "vector_cut_result",
+            name: "Editable curve Cut",
+            transform: [0, 1, -1, 0, 60, 200],
+            size: { width: 100, height: 60 },
+          },
+        },
+      ],
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    const transaction = {
+      transactionId: "divide_vector",
+      documentId: before.document.documentId,
+      baseRevision: before.document.revision,
+      actor: { type: "user" as const, id: "local-user" },
+      label: "Divide vector object",
+      commands: [...plan.operations],
+    };
+    expect(runtime.preview(transaction)).toMatchObject({ ok: true });
+    expect(runtime.apply(transaction)).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(
+      runtime
+        .getSnapshot()
+        .document.nodesById.frame_welcome?.childIds.slice(-2),
+    ).toEqual(["vector_editable", "vector_cut_result"]);
+    const retained = vectorNetworkFrom(runtime);
+    const extracted = vectorNetworkFrom(runtime, "vector_cut_result");
+    expect(retained.paths[0]).toMatchObject({
+      id: "path_closed",
+      closed: true,
+    });
+    expect(extracted.paths[0]).toMatchObject({
+      id: "path_edit_1",
+      closed: true,
+    });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.vector_cut_result,
+    ).toBeUndefined();
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(vectorNetworkFrom(reopened, "vector_cut_result")).toEqual(extracted);
+  });
+
+  it("rejects stale result IDs and inherited locks before planning a line Cut", () => {
+    const document = documentWithVector();
+    const source = document.nodesById.vector_editable;
+    if (
+      !source ||
+      source.kind !== "vector" ||
+      !("network" in source.properties)
+    ) {
+      throw new Error("Missing editable vector");
+    }
+    source.properties.network = closedNetwork();
+    expect(
+      planVectorSemanticEdit(document, "page_welcome", "vector_editable", {
+        action: "cut-with-line",
+        start: { x: -20, y: 40 },
+        end: { x: 120, y: 40 },
+        resultNodeId: "title_welcome",
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-geometry" });
+    document.nodesById.frame_welcome!.locked = true;
+    expect(
+      planVectorSemanticEdit(document, "page_welcome", "vector_editable", {
+        action: "cut-with-line",
+        start: { x: -20, y: 40 },
+        end: { x: 120, y: 40 },
+        resultNodeId: "vector_cut_result",
+      }),
+    ).toMatchObject({ ok: false, code: "locked" });
+  });
+
   it("resolves the active contour from point selection and rejects stale cut IDs", () => {
     const document = documentWithVector();
     const node = document.nodesById.vector_editable;
@@ -415,8 +573,11 @@ describe("vector editing runtime plans", () => {
   });
 });
 
-function vectorNetworkFrom(runtime: EditorRuntime): VectorNetwork {
-  const node = runtime.getSnapshot().document.nodesById.vector_editable;
+function vectorNetworkFrom(
+  runtime: EditorRuntime,
+  nodeId = "vector_editable",
+): VectorNetwork {
+  const node = runtime.getSnapshot().document.nodesById[nodeId];
   if (!node || node.kind !== "vector" || !("network" in node.properties)) {
     throw new Error("Missing editable vector");
   }

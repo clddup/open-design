@@ -3368,7 +3368,9 @@ describe("App", () => {
       expect(leaferHarness.input?.vectorEditScope?.tool).toBe("cut"),
     );
     expect(
-      screen.getByText("Click a point or path to create a break"),
+      screen.getByText(
+        "Click a point or path to create a break, or drag across the object to divide it into layers",
+      ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cut" })).toHaveAttribute(
       "aria-pressed",
@@ -3503,6 +3505,139 @@ describe("App", () => {
 
     act(() => leaferCallbacks().onVectorEditExit?.());
     expect(screen.queryByText("Editing Logo curve")).not.toBeInTheDocument();
+  });
+
+  it("divides a closed vector into two selected sibling layers through the Canvas callback", async () => {
+    renderApp();
+    act(() => {
+      const current = runtime().getSnapshot();
+      const result = runtime().apply({
+        transactionId: "insert_closed_vector",
+        documentId: current.document.documentId,
+        baseRevision: current.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Insert closed vector",
+        commands: [
+          {
+            commandId: "insert_closed_vector",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 0,
+            node: {
+              id: "closed_vector",
+              name: "Badge contour",
+              parentId: "frame_welcome",
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 40, 40],
+              size: { width: 100, height: 100 },
+              opacity: 1,
+              extensions: {},
+              kind: "vector",
+              properties: {
+                network: {
+                  vertices: [
+                    { id: "vertex_a", x: 0, y: 0 },
+                    { id: "vertex_b", x: 100, y: 0 },
+                    { id: "vertex_c", x: 100, y: 100 },
+                    { id: "vertex_d", x: 0, y: 100 },
+                  ],
+                  segments: [
+                    {
+                      id: "segment_ab",
+                      startVertexId: "vertex_a",
+                      endVertexId: "vertex_b",
+                    },
+                    {
+                      id: "segment_bc",
+                      startVertexId: "vertex_b",
+                      endVertexId: "vertex_c",
+                    },
+                    {
+                      id: "segment_cd",
+                      startVertexId: "vertex_c",
+                      endVertexId: "vertex_d",
+                    },
+                    {
+                      id: "segment_da",
+                      startVertexId: "vertex_d",
+                      endVertexId: "vertex_a",
+                    },
+                  ],
+                  paths: [
+                    {
+                      id: "path_closed",
+                      closed: true,
+                      segments: [
+                        { segmentId: "segment_ab", reversed: false },
+                        { segmentId: "segment_bc", reversed: false },
+                        { segmentId: "segment_cd", reversed: false },
+                        { segmentId: "segment_da", reversed: false },
+                      ],
+                    },
+                  ],
+                  regions: [
+                    {
+                      id: "region_face",
+                      windingRule: "nonzero",
+                      loops: [{ pathId: "path_closed", reversed: false }],
+                    },
+                  ],
+                },
+                fills: [{ type: "solid", color: "#151515", opacity: 1 }],
+                strokes: [],
+                strokeWidth: 0,
+              },
+            },
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      runtime().setSelection(["closed_vector"], "closed_vector");
+    });
+    const canvas = screen.getByRole("main", { name: "Design canvas" });
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Enter" });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope?.nodeId).toBe(
+        "closed_vector",
+      ),
+    );
+
+    const beforeRevision = runtime().getSnapshot().document.revision;
+    let response:
+      | ReturnType<NonNullable<LeaferEngineCallbacks["onVectorLineCut"]>>
+      | undefined;
+    act(() => {
+      response = leaferCallbacks().onVectorLineCut?.({
+        end: { x: 120, y: 40 },
+        nodeId: "closed_vector",
+        start: { x: -20, y: 40 },
+      });
+    });
+    expect(response).toMatchObject({ ok: true });
+    if (!response?.ok) throw new Error("Missing vector divide response");
+    const resultNodeId = response.resultNodeIds[1];
+    expect(resultNodeId).toMatch(/^vector_cut_[a-f0-9]{32}$/);
+    expect(runtime().getSnapshot().document.revision).toBe(beforeRevision + 1);
+    expect(runtime().getSnapshot().state.selection).toEqual({
+      nodeIds: ["closed_vector", resultNodeId],
+      anchorNodeId: resultNodeId,
+    });
+    const retained = runtime().getSnapshot().document.nodesById.closed_vector;
+    const extracted = runtime().getSnapshot().document.nodesById[resultNodeId];
+    expect(retained?.size).toEqual({ width: 100, height: 40 });
+    expect(extracted?.size).toEqual({ width: 100, height: 60 });
+    expect(screen.queryByText("Editing Badge contour")).not.toBeInTheDocument();
+    expect(runtime().getSnapshot().state.history.undo.at(-1)?.label).toBe(
+      "Edit vector points",
+    );
+    expect(runtime().undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime().getSnapshot().document.nodesById[resultNodeId],
+    ).toBeUndefined();
   });
 
   it("reorders selected siblings from the layer-order menu and macOS shortcuts", async () => {

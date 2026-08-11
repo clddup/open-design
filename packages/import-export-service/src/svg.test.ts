@@ -7,8 +7,12 @@ import {
   type Paint,
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "@opendesign/geometry-service/boolean-resolver";
-import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
 import {
+  normalizeVectorNetwork,
+  resolvePathPropertiesData,
+} from "@opendesign/geometry-service/editable-vector";
+import {
+  cutVectorNetworkByLine,
   cutVectorPath,
   setVectorPathClosed,
 } from "@opendesign/geometry-service/vector-edit";
@@ -792,6 +796,115 @@ describe("versioned SVG interchange", () => {
       kind: "vector",
       properties: { network: cut.network, fills: [] },
     });
+
+    const divided = cutVectorNetworkByLine(
+      sourceVector.properties.network,
+      { x: -10, y: 50 },
+      { x: 110, y: 50 },
+    );
+    if (!divided.ok) throw new Error(divided.message);
+    const retained = normalizeVectorNetwork(divided.retainedNetwork);
+    const extracted = normalizeVectorNetwork(divided.extractedNetwork);
+    if (
+      !retained.ok ||
+      !retained.offset ||
+      !extracted.ok ||
+      !extracted.offset
+    ) {
+      throw new Error("Divided SVG fixtures did not normalize");
+    }
+    const dividedDocument = structuredClone(document);
+    const retainedNode = dividedDocument.nodesById.vector_1;
+    if (
+      !retainedNode ||
+      retainedNode.kind !== "vector" ||
+      !("network" in retainedNode.properties)
+    ) {
+      throw new Error("Missing retained SVG vector fixture");
+    }
+    retainedNode.transform = [
+      1,
+      0,
+      0,
+      1,
+      12 + retained.offset.x,
+      16 + retained.offset.y,
+    ];
+    retainedNode.size = {
+      width: retained.bounds.width,
+      height: retained.bounds.height,
+    };
+    retainedNode.properties.network = retained.network;
+    const extractedNode = structuredClone(retainedNode);
+    extractedNode.id = "vector_2";
+    extractedNode.name = "Editable vector Cut";
+    extractedNode.transform = [
+      1,
+      0,
+      0,
+      1,
+      12 + extracted.offset.x,
+      16 + extracted.offset.y,
+    ];
+    extractedNode.size = {
+      width: extracted.bounds.width,
+      height: extracted.bounds.height,
+    };
+    if (!("network" in extractedNode.properties)) {
+      throw new Error("Missing extracted SVG vector network fixture");
+    }
+    extractedNode.properties.network = extracted.network;
+    dividedDocument.nodesById.vector_2 = extractedNode;
+    dividedDocument.pagesById.page_1!.rootNodeIds = ["vector_1", "vector_2"];
+
+    const dividedExport = exportSvg({
+      document: dividedDocument,
+      rootNodeIds: ["vector_1", "vector_2"],
+      viewport: { x: 0, y: 0, width: 150, height: 150 },
+      includeLayerIds: true,
+      title: "Divided editable vector",
+    });
+    expect(dividedExport.ok).toBe(true);
+    if (!dividedExport.ok) return;
+    expect(dividedExport.issues).toEqual([]);
+    expect(
+      dividedExport.svg.match(/data-opendesign-vector-network-version="2"/g),
+    ).toHaveLength(2);
+    expect(
+      [...dividedExport.svg.matchAll(/\sd="([^"]+)"/g)]
+        .map((match) => match[1])
+        .filter((path) => path?.endsWith(" Z")),
+    ).toHaveLength(2);
+
+    const dividedImported = importSvg(
+      { svg: dividedExport.svg, idPrefix: "editable_vector_divided" },
+      geometry,
+    );
+    expect(dividedImported.ok).toBe(true);
+    if (!dividedImported.ok) return;
+    expect(dividedImported.issues).toEqual([]);
+    const importedDividedVectors = dividedImported.nodes.filter(
+      (node): node is Extract<DesignNode, { kind: "vector" }> =>
+        node.kind === "vector",
+    );
+    expect(importedDividedVectors).toHaveLength(2);
+    const importedDividedNetworks = importedDividedVectors.map((node) => {
+      if (!("network" in node.properties)) {
+        throw new Error(
+          "Imported divided Vector lost editable network metadata",
+        );
+      }
+      return node.properties.network;
+    });
+    expect(importedDividedNetworks).toEqual([
+      retained.network,
+      extracted.network,
+    ]);
+    expect(
+      importedDividedNetworks.every((network) =>
+        network.paths.every((path) => path.closed),
+      ),
+    ).toBe(true);
   });
 
   it("round-trips directed Line geometry and independent standard SVG endpoint markers", () => {

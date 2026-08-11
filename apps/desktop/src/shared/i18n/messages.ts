@@ -597,10 +597,14 @@ export const enMessages = {
   "canvas.vectorEditing": "Editing {{name}}",
   "canvas.vectorEditingHint":
     "{{count}} points selected · Shift-click selects more",
-  "canvas.vectorCutHint": "Click a point or path to create a break",
+  "canvas.vectorCutHint":
+    "Click a point or path to create a break, or drag across the object to divide it into layers",
   "canvas.vectorCutUnavailable": "Vector cut result is unavailable",
   "canvas.vectorCutApplyMissing":
     "Cut vector is unavailable after applying the edit",
+  "canvas.vectorLineCutUnavailable": "Vector divide result is unavailable",
+  "canvas.vectorLineCutApplyMissing":
+    "Divided vector layers are unavailable after applying the edit",
   "canvas.vectorEditingReadOnly":
     "Read-only · Locked or unsupported vector topology",
   "canvas.exitVectorEditing": "Finish editing vector points",
@@ -1466,9 +1470,12 @@ const zhCNMessages = {
   "canvas.exitBooleanEditing": "完成布尔源图层编辑",
   "canvas.vectorEditing": "正在编辑{{name}}",
   "canvas.vectorEditingHint": "已选择 {{count}} 个节点 · Shift 点击可多选",
-  "canvas.vectorCutHint": "点击节点或路径创建断点",
+  "canvas.vectorCutHint":
+    "点击节点或路径创建断点，或拖拽穿过对象将其分为独立图层",
   "canvas.vectorCutUnavailable": "路径切断结果不可用",
   "canvas.vectorCutApplyMissing": "应用切断操作后找不到对应矢量",
+  "canvas.vectorLineCutUnavailable": "矢量分割结果不可用",
+  "canvas.vectorLineCutApplyMissing": "应用分割操作后找不到结果图层",
   "canvas.vectorEditingReadOnly": "只读 · 图层已锁定或矢量拓扑暂不支持",
   "canvas.exitVectorEditing": "完成矢量节点编辑",
   "canvas.vectorEditTool": "矢量编辑工具",

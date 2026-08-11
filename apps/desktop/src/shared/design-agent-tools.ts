@@ -6,6 +6,7 @@ import {
   type DesignAsset,
   type DesignOperation,
   type ImagePlacement,
+  type Point,
 } from "@opendesign/design-contracts";
 import {
   isSvgInterchangeIssue,
@@ -446,6 +447,14 @@ export type DesignVectorToolInput =
       nodeId: string;
       pageId: string;
       pathId: string;
+    }
+  | {
+      action: "cut-with-line";
+      end: Point;
+      label: string;
+      nodeId: string;
+      pageId: string;
+      start: Point;
     };
 
 // The canonical DesignOperation schema is deliberately exhaustive and is used
@@ -477,6 +486,16 @@ const MODEL_BLEND_MODES = [
 const MODEL_POINT_SCHEMA = {
   type: "object",
   properties: { x: { type: "number" }, y: { type: "number" } },
+  required: ["x", "y"],
+  additionalProperties: false,
+} as const;
+
+const MODEL_VECTOR_LOCAL_POINT_SCHEMA = {
+  type: "object",
+  properties: {
+    x: { type: "number", minimum: -1_000_000, maximum: 1_000_000 },
+    y: { type: "number", minimum: -1_000_000, maximum: 1_000_000 },
+  },
   required: ["x", "y"],
   additionalProperties: false,
 } as const;
@@ -1187,9 +1206,11 @@ const MODEL_ARRANGE_SCHEMA = {
 const MODEL_VECTOR_EDIT_SCHEMA = {
   type: "object",
   description:
-    "Edit one explicit existing editable Vector Network by stable Page, node, path, vertex, and segment IDs from inspection. set-closed requires closed; cut-path requires pathId and at. The host derives all new geometry, bounds, and transforms.",
+    "Edit one explicit existing editable Vector Network by stable Page, node, path, vertex, and segment IDs from inspection. set-closed requires closed; cut-path requires pathId and at; cut-with-line requires start and end in the inspected node's local coordinate space. The host derives all new geometry, result layer IDs, bounds, and transforms.",
   properties: {
-    action: { enum: ["set-closed", "reverse-path", "cut-path"] },
+    action: {
+      enum: ["set-closed", "reverse-path", "cut-path", "cut-with-line"],
+    },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     nodeId: { type: "string", minLength: 1, maxLength: 256 },
@@ -1222,6 +1243,16 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
           additionalProperties: false,
         },
       ],
+    },
+    start: {
+      ...MODEL_VECTOR_LOCAL_POINT_SCHEMA,
+      description:
+        "Required only for cut-with-line. Start of the finite cutting line in inspected node-local coordinates.",
+    },
+    end: {
+      ...MODEL_VECTOR_LOCAL_POINT_SCHEMA,
+      description:
+        "Required only for cut-with-line. End of the finite cutting line in inspected node-local coordinates.",
     },
   },
   required: ["action", "label", "pageId", "nodeId"],
@@ -1818,7 +1849,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_VECTOR_TOOL_NAME,
     description:
-      "Edit one existing non-branching editable Vector Network without asking the model to rewrite vertices, segments, path runs, regions, bounds, or transforms. set-closed opens or closes one explicit contour; reverse-path reverses one contour while preserving effective closed-region winding; cut-path creates a true break at an inspected vertex or at parameter t on an inspected line/cubic segment. A closed contour becomes open, while an open contour becomes two independently editable open path runs with stable retained IDs and host-authored endpoint, segment, and path IDs. Targets are explicit stable Page, node, path, vertex, and segment IDs returned by inspection, never the send-time or live selection. The host computes geometry through the same versioned vector-edit service as the human canvas, previews the change, and applies one atomic undoable EditorRuntime transaction. It rejects missing, locked, stale, out-of-scope, already-satisfied, invalid, branching, or connected path-run targets. Drag-across Cut, connect/disconnect, branches, flatten, and outline stroke are separate capabilities and must not be simulated with this tool.",
+      "Edit one existing non-branching editable Vector Network without asking the model to rewrite vertices, segments, path runs, regions, bounds, transforms, or result layer IDs. set-closed opens or closes one explicit contour; reverse-path reverses one contour while preserving effective closed-region winding; cut-path creates a true break at an inspected vertex or at parameter t on an inspected line/cubic segment; cut-with-line divides supported closed contours along one finite line in inspected node-local coordinates and moves the extracted pieces into one host-created sibling Vector layer. Both divided pieces receive real closing connectors and remain editable. Targets are explicit stable Page, node, path, vertex, and segment IDs returned by inspection, never the send-time or live selection. The host computes geometry through the same versioned vector-edit service as the human canvas, previews the complete change, and applies one atomic undoable EditorRuntime transaction. It rejects missing, locked, stale, out-of-scope, already-satisfied, invalid, branching, tangent, overlapping, open-contour, compound-hole, or ambiguous multi-intersection targets. Multi-Vector-layer Cut, open-stroke division, connect/disconnect, branches, flatten, and outline stroke remain separate capabilities and must not be simulated with this tool.",
     inputSchema: MODEL_VECTOR_EDIT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2723,7 +2754,8 @@ export function isDesignVectorToolInput(
     !isRecord(input) ||
     (input.action !== "set-closed" &&
       input.action !== "reverse-path" &&
-      input.action !== "cut-path") ||
+      input.action !== "cut-path" &&
+      input.action !== "cut-with-line") ||
     !safeLabel(input.label) ||
     !safeId(input.pageId) ||
     !safeId(input.nodeId)
@@ -2751,6 +2783,13 @@ export function isDesignVectorToolInput(
       input.pathId === undefined
         ? ["action", "label", "nodeId", "pageId"]
         : ["action", "label", "nodeId", "pageId", "pathId"],
+    );
+  }
+  if (input.action === "cut-with-line") {
+    return (
+      finiteBoundedPoint(input.start, 1_000_000) &&
+      finiteBoundedPoint(input.end, 1_000_000) &&
+      exactKeys(input, ["action", "end", "label", "nodeId", "pageId", "start"])
     );
   }
   if (!safeId(input.pathId) || !isRecord(input.at)) return false;
@@ -3106,6 +3145,15 @@ function onlyKeys(
 
 function finite(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function finiteBoundedPoint(value: unknown, maximum: number): value is Point {
+  return (
+    isRecord(value) &&
+    finiteBounded(value.x, maximum) &&
+    finiteBounded(value.y, maximum) &&
+    exactKeys(value, ["x", "y"])
+  );
 }
 
 function positive(value: unknown): value is number {

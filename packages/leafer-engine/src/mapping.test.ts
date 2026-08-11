@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import {
+  cutVectorNetworkByLine,
   cutVectorPath,
   setVectorPathClosed,
 } from "@opendesign/geometry-service/vector-edit";
@@ -854,6 +855,35 @@ describe("Leafer scene projection", () => {
     if (editable.kind !== "vector" || !("network" in editable.properties)) {
       throw new Error("Missing editable network");
     }
+    const originalNetwork = structuredClone(editable.properties.network);
+    const divided = cutVectorNetworkByLine(
+      originalNetwork,
+      { x: -10, y: 50 },
+      { x: 110, y: 50 },
+    );
+    if (!divided.ok) throw new Error(divided.message);
+    editable.properties.network = divided.retainedNetwork;
+    const extracted = structuredClone(editable);
+    extracted.id = "editable_vector_cut";
+    extracted.name = "Editable vector Cut";
+    if (!("network" in extracted.properties)) {
+      throw new Error("Missing extracted editable network");
+    }
+    extracted.properties.network = divided.extractedNetwork;
+    document.nodesById[extracted.id] = extracted;
+    frame.childIds.push(extracted.id);
+    const dividedProjection = projectDesignPage(document, "page_welcome");
+    for (const nodeId of [editable.id, extracted.id]) {
+      const path = dividedProjection.elementsById.get(nodeId)?.data.path;
+      expect(typeof path === "string" && path.endsWith(" Z")).toBe(true);
+      expect(dividedProjection.elementsById.get(nodeId)?.data.fill).toEqual([
+        { type: "solid", color: "#4f7fff", opacity: 1, visible: true },
+      ]);
+    }
+    frame.childIds.pop();
+    delete document.nodesById[extracted.id];
+    editable.properties.network = originalNetwork;
+
     const opened = setVectorPathClosed(
       editable.properties.network,
       false,

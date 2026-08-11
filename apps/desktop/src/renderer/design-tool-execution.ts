@@ -742,6 +742,10 @@ async function executeDesignToolRequestUnsafe(
       request.context.mutationTarget,
       "Vector",
     );
+    const safeToolCallId =
+      request.call.toolCallId.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 180) ||
+      "tool";
+    const resultNodeId = `vector_cut_${safeToolCallId}_${document.revision}`;
     const plan = planVectorSemanticEdit(
       document,
       input.pageId,
@@ -757,11 +761,18 @@ async function executeDesignToolRequestUnsafe(
               action: input.action,
               ...(input.pathId ? { pathId: input.pathId } : {}),
             }
-          : {
-              action: input.action,
-              at: input.at,
-              pathId: input.pathId,
-            },
+          : input.action === "cut-path"
+            ? {
+                action: input.action,
+                at: input.at,
+                pathId: input.pathId,
+              }
+            : {
+                action: input.action,
+                end: input.end,
+                resultNodeId,
+                start: input.start,
+              },
     );
     if (!plan.ok) {
       throw new Error(`vector-edit.${plan.code}: ${plan.message}`);
@@ -804,7 +815,10 @@ async function executeDesignToolRequestUnsafe(
       "network" in applied.properties
         ? applied.properties.network
         : undefined;
-    const pathId = input.pathId ?? network?.paths[0]?.id;
+    const pathId =
+      input.action === "cut-with-line"
+        ? undefined
+        : (input.pathId ?? network?.paths[0]?.id);
     const path = network?.paths.find((candidate) => candidate.id === pathId);
     return {
       requestId: request.requestId,
@@ -816,14 +830,21 @@ async function executeDesignToolRequestUnsafe(
           label: input.label,
           pageId: input.pageId,
           nodeId: input.nodeId,
-          pathId,
+          ...(pathId ? { pathId, closed: path?.closed } : {}),
           ...(plan.cutResult
             ? {
                 cutVertexIds: plan.cutResult.cutVertexIds,
                 pathIds: plan.cutResult.pathIds,
               }
             : {}),
-          closed: path?.closed,
+          ...(plan.lineCutResult
+            ? {
+                extractedPathIds: plan.lineCutResult.extractedPathIds,
+                intersectionCount: plan.lineCutResult.intersectionCount,
+                resultNodeIds: plan.lineCutResult.resultNodeIds,
+                retainedPathIds: plan.lineCutResult.retainedPathIds,
+              }
+            : {}),
           revision: result.revision.revision,
           atomic: true,
           changes: result.changes,

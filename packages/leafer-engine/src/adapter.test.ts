@@ -2924,6 +2924,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect((hitPath as FakePath & { hittable: boolean }).hittable).toBe(true);
 
     app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+    expect(onVectorCut).not.toHaveBeenCalled();
+    app.emit("pointer.up", pointerEvent(30, 15, hitPath));
 
     expect(onVectorCut).toHaveBeenCalledWith({
       at: {
@@ -2956,6 +2958,93 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect((hitPath as FakePath & { hittable: boolean }).hittable).toBe(false);
     app.emit("pointer.down", pointerEvent(30, 15, hitPath));
     expect(onVectorCut).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("previews a node-local drag Cut, cancels with Escape, and submits only on pointer up", async () => {
+    const onVectorLineCut = vi.fn(() => ({
+      ok: true as const,
+      resultNodeIds: ["editable_curve", "vector_cut_result"] as const,
+    }));
+    const onVectorEditExit = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEditExit,
+      onVectorLineCut,
+    });
+    const input = withVectorEditFixture(createInput());
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope!, tool: "cut" },
+    });
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !path?.parent) throw new Error("Missing editable vector");
+    const overlay = path.parent.children.at(-1);
+    if (!(overlay instanceof FakeGroup)) {
+      throw new Error("Missing vector overlay");
+    }
+    const guide = overlay.children
+      .filter((child): child is FakePath => child instanceof FakePath)
+      .at(-1);
+    if (!guide) throw new Error("Missing Cut guide");
+
+    app.emit("pointer.down", pointerEvent(-20, 15, app.tree));
+    app.emit("pointer.move", pointerEvent(140, 15, app.tree));
+    expect((guide as FakePath & { visible: boolean }).visible).toBe(true);
+    expect(guide.path).toBe("M -20 15 L 140 15");
+    expect(onVectorLineCut).not.toHaveBeenCalled();
+
+    emitWindowKey("Escape");
+    expect((guide as FakePath & { visible: boolean }).visible).toBe(false);
+    expect(onVectorLineCut).not.toHaveBeenCalled();
+    expect(onVectorEditExit).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(-20, 18, app.tree));
+    app.emit("pointer.move", pointerEvent(140, 18, app.tree));
+    expect((guide as FakePath & { visible: boolean }).visible).toBe(true);
+    adapter.sync({
+      ...input,
+      vectorEditScope: {
+        ...input.vectorEditScope!,
+        readOnly: true,
+        tool: "cut",
+      },
+    });
+    expect((guide as FakePath & { visible: boolean }).visible).toBe(false);
+    expect(onVectorLineCut).not.toHaveBeenCalled();
+
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope!, tool: "cut" },
+    });
+    app.emit("pointer.down", pointerEvent(-20, 19, app.tree));
+    app.emit("pointer.move", pointerEvent(140, 19, app.tree));
+    app.emit("pointer.up", {
+      ...pointerEvent(140, 19, app.tree),
+      isCancel: true,
+    });
+    expect((guide as FakePath & { visible: boolean }).visible).toBe(false);
+    expect(onVectorLineCut).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(-20, 20, app.tree));
+    app.emit("pointer.move", pointerEvent(140, 20, app.tree));
+    app.emit("pointer.up", pointerEvent(140, 20, app.tree));
+    expect(onVectorLineCut).toHaveBeenCalledWith({
+      end: { x: 140, y: 20 },
+      nodeId: "editable_curve",
+      start: { x: -20, y: 20 },
+    });
+    expect((guide as FakePath & { visible: boolean }).visible).toBe(false);
+    expect(onVectorEditExit).toHaveBeenCalledTimes(1);
+
+    onVectorEditExit.mockClear();
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope!, tool: "cut" },
+    });
+    emitWindowKey("Escape");
+    expect(onVectorEditExit).toHaveBeenCalledTimes(1);
     adapter.dispose();
   });
 

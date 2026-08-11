@@ -56,6 +56,24 @@ export type VectorCutResult =
     }
   | { ok: false; code: VectorEditFailureCode; message: string };
 
+export interface VectorLineCutIntersection {
+  lineT: number;
+  location: VectorCutLocation;
+  pathId: string;
+  point: Point;
+}
+
+export type VectorLineCutResult =
+  | {
+      ok: true;
+      extractedNetwork: VectorNetwork;
+      extractedPathIds: readonly string[];
+      intersections: readonly VectorLineCutIntersection[];
+      retainedNetwork: VectorNetwork;
+      retainedPathIds: readonly string[];
+    }
+  | { ok: false; code: VectorEditFailureCode; message: string };
+
 export interface VectorSegmentHit {
   distance: number;
   pathId: string;
@@ -78,6 +96,8 @@ interface EditableContour {
 
 const HANDLE_EPSILON = 0.000_001;
 const DEFAULT_HANDLE_RATIO = 1 / 3;
+const LINE_CUT_ROOT_EPSILON = 0.000_000_1;
+const LINE_CUT_SIDE_EPSILON = 0.000_001;
 
 export function vectorNetworkEditability(
   network: VectorNetwork,
@@ -314,6 +334,573 @@ export function cutVectorPath(
 }
 
 /**
+ * Divides each closed, disjoint contour crossed exactly twice by a finite line
+ * segment. Both results receive their own closing edge along the cut, matching
+ * professional object-division behavior rather than leaving two open arcs.
+ * The piece containing each source contour's first directed vertex retains the
+ * source path ID; all other cut pieces are returned in one extracted network.
+ */
+export function cutVectorNetworkByLine(
+  network: VectorNetwork,
+  start: Point,
+  end: Point,
+): VectorLineCutResult {
+  const failure = editableFailure(network);
+  if (failure) return failure;
+  if (
+    !Number.isFinite(start.x) ||
+    !Number.isFinite(start.y) ||
+    !Number.isFinite(end.x) ||
+    !Number.isFinite(end.y)
+  ) {
+    return invalidNetwork("Vector line cut endpoints must be finite");
+  }
+  const cutLength = distance(start, end);
+  if (!Number.isFinite(cutLength)) {
+    return invalidNetwork("Vector line cut length must be finite");
+  }
+  if (cutLength <= HANDLE_EPSILON) {
+    return noOp("Vector line cut requires two distinct points");
+  }
+
+  const affected: Array<{
+    contour: EditableContour;
+    intersections: readonly ContourLineCutIntersection[];
+  }> = [];
+  for (const contour of editableContours(network)) {
+    const resolved = contourLineCutIntersections(network, contour, start, end);
+    if (!resolved.ok) return resolved;
+    if (resolved.intersections.length === 0) continue;
+    if (!contour.closed) {
+      return unsupportedTopology(
+        `Drag Cut through open path ${contour.pathId} requires the open-stroke division slice`,
+      );
+    }
+    const sourceRegions = network.regions.filter((region) =>
+      region.loops.some((loop) => loop.pathId === contour.pathId),
+    );
+    if (
+      sourceRegions.length > 1 ||
+      sourceRegions.some((region) => region.loops.length !== 1)
+    ) {
+      return unsupportedTopology(
+        `Drag Cut through compound region path ${contour.pathId} requires hole redistribution`,
+      );
+    }
+    if (resolved.intersections.length !== 2) {
+      return unsupportedTopology(
+        `Drag Cut currently requires exactly two crossing intersections per closed contour; ${contour.pathId} has ${resolved.intersections.length}`,
+      );
+    }
+    affected.push({ contour, intersections: resolved.intersections });
+  }
+  if (affected.length === 0) {
+    return noOp("Vector line cut does not cross a supported closed contour");
+  }
+
+  let divided = structuredClone(network);
+  const extractedPathIds = new Set<string>();
+  const intersections: VectorLineCutIntersection[] = [];
+  for (const target of affected) {
+    const result = divideClosedContourByLine(
+      divided,
+      target.contour,
+      target.intersections,
+    );
+    if (!result.ok) return result;
+    divided = result.network;
+    extractedPathIds.add(result.extractedPathId);
+    intersections.push(
+      ...target.intersections.map((intersection) => ({
+        lineT: intersection.lineT,
+        location: intersection.location,
+        pathId: target.contour.pathId,
+        point: intersection.point,
+      })),
+    );
+  }
+
+  const retainedPathIds = divided.paths
+    .map((path) => path.id)
+    .filter((pathId) => !extractedPathIds.has(pathId));
+  const extractedOrderedPathIds = divided.paths
+    .map((path) => path.id)
+    .filter((pathId) => extractedPathIds.has(pathId));
+  const retainedNetwork = vectorNetworkSubset(divided, retainedPathIds);
+  const extractedNetwork = vectorNetworkSubset(
+    divided,
+    extractedOrderedPathIds,
+  );
+  const retainedIssues = validateVectorNetwork(retainedNetwork);
+  const extractedIssues = validateVectorNetwork(extractedNetwork);
+  if (retainedIssues.length > 0 || extractedIssues.length > 0) {
+    return invalidNetwork(
+      [...retainedIssues, ...extractedIssues]
+        .map((issue) => issue.message)
+        .join("; "),
+    );
+  }
+  return {
+    ok: true,
+    extractedNetwork,
+    extractedPathIds: extractedOrderedPathIds,
+    intersections: intersections.sort(
+      (left, right) =>
+        left.lineT - right.lineT || left.pathId.localeCompare(right.pathId),
+    ),
+    retainedNetwork,
+    retainedPathIds,
+  };
+}
+
+interface ContourLineCutIntersection extends VectorLineCutIntersection {
+  pathParameter: number;
+}
+
+type ContourLineCutIntersectionResult =
+  | { ok: true; intersections: readonly ContourLineCutIntersection[] }
+  | { ok: false; code: VectorEditFailureCode; message: string };
+
+type DivideClosedContourResult =
+  | {
+      ok: true;
+      extractedPathId: string;
+      network: VectorNetwork;
+    }
+  | { ok: false; code: VectorEditFailureCode; message: string };
+
+function contourLineCutIntersections(
+  network: VectorNetwork,
+  contour: EditableContour,
+  lineStart: Point,
+  lineEnd: Point,
+): ContourLineCutIntersectionResult {
+  const vertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  const segments = new Map(
+    network.segments.map((segment) => [segment.id, segment]),
+  );
+  const candidates = new Map<string, ContourLineCutIntersection>();
+  for (const [referenceIndex, reference] of contour.references.entries()) {
+    const segment = segments.get(reference.segmentId)!;
+    const curve = directedCurve(segment, reference, vertices);
+    const roots = directedCurveLineRoots(curve, lineStart, lineEnd);
+    if (!roots.ok) {
+      return unsupportedTopology(
+        `Drag Cut overlaps path ${contour.pathId} at segment ${segment.id}`,
+      );
+    }
+    for (const rawT of roots.roots) {
+      const t =
+        rawT <= LINE_CUT_ROOT_EPSILON
+          ? 0
+          : rawT >= 1 - LINE_CUT_ROOT_EPSILON
+            ? 1
+            : rawT;
+      const point = normalizePoint(editableCurvePoint(curve, t));
+      const lineT = lineParameter(lineStart, lineEnd, point);
+      if (lineT < -LINE_CUT_ROOT_EPSILON || lineT > 1 + LINE_CUT_ROOT_EPSILON) {
+        continue;
+      }
+      const location: VectorCutLocation =
+        t === 0
+          ? { kind: "vertex", vertexId: curve.startVertexId }
+          : t === 1
+            ? { kind: "vertex", vertexId: curve.endVertexId }
+            : { kind: "segment", segmentId: segment.id, t };
+      const vertexIndex =
+        location.kind === "vertex"
+          ? contour.vertexIds.indexOf(location.vertexId)
+          : -1;
+      const pathParameter = vertexIndex >= 0 ? vertexIndex : referenceIndex + t;
+      const key =
+        location.kind === "vertex"
+          ? `vertex:${location.vertexId}`
+          : `segment:${location.segmentId}:${normalizeNumber(location.t)}`;
+      candidates.set(key, {
+        lineT: normalizeNumber(Math.max(0, Math.min(1, lineT))),
+        location,
+        pathId: contour.pathId,
+        pathParameter,
+        point,
+      });
+    }
+  }
+
+  const intersections: ContourLineCutIntersection[] = [];
+  for (const candidate of [...candidates.values()].sort(
+    (left, right) => left.pathParameter - right.pathParameter,
+  )) {
+    const crossing = contourCrossesLineAt(
+      network,
+      contour,
+      candidate.pathParameter,
+      lineStart,
+      lineEnd,
+    );
+    if (crossing === "ambiguous") {
+      return unsupportedTopology(
+        `Drag Cut is tangent to or overlaps path ${contour.pathId} at an unresolved boundary`,
+      );
+    }
+    if (crossing) intersections.push(candidate);
+  }
+  return { ok: true, intersections };
+}
+
+function divideClosedContourByLine(
+  network: VectorNetwork,
+  sourceContour: EditableContour,
+  intersections: readonly ContourLineCutIntersection[],
+): DivideClosedContourResult {
+  const [earlier, later] = intersections;
+  if (!earlier || !later) {
+    return unsupportedTopology("Drag Cut requires two ordered intersections");
+  }
+  const sourceRegion = network.regions.find((region) =>
+    region.loops.some((loop) => loop.pathId === sourceContour.pathId),
+  );
+  const firstCut = cutVectorPath(network, sourceContour.pathId, later.location);
+  if (!firstCut.ok) return firstCut;
+
+  let earlierLocation = earlier.location;
+  if (
+    earlier.location.kind === "segment" &&
+    later.location.kind === "segment" &&
+    earlier.location.segmentId === later.location.segmentId
+  ) {
+    if (later.location.t <= LINE_CUT_ROOT_EPSILON) {
+      return unsupportedTopology(
+        "Drag Cut could not remap two intersections on one segment",
+      );
+    }
+    earlierLocation = {
+      kind: "segment",
+      segmentId: earlier.location.segmentId,
+      t: earlier.location.t / later.location.t,
+    };
+  }
+  const secondCut = cutVectorPath(
+    firstCut.network,
+    sourceContour.pathId,
+    earlierLocation,
+  );
+  if (!secondCut.ok) return secondCut;
+  if (secondCut.pathIds.length !== 2) {
+    return unsupportedTopology(
+      `Drag Cut did not produce two open pieces for ${sourceContour.pathId}`,
+    );
+  }
+
+  let closed = secondCut.network;
+  for (const pathId of secondCut.pathIds) {
+    const result = setVectorPathClosed(closed, true, pathId);
+    if (!result.ok) return result;
+    closed = result.network;
+  }
+
+  const sourceStartVertexId = sourceContour.vertexIds[0]!;
+  const containingStart = secondCut.pathIds.filter((pathId) =>
+    vectorPathContainsVertex(closed, pathId, sourceStartVertexId),
+  );
+  if (containingStart.length !== 1) {
+    return unsupportedTopology(
+      `Drag Cut could not preserve the stable start of ${sourceContour.pathId}`,
+    );
+  }
+  let retainedPathId = containingStart[0]!;
+  let extractedPathId = secondCut.pathIds.find(
+    (pathId) => pathId !== retainedPathId,
+  )!;
+  if (retainedPathId !== sourceContour.pathId) {
+    swapVectorPathIds(closed, sourceContour.pathId, retainedPathId);
+    extractedPathId = retainedPathId;
+    retainedPathId = sourceContour.pathId;
+  }
+
+  if (!sourceRegion) {
+    closed.regions = closed.regions.filter(
+      (region) =>
+        !region.loops.some(
+          (loop) =>
+            loop.pathId === retainedPathId || loop.pathId === extractedPathId,
+        ),
+    );
+  } else {
+    const retainedRegion = closed.regions.find((region) =>
+      region.loops.some((loop) => loop.pathId === retainedPathId),
+    );
+    const extractedRegion = closed.regions.find((region) =>
+      region.loops.some((loop) => loop.pathId === extractedPathId),
+    );
+    if (!retainedRegion || !extractedRegion) {
+      return invalidNetwork(
+        `Drag Cut could not restore regions for ${sourceContour.pathId}`,
+      );
+    }
+    const sourceLoopReversed = sourceRegion.loops[0]?.reversed ?? false;
+    for (const region of [retainedRegion, extractedRegion]) {
+      region.windingRule = sourceRegion.windingRule;
+      region.loops[0]!.reversed = sourceLoopReversed;
+    }
+    if (retainedRegion.id !== sourceRegion.id) {
+      const conflict = closed.regions.find(
+        (region) => region.id === sourceRegion.id,
+      );
+      if (conflict) conflict.id = retainedRegion.id;
+      retainedRegion.id = sourceRegion.id;
+    }
+  }
+
+  return { ok: true, extractedPathId, network: closed };
+}
+
+function directedCurveLineRoots(
+  curve: DirectedCurve,
+  lineStart: Point,
+  lineEnd: Point,
+): { ok: true; roots: readonly number[] } | { ok: false } {
+  const controlStart = add(curve.start, curve.tangentStart ?? { x: 0, y: 0 });
+  const controlEnd = add(curve.end, curve.tangentEnd ?? { x: 0, y: 0 });
+  const sides = [curve.start, controlStart, controlEnd, curve.end].map(
+    (point) => signedLineDistance(lineStart, lineEnd, point),
+  );
+  const cubic = meaningful(curve.tangentStart) || meaningful(curve.tangentEnd);
+  if (
+    (cubic ? sides : [sides[0]!, sides[3]!]).every(
+      (value) => Math.abs(value) <= LINE_CUT_SIDE_EPSILON,
+    )
+  ) {
+    return { ok: false };
+  }
+  const roots = cubic
+    ? realPolynomialRoots(
+        -sides[0]! + 3 * sides[1]! - 3 * sides[2]! + sides[3]!,
+        3 * sides[0]! - 6 * sides[1]! + 3 * sides[2]!,
+        -3 * sides[0]! + 3 * sides[1]!,
+        sides[0]!,
+      )
+    : Math.abs(sides[0]! - sides[3]!) <= LINE_CUT_SIDE_EPSILON
+      ? []
+      : [sides[0]! / (sides[0]! - sides[3]!)];
+  if (Math.abs(sides[0]!) <= LINE_CUT_SIDE_EPSILON) roots.push(0);
+  if (Math.abs(sides[3]!) <= LINE_CUT_SIDE_EPSILON) roots.push(1);
+  return {
+    ok: true,
+    roots: dedupeNumbers(
+      roots.filter(
+        (root) =>
+          Number.isFinite(root) &&
+          root >= -LINE_CUT_ROOT_EPSILON &&
+          root <= 1 + LINE_CUT_ROOT_EPSILON,
+      ),
+    ).map((root) => Math.max(0, Math.min(1, root))),
+  };
+}
+
+function contourCrossesLineAt(
+  network: VectorNetwork,
+  contour: EditableContour,
+  pathParameter: number,
+  lineStart: Point,
+  lineEnd: Point,
+): boolean | "ambiguous" {
+  for (const delta of [0.000_01, 0.000_1, 0.001, 0.01]) {
+    const before = signedLineDistance(
+      lineStart,
+      lineEnd,
+      contourPointAt(network, contour, pathParameter - delta),
+    );
+    const after = signedLineDistance(
+      lineStart,
+      lineEnd,
+      contourPointAt(network, contour, pathParameter + delta),
+    );
+    if (
+      Math.abs(before) > LINE_CUT_SIDE_EPSILON &&
+      Math.abs(after) > LINE_CUT_SIDE_EPSILON
+    ) {
+      return before < 0 !== after < 0;
+    }
+  }
+  return "ambiguous";
+}
+
+function contourPointAt(
+  network: VectorNetwork,
+  contour: EditableContour,
+  rawParameter: number,
+): Point {
+  const count = contour.references.length;
+  const parameter = contour.closed
+    ? ((rawParameter % count) + count) % count
+    : Math.max(0, Math.min(count, rawParameter));
+  const index = Math.min(count - 1, Math.floor(parameter));
+  const t =
+    index === count - 1 ? Math.min(1, parameter - index) : parameter - index;
+  const reference = contour.references[index]!;
+  const segment = network.segments.find(
+    (candidate) => candidate.id === reference.segmentId,
+  )!;
+  const vertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  return editableCurvePoint(directedCurve(segment, reference, vertices), t);
+}
+
+function editableCurvePoint(curve: DirectedCurve, t: number): Point {
+  return meaningful(curve.tangentStart) || meaningful(curve.tangentEnd)
+    ? directedCurvePoint(curve, t)
+    : lerp(curve.start, curve.end, t);
+}
+
+function lineParameter(start: Point, end: Point, point: Point): number {
+  const delta = subtract(end, start);
+  const denominator = delta.x * delta.x + delta.y * delta.y;
+  return denominator <= HANDLE_EPSILON
+    ? 0
+    : ((point.x - start.x) * delta.x + (point.y - start.y) * delta.y) /
+        denominator;
+}
+
+function signedLineDistance(start: Point, end: Point, point: Point): number {
+  const delta = subtract(end, start);
+  const magnitude = Math.hypot(delta.x, delta.y);
+  return magnitude <= HANDLE_EPSILON
+    ? 0
+    : (delta.x * (point.y - start.y) - delta.y * (point.x - start.x)) /
+        magnitude;
+}
+
+function realPolynomialRoots(
+  cubic: number,
+  quadratic: number,
+  linear: number,
+  constant: number,
+): number[] {
+  if (Math.abs(cubic) <= LINE_CUT_ROOT_EPSILON) {
+    if (Math.abs(quadratic) <= LINE_CUT_ROOT_EPSILON) {
+      return Math.abs(linear) <= LINE_CUT_ROOT_EPSILON
+        ? []
+        : [-constant / linear];
+    }
+    const discriminant = linear * linear - 4 * quadratic * constant;
+    if (discriminant < -LINE_CUT_ROOT_EPSILON) return [];
+    if (Math.abs(discriminant) <= LINE_CUT_ROOT_EPSILON) {
+      return [-linear / (2 * quadratic)];
+    }
+    const root = Math.sqrt(Math.max(0, discriminant));
+    return [
+      (-linear - root) / (2 * quadratic),
+      (-linear + root) / (2 * quadratic),
+    ];
+  }
+  const a = quadratic / cubic;
+  const b = linear / cubic;
+  const c = constant / cubic;
+  const p = b - (a * a) / 3;
+  const q = (2 * a * a * a) / 27 - (a * b) / 3 + c;
+  const discriminant = (q * q) / 4 + (p * p * p) / 27;
+  const offset = a / 3;
+  if (discriminant > LINE_CUT_ROOT_EPSILON) {
+    const root = Math.sqrt(discriminant);
+    return [Math.cbrt(-q / 2 + root) + Math.cbrt(-q / 2 - root) - offset];
+  }
+  if (Math.abs(discriminant) <= LINE_CUT_ROOT_EPSILON) {
+    const root = Math.cbrt(-q / 2);
+    return [2 * root - offset, -root - offset];
+  }
+  const radius = 2 * Math.sqrt(-p / 3);
+  const angle = Math.acos(
+    Math.max(-1, Math.min(1, -q / 2 / Math.sqrt(-(p * p * p) / 27))),
+  );
+  return [0, 1, 2].map(
+    (index) => radius * Math.cos((angle + index * 2 * Math.PI) / 3) - offset,
+  );
+}
+
+function dedupeNumbers(values: readonly number[]): number[] {
+  const result: number[] = [];
+  for (const value of [...values].sort((left, right) => left - right)) {
+    if (
+      result.length === 0 ||
+      Math.abs(value - result[result.length - 1]!) > LINE_CUT_ROOT_EPSILON
+    ) {
+      result.push(value);
+    }
+  }
+  return result;
+}
+
+function vectorPathContainsVertex(
+  network: VectorNetwork,
+  pathId: string,
+  vertexId: string,
+): boolean {
+  const path = pathById(network, pathId);
+  if (!path) return false;
+  const segmentIds = new Set(
+    path.segments.map((reference) => reference.segmentId),
+  );
+  return network.segments.some(
+    (segment) =>
+      segmentIds.has(segment.id) &&
+      (segment.startVertexId === vertexId || segment.endVertexId === vertexId),
+  );
+}
+
+function swapVectorPathIds(
+  network: VectorNetwork,
+  firstId: string,
+  secondId: string,
+): void {
+  const first = pathById(network, firstId)!;
+  const second = pathById(network, secondId)!;
+  first.id = secondId;
+  second.id = firstId;
+  for (const region of network.regions) {
+    for (const loop of region.loops) {
+      if (loop.pathId === firstId) loop.pathId = secondId;
+      else if (loop.pathId === secondId) loop.pathId = firstId;
+    }
+  }
+}
+
+function vectorNetworkSubset(
+  network: VectorNetwork,
+  pathIds: readonly string[],
+): VectorNetwork {
+  const includedPaths = new Set(pathIds);
+  const paths = network.paths
+    .filter((path) => includedPaths.has(path.id))
+    .map((path) => structuredClone(path));
+  const segmentIds = new Set(
+    paths.flatMap((path) =>
+      path.segments.map((reference) => reference.segmentId),
+    ),
+  );
+  const segments = network.segments
+    .filter((segment) => segmentIds.has(segment.id))
+    .map((segment) => structuredClone(segment));
+  const vertexIds = new Set(
+    segments.flatMap((segment) => [segment.startVertexId, segment.endVertexId]),
+  );
+  return {
+    vertices: network.vertices
+      .filter((vertex) => vertexIds.has(vertex.id))
+      .map((vertex) => structuredClone(vertex)),
+    segments,
+    paths,
+    regions: network.regions
+      .filter((region) =>
+        region.loops.every((loop) => includedPaths.has(loop.pathId)),
+      )
+      .map((region) => structuredClone(region)),
+  };
+}
+
+/**
  * Opens or closes one explicit non-branching contour. Single-contour callers
  * may omit pathId; multi-contour callers must name the target path run.
  */
@@ -332,9 +919,9 @@ export function setVectorPathClosed(
       `Vector path ${contour.pathId} is already ${closed ? "closed" : "open"}`,
     );
   }
-  if (closed && contour.vertexIds.length < 3) {
+  if (closed && !contourCanFormClosedRegion(network, contour)) {
     return unsupportedTopology(
-      "A closed vector contour requires at least three vertices",
+      "A closed vector contour requires three vertices or a non-linear Bézier arc",
     );
   }
 
@@ -822,6 +1409,36 @@ function defaultHandles(
         }
       : {}),
   };
+}
+
+function contourCanFormClosedRegion(
+  network: VectorNetwork,
+  contour: EditableContour,
+): boolean {
+  if (contour.vertexIds.length >= 3) return true;
+  if (contour.vertexIds.length < 2) return false;
+  const vertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  const segments = new Map(
+    network.segments.map((segment) => [segment.id, segment]),
+  );
+  return contour.references.some((reference) => {
+    const curve = directedCurve(
+      segments.get(reference.segmentId)!,
+      reference,
+      vertices,
+    );
+    const chord = subtract(curve.end, curve.start);
+    const controlStart = add(curve.start, curve.tangentStart ?? { x: 0, y: 0 });
+    const controlEnd = add(curve.end, curve.tangentEnd ?? { x: 0, y: 0 });
+    return [controlStart, controlEnd].some((control) => {
+      const relative = subtract(control, curve.start);
+      return (
+        Math.abs(chord.x * relative.y - chord.y * relative.x) > HANDLE_EPSILON
+      );
+    });
+  });
 }
 
 function cutVectorPathAtVertex(
