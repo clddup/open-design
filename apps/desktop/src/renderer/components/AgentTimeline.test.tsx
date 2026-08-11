@@ -949,6 +949,7 @@ describe("AgentTimeline", () => {
   it("sends with Enter, keeps Shift+Enter as a newline, and shows selection scope", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(true);
+    const onMutationScopeChange = vi.fn();
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
         version: 3,
@@ -994,6 +995,8 @@ describe("AgentTimeline", () => {
         conversationTitle="Conversation"
         error={null}
         events={[]}
+        mutationScope="page"
+        onMutationScopeChange={onMutationScopeChange}
         onStop={vi.fn()}
         onSubmit={onSubmit}
         scope={{ kind: "selection", count: 2 }}
@@ -1001,7 +1004,12 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(screen.getByText("Selection · 2 layer(s)")).toBeInTheDocument();
+    expect(
+      screen.getByText("Context: Selection · 2 layer(s)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Can edit")).toBeInTheDocument();
+    await chooseNextOption(user, "Agent write scope");
+    expect(onMutationScopeChange).toHaveBeenCalledWith("document");
     const prompt = screen.getByLabelText("Continue the task");
     await user.type(prompt, "First line{Shift>}{Enter}{/Shift}Second line");
     expect(prompt).toHaveValue("First line\nSecond line");

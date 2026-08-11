@@ -1,4 +1,9 @@
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import {
+  Type,
+  type Static,
+  type TSchema,
+  type TUnion,
+} from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
 export const DESIGN_SCHEMA_VERSION = "1.8.0" as const;
@@ -12,6 +17,7 @@ export const APPEARANCE_DESIGN_SCHEMA_VERSION = "1.1.0" as const;
 export const LEGACY_DESIGN_SCHEMA_VERSION = "1.0.0" as const;
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
 export const MAX_TRANSACTION_COMMANDS = 500;
+export const MAX_PAGE_TRANSACTION_NODES = 50_000;
 
 export const JsonValueSchema = Type.Recursive((Self) =>
   Type.Union([
@@ -887,6 +893,48 @@ export const DeleteAssetCommandSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const InsertPageCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("insert_page"),
+    index: Type.Integer({ minimum: 0 }),
+    page: DesignPageSchema,
+    nodes: Type.Array(DesignNodeSchema, {
+      maxItems: MAX_PAGE_TRANSACTION_NODES,
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export const UpdatePageCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("update_page"),
+    pageId: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1, maxLength: 256 }),
+  },
+  { additionalProperties: false },
+);
+
+export const MovePageCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("move_page"),
+    pageId: Type.String({ minLength: 1 }),
+    index: Type.Integer({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
+export const DeletePageCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("delete_page"),
+    pageId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 export const NodeDesignOperationSchema = Type.Union([
   InsertElementCommandSchema,
   UpdatePropertiesCommandSchema,
@@ -895,10 +943,24 @@ export const NodeDesignOperationSchema = Type.Union([
   ReplaceSubtreeCommandSchema,
 ]);
 
-export const DesignOperationSchema = Type.Union([
+export const DesignOperationSchema: TUnion<
+  [
+    typeof NodeDesignOperationSchema,
+    typeof PutAssetCommandSchema,
+    typeof DeleteAssetCommandSchema,
+    typeof InsertPageCommandSchema,
+    typeof UpdatePageCommandSchema,
+    typeof MovePageCommandSchema,
+    typeof DeletePageCommandSchema,
+  ]
+> = Type.Union([
   NodeDesignOperationSchema,
   PutAssetCommandSchema,
   DeleteAssetCommandSchema,
+  InsertPageCommandSchema,
+  UpdatePageCommandSchema,
+  MovePageCommandSchema,
+  DeletePageCommandSchema,
 ]);
 
 export const DesignActorSchema = Type.Object(
@@ -915,7 +977,20 @@ export const DesignActorSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const DesignTransactionSchema = Type.Object(
+type DesignTransactionValue = {
+  transactionId: string;
+  documentId: string;
+  baseRevision: number;
+  actor: Static<typeof DesignActorSchema>;
+  label?: string;
+  summary?: string;
+  commands: Array<Static<typeof DesignOperationSchema>>;
+  extensions?: Static<typeof JsonObjectSchema>;
+};
+
+export const DesignTransactionSchema: TSchema & {
+  static: DesignTransactionValue;
+} = Type.Object(
   {
     transactionId: Type.String({ minLength: 1 }),
     documentId: Type.String({ minLength: 1 }),
@@ -982,6 +1057,22 @@ export const NodeChangeSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const PageChangeSchema = Type.Object(
+  {
+    type: Type.Union([
+      Type.Literal("added"),
+      Type.Literal("updated"),
+      Type.Literal("moved"),
+      Type.Literal("removed"),
+    ]),
+    pageId: Type.String({ minLength: 1 }),
+    before: Type.Optional(DesignPageSchema),
+    after: Type.Optional(DesignPageSchema),
+    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
+  },
+  { additionalProperties: false },
+);
+
 export const DesignChangeSetSchema = Type.Object(
   {
     documentId: Type.String({ minLength: 1 }),
@@ -999,6 +1090,16 @@ export const DesignChangeSetSchema = Type.Object(
     removedAssetIds: Type.Optional(
       Type.Array(Type.String(), { uniqueItems: true }),
     ),
+    addedPageIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    changedPageIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    removedPageIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    pageChanges: Type.Optional(Type.Array(PageChangeSchema)),
     changes: Type.Array(NodeChangeSchema),
   },
   { additionalProperties: false },
@@ -1244,9 +1345,12 @@ export const ExportArtifactSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const AtomicChildCommandSchema = DesignOperationSchema;
-export const DesignCommandSchema = DesignOperationSchema;
-export const RunAtomicDesignBatchCommandSchema = DesignTransactionSchema;
+export const AtomicChildCommandSchema: typeof DesignOperationSchema =
+  DesignOperationSchema;
+export const DesignCommandSchema: typeof DesignOperationSchema =
+  DesignOperationSchema;
+export const RunAtomicDesignBatchCommandSchema: typeof DesignTransactionSchema =
+  DesignTransactionSchema;
 
 export type JsonValue = Static<typeof JsonValueSchema>;
 export type JsonObject = Static<typeof JsonObjectSchema>;
@@ -1307,6 +1411,10 @@ export type DeleteElementCommand = Static<typeof DeleteElementCommandSchema>;
 export type ReplaceSubtreeCommand = Static<typeof ReplaceSubtreeCommandSchema>;
 export type PutAssetCommand = Static<typeof PutAssetCommandSchema>;
 export type DeleteAssetCommand = Static<typeof DeleteAssetCommandSchema>;
+export type InsertPageCommand = Static<typeof InsertPageCommandSchema>;
+export type UpdatePageCommand = Static<typeof UpdatePageCommandSchema>;
+export type MovePageCommand = Static<typeof MovePageCommandSchema>;
+export type DeletePageCommand = Static<typeof DeletePageCommandSchema>;
 export type DesignOperation = Static<typeof DesignOperationSchema>;
 export type DesignActor = Static<typeof DesignActorSchema>;
 export type DesignTransaction = Static<typeof DesignTransactionSchema>;
@@ -1314,6 +1422,7 @@ export type DesignErrorCode = Static<typeof DesignErrorCodeSchema>;
 export type DesignError = Static<typeof DesignErrorSchema>;
 export type Revision = Static<typeof RevisionSchema>;
 export type NodeChange = Static<typeof NodeChangeSchema>;
+export type PageChange = Static<typeof PageChangeSchema>;
 export type DesignChangeSet = Static<typeof DesignChangeSetSchema>;
 export type DesignDiff = DesignChangeSet;
 export type FidelityWarning = Static<typeof FidelityWarningSchema>;

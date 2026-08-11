@@ -11,11 +11,16 @@ import type {
 import {
   diagnoseDesignPages,
   planArrangeNodes,
+  planCreatePage,
   planCreateBooleanGroup,
+  planDeletePage,
+  planDuplicatePage,
   planGroupNodes,
   planImageNodeUpdate,
   planReparentNodes,
   planReorderNodes,
+  planRenamePage,
+  planReorderPage,
   planSvgImport,
   planSetBooleanOperation,
   planUngroupBooleanGroup,
@@ -29,16 +34,19 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PAGE_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   isDesignArrangeToolInput,
   isDesignApplyToolInput,
   isDesignHierarchyToolInput,
+  isDesignPageToolInput,
   isExportSvgToolInput,
   isInternalDesignApplyToolInput,
   isInternalImportSvgToolInput,
   isInternalUpdateImageToolInput,
+  type DesignPageToolInput,
 } from "../shared/design-agent-tools";
 import type {
   RendererDesignToolRequest,
@@ -122,6 +130,104 @@ export async function executeDesignToolRequest(
     throw new Error(
       `Design revision conflict: expected ${request.context.revision}, current ${document.revision}`,
     );
+  }
+
+  if (
+    request.call.toolName === DESIGN_PAGE_TOOL_NAME &&
+    isDesignPageToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageToolMutationTarget(input, request.context.mutationTarget);
+    throwIfAborted(options.signal);
+    const operationId =
+      `agent_page_${request.call.toolCallId}_${document.revision}`.slice(
+        0,
+        220,
+      );
+    const plan =
+      input.action === "create"
+        ? planCreatePage(document, {
+            pageId: `${operationId}_page`,
+            name: input.name,
+            ...(input.index === undefined ? {} : { index: input.index }),
+            commandPrefix: operationId,
+          })
+        : input.action === "rename"
+          ? planRenamePage(document, {
+              pageId: input.pageId,
+              name: input.name,
+              commandPrefix: operationId,
+            })
+          : input.action === "duplicate"
+            ? planDuplicatePage(document, {
+                pageId: input.pageId,
+                duplicatePageId: `${operationId}_page`,
+                ...(input.name === undefined ? {} : { name: input.name }),
+                ...(input.index === undefined ? {} : { index: input.index }),
+                commandPrefix: operationId,
+                createNodeId: (_sourceNodeId, index) =>
+                  `${operationId}_node_${index}`,
+              })
+            : input.action === "reorder"
+              ? planReorderPage(document, {
+                  pageId: input.pageId,
+                  index: input.index,
+                  commandPrefix: operationId,
+                })
+              : planDeletePage(document, {
+                  pageId: input.pageId,
+                  commandPrefix: operationId,
+                });
+    if (!plan.ok) {
+      throw new Error(`page-operation.${plan.code}: ${plan.message}`);
+    }
+    const transaction = {
+      transactionId: `transaction_${operationId}`,
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: {
+        type: "agent",
+        id: `agent_${request.context.sessionId}`,
+        displayName: "OpenDesign Agent",
+      },
+      label: input.label,
+      commands: plan.commands,
+    } satisfies DesignTransaction;
+    const preview = runtime.preview(transaction);
+    if (!preview.ok) {
+      throw new Error(`${preview.error.code}: ${preview.error.message}`);
+    }
+    throwIfAborted(options.signal);
+    const result = runtime.apply(transaction);
+    if (!result.ok) {
+      throw new Error(`${result.error.code}: ${result.error.message}`);
+    }
+    const applied = runtime.getSnapshot().document;
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        observedRevision: result.revision.revision,
+        content: {
+          kind: "page-operation-result",
+          version: 1,
+          ok: true,
+          action: input.action,
+          pageId: plan.pageId,
+          ...(applied.pagesById[plan.pageId]
+            ? { name: applied.pagesById[plan.pageId].name }
+            : {}),
+          pageOrder: [...applied.pageOrder],
+          revision: result.revision.revision,
+          atomic: true,
+        },
+        designRevision: {
+          previousRevision: transaction.baseRevision,
+          revision: result.revision.revision,
+          transactionId: transaction.transactionId,
+        },
+      },
+    };
   }
 
   if (
@@ -1009,6 +1115,14 @@ function assertCommandsWithinMutationTarget(
       if (options.allowedAssetDeletionId === command.assetId) continue;
       throw new Error("Agent asset deletion requires a dedicated scoped tool");
     }
+    if (
+      command.type === "insert_page" ||
+      command.type === "update_page" ||
+      command.type === "move_page" ||
+      command.type === "delete_page"
+    ) {
+      throw new Error("Agent Page changes require the dedicated Page tool");
+    }
     if (command.type === "insert_element") {
       assertTarget(command.pageId, command.parentId, command.commandId);
       // Commands are executed in order. A composite design may create its
@@ -1040,6 +1154,25 @@ function mutationTargetNodeIds(
     return new Set(Object.keys(document.nodesById));
   }
   return pageNodeIds(document, mutationTarget.pageId);
+}
+
+function assertPageToolMutationTarget(
+  input: DesignPageToolInput,
+  mutationTarget: DesignMutationTarget,
+): void {
+  if (input.action === "rename" && mutationTarget.kind === "page") {
+    if (input.pageId !== mutationTarget.pageId) {
+      throw new Error(
+        `Page rename targets ${input.pageId} outside the registered Page scope`,
+      );
+    }
+    return;
+  }
+  if (mutationTarget.kind !== "document") {
+    throw new Error(
+      `${input.action} requires the Design File mutation scope selected before this Run`,
+    );
+  }
 }
 
 function requiredMutationPageId(

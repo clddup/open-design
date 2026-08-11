@@ -36,6 +36,8 @@ interface WorkspaceFileRecord extends WorkspaceFileIdentity {
   activePageId: string;
   activeFrameId?: string;
   retainedByRunIds: Set<string>;
+  pageOrder: string[];
+  unsubscribeRuntime: () => void;
 }
 
 export function workspaceFileKey(
@@ -55,14 +57,18 @@ export class WorkspaceRuntime {
   constructor(initial: WorkspaceFileIdentity & { document: DesignDocument }) {
     const runtime = new EditorRuntime(initial.document);
     const key = workspaceFileKey(initial.projectId, initial.designFileId);
-    this.#files.set(key, {
+    const record: WorkspaceFileRecord = {
       projectId: initial.projectId,
       designFileId: initial.designFileId,
       name: initial.name,
       runtime,
       activePageId: requireFirstPage(runtime, initial.designFileId),
       retainedByRunIds: new Set(),
-    });
+      pageOrder: [...runtime.getSnapshot().document.pageOrder],
+      unsubscribeRuntime: () => undefined,
+    };
+    this.#bindRuntime(record);
+    this.#files.set(key, record);
     this.#activeFileKey = key;
     this.#snapshot = this.#createSnapshot();
   }
@@ -124,12 +130,16 @@ export class WorkspaceRuntime {
     this.#assertDocumentIdentityAvailable(document.documentId, key);
 
     const runtime = new EditorRuntime(document);
-    this.#files.set(key, {
+    const record: WorkspaceFileRecord = {
       ...identity,
       runtime,
       activePageId: requireFirstPage(runtime, identity.designFileId),
       retainedByRunIds: new Set(),
-    });
+      pageOrder: [...runtime.getSnapshot().document.pageOrder],
+      unsubscribeRuntime: () => undefined,
+    };
+    this.#bindRuntime(record);
+    this.#files.set(key, record);
     this.#activeFileKey = key;
     this.#refresh();
     return runtime;
@@ -151,13 +161,18 @@ export class WorkspaceRuntime {
       );
     }
     this.#assertDocumentIdentityAvailable(document.documentId, key);
+    active.unsubscribeRuntime();
     this.#files.delete(this.#activeFileKey);
-    this.#files.set(key, {
+    const record: WorkspaceFileRecord = {
       ...identity,
       runtime,
       activePageId: requireFirstPage(runtime, identity.designFileId),
       retainedByRunIds: new Set(),
-    });
+      pageOrder: [...runtime.getSnapshot().document.pageOrder],
+      unsubscribeRuntime: () => undefined,
+    };
+    this.#bindRuntime(record);
+    this.#files.set(key, record);
     this.#activeFileKey = key;
     this.#refresh();
     return runtime;
@@ -182,7 +197,12 @@ export class WorkspaceRuntime {
 
   activatePage(pageId: string): void {
     const file = this.#activeFile();
-    if (!file.runtime.getSnapshot().document.pagesById[pageId]) {
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        file.runtime.getSnapshot().document.pagesById,
+        pageId,
+      )
+    ) {
       throw new Error(`Page is not part of the active design file: ${pageId}`);
     }
     if (pageId === file.activePageId && file.activeFrameId === undefined)
@@ -226,6 +246,7 @@ export class WorkspaceRuntime {
     if (!file || file.retainedByRunIds.size > 0 || this.#files.size === 1) {
       return false;
     }
+    file.unsubscribeRuntime();
     this.#files.delete(key);
     if (this.#activeFileKey === key) {
       const next = this.#files.keys().next().value;
@@ -281,6 +302,51 @@ export class WorkspaceRuntime {
         throw new Error(`Design document is already open: ${documentId}`);
       }
     }
+  }
+
+  #bindRuntime(file: WorkspaceFileRecord): void {
+    file.unsubscribeRuntime();
+    file.unsubscribeRuntime = file.runtime.subscribe((event, snapshot) => {
+      if (event.type !== "document.changed") return;
+      const document = snapshot.document;
+      const previousPageOrder = file.pageOrder;
+      file.pageOrder = [...document.pageOrder];
+      let workspaceChanged = false;
+      if (
+        !Object.prototype.hasOwnProperty.call(
+          document.pagesById,
+          file.activePageId,
+        )
+      ) {
+        const previousIndex = previousPageOrder.indexOf(file.activePageId);
+        const fallbackIndex = Math.min(
+          Math.max(previousIndex, 0),
+          document.pageOrder.length - 1,
+        );
+        const fallbackPageId = document.pageOrder[fallbackIndex];
+        if (!fallbackPageId) {
+          throw new Error(`Design file has no page: ${file.designFileId}`);
+        }
+        file.activePageId = fallbackPageId;
+        workspaceChanged = true;
+      }
+
+      const pageNodeIds = collectPageNodeIds(document, file.activePageId);
+      if (
+        file.activeFrameId !== undefined &&
+        !pageNodeIds.has(file.activeFrameId)
+      ) {
+        file.activeFrameId = undefined;
+        workspaceChanged = true;
+      }
+      const selectedNodeIds = snapshot.state.selection.nodeIds;
+      if (selectedNodeIds.some((nodeId) => !pageNodeIds.has(nodeId))) {
+        file.runtime.setSelection(
+          selectedNodeIds.filter((nodeId) => pageNodeIds.has(nodeId)),
+        );
+      }
+      if (workspaceChanged) this.#refresh();
+    });
   }
 
   #refresh(): void {

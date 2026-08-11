@@ -146,6 +146,60 @@ describe("WorkspaceRuntime", () => {
     );
   });
 
+  it("recovers to an adjacent Page when a transaction or undo removes the active Page", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.pageOrder.push("page_archive");
+    document.pagesById.page_archive = {
+      id: "page_archive",
+      name: "Archive",
+      rootNodeIds: [],
+      extensions: {},
+    };
+    const workspace = new WorkspaceRuntime({
+      projectId: "project_acme",
+      designFileId: "design_mobile",
+      name: "Mobile UI",
+      document,
+    });
+    const runtime = workspace.getActiveRuntime();
+    workspace.activateFrame("frame_welcome");
+    runtime.setSelection(["title_welcome"]);
+
+    const removed = runtime.apply({
+      transactionId: "delete_active_page",
+      documentId: document.documentId,
+      baseRevision: 0,
+      actor: { type: "user", id: "local-user" },
+      commands: [
+        {
+          commandId: "delete_welcome",
+          type: "delete_page",
+          pageId: "page_welcome",
+        },
+      ],
+    });
+
+    expect(removed.ok).toBe(true);
+    expect(
+      workspace.getSnapshot().files[
+        workspaceFileKey("project_acme", "design_mobile")
+      ],
+    ).toMatchObject({ activePageId: "page_archive" });
+    expect(
+      workspace.getSnapshot().files[
+        workspaceFileKey("project_acme", "design_mobile")
+      ]?.activeFrameId,
+    ).toBeUndefined();
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([]);
+
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      workspace.getSnapshot().files[
+        workspaceFileKey("project_acme", "design_mobile")
+      ]?.activePageId,
+    ).toBe("page_archive");
+  });
+
   it("retains files used by background runs when editor tabs close", () => {
     const workspace = createWorkspace();
     workspace.openFile(

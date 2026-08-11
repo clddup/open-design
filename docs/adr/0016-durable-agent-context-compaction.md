@@ -60,7 +60,7 @@ Token 预算错误按 system、tool schemas、Conversation/tool results 和请�
 - 单测证明当前 Run 的工具结果令后续轮超预算时，Runtime 保留当前用户原文和完整的近期 tool call/result 段，以临时 checkpoint 替换更早段后继续 Provider 调用；原始完成工具审计不丢失。
 - 单测证明第八个 Provider turn 轻微超预算时可以自动恢复，无法容纳当前输入或最小必要段时仍返回可见终态。
 - 单测证明当前轮和恢复旧 journal 时都会省略超长工具字段，并对大量短字段组成的超大结构化结果执行整体上限。
-- 完整生产 system prompt、十四个工具和 `200000` token Model Profile 的回归证明短消息能进入 Provider；八轮多模态工具循环还会触发 Run 内压缩并正常完成。`apply_transaction` 模型 Schema 受尺寸门禁约束，而完整运行时 Schema 继续拒绝非法命令；SVG 附件仅增加有界句柄提示，不把 XML 计入或塞入 Provider 上下文。
+- 完整生产 system prompt、十五个工具和 `200000` token Model Profile 的回归证明短消息能进入 Provider；八轮多模态工具循环还会触发 Run 内压缩并正常完成。`apply_transaction` 模型 Schema 受尺寸门禁约束，而完整运行时 Schema 继续拒绝非法命令；SVG 附件仅增加有界句柄提示，不把 XML 计入或塞入 Provider 上下文。
 - 单测证明 Main 只从所选 Model Profile 注入预算，并区分 `model_context_incompatible` 与 `context_budget_exceeded`。
 - 单测证明两类预算错误都报告固定协议或 Conversation 的分账估算。
 - 无窗口真实 Provider 烟测证明两轮请求都带 checkpoint 且不含 data URI，原始 1.6M 字符工具结果仍留在 journal，第二轮模型正常完成。

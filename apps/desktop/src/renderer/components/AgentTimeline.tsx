@@ -31,6 +31,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
 } from "../../shared/design-agent-tools";
@@ -68,6 +69,8 @@ export type AgentTimelineProps = {
     attachments: readonly AgentAttachment[],
   ) => Promise<boolean>;
   onStop: () => boolean | void | Promise<boolean | void>;
+  mutationScope?: "page" | "document";
+  onMutationScopeChange?: (scope: "page" | "document") => void;
   scope?:
     { kind: "page"; name?: string } | { kind: "selection"; count: number };
 };
@@ -98,7 +101,8 @@ function isNativeDesignTool(toolName: string | undefined): boolean {
     toolName === DESIGN_PLAN_TOOL_NAME ||
     toolName === DESIGN_REVIEW_TOOL_NAME ||
     toolName === DESIGN_ARRANGE_TOOL_NAME ||
-    toolName === DESIGN_HIERARCHY_TOOL_NAME
+    toolName === DESIGN_HIERARCHY_TOOL_NAME ||
+    toolName === DESIGN_PAGE_TOOL_NAME
   );
 }
 
@@ -181,6 +185,11 @@ function toolTitle(
     return state === "done"
       ? t("agent.arrangementUpdated")
       : t("agent.arrangingLayers");
+  }
+  if (toolName === DESIGN_PAGE_TOOL_NAME) {
+    return state === "done"
+      ? t("agent.pagesUpdated")
+      : t("agent.updatingPages");
   }
   return state === "done" ? t("agent.changeCompleted") : toolName;
 }
@@ -641,6 +650,8 @@ export function AgentTimeline({
   onSelectConversation,
   onSubmit,
   onStop,
+  mutationScope = "page",
+  onMutationScopeChange,
   scope,
 }: AgentTimelineProps) {
   const { locale, t } = useI18n();
@@ -817,6 +828,10 @@ export function AgentTimeline({
       : scope?.name
         ? t("agent.scopePage", { name: scope.name })
         : t("agent.scopePageGeneric");
+  const mutationScopeOptions = [
+    { value: "page", label: t("agent.editScopePage") },
+    { value: "document", label: t("agent.editScopeDocument") },
+  ];
   const helperMessage =
     attachmentError ??
     catalogError ??
@@ -1106,8 +1121,26 @@ export function AgentTimeline({
           >
             {hasConversation && (
               <div className="agent-prompt__scope">
-                <Glyph name="select" size={12} />
-                <span>{scopeLabel}</span>
+                <span className="agent-prompt__context">
+                  <Glyph name="select" size={12} />
+                  <span>{t("agent.contextScope", { scope: scopeLabel })}</span>
+                </span>
+                <span className="agent-prompt__mutation-scope">
+                  <span>{t("agent.canEdit")}</span>
+                  <DesktopSelect
+                    ariaLabel={t("agent.editScope")}
+                    className="agent-prompt__scope-select"
+                    disabled={Boolean(activeRunId) || submitting}
+                    onValueChange={(value) => {
+                      if (value === "page" || value === "document") {
+                        onMutationScopeChange?.(value);
+                      }
+                    }}
+                    options={mutationScopeOptions}
+                    size="compact"
+                    value={mutationScope}
+                  />
+                </span>
               </div>
             )}
             {attachments.length > 0 && (

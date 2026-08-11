@@ -5,6 +5,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
+  DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
@@ -20,6 +21,63 @@ import {
 } from "./design-agent-tools";
 
 describe("design Agent tool contract", () => {
+  it("validates a dedicated Page lifecycle tool and rejects Page commands in node transactions", () => {
+    const tool = DESIGN_AGENT_TOOL_SPECS.find(
+      (candidate) => candidate.name === DESIGN_PAGE_TOOL_NAME,
+    );
+    expect(tool).toMatchObject({ risk: "design_write", approval: "never" });
+    expect(tool?.description).toContain("Design File mutation target");
+    expect(
+      validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
+        action: "create",
+        label: "Create research Page",
+        name: "Research",
+        index: 1,
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
+        action: "rename",
+        label: "Rename Page",
+        pageId: "page_research",
+        name: "Research",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
+        action: "delete",
+        label: "Delete Page",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
+        action: "duplicate",
+        label: "Duplicate Page",
+        pageId: "page_research",
+        name: "Bad\nName",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        label: "Bypass Page tool",
+        commands: [
+          {
+            commandId: "create_page",
+            type: "insert_page",
+            index: 1,
+            page: {
+              id: "page_bypass",
+              name: "Bypass",
+              rootNodeIds: [],
+              extensions: {},
+            },
+            nodes: [],
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("requires a bounded executable design plan and rendered critique", () => {
     const plan = {
       version: 2,

@@ -1548,6 +1548,51 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
   });
 
+  it("creates, names, duplicates, and deletes Pages through EditorRuntime", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Create Page" }));
+    const pageName = screen.getByRole("textbox", { name: "Rename Page 2" });
+    expect(pageName).toHaveFocus();
+    await user.clear(pageName);
+    await user.type(pageName, "Research{Enter}");
+
+    expect(runtime().getSnapshot().document.pageOrder).toHaveLength(2);
+    expect(
+      Object.values(runtime().getSnapshot().document.pagesById).map(
+        (page) => page.name,
+      ),
+    ).toEqual(["Welcome", "Research"]);
+    expect(runtimeOutput()).toHaveAttribute("data-revision", "2");
+    expect(screen.getByRole("button", { name: "Research" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Research" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+    expect(runtime().getSnapshot().document.pageOrder).toHaveLength(3);
+    expect(
+      screen.getByRole("button", { name: "Copy of Research" }),
+    ).toHaveAttribute("aria-current", "page");
+
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Copy of Research" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(runtime().getSnapshot().document.pageOrder).toHaveLength(2);
+    expect(
+      screen.queryByRole("button", { name: "Copy of Research" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Research" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
   it("freezes selection as context while keeping the mutation target page-wide", async () => {
     const { user } = await openProjectConversation();
     act(() =>
@@ -1580,6 +1625,36 @@ describe("App", () => {
         selectedNodeIds: ["feature_one"],
       },
       mutationTarget: { kind: "page", pageId: "page_welcome" },
+    });
+  });
+
+  it("freezes an explicitly selected Design File mutation target for the Run", async () => {
+    const { user } = await openProjectConversation();
+    const writeScope = screen.getByRole("combobox", {
+      name: "Agent write scope",
+    });
+    writeScope.focus();
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(writeScope).toHaveTextContent("Design File");
+
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Create a Research page",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    const request = vi
+      .mocked(window.desktop!.sendAgentRequest)
+      .mock.calls.find(([candidate]) => candidate.type === "run.start")?.[0];
+    expect(request).toMatchObject({
+      type: "run.start",
+      documentId: "document_mobile",
+      scope: {
+        kind: "page",
+        pageId: "page_welcome",
+        selectedNodeIds: [],
+      },
+      mutationTarget: { kind: "document" },
     });
   });
 

@@ -11,6 +11,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
+  DESIGN_PAGE_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
@@ -45,6 +46,101 @@ const pageContext = {
 };
 
 describe("Renderer design tool scope", () => {
+  it("applies host-ID Page lifecycle operations only within their explicit mutation scope", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const documentContext = {
+      ...pageContext,
+      mutationTarget: { kind: "document" as const },
+    };
+    const created = await executeDesignToolRequest(
+      {
+        requestId: "page_create",
+        call: {
+          toolCallId: "tool_page_create",
+          toolName: DESIGN_PAGE_TOOL_NAME,
+          input: {
+            action: "create",
+            label: "Create research Page",
+            name: " Research ",
+            index: 1,
+          },
+        },
+        context: documentContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(created).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          kind: "page-operation-result",
+          action: "create",
+          name: "Research",
+          pageOrder: ["page_welcome", expect.stringContaining("agent_page_")],
+          revision: 1,
+          atomic: true,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    if (!created.ok || typeof created.result.content !== "object") return;
+    const createdPageId = (created.result.content as { pageId: string }).pageId;
+    expect(createdPageId).toContain("tool_page_create");
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+
+    const renamed = await executeDesignToolRequest(
+      {
+        requestId: "page_rename_current",
+        call: {
+          toolCallId: "tool_page_rename_current",
+          toolName: DESIGN_PAGE_TOOL_NAME,
+          input: {
+            action: "rename",
+            label: "Rename current Page",
+            pageId: "page_welcome",
+            name: "Homepage",
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(renamed).toMatchObject({
+      ok: true,
+      result: { content: { action: "rename", name: "Homepage", revision: 2 } },
+    });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
+  });
+
+  it("rejects document-level Page changes from a Current Page Run", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "page_create_outside_scope",
+          call: {
+            toolCallId: "tool_page_create_outside_scope",
+            toolName: DESIGN_PAGE_TOOL_NAME,
+            input: {
+              action: "create",
+              label: "Create another Page",
+              name: "Another",
+            },
+          },
+          context: pageContext,
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("requires the Design File mutation scope");
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+  });
+
   it("keeps viewport zoom outside document concurrency control", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     runtime.setViewport({

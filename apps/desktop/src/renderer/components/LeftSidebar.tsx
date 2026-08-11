@@ -7,7 +7,14 @@ import {
   canDeleteNodes,
   resolveBooleanEditScope,
 } from "@opendesign/editor-runtime";
-import { Glyph, IconButton, type GlyphName } from "@opendesign/ui";
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  Glyph,
+  IconButton,
+  type GlyphName,
+} from "@opendesign/ui";
 import {
   useEffect,
   useRef,
@@ -91,6 +98,16 @@ type ActiveLayerDrop = {
   nodeId: string;
   position: LayerDropPosition;
 };
+
+type PageDropPosition = "before" | "after";
+
+type ActivePageDrop = {
+  pageId: string;
+  position: PageDropPosition;
+};
+
+export type PageActionResult =
+  { ok: true; pageId: string; name?: string } | { ok: false; error: string };
 
 function sameParentSelection(
   document: DesignDocument,
@@ -210,6 +227,11 @@ export function LeftSidebar({
   tab,
   onTabChange,
   onPageChange,
+  onCreatePage,
+  onDeletePage,
+  onDuplicatePage,
+  onRenamePage,
+  onReorderPage,
   onDelete,
   onSelect,
   onReparent,
@@ -222,6 +244,11 @@ export function LeftSidebar({
   tab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
   onPageChange: (pageId: string) => void;
+  onCreatePage: () => PageActionResult;
+  onDeletePage: (pageId: string) => PageActionResult;
+  onDuplicatePage: (pageId: string) => PageActionResult;
+  onRenamePage: (pageId: string, name: string) => PageActionResult;
+  onReorderPage: (pageId: string, index: number) => PageActionResult;
   onDelete: (nodeId: string) => void;
   onSelect: (nodeId: string) => void;
   onReparent: (request: LayerReparentRequest) => LayerReparentResult;
@@ -233,8 +260,18 @@ export function LeftSidebar({
     () => new Set(),
   );
   const [activeDrop, setActiveDrop] = useState<ActiveLayerDrop | null>(null);
+  const [activePageDrop, setActivePageDrop] = useState<ActivePageDrop | null>(
+    null,
+  );
   const [dragStatus, setDragStatus] = useState("");
+  const [pageStatus, setPageStatus] = useState("");
+  const [editingPageId, setEditingPageId] = useState<string | null>(null);
+  const [pageNameDraft, setPageNameDraft] = useState("");
+  const [pageNameError, setPageNameError] = useState<string | null>(null);
   const draggedNodeIds = useRef<readonly string[] | null>(null);
+  const draggedPageId = useRef<string | null>(null);
+  const pageNameInput = useRef<HTMLInputElement | null>(null);
+  const composingPageName = useRef(false);
   const revealedSelectionKey = useRef<string | null>(null);
   const layers = flattenPageTree(document, activePageId, collapsedNodeIds);
   const selectedIds = new Set(selectedNodeIds);
@@ -268,6 +305,91 @@ export function LeftSidebar({
     setActiveDrop(null);
     setDragStatus("");
   }, [activePageId, document.documentId]);
+
+  useEffect(() => {
+    if (!editingPageId) return;
+    if (!document.pagesById[editingPageId]) {
+      setEditingPageId(null);
+      setPageNameError(null);
+      return;
+    }
+    pageNameInput.current?.focus();
+    pageNameInput.current?.select();
+  }, [document, editingPageId]);
+
+  const beginPageRename = (pageId: string, name: string) => {
+    setEditingPageId(pageId);
+    setPageNameDraft(name);
+    setPageNameError(null);
+  };
+
+  const cancelPageRename = () => {
+    setEditingPageId(null);
+    setPageNameError(null);
+  };
+
+  const commitPageRename = () => {
+    if (!editingPageId) return;
+    const currentName = document.pagesById[editingPageId]?.name;
+    if (pageNameDraft.trim() === currentName) {
+      cancelPageRename();
+      return;
+    }
+    const result = onRenamePage(editingPageId, pageNameDraft);
+    if (!result.ok) {
+      setPageNameError(result.error);
+      return;
+    }
+    setPageStatus(
+      t("sidebar.renamedPage", { name: result.name ?? pageNameDraft.trim() }),
+    );
+    cancelPageRename();
+  };
+
+  const createPage = () => {
+    const result = onCreatePage();
+    if (!result.ok) {
+      setPageStatus(result.error);
+      return;
+    }
+    onPageChange(result.pageId);
+    beginPageRename(result.pageId, result.name ?? t("sidebar.newPage"));
+    setPageStatus(t("sidebar.createdPage"));
+  };
+
+  const duplicatePage = (pageId: string) => {
+    const result = onDuplicatePage(pageId);
+    if (!result.ok) {
+      setPageStatus(result.error);
+      return;
+    }
+    onPageChange(result.pageId);
+    setPageStatus(t("sidebar.duplicatedPage"));
+  };
+
+  const deletePage = (pageId: string) => {
+    const result = onDeletePage(pageId);
+    setPageStatus(result.ok ? t("sidebar.deletedPage") : result.error);
+  };
+
+  const clearPageDrag = () => {
+    draggedPageId.current = null;
+    setActivePageDrop(null);
+  };
+
+  const finishPageDrop = (targetPageId: string, position: PageDropPosition) => {
+    const sourcePageId = draggedPageId.current;
+    clearPageDrag();
+    if (!sourcePageId || sourcePageId === targetPageId) return;
+    const remaining = document.pageOrder.filter(
+      (pageId) => pageId !== sourcePageId,
+    );
+    const targetIndex = remaining.indexOf(targetPageId);
+    if (targetIndex < 0) return;
+    const index = targetIndex + (position === "after" ? 1 : 0);
+    const result = onReorderPage(sourcePageId, index);
+    setPageStatus(result.ok ? t("sidebar.reorderedPage") : result.error);
+  };
 
   const expandNode = (nodeId: string) => {
     setCollapsedNodeIds((current) => {
@@ -417,23 +539,169 @@ export function LeftSidebar({
           role="tabpanel"
         >
           <nav aria-label={t("sidebar.documentPages")} className="page-list">
-            <span>{t("sidebar.pages")}</span>
+            <div className="page-list__heading">
+              <span>{t("sidebar.pages")}</span>
+              <IconButton
+                icon="plus"
+                label={t("sidebar.createPage")}
+                onClick={createPage}
+              />
+            </div>
             {document.pageOrder.map((pageId) => {
               const page = document.pagesById[pageId];
               if (!page) return null;
               return (
-                <button
-                  aria-current={pageId === activePageId ? "page" : undefined}
-                  className="page-list__item"
+                <div
+                  className={`page-list__row${
+                    activePageDrop?.pageId === pageId
+                      ? ` page-list__row--drop-${activePageDrop.position}`
+                      : ""
+                  }`}
+                  draggable={editingPageId !== pageId}
                   key={pageId}
-                  onClick={() => onPageChange(pageId)}
-                  type="button"
+                  onDragEnd={() => {
+                    clearPageDrag();
+                    setPageStatus("");
+                  }}
+                  onDragOver={(event) => {
+                    if (
+                      !draggedPageId.current ||
+                      draggedPageId.current === pageId
+                    )
+                      return;
+                    event.preventDefault();
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    const position =
+                      event.clientY < bounds.top + bounds.height / 2
+                        ? "before"
+                        : "after";
+                    setActivePageDrop({ pageId, position });
+                    setPageStatus(
+                      t(
+                        position === "before"
+                          ? "sidebar.pageDropBefore"
+                          : "sidebar.pageDropAfter",
+                        {
+                          name: page.name,
+                        },
+                      ),
+                    );
+                  }}
+                  onDragStart={(event) => {
+                    draggedPageId.current = pageId;
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData(
+                      "application/x-opendesign-page-drag",
+                      "active",
+                    );
+                    setPageStatus(
+                      t("sidebar.draggingPage", { name: page.name }),
+                    );
+                  }}
+                  onDrop={(event) => {
+                    if (!draggedPageId.current) return;
+                    event.preventDefault();
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    finishPageDrop(
+                      pageId,
+                      event.clientY < bounds.top + bounds.height / 2
+                        ? "before"
+                        : "after",
+                    );
+                  }}
                 >
-                  <Glyph name="frame" size={14} />
-                  <span>{page.name}</span>
-                </button>
+                  {editingPageId === pageId ? (
+                    <div className="page-list__editor">
+                      <Glyph name="frame" size={14} />
+                      <input
+                        aria-invalid={pageNameError ? "true" : undefined}
+                        aria-label={t("sidebar.renamePage", {
+                          name: page.name,
+                        })}
+                        maxLength={256}
+                        onBlur={() => {
+                          if (!composingPageName.current) commitPageRename();
+                        }}
+                        onChange={(event) => {
+                          setPageNameDraft(event.target.value);
+                          setPageNameError(null);
+                        }}
+                        onCompositionEnd={() => {
+                          composingPageName.current = false;
+                        }}
+                        onCompositionStart={() => {
+                          composingPageName.current = true;
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            cancelPageRename();
+                          } else if (
+                            event.key === "Enter" &&
+                            !composingPageName.current
+                          ) {
+                            event.preventDefault();
+                            commitPageRename();
+                          }
+                        }}
+                        ref={pageNameInput}
+                        title={pageNameError ?? undefined}
+                        value={pageNameDraft}
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      aria-current={
+                        pageId === activePageId ? "page" : undefined
+                      }
+                      className="page-list__item"
+                      onClick={() => onPageChange(pageId)}
+                      onDoubleClick={() => beginPageRename(pageId, page.name)}
+                      onKeyDown={(event) => {
+                        if (event.key === "F2") {
+                          event.preventDefault();
+                          beginPageRename(pageId, page.name);
+                        }
+                      }}
+                      type="button"
+                    >
+                      <Glyph name="frame" size={14} />
+                      <span>{page.name}</span>
+                    </button>
+                  )}
+                  <DropdownMenu
+                    contentProps={{
+                      side: "right",
+                      align: "start",
+                      sideOffset: 4,
+                    }}
+                    icon={<Glyph name="more" size={14} />}
+                    label={t("sidebar.pageActions", { name: page.name })}
+                  >
+                    <DropdownMenuItem
+                      onSelect={() => beginPageRename(pageId, page.name)}
+                      shortcut="F2"
+                    >
+                      {t("sidebar.renamePageAction")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => duplicatePage(pageId)}>
+                      {t("sidebar.duplicatePage")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="page-list__delete"
+                      disabled={document.pageOrder.length <= 1}
+                      onSelect={() => deletePage(pageId)}
+                    >
+                      {t("sidebar.deletePage")}
+                    </DropdownMenuItem>
+                  </DropdownMenu>
+                </div>
               );
             })}
+            <span aria-live="polite" className="page-list__status">
+              {pageNameError ?? pageStatus}
+            </span>
           </nav>
           <div
             aria-label={t("sidebar.documentLayers")}

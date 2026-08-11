@@ -753,6 +753,120 @@ function applyOperation(
     case "delete_asset":
       deleteAsset(document, command);
       return;
+    case "insert_page":
+      insertPage(document, command);
+      return;
+    case "update_page":
+      updatePage(document, command);
+      return;
+    case "move_page":
+      movePage(document, command);
+      return;
+    case "delete_page":
+      deletePage(document, command);
+      return;
+  }
+}
+
+function insertPage(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "insert_page" }>,
+): void {
+  if (document.pagesById[command.page.id]) {
+    throw new OperationError(
+      command.commandId,
+      `Page ${command.page.id} already exists`,
+      "duplicate",
+    );
+  }
+  assertPageName(command.page.name, command.commandId);
+  assertIndex(document.pageOrder, command.index, command.commandId);
+  const insertedNodeIds = new Set<string>();
+  for (const node of command.nodes) {
+    if (insertedNodeIds.has(node.id)) {
+      throw new OperationError(
+        command.commandId,
+        `Page contains duplicate node ${node.id}`,
+        "duplicate",
+      );
+    }
+    if (document.nodesById[node.id]) {
+      throw new OperationError(
+        command.commandId,
+        `Node ${node.id} already exists`,
+        "duplicate",
+      );
+    }
+    insertedNodeIds.add(node.id);
+  }
+  document.pagesById[command.page.id] = structuredClone(command.page);
+  document.pageOrder.splice(command.index, 0, command.page.id);
+  for (const node of command.nodes) {
+    document.nodesById[node.id] = structuredClone(node);
+  }
+}
+
+function updatePage(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "update_page" }>,
+): void {
+  const page = assertPage(document, command.pageId, command.commandId);
+  assertPageName(command.name, command.commandId);
+  if (page.name === command.name) {
+    throw new OperationError(command.commandId, "Page name is unchanged");
+  }
+  page.name = command.name;
+}
+
+function movePage(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "move_page" }>,
+): void {
+  assertPage(document, command.pageId, command.commandId);
+  const previousIndex = document.pageOrder.indexOf(command.pageId);
+  if (previousIndex < 0) throw notFound(command.commandId, command.pageId);
+  if (previousIndex === command.index) {
+    throw new OperationError(command.commandId, "Page position is unchanged");
+  }
+  document.pageOrder.splice(previousIndex, 1);
+  assertIndex(document.pageOrder, command.index, command.commandId);
+  document.pageOrder.splice(command.index, 0, command.pageId);
+}
+
+function deletePage(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "delete_page" }>,
+): void {
+  const page = assertPage(document, command.pageId, command.commandId);
+  if (document.pageOrder.length <= 1) {
+    throw new OperationError(
+      command.commandId,
+      "A Design File must contain at least one Page",
+    );
+  }
+  const nodeIds = page.rootNodeIds.flatMap((nodeId) =>
+    collectSubtreeIds(document, nodeId),
+  );
+  document.pageOrder.splice(document.pageOrder.indexOf(command.pageId), 1);
+  delete document.pagesById[command.pageId];
+  for (const nodeId of nodeIds) delete document.nodesById[nodeId];
+}
+
+function assertPageName(name: string, commandId: string): void {
+  if (name !== name.trim()) {
+    throw new OperationError(
+      commandId,
+      "Page name must not start or end with whitespace",
+    );
+  }
+  if (name.length === 0 || name.length > 256) {
+    throw new OperationError(
+      commandId,
+      "Page name must contain from 1 to 256 characters",
+    );
+  }
+  if (/\p{Cc}/u.test(name)) {
+    throw new OperationError(commandId, "Page name cannot contain controls");
   }
 }
 
@@ -1057,6 +1171,10 @@ function diffDocuments(
   const addedAssetIds: string[] = [];
   const changedAssetIds: string[] = [];
   const removedAssetIds: string[] = [];
+  const addedPageIds: string[] = [];
+  const changedPageIds: string[] = [];
+  const removedPageIds: string[] = [];
+  const pageChanges: NonNullable<DesignChangeSet["pageChanges"]> = [];
   const ids = new Set([
     ...Object.keys(before.nodesById),
     ...Object.keys(after.nodesById),
@@ -1128,6 +1246,49 @@ function diffDocuments(
     }
   }
 
+  const pageIds = new Set([
+    ...Object.keys(before.pagesById),
+    ...Object.keys(after.pagesById),
+  ]);
+  for (const pageId of pageIds) {
+    const oldPage = before.pagesById[pageId];
+    const newPage = after.pagesById[pageId];
+    if (!oldPage && newPage) {
+      addedPageIds.push(pageId);
+      pageChanges.push({
+        type: "added",
+        pageId,
+        after: newPage,
+        changedFields: ["page"],
+      });
+      continue;
+    }
+    if (oldPage && !newPage) {
+      removedPageIds.push(pageId);
+      pageChanges.push({
+        type: "removed",
+        pageId,
+        before: oldPage,
+        changedFields: ["page"],
+      });
+      continue;
+    }
+    if (!oldPage || !newPage) continue;
+    const changedFields = pageChangedFields(oldPage, newPage);
+    const moved = pageIndexChanged(before, after, pageId);
+    if (changedFields.length === 0 && !moved) continue;
+    changedPageIds.push(pageId);
+    pageChanges.push({
+      type: moved ? "moved" : "updated",
+      pageId,
+      before: oldPage,
+      after: newPage,
+      changedFields: moved
+        ? [...new Set([...changedFields, "pageOrder"])]
+        : changedFields,
+    });
+  }
+
   return deepFreeze({
     documentId: before.documentId,
     fromRevision: before.revision,
@@ -1138,8 +1299,30 @@ function diffDocuments(
     addedAssetIds,
     changedAssetIds,
     removedAssetIds,
+    addedPageIds,
+    changedPageIds,
+    removedPageIds,
+    pageChanges,
     changes,
   });
+}
+
+function pageIndexChanged(
+  before: DesignDocument,
+  after: DesignDocument,
+  pageId: string,
+): boolean {
+  return before.pageOrder.indexOf(pageId) !== after.pageOrder.indexOf(pageId);
+}
+
+function pageChangedFields(
+  before: DesignDocument["pagesById"][string],
+  after: DesignDocument["pagesById"][string],
+): string[] {
+  const fields = ["name", "rootNodeIds", "extensions"] as const;
+  return fields.filter(
+    (field) => JSON.stringify(before[field]) !== JSON.stringify(after[field]),
+  );
 }
 
 function nodeAssetIds(node: DesignNode): string[] {

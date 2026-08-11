@@ -5,7 +5,190 @@ import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
 import { LeftSidebar } from "./LeftSidebar";
 
+function pageActionProps() {
+  return {
+    onCreatePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
+    onDeletePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
+    onDuplicatePage: vi.fn(
+      () => ({ ok: false, error: "Unavailable" }) as const,
+    ),
+    onRenamePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
+    onReorderPage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
+  };
+}
+
 describe("LeftSidebar layer tree", () => {
+  it("supports Page naming by double-click, F2, Enter, Escape, and visible validation", async () => {
+    const user = userEvent.setup();
+    const document = createWelcomeDocument();
+    const onRenamePage = vi
+      .fn()
+      .mockReturnValueOnce({ ok: false, error: "Invalid Page name" })
+      .mockReturnValueOnce({
+        ok: true,
+        pageId: "page_welcome",
+        name: "Homepage",
+      });
+    render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          {...pageActionProps()}
+          activePageId="page_welcome"
+          document={document}
+          onDelete={vi.fn()}
+          onPageChange={vi.fn()}
+          onRenamePage={onRenamePage}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={vi.fn()}
+          onTabChange={vi.fn()}
+          onToggleLock={vi.fn()}
+          onToggleVisibility={vi.fn()}
+          selectedNodeIds={[]}
+          tab="layers"
+        />
+      </I18nProvider>,
+    );
+
+    await user.dblClick(screen.getByRole("button", { name: "Welcome" }));
+    const input = screen.getByRole("textbox", { name: "Rename Welcome" });
+    await user.clear(input);
+    await user.keyboard("{Enter}");
+    expect(onRenamePage).toHaveBeenCalledWith("page_welcome", "");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Invalid Page name")).toBeInTheDocument();
+
+    await user.type(input, "Homepage{Enter}");
+    expect(onRenamePage).toHaveBeenLastCalledWith("page_welcome", "Homepage");
+    expect(
+      screen.queryByRole("textbox", { name: "Rename Welcome" }),
+    ).toBeNull();
+
+    const pageButton = screen.getByRole("button", { name: "Welcome" });
+    pageButton.focus();
+    await user.keyboard("{F2}");
+    expect(
+      screen.getByRole("textbox", { name: "Rename Welcome" }),
+    ).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("textbox", { name: "Rename Welcome" }),
+    ).toBeNull();
+  });
+
+  it("exposes create, duplicate, delete, and final-index Page reorder controls", async () => {
+    const user = userEvent.setup();
+    const document = structuredClone(createWelcomeDocument());
+    document.pageOrder.push("page_two", "page_three");
+    document.pagesById.page_two = {
+      id: "page_two",
+      name: "Page 2",
+      rootNodeIds: [],
+      extensions: {},
+    };
+    document.pagesById.page_three = {
+      id: "page_three",
+      name: "Page 3",
+      rootNodeIds: [],
+      extensions: {},
+    };
+    const onCreatePage = vi.fn(
+      () =>
+        ({
+          ok: true,
+          pageId: "page_four",
+          name: "Page 4",
+        }) as const,
+    );
+    const onDuplicatePage = vi.fn(
+      () =>
+        ({
+          ok: true,
+          pageId: "page_two_copy",
+        }) as const,
+    );
+    const onDeletePage = vi.fn(
+      () =>
+        ({
+          ok: true,
+          pageId: "page_three",
+        }) as const,
+    );
+    const onReorderPage = vi.fn(
+      () =>
+        ({
+          ok: true,
+          pageId: "page_welcome",
+        }) as const,
+    );
+    const onPageChange = vi.fn();
+    render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          {...pageActionProps()}
+          activePageId="page_welcome"
+          document={document}
+          onCreatePage={onCreatePage}
+          onDelete={vi.fn()}
+          onDeletePage={onDeletePage}
+          onDuplicatePage={onDuplicatePage}
+          onPageChange={onPageChange}
+          onReorderPage={onReorderPage}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={vi.fn()}
+          onTabChange={vi.fn()}
+          onToggleLock={vi.fn()}
+          onToggleVisibility={vi.fn()}
+          selectedNodeIds={[]}
+          tab="layers"
+        />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create Page" }));
+    expect(onCreatePage).toHaveBeenCalledTimes(1);
+    expect(onPageChange).toHaveBeenCalledWith("page_four");
+
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Page 2" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+    expect(onDuplicatePage).toHaveBeenCalledWith("page_two");
+    expect(onPageChange).toHaveBeenCalledWith("page_two_copy");
+
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Page 3" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(onDeletePage).toHaveBeenCalledWith("page_three");
+
+    const source = screen.getByRole("button", {
+      name: "Welcome",
+    }).parentElement;
+    const target = screen.getByRole("button", { name: "Page 3" }).parentElement;
+    if (!source || !target) throw new Error("Missing Page rows");
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+      top: 100,
+      bottom: 128,
+      left: 0,
+      right: 220,
+      width: 220,
+      height: 28,
+      x: 0,
+      y: 100,
+      toJSON: () => undefined,
+    });
+    const dataTransfer = {
+      dropEffect: "none",
+      effectAllowed: "none",
+      setData: vi.fn(),
+    };
+    fireEvent.dragStart(source, { dataTransfer });
+    const drop = createEvent.drop(target, { dataTransfer });
+    Object.defineProperty(drop, "clientY", { value: 127 });
+    fireEvent(target, drop);
+    expect(onReorderPage).toHaveBeenCalledWith("page_welcome", 2);
+  });
+
   it("presents Boolean groups as named, collapsible vector containers", async () => {
     const user = userEvent.setup();
     const document = structuredClone(createWelcomeDocument());
@@ -48,6 +231,7 @@ describe("LeftSidebar layer tree", () => {
     render(
       <I18nProvider initialLocale="en">
         <LeftSidebar
+          {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
           onDelete={vi.fn()}
@@ -91,6 +275,7 @@ describe("LeftSidebar layer tree", () => {
     const view = render(
       <I18nProvider initialLocale="en">
         <LeftSidebar
+          {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
           onDelete={vi.fn()}
@@ -134,6 +319,7 @@ describe("LeftSidebar layer tree", () => {
     view.rerender(
       <I18nProvider initialLocale="en">
         <LeftSidebar
+          {...pageActionProps()}
           activePageId="page_welcome"
           document={unlockedDocument}
           onDelete={vi.fn()}
@@ -171,6 +357,7 @@ describe("LeftSidebar layer tree", () => {
     const renderSidebar = (selectedNodeIds: readonly string[]) => (
       <I18nProvider initialLocale="en">
         <LeftSidebar
+          {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
           onDelete={vi.fn()}
@@ -218,6 +405,7 @@ describe("LeftSidebar layer tree", () => {
     render(
       <I18nProvider initialLocale="en">
         <LeftSidebar
+          {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
           onDelete={vi.fn()}
@@ -286,6 +474,7 @@ describe("LeftSidebar layer tree", () => {
     render(
       <I18nProvider initialLocale="en">
         <LeftSidebar
+          {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
           onDelete={vi.fn()}

@@ -14,9 +14,9 @@
 
 - ID：`document.lifecycle`
 - 实现方：OpenDesign Workspace + EditorRuntime
-- 表面：contract=available；runtime=degraded；human=degraded；agent=unavailable；render=available；export=unavailable
-- 证据：自动化 3 项；实机 0 项
-- 限制：Agent 工具不能创建、重命名、复制、排序、归档或删除 Project、Design File 与 Page。
+- 表面：contract=available；runtime=degraded；human=degraded；agent=degraded；render=available；export=unavailable
+- 证据：自动化 7 项；实机 0 项
+- 限制：Agent 可通过显式 Page 或 Design File 写入目标创建、重命名、复制、排序和删除 Page，但尚不能管理 Project 或 Design File。
 
 ### 画布导航与选择 — 降级可用
 

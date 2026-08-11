@@ -28,6 +28,11 @@ import {
   planCreateBooleanGroup,
   planGroupNodes,
   planImageNodeUpdate,
+  planCreatePage,
+  planDeletePage,
+  planDuplicatePage,
+  planRenamePage,
+  planReorderPage,
   planReparentNodes,
   planReorderNodes,
   planSetBooleanOperation,
@@ -67,6 +72,7 @@ import {
   LeftSidebar,
   type LayerReparentRequest,
   type LayerReparentResult,
+  type PageActionResult,
 } from "./components/LeftSidebar";
 import { ProjectHome } from "./components/ProjectHome";
 import { SettingsPage } from "./components/SettingsPage";
@@ -208,6 +214,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const [utilityWidth, setUtilityWidth] = useState(320);
   const [utilityTab, setUtilityTab] = useState<UtilityDockTab>("agent");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("layers");
+  const [agentMutationScope, setAgentMutationScope] = useState<
+    "page" | "document"
+  >("page");
   const [conversationsByProjectId, setConversationsByProjectId] = useState<
     Readonly<Record<string, ConversationDescriptor[]>>
   >({});
@@ -276,6 +285,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     [],
   );
   const { document: designDocument, state } = snapshot;
+  useEffect(() => {
+    setAgentMutationScope("page");
+  }, [workspaceSnapshot.activeFileKey]);
   autosaveCallbacks.current = {
     onError: (target, error) => {
       setEditorError(
@@ -846,6 +858,122 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       applyCommands(t("history.updateProperties"), [command]);
     },
     [applyCommands, t],
+  );
+
+  const createPage = useCallback((): PageActionResult => {
+    const current = runtime.getSnapshot().document;
+    const operationId = `page_create_${Date.now()}_${++transactionCounter.current}`;
+    const name = t("sidebar.defaultPageName", {
+      count: current.pageOrder.length + 1,
+    });
+    const plan = planCreatePage(current, {
+      pageId: operationId,
+      name,
+      commandPrefix: operationId,
+    });
+    if (!plan.ok) {
+      setEditorError(plan.message);
+      return { ok: false, error: plan.message };
+    }
+    if (!applyCommands(t("history.createPage"), plan.commands)) {
+      return { ok: false, error: t("sidebar.pageApplyFailed") };
+    }
+    runtime.setSelection([]);
+    return { ok: true, pageId: plan.pageId, name };
+  }, [applyCommands, runtime, t]);
+
+  const renamePage = useCallback(
+    (pageId: string, name: string): PageActionResult => {
+      const current = runtime.getSnapshot().document;
+      const operationId = `page_rename_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planRenamePage(current, {
+        pageId,
+        name,
+        commandPrefix: operationId,
+      });
+      if (!plan.ok) {
+        setEditorError(plan.code === "no-op" ? null : plan.message);
+        return { ok: false, error: plan.message };
+      }
+      if (!applyCommands(t("history.renamePage"), plan.commands)) {
+        return { ok: false, error: t("sidebar.pageApplyFailed") };
+      }
+      return {
+        ok: true,
+        pageId: plan.pageId,
+        name: runtime.getSnapshot().document.pagesById[plan.pageId]?.name,
+      };
+    },
+    [applyCommands, runtime, t],
+  );
+
+  const duplicatePage = useCallback(
+    (pageId: string): PageActionResult => {
+      const current = runtime.getSnapshot().document;
+      const operationId = `page_duplicate_${Date.now()}_${++transactionCounter.current}`;
+      const duplicatePageId = operationId;
+      const plan = planDuplicatePage(current, {
+        pageId,
+        duplicatePageId,
+        commandPrefix: operationId,
+        createNodeId: (_sourceNodeId, index) => `${operationId}_node_${index}`,
+      });
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return { ok: false, error: plan.message };
+      }
+      if (!applyCommands(t("history.duplicatePage"), plan.commands)) {
+        return { ok: false, error: t("sidebar.pageApplyFailed") };
+      }
+      runtime.setSelection([]);
+      return {
+        ok: true,
+        pageId: plan.pageId,
+        name: runtime.getSnapshot().document.pagesById[plan.pageId]?.name,
+      };
+    },
+    [applyCommands, runtime, t],
+  );
+
+  const reorderPage = useCallback(
+    (pageId: string, index: number): PageActionResult => {
+      const current = runtime.getSnapshot().document;
+      const operationId = `page_reorder_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planReorderPage(current, {
+        pageId,
+        index,
+        commandPrefix: operationId,
+      });
+      if (!plan.ok) {
+        setEditorError(plan.code === "no-op" ? null : plan.message);
+        return { ok: false, error: plan.message };
+      }
+      if (!applyCommands(t("history.reorderPage"), plan.commands)) {
+        return { ok: false, error: t("sidebar.pageApplyFailed") };
+      }
+      return { ok: true, pageId: plan.pageId };
+    },
+    [applyCommands, runtime, t],
+  );
+
+  const deletePage = useCallback(
+    (pageId: string): PageActionResult => {
+      const current = runtime.getSnapshot().document;
+      const operationId = `page_delete_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planDeletePage(current, {
+        pageId,
+        commandPrefix: operationId,
+      });
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return { ok: false, error: plan.message };
+      }
+      if (!applyCommands(t("history.deletePage"), plan.commands)) {
+        return { ok: false, error: t("sidebar.pageApplyFailed") };
+      }
+      return { ok: true, pageId: plan.pageId };
+    },
+    [applyCommands, runtime, t],
   );
 
   const replaceSelectedImage = useCallback(async () => {
@@ -2047,9 +2175,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       documentId: current.document.documentId,
       revision: current.document.revision,
       scope: selectionScope(current, activePageId),
-      mutationTarget: activePageId
-        ? { kind: "page", pageId: activePageId }
-        : { kind: "document" },
+      mutationTarget:
+        agentMutationScope === "document"
+          ? { kind: "document" }
+          : { kind: "page", pageId: activePageId },
       modelSelection,
     };
     conversationIdByRunId.current.set(runId, conversationId);
@@ -2318,7 +2447,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           <LeftSidebar
             activePageId={activePageId}
             document={designDocument}
+            onCreatePage={createPage}
+            onDeletePage={deletePage}
+            onDuplicatePage={duplicatePage}
             onPageChange={activatePage}
+            onRenamePage={renamePage}
+            onReorderPage={reorderPage}
             onDelete={(nodeId) => deleteNodes([nodeId])}
             onReparent={reparentLayers}
             onSelect={(nodeId) => runtime.setSelection([nodeId], nodeId)}
@@ -2378,6 +2512,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 conversations={projectConversations}
                 error={activeAgentState.error ?? agentRuntimeError}
                 events={activeAgentState.events}
+                mutationScope={agentMutationScope}
                 onCreateConversation={
                   activeProject
                     ? () =>
@@ -2389,6 +2524,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                     : undefined
                 }
                 onSelectConversation={selectConversation}
+                onMutationScopeChange={setAgentMutationScope}
                 onStop={stopAgentTask}
                 onSubmit={submitAgentTask}
                 scope={

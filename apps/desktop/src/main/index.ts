@@ -74,6 +74,7 @@ import {
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
@@ -82,6 +83,7 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   isDesignApplyToolInput,
   isDesignPlanToolInput,
+  isDesignPageToolInput,
   isDesignVisualReviewToolInput,
   isGenerateImageToolInput,
   isExportSvgToolInput,
@@ -1357,6 +1359,13 @@ void app.whenReady().then(async () => {
         result.designRevision?.revision,
       );
       return result;
+    }
+    if (call.toolName === DESIGN_PAGE_TOOL_NAME) {
+      if (!isDesignPageToolInput(call.input)) {
+        throw new TypeError("Invalid Page tool input");
+      }
+      globalTaskCoordinator.assertDocumentInspected(context);
+      return await rendererDesignToolHost.execute(call, context, signal);
     }
     if (
       call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||

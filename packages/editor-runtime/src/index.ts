@@ -104,3 +104,18 @@ export {
   type EditorRuntimeOptions,
   type EditorSnapshot,
 } from "./runtime.js";
+export {
+  normalizePageName,
+  planCreatePage,
+  planDeletePage,
+  planDuplicatePage,
+  planRenamePage,
+  planReorderPage,
+  type CreatePageInput,
+  type DeletePageInput,
+  type DuplicatePageInput,
+  type PageOperationFailureCode,
+  type PageOperationPlan,
+  type RenamePageInput,
+  type ReorderPageInput,
+} from "./page-operations.js";

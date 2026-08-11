@@ -53,19 +53,23 @@
         "contract": "available",
         "runtime": "degraded",
         "human": "degraded",
-        "agent": "unavailable",
+        "agent": "degraded",
         "render": "available",
         "export": "unavailable"
       },
       "limitations": [
         {
-          "en": "Agent tools cannot create, rename, duplicate, reorder, archive, or delete Projects, Design Files, or Pages.",
-          "zh-CN": "Agent 工具不能创建、重命名、复制、排序、归档或删除 Project、Design File 与 Page。"
+          "en": "The Agent can create, rename, duplicate, reorder, and delete Pages through an explicit Page or Design File mutation target, but it cannot manage Projects or Design Files.",
+          "zh-CN": "Agent 可通过显式 Page 或 Design File 写入目标创建、重命名、复制、排序和删除 Page，但尚不能管理 Project 或 Design File。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/editor-runtime/src/index.test.ts",
+          "packages/editor-runtime/src/page-operations.test.ts",
+          "apps/desktop/src/renderer/workspace-runtime.test.ts",
+          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts",
           "apps/desktop/src/main/project/project-host.test.ts"
         ],
