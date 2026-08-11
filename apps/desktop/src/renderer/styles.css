@@ -2288,6 +2288,9 @@ textarea {
   justify-content: center;
   gap: 5px;
 }
+.distribution-grid .tidy-up-button {
+  grid-column: 1 / -1;
+}
 .spacing-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

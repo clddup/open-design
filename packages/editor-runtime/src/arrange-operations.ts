@@ -9,9 +9,12 @@ import {
   distributeItems,
   measureItemSpacing,
   setItemSpacing,
+  tidyUpItems,
   type AlignAction,
   type ArrangementItem,
   type ArrangementPlan,
+  type TidyUpDimension,
+  type TidyUpPlan,
 } from "@opendesign/geometry-service";
 import {
   getNodeBounds,
@@ -25,7 +28,8 @@ export type ArrangeAction =
   | "distribute-horizontal"
   | "distribute-vertical"
   | "set-horizontal-spacing"
-  | "set-vertical-spacing";
+  | "set-vertical-spacing"
+  | "tidy-up";
 
 export type ArrangeOperation =
   | {
@@ -56,6 +60,9 @@ export type ArrangeOperationPlan =
       orderedNodeIds: string[];
       selectionNodeIds: string[];
       resolvedSpacing?: number;
+      resolvedHorizontalSpacing?: number;
+      resolvedVerticalSpacing?: number;
+      tidyUpDimension?: TidyUpDimension;
     }
   | {
       ok: false;
@@ -69,6 +76,8 @@ export type ArrangementSelectionMetrics = {
   verticalSpacing: number | null;
   canDistributeHorizontal: boolean;
   canDistributeVertical: boolean;
+  canTidyUp: boolean;
+  tidyUpDimension: TidyUpDimension | null;
 };
 
 type ArrangeSelection = {
@@ -152,9 +161,21 @@ export function planArrangeNodes(
     commands,
     orderedNodeIds: geometryPlan.orderedIds,
     selectionNodeIds: selection.nodeIds,
-    ...(geometryPlan.resolvedSpacing === undefined
+    ...("dimension" in geometryPlan ||
+    geometryPlan.resolvedSpacing === undefined
       ? {}
       : { resolvedSpacing: geometryPlan.resolvedSpacing }),
+    ...("dimension" in geometryPlan
+      ? {
+          tidyUpDimension: geometryPlan.dimension,
+          ...(geometryPlan.horizontalSpacing === undefined
+            ? {}
+            : { resolvedHorizontalSpacing: geometryPlan.horizontalSpacing }),
+          ...(geometryPlan.verticalSpacing === undefined
+            ? {}
+            : { resolvedVerticalSpacing: geometryPlan.verticalSpacing }),
+        }
+      : {}),
   };
 }
 
@@ -169,6 +190,7 @@ export function getArrangementSelectionMetrics(
   const vertical = measureItemSpacing(selection.items, "vertical");
   const distributeHorizontal = distributeItems(selection.items, "horizontal");
   const distributeVertical = distributeItems(selection.items, "vertical");
+  const tidyUp = tidyUpItems(selection.items);
   return {
     nodeIds: selection.nodeIds,
     horizontalSpacing: horizontal.ok ? horizontal.value : null,
@@ -177,13 +199,15 @@ export function getArrangementSelectionMetrics(
       distributeHorizontal.ok || distributeHorizontal.code === "no-op",
     canDistributeVertical:
       distributeVertical.ok || distributeVertical.code === "no-op",
+    canTidyUp: tidyUp.ok,
+    tidyUpDimension: tidyUp.ok ? tidyUp.dimension : null,
   };
 }
 
 function planGeometry(
   items: readonly ArrangementItem[],
   operation: ArrangeOperation,
-): ArrangementPlan {
+): ArrangementPlan | TidyUpPlan {
   if ("spacing" in operation) {
     return setItemSpacing(
       items,
@@ -196,6 +220,9 @@ function planGeometry(
   }
   if (operation.action === "distribute-vertical") {
     return distributeItems(items, "vertical");
+  }
+  if (operation.action === "tidy-up") {
+    return tidyUpItems(items);
   }
   return alignItems(items, operation.action);
 }

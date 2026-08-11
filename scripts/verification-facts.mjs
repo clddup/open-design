@@ -21,6 +21,7 @@ const baseline = await json("docs/engine-baseline.json");
 const workflow = await text(".github/workflows/native-desktop.yml");
 const agentContracts = await text("packages/agent-contracts/src/index.ts");
 const designContracts = await text("packages/design-contracts/src/index.ts");
+const geometryService = await text("packages/geometry-service/src/index.ts");
 const requireFromDesktop = createRequire(join(desktopRoot, "package.json"));
 const vitestPath = join(
   dirname(requireFromDesktop.resolve("vitest/package.json")),
@@ -49,6 +50,13 @@ const documentSchemaVersion = capture(
   /DESIGN_SCHEMA_VERSION\s*=\s*"([^"]+)"/,
   "DesignDocument schema version",
 );
+const geometryServiceContractVersion = Number(
+  capture(
+    geometryService,
+    /GEOMETRY_SERVICE_CONTRACT_VERSION\s*=\s*([0-9]+)/,
+    "Geometry service contract version",
+  ),
+);
 const engineVersion = baseline.components.leafer.version;
 const agentCoreVersion = baseline.components.agentCore.version;
 const agentCoreStatus = baseline.components.agentCore.productionStatus;
@@ -57,6 +65,11 @@ assertEqual(
   baseline.contracts.documentSchemaVersion,
   documentSchemaVersion,
   "engine baseline document schema",
+);
+assertEqual(
+  baseline.contracts.geometryServiceContractVersion,
+  geometryServiceContractVersion,
+  "engine baseline geometry service contract",
 );
 assertEqual(
   leaferPackage.dependencies[baseline.components.leafer.dependency],
@@ -95,6 +108,7 @@ const blocks = {
     `- 环境基线：Node.js ${nodeVersion}、pnpm ${packageManager}、Electron ${electronVersion}、Vite ${viteVersion}`,
     `- 文档协议：\`DesignDocument ${documentSchemaVersion}\``,
     `- Agent 协议：\`${agentProtocol}\``,
+    `- Geometry Service：\`contract v${geometryServiceContractVersion}\``,
     `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（${agentCoreStatus}）`,
     `- 生产画布：\`${baseline.components.leafer.dependency} ${engineVersion}\``,
   ].join("\n"),

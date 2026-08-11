@@ -315,7 +315,8 @@ export type DesignArrangeToolInput =
         | "align-vertical-center"
         | "align-bottom"
         | "distribute-horizontal"
-        | "distribute-vertical";
+        | "distribute-vertical"
+        | "tidy-up";
       label: string;
       pageId: string;
       nodeIds: string[];
@@ -946,7 +947,7 @@ const MODEL_HIERARCHY_SCHEMA = {
 const MODEL_ARRANGE_SCHEMA = {
   type: "object",
   description:
-    "Align requires at least two explicit layers. Distribute requires at least three and preserves the two outermost layers on that axis. Set-spacing requires at least two and a finite spacing value; negative spacing intentionally overlaps layers.",
+    "Align requires at least two explicit layers. Distribute requires at least three and preserves the two outermost layers on that axis. Tidy up requires at least three, infers a stable row, column, or two-dimensional grid, uses the most common existing gap on each applicable axis, and anchors a grid at the selection top-left. Set-spacing requires at least two and a finite spacing value; negative spacing intentionally overlaps layers.",
   properties: {
     action: {
       enum: [
@@ -958,6 +959,7 @@ const MODEL_ARRANGE_SCHEMA = {
         "align-bottom",
         "distribute-horizontal",
         "distribute-vertical",
+        "tidy-up",
         "set-horizontal-spacing",
         "set-vertical-spacing",
       ],
@@ -1479,7 +1481,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_ARRANGE_TOOL_NAME,
     description:
-      "Precisely arrange explicit existing layers in the currently bound Design File using host-computed geometry. It aligns selection bounds, distributes horizontal or vertical spacing while preserving the two outermost layers, or sets an exact positive, zero, or negative 1D spacing from the leading layer. The host handles rotated/scaled parent transforms, dynamically recomputes affected Group bounds, previews the complete change, and applies one atomic undoable transaction. Targets are stable Page and layer IDs returned by inspection, never the send-time or live user selection. It rejects locked, missing, stale, out-of-scope, non-invertible, ambiguous, no-op, and over-limit operations. This is deterministic 1D arrangement, not 2D Tidy up or Auto Layout.",
+      "Precisely arrange explicit existing layers in the currently bound Design File using host-computed geometry. It aligns selection bounds, distributes horizontal or vertical spacing while preserving the two outermost layers, sets an exact positive, zero, or negative 1D spacing from the leading layer, or performs deterministic Tidy up. One-dimensional Tidy up changes only the inferred row/column axis using the most common existing gap; two-dimensional Tidy up resolves unequal or sparse row/column cells on both axes and anchors the result at the selection top-left. The host handles rotated/scaled parent transforms, dynamically recomputes affected Group bounds, previews the complete change, and applies one atomic undoable transaction. Targets are stable Page and layer IDs returned by inspection, never the send-time or live user selection. It rejects locked, missing, stale, out-of-scope, non-invertible, ambiguous, no-op, and over-limit operations. Smart Selection canvas handles, reflow editing, and Auto Layout are separate capabilities.",
     inputSchema: MODEL_ARRANGE_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2200,6 +2202,7 @@ export function isDesignArrangeToolInput(
     "align-bottom",
     "distribute-horizontal",
     "distribute-vertical",
+    "tidy-up",
     "set-horizontal-spacing",
     "set-vertical-spacing",
   ] as const;
@@ -2208,13 +2211,14 @@ export function isDesignArrangeToolInput(
     action === "set-horizontal-spacing" || action === "set-vertical-spacing";
   const distribute =
     action === "distribute-horizontal" || action === "distribute-vertical";
+  const tidyUp = action === "tidy-up";
   return (
     typeof input.label === "string" &&
     input.label.trim().length > 0 &&
     input.label.length <= 256 &&
     safeId(input.pageId) &&
     Array.isArray(input.nodeIds) &&
-    input.nodeIds.length >= (distribute ? 3 : 2) &&
+    input.nodeIds.length >= (distribute || tidyUp ? 3 : 2) &&
     input.nodeIds.length <= 500 &&
     input.nodeIds.every(safeId) &&
     new Set(input.nodeIds).size === input.nodeIds.length &&

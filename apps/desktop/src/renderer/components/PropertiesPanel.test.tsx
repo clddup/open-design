@@ -2,6 +2,10 @@ import { TooltipProvider } from "@opendesign/ui";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DesignNode } from "@opendesign/design-contracts";
+import type {
+  ArrangeOperation,
+  ArrangementSelectionMetrics,
+} from "@opendesign/editor-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
 import {
@@ -11,9 +15,12 @@ import {
 
 function renderPanel(
   options: {
+    arrangement?: ArrangementSelectionMetrics | null;
     feedback?: SvgInterchangeFeedback | null;
     node?: DesignNode;
+    onArrange?: (operation: ArrangeOperation) => void;
     operation?: { kind: "import" | "export"; name: string } | null;
+    selectionCount?: number;
   } = {},
 ) {
   const onCancelSvgOperation = vi.fn();
@@ -21,15 +28,17 @@ function renderPanel(
   const onExportSvg = vi.fn();
   const onSvgExportSettingsChange = vi.fn();
   const onUpdate = vi.fn();
+  const onArrange =
+    options.onArrange ?? vi.fn<(operation: ArrangeOperation) => void>();
   render(
     <TooltipProvider delayDuration={0}>
       <I18nProvider initialLocale="en">
         <PropertiesPanel
-          arrangement={null}
+          arrangement={options.arrangement ?? null}
           booleanOperationEditable={false}
           canDelete
           node={options.node}
-          onArrange={vi.fn()}
+          onArrange={onArrange}
           onBooleanOperationChange={vi.fn()}
           onCancelSvgOperation={onCancelSvgOperation}
           onDelete={vi.fn()}
@@ -40,7 +49,7 @@ function renderPanel(
           onSelectBooleanParent={vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onUpdate={onUpdate}
-          selectionCount={2}
+          selectionCount={options.selectionCount ?? 2}
           svgExportSettings={{ includeLayerIds: false, padding: 0 }}
           svgFeedback={options.feedback ?? null}
           svgOperation={options.operation ?? null}
@@ -50,6 +59,7 @@ function renderPanel(
   );
   return {
     onCancelSvgOperation,
+    onArrange,
     onDismissSvgFeedback,
     onExportSvg,
     onSvgExportSettingsChange,
@@ -107,6 +117,27 @@ const starNode: DesignNode = {
 };
 
 describe("PropertiesPanel SVG workflow", () => {
+  it("runs the shared Tidy up planner from an enabled multi-selection control", async () => {
+    const user = userEvent.setup();
+    const { onArrange } = renderPanel({
+      arrangement: {
+        nodeIds: ["a", "b", "c", "d"],
+        horizontalSpacing: null,
+        verticalSpacing: null,
+        canDistributeHorizontal: true,
+        canDistributeVertical: true,
+        canTidyUp: true,
+        tidyUpDimension: "grid",
+      },
+      selectionCount: 4,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Tidy up two-dimensional grid" }),
+    );
+    expect(onArrange).toHaveBeenCalledWith({ action: "tidy-up" });
+  });
+
   it("edits only implemented SVG settings and exports the current selection", async () => {
     const user = userEvent.setup();
     const { onExportSvg, onSvgExportSettingsChange } = renderPanel();

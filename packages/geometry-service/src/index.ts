@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 3 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 4 as const;
 
 export {
   alignItems,
@@ -6,6 +6,7 @@ export {
   MAX_ARRANGEMENT_SPACING,
   measureItemSpacing,
   setItemSpacing,
+  tidyUpItems,
   type AlignAction,
   type ArrangeAxis,
   type ArrangementFailure,
@@ -14,6 +15,9 @@ export {
   type ArrangementPlacement,
   type ArrangementPlan,
   type SpacingMeasurement,
+  type TidyUpDimension,
+  type TidyUpPlacement,
+  type TidyUpPlan,
 } from "./arrangement.js";
 export {
   deleteVectorVertices,

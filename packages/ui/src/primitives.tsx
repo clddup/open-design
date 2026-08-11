@@ -56,6 +56,7 @@ export type GlyphName =
   | "stop"
   | "sun"
   | "text"
+  | "tidy-up"
   | "trash"
   | "undo";
 
@@ -271,6 +272,15 @@ const paths: Record<GlyphName, ReactNode> = {
     </>
   ),
   text: <path d="M5 5h14M12 5v14M8 19h8" />,
+  "tidy-up": (
+    <>
+      <rect x="4" y="4" width="6" height="6" rx="1" />
+      <rect x="14" y="4" width="6" height="6" rx="1" />
+      <rect x="4" y="14" width="6" height="6" rx="1" />
+      <rect x="14" y="14" width="6" height="6" rx="1" />
+      <path d="M12 5v14M5 12h14" />
+    </>
+  ),
   trash: (
     <>
       <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />

@@ -88,7 +88,10 @@ describe("OpenDesign Agent system prompt", () => {
       "preserves the two outermost layers",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "does not provide 2D Tidy up",
+      "two-dimensional layouts resolve both axes and retain the selection top-left",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Smart Selection canvas handles, reflow editing, and Auto Layout remain separate",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "does not prove rendered visual quality",

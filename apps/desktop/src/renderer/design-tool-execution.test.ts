@@ -1720,6 +1720,46 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(arranged.state.history.undo).toHaveLength(1);
   });
 
+  it("tidies explicit layers and reports the host-resolved layout", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "arrange_tidy",
+        call: {
+          toolCallId: "tool_arrange_tidy",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "tidy-up",
+            label: "Tidy capability cards",
+            pageId: "page_welcome",
+            nodeIds: ["feature_one", "feature_two", "feature_three"],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "tidy-up",
+          tidyUpDimension: "horizontal",
+          resolvedHorizontalSpacing: 32,
+          orderedNodeIds: ["feature_one", "feature_two", "feature_three"],
+          revision: 1,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      getNodeBounds(runtime.getSnapshot().document, "feature_three")?.x,
+    ).toBe(816);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
   it("sets exact negative Agent spacing and rejects locked or out-of-scope arrangement", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = await executeDesignToolRequest(

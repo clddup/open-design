@@ -611,6 +611,17 @@ export async function executeDesignToolRequest(
           ...(plan.resolvedSpacing === undefined
             ? {}
             : { resolvedSpacing: plan.resolvedSpacing }),
+          ...(plan.tidyUpDimension === undefined
+            ? {}
+            : { tidyUpDimension: plan.tidyUpDimension }),
+          ...(plan.resolvedHorizontalSpacing === undefined
+            ? {}
+            : {
+                resolvedHorizontalSpacing: plan.resolvedHorizontalSpacing,
+              }),
+          ...(plan.resolvedVerticalSpacing === undefined
+            ? {}
+            : { resolvedVerticalSpacing: plan.resolvedVerticalSpacing }),
           revision: result.revision.revision,
           atomic: true,
           changes: result.changes,

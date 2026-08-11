@@ -1140,22 +1140,38 @@ describe("design Agent tool contract", () => {
       nodeIds: ["row_one", "row_two"],
       spacing: 24,
     };
+    const tidyUp = {
+      action: "tidy-up",
+      label: "Tidy comparison cards",
+      pageId: "page_1",
+      nodeIds: ["card_one", "card_two", "card_three", "card_four"],
+    };
 
     expect(arrange).toMatchObject({
       risk: "design_write",
       approval: "never",
     });
     expect(arrange?.description).toContain("host-computed geometry");
-    expect(arrange?.description).toContain("not 2D Tidy up");
+    expect(arrange?.description).toContain("two-dimensional Tidy up");
+    expect(arrange?.description).toContain("Smart Selection canvas handles");
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, distribute),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, spacing),
     ).toBe(true);
+    expect(validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, tidyUp)).toBe(
+      true,
+    );
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...distribute,
+        nodeIds: ["card_one", "card_two"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...tidyUp,
         nodeIds: ["card_one", "card_two"],
       }),
     ).toBe(false);

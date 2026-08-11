@@ -41,13 +41,13 @@
 
 ### 精确排列 — 降级可用
 
-通过人工 UI 与 Agent 共用的 planner 对齐多层对象、固定两端均分横向或纵向间隙，并设置正数、零或负数的一维精确间距。
+通过人工 UI 与 Agent 共用的 planner 对齐多层对象、固定两端均分横向或纵向间隙、设置正数/零/负数的一维精确间距，并整理行、列或不等尺寸/稀疏二维网格。
 
 - ID：`transform.precise-arrangement`
-- 实现方：@opendesign/geometry-service contract v3 + EditorRuntime
+- 实现方：@opendesign/geometry-service contract v4 + EditorRuntime
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
-- 证据：自动化 5 项；实机 0 项
-- 限制：单层相对父级对齐、二维 Tidy up、Smart Selection 画布间距手柄、翻转/原点、吸附、参考线、标尺和像素网格取整仍未补齐。
+- 证据：自动化 6 项；实机 0 项
+- 限制：单层相对父级对齐、Smart Selection 画布间距手柄与回流编辑、翻转/原点、吸附、参考线、标尺和像素网格取整仍未补齐。
 - 限制：排列产品链与隔离的 PathKit 矢量 provider 保持明确分离；本能力不据此宣称任何矢量产品能力。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039956914-Adjust-alignment-dimensions-rotation-and-position)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450233-Arrange-layers-with-Smart-selection)

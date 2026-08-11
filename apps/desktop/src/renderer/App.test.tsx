@@ -3247,6 +3247,48 @@ describe("App", () => {
     },
   );
 
+  it.each(["darwin", "win32"] as const)(
+    "tidies an inferred row from the inspector on %s",
+    async (platform) => {
+      vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
+        platform,
+        version: "0.0.0",
+      });
+      const user = userEvent.setup();
+      renderApp();
+      act(() =>
+        runtime().setSelection(
+          ["feature_one", "feature_two", "feature_three"],
+          "feature_one",
+        ),
+      );
+
+      await user.click(screen.getByRole("tab", { name: "Properties" }));
+      const tidyUp = screen.getByRole("button", {
+        name: "Tidy up horizontal row",
+      });
+      expect(tidyUp).toBeEnabled();
+      expect(
+        tidyUp.querySelector('[data-glyph="tidy-up"]'),
+      ).toBeInTheDocument();
+      await user.click(tidyUp);
+
+      const snapshot = runtime().getSnapshot();
+      expect(snapshot.document.revision).toBe(1);
+      expect(snapshot.state.history.undo).toHaveLength(1);
+      expect(getNodeBounds(snapshot.document, "feature_three")?.x).toBe(816);
+      expect(snapshot.state.selection.nodeIds).toEqual([
+        "feature_one",
+        "feature_two",
+        "feature_three",
+      ]);
+      await user.click(screen.getByRole("button", { name: "Undo" }));
+      expect(
+        getNodeBounds(runtime().getSnapshot().document, "feature_three")?.x,
+      ).toBe(864);
+    },
+  );
+
   it("edits text content and typography through the inspector", async () => {
     const user = userEvent.setup();
     renderApp();

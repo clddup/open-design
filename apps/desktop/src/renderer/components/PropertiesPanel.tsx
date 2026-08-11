@@ -2065,6 +2065,22 @@ export function PropertiesPanel({
                   <Glyph name="distribute-vertical" size={15} />
                   {t("properties.vertical")}
                 </button>
+                <button
+                  aria-label={t(
+                    arrangement?.tidyUpDimension === "horizontal"
+                      ? "properties.tidyUpHorizontal"
+                      : arrangement?.tidyUpDimension === "vertical"
+                        ? "properties.tidyUpVertical"
+                        : "properties.tidyUpGrid",
+                  )}
+                  className="tidy-up-button"
+                  disabled={!arrangement?.canTidyUp}
+                  onClick={() => onArrange({ action: "tidy-up" })}
+                  type="button"
+                >
+                  <Glyph name="tidy-up" size={15} />
+                  {t("properties.tidyUp")}
+                </button>
               </div>
               <div className="spacing-grid">
                 <Field

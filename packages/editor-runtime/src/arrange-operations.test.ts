@@ -147,8 +147,74 @@ describe("arrange operations", () => {
       horizontalSpacing: null,
       canDistributeHorizontal: true,
       canDistributeVertical: false,
+      canTidyUp: true,
+      tidyUpDimension: "horizontal",
     });
     expect(document.revision).toBe(0);
+  });
+
+  it("tidies an unequal two-dimensional selection through one reversible transaction", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const template = document.nodesById.feature_one!;
+    const placements = [
+      ["grid_a", 0, 0, 120, 80],
+      ["grid_b", 160, 4, 100, 60],
+      ["grid_c", 310, 2, 80, 70],
+      ["grid_d", 6, 140, 90, 90],
+      ["grid_e", 170, 150, 110, 50],
+      ["grid_f", 340, 146, 70, 75],
+    ] as const;
+    for (const [id, x, y, width, height] of placements) {
+      document.nodesById[id] = {
+        ...structuredClone(template),
+        id,
+        name: id,
+        transform: [1, 0, 0, 1, x, y],
+        size: { width, height },
+      };
+    }
+    document.nodesById.feature_group!.childIds = placements.map(([id]) => id);
+    document.nodesById.feature_group!.size = { width: 410, height: 240 };
+    delete document.nodesById.feature_one;
+    delete document.nodesById.feature_two;
+    delete document.nodesById.feature_three;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const before = runtime.getSnapshot().document;
+    const plan = planArrangeNodes(
+      before,
+      "page_welcome",
+      placements.map(([id]) => id),
+      { action: "tidy-up" },
+      "tidy_grid",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan).toMatchObject({
+      tidyUpDimension: "grid",
+      resolvedHorizontalSpacing: 40,
+      resolvedVerticalSpacing: 60,
+      orderedNodeIds: placements.map(([id]) => id),
+    });
+    expect(
+      runtime.apply(transaction(runtime, "tidy_grid", plan.commands)).ok,
+    ).toBe(true);
+    const arranged = runtime.getSnapshot();
+    expect(getNodeBounds(arranged.document, "grid_a")).toMatchObject({
+      x: 144,
+      y: 404,
+    });
+    expect(getNodeBounds(arranged.document, "grid_e")).toMatchObject({
+      x: 304,
+      y: 544,
+    });
+    expect(arranged.state.history.undo).toHaveLength(1);
+    expect(runtime.undo().ok).toBe(true);
+    expect(getNodeBounds(runtime.getSnapshot().document, "grid_e")).toEqual(
+      getNodeBounds(before, "grid_e"),
+    );
+    expect(runtime.redo().ok).toBe(true);
+    expect(getNodeBounds(runtime.getSnapshot().document, "grid_e")?.x).toBe(
+      304,
+    );
   });
 
   it("rejects locked, singular, no-op, and insufficient selections atomically", () => {

@@ -166,10 +166,10 @@
         "zh-CN": "精确排列"
       },
       "description": {
-        "en": "Align multiple layers, distribute horizontal or vertical gaps with fixed outer anchors, and set exact positive, zero, or negative one-dimensional spacing through shared human and Agent planners.",
-        "zh-CN": "通过人工 UI 与 Agent 共用的 planner 对齐多层对象、固定两端均分横向或纵向间隙，并设置正数、零或负数的一维精确间距。"
+        "en": "Align multiple layers, distribute horizontal or vertical gaps with fixed outer anchors, set exact positive, zero, or negative one-dimensional spacing, and Tidy up rows, columns, or unequal/sparse two-dimensional grids through shared human and Agent planners.",
+        "zh-CN": "通过人工 UI 与 Agent 共用的 planner 对齐多层对象、固定两端均分横向或纵向间隙、设置正数/零/负数的一维精确间距，并整理行、列或不等尺寸/稀疏二维网格。"
       },
-      "provider": "@opendesign/geometry-service contract v3 + EditorRuntime",
+      "provider": "@opendesign/geometry-service contract v4 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -181,8 +181,8 @@
       },
       "limitations": [
         {
-          "en": "Single-layer alignment to its parent, two-dimensional Tidy up, Smart Selection canvas spacing handles, flip/origin controls, snapping, guides, rulers, and pixel-grid rounding remain incomplete.",
-          "zh-CN": "单层相对父级对齐、二维 Tidy up、Smart Selection 画布间距手柄、翻转/原点、吸附、参考线、标尺和像素网格取整仍未补齐。"
+          "en": "Single-layer alignment to its parent, Smart Selection canvas spacing handles and reflow editing, flip/origin controls, snapping, guides, rulers, and pixel-grid rounding remain incomplete.",
+          "zh-CN": "单层相对父级对齐、Smart Selection 画布间距手柄与回流编辑、翻转/原点、吸附、参考线、标尺和像素网格取整仍未补齐。"
         },
         {
           "en": "The arrangement product path remains intentionally separate from the isolated PathKit vector provider; no vector product capability is implied here.",
@@ -195,7 +195,8 @@
           "packages/editor-runtime/src/arrange-operations.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "apps/desktop/src/renderer/design-tool-execution.test.ts",
-          "apps/desktop/src/renderer/App.test.tsx"
+          "apps/desktop/src/renderer/App.test.tsx",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
         ],
         "manual": []
       },

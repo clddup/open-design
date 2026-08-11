@@ -103,6 +103,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P2：精确图层、变换与矢量
 
 - [x] 建立 `@opendesign/geometry-service` 的首个纯排列 provider；多层对齐、固定两端均分和明确一维间距由 EditorRuntime 转成单次事务，人工 Inspector 与 Agent typed tool 共用，不在 React、prompt 或 Leafer adapter 中重复计算。
+- [x] 将纯排列 provider 升至 contract v4，增加确定性 Tidy up：一维按重叠轴和现有 gap 众数整理且不改另一轴；二维验证行列关系、支持不等尺寸与稀疏网格、锚定选择区域左上角。Inspector 与 `opendesign_arrange_layers` 共用同一 planner、preview、revision、undo 和自动保存路径；歧义/锁定/不可逆 transform/预算/no-op 明确失败。Smart Selection 画布间距手柄与增删改尺寸后的回流仍为后续独立切片。
 - [ ] 针对 Path/Vector 通过维护状态、许可证、包体积、确定性、WASM/原生要求和 macOS/Windows 兼容基准选择固定版本的成熟 geometry kernel；已固定 BSD-3-Clause 的 `pathkit-wasm 1.0.0` 并通过真实 WASM 的 cubic PathOps、孔洞、空结果、simplify、outline stroke、输入预算与基础 bundle 隔离测试，裁决见 ADR-0021。剩余门禁是同一 corpus 的 macOS/Windows 原生加载、性能与内存基准，通过前不勾选完成，也不把 provider 基础描述为可用 Boolean/Pen 功能。
 - [x] 将非破坏 Boolean Group 固定为 `DesignDocument 1.4.0` 的独立 `boolean` 容器；源层保持可编辑，组持有统一外观，Union/Intersect/Exclude 初始继承顶层、Subtract 初始继承底层。EditorRuntime planner 覆盖创建、operation 切换、解组、锁定、revision、保存重开和 undo/redo，不持久化 PathKit 派生 path；当前 capability 为 `degraded`。
 - [x] 建立递归 Boolean geometry resolver 和 PathKit 派生投影：Rectangle/Ellipse/Path/Vector/嵌套 Boolean 统一进入真实 PathKit，源层 fill+stroke、局部 transform、空结果、精确缓存失效和短生命周期资源释放已有自动化；Leafer 按需加载独立 WASM chunk，只 reconcile 稳定 synthetic result，并将命中映射回原 Boolean，未把派生 path 写入文档或逐层绘制源层冒充结果。
@@ -116,7 +117,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 增加 `DesignDocument 1.7.0` editable Vector Network 与首个 Pen 创作切片：`path` / `network` 严格互斥，稳定 vertex/segment/path/region ID、拓扑 invariant、cubic tight bounds、保存重开/undo/redo、Leafer-native preview/anchor/handle、`P`、click/drag/close/Enter/Escape/Backspace/tool-switch、单事务写入、Agent schema、Boolean 消费和受控 SVG network metadata 已打通；当前只创建单条非分叉 contour，macOS/Windows 打包交互和像素证据继续保持明确限制。
 - [x] 增加 `DesignDocument 1.8.0` 已有单轮廓节点编辑：持久 corner/smooth/mirrored/independent handle mode，Enter/双击进入，单选/Shift 多选节点移动，选中节点手柄拖动，Delete/Backspace，锁定只读，Done/Escape，普通 selection/Pen/path-edit chrome 互斥，pointer-up/point-mode/delete 单事务，cubic tight bounds 与 transform offset 组合、保存重开/undo/redo、Agent schema 和受控 SVG metadata v2 均已打通；实现对照 Figma Vector Network 与 OpenPencil 固定提交 `449f31dd8b7df12965f65d9da774597332fc153d` 的 `path_edit.rs`、`canvas_path_overlay.rs` 和 history 行为，不引入其 runtime、文档或工具权限边界。
 - [ ] 继续完成开放/闭合转换、分支、多轮廓、连接/断开、路径反转、路径切断、套索、多节点变换框、flatten、outline stroke 与正式 Slice；补真实像素 baseline 和 macOS/Windows 打包产品交互证据。
-- 扩展剩余图层与精确变换工作流：重命名、批量属性、单层相对父级对齐、二维 Tidy up/画布间距手柄、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
+- 扩展剩余图层与精确变换工作流：重命名、批量属性、单层相对父级对齐、Smart Selection 画布间距手柄与回流、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
 - 人工命令与 Agent typed tools 调用同一 geometry service，并把结果作为一个可预览、可撤销的 `DesignTransaction` 应用。SVG 导入导出必须经过同一公共 Path 语义，不能泄漏 provider 私有命令。
 
 完成条件：`OD-PENGUIN-01` 可以通过人工 Pen 和 Agent 工具继续编辑，不需要重建整个轮廓；`OD-BRAND-01` 的布尔、outline 和 SVG 往返保持结构、bounds 与视觉基线；所有动作支持保存重开和 undo/redo。
