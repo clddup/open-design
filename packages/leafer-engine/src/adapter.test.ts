@@ -565,6 +565,25 @@ describe("Leafer engine selection bounds synchronization", () => {
         .map((child) => (child as FakeText).text),
     ).toEqual(["Hero visual", "Launch typography"]);
 
+    app.tree.localTransform = {
+      a: 0.8,
+      b: 0,
+      c: 0,
+      d: 0.8,
+      e: -96,
+      f: 72,
+    };
+    app.emit("viewport.move");
+    expect(layer?.localTransform).toEqual({
+      a: 0.8,
+      b: 0,
+      c: 0,
+      d: 0.8,
+      e: -96,
+      f: 72,
+    });
+    expect(artboard?.children[0]?.strokeWidth).toBeCloseTo(1.4375);
+
     adapter.sync({
       ...first,
       generationSkeleton: skeleton,
@@ -661,6 +680,24 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect((layer?.children[2] as FakeText | undefined)?.text).toBe(
       "AI · Structuring the layout",
     );
+
+    app.tree.localTransform = {
+      a: 0.8,
+      b: 0,
+      c: 0,
+      d: 0.8,
+      e: -96,
+      f: 72,
+    };
+    app.emit("viewport.move");
+    expect(layer?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 224,
+      f: 312,
+    });
 
     adapter.sync({
       ...first,
@@ -1312,8 +1349,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(selectedElement?.forceUpdate).toHaveBeenCalledWith("bounds");
     expect(app.editor.update).toHaveBeenCalledTimes(2);
 
-    app.tree.emit("viewport.zoom");
-    app.tree.emit("viewport.move");
+    app.emit("viewport.zoom");
+    app.emit("viewport.move");
     expect(animationFrames).toHaveLength(2);
     flushAnimationFrames();
 

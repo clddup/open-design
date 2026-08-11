@@ -906,10 +906,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
     };
-    this.#app.tree.on(MoveEvent.MOVE, viewportChanged);
-    this.#app.tree.on(MoveEvent.END, viewportChanged);
-    this.#app.tree.on(ZoomEvent.ZOOM, viewportChanged);
-    this.#app.tree.on(ZoomEvent.END, viewportChanged);
+    // Viewport gestures are emitted by the App interaction dispatcher. The
+    // tree is the transformed zoom layer, not the event owner. Listening on
+    // the tree happened to cover programmatic syncs in unit tests but missed
+    // real pan/zoom gestures, leaving sky-layer presentation at the previous
+    // viewport transform until the next React sync.
+    this.#app.on(MoveEvent.MOVE, viewportChanged);
+    this.#app.on(MoveEvent.END, viewportChanged);
+    this.#app.on(ZoomEvent.ZOOM, viewportChanged);
+    this.#app.on(ZoomEvent.END, viewportChanged);
     this.#app.on(ResizeEvent.RESIZE, viewportChanged);
 
     window.addEventListener("keydown", this.#onWindowKeyDown, true);
