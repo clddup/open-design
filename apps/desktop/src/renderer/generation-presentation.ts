@@ -412,26 +412,45 @@ export function generationRevealFromEditorEvent(
 ): LeaferGenerationReveal | undefined {
   if (
     event.type !== "document.changed" ||
-    event.result.revision.actor?.type !== "agent" ||
-    event.result.changes.addedNodeIds.length === 0
+    event.result.revision.actor?.type !== "agent"
   ) {
     return undefined;
   }
   const page = document.pagesById[pageId];
   if (!page) return undefined;
   const added = new Set(event.result.changes.addedNodeIds);
-  const ordered: string[] = [];
+  const tweenable = new Set(
+    event.result.changes.changes.flatMap((change) => {
+      if (
+        change.type === "added" ||
+        change.type === "removed" ||
+        !change.before ||
+        !change.after ||
+        change.before.parentId !== change.after.parentId ||
+        !change.changedFields.some((field) =>
+          GENERATION_TWEEN_NODE_FIELDS.has(field),
+        )
+      ) {
+        return [];
+      }
+      return [change.nodeId];
+    }),
+  );
+  const orderedAdded: string[] = [];
+  const orderedTween: string[] = [];
   const visited = new Set<string>();
   const visit = (nodeId: string): void => {
     if (visited.has(nodeId)) return;
     visited.add(nodeId);
     const node = document.nodesById[nodeId];
     if (!node) return;
-    if (added.has(nodeId)) ordered.push(nodeId);
+    if (added.has(nodeId)) orderedAdded.push(nodeId);
+    else if (tweenable.has(nodeId)) orderedTween.push(nodeId);
     node.childIds.forEach(visit);
   };
   page.rootNodeIds.forEach(visit);
-  if (ordered.length === 0) return undefined;
+  if (orderedAdded.length === 0 && orderedTween.length === 0) return undefined;
+  const ordered = [...orderedAdded, ...orderedTween];
   const focusPoints = Object.fromEntries(
     ordered.flatMap((nodeId) => {
       const bounds = getNodeBounds(document, nodeId);
@@ -451,10 +470,22 @@ export function generationRevealFromEditorEvent(
   return {
     ...(Object.keys(focusPoints).length === 0 ? {} : { focusPoints }),
     id: event.eventId,
-    nodeIds: ordered,
+    nodeIds: orderedAdded,
     startedAt: Number.isFinite(startedAt) ? Math.max(0, startedAt) : 0,
+    ...(orderedTween.length === 0 ? {} : { tweenNodeIds: orderedTween }),
   };
 }
+
+const GENERATION_TWEEN_NODE_FIELDS = new Set([
+  "blendMode",
+  "effects",
+  "maskMode",
+  "opacity",
+  "properties",
+  "size",
+  "transform",
+  "visible",
+]);
 
 function generationPhaseForTool(
   toolName: string,

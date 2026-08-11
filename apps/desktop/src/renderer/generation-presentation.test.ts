@@ -149,7 +149,7 @@ describe("Renderer Agent generation presentation", () => {
     expect(Number.isFinite(reveal?.focusPoints?.agent_group?.y)).toBe(true);
   });
 
-  it("does not animate user edits or non-additive changes", () => {
+  it("does not animate user edits", () => {
     const runtime = new EditorRuntime(createWelcomeDocument(), {
       createId: (prefix) => `${prefix}_user_edit`,
     });
@@ -186,7 +186,7 @@ describe("Renderer Agent generation presentation", () => {
     ).toBeUndefined();
   });
 
-  it("does not animate an Agent update without newly added nodes", () => {
+  it("creates a property tween for changed-only Agent revisions", () => {
     const runtime = new EditorRuntime(createWelcomeDocument(), {
       createId: (prefix) => `${prefix}_agent_update`,
     });
@@ -216,6 +216,48 @@ describe("Renderer Agent generation presentation", () => {
     expect(
       generationRevealFromEditorEvent(
         changed,
+        runtime.getSnapshot().document,
+        "page_welcome",
+        500,
+      ),
+    ).toMatchObject({
+      id: "event_agent_update",
+      nodeIds: [],
+      tweenNodeIds: ["feature_one"],
+      startedAt: 500,
+    });
+  });
+
+  it("does not animate Agent metadata, reparenting, or z-order-only changes", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument(), {
+      createId: (prefix) => `${prefix}_non_visual`,
+    });
+    let event: EditorEvent | undefined;
+    runtime.subscribe((candidate) => {
+      if (candidate.type === "document.changed") event = candidate;
+    });
+    expect(
+      runtime.apply({
+        transactionId: "transaction_non_visual",
+        documentId: "document_welcome",
+        baseRevision: 0,
+        actor: { type: "agent", id: "agent_conversation" },
+        label: "Rename an existing layer",
+        commands: [
+          {
+            commandId: "rename_feature",
+            type: "update_properties",
+            nodeId: "feature_one",
+            name: "Renamed",
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+    expect(event).toBeDefined();
+    if (!event) return;
+    expect(
+      generationRevealFromEditorEvent(
+        event,
         runtime.getSnapshot().document,
         "page_welcome",
         500,

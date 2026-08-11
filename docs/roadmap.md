@@ -67,7 +67,10 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 把“空壳首稿”和不透明 union error 前移到正式 revision 之前：新 target 的首个事务必须带真实可编辑内容，当次插入的每个计划区域也必须同时带非容器内容，拒绝时 ledger 保持 pending；模型可见 paint/effect schema 按具体类型声明必需字段，EditorRuntime 对 property patch 合并真实节点后按 `kind` 校验，TypeBox union 展开为具体 field path，Renderer 将 issue 归因到最后一个真正修改该节点的 command。视觉审查继续负责构图与审美，不再作为发现空 Frame/Group 或节点 schema 错误的第一道防线。
 - [x] 修复复杂设计在视觉审查后以 budget 提前停止：Run 生成预算只累计 Provider `usage.output`（已含 reasoning），不再把每轮重复 input/context 反复收费；单轮输入继续由可信模型窗口与 compaction 门禁负责，turn/tool/output 三层仍保留防失控上限。Provider 明确返回的有界 `reasoning_summary` 以低权重“设计思路”显示在 Timeline，省略/加密 reasoning 不反推隐藏思维链。
 - [x] 收口 Agent 历史终态与超时表达：新 Run 开始时把旧 Run 的“已达到上下文限制”等 error/budget 终态降为保留审计的中性历史行，不再冒充当前阻塞；Provider 首响应、流空闲、总时限使用独立 watchdog 和结构化 `provider_timeout`，Main/Agent/journal/diagnostic/Timeline 保留具体 phase、阈值、retryable、已知 Provider request ID 与始终可用的本地 model request ID。首响应前拿不到上游 ID 时明确显示 unavailable，不伪造；旧无 failure journal 继续兼容。见 ADR-0030。
-- [ ] 增加属性级 transform/geometry/paint/text tween 和自适应 reveal/tween 节奏；完成 macOS/Windows 实机运动、缩放和帧时间验收。这些过渡只能在合法 revision 之间插值，不得制造第二份可写状态。
+- [x] 增加稳定 node ID 的属性级 transform/geometry/paint/effect/text/path tween 和自适应 reveal/tween 节奏：只在连续合法 Agent revision 间插值，支持同节点当前显示值 retarget、离屏最终态、Reduced Motion、截图/停止/错误/切页/人工编辑收口，并让新增 reveal 与属性 tween 共用单 RAF；选中节点及祖先的 editBox 同帧刷新，不产生第二份可写状态。
+- [ ] 完成上述生成 motion 的 macOS/Windows 打包程序实机运动、触控板缩放、选区 editBox 与帧时间验收；共享自动化不能替代原生 GUI 证据。
+- [ ] 前移首个专业位图交付切片：从冻结的选区或 Frame 和权威 `DesignDocument` 生成 PNG/JPEG/WebP，支持目标尺寸、1×/2×/3×、透明或明确背景、颜色配置、进度/取消、人工 UI 与 Agent typed tool，并完成 macOS/Windows 保存验证；内部 `capture_canvas` 截图不得冒充交付导出。
+- [ ] 把左侧静态 Assets 占位替换为当前 Design File 的真实资源面板：先覆盖图片预览、使用次数、定位实例、拖入画布、导入/替换/relink、缺失状态与安全删除未引用资源；字体、跨文件 Library、授权、派生谱系和批量管理继续由 P4 完整资源工作台承接。
 - [ ] 建立独立的设计策略与视觉 critic 切片，解决“方块卡片 + 圆形光晕”的模板化收敛：计划必须形成可验收的视觉命题、signature motif、造型/图像/字体语言和明确反模板项；初稿前提供有差异的低成本方向探索，capture critic 对独特性、构图张力、类型层级、形态多样性、素材融合与过度重复做结构化评分，refinement 必须落实失败项。用 UI/Web、海报、Logo、吉祥物固定任务和人工盲评建立基线，不能以节点数量、用了渐变/path 或模型自评冒充审美提升。
 - [ ] 在本仓库启动的 Electron 实例中复验：Agent 渐进事务期间 pan/zoom/resize 后 Leafer editBox 始终贴合选区，不出现巨大蓝色角、残影或输入锁死。
 - [ ] 实机复验复杂渐变/光晕/模糊、属性检查器同步、`capture_canvas` 多模态视觉回读、本地路径/URL `read_image`、全局 GPT Image 2 `generate_image`、粘贴/拖放附件和 `place_image`。
@@ -134,7 +137,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 - 建立 Text/Font service，支持富文本 runs、paragraph、列表、OpenType/variable font、字体 asset、缺失字体替换和共享文本样式。文字测量与 shaping 必须在 macOS 和 Windows 上产生明确的兼容结果或 fidelity warning。
 - 扩展已建立的 Image service：当前已有 Image 节点的版本化 placement、crop/focal 几何、Leafer 投影、检查器、来源替换和专用 Agent update tool；下一步补齐画布直接 Crop、mask、透明背景、基础 adjustments/filter、资源变体、引用恢复和大图生命周期。增加独立 `edit_image` adapter/tool，支持局部重绘、扩图、背景替换、重打光和风格统一；参考图、原图和 AI 派生资源必须分离并可追溯，任何编辑都不得覆盖原始 asset。
-- 建立首个专业导出切片，支持选区或 Frame 的 PNG/JPEG/WebP、多倍图、透明背景和颜色配置。导出读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
+- 扩展 P0-B 已建立的专业位图导出，补海报交付所需的高级颜色、资源和格式保真；导出继续读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
 - 为人工属性面板和 Agent 增加文字、裁剪、替换、调整和导出的语义命令；长任务必须展示进度、支持取消并返回稳定产物或明确失败。
 
 完成条件：`OD-POSTER-01` 在保存重开后保持字体、图片裁剪和复杂外观，并能输出 1×/2× 专业位图；导出尺寸、alpha、资源引用和视觉基线通过自动化及 Electron 实机验证。

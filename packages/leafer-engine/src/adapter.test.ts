@@ -45,6 +45,7 @@ class FakeElement extends FakeEventTarget {
   parent: FakeGroup | undefined;
   localTransform = identityMatrix();
   opacity = 1;
+  pageBounds?: { x: number; y: number; width: number; height: number };
   visible = true;
   width = 0;
   height = 0;
@@ -81,7 +82,11 @@ class FakeElement extends FakeEventTarget {
     this.localTransform = { ...transform };
   }
 
-  getBounds(): { x: number; y: number; width: number; height: number } {
+  getBounds(
+    _boundsType?: string,
+    coordinateType?: string,
+  ): { x: number; y: number; width: number; height: number } {
+    if (coordinateType === "page" && this.pageBounds) return this.pageBounds;
     return { x: 0, y: 0, width: this.width, height: this.height };
   }
 
@@ -867,6 +872,365 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(findElement(app.tree, "reduced_motion_card")?.opacity).toBe(1);
     expect(leaferHarness.strokers[0]?.target).toBeNull();
     adapter.dispose();
+  });
+
+  it("tweens changed Agent properties while keeping selection bounds synchronized", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, "feature_one");
+    if (!element) throw new Error("Missing selected fixture");
+    app.editor.update.mockClear();
+    element.forceUpdate.mockClear();
+
+    const secondDocument = structuredClone(first.document);
+    secondDocument.revision += 1;
+    const node = secondDocument.nodesById.feature_one;
+    if (!node || node.kind !== "rectangle") {
+      throw new Error("Missing rectangle fixture");
+    }
+    const previousX = node.transform[4];
+    const previousWidth = node.size.width;
+    node.transform = [1, 0, 0, 1, previousX + 240, node.transform[5] + 80];
+    node.size = { width: previousWidth + 160, height: node.size.height + 40 };
+    node.opacity = 0.6;
+    node.properties.fills = [{ type: "solid", color: "#ff3366", opacity: 1 }];
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(first.document, secondDocument, "feature_one"),
+      document: secondDocument,
+      generationReveal: {
+        id: "event_agent_tween",
+        nodeIds: [],
+        startedAt: 1_000,
+        tweenNodeIds: ["feature_one"],
+      },
+    });
+
+    expect(element.localTransform.e).toBe(previousX);
+    expect(element.width).toBe(previousWidth);
+    expect(app.editor.update).toHaveBeenCalledTimes(1);
+    flushAnimationFramesAt(1_150);
+    expect(element.localTransform.e).toBeGreaterThan(previousX);
+    expect(element.localTransform.e).toBeLessThan(node.transform[4]);
+    expect(element.width).toBeGreaterThan(previousWidth);
+    expect(element.width).toBeLessThan(node.size.width);
+    expect(element.opacity).toBeGreaterThan(0);
+    expect(element.opacity).toBeLessThan(1);
+    expect(element.forceUpdate).toHaveBeenCalledWith("bounds");
+
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(first.document, secondDocument, "feature_one"),
+      document: secondDocument,
+      generationReveal: {
+        id: "event_agent_tween",
+        nodeIds: [],
+        startedAt: 1_000,
+        tweenNodeIds: ["feature_one"],
+      },
+      viewport: { ...first.viewport, panX: 24, panY: -18, zoom: 1.2 },
+    });
+    flushAnimationFramesAt(1_300);
+    expect(element.localTransform.e).toBe(node.transform[4]);
+    expect(element.width).toBe(node.size.width);
+    expect(element.opacity).toBe(node.opacity);
+    adapter.dispose();
+  });
+
+  it("retargets a later Agent revision from the current visual value", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, "feature_one");
+    if (!element) throw new Error("Missing selected fixture");
+
+    const secondDocument = structuredClone(first.document);
+    secondDocument.revision += 1;
+    const secondNode = secondDocument.nodesById.feature_one;
+    if (!secondNode) throw new Error("Missing selected fixture node");
+    secondNode.transform = [1, 0, 0, 1, 400, 120];
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(
+        first.document,
+        secondDocument,
+        "feature_one",
+        "transform",
+      ),
+      document: secondDocument,
+      generationReveal: {
+        id: "event_tween_first",
+        nodeIds: [],
+        startedAt: 1_000,
+        tweenNodeIds: ["feature_one"],
+      },
+    });
+    flushAnimationFramesAt(1_120);
+    const intermediateX = element.localTransform.e;
+    expect(intermediateX).toBeLessThan(400);
+
+    const thirdDocument = structuredClone(secondDocument);
+    thirdDocument.revision += 1;
+    const thirdNode = thirdDocument.nodesById.feature_one;
+    if (!thirdNode) throw new Error("Missing selected fixture node");
+    thirdNode.transform = [1, 0, 0, 1, 640, 180];
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(
+        secondDocument,
+        thirdDocument,
+        "feature_one",
+        "transform",
+      ),
+      document: thirdDocument,
+      generationReveal: {
+        id: "event_tween_second",
+        nodeIds: [],
+        startedAt: 1_120,
+        tweenNodeIds: ["feature_one"],
+      },
+    });
+    expect(element.localTransform.e).toBeCloseTo(intermediateX);
+    flushAnimationFramesAt(1_270);
+    expect(element.localTransform.e).toBeGreaterThan(intermediateX);
+    expect(element.localTransform.e).toBeLessThan(640);
+    flushAnimationFramesAt(1_420);
+    expect(element.localTransform.e).toBe(640);
+    adapter.dispose();
+  });
+
+  it("leaves offscreen Agent updates at their authoritative final value", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, "feature_two");
+    if (!element) throw new Error("Missing sibling fixture");
+    element.pageBounds = { x: 4_000, y: 4_000, width: 200, height: 120 };
+    const secondDocument = structuredClone(first.document);
+    secondDocument.revision += 1;
+    const node = secondDocument.nodesById.feature_two;
+    if (!node) throw new Error("Missing sibling fixture node");
+    node.transform = [1, 0, 0, 1, 820, 420];
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(
+        first.document,
+        secondDocument,
+        "feature_two",
+        "transform",
+      ),
+      document: secondDocument,
+      generationReveal: {
+        id: "event_tween_offscreen",
+        nodeIds: [],
+        startedAt: 1_000,
+        tweenNodeIds: ["feature_two"],
+      },
+    });
+    expect(element.localTransform.e).toBe(820);
+    flushAnimationFramesAt(1_100);
+    expect(element.localTransform.e).toBe(820);
+    adapter.dispose();
+  });
+
+  it("finishes tween state before capture, direct manipulation, or reduced motion", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, "feature_one");
+    if (!element) throw new Error("Missing selected fixture");
+    const secondDocument = structuredClone(first.document);
+    secondDocument.revision += 1;
+    const node = secondDocument.nodesById.feature_one;
+    if (!node) throw new Error("Missing selected fixture node");
+    node.transform = [1, 0, 0, 1, 520, 180];
+    const changed = changedNodeSet(
+      first.document,
+      secondDocument,
+      "feature_one",
+      "transform",
+    );
+    const animated = {
+      ...first,
+      changes: changed,
+      document: secondDocument,
+      generationReveal: {
+        id: "event_tween_finish",
+        nodeIds: [],
+        startedAt: 1_000,
+        tweenNodeIds: ["feature_one"],
+      },
+    } satisfies LeaferEngineSyncInput;
+    adapter.sync(animated);
+    flushAnimationFramesAt(1_100);
+    expect(element.localTransform.e).toBeLessThan(520);
+    await adapter.capture({ kind: "page", pageId: "page_welcome" });
+    expect(element.localTransform.e).toBe(520);
+
+    const thirdDocument = structuredClone(secondDocument);
+    thirdDocument.revision += 1;
+    const thirdNode = thirdDocument.nodesById.feature_one;
+    if (!thirdNode) throw new Error("Missing selected fixture node");
+    thirdNode.transform = [1, 0, 0, 1, 620, 210];
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(
+        secondDocument,
+        thirdDocument,
+        "feature_one",
+        "transform",
+      ),
+      document: thirdDocument,
+      generationReveal: {
+        id: "event_tween_direct",
+        nodeIds: [],
+        startedAt: 1_100,
+        tweenNodeIds: ["feature_one"],
+      },
+    });
+    flushAnimationFramesAt(1_200);
+    expect(element.localTransform.e).toBeLessThan(620);
+    app.editor.editBox.emit("drag.start");
+    expect(element.localTransform.e).toBe(620);
+    app.editor.editBox.emit("drag.end");
+
+    const fourthDocument = structuredClone(thirdDocument);
+    fourthDocument.revision += 1;
+    const fourthNode = fourthDocument.nodesById.feature_one;
+    if (!fourthNode) throw new Error("Missing selected fixture node");
+    fourthNode.transform = [1, 0, 0, 1, 700, 220];
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(
+        thirdDocument,
+        fourthDocument,
+        "feature_one",
+        "transform",
+      ),
+      document: fourthDocument,
+      generationReveal: {
+        id: "event_tween_reduced",
+        nodeIds: [],
+        startedAt: 1_200,
+        tweenNodeIds: ["feature_one"],
+      },
+      reducedMotion: true,
+    });
+    expect(element.localTransform.e).toBe(700);
+    adapter.dispose();
+  });
+
+  it("recovers a failed tween frame to the final projection and reports the error", async () => {
+    const onError = vi.fn();
+    const callbacks = { ...createCallbacks(), onError };
+    const adapter = await createLeaferEngineAdapter(createHost(), callbacks);
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, "feature_two");
+    if (!element) throw new Error("Missing sibling fixture");
+    const secondDocument = structuredClone(first.document);
+    secondDocument.revision += 1;
+    const node = secondDocument.nodesById.feature_two;
+    if (!node) throw new Error("Missing sibling fixture node");
+    node.transform = [1, 0, 0, 1, 740, 160];
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(
+        first.document,
+        secondDocument,
+        "feature_two",
+        "transform",
+      ),
+      document: secondDocument,
+      generationReveal: {
+        id: "event_tween_frame_error",
+        nodeIds: [],
+        startedAt: 1_000,
+        tweenNodeIds: ["feature_two"],
+      },
+    });
+    const set = element.set.bind(element);
+    let failNextFrame = true;
+    element.set = (data) => {
+      if (failNextFrame) {
+        failNextFrame = false;
+        throw new Error("Tween paint failed");
+      }
+      set(data);
+    };
+    flushAnimationFramesAt(1_150);
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Tween paint failed" }),
+    );
+    expect(element.localTransform.e).toBe(740);
+    adapter.dispose();
+  });
+
+  it("restores an active tween before adapter disposal", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, "feature_two");
+    if (!element) throw new Error("Missing sibling fixture");
+    const secondDocument = structuredClone(first.document);
+    secondDocument.revision += 1;
+    const node = secondDocument.nodesById.feature_two;
+    if (!node) throw new Error("Missing sibling fixture node");
+    node.transform = [1, 0, 0, 1, 780, 220];
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(
+        first.document,
+        secondDocument,
+        "feature_two",
+        "transform",
+      ),
+      document: secondDocument,
+      generationReveal: {
+        id: "event_tween_dispose",
+        nodeIds: [],
+        startedAt: 1_000,
+        tweenNodeIds: ["feature_two"],
+      },
+    });
+    flushAnimationFramesAt(1_100);
+    expect(element.localTransform.e).toBeLessThan(780);
+    adapter.dispose();
+    expect(element.localTransform.e).toBe(780);
   });
 
   it("refreshes an unchanged selection after revisions and viewport gestures", async () => {

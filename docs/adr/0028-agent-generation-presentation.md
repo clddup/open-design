@@ -4,7 +4,7 @@
 - 日期：2026-08-11
 - 文档协议：不变（`DesignDocument 1.8.0`）
 - 关联：ADR-0009、ADR-0016、ADR-0018、ADR-0020
-- 参考：OpenPencil `449f31dd8b7df12965f65d9da774597332fc153d`、Figma First Draft / Version History
+- 参考：OpenPencil `449f31dd8b7df12965f65d9da774597332fc153d`、Figma First Draft / Version History / Smart Animate / Motion fundamentals
 
 ## 背景
 
@@ -13,6 +13,8 @@
 OpenPencil 的固定源码并不是把 Provider 的半截输出逐 token 写入正式文档。`batch_design` 保持一次 batch 的原子应用，过程感来自 orchestrator 的多批 apply、scaffold/cleanup 阶段、节点 reveal、stagger 和 Agent cursor。Figma [First Draft](https://help.figma.com/hc/en-us/articles/23955143044247-Use-First-Draft-with-Figma-AI) 同样先生成可编辑 wireframe/design，再允许通过 prompt 或颜色、字体、间距、圆角控制继续修改，也允许把后续 prompt 限定到选中部分；[Figma Design AI tools](https://help.figma.com/hc/en-us/articles/23870272542231-Use-AI-tools-in-Figma-Design) 继续把可编辑设计、图片处理、图层重命名和交互作为分开的能力。OpenDesign 据此采用“可编辑有效阶段 + 可丢弃展示 + 可辨识语义状态”的原则，但不复制 OpenPencil/Figma 的文档、renderer、Agent runtime 或权限模型。
 
 Figma 的 [Frame](https://help.figma.com/hc/en-us/articles/360041539473-Frames-in-Figma-Design) 是控制或影响 child objects 的父级容器，其 [parent/child 关系](https://help.figma.com/hc/en-us/articles/360039959014-Parent-child-and-sibling-relationships) 与画布上的 reparenting 分开建模。OpenDesign 因而把 Run 目标绑定到稳定 Frame/region ID 和父级局部几何；单纯移动父 Frame 不应把内部设计解释成一组新的世界坐标，也不应等同于 resize、reparent 或换 Page。
+
+Figma [Smart Animate](https://help.figma.com/hc/en-us/articles/360039818874-Smart-animate-layers-between-frames) 只对匹配层实际变化的 position、size、rotation、opacity 和 fill 等属性过渡，未变化层不参与动画，不兼容形态退回 dissolve。其 [Timing](https://help.figma.com/hc/en-us/articles/41238756222615-Motion-design-fundamentals-Timing)、[Easing](https://help.figma.com/hc/en-us/articles/41238219562007-Motion-design-fundamentals-Easing) 与 [Sequencing](https://help.figma.com/hc/en-us/articles/41239278373271-Motion-design-fundamentals-Sequencing) 指南进一步要求功能性动画短而可感知、屏内移动使用缓入缓出，并让批次 offset 明显短于单项 duration。OpenDesign 使用稳定 node ID 和合法 revision 作为比名称更强的匹配条件，并把这些原则用于 Agent 生成展示，不把它实现成通用原型动画系统。
 
 ## 决策
 
@@ -28,21 +30,21 @@ Figma 的 [Frame](https://help.figma.com/hc/en-us/articles/360041539473-Frames-i
 
 这是一组可见、各自有效的提交，不是把一个非法事务“播放”出来。Provider partial JSON、推理文本和未执行的工具声明永远不能成为阶段来源。
 
-### Leafer reveal 是可丢弃展示
+### Leafer reveal 与属性 tween 是可丢弃展示
 
-Renderer 只从已提交的 `document.changed` 事件派生 reveal，并且必须同时满足：revision actor 是 Agent、`ChangeSet` 含当前 Page 的新增节点。新增节点按活动 Page 树的父级优先顺序排列，再交给 Leafer adapter 展示：
+Renderer 只从已提交的 `document.changed` 事件派生展示，并且 revision actor 必须是 Agent。`ChangeSet` 中当前 Page 的新增节点按父级优先顺序进入 reveal；稳定 node ID、相同 parent/tag 且确有视觉属性变化的既有节点进入 tween：
 
 ```text
 有效 Agent revision
-  → ChangeSet 新增节点
-  → 父级优先的 reveal schedule
-  → 短暂线框
-  → 节点淡入为当前 revision 的最终外观
+  ├─ 新增节点 → 父级优先 reveal → 短暂线框 → 淡入
+  └─ 匹配节点 → before/current display → 属性 tween → 最终属性
 ```
 
-reveal ID、时间、线框、临时 opacity 和 animation frame 不进入 `DesignDocument`、revision、history、selection、Project 文件或 Conversation journal。Leafer 场景仍只是当前 revision 的投影；展示结束后不留下另一份节点状态。
+reveal/tween ID、时间、线框、临时属性和 animation frame 不进入 `DesignDocument`、revision、history、selection、Project 文件或 Conversation journal。`#projection` 始终保存当前 revision 的最终 Leafer spec；动画只暂时修改对应 element 的显示值，展示结束后恢复最终 spec，不留下另一份节点状态。
 
-普通批次使用短 lead、wireframe 和 fade。密集批次把最多 48 个视觉节拍压缩在约 1.6 秒的 stagger span 内，不能按一千个节点逐个等待几十秒。当前只对新增节点做 reveal；现有节点的属性更新会随有效阶段出现，但尚不做 transform/paint tween。
+普通新增批次使用短 lead、wireframe 和 fade。密集批次把最多 48 个视觉节拍压缩在约 1.6 秒的 stagger span 内，不能按一千个节点逐个等待几十秒。既有节点支持仿射 transform 最短角旋转、width/height/corner/points、opacity、solid/gradient paint、stroke、兼容 shadow/blur、文字度量和同 token topology SVG path 的连续插值；文字内容、图片源、层级或不兼容 paint/path 等语义在中点离散切换并使用有界 dissolve，不强行生成错误形态。
+
+reveal 与 tween 共用一条 presentation RAF，不为每个节点建立 timer。节奏根据视口可见节点数和实际 presentation frame interval 选择约 `140–300 ms` duration、`0–24 ms` stagger 和 `12–48` 个最大动画节点；离屏节点直接保持最终值。后续 Agent revision 命中同一稳定节点时从当前显示值 retarget，而不是跳回上一 revision 的终值；非连续 revision、换 Page/文档、人工直接移动/缩放/旋转、文字或 Vector 编辑则先收口目标 tween，再由用户或权威新 revision 接管。选中节点或祖先参与 tween 时，同一帧更新 Leafer bounds/editBox，pan/zoom 只改变 viewport，不取消 tween。
 
 ### Accepted typed plan 先形成结构骨架
 
@@ -68,29 +70,29 @@ Conversation Timeline 可以显示 Provider 明确返回并已进入 `AssistantT
 
 ### 生命周期与可信截图
 
-- 用户启用 Reduced Motion 时不运行节点 reveal，Agent cursor 直接跳到目标；已接受计划仍可显示静态结构骨架，避免丢失进行中状态。
-- Design File/Page 切换、Run 终态、手动停止、Renderer/adapter 错误和 adapter dispose 都必须结束展示、恢复投影 opacity 并移除线框、骨架和 Agent cursor。
+- 用户启用 Reduced Motion 时不运行节点 reveal/tween，Agent cursor 直接跳到目标；已接受计划仍可显示静态结构骨架，避免丢失进行中状态。
+- Design File/Page 切换、Run 终态、手动停止、Renderer/adapter 错误和 adapter dispose 都必须结束展示、恢复最终投影属性并移除线框、骨架和 Agent cursor。
 - 用户在生成期间仍可 pan/zoom；viewport 变化不取消 reveal，也不改变事务作用域。
 - `capture_canvas` 不再复制用户活动 viewport 的 Canvas。Main 选择 Run 绑定 Page 或已建立的计划 Frame，Renderer 为 captured revision 创建隔离的 Leafer 投影并直接导出内容 tree；selection、skeleton、cursor、reveal 和活动 tab 均不进入图片，也不中断用户正在观看的生成展示。
 - SVG 等结构化导出继续直接读取权威文档，不序列化展示状态。
 
 ## 当前范围与后续阶段
 
-本 ADR 当前完成三个阶段：
+本 ADR 当前完成四个阶段：
 
 1. 文档有效的渐进提交、新增节点 wireframe/fade、取消回滚、单次 undo、终态/错误/切页清理、Reduced Motion 和截图收口；
 2. Main accepted typed plan 驱动的 Frame/区域骨架、全局唯一稳定 ID、可信父级局部几何编译、真实 Frame 平移跟随、受 guard 限制的纯新增 rebase、真实内容逐区替换、viewport 同步，以及停止/截图/失败/切页/dispose 清理；
 3. 绑定 accepted plan 与 typed tool 生命周期的语义阶段、绑定已提交 revision focus points 的独立 Agent cursor、固定屏幕标签、Reduced Motion、viewport/离屏行为、`aria-live` status，以及 live/durable timeline 完成态清理。
+4. 稳定 node ID 的属性级 transform/geometry/paint/effect/text/path tween、同节点 retarget、自适应视口/帧时间节奏、reveal 共用 RAF、选区 bounds 同帧刷新，以及截图/人工编辑/Reduced Motion/错误/切换/终态的最终值收口。
 
 以下仍是明确计划，不作为已实现能力宣传：
 
-1. 对 transform、geometry、paint 和 text update 提供按属性类型设计的过渡，而不是全量 cross-fade；
-2. 根据节点量、视口可见性、机器性能和用户设置调整 reveal/tween 节奏，并完成 macOS/Windows 实机运动与帧时间验收；
-3. 为跨多个工具调用的同一 Run 提供更高层 checkpoint/undo 分组，同时保留每个 Design File 的 revision 与冲突语义。
+1. 在 macOS/Windows 打包程序中完成 motion、触控板缩放、选区 editBox 和真实帧时间验收；自动化与共享构建不能替代原生 GUI 证据；
+2. 为跨多个工具调用的同一 Run 提供更高层 checkpoint/undo 分组，同时保留每个 Design File 的 revision 与冲突语义。
 
 ## 后果
 
 - 用户可以在画布上看到 Agent 产物从结构到节点逐步出现，而不是只看到聊天 loading 和最终跳变。
 - 正式文档在每个可见阶段都合法，取消后回到开始前状态；视觉过程不会污染保存、导出、截图或历史。
 - 过程感不再依赖提示词要求模型“每画一个点提交一次”，也不要求 Provider 支持特定流式格式。
-- 当前体验仍不是模拟人手逐点绘制。复杂任务先显示结构骨架，再由 Agent cursor 指示真实 revision focus，表现为多个有效批次及其节点 reveal；属性 tween、自适应节奏和 Run 级 checkpoint 尚未完成。
+- 当前体验仍不是模拟人手逐点绘制。复杂任务先显示结构骨架，再由 Agent cursor 指示真实 revision focus，表现为多个有效批次、新增节点 reveal 和既有节点属性 tween；逐点绘制回放与 Run 级 checkpoint 仍未完成。

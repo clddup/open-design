@@ -92,6 +92,7 @@ export interface LeaferGenerationReveal {
   id: string;
   nodeIds: readonly string[];
   startedAt: number;
+  tweenNodeIds?: readonly string[];
 }
 
 export type LeaferGenerationActivityPhase =

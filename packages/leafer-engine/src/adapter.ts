@@ -54,6 +54,14 @@ import {
   scheduleGenerationReveals,
   type ScheduledGenerationReveal,
 } from "./generation-reveal.js";
+import {
+  createGenerationTweenPlan,
+  generationTweenCadence,
+  generationTweenFrame,
+  type GenerationTweenEndpoint,
+  type GenerationTweenFrame,
+  type GenerationTweenPlan,
+} from "./generation-tween.js";
 import type {
   LeaferBoxCreateTool,
   LeaferCaptureResult,
@@ -97,6 +105,11 @@ interface GenerationActivityElements {
   badge: LeaferElement;
   cursor: LeaferElement;
   label: LeaferElement;
+}
+
+interface ActiveGenerationTween {
+  current: GenerationTweenFrame;
+  plan: GenerationTweenPlan;
 }
 
 interface TransformSession {
@@ -241,9 +254,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #editorFrame: number | null = null;
   #editorRefreshNeedsTreeBounds = false;
   readonly #editorRefreshNodeBounds = new Set<string>();
-  #generationRevealFrame: number | null = null;
+  #generationPresentationFrame: number | null = null;
+  #generationPresentationAverageFrameMs = 16.67;
+  #generationPresentationLastFrameAt: number | null = null;
   #generationRevealNextStartAt: number | null = null;
   readonly #generationReveals = new Map<string, ScheduledGenerationReveal>();
+  readonly #generationTweens = new Map<string, ActiveGenerationTween>();
   readonly #processedGenerationRevealIds = new Set<string>();
   #generationSkeletonFingerprint: string | null = null;
   #generationSkeletonId: string | null = null;
@@ -429,6 +445,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       input.booleanEditScope,
     );
     if (sceneChanged || editScopeChanged) this.#cancelBooleanPreview();
+    let generationTweenStarts:
+      ReadonlyMap<string, GenerationTweenEndpoint> | undefined;
 
     this.#synchronizing = true;
     try {
@@ -459,6 +477,34 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
             ? changedBooleanEditScopeIds(previous, input)
             : undefined,
         );
+        if (!contiguousChanges || input.reducedMotion === true) {
+          this.#finishGenerationTweens();
+        } else {
+          const requestedTweenNodeIds = new Set(
+            input.generationReveal?.tweenNodeIds ?? [],
+          );
+          const starts = new Map<string, GenerationTweenEndpoint>();
+          for (const nodeId of changedNodeIds) {
+            const previousSpec = this.#projection?.elementsById.get(nodeId);
+            const nextSpec = projection.elementsById.get(nodeId);
+            const canRetarget =
+              requestedTweenNodeIds.has(nodeId) &&
+              previousSpec !== undefined &&
+              nextSpec !== undefined &&
+              previousSpec.tag === nextSpec.tag &&
+              previousSpec.parentId === nextSpec.parentId;
+            this.#finishGenerationRevealNode(nodeId);
+            if (canRetarget) {
+              starts.set(
+                nodeId,
+                this.#takeGenerationTweenStart(nodeId, previousSpec),
+              );
+            } else {
+              this.#finishGenerationTweenNode(nodeId, true);
+            }
+          }
+          if (starts.size > 0) generationTweenStarts = starts;
+        }
         const invalidatesInteraction = (nodeId: string) =>
           changedNodeIds.has(nodeId) ||
           (projection.affectedNodeIds?.has(nodeId) === true &&
@@ -549,7 +595,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#focusGenerationActivityOnRevealLast(input.generationReveal);
         }
       } else if (input.generationReveal) {
-        this.#queueGenerationReveal(input.generationReveal);
+        this.#queueGenerationReveal(
+          input.generationReveal,
+          generationTweenStarts,
+        );
       }
     } catch (error) {
       this.finishGenerationPresentation();
@@ -562,6 +611,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   async capture(target: LeaferCaptureTarget): Promise<LeaferCaptureResult> {
     if (this.#disposed) throw new Error("Leafer capture adapter is disposed");
+    this.#finishGenerationReveal();
     const input = this.#input;
     if (!input || input.pageId !== target.pageId) {
       throw new Error("Leafer capture target is not the projected Page");
@@ -656,14 +706,21 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #finishGenerationReveal(): void {
-    if (this.#generationRevealFrame !== null) {
-      cancelAnimationFrame(this.#generationRevealFrame);
-      this.#generationRevealFrame = null;
+    if (this.#generationPresentationFrame !== null) {
+      cancelAnimationFrame(this.#generationPresentationFrame);
+      this.#generationPresentationFrame = null;
     }
     for (const [nodeId] of this.#generationReveals) {
       this.#restoreGenerationRevealNode(nodeId);
     }
     this.#generationReveals.clear();
+    const tweenNodeIds = new Set(this.#generationTweens.keys());
+    for (const [nodeId] of this.#generationTweens) {
+      this.#restoreGenerationTweenNode(nodeId);
+    }
+    this.#generationTweens.clear();
+    this.#refreshGenerationTweenSelection(tweenNodeIds);
+    this.#generationPresentationLastFrameAt = null;
     this.#generationRevealFocusPoints.clear();
     this.#generationActivityRevealNodeId = null;
     this.#generationRevealNextStartAt = null;
@@ -742,6 +799,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const element = this.#editor.list[0];
       const nodeId = element && this.#nodeId(element as LeaferElement);
       if (nodeId && this.#input?.document.nodesById[nodeId]?.kind === "text") {
+        this.#finishGenerationRevealNode(nodeId);
+        this.#finishGenerationTweenNode(nodeId, true);
         this.#textBefore = {
           nodeId,
           text: readElementText(element as LeaferElement),
@@ -1169,6 +1228,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (this.#selectionHasLockedElement()) return;
     const nodeIds = this.#selectedSubtreeIds();
     if (nodeIds.length === 0) return;
+    for (const nodeId of nodeIds) {
+      this.#finishGenerationRevealNode(nodeId);
+      this.#finishGenerationTweenNode(nodeId, true);
+    }
     this.#transform = {
       before: this.#capture(nodeIds),
       changed: false,
@@ -1548,6 +1611,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#cancelVectorEdit();
       return;
     }
+    this.#finishGenerationRevealNode(scope.nodeId);
+    this.#finishGenerationTweenNode(scope.nodeId, true);
     const network = node.properties.network;
     const selectedVertexIds = [...new Set(scope.selectedVertexIds)].filter(
       (vertexId) => network.vertices.some((vertex) => vertex.id === vertexId),
@@ -2412,8 +2477,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #focusGenerationActivityOnRevealLast(reveal: LeaferGenerationReveal): void {
     if (!this.#generationActivityId || !reveal.focusPoints) return;
-    for (let index = reveal.nodeIds.length - 1; index >= 0; index -= 1) {
-      const nodeId = reveal.nodeIds[index];
+    const nodeIds = [...reveal.nodeIds, ...(reveal.tweenNodeIds ?? [])];
+    for (let index = nodeIds.length - 1; index >= 0; index -= 1) {
+      const nodeId = nodeIds[index];
       if (!nodeId) continue;
       const point = reveal.focusPoints[nodeId];
       if (!point) continue;
@@ -2595,10 +2661,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationSkeletonStrokes.length = 0;
   }
 
-  #queueGenerationReveal(reveal: LeaferGenerationReveal): void {
+  #queueGenerationReveal(
+    reveal: LeaferGenerationReveal,
+    tweenStarts?: ReadonlyMap<string, GenerationTweenEndpoint>,
+  ): void {
     if (!this.#rememberGenerationReveal(reveal.id)) return;
     if (reveal.focusPoints) {
-      for (const nodeId of reveal.nodeIds) {
+      for (const nodeId of [
+        ...reveal.nodeIds,
+        ...(reveal.tweenNodeIds ?? []),
+      ]) {
         const point = reveal.focusPoints[nodeId];
         if (point) this.#generationRevealFocusPoints.set(nodeId, point);
       }
@@ -2622,7 +2694,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#generationReveals.set(item.nodeId, item);
       this.#setGenerationRevealOpacity(item.nodeId, 0);
     }
-    if (scheduled.items.length > 0) this.#scheduleGenerationRevealFrame();
+    this.#queueGenerationTweens(reveal, tweenStarts);
+    if (scheduled.items.length > 0 || this.#generationTweens.size > 0) {
+      this.#scheduleGenerationPresentationFrame();
+    }
   }
 
   #rememberGenerationReveal(revealId: string): boolean {
@@ -2638,14 +2713,24 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     return true;
   }
 
-  #scheduleGenerationRevealFrame(): void {
-    if (this.#disposed || this.#generationRevealFrame !== null) return;
-    this.#generationRevealFrame = requestAnimationFrame((now) => {
-      this.#generationRevealFrame = null;
+  #scheduleGenerationPresentationFrame(): void {
+    if (this.#disposed || this.#generationPresentationFrame !== null) return;
+    this.#generationPresentationFrame = requestAnimationFrame((now) => {
+      this.#generationPresentationFrame = null;
       if (this.#disposed) return;
-      this.#renderGenerationRevealFrame(now);
-      if (this.#generationReveals.size > 0) {
-        this.#scheduleGenerationRevealFrame();
+      try {
+        this.#recordGenerationPresentationFrame(now);
+        this.#renderGenerationRevealFrame(now);
+        this.#renderGenerationTweenFrame(now);
+      } catch (error) {
+        this.#finishGenerationReveal();
+        this.#report(error);
+        return;
+      }
+      if (this.#generationReveals.size > 0 || this.#generationTweens.size > 0) {
+        this.#scheduleGenerationPresentationFrame();
+      } else {
+        this.#generationPresentationLastFrameAt = null;
       }
     });
   }
@@ -2708,7 +2793,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#generationRevealStroker.opacity = 0;
       this.#generationRevealStroker.update();
     }
-    if (this.#generationReveals.size === 0) {
+    if (
+      this.#generationReveals.size === 0 &&
+      this.#generationTweens.size === 0
+    ) {
       this.#generationRevealNextStartAt = null;
       this.#generationRevealFocusPoints.clear();
       this.#generationActivityRevealNodeId = null;
@@ -2726,6 +2814,248 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#projection?.elementsById.get(nodeId)?.data.opacity,
     );
     this.#setGenerationRevealOpacity(nodeId, opacity);
+  }
+
+  #finishGenerationRevealNode(nodeId: string): void {
+    if (!this.#generationReveals.delete(nodeId)) return;
+    const element = this.#elements.get(nodeId);
+    this.#restoreGenerationRevealNode(nodeId);
+    if (element && this.#generationRevealStroker.target === element) {
+      this.#generationRevealStroker.target = null as never;
+      this.#generationRevealStroker.opacity = 0;
+      this.#generationRevealStroker.update();
+    }
+  }
+
+  #queueGenerationTweens(
+    reveal: LeaferGenerationReveal,
+    tweenStarts?: ReadonlyMap<string, GenerationTweenEndpoint>,
+  ): void {
+    const requested = reveal.tweenNodeIds ?? [];
+    if (requested.length === 0 || !tweenStarts || !this.#projection) return;
+    const selectedNodeIds = new Set(this.#input?.selection.nodeIds ?? []);
+    const candidates = requested.flatMap((nodeId, order) => {
+      const start = tweenStarts.get(nodeId);
+      const target = this.#projection?.elementsById.get(nodeId);
+      const element = this.#elements.get(nodeId);
+      const disappearing =
+        target?.data.visible === false && start?.data.visible !== false;
+      if (
+        !start ||
+        !target ||
+        !element ||
+        (target.data.visible === false && !disappearing) ||
+        (!disappearing && !this.#isGenerationTweenVisible(element))
+      ) {
+        return [];
+      }
+      return [
+        {
+          element,
+          nodeId,
+          order,
+          selected: selectedNodeIds.has(nodeId),
+          start,
+          target,
+        },
+      ];
+    });
+    const cadence = generationTweenCadence({
+      averageFrameMs: this.#generationPresentationAverageFrameMs,
+      nodeCount: requested.length,
+      visibleNodeCount: candidates.length,
+    });
+    candidates.sort(
+      (left, right) =>
+        Number(right.selected) - Number(left.selected) ||
+        left.order - right.order,
+    );
+    candidates
+      .slice(0, cadence.maximumAnimatedNodeCount)
+      .forEach(({ element, nodeId, start, target }, index) => {
+        const plan = createGenerationTweenPlan(
+          nodeId,
+          start,
+          { data: target.data, transform: target.transform },
+          reveal.startedAt + index * cadence.staggerMs,
+          cadence.durationMs,
+        );
+        if (!plan) return;
+        const current = generationTweenFrame(plan, plan.startsAt);
+        this.#generationTweens.set(nodeId, { current, plan });
+        this.#applyGenerationTweenFrame(element, current);
+      });
+    const animatedNodeIds = new Set(this.#generationTweens.keys());
+    const selectionBounds = this.#selectionBoundsAffected(
+      animatedNodeIds,
+      this.#projection,
+      this.#projection,
+    );
+    if (selectionBounds.size > 0) {
+      for (const nodeId of selectionBounds) {
+        this.#elements.get(nodeId)?.forceUpdate("bounds");
+      }
+      this.#editor.update();
+    }
+    const lastAnimatedNodeId = [...this.#generationTweens.keys()].at(-1);
+    const focusPoint = lastAnimatedNodeId
+      ? this.#generationRevealFocusPoints.get(lastAnimatedNodeId)
+      : undefined;
+    if (
+      lastAnimatedNodeId &&
+      focusPoint &&
+      this.#generationActivityId &&
+      this.#generationActivityRevealNodeId !== lastAnimatedNodeId
+    ) {
+      this.#generationActivityRevealNodeId = lastAnimatedNodeId;
+      this.#setGenerationActivityTarget(focusPoint, false);
+    }
+  }
+
+  #renderGenerationTweenFrame(now: number): void {
+    if (this.#generationTweens.size === 0) return;
+    const changedNodeIds = new Set<string>();
+    for (const [nodeId, active] of this.#generationTweens) {
+      const element = this.#elements.get(nodeId);
+      const target = this.#projection?.elementsById.get(nodeId);
+      if (!element || !target) {
+        this.#generationTweens.delete(nodeId);
+        continue;
+      }
+      const current = generationTweenFrame(active.plan, now);
+      active.current = current;
+      this.#applyGenerationTweenFrame(element, current);
+      changedNodeIds.add(nodeId);
+      if (current.done) {
+        this.#restoreGenerationTweenNode(nodeId);
+        this.#generationTweens.delete(nodeId);
+      }
+    }
+    const projection = this.#projection;
+    if (projection && changedNodeIds.size > 0) {
+      const selectionBounds = this.#selectionBoundsAffected(
+        changedNodeIds,
+        projection,
+        projection,
+      );
+      if (selectionBounds.size > 0) {
+        for (const nodeId of selectionBounds) {
+          this.#elements.get(nodeId)?.forceUpdate("bounds");
+        }
+        this.#editor.update();
+      }
+    }
+    if (
+      this.#generationTweens.size === 0 &&
+      this.#generationReveals.size === 0
+    ) {
+      this.#generationRevealNextStartAt = null;
+      this.#generationRevealFocusPoints.clear();
+      this.#generationActivityRevealNodeId = null;
+    }
+  }
+
+  #takeGenerationTweenStart(
+    nodeId: string,
+    previousSpec: LeaferElementSpec,
+  ): GenerationTweenEndpoint {
+    const active = this.#generationTweens.get(nodeId);
+    if (!active) {
+      return { data: previousSpec.data, transform: previousSpec.transform };
+    }
+    this.#generationTweens.delete(nodeId);
+    return {
+      data: { ...previousSpec.data, ...active.current.data },
+      transform: active.current.transform,
+    };
+  }
+
+  #finishGenerationTweenNode(nodeId: string, restore: boolean): void {
+    if (!this.#generationTweens.delete(nodeId)) return;
+    if (restore) {
+      this.#restoreGenerationTweenNode(nodeId);
+      this.#refreshGenerationTweenSelection(new Set([nodeId]));
+    }
+  }
+
+  #finishGenerationTweens(): void {
+    const nodeIds = new Set(this.#generationTweens.keys());
+    for (const [nodeId] of this.#generationTweens) {
+      this.#restoreGenerationTweenNode(nodeId);
+    }
+    this.#generationTweens.clear();
+    this.#refreshGenerationTweenSelection(nodeIds);
+  }
+
+  #restoreGenerationTweenNode(nodeId: string): void {
+    const element = this.#elements.get(nodeId);
+    const target = this.#projection?.elementsById.get(nodeId);
+    if (!element || !target) return;
+    element.set(target.data);
+    element.setTransform(toMatrix(target.transform));
+  }
+
+  #applyGenerationTweenFrame(
+    element: LeaferElement,
+    frame: GenerationTweenFrame,
+  ): void {
+    element.set(frame.data);
+    element.setTransform(toMatrix(frame.transform));
+  }
+
+  #refreshGenerationTweenSelection(nodeIds: ReadonlySet<string>): void {
+    const projection = this.#projection;
+    if (!projection || nodeIds.size === 0) return;
+    const selectionBounds = this.#selectionBoundsAffected(
+      nodeIds,
+      projection,
+      projection,
+    );
+    if (selectionBounds.size === 0) return;
+    for (const nodeId of selectionBounds) {
+      this.#elements.get(nodeId)?.forceUpdate("bounds");
+    }
+    this.#editor.update();
+  }
+
+  #recordGenerationPresentationFrame(now: number): void {
+    const previous = this.#generationPresentationLastFrameAt;
+    this.#generationPresentationLastFrameAt = now;
+    if (previous === null) return;
+    const interval = now - previous;
+    if (!Number.isFinite(interval) || interval < 4 || interval > 100) return;
+    this.#generationPresentationAverageFrameMs =
+      this.#generationPresentationAverageFrameMs * 0.85 + interval * 0.15;
+  }
+
+  #isGenerationTweenVisible(element: LeaferElement): boolean {
+    let bounds: ReturnType<LeaferElement["getBounds"]>;
+    try {
+      bounds = element.getBounds("render", "page");
+    } catch {
+      return false;
+    }
+    if (
+      !Number.isFinite(bounds.x) ||
+      !Number.isFinite(bounds.y) ||
+      !Number.isFinite(bounds.width) ||
+      !Number.isFinite(bounds.height)
+    ) {
+      return false;
+    }
+    const host = this.#host.getBoundingClientRect();
+    const left = Number.isFinite(host.left) ? host.left : 0;
+    const top = Number.isFinite(host.top) ? host.top : 0;
+    const right = Number.isFinite(host.right) ? host.right : left + host.width;
+    const bottom = Number.isFinite(host.bottom)
+      ? host.bottom
+      : top + host.height;
+    return (
+      bounds.x + bounds.width >= left &&
+      bounds.y + bounds.height >= top &&
+      bounds.x <= right &&
+      bounds.y <= bottom
+    );
   }
 
   #scheduleViewport(): void {
