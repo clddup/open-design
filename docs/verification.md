@@ -38,8 +38,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   38 files / 301 tests
-└── desktop tests   44 files / 337 tests
+├── package tests   39 files / 307 tests
+└── desktop tests   45 files / 342 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -52,6 +52,7 @@ pnpm build          passed
 测试覆盖的关键路径包括：
 
 - DesignDocument 1.8 schema/migration、正式 Path/Vector 外观与持久 Bézier point mode、非破坏 Image placement 与 Boolean Group、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
+- Agent 画布生成过程测试覆盖：三条以内事务保持原子；大型事务从 `EditorRuntime.preview()` 可接受的连续前缀逐步提交；Boolean 等依赖完整 invariant 的命令自动合并到同一有效阶段；多个 revision 共享一个 undo，取消回滚整组。Renderer 只从已提交 Agent `ChangeSet` 派生父级优先的新增节点 reveal；Leafer 测试覆盖 pending/wireframe/fade/final、密集批次有界节奏、重复事件去重、Reduced Motion、显式收口和最终 opacity 恢复。App 测试证明 Agent 终态会结束展示，`capture_canvas` 在编码前强制读取最终 revision 外观。该自动化不替代 macOS/Windows 实机运动和帧时间验收。
 - `DesignCapabilityManifest v1` 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context、只读 `get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON，`capabilities:check` 会拒绝文档漂移。
 - `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
 - Agent Runtime 在完整 run 边界生成累计 `context.compacted` checkpoint，并在同一 Run 的每个 Provider turn 前重新预算；旧 assistant/tool 段超限时变成临时有界 checkpoint，当前用户原文和最近完整 tool call/result 段继续保留。测试覆盖原始 Timeline 不删除、checkpoint 范围单调增加、旧全文退出模型投影、第八轮自动恢复，以及单次当前输入或最小必要段仍超预算时才返回 `context_budget_exceeded`。模型投影同时限制超长单字段和超过 `50000` 字符的完整结构化工具结果，原始 journal 不丢失；预算错误按 system、tool schemas、Conversation/tool results 和 framing 分账。Main 从可信 Model Profile 注入窗口和输出预算；可信 token 预算存在时不会再被固定字符阈值误杀，缺少模型窗口时才使用字符保底；固定协议无法适配小窗口时返回独立的 `model_context_incompatible`。
@@ -136,7 +137,7 @@ Vite 生产构建完成四个环境。共享门禁从实际 `out/` 检查每个�
 
 以下项目没有被本次自动化替代，不能描述成已完成：
 
-1. 在本仓库启动的 Electron 实例中，选中节点并运行多阶段 Agent 事务；持续 pan/zoom/resize，确认 Leafer 蓝色 editBox 始终贴合节点，无巨大角、残影、viewport 锁死或输入丢失。
+1. 在本仓库启动的 macOS/Windows Electron 实例中运行大型 Agent 事务，确认有效阶段和父级优先 wireframe/fade 清楚但不过慢；生成期间持续 pan/zoom/resize，确认 Leafer 蓝色 editBox 始终贴合节点，无巨大角、残影、viewport 锁死或输入丢失；停止、失败、切页、Reduced Motion 和截图后不残留半透明节点或 Agent 线框。
 2. 复杂渐变、光晕、模糊、blend、mask 和高级描边组合的视觉保真。
 3. 属性检查器修改后画布同步、多选对齐/均分/明确间距的图标与键盘焦点、文本中文输入法、缩放中的 DOM TextEditor 和焦点恢复。
 4. 粘贴/拖放附件、本地路径/URL `read_image`、全局 GPT Image 2 `generate_image` 到真实多模态模型，以及 `place_image` 的完整用户流程。

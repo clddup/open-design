@@ -49,6 +49,11 @@ import {
   setPenVertexHandle,
   type PenDraft,
 } from "./pen-tool.js";
+import {
+  generationRevealPaintState,
+  scheduleGenerationReveals,
+  type ScheduledGenerationReveal,
+} from "./generation-reveal.js";
 import type {
   LeaferBoxCreateTool,
   LeaferCanvasTool,
@@ -56,6 +61,7 @@ import type {
   LeaferCreateVectorRequest,
   LeaferEngineAdapter,
   LeaferEngineCallbacks,
+  LeaferGenerationReveal,
   LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferOperationKind,
@@ -66,6 +72,7 @@ type LeaferApp = InstanceType<LeaferModule["App"]>;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
 type LeaferGroup = InstanceType<LeaferModule["Group"]>;
 type LeaferEditor = InstanceType<LeaferModule["Editor"]>;
+type LeaferStroker = InstanceType<LeaferModule["Stroker"]>;
 
 interface ElementState {
   linePoints?: readonly [number, number, number, number];
@@ -158,6 +165,8 @@ const PEN_CLOSE_DISTANCE = 10;
 const MIN_VIEWPORT_ZOOM = 0.1;
 const MAX_VIEWPORT_ZOOM = 8;
 const WHEEL_ZOOM_SPEED = 0.16;
+const GENERATION_REVEAL_COLOR = "#6574ff";
+const MAX_PROCESSED_GENERATION_REVEALS = 128;
 
 export async function createLeaferEngineAdapter(
   host: HTMLElement,
@@ -174,6 +183,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #host: HTMLElement;
   readonly #leafer: LeaferModule;
   readonly #editor: LeaferEditor;
+  readonly #generationRevealStroker: LeaferStroker;
   readonly #elements = new Map<string, LeaferElement>();
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
   #baseProjection: LeaferSceneProjection | null = null;
@@ -202,6 +212,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #editorFrame: number | null = null;
   #editorRefreshNeedsTreeBounds = false;
   readonly #editorRefreshNodeBounds = new Set<string>();
+  #generationRevealFrame: number | null = null;
+  #generationRevealNextStartAt: number | null = null;
+  readonly #generationReveals = new Map<string, ScheduledGenerationReveal>();
+  readonly #processedGenerationRevealIds = new Set<string>();
 
   constructor(
     host: HTMLElement,
@@ -256,6 +270,17 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       },
     });
     this.#editor = this.#app.editor as LeaferEditor;
+    this.#generationRevealStroker = new leafer.Stroker();
+    this.#generationRevealStroker.set({
+      dashPattern: [6, 4],
+      hittable: false,
+      opacity: 0,
+      stroke: GENERATION_REVEAL_COLOR,
+      strokeAlign: "center",
+      strokePathType: "render-path",
+      strokeWidth: 1.25,
+    });
+    this.#editor.add(this.#generationRevealStroker);
     this.#listen();
   }
 
@@ -278,6 +303,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       !previous ||
       previous.document.documentId !== input.document.documentId ||
       previous.pageId !== input.pageId;
+    if (identityChanged) {
+      this.finishGenerationPresentation();
+      this.#processedGenerationRevealIds.clear();
+    }
     const sceneChanged =
       identityChanged ||
       previous?.document.revision !== input.document.revision;
@@ -394,7 +423,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection.nodeIds);
+      if (input.reducedMotion === true) {
+        this.finishGenerationPresentation();
+        if (input.generationReveal) {
+          this.#rememberGenerationReveal(input.generationReveal.id);
+        }
+      } else if (input.generationReveal) {
+        this.#queueGenerationReveal(input.generationReveal);
+      }
     } catch (error) {
+      this.finishGenerationPresentation();
       this.#report(error);
     } finally {
       this.#synchronizing = false;
@@ -415,6 +453,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#cancelDraw();
     this.#cancelPen();
     this.#cancelVectorEdit();
+    this.finishGenerationPresentation();
     if (this.#viewportFrame !== null) cancelAnimationFrame(this.#viewportFrame);
     if (this.#editorFrame !== null) cancelAnimationFrame(this.#editorFrame);
     this.#cancelBooleanPreview();
@@ -422,10 +461,27 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#editorFrame = null;
     this.#editorRefreshNeedsTreeBounds = false;
     this.#editorRefreshNodeBounds.clear();
+    this.#generationRevealStroker.remove();
+    this.#generationRevealStroker.destroy();
     window.removeEventListener("keydown", this.#onWindowKeyDown, true);
     this.#host.removeEventListener("contextlost", this.#onContextLost, true);
     this.#app.destroy();
     this.#elements.clear();
+  }
+
+  finishGenerationPresentation(): void {
+    if (this.#generationRevealFrame !== null) {
+      cancelAnimationFrame(this.#generationRevealFrame);
+      this.#generationRevealFrame = null;
+    }
+    for (const [nodeId] of this.#generationReveals) {
+      this.#restoreGenerationRevealNode(nodeId);
+    }
+    this.#generationReveals.clear();
+    this.#generationRevealNextStartAt = null;
+    this.#generationRevealStroker.target = null as never;
+    this.#generationRevealStroker.opacity = 0;
+    this.#generationRevealStroker.update();
   }
 
   retryBooleanGeometry(): boolean {
@@ -2034,6 +2090,119 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#draw = null;
   }
 
+  #queueGenerationReveal(reveal: LeaferGenerationReveal): void {
+    if (!this.#rememberGenerationReveal(reveal.id)) return;
+    const nodeIds = reveal.nodeIds.filter((nodeId) => {
+      const spec = this.#projection?.elementsById.get(nodeId);
+      const opacity = spec?.data.opacity;
+      return (
+        this.#elements.has(nodeId) &&
+        spec?.data.visible !== false &&
+        (typeof opacity !== "number" || opacity > 0)
+      );
+    });
+    const scheduled = scheduleGenerationReveals(
+      nodeIds,
+      reveal.startedAt,
+      this.#generationRevealNextStartAt,
+    );
+    this.#generationRevealNextStartAt = scheduled.nextAvailableStartAt;
+    for (const item of scheduled.items) {
+      this.#generationReveals.set(item.nodeId, item);
+      this.#setGenerationRevealOpacity(item.nodeId, 0);
+    }
+    if (scheduled.items.length > 0) this.#scheduleGenerationRevealFrame();
+  }
+
+  #rememberGenerationReveal(revealId: string): boolean {
+    if (this.#processedGenerationRevealIds.has(revealId)) return false;
+    this.#processedGenerationRevealIds.add(revealId);
+    while (
+      this.#processedGenerationRevealIds.size > MAX_PROCESSED_GENERATION_REVEALS
+    ) {
+      const oldest = this.#processedGenerationRevealIds.values().next().value;
+      if (oldest === undefined) break;
+      this.#processedGenerationRevealIds.delete(oldest);
+    }
+    return true;
+  }
+
+  #scheduleGenerationRevealFrame(): void {
+    if (this.#disposed || this.#generationRevealFrame !== null) return;
+    this.#generationRevealFrame = requestAnimationFrame((now) => {
+      this.#generationRevealFrame = null;
+      if (this.#disposed) return;
+      this.#renderGenerationRevealFrame(now);
+      if (this.#generationReveals.size > 0) {
+        this.#scheduleGenerationRevealFrame();
+      }
+    });
+  }
+
+  #renderGenerationRevealFrame(now: number): void {
+    let active:
+      | {
+          element: LeaferElement;
+          opacity: number;
+          startsAt: number;
+        }
+      | undefined;
+    for (const [nodeId, item] of this.#generationReveals) {
+      const element = this.#elements.get(nodeId);
+      const spec = this.#projection?.elementsById.get(nodeId);
+      if (!element || !spec) {
+        this.#generationReveals.delete(nodeId);
+        continue;
+      }
+      const state = generationRevealPaintState(item, now);
+      const finalOpacity = projectionOpacity(spec.data.opacity);
+      this.#setGenerationRevealOpacity(
+        nodeId,
+        finalOpacity * state.nodeOpacity,
+      );
+      if (state.phase === "done") {
+        this.#generationReveals.delete(nodeId);
+        continue;
+      }
+      if (
+        state.overlayOpacity > 0 &&
+        (!active || item.startsAt >= active.startsAt)
+      ) {
+        active = {
+          element,
+          opacity: state.overlayOpacity,
+          startsAt: item.startsAt,
+        };
+      }
+    }
+
+    if (active) {
+      this.#generationRevealStroker.setTarget(active.element, {
+        opacity: active.opacity,
+      });
+    } else {
+      this.#generationRevealStroker.target = null as never;
+      this.#generationRevealStroker.opacity = 0;
+      this.#generationRevealStroker.update();
+    }
+    if (this.#generationReveals.size === 0) {
+      this.#generationRevealNextStartAt = null;
+    }
+  }
+
+  #setGenerationRevealOpacity(nodeId: string, opacity: number): void {
+    const element = this.#elements.get(nodeId);
+    if (!element || nearlyEqual(element.opacity ?? 1, opacity)) return;
+    element.opacity = opacity;
+  }
+
+  #restoreGenerationRevealNode(nodeId: string): void {
+    const opacity = projectionOpacity(
+      this.#projection?.elementsById.get(nodeId)?.data.opacity,
+    );
+    this.#setGenerationRevealOpacity(nodeId, opacity);
+  }
+
   #scheduleViewport(): void {
     if (this.#synchronizing || this.#disposed || this.#viewportFrame !== null) {
       return;
@@ -2303,6 +2472,12 @@ function normalizeNumber(value: number): number {
   if (!Number.isFinite(value)) return 0;
   const rounded = Math.round(value * 1_000_000) / 1_000_000;
   return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function projectionOpacity(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.min(1, value))
+    : 1;
 }
 
 function nearlyEqual(left: number, right: number): boolean {

@@ -85,11 +85,19 @@ export interface LeaferVectorEditScope {
   selectedVertexIds: readonly string[];
 }
 
+export interface LeaferGenerationReveal {
+  id: string;
+  nodeIds: readonly string[];
+  startedAt: number;
+}
+
 export interface LeaferEngineSyncInput {
   booleanEditScope?: LeaferBooleanEditScope;
   document: DesignDocument;
   changes?: DesignChangeSet;
+  generationReveal?: LeaferGenerationReveal;
   pageId: string;
+  reducedMotion?: boolean;
   selection: SelectionState;
   tool: LeaferCanvasTool;
   vectorEditScope?: LeaferVectorEditScope;
@@ -116,6 +124,7 @@ export interface LeaferEngineOptions {
 
 export interface LeaferEngineAdapter {
   dispose(): void;
+  finishGenerationPresentation(): void;
   retryBooleanGeometry(): boolean;
   setVectorPointMode(mode: VectorPointMode): boolean;
   sync(input: LeaferEngineSyncInput): void;

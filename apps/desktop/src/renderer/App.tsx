@@ -2039,6 +2039,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               snapshot={workspaceSnapshot}
             />
             <Canvas
+              activeAgentRunId={activeAgentState.activeRunId}
               activePageId={activePageId}
               captureRef={canvasPreviewCapture}
               onTransactionError={setEditorError}

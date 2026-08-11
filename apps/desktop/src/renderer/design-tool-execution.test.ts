@@ -4,6 +4,7 @@ import {
   EditorRuntime,
   getNodeBounds,
   getWorldTransform,
+  planCreateBooleanGroup,
 } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
 import {
@@ -1007,6 +1008,56 @@ describe("Renderer design tool scope", () => {
     expect(runtime.getSnapshot().document.nodesById.feature_one?.name).toBe(
       "Structured editing",
     );
+  });
+
+  it("keeps invariant-dependent commands together in a document-valid stage", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const plan = planCreateBooleanGroup(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["feature_one", "feature_two"],
+      "subtract",
+      {
+        booleanId: "progressive_boolean",
+        name: "Progressive Boolean",
+        commandPrefix: "progressive_boolean",
+      },
+    );
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "apply_invariant_dependent",
+        call: {
+          toolCallId: "tool_invariant_dependent",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Create a valid Boolean",
+            commands: plan.commands,
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      { stageDelayMs: 0 },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: { revision: 1, stages: 1 },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.progressive_boolean,
+    ).toMatchObject({
+      kind: "boolean",
+      childIds: ["feature_one", "feature_two"],
+    });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
   it("rolls back every visible stage when generation is cancelled", async () => {

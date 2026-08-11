@@ -42,15 +42,18 @@ import {
 import type { MutableRefObject } from "react";
 import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
+import { generationRevealFromEditorEvent } from "../generation-presentation";
 import { isTool } from "../state/editor";
 
 export function Canvas({
+  activeAgentRunId,
   activePageId,
   captureRef,
   runtime,
   snapshot,
   onTransactionError,
 }: {
+  activeAgentRunId: string | null;
   activePageId: string;
   captureRef?: MutableRefObject<CanvasPreviewCapture | null>;
   runtime: EditorRuntime;
@@ -62,8 +65,12 @@ export function Canvas({
   const adapter = useRef<LeaferEngineAdapter | null>(null);
   const latestInput = useRef<LeaferEngineSyncInput | null>(null);
   const changesByRevision = useRef(new Map<number, DesignChangeSet>());
+  const generationRevealByRevision = useRef(
+    new Map<number, NonNullable<LeaferEngineSyncInput["generationReveal"]>>(),
+  );
   const transactionSequence = useRef(0);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const reducedMotion = useReducedMotion();
   const [fidelityWarnings, setFidelityWarnings] = useState<
     readonly LeaferFidelityWarning[]
   >([]);
@@ -102,6 +109,12 @@ export function Canvas({
   useEffect(() => {
     if (vectorEditState && !vectorEditScope) setVectorEditState(null);
   }, [vectorEditScope, vectorEditState]);
+
+  useEffect(() => {
+    if (activeAgentRunId === null) {
+      adapter.current?.finishGenerationPresentation();
+    }
+  }, [activeAgentRunId]);
 
   const enterVectorEdit = useCallback(
     (nodeIds: readonly string[]) => {
@@ -202,7 +215,11 @@ export function Canvas({
   useEffect(() => {
     const element = host.current;
     if (!captureRef || !element) return;
-    const capture = () => captureCanvasPreview(element);
+    const capture = async () => {
+      adapter.current?.finishGenerationPresentation();
+      await nextAnimationFrame();
+      return captureCanvasPreview(element);
+    };
     captureRef.current = capture;
     return () => {
       if (captureRef.current === capture) captureRef.current = null;
@@ -384,19 +401,35 @@ export function Canvas({
 
   useEffect(() => {
     changesByRevision.current.clear();
-    return runtime.subscribe((event) => {
+    generationRevealByRevision.current.clear();
+    return runtime.subscribe((event, nextSnapshot) => {
       if (event.type !== "document.changed") return;
       changesByRevision.current.set(
         event.result.changes.toRevision,
         event.result.changes,
       );
+      const reveal = generationRevealFromEditorEvent(
+        event,
+        nextSnapshot.document,
+        activePageId,
+        performance.now(),
+      );
+      if (reveal) {
+        generationRevealByRevision.current.set(
+          event.result.changes.toRevision,
+          reveal,
+        );
+      }
       if (changesByRevision.current.size <= 8) return;
       const oldest = [...changesByRevision.current.keys()].sort(
         (left, right) => left - right,
       )[0];
-      if (oldest !== undefined) changesByRevision.current.delete(oldest);
+      if (oldest !== undefined) {
+        changesByRevision.current.delete(oldest);
+        generationRevealByRevision.current.delete(oldest);
+      }
     });
-  }, [runtime]);
+  }, [activePageId, runtime]);
 
   useEffect(() => {
     const element = host.current;
@@ -465,6 +498,9 @@ export function Canvas({
 
   useEffect(() => {
     const changes = changesByRevision.current.get(snapshot.document.revision);
+    const generationReveal = generationRevealByRevision.current.get(
+      snapshot.document.revision,
+    );
     const input: LeaferEngineSyncInput = {
       ...(booleanEditScope
         ? {
@@ -477,7 +513,9 @@ export function Canvas({
         : {}),
       document: snapshot.document,
       ...(changes ? { changes } : {}),
+      ...(generationReveal ? { generationReveal } : {}),
       pageId: activePageId,
+      reducedMotion,
       selection: snapshot.state.selection,
       tool,
       ...(vectorEditScope
@@ -497,6 +535,7 @@ export function Canvas({
     activePageId,
     booleanEditScope,
     snapshot.document,
+    reducedMotion,
     snapshot.state.selection,
     snapshot.state.viewport,
     tool,
@@ -686,6 +725,26 @@ export type CanvasPreviewCapture = () => Promise<{
   mimeType: "image/jpeg";
   width: number;
 }>;
+
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(
+    () =>
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+  );
+  useEffect(() => {
+    const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!media) return;
+    const update = () => setReduced(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return reduced;
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
 
 const MAX_CAPTURE_WIDTH = 1_280;
 const MAX_CAPTURE_HEIGHT = 960;

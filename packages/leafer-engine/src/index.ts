@@ -10,6 +10,7 @@ export type {
   LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferFidelityWarning,
+  LeaferGenerationReveal,
   LeaferOperationKind,
   LeaferOperationRequest,
   LeaferVectorEditRequest,

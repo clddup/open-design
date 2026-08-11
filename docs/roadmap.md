@@ -51,6 +51,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 建立 Main-owned 结构化诊断 JSONL 与大小轮转；错误通过 Conversation/Run/Request/Tool Call ID 关联到右下角通知，并可一键复制。Agent 对话仅在用户贴近底部时自动跟随消息、流式增量和工具状态，上翻查看历史时不强制回底。
 - [x] 将 Provider Catalog 升级到只管理对话模型的 v3，并建立独立 `GlobalImageGenerationSettings v1`：生图服务拥有自己的启用状态、adapter、Base URL、鉴权、凭据和用户模型 ID，不受 Conversation Provider/Model 影响；`generate_image` 结果进入内容寻址附件并由 `place_image` 通过唯一事务放入画布。旧 v2 生图选择确定性迁移后从 Catalog 剥离。
 - [x] 建立跨设计类型的 Agent 质量流程门禁：新建 UI、海报、Logo、插画和品牌物料必须先提交 typed design plan，固定 Frame/Artboard、构图、排版、形态语言、surface/depth、asset role 与反模式；首张 capture 后必须提交 typed visual review 才能 refinement。Main 阻止无计划新建、Page-root 散落、未声明 raster role、默认整图替代可编辑 composition，以及未审查截图后的继续写入。
+- [x] 建立第一阶段 Agent 画布生成过程：三条以内保持原子，大事务按 `EditorRuntime.preview()` 选择文档有效的连续阶段并共享单一撤销组；已提交 Agent 新节点按父级优先执行有界 wireframe/fade reveal。取消回滚、Run 终态/错误/切页清理、Reduced Motion 和 `capture_canvas` 最终态截图已有自动化证据；展示状态不进入文档、history、selection 或导出。
+- [ ] 在第一阶段之上增加 typed plan 驱动的 Frame/区域 skeleton、独立 Agent cursor、语义阶段标签、属性级 transform/paint/text tween 和自适应节奏；这些状态必须继续与正式文档分离，并完成 macOS/Windows 实机运动、缩放和帧时间验收。
 - [ ] 在本仓库启动的 Electron 实例中复验：Agent 渐进事务期间 pan/zoom/resize 后 Leafer editBox 始终贴合选区，不出现巨大蓝色角、残影或输入锁死。
 - [ ] 实机复验复杂渐变/光晕/模糊、属性检查器同步、`capture_canvas` 多模态视觉回读、本地路径/URL `read_image`、全局 GPT Image 2 `generate_image`、粘贴/拖放附件和 `place_image`。
 - [x] 将 Leafer revision 同步改为 transaction change set 驱动的 affected-node 增量投影与 reconcile：未变节点不再 `set()`，无关 revision 不再隐藏 Editor、取消直接操作或刷新 tree bounds；选区相关变化只刷新对应元素 bounds，断档/切页/恢复才全量回退。

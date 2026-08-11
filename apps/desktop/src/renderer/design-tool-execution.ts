@@ -683,26 +683,41 @@ async function applyProgressively(
   signal: AbortSignal | undefined,
   stageDelayMs: number,
 ): Promise<RendererDesignToolResponse> {
-  const stages = progressiveStages(transaction.commands);
+  const remainingCommands = [...transaction.commands];
   let appliedStages = 0;
   let lastResult: DesignTransactionSuccess | undefined;
   try {
-    for (const [index, commands] of stages.entries()) {
+    while (remainingCommands.length > 0) {
       throwIfAborted(signal);
       const currentRevision = runtime.getSnapshot().document.revision;
+      const commands = nextValidProgressiveStage(
+        runtime,
+        transaction,
+        remainingCommands,
+        appliedStages === 0
+          ? transaction.commands.length <= 3
+            ? transaction.commands.length
+            : 1
+          : 3,
+        appliedStages,
+      );
+      const finalStage = commands.length === remainingCommands.length;
+      const onlyStage =
+        appliedStages === 0 &&
+        finalStage &&
+        remainingCommands.length === transaction.commands.length;
       const result = runtime.apply(
         {
           ...transaction,
-          transactionId:
-            stages.length === 1
-              ? transaction.transactionId
-              : `${transaction.transactionId}_stage_${index + 1}`,
+          transactionId: onlyStage
+            ? transaction.transactionId
+            : `${transaction.transactionId}_stage_${appliedStages + 1}`,
           baseRevision: currentRevision,
           commands,
         },
         {
           historyGroupId: transaction.transactionId,
-          finalizeHistoryGroup: index === stages.length - 1,
+          finalizeHistoryGroup: finalStage,
         },
       );
       if (!result.ok) {
@@ -710,7 +725,8 @@ async function applyProgressively(
       }
       appliedStages += 1;
       lastResult = result;
-      if (index < stages.length - 1) {
+      remainingCommands.splice(0, commands.length);
+      if (remainingCommands.length > 0) {
         await waitForCanvasPaint(signal, stageDelayMs);
       }
     }
@@ -736,7 +752,7 @@ async function applyProgressively(
         ok: true,
         label: transaction.label,
         revision: lastResult.revision.revision,
-        stages: stages.length,
+        stages: appliedStages,
         changes,
         warnings: lastResult.warnings,
       },
@@ -749,15 +765,38 @@ async function applyProgressively(
   };
 }
 
-function progressiveStages(
-  commands: readonly DesignOperation[],
-): DesignOperation[][] {
-  if (commands.length <= 3) return [[...commands]];
-  const stages: DesignOperation[][] = [[commands[0]]];
-  for (let index = 1; index < commands.length; index += 3) {
-    stages.push(commands.slice(index, index + 3));
+function nextValidProgressiveStage(
+  runtime: EditorRuntime,
+  transaction: DesignTransaction,
+  remainingCommands: readonly DesignOperation[],
+  preferredCommandCount: number,
+  stageIndex: number,
+): DesignOperation[] {
+  const baseRevision = runtime.getSnapshot().document.revision;
+  const firstCandidateSize = Math.min(
+    Math.max(1, preferredCommandCount),
+    remainingCommands.length,
+  );
+  let lastFailure: ReturnType<EditorRuntime["preview"]> | undefined;
+  for (
+    let commandCount = firstCandidateSize;
+    commandCount <= remainingCommands.length;
+    commandCount += 1
+  ) {
+    const commands = remainingCommands.slice(0, commandCount);
+    const candidate = runtime.preview({
+      ...transaction,
+      transactionId: `${transaction.transactionId}_preview_stage_${stageIndex + 1}_${commandCount}`,
+      baseRevision,
+      commands,
+    });
+    if (candidate.ok) return commands;
+    lastFailure = candidate;
   }
-  return stages;
+  if (lastFailure && !lastFailure.ok) {
+    throw new Error(`${lastFailure.error.code}: ${lastFailure.error.message}`);
+  }
+  throw new Error("Design transaction has no document-valid visible stage");
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

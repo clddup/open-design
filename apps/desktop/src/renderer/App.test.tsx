@@ -49,6 +49,7 @@ import type { DiagnosticEvent } from "../shared/diagnostics";
 const leaferHarness = vi.hoisted(() => ({
   callbacks: null as LeaferEngineCallbacks | null,
   input: null as LeaferEngineSyncInput | null,
+  finishGenerationPresentation: vi.fn(),
   sync: vi.fn(),
   retryBooleanGeometry: vi.fn(() => true),
   setVectorPointMode: vi.fn(() => true),
@@ -64,6 +65,8 @@ vi.mock("@opendesign/leafer-engine", () => ({
       host.append(canvas);
       return Promise.resolve({
         dispose: () => canvas.remove(),
+        finishGenerationPresentation:
+          leaferHarness.finishGenerationPresentation,
         retryBooleanGeometry: leaferHarness.retryBooleanGeometry,
         setVectorPointMode: leaferHarness.setVectorPointMode,
         sync: (input: LeaferEngineSyncInput) => {
@@ -101,6 +104,7 @@ beforeEach(() => {
   emitDiagnosticEvent = undefined;
   leaferHarness.callbacks = null;
   leaferHarness.input = null;
+  leaferHarness.finishGenerationPresentation.mockClear();
   leaferHarness.sync.mockClear();
   leaferHarness.retryBooleanGeometry.mockClear();
   leaferHarness.setVectorPointMode.mockClear();
@@ -3255,6 +3259,11 @@ describe("App", () => {
       screen.queryByRole("button", { name: "Stop" }),
     ).not.toBeInTheDocument();
     expect(document.querySelector(".agent-message__caret")).toBeNull();
+    await waitFor(() =>
+      expect(leaferHarness.finishGenerationPresentation).toHaveBeenCalledTimes(
+        1,
+      ),
+    );
   });
 
   it("saves the structured document and checkpoints only on success", async () => {
@@ -3338,6 +3347,68 @@ describe("App", () => {
     expect(runtime().getSnapshot().document.nodesById.frame_welcome?.name).toBe(
       "Agent-updated canvas",
     );
+  });
+
+  it("finishes disposable generation presentation before Agent canvas capture", async () => {
+    const context = {
+      fillStyle: "",
+      drawImage: vi.fn(),
+      fillRect: vi.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockReturnValue(context);
+    const toBlob = vi
+      .spyOn(HTMLCanvasElement.prototype, "toBlob")
+      .mockImplementation((callback) => {
+        callback(new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }));
+      });
+    const attachmentId = `image_${"c".repeat(64)}`;
+    vi.mocked(window.desktop!.importAgentAttachments).mockResolvedValueOnce([
+      {
+        attachmentId,
+        name: "OpenDesign canvas r0.jpg",
+        mimeType: "image/jpeg",
+        byteSize: 3,
+      },
+    ]);
+    renderApp();
+    if (!requestDesignTool) throw new Error("Design tool listener is missing");
+    leaferHarness.finishGenerationPresentation.mockClear();
+    const current = runtime().getSnapshot().document;
+
+    act(() => {
+      requestDesignTool?.({
+        requestId: "renderer_capture_final_presentation",
+        call: {
+          toolCallId: "tool_capture_final_presentation",
+          toolName: "opendesign_capture_canvas",
+          input: {},
+        },
+        context: {
+          runId: "run_capture",
+          sessionId: "conversation_capture",
+          documentId: current.documentId,
+          revision: current.revision,
+          scope: { kind: "document", selectedNodeIds: [] },
+          mutationTarget: { kind: "document" },
+        },
+      });
+    });
+
+    await vi.waitFor(() => {
+      expect(leaferHarness.finishGenerationPresentation).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(window.desktop!.resolveDesignToolRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: "renderer_capture_final_presentation",
+          ok: true,
+        }),
+      );
+    });
+    getContext.mockRestore();
+    toBlob.mockRestore();
   });
 
   it("reports Leafer failures without corrupting the document", () => {

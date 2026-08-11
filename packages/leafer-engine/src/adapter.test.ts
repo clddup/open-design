@@ -1,4 +1,7 @@
-import { createWelcomeDocument } from "@opendesign/editor-runtime";
+import {
+  createWelcomeDocument,
+  EditorRuntime,
+} from "@opendesign/editor-runtime";
 import type { DesignChangeSet } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +20,7 @@ const leaferHarness = vi.hoisted(() => ({
   appConfig: null as Record<string, unknown> | null,
   boxMatches: [] as FakeElement[],
   windowListeners: new Map<string, Set<(event: KeyboardEvent) => void>>(),
+  strokers: [] as FakeStroker[],
 }));
 
 class FakeEventTarget {
@@ -39,6 +43,7 @@ class FakeElement extends FakeEventTarget {
   locked = false;
   parent: FakeGroup | undefined;
   localTransform = identityMatrix();
+  opacity = 1;
   width = 0;
   height = 0;
   setCalls = 0;
@@ -125,6 +130,26 @@ class FakeText extends FakeElement {
   text = "";
 }
 
+class FakeStroker extends FakeElement {
+  override readonly tag: string = "Stroker";
+  target: FakeElement | FakeElement[] | null = null;
+  update = vi.fn();
+
+  setTarget(
+    target: FakeElement | FakeElement[] | null,
+    style?: Record<string, unknown>,
+  ): void {
+    if (style) this.set(style);
+    this.target = target;
+    this.update();
+  }
+
+  constructor() {
+    super();
+    leaferHarness.strokers.push(this);
+  }
+}
+
 class FakeTree extends FakeGroup {
   override readonly tag: string = "Leafer";
   override forceUpdate = vi.fn();
@@ -150,6 +175,7 @@ class FakeEditor extends FakeEventTarget {
   rotating = false;
   skewing = false;
   update = vi.fn();
+  children: FakeElement[] = [];
 
   constructor() {
     super();
@@ -171,6 +197,10 @@ class FakeEditor extends FakeEventTarget {
 
   closeInnerEditor(): void {
     this.innerEditing = false;
+  }
+
+  add(child: FakeElement): void {
+    this.children.push(child);
   }
 }
 
@@ -230,6 +260,7 @@ vi.mock("leafer-editor", () => ({
   ResizeEvent: { RESIZE: "viewport.resize" },
   Text: FakeText,
   Star: FakeStar,
+  Stroker: FakeStroker,
   UI: FakeElement,
   ZoomEvent: { ZOOM: "viewport.zoom", END: "viewport.zoom-end" },
 }));
@@ -243,6 +274,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     leaferHarness.appConfig = null;
     leaferHarness.boxMatches = [];
     leaferHarness.windowListeners.clear();
+    leaferHarness.strokers = [];
     animationFrames.clear();
     animationFrameSequence = 0;
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -300,6 +332,168 @@ describe("Leafer engine selection bounds synchronization", () => {
       wheel: { zoomSpeed: 0.16 },
       zoom: { min: 0.1, max: 8 },
     });
+    adapter.dispose();
+  });
+
+  it("reveals committed Agent nodes as disposable wireframe and fade presentation", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+
+    const runtime = new EditorRuntime(first.document);
+    const frame = first.document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    const applied = runtime.apply({
+      transactionId: "transaction_agent_reveal",
+      documentId: first.document.documentId,
+      baseRevision: first.document.revision,
+      actor: { type: "agent", id: "agent_conversation" },
+      label: "Add a generated card",
+      commands: [
+        {
+          commandId: "insert_generated_card",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: frame.id,
+          index: frame.childIds.length,
+          node: {
+            id: "generated_card",
+            kind: "rectangle",
+            name: "Generated card",
+            parentId: frame.id,
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 760, 80],
+            size: { width: 180, height: 120 },
+            opacity: 0.8,
+            properties: {
+              fills: [{ type: "solid", color: "#6574ff", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+              cornerRadius: 12,
+            },
+            extensions: {},
+          },
+        },
+      ],
+    });
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+
+    adapter.sync({
+      ...first,
+      document: runtime.getSnapshot().document,
+      changes: applied.changes,
+      generationReveal: {
+        id: "event_agent_reveal",
+        nodeIds: ["generated_card"],
+        startedAt: 1_000,
+      },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const card = findElement(app.tree, "generated_card");
+    const stroker = leaferHarness.strokers[0];
+    expect(card?.opacity).toBe(0);
+    expect(stroker).toBeDefined();
+
+    flushAnimationFramesAt(1_080);
+    expect(card?.opacity).toBe(0);
+    expect(stroker?.target).toBe(card);
+    expect(stroker?.opacity).toBe(1);
+
+    flushAnimationFramesAt(1_300);
+    expect(card?.opacity).toBeGreaterThan(0);
+    expect(card?.opacity).toBeLessThan(0.8);
+
+    adapter.finishGenerationPresentation();
+    expect(card?.opacity).toBe(0.8);
+    expect(stroker?.target).toBeNull();
+    adapter.dispose();
+  });
+
+  it("skips reveal motion when the operating system requests reduced motion", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    adapter.sync(first);
+    flushAnimationFrames();
+    const runtime = new EditorRuntime(first.document);
+    const frame = first.document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    const applied = runtime.apply({
+      transactionId: "transaction_reduced_motion",
+      documentId: first.document.documentId,
+      baseRevision: first.document.revision,
+      actor: { type: "agent", id: "agent_conversation" },
+      label: "Add without motion",
+      commands: [
+        {
+          commandId: "insert_reduced_motion_card",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: frame.id,
+          index: frame.childIds.length,
+          node: {
+            id: "reduced_motion_card",
+            kind: "rectangle",
+            name: "Reduced motion card",
+            parentId: frame.id,
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 760, 80],
+            size: { width: 180, height: 120 },
+            opacity: 1,
+            properties: {
+              fills: [{ type: "solid", color: "#6574ff", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+              cornerRadius: 12,
+            },
+            extensions: {},
+          },
+        },
+      ],
+    });
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    adapter.sync({
+      ...first,
+      document: runtime.getSnapshot().document,
+      changes: applied.changes,
+      generationReveal: {
+        id: "event_reduced_motion",
+        nodeIds: ["reduced_motion_card"],
+        startedAt: 1_000,
+      },
+      reducedMotion: true,
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    expect(findElement(app.tree, "reduced_motion_card")?.opacity).toBe(1);
+    expect(leaferHarness.strokers[0]?.target).toBeNull();
+    adapter.sync({
+      ...first,
+      document: runtime.getSnapshot().document,
+      changes: applied.changes,
+      generationReveal: {
+        id: "event_reduced_motion",
+        nodeIds: ["reduced_motion_card"],
+        startedAt: 1_000,
+      },
+      reducedMotion: false,
+    });
+    flushAnimationFramesAt(1_080);
+    expect(findElement(app.tree, "reduced_motion_card")?.opacity).toBe(1);
+    expect(leaferHarness.strokers[0]?.target).toBeNull();
     adapter.dispose();
   });
 
@@ -1903,6 +2097,12 @@ function flushAnimationFrames(): void {
     animationFrames.clear();
     pending.forEach(([id, callback]) => callback(id));
   }
+}
+
+function flushAnimationFramesAt(timestamp: number): void {
+  const pending = [...animationFrames.values()];
+  animationFrames.clear();
+  pending.forEach((callback) => callback(timestamp));
 }
 
 function identityMatrix() {
