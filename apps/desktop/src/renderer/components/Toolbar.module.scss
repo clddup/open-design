@@ -1,0 +1,15 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  user-select: none;
+}
+
+.group {
+  display: flex;
+  gap: 1px;
+}

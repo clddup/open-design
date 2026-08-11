@@ -2,9 +2,14 @@ import { IconButton, TooltipProvider } from "@opendesign/ui";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DesktopApi } from "../../shared/desktop-api";
 import { I18nProvider } from "../i18n";
 import { Titlebar } from "./Titlebar";
+
+afterEach(() => {
+  window.desktop = undefined;
+});
 
 function renderTitlebar() {
   const onOpen = vi.fn();
@@ -70,7 +75,7 @@ describe("Titlebar behavior primitives", () => {
       </TooltipProvider>,
     );
 
-    expect(document.querySelector(".titlebar")).toHaveAttribute(
+    expect(screen.getByRole("banner")).toHaveAttribute(
       "data-platform",
       "win32",
     );
@@ -99,11 +104,53 @@ describe("Titlebar behavior primitives", () => {
       </TooltipProvider>,
     );
 
-    expect(document.querySelector(".titlebar")).toHaveAttribute(
+    expect(screen.getByRole("banner")).toHaveAttribute(
       "data-platform",
       "darwin",
     );
     expect(screen.queryByRole("group", { name: "Window controls" })).toBeNull();
+  });
+
+  it("routes all Windows titlebar controls through the typed desktop bridge", async () => {
+    const user = userEvent.setup();
+    const windowAction = vi.fn().mockResolvedValue(undefined);
+    window.desktop = {
+      getLocale: vi.fn().mockResolvedValue("en"),
+      onLocaleChange: vi.fn().mockReturnValue(() => undefined),
+      setLocale: vi.fn().mockResolvedValue("en"),
+      windowAction,
+    } as unknown as DesktopApi;
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <I18nProvider initialLocale="en">
+          <Titlebar
+            canExportSvg={false}
+            dirty={false}
+            documentName="Welcome.opendesign"
+            onExportSvg={vi.fn()}
+            onImportSvg={vi.fn()}
+            onSave={vi.fn()}
+            onSettings={vi.fn()}
+            onThemeChange={vi.fn()}
+            onWorkspace={vi.fn()}
+            platform="win32"
+            svgBusy={false}
+            theme="light"
+          />
+        </I18nProvider>
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Minimize window" }));
+    await user.click(screen.getByRole("button", { name: "Maximize window" }));
+    await user.click(screen.getByRole("button", { name: "Close window" }));
+
+    expect(windowAction.mock.calls).toEqual([
+      ["minimize"],
+      ["toggle-maximize"],
+      ["close"],
+    ]);
   });
 
   it("keeps the menu open when its parent rerenders during the pointer gesture", async () => {

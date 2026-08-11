@@ -35,6 +35,11 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
   不再通过 `.app-shell > .diagnostic-notifications` 跨组件猜测父容器；Statusbar
   从 App 提取为只接收 persistence/error、selection、revision、zoom 和命令回调的
   展示组件。两者的错误、窄窗口、按钮 focus 与工作台定位进入各自 module。
+- 编辑器顶栏按职责拆为 `Titlebar.module.scss`、`Toolbar.module.scss` 和
+  `WindowControls.module.scss`。macOS traffic-light 安全区、Electron drag/no-drag、
+  Windows minimize/maximize/close、文档保存状态、工具 pressed/disabled/focus 与
+  1100/860 像素窄窗口行为仍由原组件拥有；平台测试改用 banner、group 与 accessible
+  name，不再依赖全局 `.titlebar` 类名。
 - `sass` 固定为 `1.102.0`，仅用于 Vite 编译期；许可记录进入第三方声明。
 - TypeScript 通过 `vite/client` 读取 module 类型，Vite 生产构建验证 SCSS Modules 可编译和合并。
 - 后续迁移需保持键盘/焦点、主题、窄窗口、Reduced Motion 和视觉状态测试；仅减少全局行数不构成完成证据。

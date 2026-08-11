@@ -1,5 +1,6 @@
 import { IconButton } from "@opendesign/ui";
 import { useI18n } from "../i18n";
+import styles from "./WindowControls.module.scss";
 
 export function WindowControls() {
   const { t } = useI18n();
@@ -10,11 +11,7 @@ export function WindowControls() {
   };
 
   return (
-    <div
-      aria-label={t("window.controls")}
-      className="window-controls"
-      role="group"
-    >
+    <div aria-label={t("window.controls")} className={styles.root} role="group">
       <IconButton
         icon="minimize"
         label={t("window.minimize")}
@@ -26,7 +23,7 @@ export function WindowControls() {
         onClick={() => runWindowAction("toggle-maximize")}
       />
       <IconButton
-        className="window-control--close"
+        className={styles.close}
         icon="close"
         label={t("window.close")}
         onClick={() => runWindowAction("close")}

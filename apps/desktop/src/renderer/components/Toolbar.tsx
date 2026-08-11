@@ -11,6 +11,7 @@ import {
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
 import type { Tool } from "../state/editor";
+import styles from "./Toolbar.module.scss";
 
 type ToolbarItem = {
   id: Tool;
@@ -142,9 +143,9 @@ export function Toolbar({
     { operation: "exclude", label: "properties.booleanExclude" },
   ];
   return (
-    <nav aria-label={t("toolbar.designTools")} className="toolbar">
+    <nav aria-label={t("toolbar.designTools")} className={styles.root}>
       <div
-        className="toolbar__group"
+        className={styles.group}
         role="group"
         aria-label={t("toolbar.history")}
       >
@@ -163,7 +164,7 @@ export function Toolbar({
       </div>
       <Divider />
       <div
-        className="toolbar__group"
+        className={styles.group}
         role="group"
         aria-label={t("toolbar.selectionActions")}
       >
@@ -220,7 +221,7 @@ export function Toolbar({
       </div>
       <Divider />
       <div
-        className="toolbar__group"
+        className={styles.group}
         role="group"
         aria-label={t("toolbar.canvasTools")}
       >

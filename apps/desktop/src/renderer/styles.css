@@ -52,36 +52,17 @@ textarea {
   min-width: 720px;
   background: var(--ui-bg);
 }
-.titlebar {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(164px, 1fr) auto;
-  align-items: center;
-  padding: 0 8px;
-  background: var(--ui-surface);
-  border-bottom: 1px solid var(--ui-border);
-  -webkit-app-region: drag;
-  user-select: none;
-}
 .titlebar__native-safe-zone {
   display: none;
   position: absolute;
   inset: 0 auto 0 0;
   width: 76px;
 }
-.titlebar[data-platform="darwin"],
 .home-titlebar[data-platform="darwin"] {
   padding-left: 78px;
 }
-.titlebar[data-platform="darwin"] .titlebar__native-safe-zone,
 .home-titlebar[data-platform="darwin"] .titlebar__native-safe-zone {
   display: block;
-}
-.titlebar__project {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
 }
 .brand-mark {
   display: grid;
@@ -93,53 +74,6 @@ textarea {
   border-radius: 7px;
   background: var(--ui-surface-raised);
 }
-.titlebar__file {
-  overflow: hidden;
-  max-width: 220px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.titlebar__status {
-  color: var(--ui-text-faint);
-  font-size: 11px;
-}
-.titlebar__actions {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-.window-controls {
-  display: flex;
-  margin-left: 2px;
-}
-.window-control--close:hover {
-  color: white !important;
-  background: #c53e3e !important;
-}
-.titlebar__breadcrumb,
-.titlebar__page {
-  overflow: hidden;
-  max-width: 180px;
-  color: var(--ui-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.titlebar__breadcrumb {
-  padding: 3px 5px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  font: inherit;
-}
-.titlebar__breadcrumb:hover {
-  color: var(--ui-text);
-  background: var(--ui-surface-raised);
-}
-.titlebar__page {
-  font-size: 11px;
-}
-
 .home-shell {
   display: grid;
   width: 100%;
@@ -680,21 +614,6 @@ textarea {
   color: var(--ui-text-faint);
   font-size: 9px;
   text-transform: capitalize;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 0 10px;
-  background: var(--ui-surface);
-  border-bottom: 1px solid var(--ui-border);
-  user-select: none;
-}
-.toolbar__group {
-  display: flex;
-  gap: 1px;
 }
 
 .workspace {
@@ -1577,12 +1496,6 @@ textarea {
 }
 
 @media (max-width: 1100px) {
-  .titlebar {
-    padding-left: 70px;
-  }
-  .titlebar__actions .ui-button--quiet span {
-    display: none;
-  }
   .workspace {
     grid-template-columns:
       min(200px, var(--left-width)) 1px minmax(0, 1fr)
@@ -1594,9 +1507,6 @@ textarea {
   }
 }
 @media (max-width: 860px) {
-  .titlebar__status {
-    display: none;
-  }
   .workspace {
     grid-template-columns:
       min(120px, var(--left-width)) 1px minmax(0, 1fr)

@@ -8,6 +8,7 @@ import {
 } from "@opendesign/ui";
 import type { ThemePreference } from "../../shared/desktop-api";
 import { useI18n } from "../i18n";
+import styles from "./Titlebar.module.scss";
 import { WindowControls } from "./WindowControls";
 
 export function Titlebar({
@@ -50,12 +51,12 @@ export function Titlebar({
   const { t } = useI18n();
   const nextTheme = theme === "dark" ? "light" : "dark";
   return (
-    <header className="titlebar" data-platform={platform}>
-      <div aria-hidden="true" className="titlebar__native-safe-zone" />
-      <div className="titlebar__project">
+    <header className={styles.root} data-platform={platform}>
+      <div aria-hidden="true" className={styles.nativeSafeZone} />
+      <div className={styles.project}>
         <button
           aria-label={t("title.workspaceHome")}
-          className="brand-mark no-drag"
+          className={`${styles.brandMark} no-drag`}
           onClick={onWorkspace}
           type="button"
         >
@@ -64,7 +65,7 @@ export function Titlebar({
         {projectName && (
           <>
             <button
-              className="titlebar__breadcrumb no-drag"
+              className={`${styles.breadcrumb} no-drag`}
               onClick={onProject}
               type="button"
             >
@@ -73,20 +74,20 @@ export function Titlebar({
             <Glyph name="chevron-right" size={12} />
           </>
         )}
-        <span className="titlebar__file" title={documentName}>
+        <span className={styles.file} title={documentName}>
           {documentName}
         </span>
         {pageName && (
           <>
             <Glyph name="chevron-right" size={12} />
-            <span className="titlebar__page">{pageName}</span>
+            <span className={styles.page}>{pageName}</span>
           </>
         )}
-        <span className="titlebar__status" role="status">
+        <span className={styles.status} role="status">
           {dirty ? t("title.unsaved") : t("title.saved")}
         </span>
       </div>
-      <div className="titlebar__actions no-drag">
+      <div className={`${styles.actions} no-drag`}>
         <Button onClick={onSave} tone="quiet">
           {t("common.save")}
         </Button>
