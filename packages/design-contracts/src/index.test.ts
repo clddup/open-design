@@ -11,6 +11,8 @@ import {
   PaintSchema,
   isDesignTransaction,
   migrateDesignDocument,
+  normalizeLineEndpoints,
+  resolveLineEndpointPoint,
   schemaValidationIssues,
 } from "./index.js";
 
@@ -198,6 +200,72 @@ describe("design contract schemas", () => {
         properties: { ...pathNode.properties, path: "<script>bad()</script>" },
       }),
     ).toBe(false);
+  });
+
+  it("defines a directed editable line with independent endpoint decorations", () => {
+    const lineNode = {
+      id: "line_flow",
+      name: "Directed flow",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 40, 32],
+      size: { width: 240, height: 120 },
+      opacity: 1,
+      extensions: {},
+      kind: "line",
+      properties: {
+        fills: [],
+        strokes: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+        strokeWidth: 3,
+        strokeAlign: "center",
+        strokeCap: "round",
+        strokeJoin: "round",
+        dashPattern: [12, 6],
+        start: { x: 1, y: 0 },
+        end: { x: 0, y: 1 },
+        startEndpoint: "circle",
+        endEndpoint: "triangle-arrow",
+      },
+    };
+
+    expect(Value.Check(DesignNodeSchema, lineNode)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...lineNode,
+        properties: {
+          ...lineNode.properties,
+          endEndpoint: "custom-unsafe-marker",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...lineNode,
+        properties: {
+          ...lineNode.properties,
+          fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...lineNode,
+        properties: { ...lineNode.properties, strokeAlign: "inside" },
+      }),
+    ).toBe(false);
+    expect(
+      resolveLineEndpointPoint(lineNode.size, lineNode.properties.start),
+    ).toEqual({ x: 240, y: 0 });
+  });
+
+  it("normalizes line direction without losing horizontal or reverse endpoints", () => {
+    expect(normalizeLineEndpoints({ x: 80, y: 40 }, { x: 20, y: 40 })).toEqual({
+      bounds: { x: 20, y: 40, width: 60, height: 0 },
+      start: { x: 1, y: 0.5 },
+      end: { x: 0, y: 0.5 },
+    });
   });
 
   it("defines a non-destructive Boolean container without persisting derived provider geometry", () => {
@@ -405,7 +473,7 @@ describe("design contract schemas", () => {
     ).toEqual({ sourceSchemaVersion: "1.2.0", legacyFit: fit });
   });
 
-  it("migrates a 1.3 document to 1.4 without inventing Boolean state", () => {
+  it("migrates a 1.3 document to the current schema without inventing state", () => {
     const imagePlacementDocument = {
       format: DESIGN_FORMAT,
       schemaVersion: "1.3.0",
@@ -432,6 +500,37 @@ describe("design contract schemas", () => {
 
     expect(migrateDesignDocument(imagePlacementDocument)).toEqual({
       ...imagePlacementDocument,
+      schemaVersion: DESIGN_SCHEMA_VERSION,
+    });
+  });
+
+  it("migrates a 1.4 document to 1.5 without inventing Line state", () => {
+    const maskDocument = {
+      format: DESIGN_FORMAT,
+      schemaVersion: "1.4.0",
+      documentId: "document_mask",
+      revision: 9,
+      pageOrder: ["page_1"],
+      pagesById: {
+        page_1: {
+          id: "page_1",
+          name: "Page 1",
+          rootNodeIds: [],
+          extensions: {},
+        },
+      },
+      nodesById: {},
+      componentsById: {},
+      variantSetsById: {},
+      tokenCollectionsById: {},
+      tokensById: {},
+      interactionsById: {},
+      assetsById: {},
+      extensions: { source: "1.4-fixture" },
+    };
+
+    expect(migrateDesignDocument(maskDocument)).toEqual({
+      ...maskDocument,
       schemaVersion: DESIGN_SCHEMA_VERSION,
     });
   });

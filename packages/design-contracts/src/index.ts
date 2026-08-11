@@ -1,7 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.4.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.5.0" as const;
+export const MASK_DESIGN_SCHEMA_VERSION = "1.4.0" as const;
 export const IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION = "1.3.0" as const;
 export const PATH_DESIGN_SCHEMA_VERSION = "1.2.0" as const;
 export const APPEARANCE_DESIGN_SCHEMA_VERSION = "1.1.0" as const;
@@ -28,6 +29,7 @@ export const NodeKindSchema = Type.Union([
   Type.Literal("boolean"),
   Type.Literal("rectangle"),
   Type.Literal("ellipse"),
+  Type.Literal("line"),
   Type.Literal("text"),
   Type.Literal("image"),
   Type.Literal("vector"),
@@ -328,6 +330,32 @@ export const EllipsePropertiesSchema = Type.Object(ShapeProperties, {
   additionalProperties: false,
 });
 
+export const LineEndpointSchema = Type.Union([
+  Type.Literal("none"),
+  Type.Literal("line-arrow"),
+  Type.Literal("triangle-arrow"),
+  Type.Literal("reversed-triangle-arrow"),
+  Type.Literal("circle"),
+  Type.Literal("diamond"),
+]);
+
+export const LinePropertiesSchema = Type.Object(
+  {
+    fills: Type.Array(PaintSchema, { maxItems: 0 }),
+    strokes: ShapeProperties.strokes,
+    strokeWidth: ShapeProperties.strokeWidth,
+    strokeAlign: Type.Optional(Type.Literal("center")),
+    strokeCap: ShapeProperties.strokeCap,
+    strokeJoin: ShapeProperties.strokeJoin,
+    dashPattern: ShapeProperties.dashPattern,
+    start: NormalizedPointSchema,
+    end: NormalizedPointSchema,
+    startEndpoint: LineEndpointSchema,
+    endEndpoint: LineEndpointSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const TextPropertiesSchema = Type.Object(
   {
     content: Type.String(),
@@ -490,6 +518,15 @@ export const EllipseNodeSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const LineNodeSchema = Type.Object(
+  {
+    ...NodeBaseProperties,
+    kind: Type.Literal("line"),
+    properties: LinePropertiesSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const TextNodeSchema = Type.Object(
   {
     ...NodeBaseProperties,
@@ -544,6 +581,7 @@ export const DesignNodeSchema = Type.Union([
   BooleanNodeSchema,
   RectangleNodeSchema,
   EllipseNodeSchema,
+  LineNodeSchema,
   TextNodeSchema,
   ImageNodeSchema,
   VectorNodeSchema,
@@ -1078,12 +1116,14 @@ export type ImagePlacement = Static<typeof ImagePlacementSchema>;
 export type Paint = Static<typeof PaintSchema>;
 export type Effect = Static<typeof EffectSchema>;
 export type MaskMode = Static<typeof MaskModeSchema>;
+export type LineEndpoint = Static<typeof LineEndpointSchema>;
 export type BooleanOperation = Static<typeof BooleanOperationSchema>;
 export type FrameNode = Static<typeof FrameNodeSchema>;
 export type GroupNode = Static<typeof GroupNodeSchema>;
 export type BooleanNode = Static<typeof BooleanNodeSchema>;
 export type RectangleNode = Static<typeof RectangleNodeSchema>;
 export type EllipseNode = Static<typeof EllipseNodeSchema>;
+export type LineNode = Static<typeof LineNodeSchema>;
 export type TextNode = Static<typeof TextNodeSchema>;
 export type ImageNode = Static<typeof ImageNodeSchema>;
 export type VectorNode = Static<typeof VectorNodeSchema>;
@@ -1205,7 +1245,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     (schemaVersion !== LEGACY_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== APPEARANCE_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== PATH_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== MASK_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
@@ -1223,6 +1264,36 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
   } catch {
     return null;
   }
+}
+
+export function resolveLineEndpointPoint(
+  size: Size,
+  endpoint: NormalizedPoint,
+): Point {
+  return { x: size.width * endpoint.x, y: size.height * endpoint.y };
+}
+
+export function normalizeLineEndpoints(
+  start: Point,
+  end: Point,
+): {
+  bounds: Rect;
+  start: NormalizedPoint;
+  end: NormalizedPoint;
+} {
+  const x = Math.min(start.x, end.x);
+  const y = Math.min(start.y, end.y);
+  const width = Math.abs(end.x - start.x);
+  const height = Math.abs(end.y - start.y);
+  const normalize = (point: Point): NormalizedPoint => ({
+    x: width === 0 ? 0.5 : (point.x - x) / width,
+    y: height === 0 ? 0.5 : (point.y - y) / height,
+  });
+  return {
+    bounds: { x, y, width, height },
+    start: normalize(start),
+    end: normalize(end),
+  };
 }
 
 function migrateImageNodes(

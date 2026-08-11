@@ -8,7 +8,7 @@ import type {
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 
 export type LeaferCanvasTool =
-  "select" | "frame" | "rectangle" | "ellipse" | "text";
+  "select" | "frame" | "rectangle" | "ellipse" | "line" | "arrow" | "text";
 
 export type LeaferOperationKind =
   "move" | "resize" | "rotate" | "skew" | "transform" | "text";
@@ -20,9 +20,11 @@ export interface LeaferOperationRequest {
 
 export interface LeaferCreateRequest {
   dragged: boolean;
+  end?: { x: number; y: number };
   height: number;
   pageId: string;
   parentId: string | null;
+  start?: { x: number; y: number };
   tool: Exclude<LeaferCanvasTool, "select">;
   width: number;
   x: number;

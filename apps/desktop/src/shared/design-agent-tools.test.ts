@@ -374,6 +374,86 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
   });
 
+  it("accepts a directed Line node and rejects invalid endpoint semantics", () => {
+    const node = {
+      id: "connector_1",
+      name: "Directed connector",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 120, 80],
+      size: { width: 240, height: 120 },
+      opacity: 1,
+      extensions: {},
+      kind: "line",
+      properties: {
+        fills: [],
+        strokes: [{ type: "solid", color: "#151515", opacity: 1 }],
+        strokeWidth: 3,
+        strokeAlign: "center",
+        strokeCap: "round",
+        strokeJoin: "round",
+        dashPattern: [8, 4],
+        start: { x: 1, y: 0 },
+        end: { x: 0, y: 1 },
+        startEndpoint: "circle",
+        endEndpoint: "triangle-arrow",
+      },
+    };
+    const input = {
+      label: "Create a directed connector",
+      commands: [
+        {
+          commandId: "insert_connector",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: null,
+          index: 0,
+          node,
+        },
+      ],
+    };
+
+    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        commands: [
+          {
+            ...input.commands[0],
+            node: {
+              ...node,
+              properties: {
+                ...node.properties,
+                endEndpoint: "open-arrow",
+              },
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        commands: [
+          {
+            ...input.commands[0],
+            node: {
+              ...node,
+              properties: {
+                ...node.properties,
+                start: { x: 1.2, y: 0 },
+              },
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("exposes bounded GPT Image 2 generation without a model override", () => {
     const generate = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === GENERATE_IMAGE_TOOL_NAME,

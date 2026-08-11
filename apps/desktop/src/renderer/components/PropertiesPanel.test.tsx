@@ -1,6 +1,7 @@
 import { TooltipProvider } from "@opendesign/ui";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { DesignNode } from "@opendesign/design-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
 import {
@@ -11,6 +12,7 @@ import {
 function renderPanel(
   options: {
     feedback?: SvgInterchangeFeedback | null;
+    node?: DesignNode;
     operation?: { kind: "import" | "export"; name: string } | null;
   } = {},
 ) {
@@ -18,6 +20,7 @@ function renderPanel(
   const onDismissSvgFeedback = vi.fn();
   const onExportSvg = vi.fn();
   const onSvgExportSettingsChange = vi.fn();
+  const onUpdate = vi.fn();
   render(
     <TooltipProvider delayDuration={0}>
       <I18nProvider initialLocale="en">
@@ -25,7 +28,7 @@ function renderPanel(
           arrangement={null}
           booleanOperationEditable={false}
           canDelete
-          node={undefined}
+          node={options.node}
           onArrange={vi.fn()}
           onBooleanOperationChange={vi.fn()}
           onCancelSvgOperation={onCancelSvgOperation}
@@ -36,7 +39,7 @@ function renderPanel(
           onReplaceImage={vi.fn()}
           onSelectBooleanParent={vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
-          onUpdate={vi.fn()}
+          onUpdate={onUpdate}
           selectionCount={2}
           svgExportSettings={{ includeLayerIds: false, padding: 0 }}
           svgFeedback={options.feedback ?? null}
@@ -50,8 +53,36 @@ function renderPanel(
     onDismissSvgFeedback,
     onExportSvg,
     onSvgExportSettingsChange,
+    onUpdate,
   };
 }
+
+const lineNode: DesignNode = {
+  id: "line_1",
+  name: "Directed connector",
+  parentId: null,
+  childIds: [],
+  visible: true,
+  locked: false,
+  transform: [1, 0, 0, 1, 120, 80],
+  size: { width: 240, height: 120 },
+  opacity: 1,
+  extensions: {},
+  kind: "line",
+  properties: {
+    fills: [],
+    strokes: [{ type: "solid", color: "#151515", opacity: 1 }],
+    strokeWidth: 3,
+    strokeAlign: "center",
+    strokeCap: "round",
+    strokeJoin: "round",
+    dashPattern: [8, 4],
+    start: { x: 1, y: 0 },
+    end: { x: 0, y: 1 },
+    startEndpoint: "circle",
+    endEndpoint: "line-arrow",
+  },
+};
 
 describe("PropertiesPanel SVG workflow", () => {
   it("edits only implemented SVG settings and exports the current selection", async () => {
@@ -128,5 +159,49 @@ describe("PropertiesPanel SVG workflow", () => {
       screen.getByRole("button", { name: "Dismiss SVG report" }),
     );
     expect(onDismissSvgFeedback).toHaveBeenCalledOnce();
+  });
+});
+
+describe("PropertiesPanel line workflow", () => {
+  it("edits independent endpoints, direction, cap, join, and dash pattern", async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = renderPanel({ node: lineNode });
+
+    expect(screen.getByText("Directed connector")).toBeVisible();
+    await user.selectOptions(screen.getByLabelText("Start"), "diamond");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { startEndpoint: "diamond" },
+    });
+
+    await user.selectOptions(screen.getByLabelText("End"), "triangle-arrow");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { endEndpoint: "triangle-arrow" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Reverse direction" }));
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: {
+        start: { x: 0, y: 1 },
+        end: { x: 1, y: 0 },
+      },
+    });
+
+    await user.selectOptions(screen.getByLabelText("Cap"), "square");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { strokeCap: "square" },
+    });
+
+    await user.selectOptions(screen.getByLabelText("Join"), "bevel");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { strokeJoin: "bevel" },
+    });
+
+    const dashPattern = screen.getByLabelText("Dash pattern");
+    await user.clear(dashPattern);
+    await user.type(dashPattern, "12, 6, 2, 6");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { dashPattern: [12, 6, 2, 6] },
+    });
   });
 });

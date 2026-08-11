@@ -4,7 +4,11 @@ import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLeaferEngineAdapter } from "./adapter.js";
 import { booleanResultElementId } from "./mapping.js";
-import type { LeaferEngineCallbacks, LeaferEngineSyncInput } from "./types.js";
+import type {
+  LeaferCreateRequest,
+  LeaferEngineCallbacks,
+  LeaferEngineSyncInput,
+} from "./types.js";
 
 const leaferHarness = vi.hoisted(() => ({
   app: null as FakeApp | null,
@@ -91,6 +95,11 @@ class FakeEllipse extends FakeElement {
   override readonly tag: string = "Ellipse";
 }
 
+class FakeArrow extends FakeElement {
+  override readonly tag: string = "Arrow";
+  points: number[] = [];
+}
+
 class FakeImage extends FakeElement {
   override readonly tag: string = "Image";
 }
@@ -169,6 +178,7 @@ class FakeApp extends FakeEventTarget {
 
 vi.mock("leafer-editor", () => ({
   App: FakeApp,
+  Arrow: FakeArrow,
   Bounds: class FakeBounds {
     constructor(
       readonly x: number,
@@ -1016,6 +1026,154 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(app.editor.update).not.toHaveBeenCalled();
     adapter.dispose();
   });
+
+  it("creates directed Line and Arrow requests without losing reverse drag direction", async () => {
+    const onCreate = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreate,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "arrow",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+
+    app.emit("drag.start", boxDragEvent(100, 40));
+    app.emit("drag.drag", boxDragEvent(20, 100));
+    app.emit("drag.end", boxDragEvent(20, 100));
+
+    expect(onCreate).toHaveBeenCalledWith({
+      dragged: true,
+      end: { x: 0, y: 1 },
+      height: 60,
+      pageId: "page_welcome",
+      parentId: null,
+      start: { x: 1, y: 0 },
+      tool: "arrow",
+      width: 80,
+      x: 20,
+      y: 40,
+    });
+    adapter.dispose();
+  });
+
+  it("constrains Line creation to 45-degree increments and draws from center with Alt", async () => {
+    const onCreate = vi.fn(
+      (request: LeaferCreateRequest) => request.tool === "line",
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreate,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "line",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+
+    app.emit("drag.start", boxDragEvent(100, 100));
+    app.emit(
+      "drag.drag",
+      boxDragEvent(140, 110, { altKey: true, shiftKey: true }),
+    );
+    app.emit(
+      "drag.end",
+      boxDragEvent(140, 110, { altKey: true, shiftKey: true }),
+    );
+
+    const request = onCreate.mock.calls[0]?.[0];
+    expect(request).toMatchObject({
+      dragged: true,
+      end: { x: 1, y: 0.5 },
+      height: 0,
+      pageId: "page_welcome",
+      parentId: null,
+      start: { x: 0, y: 0.5 },
+      tool: "line",
+      y: 100,
+    });
+    expect(request?.x).toBeCloseTo(58.7689, 4);
+    expect(request?.width).toBeCloseTo(82.4621, 4);
+    adapter.dispose();
+  });
+
+  it("creates a deterministic default Line when the user clicks without dragging", async () => {
+    const onCreate = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreate,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "line",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+
+    app.emit("drag.start", boxDragEvent(120, 90));
+    app.emit("drag.end", boxDragEvent(120, 90));
+
+    expect(onCreate).toHaveBeenCalledWith({
+      dragged: false,
+      end: { x: 1, y: 0.5 },
+      height: 0,
+      pageId: "page_welcome",
+      parentId: null,
+      start: { x: 0, y: 0.5 },
+      tool: "line",
+      width: 160,
+      x: 120,
+      y: 90,
+    });
+    adapter.dispose();
+  });
+
+  it("persists Leafer LineEditTool endpoint drags as one canonical transaction", async () => {
+    const onOperations = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    adapter.sync(withLineFixture(createInput()));
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    const line = app && findElement(app.tree, "flow_line");
+    if (!app || !(line instanceof FakeArrow)) {
+      throw new Error("Missing Line projection");
+    }
+
+    app.editor.resizing = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-scale");
+    line.points = [-20, 0, 130, 60];
+    app.editor.emit("editor.scale");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+
+    expect(onOperations).toHaveBeenCalledWith({
+      kind: "resize",
+      operations: [
+        {
+          commandId: "leafer_transform_flow_line",
+          type: "update_properties",
+          nodeId: "flow_line",
+          transform: [1, 0, 0, 1, 0, 30],
+          size: { width: 150, height: 60 },
+          properties: {
+            start: { x: 0, y: 0 },
+            end: { x: 1, y: 1 },
+          },
+        },
+      ],
+    });
+    adapter.dispose();
+  });
 });
 
 function createInput(): LeaferEngineSyncInput {
@@ -1100,6 +1258,44 @@ function withBooleanFixture(
   };
 }
 
+function withLineFixture(input: LeaferEngineSyncInput): LeaferEngineSyncInput {
+  const document = structuredClone(input.document);
+  const frame = document.nodesById.frame_welcome;
+  if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+  document.nodesById.flow_line = {
+    id: "flow_line",
+    name: "Flow line",
+    parentId: frame.id,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 20, 30],
+    size: { width: 100, height: 0 },
+    opacity: 1,
+    extensions: {},
+    kind: "line",
+    properties: {
+      fills: [],
+      strokes: [{ type: "solid", color: "#111827", opacity: 1 }],
+      strokeWidth: 2,
+      strokeAlign: "center",
+      strokeCap: "round",
+      strokeJoin: "round",
+      dashPattern: [],
+      start: { x: 0, y: 0.5 },
+      end: { x: 1, y: 0.5 },
+      startEndpoint: "none",
+      endEndpoint: "line-arrow",
+    },
+  };
+  frame.childIds.push("flow_line");
+  return {
+    ...input,
+    document,
+    selection: { nodeIds: ["flow_line"], anchorNodeId: "flow_line" },
+  };
+}
+
 function fakeVectorGeometryProvider(): VectorGeometryProvider {
   const result = (
     path: string,
@@ -1162,12 +1358,17 @@ function createHost(): HTMLElement {
   } as unknown as HTMLElement;
 }
 
-function boxDragEvent(x: number, y: number) {
+function boxDragEvent(
+  x: number,
+  y: number,
+  modifiers: { altKey?: boolean; shiftKey?: boolean } = {},
+) {
   return {
+    altKey: modifiers.altKey ?? false,
     clientX: x,
     clientY: y,
     getInnerPoint: () => ({ x, y }),
-    shiftKey: false,
+    shiftKey: modifiers.shiftKey ?? false,
     target: {},
   };
 }

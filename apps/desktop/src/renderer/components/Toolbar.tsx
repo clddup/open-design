@@ -30,6 +30,13 @@ const tools: ToolbarItem[] = [
     shortcut: "R",
   },
   { id: "ellipse", label: "toolbar.ellipse", icon: "ellipse", shortcut: "O" },
+  { id: "line", label: "toolbar.line", icon: "line", shortcut: "L" },
+  {
+    id: "arrow",
+    label: "toolbar.arrow",
+    icon: "arrow",
+    shortcut: "Shift+L",
+  },
   {
     id: "pen",
     label: "toolbar.penUnavailable",

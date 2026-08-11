@@ -306,6 +306,16 @@ const MODEL_POINT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_NORMALIZED_POINT_SCHEMA = {
+  type: "object",
+  properties: {
+    x: { type: "number", minimum: 0, maximum: 1 },
+    y: { type: "number", minimum: 0, maximum: 1 },
+  },
+  required: ["x", "y"],
+  additionalProperties: false,
+} as const;
+
 const MODEL_SIZE_SCHEMA = {
   type: "object",
   properties: {
@@ -415,7 +425,7 @@ const MODEL_SHAPE_PROPERTIES = {
 const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
   type: "object",
   description:
-    "Properties must match node.kind. frame: shape fields + cornerRadius + clipsContent; group: empty object; rectangle: shape fields + cornerRadius; ellipse: shape fields; text: content/fontFamily/fontSize/fontWeight/lineHeight/letterSpacing/textAlignHorizontal/textAlignVertical + shape fields; image: assetId/placement/altText/cornerRadius; path or vector: shape fields + SVG path and optional fillRule.",
+    "Properties must match node.kind. frame: shape fields + cornerRadius + clipsContent; group: empty object; rectangle: shape fields + cornerRadius; ellipse: shape fields; line: empty fills + center stroke fields + normalized directed start/end + independent startEndpoint/endEndpoint; text: content/fontFamily/fontSize/fontWeight/lineHeight/letterSpacing/textAlignHorizontal/textAlignVertical + shape fields; image: assetId/placement/altText/cornerRadius; path or vector: shape fields + SVG path and optional fillRule.",
   properties: {
     ...MODEL_SHAPE_PROPERTIES,
     cornerRadius: { type: "number", minimum: 0 },
@@ -500,6 +510,28 @@ const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
       description: "Portable SVG path data in the node's local coordinates.",
     },
     fillRule: { enum: ["nonzero", "evenodd"] },
+    start: MODEL_NORMALIZED_POINT_SCHEMA,
+    end: MODEL_NORMALIZED_POINT_SCHEMA,
+    startEndpoint: {
+      enum: [
+        "none",
+        "line-arrow",
+        "triangle-arrow",
+        "reversed-triangle-arrow",
+        "circle",
+        "diamond",
+      ],
+    },
+    endEndpoint: {
+      enum: [
+        "none",
+        "line-arrow",
+        "triangle-arrow",
+        "reversed-triangle-arrow",
+        "circle",
+        "diamond",
+      ],
+    },
   },
   additionalProperties: false,
 } as const;
@@ -539,6 +571,7 @@ const MODEL_NODE_SCHEMA = {
         "group",
         "rectangle",
         "ellipse",
+        "line",
         "text",
         "image",
         "vector",

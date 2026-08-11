@@ -1450,6 +1450,84 @@ describe("App", () => {
     expect(snapshot.document.revision).toBe(1);
   });
 
+  it("creates editable Line and Arrow nodes from toolbar and keyboard tools", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const before = new Set(
+      Object.keys(runtime().getSnapshot().document.nodesById),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Line (L)" }));
+    expect(runtimeOutput()).toHaveAttribute("data-tool", "line");
+    act(() => {
+      leaferCallbacks().onCreate({
+        dragged: true,
+        height: 0,
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        tool: "line",
+        width: 180,
+        x: 420,
+        y: 236,
+        start: { x: 0, y: 0.5 },
+        end: { x: 1, y: 0.5 },
+      });
+    });
+    let snapshot = runtime().getSnapshot();
+    const lineId = Object.keys(snapshot.document.nodesById).find(
+      (nodeId) => !before.has(nodeId),
+    );
+    expect(snapshot.document.nodesById[lineId ?? ""]).toMatchObject({
+      kind: "line",
+      size: { width: 180, height: 0 },
+      properties: {
+        start: { x: 0, y: 0.5 },
+        end: { x: 1, y: 0.5 },
+        startEndpoint: "none",
+        endEndpoint: "none",
+      },
+    });
+    expect(snapshot.state.selection.nodeIds).toEqual([lineId]);
+    expect(snapshot.state.tool).toBe("select");
+
+    fireEvent.keyDown(window, { code: "KeyL", key: "L", shiftKey: true });
+    expect(runtimeOutput()).toHaveAttribute("data-tool", "arrow");
+    act(() => {
+      leaferCallbacks().onCreate({
+        dragged: true,
+        height: 90,
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        tool: "arrow",
+        width: 140,
+        x: 600,
+        y: 260,
+        start: { x: 1, y: 1 },
+        end: { x: 0, y: 0 },
+      });
+    });
+    snapshot = runtime().getSnapshot();
+    const arrowId = Object.keys(snapshot.document.nodesById).find(
+      (nodeId) => !before.has(nodeId) && nodeId !== lineId,
+    );
+    expect(snapshot.document.nodesById[arrowId ?? ""]).toMatchObject({
+      kind: "line",
+      size: { width: 140, height: 90 },
+      properties: {
+        start: { x: 1, y: 1 },
+        end: { x: 0, y: 0 },
+        startEndpoint: "none",
+        endEndpoint: "line-arrow",
+      },
+    });
+    expect(snapshot.state.selection.nodeIds).toEqual([arrowId]);
+    expect(snapshot.state.tool).toBe("select");
+    expect(snapshot.document.revision).toBe(2);
+
+    fireEvent.keyDown(window, { code: "KeyL", key: "l" });
+    expect(runtimeOutput()).toHaveAttribute("data-tool", "line");
+  });
+
   it("keeps drag movement transient until pointer-up commits one revision", () => {
     renderApp();
     expect(runtime().getSnapshot().document.revision).toBe(0);

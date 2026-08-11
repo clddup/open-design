@@ -1,9 +1,14 @@
 import type {
   DesignDocument,
   DesignNode,
+  LineEndpoint,
   Paint,
   Rect,
   Transform,
+} from "@opendesign/design-contracts";
+import {
+  normalizeLineEndpoints,
+  resolveLineEndpointPoint,
 } from "@opendesign/design-contracts";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
 import type {
@@ -47,6 +52,11 @@ import type {
   SvgInterchangeIssueCode,
   SvgInterchangeIssueSeverity,
 } from "./svg-issues.js";
+import {
+  appendSvgLineEndpointDefinition,
+  collectSvgLineEndpointDefinitions,
+  readSvgLineEndpoints,
+} from "./svg-line-endpoints.js";
 
 export * from "./svg-issues.js";
 
@@ -154,6 +164,7 @@ interface ExportContext {
   filterSequence: number;
   issues: SvgInterchangeIssue[];
   maskSequence: number;
+  markerSequence: number;
   request: SvgExportRequest;
   visiting: Set<string>;
 }
@@ -166,6 +177,10 @@ interface ImportContext {
   idPrefix: string;
   issues: SvgInterchangeIssue[];
   maskDefinitions: ReadonlyMap<string, Element>;
+  markerDefinitions: ReadonlyMap<
+    string,
+    { element: Element; endpoint: LineEndpoint }
+  >;
   nodeSequence: number;
   nodes: DesignNode[];
   rootStyle: ImportedStyle;
@@ -304,6 +319,7 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
     gradientSequence: 0,
     issues,
     maskSequence: 0,
+    markerSequence: 0,
     request,
     visiting: new Set(),
   };
@@ -423,6 +439,7 @@ export function importSvg(
     idPrefix: request.idPrefix,
     issues,
     maskDefinitions,
+    markerDefinitions: collectSvgLineEndpointDefinitions(root, issues),
     nodeSequence: 0,
     nodes: [],
     rootStyle,
@@ -622,6 +639,15 @@ function exportNode(
       element.setAttribute("cy", formatNumber(node.size.height / 2));
       element.setAttribute("rx", formatNumber(node.size.width / 2));
       element.setAttribute("ry", formatNumber(node.size.height / 2));
+    } else if (node.kind === "line") {
+      element = context.document.createElementNS(SVG_NAMESPACE, "line");
+      const start = resolveLineEndpointPoint(node.size, node.properties.start);
+      const end = resolveLineEndpointPoint(node.size, node.properties.end);
+      element.setAttribute("x1", formatNumber(start.x));
+      element.setAttribute("y1", formatNumber(start.y));
+      element.setAttribute("x2", formatNumber(end.x));
+      element.setAttribute("y2", formatNumber(end.y));
+      applyExportLineEndpoints(context, element, node);
     } else if (node.kind === "path" || node.kind === "vector") {
       element = context.document.createElementNS(SVG_NAMESPACE, "path");
       element.setAttribute("d", node.properties.path);
@@ -650,6 +676,26 @@ function exportNode(
   } finally {
     context.visiting.delete(nodeId);
   }
+}
+
+function applyExportLineEndpoints(
+  context: ExportContext,
+  element: Element,
+  node: Extract<DesignNode, { kind: "line" }>,
+): void {
+  const append = (position: "start" | "end", endpoint: LineEndpoint): void => {
+    if (endpoint === "none") return;
+    const id = `od_line_marker_${++context.markerSequence}_${sanitizeXmlId(node.id)}_${position}`;
+    appendSvgLineEndpointDefinition({
+      definitions: context.definitions,
+      document: context.document,
+      endpoint,
+      id,
+    });
+    element.setAttribute(`marker-${position}`, `url(#${id})`);
+  };
+  append("start", node.properties.startEndpoint);
+  append("end", node.properties.endEndpoint);
 }
 
 function exportContainerChildren(
@@ -1664,6 +1710,59 @@ function importElement(
     return nodeId;
   }
 
+  if (tag === "line") {
+    const x1 = readLength(element, "x1", 0, context.issues);
+    const y1 = readLength(element, "y1", 0, context.issues);
+    const x2 = readLength(element, "x2", 0, context.issues);
+    const y2 = readLength(element, "y2", 0, context.issues);
+    if ([x1, y1, x2, y2].some((value) => value === null)) return null;
+    const endpoints = readSvgLineEndpoints({
+      definitions: context.markerDefinitions,
+      element,
+      issues: context.issues,
+      nodeId,
+    });
+    if (!endpoints) return null;
+    const geometry = normalizeLineEndpoints(
+      { x: x1!, y: y1! },
+      { x: x2!, y: y2! },
+    );
+    const node: DesignNode = {
+      ...common,
+      kind: "line",
+      transform: fromMatrix(
+        compose(
+          toMatrix(transform),
+          translate(geometry.bounds.x, geometry.bounds.y),
+        ),
+      ),
+      size: {
+        width: geometry.bounds.width,
+        height: geometry.bounds.height,
+      },
+      properties: {
+        fills: [],
+        strokes: properties.strokes,
+        strokeWidth: properties.strokeWidth,
+        strokeAlign: "center",
+        ...(properties.strokeCap === undefined
+          ? {}
+          : { strokeCap: properties.strokeCap }),
+        ...(properties.strokeJoin === undefined
+          ? {}
+          : { strokeJoin: properties.strokeJoin }),
+        ...(properties.dashPattern === undefined
+          ? {}
+          : { dashPattern: properties.dashPattern }),
+        start: geometry.start,
+        end: geometry.end,
+        ...endpoints,
+      },
+    };
+    context.nodes.push(node);
+    return nodeId;
+  }
+
   const pathData = readElementPath(element, tag, context.issues);
   if (!pathData) {
     context.issues.push(
@@ -2120,6 +2219,8 @@ function readImportedStyle(
     "filter",
     "mask",
     "mask-type",
+    "marker-start",
+    "marker-end",
     "stroke",
     "stroke-opacity",
     "stroke-width",
@@ -2668,6 +2769,7 @@ type ShapeProperties = Extract<
       | "boolean"
       | "ellipse"
       | "frame"
+      | "line"
       | "path"
       | "rectangle"
       | "text"

@@ -7,6 +7,7 @@ import type {
   Paint,
   Transform,
 } from "@opendesign/design-contracts";
+import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
 import { resolveImagePlacement } from "@opendesign/image-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
 import type { LeaferBooleanEditScope, LeaferFidelityWarning } from "./types.js";
@@ -16,7 +17,7 @@ export const BOOLEAN_RESULT_ELEMENT_PREFIX =
 export const LEAFER_EDITOR_SELECTION_COLOR = "#4f7fff" as const;
 
 export type LeaferElementTag =
-  "Ellipse" | "Frame" | "Group" | "Image" | "Path" | "Rect" | "Text";
+  "Arrow" | "Ellipse" | "Frame" | "Group" | "Image" | "Path" | "Rect" | "Text";
 
 export interface LeaferElementSpec {
   childIds: string[];
@@ -316,6 +317,20 @@ function toElementSpec(
         height: node.size.height,
       };
       break;
+    case "line": {
+      tag = "Arrow";
+      const start = resolveLineEndpointPoint(node.size, node.properties.start);
+      const end = resolveLineEndpointPoint(node.size, node.properties.end);
+      data = {
+        ...base,
+        ...mapShapeProperties(document, node.id, node.properties, warnings),
+        fill: null,
+        points: [start.x, start.y, end.x, end.y],
+        startArrow: mapLineEndpoint(node.properties.startEndpoint),
+        endArrow: mapLineEndpoint(node.properties.endEndpoint),
+      };
+      break;
+    }
     case "text":
       tag = "Text";
       data = {
@@ -414,6 +429,31 @@ function toElementSpec(
     tag,
     transform: [...node.transform],
   };
+}
+
+function mapLineEndpoint(
+  endpoint:
+    | "none"
+    | "line-arrow"
+    | "triangle-arrow"
+    | "reversed-triangle-arrow"
+    | "circle"
+    | "diamond",
+): "none" | "angle" | "triangle" | "triangle-flip" | "circle" | "diamond" {
+  switch (endpoint) {
+    case "none":
+      return "none";
+    case "line-arrow":
+      return "angle";
+    case "triangle-arrow":
+      return "triangle";
+    case "reversed-triangle-arrow":
+      return "triangle-flip";
+    case "circle":
+      return "circle";
+    case "diamond":
+      return "diamond";
+  }
 }
 
 export function projectResolvedBooleanGeometry(

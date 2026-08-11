@@ -442,4 +442,64 @@ describe("non-destructive Boolean operations", () => {
       "boolean nodes require at least two operands",
     );
   });
+
+  it("rejects an open Line as a Boolean operand until outline stroke is explicit", () => {
+    const document = structuredClone(booleanDocument());
+    const bottom = document.nodesById.path_bottom!;
+    bottom.parentId = "boolean_with_line";
+    document.nodesById.line_open = {
+      id: "line_open",
+      kind: "line",
+      name: "Open line",
+      parentId: "boolean_with_line",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 100, height: 0 },
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokeWidth: 4,
+        strokeAlign: "center",
+        strokeCap: "round",
+        strokeJoin: "round",
+        dashPattern: [],
+        start: { x: 0, y: 0.5 },
+        end: { x: 1, y: 0.5 },
+        startEndpoint: "none",
+        endEndpoint: "line-arrow",
+      },
+      extensions: {},
+    };
+    document.nodesById.boolean_with_line = {
+      id: "boolean_with_line",
+      kind: "boolean",
+      name: "Invalid open operand",
+      parentId: null,
+      childIds: [bottom.id, "line_open"],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 100, height: 100 },
+      opacity: 1,
+      properties: {
+        operation: "union",
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    document.pagesById.page_boolean!.rootNodeIds = [
+      "boolean_with_line",
+      "path_top",
+      "rect_unrelated",
+    ];
+
+    expect(() => normalizeDesignDocument(document)).toThrow(
+      "line nodes cannot be boolean operands",
+    );
+  });
 });

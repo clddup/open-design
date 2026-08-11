@@ -375,6 +375,7 @@ function nodeStrokeOutset(node: DesignNode): number {
     node.kind !== "boolean" &&
     node.kind !== "ellipse" &&
     node.kind !== "frame" &&
+    node.kind !== "line" &&
     node.kind !== "path" &&
     node.kind !== "rectangle" &&
     node.kind !== "text" &&

@@ -5,6 +5,7 @@ import type {
   Transform,
   ViewportState,
 } from "@opendesign/design-contracts";
+import { normalizeLineEndpoints } from "@opendesign/design-contracts";
 import {
   BOOLEAN_GEOMETRY_RESOLVER_VERSION,
   createBooleanGeometryResolver,
@@ -40,6 +41,7 @@ type LeaferGroup = InstanceType<LeaferModule["Group"]>;
 type LeaferEditor = InstanceType<LeaferModule["Editor"]>;
 
 interface ElementState {
+  linePoints?: readonly [number, number, number, number];
   size: { height: number; width: number };
   text?: string;
   transform: Transform;
@@ -55,6 +57,8 @@ interface DrawSession {
   dragged: boolean;
   parentId: string | null;
   preview: LeaferElement;
+  lineStart?: { x: number; y: number };
+  lineEnd?: { x: number; y: number };
   start: { x: number; y: number };
   startClient: { x: number; y: number };
   tool: Exclude<LeaferCanvasTool, "select">;
@@ -891,23 +895,47 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const spec = this.#projection?.elementsById.get(nodeId);
       if (!node || !element || isLockedSpec(spec)) continue;
       const current = this.#readElementState(element);
-      const transformChanged = !sameTransform(
-        previous.transform,
-        current.transform,
-      );
+      const linePointsChanged =
+        node.kind === "line" &&
+        previous.linePoints !== undefined &&
+        current.linePoints !== undefined &&
+        !sameNumberList(previous.linePoints, current.linePoints);
+      let nextTransform = current.transform;
+      let nextSize = node.kind === "line" ? node.size : current.size;
+      let lineProperties:
+        | { start: { x: number; y: number }; end: { x: number; y: number } }
+        | undefined;
+      if (linePointsChanged && current.linePoints) {
+        const geometry = normalizeLineEndpoints(
+          { x: current.linePoints[0], y: current.linePoints[1] },
+          { x: current.linePoints[2], y: current.linePoints[3] },
+        );
+        nextTransform = translateLocalTransform(
+          current.transform,
+          geometry.bounds.x,
+          geometry.bounds.y,
+        );
+        nextSize = {
+          width: geometry.bounds.width,
+          height: geometry.bounds.height,
+        };
+        lineProperties = { start: geometry.start, end: geometry.end };
+      }
+      const transformChanged = !sameTransform(node.transform, nextTransform);
       const sizeChanged =
         node.kind !== "group" &&
         node.kind !== "boolean" &&
         node.kind !== "instance" &&
-        (!nearlyEqual(previous.size.width, current.size.width) ||
-          !nearlyEqual(previous.size.height, current.size.height));
-      if (!transformChanged && !sizeChanged) continue;
+        (!nearlyEqual(node.size.width, nextSize.width) ||
+          !nearlyEqual(node.size.height, nextSize.height));
+      if (!transformChanged && !sizeChanged && !lineProperties) continue;
       operations.push({
         commandId: `leafer_transform_${nodeId}`,
         type: "update_properties",
         nodeId,
-        ...(transformChanged ? { transform: current.transform } : {}),
-        ...(sizeChanged ? { size: current.size } : {}),
+        ...(transformChanged ? { transform: nextTransform } : {}),
+        ...(sizeChanged ? { size: nextSize } : {}),
+        ...(lineProperties ? { properties: lineProperties } : {}),
       });
     }
     return operations;
@@ -915,6 +943,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #readElementState(element: LeaferElement): ElementState {
     const matrix = element.localTransform;
+    const tag = this.#tag(element);
+    const linePoints =
+      tag === "Arrow" || tag === "Line" ? readLinePoints(element) : undefined;
     return {
       transform: normalizeTransform([
         matrix.a,
@@ -928,9 +959,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         width: normalizeNumber(Number(element.width) || 0),
         height: normalizeNumber(Number(element.height) || 0),
       },
-      ...(this.#tag(element) === "Text"
-        ? { text: readElementText(element) }
-        : {}),
+      ...(linePoints ? { linePoints } : {}),
+      ...(tag === "Text" ? { text: readElementText(element) } : {}),
     };
   }
 
@@ -1042,7 +1072,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       return;
     }
     const end = drag.getInnerPoint(this.#editor.selector);
-    const rect = rectFromPoints(session.start, end, false);
+    const rect = rectFromPoints(session.start, end, false, false);
     const bounds = new this.#leafer.Bounds(
       rect.x,
       rect.y,
@@ -1090,12 +1120,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!parent) return;
     const start = drag.getInnerPoint(parent);
     const preview = this.#createDrawPreview(input.tool);
-    preview.set({ x: start.x, y: start.y, width: 1, height: 1 });
+    const lineTool = input.tool === "line" || input.tool === "arrow";
+    preview.set(
+      lineTool
+        ? { x: 0, y: 0, points: [start.x, start.y, start.x + 1, start.y] }
+        : { x: start.x, y: start.y, width: 1, height: 1 },
+    );
     parent.add(preview);
     this.#draw = {
       dragged: false,
       parentId,
       preview,
+      ...(lineTool ? { lineStart: start, lineEnd: start } : {}),
       start,
       startClient: { x: drag.clientX, y: drag.clientY },
       tool: input.tool,
@@ -1111,13 +1147,36 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       : (this.#app.tree as unknown as LeaferGroup);
     if (!parent) return;
     const point = drag.getInnerPoint(parent);
-    const rect = rectFromPoints(session.start, point, drag.shiftKey);
+    const lineTool = session.tool === "line" || session.tool === "arrow";
     session.dragged =
       Math.hypot(
         drag.clientX - session.startClient.x,
         drag.clientY - session.startClient.y,
       ) >= MIN_DRAW_DISTANCE;
-    session.preview.set(rect);
+    if (lineTool) {
+      const endpoints = lineEndpointsFromDrag(
+        session.start,
+        point,
+        drag.shiftKey,
+        drag.altKey,
+      );
+      session.lineStart = endpoints.start;
+      session.lineEnd = endpoints.end;
+      session.preview.set({
+        x: 0,
+        y: 0,
+        points: [
+          endpoints.start.x,
+          endpoints.start.y,
+          endpoints.end.x,
+          endpoints.end.y,
+        ],
+      });
+    } else {
+      session.preview.set(
+        rectFromPoints(session.start, point, drag.shiftKey, drag.altKey),
+      );
+    }
   }
 
   #finishDraw(event: unknown): void {
@@ -1125,7 +1184,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const input = this.#input;
     if (!session || !input) return;
     const drag = asLeaferEvent(event);
-    const rect = {
+    const lineTool = session.tool === "line" || session.tool === "arrow";
+    const rawLineStart = session.lineStart ?? session.start;
+    const rawLineEnd = session.dragged
+      ? (session.lineEnd ?? session.start)
+      : { x: session.start.x + 160, y: session.start.y };
+    const lineGeometry = lineTool
+      ? normalizeLineEndpoints(rawLineStart, rawLineEnd)
+      : undefined;
+    const rect = lineGeometry?.bounds ?? {
       x: Number(session.preview.x) || session.start.x,
       y: Number(session.preview.y) || session.start.y,
       width: Number(session.preview.width) || 1,
@@ -1138,6 +1205,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       height: rect.height,
       pageId: input.pageId,
       parentId: session.parentId,
+      ...(lineGeometry
+        ? { start: lineGeometry.start, end: lineGeometry.end }
+        : {}),
       tool: session.tool,
       width: rect.width,
       x: rect.x,
@@ -1148,13 +1218,23 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #createDrawPreview(tool: Exclude<LeaferCanvasTool, "select">): LeaferElement {
+    if (tool === "line" || tool === "arrow") {
+      return new this.#leafer.Arrow({
+        editable: false,
+        hittable: false,
+        stroke: "#4f7fff",
+        strokeWidth: 2,
+        startArrow: "none",
+        endArrow: tool === "arrow" ? "angle" : "none",
+      });
+    }
     const data = {
       editable: false,
       hittable: false,
       fill: [{ type: "solid", color: "#4f7fff", opacity: 0.12 }],
       stroke: "#4f7fff",
       strokeWidth: 1,
-      dashPattern: tool === "frame" ? [5, 4] : undefined,
+      ...(tool === "frame" ? { dashPattern: [5, 4] } : {}),
     };
     return tool === "ellipse"
       ? new this.#leafer.Ellipse(data)
@@ -1283,6 +1363,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #onWindowKeyDown = (event: KeyboardEvent) => {
+    if (event.code === "Escape" && this.#draw) {
+      this.#cancelDraw();
+      return;
+    }
     if (event.code === "Escape" && this.#editor.innerEditing) {
       this.#cancelTextEdit = true;
     }
@@ -1486,6 +1570,7 @@ function rectFromPoints(
   start: { x: number; y: number },
   end: { x: number; y: number },
   constrain: boolean,
+  fromCenter: boolean,
 ) {
   let width = end.x - start.x;
   let height = end.y - start.y;
@@ -1495,14 +1580,109 @@ function rectFromPoints(
     height = Math.sign(height || 1) * size;
   }
   return {
-    x: Math.min(start.x, start.x + width),
-    y: Math.min(start.y, start.y + height),
-    width: Math.max(1, Math.abs(width)),
-    height: Math.max(1, Math.abs(height)),
+    x: fromCenter
+      ? start.x - Math.abs(width)
+      : Math.min(start.x, start.x + width),
+    y: fromCenter
+      ? start.y - Math.abs(height)
+      : Math.min(start.y, start.y + height),
+    width: Math.max(1, Math.abs(width) * (fromCenter ? 2 : 1)),
+    height: Math.max(1, Math.abs(height) * (fromCenter ? 2 : 1)),
   };
 }
 
+function lineEndpointsFromDrag(
+  origin: { x: number; y: number },
+  pointer: { x: number; y: number },
+  constrain: boolean,
+  fromCenter: boolean,
+): { start: { x: number; y: number }; end: { x: number; y: number } } {
+  let x = pointer.x - origin.x;
+  let y = pointer.y - origin.y;
+  if (constrain && (x !== 0 || y !== 0)) {
+    const distance = Math.hypot(x, y);
+    const angle = Math.round(Math.atan2(y, x) / (Math.PI / 4)) * (Math.PI / 4);
+    x = Math.cos(angle) * distance;
+    y = Math.sin(angle) * distance;
+  }
+  return fromCenter
+    ? {
+        start: { x: origin.x - x, y: origin.y - y },
+        end: { x: origin.x + x, y: origin.y + y },
+      }
+    : { start: origin, end: { x: origin.x + x, y: origin.y + y } };
+}
+
+function readLinePoints(
+  element: LeaferElement,
+): readonly [number, number, number, number] | undefined {
+  const points = (element as LeaferElement & { points?: unknown }).points;
+  if (
+    Array.isArray(points) &&
+    points.length >= 4 &&
+    points.slice(0, 4).every((value) => typeof value === "number")
+  ) {
+    return points.slice(0, 4).map(normalizeNumber) as [
+      number,
+      number,
+      number,
+      number,
+    ];
+  }
+  if (
+    Array.isArray(points) &&
+    points.length >= 2 &&
+    points[0] &&
+    points[1] &&
+    typeof points[0] === "object" &&
+    typeof points[1] === "object"
+  ) {
+    const start = points[0] as { x?: unknown; y?: unknown };
+    const end = points[1] as { x?: unknown; y?: unknown };
+    if (
+      typeof start.x === "number" &&
+      typeof start.y === "number" &&
+      typeof end.x === "number" &&
+      typeof end.y === "number"
+    ) {
+      return [start.x, start.y, end.x, end.y].map(normalizeNumber) as [
+        number,
+        number,
+        number,
+        number,
+      ];
+    }
+  }
+  return undefined;
+}
+
+function translateLocalTransform(
+  transform: Transform,
+  x: number,
+  y: number,
+): Transform {
+  return normalizeTransform([
+    transform[0],
+    transform[1],
+    transform[2],
+    transform[3],
+    transform[0] * x + transform[2] * y + transform[4],
+    transform[1] * x + transform[3] * y + transform[5],
+  ]);
+}
+
+function sameNumberList(
+  left: readonly number[],
+  right: readonly number[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => nearlyEqual(value, right[index] ?? 0))
+  );
+}
+
 interface LeaferEventLike {
+  altKey: boolean;
   clientX: number;
   clientY: number;
   getInnerPoint(relative: unknown): { x: number; y: number };

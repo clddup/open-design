@@ -132,6 +132,7 @@ const nodeKindKeys: Record<string, MessageKey> = {
   boolean: "node.boolean",
   rectangle: "node.rectangle",
   ellipse: "node.ellipse",
+  line: "node.line",
   text: "node.text",
   image: "node.image",
   vector: "node.vector",
@@ -1050,6 +1051,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         f: "frame",
         r: "rectangle",
         o: "ellipse",
+        l: event.shiftKey ? "arrow" : "line",
         t: "text",
       };
       const next = tools[event.key.toLowerCase()];

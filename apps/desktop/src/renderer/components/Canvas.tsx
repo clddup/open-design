@@ -3,6 +3,7 @@ import type {
   DesignNode,
   EllipseNode,
   FrameNode,
+  LineNode,
   RectangleNode,
   TextNode,
   ViewportState,
@@ -185,6 +186,9 @@ export function Canvas({
         { x: request.x, y: request.y },
         request.dragged
           ? { width: request.width, height: request.height }
+          : undefined,
+        request.start && request.end
+          ? { start: request.start, end: request.end }
           : undefined,
         t,
       );
@@ -505,8 +509,14 @@ function createDesignNode(
   parentId: string | null,
   point: { x: number; y: number },
   drawnSize: DesignNode["size"] | undefined,
+  lineEndpoints:
+    | {
+        start: { x: number; y: number };
+        end: { x: number; y: number };
+      }
+    | undefined,
   t: (key: MessageKey, parameters?: MessageParameters) => string,
-): FrameNode | RectangleNode | EllipseNode | TextNode {
+): FrameNode | RectangleNode | EllipseNode | LineNode | TextNode {
   const base = {
     id,
     name: t("canvas.newNode", { kind: t(`node.${tool}` as MessageKey) }),
@@ -537,6 +547,26 @@ function createDesignNode(
       kind: "ellipse",
       size: drawnSize ?? { width: 120, height: 120 },
       properties: shape,
+    };
+  }
+  if (tool === "line" || tool === "arrow") {
+    return {
+      ...base,
+      kind: "line",
+      size: drawnSize ?? { width: 160, height: 0 },
+      properties: {
+        fills: [],
+        strokes: [{ type: "solid", color: "#151515", opacity: 1 }],
+        strokeWidth: 2,
+        strokeAlign: "center",
+        strokeCap: "round",
+        strokeJoin: "round",
+        dashPattern: [],
+        start: lineEndpoints?.start ?? { x: 0, y: 0.5 },
+        end: lineEndpoints?.end ?? { x: 1, y: 0.5 },
+        startEndpoint: "none",
+        endEndpoint: tool === "arrow" ? "line-arrow" : "none",
+      },
     };
   }
   if (tool === "text") {

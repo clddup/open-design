@@ -287,6 +287,7 @@ function nodePaints(node: DesignNode): readonly Paint[] {
     node.kind === "frame" ||
     node.kind === "rectangle" ||
     node.kind === "ellipse" ||
+    node.kind === "line" ||
     node.kind === "text" ||
     node.kind === "path" ||
     node.kind === "vector" ||
@@ -302,6 +303,7 @@ function hasVisibleAppearance(node: DesignNode): boolean {
   if (
     node.kind !== "rectangle" &&
     node.kind !== "ellipse" &&
+    node.kind !== "line" &&
     node.kind !== "text" &&
     node.kind !== "path" &&
     node.kind !== "vector" &&
@@ -338,6 +340,7 @@ function isDrawableShape(node: DesignNode): boolean {
   return (
     node.kind === "rectangle" ||
     node.kind === "ellipse" ||
+    node.kind === "line" ||
     node.kind === "text" ||
     node.kind === "path" ||
     node.kind === "vector" ||

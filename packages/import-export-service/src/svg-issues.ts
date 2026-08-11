@@ -13,6 +13,7 @@ export const SVG_INTERCHANGE_ISSUE_CODES = [
   "invalid-geometry",
   "invalid-root",
   "invalid-transform",
+  "line-endpoint-unsupported",
   "malformed-svg",
   "mask-omitted",
   "missing-boolean-geometry",

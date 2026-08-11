@@ -33,6 +33,8 @@ export type GlyphName =
   | "frame"
   | "image"
   | "layers"
+  | "line"
+  | "arrow"
   | "lock"
   | "unlock"
   | "maximize"
@@ -185,6 +187,13 @@ const paths: Record<GlyphName, ReactNode> = {
     <>
       <path d="m12 3 9 5-9 5-9-5z" />
       <path d="m4 12 8 4.5 8-4.5M4 16l8 4.5 8-4.5" />
+    </>
+  ),
+  line: <path d="M5 18 19 6" />,
+  arrow: (
+    <>
+      <path d="M5 18 19 6" />
+      <path d="M12.5 6H19v6.5" />
     </>
   ),
   lock: (

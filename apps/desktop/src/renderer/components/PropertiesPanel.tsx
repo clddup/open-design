@@ -5,6 +5,7 @@ import type {
   Effect,
   ImageNode,
   ImagePlacement,
+  LineEndpoint,
   MaskMode,
   Paint,
   UpdatePropertiesCommand,
@@ -57,6 +58,7 @@ type CornerNode = Extract<
   DesignNode,
   { kind: "frame" | "image" | "rectangle" }
 >;
+type StrokeNode = FillNode | Extract<DesignNode, { kind: "line" }>;
 
 const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
   frame: "frame",
@@ -64,6 +66,7 @@ const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
   boolean: "boolean",
   rectangle: "rectangle",
   ellipse: "ellipse",
+  line: "line",
   text: "text",
   image: "assets",
   vector: "pen",
@@ -77,6 +80,7 @@ const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   boolean: "node.boolean",
   rectangle: "node.rectangle",
   ellipse: "node.ellipse",
+  line: "node.line",
   text: "node.text",
   image: "node.image",
   vector: "node.vector",
@@ -112,6 +116,15 @@ const maskModes: MaskMode[] = [
   "outline",
 ];
 
+const lineEndpoints: readonly LineEndpoint[] = [
+  "none",
+  "line-arrow",
+  "triangle-arrow",
+  "reversed-triangle-arrow",
+  "circle",
+  "diamond",
+];
+
 function formatNumber(value: number) {
   return String(Math.round(value * 1000) / 1000);
 }
@@ -132,6 +145,14 @@ function isCornerNode(node: DesignNode): node is CornerNode {
   return (
     node.kind === "frame" || node.kind === "image" || node.kind === "rectangle"
   );
+}
+
+function isStrokeNode(node: DesignNode): node is StrokeNode {
+  return node.kind === "line" || isFillNode(node);
+}
+
+function lineEndpointKey(endpoint: LineEndpoint): MessageKey {
+  return `properties.lineEndpoint.${endpoint}` as MessageKey;
 }
 
 function Field({
@@ -934,6 +955,65 @@ function SelectedNodeProperties({
           </label>
         </Section>
       )}
+      {node.kind === "line" && (
+        <Section title={t("properties.line")}>
+          <div className="property-grid">
+            <label className="property-select">
+              <span>{t("properties.lineStart")}</span>
+              <select
+                aria-label={t("properties.lineStart")}
+                onChange={(event) =>
+                  onUpdate({
+                    properties: {
+                      startEndpoint: event.target.value as LineEndpoint,
+                    },
+                  })
+                }
+                value={node.properties.startEndpoint}
+              >
+                {lineEndpoints.map((endpoint) => (
+                  <option key={endpoint} value={endpoint}>
+                    {t(lineEndpointKey(endpoint))}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="property-select">
+              <span>{t("properties.lineEnd")}</span>
+              <select
+                aria-label={t("properties.lineEnd")}
+                onChange={(event) =>
+                  onUpdate({
+                    properties: {
+                      endEndpoint: event.target.value as LineEndpoint,
+                    },
+                  })
+                }
+                value={node.properties.endEndpoint}
+              >
+                {lineEndpoints.map((endpoint) => (
+                  <option key={endpoint} value={endpoint}>
+                    {t(lineEndpointKey(endpoint))}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <Button
+            onClick={() =>
+              onUpdate({
+                properties: {
+                  start: node.properties.end,
+                  end: node.properties.start,
+                },
+              })
+            }
+            tone="quiet"
+          >
+            {t("properties.reverseLine")}
+          </Button>
+        </Section>
+      )}
       <Section title={t("properties.layout")}>
         <div className="property-grid">
           <Field
@@ -1215,7 +1295,7 @@ function SelectedNodeProperties({
           </button>
         </Section>
       )}
-      {isFillNode(node) && !booleanOperandParent && (
+      {isStrokeNode(node) && !booleanOperandParent && (
         <Section title={t("properties.stroke")}>
           {node.properties.strokes.map((paint, index) => (
             <PaintEditor
@@ -1258,6 +1338,67 @@ function SelectedNodeProperties({
               }
               suffix="px"
               value={formatNumber(node.properties.strokeWidth)}
+            />
+            <label className="property-select">
+              <span>{t("properties.strokeCap")}</span>
+              <select
+                aria-label={t("properties.strokeCap")}
+                onChange={(event) =>
+                  onUpdate({
+                    properties: {
+                      strokeCap: event.target.value as
+                        "none" | "round" | "square",
+                    },
+                  })
+                }
+                value={node.properties.strokeCap ?? "none"}
+              >
+                <option value="none">{t("properties.strokeCapNone")}</option>
+                <option value="round">{t("properties.strokeCapRound")}</option>
+                <option value="square">
+                  {t("properties.strokeCapSquare")}
+                </option>
+              </select>
+            </label>
+            <label className="property-select">
+              <span>{t("properties.strokeJoin")}</span>
+              <select
+                aria-label={t("properties.strokeJoin")}
+                onChange={(event) =>
+                  onUpdate({
+                    properties: {
+                      strokeJoin: event.target.value as
+                        "miter" | "round" | "bevel",
+                    },
+                  })
+                }
+                value={node.properties.strokeJoin ?? "miter"}
+              >
+                <option value="miter">{t("properties.strokeJoinMiter")}</option>
+                <option value="round">{t("properties.strokeJoinRound")}</option>
+                <option value="bevel">{t("properties.strokeJoinBevel")}</option>
+              </select>
+            </label>
+            <Field
+              accessibleLabel={t("properties.dashPattern")}
+              label={t("properties.dash")}
+              onCommit={(draft) => {
+                const values = draft
+                  .trim()
+                  .split(/[\s,]+/)
+                  .filter(Boolean)
+                  .map(Number);
+                if (
+                  values.some((value) => !Number.isFinite(value) || value < 0)
+                ) {
+                  return null;
+                }
+                onUpdate({ properties: { dashPattern: values } });
+                return values.join(", ");
+              }}
+              placeholder="8, 4"
+              type="text"
+              value={(node.properties.dashPattern ?? []).join(", ")}
             />
           </div>
           <button

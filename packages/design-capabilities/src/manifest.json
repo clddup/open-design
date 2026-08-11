@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-11",
-  "documentSchemaVersion": "1.4.0",
+  "documentSchemaVersion": "1.5.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -119,7 +119,7 @@
         "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, cross-container reparenting, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
         "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。"
       },
-      "provider": "DesignDocument 1.4.0 + EditorRuntime",
+      "provider": "DesignDocument 1.5.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -209,7 +209,7 @@
         "en": "Persist and render portable SVG path data with fills, strokes, gradients, effects, masks, and blend modes.",
         "zh-CN": "持久化并渲染可移植 SVG Path 数据及其填充、描边、渐变、效果、蒙版和混合模式。"
       },
-      "provider": "DesignDocument 1.4.0 + Leafer Path adapter",
+      "provider": "DesignDocument 1.5.0 + Leafer Path adapter",
       "requiredSurfaces": ["contract", "runtime", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -221,8 +221,8 @@
       },
       "limitations": [
         {
-          "en": "Single-path SVG data is supported, but there is no Pen tool, point/handle editing, multi-contour vector network, or SVG round-trip.",
-          "zh-CN": "当前支持单路径 SVG 数据，但没有 Pen、节点/手柄编辑、多轮廓矢量网络或 SVG 往返。"
+          "en": "Single-path SVG data and the controlled SVG interchange subset are supported, but there is no Pen tool, point/handle editing, multi-contour vector network, or complete SVG fidelity.",
+          "zh-CN": "当前支持单路径 SVG 数据及受控 SVG 交换子集，但没有 Pen、节点/手柄编辑、多轮廓矢量网络或完整 SVG 保真。"
         }
       ],
       "evidence": {
@@ -238,6 +238,63 @@
       },
       "references": [
         "https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks"
+      ]
+    },
+    {
+      "id": "vector.line-arrow",
+      "category": "vector",
+      "status": "degraded",
+      "label": { "en": "Lines and arrows", "zh-CN": "直线与箭头" },
+      "description": {
+        "en": "Create and directly edit directed straight lines with independent start and end decorations, professional stroke controls, and editable SVG interchange.",
+        "zh-CN": "创建并直接编辑有方向的直线，独立设置起终点装饰和专业描边，并通过 SVG 保持可编辑交换。"
+      },
+      "provider": "DesignDocument 1.5.0 + Leafer Arrow / LineEditTool + SVG controlled markers",
+      "requiredSurfaces": [
+        "contract",
+        "runtime",
+        "human",
+        "agent",
+        "render",
+        "export"
+      ],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "available",
+        "human": "available",
+        "agent": "available",
+        "render": "available",
+        "export": "degraded"
+      },
+      "limitations": [
+        {
+          "en": "This slice supports one editable straight segment, Shift 45-degree constraint, Alt center drawing, independent none/line-arrow/triangle/reversed-triangle/circle/diamond endpoints, cap/join/dash controls, and native endpoint dragging. Polyline connectors, orthogonal routing, snapping, label attachment, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "当前切片支持单段可编辑直线、Shift 45 度约束、Alt 中心绘制、独立的无/线性箭头/三角/反向三角/圆点/菱形端点、端帽/连接/虚线控制和原生端点拖动；折线连接器、正交路由、吸附、标签挂接及 macOS/Windows 打包交互证据仍未完成。"
+        },
+        {
+          "en": "SVG round-trip uses exact local OpenDesign marker definitions. Plain external line elements import as Lines, while unknown, external, missing, or modified marker definitions fail explicitly instead of being flattened or trusted.",
+          "zh-CN": "SVG 往返使用精确的本地 OpenDesign marker 定义；普通外部 line 可导入为 Line，未知、外部、缺失或被修改的 marker 会明确失败，不会被扁平化或盲目信任。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/editor-runtime/src/index.test.ts",
+          "packages/leafer-engine/src/mapping.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
+          "packages/import-export-service/src/svg.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
+        ],
+        "manual": []
+      },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360040450133-Shape-tools",
+        "https://help.figma.com/hc/en-us/articles/360049283914-Apply-and-adjust-stroke-properties",
+        "https://www.leaferjs.com/ui/reference/display/Line.html",
+        "https://www.leaferjs.com/ui/plugin/in/arrow/",
+        "https://www.leaferjs.com/ui/reference/property/editable.html"
       ]
     },
     {
@@ -279,7 +336,7 @@
         "en": "Non-destructive union, subtract, intersect, and exclude groups whose source layers remain editable.",
         "zh-CN": "非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。"
       },
-      "provider": "DesignDocument 1.4.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
+      "provider": "DesignDocument 1.5.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -333,7 +390,7 @@
         "en": "Apply multiple paints and strokes, gradients, shadows, glows, blur, blend modes, masks, and advanced stroke properties.",
         "zh-CN": "应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。"
       },
-      "provider": "DesignDocument 1.4.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
+      "provider": "DesignDocument 1.5.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -425,7 +482,7 @@
         "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
         "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
       },
-      "provider": "DesignDocument 1.4.0 + OpenDesign Image service crop geometry + Leafer projection",
+      "provider": "DesignDocument 1.5.0 + OpenDesign Image service crop geometry + Leafer projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "degraded",
@@ -496,7 +553,7 @@
         "en": "Create, render, transform, and edit a text layer with one shared font style and alignment.",
         "zh-CN": "创建、渲染、变换和编辑使用单一共享字体样式与对齐方式的文字图层。"
       },
-      "provider": "DesignDocument 1.4.0 + Leafer TextEditor",
+      "provider": "DesignDocument 1.5.0 + Leafer TextEditor",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -677,8 +734,8 @@
           "zh-CN": "文件菜单与属性检查器可把 SVG 导入冻结的 Page/Frame/Group 目标，并通过可取消 Renderer worker 导出冻结的显式选区根。Agent 只能把当前 Run 内容寻址的 SVG 句柄导入检查所得目标的明确局部坐标，并通过同一 worker 导出稳定 Page/root ID。Main 会校验授权与 Renderer 结果；模型既不接收 SVG 源码，也不接收本地路径。macOS/Windows 打包产品 smoke 仍待完成。"
         },
         {
-          "en": "The current subset covers Frame/Group, rectangles, ellipses, Path/Vector, transforms, solid and linear/radial gradients, center strokes, rounded Frame clipsContent, ordered alpha/luminance/outline/clipping sibling mask runs, up to eight normal zero-spread drop shadows, and one layer blur. Supported local userSpaceOnUse mask/clipPath references import as editable sibling mask groups. Text, images, root-level or combined mask+clip, objectBoundingBox clipPath, inner/background effects, glow, spread/blend, stylesheets, angular gradients, multiple paints, complex filter graphs, and inside/outside stroke fidelity remain unavailable.",
-          "zh-CN": "当前子集覆盖 Frame/Group、Rectangle、Ellipse、Path/Vector、transform、纯色与线性/径向渐变、居中描边、圆角 Frame clipsContent、有序 alpha/luminance/outline/clipping 同级蒙版段、最多八个普通零 spread 投影和一层 layer blur；受支持的本地 userSpaceOnUse mask/clipPath 引用会导入为可编辑同级蒙版组。文字、图片、root-level 或 mask+clip 组合、objectBoundingBox clipPath、内阴影/背景效果、光晕、spread/blend、stylesheet、角度渐变、多 paint、复杂 filter graph 与内外描边保真仍不可用。"
+          "en": "The current subset covers Frame/Group, rectangles, ellipses, directed Line/Arrow with controlled local endpoint markers, Path/Vector, transforms, solid and linear/radial gradients, center strokes, rounded Frame clipsContent, ordered alpha/luminance/outline/clipping sibling mask runs, up to eight normal zero-spread drop shadows, and one layer blur. Plain external line elements import as editable Lines; supported local userSpaceOnUse mask/clipPath references import as editable sibling mask groups. Text, images, arbitrary external marker definitions, root-level or combined mask+clip, objectBoundingBox clipPath, inner/background effects, glow, spread/blend, stylesheets, angular gradients, multiple paints, complex filter graphs, and inside/outside stroke fidelity remain unavailable.",
+          "zh-CN": "当前子集覆盖 Frame/Group、Rectangle、Ellipse、带受控本地端点 marker 的有向 Line/Arrow、Path/Vector、transform、纯色与线性/径向渐变、居中描边、圆角 Frame clipsContent、有序 alpha/luminance/outline/clipping 同级蒙版段、最多八个普通零 spread 投影和一层 layer blur；普通外部 line 会导入为可编辑 Line，受支持的本地 userSpaceOnUse mask/clipPath 引用会导入为可编辑同级蒙版组。文字、图片、任意外部 marker 定义、root-level 或 mask+clip 组合、objectBoundingBox clipPath、内阴影/背景效果、光晕、spread/blend、stylesheet、角度渐变、多 paint、复杂 filter graph 与内外描边保真仍不可用。"
         },
         {
           "en": "Standard SVG cannot retain OpenDesign Boolean operands. Export consumes a disposable resolved path, reports boolean-flattened, and re-imports it as an editable Vector without inventing lost source layers.",

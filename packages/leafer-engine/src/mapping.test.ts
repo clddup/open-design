@@ -626,4 +626,55 @@ describe("Leafer scene projection", () => {
       },
     });
   });
+
+  it("projects directed Line semantics through Leafer Arrow without flattening endpoints", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    document.nodesById.flow_arrow = {
+      id: "flow_arrow",
+      name: "Flow arrow",
+      parentId: frame.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 70, 90],
+      size: { width: 240, height: 120 },
+      opacity: 1,
+      extensions: {},
+      kind: "line",
+      properties: {
+        fills: [],
+        strokes: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+        strokeWidth: 4,
+        strokeAlign: "center",
+        strokeCap: "round",
+        strokeJoin: "round",
+        dashPattern: [10, 6],
+        start: { x: 1, y: 0 },
+        end: { x: 0, y: 1 },
+        startEndpoint: "circle",
+        endEndpoint: "triangle-arrow",
+      },
+    };
+    frame.childIds.push("flow_arrow");
+
+    expect(
+      projectDesignPage(document, "page_welcome").elementsById.get(
+        "flow_arrow",
+      ),
+    ).toMatchObject({
+      tag: "Arrow",
+      transform: [1, 0, 0, 1, 70, 90],
+      data: {
+        fill: null,
+        points: [240, 0, 0, 120],
+        startArrow: "circle",
+        endArrow: "triangle",
+        strokeWidth: 4,
+        strokeCap: "round",
+        dashPattern: [10, 6],
+      },
+    });
+  });
 });

@@ -207,6 +207,142 @@ describe("versioned SVG interchange", () => {
     );
   });
 
+  it("round-trips directed Line geometry and independent standard SVG endpoint markers", () => {
+    const line: DesignNode = {
+      id: "flow_line",
+      kind: "line",
+      name: "Flow line",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 30, 24],
+      size: { width: 180, height: 90 },
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+        strokeWidth: 4,
+        strokeAlign: "center",
+        strokeCap: "round",
+        strokeJoin: "round",
+        dashPattern: [12, 6],
+        start: { x: 1, y: 0 },
+        end: { x: 0, y: 1 },
+        startEndpoint: "circle",
+        endEndpoint: "triangle-arrow",
+      },
+      extensions: {},
+    };
+    const document = documentFromNodes("svg_line_document", [line], [line.id]);
+    const exported = exportSvg({
+      document,
+      rootNodeIds: [line.id],
+      viewport: { x: 0, y: 0, width: 240, height: 160 },
+      includeLayerIds: true,
+    });
+
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues).toEqual([]);
+    expect(exported.svg).toContain("<line");
+    expect(exported.svg).toContain('x1="180"');
+    expect(exported.svg).toContain('y2="90"');
+    expect(exported.svg).toContain('data-opendesign-line-endpoint="circle"');
+    expect(exported.svg).toContain(
+      'data-opendesign-line-endpoint="triangle-arrow"',
+    );
+    expect(exported.svg).toContain('orient="auto-start-reverse"');
+
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "line_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    expect(findImportedSource(imported.nodes, line.id)).toMatchObject({
+      kind: "line",
+      transform: [1, 0, 0, 1, 30, 24],
+      size: { width: 180, height: 90 },
+      properties: {
+        fills: [],
+        strokes: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+        strokeWidth: 4,
+        strokeCap: "round",
+        strokeJoin: "round",
+        dashPattern: [12, 6],
+        start: { x: 1, y: 0 },
+        end: { x: 0, y: 1 },
+        startEndpoint: "circle",
+        endEndpoint: "triangle-arrow",
+      },
+    });
+    expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
+      isDesignDocument,
+    );
+  });
+
+  it("imports an ordinary unmarked SVG line as a high-level Line node", () => {
+    const imported = importSvg(
+      {
+        idPrefix: "external_line",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><line id="divider" x1="100" y1="20" x2="20" y2="60" stroke="#111827" stroke-width="3"/></svg>`,
+      },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(findImportedSource(imported.nodes, "divider")).toMatchObject({
+      kind: "line",
+      transform: [1, 0, 0, 1, 20, 20],
+      size: { width: 80, height: 40 },
+      properties: {
+        fills: [],
+        start: { x: 1, y: 0 },
+        end: { x: 0, y: 1 },
+        startEndpoint: "none",
+        endEndpoint: "none",
+      },
+    });
+  });
+
+  it("rejects external or modified SVG markers instead of flattening arrow semantics", () => {
+    const external = importSvg(
+      {
+        idPrefix: "unsafe_marker",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><defs><marker id="custom"><path d="M0 0L10 5L0 10Z"/></marker></defs><line x1="20" y1="20" x2="100" y2="60" stroke="#111827" marker-end="url(#custom)"/></svg>`,
+      },
+      geometry,
+    );
+    expect(external.ok).toBe(false);
+    if (external.ok) return;
+    expect(external.issues).toContainEqual(
+      expect.objectContaining({ code: "line-endpoint-unsupported" }),
+    );
+
+    const line = simpleLine("controlled", null);
+    const exported = exportSvg({
+      document: documentFromNodes("tampered_marker", [line], [line.id]),
+      rootNodeIds: [line.id],
+      viewport: { x: 0, y: 0, width: 160, height: 80 },
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    const tampered = importSvg(
+      {
+        idPrefix: "tampered_marker",
+        svg: exported.svg.replace('markerWidth="4"', 'markerWidth="40"'),
+      },
+      geometry,
+    );
+    expect(tampered.ok).toBe(false);
+    if (tampered.ok) return;
+    expect(tampered.issues).toContainEqual(
+      expect.objectContaining({ code: "line-endpoint-unsupported" }),
+    );
+  });
+
   it("round-trips multiple drop shadows, layer blur, effect order, and hidden effects deterministically", () => {
     const document = shapeDocument();
     const node = document.nodesById.rect_gradient;
@@ -1147,6 +1283,38 @@ function simpleRectangle(
       strokes: [],
       strokeWidth: 0,
       cornerRadius: 18,
+    },
+    extensions: {},
+  };
+}
+
+function simpleLine(
+  id: string,
+  parentId: string | null,
+): Extract<DesignNode, { kind: "line" }> {
+  return {
+    id,
+    kind: "line",
+    name: id,
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 16, 20],
+    size: { width: 120, height: 24 },
+    opacity: 1,
+    properties: {
+      fills: [],
+      strokes: [{ type: "solid", color: "#111827", opacity: 1 }],
+      strokeWidth: 2,
+      strokeAlign: "center",
+      strokeCap: "round",
+      strokeJoin: "round",
+      dashPattern: [],
+      start: { x: 0, y: 0 },
+      end: { x: 1, y: 1 },
+      startEndpoint: "none",
+      endEndpoint: "line-arrow",
     },
     extensions: {},
   };
