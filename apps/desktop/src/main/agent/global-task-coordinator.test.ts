@@ -374,23 +374,32 @@ function inspectionResult(
   document: DesignDocument,
   pageId: string,
   revision = document.revision,
+  includeAllPages = false,
 ) {
   const page = document.pagesById[pageId];
   if (!page) throw new Error("Inspection Page is missing");
+  const inspectedPageIds = includeAllPages ? document.pageOrder : [pageId];
   return {
     observedRevision: revision,
     content: {
       document: {
         documentId: document.documentId,
         revision,
-        pageOrder: [pageId],
-        pagesById: {
-          [pageId]: {
-            id: page.id,
-            name: page.name,
-            rootNodeIds: [...page.rootNodeIds],
-          },
-        },
+        pageOrder: [...inspectedPageIds],
+        pagesById: Object.fromEntries(
+          inspectedPageIds.map((inspectedPageId) => {
+            const inspectedPage = document.pagesById[inspectedPageId];
+            if (!inspectedPage) throw new Error("Inspection Page is missing");
+            return [
+              inspectedPageId,
+              {
+                id: inspectedPage.id,
+                name: inspectedPage.name,
+                rootNodeIds: [...inspectedPage.rootNodeIds],
+              },
+            ];
+          }),
+        ),
         nodesById: structuredClone(document.nodesById),
       },
     },
@@ -1361,6 +1370,96 @@ describe("GlobalTaskCoordinator", () => {
       ["conversation_mobile", "2026-08-10T01:00:00.000Z"],
       ["conversation_recent", "2026-08-08T12:00:00.000Z"],
     ]);
+    store.close();
+  });
+
+  it("expands a Page Run only after one Main-recorded Page structure approval", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_page_access",
+      sessionId: "conversation_mobile",
+      prompt: "Create a Research page",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_page_access",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+
+    expect(() =>
+      coordinator.assertPageToolAccess(context, {
+        action: "rename",
+        pageId,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertPageToolAccess(context, { action: "create" }),
+    ).toThrow("page_structure_access_required");
+    expect(coordinator.resolveExecutionContext(context).mutationTarget).toEqual(
+      { kind: "page", pageId },
+    );
+    const crossPagePlan = multiTargetPlan(pageId);
+    const secondTarget = crossPagePlan.targets[1];
+    if (!secondTarget) throw new Error("Second target is missing");
+    secondTarget.pageId = "page_research";
+    expect(() =>
+      coordinator.registerDesignPlan(context, crossPagePlan),
+    ).toThrow("outside the registered Page mutation target");
+
+    coordinator.grantPageStructureAccess(
+      context.runId,
+      "approval_pages",
+      "tool_page_access",
+    );
+
+    expect(coordinator.hasPageStructureAccess(context.runId)).toBe(true);
+    expect(coordinator.resolveExecutionContext(context)).toMatchObject({
+      scope: { kind: "document", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "document" },
+    });
+    expect(() => coordinator.assertDocumentInspected(context)).toThrow(
+      "inspection_required",
+    );
+    const fullDocument = structuredClone(opened.document);
+    fullDocument.pageOrder.push("page_research");
+    fullDocument.pagesById.page_research = {
+      id: "page_research",
+      name: "Research",
+      rootNodeIds: [],
+      extensions: {},
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(fullDocument, pageId, fullDocument.revision, true),
+    );
+    expect(() =>
+      coordinator.registerDesignPlan(context, crossPagePlan),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertPageToolAccess(context, { action: "create" }),
+    ).not.toThrow();
+
+    coordinator.handleAgentEvent({
+      type: "run.completed",
+      runId: context.runId,
+      finishedAt: "2026-08-11T12:00:00.000Z",
+      stopReason: "complete",
+    });
+    expect(coordinator.hasPageStructureAccess(context.runId)).toBe(false);
     store.close();
   });
 

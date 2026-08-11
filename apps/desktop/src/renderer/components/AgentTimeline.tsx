@@ -38,6 +38,7 @@ import {
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
 } from "../../shared/design-agent-tools";
@@ -57,6 +58,8 @@ type TimelineItem = {
   toolName?: string;
   routine?: boolean;
   order: number;
+  approvalId?: string;
+  toolCallId?: string;
 };
 
 export type AgentTimelineProps = {
@@ -75,8 +78,13 @@ export type AgentTimelineProps = {
     attachments: readonly AgentAttachment[],
   ) => Promise<boolean>;
   onStop: () => boolean | void | Promise<boolean | void>;
-  mutationScope?: "page" | "document";
-  onMutationScopeChange?: (scope: "page" | "document") => void;
+  approvalResourceName?: string;
+  onResolveApproval?: (resolution: {
+    runId: string;
+    toolCallId: string;
+    approvalId: string;
+    decision: "allow_once" | "deny";
+  }) => Promise<boolean>;
   scope?:
     { kind: "page"; name?: string } | { kind: "selection"; count: number };
 };
@@ -259,6 +267,11 @@ function toolTitle(
       ? t("agent.pagesUpdated")
       : t("agent.updatingPages");
   }
+  if (toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
+    return state === "done"
+      ? t("agent.pageStructureAccessGranted")
+      : t("agent.pageStructureAccessRequested");
+  }
   return state === "done" ? t("agent.changeCompleted") : toolName;
 }
 
@@ -340,11 +353,24 @@ function projectTimeline(
       };
     }
     if (item.type === "approval") {
+      let toolName: string | undefined;
+      for (const candidate of timeline) {
+        if (
+          candidate.type === "tool" &&
+          candidate.toolCallId === item.toolCallId
+        ) {
+          toolName = candidate.toolName;
+          break;
+        }
+      }
       return {
         ...base,
         routine: item.status === "requested" && item.runId !== activeRunId,
         state: item.status === "requested" ? "queued" : "done",
         kind: "approval",
+        approvalId: item.approvalId,
+        toolCallId: item.toolCallId,
+        ...(toolName ? { toolName } : {}),
         title: item.title,
         detail:
           item.status === "requested"
@@ -575,9 +601,13 @@ function projectEvents(
       });
     }
     if (event.type === "approval.requested") {
+      const tool = items.get(`tool:${event.toolCallId}`);
       updateEvent(`approval:${event.approvalId}`, {
         state: "queued",
         kind: "approval",
+        approvalId: event.approvalId,
+        toolCallId: event.toolCallId,
+        ...(tool?.toolName ? { toolName: tool.toolName } : {}),
         time: t("common.review"),
         title: event.title,
         detail: event.summary,
@@ -718,8 +748,8 @@ export function AgentTimeline({
   onSelectConversation,
   onSubmit,
   onStop,
-  mutationScope = "page",
-  onMutationScopeChange,
+  approvalResourceName,
+  onResolveApproval,
   scope,
 }: AgentTimelineProps) {
   const { locale, t } = useI18n();
@@ -731,8 +761,12 @@ export function AgentTimeline({
     [],
   );
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const [attachmentDropActive, setAttachmentDropActive] = useState(false);
   const [stopRequestedRunId, setStopRequestedRunId] = useState<string | null>(
+    null,
+  );
+  const [resolvingApprovalId, setResolvingApprovalId] = useState<string | null>(
     null,
   );
   const [catalog, setCatalog] = useState<ModelProviderCatalog | null>(null);
@@ -754,6 +788,11 @@ export function AgentTimeline({
     t,
   );
   const delivery = latestDeliveryLedger(timeline, events, activeRunId);
+  const pendingApprovalIds = items
+    .filter((item) => item.kind === "approval" && item.state === "queued")
+    .map((item) => item.approvalId)
+    .filter(Boolean)
+    .join("|");
   const verifiedDeliveryCount =
     delivery?.targets.filter((target) => target.status === "verified").length ??
     0;
@@ -777,6 +816,15 @@ export function AgentTimeline({
     }
     if (followsLatest.current) element.scrollTop = element.scrollHeight;
   }, [conversationId, timelineRenderMarker]);
+
+  useEffect(() => {
+    if (
+      resolvingApprovalId &&
+      !pendingApprovalIds.split("|").includes(resolvingApprovalId)
+    ) {
+      setResolvingApprovalId(null);
+    }
+  }, [pendingApprovalIds, resolvingApprovalId]);
 
   useEffect(() => {
     if (stopRequestedRunId && stopRequestedRunId !== activeRunId) {
@@ -903,11 +951,8 @@ export function AgentTimeline({
       : scope?.name
         ? t("agent.scopePage", { name: scope.name })
         : t("agent.scopePageGeneric");
-  const mutationScopeOptions = [
-    { value: "page", label: t("agent.editScopePage") },
-    { value: "document", label: t("agent.editScopeDocument") },
-  ];
   const helperMessage =
+    approvalError ??
     attachmentError ??
     catalogError ??
     (hasImageAttachments && !supportsImageInput
@@ -1064,6 +1109,39 @@ export function AgentTimeline({
     }
   };
 
+  const resolveApproval = async (
+    item: TimelineItem,
+    decision: "allow_once" | "deny",
+  ) => {
+    if (
+      !onResolveApproval ||
+      !item.runId ||
+      !item.toolCallId ||
+      !item.approvalId ||
+      resolvingApprovalId
+    ) {
+      return;
+    }
+    setResolvingApprovalId(item.approvalId);
+    setApprovalError(null);
+    try {
+      const accepted = await onResolveApproval({
+        runId: item.runId,
+        toolCallId: item.toolCallId,
+        approvalId: item.approvalId,
+        decision,
+      });
+      if (!accepted) setResolvingApprovalId(null);
+    } catch (approvalFailure) {
+      setResolvingApprovalId(null);
+      setApprovalError(
+        approvalFailure instanceof Error
+          ? approvalFailure.message
+          : t("agent.approvalResolveFailed"),
+      );
+    }
+  };
+
   return (
     <section aria-label={t("agent.timeline")} className="agent-panel">
       <header className="agent-panel__header">
@@ -1188,6 +1266,63 @@ export function AgentTimeline({
                       <TimelineAttachments attachments={item.attachments} />
                     )}
                   </article>
+                ) : item.kind === "approval" &&
+                  item.state === "queued" &&
+                  item.runId === activeRunId &&
+                  item.approvalId &&
+                  item.toolCallId &&
+                  item.runId &&
+                  onResolveApproval ? (
+                  <div
+                    aria-label={
+                      item.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME
+                        ? t("agent.pageStructureApprovalTitle", {
+                            file:
+                              approvalResourceName ??
+                              t("agent.currentDesignFile"),
+                          })
+                        : item.title
+                    }
+                    className="agent-approval"
+                    role="group"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="agent-activity__indicator"
+                    />
+                    <span className="agent-approval__copy">
+                      <strong>
+                        {item.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME
+                          ? t("agent.pageStructureApprovalTitle", {
+                              file:
+                                approvalResourceName ??
+                                t("agent.currentDesignFile"),
+                            })
+                          : item.title}
+                      </strong>
+                      <small>
+                        {item.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME
+                          ? t("agent.pageStructureApprovalDetail")
+                          : item.detail}
+                      </small>
+                    </span>
+                    <span className="agent-approval__actions">
+                      <Button
+                        disabled={resolvingApprovalId !== null}
+                        onClick={() => void resolveApproval(item, "deny")}
+                        tone="quiet"
+                      >
+                        {t("agent.approvalDeny")}
+                      </Button>
+                      <Button
+                        disabled={resolvingApprovalId !== null}
+                        onClick={() => void resolveApproval(item, "allow_once")}
+                        tone="primary"
+                      >
+                        {t("agent.approvalAllowTask")}
+                      </Button>
+                    </span>
+                  </div>
                 ) : (
                   <div className="agent-activity" title={item.time}>
                     <span
@@ -1231,22 +1366,6 @@ export function AgentTimeline({
                 <span className="agent-prompt__context">
                   <Glyph name="select" size={12} />
                   <span>{t("agent.contextScope", { scope: scopeLabel })}</span>
-                </span>
-                <span className="agent-prompt__mutation-scope">
-                  <span>{t("agent.canEdit")}</span>
-                  <DesktopSelect
-                    ariaLabel={t("agent.editScope")}
-                    className="agent-prompt__scope-select"
-                    disabled={Boolean(activeRunId) || submitting}
-                    onValueChange={(value) => {
-                      if (value === "page" || value === "document") {
-                        onMutationScopeChange?.(value);
-                      }
-                    }}
-                    options={mutationScopeOptions}
-                    size="compact"
-                    value={mutationScope}
-                  />
                 </span>
               </div>
             )}

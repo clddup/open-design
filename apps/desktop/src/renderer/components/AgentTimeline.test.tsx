@@ -1135,7 +1135,6 @@ describe("AgentTimeline", () => {
   it("sends with Enter, keeps Shift+Enter as a newline, and shows selection scope", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(true);
-    const onMutationScopeChange = vi.fn();
     window.desktop = {
       getModelProviderCatalog: vi.fn().mockResolvedValue({
         version: 3,
@@ -1181,8 +1180,6 @@ describe("AgentTimeline", () => {
         conversationTitle="Conversation"
         error={null}
         events={[]}
-        mutationScope="page"
-        onMutationScopeChange={onMutationScopeChange}
         onStop={vi.fn()}
         onSubmit={onSubmit}
         scope={{ kind: "selection", count: 2 }}
@@ -1193,9 +1190,9 @@ describe("AgentTimeline", () => {
     expect(
       screen.getByText("Context: Selection · 2 layer(s)"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Can edit")).toBeInTheDocument();
-    await chooseNextOption(user, "Agent write scope");
-    expect(onMutationScopeChange).toHaveBeenCalledWith("document");
+    expect(
+      screen.queryByRole("combobox", { name: "Agent write scope" }),
+    ).not.toBeInTheDocument();
     const prompt = screen.getByLabelText("Continue the task");
     await user.type(prompt, "First line{Shift>}{Enter}{/Shift}Second line");
     expect(prompt).toHaveValue("First line\nSecond line");
@@ -1209,6 +1206,156 @@ describe("AgentTimeline", () => {
     expect(
       screen.queryByText(/Requests include the current design/i),
     ).not.toBeInTheDocument();
+  });
+
+  it("requests one-time Page structure access for the active task", async () => {
+    const user = userEvent.setup();
+    const onResolveApproval = vi.fn().mockResolvedValue(true);
+    const events: AgentEvent[] = [
+      {
+        type: "tool.requested",
+        runId: "run_pages",
+        toolCallId: "tool_pages",
+        toolName: "opendesign_request_page_structure_access",
+        input: {
+          actions: ["create-page", "cross-page-edit"],
+          reason: "Create the requested product suite.",
+        },
+        risk: "design_write",
+      },
+      {
+        type: "approval.requested",
+        runId: "run_pages",
+        toolCallId: "tool_pages",
+        approvalId: "approval_pages",
+        title: "Allow Page structure changes",
+        summary: "Allow this task to update Pages.",
+      },
+    ];
+    const view = render(
+      <AgentTimeline
+        activeRunId="run_pages"
+        approvalResourceName="Mobile Product"
+        conversationId="conversation_1"
+        conversationTitle="Product suite"
+        error={null}
+        events={events}
+        onResolveApproval={onResolveApproval}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(
+      screen.getByText("Modify Mobile Product Page structure?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Access expires when the task ends/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Allow this task" }));
+    expect(onResolveApproval).toHaveBeenCalledWith({
+      runId: "run_pages",
+      toolCallId: "tool_pages",
+      approvalId: "approval_pages",
+      decision: "allow_once",
+    });
+    expect(
+      screen.getByRole("button", { name: "Allow this task" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Don’t allow" })).toBeDisabled();
+
+    view.rerender(
+      <AgentTimeline
+        activeRunId="run_pages"
+        approvalResourceName="Mobile Product"
+        conversationId="conversation_1"
+        conversationTitle="Product suite"
+        error={null}
+        events={[
+          ...events,
+          {
+            type: "approval.resolved",
+            runId: "run_pages",
+            toolCallId: "tool_pages",
+            approvalId: "approval_pages",
+            decision: "allow_once",
+            resolvedAt: now,
+          },
+        ]}
+        onResolveApproval={onResolveApproval}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Allow this task" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("can deny active Page access and never operates an old Run approval", async () => {
+    const user = userEvent.setup();
+    const onResolveApproval = vi.fn().mockResolvedValue(true);
+    const approvalEvents: AgentEvent[] = [
+      {
+        type: "tool.requested",
+        runId: "run_old",
+        toolCallId: "tool_old_pages",
+        toolName: "opendesign_request_page_structure_access",
+        input: { actions: ["delete-page"], reason: "Delete an obsolete Page." },
+        risk: "design_write",
+      },
+      {
+        type: "approval.requested",
+        runId: "run_old",
+        toolCallId: "tool_old_pages",
+        approvalId: "approval_old_pages",
+        title: "Allow Page structure changes",
+        summary: "Allow this task to update Pages.",
+      },
+    ];
+    const view = render(
+      <AgentTimeline
+        activeRunId="run_current"
+        approvalResourceName="Mobile Product"
+        conversationId="conversation_1"
+        conversationTitle="Product suite"
+        error={null}
+        events={approvalEvents}
+        onResolveApproval={onResolveApproval}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Allow this task" }),
+    ).not.toBeInTheDocument();
+
+    view.rerender(
+      <AgentTimeline
+        activeRunId="run_current"
+        approvalResourceName="Mobile Product"
+        conversationId="conversation_1"
+        conversationTitle="Product suite"
+        error={null}
+        events={approvalEvents.map((event) =>
+          "runId" in event ? { ...event, runId: "run_current" } : event,
+        )}
+        onResolveApproval={onResolveApproval}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Don’t allow" }));
+    expect(onResolveApproval).toHaveBeenCalledWith({
+      runId: "run_current",
+      toolCallId: "tool_old_pages",
+      approvalId: "approval_old_pages",
+      decision: "deny",
+    });
   });
 
   it("submits the conversation-selected Provider/Model and reasoning level", async () => {

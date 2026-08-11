@@ -102,6 +102,10 @@ export class GlobalTaskCoordinator {
     Map<string, RasterAssetRole>
   >();
   readonly #inspectionsByRunId = new Map<string, InspectedHierarchy>();
+  readonly #pageStructureAccessByRunId = new Map<
+    string,
+    { approvalId: string; toolCallId: string }
+  >();
 
   constructor(
     private readonly projectHost: ProjectHost,
@@ -236,6 +240,81 @@ export class GlobalTaskCoordinator {
     }
   }
 
+  grantPageStructureAccess(
+    runId: string,
+    approvalId: string,
+    toolCallId: string,
+  ): void {
+    if (!this.#toolBindingsByRunId.has(runId)) {
+      throw new Error(
+        "Page structure access requires an active registered Run",
+      );
+    }
+    this.#pageStructureAccessByRunId.set(runId, {
+      approvalId,
+      toolCallId,
+    });
+    this.#inspectionsByRunId.delete(runId);
+  }
+
+  revokePageStructureAccess(runId: string, approvalId: string): void {
+    if (
+      this.#pageStructureAccessByRunId.get(runId)?.approvalId === approvalId
+    ) {
+      this.#pageStructureAccessByRunId.delete(runId);
+    }
+  }
+
+  hasPageStructureAccess(runId: string): boolean {
+    return this.#pageStructureAccessByRunId.has(runId);
+  }
+
+  resolveExecutionContext(context: TrustedToolContext): TrustedToolContext {
+    this.assertDesignToolContext(context);
+    if (
+      context.mutationTarget.kind === "document" ||
+      !this.hasPageStructureAccess(context.runId)
+    ) {
+      return context;
+    }
+    return {
+      ...context,
+      scope: {
+        kind: "document",
+        selectedNodeIds: [...context.scope.selectedNodeIds],
+        ...(context.scope.primaryNodeId
+          ? { primaryNodeId: context.scope.primaryNodeId }
+          : {}),
+        ...(context.scope.pageId ? { pageId: context.scope.pageId } : {}),
+      },
+      mutationTarget: { kind: "document" },
+    };
+  }
+
+  assertPageToolAccess(
+    context: TrustedToolContext,
+    input: { action: string; pageId?: string },
+  ): void {
+    this.assertDesignToolContext(context);
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (!binding) throw new Error("Page tool requires an active Run");
+    if (
+      binding.mutationTarget.kind === "document" ||
+      this.hasPageStructureAccess(context.runId)
+    ) {
+      return;
+    }
+    if (
+      input.action === "rename" &&
+      input.pageId === binding.mutationTarget.pageId
+    ) {
+      return;
+    }
+    throw new Error(
+      "design_workflow.page_structure_access_required: Call opendesign_request_page_structure_access and wait for the user's one-time approval before modifying Page structure or another Page",
+    );
+  }
+
   registerDesignPlan(
     context: TrustedToolContext,
     plan: DesignPlanToolInput,
@@ -257,7 +336,10 @@ export class GlobalTaskCoordinator {
     if (!binding) throw new Error("Design plan requires an active Run");
     const targets = designPlanTargets(plan);
     const recoverableDelivery = this.getRecoverableDelivery(context);
-    if (binding.mutationTarget.kind === "page") {
+    if (
+      binding.mutationTarget.kind === "page" &&
+      !this.hasPageStructureAccess(context.runId)
+    ) {
       const targetPageId = binding.mutationTarget.pageId;
       if (targets.some((target) => target.pageId !== targetPageId)) {
         throw new Error(
@@ -796,6 +878,7 @@ export class GlobalTaskCoordinator {
       this.#designPlansByRunId.delete(runId);
       this.#generatedRasterRolesByRunId.delete(runId);
       this.#inspectionsByRunId.delete(runId);
+      this.#pageStructureAccessByRunId.delete(runId);
     }
   }
 
@@ -812,6 +895,7 @@ export class GlobalTaskCoordinator {
       this.#designPlansByRunId.delete(runId);
       this.#generatedRasterRolesByRunId.delete(runId);
       this.#inspectionsByRunId.delete(runId);
+      this.#pageStructureAccessByRunId.delete(runId);
       this.#touchConversation(task.conversationId, timestamp);
     }
   }

@@ -94,7 +94,28 @@ describe("dispatchAgentRequest", () => {
     expect(isAgentEvent(events[0])).toBe(true);
   });
 
-  it("reports approval resolution as unsupported", async () => {
+  it("routes an exact approval resolution to the pending approval controller", async () => {
+    const events: AgentEvent[] = [];
+    const resolveApproval = vi.fn(() => true);
+    const request = {
+      type: "approval.resolve" as const,
+      runId: "run_1",
+      toolCallId: "tool_1",
+      approvalId: "approval_1",
+      decision: "allow_once" as const,
+    };
+
+    await dispatchAgentRequest(request, {
+      runtime: createRuntime(vi.fn(() => Promise.resolve([]))),
+      postMessage: (event) => events.push(event),
+      resolveApproval,
+    });
+
+    expect(resolveApproval).toHaveBeenCalledWith(request);
+    expect(events).toEqual([]);
+  });
+
+  it("rejects an approval resolution that has no exact pending request", async () => {
     const events: AgentEvent[] = [];
 
     await dispatchAgentRequest(
@@ -108,6 +129,7 @@ describe("dispatchAgentRequest", () => {
       {
         runtime: createRuntime(vi.fn(() => Promise.resolve([]))),
         postMessage: (event) => events.push(event),
+        resolveApproval: () => false,
       },
     );
 
@@ -115,7 +137,7 @@ describe("dispatchAgentRequest", () => {
       {
         type: "agent.error",
         code: "request_failed",
-        message: "approval.resolve is not supported by the Agent utility",
+        message: "Approval resolution does not match a pending request",
         runId: "run_1",
       },
     ]);

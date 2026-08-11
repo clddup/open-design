@@ -95,11 +95,11 @@ Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message li
 
 ### 阶段 2：工具和完成策略 parity
 
-- 包装十五个生产设计工具，并保留参数验证、审批、progress、revision 和附件结果。
+- 包装十六个生产设计工具，并保留参数验证、审批、progress、revision 和附件结果。
 - 覆盖可恢复 tool failure、不可恢复 bridge failure、停止、max turns、max tool calls 和 total token budget。
 - 把现有 plan/review completion guard 接到 Pi turn 生命周期，不能只依赖 system prompt。
 
-截至 2026-08-11，第一项与 `max tool calls` 已完成。一个通用 Pi tool adapter 直接复用十五个生产工具的原始标准 JSON Schema、OpenDesign 业务 validator、`ToolExecutorPort`、`ApprovalPort`、可信 Run context 和顺序执行，不为每个工具建立分支实现，也不把 TypeBox 私有标记发送给 Provider。Pi tool lifecycle 会写入现有 `tool.requested/progress/completed/failed`、approval 和 `design.revision` journal，并生成当前 `AgentEvent 3.6`；结构化结果仍按单字段/总量上限投影给模型，原始结果及内容寻址附件元数据进入 journal，inline base64 与 SVG XML 不进入 Pi transcript。测试覆盖成功的两轮工具循环、progress、revision、附件、业务 validator、审批拒绝、工具预算和非法 revision；桌面生产目录门禁证明十五个公开工具全部注册且三个 internal host 工具未暴露。迁移实现只从 `@opendesign/agent-runtime/pi-migration` 子入口导出，正式切换前不会因根 barrel 让旧生产 Agent bundle 提前包含未启用的 Pi loop。
+截至 2026-08-11，第一项与 `max tool calls` 已完成。一个通用 Pi tool adapter 直接复用十六个生产工具的原始标准 JSON Schema、OpenDesign 业务 validator、`ToolExecutorPort`、`ApprovalPort`、可信 Run context 和顺序执行，不为每个工具建立分支实现，也不把 TypeBox 私有标记发送给 Provider。Pi tool lifecycle 会写入现有 `tool.requested/progress/completed/failed`、approval 和 `design.revision` journal，并生成当前 `AgentEvent 3.6`；结构化结果仍按单字段/总量上限投影给模型，原始结果及内容寻址附件元数据进入 journal，inline base64 与 SVG XML 不进入 Pi transcript。测试覆盖成功的两轮工具循环、progress、revision、附件、业务 validator、审批拒绝、工具预算和非法 revision；桌面生产目录门禁证明十六个公开工具全部注册且三个 internal host 工具未暴露。迁移实现只从 `@opendesign/agent-runtime/pi-migration` 子入口导出，正式切换前不会因根 barrel 让旧生产 Agent bundle 提前包含未启用的 Pi loop。
 
 现有 plan/review `CompletionGuardPort` 也已接到 Pi `turn_end`：无工具的候选完成在 review 决定前保持 provisional，不写 journal；拒绝时发送空 `message.completed` 清除临时内容，把可信反馈作为不持久化的内部 steering 注入同一 Run，允许后才持久化最终 assistant。拒绝上限、guard failure、max turns 与累计 total token budget 都产生明确 stop/error 状态。专项测试证明首轮拒绝后会发起第二次 Provider call，journal 只保留最终获准消息；达到上限时不会留下虚假完成。
 
@@ -115,7 +115,7 @@ Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message li
 
 阶段 3 已完成。`prepareOpenDesignPiContext` 从唯一 journal 读取累计 `context.compacted` checkpoint 和未压缩事件，再构造可丢弃的 Pi 初始消息；`transformContext` 在每个 Provider turn 前复用现有 Model Profile/token/字符预算和 Run 内 checkpoint 算法。无法容纳固定 system/tool 协议与当前输入分别产生 `model_context_incompatible`、`context_budget_exceeded`，并在 Provider I/O 前经现有 Run event/journal 终态可见失败，不依赖抛出 `transformContext`。
 
-附件只以经过校验的内容寻址元数据绑定到 run-local 消息对象；ModelGateway bridge 在 Main 边界前将 raster/文档投影为 `image_ref`/`document_ref`，SVG 只投影为 run-scoped handle/name/byteSize 并由 typed import tool 消费，工具原始结果继续进入 journal，Pi transcript 不持久化 inline base64 或 SVG XML。专项验证覆盖用户附件、工具返回图片、SVG 句柄、应用重建 Context adapter 后的引用恢复、原始 journal 保留和累计 checkpoint。完整生产 system prompt、十五个工具、200K Model Profile 与八轮三图 `capture_canvas` 循环已通过相同 `transformContext`，第八轮完成且 journal 保留七个原始工具结果。启动时的孤立 Run/pending tool 一次性终结和 Conversation 最近活动排序继续由唯一 SessionStore/Main 恢复链负责，Pi 不建立第二套恢复器。
+附件只以经过校验的内容寻址元数据绑定到 run-local 消息对象；ModelGateway bridge 在 Main 边界前将 raster/文档投影为 `image_ref`/`document_ref`，SVG 只投影为 run-scoped handle/name/byteSize 并由 typed import tool 消费，工具原始结果继续进入 journal，Pi transcript 不持久化 inline base64 或 SVG XML。专项验证覆盖用户附件、工具返回图片、SVG 句柄、应用重建 Context adapter 后的引用恢复、原始 journal 保留和累计 checkpoint。完整生产 system prompt、十六个工具、200K Model Profile 与八轮三图 `capture_canvas` 循环已通过相同 `transformContext`，第八轮完成且 journal 保留七个原始工具结果。启动时的孤立 Run/pending tool 一次性终结和 Conversation 最近活动排序继续由唯一 SessionStore/Main 恢复链负责，Pi 不建立第二套恢复器。
 
 ### 阶段 4：生产切换与删除
 
@@ -130,7 +130,7 @@ Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message li
 生产切换必须同时证明：
 
 - 当前 `pnpm verify` 全部通过，且 Pi parity tests 覆盖现有 Agent Runtime 的成功与失败分支。
-- 完整生产 system prompt、十五个工具、200K Model Profile 和八轮多模态循环完成且不丢 journal。
+- 完整生产 system prompt、十六个工具、200K Model Profile 和八轮多模态循环完成且不丢 journal。
 - 工具批次顺序执行，同一 Design File 不出现并行 revision 写入。
 - Renderer、utility process 和 Pi adapter 都无法获取原始凭据、裸文件系统或 shell。
 - 图片、文档和 SVG 继续使用内容寻址引用；Pi transcript 不持久化 inline base64 或 SVG XML。

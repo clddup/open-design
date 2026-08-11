@@ -317,4 +317,62 @@ describe("AgentHost model bridge", () => {
     expect(signals.every((signal) => signal.aborted)).toBe(true);
     expect(electron.child.postMessage).not.toHaveBeenCalled();
   });
+
+  it("accepts an approval decision only for the exact pending tool call", () => {
+    const host = new AgentHost();
+    host.start();
+    postToHost({
+      type: "agent.ready",
+      protocolVersion: "3.6.0",
+      runtimeVersion: "0.0.0",
+    });
+    postToHost({ type: "agent.connected", protocolVersion: "3.6.0" });
+    postToHost({
+      type: "tool.requested",
+      runId: "run_pages",
+      toolCallId: "tool_pages",
+      toolName: "opendesign_request_page_structure_access",
+      input: {
+        actions: ["create-page"],
+        reason: "Create the requested Research page",
+      },
+      risk: "design_write",
+    });
+    postToHost({
+      type: "approval.requested",
+      runId: "run_pages",
+      toolCallId: "tool_pages",
+      approvalId: "approval_pages",
+      title: "Allow Page structure changes",
+      summary: "Allow this task to update Pages.",
+    });
+    const resolution = {
+      type: "approval.resolve" as const,
+      runId: "run_pages",
+      toolCallId: "tool_pages",
+      approvalId: "approval_pages",
+      decision: "allow_once" as const,
+    };
+
+    expect(() =>
+      host.prepareApprovalResolution({
+        ...resolution,
+        toolCallId: "tool_wrong",
+      }),
+    ).toThrow("does not match a pending request");
+    expect(host.prepareApprovalResolution(resolution)).toMatchObject({
+      input: {
+        actions: ["create-page"],
+        reason: "Create the requested Research page",
+      },
+      toolName: "opendesign_request_page_structure_access",
+      risk: "design_write",
+    });
+    host.send(resolution);
+
+    expect(electron.child.postMessage).toHaveBeenCalledWith(resolution);
+    expect(() => host.prepareApprovalResolution(resolution)).toThrow(
+      "does not match a pending request",
+    );
+  });
 });

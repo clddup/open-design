@@ -17,6 +17,7 @@ import {
 } from "../shared/design-agent-tools.js";
 import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt.js";
 import { DESIGN_VISUAL_COMPLETION_GUARD } from "./design-completion-guard.js";
+import { UserApprovalController } from "./user-approval-controller.js";
 
 if (!process.parentPort) {
   throw new Error("OpenDesign Agent must run as an Electron utility process");
@@ -25,6 +26,7 @@ const port = process.parentPort;
 
 const parentModelGateway = new ParentModelGateway(port);
 const parentDesignToolExecutor = new ParentDesignToolExecutor(port);
+const userApprovalController = new UserApprovalController();
 const runtime = new OpenDesignPiRuntime({
   modelGateway:
     process.env.OPENDESIGN_AGENT_SMOKE === "1"
@@ -45,6 +47,7 @@ const runtime = new OpenDesignPiRuntime({
       })),
   },
   toolExecutor: parentDesignToolExecutor,
+  approvalPort: userApprovalController,
   completionGuard: DESIGN_VISUAL_COMPLETION_GUARD,
   systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
 });
@@ -60,6 +63,7 @@ port.on("message", (event) => {
   void dispatchAgentRequest(request, {
     runtime,
     postMessage: (message) => port.postMessage(message),
+    resolveApproval: (approval) => userApprovalController.resolve(approval),
   });
 });
 

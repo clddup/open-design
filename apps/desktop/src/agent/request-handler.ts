@@ -15,6 +15,9 @@ export interface AgentRuntimePort {
 export interface AgentRequestHandlerOptions {
   runtime: AgentRuntimePort;
   postMessage: (event: AgentEvent) => void;
+  resolveApproval?: (
+    request: Extract<AgentRequest, { type: "approval.resolve" }>,
+  ) => boolean;
 }
 
 export async function dispatchAgentRequest(
@@ -42,7 +45,7 @@ export async function dispatchAgentRequest(
 
 async function handleRequest(
   request: AgentRequest,
-  { runtime, postMessage }: AgentRequestHandlerOptions,
+  { runtime, postMessage, resolveApproval }: AgentRequestHandlerOptions,
 ): Promise<void> {
   if (request.type === "handshake") {
     if (request.protocolVersion !== AGENT_PROTOCOL_VERSION) {
@@ -81,5 +84,12 @@ async function handleRequest(
     return;
   }
 
-  throw new Error("approval.resolve is not supported by the Agent utility");
+  if (request.type === "approval.resolve") {
+    if (!resolveApproval?.(request)) {
+      throw new Error("Approval resolution does not match a pending request");
+    }
+    return;
+  }
+
+  request satisfies never;
 }

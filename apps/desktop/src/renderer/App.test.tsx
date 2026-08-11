@@ -49,6 +49,7 @@ import type { ProjectDesignFile } from "../shared/desktop-api";
 import type { DiagnosticEvent } from "../shared/diagnostics";
 import {
   DESIGN_PLAN_TOOL_NAME,
+  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   type LegacyDesignPlanToolInput,
 } from "../shared/design-agent-tools";
 
@@ -1628,14 +1629,11 @@ describe("App", () => {
     });
   });
 
-  it("freezes an explicitly selected Design File mutation target for the Run", async () => {
+  it("always starts the Run on the current Page without a persistent write-scope control", async () => {
     const { user } = await openProjectConversation();
-    const writeScope = screen.getByRole("combobox", {
-      name: "Agent write scope",
-    });
-    writeScope.focus();
-    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
-    expect(writeScope).toHaveTextContent("Design File");
+    expect(
+      screen.queryByRole("combobox", { name: "Agent write scope" }),
+    ).not.toBeInTheDocument();
 
     await user.type(
       screen.getByLabelText("Continue the task"),
@@ -1654,9 +1652,61 @@ describe("App", () => {
         pageId: "page_welcome",
         selectedNodeIds: [],
       },
-      mutationTarget: { kind: "document" },
+      mutationTarget: { kind: "page", pageId: "page_welcome" },
     });
   });
+
+  it.each([
+    { button: "Allow this task", decision: "allow_once" as const },
+    { button: "Don’t allow", decision: "deny" as const },
+  ])(
+    "sends an exact $decision response for contextual Page access",
+    async ({ button, decision }) => {
+      const { user, conversation } = await openProjectConversation();
+      await user.type(
+        screen.getByLabelText("Continue the task"),
+        "Create a Research page",
+      );
+      await user.click(screen.getByRole("button", { name: "Send" }));
+      const request = runRequests(conversation.conversationId).at(-1);
+      if (!request) throw new Error("Agent run request is missing");
+
+      act(() => {
+        emitAgentEvent?.({
+          type: "tool.requested",
+          runId: request.runId,
+          toolCallId: "tool_page_access",
+          toolName: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
+          input: {
+            actions: ["create-page"],
+            reason: "Create the requested Research Page.",
+          },
+          risk: "design_write",
+        });
+        emitAgentEvent?.({
+          type: "approval.requested",
+          runId: request.runId,
+          toolCallId: "tool_page_access",
+          approvalId: "approval_page_access",
+          title: "Allow Page structure changes",
+          summary: "Allow this task to create a Page.",
+        });
+      });
+
+      expect(
+        await screen.findByText("Modify Mobile UI Page structure?"),
+      ).toBeInTheDocument();
+      vi.mocked(window.desktop!.sendAgentRequest).mockClear();
+      await user.click(screen.getByRole("button", { name: button }));
+      expect(window.desktop!.sendAgentRequest).toHaveBeenCalledWith({
+        type: "approval.resolve",
+        runId: request.runId,
+        toolCallId: "tool_page_access",
+        approvalId: "approval_page_access",
+        decision,
+      });
+    },
+  );
 
   it("submits reference images as safe metadata and shows them in the optimistic message", async () => {
     const attachmentId = `image_${"b".repeat(64)}`;

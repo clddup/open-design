@@ -94,6 +94,18 @@ describe("OpenDesign Agent system prompt", () => {
       "Smart Selection canvas handles, reflow editing, and Auto Layout remain separate",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Every Run starts with an immutable Current Page mutation target",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "call opendesign_request_page_structure_access",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "After approval, call opendesign_inspect_document again",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "If the user denies access, do not retry",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "does not prove rendered visual quality",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

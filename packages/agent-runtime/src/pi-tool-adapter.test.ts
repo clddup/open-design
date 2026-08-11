@@ -434,7 +434,14 @@ describe("OpenDesign Pi tool adapter", () => {
   });
 
   it("preserves approval denial and a forced tool budget terminal state", async () => {
-    const approvalTool = { ...moveTool, approval: "required" as const };
+    const approvalTool = {
+      ...moveTool,
+      approval: "required" as const,
+      approvalPrompt: {
+        title: "Modify Page structure",
+        summary: "Allow this task to update Pages in the current design file.",
+      },
+    };
     const denied = await runPiToolLoop({
       gateway: new RecordingGateway(
         new MockModelGateway([
@@ -465,6 +472,13 @@ describe("OpenDesign Pi tool adapter", () => {
         "approval.resolved",
         "tool.failed",
       ]),
+    );
+    expect(denied.events).toContainEqual(
+      expect.objectContaining({
+        type: "approval.requested",
+        title: approvalTool.approvalPrompt.title,
+        summary: approvalTool.approvalPrompt.summary,
+      }),
     );
     expect(denied.events).toContainEqual(
       expect.objectContaining({

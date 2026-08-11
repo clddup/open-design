@@ -214,9 +214,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const [utilityWidth, setUtilityWidth] = useState(320);
   const [utilityTab, setUtilityTab] = useState<UtilityDockTab>("agent");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("layers");
-  const [agentMutationScope, setAgentMutationScope] = useState<
-    "page" | "document"
-  >("page");
   const [conversationsByProjectId, setConversationsByProjectId] = useState<
     Readonly<Record<string, ConversationDescriptor[]>>
   >({});
@@ -285,9 +282,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     [],
   );
   const { document: designDocument, state } = snapshot;
-  useEffect(() => {
-    setAgentMutationScope("page");
-  }, [workspaceSnapshot.activeFileKey]);
   autosaveCallbacks.current = {
     onError: (target, error) => {
       setEditorError(
@@ -2180,10 +2174,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       documentId: current.document.documentId,
       revision: current.document.revision,
       scope: selectionScope(current, activePageId),
-      mutationTarget:
-        agentMutationScope === "document"
-          ? { kind: "document" }
-          : { kind: "page", pageId: activePageId },
+      mutationTarget: { kind: "page", pageId: activePageId },
       modelSelection,
     };
     conversationIdByRunId.current.set(runId, conversationId);
@@ -2293,6 +2284,41 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             error,
             t("error.stopAgent"),
             { conversationId, runId },
+          ),
+        })),
+      );
+      return false;
+    }
+  };
+
+  const resolveAgentApproval = async (resolution: {
+    runId: string;
+    toolCallId: string;
+    approvalId: string;
+    decision: "allow_once" | "deny";
+  }) => {
+    if (!window.desktop) return false;
+    const conversationId = conversationIdByRunId.current.get(resolution.runId);
+    if (!conversationId) return false;
+    try {
+      await window.desktop.sendAgentRequest({
+        type: "approval.resolve",
+        ...resolution,
+      });
+      return true;
+    } catch (error) {
+      setAgentByConversationId((current) =>
+        updateConversationAgentState(current, conversationId, (previous) => ({
+          ...previous,
+          error: reportRendererError(
+            "agent_approval_failed",
+            error,
+            t("error.resolveAgentApproval"),
+            {
+              conversationId,
+              runId: resolution.runId,
+              toolCallId: resolution.toolCallId,
+            },
           ),
         })),
       );
@@ -2511,13 +2537,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             activeTab={utilityTab}
             agent={
               <AgentTimeline
+                approvalResourceName={fileName}
                 activeRunId={activeAgentState.activeRunId}
                 conversationId={activeConversation?.conversationId ?? null}
                 conversationTitle={activeConversation?.title ?? null}
                 conversations={projectConversations}
                 error={activeAgentState.error ?? agentRuntimeError}
                 events={activeAgentState.events}
-                mutationScope={agentMutationScope}
                 onCreateConversation={
                   activeProject
                     ? () =>
@@ -2529,7 +2555,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                     : undefined
                 }
                 onSelectConversation={selectConversation}
-                onMutationScopeChange={setAgentMutationScope}
+                onResolveApproval={resolveAgentApproval}
                 onStop={stopAgentTask}
                 onSubmit={submitAgentTask}
                 scope={

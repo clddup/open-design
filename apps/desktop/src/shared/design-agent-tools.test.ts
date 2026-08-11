@@ -6,6 +6,7 @@ import {
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
@@ -26,7 +27,9 @@ describe("design Agent tool contract", () => {
       (candidate) => candidate.name === DESIGN_PAGE_TOOL_NAME,
     );
     expect(tool).toMatchObject({ risk: "design_write", approval: "never" });
-    expect(tool?.description).toContain("Design File mutation target");
+    expect(tool?.description).toContain(
+      "opendesign_request_page_structure_access",
+    );
     expect(
       validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
         action: "create",
@@ -74,6 +77,39 @@ describe("design Agent tool contract", () => {
             nodes: [],
           },
         ],
+      }),
+    ).toBe(false);
+  });
+
+  it("requires one explicit approval tool before Page structure access", () => {
+    const tool = DESIGN_AGENT_TOOL_SPECS.find(
+      (candidate) => candidate.name === PAGE_STRUCTURE_ACCESS_TOOL_NAME,
+    );
+    const input = {
+      actions: ["create-page", "cross-page-edit"],
+      reason: "Create and then design the requested Research page",
+    };
+
+    expect(tool).toMatchObject({
+      risk: "design_write",
+      approval: "required",
+      approvalPrompt: {
+        title: "Allow Page structure changes",
+      },
+    });
+    expect(
+      validateDesignAgentToolInput(PAGE_STRUCTURE_ACCESS_TOOL_NAME, input),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(PAGE_STRUCTURE_ACCESS_TOOL_NAME, {
+        ...input,
+        actions: ["create-page", "create-page"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(PAGE_STRUCTURE_ACCESS_TOOL_NAME, {
+        actions: ["filesystem"],
+        reason: input.reason,
       }),
     ).toBe(false);
   });

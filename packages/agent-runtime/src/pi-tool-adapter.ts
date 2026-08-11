@@ -422,8 +422,10 @@ export class OpenDesignPiToolAdapter {
       approvalId,
       toolCallId: active.toolCallId,
       toolName: active.toolName,
-      title: `Allow ${active.toolName}`,
-      summary: `Allow this ${definition.risk} tool for the current run scope.`,
+      title: definition.approvalPrompt?.title ?? `Allow ${active.toolName}`,
+      summary:
+        definition.approvalPrompt?.summary ??
+        `Allow this ${definition.risk} tool for the current run scope.`,
       risk: definition.risk,
     } satisfies ApprovalRequest;
     await this.#lifecycle.approvalRequested(approval);
@@ -681,6 +683,12 @@ function selectSafeDefinitions(
       definition.inputSchema.type !== "object" ||
       definition.inputSchema.additionalProperties !== false ||
       typeof definition.validateInput !== "function" ||
+      (definition.approvalPrompt !== undefined &&
+        (typeof definition.approvalPrompt.title !== "string" ||
+          typeof definition.approvalPrompt.summary !== "string" ||
+          definition.approvalPrompt.title.length === 0 ||
+          definition.approvalPrompt.title.length > 2_000 ||
+          definition.approvalPrompt.summary.length > 20_000)) ||
       names.has(definition.name)
     ) {
       continue;

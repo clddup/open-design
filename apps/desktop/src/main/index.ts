@@ -76,6 +76,7 @@ import {
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
@@ -86,6 +87,7 @@ import {
   isDesignApplyToolInput,
   isDesignPlanToolInput,
   isDesignPageToolInput,
+  isPageStructureAccessToolInput,
   isDesignVisualReviewToolInput,
   isGenerateImageToolInput,
   isExportSvgToolInput,
@@ -866,6 +868,50 @@ function registerIpc() {
     if (request.type === "handshake") {
       throw new TypeError("Agent handshake is host-internal");
     }
+    if (request.type === "approval.resolve") {
+      if (!globalTaskCoordinator) {
+        throw new Error("Global Task services are not initialized");
+      }
+      const pending = agentHost.prepareApprovalResolution(request);
+      if (pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
+        if (
+          pending.risk !== "design_write" ||
+          !isPageStructureAccessToolInput(pending.input)
+        ) {
+          agentHost.rollbackApprovalResolution(request.approvalId);
+          throw new TypeError("Invalid Page structure approval request");
+        }
+        if (request.decision === "allow_session") {
+          agentHost.rollbackApprovalResolution(request.approvalId);
+          throw new TypeError(
+            "Page structure access can only be allowed for the current task",
+          );
+        }
+      }
+      const grantPageStructure =
+        pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME &&
+        request.decision === "allow_once";
+      if (grantPageStructure) {
+        globalTaskCoordinator.grantPageStructureAccess(
+          request.runId,
+          request.approvalId,
+          request.toolCallId,
+        );
+      }
+      try {
+        agentHost.send(request);
+      } catch (error) {
+        agentHost.rollbackApprovalResolution(request.approvalId);
+        if (grantPageStructure) {
+          globalTaskCoordinator.revokePageStructureAccess(
+            request.runId,
+            request.approvalId,
+          );
+        }
+        throw error;
+      }
+      return;
+    }
     if (request.type === "run.start") {
       if (request.modelContext !== undefined) {
         throw new TypeError("Renderer cannot supply model context metadata");
@@ -1060,6 +1106,25 @@ void app.whenReady().then(async () => {
           : "Design tool Run context is invalid",
       );
     }
+    const executionContext =
+      globalTaskCoordinator.resolveExecutionContext(context);
+    if (call.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
+      if (!isPageStructureAccessToolInput(call.input)) {
+        throw new TypeError("Invalid Page structure access input");
+      }
+      if (!globalTaskCoordinator.hasPageStructureAccess(context.runId)) {
+        throw new Error("Page structure access was not approved for this Run");
+      }
+      return {
+        content: {
+          ok: true,
+          capability: "page-structure",
+          scope: "current-design-file",
+          expires: "run-end",
+          actions: call.input.actions,
+        },
+      };
+    }
     if (call.toolName === DESIGN_PLAN_TOOL_NAME) {
       if (!isDesignPlanToolInput(call.input)) {
         throw new TypeError("Invalid design plan tool input");
@@ -1098,7 +1163,11 @@ void app.whenReady().then(async () => {
         throw new TypeError("Invalid SVG export tool input");
       }
       globalTaskCoordinator.assertDocumentInspected(context);
-      return await requireAgentSvgExportHost().execute(call, context, signal);
+      return await requireAgentSvgExportHost().execute(
+        call,
+        executionContext,
+        signal,
+      );
     }
     if (call.toolName === IMPORT_SVG_TOOL_NAME) {
       if (!isImportSvgToolInput(call.input)) {
@@ -1113,7 +1182,7 @@ void app.whenReady().then(async () => {
       );
       const result = await requireAgentSvgImportHost().execute(
         call,
-        context,
+        executionContext,
         signal,
       );
       globalTaskCoordinator.recordMaterialDesignWriteCompleted(
@@ -1274,7 +1343,7 @@ void app.whenReady().then(async () => {
             ],
           },
         },
-        context,
+        executionContext,
         signal,
       );
       globalTaskCoordinator.recordMaterialDesignWriteCompleted(
@@ -1290,8 +1359,8 @@ void app.whenReady().then(async () => {
         throw new TypeError("Invalid update image tool input");
       }
       if (
-        context.mutationTarget.kind === "page" &&
-        context.mutationTarget.pageId !== call.input.pageId
+        executionContext.mutationTarget.kind === "page" &&
+        executionContext.mutationTarget.pageId !== call.input.pageId
       ) {
         throw new Error(
           "Image update targets a Page outside the active mutation target",
@@ -1341,7 +1410,7 @@ void app.whenReady().then(async () => {
                 : { placement: call.input.placement }),
             },
           },
-          context,
+          executionContext,
           signal,
         );
         globalTaskCoordinator.recordMaterialDesignWriteCompleted(
@@ -1357,7 +1426,7 @@ void app.whenReady().then(async () => {
           toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
           input: call.input,
         },
-        context,
+        executionContext,
         signal,
       );
       globalTaskCoordinator.recordMaterialDesignWriteCompleted(
@@ -1378,7 +1447,7 @@ void app.whenReady().then(async () => {
       );
       const result = await rendererDesignToolHost.execute(
         call,
-        context,
+        executionContext,
         signal,
       );
       globalTaskCoordinator.recordDesignApplyCompleted(
@@ -1393,8 +1462,13 @@ void app.whenReady().then(async () => {
       if (!isDesignPageToolInput(call.input)) {
         throw new TypeError("Invalid Page tool input");
       }
+      globalTaskCoordinator.assertPageToolAccess(context, call.input);
       globalTaskCoordinator.assertDocumentInspected(context);
-      return await rendererDesignToolHost.execute(call, context, signal);
+      return await rendererDesignToolHost.execute(
+        call,
+        executionContext,
+        signal,
+      );
     }
     if (
       call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
@@ -1411,7 +1485,7 @@ void app.whenReady().then(async () => {
       );
       const result = await rendererDesignToolHost.execute(
         call,
-        context,
+        executionContext,
         signal,
       );
       globalTaskCoordinator.recordMaterialDesignWriteCompleted(
@@ -1429,7 +1503,7 @@ void app.whenReady().then(async () => {
         globalTaskCoordinator.resolveCanvasCaptureTarget(context);
       const result = await rendererDesignToolHost.execute(
         call,
-        context,
+        executionContext,
         signal,
         { captureTarget },
       );
@@ -1439,7 +1513,7 @@ void app.whenReady().then(async () => {
           toolName: DESIGN_INSPECT_TOOL_NAME,
           input: {},
         },
-        context,
+        executionContext,
         signal,
       );
       globalTaskCoordinator.recordDocumentInspection(context, inspection);
@@ -1467,7 +1541,11 @@ void app.whenReady().then(async () => {
         },
       };
     }
-    const result = await rendererDesignToolHost.execute(call, context, signal);
+    const result = await rendererDesignToolHost.execute(
+      call,
+      executionContext,
+      signal,
+    );
     if (call.toolName === DESIGN_INSPECT_TOOL_NAME) {
       globalTaskCoordinator.recordDocumentInspection(context, result);
       const unfinishedDelivery =

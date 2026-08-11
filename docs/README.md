@@ -57,3 +57,7 @@
 | [0023](adr/0023-versioned-svg-interchange-service.md)                    | 已接受     | SVG service、原子导入/导出 planner、Boolean flatten 与保真报告     |
 | [0024](adr/0024-versioned-line-arrow-semantics.md)                       | 已接受     | 正式 Line/Arrow、原生端点编辑与受控 SVG marker                     |
 | [0025](adr/0025-versioned-polygon-star-semantics.md)                     | 已接受     | 正式 Polygon/Star、确定性几何与受控 SVG 往返                       |
+| [0026](adr/0026-versioned-editable-vector-network-and-pen.md)            | 已接受     | 可编辑 Vector Network、Pen 工具与受控 SVG metadata                 |
+| [0027](adr/0027-versioned-vector-point-editing.md)                       | 已接受     | Vector 节点、手柄与单轮廓 point mode 编辑                          |
+| [0028](adr/0028-agent-generation-presentation.md)                        | 已接受     | Agent 有效阶段、计划骨架、cursor 与节点 reveal                     |
+| [0029](adr/0029-contextual-page-structure-approval.md)                   | 已接受     | 默认 Page 目标与按需 Page 结构一次性授权                           |

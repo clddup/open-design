@@ -38,6 +38,10 @@ export interface AgentRunRequest {
 export interface AgentToolDefinition extends CanonicalTool {
   risk: ToolRisk;
   approval: "never" | "required";
+  approvalPrompt?: {
+    title: string;
+    summary: string;
+  };
   validateInput(input: unknown): boolean;
 }
 

@@ -126,7 +126,7 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - Main 文件桥只从原生对话框取得绝对路径，不向 Renderer 返回路径；打开/保存的扩展名、regular file、fatal UTF-8、字符/字节预算、原子写入、取消、发送方与参数数量均有专项测试，并覆盖 Windows `win32` 路径规则；
 - 原生/标题栏 File 菜单和 Properties Inspector 已接通人工导入导出；专项测试覆盖 Page/Frame/Group 居中目标、revision stale 拒绝、ancestor/descendant 选区规范化、Windows-safe 文件名、worker 协议/崩溃/取消、设置禁用、保真报告、单 revision、自动选中新根和一次 undo；
 - Renderer CSP 显式限制 `worker-src 'self'`；worker 只接收版本化 pure-data 请求，不获得 Electron、路径、凭据或第二份持久文档状态；
-- Agent import/export contract、run-scoped SVG attachment/reference host、Renderer 原子 import 与 export preparation、Main import/delivery host 已覆盖无路径参数、先 inspect、显式稳定目标、revision 匹配、worker 取消、伪造 response 拒绝、单次 undo、自动选中新根、原生保存取消、fidelity result 有界化和源码不回传；十五个生产工具仍通过完整 prompt/tool context budget 与 Pi adapter 门禁；
+- Agent import/export contract、run-scoped SVG attachment/reference host、Renderer 原子 import 与 export preparation、Main import/delivery host 已覆盖无路径参数、先 inspect、显式稳定目标、revision 匹配、worker 取消、伪造 response 拒绝、单次 undo、自动选中新根、原生保存取消、fidelity result 有界化和源码不回传；十六个生产工具仍通过完整 prompt/tool context budget 与 Pi adapter 门禁；
 - DOCTYPE/ENTITY、script、stylesheet、external URL、循环/缺失 mask reference 和缺失 Boolean geometry 均产生稳定失败；
 - service typecheck、lint、fixture 和全仓验证纳入统一门禁。
 

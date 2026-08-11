@@ -50,6 +50,15 @@ export interface DesignToolRequestHandler {
   ): Promise<TrustedToolResult>;
 }
 
+export type PendingAgentApproval = {
+  approvalId: string;
+  input: unknown;
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  risk: "read" | "design_write" | "external" | "destructive";
+};
+
 export class FatalAgentRunError extends Error {
   constructor(
     readonly code: string,
@@ -96,6 +105,19 @@ export class AgentHost {
   readonly #modelRequests = new Map<string, AbortController>();
   #designToolRequestHandler: DesignToolRequestHandler | null = null;
   readonly #designToolRequests = new Map<string, AbortController>();
+  readonly #toolRequests = new Map<
+    string,
+    {
+      input: unknown;
+      runId: string;
+      toolName: string;
+      risk: PendingAgentApproval["risk"];
+    }
+  >();
+  readonly #pendingApprovals = new Map<
+    string,
+    PendingAgentApproval & { resolutionSent: boolean }
+  >();
 
   setModelRequestHandler(handler: ModelRequestHandler | null): void {
     this.#modelRequestHandler = handler;
@@ -128,6 +150,8 @@ export class AgentHost {
       this.#ready = false;
       this.abortModelRequests();
       this.abortDesignToolRequests();
+      this.#toolRequests.clear();
+      this.#pendingApprovals.clear();
       this.#process = null;
       this.#stopping = false;
       if (wasRunning && !expected) {
@@ -155,7 +179,41 @@ export class AgentHost {
     if (!this.#ready && request.type !== "handshake") {
       throw new Error("Agent process is not ready");
     }
+    if (
+      request.type === "approval.resolve" &&
+      !this.#pendingApprovals.get(request.approvalId)?.resolutionSent
+    ) {
+      throw new Error("Approval resolution was not authorized by Main");
+    }
     this.#process.postMessage(request);
+  }
+
+  prepareApprovalResolution(
+    request: Extract<AgentRequest, { type: "approval.resolve" }>,
+  ): PendingAgentApproval {
+    const pending = this.#pendingApprovals.get(request.approvalId);
+    if (
+      !pending ||
+      pending.runId !== request.runId ||
+      pending.toolCallId !== request.toolCallId ||
+      pending.resolutionSent
+    ) {
+      throw new Error("Approval resolution does not match a pending request");
+    }
+    pending.resolutionSent = true;
+    return {
+      approvalId: pending.approvalId,
+      input: structuredClone(pending.input),
+      runId: pending.runId,
+      toolCallId: pending.toolCallId,
+      toolName: pending.toolName,
+      risk: pending.risk,
+    };
+  }
+
+  rollbackApprovalResolution(approvalId: string): void {
+    const pending = this.#pendingApprovals.get(approvalId);
+    if (pending) pending.resolutionSent = false;
   }
 
   on(listener: AgentHostListener): () => void {
@@ -170,6 +228,8 @@ export class AgentHost {
     this.#ready = false;
     this.abortModelRequests();
     this.abortDesignToolRequests();
+    this.#toolRequests.clear();
+    this.#pendingApprovals.clear();
     child.kill();
   }
 
@@ -248,6 +308,55 @@ export class AgentHost {
       return;
     }
     const event = message;
+    if (event.type === "tool.requested") {
+      this.#toolRequests.set(`${event.runId}:${event.toolCallId}`, {
+        input: structuredClone(event.input),
+        runId: event.runId,
+        toolName: event.toolName,
+        risk: event.risk,
+      });
+    }
+    if (event.type === "approval.requested") {
+      const tool = this.#toolRequests.get(`${event.runId}:${event.toolCallId}`);
+      if (!tool) {
+        this.emit({
+          type: "agent.error",
+          code: "approval_sequence_invalid",
+          message: "Agent requested approval for an unknown tool call",
+          runId: event.runId,
+        });
+        this.#process?.postMessage({
+          type: "run.cancel",
+          runId: event.runId,
+        } satisfies AgentRequest);
+        return;
+      }
+      this.#pendingApprovals.set(event.approvalId, {
+        approvalId: event.approvalId,
+        input: structuredClone(tool.input),
+        runId: event.runId,
+        toolCallId: event.toolCallId,
+        toolName: tool.toolName,
+        risk: tool.risk,
+        resolutionSent: false,
+      });
+    }
+    if (event.type === "approval.resolved") {
+      this.#pendingApprovals.delete(event.approvalId);
+    }
+    if (event.type === "run.completed" || event.type === "agent.error") {
+      const runId = event.runId;
+      if (runId) {
+        for (const [key, tool] of this.#toolRequests) {
+          if (tool.runId === runId) this.#toolRequests.delete(key);
+        }
+        for (const [approvalId, approval] of this.#pendingApprovals) {
+          if (approval.runId === runId) {
+            this.#pendingApprovals.delete(approvalId);
+          }
+        }
+      }
+    }
     if (event.type === "agent.ready") {
       if (event.protocolVersion !== AGENT_PROTOCOL_VERSION) {
         this.emit({

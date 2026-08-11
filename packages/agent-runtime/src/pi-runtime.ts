@@ -229,6 +229,12 @@ function isSafeToolDefinition(tool: AgentToolDefinition): boolean {
     tool.description.length > 0 &&
     tool.inputSchema.type === "object" &&
     tool.inputSchema.additionalProperties === false &&
+    (tool.approvalPrompt === undefined ||
+      (typeof tool.approvalPrompt.title === "string" &&
+        typeof tool.approvalPrompt.summary === "string" &&
+        tool.approvalPrompt.title.length > 0 &&
+        tool.approvalPrompt.title.length <= 2_000 &&
+        tool.approvalPrompt.summary.length <= 20_000)) &&
     typeof tool.validateInput === "function"
   );
 }
