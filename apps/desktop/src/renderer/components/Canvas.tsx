@@ -26,6 +26,7 @@ import {
   type LeaferEngineAdapter,
   type LeaferEngineSyncInput,
   type LeaferFidelityWarning,
+  type LeaferGenerationActivity,
   type LeaferGenerationSkeleton,
   type LeaferOperationKind,
   type LeaferOperationRequest,
@@ -50,6 +51,7 @@ export function Canvas({
   activeAgentRunId,
   activePageId,
   captureRef,
+  generationActivity,
   generationSkeleton,
   runtime,
   snapshot,
@@ -58,6 +60,7 @@ export function Canvas({
   activeAgentRunId: string | null;
   activePageId: string;
   captureRef?: MutableRefObject<CanvasPreviewCapture | null>;
+  generationActivity?: LeaferGenerationActivity;
   generationSkeleton?: LeaferGenerationSkeleton;
   runtime: EditorRuntime;
   snapshot: EditorSnapshot;
@@ -516,6 +519,7 @@ export function Canvas({
         : {}),
       document: snapshot.document,
       ...(changes ? { changes } : {}),
+      ...(generationActivity ? { generationActivity } : {}),
       ...(generationReveal ? { generationReveal } : {}),
       ...(generationSkeleton ? { generationSkeleton } : {}),
       pageId: activePageId,
@@ -538,6 +542,7 @@ export function Canvas({
   }, [
     activePageId,
     booleanEditScope,
+    generationActivity,
     generationSkeleton,
     snapshot.document,
     reducedMotion,
@@ -584,6 +589,11 @@ export function Canvas({
       ref={host}
       tabIndex={0}
     >
+      {generationActivity && (
+        <span aria-live="polite" className="visually-hidden" role="status">
+          {generationActivity.label}
+        </span>
+      )}
       {renderError && (
         <div className="canvas-status" role="alert">
           <span className="canvas-status__mark" />

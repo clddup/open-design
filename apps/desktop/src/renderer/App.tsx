@@ -89,6 +89,8 @@ import { executeDesignToolRequest } from "./design-tool-execution";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
   clearGenerationPlanPresentationRun,
+  generationActivityFromAcceptedPlan,
+  generationActivityMessageKey,
   generationSkeletonFromAcceptedPlan,
   projectGenerationPlanPresentationEvent,
 } from "./generation-presentation";
@@ -327,6 +329,32 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     activePageId,
     designDocument,
     generationPlanPresentation.acceptedByRunId,
+  ]);
+  const generationActivity = useMemo(() => {
+    const runId = activeAgentState.activeRunId;
+    if (!runId) return undefined;
+    const projected = generationActivityFromAcceptedPlan(
+      generationPlanPresentation.acceptedByRunId[runId],
+      generationPlanPresentation.activityByRunId[runId],
+      designDocument,
+      activePageId,
+    );
+    if (!projected) return undefined;
+    const stage = t(generationActivityMessageKey(projected.phase));
+    return {
+      ...projected,
+      label:
+        projected.progress === undefined
+          ? `AI · ${stage}`
+          : `AI · ${stage} · ${Math.round(projected.progress * 100)}%`,
+    };
+  }, [
+    activeAgentState.activeRunId,
+    activePageId,
+    designDocument,
+    generationPlanPresentation.acceptedByRunId,
+    generationPlanPresentation.activityByRunId,
+    t,
   ]);
 
   const requestConversationHistory = useCallback(
@@ -2072,6 +2100,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               activeAgentRunId={activeAgentState.activeRunId}
               activePageId={activePageId}
               captureRef={canvasPreviewCapture}
+              generationActivity={generationActivity}
               generationSkeleton={generationSkeleton}
               onTransactionError={setEditorError}
               runtime={runtime}

@@ -10,6 +10,8 @@ export type {
   LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferFidelityWarning,
+  LeaferGenerationActivity,
+  LeaferGenerationActivityPhase,
   LeaferGenerationReveal,
   LeaferGenerationSkeleton,
   LeaferGenerationSkeletonRegion,

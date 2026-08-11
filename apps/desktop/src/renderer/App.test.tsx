@@ -3179,6 +3179,52 @@ describe("App", () => {
         })),
       }),
     );
+    expect(leaferHarness.input?.generationActivity).toEqual({
+      id: `${request.runId}:tool_plan_poster:accepted`,
+      label: "AI · Structuring the layout",
+      phase: "structuring",
+      target: { x: 1_640, y: 440 },
+    });
+    expect(screen.getByText("AI · Structuring the layout")).toBeInTheDocument();
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "tool.requested",
+        runId: request.runId,
+        toolCallId: "tool_apply_poster",
+        toolName: "opendesign_apply_transaction",
+        input: { label: "Build poster", commands: [] },
+        risk: "design_write",
+      });
+      emitAgentEvent?.({
+        type: "tool.progress",
+        runId: request.runId,
+        toolCallId: "tool_apply_poster",
+        message: "Untrusted progress prose",
+        progress: 0.15,
+      });
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.generationActivity?.label).toBe(
+        "AI · Building the design · 15%",
+      ),
+    );
+    expect(screen.queryByText("Untrusted progress prose")).toBeNull();
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "tool.completed",
+        runId: request.runId,
+        toolCallId: "tool_apply_poster",
+        result: { ok: true },
+      });
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.generationActivity?.label).toBe(
+        "AI · Building the design",
+      ),
+    );
+    expect(screen.queryByText("Untrusted progress prose")).toBeNull();
 
     act(() => {
       emitAgentEvent?.({
@@ -3191,6 +3237,10 @@ describe("App", () => {
     await waitFor(() =>
       expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
     );
+    expect(leaferHarness.input?.generationActivity).toBeUndefined();
+    expect(
+      screen.queryByText("AI · Structuring the layout"),
+    ).not.toBeInTheDocument();
   });
 
   it("removes the accepted canvas skeleton immediately when the user stops", async () => {
@@ -3251,6 +3301,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
     );
+    expect(leaferHarness.input?.generationActivity).toBeUndefined();
   });
 
   it("keeps the prompt and reports an Agent connection error", async () => {
@@ -3563,6 +3614,9 @@ describe("App", () => {
       expect(leaferHarness.input?.generationSkeleton?.id).toBe(
         `${run.runId}:tool_plan_capture`,
       ),
+    );
+    expect(leaferHarness.input?.generationActivity?.id).toBe(
+      `${run.runId}:tool_plan_capture:accepted`,
     );
     if (!requestDesignTool) throw new Error("Design tool listener is missing");
     leaferHarness.finishGenerationPresentation.mockClear();

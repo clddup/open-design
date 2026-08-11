@@ -109,6 +109,16 @@ function approvalDecisionKey(decision: string): MessageKey {
 }
 
 function friendlyAgentError(message: string, t: Translate): string {
+  if (/^design_workflow\.material_write_required:/i.test(message)) {
+    return t("agent.workflowApplyingDraft");
+  }
+  if (
+    /^design_workflow\.(?:capture_required|capture_revision_invalid):/i.test(
+      message,
+    )
+  ) {
+    return t("agent.workflowCapturingCanvas");
+  }
   if (
     /Model attempt did not complete|attempt mismatch|\b(?:run|attempt)_[A-Za-z0-9_-]+/i.test(
       message,
@@ -131,6 +141,12 @@ function friendlyAgentError(message: string, t: Translate): string {
     return t("agent.canvasScopeConflict");
   }
   return message;
+}
+
+function isRecoverableDesignWorkflowFailure(message: string): boolean {
+  return /^design_workflow\.(?:material_write_required|capture_required|capture_revision_invalid):/i.test(
+    message,
+  );
 }
 
 function toolTitle(
@@ -223,14 +239,19 @@ function projectTimeline(
               : "queued";
       const detail = item.error?.message
         ? friendlyAgentError(item.error.message, t)
-        : isNativeDesignTool(item.toolName)
+        : state === "done" || isNativeDesignTool(item.toolName)
           ? undefined
           : item.progressMessage;
+      const recoverableWorkflowFailure =
+        item.status === "failed" &&
+        item.error?.message !== undefined &&
+        isRecoverableDesignWorkflowFailure(item.error.message);
       return {
         ...base,
         routine:
-          (state === "active" || state === "queued") &&
-          item.runId !== activeRunId,
+          recoverableWorkflowFailure ||
+          ((state === "active" || state === "queued") &&
+            item.runId !== activeRunId),
         state,
         kind: "tool",
         toolName: item.toolName,
@@ -455,6 +476,7 @@ function projectEvents(
       updateEvent(`tool:${event.toolCallId}`, {
         state: "done",
         kind: "tool",
+        detail: undefined,
         time:
           event.revision === undefined
             ? t("common.done")
@@ -463,7 +485,11 @@ function projectEvents(
       });
     }
     if (event.type === "tool.failed") {
+      const recoverableWorkflowFailure = isRecoverableDesignWorkflowFailure(
+        event.message,
+      );
       updateEvent(`tool:${event.toolCallId}`, {
+        routine: recoverableWorkflowFailure,
         state: "error",
         kind: "tool",
         time: t("common.error"),

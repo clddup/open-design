@@ -1094,7 +1094,10 @@ void app.whenReady().then(async () => {
         context,
         signal,
       );
-      globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+        context.runId,
+        result.designRevision?.revision,
+      );
       return result;
     }
     if (call.toolName === READ_IMAGE_TOOL_NAME) {
@@ -1245,7 +1248,10 @@ void app.whenReady().then(async () => {
         context,
         signal,
       );
-      globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+        context.runId,
+        result.designRevision?.revision,
+      );
       return result;
     }
     if (call.toolName === UPDATE_IMAGE_TOOL_NAME) {
@@ -1303,7 +1309,10 @@ void app.whenReady().then(async () => {
           context,
           signal,
         );
-        globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+          context.runId,
+          result.designRevision?.revision,
+        );
         return result;
       }
       const result = await rendererDesignToolHost.execute(
@@ -1315,7 +1324,10 @@ void app.whenReady().then(async () => {
         context,
         signal,
       );
-      globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+        context.runId,
+        result.designRevision?.revision,
+      );
       return result;
     }
     if (call.toolName === DESIGN_APPLY_TOOL_NAME) {
@@ -1332,6 +1344,7 @@ void app.whenReady().then(async () => {
       globalTaskCoordinator.recordDesignApplyCompleted(
         context.runId,
         call.input,
+        result.designRevision?.revision,
       );
       return result;
     }
@@ -1345,7 +1358,10 @@ void app.whenReady().then(async () => {
         context,
         signal,
       );
-      globalTaskCoordinator.recordMaterialDesignWriteCompleted(context.runId);
+      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+        context.runId,
+        result.designRevision?.revision,
+      );
       return result;
     }
     const result = await rendererDesignToolHost.execute(call, context, signal);
@@ -1353,7 +1369,22 @@ void app.whenReady().then(async () => {
       globalTaskCoordinator.recordDocumentInspection(context);
     }
     if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
-      globalTaskCoordinator.recordCanvasCapture(context);
+      const reviewWorkflow = globalTaskCoordinator.recordCanvasCapture(
+        context,
+        result.observedRevision,
+      );
+      if (!isRecordValue(result.content)) {
+        throw new TypeError(
+          "Canvas capture returned invalid structured content",
+        );
+      }
+      return {
+        ...result,
+        content: {
+          ...result.content,
+          reviewWorkflow,
+        },
+      };
     }
     return result;
   });
@@ -1451,6 +1482,10 @@ function smokePdf(text: string): Buffer {
     .join("");
   body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
   return Buffer.from(body, "ascii");
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 app.on("before-quit", () => {

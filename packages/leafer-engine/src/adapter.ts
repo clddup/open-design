@@ -61,6 +61,7 @@ import type {
   LeaferCreateVectorRequest,
   LeaferEngineAdapter,
   LeaferEngineCallbacks,
+  LeaferGenerationActivity,
   LeaferGenerationReveal,
   LeaferGenerationSkeleton,
   LeaferEngineOptions,
@@ -88,6 +89,12 @@ interface GenerationSkeletonLabel {
   width: number;
   x: number;
   y: number;
+}
+
+interface GenerationActivityElements {
+  badge: LeaferElement;
+  cursor: LeaferElement;
+  label: LeaferElement;
 }
 
 interface TransformSession {
@@ -179,6 +186,9 @@ const MAX_PROCESSED_GENERATION_REVEALS = 128;
 const GENERATION_SKELETON_COLOR = "#7c6ee6";
 const GENERATION_SKELETON_FILL = "rgba(124, 110, 230, 0.08)";
 const MAX_SUPPRESSED_GENERATION_SKELETONS = 128;
+const GENERATION_ACTIVITY_BADGE_FILL = "rgba(31, 28, 48, 0.94)";
+const GENERATION_ACTIVITY_MOVE_MS = 180;
+const MAX_SUPPRESSED_GENERATION_ACTIVITIES = 128;
 
 export async function createLeaferEngineAdapter(
   host: HTMLElement,
@@ -196,6 +206,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #leafer: LeaferModule;
   readonly #editor: LeaferEditor;
   readonly #generationRevealStroker: LeaferStroker;
+  readonly #generationActivityElements: GenerationActivityElements;
+  readonly #generationActivityLayer: LeaferGroup;
   readonly #generationSkeletonLayer: LeaferGroup;
   readonly #elements = new Map<string, LeaferElement>();
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
@@ -234,6 +246,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #generationSkeletonStrokes: LeaferElement[] = [];
   readonly #generationSkeletonLabels: GenerationSkeletonLabel[] = [];
   readonly #suppressedGenerationSkeletonIds = new Set<string>();
+  #generationActivityCurrentPoint: Point | null = null;
+  #generationActivityFingerprint: string | null = null;
+  #generationActivityFrame: number | null = null;
+  #generationActivityId: string | null = null;
+  #generationActivityMoveFrom: Point | null = null;
+  #generationActivityMoveStartedAt: number | null = null;
+  #generationActivityTargetPoint: Point | null = null;
+  #generationActivityRevealNodeId: string | null = null;
+  readonly #generationRevealFocusPoints = new Map<string, Point>();
+  readonly #suppressedGenerationActivityIds = new Set<string>();
 
   constructor(
     host: HTMLElement,
@@ -298,6 +320,61 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#generationSkeletonLayer,
       0,
     );
+    this.#generationActivityLayer = new leafer.Group({
+      editable: false,
+      hitChildren: false,
+      hittable: false,
+      visible: false,
+    });
+    const activityCursor = new leafer.Path({
+      editable: false,
+      fill: GENERATION_SKELETON_COLOR,
+      hittable: false,
+      path: "M 0 0 L 0 18 L 4.5 13.5 L 8.5 21 L 12 19 L 8 11.5 L 15 11.5 Z",
+      stroke: "#ffffff",
+      strokeJoin: "round",
+      strokeWidth: 1,
+    });
+    const activityBadge = new leafer.Rect({
+      cornerRadius: 4,
+      editable: false,
+      fill: GENERATION_ACTIVITY_BADGE_FILL,
+      height: 26,
+      hittable: false,
+      stroke: "rgba(124, 110, 230, 0.72)",
+      strokeAlign: "inside",
+      strokeWidth: 1,
+      width: 148,
+      x: 14,
+      y: 16,
+    });
+    const activityLabel = new leafer.Text({
+      editable: false,
+      fill: "#ffffff",
+      fontFamily: "Inter, sans-serif",
+      fontSize: 11,
+      fontWeight: 600,
+      height: 16,
+      hittable: false,
+      lineHeight: 14,
+      text: "AI",
+      textOverflow: "ellipsis",
+      width: 132,
+      x: 22,
+      y: 22,
+    });
+    this.#generationActivityLayer.add(activityCursor);
+    this.#generationActivityLayer.add(activityBadge);
+    this.#generationActivityLayer.add(activityLabel);
+    this.#generationActivityElements = {
+      badge: activityBadge,
+      cursor: activityCursor,
+      label: activityLabel,
+    };
+    (this.#app.sky as unknown as LeaferGroup).addAt(
+      this.#generationActivityLayer,
+      1,
+    );
     this.#generationRevealStroker = new leafer.Stroker();
     this.#generationRevealStroker.set({
       dashPattern: [6, 4],
@@ -332,8 +409,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         : null;
     if (identityChanged) {
       this.#finishGenerationReveal();
+      this.#clearGenerationActivity(false);
       this.#clearGenerationSkeleton(false);
+      this.#generationRevealFocusPoints.clear();
       this.#processedGenerationRevealIds.clear();
+      this.#suppressedGenerationActivityIds.clear();
       this.#suppressedGenerationSkeletonIds.clear();
     }
     this.#input = input;
@@ -454,10 +534,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection.nodeIds);
       this.#syncGenerationSkeleton(input.generationSkeleton);
+      this.#syncGenerationActivity(
+        input.generationActivity,
+        input.reducedMotion === true,
+      );
       if (input.reducedMotion === true) {
         this.#finishGenerationReveal();
         if (input.generationReveal) {
           this.#rememberGenerationReveal(input.generationReveal.id);
+          this.#focusGenerationActivityOnRevealLast(input.generationReveal);
         }
       } else if (input.generationReveal) {
         this.#queueGenerationReveal(input.generationReveal);
@@ -492,6 +577,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#editorFrame = null;
     this.#editorRefreshNeedsTreeBounds = false;
     this.#editorRefreshNodeBounds.clear();
+    this.#generationActivityLayer.remove();
+    this.#generationActivityLayer.destroy();
     this.#generationSkeletonLayer.remove();
     this.#generationSkeletonLayer.destroy();
     this.#generationRevealStroker.remove();
@@ -504,6 +591,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   finishGenerationPresentation(): void {
     this.#finishGenerationReveal();
+    this.#clearGenerationActivity(true);
     this.#clearGenerationSkeleton(true);
   }
 
@@ -516,6 +604,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#restoreGenerationRevealNode(nodeId);
     }
     this.#generationReveals.clear();
+    this.#generationRevealFocusPoints.clear();
+    this.#generationActivityRevealNodeId = null;
     this.#generationRevealNextStartAt = null;
     this.#generationRevealStroker.target = null as never;
     this.#generationRevealStroker.opacity = 0;
@@ -628,6 +718,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#scheduleEditorRefresh();
       this.#renderVectorEditOverlay();
       this.#syncGenerationSkeletonViewport();
+      this.#syncGenerationActivityViewport();
     };
     this.#app.tree.on(MoveEvent.MOVE, viewportChanged);
     this.#app.tree.on(MoveEvent.END, viewportChanged);
@@ -984,6 +1075,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       f: viewport.panY,
     });
     this.#syncGenerationSkeletonViewport();
+    this.#syncGenerationActivityViewport();
     this.#scheduleEditorRefresh();
   }
 
@@ -2130,6 +2222,180 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#draw = null;
   }
 
+  #syncGenerationActivity(
+    activity: LeaferGenerationActivity | undefined,
+    reducedMotion: boolean,
+  ): void {
+    if (!activity || this.#suppressedGenerationActivityIds.has(activity.id)) {
+      this.#clearGenerationActivity(false);
+      return;
+    }
+    const fingerprint = JSON.stringify(activity);
+    if (
+      this.#generationActivityId === activity.id &&
+      this.#generationActivityFingerprint === fingerprint
+    ) {
+      this.#syncGenerationActivityViewport();
+      return;
+    }
+
+    this.#generationActivityId = activity.id;
+    this.#generationActivityFingerprint = fingerprint;
+    this.#generationActivityRevealNodeId = null;
+    const badgeWidth = generationActivityBadgeWidth(activity.label);
+    this.#generationActivityElements.badge.set({ width: badgeWidth });
+    this.#generationActivityElements.label.set({
+      text: activity.label,
+      width: badgeWidth - 16,
+    });
+    this.#setGenerationActivityTarget(activity.target, reducedMotion);
+  }
+
+  #setGenerationActivityTarget(point: Point, reducedMotion: boolean): void {
+    const target = { x: point.x, y: point.y };
+    if (
+      reducedMotion ||
+      !this.#generationActivityCurrentPoint ||
+      !this.#generationActivityTargetPoint
+    ) {
+      this.#cancelGenerationActivityMove();
+      this.#generationActivityCurrentPoint = target;
+      this.#generationActivityTargetPoint = target;
+      this.#generationActivityMoveFrom = target;
+      this.#generationActivityLayer.visible = true;
+      this.#syncGenerationActivityViewport();
+      return;
+    }
+    if (samePoint(this.#generationActivityTargetPoint, target)) {
+      this.#syncGenerationActivityViewport();
+      return;
+    }
+    this.#generationActivityMoveFrom = {
+      ...this.#generationActivityCurrentPoint,
+    };
+    this.#generationActivityTargetPoint = target;
+    this.#generationActivityMoveStartedAt = null;
+    this.#generationActivityLayer.visible = true;
+    this.#scheduleGenerationActivityFrame();
+  }
+
+  #scheduleGenerationActivityFrame(): void {
+    if (
+      this.#disposed ||
+      this.#generationActivityFrame !== null ||
+      !this.#generationActivityId
+    ) {
+      return;
+    }
+    this.#generationActivityFrame = requestAnimationFrame((now) => {
+      this.#generationActivityFrame = null;
+      if (this.#disposed || !this.#generationActivityId) return;
+      const from = this.#generationActivityMoveFrom;
+      const target = this.#generationActivityTargetPoint;
+      if (!from || !target) return;
+      this.#generationActivityMoveStartedAt ??= now;
+      const elapsed = Math.max(0, now - this.#generationActivityMoveStartedAt);
+      const progress = Math.min(1, elapsed / GENERATION_ACTIVITY_MOVE_MS);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      this.#generationActivityCurrentPoint = {
+        x: from.x + (target.x - from.x) * eased,
+        y: from.y + (target.y - from.y) * eased,
+      };
+      this.#syncGenerationActivityViewport();
+      if (progress < 1) {
+        this.#scheduleGenerationActivityFrame();
+      } else {
+        this.#generationActivityMoveFrom = target;
+        this.#generationActivityMoveStartedAt = null;
+      }
+    });
+  }
+
+  #syncGenerationActivityViewport(): void {
+    const point = this.#generationActivityCurrentPoint;
+    if (!point || !this.#generationActivityId) return;
+    const matrix = this.#app.tree.localTransform;
+    const screen = {
+      x: matrix.a * point.x + matrix.c * point.y + matrix.e,
+      y: matrix.b * point.x + matrix.d * point.y + matrix.f,
+    };
+    const hostBounds = this.#host.getBoundingClientRect();
+    const onScreen =
+      screen.x >= -24 &&
+      screen.y >= -24 &&
+      screen.x <= hostBounds.width + 24 &&
+      screen.y <= hostBounds.height + 24;
+    this.#generationActivityLayer.visible = onScreen;
+    if (!onScreen) return;
+    this.#generationActivityLayer.setTransform({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: screen.x,
+      f: screen.y,
+    });
+    const badgeWidth = Math.max(
+      1,
+      Number(this.#generationActivityElements.badge.width) || 148,
+    );
+    const badgeX =
+      screen.x + badgeWidth + 28 > hostBounds.width ? -badgeWidth - 14 : 14;
+    const badgeY = screen.y + 48 > hostBounds.height ? -40 : 16;
+    this.#generationActivityElements.badge.set({ x: badgeX, y: badgeY });
+    this.#generationActivityElements.label.set({
+      width: badgeWidth - 16,
+      x: badgeX + 8,
+      y: badgeY + 6,
+    });
+  }
+
+  #focusGenerationActivityOnRevealLast(reveal: LeaferGenerationReveal): void {
+    if (!this.#generationActivityId || !reveal.focusPoints) return;
+    for (let index = reveal.nodeIds.length - 1; index >= 0; index -= 1) {
+      const nodeId = reveal.nodeIds[index];
+      if (!nodeId) continue;
+      const point = reveal.focusPoints[nodeId];
+      if (!point) continue;
+      this.#generationActivityRevealNodeId = nodeId;
+      this.#setGenerationActivityTarget(point, true);
+      return;
+    }
+  }
+
+  #cancelGenerationActivityMove(): void {
+    if (this.#generationActivityFrame !== null) {
+      cancelAnimationFrame(this.#generationActivityFrame);
+      this.#generationActivityFrame = null;
+    }
+    this.#generationActivityMoveStartedAt = null;
+  }
+
+  #clearGenerationActivity(suppress: boolean): void {
+    const activityId = this.#generationActivityId;
+    if (suppress && activityId) {
+      this.#suppressedGenerationActivityIds.add(activityId);
+      while (
+        this.#suppressedGenerationActivityIds.size >
+        MAX_SUPPRESSED_GENERATION_ACTIVITIES
+      ) {
+        const oldest = this.#suppressedGenerationActivityIds
+          .values()
+          .next().value;
+        if (oldest === undefined) break;
+        this.#suppressedGenerationActivityIds.delete(oldest);
+      }
+    }
+    this.#cancelGenerationActivityMove();
+    this.#generationActivityLayer.visible = false;
+    this.#generationActivityCurrentPoint = null;
+    this.#generationActivityFingerprint = null;
+    this.#generationActivityId = null;
+    this.#generationActivityMoveFrom = null;
+    this.#generationActivityTargetPoint = null;
+    this.#generationActivityRevealNodeId = null;
+  }
+
   #syncGenerationSkeleton(
     skeleton: LeaferGenerationSkeleton | undefined,
   ): void {
@@ -2271,6 +2537,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #queueGenerationReveal(reveal: LeaferGenerationReveal): void {
     if (!this.#rememberGenerationReveal(reveal.id)) return;
+    if (reveal.focusPoints) {
+      for (const nodeId of reveal.nodeIds) {
+        const point = reveal.focusPoints[nodeId];
+        if (point) this.#generationRevealFocusPoints.set(nodeId, point);
+      }
+    }
     const nodeIds = reveal.nodeIds.filter((nodeId) => {
       const spec = this.#projection?.elementsById.get(nodeId);
       const opacity = spec?.data.opacity;
@@ -2322,6 +2594,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     let active:
       | {
           element: LeaferElement;
+          nodeId: string;
           opacity: number;
           startsAt: number;
         }
@@ -2349,6 +2622,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       ) {
         active = {
           element,
+          nodeId,
           opacity: state.overlayOpacity,
           startsAt: item.startsAt,
         };
@@ -2359,6 +2633,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#generationRevealStroker.setTarget(active.element, {
         opacity: active.opacity,
       });
+      if (
+        this.#generationActivityId &&
+        this.#generationActivityRevealNodeId !== active.nodeId
+      ) {
+        const point = this.#generationRevealFocusPoints.get(active.nodeId);
+        if (point) {
+          this.#generationActivityRevealNodeId = active.nodeId;
+          this.#setGenerationActivityTarget(point, false);
+        }
+      }
     } else {
       this.#generationRevealStroker.target = null as never;
       this.#generationRevealStroker.opacity = 0;
@@ -2366,6 +2650,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
     if (this.#generationReveals.size === 0) {
       this.#generationRevealNextStartAt = null;
+      this.#generationRevealFocusPoints.clear();
+      this.#generationActivityRevealNodeId = null;
     }
   }
 
@@ -2665,6 +2951,18 @@ function generationSkeletonFill(
   return role === "media" || role === "graphic"
     ? "rgba(124, 110, 230, 0.12)"
     : GENERATION_SKELETON_FILL;
+}
+
+function generationActivityBadgeWidth(label: string): number {
+  let width = 28;
+  for (const character of label) {
+    width += character.codePointAt(0)! > 0xff ? 11 : 6.3;
+  }
+  return Math.min(220, Math.max(104, Math.ceil(width)));
+}
+
+function samePoint(left: Point, right: Point): boolean {
+  return nearlyEqual(left.x, right.x) && nearlyEqual(left.y, right.y);
 }
 
 function nearlyEqual(left: number, right: number): boolean {

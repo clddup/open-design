@@ -1221,7 +1221,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_CAPTURE_TOOL_NAME,
     description:
-      "Capture the currently bound OpenDesign canvas viewport as a bounded image and return it as multimodal content. Use this after a material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before claiming visual quality. This captures only the active design canvas; it does not capture other applications, windows, files, or screens.",
+      "Capture the currently bound OpenDesign canvas viewport as a bounded image and return it as multimodal content together with the observed document revision and reviewWorkflow. Call record_visual_review only when reviewWorkflow.reviewEligible is true; otherwise perform reviewWorkflow.nextAction first. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before recording the required visual review. A baseline capture before a write may inform planning but does not unlock review. Pan, zoom, selection, and window size do not change document revision or the Run mutation target. This captures only the active design canvas; it does not capture other applications, windows, files, or screens.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -1241,7 +1241,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_REVIEW_TOOL_NAME,
     description:
-      "Record a structured critique of the most recent opendesign_capture_canvas result before refining a material draft. Evaluate the rendered composition, hierarchy, typography, asset integration, form/surface, and effects, then name at least two concrete refinements. Do not submit generic praise. The host rejects a review when no newer canvas capture exists. This records Run review state and does not mutate the canvas.",
+      "Record a structured critique of the newest unreviewed opendesign_capture_canvas result after a successful material design write in this Run. Evaluate the rendered composition, hierarchy, typography, asset integration, form/surface, and effects, then name at least two concrete refinements. Do not submit generic praise. The host rejects baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision with a design_workflow.* recovery instruction; follow that instruction instead of retrying the same review. This records Run review state and does not mutate the canvas.",
     inputSchema: MODEL_VISUAL_REVIEW_SCHEMA,
     risk: "read" as const,
     approval: "never" as const,

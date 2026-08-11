@@ -53,7 +53,10 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 建立跨设计类型的 Agent 质量流程门禁：新建 UI、海报、Logo、插画和品牌物料必须先提交 typed design plan，固定 Frame/Artboard、构图、排版、形态语言、surface/depth、asset role 与反模式；首张 capture 后必须提交 typed visual review 才能 refinement。Main 阻止无计划新建、Page-root 散落、未声明 raster role、默认整图替代可编辑 composition，以及未审查截图后的继续写入。
 - [x] 建立第一阶段 Agent 画布生成过程：三条以内保持原子，大事务按 `EditorRuntime.preview()` 选择文档有效的连续阶段并共享单一撤销组；已提交 Agent 新节点按父级优先执行有界 wireframe/fade reveal。取消回滚、Run 终态/错误/切页清理、Reduced Motion 和 `capture_canvas` 最终态截图已有自动化证据；展示状态不进入文档、history、selection 或导出。
 - [x] 建立第二阶段 Agent 画布结构过程：`DesignPlanToolInput version: 2` 声明画板位置/尺寸和稳定区域 ID/bounds；只有 Main 匹配接受的计划才能在 Leafer `sky` 层显示 Frame/区域 skeleton。正式直属 `Group/Frame` 出现实际内容后逐区替换，空容器不冒充完成；停止、终态、错误、切页、截图和 dispose 均清理，静态 Reduced Motion、pan/zoom 与 selection 分层已有自动化证据。骨架不进入文档、revision、history、selection、保存或导出。
-- [ ] 增加独立 Agent cursor、语义阶段标签、属性级 transform/geometry/paint/text tween 和自适应节奏；这些状态必须继续与正式文档分离，并完成 macOS/Windows 实机运动、缩放和帧时间验收。
+- [x] 建立第三阶段 Agent 语义过程：accepted plan 后才显示独立紫色 Agent cursor 与本地化阶段标签；位置先锚定待完成区域，再只跟随已提交 Agent revision 的新增节点 focus point。typed tool name/结构化 progress 驱动 `structuring/building/assets/reviewing/refining/recovering`，不展示 Provider 自由文本；完成态清除旧百分比和 live/durable timeline progress detail。cursor 不命中、不借用 selection，支持 pan/zoom、离屏隐藏、180 ms 低频位移、Reduced Motion、`aria-live`、停止/截图/终态/错误/切页/dispose 清理，并继续与正式文档分离。
+- [x] 将 material write → capture → visual review 门禁绑定到权威 revision，而不是视口或选区状态：baseline/pre-write、重复和早于最近 material revision 的截图分别返回稳定 `design_workflow.*` 恢复指令；系统提示禁止原样重试，live/durable 时间线默认折叠可自动恢复的门禁失败。pan、zoom、全屏、窗口尺寸和选择变化不改变 revision/mutation target。
+- [ ] 将视觉审查从“活动画布视口截图”升级为绑定 Run Mutation Target/计划 Frame 的确定性离屏渲染；用户在生成期间 pan、zoom、resize 或查看其他区域只能改变本地视图，不能改变 Agent 收到的审查画面。实现前仍需如实标明当前截图内容会随活动视口变化，但这不得再触发 revision 或 workflow 冲突。
+- [ ] 增加属性级 transform/geometry/paint/text tween 和自适应 reveal/tween 节奏；完成 macOS/Windows 实机运动、缩放和帧时间验收。这些过渡只能在合法 revision 之间插值，不得制造第二份可写状态。
 - [ ] 在本仓库启动的 Electron 实例中复验：Agent 渐进事务期间 pan/zoom/resize 后 Leafer editBox 始终贴合选区，不出现巨大蓝色角、残影或输入锁死。
 - [ ] 实机复验复杂渐变/光晕/模糊、属性检查器同步、`capture_canvas` 多模态视觉回读、本地路径/URL `read_image`、全局 GPT Image 2 `generate_image`、粘贴/拖放附件和 `place_image`。
 - [x] 将 Leafer revision 同步改为 transaction change set 驱动的 affected-node 增量投影与 reconcile：未变节点不再 `set()`，无关 revision 不再隐藏 Editor、取消直接操作或刷新 tree bounds；选区相关变化只刷新对应元素 bounds，断档/切页/恢复才全量回退。

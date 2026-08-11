@@ -2,6 +2,7 @@ import type {
   DesignChangeSet,
   DesignDocument,
   DesignOperation,
+  Point,
   SelectionState,
   Transform,
   VectorNetwork,
@@ -87,9 +88,26 @@ export interface LeaferVectorEditScope {
 }
 
 export interface LeaferGenerationReveal {
+  focusPoints?: Readonly<Record<string, Point>>;
   id: string;
   nodeIds: readonly string[];
   startedAt: number;
+}
+
+export type LeaferGenerationActivityPhase =
+  | "structuring"
+  | "building"
+  | "assets"
+  | "reviewing"
+  | "refining"
+  | "recovering";
+
+export interface LeaferGenerationActivity {
+  id: string;
+  label: string;
+  phase: LeaferGenerationActivityPhase;
+  progress?: number;
+  target: Point;
 }
 
 export type LeaferGenerationSkeletonRole =
@@ -128,6 +146,7 @@ export interface LeaferEngineSyncInput {
   booleanEditScope?: LeaferBooleanEditScope;
   document: DesignDocument;
   changes?: DesignChangeSet;
+  generationActivity?: LeaferGenerationActivity;
   generationReveal?: LeaferGenerationReveal;
   generationSkeleton?: LeaferGenerationSkeleton;
   pageId: string;

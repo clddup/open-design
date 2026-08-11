@@ -50,10 +50,13 @@ export class GlobalTaskCoordinator {
       artboardEstablished: boolean;
       artboardDescendantIds: Set<string>;
       captureCount: number;
+      lastCaptureRevision: number | null;
       lastReview: DesignVisualReviewToolInput | null;
+      lastMaterialWriteRevision: number | null;
       materialWriteCompleted: boolean;
       plan: DesignPlanToolInput;
       reviewedCaptureCount: number;
+      reviewedCaptureRevision: number | null;
     }
   >();
   readonly #generatedRasterRolesByRunId = new Map<
@@ -236,10 +239,13 @@ export class GlobalTaskCoordinator {
       artboardEstablished: plan.artboard.mode === "existing",
       artboardDescendantIds: new Set(),
       captureCount: 0,
+      lastCaptureRevision: null,
       lastReview: null,
+      lastMaterialWriteRevision: null,
       materialWriteCompleted: false,
       plan: structuredClone(plan),
       reviewedCaptureCount: 0,
+      reviewedCaptureRevision: null,
     });
     this.#generatedRasterRolesByRunId.set(context.runId, new Map());
   }
@@ -258,13 +264,55 @@ export class GlobalTaskCoordinator {
     }
   }
 
-  recordCanvasCapture(context: TrustedToolContext): void {
+  recordCanvasCapture(
+    context: TrustedToolContext,
+    observedRevision = context.revision,
+  ):
+    | {
+        capturedRevision: number;
+        nextAction: "define-plan-write-capture" | "write-capture";
+        reviewEligible: false;
+      }
+    | {
+        captureSequence: number;
+        capturedRevision: number;
+        nextAction: "record-visual-review";
+        reviewEligible: true;
+      } {
+    this.assertDesignToolContext(context);
+    if (!Number.isSafeInteger(observedRevision) || observedRevision < 0) {
+      throw new Error(
+        "design_workflow.capture_revision_invalid: The rendered capture returned an invalid document revision; capture the current canvas again",
+      );
+    }
     const state = this.#designPlansByRunId.get(context.runId);
-    if (!state?.materialWriteCompleted) return;
+    if (!state?.materialWriteCompleted) {
+      return {
+        capturedRevision: observedRevision,
+        nextAction: state ? "write-capture" : "define-plan-write-capture",
+        reviewEligible: false,
+      };
+    }
+    if (
+      state.lastMaterialWriteRevision !== null &&
+      observedRevision < state.lastMaterialWriteRevision
+    ) {
+      throw new Error(
+        "design_workflow.capture_revision_invalid: The rendered capture predates the latest material design revision; capture the current canvas again",
+      );
+    }
+    const captureSequence = state.captureCount + 1;
     this.#designPlansByRunId.set(context.runId, {
       ...state,
-      captureCount: state.captureCount + 1,
+      captureCount: captureSequence,
+      lastCaptureRevision: observedRevision,
     });
+    return {
+      captureSequence,
+      capturedRevision: observedRevision,
+      nextAction: "record-visual-review",
+      reviewEligible: true,
+    };
   }
 
   registerVisualReview(
@@ -272,13 +320,30 @@ export class GlobalTaskCoordinator {
     review: DesignVisualReviewToolInput,
   ): void {
     const state = this.#requireDesignPlan(context);
+    if (!state.materialWriteCompleted) {
+      throw new Error(
+        "design_workflow.material_write_required: Apply one successful material design transaction from the accepted plan, then call opendesign_capture_canvas before recording a visual review; do not retry the review yet",
+      );
+    }
     if (state.captureCount <= state.reviewedCaptureCount) {
-      throw new Error("Visual review requires a newer rendered canvas capture");
+      throw new Error(
+        "design_workflow.capture_required: Call opendesign_capture_canvas once after the latest material design write, then record the visual review from that returned image; do not retry the review before capturing",
+      );
+    }
+    if (
+      state.lastCaptureRevision === null ||
+      (state.lastMaterialWriteRevision !== null &&
+        state.lastCaptureRevision < state.lastMaterialWriteRevision)
+    ) {
+      throw new Error(
+        "design_workflow.capture_revision_invalid: The latest rendered capture predates the latest material design revision; capture the current canvas again before recording the review",
+      );
     }
     this.#designPlansByRunId.set(context.runId, {
       ...state,
       lastReview: structuredClone(review),
       reviewedCaptureCount: state.captureCount,
+      reviewedCaptureRevision: state.lastCaptureRevision,
     });
   }
 
@@ -363,7 +428,11 @@ export class GlobalTaskCoordinator {
     return state.plan;
   }
 
-  recordDesignApplyCompleted(runId: string, input: DesignApplyToolInput): void {
+  recordDesignApplyCompleted(
+    runId: string,
+    input: DesignApplyToolInput,
+    revision?: number,
+  ): void {
     const state = this.#designPlansByRunId.get(runId);
     if (!state) return;
     const artboardEstablished =
@@ -387,15 +456,21 @@ export class GlobalTaskCoordinator {
       ...state,
       artboardEstablished,
       artboardDescendantIds,
+      lastMaterialWriteRevision: validRevision(revision)
+        ? revision
+        : state.lastMaterialWriteRevision,
       materialWriteCompleted: true,
     });
   }
 
-  recordMaterialDesignWriteCompleted(runId: string): void {
+  recordMaterialDesignWriteCompleted(runId: string, revision?: number): void {
     const state = this.#designPlansByRunId.get(runId);
     if (!state) return;
     this.#designPlansByRunId.set(runId, {
       ...state,
+      lastMaterialWriteRevision: validRevision(revision)
+        ? revision
+        : state.lastMaterialWriteRevision,
       materialWriteCompleted: true,
     });
   }
@@ -482,10 +557,13 @@ function assertPlannedArtboardWrite(
     artboardEstablished: boolean;
     artboardDescendantIds: Set<string>;
     captureCount: number;
+    lastCaptureRevision: number | null;
     lastReview: DesignVisualReviewToolInput | null;
+    lastMaterialWriteRevision: number | null;
     materialWriteCompleted: boolean;
     plan: DesignPlanToolInput;
     reviewedCaptureCount: number;
+    reviewedCaptureRevision: number | null;
   },
 ): void {
   const inserts = input.commands.filter(
@@ -715,4 +793,8 @@ function isConflictCode(code: string): boolean {
   return ["conflict", "revision", "stale"].some((part) =>
     code.toLowerCase().includes(part),
   );
+}
+
+function validRevision(value: number | undefined): value is number {
+  return value !== undefined && Number.isSafeInteger(value) && value >= 0;
 }

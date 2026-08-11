@@ -2,16 +2,33 @@ import type { AgentEvent } from "@opendesign/agent-contracts";
 import type {
   DesignDocument,
   EditorEvent,
+  Point,
   Transform,
 } from "@opendesign/design-contracts";
+import { getNodeBounds } from "@opendesign/editor-runtime";
 import type {
+  LeaferGenerationActivity,
+  LeaferGenerationActivityPhase,
   LeaferGenerationReveal,
   LeaferGenerationSkeleton,
 } from "@opendesign/leafer-engine";
 import {
+  DESIGN_APPLY_TOOL_NAME,
+  DESIGN_ARRANGE_TOOL_NAME,
+  DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
+  DESIGN_REVIEW_TOOL_NAME,
+  GENERATE_IMAGE_TOOL_NAME,
+  IMPORT_SVG_TOOL_NAME,
+  INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  INTERNAL_IMPORT_SVG_TOOL_NAME,
+  INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   isDesignPlanToolInput,
+  PLACE_IMAGE_TOOL_NAME,
+  READ_IMAGE_TOOL_NAME,
   type DesignPlanToolInput,
+  UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 
 export interface AcceptedGenerationPlan {
@@ -27,15 +44,34 @@ interface RequestedGenerationPlan {
   toolCallId: string;
 }
 
+interface RequestedGenerationTool {
+  runId: string;
+  toolName: string;
+}
+
+export interface GenerationActivityState {
+  id: string;
+  phase: LeaferGenerationActivityPhase;
+  progress?: number;
+  runId: string;
+  toolCallId?: string;
+}
+
 export interface GenerationPlanPresentationState {
   acceptedByRunId: Readonly<Record<string, AcceptedGenerationPlan>>;
+  activityByRunId: Readonly<Record<string, GenerationActivityState>>;
   requestedByCallId: Readonly<Record<string, RequestedGenerationPlan>>;
+  requestedToolByCallId: Readonly<Record<string, RequestedGenerationTool>>;
+  reviewedByRunId: Readonly<Record<string, true>>;
 }
 
 export const EMPTY_GENERATION_PLAN_PRESENTATION_STATE: GenerationPlanPresentationState =
   {
     acceptedByRunId: {},
+    activityByRunId: {},
     requestedByCallId: {},
+    requestedToolByCallId: {},
+    reviewedByRunId: {},
   };
 
 export function projectGenerationPlanPresentationEvent(
@@ -50,6 +86,23 @@ export function projectGenerationPlanPresentationEvent(
   }
   if (event.type === "agent.error" && event.runId !== undefined) {
     return clearGenerationPlanPresentationRun(state, event.runId);
+  }
+  if (event.type === "tool.progress") {
+    const callId = generationPlanCallId(event.runId, event.toolCallId);
+    const requested = state.requestedToolByCallId[callId];
+    const activity = state.activityByRunId[event.runId];
+    if (!requested || activity?.toolCallId !== event.toolCallId) return state;
+    return {
+      ...state,
+      activityByRunId: {
+        ...state.activityByRunId,
+        [event.runId]: {
+          ...activity,
+          id: `${callId}:progress:${Math.round(event.progress * 1_000)}`,
+          progress: event.progress,
+        },
+      },
+    };
   }
   if (
     event.type === "tool.requested" &&
@@ -69,31 +122,115 @@ export function projectGenerationPlanPresentationEvent(
       },
     };
   }
+  if (event.type === "tool.requested") {
+    if (!state.acceptedByRunId[event.runId]) return state;
+    const phase = generationPhaseForTool(
+      event.toolName,
+      state.reviewedByRunId[event.runId] === true,
+    );
+    if (!phase) return state;
+    const callId = generationPlanCallId(event.runId, event.toolCallId);
+    return {
+      ...state,
+      activityByRunId: {
+        ...state.activityByRunId,
+        [event.runId]: {
+          id: `${callId}:requested`,
+          phase,
+          runId: event.runId,
+          toolCallId: event.toolCallId,
+        },
+      },
+      requestedToolByCallId: {
+        ...state.requestedToolByCallId,
+        [callId]: { runId: event.runId, toolName: event.toolName },
+      },
+    };
+  }
   if (event.type !== "tool.completed" && event.type !== "tool.failed") {
     return state;
   }
   const callId = generationPlanCallId(event.runId, event.toolCallId);
-  const requested = state.requestedByCallId[callId];
-  if (!requested) return state;
-  const requestedByCallId = { ...state.requestedByCallId };
-  delete requestedByCallId[callId];
-  if (
-    event.type === "tool.failed" ||
-    !isAcceptedGenerationPlanResult(event.result, requested.plan)
-  ) {
-    return { ...state, requestedByCallId };
+  const requestedPlan = state.requestedByCallId[callId];
+  if (requestedPlan) {
+    const requestedByCallId = { ...state.requestedByCallId };
+    delete requestedByCallId[callId];
+    if (
+      event.type === "tool.failed" ||
+      !isAcceptedGenerationPlanResult(event.result, requestedPlan.plan)
+    ) {
+      return { ...state, requestedByCallId };
+    }
+    const reviewedByRunId = { ...state.reviewedByRunId };
+    delete reviewedByRunId[event.runId];
+    return {
+      ...state,
+      acceptedByRunId: {
+        ...state.acceptedByRunId,
+        [event.runId]: {
+          id: callId,
+          plan: structuredClone(requestedPlan.plan),
+          runId: event.runId,
+          toolCallId: event.toolCallId,
+        },
+      },
+      activityByRunId: {
+        ...state.activityByRunId,
+        [event.runId]: {
+          id: `${callId}:accepted`,
+          phase: "structuring",
+          runId: event.runId,
+          toolCallId: event.toolCallId,
+        },
+      },
+      requestedByCallId,
+      reviewedByRunId,
+    };
   }
+
+  const requestedTool = state.requestedToolByCallId[callId];
+  if (!requestedTool) return state;
+  const requestedToolByCallId = { ...state.requestedToolByCallId };
+  delete requestedToolByCallId[callId];
+  if (event.type === "tool.failed") {
+    return {
+      ...state,
+      activityByRunId: {
+        ...state.activityByRunId,
+        [event.runId]: {
+          id: `${callId}:failed`,
+          phase: "recovering",
+          runId: event.runId,
+          toolCallId: event.toolCallId,
+        },
+      },
+      requestedToolByCallId,
+    };
+  }
+
+  const reviewedByRunId = { ...state.reviewedByRunId };
+  const reviewCompleted = requestedTool.toolName === DESIGN_REVIEW_TOOL_NAME;
+  if (reviewCompleted) reviewedByRunId[event.runId] = true;
+  const phase = reviewCompleted
+    ? "refining"
+    : generationPhaseForTool(
+        requestedTool.toolName,
+        reviewedByRunId[event.runId] === true,
+      );
+  if (!phase) return { ...state, requestedToolByCallId, reviewedByRunId };
   return {
-    acceptedByRunId: {
-      ...state.acceptedByRunId,
+    ...state,
+    activityByRunId: {
+      ...state.activityByRunId,
       [event.runId]: {
-        id: callId,
-        plan: structuredClone(requested.plan),
+        id: `${callId}:completed`,
+        phase,
         runId: event.runId,
         toolCallId: event.toolCallId,
       },
     },
-    requestedByCallId,
+    requestedToolByCallId,
+    reviewedByRunId,
   };
 }
 
@@ -102,21 +239,41 @@ export function clearGenerationPlanPresentationRun(
   runId: string,
 ): GenerationPlanPresentationState {
   const acceptedByRunId = { ...state.acceptedByRunId };
-  const hadAccepted = acceptedByRunId[runId] !== undefined;
+  const activityByRunId = { ...state.activityByRunId };
+  const reviewedByRunId = { ...state.reviewedByRunId };
+  const hadRunState =
+    acceptedByRunId[runId] !== undefined ||
+    activityByRunId[runId] !== undefined ||
+    reviewedByRunId[runId] !== undefined;
   delete acceptedByRunId[runId];
+  delete activityByRunId[runId];
+  delete reviewedByRunId[runId];
   const requestedByCallId = Object.fromEntries(
     Object.entries(state.requestedByCallId).filter(
       ([, requested]) => requested.runId !== runId,
     ),
   );
+  const requestedToolByCallId = Object.fromEntries(
+    Object.entries(state.requestedToolByCallId).filter(
+      ([, requested]) => requested.runId !== runId,
+    ),
+  );
   if (
-    !hadAccepted &&
+    !hadRunState &&
     Object.keys(requestedByCallId).length ===
-      Object.keys(state.requestedByCallId).length
+      Object.keys(state.requestedByCallId).length &&
+    Object.keys(requestedToolByCallId).length ===
+      Object.keys(state.requestedToolByCallId).length
   ) {
     return state;
   }
-  return { acceptedByRunId, requestedByCallId };
+  return {
+    acceptedByRunId,
+    activityByRunId,
+    requestedByCallId,
+    requestedToolByCallId,
+    reviewedByRunId,
+  };
 }
 
 export function generationSkeletonFromAcceptedPlan(
@@ -176,6 +333,56 @@ export function generationSkeletonFromAcceptedPlan(
   };
 }
 
+export function generationActivityFromAcceptedPlan(
+  accepted: AcceptedGenerationPlan | undefined,
+  activity: GenerationActivityState | undefined,
+  document: DesignDocument,
+  pageId: string,
+): Omit<LeaferGenerationActivity, "label"> | undefined {
+  if (!accepted || !activity || accepted.runId !== activity.runId) {
+    return undefined;
+  }
+  const skeleton = generationSkeletonFromAcceptedPlan(
+    accepted,
+    document,
+    pageId,
+  );
+  if (!skeleton) return undefined;
+  const region = skeleton.regions[0];
+  const localTarget = region
+    ? {
+        x: region.x + region.width / 2,
+        y: region.y + region.height / 2,
+      }
+    : {
+        x: Math.max(0, skeleton.artboard.width - 24),
+        y: Math.min(24, skeleton.artboard.height / 2),
+      };
+  return {
+    id: activity.id,
+    phase: activity.phase,
+    ...(activity.progress === undefined ? {} : { progress: activity.progress }),
+    target: transformPoint(localTarget, skeleton.artboard.transform),
+  };
+}
+
+export function generationActivityMessageKey(
+  phase: LeaferGenerationActivityPhase,
+):
+  | "agent.canvasPhaseStructuring"
+  | "agent.canvasPhaseBuilding"
+  | "agent.canvasPhaseAssets"
+  | "agent.canvasPhaseReviewing"
+  | "agent.canvasPhaseRefining"
+  | "agent.canvasPhaseRecovering" {
+  if (phase === "structuring") return "agent.canvasPhaseStructuring";
+  if (phase === "building") return "agent.canvasPhaseBuilding";
+  if (phase === "assets") return "agent.canvasPhaseAssets";
+  if (phase === "reviewing") return "agent.canvasPhaseReviewing";
+  if (phase === "refining") return "agent.canvasPhaseRefining";
+  return "agent.canvasPhaseRecovering";
+}
+
 /**
  * Derives disposable canvas presentation from an already-committed Agent
  * change. It never creates or mutates design data: the authoritative document
@@ -209,10 +416,66 @@ export function generationRevealFromEditorEvent(
   };
   page.rootNodeIds.forEach(visit);
   if (ordered.length === 0) return undefined;
+  const focusPoints = Object.fromEntries(
+    ordered.flatMap((nodeId) => {
+      const bounds = getNodeBounds(document, nodeId);
+      return bounds
+        ? [
+            [
+              nodeId,
+              {
+                x: bounds.x + bounds.width / 2,
+                y: bounds.y + bounds.height / 2,
+              },
+            ] as const,
+          ]
+        : [];
+    }),
+  );
   return {
+    ...(Object.keys(focusPoints).length === 0 ? {} : { focusPoints }),
     id: event.eventId,
     nodeIds: ordered,
     startedAt: Number.isFinite(startedAt) ? Math.max(0, startedAt) : 0,
+  };
+}
+
+function generationPhaseForTool(
+  toolName: string,
+  reviewed: boolean,
+): LeaferGenerationActivityPhase | null {
+  if (
+    toolName === GENERATE_IMAGE_TOOL_NAME ||
+    toolName === READ_IMAGE_TOOL_NAME
+  ) {
+    return "assets";
+  }
+  if (
+    toolName === DESIGN_CAPTURE_TOOL_NAME ||
+    toolName === DESIGN_REVIEW_TOOL_NAME
+  ) {
+    return "reviewing";
+  }
+  if (
+    toolName === DESIGN_APPLY_TOOL_NAME ||
+    toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME ||
+    toolName === DESIGN_HIERARCHY_TOOL_NAME ||
+    toolName === DESIGN_ARRANGE_TOOL_NAME ||
+    toolName === PLACE_IMAGE_TOOL_NAME ||
+    toolName === UPDATE_IMAGE_TOOL_NAME ||
+    toolName === INTERNAL_UPDATE_IMAGE_TOOL_NAME ||
+    toolName === IMPORT_SVG_TOOL_NAME ||
+    toolName === INTERNAL_IMPORT_SVG_TOOL_NAME
+  ) {
+    return reviewed ? "refining" : "building";
+  }
+  return null;
+}
+
+function transformPoint(point: Point, transform: Transform): Point {
+  return {
+    x: transform[0] * point.x + transform[2] * point.y + transform[4],
+    y: transform[1] * point.x + transform[3] * point.y + transform[5],
   };
 }
 

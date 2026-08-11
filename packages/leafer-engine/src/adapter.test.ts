@@ -48,6 +48,8 @@ class FakeElement extends FakeEventTarget {
   visible = true;
   width = 0;
   height = 0;
+  x = 0;
+  y = 0;
   setCalls = 0;
   strokeWidth = 0;
   transformCalls = 0;
@@ -453,6 +455,107 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("shows a non-interactive Agent cursor for trusted semantic activity", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    const activity = {
+      id: "run_plan:tool_plan:accepted",
+      label: "AI · Structuring the layout",
+      phase: "structuring" as const,
+      target: { x: 400, y: 300 },
+    };
+    adapter.sync({ ...first, generationActivity: activity });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const layer = app.sky.children[1] as FakeGroup | undefined;
+    expect(layer).toMatchObject({
+      visible: true,
+      localTransform: { a: 1, b: 0, c: 0, d: 1, e: 400, f: 300 },
+    });
+    expect(layer?.children.map((child) => child.tag)).toEqual([
+      "Path",
+      "Rect",
+      "Text",
+    ]);
+    expect((layer?.children[2] as FakeText | undefined)?.text).toBe(
+      "AI · Structuring the layout",
+    );
+
+    adapter.sync({
+      ...first,
+      generationActivity: activity,
+      viewport: { ...first.viewport, panX: -200, panY: 40, zoom: 0.5 },
+    });
+    expect(layer?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 0,
+      f: 190,
+    });
+
+    adapter.sync({
+      ...first,
+      generationActivity: {
+        ...activity,
+        id: "run_plan:tool_apply:requested",
+        label: "AI · Building the design",
+        phase: "building",
+        target: { x: 800, y: 600 },
+      },
+      viewport: { ...first.viewport, panX: -200, panY: 40, zoom: 0.5 },
+    });
+    flushAnimationFramesAt(0);
+    expect(layer?.localTransform.e).toBe(0);
+    flushAnimationFramesAt(180);
+    expect(layer?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 200,
+      f: 340,
+    });
+
+    adapter.sync({
+      ...first,
+      generationActivity: {
+        ...activity,
+        id: "run_plan:tool_review:requested",
+        label: "AI · Reviewing the rendered result",
+        phase: "reviewing",
+        target: { x: 240, y: 160 },
+      },
+      reducedMotion: true,
+    });
+    expect(layer?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 240,
+      f: 160,
+    });
+
+    adapter.finishGenerationPresentation();
+    expect(layer?.visible).toBe(false);
+    adapter.sync({ ...first, generationActivity: activity });
+    expect(layer?.visible).toBe(true);
+    adapter.finishGenerationPresentation();
+    adapter.sync({ ...first, generationActivity: activity });
+    expect(layer?.visible).toBe(false);
+    adapter.sync({
+      ...first,
+      generationActivity: { ...activity, id: "run_next:tool_plan:accepted" },
+    });
+    expect(layer?.visible).toBe(true);
+    adapter.dispose();
+  });
+
   it("reveals committed Agent nodes as disposable wireframe and fade presentation", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
@@ -507,7 +610,14 @@ describe("Leafer engine selection bounds synchronization", () => {
       ...first,
       document: runtime.getSnapshot().document,
       changes: applied.changes,
+      generationActivity: {
+        id: "run_reveal:tool_apply:requested",
+        label: "AI · Building the design",
+        phase: "building",
+        target: { x: 100, y: 100 },
+      },
       generationReveal: {
+        focusPoints: { generated_card: { x: 900, y: 500 } },
         id: "event_agent_reveal",
         nodeIds: ["generated_card"],
         startedAt: 1_000,
@@ -516,6 +626,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
     const card = findElement(app.tree, "generated_card");
+    const activityLayer = app.sky.children[1] as FakeGroup | undefined;
     const stroker = leaferHarness.strokers[0];
     expect(card?.opacity).toBe(0);
     expect(stroker).toBeDefined();
@@ -528,6 +639,15 @@ describe("Leafer engine selection bounds synchronization", () => {
     flushAnimationFramesAt(1_300);
     expect(card?.opacity).toBeGreaterThan(0);
     expect(card?.opacity).toBeLessThan(0.8);
+    flushAnimationFramesAt(1_480);
+    expect(activityLayer?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 900,
+      f: 500,
+    });
 
     adapter.finishGenerationPresentation();
     expect(card?.opacity).toBe(0.8);
@@ -587,7 +707,14 @@ describe("Leafer engine selection bounds synchronization", () => {
       ...first,
       document: runtime.getSnapshot().document,
       changes: applied.changes,
+      generationActivity: {
+        id: "run_reduced:tool_apply:requested",
+        label: "AI · Building the design",
+        phase: "building",
+        target: { x: 100, y: 100 },
+      },
       generationReveal: {
+        focusPoints: { reduced_motion_card: { x: 900, y: 500 } },
         id: "event_reduced_motion",
         nodeIds: ["reduced_motion_card"],
         startedAt: 1_000,
@@ -598,6 +725,9 @@ describe("Leafer engine selection bounds synchronization", () => {
     if (!app) throw new Error("Fake Leafer App was not created");
     expect(findElement(app.tree, "reduced_motion_card")?.opacity).toBe(1);
     expect(leaferHarness.strokers[0]?.target).toBeNull();
+    expect(
+      (app.sky.children[1] as FakeGroup | undefined)?.localTransform,
+    ).toEqual({ a: 1, b: 0, c: 0, d: 1, e: 900, f: 500 });
     adapter.sync({
       ...first,
       document: runtime.getSnapshot().document,

@@ -157,7 +157,20 @@ describe("GlobalTaskCoordinator", () => {
     );
     coordinator.recordDocumentInspection(context);
     expect(() => coordinator.assertDocumentInspected(context)).not.toThrow();
+    expect(coordinator.recordCanvasCapture(context)).toEqual({
+      capturedRevision: 0,
+      nextAction: "define-plan-write-capture",
+      reviewEligible: false,
+    });
     coordinator.registerDesignPlan(context, { ...designPlan, pageId });
+    expect(coordinator.recordCanvasCapture(context)).toEqual({
+      capturedRevision: 0,
+      nextAction: "write-capture",
+      reviewEligible: false,
+    });
+    expect(() =>
+      coordinator.registerVisualReview(context, visualReview),
+    ).toThrow("design_workflow.material_write_required");
     expect(() =>
       coordinator.assertDesignPlanForRaster(context, "hero"),
     ).not.toThrow();
@@ -290,12 +303,32 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.assertDesignPlanForApply(context, plannedDraft),
     ).not.toThrow();
-    coordinator.recordDesignApplyCompleted(context.runId, plannedDraft);
-    coordinator.recordCanvasCapture(context);
+    coordinator.recordDesignApplyCompleted(context.runId, plannedDraft, 1);
+    expect(() => coordinator.recordCanvasCapture(context, 0)).toThrow(
+      "design_workflow.capture_revision_invalid",
+    );
+    expect(coordinator.recordCanvasCapture(context, 1)).toEqual({
+      captureSequence: 1,
+      capturedRevision: 1,
+      nextAction: "record-visual-review",
+      reviewEligible: true,
+    });
     expect(() => coordinator.assertVisualReviewBeforeWrite(context)).toThrow(
       "structured visual review",
     );
     coordinator.registerVisualReview(context, visualReview);
+    expect(() =>
+      coordinator.registerVisualReview(context, visualReview),
+    ).toThrow("design_workflow.capture_required");
+    expect(coordinator.recordCanvasCapture(context, 1)).toEqual({
+      captureSequence: 2,
+      capturedRevision: 1,
+      nextAction: "record-visual-review",
+      reviewEligible: true,
+    });
+    expect(() =>
+      coordinator.registerVisualReview(context, visualReview),
+    ).not.toThrow();
     expect(() =>
       coordinator.assertVisualReviewBeforeWrite(context),
     ).not.toThrow();

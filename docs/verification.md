@@ -38,8 +38,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   39 files / 308 tests
-└── desktop tests   45 files / 348 tests
+├── package tests   39 files / 309 tests
+└── desktop tests   45 files / 353 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -52,7 +52,7 @@ pnpm build          passed
 测试覆盖的关键路径包括：
 
 - DesignDocument 1.8 schema/migration、正式 Path/Vector 外观与持久 Bézier point mode、非破坏 Image placement 与 Boolean Group、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
-- Agent 画布生成过程测试覆盖：三条以内事务保持原子；大型事务从 `EditorRuntime.preview()` 可接受的连续前缀逐步提交；Boolean 等依赖完整 invariant 的命令自动合并到同一有效阶段；多个 revision 共享一个 undo，取消回滚整组。Renderer 只从已提交 Agent `ChangeSet` 派生父级优先的新增节点 reveal；Leafer 测试覆盖 pending/wireframe/fade/final、密集批次有界节奏、重复事件去重、Reduced Motion、显式收口和最终 opacity 恢复。`DesignPlanToolInput version: 2` 测试进一步覆盖画板位置/尺寸、区域 bounds/稳定 ID、Main acceptance 匹配，以及独立 Leafer `sky` 骨架的 viewport 同步、固定屏幕描边/标签、空容器保留、真实内容逐区替换、抑制和新 Run 恢复。App 测试证明手动停止和 Agent 终态会清理骨架，`capture_canvas` 在编码前强制结束骨架/reveal 并读取最终 revision 外观。该自动化不替代 macOS/Windows 实机运动和帧时间验收。
+- Agent 画布生成过程测试覆盖：三条以内事务保持原子；大型事务从 `EditorRuntime.preview()` 可接受的连续前缀逐步提交；Boolean 等依赖完整 invariant 的命令自动合并到同一有效阶段；多个 revision 共享一个 undo，取消回滚整组。Renderer 只从已提交 Agent `ChangeSet` 派生父级优先的新增节点 reveal/focus point；Leafer 测试覆盖 pending/wireframe/fade/final、密集批次有界节奏、重复事件去重、Reduced Motion、显式收口和最终 opacity 恢复。`DesignPlanToolInput version: 2` 测试进一步覆盖画板位置/尺寸、区域 bounds/稳定 ID、Main acceptance 匹配，以及独立 Leafer `sky` 骨架的 viewport 同步、固定屏幕描边/标签、空容器保留、真实内容逐区替换、抑制和新 Run 恢复。第三阶段测试覆盖本地 typed tool → semantic phase 映射、自由文本 progress 隔离、百分比终态清理、真实 revision cursor focus、180 ms 位移、pan/zoom、离屏边界、固定屏幕标签、Reduced Motion、`aria-live`、抑制和新 Run 恢复；Agent timeline 同时证明 live/durable completed tool 不再保留旧 progress detail，可自动恢复的 `design_workflow.*` 门禁反馈不堆叠为红色失败卡。Main coordinator 以 material/capture/review revision 拒绝 baseline、重复和过期截图，并证明视口状态不参与该 revision 链。App 测试证明手动停止和 Agent 终态会清理所有展示，`capture_canvas` 在编码前强制结束骨架/cursor/reveal 并读取最终 revision 外观。该自动化不替代 macOS/Windows 实机运动和帧时间验收。
 - `DesignCapabilityManifest v1` 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context、只读 `get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON，`capabilities:check` 会拒绝文档漂移。
 - `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
 - Agent Runtime 在完整 run 边界生成累计 `context.compacted` checkpoint，并在同一 Run 的每个 Provider turn 前重新预算；旧 assistant/tool 段超限时变成临时有界 checkpoint，当前用户原文和最近完整 tool call/result 段继续保留。测试覆盖原始 Timeline 不删除、checkpoint 范围单调增加、旧全文退出模型投影、第八轮自动恢复，以及单次当前输入或最小必要段仍超预算时才返回 `context_budget_exceeded`。模型投影同时限制超长单字段和超过 `50000` 字符的完整结构化工具结果，原始 journal 不丢失；预算错误按 system、tool schemas、Conversation/tool results 和 framing 分账。Main 从可信 Model Profile 注入窗口和输出预算；可信 token 预算存在时不会再被固定字符阈值误杀，缺少模型窗口时才使用字符保底；固定协议无法适配小窗口时返回独立的 `model_context_incompatible`。
@@ -98,7 +98,7 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify、transform、dash 和 outline stroke 的底层计算边界；editable-vector 子入口提供稳定 ID 拓扑校验、确定性 cubic 序列化、分支检测与 tight bounds，vector-edit 子入口提供单轮廓节点和手柄的纯几何操作。`DesignDocument 1.8.0` 与 EditorRuntime 建立非破坏 Boolean Group、正式 LineNode、PolygonNode、StarNode、Vector Network 与持久 point mode 的独立节点语义、迁移、持久化、节点编辑 planner 和 undo/redo；`path` 与 `network` 严格互斥。递归 Boolean resolver 现可处理 Rectangle/Ellipse/尖角 Polygon/Star/两种 Path/Vector/嵌套 Boolean，Leafer synthetic result 已让 Render 表面可用，且没有持久化 provider 派生 path。人工 Pen、已有单轮廓节点编辑与 Agent typed network 已消费同一种 editable network；flatten 和 outline stroke 的产品命令仍未完成。仓库独立 `@opendesign/import-export-service` 的安全 SVG v1 继续由 EditorRuntime planner、Main 文件桥、人工入口和 Agent handle 复用；OpenDesign editable network 通过有界受控 metadata v2 往返 point mode，并在导入时同时校验 schema、拓扑和标准 `d` 匹配；Text 通过标准 `<text>/<tspan>` 和受控 metadata v1 往返 Text box 语义，并同时校验可见文字/paint。没有 metadata 的外部 SVG path 继续导入为精确 path-data，不猜测 network；没有受控 metadata 的普通第三方 Text 继续拒绝。图片、复杂 effects/combined mask graph、angular gradient、多 paint、outline text/stroke 保真与双平台打包产品 smoke 仍未完成，因此 SVG capability 保持 `degraded`。仓库仍没有独立 Layout 或 Text/Font service 包；组件、Variant 和 Token 仍为占位数据。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
 
-Agent Runtime 与 Main 当前强制执行“inspect → typed plan v2 → 结构骨架 → 实质初稿 → `capture_canvas` → typed visual review → refinement → `capture_canvas`”。所有新 composition 必须位于计划 Frame 内；区域根必须按稳定 ID/bounds 建为直属 `Group/Frame`；全局生图只能使用计划声明的 role，默认不能用一张 raster 替代可编辑设计。骨架只负责把已接受的结构意图呈现在画布上，不是完成证据。该流程显著收紧敷衍路径，但仍不能单独保证审美、文字可读性或交付保真；后续交付必须按照 [`roadmap.md`](roadmap.md) 的像素基线、固定样张、capability manifest、专业 service 和人工验收推进。
+Agent Runtime 与 Main 当前强制执行“inspect → typed plan v2 → 结构骨架 → 实质初稿 → `capture_canvas` → typed visual review → refinement → `capture_canvas`”。所有新 composition 必须位于计划 Frame 内；区域根必须按稳定 ID/bounds 建为直属 `Group/Frame`；全局生图只能使用计划声明的 role，默认不能用一张 raster 替代可编辑设计。骨架/cursor 只负责把已接受的结构意图、typed tool 阶段和已提交 revision focus 呈现在画布上，不是完成证据。Material write/capture/review 记录精确 revision 和 capture consumption；pan、zoom、全屏、窗口尺寸与选区不参与冲突判断，baseline/重复/过期截图会返回不同的稳定恢复步骤。该流程显著收紧敷衍路径，但仍不能单独保证审美、文字可读性或交付保真；后续交付必须按照 [`roadmap.md`](roadmap.md) 的像素基线、固定样张、capability manifest、专业 service 和人工验收推进。
 
 ## 构建结果
 

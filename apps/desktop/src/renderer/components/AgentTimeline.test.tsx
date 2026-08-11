@@ -308,6 +308,91 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("run_canvas_1");
   });
 
+  it("clears transient progress detail when a design tool completes", () => {
+    const events: AgentEvent[] = [
+      {
+        type: "tool.requested",
+        runId: "run_place_1",
+        toolCallId: "tool_place_1",
+        toolName: "opendesign_place_image",
+        input: {},
+        risk: "design_write",
+      },
+      {
+        type: "tool.progress",
+        runId: "run_place_1",
+        toolCallId: "tool_place_1",
+        message: "Validating design tool parameters and revision",
+        progress: 0.15,
+      },
+      {
+        type: "tool.completed",
+        runId: "run_place_1",
+        toolCallId: "tool_place_1",
+        result: { ok: true },
+        revision: 4,
+      },
+    ];
+
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={"run_place_1"}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={events}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(screen.getByText("Design change completed")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(
+      "Validating design tool parameters and revision",
+    );
+  });
+
+  it("does not restore stale progress detail from completed durable tools", () => {
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "tool:durable_place_tool",
+        sessionId: "conversation_1",
+        runId: "run_place_1",
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "durable_place_tool",
+        toolName: "opendesign_place_image",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        progressMessage: "Validating design tool parameters and revision",
+        result: { ok: true },
+        revision: 4,
+      },
+    ];
+
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={timeline}
+      />,
+    );
+
+    expect(screen.getByText("Design change completed")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(
+      "Validating design tool parameters and revision",
+    );
+  });
+
   it("shows semantic hierarchy work as native layer activity", () => {
     const events: AgentEvent[] = [
       {
@@ -621,6 +706,62 @@ describe("AgentTimeline", () => {
     ).toBeInTheDocument();
     expect(container).not.toHaveTextContent("login-002");
     expect(container).not.toHaveTextContent("registered page scope");
+  });
+
+  it("keeps recoverable design workflow guard retries out of the visible timeline", () => {
+    const message =
+      "design_workflow.capture_required: Call opendesign_capture_canvas once before retrying review";
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "tool:durable_review_retry",
+        sessionId: "conversation_1",
+        runId: "run_review_retry",
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "durable_review_retry",
+        toolName: "opendesign_record_visual_review",
+        input: {},
+        risk: "read",
+        status: "failed",
+        error: { code: "tool_error", message },
+      },
+    ];
+    const events: AgentEvent[] = [
+      {
+        type: "tool.requested",
+        runId: "run_review_retry",
+        toolCallId: "live_review_retry",
+        toolName: "opendesign_record_visual_review",
+        input: {},
+        risk: "read",
+      },
+      {
+        type: "tool.failed",
+        runId: "run_review_retry",
+        toolCallId: "live_review_retry",
+        code: "tool_error",
+        message,
+      },
+    ];
+
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_review_retry"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={events}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={timeline}
+      />,
+    );
+
+    expect(container).not.toHaveTextContent("Design change failed");
+    expect(container).not.toHaveTextContent("design_workflow");
+    expect(container).not.toHaveTextContent("capture_canvas once");
   });
 
   it("keeps the complete Conversation history visible", () => {

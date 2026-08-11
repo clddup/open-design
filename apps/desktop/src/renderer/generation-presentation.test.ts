@@ -14,6 +14,8 @@ import {
 } from "../shared/design-agent-tools";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+  generationActivityFromAcceptedPlan,
+  generationActivityMessageKey,
   generationRevealFromEditorEvent,
   generationSkeletonFromAcceptedPlan,
   projectGenerationPlanPresentationEvent,
@@ -128,18 +130,23 @@ describe("Renderer Agent generation presentation", () => {
     expect(result.ok).toBe(true);
     expect(changed).toBeDefined();
     if (!changed) return;
-    expect(
-      generationRevealFromEditorEvent(
-        changed,
-        runtime.getSnapshot().document,
-        "page_welcome",
-        500,
-      ),
-    ).toEqual({
+    const reveal = generationRevealFromEditorEvent(
+      changed,
+      runtime.getSnapshot().document,
+      "page_welcome",
+      500,
+    );
+    expect(reveal).toMatchObject({
       id: "event_agent_additions",
       nodeIds: ["agent_group", "agent_child"],
       startedAt: 500,
     });
+    expect(Object.keys(reveal?.focusPoints ?? {})).toEqual([
+      "agent_group",
+      "agent_child",
+    ]);
+    expect(Number.isFinite(reveal?.focusPoints?.agent_group?.x)).toBe(true);
+    expect(Number.isFinite(reveal?.focusPoints?.agent_group?.y)).toBe(true);
   });
 
   it("does not animate user edits or non-additive changes", () => {
@@ -248,6 +255,12 @@ describe("Renderer typed plan skeleton presentation", () => {
       runId: "run_plan",
       toolCallId: "tool_plan",
     });
+    expect(afterCompletion.activityByRunId.run_plan).toEqual({
+      id: "run_plan:tool_plan:accepted",
+      phase: "structuring",
+      runId: "run_plan",
+      toolCallId: "tool_plan",
+    });
     expect(afterCompletion.requestedByCallId).toEqual({});
 
     expect(
@@ -296,6 +309,83 @@ describe("Renderer typed plan skeleton presentation", () => {
     });
     expect(mismatched.acceptedByRunId.run_bad).toBeUndefined();
     expect(mismatched.requestedByCallId).toEqual({});
+  });
+
+  it("projects trusted design tools into semantic stages without using progress prose", () => {
+    const accepted = acceptPlanPresentation("run_stages", "tool_plan_stages");
+    const requested = projectGenerationPlanPresentationEvent(accepted, {
+      type: "tool.requested",
+      runId: "run_stages",
+      toolCallId: "tool_apply_draft",
+      toolName: "opendesign_apply_transaction",
+      input: { label: "Build draft", commands: [] },
+      risk: "design_write",
+    });
+    expect(requested.activityByRunId.run_stages).toEqual({
+      id: "run_stages:tool_apply_draft:requested",
+      phase: "building",
+      runId: "run_stages",
+      toolCallId: "tool_apply_draft",
+    });
+
+    const progressed = projectGenerationPlanPresentationEvent(requested, {
+      type: "tool.progress",
+      runId: "run_stages",
+      toolCallId: "tool_apply_draft",
+      message: "provider-controlled progress prose is not displayed",
+      progress: 0.42,
+    });
+    expect(progressed.activityByRunId.run_stages).toMatchObject({
+      id: "run_stages:tool_apply_draft:progress:420",
+      phase: "building",
+      progress: 0.42,
+    });
+
+    const failed = projectGenerationPlanPresentationEvent(progressed, {
+      type: "tool.failed",
+      runId: "run_stages",
+      toolCallId: "tool_apply_draft",
+      code: "conflict",
+      message: "stale revision",
+    });
+    expect(failed.activityByRunId.run_stages).toMatchObject({
+      id: "run_stages:tool_apply_draft:failed",
+      phase: "recovering",
+    });
+
+    const reviewRequested = projectGenerationPlanPresentationEvent(failed, {
+      type: "tool.requested",
+      runId: "run_stages",
+      toolCallId: "tool_review",
+      toolName: "opendesign_record_visual_review",
+      input: {},
+      risk: "read",
+    });
+    const reviewCompleted = projectGenerationPlanPresentationEvent(
+      reviewRequested,
+      {
+        type: "tool.completed",
+        runId: "run_stages",
+        toolCallId: "tool_review",
+        result: { ok: true },
+      },
+    );
+    expect(reviewCompleted.reviewedByRunId.run_stages).toBe(true);
+    expect(reviewCompleted.activityByRunId.run_stages).toMatchObject({
+      phase: "refining",
+    });
+
+    const refinement = projectGenerationPlanPresentationEvent(reviewCompleted, {
+      type: "tool.requested",
+      runId: "run_stages",
+      toolCallId: "tool_apply_refinement",
+      toolName: "opendesign_apply_transaction",
+      input: { label: "Refine", commands: [] },
+      risk: "design_write",
+    });
+    expect(refinement.activityByRunId.run_stages).toMatchObject({
+      phase: "refining",
+    });
   });
 
   it("uses planned artboard geometry and replaces fulfilled regions with committed nodes", () => {
@@ -376,6 +466,22 @@ describe("Renderer typed plan skeleton presentation", () => {
       "poster_hero",
       "poster_title",
     ]);
+    expect(
+      generationActivityFromAcceptedPlan(
+        accepted,
+        {
+          id: "run_plan:tool_plan:accepted",
+          phase: "structuring",
+          runId: "run_plan",
+        },
+        createWelcomeDocument(),
+        "page_welcome",
+      ),
+    ).toEqual({
+      id: "run_plan:tool_plan:accepted",
+      phase: "structuring",
+      target: { x: 1_640, y: 440 },
+    });
 
     const nestedEmptyGroup = runtime.apply({
       transactionId: "transaction_plan_empty_nested_group",
@@ -493,7 +599,48 @@ describe("Renderer typed plan skeleton presentation", () => {
       ),
     ).toBeUndefined();
   });
+
+  it("uses stable localized message keys for each semantic stage", () => {
+    expect(generationActivityMessageKey("structuring")).toBe(
+      "agent.canvasPhaseStructuring",
+    );
+    expect(generationActivityMessageKey("building")).toBe(
+      "agent.canvasPhaseBuilding",
+    );
+    expect(generationActivityMessageKey("assets")).toBe(
+      "agent.canvasPhaseAssets",
+    );
+    expect(generationActivityMessageKey("reviewing")).toBe(
+      "agent.canvasPhaseReviewing",
+    );
+    expect(generationActivityMessageKey("refining")).toBe(
+      "agent.canvasPhaseRefining",
+    );
+    expect(generationActivityMessageKey("recovering")).toBe(
+      "agent.canvasPhaseRecovering",
+    );
+  });
 });
+
+function acceptPlanPresentation(runId: string, toolCallId: string) {
+  const requested = projectGenerationPlanPresentationEvent(
+    EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+    {
+      type: "tool.requested",
+      runId,
+      toolCallId,
+      toolName: DESIGN_PLAN_TOOL_NAME,
+      input: generationPlan,
+      risk: "read",
+    },
+  );
+  return projectGenerationPlanPresentationEvent(requested, {
+    type: "tool.completed",
+    runId,
+    toolCallId,
+    result: acceptedPlanResult(generationPlan),
+  });
+}
 
 function acceptedPlanResult(plan: DesignPlanToolInput) {
   return {

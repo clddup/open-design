@@ -572,6 +572,16 @@ export const enMessages = {
   "agent.designRevisionApplied": "Design revision applied",
   "agent.revisionTransition": "Revision {{previous}} → {{revision}}",
   "agent.workingDesign": "Working on your design",
+  "agent.canvasPhaseStructuring": "Structuring the layout",
+  "agent.canvasPhaseBuilding": "Building the design",
+  "agent.canvasPhaseAssets": "Preparing visual assets",
+  "agent.canvasPhaseReviewing": "Reviewing the rendered result",
+  "agent.canvasPhaseRefining": "Refining the design",
+  "agent.canvasPhaseRecovering": "Adjusting the next step",
+  "agent.workflowApplyingDraft":
+    "The Agent is applying the planned draft before visual review.",
+  "agent.workflowCapturingCanvas":
+    "The Agent is capturing the latest design revision before visual review.",
   "agent.readingCanvas": "Reading the canvas",
   "agent.canvasRead": "Canvas read",
   "agent.buildingCanvas": "Building on the canvas",
@@ -1264,6 +1274,16 @@ const zhCNMessages = {
   "agent.designRevisionApplied": "设计 revision 已应用",
   "agent.revisionTransition": "Revision {{previous}} → {{revision}}",
   "agent.workingDesign": "正在处理设计",
+  "agent.canvasPhaseStructuring": "正在搭建设计结构",
+  "agent.canvasPhaseBuilding": "正在构建设计内容",
+  "agent.canvasPhaseAssets": "正在准备视觉素材",
+  "agent.canvasPhaseReviewing": "正在检查渲染结果",
+  "agent.canvasPhaseRefining": "正在修正设计细节",
+  "agent.canvasPhaseRecovering": "正在调整下一步操作",
+  "agent.workflowApplyingDraft":
+    "Agent 正在先应用计划中的设计，再进行视觉审查。",
+  "agent.workflowCapturingCanvas":
+    "Agent 正在先截图当前设计 revision，再进行视觉审查。",
   "agent.readingCanvas": "正在读取画布",
   "agent.canvasRead": "已读取画布",
   "agent.buildingCanvas": "正在构建设计",

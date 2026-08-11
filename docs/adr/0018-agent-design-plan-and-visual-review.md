@@ -21,7 +21,7 @@ Agent 新建设计内容前必须先读取文档，再调用 `opendesign_define_
 
 Renderer 只在收到 Main 对同一 tool call 的 `accepted` 结果后，才把 version 2 计划投影为可丢弃的 Frame/区域骨架；未经确认的 Provider tool request 不能单独触发画布展示。正式区域根及其实际内容到达后逐区替换骨架，具体生命周期见 [ADR-0028](0028-agent-generation-presentation.md)。
 
-Main 在首次实质写入后的新截图到达后冻结下一次设计写入，直到 Agent 调用 `opendesign_record_visual_review`。Review 必须分别描述 composition、hierarchy、typography、asset integration、form/surface、effects，并给出至少两项具体修改。Runtime 完成门禁固定顺序为：
+Main 在首次实质写入后的新截图到达后冻结下一次设计写入，直到 Agent 调用 `opendesign_record_visual_review`。Review 必须分别描述 composition、hierarchy、typography、asset integration、form/surface、effects，并给出至少两项具体修改。Material write、capture 与 review 除消费序号外还记录权威 document revision：只有成功写入后、且 `capture_canvas.observedRevision` 不早于最近 material revision 的未消费截图才能进入 review。现有设计的 baseline capture 可以辅助规划，但不能冒充 post-write capture；pan、zoom、选区、全屏和窗口尺寸不改变 document revision 或 Run mutation target，也不会使具体节点写入过期。Runtime 完成门禁固定顺序为：
 
 ```text
 inspect → define plan → material draft → capture → visual review
@@ -29,6 +29,8 @@ inspect → define plan → material draft → capture → visual review
 ```
 
 生成图片参与新建的可编辑 composition 时，最终结果还必须包含有意义的可编辑文字、矢量、形状、控件或信息层；不能只放置一张 raster 后结束。UI 同样必须在计划中说明 grid、density、typographic hierarchy、state、form 与 depth，重复 card/rectangle 不能被当作完整视觉语言。
+
+Review 前置条件失败使用稳定 `design_workflow.material_write_required / capture_required / capture_revision_invalid` 恢复指令，明确下一步是写入还是截图；模型不得原样重试同一 review。此类可由 Agent 自行恢复的门禁反馈仍进入 journal/日志，但默认不堆叠为右侧红色失败卡；若 Run 最终无法恢复，Run 终态和诊断继续对用户可见。
 
 ## 结果
 
@@ -40,5 +42,5 @@ inspect → define plan → material draft → capture → visual review
 ## 验证
 
 - Tool contract 测试覆盖 plan/review 字段、区域 bounds、重复/保留 ID、反模式与图片 role。
-- Main coordinator 测试覆盖无计划拒绝、计划 Page、首个 Frame 的位置/尺寸、区域根的类型/直属层级/bounds、嵌套图层、根层散落、图片 role、单图用户证据、截图后 review 冻结及终态清理。
+- Main coordinator 测试覆盖无计划拒绝、计划 Page、首个 Frame 的位置/尺寸、区域根的类型/直属层级/bounds、嵌套图层、根层散落、图片 role、单图用户证据、material/capture/review revision 顺序、baseline/重复/过期 capture 拒绝、截图后 review 冻结及终态清理。
 - Completion guard 测试覆盖 plan、两次 capture、中间 review/refinement、仅生图未写画布和 raster 主导的可编辑 composition 拒绝。
