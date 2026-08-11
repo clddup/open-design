@@ -307,6 +307,201 @@ describe("versioned SVG interchange", () => {
     });
   });
 
+  it("round-trips sharp Polygon and Star semantics without guessing external polygons", () => {
+    const polygon: DesignNode = {
+      id: "semantic_polygon",
+      kind: "polygon",
+      name: "Semantic polygon",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 20, 24],
+      size: { width: 160, height: 120 },
+      opacity: 1,
+      properties: {
+        pointCount: 6,
+        cornerRadius: 0,
+        fills: [{ type: "solid", color: "#f59e0b", opacity: 1 }],
+        strokes: [{ type: "solid", color: "#78350f", opacity: 1 }],
+        strokeWidth: 2,
+        strokeAlign: "center",
+        strokeJoin: "round",
+      },
+      extensions: {},
+    };
+    const star: DesignNode = {
+      id: "semantic_star",
+      kind: "star",
+      name: "Semantic star",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 210, 24],
+      size: { width: 140, height: 140 },
+      opacity: 0.9,
+      properties: {
+        pointCount: 7,
+        innerRadius: 0.42,
+        cornerRadius: 0,
+        fills: [{ type: "solid", color: "#8b5cf6", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    const document = documentFromNodes(
+      "regular_shapes",
+      [polygon, star],
+      [polygon.id, star.id],
+    );
+    const first = exportSvg({
+      document,
+      rootNodeIds: [polygon.id, star.id],
+      viewport: { x: 0, y: 0, width: 380, height: 190 },
+      includeLayerIds: true,
+    });
+    const second = exportSvg({
+      document,
+      rootNodeIds: [polygon.id, star.id],
+      viewport: { x: 0, y: 0, width: 380, height: 190 },
+      includeLayerIds: true,
+    });
+    expect(first).toEqual(second);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.issues).toEqual([]);
+    expect(first.svg.match(/<polygon/g)).toHaveLength(2);
+    expect(first.svg).toContain('data-opendesign-regular-shape-version="1"');
+    expect(first.svg).toContain('data-opendesign-inner-radius="0.42"');
+
+    const imported = importSvg(
+      { svg: first.svg, idPrefix: "regular_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    expect(findImportedSource(imported.nodes, polygon.id)).toMatchObject({
+      kind: "polygon",
+      transform: polygon.transform,
+      size: polygon.size,
+      properties: {
+        pointCount: 6,
+        cornerRadius: 0,
+      },
+    });
+    expect(findImportedSource(imported.nodes, star.id)).toMatchObject({
+      kind: "star",
+      transform: star.transform,
+      size: star.size,
+      properties: {
+        pointCount: 7,
+        innerRadius: 0.42,
+        cornerRadius: 0,
+      },
+    });
+    expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
+      isDesignDocument,
+    );
+
+    const external = importSvg(
+      {
+        idPrefix: "external_polygon",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon id="ordinary" points="50,0 100,50 50,100 0,50" fill="#111827"/></svg>`,
+      },
+      geometry,
+    );
+    expect(external.ok).toBe(true);
+    if (!external.ok) return;
+    expect(findImportedSource(external.nodes, "ordinary")?.kind).toBe("vector");
+  });
+
+  it("rejects tampered or rounded regular-shape interchange instead of losing fidelity", () => {
+    const star: DesignNode = {
+      id: "controlled_star",
+      kind: "star",
+      name: "Controlled star",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 10, 10],
+      size: { width: 100, height: 100 },
+      opacity: 1,
+      properties: {
+        pointCount: 5,
+        innerRadius: 0.4,
+        cornerRadius: 0,
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    const document = documentFromNodes("controlled_star", [star], [star.id]);
+    const exported = exportSvg({
+      document,
+      rootNodeIds: [star.id],
+      viewport: { x: 0, y: 0, width: 120, height: 120 },
+      includeLayerIds: true,
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    const tampered = importSvg(
+      {
+        idPrefix: "tampered_star",
+        svg: exported.svg.replace(
+          'data-opendesign-point-count="5"',
+          'data-opendesign-point-count="6"',
+        ),
+      },
+      geometry,
+    );
+    expect(tampered.ok).toBe(false);
+    if (tampered.ok) return;
+    expect(tampered.issues).toContainEqual(
+      expect.objectContaining({
+        code: "regular-shape-fidelity-unsupported",
+      }),
+    );
+
+    const wrongElement = importSvg(
+      {
+        idPrefix: "wrong_regular_element",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g data-opendesign-kind="polygon" data-opendesign-regular-shape-version="1"><rect width="100" height="100"/></g></svg>`,
+      },
+      geometry,
+    );
+    expect(wrongElement.ok).toBe(false);
+    if (wrongElement.ok) return;
+    expect(wrongElement.issues).toContainEqual(
+      expect.objectContaining({
+        code: "regular-shape-fidelity-unsupported",
+      }),
+    );
+
+    const rounded = structuredClone(document);
+    const roundedStar = rounded.nodesById[star.id];
+    if (!roundedStar || roundedStar.kind !== "star") {
+      throw new Error("Missing controlled star");
+    }
+    roundedStar.properties.cornerRadius = 8;
+    const rejected = exportSvg({
+      document: rounded,
+      rootNodeIds: [star.id],
+      viewport: { x: 0, y: 0, width: 120, height: 120 },
+    });
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) return;
+    expect(rejected.issues).toContainEqual(
+      expect.objectContaining({
+        code: "regular-shape-fidelity-unsupported",
+      }),
+    );
+  });
+
   it("rejects external or modified SVG markers instead of flattening arrow semantics", () => {
     const external = importSvg(
       {

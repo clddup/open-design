@@ -1,7 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.5.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.6.0" as const;
+export const LINE_DESIGN_SCHEMA_VERSION = "1.5.0" as const;
 export const MASK_DESIGN_SCHEMA_VERSION = "1.4.0" as const;
 export const IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION = "1.3.0" as const;
 export const PATH_DESIGN_SCHEMA_VERSION = "1.2.0" as const;
@@ -30,6 +31,8 @@ export const NodeKindSchema = Type.Union([
   Type.Literal("rectangle"),
   Type.Literal("ellipse"),
   Type.Literal("line"),
+  Type.Literal("polygon"),
+  Type.Literal("star"),
   Type.Literal("text"),
   Type.Literal("image"),
   Type.Literal("vector"),
@@ -356,6 +359,25 @@ export const LinePropertiesSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const PolygonPropertiesSchema = Type.Object(
+  {
+    ...ShapeProperties,
+    pointCount: Type.Integer({ minimum: 3, maximum: 60 }),
+    cornerRadius: Type.Number({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
+export const StarPropertiesSchema = Type.Object(
+  {
+    ...ShapeProperties,
+    pointCount: Type.Integer({ minimum: 3, maximum: 60 }),
+    innerRadius: Type.Number({ minimum: 0, maximum: 1 }),
+    cornerRadius: Type.Number({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
 export const TextPropertiesSchema = Type.Object(
   {
     content: Type.String(),
@@ -527,6 +549,24 @@ export const LineNodeSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const PolygonNodeSchema = Type.Object(
+  {
+    ...NodeBaseProperties,
+    kind: Type.Literal("polygon"),
+    properties: PolygonPropertiesSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const StarNodeSchema = Type.Object(
+  {
+    ...NodeBaseProperties,
+    kind: Type.Literal("star"),
+    properties: StarPropertiesSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const TextNodeSchema = Type.Object(
   {
     ...NodeBaseProperties,
@@ -582,6 +622,8 @@ export const DesignNodeSchema = Type.Union([
   RectangleNodeSchema,
   EllipseNodeSchema,
   LineNodeSchema,
+  PolygonNodeSchema,
+  StarNodeSchema,
   TextNodeSchema,
   ImageNodeSchema,
   VectorNodeSchema,
@@ -913,7 +955,7 @@ export const HistoryEntrySchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const HistoryStateSchema = Type.Object(
+export const HistoryStateSchema: TSchema = Type.Object(
   {
     canUndo: Type.Boolean(),
     canRedo: Type.Boolean(),
@@ -942,7 +984,7 @@ export const ViewportStateSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const EditorStateSchema = Type.Object(
+export const EditorStateSchema: TSchema = Type.Object(
   {
     documentId: Type.String({ minLength: 1 }),
     revision: Type.Integer({ minimum: 0 }),
@@ -1124,6 +1166,8 @@ export type BooleanNode = Static<typeof BooleanNodeSchema>;
 export type RectangleNode = Static<typeof RectangleNodeSchema>;
 export type EllipseNode = Static<typeof EllipseNodeSchema>;
 export type LineNode = Static<typeof LineNodeSchema>;
+export type PolygonNode = Static<typeof PolygonNodeSchema>;
+export type StarNode = Static<typeof StarNodeSchema>;
 export type TextNode = Static<typeof TextNodeSchema>;
 export type ImageNode = Static<typeof ImageNodeSchema>;
 export type VectorNode = Static<typeof VectorNodeSchema>;
@@ -1163,10 +1207,24 @@ export type DesignTransactionResult = Static<
 >;
 export type CommandResult = DesignTransactionResult;
 export type HistoryEntry = Static<typeof HistoryEntrySchema>;
-export type HistoryState = Static<typeof HistoryStateSchema>;
+export interface HistoryState {
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: HistoryEntry[];
+  redo: HistoryEntry[];
+}
 export type SelectionState = Static<typeof SelectionStateSchema>;
 export type ViewportState = Static<typeof ViewportStateSchema>;
-export type EditorState = Static<typeof EditorStateSchema>;
+export interface EditorState {
+  documentId: string;
+  revision: number;
+  selection: SelectionState;
+  tool: string;
+  viewport: ViewportState;
+  dirty: boolean;
+  checkpointRevision: number;
+  history: HistoryState;
+}
 type EditorEventBase = {
   eventId: string;
   sequence: number;
@@ -1246,7 +1304,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       schemaVersion !== APPEARANCE_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== PATH_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== MASK_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== MASK_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== LINE_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
@@ -1294,6 +1353,49 @@ export function normalizeLineEndpoints(
     start: normalize(start),
     end: normalize(end),
   };
+}
+
+export function resolveRegularPolygonPoints(
+  size: Size,
+  pointCount: number,
+): Point[] {
+  assertRegularPointCount(pointCount);
+  const centerX = size.width / 2;
+  const centerY = size.height / 2;
+  return Array.from({ length: pointCount }, (_, index) => {
+    const angle = (index * Math.PI * 2) / pointCount - Math.PI / 2;
+    return {
+      x: centerX + centerX * Math.cos(angle),
+      y: centerY + centerY * Math.sin(angle),
+    };
+  });
+}
+
+export function resolveStarPoints(
+  size: Size,
+  pointCount: number,
+  innerRadius: number,
+): Point[] {
+  assertRegularPointCount(pointCount);
+  if (!Number.isFinite(innerRadius) || innerRadius < 0 || innerRadius > 1) {
+    throw new RangeError("Star innerRadius must be between 0 and 1");
+  }
+  const centerX = size.width / 2;
+  const centerY = size.height / 2;
+  return Array.from({ length: pointCount * 2 }, (_, index) => {
+    const radius = index % 2 === 0 ? 1 : innerRadius;
+    const angle = (index * Math.PI) / pointCount - Math.PI / 2;
+    return {
+      x: centerX + centerX * radius * Math.cos(angle),
+      y: centerY + centerY * radius * Math.sin(angle),
+    };
+  });
+}
+
+function assertRegularPointCount(pointCount: number): void {
+  if (!Number.isInteger(pointCount) || pointCount < 3 || pointCount > 60) {
+    throw new RangeError("Polygon and Star pointCount must be from 3 to 60");
+  }
 }
 
 function migrateImageNodes(

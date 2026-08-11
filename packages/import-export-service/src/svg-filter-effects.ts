@@ -377,7 +377,9 @@ function nodeStrokeOutset(node: DesignNode): number {
     node.kind !== "frame" &&
     node.kind !== "line" &&
     node.kind !== "path" &&
+    node.kind !== "polygon" &&
     node.kind !== "rectangle" &&
+    node.kind !== "star" &&
     node.kind !== "text" &&
     node.kind !== "vector"
   ) {

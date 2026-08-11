@@ -95,6 +95,14 @@ class FakeEllipse extends FakeElement {
   override readonly tag: string = "Ellipse";
 }
 
+class FakePolygon extends FakeElement {
+  override readonly tag: string = "Polygon";
+}
+
+class FakeStar extends FakeElement {
+  override readonly tag: string = "Star";
+}
+
 class FakeArrow extends FakeElement {
   override readonly tag: string = "Arrow";
   points: number[] = [];
@@ -209,9 +217,11 @@ vi.mock("leafer-editor", () => ({
   InnerEditorEvent: { BEFORE_OPEN: "inner.before-open", CLOSE: "inner.close" },
   MoveEvent: { MOVE: "viewport.move", END: "viewport.move-end" },
   Path: FakePath,
+  Polygon: FakePolygon,
   Rect: FakeRect,
   ResizeEvent: { RESIZE: "viewport.resize" },
   Text: FakeText,
+  Star: FakeStar,
   UI: FakeElement,
   ZoomEvent: { ZOOM: "viewport.zoom", END: "viewport.zoom-end" },
 }));
@@ -257,6 +267,11 @@ describe("Leafer engine selection bounds synchronization", () => {
     );
 
     expect(leaferHarness.appConfig).toMatchObject({
+      editor: {
+        hoverPathType: "box",
+        hoverStyle: { stroke: "#8b8b89", strokeWidth: 1 },
+        selectedPathType: "box",
+      },
       wheel: { zoomSpeed: 0.16 },
       zoom: { min: 0.1, max: 8 },
     });
@@ -1130,6 +1145,61 @@ describe("Leafer engine selection bounds synchronization", () => {
       width: 160,
       x: 120,
       y: 90,
+    });
+    adapter.dispose();
+  });
+
+  it("creates native Polygon and Star requests with square and center modifiers", async () => {
+    const onCreate = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreate,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "polygon",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+
+    app.emit("drag.start", boxDragEvent(100, 100));
+    app.emit(
+      "drag.drag",
+      boxDragEvent(140, 120, { altKey: true, shiftKey: true }),
+    );
+    app.emit(
+      "drag.end",
+      boxDragEvent(140, 120, { altKey: true, shiftKey: true }),
+    );
+    expect(onCreate).toHaveBeenLastCalledWith({
+      dragged: true,
+      height: 80,
+      pageId: "page_welcome",
+      parentId: null,
+      tool: "polygon",
+      width: 80,
+      x: 60,
+      y: 60,
+    });
+
+    adapter.sync({
+      ...createInput(),
+      tool: "star",
+      selection: { nodeIds: [] },
+    });
+    app.emit("drag.start", boxDragEvent(20, 30));
+    app.emit("drag.drag", boxDragEvent(90, 80));
+    app.emit("drag.end", boxDragEvent(90, 80));
+    expect(onCreate).toHaveBeenLastCalledWith({
+      dragged: true,
+      height: 50,
+      pageId: "page_welcome",
+      parentId: null,
+      tool: "star",
+      width: 70,
+      x: 20,
+      y: 30,
     });
     adapter.dispose();
   });

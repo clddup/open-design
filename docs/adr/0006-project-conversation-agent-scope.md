@@ -105,7 +105,7 @@ MCP 协议层使用 Workspace、Project、Design File、Page、节点和 root ha
 
 OpenDesign 采用单 Design File、多 Page 的结论，但不照抄任意 MCP `filePath` 路由。该做法把资源发现、授权和执行压缩进模型可控字符串，无法表达 Project 归属、attached root、per-run reference、Capability、Approval 或同文件 revision 冲突，也难以安全处理符号链接和路径替换。
 
-OpenPencil 只作为历史调研与迁移记录，不是当前或目标 Agent、项目、权限或发行架构。
+OpenPencil 只作为历史调研与迁移记录，不是当前或目标 Agent、项目、权限或发行架构。ADR-0025 后续允许把固定上游提交作为产品行为、Pen/Path、SVG 和验收矩阵的持续参考；该参考不恢复任何 OpenPencil runtime、文档、权限、vendor 或发行边界。
 
 ## 当前实现与迁移
 

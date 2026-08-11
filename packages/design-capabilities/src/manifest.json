@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-11",
-  "documentSchemaVersion": "1.5.0",
+  "documentSchemaVersion": "1.6.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -119,7 +119,7 @@
         "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, cross-container reparenting, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
         "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。"
       },
-      "provider": "DesignDocument 1.5.0 + EditorRuntime",
+      "provider": "DesignDocument 1.6.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -209,7 +209,7 @@
         "en": "Persist and render portable SVG path data with fills, strokes, gradients, effects, masks, and blend modes.",
         "zh-CN": "持久化并渲染可移植 SVG Path 数据及其填充、描边、渐变、效果、蒙版和混合模式。"
       },
-      "provider": "DesignDocument 1.5.0 + Leafer Path adapter",
+      "provider": "DesignDocument 1.6.0 + Leafer Path adapter",
       "requiredSurfaces": ["contract", "runtime", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -249,7 +249,7 @@
         "en": "Create and directly edit directed straight lines with independent start and end decorations, professional stroke controls, and editable SVG interchange.",
         "zh-CN": "创建并直接编辑有方向的直线，独立设置起终点装饰和专业描边，并通过 SVG 保持可编辑交换。"
       },
-      "provider": "DesignDocument 1.5.0 + Leafer Arrow / LineEditTool + SVG controlled markers",
+      "provider": "DesignDocument 1.6.0 + Leafer Arrow / LineEditTool + SVG controlled markers",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -298,6 +298,72 @@
       ]
     },
     {
+      "id": "vector.regular-shapes",
+      "category": "vector",
+      "status": "degraded",
+      "label": {
+        "en": "Regular polygons and stars",
+        "zh-CN": "规则多边形与星形"
+      },
+      "description": {
+        "en": "Create, resize, restyle, and exchange semantic regular Polygon and Star nodes without flattening them into generic paths.",
+        "zh-CN": "创建、缩放、调整外观并交换语义化 Polygon 与 Star 节点，不将其扁平化为普通 Path。"
+      },
+      "provider": "DesignDocument 1.6.0 + Leafer Polygon/Star + controlled SVG regular-shape metadata",
+      "requiredSurfaces": [
+        "contract",
+        "runtime",
+        "human",
+        "agent",
+        "render",
+        "export"
+      ],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "available",
+        "human": "available",
+        "agent": "available",
+        "render": "available",
+        "export": "degraded"
+      },
+      "limitations": [
+        {
+          "en": "Polygon supports 3–60 points; Star supports 3–60 points and a normalized inner radius. Shift constrains the draw bounds to a square and Alt/Option draws from the center. Leafer cornerRadius renders live rounded shapes, but Figma-style corner smoothing is not yet part of the OpenDesign contract.",
+          "zh-CN": "Polygon 支持 3–60 个顶点；Star 支持 3–60 个顶点和归一化内径。Shift 将绘制边界约束为正方形，Alt/Option 从中心绘制。Leafer cornerRadius 可渲染实时圆角图形，但 Figma 式 corner smoothing 尚未进入 OpenDesign 协议。"
+        },
+        {
+          "en": "Sharp Polygon/Star nodes participate in deterministic Boolean geometry and exact controlled SVG round-trip. Rounded regular shapes fail Boolean creation and SVG export explicitly until an exact rounded outline exists; ordinary external SVG polygons continue to import as Vectors instead of being guessed as semantic shapes.",
+          "zh-CN": "零圆角 Polygon/Star 可参与确定性 Boolean geometry，并通过受控 SVG 精确往返。圆角规则图形在精确 outline 完成前会明确拒绝 Boolean 创建与 SVG 导出；普通外部 SVG polygon 继续导入为 Vector，不猜测为语义图形。"
+        },
+        {
+          "en": "Packaged macOS/Windows direct-manipulation evidence and real Leafer pixel baselines are not yet recorded.",
+          "zh-CN": "尚未记录 macOS/Windows 打包程序的直接操作证据与真实 Leafer 像素基线。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/editor-runtime/src/boolean-operations.test.ts",
+          "packages/geometry-service/src/boolean-resolver.test.ts",
+          "packages/import-export-service/src/svg.test.ts",
+          "packages/leafer-engine/src/mapping.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
+        ],
+        "manual": []
+      },
+      "references": [
+        "https://help.figma.com/hc/en-us/articles/360040450133-Shape-tools",
+        "https://developers.figma.com/docs/plugins/api/StarNode/",
+        "https://www.leaferjs.com/ui/en/reference/display/Polygon.html",
+        "https://www.leaferjs.com/ui/en/reference/display/Star.html",
+        "https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/svg_import/nodes.rs",
+        "https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-ui/src/svg_export.rs"
+      ]
+    },
+    {
       "id": "vector.pen-node-editing",
       "category": "vector",
       "status": "unavailable",
@@ -336,7 +402,7 @@
         "en": "Non-destructive union, subtract, intersect, and exclude groups whose source layers remain editable.",
         "zh-CN": "非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。"
       },
-      "provider": "DesignDocument 1.5.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
+      "provider": "DesignDocument 1.6.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -348,8 +414,8 @@
       },
       "limitations": [
         {
-          "en": "The recursive resolver converts Rectangle, Ellipse, Path, Vector, and nested Boolean operands into fill-plus-stroke PathKit geometry, applies local transforms, preserves honest empty results, and projects a stable synthetic Leafer Path without persisting provider output.",
-          "zh-CN": "递归 resolver 会把 Rectangle、Ellipse、Path、Vector 与嵌套 Boolean 转换为包含 fill+stroke 的 PathKit 几何，应用局部 transform、保留真实空结果，并在不持久化 provider 输出的前提下投影稳定的 Leafer synthetic Path。"
+          "en": "The recursive resolver converts Rectangle, Ellipse, sharp Polygon/Star, Path, Vector, and nested Boolean operands into fill-plus-stroke PathKit geometry, applies local transforms, preserves honest empty results, and projects a stable synthetic Leafer Path without persisting provider output.",
+          "zh-CN": "递归 resolver 会把 Rectangle、Ellipse、零圆角 Polygon/Star、Path、Vector 与嵌套 Boolean 转换为包含 fill+stroke 的 PathKit 几何，应用局部 transform、保留真实空结果，并在不持久化 provider 输出的前提下投影稳定的 Leafer synthetic Path。"
         },
         {
           "en": "The toolbar/menu, macOS and Windows shortcuts, Inspector operation control, ungroup command, and typed Agent hierarchy actions reuse the same previewed atomic planners. Enter, double-click, layer-tree selection, Shift+Enter, Escape, and Tab provide transient source-operand editing with live derived-result preview, locked read-only state, controlled appearance fields, and contextual failure recovery. Text outlines, SVG round-trip, pixel baselines, and macOS/Windows packaged product evidence remain unavailable. Dash patterns longer than two values, masked operands, and non-center strokes on open paths fail explicitly instead of being approximated.",
@@ -390,7 +456,7 @@
         "en": "Apply multiple paints and strokes, gradients, shadows, glows, blur, blend modes, masks, and advanced stroke properties.",
         "zh-CN": "应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。"
       },
-      "provider": "DesignDocument 1.5.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
+      "provider": "DesignDocument 1.6.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -482,7 +548,7 @@
         "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
         "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
       },
-      "provider": "DesignDocument 1.5.0 + OpenDesign Image service crop geometry + Leafer projection",
+      "provider": "DesignDocument 1.6.0 + OpenDesign Image service crop geometry + Leafer projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "degraded",
@@ -553,7 +619,7 @@
         "en": "Create, render, transform, and edit a text layer with one shared font style and alignment.",
         "zh-CN": "创建、渲染、变换和编辑使用单一共享字体样式与对齐方式的文字图层。"
       },
-      "provider": "DesignDocument 1.5.0 + Leafer TextEditor",
+      "provider": "DesignDocument 1.6.0 + Leafer TextEditor",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",

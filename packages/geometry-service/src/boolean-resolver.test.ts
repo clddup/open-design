@@ -9,7 +9,9 @@ import {
   type DesignNode,
   type EllipseNode,
   type PathNode,
+  type PolygonNode,
   type RectangleNode,
+  type StarNode,
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "./boolean-resolver.js";
 import {
@@ -53,6 +55,58 @@ describe("non-destructive Boolean geometry resolver", () => {
     expect(
       resolution.resultsByNodeId.get("mark")?.path.match(/M/g)?.length,
     ).toBe(2);
+  });
+
+  it("resolves sharp Polygon and Star geometry and invalidates semantic parameters", () => {
+    const hexagon = polygon("hexagon", "regular", 100, 100, 6);
+    const signal = star("signal", "regular", 100, 100, 5, 0.4);
+    signal.transform = [1, 0, 0, 1, 120, 0];
+    const regular = booleanNode("regular", null, "union", [
+      hexagon.id,
+      signal.id,
+    ]);
+    const document = designDocument([regular, hexagon, signal], [regular.id]);
+    const resolver = createBooleanGeometryResolver(provider);
+    const first = resolver.resolve(document, "page");
+
+    expect(first.issues).toEqual([]);
+    expect(first.resultsByNodeId.get(regular.id)).toMatchObject({
+      empty: false,
+      nodeId: regular.id,
+    });
+    expect(first.resultsByNodeId.get(regular.id)?.path.length).toBeGreaterThan(
+      20,
+    );
+
+    const changed = structuredClone(document);
+    changed.revision += 1;
+    const changedStar = changed.nodesById.signal;
+    if (!changedStar || changedStar.kind !== "star") {
+      throw new Error("Missing Star operand");
+    }
+    changedStar.properties.pointCount = 7;
+    changedStar.properties.innerRadius = 0.5;
+    expect(resolver.resolve(changed, "page").computedNodeIds).toEqual([
+      regular.id,
+    ]);
+
+    const rounded = structuredClone(document);
+    rounded.revision += 1;
+    const roundedPolygon = rounded.nodesById.hexagon;
+    if (!roundedPolygon || roundedPolygon.kind !== "polygon") {
+      throw new Error("Missing Polygon operand");
+    }
+    roundedPolygon.properties.cornerRadius = 6;
+    const rejected = resolver.resolve(rounded, "page");
+    expect(rejected.resultsByNodeId.has(regular.id)).toBe(false);
+    expect(rejected.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unsupported-style",
+          nodeId: hexagon.id,
+        }),
+      ]),
+    );
   });
 
   it("keeps authored Path coordinates and applies the node transform exactly once", () => {
@@ -338,6 +392,66 @@ function ellipse(
     },
     size: { width, height },
     transform,
+    visible: true,
+  };
+}
+
+function polygon(
+  id: string,
+  parentId: string | null,
+  width: number,
+  height: number,
+  pointCount: number,
+): PolygonNode {
+  return {
+    childIds: [],
+    extensions: {},
+    id,
+    kind: "polygon",
+    locked: false,
+    name: id,
+    opacity: 1,
+    parentId,
+    properties: {
+      cornerRadius: 0,
+      fills: [solid("#111827")],
+      pointCount,
+      strokes: [],
+      strokeWidth: 0,
+    },
+    size: { width, height },
+    transform: [1, 0, 0, 1, 0, 0],
+    visible: true,
+  };
+}
+
+function star(
+  id: string,
+  parentId: string | null,
+  width: number,
+  height: number,
+  pointCount: number,
+  innerRadius: number,
+): StarNode {
+  return {
+    childIds: [],
+    extensions: {},
+    id,
+    kind: "star",
+    locked: false,
+    name: id,
+    opacity: 1,
+    parentId,
+    properties: {
+      cornerRadius: 0,
+      fills: [solid("#111827")],
+      innerRadius,
+      pointCount,
+      strokes: [],
+      strokeWidth: 0,
+    },
+    size: { width, height },
+    transform: [1, 0, 0, 1, 0, 0],
     visible: true,
   };
 }

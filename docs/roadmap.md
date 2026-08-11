@@ -83,7 +83,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P1：专业能力契约
 
 - 把 P0-C 的初始 capability manifest 提升为版本化公共契约，并为 Renderer、Agent、MCP 和发布说明提供同一只读查询入口。未知能力必须拒绝，降级能力必须返回结构化限制和 fidelity warning。
-- 设计可按垂直切片迁移的专业基础文档版本，统一正式 Line/Arrow/Polygon/Star/Slice、Path/Vector 多轮廓、constraints/layout、富文本/font、图片 crop/adjustments、Component/Instance/Variant、style/token binding 和 export settings。
+- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.6.0` 已统一正式 Line/Arrow 与 Polygon/Star，后续仍需 Slice、Path/Vector 多轮廓、constraints/layout、富文本/font、图片 adjustments、Component/Instance/Variant、style/token binding 和 export settings。
 - 为 Geometry、Layout、Text/Font、Image 和 Import/Export service 建立窄、版本化的输入输出接口。服务只能返回纯结果、诊断或候选 `DesignOperation[]`，不能保存第二份文档或直接修改 Leafer 场景。
 - 提供确定性迁移、未知版本拒绝、保存重开、preview、undo/redo、Agent schema、provider 映射和 fidelity warning 测试；不得把长期语义藏进 `extensions`。
 
@@ -101,7 +101,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成首个 SVG filter fidelity slice：导出使用标准 shadow-only primitive 分支与单一 `feMerge`，避免多 `feDropShadow` 重复合成半透明源图；导入/导出确定性保留最多八个普通零 spread drop shadow、一层 layer blur、效果顺序和 `visible`，并提供显式 user-space filter region。外部单个标准 `feDropShadow`/`feGaussianBlur` 可进入正式 `DesignNode.effects`；外部 URL 拒绝，inner/background/glow/grayscale、spread/blend、各向异性 blur、超预算值和复杂 graph 返回明确 fidelity issue，不静默扁平化。
 - [x] 完成首个 SVG mask/clip fidelity slice：按 Figma/Leafer sibling 顺序把 alpha、luminance、outline、clipping mask runs 转换为标准 `<mask>/<clipPath>` 引用组，圆角 Frame `clipsContent` 只裁剪 children、不制造 background 图层；受控 graph 可确定性还原为同级 mask source + targets，受支持的外部本地 user-space mask/clip 会展开为可编辑蒙版组。definition 篡改、外部 URL、缺失/重复/循环引用、objectBoundingBox clip 与同元素 mask+clip 明确失败；复杂组合 graph 和 Text/Image mask source 继续显式不可用。
 - [x] 增加 `DesignDocument 1.5.0` 正式 Line/Arrow：唯一持久 LineNode、有向归一化端点、独立端点装饰、开放中心描边、`L` / `Shift+L`、Shift 45 度、Alt 中心绘制、Inspector、Leafer Arrow/LineEditTool 端点写回、Agent schema 与受控 SVG marker 已打通；折线 connector、路由/吸附、标签、像素基线和 macOS/Windows 打包产品交互证据继续保持明确限制。
-- 增加正式 Polygon/Star/Slice 与可编辑 Path/Vector 多轮廓；实现 Pen、节点/手柄、开放/闭合、连接/断开、路径反转、布尔 union/subtract/intersect/exclude、flatten 和 outline stroke。
+- [x] 增加 `DesignDocument 1.6.0` 正式 Polygon/Star：唯一持久语义节点、3–60 顶点、Star 归一化内径、实时圆角、Shift/Alt 创建、Inspector、Leafer 原生投影、Agent schema、尖角 PathKit Boolean 与受控 SVG 逐点校验已打通；corner smoothing、rounded outline、像素基线和 macOS/Windows 打包产品交互证据继续保持明确限制。
+- 增加正式 Slice 与可编辑 Path/Vector 多轮廓；实现 Pen、节点/手柄、开放/闭合、连接/断开、路径反转、flatten 和 outline stroke。Pen/节点编辑应对照 Figma 的 Vector Network 行为，并以 OpenPencil 固定提交 `449f31dd8b7df12965f65d9da774597332fc153d` 的 Pen 状态机、path overlay、SVG 路径与测试矩阵作为实现参考，但不引入其 runtime、文档或工具权限边界。
 - 扩展剩余图层与精确变换工作流：重命名、批量属性、单层相对父级对齐、二维 Tidy up/画布间距手柄、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
 - 人工命令与 Agent typed tools 调用同一 geometry service，并把结果作为一个可预览、可撤销的 `DesignTransaction` 应用。SVG 导入导出必须经过同一公共 Path 语义，不能泄漏 provider 私有命令。
 
@@ -155,6 +156,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## 持续门禁
 
 - 不恢复 OpenPencil、Canvas2D、手写选择框、隐藏 fallback 或双写状态。
+- OpenPencil 可作为持续的产品行为、工作台、Pen/Path、SVG、图片和模板验收基准；参考必须固定提交并转译为 OpenDesign 公共语义与测试，不能把上游实现直接变成第二套产品内核。
 - 不让模型、MCP、skills 或 Renderer 获得 Leafer 对象、原始凭据、任意路径或裸 shell。
 - 新第三方依赖必须固定版本并更新 ADR、`engine-baseline.json`、第三方通知和兼容性测试。
 - macOS 与 Windows 是同级发布门禁；不能用一个平台的构建或自动化结果替代另一个平台的原生验证。

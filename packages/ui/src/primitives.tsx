@@ -35,6 +35,8 @@ export type GlyphName =
   | "layers"
   | "line"
   | "arrow"
+  | "polygon"
+  | "star"
   | "lock"
   | "unlock"
   | "maximize"
@@ -195,6 +197,10 @@ const paths: Record<GlyphName, ReactNode> = {
       <path d="M5 18 19 6" />
       <path d="M12.5 6H19v6.5" />
     </>
+  ),
+  polygon: <path d="m12 3 9 6.5-3.5 10.5h-11L3 9.5 12 3Z" />,
+  star: (
+    <path d="m12 2.8 2.8 5.7 6.3.9-4.6 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2-4.6-4.4 6.3-.9L12 2.8Z" />
   ),
   lock: (
     <>

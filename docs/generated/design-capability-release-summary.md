@@ -2,7 +2,7 @@
 
 # Design capability release summary
 
-Manifest v1 (2026-08-11) · 0 available · 12 degraded · 7 unavailable
+Manifest v1 (2026-08-11) · 0 available · 13 degraded · 7 unavailable
 
 This block is the release-note view of the same manifest used by the built-in Agent and generated help. It must not be edited by hand.
 
@@ -18,6 +18,7 @@ This block is the release-note view of the same manifest used by the built-in Ag
 - `transform.precise-arrangement` — Precise arrangement
 - `vector.path-rendering` — SVG path rendering
 - `vector.line-arrow` — Lines and arrows
+- `vector.regular-shapes` — Regular polygons and stars
 - `vector.boolean-operations` — Boolean operations
 - `appearance.paints-effects-masks` — Paints, effects, and masks
 - `image.import-generation-placement` — Image import, generation, and placement

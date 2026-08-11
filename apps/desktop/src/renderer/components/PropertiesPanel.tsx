@@ -49,15 +49,18 @@ type FillNode = Extract<
       | "ellipse"
       | "frame"
       | "path"
+      | "polygon"
       | "rectangle"
+      | "star"
       | "text"
       | "vector";
   }
 >;
 type CornerNode = Extract<
   DesignNode,
-  { kind: "frame" | "image" | "rectangle" }
+  { kind: "frame" | "image" | "polygon" | "rectangle" | "star" }
 >;
+type RegularShapeNode = Extract<DesignNode, { kind: "polygon" | "star" }>;
 type StrokeNode = FillNode | Extract<DesignNode, { kind: "line" }>;
 
 const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
@@ -67,6 +70,8 @@ const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
   rectangle: "rectangle",
   ellipse: "ellipse",
   line: "line",
+  polygon: "polygon",
+  star: "star",
   text: "text",
   image: "assets",
   vector: "pen",
@@ -81,6 +86,8 @@ const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   rectangle: "node.rectangle",
   ellipse: "node.ellipse",
   line: "node.line",
+  polygon: "node.polygon",
+  star: "node.star",
   text: "node.text",
   image: "node.image",
   vector: "node.vector",
@@ -135,7 +142,9 @@ function isFillNode(node: DesignNode): node is FillNode {
     node.kind === "ellipse" ||
     node.kind === "frame" ||
     node.kind === "path" ||
+    node.kind === "polygon" ||
     node.kind === "rectangle" ||
+    node.kind === "star" ||
     node.kind === "text" ||
     node.kind === "vector"
   );
@@ -143,8 +152,16 @@ function isFillNode(node: DesignNode): node is FillNode {
 
 function isCornerNode(node: DesignNode): node is CornerNode {
   return (
-    node.kind === "frame" || node.kind === "image" || node.kind === "rectangle"
+    node.kind === "frame" ||
+    node.kind === "image" ||
+    node.kind === "polygon" ||
+    node.kind === "rectangle" ||
+    node.kind === "star"
   );
+}
+
+function isRegularShapeNode(node: DesignNode): node is RegularShapeNode {
+  return node.kind === "polygon" || node.kind === "star";
 }
 
 function isStrokeNode(node: DesignNode): node is StrokeNode {
@@ -279,12 +296,13 @@ function commitNumber(
   draft: string,
   current: number,
   update: (value: number) => void,
-  bounds: { min?: number; max?: number } = {},
+  bounds: { min?: number; max?: number; integer?: boolean } = {},
 ) {
   const normalized = draft.trim();
   if (!normalized) return null;
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) return null;
+  if (bounds.integer && !Number.isInteger(parsed)) return null;
 
   const next = Math.min(
     bounds.max ?? Number.POSITIVE_INFINITY,
@@ -1012,6 +1030,48 @@ function SelectedNodeProperties({
           >
             {t("properties.reverseLine")}
           </Button>
+        </Section>
+      )}
+      {isRegularShapeNode(node) && (
+        <Section title={t("properties.regularShape")}>
+          <div className="property-grid">
+            <Field
+              accessibleLabel={t("properties.pointCount")}
+              label={t("properties.pointCount")}
+              max={60}
+              min={3}
+              onCommit={(draft) =>
+                commitNumber(
+                  draft,
+                  node.properties.pointCount,
+                  (pointCount) => onUpdate({ properties: { pointCount } }),
+                  { min: 3, max: 60, integer: true },
+                )
+              }
+              value={formatNumber(node.properties.pointCount)}
+            />
+            {node.kind === "star" && (
+              <Field
+                accessibleLabel={t("properties.starInnerRadius")}
+                label={t("properties.starInnerRadius")}
+                max={100}
+                min={0}
+                onCommit={(draft) =>
+                  commitNumber(
+                    draft,
+                    node.properties.innerRadius * 100,
+                    (innerRadius) =>
+                      onUpdate({
+                        properties: { innerRadius: innerRadius / 100 },
+                      }),
+                    { min: 0, max: 100 },
+                  )
+                }
+                suffix="%"
+                value={formatNumber(node.properties.innerRadius * 100)}
+              />
+            )}
+          </div>
         </Section>
       )}
       <Section title={t("properties.layout")}>

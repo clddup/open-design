@@ -532,6 +532,8 @@ const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
         "diamond",
       ],
     },
+    pointCount: { type: "integer", minimum: 3, maximum: 60 },
+    innerRadius: { type: "number", minimum: 0, maximum: 1 },
   },
   additionalProperties: false,
 } as const;
@@ -572,6 +574,8 @@ const MODEL_NODE_SCHEMA = {
         "rectangle",
         "ellipse",
         "line",
+        "polygon",
+        "star",
         "text",
         "image",
         "vector",

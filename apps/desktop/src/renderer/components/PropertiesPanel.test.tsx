@@ -84,6 +84,28 @@ const lineNode: DesignNode = {
   },
 };
 
+const starNode: DesignNode = {
+  id: "star_1",
+  name: "Seven-point signal",
+  parentId: null,
+  childIds: [],
+  visible: true,
+  locked: false,
+  transform: [1, 0, 0, 1, 120, 80],
+  size: { width: 180, height: 180 },
+  opacity: 1,
+  extensions: {},
+  kind: "star",
+  properties: {
+    fills: [{ type: "solid", color: "#f59e0b", opacity: 1 }],
+    strokes: [],
+    strokeWidth: 0,
+    pointCount: 7,
+    innerRadius: 0.42,
+    cornerRadius: 6,
+  },
+};
+
 describe("PropertiesPanel SVG workflow", () => {
   it("edits only implemented SVG settings and exports the current selection", async () => {
     const user = userEvent.setup();
@@ -202,6 +224,56 @@ describe("PropertiesPanel line workflow", () => {
     await user.tab();
     expect(onUpdate).toHaveBeenCalledWith({
       properties: { dashPattern: [12, 6, 2, 6] },
+    });
+  });
+});
+
+describe("PropertiesPanel regular-shape workflow", () => {
+  it("edits bounded Star point count, inner radius, and corner radius", async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = renderPanel({ node: starNode });
+
+    const pointCount = screen.getByLabelText("Point count");
+    await user.clear(pointCount);
+    await user.type(pointCount, "9");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { pointCount: 9 },
+    });
+
+    const innerRadius = screen.getByLabelText("Inner radius");
+    await user.clear(innerRadius);
+    await user.type(innerRadius, "55");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { innerRadius: 0.55 },
+    });
+
+    const cornerRadius = screen.getByLabelText("Corner radius");
+    await user.clear(cornerRadius);
+    await user.type(cornerRadius, "12");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { cornerRadius: 12 },
+    });
+  });
+
+  it("rejects fractional point counts and clamps values to the supported range", async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = renderPanel({ node: starNode });
+    const pointCount = screen.getByLabelText("Point count");
+
+    await user.clear(pointCount);
+    await user.type(pointCount, "4.5");
+    await user.tab();
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    await user.click(pointCount);
+    await user.clear(pointCount);
+    await user.type(pointCount, "61");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { pointCount: 60 },
     });
   });
 });

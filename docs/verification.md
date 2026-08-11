@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.5.0`
+- 文档协议：`DesignDocument 1.6.0`
 - Agent 协议：`3.5.0`
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
@@ -38,8 +38,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   33 files / 245 tests
-└── desktop tests   44 files / 329 tests
+├── package tests   33 files / 254 tests
+└── desktop tests   44 files / 333 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -92,9 +92,9 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、12 项降级可用和 7 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.5.0`、EditorRuntime、Image service、Leafer adapter、属性检查器和 Agent tools 已经打通正式 Line/Arrow、Path/Vector、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement、来源替换和视觉复核的基础路径。Line/Arrow 专项证据覆盖有向归一化端点、独立装饰、开放描边、工具栏与快捷键、Shift/Alt 创建、Leafer LineEditTool 写回、Agent schema 和受控 SVG marker；由于像素基线和双平台打包交互仍未验收，该能力保持 `degraded`。三个固定专业 fixture 进一步证明现有语义可以组成完整企鹅层级、复杂海报文档和保留源 operand 的 Boolean 品牌主件，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、真实 Electron 像素截图、Agent 重放和完整专业导出仍未完成，因此不能据此把完整工作流标为可用。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、13 项降级可用和 7 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.6.0`、EditorRuntime、Image service、Leafer adapter、属性检查器和 Agent tools 已经打通正式 Line/Arrow、Polygon/Star、Path/Vector、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement、来源替换和视觉复核的基础路径。Line/Arrow 专项证据覆盖有向归一化端点、独立装饰、开放描边、工具栏与快捷键、Shift/Alt 创建、Leafer LineEditTool 写回、Agent schema 和受控 SVG marker；Polygon/Star 专项证据覆盖 3–60 顶点、Star 内径、实时圆角、Shift/Alt 创建、Leafer 原生投影、Inspector、Agent schema、尖角 Boolean、受控 SVG 逐点往返与圆角保真拒绝。由于像素基线和双平台打包交互仍未验收，这些能力保持 `degraded`。三个固定专业 fixture 进一步证明现有语义可以组成完整企鹅层级、复杂海报文档和保留源 operand 的 Boolean 品牌主件，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、真实 Electron 像素截图、Agent 重放和完整专业导出仍未完成，因此不能据此把完整工作流标为可用。
 
-仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify、transform、dash 和 outline stroke 的底层计算边界。`DesignDocument 1.5.0` 与 EditorRuntime 建立非破坏 Boolean Group 和正式 LineNode 的独立节点语义、迁移、持久化与 undo/redo；开放 Line 不会被静默转换为 Boolean operand。递归 Boolean resolver 与 Leafer synthetic result 已让 Render 表面可用，且没有持久化 provider 派生 path。人工工具栏/菜单、Inspector、双平台快捷键、源 operand 画布编辑与 Agent typed tool 已开放 Boolean 创建、切换、继续编辑和解组，但文字 outline、完整 SVG 保真、像素基线和双平台打包产品证据仍未完成，所以 Boolean capability 保持 `degraded`；Pen、flatten 和 outline stroke 也仍不是可用产品能力。仓库已新增独立 `@opendesign/import-export-service` 的安全 SVG v1 纯 service contract，并由 EditorRuntime 导入 planner 把候选树转换为显式 Page/Frame/Group 目标下的父节点优先标准命令；专项测试覆盖候选不修改、preview、单 revision、保存重开、一次 undo/redo、stale revision、锁定/越界目标、ID 冲突、cycle/orphan/多 root、asset 引用、命令上限和中途失败无部分写入。导出 planner 从显式 Page/root IDs 与 base revision 生成 0-origin `SvgExportRequest`，并验证 canvas paint order、Group 内容 bounds、Frame 固定 bounds、嵌套 affine transform、stroke 防裁切、padding、锁定只读导出和同 revision Boolean snapshot；对应请求已穿过真实 SVG service。普通 `<line>` 可导入为 Line，OpenDesign 端点通过精确受控本地 marker 往返，外部、缺失或篡改 marker 明确失败。Main 文件桥、人工入口与 Agent `opendesign_import_svg`/`opendesign_export_svg` 继续复用可取消 worker、冻结目标、单事务应用/自动选中/undo、显式 roots、原生保存和 fidelity report；SVG XML、路径和内部 ID prefix 不进入模型。文字、图片、复杂 effects/combined mask graph、angular gradient、多 paint、outline stroke 保真与双平台打包产品 smoke 仍未完成，因此 SVG capability 保持 `degraded`。仓库仍没有独立 Layout 或 Text/Font service 包；组件、Variant 和 Token 仍为占位数据。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
+仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify、transform、dash 和 outline stroke 的底层计算边界。`DesignDocument 1.6.0` 与 EditorRuntime 建立非破坏 Boolean Group、正式 LineNode、PolygonNode 与 StarNode 的独立节点语义、迁移、持久化与 undo/redo；开放 Line 和没有精确 rounded outline 的圆角规则图形不会被静默转换为 Boolean operand。递归 Boolean resolver 现可处理 Rectangle/Ellipse/尖角 Polygon/Star/Path/Vector/嵌套 Boolean，Leafer synthetic result 已让 Render 表面可用，且没有持久化 provider 派生 path。人工工具栏/菜单、Inspector、双平台快捷键、源 operand 画布编辑与 Agent typed tool 已开放 Boolean 创建、切换、继续编辑和解组，但文字 outline、完整 SVG 保真、像素基线和双平台打包产品证据仍未完成，所以 Boolean capability 保持 `degraded`；Pen、flatten 和 outline stroke 也仍不是可用产品能力。仓库已新增独立 `@opendesign/import-export-service` 的安全 SVG v1 纯 service contract，并由 EditorRuntime 导入 planner 把候选树转换为显式 Page/Frame/Group 目标下的父节点优先标准命令；专项测试覆盖候选不修改、preview、单 revision、保存重开、一次 undo/redo、stale revision、锁定/越界目标、ID 冲突、cycle/orphan/多 root、asset 引用、命令上限和中途失败无部分写入。导出 planner 从显式 Page/root IDs 与 base revision 生成 0-origin `SvgExportRequest`，并验证 canvas paint order、Group 内容 bounds、Frame 固定 bounds、嵌套 affine transform、stroke 防裁切、padding、锁定只读导出和同 revision Boolean snapshot；对应请求已穿过真实 SVG service。普通 `<line>` 可导入为 Line，OpenDesign 端点通过精确受控本地 marker 往返，外部、缺失或篡改 marker 明确失败；尖角 Polygon/Star 通过完整 semantic metadata 和 points 匹配恢复，普通第三方 `<polygon>` 仍为 Vector，篡改与圆角保真缺口明确失败。Main 文件桥、人工入口与 Agent `opendesign_import_svg`/`opendesign_export_svg` 继续复用可取消 worker、冻结目标、单事务应用/自动选中/undo、显式 roots、原生保存和 fidelity report；SVG XML、路径和内部 ID prefix 不进入模型。文字、图片、复杂 effects/combined mask graph、angular gradient、多 paint、outline stroke 保真与双平台打包产品 smoke 仍未完成，因此 SVG capability 保持 `degraded`。仓库仍没有独立 Layout 或 Text/Font service 包；组件、Variant 和 Token 仍为占位数据。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
 
 Agent Runtime 与 Main 当前强制执行“inspect → typed plan → 实质初稿 → `capture_canvas` → typed visual review → refinement → `capture_canvas`”。所有新 composition 必须位于计划 Frame 内；全局生图只能使用计划声明的 role，默认不能用一张 raster 替代可编辑设计。该流程显著收紧敷衍路径，但仍不能单独保证审美、文字可读性或交付保真；后续交付必须按照 [`roadmap.md`](roadmap.md) 的像素基线、固定样张、capability manifest、专业 service 和人工验收推进。
 

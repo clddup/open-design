@@ -1127,7 +1127,7 @@ textarea {
   touch-action: none;
 }
 .canvas-area--leafer:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--ui-accent);
+  box-shadow: inset 0 0 0 1px var(--ui-border-strong);
 }
 .canvas-area--leafer > .leafer-app-view,
 .canvas-area--leafer > .leafer-canvas-view {

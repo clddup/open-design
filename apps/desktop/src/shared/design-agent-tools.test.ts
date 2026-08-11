@@ -454,6 +454,99 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
   });
 
+  it("accepts semantic Polygon and Star nodes and rejects invalid parameters", () => {
+    const node = {
+      id: "star_1",
+      name: "Editable star",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 120, 80],
+      size: { width: 180, height: 180 },
+      opacity: 1,
+      extensions: {},
+      kind: "star",
+      properties: {
+        fills: [{ type: "solid", color: "#f59e0b", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+        pointCount: 5,
+        innerRadius: 0.382,
+        cornerRadius: 0,
+      },
+    };
+    const input = {
+      label: "Create an editable star",
+      commands: [
+        {
+          commandId: "insert_star",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: null,
+          index: 0,
+          node,
+        },
+      ],
+    };
+
+    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        commands: [
+          {
+            ...input.commands[0],
+            node: {
+              ...node,
+              properties: { ...node.properties, pointCount: 4.5 },
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        commands: [
+          {
+            ...input.commands[0],
+            node: {
+              ...node,
+              properties: { ...node.properties, innerRadius: 1.2 },
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+
+    const polygon = {
+      ...node,
+      id: "polygon_1",
+      kind: "polygon",
+      properties: {
+        fills: node.properties.fills,
+        strokes: [],
+        strokeWidth: 0,
+        pointCount: 6,
+        cornerRadius: 8,
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        commands: [
+          {
+            ...input.commands[0],
+            node: polygon,
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
   it("exposes bounded GPT Image 2 generation without a model override", () => {
     const generate = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === GENERATE_IMAGE_TOOL_NAME,

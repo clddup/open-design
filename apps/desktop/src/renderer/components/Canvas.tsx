@@ -4,7 +4,9 @@ import type {
   EllipseNode,
   FrameNode,
   LineNode,
+  PolygonNode,
   RectangleNode,
+  StarNode,
   TextNode,
   ViewportState,
 } from "@opendesign/design-contracts";
@@ -516,7 +518,14 @@ function createDesignNode(
       }
     | undefined,
   t: (key: MessageKey, parameters?: MessageParameters) => string,
-): FrameNode | RectangleNode | EllipseNode | LineNode | TextNode {
+):
+  | FrameNode
+  | RectangleNode
+  | EllipseNode
+  | LineNode
+  | PolygonNode
+  | StarNode
+  | TextNode {
   const base = {
     id,
     name: t("canvas.newNode", { kind: t(`node.${tool}` as MessageKey) }),
@@ -566,6 +575,31 @@ function createDesignNode(
         end: lineEndpoints?.end ?? { x: 1, y: 0.5 },
         startEndpoint: "none",
         endEndpoint: tool === "arrow" ? "line-arrow" : "none",
+      },
+    };
+  }
+  if (tool === "polygon") {
+    return {
+      ...base,
+      kind: "polygon",
+      size: drawnSize ?? { width: 120, height: 120 },
+      properties: {
+        ...shape,
+        pointCount: 3,
+        cornerRadius: 0,
+      },
+    };
+  }
+  if (tool === "star") {
+    return {
+      ...base,
+      kind: "star",
+      size: drawnSize ?? { width: 120, height: 120 },
+      properties: {
+        ...shape,
+        pointCount: 5,
+        innerRadius: 0.382,
+        cornerRadius: 0,
       },
     };
   }

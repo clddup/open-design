@@ -425,6 +425,8 @@ function shapeProperties(node: DesignNode):
     node.kind === "rectangle" ||
     node.kind === "ellipse" ||
     node.kind === "line" ||
+    node.kind === "polygon" ||
+    node.kind === "star" ||
     node.kind === "text" ||
     node.kind === "path" ||
     node.kind === "vector" ||

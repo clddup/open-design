@@ -1528,6 +1528,81 @@ describe("App", () => {
     expect(runtimeOutput()).toHaveAttribute("data-tool", "line");
   });
 
+  it("creates semantic Polygon and Star nodes as undoable document transactions", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const before = new Set(
+      Object.keys(runtime().getSnapshot().document.nodesById),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Polygon" }));
+    expect(runtimeOutput()).toHaveAttribute("data-tool", "polygon");
+    act(() => {
+      leaferCallbacks().onCreate({
+        dragged: true,
+        height: 120,
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        tool: "polygon",
+        width: 160,
+        x: 420,
+        y: 236,
+      });
+    });
+    let snapshot = runtime().getSnapshot();
+    const polygonId = Object.keys(snapshot.document.nodesById).find(
+      (nodeId) => !before.has(nodeId),
+    );
+    expect(snapshot.document.nodesById[polygonId ?? ""]).toMatchObject({
+      kind: "polygon",
+      parentId: "frame_welcome",
+      size: { width: 160, height: 120 },
+      properties: { pointCount: 3, cornerRadius: 0 },
+    });
+    expect(snapshot.state.selection.nodeIds).toEqual([polygonId]);
+    expect(snapshot.state.tool).toBe("select");
+
+    await user.click(screen.getByRole("button", { name: "Star" }));
+    act(() => {
+      leaferCallbacks().onCreate({
+        dragged: true,
+        height: 140,
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        tool: "star",
+        width: 140,
+        x: 620,
+        y: 236,
+      });
+    });
+    snapshot = runtime().getSnapshot();
+    const starId = Object.keys(snapshot.document.nodesById).find(
+      (nodeId) => !before.has(nodeId) && nodeId !== polygonId,
+    );
+    expect(snapshot.document.nodesById[starId ?? ""]).toMatchObject({
+      kind: "star",
+      parentId: "frame_welcome",
+      size: { width: 140, height: 140 },
+      properties: {
+        pointCount: 5,
+        innerRadius: 0.382,
+        cornerRadius: 0,
+      },
+    });
+    expect(snapshot.document.revision).toBe(2);
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.nodesById[starId ?? ""],
+    ).toBeUndefined();
+    await user.click(screen.getByRole("button", { name: "Redo" }));
+    expect(
+      runtime().getSnapshot().document.nodesById[starId ?? ""],
+    ).toMatchObject({
+      kind: "star",
+    });
+  });
+
   it("keeps drag movement transient until pointer-up commits one revision", () => {
     renderApp();
     expect(runtime().getSnapshot().document.revision).toBe(0);

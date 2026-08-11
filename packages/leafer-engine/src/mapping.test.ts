@@ -36,6 +36,76 @@ describe("Leafer scene projection", () => {
     });
   });
 
+  it("projects semantic Polygon and Star nodes through native Leafer shapes", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    document.nodesById.badge_polygon = {
+      id: "badge_polygon",
+      kind: "polygon",
+      name: "Hexagonal badge",
+      parentId: frame.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 80, 80],
+      size: { width: 160, height: 120 },
+      opacity: 1,
+      properties: {
+        pointCount: 6,
+        cornerRadius: 10,
+        fills: [{ type: "solid", color: "#f59e0b", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    document.nodesById.signal_star = {
+      id: "signal_star",
+      kind: "star",
+      name: "Signal star",
+      parentId: frame.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 280, 80],
+      size: { width: 140, height: 140 },
+      opacity: 1,
+      properties: {
+        pointCount: 7,
+        innerRadius: 0.42,
+        cornerRadius: 4,
+        fills: [{ type: "solid", color: "#8b5cf6", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    frame.childIds.push("badge_polygon", "signal_star");
+
+    const projection = projectDesignPage(document, "page_welcome");
+    expect(projection.elementsById.get("badge_polygon")).toMatchObject({
+      tag: "Polygon",
+      data: {
+        width: 160,
+        height: 120,
+        sides: 6,
+        cornerRadius: 10,
+      },
+    });
+    expect(projection.elementsById.get("signal_star")).toMatchObject({
+      tag: "Star",
+      data: {
+        width: 140,
+        height: 140,
+        corners: 7,
+        innerRadius: 0.42,
+        cornerRadius: 4,
+      },
+    });
+    expect(projection.warnings).toEqual([]);
+  });
+
   it("keeps Boolean operands hidden and projects a stable synthetic result", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;

@@ -18,6 +18,7 @@ export const SVG_INTERCHANGE_ISSUE_CODES = [
   "mask-omitted",
   "missing-boolean-geometry",
   "multiple-paints-flattened",
+  "regular-shape-fidelity-unsupported",
   "size-limit",
   "stroke-alignment-flattened",
   "unsupported-css",

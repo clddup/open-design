@@ -6,10 +6,11 @@
 
 1. [`product-and-architecture.md`](product-and-architecture.md)：产品范围、系统边界和目标架构。
 2. [`design-capability-baseline.md`](design-capability-baseline.md)：专业设计工具必须覆盖的完整能力与当前状态。
-3. [`roadmap.md`](roadmap.md)：按架构依赖排序的当前实施计划。
-4. [`verification.md`](verification.md)：最近一次实际执行的自动化、构建和实机验证结果。
-5. [`engine-baseline.json`](engine-baseline.json)：机器可读的协议与引擎固定版本。
-6. [`adr/`](adr/)：已经接受或被取代的规范决策。
+3. [`openpencil-capability-benchmark.md`](openpencil-capability-benchmark.md)：固定上游提交的能力对照、可复用范围与禁止整包接入的边界。
+4. [`roadmap.md`](roadmap.md)：按架构依赖排序的当前实施计划。
+5. [`verification.md`](verification.md)：最近一次实际执行的自动化、构建和实机验证结果。
+6. [`engine-baseline.json`](engine-baseline.json)：机器可读的协议与引擎固定版本。
+7. [`adr/`](adr/)：已经接受或被取代的规范决策。
 
 仓库级开发与安全规则见 [`../AGENTS.md`](../AGENTS.md)，第三方通知见 [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)。
 
@@ -55,3 +56,4 @@
 | [0022](adr/0022-versioned-nondestructive-boolean-groups.md)              | 已接受     | 非破坏 Boolean Group 与可丢弃派生结果                              |
 | [0023](adr/0023-versioned-svg-interchange-service.md)                    | 已接受     | SVG service、原子导入/导出 planner、Boolean flatten 与保真报告     |
 | [0024](adr/0024-versioned-line-arrow-semantics.md)                       | 已接受     | 正式 Line/Arrow、原生端点编辑与受控 SVG marker                     |
+| [0025](adr/0025-versioned-polygon-star-semantics.md)                     | 已接受     | 正式 Polygon/Star、确定性几何与受控 SVG 往返                       |

@@ -12,7 +12,9 @@ import {
   isDesignTransaction,
   migrateDesignDocument,
   normalizeLineEndpoints,
+  resolveRegularPolygonPoints,
   resolveLineEndpointPoint,
+  resolveStarPoints,
   schemaValidationIssues,
 } from "./index.js";
 
@@ -268,6 +270,75 @@ describe("design contract schemas", () => {
     });
   });
 
+  it("defines bounded semantic Polygon and Star nodes", () => {
+    const base = {
+      id: "shape_1",
+      name: "Semantic shape",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 40, 32],
+      size: { width: 200, height: 160 },
+      opacity: 1,
+      extensions: {},
+    };
+    const shape = {
+      fills: [{ type: "solid", color: "#f59e0b", opacity: 1 }],
+      strokes: [{ type: "solid", color: "#78350f", opacity: 1 }],
+      strokeWidth: 2,
+      strokeAlign: "inside",
+      strokeJoin: "round",
+      dashPattern: [],
+      pointCount: 6,
+      cornerRadius: 8,
+    };
+    const polygon = { ...base, kind: "polygon", properties: shape };
+    const star = {
+      ...base,
+      id: "star_1",
+      kind: "star",
+      properties: { ...shape, pointCount: 5, innerRadius: 0.382 },
+    };
+
+    expect(Value.Check(DesignNodeSchema, polygon)).toBe(true);
+    expect(Value.Check(DesignNodeSchema, star)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...polygon,
+        properties: { ...shape, pointCount: 2 },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...star,
+        properties: { ...star.properties, innerRadius: 1.01 },
+      }),
+    ).toBe(false);
+  });
+
+  it("resolves Polygon and Star vertices from the top in local bounds", () => {
+    const polygon = resolveRegularPolygonPoints({ width: 100, height: 80 }, 4);
+    const expectedPolygon = [
+      { x: 50, y: 0 },
+      { x: 100, y: 40 },
+      { x: 50, y: 80 },
+      { x: 0, y: 40 },
+    ];
+    polygon.forEach((point, index) => {
+      expect(point.x).toBeCloseTo(expectedPolygon[index]!.x, 10);
+      expect(point.y).toBeCloseTo(expectedPolygon[index]!.y, 10);
+    });
+    const star = resolveStarPoints({ width: 100, height: 100 }, 5, 0.5);
+    expect(star).toHaveLength(10);
+    expect(star[0]).toEqual({ x: 50, y: 0 });
+    expect(star[1]?.x).toBeCloseTo(64.6946, 4);
+    expect(star[1]?.y).toBeCloseTo(29.7746, 4);
+    expect(() =>
+      resolveRegularPolygonPoints({ width: 10, height: 10 }, 61),
+    ).toThrow("pointCount");
+  });
+
   it("defines a non-destructive Boolean container without persisting derived provider geometry", () => {
     const booleanNode = {
       id: "boolean_logo",
@@ -504,7 +575,7 @@ describe("design contract schemas", () => {
     });
   });
 
-  it("migrates a 1.4 document to 1.5 without inventing Line state", () => {
+  it("migrates a 1.4 document to the current schema without inventing Line state", () => {
     const maskDocument = {
       format: DESIGN_FORMAT,
       schemaVersion: "1.4.0",
@@ -531,6 +602,37 @@ describe("design contract schemas", () => {
 
     expect(migrateDesignDocument(maskDocument)).toEqual({
       ...maskDocument,
+      schemaVersion: DESIGN_SCHEMA_VERSION,
+    });
+  });
+
+  it("migrates a 1.5 document to 1.6 without inventing Polygon or Star state", () => {
+    const lineDocument = {
+      format: DESIGN_FORMAT,
+      schemaVersion: "1.5.0",
+      documentId: "document_line",
+      revision: 10,
+      pageOrder: ["page_1"],
+      pagesById: {
+        page_1: {
+          id: "page_1",
+          name: "Page 1",
+          rootNodeIds: [],
+          extensions: {},
+        },
+      },
+      nodesById: {},
+      componentsById: {},
+      variantSetsById: {},
+      tokenCollectionsById: {},
+      tokensById: {},
+      interactionsById: {},
+      assetsById: {},
+      extensions: { source: "1.5-fixture" },
+    };
+
+    expect(migrateDesignDocument(lineDocument)).toEqual({
+      ...lineDocument,
       schemaVersion: DESIGN_SCHEMA_VERSION,
     });
   });

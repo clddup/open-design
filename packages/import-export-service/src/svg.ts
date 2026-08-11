@@ -57,6 +57,10 @@ import {
   collectSvgLineEndpointDefinitions,
   readSvgLineEndpoints,
 } from "./svg-line-endpoints.js";
+import {
+  readSvgRegularShape,
+  writeSvgRegularShape,
+} from "./svg-regular-shapes.js";
 
 export * from "./svg-issues.js";
 
@@ -648,6 +652,20 @@ function exportNode(
       element.setAttribute("x2", formatNumber(end.x));
       element.setAttribute("y2", formatNumber(end.y));
       applyExportLineEndpoints(context, element, node);
+    } else if (node.kind === "polygon" || node.kind === "star") {
+      if (node.properties.cornerRadius > 0) {
+        context.issues.push(
+          svgIssue(
+            "regular-shape-fidelity-unsupported",
+            "error",
+            `Rounded ${node.kind} ${node.id} requires an exact outline before SVG export`,
+            { nodeId: node.id },
+          ),
+        );
+        return null;
+      }
+      element = context.document.createElementNS(SVG_NAMESPACE, "polygon");
+      writeSvgRegularShape(element, node);
     } else if (node.kind === "path" || node.kind === "vector") {
       element = context.document.createElementNS(SVG_NAMESPACE, "path");
       element.setAttribute("d", node.properties.path);
@@ -1602,6 +1620,19 @@ function importElement(
     },
   };
 
+  const regularShape = readSvgRegularShape(element);
+  if (regularShape.status === "invalid") {
+    context.issues.push(
+      svgIssue(
+        "regular-shape-fidelity-unsupported",
+        "error",
+        regularShape.message,
+        { nodeId, sourceElement: tag },
+      ),
+    );
+    return null;
+  }
+
   if (tag === "g") {
     if (element.getAttribute("data-opendesign-kind") === "frame") {
       return importFrameElement(
@@ -1645,6 +1676,37 @@ function importElement(
     nodeId,
   );
   if (!properties) return null;
+
+  if (regularShape.status === "valid") {
+    const semantic = regularShape.value;
+    const node: DesignNode =
+      semantic.kind === "polygon"
+        ? {
+            ...common,
+            kind: "polygon",
+            transform,
+            size: { width: semantic.width, height: semantic.height },
+            properties: {
+              ...properties,
+              pointCount: semantic.pointCount,
+              cornerRadius: semantic.cornerRadius,
+            },
+          }
+        : {
+            ...common,
+            kind: "star",
+            transform,
+            size: { width: semantic.width, height: semantic.height },
+            properties: {
+              ...properties,
+              pointCount: semantic.pointCount,
+              innerRadius: semantic.innerRadius,
+              cornerRadius: semantic.cornerRadius,
+            },
+          };
+    context.nodes.push(node);
+    return nodeId;
+  }
 
   if (tag === "rect") {
     const x = readLength(element, "x", 0, context.issues);

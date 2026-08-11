@@ -189,6 +189,9 @@ function nodeReferencesAsset(node: DesignNode, assetId: string): boolean {
     node.kind !== "frame" &&
     node.kind !== "rectangle" &&
     node.kind !== "ellipse" &&
+    node.kind !== "line" &&
+    node.kind !== "polygon" &&
+    node.kind !== "star" &&
     node.kind !== "text" &&
     node.kind !== "path" &&
     node.kind !== "vector" &&

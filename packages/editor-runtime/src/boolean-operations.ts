@@ -33,7 +33,16 @@ export type BooleanOperationPlan =
 
 type CurrentBooleanOperand = Extract<
   DesignNode,
-  { kind: "rectangle" | "ellipse" | "path" | "vector" | "boolean" }
+  {
+    kind:
+      | "rectangle"
+      | "ellipse"
+      | "polygon"
+      | "star"
+      | "path"
+      | "vector"
+      | "boolean";
+  }
 >;
 
 export function planCreateBooleanGroup(
@@ -64,6 +73,17 @@ export function planCreateBooleanGroup(
     return failure(
       "unsupported-operand",
       `${unsupported.kind} node ${unsupported.id} cannot yet be resolved to Boolean path geometry`,
+    );
+  }
+  const roundedRegularShape = operands.find(
+    (node) =>
+      (node.kind === "polygon" || node.kind === "star") &&
+      node.properties.cornerRadius > 0,
+  );
+  if (roundedRegularShape) {
+    return failure(
+      "visual-fidelity",
+      `Rounded ${roundedRegularShape.kind} node ${roundedRegularShape.id} cannot enter a Boolean group until its exact rounded outline is available`,
     );
   }
   if (
@@ -356,6 +376,8 @@ function isCurrentBooleanOperand(
   return (
     node.kind === "rectangle" ||
     node.kind === "ellipse" ||
+    node.kind === "polygon" ||
+    node.kind === "star" ||
     node.kind === "path" ||
     node.kind === "vector" ||
     node.kind === "boolean"

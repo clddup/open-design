@@ -17,7 +17,16 @@ export const BOOLEAN_RESULT_ELEMENT_PREFIX =
 export const LEAFER_EDITOR_SELECTION_COLOR = "#4f7fff" as const;
 
 export type LeaferElementTag =
-  "Arrow" | "Ellipse" | "Frame" | "Group" | "Image" | "Path" | "Rect" | "Text";
+  | "Arrow"
+  | "Ellipse"
+  | "Frame"
+  | "Group"
+  | "Image"
+  | "Path"
+  | "Polygon"
+  | "Rect"
+  | "Star"
+  | "Text";
 
 export interface LeaferElementSpec {
   childIds: string[];
@@ -331,6 +340,29 @@ function toElementSpec(
       };
       break;
     }
+    case "polygon":
+      tag = "Polygon";
+      data = {
+        ...base,
+        ...mapShapeProperties(document, node.id, node.properties, warnings),
+        width: node.size.width,
+        height: node.size.height,
+        sides: node.properties.pointCount,
+        cornerRadius: node.properties.cornerRadius,
+      };
+      break;
+    case "star":
+      tag = "Star";
+      data = {
+        ...base,
+        ...mapShapeProperties(document, node.id, node.properties, warnings),
+        width: node.size.width,
+        height: node.size.height,
+        corners: node.properties.pointCount,
+        innerRadius: node.properties.innerRadius,
+        cornerRadius: node.properties.cornerRadius,
+      };
+      break;
     case "text":
       tag = "Text";
       data = {

@@ -4,6 +4,10 @@ import type {
   DesignNode,
   Rect,
 } from "@opendesign/design-contracts";
+import {
+  resolveRegularPolygonPoints,
+  resolveStarPoints,
+} from "@opendesign/design-contracts";
 import type {
   VectorBooleanOperation,
   VectorFillRule,
@@ -98,7 +102,16 @@ interface RequiredResolverOptions {
 
 type ShapeNode = Extract<
   DesignNode,
-  { kind: "boolean" | "ellipse" | "path" | "rectangle" | "vector" }
+  {
+    kind:
+      | "boolean"
+      | "ellipse"
+      | "path"
+      | "polygon"
+      | "rectangle"
+      | "star"
+      | "vector";
+  }
 >;
 
 const DEFAULT_OPTIONS: RequiredResolverOptions = {
@@ -291,7 +304,7 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
       node.kind === "boolean"
         ? this.#resolveBoolean(state, node.id, depth)
         : this.#baseShape(node);
-    if (!core.ok) return core;
+    if (!core.ok) return this.#fail(state, core.issue);
     const styled = this.#applyOperandAppearance(node, core.value);
     if (!styled.ok) return this.#fail(state, styled.issue);
     if (styled.value.empty) return styled;
@@ -312,6 +325,38 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
       );
     } else if (node.kind === "ellipse") {
       path = ellipsePath(node.size.width, node.size.height);
+    } else if (node.kind === "polygon") {
+      if (node.properties.cornerRadius > 0) {
+        return {
+          ok: false,
+          issue: {
+            code: "unsupported-style",
+            message: `Rounded polygon operand ${node.id} requires an exact outline before Boolean resolution`,
+            nodeId: node.id,
+          },
+        };
+      }
+      path = closedPointPath(
+        resolveRegularPolygonPoints(node.size, node.properties.pointCount),
+      );
+    } else if (node.kind === "star") {
+      if (node.properties.cornerRadius > 0) {
+        return {
+          ok: false,
+          issue: {
+            code: "unsupported-style",
+            message: `Rounded star operand ${node.id} requires an exact outline before Boolean resolution`,
+            nodeId: node.id,
+          },
+        };
+      }
+      path = closedPointPath(
+        resolveStarPoints(
+          node.size,
+          node.properties.pointCount,
+          node.properties.innerRadius,
+        ),
+      );
     } else {
       path = node.properties.path;
     }
@@ -539,6 +584,21 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
           ];
         } else if (child.kind === "ellipse") {
           shape = [child.size.width, child.size.height];
+        } else if (child.kind === "polygon") {
+          shape = [
+            child.size.width,
+            child.size.height,
+            child.properties.pointCount,
+            child.properties.cornerRadius,
+          ];
+        } else if (child.kind === "star") {
+          shape = [
+            child.size.width,
+            child.size.height,
+            child.properties.pointCount,
+            child.properties.innerRadius,
+            child.properties.cornerRadius,
+          ];
         } else {
           shape = [
             child.properties.path,
@@ -687,13 +747,30 @@ function isShapeNode(node: DesignNode): node is ShapeNode {
     node.kind === "boolean" ||
     node.kind === "ellipse" ||
     node.kind === "path" ||
+    node.kind === "polygon" ||
     node.kind === "rectangle" ||
+    node.kind === "star" ||
     node.kind === "vector"
   );
 }
 
 function emptyGeometry(): GeometryValue {
   return { bounds: null, empty: true, fillRule: "nonzero", path: "" };
+}
+
+function closedPointPath(points: readonly { x: number; y: number }[]): string {
+  return points
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"}${formatPathNumber(point.x)} ${formatPathNumber(point.y)}`,
+    )
+    .concat("Z")
+    .join(" ");
+}
+
+function formatPathNumber(value: number): string {
+  const normalized = Math.abs(value) < 1e-12 ? 0 : value;
+  return Number(normalized.toFixed(12)).toString();
 }
 
 function rectanglePath(width: number, height: number, radius: number): string {

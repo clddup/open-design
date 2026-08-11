@@ -16,7 +16,7 @@ type ToolbarItem = {
   id: Tool | "pen";
   label: MessageKey;
   icon: GlyphName;
-  shortcut: string;
+  shortcut?: string;
   disabled?: boolean;
 };
 
@@ -37,6 +37,8 @@ const tools: ToolbarItem[] = [
     icon: "arrow",
     shortcut: "Shift+L",
   },
+  { id: "polygon", label: "toolbar.polygon", icon: "polygon" },
+  { id: "star", label: "toolbar.star", icon: "star" },
   {
     id: "pen",
     label: "toolbar.penUnavailable",
@@ -229,7 +231,11 @@ export function Toolbar({
             disabled={item.disabled}
             icon={item.icon}
             key={item.id}
-            label={`${t(item.label)} (${item.shortcut})`}
+            label={
+              item.shortcut
+                ? `${t(item.label)} (${item.shortcut})`
+                : t(item.label)
+            }
             onClick={() => {
               if (item.id !== "pen") onToolChange(item.id);
             }}

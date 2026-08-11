@@ -126,6 +126,8 @@ export function validateDocumentInvariants(
       node.kind === "rectangle" ||
       node.kind === "ellipse" ||
       node.kind === "line" ||
+      node.kind === "polygon" ||
+      node.kind === "star" ||
       node.kind === "text" ||
       node.kind === "path" ||
       node.kind === "vector" ||
@@ -540,6 +542,8 @@ function isBooleanOperand(node: DesignNode): boolean {
   return (
     node.kind === "rectangle" ||
     node.kind === "ellipse" ||
+    node.kind === "polygon" ||
+    node.kind === "star" ||
     node.kind === "text" ||
     node.kind === "path" ||
     node.kind === "vector" ||

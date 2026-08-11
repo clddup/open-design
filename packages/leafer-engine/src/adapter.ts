@@ -140,9 +140,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         multipleSelect: true,
         boxSelect: "hit",
         hover: true,
+        hoverPathType: "box",
+        hoverStyle: {
+          stroke: "#8b8b89",
+          strokeWidth: 1,
+        },
         moveable: true,
         resizeable: true,
         rotateable: true,
+        selectedPathType: "box",
         skewable: true,
         openInner: "double",
         stroke: LEAFER_EDITOR_SELECTION_COLOR,
@@ -1238,7 +1244,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     };
     return tool === "ellipse"
       ? new this.#leafer.Ellipse(data)
-      : new this.#leafer.Rect(data);
+      : tool === "polygon"
+        ? new this.#leafer.Polygon({ ...data, sides: 3 })
+        : tool === "star"
+          ? new this.#leafer.Star({
+              ...data,
+              corners: 5,
+              innerRadius: 0.382,
+            })
+          : new this.#leafer.Rect(data);
   }
 
   #resolveDrawParent(

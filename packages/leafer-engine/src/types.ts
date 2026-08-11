@@ -8,7 +8,15 @@ import type {
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 
 export type LeaferCanvasTool =
-  "select" | "frame" | "rectangle" | "ellipse" | "line" | "arrow" | "text";
+  | "select"
+  | "frame"
+  | "rectangle"
+  | "ellipse"
+  | "line"
+  | "arrow"
+  | "polygon"
+  | "star"
+  | "text";
 
 export type LeaferOperationKind =
   "move" | "resize" | "rotate" | "skew" | "transform" | "text";

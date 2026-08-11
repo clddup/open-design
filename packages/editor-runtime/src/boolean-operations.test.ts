@@ -502,4 +502,68 @@ describe("non-destructive Boolean operations", () => {
       "line nodes cannot be boolean operands",
     );
   });
+
+  it("accepts sharp Polygon and Star operands but rejects rounded outlines", () => {
+    const document = structuredClone(booleanDocument());
+    const star: DesignNode = {
+      id: "star_operand",
+      kind: "star",
+      name: "Star operand",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 140, 30],
+      size: { width: 100, height: 100 },
+      opacity: 1,
+      properties: {
+        pointCount: 5,
+        innerRadius: 0.4,
+        cornerRadius: 0,
+        fills: [{ type: "solid", color: "#f59e0b", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+      extensions: {},
+    };
+    document.nodesById[star.id] = star;
+    document.pagesById.page_boolean!.rootNodeIds.push(star.id);
+    const sharp = normalizeDesignDocument(document);
+
+    expect(
+      planCreateBooleanGroup(
+        sharp,
+        "page_boolean",
+        ["path_bottom", star.id],
+        "union",
+        {
+          booleanId: "boolean_regular_shape",
+          name: "Regular shape union",
+          commandPrefix: "regular_shape",
+        },
+      ),
+    ).toMatchObject({ ok: true });
+
+    const roundedDraft = structuredClone(sharp);
+    const rounded = roundedDraft.nodesById[star.id];
+    if (!rounded || rounded.kind !== "star") throw new Error("Missing star");
+    rounded.properties.cornerRadius = 8;
+    const roundedPlan = planCreateBooleanGroup(
+      normalizeDesignDocument(roundedDraft),
+      "page_boolean",
+      ["path_bottom", star.id],
+      "union",
+      {
+        booleanId: "boolean_rounded_shape",
+        name: "Rounded shape union",
+        commandPrefix: "rounded_shape",
+      },
+    );
+    expect(roundedPlan).toMatchObject({
+      ok: false,
+      code: "visual-fidelity",
+    });
+    if (roundedPlan.ok) throw new Error("Expected rounded shape rejection");
+    expect(roundedPlan.message).toContain("exact rounded outline");
+  });
 });

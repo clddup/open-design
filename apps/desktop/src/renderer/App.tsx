@@ -133,6 +133,8 @@ const nodeKindKeys: Record<string, MessageKey> = {
   rectangle: "node.rectangle",
   ellipse: "node.ellipse",
   line: "node.line",
+  polygon: "node.polygon",
+  star: "node.star",
   text: "node.text",
   image: "node.image",
   vector: "node.vector",

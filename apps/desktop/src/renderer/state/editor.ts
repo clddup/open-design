@@ -1,5 +1,13 @@
 export type Tool =
-  "select" | "frame" | "rectangle" | "ellipse" | "line" | "arrow" | "text";
+  | "select"
+  | "frame"
+  | "rectangle"
+  | "ellipse"
+  | "line"
+  | "arrow"
+  | "polygon"
+  | "star"
+  | "text";
 
 export type SidebarTab = "layers" | "assets";
 
@@ -11,6 +19,8 @@ export function isTool(value: unknown): value is Tool {
     value === "ellipse" ||
     value === "line" ||
     value === "arrow" ||
+    value === "polygon" ||
+    value === "star" ||
     value === "text"
   );
 }
