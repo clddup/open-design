@@ -573,8 +573,8 @@
       },
       "limitations": [
         {
-          "en": "Image generation requires separate global configuration; direct canvas placement handles, background removal, and asset management UI are incomplete.",
-          "zh-CN": "图片生成需要独立全局配置；画布直接放置手柄、移除背景和资源管理 UI 尚未完成。"
+          "en": "Image generation requires separate global configuration. Current-file image assets now support preview, search, usage, location, canvas drag placement, import, file-wide replacement/relink, and safe deletion; fonts, cross-file libraries, provenance, background removal, large-list virtualization, and native macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "图片生成需要独立全局配置；当前文件图片资源已支持预览、搜索、使用次数、定位、画布拖放、导入、全文件替换/relink 与安全删除，但字体、跨文件 Library、来源谱系、移除背景、大列表虚拟化及 macOS/Windows 原生交互证据仍未完成。"
         }
       ],
       "evidence": {
@@ -582,6 +582,10 @@
           "apps/desktop/src/main/model/image-generation-host.test.ts",
           "apps/desktop/src/main/agent/agent-attachment-host.test.ts",
           "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/design-assets.test.ts",
+          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
+          "apps/desktop/src/renderer/App.test.tsx",
+          "packages/editor-runtime/src/image-operations.test.ts",
           "packages/editor-runtime/src/diagnostics.test.ts",
           "packages/leafer-engine/src/professional-fixtures.test.ts"
         ],

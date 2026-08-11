@@ -39,8 +39,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   43 files / 350 tests
-└── desktop tests   53 files / 454 tests
+├── package tests   43 files / 354 tests
+└── desktop tests   54 files / 461 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -77,6 +77,8 @@ pnpm build          passed
 - Renderer Agent 对话、属性检查器、设计工具 selection context / Mutation Target / revision、`capture_canvas` 内容寻址多模态结果、取消/继续、i18n 和桌面控件交互；对话在底部时跟随新消息与状态，用户上翻后保持阅读位置，回到底部后恢复跟随；剪贴板文件与拖放文件经 Preload API 导入，run 只接收安全附件元数据，纯文本路径粘贴保持普通输入行为。
 - host-only 图片放置以单个 Page-targeted `put_asset + insert_element(image)` 事务进入 `EditorRuntime`；测试验证单次 revision、发送时存在选区也能在固定 Page 新增 asset/node、当前活动页面变化不漂移目标，以及一次 undo 同时移除 asset/node。
 - 人工检查器与 `opendesign_update_image` 共用 `planImageNodeUpdate`：明确 Page/node ID 的 placement 与来源替换进入单个事务，保留现有 placement，未共享的旧 asset 可安全清理，共享 Image/Path/Vector paint 资源不会误删；文件选择取消/失败不产生 revision，Agent 执行不读取发送时或实时选区。
+- 当前 Design File 的 Assets 面板直接投影权威 `assetsById/nodesById`，覆盖 Image 与 image paint、多 Page 引用计数、安全 data 预览、不受支持/缺失状态、搜索和循环定位。内部拖放只携带稳定 asset ID；Canvas 将 host 屏幕坐标转换为文档坐标，Runtime 再解析最深可见 Frame 与父级局部坐标，锁定容器明确拒绝。导入、放置、全引用 replace/relink 与零引用删除分别保持单 revision/undo，替换保留 placement/paint 字段，UI 预判与 Runtime 删除门禁共同覆盖竞态；取消、picker 失败和外部 drop payload 均不改 revision。见 ADR-0032。
+- Renderer 新业务样式开始使用 Vite CSS Modules + 固定 Dart Sass 的 `Component.module.scss`；AssetsPanel 与 Canvas 拖放态已从全局入口隔离，生产 Vite 构建证明编译链可用。历史 `styles.css` 仍待按组件迁移，当前不能宣称全仓模块化完成。见 ADR-0033。
 - `opendesign_edit_hierarchy` 对现有节点提供显式 ID 的编组/解组、前移/后移/置顶/置底和跨 Page root/Frame/Group 重挂载语义；宿主与人工 UI 复用同一 planner，保持世界 transform 与多选内部顺序，固定 Frame 尺寸，自底向上重算受影响 Group bounds，并以一个原子事务写入和一次撤销。人工入口包含 Layer order 菜单、macOS `⌘/⌥⌘ + [ ]`、Windows `Ctrl/Ctrl+Shift + [ ]` 快捷键，以及图层树 before/inside/after 指针拖放。测试覆盖两个平台状态下的拖放、选区保持、保存重开、undo/redo、stale revision、Page Mutation Target、锁定、混合父级、cycle、空来源 Group、不可逆 transform、无效 index、外部拖放数据拒绝、继承外观 warning 与提交前取消；这仍是自动化 DOM/Runtime 证据，不冒充 Electron 实机指针验证。
 - `artboard.mode=existing` 由 Main 从当前 Renderer inspection 的 document ID、observed revision、Page roots 和完整 `parentId` 链解析，不再以空后代集合开始。Main 在计划接受前拒绝缺失/非 Frame/错 Page/断裂/循环/过期层级，失败后可重新 inspect 并重定义计划；既有锁定 Group/Frame 仍可作为 Agent 数据写入容器，插入与图片放置可进入任意真实后代，但 Page-root 散落继续拒绝。`global-task-coordinator` 测试覆盖既有 Frame、两层嵌套容器、锁定、stale revision、重新 inspection 恢复和根层拒绝。`AgentEvent 3.7` 继续保留 invariant 的 command/node/path/message，并新增受限结构化 Run failure；失败零 revision，重新 inspection 前设计写被冻结，盲重试不再次执行。按需 Page 结构授权与多目标交付账本均已有专项验证。
 - `@opendesign/geometry-service` contract v4 的根入口提供不持有文档状态的纯排列结果；EditorRuntime 的 `planArrangeNodes` 将六向多层对齐、固定两端横/纵均分、明确正数/零/负数间距，以及一维/二维 Tidy up 映射为一个原子事务，并自底向上维护 Group bounds。一维 Tidy up 只修改重叠关系确定的排列轴，使用现有 gap 众数并保留另一轴；二维验证行列 overlap graph、支持不等尺寸和稀疏网格、使用两轴 gap 众数并锚定选择区域左上角。Inspector 与 `opendesign_arrange_layers` 共用该 planner；Agent 必须提供检查所得的稳定 Page/node IDs，发送时或实时选区不作为写目标。测试覆盖不等尺寸、稀疏二维网格、众数 tie-break、负间距、旋转/缩放父级、两端固定、Group rebase、保存重开、undo/redo、锁定、不可逆 transform、歧义、Page scope、无操作拒绝、事务预算，以及 macOS/Windows Renderer 状态；尚未执行真实 Electron 指针/键盘产品 smoke，Smart Selection 画布手柄和回流也尚未实现。

@@ -121,6 +121,7 @@ import {
   runSvgImportInWorker,
   suggestSvgExportName,
 } from "./svg-interchange";
+import { useDesignAssetActions } from "./use-design-asset-actions";
 
 const LAYER_ORDER_ACTIONS: readonly LayerOrderAction[] = [
   "bring-forward",
@@ -1067,6 +1068,23 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       setEditorError(t("error.replaceImage"));
     }
   }, [activePageId, applyCommands, runtime, t]);
+
+  const {
+    deleteImageAsset,
+    importImageAsset,
+    locateImageAsset,
+    placeImageAsset,
+    placeImageAssetAtPoint,
+    replaceImageAsset,
+  } = useDesignAssetActions({
+    activePageId,
+    activatePage,
+    applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  });
 
   const deleteNodes = useCallback(
     (nodeIds: readonly string[]) => {
@@ -2628,12 +2646,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           <LeftSidebar
             activePageId={activePageId}
             document={designDocument}
+            onDeleteAsset={deleteImageAsset}
             onCreatePage={createPage}
             onDeletePage={deletePage}
             onDuplicatePage={duplicatePage}
+            onImportAsset={importImageAsset}
+            onLocateAsset={locateImageAsset}
             onPageChange={activatePage}
+            onPlaceAsset={placeImageAsset}
             onRenamePage={renamePage}
             onReorderPage={reorderPage}
+            onReplaceAsset={replaceImageAsset}
             onDelete={(nodeId) => deleteNodes([nodeId])}
             onReparent={reparentLayers}
             onSelect={(nodeId) => runtime.setSelection([nodeId], nodeId)}
@@ -2670,6 +2693,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               generationActivity={generationActivity}
               generationSkeleton={generationSkeleton}
               onTransactionError={setEditorError}
+              onAssetDrop={placeImageAssetAtPoint}
               runtime={runtime}
               snapshot={snapshot}
             />

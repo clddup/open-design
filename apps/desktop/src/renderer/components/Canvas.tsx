@@ -18,7 +18,9 @@ import {
   planVectorNetworkUpdate,
   resolveBooleanEditScope,
   resolveVectorEditScope,
+  screenToDocument,
 } from "@opendesign/editor-runtime";
+import { Glyph } from "@opendesign/ui";
 import {
   createLeaferEngineAdapter,
   type LeaferCreateRequest,
@@ -38,6 +40,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
@@ -45,6 +48,8 @@ import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
 import { generationRevealFromEditorEvent } from "../generation-presentation";
 import { isTool } from "../state/editor";
+import { DESIGN_ASSET_DRAG_MIME } from "../design-assets";
+import styles from "./Canvas.module.scss";
 
 export function Canvas({
   activeAgentRunId,
@@ -54,6 +59,7 @@ export function Canvas({
   runtime,
   snapshot,
   onTransactionError,
+  onAssetDrop,
 }: {
   activeAgentRunId: string | null;
   activePageId: string;
@@ -62,6 +68,10 @@ export function Canvas({
   runtime: EditorRuntime;
   snapshot: EditorSnapshot;
   onTransactionError: (message: string | null) => void;
+  onAssetDrop: (
+    assetId: string,
+    documentPoint: { x: number; y: number },
+  ) => { ok: boolean };
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLElement>(null);
@@ -73,6 +83,7 @@ export function Canvas({
   );
   const transactionSequence = useRef(0);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [assetDropActive, setAssetDropActive] = useState(false);
   const reducedMotion = useReducedMotion();
   const [fidelityWarnings, setFidelityWarnings] = useState<
     readonly LeaferFidelityWarning[]
@@ -214,6 +225,34 @@ export function Canvas({
     },
     [enterVectorEdit, runtime, selectBooleanTarget],
   );
+
+  const acceptsAssetDrag = (event: DragEvent<HTMLElement>) =>
+    Array.from(event.dataTransfer.types).includes(DESIGN_ASSET_DRAG_MIME);
+
+  const handleAssetDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!acceptsAssetDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setAssetDropActive(true);
+  };
+
+  const handleAssetDrop = (event: DragEvent<HTMLElement>) => {
+    if (!acceptsAssetDrag(event)) return;
+    event.preventDefault();
+    setAssetDropActive(false);
+    const assetId = event.dataTransfer.getData(DESIGN_ASSET_DRAG_MIME);
+    if (!/^[A-Za-z0-9._:-]{1,256}$/.test(assetId)) {
+      onTransactionError(t("sidebar.assetActionFailed"));
+      return;
+    }
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const current = runtime.getSnapshot().state.viewport;
+    const point = screenToDocument(
+      { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      current,
+    );
+    onAssetDrop(assetId, point);
+  };
 
   const applyOperations = useCallback(
     (request: LeaferOperationRequest) => {
@@ -565,13 +604,31 @@ export function Canvas({
   return (
     <main
       aria-label={t("canvas.label")}
-      className="canvas-area canvas-area--leafer"
+      className={`canvas-area canvas-area--leafer${
+        assetDropActive ? ` ${styles.assetDrop}` : ""
+      }`}
+      onDragLeave={(event) => {
+        const related = event.relatedTarget;
+        if (!(
+          related instanceof Node && event.currentTarget.contains(related)
+        )) {
+          setAssetDropActive(false);
+        }
+      }}
+      onDragOver={handleAssetDragOver}
+      onDrop={handleAssetDrop}
       onDoubleClick={handleCanvasDoubleClick}
       onKeyDown={handleCanvasKeyDown}
       onPointerDown={() => host.current?.focus()}
       ref={host}
       tabIndex={0}
     >
+      {assetDropActive && (
+        <div className={styles.assetDropHint} role="status">
+          <Glyph name="image" size={15} />
+          {t("canvas.dropImageAsset")}
+        </div>
+      )}
       {generationActivity && (
         <span aria-live="polite" className="visually-hidden" role="status">
           {generationActivity.label}

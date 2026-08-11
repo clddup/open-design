@@ -23,8 +23,10 @@ import {
   type DragEvent as ReactDragEvent,
 } from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
+import type { AssetActionResult, DesignAssetReference } from "../design-assets";
 import { useI18n } from "../i18n";
 import type { SidebarTab } from "../state/editor";
+import { AssetsPanel } from "./AssetsPanel";
 
 const nodeIcons: Record<NodeKind, GlyphName> = {
   frame: "frame",
@@ -41,22 +43,6 @@ const nodeIcons: Record<NodeKind, GlyphName> = {
   path: "pen",
   instance: "assets",
 };
-
-const assets = [
-  {
-    name: "sidebar.assetNavigation",
-    detail: "sidebar.componentPlaceholder",
-  },
-  {
-    name: "sidebar.assetPrimaryButton",
-    detail: "sidebar.componentPlaceholder",
-  },
-  {
-    name: "sidebar.assetInsightCard",
-    detail: "sidebar.componentPlaceholder",
-  },
-  { name: "sidebar.assetSignalOrb", detail: "sidebar.vectorPlaceholder" },
-] satisfies ReadonlyArray<{ name: MessageKey; detail: MessageKey }>;
 
 const nodeKindKeys: Record<NodeKind, MessageKey> = {
   frame: "node.frame",
@@ -232,6 +218,11 @@ export function LeftSidebar({
   onDuplicatePage,
   onRenamePage,
   onReorderPage,
+  onDeleteAsset,
+  onImportAsset,
+  onLocateAsset,
+  onPlaceAsset,
+  onReplaceAsset,
   onDelete,
   onSelect,
   onReparent,
@@ -249,6 +240,11 @@ export function LeftSidebar({
   onDuplicatePage: (pageId: string) => PageActionResult;
   onRenamePage: (pageId: string, name: string) => PageActionResult;
   onReorderPage: (pageId: string, index: number) => PageActionResult;
+  onDeleteAsset: (assetId: string) => AssetActionResult;
+  onImportAsset: () => Promise<AssetActionResult>;
+  onLocateAsset: (reference: DesignAssetReference) => void;
+  onPlaceAsset: (assetId: string) => AssetActionResult;
+  onReplaceAsset: (assetId: string) => Promise<AssetActionResult>;
   onDelete: (nodeId: string) => void;
   onSelect: (nodeId: string) => void;
   onReparent: (request: LayerReparentRequest) => LayerReparentResult;
@@ -268,6 +264,7 @@ export function LeftSidebar({
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [pageNameDraft, setPageNameDraft] = useState("");
   const [pageNameError, setPageNameError] = useState<string | null>(null);
+  const [assetQuery, setAssetQuery] = useState("");
   const draggedNodeIds = useRef<readonly string[] | null>(null);
   const draggedPageId = useRef<string | null>(null);
   const pageNameInput = useRef<HTMLInputElement | null>(null);
@@ -305,6 +302,10 @@ export function LeftSidebar({
     setActiveDrop(null);
     setDragStatus("");
   }, [activePageId, document.documentId]);
+
+  useEffect(() => {
+    setAssetQuery("");
+  }, [document.documentId]);
 
   useEffect(() => {
     if (!editingPageId) return;
@@ -523,12 +524,22 @@ export function LeftSidebar({
       <div className="sidebar-search">
         <Glyph name="search" />
         <input
-          aria-label={t("sidebar.searchUnavailable", {
-            view: t(tab === "layers" ? "sidebar.layers" : "sidebar.assets"),
-          })}
-          disabled
-          placeholder={t("sidebar.searchUnavailablePlaceholder")}
+          aria-label={
+            tab === "assets"
+              ? t("sidebar.searchAssets")
+              : t("sidebar.searchUnavailable", {
+                  view: t("sidebar.layers"),
+                })
+          }
+          disabled={tab !== "assets"}
+          onChange={(event) => setAssetQuery(event.target.value)}
+          placeholder={
+            tab === "assets"
+              ? t("sidebar.searchAssetsPlaceholder")
+              : t("sidebar.searchUnavailablePlaceholder")
+          }
           type="search"
+          value={tab === "assets" ? assetQuery : ""}
         />
       </div>
       {tab === "layers" ? (
@@ -851,39 +862,15 @@ export function LeftSidebar({
           </div>
         </div>
       ) : (
-        <div
-          aria-labelledby="sidebar-assets-tab"
-          className="asset-list"
-          id="sidebar-assets"
-          role="tabpanel"
-        >
-          <div className="asset-list__heading">
-            <span>{t("sidebar.staticPlaceholders")}</span>
-            <IconButton
-              disabled
-              icon="plus"
-              label={t("sidebar.createComponentUnavailable")}
-            />
-          </div>
-          {assets.map((asset, index) => (
-            <button
-              className="asset-card"
-              disabled
-              key={asset.name}
-              type="button"
-            >
-              <span
-                className={`asset-card__preview asset-card__preview--${index + 1}`}
-              >
-                <Glyph name={index === 3 ? "ellipse" : "rectangle"} />
-              </span>
-              <span>
-                <strong>{t(asset.name)}</strong>
-                <small>{t(asset.detail)}</small>
-              </span>
-            </button>
-          ))}
-        </div>
+        <AssetsPanel
+          document={document}
+          onDelete={onDeleteAsset}
+          onImport={onImportAsset}
+          onLocate={onLocateAsset}
+          onPlace={onPlaceAsset}
+          onReplace={onReplaceAsset}
+          query={assetQuery}
+        />
       )}
     </aside>
   );

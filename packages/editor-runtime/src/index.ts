@@ -68,10 +68,17 @@ export {
   type VectorOperationPlan,
 } from "./vector-operations.js";
 export {
+  nodeReferencesAsset,
+  planDeleteImageAsset,
   planImageNodeUpdate,
+  planPlaceImageAsset,
+  planReplaceImageAsset,
+  type ImageAssetOperationFailureCode,
+  type ImageAssetOperationPlan,
   type ImageUpdateFailureCode,
   type ImageUpdateOperation,
   type ImageUpdatePlan,
+  type PlaceImageAssetOperation,
 } from "./image-operations.js";
 export {
   planSvgImport,

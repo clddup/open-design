@@ -30,6 +30,8 @@ The authoritative development dependency graph is pinned by `pnpm-lock.yaml`, wh
 
 `@opendesign/desktop` directly uses `mammoth` 1.12.0 from [mwilliamson/mammoth.js](https://github.com/mwilliamson/mammoth.js). It is distributed under the BSD 2-Clause License, Copyright (c) 2013 Michael Williamson. OpenDesign uses `extractRawText` for user-selected DOCX Agent attachments after host-side archive validation.
 
+`@opendesign/desktop` uses Dart Sass (`sass` 1.102.0) from [sass/dart-sass](https://github.com/sass/dart-sass) as a development-only Vite preprocessor for component-scoped SCSS Modules. Dart Sass is distributed under the MIT License, Copyright (c) 2016 Google Inc.; its bundled Dart SDK and analyzer components retain their own notices in the package license. Sass is not a Renderer styling runtime and does not enter OpenDesign document, Agent, or design transaction boundaries.
+
 Before distribution, generate a machine-readable inventory from the lockfile and the actual packaged artifact, resolve every package's license and required notice text, and ship the resulting license bundle. Do not infer that a dependency is absent merely because it is bundled into ASAR or JavaScript output.
 
 ## Architecture references

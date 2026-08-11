@@ -1,0 +1,29 @@
+.assetDrop::after {
+  position: absolute;
+  z-index: 5;
+  inset: 8px;
+  border: 1px dashed var(--ui-accent);
+  border-radius: 6px;
+  content: "";
+  pointer-events: none;
+}
+
+.assetDropHint {
+  position: absolute;
+  z-index: 6;
+  top: 14px;
+  left: 50%;
+  display: flex;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 5px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  box-shadow: var(--ui-shadow-sm);
+  font-size: 10px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}

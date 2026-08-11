@@ -154,8 +154,8 @@
 - ID：`image.import-generation-placement`
 - 实现方：AgentAttachmentHost + ImageGenerationHost + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
-- 证据：自动化 5 项；实机 0 项
-- 限制：图片生成需要独立全局配置；画布直接放置手柄、移除背景和资源管理 UI 尚未完成。
+- 证据：自动化 9 项；实机 0 项
+- 限制：图片生成需要独立全局配置；当前文件图片资源已支持预览、搜索、使用次数、定位、画布拖放、导入、全文件替换/relink 与安全删除，但字体、跨文件 Library、来源谱系、移除背景、大列表虚拟化及 macOS/Windows 原生交互证据仍未完成。
 
 ### 图片裁剪与调整 — 降级可用
 

@@ -7,6 +7,11 @@ import { LeftSidebar } from "./LeftSidebar";
 
 function pageActionProps() {
   return {
+    onDeleteAsset: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
+    onImportAsset: vi.fn(() => Promise.resolve({ ok: true } as const)),
+    onLocateAsset: vi.fn(),
+    onPlaceAsset: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
+    onReplaceAsset: vi.fn(() => Promise.resolve({ ok: true } as const)),
     onCreatePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
     onDeletePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
     onDuplicatePage: vi.fn(
@@ -536,5 +541,118 @@ describe("LeftSidebar layer tree", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Rejected by hierarchy planner",
     );
+  });
+});
+
+describe("LeftSidebar image assets", () => {
+  it("shows real file assets, searches, locates, drags stable IDs, imports, and protects referenced deletion", async () => {
+    const user = userEvent.setup();
+    const document = structuredClone(createWelcomeDocument());
+    document.assetsById.asset_photo = {
+      id: "asset_photo",
+      kind: "image",
+      name: "Campaign hero",
+      mimeType: "image/png",
+      source: { type: "data", value: "aW1hZ2U=" },
+      size: { width: 1200, height: 800 },
+      extensions: {},
+    };
+    document.nodesById.hero_photo = {
+      id: "hero_photo",
+      kind: "image",
+      name: "Campaign hero",
+      parentId: "frame_welcome",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 20, 20],
+      size: { width: 300, height: 200 },
+      opacity: 1,
+      properties: {
+        assetId: "asset_photo",
+        placement: { mode: "fit" },
+        altText: "",
+        cornerRadius: 0,
+      },
+      extensions: {},
+    };
+    const frame = document.nodesById.frame_welcome;
+    if (!frame) throw new Error("Missing Frame fixture");
+    frame.childIds.push("hero_photo");
+    const onLocateAsset = vi.fn();
+    const onImportAsset = vi.fn(() => Promise.resolve({ ok: true } as const));
+    const onDeleteAsset = vi.fn(() => ({ ok: true }) as const);
+    const view = render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          {...pageActionProps()}
+          activePageId="page_welcome"
+          document={document}
+          onDelete={vi.fn()}
+          onDeleteAsset={onDeleteAsset}
+          onImportAsset={onImportAsset}
+          onLocateAsset={onLocateAsset}
+          onPageChange={vi.fn()}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={vi.fn()}
+          onTabChange={vi.fn()}
+          onToggleLock={vi.fn()}
+          onToggleVisibility={vi.fn()}
+          selectedNodeIds={[]}
+          tab="assets"
+        />
+      </I18nProvider>,
+    );
+
+    const searchInput = screen.getByRole("searchbox", {
+      name: "Search image assets",
+    });
+    expect(searchInput).toBeEnabled();
+    expect(screen.getByText("Campaign hero")).toBeInTheDocument();
+    expect(screen.getByText("Used 1 times · 1200 × 800")).toBeInTheDocument();
+    expect(view.container.querySelector("img")).toHaveAttribute(
+      "src",
+      "data:image/png;base64,aW1hZ2U=",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Locate Campaign hero" }),
+    );
+    expect(onLocateAsset).toHaveBeenCalledWith({
+      nodeId: "hero_photo",
+      pageId: "page_welcome",
+      kind: "image-node",
+    });
+
+    const dataTransfer = {
+      effectAllowed: "none",
+      setData: vi.fn(),
+    };
+    fireEvent.dragStart(
+      screen.getByRole("button", { name: "Locate Campaign hero" }),
+      { dataTransfer },
+    );
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      "application/x-opendesign-image-asset-id",
+      "asset_photo",
+    );
+
+    await user.type(searchInput, "not found");
+    expect(screen.getByText("No matching images")).toBeInTheDocument();
+    await user.clear(searchInput);
+    await user.click(
+      screen.getByRole("button", { name: "Import image asset" }),
+    );
+    expect(onImportAsset).toHaveBeenCalledTimes(1);
+
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Campaign hero" }),
+    );
+    expect(
+      screen.getByRole("menuitem", {
+        name: "Delete unavailable · asset is in use",
+      }),
+    ).toHaveAttribute("data-disabled");
+    expect(onDeleteAsset).not.toHaveBeenCalled();
   });
 });

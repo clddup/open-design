@@ -16,8 +16,10 @@ import type {
 import {
   createEmptyDesignDocument,
   createWelcomeDocument,
+  documentToScreen,
   getNodeBounds,
   getWorldTransform,
+  transformPoint,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import type { SvgInterchangeIssue } from "@opendesign/import-export-service";
@@ -2618,6 +2620,246 @@ describe("App", () => {
     expect(
       runtime().getSnapshot().document.assetsById[oldAssetId],
     ).toBeDefined();
+  });
+
+  it("manages current-file image assets through import, placement, file-wide replacement, and safe deletion", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const importedId = `asset_${"e".repeat(64)}`;
+    const replacementId = `asset_${"f".repeat(64)}`;
+    await user.click(screen.getByRole("tab", { name: "Assets" }));
+    expect(screen.getByText("No image assets")).toBeInTheDocument();
+
+    vi.mocked(window.desktop!.selectDesignImage).mockResolvedValueOnce({
+      asset: {
+        id: importedId,
+        kind: "image",
+        name: "Library hero",
+        mimeType: "image/png",
+        source: { type: "data", value: "aW1hZ2U=" },
+        size: { width: 1200, height: 800 },
+        extensions: {},
+      },
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Import image asset" }),
+    );
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.assetsById[importedId],
+      ).toBeDefined(),
+    );
+    expect(runtime().getSnapshot().document.revision).toBe(1);
+    expect(screen.getByText("Unused · 1200 × 800")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Place Library hero on canvas" }),
+    );
+    const placed = Object.values(
+      runtime().getSnapshot().document.nodesById,
+    ).find(
+      (node) => node.kind === "image" && node.properties.assetId === importedId,
+    );
+    expect(placed).toBeDefined();
+    expect(runtime().getSnapshot().document.revision).toBe(2);
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      placed?.id,
+    ]);
+
+    vi.mocked(window.desktop!.selectDesignImage).mockResolvedValueOnce({
+      asset: {
+        id: replacementId,
+        kind: "image",
+        name: "Retouched hero",
+        mimeType: "image/webp",
+        source: { type: "data", value: "cmV0b3VjaGVk" },
+        size: { width: 1600, height: 900 },
+        extensions: {},
+      },
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Library hero" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Replace all uses…" }),
+    );
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.assetsById[replacementId],
+      ).toBeDefined(),
+    );
+    expect(
+      runtime().getSnapshot().document.assetsById[importedId],
+    ).toBeUndefined();
+    expect(
+      runtime().getSnapshot().document.nodesById[placed!.id],
+    ).toMatchObject({
+      properties: { assetId: replacementId, placement: { mode: "fit" } },
+    });
+    expect(runtime().getSnapshot().document.revision).toBe(3);
+
+    await user.click(
+      screen.getByRole("button", { name: "Delete selection (Delete)" }),
+    );
+    expect(
+      runtime().getSnapshot().document.nodesById[placed!.id],
+    ).toBeUndefined();
+    expect(screen.getByText("Unused · 1600 × 900")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Retouched hero" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Delete asset" }));
+    expect(
+      runtime().getSnapshot().document.assetsById[replacementId],
+    ).toBeUndefined();
+    expect(screen.getByText("No image assets")).toBeInTheDocument();
+    expect(runtime().getSnapshot().document.revision).toBe(5);
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.assetsById[replacementId],
+    ).toBeDefined();
+  });
+
+  it("keeps image asset import cancellation and picker failure revision-free", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(screen.getByRole("tab", { name: "Assets" }));
+    const importButton = screen.getByRole("button", {
+      name: "Import image asset",
+    });
+    const before = runtime().getSnapshot().document.revision;
+    await user.click(importButton);
+    await waitFor(() =>
+      expect(window.desktop!.selectDesignImage).toHaveBeenCalledTimes(1),
+    );
+    const importAfterCancel = screen.getByRole("button", {
+      name: "Import image asset",
+    });
+    await waitFor(() => expect(importAfterCancel).toBeEnabled());
+    expect(runtime().getSnapshot().document.revision).toBe(before);
+
+    vi.mocked(window.desktop!.selectDesignImage).mockRejectedValueOnce(
+      new Error("picker failed"),
+    );
+    await user.click(importAfterCancel);
+    await waitFor(() =>
+      expect(window.desktop!.selectDesignImage).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      await screen.findAllByText("Could not update the image asset"),
+    ).toHaveLength(2);
+    expect(runtime().getSnapshot().document.revision).toBe(before);
+  });
+
+  it("accepts only internal asset-ID drops and places them at exact canvas coordinates", () => {
+    renderApp();
+    const assetId = `asset_${"9".repeat(64)}`;
+    act(() => {
+      const current = runtime().getSnapshot().document;
+      const result = runtime().apply({
+        transactionId: "add_drag_asset",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: [
+          {
+            commandId: "put_drag_asset",
+            type: "put_asset",
+            asset: {
+              id: assetId,
+              kind: "image",
+              name: "Dragged image",
+              mimeType: "image/png",
+              source: { type: "data", value: "aW1hZ2U=" },
+              size: { width: 640, height: 480 },
+              extensions: {},
+            },
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      runtime().setViewport({
+        width: 1000,
+        height: 800,
+        zoom: 1.25,
+        panX: 40,
+        panY: 30,
+      });
+    });
+    const frame = runtime().getSnapshot().document.nodesById.frame_welcome;
+    const frameTransform = getWorldTransform(
+      runtime().getSnapshot().document,
+      "frame_welcome",
+    );
+    if (!frame || !frameTransform) throw new Error("Missing Frame fixture");
+    const documentPoint = transformPoint({ x: 220, y: 160 }, frameTransform);
+    const screenPoint = documentToScreen(
+      documentPoint,
+      runtime().getSnapshot().state.viewport,
+    );
+    const canvas = screen.getByRole("main", { name: "Design canvas" });
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      x: 12,
+      y: 18,
+      left: 12,
+      top: 18,
+      right: 1012,
+      bottom: 818,
+      width: 1000,
+      height: 800,
+      toJSON: () => undefined,
+    });
+
+    const external = {
+      types: ["Files"],
+      dropEffect: "none",
+      getData: vi.fn(() => assetId),
+    };
+    fireEvent.dragOver(canvas, { dataTransfer: external });
+    expect(screen.queryByText("Drop to place image")).toBeNull();
+    const before = runtime().getSnapshot().document.revision;
+    fireEvent.drop(canvas, { dataTransfer: external });
+    expect(runtime().getSnapshot().document.revision).toBe(before);
+
+    const internal = {
+      types: ["application/x-opendesign-image-asset-id"],
+      dropEffect: "none",
+      getData: vi.fn(() => assetId),
+    };
+    const dragOver = createEvent.dragOver(canvas, { dataTransfer: internal });
+    fireEvent(canvas, dragOver);
+    expect(screen.getByText("Drop to place image")).toBeInTheDocument();
+    const drop = createEvent.drop(canvas, { dataTransfer: internal });
+    Object.defineProperties(drop, {
+      clientX: { value: screenPoint.x + 12 },
+      clientY: { value: screenPoint.y + 18 },
+    });
+    fireEvent(canvas, drop);
+
+    const placed = Object.values(
+      runtime().getSnapshot().document.nodesById,
+    ).find(
+      (node) =>
+        node.kind === "image" &&
+        node.properties.assetId === assetId &&
+        node.parentId === frame.id,
+    );
+    expect(placed).toBeDefined();
+    if (!placed) return;
+    const placedTransform = getWorldTransform(
+      runtime().getSnapshot().document,
+      placed.id,
+    );
+    expect(placedTransform).not.toBeNull();
+    expect(
+      transformPoint(
+        { x: placed.size.width / 2, y: placed.size.height / 2 },
+        placedTransform!,
+      ),
+    ).toEqual(documentPoint);
+    expect(runtime().getSnapshot().document.revision).toBe(before + 1);
+    expect(screen.queryByText("Drop to place image")).toBeNull();
   });
 
   it("duplicates a complete layer subtree through one transaction", async () => {
