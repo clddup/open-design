@@ -297,6 +297,9 @@ importers:
       '@opendesign/image-service':
         specifier: workspace:*
         version: link:../image-service
+      '@opendesign/import-export-service':
+        specifier: workspace:*
+        version: link:../import-export-service
       leafer-editor:
         specifier: 2.2.9
         version: 2.2.9(@leafer-ui/interface@2.2.9)(@leafer/interface@2.2.9)
