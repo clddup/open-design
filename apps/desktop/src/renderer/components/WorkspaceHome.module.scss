@@ -1,0 +1,239 @@
+.content {
+  padding: 36px 0 32px;
+}
+
+.hero {
+  width: min(720px, 100%);
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 18px;
+}
+
+.createProject {
+  width: min(580px, 100%);
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  background: var(--ui-surface);
+
+  label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--ui-text-muted);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  > div {
+    display: flex;
+    gap: 6px;
+  }
+
+  input {
+    min-width: 0;
+    flex: 1;
+    padding: 0 10px;
+    border: 1px solid var(--ui-border-strong);
+    border-radius: 6px;
+    outline: none;
+    color: var(--ui-text);
+    background: var(--ui-bg);
+    font: inherit;
+
+    &:focus {
+      border-color: var(--ui-accent);
+      box-shadow: 0 0 0 2px var(--ui-accent-soft);
+    }
+  }
+}
+
+.grid {
+  display: grid;
+  margin-top: 32px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.8fr);
+  gap: 12px;
+}
+
+.recentProjects {
+  padding: 5px;
+}
+
+.recentProjectRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: center;
+  border-radius: 6px;
+
+  &:hover {
+    background: var(--ui-surface-raised);
+  }
+
+  > :global(.ui-icon-button) {
+    color: var(--ui-text-faint);
+    opacity: 0.7;
+  }
+
+  &:hover > :global(.ui-icon-button),
+  > :global(.ui-icon-button):focus-visible {
+    opacity: 1;
+  }
+}
+
+.recentProject {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: transparent;
+  text-align: left;
+
+  &:hover {
+    background: transparent;
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--ui-focus);
+    outline-offset: -2px;
+  }
+
+  > span:nth-child(2) {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  time {
+    color: var(--ui-text-faint);
+    font-size: 10px;
+  }
+}
+
+.recentProjectIcon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  background: var(--ui-bg);
+}
+
+.recentProjectRemoval {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 7px;
+  grid-column: 1 / -1;
+  padding: 7px 8px 8px 50px;
+  border-top: 1px solid var(--ui-border-subtle);
+
+  > span {
+    min-width: 0;
+    flex: 1;
+    color: var(--ui-text-muted);
+    font-size: 10px;
+    line-height: 1.4;
+  }
+}
+
+.removeAction {
+  color: var(--ui-danger);
+}
+
+.taskList {
+  max-height: min(300px, 38vh);
+  margin: 0;
+  padding: 5px;
+  overflow-y: auto;
+  border-top: 1px solid var(--ui-border);
+  list-style: none;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--ui-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.taskRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 9px;
+  border-radius: 5px;
+
+  + .taskRow {
+    border-top: 1px solid var(--ui-border);
+  }
+
+  > span {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+  }
+
+  small {
+    color: var(--ui-text-faint);
+    font-size: 9px;
+    text-transform: capitalize;
+  }
+}
+
+.compatibilityLink {
+  margin-top: 22px;
+  padding: 4px 0;
+  border: 0;
+  color: var(--ui-text-faint);
+  background: transparent;
+  font: inherit;
+
+  &:hover {
+    color: var(--ui-text-muted);
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--ui-focus);
+    outline-offset: 2px;
+  }
+}
+
+@media (max-width: 940px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .content {
+    padding-top: 26px;
+  }
+
+  .createProject > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

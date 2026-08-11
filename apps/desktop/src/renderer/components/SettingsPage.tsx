@@ -22,7 +22,7 @@ import type {
 } from "../../shared/desktop-api";
 import type { AppLocale } from "../../shared/i18n/locale";
 import { useI18n } from "../i18n";
-import { WindowControls } from "./WindowControls";
+import { HomeTitlebar } from "./HomeTitlebar";
 
 type SettingsTab = "general" | "models" | "image-generation";
 
@@ -92,26 +92,19 @@ function SettingsPageContent({
 
   return (
     <div className="settings-shell">
-      <header
-        className="home-titlebar settings-titlebar"
-        data-platform={platform}
-      >
-        <div aria-hidden="true" className="titlebar__native-safe-zone" />
-        <div className="home-titlebar__brand">
-          <span className="brand-mark">
-            <Glyph name="settings" size={15} />
-          </span>
-          <strong>{t("settings.title")}</strong>
-        </div>
-        <div className="home-titlebar__actions no-drag">
+      <HomeTitlebar
+        actions={
           <IconButton
             icon="close"
             label={t("settings.close")}
             onClick={onClose}
           />
-          {platform !== "darwin" && <WindowControls />}
-        </div>
-      </header>
+        }
+        icon="settings"
+        identity={<strong>{t("settings.title")}</strong>}
+        platform={platform}
+        surface="solid"
+      />
       <main className="settings-workbench">
         <aside aria-label={t("settings.title")} className="settings-navigation">
           <div aria-orientation="vertical" role="tablist">
@@ -234,26 +227,19 @@ class SettingsErrorBoundary extends Component<
     if (!this.state.failed) return this.props.children;
     return (
       <div className="settings-shell">
-        <header
-          className="home-titlebar settings-titlebar"
-          data-platform={this.props.platform}
-        >
-          <div aria-hidden="true" className="titlebar__native-safe-zone" />
-          <div className="home-titlebar__brand">
-            <span className="brand-mark">
-              <Glyph name="settings" size={15} />
-            </span>
-            <strong>{this.props.title}</strong>
-          </div>
-          <div className="home-titlebar__actions no-drag">
+        <HomeTitlebar
+          actions={
             <IconButton
               icon="close"
               label={this.props.closeLabel}
               onClick={this.props.onClose}
             />
-            {this.props.platform !== "darwin" && <WindowControls />}
-          </div>
-        </header>
+          }
+          icon="settings"
+          identity={<strong>{this.props.title}</strong>}
+          platform={this.props.platform}
+          surface="solid"
+        />
         <main className="settings-recovery" role="alert">
           <Glyph name="settings" size={22} />
           <h1>{this.props.title}</h1>

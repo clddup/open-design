@@ -14,7 +14,9 @@ import { useState } from "react";
 import type { RecentProject, ThemePreference } from "../../shared/desktop-api";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
-import { WindowControls } from "./WindowControls";
+import { HomeTitlebar } from "./HomeTitlebar";
+import homeStyles from "./HomeSurface.module.scss";
+import styles from "./WorkspaceHome.module.scss";
 
 export type WorkspaceHomeProps = {
   busy: boolean;
@@ -81,37 +83,41 @@ export function WorkspaceHome({
   ).length;
 
   return (
-    <div className="home-shell">
-      <header className="home-titlebar" data-platform={platform}>
-        <div aria-hidden="true" className="titlebar__native-safe-zone" />
-        <div className="home-titlebar__brand">
-          <span className="brand-mark">
-            <Glyph name="spark" size={15} />
-          </span>
-          <strong>OpenDesign</strong>
-        </div>
-        <div className="home-titlebar__actions no-drag">
-          <Button
-            aria-label={t("settings.open")}
-            icon="settings"
-            onClick={onSettings}
-          >
-            {t("settings.title")}
-          </Button>
-          <IconButton
-            icon={theme === "dark" ? "sun" : "moon"}
-            label={t(nextTheme === "dark" ? "theme.useDark" : "theme.useLight")}
-            onClick={() => onThemeChange(nextTheme)}
-          />
-          {platform !== "darwin" && <WindowControls />}
-        </div>
-      </header>
-      <main aria-labelledby="workspace-home-title" className="home-content">
-        <section className="home-hero">
-          <span className="home-eyebrow">{t("workspace.label")}</span>
-          <h1 id="workspace-home-title">{t("workspace.title")}</h1>
-          <p>{t("workspace.description")}</p>
-          <div className="home-actions">
+    <div className={homeStyles.shell}>
+      <HomeTitlebar
+        actions={
+          <>
+            <Button
+              aria-label={t("settings.open")}
+              icon="settings"
+              onClick={onSettings}
+            >
+              {t("settings.title")}
+            </Button>
+            <IconButton
+              icon={theme === "dark" ? "sun" : "moon"}
+              label={t(
+                nextTheme === "dark" ? "theme.useDark" : "theme.useLight",
+              )}
+              onClick={() => onThemeChange(nextTheme)}
+            />
+          </>
+        }
+        icon="spark"
+        identity={<strong>OpenDesign</strong>}
+        platform={platform}
+      />
+      <main
+        aria-labelledby="workspace-home-title"
+        className={`${homeStyles.viewport} ${styles.content}`}
+      >
+        <section className={styles.hero}>
+          <span className={homeStyles.eyebrow}>{t("workspace.label")}</span>
+          <h1 className={homeStyles.title} id="workspace-home-title">
+            {t("workspace.title")}
+          </h1>
+          <p className={homeStyles.description}>{t("workspace.description")}</p>
+          <div className={styles.actions}>
             <Button
               disabled={busy}
               icon="plus"
@@ -127,7 +133,7 @@ export function WorkspaceHome({
           {creating && (
             <form
               aria-label={t("workspace.createProjectForm")}
-              className="home-create-project"
+              className={styles.createProject}
               onSubmit={(event) => {
                 event.preventDefault();
                 void onCreateProject(projectName).then((created) => {
@@ -167,43 +173,50 @@ export function WorkspaceHome({
             </form>
           )}
           {error && (
-            <p className="home-error" role="alert">
+            <p className={homeStyles.error} role="alert">
               {error}
             </p>
           )}
         </section>
 
-        <div className="home-grid">
+        <div className={styles.grid}>
           <section
             aria-labelledby="recent-projects-title"
-            className="home-panel"
+            className={homeStyles.panel}
           >
-            <div className="home-panel__heading">
+            <div className={homeStyles.sectionHeading}>
               <div>
-                <span>{t("workspace.label")}</span>
+                <span className={homeStyles.sectionLabel}>
+                  {t("workspace.label")}
+                </span>
                 <h2 id="recent-projects-title">
                   {t("workspace.recentProjects")}
                 </h2>
               </div>
-              <span>{recentProjects.length}</span>
+              <span className={homeStyles.sectionCount}>
+                {recentProjects.length}
+              </span>
             </div>
             {recentProjects.length === 0 ? (
-              <div className="home-empty">
+              <div className={homeStyles.empty}>
                 <Glyph name="frame" size={20} />
                 <strong>{t("workspace.noRecentProjects")}</strong>
                 <p>{t("workspace.noRecentProjectsDetail")}</p>
               </div>
             ) : (
-              <div className="recent-projects">
+              <div className={styles.recentProjects}>
                 {recentProjects.map((project) => (
-                  <div className="recent-project-row" key={project.projectId}>
+                  <div
+                    className={styles.recentProjectRow}
+                    key={project.projectId}
+                  >
                     <button
-                      className="recent-project"
+                      className={styles.recentProject}
                       disabled={busy}
                       onClick={() => onOpenRecentProject(project.projectId)}
                       type="button"
                     >
-                      <span className="recent-project__icon">
+                      <span className={styles.recentProjectIcon}>
                         <Glyph name="layers" size={16} />
                       </span>
                       <span>
@@ -232,7 +245,7 @@ export function WorkspaceHome({
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        className="recent-project-menu__remove"
+                        className={styles.removeAction}
                         onSelect={() => setPendingRemovalId(project.projectId)}
                       >
                         {t("workspace.removeProject")}
@@ -243,7 +256,7 @@ export function WorkspaceHome({
                         aria-label={t("workspace.confirmRemoveProject", {
                           name: project.name,
                         })}
-                        className="recent-project-removal"
+                        className={styles.recentProjectRemoval}
                         role="group"
                       >
                         <span>{t("workspace.removeProjectDescription")}</span>
@@ -278,13 +291,18 @@ export function WorkspaceHome({
             )}
           </section>
 
-          <section aria-labelledby="global-tasks-title" className="home-panel">
-            <div className="home-panel__heading">
+          <section
+            aria-labelledby="global-tasks-title"
+            className={homeStyles.panel}
+          >
+            <div className={homeStyles.sectionHeading}>
               <div>
-                <span>{t("workspace.acrossProjects")}</span>
+                <span className={homeStyles.sectionLabel}>
+                  {t("workspace.acrossProjects")}
+                </span>
                 <h2 id="global-tasks-title">{t("workspace.globalTasks")}</h2>
               </div>
-              <span>
+              <span className={homeStyles.sectionCount}>
                 {t("workspace.taskCount", {
                   active: activeTaskCount,
                   total: globalTasks.length,
@@ -292,15 +310,15 @@ export function WorkspaceHome({
               </span>
             </div>
             {globalTasks.length === 0 ? (
-              <div className="home-empty home-empty--compact">
+              <div className={`${homeStyles.empty} ${homeStyles.emptyCompact}`}>
                 <Glyph name="agent" size={20} />
                 <strong>{t("workspace.noAgentTasks")}</strong>
                 <p>{t("workspace.noAgentTasksDetail")}</p>
               </div>
             ) : (
-              <ul className="global-task-list">
+              <ul className={styles.taskList}>
                 {globalTasks.map((task) => (
-                  <li className="global-task-row" key={task.taskId}>
+                  <li className={styles.taskRow} key={task.taskId}>
                     <span>
                       <strong>{task.title}</strong>
                       <small>
@@ -332,7 +350,7 @@ export function WorkspaceHome({
         </div>
 
         <button
-          className="home-compatibility-link"
+          className={styles.compatibilityLink}
           disabled={busy}
           onClick={onOpenDesignFile}
           type="button"

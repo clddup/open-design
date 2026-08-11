@@ -44,6 +44,11 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
   重命名 pending/error 和后台 Run 指示状态；组件继续只消费稳定 Workspace snapshot，
   不因样式迁移复制 File/Project/Agent 状态。专项测试覆盖跨 Project 复合身份、键盘
   roving focus、F2/双击重命名、Enter/blur/Escape、失败重试和异步持久化 pending。
+- Workspace、Project 与 Settings 原先复制的窗口标题栏已提取为 `HomeTitlebar`；它统一
+  拥有 macOS safe zone、Windows native controls、drag/no-drag 和 solid/translucent
+  surface variant，不接管页面导航或业务状态。Home 页面样式继续拆为共享
+  `HomeSurface.module.scss` 与各自的 `WorkspaceHome.module.scss`、
+  `ProjectHome.module.scss`，共享 shell/panel/空态不会迫使两个页面共用业务布局。
 - `sass` 固定为 `1.102.0`，仅用于 Vite 编译期；许可记录进入第三方声明。
 - TypeScript 通过 `vite/client` 读取 module 类型，Vite 生产构建验证 SCSS Modules 可编译和合并。
 - 后续迁移需保持键盘/焦点、主题、窄窗口、Reduced Motion 和视觉状态测试；仅减少全局行数不构成完成证据。

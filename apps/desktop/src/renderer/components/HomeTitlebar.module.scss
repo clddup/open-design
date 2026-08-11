@@ -1,0 +1,57 @@
+.root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--ui-border);
+  background: color-mix(in srgb, var(--ui-surface) 94%, transparent);
+  user-select: none;
+  -webkit-app-region: drag;
+
+  &[data-platform="darwin"] {
+    padding-left: 78px;
+
+    .nativeSafeZone {
+      display: block;
+    }
+  }
+}
+
+.solid {
+  background: var(--ui-surface);
+}
+
+.nativeSafeZone {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: none;
+  width: 76px;
+}
+
+.identity,
+.actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.identity strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brandMark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+}

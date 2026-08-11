@@ -6,7 +6,9 @@ import { Button, Glyph, IconButton } from "@opendesign/ui";
 import { useState, type FormEvent } from "react";
 import type { ThemePreference } from "../../shared/desktop-api";
 import { useI18n } from "../i18n";
-import { WindowControls } from "./WindowControls";
+import { HomeTitlebar } from "./HomeTitlebar";
+import homeStyles from "./HomeSurface.module.scss";
+import styles from "./ProjectHome.module.scss";
 
 export type ProjectHomeProps = {
   activeConversationId: string | null;
@@ -56,41 +58,53 @@ export function ProjectHome({
     }
   };
   return (
-    <div className="home-shell">
-      <header className="home-titlebar" data-platform={platform}>
-        <div aria-hidden="true" className="titlebar__native-safe-zone" />
-        <div className="home-titlebar__brand">
-          <span className="brand-mark">
-            <Glyph name="spark" size={15} />
-          </span>
-          <button className="home-breadcrumb" onClick={onBack} type="button">
-            {t("workspace.label")}
-          </button>
-          <Glyph name="chevron-right" size={13} />
-          <strong>{manifest.name}</strong>
-        </div>
-        <div className="home-titlebar__actions no-drag">
-          <Button
-            aria-label={t("settings.open")}
-            icon="settings"
-            onClick={onSettings}
-          >
-            {t("settings.title")}
-          </Button>
-          <IconButton
-            icon={theme === "dark" ? "sun" : "moon"}
-            label={t(nextTheme === "dark" ? "theme.useDark" : "theme.useLight")}
-            onClick={() => onThemeChange(nextTheme)}
-          />
-          {platform !== "darwin" && <WindowControls />}
-        </div>
-      </header>
-      <main aria-labelledby="project-home-title" className="project-home">
-        <header className="project-home__header">
+    <div className={homeStyles.shell}>
+      <HomeTitlebar
+        actions={
+          <>
+            <Button
+              aria-label={t("settings.open")}
+              icon="settings"
+              onClick={onSettings}
+            >
+              {t("settings.title")}
+            </Button>
+            <IconButton
+              icon={theme === "dark" ? "sun" : "moon"}
+              label={t(
+                nextTheme === "dark" ? "theme.useDark" : "theme.useLight",
+              )}
+              onClick={() => onThemeChange(nextTheme)}
+            />
+          </>
+        }
+        icon="spark"
+        identity={
+          <>
+            <button
+              className={styles.breadcrumb}
+              onClick={onBack}
+              type="button"
+            >
+              {t("workspace.label")}
+            </button>
+            <Glyph name="chevron-right" size={13} />
+            <strong>{manifest.name}</strong>
+          </>
+        }
+        platform={platform}
+      />
+      <main
+        aria-labelledby="project-home-title"
+        className={`${homeStyles.viewport} ${styles.content}`}
+      >
+        <header className={styles.header}>
           <div>
-            <span className="home-eyebrow">{t("project.label")}</span>
-            <h1 id="project-home-title">{manifest.name}</h1>
-            <p>
+            <span className={homeStyles.eyebrow}>{t("project.label")}</span>
+            <h1 className={homeStyles.title} id="project-home-title">
+              {manifest.name}
+            </h1>
+            <p className={homeStyles.description}>
               {t("project.designFileSummary", {
                 count: manifest.designFiles.length,
               })}
@@ -102,24 +116,30 @@ export function ProjectHome({
         </header>
 
         {error && (
-          <p className="home-error" role="alert">
+          <p className={homeStyles.error} role="alert">
             {error}
           </p>
         )}
 
-        <div className="project-home__layout">
+        <div className={styles.layout}>
           <section aria-labelledby="design-files-title">
-            <div className="project-section-heading">
+            <div
+              className={`${homeStyles.sectionHeading} ${styles.sectionHeading}`}
+            >
               <div>
-                <span>{t("project.canvasSources")}</span>
+                <span className={homeStyles.sectionLabel}>
+                  {t("project.canvasSources")}
+                </span>
                 <h2 id="design-files-title">{t("project.designFiles")}</h2>
               </div>
-              <span>{manifest.designFiles.length}</span>
+              <span className={homeStyles.sectionCount}>
+                {manifest.designFiles.length}
+              </span>
             </div>
-            <div className="design-file-cards">
+            <div className={styles.designFileCards}>
               {manifest.designFiles.map((file, index) => (
                 <button
-                  className="design-file-card"
+                  className={styles.designFileCard}
                   disabled={busy}
                   key={file.designFileId}
                   onClick={() => onOpenDesignFile(file.designFileId)}
@@ -127,13 +147,13 @@ export function ProjectHome({
                 >
                   <span
                     aria-hidden="true"
-                    className={`design-file-card__preview preview-${index % 3}`}
+                    className={`${styles.preview}${index % 3 === 1 ? ` ${styles.previewAlternate}` : ""}`}
                   >
                     <i />
                     <i />
                     <i />
                   </span>
-                  <span className="design-file-card__meta">
+                  <span className={styles.designFileMeta}>
                     <span>
                       <strong>{file.name}</strong>
                       <small>{file.relativePath}</small>
@@ -145,10 +165,12 @@ export function ProjectHome({
             </div>
           </section>
 
-          <aside className="project-home__aside">
-            <section className="project-summary">
-              <span>{t("project.activity")}</span>
-              <div className="project-summary__heading">
+          <aside className={styles.aside}>
+            <section className={`${homeStyles.panel} ${styles.summary}`}>
+              <span className={styles.summaryLabel}>
+                {t("project.activity")}
+              </span>
+              <div className={styles.summaryHeading}>
                 <h2 id="project-conversations-title">
                   {t("project.conversations")}
                 </h2>
@@ -156,7 +178,7 @@ export function ProjectHome({
               </div>
               <form
                 aria-label={t("project.createConversation")}
-                className="conversation-create"
+                className={styles.conversationCreate}
                 onSubmit={(event) => void createConversation(event)}
               >
                 <label className="visually-hidden" htmlFor="conversation-title">
@@ -186,7 +208,9 @@ export function ProjectHome({
                 </Button>
               </form>
               {conversations.length === 0 ? (
-                <div className="home-empty home-empty--compact">
+                <div
+                  className={`${homeStyles.empty} ${homeStyles.emptyCompact} ${styles.summaryEmpty}`}
+                >
                   <Glyph name="comment" size={20} />
                   <strong>{t("project.noConversations")}</strong>
                   <p>{t("project.noConversationsDetail")}</p>
@@ -194,7 +218,7 @@ export function ProjectHome({
               ) : (
                 <ul
                   aria-labelledby="project-conversations-title"
-                  className="conversation-list"
+                  className={styles.conversationList}
                 >
                   {conversations.map((conversation) => {
                     const active =
@@ -203,7 +227,7 @@ export function ProjectHome({
                       <li key={conversation.conversationId}>
                         <button
                           aria-current={active ? "true" : undefined}
-                          className={`conversation-row${active ? " conversation-row--active" : ""}`}
+                          className={`${styles.conversationRow}${active ? ` ${styles.conversationActive}` : ""}`}
                           disabled={busy}
                           onClick={() =>
                             onSelectConversation(conversation.conversationId)
@@ -226,8 +250,10 @@ export function ProjectHome({
                 </ul>
               )}
             </section>
-            <section className="project-summary">
-              <span>{t("project.workingSet")}</span>
+            <section className={`${homeStyles.panel} ${styles.summary}`}>
+              <span className={styles.summaryLabel}>
+                {t("project.workingSet")}
+              </span>
               <h2>{t("project.assetsAccess")}</h2>
               <dl>
                 <div>
