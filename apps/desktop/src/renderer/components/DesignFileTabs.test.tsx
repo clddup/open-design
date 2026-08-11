@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { workspaceFileKey, type WorkspaceSnapshot } from "../workspace-runtime";
@@ -12,12 +13,21 @@ const files = [
 
 function Tabs({
   onActivate,
+  onRename = () => Promise.resolve(true),
+  canRename = () => true,
 }: {
   onActivate: (projectId: string, designFileId: string) => void;
+  onRename?: (
+    projectId: string,
+    designFileId: string,
+    name: string,
+  ) => Promise<boolean>;
+  canRename?: (projectId: string, designFileId: string) => boolean;
 }) {
   const [activeFileKey, setActiveFileKey] = useState(
     workspaceFileKey(files[0].projectId, files[0].designFileId),
   );
+  const [names, setNames] = useState(files.map(({ name }) => name as string));
   const openFileKeys = files.map((file) =>
     workspaceFileKey(file.projectId, file.designFileId),
   );
@@ -29,6 +39,7 @@ function Tabs({
         key,
         {
           ...file,
+          name: names[index] ?? file.name,
           key,
           documentId: `document_${index}`,
           activePageId: `page_${index}`,
@@ -50,9 +61,28 @@ function Tabs({
 
   return (
     <DesignFileTabs
+      canRename={canRename}
       onActivate={(projectId, designFileId) => {
         onActivate(projectId, designFileId);
         setActiveFileKey(workspaceFileKey(projectId, designFileId));
+      }}
+      onRename={async (projectId, designFileId, name) => {
+        const renamed = await onRename(projectId, designFileId, name);
+        if (renamed) {
+          const index = files.findIndex(
+            (file) =>
+              file.projectId === projectId &&
+              file.designFileId === designFileId,
+          );
+          if (index >= 0) {
+            setNames((current) =>
+              current.map((currentName, currentIndex) =>
+                currentIndex === index ? name : currentName,
+              ),
+            );
+          }
+        }
+        return renamed;
       }}
       snapshot={snapshot}
     />
@@ -86,5 +116,102 @@ describe("DesignFileTabs", () => {
     fireEvent.keyDown(first, { key: "ArrowLeft" });
     expect(onActivate).toHaveBeenLastCalledWith("project_a", "design_brand");
     expect(last).toHaveFocus();
+  });
+
+  it("renames by stable composite identity and restores tab focus on Enter", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn().mockResolvedValue(true);
+    render(<Tabs onActivate={vi.fn()} onRename={onRename} />);
+
+    await user.dblClick(screen.getByRole("tab", { name: "Mobile UI" }));
+    const input = screen.getByRole("textbox", { name: "Rename Mobile UI" });
+    expect(input).toHaveFocus();
+    await user.clear(input);
+    await user.type(input, "Launch poster{Enter}");
+
+    expect(onRename).toHaveBeenCalledWith(
+      "project_a",
+      "design_mobile",
+      "Launch poster",
+    );
+    expect(
+      await screen.findByRole("tab", { name: "Launch poster" }),
+    ).toHaveFocus();
+  });
+
+  it("commits a trimmed name on blur without stealing the next tab focus", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn().mockResolvedValue(true);
+    render(<Tabs onActivate={vi.fn()} onRename={onRename} />);
+
+    await user.dblClick(screen.getByRole("tab", { name: "Mobile UI" }));
+    const input = screen.getByRole("textbox", { name: "Rename Mobile UI" });
+    await user.clear(input);
+    await user.type(input, "  Product UI  ");
+    await user.click(screen.getByRole("tab", { name: "Website" }));
+
+    expect(onRename).toHaveBeenCalledWith(
+      "project_a",
+      "design_mobile",
+      "Product UI",
+    );
+    expect(
+      await screen.findByRole("tab", { name: "Product UI" }),
+    ).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Website" })).toHaveFocus();
+  });
+
+  it("cancels with Escape and rejects an empty name without leaving edit mode", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn().mockResolvedValue(true);
+    render(<Tabs onActivate={vi.fn()} onRename={onRename} />);
+
+    const mobile = screen.getByRole("tab", { name: "Mobile UI" });
+    mobile.focus();
+    await user.keyboard("{F2}");
+    let input = screen.getByRole("textbox", { name: "Rename Mobile UI" });
+    await user.clear(input);
+    await user.keyboard("{Enter}");
+    input = screen.getByRole("textbox", { name: "Rename Mobile UI" });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a file name using 1 to 256 characters.",
+    );
+    expect(onRename).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("tab", { name: "Mobile UI" })).toHaveFocus();
+  });
+
+  it("keeps the editor open for retry when persistence fails", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn().mockResolvedValue(false);
+    render(<Tabs onActivate={vi.fn()} onRename={onRename} />);
+
+    await user.dblClick(screen.getByRole("tab", { name: "Mobile UI" }));
+    const input = screen.getByRole("textbox", { name: "Rename Mobile UI" });
+    await user.clear(input);
+    await user.type(input, "Retry name{Enter}");
+
+    expect(onRename).toHaveBeenCalledOnce();
+    expect(
+      await screen.findByRole("textbox", { name: "Rename Mobile UI" }),
+    ).toHaveFocus();
+  });
+
+  it("does not offer persistent rename for non-Project files", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn().mockResolvedValue(true);
+    render(
+      <Tabs canRename={() => false} onActivate={vi.fn()} onRename={onRename} />,
+    );
+
+    const mobile = screen.getByRole("tab", { name: "Mobile UI" });
+    await user.dblClick(mobile);
+    mobile.focus();
+    await user.keyboard("{F2}");
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(onRename).not.toHaveBeenCalled();
   });
 });

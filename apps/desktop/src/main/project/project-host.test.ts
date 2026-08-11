@@ -201,6 +201,138 @@ describe("ProjectHost", () => {
     store.close();
   });
 
+  it("renames a design file without changing its identity, path, or document", async () => {
+    const root = await createProjectRoot();
+    const host = new ProjectHost();
+    await host.createProject(root, {
+      projectId: "project_acme",
+      name: "Acme Design",
+      now,
+    });
+    const document = createWelcomeDocument();
+    const descriptor = designFileDescriptor();
+    await host.createDesignFile("project_acme", { descriptor, document });
+    const documentPath = join(root, descriptor.relativePath);
+    const beforeDocument = await readFile(documentPath, "utf8");
+
+    const renamed = await host.renameDesignFile(
+      "project_acme",
+      "design_mobile",
+      "Launch poster",
+      later,
+    );
+
+    expect(renamed).toEqual({
+      ...descriptor,
+      name: "Launch poster",
+      updatedAt: later,
+    });
+    expect(await readFile(documentPath, "utf8")).toBe(beforeDocument);
+    const reopened = new ProjectHost();
+    const manifest = await reopened.openProject(root);
+    expect(manifest.updatedAt).toBe(later);
+    expect(manifest.designFiles[0]).toEqual(renamed);
+    await expect(
+      reopened.readDesignFile("project_acme", "design_mobile"),
+    ).resolves.toEqual({ descriptor: renamed, document });
+  });
+
+  it("serializes a manifest rename with a document save without losing either", async () => {
+    const root = await createProjectRoot();
+    const host = new ProjectHost();
+    await host.createProject(root, {
+      projectId: "project_acme",
+      name: "Acme Design",
+      now,
+    });
+    const document = createWelcomeDocument();
+    const descriptor = designFileDescriptor();
+    await host.createDesignFile("project_acme", { descriptor, document });
+    const updated = structuredClone(document);
+    const frame = updated.nodesById.frame_welcome;
+    if (!frame) throw new Error("Welcome frame is missing");
+    frame.name = "Saved after rename";
+
+    await Promise.all([
+      host.renameDesignFile(
+        "project_acme",
+        "design_mobile",
+        "Launch poster",
+        later,
+      ),
+      host.saveDesignFile("project_acme", "design_mobile", updated, later),
+    ]);
+
+    const reopened = new ProjectHost();
+    await reopened.openProject(root);
+    const file = await reopened.readDesignFile("project_acme", "design_mobile");
+    expect(file.descriptor.name).toBe("Launch poster");
+    expect(file.document.nodesById.frame_welcome?.name).toBe(
+      "Saved after rename",
+    );
+  });
+
+  it("allows duplicate display names while preserving distinct file identities", async () => {
+    const root = await createProjectRoot();
+    const host = new ProjectHost();
+    await host.createProject(root, {
+      projectId: "project_acme",
+      name: "Acme Design",
+      now,
+    });
+    const mobileDocument = createWelcomeDocument();
+    const websiteDocument = structuredClone(mobileDocument);
+    websiteDocument.documentId = "document_website";
+    const mobileDescriptor = designFileDescriptor();
+    const websiteDescriptor = designFileDescriptor({
+      designFileId: "design_website",
+      documentId: "document_website",
+      name: "Website",
+      relativePath: "designs/website.opendesign",
+    });
+    await host.createDesignFile("project_acme", {
+      descriptor: mobileDescriptor,
+      document: mobileDocument,
+    });
+    await host.createDesignFile("project_acme", {
+      descriptor: websiteDescriptor,
+      document: websiteDocument,
+    });
+
+    await host.renameDesignFile(
+      "project_acme",
+      "design_website",
+      "Mobile UI",
+      later,
+    );
+
+    expect(
+      host
+        .listOpenProjects()[0]
+        ?.designFiles.map(({ designFileId, name }) => ({ designFileId, name })),
+    ).toEqual([
+      { designFileId: "design_mobile", name: "Mobile UI" },
+      { designFileId: "design_website", name: "Mobile UI" },
+    ]);
+  });
+
+  it("rejects invalid or unknown design file rename targets", async () => {
+    const root = await createProjectRoot();
+    const host = new ProjectHost();
+    await host.createProject(root, {
+      projectId: "project_acme",
+      name: "Acme Design",
+      now,
+    });
+
+    await expect(
+      host.renameDesignFile("project_acme", "design_missing", "Missing"),
+    ).rejects.toMatchObject({ code: "DESIGN_FILE_NOT_FOUND" });
+    await expect(
+      host.renameDesignFile("project_acme", "design_missing", "   "),
+    ).rejects.toMatchObject({ code: "INVALID_DESIGN_FILE" });
+  });
+
   it("serializes concurrent design file creation without losing manifest entries", async () => {
     const root = await createProjectRoot();
     const host = new ProjectHost();
@@ -420,6 +552,55 @@ describe("ProjectHost", () => {
       (await reopened.readDesignFile("project_acme", "design_mobile")).document
         .nodesById.frame_welcome?.name,
     ).toBe("Recovered frame");
+    await expect(
+      readFile(join(root, PROJECT_SAVE_JOURNAL_NAME), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("finishes an interrupted manifest-only design file rename on reopen", async () => {
+    const root = await createProjectRoot();
+    const host = new ProjectHost();
+    await host.createProject(root, {
+      projectId: "project_acme",
+      name: "Acme Design",
+      now,
+    });
+    const document = createWelcomeDocument();
+    const descriptor = designFileDescriptor();
+    await host.createDesignFile("project_acme", { descriptor, document });
+    const previousManifest = host.listOpenProjects()[0];
+    if (!previousManifest) throw new Error("Open Project manifest is missing");
+    const nextDescriptor = {
+      ...descriptor,
+      name: "Recovered name",
+      updatedAt: later,
+    };
+    const nextManifest = {
+      ...previousManifest,
+      updatedAt: later,
+      designFiles: [nextDescriptor],
+    };
+    const previousManifestContents = JSON.stringify(previousManifest, null, 2);
+    const nextManifestContents = JSON.stringify(nextManifest, null, 2);
+    await writeFile(
+      join(root, PROJECT_SAVE_JOURNAL_NAME),
+      JSON.stringify({
+        version: 1,
+        operation: "rename",
+        projectId: "project_acme",
+        designFileId: "design_mobile",
+        previousManifestHash: hash(previousManifestContents),
+        nextManifestHash: hash(nextManifestContents),
+        previousManifest,
+        nextManifest,
+      }),
+    );
+
+    const reopened = new ProjectHost();
+    await expect(reopened.openProject(root)).resolves.toEqual(nextManifest);
+    await expect(
+      reopened.readDesignFile("project_acme", "design_mobile"),
+    ).resolves.toEqual({ descriptor: nextDescriptor, document });
     await expect(
       readFile(join(root, PROJECT_SAVE_JOURNAL_NAME), "utf8"),
     ).rejects.toMatchObject({ code: "ENOENT" });

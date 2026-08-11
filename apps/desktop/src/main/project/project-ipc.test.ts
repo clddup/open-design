@@ -109,6 +109,25 @@ describe("ProjectIpcService", () => {
     expect(saved.document.nodesById.frame_welcome?.name).toBe(
       "Updated through Project IPC",
     );
+    const renamed = await service.renameDesignFile({
+      projectId: "project_acme",
+      designFileId: "design_brand",
+      name: "Launch poster",
+    });
+    expect(renamed).toMatchObject({
+      designFileId: "design_brand",
+      documentId: document.documentId,
+      name: "Launch poster",
+      relativePath: descriptor.relativePath,
+    });
+    expect(
+      (
+        await service.readDesignFile({
+          projectId: "project_acme",
+          designFileId: "design_brand",
+        })
+      ).document.nodesById.frame_welcome?.name,
+    ).toBe("Updated through Project IPC");
     expect(service.listOpenProjects()).toHaveLength(1);
     expect(service.listRecentProjects()).toEqual([
       expect.objectContaining({
@@ -410,6 +429,13 @@ describe("ProjectIpcService", () => {
         path: "/tmp/forged.opendesign",
       }),
     ).toThrow("Invalid design file read request");
+    expect(() =>
+      service.renameDesignFile({
+        projectId: "project_acme",
+        designFileId: "design_brand",
+        name: " Forged ",
+      }),
+    ).toThrow("Invalid design file rename request");
     store.close();
   });
 });

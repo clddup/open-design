@@ -252,6 +252,7 @@ beforeEach(() => {
     createProjectDesignFile: vi.fn(),
     readProjectDesignFile: vi.fn(),
     saveProjectDesignFile: vi.fn(),
+    renameProjectDesignFile: vi.fn(),
     sendAgentRequest: vi.fn().mockResolvedValue(undefined),
     onAgentEvent: vi
       .fn()
@@ -1139,6 +1140,74 @@ describe("App", () => {
         expect(runtimeOutput()).toHaveAttribute("data-dirty", "false");
       },
       { timeout: 2_000 },
+    );
+  });
+
+  it("persists an inline Design File rename without saving document content", async () => {
+    const { user, manifest } = await openProjectConversation();
+    const descriptor = manifest.designFiles[0];
+    if (!descriptor) throw new Error("Mobile design file is missing");
+    vi.mocked(window.desktop!.renameProjectDesignFile).mockResolvedValueOnce({
+      ...descriptor,
+      name: "Launch poster",
+      updatedAt: "2026-08-11T12:00:00.000Z",
+    });
+
+    await user.dblClick(screen.getByRole("tab", { name: descriptor.name }));
+    const input = screen.getByRole("textbox", {
+      name: `Rename ${descriptor.name}`,
+    });
+    await user.clear(input);
+    await user.type(input, "Launch poster{Enter}");
+
+    expect(window.desktop!.renameProjectDesignFile).toHaveBeenCalledWith({
+      projectId: manifest.projectId,
+      designFileId: descriptor.designFileId,
+      name: "Launch poster",
+    });
+    expect(window.desktop!.saveProjectDesignFile).not.toHaveBeenCalled();
+    expect(runtimeOutput()).toHaveAttribute("data-dirty", "false");
+    expect(await screen.findAllByText("Launch poster")).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: manifest.name }));
+    expect(
+      await screen.findByRole("button", { name: /Launch poster/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps inline Design File rename editable after persistence fails", async () => {
+    const { user, manifest } = await openProjectConversation();
+    const descriptor = manifest.designFiles[0];
+    if (!descriptor) throw new Error("Mobile design file is missing");
+    vi.mocked(window.desktop!.renameProjectDesignFile).mockRejectedValueOnce(
+      new Error("Project manifest is read-only"),
+    );
+
+    await user.dblClick(screen.getByRole("tab", { name: descriptor.name }));
+    const input = screen.getByRole("textbox", {
+      name: `Rename ${descriptor.name}`,
+    });
+    await user.clear(input);
+    await user.type(input, "Retry name{Enter}");
+
+    expect(
+      await screen.findByRole("textbox", { name: `Rename ${descriptor.name}` }),
+    ).toHaveFocus();
+    expect(
+      await screen.findByText("Project manifest is read-only"),
+    ).toBeInTheDocument();
+    expect(runtimeOutput()).toHaveAttribute("data-dirty", "false");
+    await waitFor(() =>
+      expect(window.desktop!.reportDiagnostic).toHaveBeenCalledWith({
+        level: "error",
+        presentation: "toast",
+        code: "design_file_rename_failed",
+        message: "Project manifest is read-only",
+        context: {
+          projectId: manifest.projectId,
+          designFileId: descriptor.designFileId,
+        },
+      }),
     );
   });
 

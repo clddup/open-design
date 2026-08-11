@@ -6,6 +6,7 @@ import {
   isListProjectConversationsRequest,
   isOpenRecentProjectRequest,
   isProjectDesignFileRequest,
+  isRenameProjectDesignFileRequest,
   isSaveProjectDesignFileRequest,
 } from "../../shared/desktop-api.js";
 import { createStarterProjectFiles } from "../../shared/project/starter-project.js";
@@ -150,6 +151,17 @@ export class ProjectIpcService {
       request.projectId,
       request.designFileId,
       request.document,
+    );
+  }
+
+  renameDesignFile(request: unknown) {
+    if (!isRenameProjectDesignFileRequest(request)) {
+      throw new TypeError("Invalid design file rename request");
+    }
+    return this.projectHost.renameDesignFile(
+      request.projectId,
+      request.designFileId,
+      request.name,
     );
   }
 }

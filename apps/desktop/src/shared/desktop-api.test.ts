@@ -22,6 +22,7 @@ import {
   isProjectDesignFileRequest,
   isProjectManifestResult,
   isRecentProject,
+  isRenameProjectDesignFileRequest,
   isOpenSvgFile,
   isSaveDesignFileRequest,
   isSaveGlobalImageGenerationSettingsRequest,
@@ -419,6 +420,13 @@ describe("Project desktop API guards", () => {
         document,
       }),
     ).toBe(true);
+    expect(
+      isRenameProjectDesignFileRequest({
+        projectId: "project_acme",
+        designFileId: "design_mobile",
+        name: "Launch poster",
+      }),
+    ).toBe(true);
 
     const substituted = structuredClone(document);
     substituted.documentId = "document_other";
@@ -445,6 +453,21 @@ describe("Project desktop API guards", () => {
         designFileId: "design_mobile",
         document: createWelcomeDocument(),
         rootPath: "/tmp/Acme Design",
+      }),
+    ).toBe(false);
+    expect(
+      isRenameProjectDesignFileRequest({
+        projectId: "project_acme",
+        designFileId: "design_mobile",
+        name: " Forged name ",
+      }),
+    ).toBe(false);
+    expect(
+      isRenameProjectDesignFileRequest({
+        projectId: "project_acme",
+        designFileId: "design_mobile",
+        name: "Launch poster",
+        path: "/tmp/forged.opendesign",
       }),
     ).toBe(false);
   });

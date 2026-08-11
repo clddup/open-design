@@ -1586,6 +1586,72 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     [refreshRecentProjects, showProject, t],
   );
 
+  const renameProjectDesignFile = useCallback(
+    async (projectId: string, designFileId: string, nextName: string) => {
+      const desktop = window.desktop;
+      const targetProject = projectsById[projectId];
+      const targetFile = Object.values(workspaceSnapshot.files).find(
+        (file) =>
+          file.projectId === projectId && file.designFileId === designFileId,
+      );
+      if (!desktop || !targetProject || !targetFile) return false;
+      const name = nextName.trim();
+      if (name.length === 0 || name.length > 256) return false;
+      setEditorError(null);
+      try {
+        const descriptor = await desktop.renameProjectDesignFile({
+          projectId,
+          designFileId,
+          name,
+        });
+        if (
+          descriptor.designFileId !== designFileId ||
+          descriptor.documentId !== targetFile.documentId ||
+          descriptor.name !== name
+        ) {
+          throw new Error(
+            "Design file rename response identity does not match",
+          );
+        }
+        const updateManifest = (project: ProjectManifest): ProjectManifest => ({
+          ...project,
+          updatedAt: descriptor.updatedAt,
+          designFiles: project.designFiles.map((file) =>
+            file.designFileId === designFileId ? descriptor : file,
+          ),
+        });
+        setProjectsById((projects) => {
+          const project = projects[projectId];
+          return project
+            ? { ...projects, [projectId]: updateManifest(project) }
+            : projects;
+        });
+        setActiveProject((project) =>
+          project?.projectId === projectId ? updateManifest(project) : project,
+        );
+        workspace.renameFile(projectId, designFileId, descriptor.name);
+        if (
+          workspaceSnapshot.activeProjectId === projectId &&
+          workspaceSnapshot.activeDesignFileId === designFileId
+        ) {
+          setFileName(descriptor.name);
+        }
+        return true;
+      } catch (error) {
+        setEditorError(
+          reportRendererError(
+            "design_file_rename_failed",
+            error,
+            t("error.renameDesignFile"),
+            { projectId, designFileId },
+          ),
+        );
+        return false;
+      }
+    },
+    [projectsById, t, workspace, workspaceSnapshot],
+  );
+
   const openProjectDesignFile = useCallback(
     async (designFileId: string) => {
       if (!window.desktop || !activeProject) return;
@@ -2278,7 +2344,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           />
           <div className="workspace__center">
             <DesignFileTabs
+              canRename={(projectId) => projectsById[projectId] !== undefined}
               onActivate={activateDesignFile}
+              onRename={renameProjectDesignFile}
               snapshot={workspaceSnapshot}
             />
             <Canvas

@@ -505,6 +505,14 @@ function registerProjectIpc() {
       return requireProjectIpc().saveDesignFile(args[0]);
     },
   );
+  ipcMain.handle(
+    channels.renameProjectDesignFile,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      return requireProjectIpc().renameDesignFile(args[0]);
+    },
+  );
 }
 
 function registerIpc() {

@@ -236,6 +236,10 @@ export type SaveProjectDesignFileRequest = ProjectDesignFileRequest & {
   document: DesignDocument;
 };
 
+export type RenameProjectDesignFileRequest = ProjectDesignFileRequest & {
+  name: string;
+};
+
 export type ProjectDesignFile = {
   descriptor: DesignFileDescriptor;
   document: DesignDocument;
@@ -327,6 +331,9 @@ export interface DesktopApi {
   saveProjectDesignFile: (
     request: SaveProjectDesignFileRequest,
   ) => Promise<ProjectDesignFile>;
+  renameProjectDesignFile: (
+    request: RenameProjectDesignFileRequest,
+  ) => Promise<DesignFileDescriptor>;
   sendAgentRequest: (request: AgentRequest) => Promise<void>;
   onAgentEvent: (listener: (event: AgentEvent) => void) => () => void;
 }
@@ -377,6 +384,7 @@ export const channels = {
   createProjectDesignFile: "project:design-file:create",
   readProjectDesignFile: "project:design-file:read",
   saveProjectDesignFile: "project:design-file:save",
+  renameProjectDesignFile: "project:design-file:rename",
   agentRequest: "agent:request",
   agentEvent: "agent:event",
 } as const;
@@ -881,6 +889,20 @@ export function isSaveProjectDesignFileRequest(
   );
 }
 
+export function isRenameProjectDesignFileRequest(
+  value: unknown,
+): value is RenameProjectDesignFileRequest {
+  if (!value || typeof value !== "object") return false;
+  const request = value as Record<string, unknown>;
+  return (
+    isStableId(request.projectId) &&
+    isStableId(request.designFileId) &&
+    isDisplayName(request.name) &&
+    request.name === request.name.trim() &&
+    hasExactKeys(request, ["projectId", "designFileId", "name"])
+  );
+}
+
 export function isProjectDesignFile(
   value: unknown,
 ): value is ProjectDesignFile {
@@ -892,6 +914,12 @@ export function isProjectDesignFile(
     file.descriptor.documentId === file.document.documentId &&
     hasExactKeys(file, ["descriptor", "document"])
   );
+}
+
+export function isDesignFileDescriptorResult(
+  value: unknown,
+): value is DesignFileDescriptor {
+  return isDesignFileDescriptor(value);
 }
 
 export function isRecentProject(value: unknown): value is RecentProject {

@@ -16,6 +16,7 @@ import {
   isAgentAttachmentSelection,
   isAgentAttachmentImport,
   isDesignImageSelection,
+  isDesignFileDescriptorResult,
   isConversationDescriptorResult,
   isCreateConversationRequest,
   isCreateProjectDesignFileRequest,
@@ -28,6 +29,7 @@ import {
   isProjectDesignFile,
   isProjectDesignFileRequest,
   isProjectManifestResult,
+  isRenameProjectDesignFileRequest,
   isRecentProject,
   isOpenSvgFile,
   isSaveProjectDesignFileRequest,
@@ -57,6 +59,7 @@ import {
   type ProviderConnectionResult,
   type ProjectDesignFile,
   type ProjectDesignFileRequest,
+  type RenameProjectDesignFileRequest,
   type RecentProject,
   type SaveDesignFileRequest,
   type OpenSvgFile,
@@ -543,6 +546,22 @@ const desktopApi: DesktopApi = Object.freeze({
       result,
       isProjectDesignFile,
       "Invalid design file response",
+    );
+  },
+  renameProjectDesignFile: async (request: RenameProjectDesignFileRequest) => {
+    validate(
+      request,
+      isRenameProjectDesignFileRequest,
+      "Invalid design file rename request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.renameProjectDesignFile,
+      request,
+    );
+    return validate(
+      result,
+      isDesignFileDescriptorResult,
+      "Invalid design file rename response",
     );
   },
   onNativeThemeChange: (listener: (isDark: boolean) => void) => {

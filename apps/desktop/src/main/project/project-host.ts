@@ -89,10 +89,22 @@ interface ProjectMigrationJournal {
   createdDesignFiles: ProjectInitializationJournal["designFiles"];
 }
 
+interface ProjectDesignFileRenameJournal {
+  version: 1;
+  operation: "rename";
+  projectId: string;
+  designFileId: string;
+  previousManifestHash: string;
+  nextManifestHash: string;
+  previousManifest: ProjectManifest;
+  nextManifest: ProjectManifest;
+}
+
 type ProjectSaveJournal =
   | ProjectDocumentSaveJournal
   | ProjectInitializationJournal
-  | ProjectMigrationJournal;
+  | ProjectMigrationJournal
+  | ProjectDesignFileRenameJournal;
 
 export interface CreateProjectRequest {
   projectId: string;
@@ -441,6 +453,51 @@ export class ProjectHost {
     });
   }
 
+  async renameDesignFile(
+    projectId: string,
+    designFileId: string,
+    name: string,
+    now = new Date().toISOString(),
+  ): Promise<DesignFileDescriptor> {
+    return this.#withProjectMutation(projectId, async () => {
+      assertDesignFileName(name);
+      const project = this.#requireProject(projectId);
+      const index = project.manifest.designFiles.findIndex(
+        (file) => file.designFileId === designFileId,
+      );
+      const descriptor = project.manifest.designFiles[index];
+      if (!descriptor) {
+        throw new ProjectHostError(
+          "DESIGN_FILE_NOT_FOUND",
+          `Unknown design file: ${designFileId}`,
+        );
+      }
+      if (descriptor.name === name) return structuredClone(descriptor);
+
+      const updatedDescriptor = { ...descriptor, name, updatedAt: now };
+      const designFiles = [...project.manifest.designFiles];
+      designFiles[index] = updatedDescriptor;
+      const nextManifest = { ...project.manifest, updatedAt: now, designFiles };
+      const manifestPath = resolve(project.rootPath, PROJECT_MANIFEST_NAME);
+      const previousManifestContents = await readFile(manifestPath, "utf8");
+      const nextManifestContents = JSON.stringify(nextManifest, null, 2);
+      const journal: ProjectSaveJournal = {
+        version: 1,
+        operation: "rename",
+        projectId,
+        designFileId,
+        previousManifestHash: hashContents(previousManifestContents),
+        nextManifestHash: hashContents(nextManifestContents),
+        previousManifest: project.manifest,
+        nextManifest,
+      };
+      await commitProjectSave(project.rootPath, journal);
+      project.manifest = nextManifest;
+      this.#touch(project);
+      return structuredClone(updatedDescriptor);
+    });
+  }
+
   async #withProjectMutation<T>(
     projectId: string,
     operation: () => Promise<T>,
@@ -750,6 +807,14 @@ async function commitProjectSave(
         JSON.stringify(file.nextDocument, null, 2),
       );
     }
+  } else if (journal.operation === "rename") {
+    if ((await readHash(manifestPath)) !== journal.previousManifestHash) {
+      throw new ProjectHostError(
+        "INVALID_PROJECT",
+        "Project changed before the rename could be committed",
+      );
+    }
+    await writeAtomic(journalPath, journalContents);
   } else {
     const documentPath = await resolveProjectPath(
       rootPath,
@@ -834,7 +899,7 @@ async function recoverProjectSave(rootPath: string): Promise<void> {
         );
       }
     }
-  } else {
+  } else if (value.operation !== "rename") {
     const documentPath = await resolveProjectPath(
       rootPath,
       value.relativePath,
@@ -904,6 +969,47 @@ function isProjectSaveJournal(value: unknown): value is ProjectSaveJournal {
       )
     );
   }
+  if (journal.operation === "rename") {
+    if (
+      !isStableId(journal.designFileId) ||
+      !isContentHash(journal.previousManifestHash) ||
+      !isProjectManifest(journal.previousManifest) ||
+      journal.previousManifest.projectId !== journal.projectId ||
+      hashContents(JSON.stringify(journal.previousManifest, null, 2)) !==
+        journal.previousManifestHash
+    ) {
+      return false;
+    }
+    const previousDescriptor = journal.previousManifest.designFiles.find(
+      (file) => file.designFileId === journal.designFileId,
+    );
+    const nextDescriptor = journal.nextManifest.designFiles.find(
+      (file) => file.designFileId === journal.designFileId,
+    );
+    if (
+      !previousDescriptor ||
+      !nextDescriptor ||
+      !isValidDesignFileName(nextDescriptor.name) ||
+      previousDescriptor.name === nextDescriptor.name ||
+      previousDescriptor.documentId !== nextDescriptor.documentId ||
+      previousDescriptor.relativePath !== nextDescriptor.relativePath ||
+      previousDescriptor.createdAt !== nextDescriptor.createdAt ||
+      previousDescriptor.lifecycle !== nextDescriptor.lifecycle ||
+      nextDescriptor.updatedAt !== journal.nextManifest.updatedAt
+    ) {
+      return false;
+    }
+    const expectedManifest: ProjectManifest = {
+      ...journal.previousManifest,
+      updatedAt: nextDescriptor.updatedAt,
+      designFiles: journal.previousManifest.designFiles.map((file) =>
+        file.designFileId === journal.designFileId ? nextDescriptor : file,
+      ),
+    };
+    return (
+      JSON.stringify(expectedManifest) === JSON.stringify(journal.nextManifest)
+    );
+  }
   if (
     (journal.operation !== "create" && journal.operation !== "save") ||
     !isStableId(journal.designFileId) ||
@@ -970,6 +1076,32 @@ function isContentHash(value: unknown): value is string {
 
 function hashContents(contents: string): string {
   return createHash("sha256").update(contents, "utf8").digest("hex");
+}
+
+function assertDesignFileName(name: string): void {
+  if (!isValidDesignFileName(name)) {
+    throw new ProjectHostError(
+      "INVALID_DESIGN_FILE",
+      "Design file name must contain 1 to 256 visible characters without surrounding whitespace",
+    );
+  }
+}
+
+function isValidDesignFileName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 256 &&
+    value === value.trim() &&
+    !hasControlCharacter(value)
+  );
+}
+
+function hasControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
+  });
 }
 
 async function readHash(path: string): Promise<string | null> {
