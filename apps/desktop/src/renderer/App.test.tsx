@@ -45,6 +45,10 @@ import * as svgInterchange from "./svg-interchange";
 import type { SuccessfulSvgImportResult } from "./svg-interchange-contract";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
 import type { DiagnosticEvent } from "../shared/diagnostics";
+import {
+  DESIGN_PLAN_TOOL_NAME,
+  type DesignPlanToolInput,
+} from "../shared/design-agent-tools";
 
 const leaferHarness = vi.hoisted(() => ({
   callbacks: null as LeaferEngineCallbacks | null,
@@ -3107,6 +3111,148 @@ describe("App", () => {
     expect(screen.getByLabelText("Continue the task")).toBeEnabled();
   });
 
+  it("shows an accepted typed plan on the canvas until the Run ends", async () => {
+    const { user, conversation } = await openProjectConversation();
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Create an editorial poster",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const request = runRequests(conversation.conversationId).at(-1);
+    if (!request) throw new Error("Agent run request is missing");
+    const plan = rendererGenerationPlan();
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: request.runId,
+        startedAt: now,
+      });
+      emitAgentEvent?.({
+        type: "tool.requested",
+        runId: request.runId,
+        toolCallId: "tool_plan_poster",
+        toolName: DESIGN_PLAN_TOOL_NAME,
+        input: plan,
+        risk: "read",
+      });
+    });
+    expect(leaferHarness.input?.generationSkeleton).toBeUndefined();
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "tool.completed",
+        runId: request.runId,
+        toolCallId: "tool_plan_poster",
+        result: {
+          ok: true,
+          status: "accepted",
+          version: plan.version,
+          deliverable: plan.deliverable,
+          outputMode: plan.outputMode,
+          pageId: plan.pageId,
+          artboard: plan.artboard,
+          regions: plan.composition.regions,
+          editableLayers: plan.editableLayers,
+          rasterAssetRoles: plan.rasterAssetRoles,
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.generationSkeleton).toEqual({
+        id: `${request.runId}:tool_plan_poster`,
+        artboard: {
+          frameId: "poster_artboard",
+          height: 1_000,
+          pending: true,
+          transform: [1, 0, 0, 1, 1_240, 80],
+          width: 800,
+        },
+        regions: plan.composition.regions.map((region) => ({
+          height: region.height,
+          id: region.nodeId,
+          name: region.name,
+          role: region.role,
+          width: region.width,
+          x: region.x,
+          y: region.y,
+        })),
+      }),
+    );
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.completed",
+        runId: request.runId,
+        finishedAt: now,
+        stopReason: "complete",
+      });
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
+    );
+  });
+
+  it("removes the accepted canvas skeleton immediately when the user stops", async () => {
+    const { user, conversation } = await openProjectConversation();
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Create an editorial poster",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const request = runRequests(conversation.conversationId).at(-1);
+    if (!request) throw new Error("Agent run request is missing");
+    const plan = rendererGenerationPlan();
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: request.runId,
+        startedAt: now,
+      });
+      emitAgentEvent?.({
+        type: "tool.requested",
+        runId: request.runId,
+        toolCallId: "tool_plan_stop",
+        toolName: DESIGN_PLAN_TOOL_NAME,
+        input: plan,
+        risk: "read",
+      });
+      emitAgentEvent?.({
+        type: "tool.completed",
+        runId: request.runId,
+        toolCallId: "tool_plan_stop",
+        result: {
+          ok: true,
+          status: "accepted",
+          version: plan.version,
+          deliverable: plan.deliverable,
+          outputMode: plan.outputMode,
+          pageId: plan.pageId,
+          artboard: plan.artboard,
+          regions: plan.composition.regions,
+          editableLayers: plan.editableLayers,
+          rasterAssetRoles: plan.rasterAssetRoles,
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.generationSkeleton?.id).toBe(
+        `${request.runId}:tool_plan_stop`,
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(window.desktop?.sendAgentRequest).toHaveBeenCalledWith({
+      type: "run.cancel",
+      runId: request.runId,
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
+    );
+  });
+
   it("keeps the prompt and reports an Agent connection error", async () => {
     const { user } = await openProjectConversation();
     vi.mocked(window.desktop!.sendAgentRequest).mockImplementationOnce(
@@ -3372,7 +3518,52 @@ describe("App", () => {
         byteSize: 3,
       },
     ]);
-    renderApp();
+    const { user, conversation } = await openProjectConversation();
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Create an editorial poster",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const run = runRequests(conversation.conversationId).at(-1);
+    if (!run) throw new Error("Agent run request is missing");
+    const plan = rendererGenerationPlan();
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: run.runId,
+        startedAt: now,
+      });
+      emitAgentEvent?.({
+        type: "tool.requested",
+        runId: run.runId,
+        toolCallId: "tool_plan_capture",
+        toolName: DESIGN_PLAN_TOOL_NAME,
+        input: plan,
+        risk: "read",
+      });
+      emitAgentEvent?.({
+        type: "tool.completed",
+        runId: run.runId,
+        toolCallId: "tool_plan_capture",
+        result: {
+          ok: true,
+          status: "accepted",
+          version: plan.version,
+          deliverable: plan.deliverable,
+          outputMode: plan.outputMode,
+          pageId: plan.pageId,
+          artboard: plan.artboard,
+          regions: plan.composition.regions,
+          editableLayers: plan.editableLayers,
+          rasterAssetRoles: plan.rasterAssetRoles,
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.generationSkeleton?.id).toBe(
+        `${run.runId}:tool_plan_capture`,
+      ),
+    );
     if (!requestDesignTool) throw new Error("Design tool listener is missing");
     leaferHarness.finishGenerationPresentation.mockClear();
     const current = runtime().getSnapshot().document;
@@ -3386,8 +3577,8 @@ describe("App", () => {
           input: {},
         },
         context: {
-          runId: "run_capture",
-          sessionId: "conversation_capture",
+          runId: run.runId,
+          sessionId: conversation.conversationId,
           documentId: current.documentId,
           revision: current.revision,
           scope: { kind: "document", selectedNodeIds: [] },
@@ -3491,6 +3682,67 @@ describe("App", () => {
     expect(screen.getByText("Opened canvas")).toBeInTheDocument();
   });
 });
+
+function rendererGenerationPlan(): DesignPlanToolInput {
+  return {
+    version: 2,
+    pageId: "page_welcome",
+    deliverable: "poster",
+    objective: "Create an editorial launch poster",
+    outputMode: "editable-composition",
+    artboard: {
+      mode: "create",
+      frameId: "poster_artboard",
+      x: 1_240,
+      y: 80,
+      width: 800,
+      height: 1_000,
+    },
+    composition: {
+      direction: "Asymmetric editorial composition",
+      hierarchy: ["Hero visual", "Launch typography"],
+      regions: [
+        {
+          nodeId: "poster_hero",
+          name: "Hero visual",
+          role: "graphic",
+          x: 48,
+          y: 80,
+          width: 704,
+          height: 560,
+        },
+        {
+          nodeId: "poster_title",
+          name: "Launch typography",
+          role: "typography",
+          x: 48,
+          y: 688,
+          width: 704,
+          height: 200,
+        },
+      ],
+      assetIntegration:
+        "Use editable vector artwork with intentional overlap and negative space",
+      spacingRhythm: "8/16/24/48 px editorial rhythm",
+    },
+    visualSystem: {
+      avoidances: ["No generic text slab", "No centered card stack"],
+      formLanguage: "Sharp editorial geometry with one organic hero",
+      palette: ["#111111", "#F4F0E8", "#7C6EE6"],
+      surfaceAndDepth: "Overlap and tonal contrast without generic cards",
+      typography: ["Display 72/76", "Body 18/26"],
+      effects: ["Tight outer glow"],
+    },
+    rasterAssetRoles: [],
+    editableLayers: ["Hero visual", "Title", "Supporting copy"],
+    implementationSteps: [
+      "Create the artboard",
+      "Build the planned regions",
+      "Refine depth and hierarchy",
+    ],
+    validationChecks: ["Check silhouette", "Check type hierarchy"],
+  };
+}
 
 function leaferCallbacks(): LeaferEngineCallbacks {
   if (!leaferHarness.callbacks)

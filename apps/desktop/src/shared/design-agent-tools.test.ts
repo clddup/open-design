@@ -22,6 +22,7 @@ import {
 describe("design Agent tool contract", () => {
   it("requires a bounded executable design plan and rendered critique", () => {
     const plan = {
+      version: 2,
       pageId: "page_1",
       deliverable: "ui",
       objective: "Design a polished analytics workspace",
@@ -29,12 +30,43 @@ describe("design Agent tool contract", () => {
       artboard: {
         mode: "create",
         frameId: "analytics_artboard",
+        x: 120,
+        y: 80,
         width: 1440,
         height: 1024,
       },
       composition: {
         direction: "Dense desktop workspace with a strong primary data plane",
         hierarchy: ["Navigation", "Primary analysis", "Contextual detail"],
+        regions: [
+          {
+            nodeId: "analytics_navigation",
+            name: "Navigation",
+            role: "structure",
+            x: 32,
+            y: 32,
+            width: 1376,
+            height: 72,
+          },
+          {
+            nodeId: "analytics_primary",
+            name: "Primary analysis",
+            role: "content",
+            x: 32,
+            y: 128,
+            width: 960,
+            height: 864,
+          },
+          {
+            nodeId: "analytics_inspector",
+            name: "Contextual detail",
+            role: "interaction",
+            x: 1016,
+            y: 128,
+            width: 392,
+            height: 864,
+          },
+        ],
         assetIntegration:
           "Use native icons and restrained vector data accents; no raster asset",
         spacingRhythm: "4/8/12/20/32 px rhythm",
@@ -77,6 +109,51 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, plan)).toBe(
       true,
     );
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...plan,
+        composition: {
+          ...plan.composition,
+          regions: [
+            ...plan.composition.regions.slice(0, 2),
+            {
+              ...plan.composition.regions[2],
+              x: 1_200,
+              width: 392,
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...plan,
+        composition: {
+          ...plan.composition,
+          regions: [
+            {
+              ...plan.composition.regions[0],
+              nodeId: plan.artboard.frameId,
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...plan,
+        composition: {
+          ...plan.composition,
+          regions: [
+            plan.composition.regions[0],
+            {
+              ...plan.composition.regions[1],
+              nodeId: "analytics_navigation",
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
         ...plan,

@@ -1,10 +1,77 @@
-import type { DesignNode, EditorEvent } from "@opendesign/design-contracts";
+import type {
+  DesignNode,
+  EditorEvent,
+  FrameNode,
+} from "@opendesign/design-contracts";
 import {
   createWelcomeDocument,
   EditorRuntime,
 } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
-import { generationRevealFromEditorEvent } from "./generation-presentation";
+import {
+  DESIGN_PLAN_TOOL_NAME,
+  type DesignPlanToolInput,
+} from "../shared/design-agent-tools";
+import {
+  EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+  generationRevealFromEditorEvent,
+  generationSkeletonFromAcceptedPlan,
+  projectGenerationPlanPresentationEvent,
+} from "./generation-presentation";
+
+const generationPlan = {
+  version: 2,
+  pageId: "page_welcome",
+  deliverable: "poster",
+  objective: "Create an editorial launch poster",
+  outputMode: "editable-composition",
+  artboard: {
+    mode: "create",
+    frameId: "poster_artboard",
+    x: 1_240,
+    y: 80,
+    width: 800,
+    height: 1_000,
+  },
+  composition: {
+    direction: "Asymmetric editorial composition",
+    hierarchy: ["Hero visual", "Launch typography"],
+    regions: [
+      {
+        nodeId: "poster_hero",
+        name: "Hero visual",
+        role: "graphic",
+        x: 48,
+        y: 80,
+        width: 704,
+        height: 560,
+      },
+      {
+        nodeId: "poster_title",
+        name: "Launch typography",
+        role: "typography",
+        x: 48,
+        y: 688,
+        width: 704,
+        height: 200,
+      },
+    ],
+    assetIntegration: "Use editable vector artwork with intentional overlap",
+    spacingRhythm: "8/16/24/48 px editorial rhythm",
+  },
+  visualSystem: {
+    avoidances: ["No generic text slab", "No centered card stack"],
+    formLanguage: "Sharp editorial geometry with one organic hero",
+    palette: ["#111111", "#F4F0E8", "#7C6EE6"],
+    surfaceAndDepth: "Overlap and tonal contrast without generic cards",
+    typography: ["Display 72/76", "Body 18/26"],
+    effects: ["Tight outer glow"],
+  },
+  rasterAssetRoles: [],
+  editableLayers: ["Hero visual", "Title", "Supporting copy"],
+  implementationSteps: ["Create artboard", "Build regions", "Refine depth"],
+  validationChecks: ["Check silhouette", "Check type hierarchy"],
+} satisfies DesignPlanToolInput;
 
 describe("Renderer Agent generation presentation", () => {
   it("derives parent-first reveal order from committed Agent additions", () => {
@@ -149,6 +216,322 @@ describe("Renderer Agent generation presentation", () => {
     ).toBeUndefined();
   });
 });
+
+describe("Renderer typed plan skeleton presentation", () => {
+  it("only accepts a plan after the matching Main tool completion", () => {
+    const requested = {
+      type: "tool.requested" as const,
+      runId: "run_plan",
+      toolCallId: "tool_plan",
+      toolName: DESIGN_PLAN_TOOL_NAME,
+      input: generationPlan,
+      risk: "read" as const,
+    };
+    const afterRequest = projectGenerationPlanPresentationEvent(
+      EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+      requested,
+    );
+    expect(afterRequest.acceptedByRunId.run_plan).toBeUndefined();
+
+    const afterCompletion = projectGenerationPlanPresentationEvent(
+      afterRequest,
+      {
+        type: "tool.completed",
+        runId: "run_plan",
+        toolCallId: "tool_plan",
+        result: acceptedPlanResult(generationPlan),
+      },
+    );
+    expect(afterCompletion.acceptedByRunId.run_plan).toMatchObject({
+      id: "run_plan:tool_plan",
+      plan: generationPlan,
+      runId: "run_plan",
+      toolCallId: "tool_plan",
+    });
+    expect(afterCompletion.requestedByCallId).toEqual({});
+
+    expect(
+      projectGenerationPlanPresentationEvent(afterCompletion, {
+        type: "run.completed",
+        runId: "run_plan",
+        finishedAt: "2026-08-11T12:00:00.000Z",
+        stopReason: "complete",
+      }),
+    ).toEqual(EMPTY_GENERATION_PLAN_PRESENTATION_STATE);
+  });
+
+  it("rejects failed, malformed, or mismatched plan events", () => {
+    const malformed = projectGenerationPlanPresentationEvent(
+      EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+      {
+        type: "tool.requested",
+        runId: "run_bad",
+        toolCallId: "tool_bad",
+        toolName: DESIGN_PLAN_TOOL_NAME,
+        input: { ...generationPlan, version: 1 },
+        risk: "read",
+      },
+    );
+    expect(malformed).toBe(EMPTY_GENERATION_PLAN_PRESENTATION_STATE);
+
+    const requested = projectGenerationPlanPresentationEvent(
+      EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+      {
+        type: "tool.requested",
+        runId: "run_bad",
+        toolCallId: "tool_bad",
+        toolName: DESIGN_PLAN_TOOL_NAME,
+        input: generationPlan,
+        risk: "read",
+      },
+    );
+    const mismatched = projectGenerationPlanPresentationEvent(requested, {
+      type: "tool.completed",
+      runId: "run_bad",
+      toolCallId: "tool_bad",
+      result: {
+        ...acceptedPlanResult(generationPlan),
+        pageId: "page_other",
+      },
+    });
+    expect(mismatched.acceptedByRunId.run_bad).toBeUndefined();
+    expect(mismatched.requestedByCallId).toEqual({});
+  });
+
+  it("uses planned artboard geometry and replaces fulfilled regions with committed nodes", () => {
+    const accepted = {
+      id: "run_plan:tool_plan",
+      plan: generationPlan,
+      runId: "run_plan",
+      toolCallId: "tool_plan",
+    };
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    expect(
+      generationSkeletonFromAcceptedPlan(
+        accepted,
+        runtime.getSnapshot().document,
+        "page_welcome",
+      ),
+    ).toEqual({
+      id: accepted.id,
+      artboard: {
+        frameId: "poster_artboard",
+        height: 1_000,
+        pending: true,
+        transform: [1, 0, 0, 1, 1_240, 80],
+        width: 800,
+      },
+      regions: generationPlan.composition.regions.map((region) => ({
+        height: region.height,
+        id: region.nodeId,
+        name: region.name,
+        role: region.role,
+        width: region.width,
+        x: region.x,
+        y: region.y,
+      })),
+    });
+
+    const inserted = runtime.apply({
+      transactionId: "transaction_plan_structure",
+      documentId: "document_welcome",
+      baseRevision: 0,
+      actor: { type: "agent", id: "agent_conversation" },
+      label: "Create planned poster structure",
+      commands: [
+        {
+          commandId: "insert_poster_artboard",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: null,
+          index: 1,
+          node: frameNode(),
+        },
+        {
+          commandId: "insert_poster_hero",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: "poster_artboard",
+          index: 0,
+          node: node({
+            id: "poster_hero",
+            kind: "group",
+            parentId: "poster_artboard",
+            properties: {},
+          }),
+        },
+      ],
+    });
+    expect(inserted.ok).toBe(true);
+    const withEmptyRegion = generationSkeletonFromAcceptedPlan(
+      accepted,
+      runtime.getSnapshot().document,
+      "page_welcome",
+    );
+    expect(withEmptyRegion?.artboard).toMatchObject({
+      pending: false,
+      transform: [1, 0, 0, 1, 1_240, 80],
+    });
+    expect(withEmptyRegion?.regions.map((region) => region.id)).toEqual([
+      "poster_hero",
+      "poster_title",
+    ]);
+
+    const nestedEmptyGroup = runtime.apply({
+      transactionId: "transaction_plan_empty_nested_group",
+      documentId: "document_welcome",
+      baseRevision: 1,
+      actor: { type: "agent", id: "agent_conversation" },
+      label: "Create an empty nested group",
+      commands: [
+        {
+          commandId: "insert_empty_nested_group",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: "poster_hero",
+          index: 0,
+          node: node({
+            id: "poster_hero_empty_group",
+            kind: "group",
+            parentId: "poster_hero",
+            properties: {},
+          }),
+        },
+      ],
+    });
+    expect(nestedEmptyGroup.ok).toBe(true);
+    expect(
+      generationSkeletonFromAcceptedPlan(
+        accepted,
+        runtime.getSnapshot().document,
+        "page_welcome",
+      )?.regions.map((region) => region.id),
+    ).toEqual(["poster_hero", "poster_title"]);
+
+    const heroContent = runtime.apply({
+      transactionId: "transaction_plan_hero_content",
+      documentId: "document_welcome",
+      baseRevision: 2,
+      actor: { type: "agent", id: "agent_conversation" },
+      label: "Build planned hero",
+      commands: [
+        {
+          commandId: "insert_hero_shape",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: "poster_hero",
+          index: 1,
+          node: node({
+            id: "hero_shape",
+            kind: "rectangle",
+            parentId: "poster_hero",
+            properties: {
+              fills: [{ type: "solid", color: "#7c6ee6", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+              cornerRadius: 12,
+            },
+          }),
+        },
+      ],
+    });
+    expect(heroContent.ok).toBe(true);
+    expect(
+      generationSkeletonFromAcceptedPlan(
+        accepted,
+        runtime.getSnapshot().document,
+        "page_welcome",
+      )?.regions.map((region) => region.id),
+    ).toEqual(["poster_title"]);
+  });
+
+  it("does not present an existing or conflicting artboard plan as trusted geometry", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const existing = {
+      id: "run_existing:tool_plan",
+      plan: {
+        ...generationPlan,
+        artboard: { ...generationPlan.artboard, mode: "existing" as const },
+      },
+      runId: "run_existing",
+      toolCallId: "tool_plan",
+    };
+    expect(
+      generationSkeletonFromAcceptedPlan(
+        existing,
+        runtime.getSnapshot().document,
+        "page_welcome",
+      ),
+    ).toBeUndefined();
+
+    const conflicting = runtime.apply({
+      transactionId: "transaction_conflicting_artboard",
+      documentId: "document_welcome",
+      baseRevision: 0,
+      actor: { type: "user", id: "user_local" },
+      label: "Create conflicting artboard",
+      commands: [
+        {
+          commandId: "insert_conflicting_artboard",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: null,
+          index: 1,
+          node: {
+            ...frameNode(),
+            transform: [1, 0, 0, 1, 1_280, 80],
+          },
+        },
+      ],
+    });
+    expect(conflicting.ok).toBe(true);
+    expect(
+      generationSkeletonFromAcceptedPlan(
+        { ...existing, plan: generationPlan },
+        runtime.getSnapshot().document,
+        "page_welcome",
+      ),
+    ).toBeUndefined();
+  });
+});
+
+function acceptedPlanResult(plan: DesignPlanToolInput) {
+  return {
+    ok: true,
+    status: "accepted",
+    version: plan.version,
+    deliverable: plan.deliverable,
+    outputMode: plan.outputMode,
+    pageId: plan.pageId,
+    artboard: plan.artboard,
+    regions: plan.composition.regions,
+    editableLayers: plan.editableLayers,
+    rasterAssetRoles: plan.rasterAssetRoles,
+  };
+}
+
+function frameNode(): FrameNode {
+  return {
+    id: "poster_artboard",
+    kind: "frame",
+    name: "Poster artboard",
+    parentId: null,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 1_240, 80],
+    size: { width: 800, height: 1_000 },
+    opacity: 1,
+    properties: {
+      fills: [{ type: "solid", color: "#f4f0e8", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+      cornerRadius: 0,
+      clipsContent: true,
+    },
+    extensions: {},
+  };
+}
 
 function node(
   input:

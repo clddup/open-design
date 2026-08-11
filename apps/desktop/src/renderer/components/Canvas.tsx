@@ -26,6 +26,7 @@ import {
   type LeaferEngineAdapter,
   type LeaferEngineSyncInput,
   type LeaferFidelityWarning,
+  type LeaferGenerationSkeleton,
   type LeaferOperationKind,
   type LeaferOperationRequest,
   type LeaferVectorEditRequest,
@@ -49,6 +50,7 @@ export function Canvas({
   activeAgentRunId,
   activePageId,
   captureRef,
+  generationSkeleton,
   runtime,
   snapshot,
   onTransactionError,
@@ -56,6 +58,7 @@ export function Canvas({
   activeAgentRunId: string | null;
   activePageId: string;
   captureRef?: MutableRefObject<CanvasPreviewCapture | null>;
+  generationSkeleton?: LeaferGenerationSkeleton;
   runtime: EditorRuntime;
   snapshot: EditorSnapshot;
   onTransactionError: (message: string | null) => void;
@@ -514,6 +517,7 @@ export function Canvas({
       document: snapshot.document,
       ...(changes ? { changes } : {}),
       ...(generationReveal ? { generationReveal } : {}),
+      ...(generationSkeleton ? { generationSkeleton } : {}),
       pageId: activePageId,
       reducedMotion,
       selection: snapshot.state.selection,
@@ -534,6 +538,7 @@ export function Canvas({
   }, [
     activePageId,
     booleanEditScope,
+    generationSkeleton,
     snapshot.document,
     reducedMotion,
     snapshot.state.selection,

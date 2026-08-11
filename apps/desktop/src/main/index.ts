@@ -1052,10 +1052,12 @@ void app.whenReady().then(async () => {
         content: {
           ok: true,
           status: "accepted",
+          version: call.input.version,
           deliverable: call.input.deliverable,
           outputMode: call.input.outputMode,
           pageId: call.input.pageId,
           artboard: call.input.artboard,
+          regions: call.input.composition.regions,
           editableLayers: call.input.editableLayers,
           rasterAssetRoles: call.input.rasterAssetRoles,
         },

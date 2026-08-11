@@ -513,11 +513,17 @@ function assertPlannedArtboardWrite(
       artboardInsert.pageId !== pageId ||
       artboardInsert.parentId !== null ||
       artboardInsert.node.parentId !== null ||
+      artboardInsert.node.transform[0] !== 1 ||
+      artboardInsert.node.transform[1] !== 0 ||
+      artboardInsert.node.transform[2] !== 0 ||
+      artboardInsert.node.transform[3] !== 1 ||
+      artboardInsert.node.transform[4] !== artboard.x ||
+      artboardInsert.node.transform[5] !== artboard.y ||
       artboardInsert.node.size.width !== artboard.width ||
       artboardInsert.node.size.height !== artboard.height
     ) {
       throw new Error(
-        "The first design creation transaction must create the planned Page-root Frame at its declared dimensions",
+        "The first design creation transaction must create the planned axis-aligned Page-root Frame at its declared position and dimensions",
       );
     }
     const insertedParents = new Map(
@@ -538,6 +544,7 @@ function assertPlannedArtboardWrite(
         );
       }
     }
+    assertPlannedRegionWrites(inserts, state.plan);
     return;
   }
   const insertedParents = new Map(
@@ -554,6 +561,40 @@ function assertPlannedArtboardWrite(
     ) {
       throw new Error(
         "New design layers cannot be scattered outside the planned artboard Frame",
+      );
+    }
+  }
+  assertPlannedRegionWrites(inserts, state.plan);
+}
+
+function assertPlannedRegionWrites(
+  inserts: readonly Extract<
+    DesignApplyToolInput["commands"][number],
+    { type: "insert_element" }
+  >[],
+  plan: DesignPlanToolInput,
+): void {
+  const regionsById = new Map(
+    plan.composition.regions.map((region) => [region.nodeId, region]),
+  );
+  for (const command of inserts) {
+    const region = regionsById.get(command.node.id);
+    if (!region) continue;
+    if (
+      (command.node.kind !== "group" && command.node.kind !== "frame") ||
+      command.parentId !== plan.artboard.frameId ||
+      command.node.parentId !== plan.artboard.frameId ||
+      command.node.transform[0] !== 1 ||
+      command.node.transform[1] !== 0 ||
+      command.node.transform[2] !== 0 ||
+      command.node.transform[3] !== 1 ||
+      command.node.transform[4] !== region.x ||
+      command.node.transform[5] !== region.y ||
+      command.node.size.width !== region.width ||
+      command.node.size.height !== region.height
+    ) {
+      throw new Error(
+        `Planned region ${region.nodeId} must be an axis-aligned Group or Frame directly inside the artboard at its declared bounds`,
       );
     }
   }

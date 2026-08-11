@@ -46,6 +46,7 @@ import { ResizeHandle } from "@opendesign/ui";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -85,6 +86,12 @@ import {
 } from "./editor-runtime";
 import { useI18n } from "./i18n";
 import { executeDesignToolRequest } from "./design-tool-execution";
+import {
+  EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+  clearGenerationPlanPresentationRun,
+  generationSkeletonFromAcceptedPlan,
+  projectGenerationPlanPresentationEvent,
+} from "./generation-presentation";
 import { isTool, type SidebarTab, type Tool } from "./state/editor";
 import type { SvgWorkerExportSettings } from "./svg-interchange-contract";
 import {
@@ -201,6 +208,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const [agentByConversationId, setAgentByConversationId] = useState<
     Readonly<Record<string, ConversationAgentState>>
   >({});
+  const [generationPlanPresentation, setGenerationPlanPresentation] = useState(
+    EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+  );
   const [globalTasks, setGlobalTasks] = useState<GlobalTaskProjection[]>([]);
   const [agentRuntimeError, setAgentRuntimeError] = useState<string | null>(
     null,
@@ -305,6 +315,19 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     ? (agentByConversationId[activeConversation.conversationId] ??
       EMPTY_AGENT_STATE)
     : EMPTY_AGENT_STATE;
+  const generationSkeleton = useMemo(() => {
+    const runId = activeAgentState.activeRunId;
+    return generationSkeletonFromAcceptedPlan(
+      runId ? generationPlanPresentation.acceptedByRunId[runId] : undefined,
+      designDocument,
+      activePageId,
+    );
+  }, [
+    activeAgentState.activeRunId,
+    activePageId,
+    designDocument,
+    generationPlanPresentation.acceptedByRunId,
+  ]);
 
   const requestConversationHistory = useCallback(
     async (conversationId: string) => {
@@ -447,6 +470,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         );
         return;
       }
+
+      setGenerationPlanPresentation((current) =>
+        projectGenerationPlanPresentationEvent(current, event),
+      );
 
       const runId = "runId" in event ? event.runId : undefined;
       const conversationId = runId
@@ -1840,6 +1867,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     const conversationId = activeConversation.conversationId;
     try {
       await window.desktop.sendAgentRequest({ type: "run.cancel", runId });
+      setGenerationPlanPresentation((current) =>
+        clearGenerationPlanPresentationRun(current, runId),
+      );
       return true;
     } catch (error) {
       setAgentByConversationId((current) =>
@@ -2042,6 +2072,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               activeAgentRunId={activeAgentState.activeRunId}
               activePageId={activePageId}
               captureRef={canvasPreviewCapture}
+              generationSkeleton={generationSkeleton}
               onTransactionError={setEditorError}
               runtime={runtime}
               snapshot={snapshot}

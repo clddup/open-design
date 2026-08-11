@@ -3,6 +3,7 @@ import type {
   DesignDocument,
   DesignOperation,
   SelectionState,
+  Transform,
   VectorNetwork,
   VectorPointMode,
   ViewportState,
@@ -91,11 +92,44 @@ export interface LeaferGenerationReveal {
   startedAt: number;
 }
 
+export type LeaferGenerationSkeletonRole =
+  | "structure"
+  | "content"
+  | "typography"
+  | "media"
+  | "graphic"
+  | "decoration"
+  | "interaction"
+  | "other";
+
+export interface LeaferGenerationSkeletonRegion {
+  height: number;
+  id: string;
+  name: string;
+  role: LeaferGenerationSkeletonRole;
+  width: number;
+  x: number;
+  y: number;
+}
+
+export interface LeaferGenerationSkeleton {
+  artboard: {
+    frameId: string;
+    height: number;
+    pending: boolean;
+    transform: Transform;
+    width: number;
+  };
+  id: string;
+  regions: readonly LeaferGenerationSkeletonRegion[];
+}
+
 export interface LeaferEngineSyncInput {
   booleanEditScope?: LeaferBooleanEditScope;
   document: DesignDocument;
   changes?: DesignChangeSet;
   generationReveal?: LeaferGenerationReveal;
+  generationSkeleton?: LeaferGenerationSkeleton;
   pageId: string;
   reducedMotion?: boolean;
   selection: SelectionState;

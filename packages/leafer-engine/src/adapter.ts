@@ -62,6 +62,7 @@ import type {
   LeaferEngineAdapter,
   LeaferEngineCallbacks,
   LeaferGenerationReveal,
+  LeaferGenerationSkeleton,
   LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferOperationKind,
@@ -79,6 +80,14 @@ interface ElementState {
   size: { height: number; width: number };
   text?: string;
   transform: Transform;
+}
+
+interface GenerationSkeletonLabel {
+  element: LeaferElement;
+  height: number;
+  width: number;
+  x: number;
+  y: number;
 }
 
 interface TransformSession {
@@ -167,6 +176,9 @@ const MAX_VIEWPORT_ZOOM = 8;
 const WHEEL_ZOOM_SPEED = 0.16;
 const GENERATION_REVEAL_COLOR = "#6574ff";
 const MAX_PROCESSED_GENERATION_REVEALS = 128;
+const GENERATION_SKELETON_COLOR = "#7c6ee6";
+const GENERATION_SKELETON_FILL = "rgba(124, 110, 230, 0.08)";
+const MAX_SUPPRESSED_GENERATION_SKELETONS = 128;
 
 export async function createLeaferEngineAdapter(
   host: HTMLElement,
@@ -184,6 +196,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #leafer: LeaferModule;
   readonly #editor: LeaferEditor;
   readonly #generationRevealStroker: LeaferStroker;
+  readonly #generationSkeletonLayer: LeaferGroup;
   readonly #elements = new Map<string, LeaferElement>();
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
   #baseProjection: LeaferSceneProjection | null = null;
@@ -216,6 +229,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #generationRevealNextStartAt: number | null = null;
   readonly #generationReveals = new Map<string, ScheduledGenerationReveal>();
   readonly #processedGenerationRevealIds = new Set<string>();
+  #generationSkeletonFingerprint: string | null = null;
+  #generationSkeletonId: string | null = null;
+  readonly #generationSkeletonStrokes: LeaferElement[] = [];
+  readonly #generationSkeletonLabels: GenerationSkeletonLabel[] = [];
+  readonly #suppressedGenerationSkeletonIds = new Set<string>();
 
   constructor(
     host: HTMLElement,
@@ -270,6 +288,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       },
     });
     this.#editor = this.#app.editor as LeaferEditor;
+    this.#generationSkeletonLayer = new leafer.Group({
+      editable: false,
+      hitChildren: false,
+      hittable: false,
+      visible: false,
+    });
+    (this.#app.sky as unknown as LeaferGroup).addAt(
+      this.#generationSkeletonLayer,
+      0,
+    );
     this.#generationRevealStroker = new leafer.Stroker();
     this.#generationRevealStroker.set({
       dashPattern: [6, 4],
@@ -287,6 +315,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   sync(input: LeaferEngineSyncInput): void {
     if (this.#disposed) return;
     const previous = this.#input;
+    const identityChanged =
+      !previous ||
+      previous.document.documentId !== input.document.documentId ||
+      previous.pageId !== input.pageId;
     if (
       previous?.vectorEditScope?.nodeId !== input.vectorEditScope?.nodeId ||
       previous?.document.documentId !== input.document.documentId ||
@@ -298,15 +330,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       previous?.tool === "pen" && input.tool !== "pen" && this.#pen
         ? this.#takePenRequest(false)
         : null;
-    this.#input = input;
-    const identityChanged =
-      !previous ||
-      previous.document.documentId !== input.document.documentId ||
-      previous.pageId !== input.pageId;
     if (identityChanged) {
-      this.finishGenerationPresentation();
+      this.#finishGenerationReveal();
+      this.#clearGenerationSkeleton(false);
       this.#processedGenerationRevealIds.clear();
+      this.#suppressedGenerationSkeletonIds.clear();
     }
+    this.#input = input;
     const sceneChanged =
       identityChanged ||
       previous?.document.revision !== input.document.revision;
@@ -423,8 +453,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection.nodeIds);
+      this.#syncGenerationSkeleton(input.generationSkeleton);
       if (input.reducedMotion === true) {
-        this.finishGenerationPresentation();
+        this.#finishGenerationReveal();
         if (input.generationReveal) {
           this.#rememberGenerationReveal(input.generationReveal.id);
         }
@@ -461,6 +492,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#editorFrame = null;
     this.#editorRefreshNeedsTreeBounds = false;
     this.#editorRefreshNodeBounds.clear();
+    this.#generationSkeletonLayer.remove();
+    this.#generationSkeletonLayer.destroy();
     this.#generationRevealStroker.remove();
     this.#generationRevealStroker.destroy();
     window.removeEventListener("keydown", this.#onWindowKeyDown, true);
@@ -470,6 +503,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   finishGenerationPresentation(): void {
+    this.#finishGenerationReveal();
+    this.#clearGenerationSkeleton(true);
+  }
+
+  #finishGenerationReveal(): void {
     if (this.#generationRevealFrame !== null) {
       cancelAnimationFrame(this.#generationRevealFrame);
       this.#generationRevealFrame = null;
@@ -589,6 +627,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#scheduleViewport();
       this.#scheduleEditorRefresh();
       this.#renderVectorEditOverlay();
+      this.#syncGenerationSkeletonViewport();
     };
     this.#app.tree.on(MoveEvent.MOVE, viewportChanged);
     this.#app.tree.on(MoveEvent.END, viewportChanged);
@@ -944,6 +983,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       e: viewport.panX,
       f: viewport.panY,
     });
+    this.#syncGenerationSkeletonViewport();
     this.#scheduleEditorRefresh();
   }
 
@@ -2090,6 +2130,145 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#draw = null;
   }
 
+  #syncGenerationSkeleton(
+    skeleton: LeaferGenerationSkeleton | undefined,
+  ): void {
+    if (!skeleton || this.#suppressedGenerationSkeletonIds.has(skeleton.id)) {
+      this.#clearGenerationSkeleton(false);
+      return;
+    }
+    const fingerprint = JSON.stringify(skeleton);
+    if (
+      this.#generationSkeletonId === skeleton.id &&
+      this.#generationSkeletonFingerprint === fingerprint
+    ) {
+      this.#syncGenerationSkeletonViewport();
+      return;
+    }
+
+    this.#clearGenerationSkeleton(false);
+    this.#generationSkeletonId = skeleton.id;
+    this.#generationSkeletonFingerprint = fingerprint;
+    if (!skeleton.artboard.pending && skeleton.regions.length === 0) {
+      return;
+    }
+
+    const artboardGroup = new this.#leafer.Group({
+      editable: false,
+      hitChildren: false,
+      hittable: false,
+    }) as LeaferGroup;
+    artboardGroup.setTransform(toMatrix(skeleton.artboard.transform));
+    if (skeleton.artboard.pending) {
+      const outline = new this.#leafer.Rect({
+        cornerRadius: 8,
+        dashPattern: [8, 6],
+        editable: false,
+        fill: "rgba(124, 110, 230, 0.035)",
+        height: skeleton.artboard.height,
+        hittable: false,
+        stroke: GENERATION_SKELETON_COLOR,
+        strokeAlign: "inside",
+        width: skeleton.artboard.width,
+      }) as LeaferElement;
+      this.#generationSkeletonStrokes.push(outline);
+      artboardGroup.add(outline);
+    }
+    for (const region of skeleton.regions) {
+      const outline = new this.#leafer.Rect({
+        cornerRadius: 5,
+        dashPattern: [5, 4],
+        editable: false,
+        fill: generationSkeletonFill(region.role),
+        height: region.height,
+        hittable: false,
+        stroke: GENERATION_SKELETON_COLOR,
+        strokeAlign: "inside",
+        width: region.width,
+        x: region.x,
+        y: region.y,
+      }) as LeaferElement;
+      const label = new this.#leafer.Text({
+        editable: false,
+        fill: GENERATION_SKELETON_COLOR,
+        fontFamily: "Inter, sans-serif",
+        fontWeight: 600,
+        hittable: false,
+        text: region.name,
+        textOverflow: "ellipsis",
+      }) as LeaferElement;
+      this.#generationSkeletonStrokes.push(outline);
+      this.#generationSkeletonLabels.push({
+        element: label,
+        height: region.height,
+        width: region.width,
+        x: region.x,
+        y: region.y,
+      });
+      artboardGroup.add(outline);
+      artboardGroup.add(label);
+    }
+    this.#generationSkeletonLayer.add(artboardGroup);
+    this.#generationSkeletonLayer.visible = true;
+    this.#syncGenerationSkeletonViewport();
+  }
+
+  #syncGenerationSkeletonViewport(): void {
+    if (!this.#generationSkeletonId) return;
+    this.#generationSkeletonLayer.setTransform({
+      ...this.#app.tree.localTransform,
+    });
+    const zoom = Math.max(
+      MATRIX_EPSILON,
+      Math.abs(this.#app.tree.localTransform.a || 1),
+    );
+    const inverseZoom = 1 / zoom;
+    for (const element of this.#generationSkeletonStrokes) {
+      element.set({
+        dashPattern: [5 * inverseZoom, 4 * inverseZoom],
+        strokeWidth: 1.15 * inverseZoom,
+      });
+    }
+    for (const label of this.#generationSkeletonLabels) {
+      const inset = 7 * inverseZoom;
+      const labelHeight = Math.min(label.height, 16 * inverseZoom);
+      label.element.set({
+        fontSize: 11 * inverseZoom,
+        height: labelHeight,
+        lineHeight: 14 * inverseZoom,
+        width: Math.max(inverseZoom, label.width - inset * 2),
+        x: label.x + inset,
+        y: label.y + 5 * inverseZoom,
+      });
+    }
+  }
+
+  #clearGenerationSkeleton(suppress: boolean): void {
+    const skeletonId = this.#generationSkeletonId;
+    if (suppress && skeletonId) {
+      this.#suppressedGenerationSkeletonIds.add(skeletonId);
+      while (
+        this.#suppressedGenerationSkeletonIds.size >
+        MAX_SUPPRESSED_GENERATION_SKELETONS
+      ) {
+        const oldest = this.#suppressedGenerationSkeletonIds
+          .values()
+          .next().value;
+        if (oldest === undefined) break;
+        this.#suppressedGenerationSkeletonIds.delete(oldest);
+      }
+    }
+    for (const child of [...this.#generationSkeletonLayer.children]) {
+      child.remove();
+      child.destroy();
+    }
+    this.#generationSkeletonLayer.visible = false;
+    this.#generationSkeletonFingerprint = null;
+    this.#generationSkeletonId = null;
+    this.#generationSkeletonLabels.length = 0;
+    this.#generationSkeletonStrokes.length = 0;
+  }
+
   #queueGenerationReveal(reveal: LeaferGenerationReveal): void {
     if (!this.#rememberGenerationReveal(reveal.id)) return;
     const nodeIds = reveal.nodeIds.filter((nodeId) => {
@@ -2478,6 +2657,14 @@ function projectionOpacity(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(0, Math.min(1, value))
     : 1;
+}
+
+function generationSkeletonFill(
+  role: LeaferGenerationSkeleton["regions"][number]["role"],
+): string {
+  return role === "media" || role === "graphic"
+    ? "rgba(124, 110, 230, 0.12)"
+    : GENERATION_SKELETON_FILL;
 }
 
 function nearlyEqual(left: number, right: number): boolean {

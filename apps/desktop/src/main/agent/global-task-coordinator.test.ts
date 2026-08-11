@@ -18,6 +18,7 @@ const modelSelection = {
 };
 
 const designPlan: DesignPlanToolInput = {
+  version: 2,
   pageId: "page_welcome",
   deliverable: "ui",
   objective: "Design a polished product workspace",
@@ -25,12 +26,43 @@ const designPlan: DesignPlanToolInput = {
   artboard: {
     mode: "create",
     frameId: "workspace_artboard",
+    x: 120,
+    y: 80,
     width: 1440,
     height: 1024,
   },
   composition: {
     direction: "Dense desktop workspace with a dominant primary work area",
     hierarchy: ["Navigation", "Primary work area", "Contextual inspector"],
+    regions: [
+      {
+        nodeId: "workspace_navigation",
+        name: "Navigation",
+        role: "structure",
+        x: 32,
+        y: 32,
+        width: 1376,
+        height: 72,
+      },
+      {
+        nodeId: "workspace_primary",
+        name: "Primary work area",
+        role: "content",
+        x: 32,
+        y: 128,
+        width: 960,
+        height: 864,
+      },
+      {
+        nodeId: "workspace_inspector",
+        name: "Contextual inspector",
+        role: "interaction",
+        x: 1016,
+        y: 128,
+        width: 392,
+        height: 864,
+      },
+    ],
     assetIntegration:
       "Integrate one hero image below editable navigation and data",
     spacingRhythm: "4/8/12/20/32 px rhythm",
@@ -179,7 +211,7 @@ describe("GlobalTaskCoordinator", () => {
     };
     expect(() =>
       coordinator.assertDesignPlanForApply(context, scatteredDraft),
-    ).toThrow("planned Page-root Frame");
+    ).toThrow("planned axis-aligned Page-root Frame");
 
     const plannedDraft: DesignApplyToolInput = {
       label: "Create planned editable workspace",
@@ -198,7 +230,7 @@ describe("GlobalTaskCoordinator", () => {
             childIds: [],
             visible: true,
             locked: false,
-            transform: [1, 0, 0, 1, 0, 0],
+            transform: [1, 0, 0, 1, 120, 80],
             size: { width: 1440, height: 1024 },
             opacity: 1,
             properties: {
@@ -246,6 +278,15 @@ describe("GlobalTaskCoordinator", () => {
         },
       ],
     };
+    const misplacedDraft = structuredClone(plannedDraft);
+    const misplacedArtboard = misplacedDraft.commands[0];
+    if (!misplacedArtboard || misplacedArtboard.type !== "insert_element") {
+      throw new Error("Planned artboard command is missing");
+    }
+    misplacedArtboard.node.transform = [1, 0, 0, 1, 0, 0];
+    expect(() =>
+      coordinator.assertDesignPlanForApply(context, misplacedDraft),
+    ).toThrow("declared position and dimensions");
     expect(() =>
       coordinator.assertDesignPlanForApply(context, plannedDraft),
     ).not.toThrow();
@@ -258,6 +299,47 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.assertVisualReviewBeforeWrite(context),
     ).not.toThrow();
+    const navigationRegion: DesignApplyToolInput = {
+      label: "Create planned navigation region",
+      commands: [
+        {
+          commandId: "insert_navigation_region",
+          type: "insert_element",
+          pageId,
+          parentId: "workspace_artboard",
+          index: 1,
+          node: {
+            id: "workspace_navigation",
+            kind: "group",
+            name: "Navigation",
+            parentId: "workspace_artboard",
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 32, 32],
+            size: { width: 1376, height: 72 },
+            opacity: 1,
+            properties: {},
+            extensions: {},
+          },
+        },
+      ],
+    };
+    expect(() =>
+      coordinator.assertDesignPlanForApply(context, navigationRegion),
+    ).not.toThrow();
+    const misplacedRegion = structuredClone(navigationRegion);
+    const misplacedRegionInsert = misplacedRegion.commands[0];
+    if (
+      !misplacedRegionInsert ||
+      misplacedRegionInsert.type !== "insert_element"
+    ) {
+      throw new Error("Planned region command is missing");
+    }
+    misplacedRegionInsert.node.transform = [1, 0, 0, 1, 48, 32];
+    expect(() =>
+      coordinator.assertDesignPlanForApply(context, misplacedRegion),
+    ).toThrow("directly inside the artboard at its declared bounds");
     expect(() =>
       coordinator.assertDesignPlanForApply(context, scatteredDraft),
     ).toThrow("outside the planned artboard Frame");

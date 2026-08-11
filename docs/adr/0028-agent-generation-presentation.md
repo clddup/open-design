@@ -42,29 +42,39 @@ reveal ID、时间、线框、临时 opacity 和 animation frame 不进入 `Desi
 
 普通批次使用短 lead、wireframe 和 fade。密集批次把最多 48 个视觉节拍压缩在约 1.6 秒的 stagger span 内，不能按一千个节点逐个等待几十秒。当前只对新增节点做 reveal；现有节点的属性更新会随有效阶段出现，但尚不做 transform/paint tween。
 
+### Accepted typed plan 先形成结构骨架
+
+`DesignPlanToolInput version: 2` 在正式写入前声明画板 Page 坐标、尺寸，以及主要区域的稳定 `nodeId`、角色和画板局部 bounds。Renderer 会临时记录 Provider 的 `tool.requested`，但只有 Main 对同一 Run/tool call 返回字段完全匹配的 `tool.completed { status: "accepted" }` 后，才允许 Leafer 在独立 `sky` 层展示骨架。失败、畸形或不匹配结果不会显示未经信任的结构。
+
+骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架切换到权威 Frame transform；声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。Main 同时要求区域根是画板直属、轴对齐并匹配计划 bounds，因此临时结构和正式层级使用同一组稳定 ID/几何。
+
+骨架 ID、标签、填充、虚线和完成状态与 reveal 一样只属于当前 Run 的可丢弃展示。它们不进入文档、revision、history、selection、保存、结构化导出或截图，也不成为另一份可写设计状态。
+
 ### 生命周期与可信截图
 
-- 用户启用 Reduced Motion 时直接显示 revision 的最终外观，不运行 reveal。
-- Design File/Page 切换、Run 终态、Renderer/adapter 错误和 adapter dispose 都必须结束展示、恢复投影 opacity 并移除线框。
+- 用户启用 Reduced Motion 时不运行节点 reveal；已接受计划仍可显示静态结构骨架，避免丢失进行中状态。
+- Design File/Page 切换、Run 终态、手动停止、Renderer/adapter 错误和 adapter dispose 都必须结束展示、恢复投影 opacity 并移除线框/骨架。
 - 用户在生成期间仍可 pan/zoom；viewport 变化不取消 reveal，也不改变事务作用域。
 - `capture_canvas` 在编码前强制结束展示并等待一次绘制帧，确保模型看到可复核的最终 revision，而不是半透明节点或 Agent 线框。
 - SVG 等结构化导出继续直接读取权威文档，不序列化展示状态。
 
 ## 当前范围与后续阶段
 
-本 ADR 当前完成第一阶段：文档有效的渐进提交、新增节点 wireframe/fade、取消回滚、单次 undo、终态/错误/切页清理、Reduced Motion 和截图收口。
+本 ADR 当前完成两个阶段：
+
+1. 文档有效的渐进提交、新增节点 wireframe/fade、取消回滚、单次 undo、终态/错误/切页清理、Reduced Motion 和截图收口；
+2. Main accepted typed plan 驱动的 Frame/区域骨架、稳定区域 ID/几何约束、真实内容逐区替换、viewport 同步，以及停止/截图/失败/切页/dispose 清理。
 
 以下仍是明确计划，不作为已实现能力宣传：
 
-1. 使用 typed design plan 先展示 Frame/区域骨架，并在实质节点到达时替换骨架；
-2. 展示绑定 Run/Conversation 的 Agent cursor、当前语义阶段和作用域，不借用用户 selection chrome；
-3. 对 transform、geometry、paint 和 text update 提供按属性类型设计的过渡，而不是全量 cross-fade；
-4. 根据节点量、视口可见性、机器性能和用户设置调整节奏，并完成 macOS/Windows 实机运动与帧时间验收；
-5. 为跨多个工具调用的同一 Run 提供更高层 checkpoint/undo 分组，同时保留每个 Design File 的 revision 与冲突语义。
+1. 展示绑定 Run/Conversation 的 Agent cursor、当前语义阶段和作用域，不借用用户 selection chrome；
+2. 对 transform、geometry、paint 和 text update 提供按属性类型设计的过渡，而不是全量 cross-fade；
+3. 根据节点量、视口可见性、机器性能和用户设置调整节奏，并完成 macOS/Windows 实机运动与帧时间验收；
+4. 为跨多个工具调用的同一 Run 提供更高层 checkpoint/undo 分组，同时保留每个 Design File 的 revision 与冲突语义。
 
 ## 后果
 
 - 用户可以在画布上看到 Agent 产物从结构到节点逐步出现，而不是只看到聊天 loading 和最终跳变。
 - 正式文档在每个可见阶段都合法，取消后回到开始前状态；视觉过程不会污染保存、导出、截图或历史。
 - 过程感不再依赖提示词要求模型“每画一个点提交一次”，也不要求 Provider 支持特定流式格式。
-- 当前体验仍不是模拟人手逐点绘制。骨架、Agent cursor、属性 tween 和 Run 级 checkpoint 完成前，复杂任务表现为多个有效批次及其节点 reveal。
+- 当前体验仍不是模拟人手逐点绘制。复杂任务先显示结构骨架，再表现为多个有效批次及其节点 reveal；Agent cursor、属性 tween 和 Run 级 checkpoint 尚未完成。

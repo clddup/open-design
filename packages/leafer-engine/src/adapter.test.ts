@@ -12,6 +12,7 @@ import type {
   LeaferCreateVectorRequest,
   LeaferEngineCallbacks,
   LeaferEngineSyncInput,
+  LeaferGenerationSkeleton,
   LeaferVectorEditRequest,
 } from "./types.js";
 
@@ -44,9 +45,11 @@ class FakeElement extends FakeEventTarget {
   parent: FakeGroup | undefined;
   localTransform = identityMatrix();
   opacity = 1;
+  visible = true;
   width = 0;
   height = 0;
   setCalls = 0;
+  strokeWidth = 0;
   transformCalls = 0;
   forceUpdate = vi.fn();
 
@@ -128,6 +131,11 @@ class FakePath extends FakeElement {
 class FakeText extends FakeElement {
   override readonly tag: string = "Text";
   text = "";
+
+  constructor(data?: Record<string, unknown>) {
+    super();
+    if (data) this.set(data);
+  }
 }
 
 class FakeStroker extends FakeElement {
@@ -206,6 +214,7 @@ class FakeEditor extends FakeEventTarget {
 
 class FakeApp extends FakeEventTarget {
   readonly tree = new FakeTree();
+  readonly sky = new FakeGroup();
   readonly editor = new FakeEditor();
   mode = "normal";
   destroy = vi.fn();
@@ -332,6 +341,115 @@ describe("Leafer engine selection bounds synchronization", () => {
       wheel: { zoomSpeed: 0.16 },
       zoom: { min: 0.1, max: 8 },
     });
+    adapter.dispose();
+  });
+
+  it("presents an accepted typed plan as a disposable world-space skeleton", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    const skeleton: LeaferGenerationSkeleton = {
+      id: "run_plan:tool_plan",
+      artboard: {
+        frameId: "poster_artboard",
+        height: 1_000,
+        pending: true,
+        transform: [1, 0, 0, 1, 1_240, 80],
+        width: 800,
+      },
+      regions: [
+        {
+          height: 560,
+          id: "poster_hero",
+          name: "Hero visual",
+          role: "graphic" as const,
+          width: 704,
+          x: 48,
+          y: 80,
+        },
+        {
+          height: 200,
+          id: "poster_title",
+          name: "Launch typography",
+          role: "typography" as const,
+          width: 704,
+          x: 48,
+          y: 688,
+        },
+      ],
+    };
+    adapter.sync({ ...first, generationSkeleton: skeleton });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const layer = app.sky.children[0] as FakeGroup | undefined;
+    const artboard = layer?.children[0] as FakeGroup | undefined;
+    expect(layer).toMatchObject({
+      visible: true,
+      localTransform: identityMatrix(),
+    });
+    expect(artboard?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 1_240,
+      f: 80,
+    });
+    expect(artboard?.children.map((child) => child.tag)).toEqual([
+      "Rect",
+      "Rect",
+      "Text",
+      "Rect",
+      "Text",
+    ]);
+    expect(
+      artboard?.children
+        .filter((child) => child.tag === "Text")
+        .map((child) => (child as FakeText).text),
+    ).toEqual(["Hero visual", "Launch typography"]);
+
+    adapter.sync({
+      ...first,
+      generationSkeleton: skeleton,
+      viewport: { ...first.viewport, panX: -200, panY: 40, zoom: 0.5 },
+    });
+    expect(layer?.localTransform).toEqual({
+      a: 0.5,
+      b: 0,
+      c: 0,
+      d: 0.5,
+      e: -200,
+      f: 40,
+    });
+    expect(artboard?.children[0]?.strokeWidth).toBeCloseTo(2.3);
+
+    adapter.sync({
+      ...first,
+      generationSkeleton: {
+        ...skeleton,
+        artboard: { ...skeleton.artboard, pending: false },
+        regions: [skeleton.regions[1]!],
+      },
+    });
+    const updatedArtboard = layer?.children[0] as FakeGroup | undefined;
+    expect(updatedArtboard?.children.map((child) => child.tag)).toEqual([
+      "Rect",
+      "Text",
+    ]);
+
+    adapter.finishGenerationPresentation();
+    expect(layer?.visible).toBe(false);
+    expect(layer?.children).toEqual([]);
+    adapter.sync({ ...first, generationSkeleton: skeleton });
+    expect(layer?.visible).toBe(false);
+
+    adapter.sync({
+      ...first,
+      generationSkeleton: { ...skeleton, id: "run_next:tool_plan" },
+    });
+    expect(layer?.visible).toBe(true);
     adapter.dispose();
   });
 

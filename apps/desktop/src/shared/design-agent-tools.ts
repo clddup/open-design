@@ -49,7 +49,26 @@ export type RasterAssetRole =
   | "supporting-content"
   | "final-single-image";
 export type PlaceableRasterAssetRole = Exclude<RasterAssetRole, "reference">;
+export type DesignPlanRegionRole =
+  | "structure"
+  | "content"
+  | "typography"
+  | "media"
+  | "graphic"
+  | "decoration"
+  | "interaction"
+  | "other";
+export type DesignPlanRegion = {
+  nodeId: string;
+  name: string;
+  role: DesignPlanRegionRole;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 export type DesignPlanToolInput = {
+  version: 2;
   pageId: string;
   deliverable: DesignDeliverable;
   objective: string;
@@ -57,6 +76,8 @@ export type DesignPlanToolInput = {
   artboard: {
     mode: "create" | "existing";
     frameId: string;
+    x: number;
+    y: number;
     width: number;
     height: number;
   };
@@ -64,6 +85,7 @@ export type DesignPlanToolInput = {
     assetIntegration: string;
     direction: string;
     hierarchy: string[];
+    regions: DesignPlanRegion[];
     spacingRhythm: string;
   };
   visualSystem: {
@@ -933,8 +955,9 @@ const MODEL_ARRANGE_SCHEMA = {
 const MODEL_DESIGN_PLAN_SCHEMA = {
   type: "object",
   description:
-    "A bounded, executable visual plan for the current Page. New poster work must name one Frame artboard and keep all poster layers inside it.",
+    "Version 2 of the bounded, executable visual plan for the current Page. It fixes one artboard and stable region node IDs/bounds so the host can present a structural draft before committed design layers arrive.",
   properties: {
+    version: { const: 2 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     deliverable: {
       enum: [
@@ -954,10 +977,12 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
       properties: {
         mode: { enum: ["create", "existing"] },
         frameId: { type: "string", minLength: 1, maxLength: 256 },
+        x: { type: "number", minimum: -1_000_000, maximum: 1_000_000 },
+        y: { type: "number", minimum: -1_000_000, maximum: 1_000_000 },
         width: { type: "number", exclusiveMinimum: 0, maximum: 100_000 },
         height: { type: "number", exclusiveMinimum: 0, maximum: 100_000 },
       },
-      required: ["mode", "frameId", "width", "height"],
+      required: ["mode", "frameId", "x", "y", "width", "height"],
       additionalProperties: false,
     },
     composition: {
@@ -970,6 +995,46 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
           maxItems: 16,
           items: { type: "string", minLength: 1, maxLength: 256 },
         },
+        regions: {
+          type: "array",
+          minItems: 1,
+          maxItems: 16,
+          description:
+            "Major composition regions in artboard-local coordinates. nodeId is the stable ID the later design transaction must create for an axis-aligned Group or Frame directly inside the artboard at these bounds; regions are structural planning blocks, not every final layer.",
+          items: {
+            type: "object",
+            properties: {
+              nodeId: { type: "string", minLength: 1, maxLength: 256 },
+              name: { type: "string", minLength: 1, maxLength: 128 },
+              role: {
+                enum: [
+                  "structure",
+                  "content",
+                  "typography",
+                  "media",
+                  "graphic",
+                  "decoration",
+                  "interaction",
+                  "other",
+                ],
+              },
+              x: { type: "number", minimum: 0, maximum: 100_000 },
+              y: { type: "number", minimum: 0, maximum: 100_000 },
+              width: {
+                type: "number",
+                exclusiveMinimum: 0,
+                maximum: 100_000,
+              },
+              height: {
+                type: "number",
+                exclusiveMinimum: 0,
+                maximum: 100_000,
+              },
+            },
+            required: ["nodeId", "name", "role", "x", "y", "width", "height"],
+            additionalProperties: false,
+          },
+        },
         assetIntegration: {
           type: "string",
           minLength: 1,
@@ -979,7 +1044,13 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
         },
         spacingRhythm: { type: "string", minLength: 1, maxLength: 500 },
       },
-      required: ["direction", "hierarchy", "assetIntegration", "spacingRhythm"],
+      required: [
+        "direction",
+        "hierarchy",
+        "regions",
+        "assetIntegration",
+        "spacingRhythm",
+      ],
       additionalProperties: false,
     },
     visualSystem: {
@@ -1076,6 +1147,7 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
     },
   },
   required: [
+    "version",
     "pageId",
     "deliverable",
     "objective",
@@ -1161,7 +1233,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_PLAN_TOOL_NAME,
     description:
-      "Define the executable visual plan for the current Page after inspection and before generating imagery or creating new design layers. The plan fixes the deliverable, artboard Frame and dimensions, composition hierarchy, spacing, palette, typography, effects, editable layers, raster asset roles, implementation steps, and rendered validation checks. Posters default to editable-composition and must live inside the named Frame. single-raster is allowed only when singleRasterEvidence exactly quotes an explicit request in the current user prompt. This tool records Run planning state; it does not mutate the canvas.",
+      "Define version 2 of the executable visual plan for the current Page after inspection and before generating imagery or creating new design layers. The plan fixes the deliverable, artboard Frame position/dimensions, composition hierarchy, stable region root node IDs with artboard-local bounds, spacing, palette, typography, effects, editable layers, raster asset roles, implementation steps, and rendered validation checks. The host uses accepted regions as a disposable structural canvas draft until matching committed nodes arrive. Later transactions must create each region root as an axis-aligned Group or Frame directly inside the artboard, using its declared nodeId and bounds. Posters default to editable-composition and must live inside the named Frame. single-raster is allowed only when singleRasterEvidence exactly quotes an explicit request in the current user prompt. This tool records Run planning state; it does not mutate the design document.",
     inputSchema: MODEL_DESIGN_PLAN_SCHEMA,
     risk: "read" as const,
     approval: "never" as const,
@@ -1770,6 +1842,7 @@ export function isDesignPlanToolInput(
 ): input is DesignPlanToolInput {
   if (!isRecord(input)) return false;
   const allowed = [
+    "version",
     "pageId",
     "deliverable",
     "objective",
@@ -1784,51 +1857,96 @@ export function isDesignPlanToolInput(
     "singleRasterEvidence",
   ];
   if (
+    input.version !== 2 ||
     !safeId(input.pageId) ||
     !isDesignDeliverable(input.deliverable) ||
     !boundedText(input.objective, 2_000) ||
     (input.outputMode !== "editable-composition" &&
       input.outputMode !== "single-raster") ||
-    !isRecord(input.artboard) ||
-    (input.artboard.mode !== "create" && input.artboard.mode !== "existing") ||
-    !safeId(input.artboard.frameId) ||
-    !positiveBounded(input.artboard.width, 100_000) ||
-    !positiveBounded(input.artboard.height, 100_000) ||
-    !exactKeys(input.artboard, ["mode", "frameId", "width", "height"]) ||
-    !isRecord(input.composition) ||
-    !boundedText(input.composition.direction, 1_000) ||
-    !boundedTextArray(input.composition.hierarchy, 2, 16, 256) ||
-    !boundedText(input.composition.assetIntegration, 1_000) ||
-    !boundedText(input.composition.spacingRhythm, 500) ||
-    !exactKeys(input.composition, [
+    !Object.keys(input).every((key) => allowed.includes(key))
+  ) {
+    return false;
+  }
+
+  const artboard = input.artboard;
+  if (
+    !isRecord(artboard) ||
+    (artboard.mode !== "create" && artboard.mode !== "existing") ||
+    !safeId(artboard.frameId) ||
+    !finiteBounded(artboard.x, 1_000_000) ||
+    !finiteBounded(artboard.y, 1_000_000) ||
+    !positiveBounded(artboard.width, 100_000) ||
+    !positiveBounded(artboard.height, 100_000) ||
+    !exactKeys(artboard, ["mode", "frameId", "x", "y", "width", "height"])
+  ) {
+    return false;
+  }
+  const artboardWidth = artboard.width;
+  const artboardHeight = artboard.height;
+
+  const composition = input.composition;
+  if (
+    !isRecord(composition) ||
+    !boundedText(composition.direction, 1_000) ||
+    !boundedTextArray(composition.hierarchy, 2, 16, 256) ||
+    !Array.isArray(composition.regions) ||
+    composition.regions.length < 1 ||
+    composition.regions.length > 16 ||
+    !composition.regions.every((region) =>
+      isDesignPlanRegion(region, artboardWidth, artboardHeight),
+    ) ||
+    composition.regions.some(
+      (region) => isRecord(region) && region.nodeId === artboard.frameId,
+    ) ||
+    new Set(
+      composition.regions.flatMap((region) =>
+        isRecord(region) && typeof region.nodeId === "string"
+          ? [region.nodeId]
+          : [],
+      ),
+    ).size !== composition.regions.length ||
+    !boundedText(composition.assetIntegration, 1_000) ||
+    !boundedText(composition.spacingRhythm, 500) ||
+    !exactKeys(composition, [
       "direction",
       "hierarchy",
+      "regions",
       "assetIntegration",
       "spacingRhythm",
-    ]) ||
-    !isRecord(input.visualSystem) ||
-    !boundedTextArray(input.visualSystem.avoidances, 2, 12, 256) ||
-    !boundedText(input.visualSystem.formLanguage, 1_000) ||
-    !boundedTextArray(input.visualSystem.palette, 1, 12, 128) ||
-    !boundedText(input.visualSystem.surfaceAndDepth, 1_000) ||
-    !boundedTextArray(input.visualSystem.typography, 1, 8, 256) ||
-    !boundedTextArray(input.visualSystem.effects, 0, 12, 256) ||
-    !exactKeys(input.visualSystem, [
+    ])
+  ) {
+    return false;
+  }
+
+  const visualSystem = input.visualSystem;
+  if (
+    !isRecord(visualSystem) ||
+    !boundedTextArray(visualSystem.avoidances, 2, 12, 256) ||
+    !boundedText(visualSystem.formLanguage, 1_000) ||
+    !boundedTextArray(visualSystem.palette, 1, 12, 128) ||
+    !boundedText(visualSystem.surfaceAndDepth, 1_000) ||
+    !boundedTextArray(visualSystem.typography, 1, 8, 256) ||
+    !boundedTextArray(visualSystem.effects, 0, 12, 256) ||
+    !exactKeys(visualSystem, [
       "avoidances",
       "formLanguage",
       "palette",
       "surfaceAndDepth",
       "typography",
       "effects",
-    ]) ||
+    ])
+  ) {
+    return false;
+  }
+
+  if (
     !Array.isArray(input.rasterAssetRoles) ||
     input.rasterAssetRoles.length > 5 ||
     !input.rasterAssetRoles.every(isRasterAssetRole) ||
     new Set(input.rasterAssetRoles).size !== input.rasterAssetRoles.length ||
     !boundedTextArray(input.editableLayers, 2, 24, 256) ||
     !boundedTextArray(input.implementationSteps, 2, 16, 500) ||
-    !boundedTextArray(input.validationChecks, 2, 16, 500) ||
-    !Object.keys(input).every((key) => allowed.includes(key))
+    !boundedTextArray(input.validationChecks, 2, 16, 500)
   ) {
     return false;
   }
@@ -2094,6 +2212,10 @@ function positiveBounded(value: unknown, maximum: number): value is number {
   return positive(value) && value <= maximum;
 }
 
+function finiteBounded(value: unknown, maximum: number): value is number {
+  return finite(value) && Math.abs(value) <= maximum;
+}
+
 function boundedText(value: unknown, maximum: number): value is string {
   return (
     typeof value === "string" &&
@@ -2138,6 +2260,51 @@ function isDesignDeliverable(value: unknown): value is DesignDeliverable {
     value === "brand-asset" ||
     value === "illustration" ||
     value === "presentation-visual" ||
+    value === "other"
+  );
+}
+
+function isDesignPlanRegion(
+  value: unknown,
+  artboardWidth: number,
+  artboardHeight: number,
+): value is DesignPlanRegion {
+  if (
+    !isRecord(value) ||
+    !safeId(value.nodeId) ||
+    !boundedText(value.name, 128) ||
+    !isDesignPlanRegionRole(value.role) ||
+    !finite(value.x) ||
+    !finite(value.y) ||
+    value.x < 0 ||
+    value.y < 0 ||
+    !positiveBounded(value.width, 100_000) ||
+    !positiveBounded(value.height, 100_000) ||
+    value.x + value.width > artboardWidth ||
+    value.y + value.height > artboardHeight
+  ) {
+    return false;
+  }
+  return exactKeys(value, [
+    "nodeId",
+    "name",
+    "role",
+    "x",
+    "y",
+    "width",
+    "height",
+  ]);
+}
+
+function isDesignPlanRegionRole(value: unknown): value is DesignPlanRegionRole {
+  return (
+    value === "structure" ||
+    value === "content" ||
+    value === "typography" ||
+    value === "media" ||
+    value === "graphic" ||
+    value === "decoration" ||
+    value === "interaction" ||
     value === "other"
   );
 }
