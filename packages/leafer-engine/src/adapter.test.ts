@@ -450,6 +450,55 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("exports a delivery raster with explicit format, size, background, quality, and resampling", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    adapter.sync(createInput());
+
+    const result = await adapter.exportRaster({
+      version: 1,
+      pageId: "page_welcome",
+      rootNodeId: "frame_welcome",
+      format: "webp",
+      size: { mode: "width", value: 600 },
+      background: { mode: "color", color: "#112233" },
+      quality: 0.82,
+      resampling: "pixelated",
+    });
+
+    expect(result).toMatchObject({
+      mimeType: "image/webp",
+      width: 600,
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const frame = findElement(app.tree, "frame_welcome");
+    expect(frame?.export).toHaveBeenCalledWith(
+      "webp",
+      expect.objectContaining({
+        blob: true,
+        fill: "#112233",
+        pixelRatio: 1,
+        quality: 0.82,
+        smooth: false,
+      }),
+    );
+    await expect(
+      adapter.exportRaster({
+        version: 1,
+        pageId: "page_welcome",
+        rootNodeId: "missing",
+        format: "png",
+        size: { mode: "scale", value: 1 },
+        background: { mode: "transparent" },
+        resampling: "smooth",
+      }),
+    ).rejects.toThrow("Leafer raster export layer is unavailable");
+    adapter.dispose();
+  });
+
   it("presents an accepted typed plan as a disposable world-space skeleton", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),

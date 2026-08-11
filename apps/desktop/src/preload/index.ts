@@ -35,6 +35,8 @@ import {
   isSaveProjectDesignFileRequest,
   isSaveSvgFileRequest,
   isSaveSvgFileResult,
+  isSaveRasterFileRequest,
+  isSaveRasterFileResult,
   isLocalePreference,
   isSaveModelProviderProfileRequest,
   isGlobalImageGenerationSettings,
@@ -72,6 +74,8 @@ import {
   type SaveProjectDesignFileRequest,
   type SaveSvgFileRequest,
   type SaveSvgFileResult,
+  type SaveRasterFileRequest,
+  type SaveRasterFileResult,
   type ThemePreference,
   type WindowAction,
 } from "../shared/desktop-api";
@@ -382,6 +386,19 @@ const desktopApi: DesktopApi = Object.freeze({
       result,
       isSaveSvgFileResult,
       "Invalid SVG save response",
+    );
+  },
+  saveRasterFile: async (request: SaveRasterFileRequest) => {
+    validate(request, isSaveRasterFileRequest, "Invalid raster save request");
+    const result: unknown = await ipcRenderer.invoke(
+      channels.saveRasterFile,
+      request,
+    );
+    if (result === null) return null;
+    return validate<SaveRasterFileResult>(
+      result,
+      isSaveRasterFileResult,
+      "Invalid raster save response",
     );
   },
   createProject: async (request: CreateProjectRequest) => {

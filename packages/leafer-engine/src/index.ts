@@ -20,6 +20,7 @@ export type {
   LeaferGenerationSkeletonRole,
   LeaferOperationKind,
   LeaferOperationRequest,
+  LeaferRasterExportResult,
   LeaferVectorEditRequest,
   LeaferVectorEditScope,
 } from "./types.js";

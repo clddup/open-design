@@ -42,6 +42,7 @@ import {
 } from "./editor-runtime";
 import { I18nProvider } from "./i18n";
 import * as designCapture from "./design-capture";
+import * as rasterExport from "./raster-export";
 import * as svgInterchange from "./svg-interchange";
 import type { SuccessfulSvgImportResult } from "./svg-interchange-contract";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
@@ -87,6 +88,7 @@ vi.mock("@opendesign/leafer-engine", () => ({
 
 vi.mock("./svg-interchange", { spy: true });
 vi.mock("./design-capture", { spy: true });
+vi.mock("./raster-export", { spy: true });
 
 const svgHarness = {
   runImport: vi.mocked(svgInterchange.runSvgImportInWorker),
@@ -94,6 +96,9 @@ const svgHarness = {
 };
 const captureHarness = {
   capture: vi.mocked(designCapture.captureDesignTarget),
+};
+const rasterHarness = {
+  export: vi.mocked(rasterExport.exportDesignRaster),
 };
 
 let emitAgentEvent: ((event: AgentEvent) => void) | undefined;
@@ -122,6 +127,13 @@ beforeEach(() => {
   svgHarness.runImport.mockReset();
   svgHarness.runExport.mockReset();
   captureHarness.capture.mockReset();
+  rasterHarness.export.mockReset();
+  rasterHarness.export.mockResolvedValue({
+    bytes: new Uint8Array([4, 5, 6]),
+    height: 720,
+    mimeType: "image/png",
+    width: 1_200,
+  });
   captureHarness.capture.mockResolvedValue({
     bytes: new Uint8Array([1, 2, 3]),
     height: 720,
@@ -240,6 +252,7 @@ beforeEach(() => {
     saveDesignFile: vi.fn().mockResolvedValue(null),
     openSvgFile: vi.fn().mockResolvedValue(null),
     saveSvgFile: vi.fn().mockResolvedValue(null),
+    saveRasterFile: vi.fn().mockResolvedValue(null),
     createProject: vi.fn().mockResolvedValue(null),
     openProject: vi.fn().mockResolvedValue(null),
     openRecentProject: vi.fn(),
@@ -619,6 +632,7 @@ describe("App", () => {
     renderApp();
     act(() => runtime().setSelection(["feature_one"], "feature_one"));
     await user.click(screen.getByRole("tab", { name: "Properties" }));
+    await user.selectOptions(screen.getByLabelText("Format"), "svg");
 
     await user.click(screen.getByLabelText("Include layer IDs"));
     const padding = screen.getByLabelText("Padding");
@@ -644,6 +658,50 @@ describe("App", () => {
     });
     expect(screen.getByText("Exported Structured editing.svg")).toBeVisible();
     expect(screen.getByText("boolean-flattened")).toBeVisible();
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+  });
+
+  it("exports one frozen layer as a delivery PNG through the Main save bridge", async () => {
+    const user = userEvent.setup();
+    vi.mocked(window.desktop!.saveRasterFile).mockResolvedValueOnce({
+      name: "Structured editing.png",
+      byteSize: 3,
+    });
+    renderApp();
+    act(() => runtime().setSelection(["feature_one"], "feature_one"));
+    await user.click(screen.getByRole("tab", { name: "Properties" }));
+
+    expect(screen.getByLabelText("Format")).toHaveValue("png");
+    await user.selectOptions(screen.getByLabelText("Size"), "scale:2");
+    await user.click(
+      screen.getByRole("button", { name: "Export selection as PNG…" }),
+    );
+
+    await waitFor(() =>
+      expect(window.desktop!.saveRasterFile).toHaveBeenCalledOnce(),
+    );
+    const call = rasterHarness.export.mock.calls[0];
+    expect(call?.[0].revision).toBe(0);
+    expect(call?.[1]).toMatchObject({
+      version: 1,
+      pageId: "page_welcome",
+      rootNodeId: "feature_one",
+      format: "png",
+      size: { mode: "scale", value: 2 },
+      background: { mode: "transparent" },
+      resampling: "smooth",
+    });
+    expect(call?.[2]).toBeInstanceOf(AbortSignal);
+    expect(window.desktop!.saveRasterFile).toHaveBeenCalledWith({
+      suggestedName: "Structured editing",
+      format: "png",
+      mimeType: "image/png",
+      bytes: new Uint8Array([4, 5, 6]),
+      width: 1_200,
+      height: 720,
+    });
+    expect(screen.getByText("Exported Structured editing.png")).toBeVisible();
+    expect(screen.getByText("PNG · 1200 × 720 px · 3 B")).toBeVisible();
     expect(runtime().getSnapshot().document.revision).toBe(0);
   });
 

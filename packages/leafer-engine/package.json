@@ -13,6 +13,7 @@
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/geometry-service": "workspace:*",
     "@opendesign/image-service": "workspace:*",
+    "@opendesign/import-export-service": "workspace:*",
     "leafer-editor": "2.2.9"
   },
   "devDependencies": {

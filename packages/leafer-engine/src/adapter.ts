@@ -28,6 +28,12 @@ import {
   type VectorHandleReference,
 } from "@opendesign/geometry-service/vector-edit";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import {
+  isRasterExportRequest,
+  planRasterExportDimensions,
+  rasterExportMimeType,
+  type RasterExportRequest,
+} from "@opendesign/import-export-service/raster";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
   LEAFER_EDITOR_SELECTION_COLOR,
@@ -77,6 +83,7 @@ import type {
   LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferOperationKind,
+  LeaferRasterExportResult,
 } from "./types.js";
 
 type LeaferModule = typeof LeaferEditorModule;
@@ -662,6 +669,66 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       bytes: new Uint8Array(await exported.data.arrayBuffer()),
       height,
       mimeType: "image/jpeg",
+      width,
+    };
+  }
+
+  async exportRaster(
+    request: RasterExportRequest,
+  ): Promise<LeaferRasterExportResult> {
+    if (this.#disposed)
+      throw new Error("Leafer raster export adapter is disposed");
+    if (!isRasterExportRequest(request)) {
+      throw new TypeError("Invalid Leafer raster export request");
+    }
+    this.#finishGenerationReveal();
+    const input = this.#input;
+    if (!input || input.pageId !== request.pageId) {
+      throw new Error("Leafer raster export target is not the projected Page");
+    }
+    if (this.#geometryLoadPromise) await this.#geometryLoadPromise;
+    if (this.#disposed || this.#input !== input) {
+      throw new Error("Leafer raster export target changed during rendering");
+    }
+    const leaf = this.#exportElement(request.rootNodeId);
+    const bounds = leaf.getBounds("render", "local");
+    const plan = planRasterExportDimensions(bounds, request.size);
+    if (!plan.ok) throw new RangeError(`${plan.code}: ${plan.message}`);
+    const exported = await leaf.export(
+      request.format === "jpeg" ? "jpg" : request.format,
+      {
+        blob: true,
+        pixelRatio: 1,
+        scale: plan.dimensions.scale,
+        smooth: request.resampling === "smooth",
+        ...(request.quality === undefined ? {} : { quality: request.quality }),
+        ...(request.background.mode === "color"
+          ? { fill: request.background.color }
+          : {}),
+      },
+    );
+    if (exported.error) {
+      throw exported.error instanceof Error
+        ? exported.error
+        : new Error("Leafer raster export failed");
+    }
+    if (!isBlobLike(exported.data)) {
+      throw new Error("Leafer raster export did not return image bytes");
+    }
+    const width = finitePositiveInteger(exported.width);
+    const height = finitePositiveInteger(exported.height);
+    if (width === null || height === null) {
+      throw new Error("Leafer raster export returned invalid dimensions");
+    }
+    if (width !== plan.dimensions.width || height !== plan.dimensions.height) {
+      throw new Error(
+        `Leafer raster export returned ${width}x${height}; expected ${plan.dimensions.width}x${plan.dimensions.height}`,
+      );
+    }
+    return {
+      bytes: new Uint8Array(await exported.data.arrayBuffer()),
+      height,
+      mimeType: rasterExportMimeType(request.format),
       width,
     };
   }
@@ -3141,6 +3208,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const element = this.#elements.get(nodeId);
     if (!spec || spec.kind !== "frame" || !element) {
       throw new Error(`Leafer capture Frame is unavailable: ${nodeId}`);
+    }
+    return element;
+  }
+
+  #exportElement(nodeId: string): LeaferElement {
+    const spec = this.#projection?.elementsById.get(nodeId);
+    const element = this.#elements.get(nodeId);
+    if (!spec || !element) {
+      throw new Error(`Leafer raster export layer is unavailable: ${nodeId}`);
     }
     return element;
   }

@@ -61,3 +61,5 @@
 | [0027](adr/0027-versioned-vector-point-editing.md)                       | 已接受     | Vector 节点、手柄与单轮廓 point mode 编辑                          |
 | [0028](adr/0028-agent-generation-presentation.md)                        | 已接受     | Agent 有效阶段、计划骨架、cursor 与节点 reveal                     |
 | [0029](adr/0029-contextual-page-structure-approval.md)                   | 已接受     | 默认 Page 目标与按需 Page 结构一次性授权                           |
+| [0030](adr/0030-structured-provider-failures-and-run-history.md)         | 已接受     | Provider 结构化失败、超时阶段与历史终态折叠                        |
+| [0031](adr/0031-versioned-professional-raster-export.md)                 | 已接受     | PNG/JPEG/WebP 专业导出、离屏 Leafer 与 Main 原生保存               |

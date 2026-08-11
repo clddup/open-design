@@ -28,6 +28,7 @@ import { AgentAttachmentHost } from "./agent/agent-attachment-host";
 import { AgentReferenceHost } from "./agent/agent-reference-host";
 import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
 import { AgentSvgImportHost } from "./agent/agent-svg-import-host";
+import { AgentRasterExportHost } from "./agent/agent-raster-export-host";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
@@ -41,6 +42,9 @@ import { ProjectIpcService } from "./project/project-ipc";
 import { WorkspaceStore } from "./project/workspace-store";
 import { registerSvgFileIpc } from "./svg/svg-file-ipc";
 import { SvgFileService } from "./svg/svg-file-service";
+import { registerRasterFileIpc } from "./raster/raster-file-ipc";
+import { RasterFileService } from "./raster/raster-file-service";
+import type { RasterExportFormat } from "@opendesign/import-export-service/raster";
 import { ModelProviderHost } from "./model/model-provider-host";
 import { ImageGenerationHost } from "./model/image-generation-host";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
@@ -80,6 +84,7 @@ import {
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
+  EXPORT_RASTER_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
@@ -91,6 +96,7 @@ import {
   isDesignVisualReviewToolInput,
   isGenerateImageToolInput,
   isExportSvgToolInput,
+  isExportRasterToolInput,
   isImportSvgToolInput,
   isPlaceImageToolInput,
   isReadImageToolInput,
@@ -141,7 +147,9 @@ let agentAttachmentHost: AgentAttachmentHost | null = null;
 let agentReferenceHost: AgentReferenceHost | null = null;
 let agentSvgExportHost: AgentSvgExportHost | null = null;
 let agentSvgImportHost: AgentSvgImportHost | null = null;
+let agentRasterExportHost: AgentRasterExportHost | null = null;
 let svgFileService: SvgFileService | null = null;
+let rasterFileService: RasterFileService | null = null;
 let diagnosticLog: DiagnosticLog | null = null;
 const pendingDiagnosticEvents: DiagnosticEvent[] = [];
 const conversationIdByRunId = new Map<string, string>();
@@ -246,6 +254,13 @@ function requireAgentSvgExportHost(): AgentSvgExportHost {
   return agentSvgExportHost;
 }
 
+function requireAgentRasterExportHost(): AgentRasterExportHost {
+  if (!agentRasterExportHost) {
+    throw new Error("Agent raster export services are not initialized");
+  }
+  return agentRasterExportHost;
+}
+
 function requireAgentSvgImportHost(): AgentSvgImportHost {
   if (!agentSvgImportHost) {
     throw new Error("Agent SVG import services are not initialized");
@@ -327,6 +342,30 @@ async function selectSvgSaveFile(
       {
         name: translate(localePreference, "main.svgFilter"),
         extensions: ["svg"],
+      },
+    ],
+  });
+  if (result.canceled || !result.filePath) return null;
+  return result.filePath;
+}
+
+async function selectRasterSaveFile(
+  suggestedName: string,
+  format: RasterExportFormat,
+): Promise<string | null> {
+  const window = mainWindow;
+  if (!window) return null;
+  const extensions = format === "jpeg" ? ["jpg", "jpeg"] : [format];
+  const result = await dialog.showSaveDialog(window, {
+    title: translate(localePreference, "main.saveRasterTitle"),
+    buttonLabel: translate(localePreference, "main.saveRasterButton"),
+    defaultPath: suggestedName,
+    filters: [
+      {
+        name: translate(localePreference, "main.rasterFilter", {
+          format: format.toUpperCase(),
+        }),
+        extensions,
       },
     ],
   });
@@ -536,6 +575,13 @@ function registerIpc() {
     selectOpenFile: selectSvgOpenFile,
     selectSaveFile: selectSvgSaveFile,
   });
+  rasterFileService = new RasterFileService({
+    selectSaveFile: selectRasterSaveFile,
+  });
+  agentRasterExportHost = new AgentRasterExportHost(
+    rendererDesignToolHost,
+    rasterFileService,
+  );
   agentSvgExportHost = new AgentSvgExportHost(
     rendererDesignToolHost,
     svgFileService,
@@ -549,6 +595,11 @@ function registerIpc() {
     ipc: ipcMain,
     assertRenderer: assertMainRenderer,
     service: svgFileService,
+  });
+  registerRasterFileIpc({
+    ipc: ipcMain,
+    assertRenderer: assertMainRenderer,
+    service: rasterFileService,
   });
   ipcMain.handle(channels.platformInfo, () => ({
     platform: process.platform,
@@ -1176,6 +1227,17 @@ void app.whenReady().then(async () => {
         signal,
       );
     }
+    if (call.toolName === EXPORT_RASTER_TOOL_NAME) {
+      if (!isExportRasterToolInput(call.input)) {
+        throw new TypeError("Invalid raster export tool input");
+      }
+      globalTaskCoordinator.assertDocumentInspected(context);
+      return await requireAgentRasterExportHost().execute(
+        call,
+        executionContext,
+        signal,
+      );
+    }
     if (call.toolName === IMPORT_SVG_TOOL_NAME) {
       if (!isImportSvgToolInput(call.input)) {
         throw new TypeError("Invalid SVG import tool input");
@@ -1751,8 +1813,10 @@ app.on("will-quit", () => {
   agentAttachmentHost = null;
   agentReferenceHost = null;
   agentSvgExportHost = null;
+  agentRasterExportHost = null;
   agentSvgImportHost = null;
   svgFileService = null;
+  rasterFileService = null;
   agentHost.setModelRequestHandler(null);
   agentHost.setDesignToolRequestHandler(null);
   rendererDesignToolHost.rejectAll("OpenDesign is shutting down");

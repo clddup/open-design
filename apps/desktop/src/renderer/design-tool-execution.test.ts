@@ -9,6 +9,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
+  EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -603,6 +604,76 @@ describe("Renderer design tool scope", () => {
       },
     });
     expect(JSON.stringify(response)).not.toContain("filePath");
+    expect(runtime.getSnapshot().document.revision).toBe(0);
+    expect(runtime.getSnapshot().state.history.canUndo).toBe(false);
+  });
+
+  it("prepares one explicit delivery raster without reading selection or changing revision", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    let rasterRequest: unknown;
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "export_raster",
+        call: {
+          toolCallId: "tool_export_raster",
+          toolName: EXPORT_RASTER_TOOL_NAME,
+          input: {
+            pageId: "page_welcome",
+            rootNodeId: "feature_one",
+            suggestedName: "Structured editing",
+            format: "webp",
+            size: { mode: "height", value: 900 },
+            background: { mode: "color", color: "#ffffff" },
+            quality: 0.84,
+            resampling: "smooth",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      {
+        exportRaster: (_document, request) => {
+          rasterRequest = request;
+          return Promise.resolve({
+            bytes: new Uint8Array([7, 8, 9]),
+            width: 1200,
+            height: 900,
+            mimeType: "image/webp",
+          });
+        },
+      },
+    );
+
+    expect(rasterRequest).toEqual({
+      version: 1,
+      pageId: "page_welcome",
+      rootNodeId: "feature_one",
+      format: "webp",
+      size: { mode: "height", value: 900 },
+      background: { mode: "color", color: "#ffffff" },
+      quality: 0.84,
+      resampling: "smooth",
+    });
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        observedRevision: 0,
+        content: {
+          kind: "raster-export-preparation",
+          version: 1,
+          rootNodeId: "feature_one",
+          width: 1200,
+          height: 900,
+          mimeType: "image/webp",
+          revision: 0,
+        },
+      },
+    });
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
     expect(runtime.getSnapshot().document.revision).toBe(0);
     expect(runtime.getSnapshot().state.history.canUndo).toBe(false);
   });

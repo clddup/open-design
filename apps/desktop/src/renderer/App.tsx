@@ -12,6 +12,7 @@ import type {
   DesignOperation,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
+import { RASTER_EXPORT_VERSION } from "@opendesign/import-export-service/raster";
 import {
   canCreateBooleanGroup,
   canDeleteNodes,
@@ -78,6 +79,9 @@ import { ProjectHome } from "./components/ProjectHome";
 import { SettingsPage } from "./components/SettingsPage";
 import {
   PropertiesPanel,
+  type ExportFormat,
+  type RasterExportFeedback,
+  type RasterExportSettings,
   type SvgInterchangeFeedback,
   type SvgOperationStatus,
   type UpdatePropertiesPatch,
@@ -94,6 +98,7 @@ import {
 import { useI18n } from "./i18n";
 import { executeDesignToolRequest } from "./design-tool-execution";
 import { captureDesignTarget } from "./design-capture";
+import { exportDesignRaster, suggestRasterExportName } from "./raster-export";
 import {
   ProjectAutosaveCoordinator,
   type ProjectAutosaveTarget,
@@ -237,12 +242,23 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       includeLayerIds: false,
       padding: 0,
     });
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("png");
+  const [rasterExportSettings, setRasterExportSettings] =
+    useState<RasterExportSettings>({
+      format: "png",
+      size: { mode: "scale", value: 1 },
+      background: { mode: "transparent" },
+      quality: 0.9,
+      resampling: "smooth",
+    });
   const [svgOperation, setSvgOperation] = useState<SvgOperationStatus | null>(
     null,
   );
   const [svgFeedback, setSvgFeedback] = useState<SvgInterchangeFeedback | null>(
     null,
   );
+  const [rasterFeedback, setRasterFeedback] =
+    useState<RasterExportFeedback | null>(null);
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
   );
@@ -1967,6 +1983,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     svgOperationController.current = controller;
     setSvgOperation(status);
     setSvgFeedback(null);
+    setRasterFeedback(null);
     setEditorError(null);
     setUtilityTab("properties");
     return controller;
@@ -2158,6 +2175,98 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     workspaceSnapshot.activeProjectId,
   ]);
 
+  const exportRaster = useCallback(async () => {
+    const desktop = window.desktop;
+    if (!desktop || view !== "editor" || svgOperationController.current) return;
+    const frozen = runtime.getSnapshot();
+    if (frozen.state.selection.nodeIds.length !== 1) {
+      setUtilityTab("properties");
+      setEditorError(t("error.exportRasterSelection"));
+      return;
+    }
+    const rootNodeId = frozen.state.selection.nodeIds[0];
+    const node = rootNodeId ? frozen.document.nodesById[rootNodeId] : undefined;
+    if (!rootNodeId || !node) {
+      setEditorError(t("error.exportRasterSelection"));
+      return;
+    }
+    const settings = rasterExportSettings;
+    const background =
+      settings.format === "jpeg" && settings.background.mode === "transparent"
+        ? ({ mode: "color", color: "#ffffff" } as const)
+        : settings.background;
+    const suggestedName = suggestRasterExportName(node.name);
+    const controller = beginSvgOperation({
+      kind: "raster-export",
+      name: suggestedName,
+    });
+    if (!controller) return;
+    try {
+      const result = await exportDesignRaster(
+        frozen.document,
+        {
+          version: RASTER_EXPORT_VERSION,
+          pageId: activePageId,
+          rootNodeId,
+          format: settings.format,
+          size: settings.size,
+          background,
+          ...(settings.format === "png" ? {} : { quality: settings.quality }),
+          resampling: settings.resampling,
+        },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      const saved = await desktop.saveRasterFile({
+        suggestedName,
+        format: settings.format,
+        mimeType: result.mimeType,
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+      });
+      if (!saved || controller.signal.aborted) return;
+      setRasterFeedback({
+        name: saved.name,
+        format: settings.format,
+        width: result.width,
+        height: result.height,
+        byteSize: saved.byteSize,
+      });
+    } catch (error) {
+      if (!isAbortError(error)) {
+        setEditorError(
+          reportRendererError(
+            "raster_export_failed",
+            error,
+            t("error.exportRaster"),
+            {
+              projectId: workspaceSnapshot.activeProjectId,
+              designFileId: workspaceSnapshot.activeDesignFileId,
+            },
+          ),
+        );
+      }
+    } finally {
+      finishSvgOperation(controller);
+    }
+  }, [
+    activePageId,
+    beginSvgOperation,
+    finishSvgOperation,
+    rasterExportSettings,
+    runtime,
+    t,
+    view,
+    workspaceSnapshot.activeDesignFileId,
+    workspaceSnapshot.activeProjectId,
+  ]);
+
+  const exportSelection = useCallback(() => {
+    if (exportFormat === "svg") return exportSvg();
+    return exportRaster();
+  }, [exportFormat, exportRaster, exportSvg]);
+
   useEffect(() => {
     const desktop = window.desktop;
     if (!desktop) return;
@@ -2165,13 +2274,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       void importSvg();
     });
     const unsubscribeExport = desktop.onExportSvgCommand(() => {
-      void exportSvg();
+      void exportSelection();
     });
     return () => {
       unsubscribeImport();
       unsubscribeExport();
     };
-  }, [exportSvg, importSvg]);
+  }, [exportSelection, importSvg]);
 
   useEffect(() => {
     if (view !== "editor") svgOperationController.current?.abort();
@@ -2464,7 +2573,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           canExportSvg={state.selection.nodeIds.length > 0}
           dirty={state.dirty}
           documentName={documentName}
-          onExportSvg={() => void exportSvg()}
+          onExportSvg={() => void exportSelection()}
           onImportSvg={() => void importSvg()}
           onOpen={activeProject ? undefined : () => void openDocument()}
           onProject={activeProject ? () => setView("project") : undefined}
@@ -2630,8 +2739,23 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onBooleanOperationChange={applyBooleanOperation}
                 onCancelSvgOperation={cancelSvgOperation}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
+                onDismissRasterFeedback={() => setRasterFeedback(null)}
                 onDismissSvgFeedback={() => setSvgFeedback(null)}
                 onDuplicate={duplicateSelection}
+                onExportFormatChange={(format) => {
+                  setExportFormat(format);
+                  if (format !== "svg") {
+                    setRasterExportSettings((current) => ({
+                      ...current,
+                      format,
+                      ...(format === "jpeg" &&
+                      current.background.mode === "transparent"
+                        ? { background: { mode: "color", color: "#ffffff" } }
+                        : {}),
+                    }));
+                  }
+                }}
+                onExportRaster={() => void exportRaster()}
                 onExportSvg={() => void exportSvg()}
                 onReplaceImage={() => void replaceSelectedImage()}
                 onSelectBooleanParent={(nodeId) =>
@@ -2641,6 +2765,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}
                 onSvgExportSettingsChange={setSvgExportSettings}
+                onRasterExportSettingsChange={setRasterExportSettings}
+                exportFormat={exportFormat}
+                rasterExportSettings={rasterExportSettings}
+                rasterFeedback={rasterFeedback}
                 selectionCount={state.selection.nodeIds.length}
                 svgExportSettings={svgExportSettings}
                 svgFeedback={svgFeedback}

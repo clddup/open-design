@@ -898,31 +898,56 @@
     {
       "id": "export.static-formats",
       "category": "delivery",
-      "status": "unavailable",
+      "status": "degraded",
       "label": { "en": "Professional static export", "zh-CN": "专业静态导出" },
       "description": {
         "en": "Export selected layers, Frames, or Slices to PNG, JPEG, WebP, SVG, or PDF with scale and transparency settings.",
         "zh-CN": "按倍率和透明背景设置，把选中图层、Frame 或 Slice 导出为 PNG、JPEG、WebP、SVG 或 PDF。"
       },
-      "provider": "Not implemented",
+      "provider": "OpenDesign Raster Export v1 + leafer-editor 2.2.9 + Main RasterFileService; SVG v1 interchange service",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "export"],
       "surfaces": {
-        "contract": "unavailable",
-        "runtime": "unavailable",
-        "human": "unavailable",
-        "agent": "unavailable",
+        "contract": "degraded",
+        "runtime": "degraded",
+        "human": "degraded",
+        "agent": "degraded",
         "render": "degraded",
-        "export": "unavailable"
+        "export": "degraded"
       },
       "limitations": [
         {
-          "en": "Canvas screenshots are diagnostic previews and are not accepted as professional export artifacts.",
-          "zh-CN": "画布截图只是诊断预览，不能作为专业导出产物。"
+          "en": "Raster Export v1 delivers one explicit layer, Group, or Frame as PNG, JPEG, or WebP with scale/fixed-edge, background, quality, and resampling settings. Canvas screenshots remain separate diagnostic previews.",
+          "zh-CN": "Raster Export v1 可把一个明确图层、Group 或 Frame 按倍率/固定边长、背景、质量和重采样设置导出为 PNG、JPEG 或 WebP；画布截图仍是独立诊断预览。"
+        },
+        {
+          "en": "Batch export, Slice, Page export, persistent multi-configuration, PDF, Display P3/ICC, and export suffixes are not implemented.",
+          "zh-CN": "批量导出、Slice、整页、持久多配置、PDF、Display P3/ICC 和导出后缀尚未实现。"
+        },
+        {
+          "en": "Shared macOS/Windows path tests are complete; packaged-product save, overwrite, cancellation, transparency, and size smoke remain pending on both platforms.",
+          "zh-CN": "macOS/Windows 共享路径自动化已完成；两平台打包产品的保存、覆盖、取消、透明与尺寸实测仍待完成。"
         }
       ],
-      "evidence": { "automated": [], "manual": [] },
+      "evidence": {
+        "automated": [
+          "packages/import-export-service/src/raster.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
+          "apps/desktop/src/renderer/raster-export.test.ts",
+          "apps/desktop/src/main/raster/raster-file-service.test.ts",
+          "apps/desktop/src/main/raster/raster-file-ipc.test.ts",
+          "apps/desktop/src/shared/desktop-api.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/shared/design-tool-bridge.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/main/agent/agent-raster-export-host.test.ts",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/App.test.tsx"
+        ],
+        "manual": []
+      },
       "references": [
-        "https://help.figma.com/hc/en-us/articles/360040028114-Export-static-designs-from-Figma"
+        "https://help.figma.com/hc/en-us/articles/360040028114-Export-static-designs-from-Figma",
+        "https://help.figma.com/hc/en-us/articles/13402894554519-Export-formats-and-settings"
       ]
     }
   ]

@@ -10,6 +10,10 @@ import type {
   ViewportState,
 } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import type {
+  RasterExportMimeType,
+  RasterExportRequest,
+} from "@opendesign/import-export-service/raster";
 
 export type LeaferCanvasTool =
   | "select"
@@ -122,6 +126,13 @@ export interface LeaferCaptureResult {
   width: number;
 }
 
+export interface LeaferRasterExportResult {
+  bytes: Uint8Array;
+  height: number;
+  mimeType: RasterExportMimeType;
+  width: number;
+}
+
 export type LeaferGenerationSkeletonRole =
   | "structure"
   | "content"
@@ -190,6 +201,7 @@ export interface LeaferEngineOptions {
 export interface LeaferEngineAdapter {
   capture(target: LeaferCaptureTarget): Promise<LeaferCaptureResult>;
   dispose(): void;
+  exportRaster(request: RasterExportRequest): Promise<LeaferRasterExportResult>;
   finishGenerationPresentation(): void;
   retryBooleanGeometry(): boolean;
   setVectorPointMode(mode: VectorPointMode): boolean;

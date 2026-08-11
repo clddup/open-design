@@ -20,13 +20,16 @@ function renderPanel(
     node?: DesignNode;
     onArrange?: (operation: ArrangeOperation) => void;
     operation?: { kind: "import" | "export"; name: string } | null;
+    exportFormat?: "svg" | "png" | "jpeg" | "webp";
     selectionCount?: number;
   } = {},
 ) {
   const onCancelSvgOperation = vi.fn();
   const onDismissSvgFeedback = vi.fn();
   const onExportSvg = vi.fn();
+  const onExportRaster = vi.fn();
   const onSvgExportSettingsChange = vi.fn();
+  const onRasterExportSettingsChange = vi.fn();
   const onUpdate = vi.fn();
   const onArrange =
     options.onArrange ?? vi.fn<(operation: ArrangeOperation) => void>();
@@ -42,12 +45,28 @@ function renderPanel(
           onBooleanOperationChange={vi.fn()}
           onCancelSvgOperation={onCancelSvgOperation}
           onDelete={vi.fn()}
+          onDismissRasterFeedback={vi.fn()}
           onDismissSvgFeedback={onDismissSvgFeedback}
           onDuplicate={vi.fn()}
+          onExportFormatChange={vi.fn()}
+          onExportRaster={onExportRaster}
           onExportSvg={onExportSvg}
           onReplaceImage={vi.fn()}
           onSelectBooleanParent={vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
+          onRasterExportSettingsChange={onRasterExportSettingsChange}
+          exportFormat={options.exportFormat ?? "svg"}
+          rasterExportSettings={{
+            format:
+              options.exportFormat && options.exportFormat !== "svg"
+                ? options.exportFormat
+                : "png",
+            size: { mode: "scale", value: 1 },
+            background: { mode: "transparent" },
+            quality: 0.9,
+            resampling: "smooth",
+          }}
+          rasterFeedback={null}
           onUpdate={onUpdate}
           selectionCount={options.selectionCount ?? 2}
           svgExportSettings={{ includeLayerIds: false, padding: 0 }}
@@ -62,6 +81,8 @@ function renderPanel(
     onArrange,
     onDismissSvgFeedback,
     onExportSvg,
+    onExportRaster,
+    onRasterExportSettingsChange,
     onSvgExportSettingsChange,
     onUpdate,
   };
@@ -216,6 +237,25 @@ describe("PropertiesPanel SVG workflow", () => {
 });
 
 describe("PropertiesPanel line workflow", () => {
+  it("configures and starts a single-target professional raster export", async () => {
+    const user = userEvent.setup();
+    const { onExportRaster, onRasterExportSettingsChange } = renderPanel({
+      node: lineNode,
+      selectionCount: 1,
+      exportFormat: "png",
+    });
+
+    expect(screen.getByText("240 × 120 px")).toBeVisible();
+    await user.selectOptions(screen.getByLabelText("Size"), "scale:3");
+    expect(onRasterExportSettingsChange).toHaveBeenCalledWith(
+      expect.objectContaining({ size: { mode: "scale", value: 3 } }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Export selection as PNG…" }),
+    );
+    expect(onExportRaster).toHaveBeenCalledOnce();
+  });
+
   it("edits independent endpoints, direction, cap, join, and dash pattern", async () => {
     const user = userEvent.setup();
     const { onUpdate } = renderPanel({ node: lineNode });

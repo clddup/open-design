@@ -33,6 +33,7 @@ import {
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
@@ -46,6 +47,7 @@ import {
   isDesignHierarchyToolInput,
   isDesignPageToolInput,
   isExportSvgToolInput,
+  isExportRasterToolInput,
   isInternalDesignApplyToolInput,
   isInternalImportSvgToolInput,
   isInternalUpdateImageToolInput,
@@ -56,6 +58,7 @@ import type {
   RendererDesignToolResponse,
 } from "../shared/design-tool-bridge";
 import { runSvgExportInWorker, runSvgImportInWorker } from "./svg-interchange";
+import { exportDesignRaster } from "./raster-export";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -69,6 +72,7 @@ type ExecuteDesignToolOptions = {
     width: number;
   }>;
   exportSvg?: typeof runSvgExportInWorker;
+  exportRaster?: typeof exportDesignRaster;
   importSvg?: typeof runSvgImportInWorker;
   signal?: AbortSignal;
   stageDelayMs?: number;
@@ -344,6 +348,53 @@ async function executeDesignToolRequestUnsafe(
           previousRevision: transaction.baseRevision,
           revision: result.revision.revision,
           transactionId: transaction.transactionId,
+        },
+      },
+    };
+  }
+
+  if (
+    request.call.toolName === EXPORT_RASTER_TOOL_NAME &&
+    isExportRasterToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "Raster export",
+    );
+    throwIfAborted(options.signal);
+    const exported = await (options.exportRaster ?? exportDesignRaster)(
+      document,
+      {
+        version: 1,
+        pageId: input.pageId,
+        rootNodeId: input.rootNodeId,
+        format: input.format,
+        size: input.size,
+        background: input.background,
+        ...(input.quality === undefined ? {} : { quality: input.quality }),
+        resampling: input.resampling,
+      },
+      options.signal,
+    );
+    throwIfAborted(options.signal);
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        observedRevision: document.revision,
+        content: {
+          kind: "raster-export-preparation",
+          version: 1,
+          suggestedName: input.suggestedName,
+          format: input.format,
+          mimeType: exported.mimeType,
+          bytes: exported.bytes,
+          width: exported.width,
+          height: exported.height,
+          revision: document.revision,
+          rootNodeId: input.rootNodeId,
         },
       },
     };

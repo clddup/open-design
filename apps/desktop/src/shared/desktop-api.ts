@@ -11,6 +11,13 @@ import type {
 } from "@opendesign/model-gateway";
 import { SVG_MAX_CHARACTERS } from "@opendesign/import-export-service/limits";
 import {
+  RASTER_EXPORT_MAX_ENCODED_BYTES,
+  isRasterExportFormat,
+  rasterExportMimeType,
+  type RasterExportFormat,
+  type RasterExportMimeType,
+} from "@opendesign/import-export-service/raster";
+import {
   isDesignAsset,
   isDesignDocument,
   type DesignAsset,
@@ -91,6 +98,20 @@ export type SaveSvgFileRequest = {
 
 export type SaveSvgFileResult = {
   name: string;
+};
+
+export type SaveRasterFileRequest = {
+  suggestedName: string;
+  format: RasterExportFormat;
+  mimeType: RasterExportMimeType;
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+};
+
+export type SaveRasterFileResult = {
+  name: string;
+  byteSize: number;
 };
 
 export const MODEL_PROVIDER_CATALOG_VERSION = 3 as const;
@@ -302,6 +323,9 @@ export interface DesktopApi {
   saveSvgFile: (
     request: SaveSvgFileRequest,
   ) => Promise<SaveSvgFileResult | null>;
+  saveRasterFile: (
+    request: SaveRasterFileRequest,
+  ) => Promise<SaveRasterFileResult | null>;
   createProject: (
     request: CreateProjectRequest,
   ) => Promise<ProjectManifest | null>;
@@ -371,6 +395,7 @@ export const channels = {
   saveDesignFile: "design-file:save",
   openSvgFile: "svg-file:open",
   saveSvgFile: "svg-file:save",
+  saveRasterFile: "raster-file:save",
   createProject: "project:create",
   openProject: "project:open",
   openRecentProject: "project:open-recent",
@@ -791,6 +816,43 @@ export function isSaveSvgFileResult(
     isRecord(value) &&
     isSvgFileName(value.name) &&
     hasExactKeys(value, ["name"])
+  );
+}
+
+export function isSaveRasterFileRequest(
+  value: unknown,
+): value is SaveRasterFileRequest {
+  if (!isRecord(value)) return false;
+  return (
+    isSuggestedFileName(value.suggestedName) &&
+    isRasterExportFormat(value.format) &&
+    value.mimeType === rasterExportMimeType(value.format) &&
+    value.bytes instanceof Uint8Array &&
+    value.bytes.byteLength > 0 &&
+    value.bytes.byteLength <= RASTER_EXPORT_MAX_ENCODED_BYTES &&
+    isRasterDimension(value.width) &&
+    isRasterDimension(value.height) &&
+    hasExactKeys(value, [
+      "suggestedName",
+      "format",
+      "mimeType",
+      "bytes",
+      "width",
+      "height",
+    ])
+  );
+}
+
+export function isSaveRasterFileResult(
+  value: unknown,
+): value is SaveRasterFileResult {
+  return (
+    isRecord(value) &&
+    isSuggestedFileName(value.name) &&
+    Number.isInteger(value.byteSize) &&
+    Number(value.byteSize) > 0 &&
+    Number(value.byteSize) <= RASTER_EXPORT_MAX_ENCODED_BYTES &&
+    hasExactKeys(value, ["name", "byteSize"])
   );
 }
 
@@ -1239,6 +1301,12 @@ function isSuggestedFileName(value: unknown): value is string {
 
 function isSvgFileName(value: unknown): value is string {
   return isSuggestedFileName(value) && value.toLowerCase().endsWith(".svg");
+}
+
+function isRasterDimension(value: unknown): value is number {
+  return (
+    Number.isInteger(value) && Number(value) > 0 && Number(value) <= 16_384
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

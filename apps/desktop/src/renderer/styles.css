@@ -1740,6 +1740,43 @@ textarea {
   display: grid;
   gap: 6px;
 }
+.property-select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 7px;
+  border-radius: 4px;
+  color: var(--ui-text-muted);
+  background: var(--ui-bg);
+  font-size: 10px;
+}
+.property-select-row select {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--ui-text);
+  background: transparent;
+  font: 10px var(--ui-font);
+}
+.property-select-row select:focus-visible {
+  outline: 1px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.property-select-row .paint-color-picker {
+  justify-self: end;
+}
+.raster-export-dimensions {
+  color: var(--ui-text-faint);
+  font: 9px/1.4 var(--ui-mono);
+  text-align: right;
+}
+.raster-export-hint {
+  color: var(--ui-warning-text);
+  font-size: 9px;
+  line-height: 1.4;
+}
 .svg-export-format {
   display: flex;
   min-height: 26px;

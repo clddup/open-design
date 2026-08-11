@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
+  EXPORT_RASTER_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
@@ -25,6 +26,57 @@ const context = {
 };
 
 describe("Renderer design tool bridge", () => {
+  it("accepts bounded raster preparation bytes only for the typed export tool", () => {
+    const request = {
+      requestId: "renderer_raster_export",
+      call: {
+        toolCallId: "export_raster_1",
+        toolName: EXPORT_RASTER_TOOL_NAME,
+        input: {
+          pageId: "page_1",
+          rootNodeId: "frame_1",
+          suggestedName: "Poster",
+          format: "png",
+          size: { mode: "scale", value: 2 },
+          background: { mode: "transparent" },
+          resampling: "smooth",
+        },
+      },
+      context,
+    };
+    expect(isRendererDesignToolRequest(request)).toBe(true);
+    expect(
+      isRendererDesignToolResponse({
+        requestId: request.requestId,
+        ok: true,
+        result: {
+          observedRevision: 4,
+          content: {
+            kind: "raster-export-preparation",
+            version: 1,
+            suggestedName: "Poster",
+            format: "png",
+            mimeType: "image/png",
+            bytes: new Uint8Array([1, 2, 3]),
+            width: 1600,
+            height: 1200,
+            revision: 4,
+            rootNodeId: "frame_1",
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isRendererDesignToolRequest({
+        ...request,
+        call: {
+          ...request.call,
+          input: { ...request.call.input, filePath: "/tmp/poster.png" },
+        },
+      }),
+    ).toBe(false);
+  });
+
   it("requires a Main-selected Page or Frame target for canvas capture", () => {
     const request = {
       requestId: "renderer_capture_1",

@@ -30,6 +30,8 @@ import {
   isSaveProjectDesignFileRequest,
   isSaveSvgFileRequest,
   isSaveSvgFileResult,
+  isSaveRasterFileRequest,
+  isSaveRasterFileResult,
 } from "./desktop-api";
 
 const now = "2026-08-07T12:00:00.000Z";
@@ -671,5 +673,30 @@ describe("SVG file desktop API guards", () => {
         contents: "x".repeat(2_000_001),
       }),
     ).toBe(false);
+  });
+});
+
+describe("raster file desktop API guards", () => {
+  const request = {
+    suggestedName: "Poster",
+    format: "webp",
+    mimeType: "image/webp",
+    bytes: new Uint8Array([1, 2, 3]),
+    width: 1600,
+    height: 900,
+  };
+
+  it("accepts only exact path-free encoded image requests and metadata", () => {
+    expect(isSaveRasterFileRequest(request)).toBe(true);
+    expect(isSaveRasterFileResult({ name: "Poster.webp", byteSize: 3 })).toBe(
+      true,
+    );
+    expect(
+      isSaveRasterFileRequest({ ...request, filePath: "/tmp/Poster.webp" }),
+    ).toBe(false);
+    expect(isSaveRasterFileRequest({ ...request, mimeType: "image/png" })).toBe(
+      false,
+    );
+    expect(isSaveRasterFileRequest({ ...request, width: 20_000 })).toBe(false);
   });
 });

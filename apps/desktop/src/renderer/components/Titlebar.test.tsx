@@ -167,7 +167,7 @@ describe("Titlebar behavior primitives", () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
-  it("offers editable SVG import and selection export in the file menu", async () => {
+  it("offers editable SVG import and current-format selection export in the file menu", async () => {
     const user = userEvent.setup();
     const { onExportSvg, onImportSvg } = renderTitlebar();
 
@@ -177,12 +177,12 @@ describe("Titlebar behavior primitives", () => {
 
     await user.click(screen.getByRole("button", { name: "File actions" }));
     await user.click(
-      screen.getByRole("menuitem", { name: "Export selection as SVG…" }),
+      screen.getByRole("menuitem", { name: "Export selection…" }),
     );
     expect(onExportSvg).toHaveBeenCalledOnce();
   });
 
-  it("disables SVG commands while an operation is active or no layer is selected", async () => {
+  it("disables import and export commands while an operation is active or no layer is selected", async () => {
     const user = userEvent.setup();
     render(
       <TooltipProvider delayDuration={0}>
@@ -210,7 +210,7 @@ describe("Titlebar behavior primitives", () => {
       screen.getByRole("menuitem", { name: "Import SVG…" }),
     ).toHaveAttribute("aria-disabled", "true");
     expect(
-      screen.getByRole("menuitem", { name: "Export selection as SVG…" }),
+      screen.getByRole("menuitem", { name: "Export selection…" }),
     ).toHaveAttribute("aria-disabled", "true");
   });
 

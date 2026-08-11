@@ -10,6 +10,7 @@ import {
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
+  EXPORT_RASTER_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
@@ -19,10 +20,57 @@ import {
   UPDATE_IMAGE_TOOL_NAME,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
+  isPreparedAgentRasterExport,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
 
 describe("design Agent tool contract", () => {
+  it("exposes a path-free versioned raster delivery tool with format-specific validation", () => {
+    const tool = DESIGN_AGENT_TOOL_SPECS.find(
+      (candidate) => candidate.name === EXPORT_RASTER_TOOL_NAME,
+    );
+    const input = {
+      pageId: "page_1",
+      rootNodeId: "frame_1",
+      suggestedName: "Launch poster",
+      format: "jpeg",
+      size: { mode: "width", value: 2400 },
+      background: { mode: "color", color: "#ffffff" },
+      quality: 0.9,
+      resampling: "smooth",
+    };
+    expect(tool).toMatchObject({ risk: "external", approval: "never" });
+    expect(validateDesignAgentToolInput(EXPORT_RASTER_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(EXPORT_RASTER_TOOL_NAME, {
+        ...input,
+        filePath: "C:\\Users\\designer\\poster.jpg",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(EXPORT_RASTER_TOOL_NAME, {
+        ...input,
+        background: { mode: "transparent" },
+      }),
+    ).toBe(false);
+    expect(
+      isPreparedAgentRasterExport({
+        kind: "raster-export-preparation",
+        version: 1,
+        suggestedName: "Launch poster",
+        format: "jpeg",
+        mimeType: "image/jpeg",
+        bytes: new Uint8Array([1, 2, 3]),
+        width: 2400,
+        height: 1600,
+        revision: 4,
+        rootNodeId: "frame_1",
+      }),
+    ).toBe(true);
+  });
+
   it("validates a dedicated Page lifecycle tool and rejects Page commands in node transactions", () => {
     const tool = DESIGN_AGENT_TOOL_SPECS.find(
       (candidate) => candidate.name === DESIGN_PAGE_TOOL_NAME,

@@ -10,6 +10,7 @@ import type {
 } from "@opendesign/agent-runtime";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
+  isPreparedAgentRasterExport,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
 
@@ -286,7 +287,12 @@ function isRendererDesignCaptureTarget(
 }
 
 function isTrustedToolResult(value: unknown): value is TrustedToolResult {
-  if (!record(value) || !jsonSizeWithin(value.content, 4_000_000)) return false;
+  if (
+    !record(value) ||
+    (!isPreparedAgentRasterExport(value.content) &&
+      !jsonSizeWithin(value.content, 4_000_000))
+  )
+    return false;
   const observedRevision = value.observedRevision;
   if (
     observedRevision !== undefined &&

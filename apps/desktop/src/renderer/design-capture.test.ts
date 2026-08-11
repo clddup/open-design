@@ -17,6 +17,7 @@ describe("deterministic design target capture", () => {
     const adapter = {
       capture,
       dispose,
+      exportRaster: vi.fn(),
       finishGenerationPresentation: vi.fn(),
       retryBooleanGeometry: vi.fn(),
       setVectorPointMode: vi.fn(),

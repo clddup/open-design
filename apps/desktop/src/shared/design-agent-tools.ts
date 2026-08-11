@@ -12,6 +12,17 @@ import {
   type SvgInterchangeIssue,
 } from "@opendesign/import-export-service/svg-issues";
 import { SVG_MAX_CHARACTERS } from "@opendesign/import-export-service/limits";
+import {
+  RASTER_EXPORT_MAX_ENCODED_BYTES,
+  RASTER_EXPORT_VERSION,
+  isRasterExportRequest,
+  rasterExportMimeType,
+  type RasterExportBackground,
+  type RasterExportFormat,
+  type RasterExportMimeType,
+  type RasterExportResampling,
+  type RasterExportSize,
+} from "@opendesign/import-export-service/raster";
 import { isPortableFileName } from "./portable-file-name";
 export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
@@ -30,6 +41,7 @@ export const PLACE_IMAGE_TOOL_NAME = "opendesign_place_image";
 export const UPDATE_IMAGE_TOOL_NAME = "opendesign_update_image";
 export const IMPORT_SVG_TOOL_NAME = "opendesign_import_svg";
 export const EXPORT_SVG_TOOL_NAME = "opendesign_export_svg";
+export const EXPORT_RASTER_TOOL_NAME = "opendesign_export_raster";
 export const INTERNAL_DESIGN_APPLY_TOOL_NAME =
   "opendesign_internal_apply_transaction";
 export const INTERNAL_UPDATE_IMAGE_TOOL_NAME =
@@ -186,6 +198,30 @@ export type ExportSvgToolInput = {
   suggestedName: string;
   includeLayerIds?: boolean;
   padding?: number;
+};
+
+export type ExportRasterToolInput = {
+  pageId: string;
+  rootNodeId: string;
+  suggestedName: string;
+  format: RasterExportFormat;
+  size: RasterExportSize;
+  background: RasterExportBackground;
+  quality?: number;
+  resampling: RasterExportResampling;
+};
+
+export type PreparedAgentRasterExport = {
+  kind: "raster-export-preparation";
+  version: 1;
+  suggestedName: string;
+  format: RasterExportFormat;
+  mimeType: RasterExportMimeType;
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  revision: number;
+  rootNodeId: string;
 };
 
 export type ImportSvgToolInput = {
@@ -1608,6 +1644,84 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: EXPORT_RASTER_TOOL_NAME,
+    description:
+      "Export one explicit existing layer or Frame from the currently bound Design File as a delivery-quality PNG, JPEG, or WebP. pageId and rootNodeId must be stable IDs returned by opendesign_inspect_document; this tool never reads the live user selection or viewport. It freezes the current revision, renders an isolated Leafer projection with explicit 1x/2x/3x or fixed width/height, background, quality, and resampling settings, then opens Main's native save dialog. The user chooses or cancels the destination; the model never receives bytes or a local path. Call only when the user explicitly asks to export or deliver a raster image. opendesign_capture_canvas is a bounded review preview and must not be presented as the exported artifact.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pageId: { type: "string", minLength: 1, maxLength: 256 },
+        rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
+        suggestedName: {
+          type: "string",
+          minLength: 1,
+          maxLength: 255,
+          description: "Portable file name only, never a path.",
+        },
+        format: { enum: ["png", "jpeg", "webp"] },
+        size: {
+          oneOf: [
+            {
+              type: "object",
+              properties: {
+                mode: { const: "scale" },
+                value: { enum: [1, 2, 3] },
+              },
+              required: ["mode", "value"],
+              additionalProperties: false,
+            },
+            ...(["width", "height"] as const).map((mode) => ({
+              type: "object" as const,
+              properties: {
+                mode: { const: mode },
+                value: {
+                  type: "integer" as const,
+                  minimum: 1,
+                  maximum: 16_384,
+                },
+              },
+              required: ["mode", "value"],
+              additionalProperties: false,
+            })),
+          ],
+        },
+        background: {
+          oneOf: [
+            {
+              type: "object",
+              properties: { mode: { const: "transparent" } },
+              required: ["mode"],
+              additionalProperties: false,
+            },
+            {
+              type: "object",
+              properties: {
+                mode: { const: "color" },
+                color: { type: "string", pattern: "^#[0-9A-Fa-f]{6}$" },
+              },
+              required: ["mode", "color"],
+              additionalProperties: false,
+            },
+          ],
+        },
+        quality: { type: "number", minimum: 0.01, maximum: 1 },
+        resampling: { enum: ["smooth", "pixelated"] },
+      },
+      required: [
+        "pageId",
+        "rootNodeId",
+        "suggestedName",
+        "format",
+        "size",
+        "background",
+        "resampling",
+      ],
+      additionalProperties: false,
+    },
+    risk: "external" as const,
+    approval: "never" as const,
+  },
+  {
     name: DESIGN_HIERARCHY_TOOL_NAME,
     description:
       "Edit existing layer hierarchy and non-destructive Boolean groups in the currently bound Design File without asking the model to calculate low-level move commands, transforms, or derived paths. It can group siblings, ungroup one Group, create union/subtract/intersect/exclude from explicit supported siblings, change a Boolean operation, ungroup one Boolean, reorder siblings, or reparent layers to an explicit Page-root, Frame, or Group insertion index. Source Boolean operands remain editable and the provider-derived result is never model-authored or persisted. Reparenting preserves world transforms and dynamically recomputes affected Group bounds; Frame sizes remain fixed. Targets are explicit stable node IDs on an explicit existing Page, never the send-time or live user selection. The host previews the complete change and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, unsupported or masked Boolean operands, cycles, empty source Groups, non-invertible targets, no-op changes, and visually lossy ungrouping; inherited clipping or appearance changes return a visual-review warning.",
@@ -1724,6 +1838,9 @@ export function validateDesignAgentToolInput(
   if (toolName === UPDATE_IMAGE_TOOL_NAME) return isUpdateImageToolInput(input);
   if (toolName === IMPORT_SVG_TOOL_NAME) return isImportSvgToolInput(input);
   if (toolName === EXPORT_SVG_TOOL_NAME) return isExportSvgToolInput(input);
+  if (toolName === EXPORT_RASTER_TOOL_NAME) {
+    return isExportRasterToolInput(input);
+  }
   if (toolName === INTERNAL_IMPORT_SVG_TOOL_NAME) {
     return isInternalImportSvgToolInput(input);
   }
@@ -1917,6 +2034,79 @@ export function isExportSvgToolInput(
         "suggestedName",
         "includeLayerIds",
         "padding",
+      ].includes(key),
+    )
+  );
+}
+
+export function isExportRasterToolInput(
+  input: unknown,
+): input is ExportRasterToolInput {
+  if (!isRecord(input) || !isPortableFileName(input.suggestedName))
+    return false;
+  if (
+    !Object.keys(input).every((key) =>
+      [
+        "pageId",
+        "rootNodeId",
+        "suggestedName",
+        "format",
+        "size",
+        "background",
+        "quality",
+        "resampling",
+      ].includes(key),
+    )
+  )
+    return false;
+  return isRasterExportRequest({
+    version: RASTER_EXPORT_VERSION,
+    pageId: input.pageId,
+    rootNodeId: input.rootNodeId,
+    format: input.format,
+    size: input.size,
+    background: input.background,
+    quality: input.quality,
+    resampling: input.resampling,
+  });
+}
+
+export function isPreparedAgentRasterExport(
+  value: unknown,
+): value is PreparedAgentRasterExport {
+  if (!isRecord(value)) return false;
+  return (
+    value.kind === "raster-export-preparation" &&
+    value.version === 1 &&
+    isPortableFileName(value.suggestedName) &&
+    (value.format === "png" ||
+      value.format === "jpeg" ||
+      value.format === "webp") &&
+    value.mimeType === rasterExportMimeType(value.format) &&
+    value.bytes instanceof Uint8Array &&
+    value.bytes.byteLength > 0 &&
+    value.bytes.byteLength <= RASTER_EXPORT_MAX_ENCODED_BYTES &&
+    Number.isInteger(value.width) &&
+    Number(value.width) > 0 &&
+    Number(value.width) <= 16_384 &&
+    Number.isInteger(value.height) &&
+    Number(value.height) > 0 &&
+    Number(value.height) <= 16_384 &&
+    Number.isInteger(value.revision) &&
+    Number(value.revision) >= 0 &&
+    safeId(value.rootNodeId) &&
+    Object.keys(value).every((key) =>
+      [
+        "kind",
+        "version",
+        "suggestedName",
+        "format",
+        "mimeType",
+        "bytes",
+        "width",
+        "height",
+        "revision",
+        "rootNodeId",
       ].includes(key),
     )
   );

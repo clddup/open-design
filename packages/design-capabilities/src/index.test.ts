@@ -33,8 +33,8 @@ describe("design capability manifest", () => {
   it("does not mark evidence-free professional workflows available", () => {
     expect(summarizeCapabilityStatuses()).toEqual({
       available: 0,
-      degraded: 14,
-      unavailable: 6,
+      degraded: 15,
+      unavailable: 5,
     });
     expect(getDesignCapability("appearance.paints-effects-masks")?.status).toBe(
       "degraded",

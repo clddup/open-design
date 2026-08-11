@@ -19,6 +19,13 @@ import {
   MAX_SVG_EXPORT_PADDING,
 } from "@opendesign/editor-runtime";
 import type { SvgInterchangeIssue } from "@opendesign/import-export-service";
+import {
+  planRasterExportDimensions,
+  type RasterExportBackground,
+  type RasterExportFormat,
+  type RasterExportResampling,
+  type RasterExportSize,
+} from "@opendesign/import-export-service/raster";
 import { Button, Glyph, IconButton, type GlyphName } from "@opendesign/ui";
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
@@ -30,8 +37,18 @@ export type UpdatePropertiesPatch = Omit<
   "commandId" | "nodeId" | "type"
 >;
 
+export type ExportFormat = "svg" | RasterExportFormat;
+
+export interface RasterExportSettings {
+  format: RasterExportFormat;
+  size: RasterExportSize;
+  background: RasterExportBackground;
+  quality: number;
+  resampling: RasterExportResampling;
+}
+
 export interface SvgOperationStatus {
-  kind: "import" | "export";
+  kind: "import" | "export" | "raster-export";
   name: string;
 }
 
@@ -39,6 +56,14 @@ export interface SvgInterchangeFeedback {
   kind: "import" | "export";
   name: string;
   issues: readonly SvgInterchangeIssue[];
+}
+
+export interface RasterExportFeedback {
+  name: string;
+  format: RasterExportFormat;
+  width: number;
+  height: number;
+  byteSize: number;
 }
 
 type FillNode = Extract<
@@ -1748,13 +1773,58 @@ function SvgOperationNotice({
         <strong>
           {operation.kind === "import"
             ? t("properties.importingSvg", { name: operation.name })
-            : t("properties.exportingSvg")}
+            : operation.kind === "export"
+              ? t("properties.exportingSvg")
+              : t("properties.exportingRaster", { name: operation.name })}
         </strong>
-        <small>{t("properties.svgOperationDetail")}</small>
+        <small>
+          {operation.kind === "raster-export"
+            ? t("properties.rasterOperationDetail")
+            : t("properties.svgOperationDetail")}
+        </small>
       </span>
       <Button onClick={onCancel} tone="quiet">
         {t("properties.cancelSvgOperation")}
       </Button>
+    </section>
+  );
+}
+
+function RasterExportReport({
+  feedback,
+  onDismiss,
+}: {
+  feedback: RasterExportFeedback;
+  onDismiss: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <section
+      aria-live="polite"
+      className="svg-fidelity-report is-success"
+      role="status"
+    >
+      <header>
+        <span aria-hidden="true" className="svg-fidelity-report__mark">
+          ✓
+        </span>
+        <strong>
+          {t("properties.rasterExportComplete", { name: feedback.name })}
+        </strong>
+        <IconButton
+          icon="close"
+          label={t("properties.dismissRasterFeedback")}
+          onClick={onDismiss}
+        />
+      </header>
+      <p>
+        {t("properties.rasterExportSummary", {
+          format: feedback.format.toUpperCase(),
+          width: feedback.width,
+          height: feedback.height,
+          size: formatByteSize(feedback.byteSize),
+        })}
+      </p>
     </section>
   );
 }
@@ -1821,65 +1891,257 @@ function SvgFidelityReport({
   );
 }
 
-function SvgExportSection({
+function ExportSection({
   busy,
-  onExport,
-  onSettingsChange,
+  format,
+  node,
+  onExportFormatChange,
+  onExportRaster,
+  onExportSvg,
+  onRasterSettingsChange,
+  onSvgSettingsChange,
+  rasterSettings,
   selectionCount,
-  settings,
+  svgSettings,
 }: {
   busy: boolean;
-  onExport: () => void;
-  onSettingsChange: (settings: SvgWorkerExportSettings) => void;
+  format: ExportFormat;
+  node: DesignNode | undefined;
+  onExportFormatChange: (format: ExportFormat) => void;
+  onExportRaster: () => void;
+  onExportSvg: () => void;
+  onRasterSettingsChange: (settings: RasterExportSettings) => void;
+  onSvgSettingsChange: (settings: SvgWorkerExportSettings) => void;
+  rasterSettings: RasterExportSettings;
   selectionCount: number;
-  settings: SvgWorkerExportSettings;
+  svgSettings: SvgWorkerExportSettings;
 }) {
   const { t } = useI18n();
+  const dimensionPlan = node
+    ? planRasterExportDimensions(node.size, rasterSettings.size)
+    : null;
+  const rasterTargetValid = selectionCount === 1 && node !== undefined;
+  const fixedWidth =
+    rasterSettings.size.mode === "width" ? rasterSettings.size.value : 1_920;
+  const fixedHeight =
+    rasterSettings.size.mode === "height" ? rasterSettings.size.value : 1_080;
   return (
     <Section title={t("properties.export")}>
       <div className="svg-export-settings">
-        <div className="svg-export-format">
+        <label className="property-select-row">
           <span>{t("properties.exportFormat")}</span>
-          <strong>SVG</strong>
-        </div>
-        <label className="svg-export-toggle">
-          <input
-            checked={settings.includeLayerIds}
+          <select
+            aria-label={t("properties.exportFormat")}
             disabled={busy}
             onChange={(event) =>
-              onSettingsChange({
-                ...settings,
-                includeLayerIds: event.target.checked,
-              })
+              onExportFormatChange(event.target.value as ExportFormat)
             }
-            type="checkbox"
-          />
-          <span>{t("properties.exportIncludeLayerIds")}</span>
+            value={format}
+          >
+            <option value="svg">SVG</option>
+            <option value="png">PNG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WebP</option>
+          </select>
         </label>
-        <Field
-          accessibleLabel={t("properties.exportPadding")}
-          disabled={busy}
-          label="P"
-          max={MAX_SVG_EXPORT_PADDING}
-          min={0}
-          onCommit={(draft) =>
-            commitNumber(
-              draft,
-              settings.padding,
-              (padding) => onSettingsChange({ ...settings, padding }),
-              { min: 0, max: MAX_SVG_EXPORT_PADDING },
-            )
-          }
-          suffix="px"
-          value={formatNumber(settings.padding)}
-        />
+        {format === "svg" ? (
+          <>
+            <label className="svg-export-toggle">
+              <input
+                checked={svgSettings.includeLayerIds}
+                disabled={busy}
+                onChange={(event) =>
+                  onSvgSettingsChange({
+                    ...svgSettings,
+                    includeLayerIds: event.target.checked,
+                  })
+                }
+                type="checkbox"
+              />
+              <span>{t("properties.exportIncludeLayerIds")}</span>
+            </label>
+            <Field
+              accessibleLabel={t("properties.exportPadding")}
+              disabled={busy}
+              label="P"
+              max={MAX_SVG_EXPORT_PADDING}
+              min={0}
+              onCommit={(draft) =>
+                commitNumber(
+                  draft,
+                  svgSettings.padding,
+                  (padding) => onSvgSettingsChange({ ...svgSettings, padding }),
+                  { min: 0, max: MAX_SVG_EXPORT_PADDING },
+                )
+              }
+              suffix="px"
+              value={formatNumber(svgSettings.padding)}
+            />
+          </>
+        ) : (
+          <>
+            <label className="property-select-row">
+              <span>{t("properties.exportSize")}</span>
+              <select
+                aria-label={t("properties.exportSize")}
+                disabled={busy}
+                onChange={(event) => {
+                  const [mode, raw] = event.target.value.split(":");
+                  const value = Number(raw);
+                  onRasterSettingsChange({
+                    ...rasterSettings,
+                    size: {
+                      mode: mode as RasterExportSize["mode"],
+                      value,
+                    } as RasterExportSize,
+                  });
+                }}
+                value={`${rasterSettings.size.mode}:${rasterSettings.size.value}`}
+              >
+                <option value="scale:1">1×</option>
+                <option value="scale:2">2×</option>
+                <option value="scale:3">3×</option>
+                <option value={`width:${fixedWidth}`}>
+                  {t("properties.exportFixedWidth")}
+                </option>
+                <option value={`height:${fixedHeight}`}>
+                  {t("properties.exportFixedHeight")}
+                </option>
+              </select>
+            </label>
+            {rasterSettings.size.mode !== "scale" && (
+              <Field
+                accessibleLabel={
+                  rasterSettings.size.mode === "width"
+                    ? t("properties.exportWidth")
+                    : t("properties.exportHeight")
+                }
+                disabled={busy}
+                label={rasterSettings.size.mode === "width" ? "W" : "H"}
+                max={16_384}
+                min={1}
+                onCommit={(draft) =>
+                  commitNumber(
+                    draft,
+                    rasterSettings.size.value,
+                    (value) =>
+                      onRasterSettingsChange({
+                        ...rasterSettings,
+                        size:
+                          rasterSettings.size.mode === "width"
+                            ? { mode: "width", value }
+                            : { mode: "height", value },
+                      }),
+                    { min: 1, max: 16_384 },
+                  )
+                }
+                suffix="px"
+                value={formatNumber(rasterSettings.size.value)}
+              />
+            )}
+            {format !== "jpeg" && (
+              <label className="svg-export-toggle">
+                <input
+                  checked={rasterSettings.background.mode === "transparent"}
+                  disabled={busy}
+                  onChange={(event) =>
+                    onRasterSettingsChange({
+                      ...rasterSettings,
+                      background: event.target.checked
+                        ? { mode: "transparent" }
+                        : { mode: "color", color: "#ffffff" },
+                    })
+                  }
+                  type="checkbox"
+                />
+                <span>{t("properties.exportTransparent")}</span>
+              </label>
+            )}
+            {(format === "jpeg" ||
+              rasterSettings.background.mode === "color") && (
+              <label className="property-select-row">
+                <span>{t("properties.exportBackground")}</span>
+                <ColorPicker
+                  label={t("properties.exportBackground")}
+                  onChange={(color) =>
+                    onRasterSettingsChange({
+                      ...rasterSettings,
+                      background: { mode: "color", color },
+                    })
+                  }
+                  value={
+                    rasterSettings.background.mode === "color"
+                      ? rasterSettings.background.color
+                      : "#ffffff"
+                  }
+                />
+              </label>
+            )}
+            {format !== "png" && (
+              <Field
+                accessibleLabel={t("properties.exportQuality")}
+                disabled={busy}
+                label="Q"
+                max={100}
+                min={1}
+                onCommit={(draft) =>
+                  commitNumber(
+                    draft,
+                    Math.round(rasterSettings.quality * 100),
+                    (quality) =>
+                      onRasterSettingsChange({
+                        ...rasterSettings,
+                        quality: quality / 100,
+                      }),
+                    { min: 1, max: 100 },
+                  )
+                }
+                suffix="%"
+                value={String(Math.round(rasterSettings.quality * 100))}
+              />
+            )}
+            <label className="property-select-row">
+              <span>{t("properties.exportResampling")}</span>
+              <select
+                aria-label={t("properties.exportResampling")}
+                disabled={busy}
+                onChange={(event) =>
+                  onRasterSettingsChange({
+                    ...rasterSettings,
+                    resampling: event.target.value as RasterExportResampling,
+                  })
+                }
+                value={rasterSettings.resampling}
+              >
+                <option value="smooth">{t("properties.exportSmooth")}</option>
+                <option value="pixelated">
+                  {t("properties.exportPixelated")}
+                </option>
+              </select>
+            </label>
+            <div className="raster-export-dimensions" role="status">
+              {dimensionPlan?.ok
+                ? `${dimensionPlan.dimensions.width} × ${dimensionPlan.dimensions.height} px`
+                : t("properties.exportDimensionsUnavailable")}
+            </div>
+            {!rasterTargetValid && (
+              <small className="raster-export-hint">
+                {t("properties.exportRasterSingleTarget")}
+              </small>
+            )}
+          </>
+        )}
         <Button
           className="svg-export-button"
-          disabled={busy}
-          onClick={onExport}
+          disabled={busy || (format !== "svg" && !rasterTargetValid)}
+          onClick={format === "svg" ? onExportSvg : onExportRaster}
           tone="primary"
         >
-          {t("properties.exportSelection", { count: selectionCount })}
+          {format === "svg"
+            ? t("properties.exportSelection", { count: selectionCount })
+            : t("properties.exportRasterSelection", {
+                format: format.toUpperCase(),
+              })}
         </Button>
       </div>
     </Section>
@@ -1897,16 +2159,23 @@ export function PropertiesPanel({
   onDelete,
   onDuplicate,
   onCancelSvgOperation,
+  onDismissRasterFeedback,
   onDismissSvgFeedback,
   onExportSvg,
+  onExportRaster,
+  onExportFormatChange,
   onReplaceImage,
   onSelectBooleanParent,
   onUpdate,
   selectionCount,
+  exportFormat,
+  rasterExportSettings,
+  rasterFeedback,
   svgExportSettings,
   svgFeedback,
   svgOperation,
   onSvgExportSettingsChange,
+  onRasterExportSettingsChange,
 }: {
   node: DesignNode | undefined;
   arrangement: ArrangementSelectionMetrics | null;
@@ -1918,16 +2187,23 @@ export function PropertiesPanel({
   onDelete: () => void;
   onDuplicate: () => void;
   onCancelSvgOperation: () => void;
+  onDismissRasterFeedback: () => void;
   onDismissSvgFeedback: () => void;
   onExportSvg: () => void;
+  onExportRaster: () => void;
+  onExportFormatChange: (format: ExportFormat) => void;
   onReplaceImage: () => void;
   onSelectBooleanParent: (nodeId: string) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   selectionCount: number;
+  exportFormat: ExportFormat;
+  rasterExportSettings: RasterExportSettings;
+  rasterFeedback: RasterExportFeedback | null;
   svgExportSettings: SvgWorkerExportSettings;
   svgFeedback: SvgInterchangeFeedback | null;
   svgOperation: SvgOperationStatus | null;
   onSvgExportSettingsChange: (settings: SvgWorkerExportSettings) => void;
+  onRasterExportSettingsChange: (settings: RasterExportSettings) => void;
 }) {
   const { t } = useI18n();
   return (
@@ -1974,6 +2250,12 @@ export function PropertiesPanel({
           <SvgFidelityReport
             feedback={svgFeedback}
             onDismiss={onDismissSvgFeedback}
+          />
+        )}
+        {rasterFeedback && (
+          <RasterExportReport
+            feedback={rasterFeedback}
+            onDismiss={onDismissRasterFeedback}
           />
         )}
         {node ? (
@@ -2154,12 +2436,18 @@ export function PropertiesPanel({
           </div>
         )}
         {selectionCount > 0 && (
-          <SvgExportSection
+          <ExportSection
             busy={svgOperation !== null}
-            onExport={onExportSvg}
-            onSettingsChange={onSvgExportSettingsChange}
+            format={exportFormat}
+            node={node}
+            onExportFormatChange={onExportFormatChange}
+            onExportRaster={onExportRaster}
+            onExportSvg={onExportSvg}
+            onRasterSettingsChange={onRasterExportSettingsChange}
+            onSvgSettingsChange={onSvgExportSettingsChange}
+            rasterSettings={rasterExportSettings}
             selectionCount={selectionCount}
-            settings={svgExportSettings}
+            svgSettings={svgExportSettings}
           />
         )}
       </div>
@@ -2169,4 +2457,10 @@ export function PropertiesPanel({
 
 function isHexColor(value: string): boolean {
   return /^#[\da-f]{6}$/i.test(value);
+}
+
+function formatByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
