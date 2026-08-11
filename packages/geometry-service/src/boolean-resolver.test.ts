@@ -15,7 +15,7 @@ import {
   type VectorNode,
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "./boolean-resolver.js";
-import { setVectorPathClosed } from "./vector-edit.js";
+import { cutVectorPath, setVectorPathClosed } from "./vector-edit.js";
 import {
   createPathKitGeometryProvider,
   type VectorGeometryProvider,
@@ -200,6 +200,24 @@ describe("non-destructive Boolean geometry resolver", () => {
 
     expect(result.issues).toEqual([]);
     expect(result.resultsByNodeId.get(group.id)).toMatchObject({
+      bounds: null,
+      empty: true,
+      path: "",
+    });
+
+    const cut = cutVectorPath(opened.network, opened.network.paths[0]!.id, {
+      kind: "segment",
+      segmentId: opened.network.paths[0]!.segments[0]!.segmentId,
+      t: 0.5,
+    });
+    if (!cut.ok) throw new Error(cut.message);
+    editable.properties.network = cut.network;
+    const cutResult = createBooleanGeometryResolver(provider).resolve(
+      designDocument([group, editable, hidden], [group.id]),
+      "page",
+    );
+    expect(cutResult.issues).toEqual([]);
+    expect(cutResult.resultsByNodeId.get(group.id)).toMatchObject({
       bounds: null,
       empty: true,
       path: "",

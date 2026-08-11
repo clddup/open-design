@@ -23,6 +23,9 @@ export type {
   LeaferRasterExportResult,
   LeaferVectorEditRequest,
   LeaferVectorEditScope,
+  LeaferVectorEditTool,
+  LeaferVectorCutRequest,
+  LeaferVectorCutResponse,
 } from "./types.js";
 export {
   createLeaferTextLayoutProvider,

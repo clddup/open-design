@@ -2274,6 +2274,57 @@ describe("Renderer semantic hierarchy tool", () => {
     );
   });
 
+  it("cuts an inspected vector segment atomically and returns trusted topology IDs", async () => {
+    const runtime = createEditableVectorRuntime();
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_cut",
+        call: {
+          toolCallId: "tool_vector_cut",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "cut-path",
+            at: { kind: "segment", segmentId: "segment_bc", t: 0.25 },
+            label: "Cut the logo contour",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            pathId: "logo_path",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "cut-path",
+          atomic: true,
+          closed: false,
+          cutVertexIds: ["vertex_edit_1", "vertex_edit_2"],
+          nodeId: "editable_logo_contour",
+          pageId: "page_welcome",
+          pathId: "logo_path",
+          pathIds: ["logo_path", "path_edit_1"],
+          revision: 1,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(editableVectorNetwork(runtime).paths).toHaveLength(2);
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(editableVectorNetwork(runtime).paths).toHaveLength(1);
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+  });
+
   it("rejects no-op, locked, out-of-scope, and stale Agent vector edits", async () => {
     const noOpRuntime = createEditableVectorRuntime();
     await expect(
@@ -2298,6 +2349,29 @@ describe("Renderer semantic hierarchy tool", () => {
       ),
     ).rejects.toThrow("vector-edit.no-op");
     expect(noOpRuntime.getSnapshot().document.revision).toBe(0);
+
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "vector_stale_segment",
+          call: {
+            toolCallId: "tool_vector_stale_segment",
+            toolName: DESIGN_VECTOR_TOOL_NAME,
+            input: {
+              action: "cut-path",
+              at: { kind: "segment", segmentId: "missing_segment", t: 0.5 },
+              label: "Cut the logo contour",
+              nodeId: "editable_logo_contour",
+              pageId: "page_welcome",
+              pathId: "logo_path",
+            },
+          },
+          context: pageContext,
+        },
+        createEditableVectorRuntime(),
+        "page_welcome",
+      ),
+    ).rejects.toThrow("vector-edit.not-found");
 
     const lockedRuntime = createEditableVectorRuntime();
     const lockedDocument = structuredClone(

@@ -4,6 +4,7 @@ import {
 } from "@opendesign/editor-runtime";
 import type { DesignChangeSet } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import { cutVectorPath } from "@opendesign/geometry-service/vector-edit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLeaferEngineAdapter } from "./adapter.js";
 import { booleanResultElementId } from "./mapping.js";
@@ -2792,6 +2793,89 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("forwards Cut path hits through the semantic callback and keeps editing the new endpoints", async () => {
+    const authoritative =
+      withVectorEditFixture(createInput()).document.nodesById.editable_curve;
+    if (
+      !authoritative ||
+      authoritative.kind !== "vector" ||
+      !("network" in authoritative.properties)
+    ) {
+      throw new Error("Missing editable vector network");
+    }
+    let network = structuredClone(authoritative.properties.network);
+    const onVectorCut = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onVectorCut"]>
+    >((request) => {
+      const result = cutVectorPath(network, request.pathId, request.at);
+      if (!result.ok) return { ok: false };
+      network = result.network;
+      return {
+        ok: true,
+        network,
+        selectedVertexIds: result.cutVertexIds,
+      };
+    });
+    const onVectorEditSelectionChange = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorCut,
+      onVectorEditSelectionChange,
+    });
+    const input = withVectorEditFixture(createInput());
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope!, tool: "cut" },
+    });
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !path?.parent) throw new Error("Missing editable vector");
+    const overlay = path.parent.children.at(-1);
+    if (!(overlay instanceof FakeGroup)) {
+      throw new Error("Missing vector overlay");
+    }
+    const hitPath = overlay.children.filter(
+      (child): child is FakePath => child instanceof FakePath,
+    )[0];
+    if (!hitPath) throw new Error("Missing Cut hit path");
+    expect((hitPath as FakePath & { hittable: boolean }).hittable).toBe(true);
+
+    app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+
+    expect(onVectorCut).toHaveBeenCalledWith({
+      at: {
+        kind: "segment",
+        segmentId: "segment_ab",
+        t: 0.5,
+      },
+      nodeId: "editable_curve",
+      pathId: "path_open",
+    });
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith([
+      "vertex_edit_1",
+      "vertex_edit_2",
+    ]);
+    expect(network.paths).toHaveLength(2);
+    expect(
+      overlay.children.filter(
+        (child): child is FakeEllipse => child instanceof FakeEllipse,
+      ),
+    ).toHaveLength(5);
+    onVectorCut.mockClear();
+    adapter.sync({
+      ...input,
+      vectorEditScope: {
+        ...input.vectorEditScope!,
+        readOnly: true,
+        tool: "cut",
+      },
+    });
+    expect((hitPath as FakePath & { hittable: boolean }).hittable).toBe(false);
+    app.emit("pointer.down", pointerEvent(30, 15, hitPath));
+    expect(onVectorCut).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("edits mirrored vector handles and point modes through the same callback", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,
@@ -3109,6 +3193,7 @@ function withVectorEditFixture(
       nodeId: "editable_curve",
       readOnly: false,
       selectedVertexIds,
+      tool: "move",
     },
   };
 }

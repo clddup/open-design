@@ -1,9 +1,11 @@
 import type {
   Point,
   VectorNetwork,
+  VectorPathRun,
   VectorPointMode,
   VectorSegment,
   VectorSegmentReference,
+  VectorVertex,
 } from "@opendesign/design-contracts";
 import {
   validateVectorNetwork,
@@ -26,6 +28,8 @@ export interface VectorVertexHandle extends VectorHandleReference {
 export type VectorEditFailureCode =
   | "invalid-network"
   | "missing-handle"
+  | "missing-path"
+  | "missing-segment"
   | "missing-vertex"
   | "no-op"
   | "unsupported-topology";
@@ -38,6 +42,28 @@ export type VectorDeleteResult =
   | { ok: true; deleteNode: true }
   | { ok: true; deleteNode: false; network: VectorNetwork }
   | { ok: false; code: VectorEditFailureCode; message: string };
+
+export type VectorCutLocation =
+  | { kind: "vertex"; vertexId: string }
+  | { kind: "segment"; segmentId: string; t: number };
+
+export type VectorCutResult =
+  | {
+      ok: true;
+      cutVertexIds: readonly [string, string];
+      network: VectorNetwork;
+      pathIds: readonly string[];
+    }
+  | { ok: false; code: VectorEditFailureCode; message: string };
+
+export interface VectorSegmentHit {
+  distance: number;
+  pathId: string;
+  point: Point;
+  segmentId: string;
+  /** Parameter in the path run's directed traversal, not storage direction. */
+  t: number;
+}
 
 interface ContourHandleReference extends VectorHandleReference {
   direction: "incoming" | "outgoing";
@@ -63,19 +89,43 @@ export function vectorNetworkEditability(
       reason: issues.map((issue) => issue.message).join("; "),
     };
   }
-  if (network.paths.length !== 1) {
-    return {
-      editable: false,
-      reason: "This editing slice supports one contour at a time",
-    };
-  }
   if (vectorNetworkHasBranches(network)) {
     return {
       editable: false,
       reason: "Branching vector networks require the branch editing slice",
     };
   }
+  const owners = new Map<string, string>();
+  for (const contour of uncheckedEditableContours(network)) {
+    for (const vertexId of contour.vertexIds) {
+      const owner = owners.get(vertexId);
+      if (owner && owner !== contour.pathId) {
+        return {
+          editable: false,
+          reason:
+            "Connected path runs require the connect/disconnect editing slice",
+        };
+      }
+      owners.set(vertexId, contour.pathId);
+    }
+  }
+  if (network.paths.length === 0) {
+    return {
+      editable: false,
+      reason: "An editable vector network requires at least one path run",
+    };
+  }
   return { editable: true };
+}
+
+export function findVectorPathIdForVertex(
+  network: VectorNetwork,
+  vertexId: string,
+): string | undefined {
+  if (!vectorNetworkEditability(network).editable) return undefined;
+  return editableContours(network).find((contour) =>
+    contour.vertexIds.includes(vertexId),
+  )?.pathId;
 }
 
 export function listVectorVertexHandles(
@@ -169,18 +219,114 @@ export function moveVectorVertices(
 }
 
 /**
- * Opens or closes the one non-branching contour supported by the current
- * vector-edit slice. The operation keeps every retained vertex/segment ID
- * stable and authors only the missing closing edge/region when closing.
+ * Returns the nearest point on any editable contour. Cubics use a deterministic
+ * coarse search followed by interval refinement; the returned t follows the
+ * path reference direction so it can be passed directly to cutVectorPath().
+ */
+export function nearestVectorSegmentPoint(
+  network: VectorNetwork,
+  point: Point,
+): VectorSegmentHit | null {
+  if (
+    !vectorNetworkEditability(network).editable ||
+    !Number.isFinite(point.x) ||
+    !Number.isFinite(point.y)
+  ) {
+    return null;
+  }
+  const vertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  const segments = new Map(
+    network.segments.map((segment) => [segment.id, segment]),
+  );
+  let nearest: VectorSegmentHit | null = null;
+  for (const path of network.paths) {
+    for (const reference of path.segments) {
+      const segment = segments.get(reference.segmentId)!;
+      const curve = directedCurve(segment, reference, vertices);
+      const candidate =
+        meaningful(curve.tangentStart) || meaningful(curve.tangentEnd)
+          ? nearestCubicPoint(curve, point)
+          : nearestLinePoint(curve.start, curve.end, point);
+      if (
+        !nearest ||
+        candidate.distance < nearest.distance - HANDLE_EPSILON ||
+        (Math.abs(candidate.distance - nearest.distance) <= HANDLE_EPSILON &&
+          (path.id < nearest.pathId ||
+            (path.id === nearest.pathId && segment.id < nearest.segmentId)))
+      ) {
+        nearest = {
+          ...candidate,
+          pathId: path.id,
+          segmentId: segment.id,
+        };
+      }
+    }
+  }
+  return nearest;
+}
+
+/**
+ * Creates a real topological break. The two returned endpoint IDs occupy the
+ * same coordinate but are no longer connected, so subsequent edits can move
+ * either side independently without introducing a visible gap at cut time.
+ */
+export function cutVectorPath(
+  network: VectorNetwork,
+  pathId: string,
+  location: VectorCutLocation,
+): VectorCutResult {
+  const failure = editableFailure(network);
+  if (failure) return failure;
+  const contour = editableContour(network, pathId);
+  if (!contour) {
+    return missingPath(`Vector path ${pathId} does not exist`);
+  }
+  if (location.kind === "vertex") {
+    return cutVectorPathAtVertex(network, contour, location.vertexId);
+  }
+  if (!Number.isFinite(location.t)) {
+    return invalidNetwork("Vector cut parameter must be finite");
+  }
+  if (location.t < 0 || location.t > 1) {
+    return invalidNetwork("Vector cut parameter must be between 0 and 1");
+  }
+  const referenceIndex = contour.references.findIndex(
+    (reference) => reference.segmentId === location.segmentId,
+  );
+  if (referenceIndex < 0) {
+    return missingSegment(
+      `Vector segment ${location.segmentId} does not belong to path ${pathId}`,
+    );
+  }
+  const directed = directedVertexIds(
+    network.segments.find((segment) => segment.id === location.segmentId)!,
+    contour.references[referenceIndex]!,
+  );
+  if (location.t <= HANDLE_EPSILON) {
+    return cutVectorPathAtVertex(network, contour, directed.start);
+  }
+  if (location.t >= 1 - HANDLE_EPSILON) {
+    return cutVectorPathAtVertex(network, contour, directed.end);
+  }
+  return cutVectorPathAtSegment(network, contour, referenceIndex, location.t);
+}
+
+/**
+ * Opens or closes one explicit non-branching contour. Single-contour callers
+ * may omit pathId; multi-contour callers must name the target path run.
  */
 export function setVectorPathClosed(
   network: VectorNetwork,
   closed: boolean,
+  pathId?: string,
 ): VectorEditResult {
   const failure = editableFailure(network);
   if (failure) return failure;
-  const contour = editableContour(network);
-  if (!contour) return unsupportedTopology();
+  const resolved = resolveTargetContour(network, pathId);
+  if (!resolved.ok) return resolved;
+  const contour = resolved.contour;
   if (contour.closed === closed) {
     return noOp(
       `Vector path ${contour.pathId} is already ${closed ? "closed" : "open"}`,
@@ -193,7 +339,7 @@ export function setVectorPathClosed(
   }
 
   const next = structuredClone(network);
-  const path = next.paths[0]!;
+  const path = next.paths.find((candidate) => candidate.id === contour.pathId)!;
   if (closed) {
     const firstVertexId = contour.vertexIds[0]!;
     const lastVertexId = contour.vertexIds.at(-1)!;
@@ -245,11 +391,17 @@ export function setVectorPathClosed(
  * direction is toggled with the path so the effective winding remains
  * visually equivalent for nonzero fills.
  */
-export function reverseVectorPath(network: VectorNetwork): VectorEditResult {
+export function reverseVectorPath(
+  network: VectorNetwork,
+  pathId?: string,
+): VectorEditResult {
   const failure = editableFailure(network);
   if (failure) return failure;
+  const resolved = resolveTargetContour(network, pathId);
+  if (!resolved.ok) return resolved;
+  const contour = resolved.contour;
   const next = structuredClone(network);
-  const path = next.paths[0]!;
+  const path = next.paths.find((candidate) => candidate.id === contour.pathId)!;
   path.segments = [...path.segments].reverse().map((reference) => ({
     segmentId: reference.segmentId,
     reversed: !reference.reversed,
@@ -405,72 +557,108 @@ export function deleteVectorVertices(
 ): VectorDeleteResult {
   const failure = editableFailure(network);
   if (failure) return failure;
-  const contour = editableContour(network);
-  if (!contour) return unsupportedTopology();
   const selected = new Set(vertexIds);
   if (selected.size === 0)
     return missingVertex("No vector vertices are selected");
-  if ([...selected].some((vertexId) => !contour.vertexIds.includes(vertexId))) {
+  const available = new Set(network.vertices.map((vertex) => vertex.id));
+  if ([...selected].some((vertexId) => !available.has(vertexId))) {
     return missingVertex(
-      "A selected vector vertex does not exist in the editable contour",
+      "A selected vector vertex does not exist in the editable network",
     );
   }
-  const remaining = contour.vertexIds.filter(
-    (vertexId) => !selected.has(vertexId),
-  );
-  if (remaining.length < (contour.closed ? 3 : 2))
-    return { ok: true, deleteNode: true };
-
   const segments = new Map(
     network.segments.map((segment) => [segment.id, segment]),
   );
-  const retainedReferences: VectorSegmentReference[] = [];
-  const retainedSegments: VectorSegment[] = [];
   const usedIds = new Set(network.segments.map((segment) => segment.id));
-  const edgeCount = contour.closed ? remaining.length : remaining.length - 1;
-  for (let index = 0; index < edgeCount; index += 1) {
-    const startVertexId = remaining[index]!;
-    const endVertexId = remaining[(index + 1) % remaining.length]!;
-    const original = originalDirectedEdge(
-      network,
-      contour,
-      startVertexId,
-      endVertexId,
+  const retainedPaths: VectorPathRun[] = [];
+  const retainedSegments = new Map<string, VectorSegment>();
+  const modifiedVertexIds = new Set<string>();
+  const deletedPathIds = new Set<string>();
+
+  for (const contour of editableContours(network)) {
+    const changed = contour.vertexIds.some((vertexId) =>
+      selected.has(vertexId),
     );
-    if (original) {
-      retainedReferences.push({ ...original.reference });
-      retainedSegments.push(
-        structuredClone(segments.get(original.reference.segmentId)!),
-      );
+    if (!changed) {
+      retainedPaths.push(structuredClone(pathById(network, contour.pathId)!));
+      for (const reference of contour.references) {
+        retainedSegments.set(
+          reference.segmentId,
+          structuredClone(segments.get(reference.segmentId)!),
+        );
+      }
       continue;
     }
-    const id = nextSegmentId(usedIds);
-    usedIds.add(id);
-    retainedSegments.push({ id, startVertexId, endVertexId });
-    retainedReferences.push({ segmentId: id, reversed: false });
+    const remaining = contour.vertexIds.filter(
+      (vertexId) => !selected.has(vertexId),
+    );
+    if (remaining.length < (contour.closed ? 3 : 2)) {
+      deletedPathIds.add(contour.pathId);
+      continue;
+    }
+    const references: VectorSegmentReference[] = [];
+    const edgeCount = contour.closed ? remaining.length : remaining.length - 1;
+    for (let index = 0; index < edgeCount; index += 1) {
+      const startVertexId = remaining[index]!;
+      const endVertexId = remaining[(index + 1) % remaining.length]!;
+      const original = originalDirectedEdge(
+        network,
+        contour,
+        startVertexId,
+        endVertexId,
+      );
+      if (original) {
+        references.push({ ...original.reference });
+        retainedSegments.set(
+          original.reference.segmentId,
+          structuredClone(segments.get(original.reference.segmentId)!),
+        );
+      } else {
+        const id = nextSegmentId(usedIds);
+        usedIds.add(id);
+        retainedSegments.set(id, { id, startVertexId, endVertexId });
+        references.push({ segmentId: id, reversed: false });
+      }
+    }
+    remaining.forEach((vertexId) => modifiedVertexIds.add(vertexId));
+    retainedPaths.push({
+      ...structuredClone(pathById(network, contour.pathId)!),
+      segments: references,
+    });
   }
 
+  if (retainedPaths.length === 0) return { ok: true, deleteNode: true };
+  const retainedVertexIds = new Set<string>();
+  for (const segment of retainedSegments.values()) {
+    retainedVertexIds.add(segment.startVertexId);
+    retainedVertexIds.add(segment.endVertexId);
+  }
   const next: VectorNetwork = {
     vertices: network.vertices
-      .filter((vertex) => remaining.includes(vertex.id))
+      .filter((vertex) => retainedVertexIds.has(vertex.id))
       .map((vertex) => {
         const nextVertex = structuredClone(vertex);
-        delete nextVertex.handleMode;
+        if (modifiedVertexIds.has(vertex.id)) delete nextVertex.handleMode;
         return nextVertex;
       }),
-    segments: retainedSegments,
-    paths: [
-      {
-        ...structuredClone(network.paths[0]!),
-        segments: retainedReferences,
-      },
-    ],
-    regions: structuredClone(network.regions),
+    segments: retainedPaths.flatMap((path) =>
+      path.segments.map((reference) =>
+        retainedSegments.get(reference.segmentId)!,
+      ),
+    ),
+    paths: retainedPaths,
+    regions: network.regions
+      .filter(
+        (region) =>
+          !region.loops.some((loop) => deletedPathIds.has(loop.pathId)),
+      )
+      .map((region) => structuredClone(region)),
   };
-  next.vertices = next.vertices.map((vertex) => ({
-    ...vertex,
-    handleMode: inferVectorPointMode(next, vertex.id),
-  }));
+  next.vertices = next.vertices.map((vertex) =>
+    modifiedVertexIds.has(vertex.id)
+      ? { ...vertex, handleMode: inferVectorPointMode(next, vertex.id) }
+      : vertex,
+  );
   const result = validated(next);
   return result.ok
     ? { ok: true, deleteNode: false, network: result.network }
@@ -488,33 +676,70 @@ function editableFailure(
     : { ok: false, code: "unsupported-topology", message: editability.reason };
 }
 
-function editableContour(network: VectorNetwork): EditableContour | null {
-  if (!vectorNetworkEditability(network).editable) return null;
-  const path = network.paths[0]!;
+function editableContours(network: VectorNetwork): EditableContour[] {
+  if (!vectorNetworkEditability(network).editable) return [];
+  return uncheckedEditableContours(network);
+}
+
+function uncheckedEditableContours(network: VectorNetwork): EditableContour[] {
   const segments = new Map(
     network.segments.map((segment) => [segment.id, segment]),
   );
-  const vertexIds: string[] = [];
-  for (const [index, reference] of path.segments.entries()) {
-    const segment = segments.get(reference.segmentId)!;
-    const directed = directedVertexIds(segment, reference);
-    if (index === 0) vertexIds.push(directed.start);
-    vertexIds.push(directed.end);
+  return network.paths.map((path) => {
+    const vertexIds: string[] = [];
+    for (const [index, reference] of path.segments.entries()) {
+      const segment = segments.get(reference.segmentId)!;
+      const directed = directedVertexIds(segment, reference);
+      if (index === 0) vertexIds.push(directed.start);
+      vertexIds.push(directed.end);
+    }
+    if (path.closed) vertexIds.pop();
+    return {
+      closed: path.closed,
+      pathId: path.id,
+      references: path.segments,
+      vertexIds,
+    };
+  });
+}
+
+function editableContour(
+  network: VectorNetwork,
+  pathId: string,
+): EditableContour | null {
+  return (
+    editableContours(network).find((contour) => contour.pathId === pathId) ??
+    null
+  );
+}
+
+function resolveTargetContour(
+  network: VectorNetwork,
+  pathId: string | undefined,
+):
+  | { ok: true; contour: EditableContour }
+  | Extract<VectorEditResult, { ok: false }> {
+  if (!pathId && network.paths.length !== 1) {
+    return unsupportedTopology(
+      "An explicit pathId is required for a multi-contour vector network",
+    );
   }
-  if (path.closed) vertexIds.pop();
-  return {
-    closed: path.closed,
-    pathId: path.id,
-    references: path.segments,
-    vertexIds,
-  };
+  const resolvedPathId = pathId ?? network.paths[0]?.id;
+  const contour = resolvedPathId
+    ? editableContour(network, resolvedPathId)
+    : null;
+  return contour
+    ? { ok: true, contour }
+    : missingPath(`Vector path ${resolvedPathId ?? ""} does not exist`);
 }
 
 function contourHandles(
   network: VectorNetwork,
   vertexId: string,
 ): ContourHandleReference[] | null {
-  const contour = editableContour(network);
+  const contour = editableContours(network).find((candidate) =>
+    candidate.vertexIds.includes(vertexId),
+  );
   if (!contour) return null;
   const index = contour.vertexIds.indexOf(vertexId);
   if (index < 0) return [];
@@ -547,7 +772,9 @@ function defaultHandles(
   vertexId: string,
   references: readonly ContourHandleReference[],
 ): { incoming?: Point; outgoing?: Point } {
-  const contour = editableContour(network)!;
+  const contour = editableContours(network).find((candidate) =>
+    candidate.vertexIds.includes(vertexId),
+  )!;
   const vertices = new Map(
     network.vertices.map((vertex) => [vertex.id, vertex]),
   );
@@ -595,6 +822,392 @@ function defaultHandles(
         }
       : {}),
   };
+}
+
+function cutVectorPathAtVertex(
+  network: VectorNetwork,
+  contour: EditableContour,
+  vertexId: string,
+): VectorCutResult {
+  const vertexIndex = contour.vertexIds.indexOf(vertexId);
+  if (vertexIndex < 0) {
+    return missingVertex(
+      `Vector vertex ${vertexId} does not belong to path ${contour.pathId}`,
+    );
+  }
+  if (
+    !contour.closed &&
+    (vertexIndex === 0 || vertexIndex === contour.vertexIds.length - 1)
+  ) {
+    return noOp(`Vector vertex ${vertexId} is already an open endpoint`);
+  }
+
+  const next = structuredClone(network);
+  const path = pathById(next, contour.pathId)!;
+  const sourceVertex = next.vertices.find((vertex) => vertex.id === vertexId)!;
+  const duplicateId = nextVertexId(
+    new Set(next.vertices.map((vertex) => vertex.id)),
+  );
+  const duplicate: VectorVertex = {
+    ...structuredClone(sourceVertex),
+    id: duplicateId,
+  };
+  delete duplicate.handleMode;
+  delete sourceVertex.handleMode;
+  const sourceIndex = next.vertices.findIndex(
+    (vertex) => vertex.id === vertexId,
+  );
+  next.vertices.splice(sourceIndex + 1, 0, duplicate);
+
+  if (contour.closed) {
+    const incomingIndex =
+      (vertexIndex - 1 + contour.references.length) % contour.references.length;
+    const incoming = path.segments[incomingIndex]!;
+    const segment = next.segments.find(
+      (candidate) => candidate.id === incoming.segmentId,
+    )!;
+    setDirectedEndVertexId(segment, incoming, duplicateId);
+    path.segments = [
+      ...path.segments.slice(vertexIndex),
+      ...path.segments.slice(0, vertexIndex),
+    ];
+    path.closed = false;
+    next.regions = removePathRegions(next.regions, path.id);
+    setEndpointPointModes(next, [vertexId, duplicateId]);
+    return validatedCut(next, [vertexId, duplicateId], [path.id]);
+  }
+
+  const outgoing = path.segments[vertexIndex]!;
+  const outgoingSegment = next.segments.find(
+    (candidate) => candidate.id === outgoing.segmentId,
+  )!;
+  setDirectedStartVertexId(outgoingSegment, outgoing, duplicateId);
+  const newPathId = nextPathId(new Set(next.paths.map((item) => item.id)));
+  const newPath: VectorPathRun = {
+    id: newPathId,
+    closed: false,
+    segments: path.segments.slice(vertexIndex),
+  };
+  path.segments = path.segments.slice(0, vertexIndex);
+  const pathIndex = next.paths.findIndex((item) => item.id === path.id);
+  next.paths.splice(pathIndex + 1, 0, newPath);
+  setEndpointPointModes(next, [vertexId, duplicateId]);
+  return validatedCut(next, [vertexId, duplicateId], [path.id, newPathId]);
+}
+
+function cutVectorPathAtSegment(
+  network: VectorNetwork,
+  contour: EditableContour,
+  referenceIndex: number,
+  t: number,
+): VectorCutResult {
+  const next = structuredClone(network);
+  const path = pathById(next, contour.pathId)!;
+  const reference = path.segments[referenceIndex]!;
+  const segmentIndex = next.segments.findIndex(
+    (segment) => segment.id === reference.segmentId,
+  );
+  const segment = next.segments[segmentIndex]!;
+  const vertices = new Map(next.vertices.map((vertex) => [vertex.id, vertex]));
+  const curve = directedCurve(segment, reference, vertices);
+  const split = splitDirectedCurve(curve, t);
+
+  const usedVertexIds = new Set(next.vertices.map((vertex) => vertex.id));
+  const firstCutVertexId = nextVertexId(usedVertexIds);
+  usedVertexIds.add(firstCutVertexId);
+  const secondCutVertexId = nextVertexId(usedVertexIds);
+  const firstCutVertex: VectorVertex = {
+    id: firstCutVertexId,
+    ...split.point,
+  };
+  const secondCutVertex: VectorVertex = {
+    id: secondCutVertexId,
+    ...split.point,
+  };
+  next.vertices.push(firstCutVertex, secondCutVertex);
+
+  const newSegmentId = nextSegmentId(
+    new Set(next.segments.map((item) => item.id)),
+  );
+  const firstSegment = storedSegmentFromDirectedCurve(
+    segment.id,
+    curve.startVertexId,
+    firstCutVertexId,
+    split.first,
+    reference.reversed,
+  );
+  const secondSegment = storedSegmentFromDirectedCurve(
+    newSegmentId,
+    secondCutVertexId,
+    curve.endVertexId,
+    split.second,
+    reference.reversed,
+  );
+  next.segments.splice(segmentIndex, 1, firstSegment, secondSegment);
+  const firstReference: VectorSegmentReference = {
+    segmentId: segment.id,
+    reversed: reference.reversed,
+  };
+  const secondReference: VectorSegmentReference = {
+    segmentId: newSegmentId,
+    reversed: reference.reversed,
+  };
+  const prefix = path.segments.slice(0, referenceIndex);
+  const suffix = path.segments.slice(referenceIndex + 1);
+  let pathIds: string[];
+  if (contour.closed) {
+    path.segments = [secondReference, ...suffix, ...prefix, firstReference];
+    path.closed = false;
+    next.regions = removePathRegions(next.regions, path.id);
+    pathIds = [path.id];
+  } else {
+    path.segments = [...prefix, firstReference];
+    const newPathId = nextPathId(new Set(next.paths.map((item) => item.id)));
+    const newPath: VectorPathRun = {
+      id: newPathId,
+      closed: false,
+      segments: [secondReference, ...suffix],
+    };
+    const pathIndex = next.paths.findIndex((item) => item.id === path.id);
+    next.paths.splice(pathIndex + 1, 0, newPath);
+    pathIds = [path.id, newPathId];
+  }
+  setEndpointPointModes(next, [firstCutVertexId, secondCutVertexId]);
+  return validatedCut(next, [firstCutVertexId, secondCutVertexId], pathIds);
+}
+
+interface DirectedCurve {
+  end: Point;
+  endVertexId: string;
+  start: Point;
+  startVertexId: string;
+  tangentEnd?: Point;
+  tangentStart?: Point;
+}
+
+function directedCurve(
+  segment: VectorSegment,
+  reference: VectorSegmentReference,
+  vertices: ReadonlyMap<string, VectorVertex>,
+): DirectedCurve {
+  const ids = directedVertexIds(segment, reference);
+  return {
+    start: vertices.get(ids.start)!,
+    startVertexId: ids.start,
+    end: vertices.get(ids.end)!,
+    endVertexId: ids.end,
+    ...(reference.reversed
+      ? {
+          ...(segment.tangentEnd
+            ? { tangentStart: { ...segment.tangentEnd } }
+            : {}),
+          ...(segment.tangentStart
+            ? { tangentEnd: { ...segment.tangentStart } }
+            : {}),
+        }
+      : {
+          ...(segment.tangentStart
+            ? { tangentStart: { ...segment.tangentStart } }
+            : {}),
+          ...(segment.tangentEnd
+            ? { tangentEnd: { ...segment.tangentEnd } }
+            : {}),
+        }),
+  };
+}
+
+function splitDirectedCurve(
+  curve: DirectedCurve,
+  t: number,
+): {
+  first: Pick<DirectedCurve, "tangentStart" | "tangentEnd">;
+  point: Point;
+  second: Pick<DirectedCurve, "tangentStart" | "tangentEnd">;
+} {
+  if (!meaningful(curve.tangentStart) && !meaningful(curve.tangentEnd)) {
+    return {
+      first: {},
+      point: normalizePoint(lerp(curve.start, curve.end, t)),
+      second: {},
+    };
+  }
+  const controlStart = add(curve.start, curve.tangentStart ?? { x: 0, y: 0 });
+  const controlEnd = add(curve.end, curve.tangentEnd ?? { x: 0, y: 0 });
+  const q0 = lerp(curve.start, controlStart, t);
+  const q1 = lerp(controlStart, controlEnd, t);
+  const q2 = lerp(controlEnd, curve.end, t);
+  const r0 = lerp(q0, q1, t);
+  const r1 = lerp(q1, q2, t);
+  const point = normalizePoint(lerp(r0, r1, t));
+  return {
+    first: {
+      tangentStart: normalizePoint(subtract(q0, curve.start)),
+      tangentEnd: normalizePoint(subtract(r0, point)),
+    },
+    point,
+    second: {
+      tangentStart: normalizePoint(subtract(r1, point)),
+      tangentEnd: normalizePoint(subtract(q2, curve.end)),
+    },
+  };
+}
+
+function storedSegmentFromDirectedCurve(
+  id: string,
+  startVertexId: string,
+  endVertexId: string,
+  curve: Pick<DirectedCurve, "tangentStart" | "tangentEnd">,
+  reversed: boolean,
+): VectorSegment {
+  const tangentStart = meaningful(curve.tangentStart)
+    ? normalizePoint(curve.tangentStart!)
+    : undefined;
+  const tangentEnd = meaningful(curve.tangentEnd)
+    ? normalizePoint(curve.tangentEnd!)
+    : undefined;
+  if (!reversed) {
+    return {
+      id,
+      startVertexId,
+      endVertexId,
+      ...(tangentStart ? { tangentStart } : {}),
+      ...(tangentEnd ? { tangentEnd } : {}),
+    };
+  }
+  return {
+    id,
+    startVertexId: endVertexId,
+    endVertexId: startVertexId,
+    ...(tangentEnd ? { tangentStart: tangentEnd } : {}),
+    ...(tangentStart ? { tangentEnd: tangentStart } : {}),
+  };
+}
+
+function nearestLinePoint(
+  start: Point,
+  end: Point,
+  point: Point,
+): Pick<VectorSegmentHit, "distance" | "point" | "t"> {
+  const delta = subtract(end, start);
+  const denominator = delta.x * delta.x + delta.y * delta.y;
+  const t =
+    denominator <= HANDLE_EPSILON
+      ? 0
+      : Math.max(
+          0,
+          Math.min(
+            1,
+            ((point.x - start.x) * delta.x + (point.y - start.y) * delta.y) /
+              denominator,
+          ),
+        );
+  const nearest = normalizePoint(lerp(start, end, t));
+  return { distance: distance(nearest, point), point: nearest, t };
+}
+
+function nearestCubicPoint(
+  curve: DirectedCurve,
+  point: Point,
+): Pick<VectorSegmentHit, "distance" | "point" | "t"> {
+  const sampleCount = 32;
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index <= sampleCount; index += 1) {
+    const sample = directedCurvePoint(curve, index / sampleCount);
+    const candidate = squaredDistance(sample, point);
+    if (candidate < bestDistance) {
+      bestDistance = candidate;
+      bestIndex = index;
+    }
+  }
+  let left = Math.max(0, (bestIndex - 1) / sampleCount);
+  let right = Math.min(1, (bestIndex + 1) / sampleCount);
+  for (let iteration = 0; iteration < 24; iteration += 1) {
+    const first = left + (right - left) / 3;
+    const second = right - (right - left) / 3;
+    if (
+      squaredDistance(directedCurvePoint(curve, first), point) <=
+      squaredDistance(directedCurvePoint(curve, second), point)
+    ) {
+      right = second;
+    } else {
+      left = first;
+    }
+  }
+  const t = normalizeNumber((left + right) / 2);
+  const nearest = normalizePoint(directedCurvePoint(curve, t));
+  return { distance: distance(nearest, point), point: nearest, t };
+}
+
+function directedCurvePoint(curve: DirectedCurve, t: number): Point {
+  const controlStart = add(curve.start, curve.tangentStart ?? { x: 0, y: 0 });
+  const controlEnd = add(curve.end, curve.tangentEnd ?? { x: 0, y: 0 });
+  const mt = 1 - t;
+  return {
+    x:
+      mt ** 3 * curve.start.x +
+      3 * mt ** 2 * t * controlStart.x +
+      3 * mt * t ** 2 * controlEnd.x +
+      t ** 3 * curve.end.x,
+    y:
+      mt ** 3 * curve.start.y +
+      3 * mt ** 2 * t * controlStart.y +
+      3 * mt * t ** 2 * controlEnd.y +
+      t ** 3 * curve.end.y,
+  };
+}
+
+function setDirectedStartVertexId(
+  segment: VectorSegment,
+  reference: VectorSegmentReference,
+  vertexId: string,
+): void {
+  if (reference.reversed) segment.endVertexId = vertexId;
+  else segment.startVertexId = vertexId;
+}
+
+function setDirectedEndVertexId(
+  segment: VectorSegment,
+  reference: VectorSegmentReference,
+  vertexId: string,
+): void {
+  if (reference.reversed) segment.startVertexId = vertexId;
+  else segment.endVertexId = vertexId;
+}
+
+function setEndpointPointModes(
+  network: VectorNetwork,
+  vertexIds: readonly string[],
+): void {
+  for (const vertexId of vertexIds) {
+    const vertex = network.vertices.find(
+      (candidate) => candidate.id === vertexId,
+    );
+    if (!vertex) continue;
+    delete vertex.handleMode;
+  }
+  for (const vertexId of vertexIds) {
+    const vertex = network.vertices.find(
+      (candidate) => candidate.id === vertexId,
+    );
+    if (vertex) vertex.handleMode = inferVectorPointMode(network, vertexId);
+  }
+}
+
+function removePathRegions(
+  regions: VectorNetwork["regions"],
+  pathId: string,
+): VectorNetwork["regions"] {
+  return regions.filter(
+    (region) => !region.loops.some((loop) => loop.pathId === pathId),
+  );
+}
+
+function pathById(
+  network: VectorNetwork,
+  pathId: string,
+): VectorPathRun | undefined {
+  return network.paths.find((path) => path.id === pathId);
 }
 
 function originalDirectedEdge(
@@ -693,6 +1306,18 @@ function nextSegmentId(usedIds: ReadonlySet<string>): string {
   return `segment_edit_${index}`;
 }
 
+function nextVertexId(usedIds: ReadonlySet<string>): string {
+  let index = 1;
+  while (usedIds.has(`vertex_edit_${index}`)) index += 1;
+  return `vertex_edit_${index}`;
+}
+
+function nextPathId(usedIds: ReadonlySet<string>): string {
+  let index = 1;
+  while (usedIds.has(`path_edit_${index}`)) index += 1;
+  return `path_edit_${index}`;
+}
+
 function nextRegionId(usedIds: ReadonlySet<string>): string {
   let index = 1;
   while (usedIds.has(`region_edit_${index}`)) index += 1;
@@ -733,6 +1358,17 @@ function validated(network: VectorNetwork): VectorEditResult {
     : invalidNetwork(issues.map((issue) => issue.message).join("; "));
 }
 
+function validatedCut(
+  network: VectorNetwork,
+  cutVertexIds: readonly [string, string],
+  pathIds: readonly string[],
+): VectorCutResult {
+  const issues = validateVectorNetwork(network);
+  return issues.length === 0
+    ? { ok: true, network, cutVertexIds, pathIds }
+    : invalidNetwork(issues.map((issue) => issue.message).join("; "));
+}
+
 function invalidNetwork(
   message: string,
 ): Extract<VectorEditResult, { ok: false }> {
@@ -743,6 +1379,18 @@ function missingVertex(
   message: string,
 ): Extract<VectorEditResult, { ok: false }> {
   return { ok: false, code: "missing-vertex", message };
+}
+
+function missingPath(
+  message: string,
+): Extract<VectorEditResult, { ok: false }> {
+  return { ok: false, code: "missing-path", message };
+}
+
+function missingSegment(
+  message: string,
+): Extract<VectorEditResult, { ok: false }> {
+  return { ok: false, code: "missing-segment", message };
 }
 
 function missingHandle(
@@ -756,7 +1404,7 @@ function noOp(message: string): Extract<VectorEditResult, { ok: false }> {
 }
 
 function unsupportedTopology(
-  message = "This editing slice supports one non-branching contour",
+  message = "This editing slice supports disjoint non-branching contours",
 ): Extract<VectorEditResult, { ok: false }> {
   return {
     ok: false,
@@ -783,6 +1431,17 @@ function add(left: Point, right: Point): Point {
   return { x: left.x + right.x, y: left.y + right.y };
 }
 
+function subtract(left: Point, right: Point): Point {
+  return { x: left.x - right.x, y: left.y - right.y };
+}
+
+function lerp(start: Point, end: Point, t: number): Point {
+  return {
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t,
+  };
+}
+
 function scale(point: Point, factor: number): Point {
   return normalizePoint({ x: point.x * factor, y: point.y * factor });
 }
@@ -806,6 +1465,10 @@ function length(point: Point): number {
 
 function distance(left: Point, right: Point): number {
   return Math.hypot(left.x - right.x, left.y - right.y);
+}
+
+function squaredDistance(left: Point, right: Point): number {
+  return (left.x - right.x) ** 2 + (left.y - right.y) ** 2;
 }
 
 function normalizePoint(point: Point): Point {

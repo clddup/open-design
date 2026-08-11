@@ -747,8 +747,21 @@ async function executeDesignToolRequestUnsafe(
       input.pageId,
       input.nodeId,
       input.action === "set-closed"
-        ? { action: input.action, closed: input.closed }
-        : { action: input.action },
+        ? {
+            action: input.action,
+            closed: input.closed,
+            ...(input.pathId ? { pathId: input.pathId } : {}),
+          }
+        : input.action === "reverse-path"
+          ? {
+              action: input.action,
+              ...(input.pathId ? { pathId: input.pathId } : {}),
+            }
+          : {
+              action: input.action,
+              at: input.at,
+              pathId: input.pathId,
+            },
     );
     if (!plan.ok) {
       throw new Error(`vector-edit.${plan.code}: ${plan.message}`);
@@ -785,12 +798,14 @@ async function executeDesignToolRequestUnsafe(
       throw designTransactionToolError(result.error, transaction.commands);
     }
     const applied = runtime.getSnapshot().document.nodesById[input.nodeId];
-    const path =
+    const network =
       applied &&
       (applied.kind === "path" || applied.kind === "vector") &&
       "network" in applied.properties
-        ? applied.properties.network.paths[0]
+        ? applied.properties.network
         : undefined;
+    const pathId = input.pathId ?? network?.paths[0]?.id;
+    const path = network?.paths.find((candidate) => candidate.id === pathId);
     return {
       requestId: request.requestId,
       ok: true,
@@ -801,7 +816,13 @@ async function executeDesignToolRequestUnsafe(
           label: input.label,
           pageId: input.pageId,
           nodeId: input.nodeId,
-          pathId: path?.id,
+          pathId,
+          ...(plan.cutResult
+            ? {
+                cutVertexIds: plan.cutResult.cutVertexIds,
+                pathIds: plan.cutResult.pathIds,
+              }
+            : {}),
           closed: path?.closed,
           revision: result.revision.revision,
           atomic: true,

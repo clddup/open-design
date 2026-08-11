@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 5 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 6 as const;
 
 export {
   alignItems,
@@ -20,19 +20,25 @@ export {
   type TidyUpPlan,
 } from "./arrangement.js";
 export {
+  cutVectorPath,
   deleteVectorVertices,
+  findVectorPathIdForVertex,
   inferVectorPointMode,
   listVectorVertexHandles,
   moveVectorHandle,
   moveVectorVertices,
+  nearestVectorSegmentPoint,
   reverseVectorPath,
   setVectorPathClosed,
   setVectorPointMode,
   vectorNetworkEditability,
+  type VectorCutLocation,
+  type VectorCutResult,
   type VectorDeleteResult,
   type VectorEditFailureCode,
   type VectorEditResult,
   type VectorHandleReference,
   type VectorHandleSide,
+  type VectorSegmentHit,
   type VectorVertexHandle,
 } from "./vector-edit.js";

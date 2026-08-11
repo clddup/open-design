@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import {
+  cutVectorPath,
+  setVectorPathClosed,
+} from "@opendesign/geometry-service/vector-edit";
+import {
   booleanResultElementId,
   projectBooleanEditScope,
   projectDesignPage,
@@ -850,10 +854,19 @@ describe("Leafer scene projection", () => {
     if (editable.kind !== "vector" || !("network" in editable.properties)) {
       throw new Error("Missing editable network");
     }
-    editable.properties.network.paths[0]!.closed = false;
-    editable.properties.network.paths[0]!.segments.pop();
-    editable.properties.network.segments.pop();
-    editable.properties.network.regions = [];
+    const opened = setVectorPathClosed(
+      editable.properties.network,
+      false,
+      "path_1",
+    );
+    if (!opened.ok) throw new Error(opened.message);
+    const cut = cutVectorPath(opened.network, "path_1", {
+      kind: "segment",
+      segmentId: "segment_ab",
+      t: 0.5,
+    });
+    if (!cut.ok) throw new Error(cut.message);
+    editable.properties.network = cut.network;
     editable.properties.strokes = [
       { type: "solid", color: "#151515", opacity: 1 },
     ];
@@ -863,7 +876,7 @@ describe("Leafer scene projection", () => {
         "editable_vector",
       )?.data,
     ).toMatchObject({
-      path: "M 0 0 C 25 0 75 0 100 0 L 50 100",
+      path: "M 0 0 C 12.5 0 31.25 0 50 0 M 50 0 C 68.75 0 87.5 0 100 0 L 50 100",
       fill: null,
       stroke: [{ type: "solid", color: "#151515", opacity: 1 }],
       strokeWidth: 2,

@@ -10,6 +10,7 @@ import type {
   ViewportState,
 } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
+import type { VectorCutLocation } from "@opendesign/geometry-service/vector-edit";
 import type {
   RasterExportMimeType,
   RasterExportRequest,
@@ -66,12 +67,29 @@ export type LeaferVectorEditRequest =
   | { deleteNode: true; nodeId: string }
   | { deleteNode: false; network: VectorNetwork; nodeId: string };
 
+export type LeaferVectorEditTool = "move" | "cut";
+
+export interface LeaferVectorCutRequest {
+  at: VectorCutLocation;
+  nodeId: string;
+  pathId: string;
+}
+
+export type LeaferVectorCutResponse =
+  | {
+      ok: true;
+      network: VectorNetwork;
+      selectedVertexIds: readonly [string, string];
+    }
+  | { ok: false };
+
 export interface LeaferEngineCallbacks {
   onCreate(request: LeaferCreateRequest): boolean;
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
   onOperations(request: LeaferOperationRequest): boolean;
   onSelectionChange(nodeIds: string[], anchorNodeId?: string): void;
+  onVectorCut?(request: LeaferVectorCutRequest): LeaferVectorCutResponse;
   onVectorEdit?(request: LeaferVectorEditRequest): boolean;
   onVectorEditExit?(): void;
   onVectorEditSelectionChange?(vertexIds: readonly string[]): void;
@@ -90,6 +108,7 @@ export interface LeaferVectorEditScope {
   nodeId: string;
   readOnly: boolean;
   selectedVertexIds: readonly string[];
+  tool: LeaferVectorEditTool;
 }
 
 export interface LeaferGenerationReveal {

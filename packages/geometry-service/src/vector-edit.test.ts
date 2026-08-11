@@ -1,11 +1,14 @@
 import type { VectorNetwork } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import {
+  cutVectorPath,
   deleteVectorVertices,
+  findVectorPathIdForVertex,
   inferVectorPointMode,
   listVectorVertexHandles,
   moveVectorHandle,
   moveVectorVertices,
+  nearestVectorSegmentPoint,
   reverseVectorPath,
   setVectorPathClosed,
   setVectorPointMode,
@@ -73,6 +76,35 @@ function closedNetwork(): VectorNetwork {
         loops: [{ pathId: "path_closed", reversed: false }],
       },
     ],
+  };
+}
+
+function twoContourNetwork(): VectorNetwork {
+  const first = openNetwork();
+  return {
+    vertices: [
+      ...first.vertices,
+      { id: "vertex_e", x: 240, y: 0 },
+      { id: "vertex_f", x: 300, y: 30 },
+      { id: "vertex_g", x: 360, y: 0 },
+    ],
+    segments: [
+      ...first.segments,
+      { id: "segment_ef", startVertexId: "vertex_e", endVertexId: "vertex_f" },
+      { id: "segment_fg", startVertexId: "vertex_f", endVertexId: "vertex_g" },
+    ],
+    paths: [
+      ...first.paths,
+      {
+        id: "path_second",
+        closed: false,
+        segments: [
+          { segmentId: "segment_ef", reversed: false },
+          { segmentId: "segment_fg", reversed: false },
+        ],
+      },
+    ],
+    regions: [],
   };
 }
 
@@ -315,6 +347,241 @@ describe("editable vector point operations", () => {
     expect(restored).toEqual({ ok: true, network: source });
   });
 
+  it("cuts a closed contour at an existing vertex into one editable open contour", () => {
+    const source = closedNetwork();
+    const result = cutVectorPath(source, "path_closed", {
+      kind: "vertex",
+      vertexId: "vertex_b",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      cutVertexIds: ["vertex_b", "vertex_edit_1"],
+      pathIds: ["path_closed"],
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.network.paths).toEqual([
+      {
+        id: "path_closed",
+        closed: false,
+        segments: [
+          { segmentId: "segment_bc", reversed: false },
+          { segmentId: "segment_cd", reversed: false },
+          { segmentId: "segment_da", reversed: false },
+          { segmentId: "segment_ab", reversed: false },
+        ],
+      },
+    ]);
+    expect(result.network.regions).toEqual([]);
+    expect(
+      result.network.vertices.find((vertex) => vertex.id === "vertex_edit_1"),
+    ).toMatchObject({ x: 100, y: 0 });
+    expect(
+      result.network.segments.find((segment) => segment.id === "segment_ab"),
+    ).toMatchObject({ endVertexId: "vertex_edit_1" });
+    expect(vectorNetworkEditability(result.network)).toEqual({
+      editable: true,
+    });
+
+    const reversed = reverseVectorPath(source, "path_closed");
+    if (!reversed.ok) throw new Error(reversed.message);
+    const reversedCut = cutVectorPath(reversed.network, "path_closed", {
+      kind: "vertex",
+      vertexId: "vertex_b",
+    });
+    expect(reversedCut).toMatchObject({ ok: true });
+    if (!reversedCut.ok) throw new Error(reversedCut.message);
+    expect(vectorNetworkEditability(reversedCut.network)).toEqual({
+      editable: true,
+    });
+  });
+
+  it("cuts an open contour at an internal vertex and keeps both sides independently editable", () => {
+    const result = cutVectorPath(openNetwork(), "path_open", {
+      kind: "vertex",
+      vertexId: "vertex_c",
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.cutVertexIds).toEqual(["vertex_c", "vertex_edit_1"]);
+    expect(result.pathIds).toEqual(["path_open", "path_edit_1"]);
+    expect(result.network.paths).toEqual([
+      {
+        id: "path_open",
+        closed: false,
+        segments: [
+          { segmentId: "segment_ab", reversed: false },
+          { segmentId: "segment_bc", reversed: false },
+        ],
+      },
+      {
+        id: "path_edit_1",
+        closed: false,
+        segments: [{ segmentId: "segment_cd", reversed: false }],
+      },
+    ]);
+    const moved = moveVectorVertices(result.network, ["vertex_edit_1"], {
+      x: 12,
+      y: 8,
+    });
+    if (!moved.ok) throw new Error(moved.message);
+    expect(
+      moved.network.vertices.find((vertex) => vertex.id === "vertex_c"),
+    ).toMatchObject({ x: 120, y: 0 });
+    expect(
+      moved.network.vertices.find((vertex) => vertex.id === "vertex_edit_1"),
+    ).toMatchObject({ x: 132, y: 8 });
+  });
+
+  it("splits line and reversed cubic segments exactly with stable directed IDs", () => {
+    const line = cutVectorPath(openNetwork(), "path_open", {
+      kind: "segment",
+      segmentId: "segment_bc",
+      t: 0.25,
+    });
+    if (!line.ok) throw new Error(line.message);
+    expect(line.cutVertexIds).toEqual(["vertex_edit_1", "vertex_edit_2"]);
+    expect(
+      line.network.vertices.filter((vertex) =>
+        line.cutVertexIds.includes(vertex.id),
+      ),
+    ).toEqual([
+      { id: "vertex_edit_1", x: 75, y: 22.5, handleMode: "corner" },
+      { id: "vertex_edit_2", x: 75, y: 22.5, handleMode: "corner" },
+    ]);
+    expect(line.network.paths[0]?.segments.at(-1)?.segmentId).toBe(
+      "segment_bc",
+    );
+    expect(line.network.paths[1]?.segments[0]?.segmentId).toBe(
+      "segment_edit_1",
+    );
+
+    const cubic: VectorNetwork = {
+      vertices: [
+        { id: "vertex_a", x: 0, y: 0 },
+        { id: "vertex_b", x: 100, y: 0 },
+      ],
+      segments: [
+        {
+          id: "segment_curve",
+          startVertexId: "vertex_a",
+          endVertexId: "vertex_b",
+          tangentStart: { x: 0, y: 100 },
+          tangentEnd: { x: 0, y: 100 },
+        },
+      ],
+      paths: [
+        {
+          id: "path_curve",
+          closed: false,
+          segments: [{ segmentId: "segment_curve", reversed: true }],
+        },
+      ],
+      regions: [],
+    };
+    const curved = cutVectorPath(cubic, "path_curve", {
+      kind: "segment",
+      segmentId: "segment_curve",
+      t: 0.5,
+    });
+    if (!curved.ok) throw new Error(curved.message);
+    expect(curved.network.vertices.slice(-2)).toEqual([
+      { id: "vertex_edit_1", x: 50, y: 75, handleMode: "independent" },
+      { id: "vertex_edit_2", x: 50, y: 75, handleMode: "independent" },
+    ]);
+    expect(curved.network.segments).toEqual([
+      {
+        id: "segment_curve",
+        startVertexId: "vertex_edit_1",
+        endVertexId: "vertex_b",
+        tangentStart: { x: 25, y: 0 },
+        tangentEnd: { x: 0, y: 50 },
+      },
+      {
+        id: "segment_edit_1",
+        startVertexId: "vertex_a",
+        endVertexId: "vertex_edit_2",
+        tangentStart: { x: 0, y: 50 },
+        tangentEnd: { x: -25, y: 0 },
+      },
+    ]);
+    expect(curved.network.paths.map((path) => path.segments)).toEqual([
+      [{ segmentId: "segment_curve", reversed: true }],
+      [{ segmentId: "segment_edit_1", reversed: true }],
+    ]);
+  });
+
+  it("finds deterministic path-directed line and cubic cut locations", () => {
+    const line = nearestVectorSegmentPoint(openNetwork(), { x: 92, y: 17 });
+    expect(line).toMatchObject({
+      pathId: "path_open",
+      segmentId: "segment_bc",
+    });
+    expect(line?.t).toBeCloseTo(0.513333);
+    expect(line?.point).toEqual({ x: 90.8, y: 14.6 });
+
+    const curved = openNetwork();
+    curved.segments[0]!.tangentStart = { x: 20, y: 80 };
+    curved.segments[0]!.tangentEnd = { x: -20, y: 80 };
+    const hit = nearestVectorSegmentPoint(curved, { x: 30, y: 60 });
+    expect(hit).toMatchObject({ pathId: "path_open", segmentId: "segment_ab" });
+    expect(hit?.t).toBeGreaterThan(0);
+    expect(hit?.t).toBeLessThan(1);
+    expect(hit?.distance).toBeLessThan(20);
+  });
+
+  it("keeps disjoint contours editable and requires an explicit topology target", () => {
+    const source = twoContourNetwork();
+    expect(vectorNetworkEditability(source)).toEqual({ editable: true });
+    expect(findVectorPathIdForVertex(source, "vertex_f")).toBe("path_second");
+    expect(reverseVectorPath(source)).toMatchObject({
+      ok: false,
+      code: "unsupported-topology",
+    });
+    const reversed = reverseVectorPath(source, "path_second");
+    if (!reversed.ok) throw new Error(reversed.message);
+    expect(reversed.network.paths[0]).toEqual(source.paths[0]);
+    expect(reversed.network.paths[1]?.segments).toEqual([
+      { segmentId: "segment_fg", reversed: true },
+      { segmentId: "segment_ef", reversed: true },
+    ]);
+
+    const deleted = deleteVectorVertices(source, ["vertex_e", "vertex_f"]);
+    if (!deleted.ok || deleted.deleteNode)
+      throw new Error("Expected one contour");
+    expect(deleted.network.paths.map((path) => path.id)).toEqual(["path_open"]);
+    expect(
+      deleted.network.vertices.some((vertex) => vertex.id === "vertex_g"),
+    ).toBe(false);
+  });
+
+  it("returns recoverable cut failures for endpoints and stale geometry IDs", () => {
+    expect(
+      cutVectorPath(openNetwork(), "path_open", {
+        kind: "vertex",
+        vertexId: "vertex_a",
+      }),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    expect(
+      cutVectorPath(openNetwork(), "missing_path", {
+        kind: "vertex",
+        vertexId: "vertex_b",
+      }),
+    ).toMatchObject({ ok: false, code: "missing-path" });
+    expect(
+      cutVectorPath(openNetwork(), "path_open", {
+        kind: "segment",
+        segmentId: "missing_segment",
+        t: 0.5,
+      }),
+    ).toMatchObject({ ok: false, code: "missing-segment" });
+    expect(
+      cutVectorPath(openNetwork(), "path_open", {
+        kind: "segment",
+        segmentId: "segment_ab",
+        t: 1.1,
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-network" });
+  });
+
   it("rejects topology no-ops and closing a two-point contour", () => {
     expect(setVectorPathClosed(openNetwork(), false)).toMatchObject({
       ok: false,
@@ -334,7 +601,7 @@ describe("editable vector point operations", () => {
     });
   });
 
-  it("rejects branch and multi-contour networks for this interaction slice", () => {
+  it("rejects connected path runs until connect/disconnect editing is available", () => {
     const network = openNetwork();
     network.vertices.push({ id: "vertex_branch", x: 60, y: 90 });
     network.segments.push({

@@ -8,7 +8,10 @@ import {
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "@opendesign/geometry-service/boolean-resolver";
 import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
-import { setVectorPathClosed } from "@opendesign/geometry-service/vector-edit";
+import {
+  cutVectorPath,
+  setVectorPathClosed,
+} from "@opendesign/geometry-service/vector-edit";
 import {
   createPathKitGeometryProvider,
   type VectorGeometryProvider,
@@ -756,6 +759,38 @@ describe("versioned SVG interchange", () => {
     expect(importedOpenVector).toMatchObject({
       kind: "vector",
       properties: { network: opened.network, fills: [] },
+    });
+
+    const cut = cutVectorPath(opened.network, "path_1", {
+      kind: "segment",
+      segmentId: "segment_ab",
+      t: 0.5,
+    });
+    if (!cut.ok) throw new Error(cut.message);
+    openVector.properties.network = cut.network;
+    const cutExport = exportSvg({
+      document: openDocument,
+      rootNodeIds: ["vector_1"],
+      viewport: { x: 0, y: 0, width: 150, height: 150 },
+      includeLayerIds: true,
+      title: "Cut editable vector",
+    });
+    expect(cutExport.ok).toBe(true);
+    if (!cutExport.ok) return;
+    expect(cutExport.svg).toContain('fill="none"');
+    expect(cutExport.svg).toContain(" M ");
+    const cutImported = importSvg(
+      { svg: cutExport.svg, idPrefix: "editable_vector_cut" },
+      geometry,
+    );
+    expect(cutImported.ok).toBe(true);
+    if (!cutImported.ok) return;
+    expect(cutImported.issues).toEqual([]);
+    expect(
+      cutImported.nodes.find((node) => node.kind === "vector"),
+    ).toMatchObject({
+      kind: "vector",
+      properties: { network: cut.network, fills: [] },
     });
   });
 

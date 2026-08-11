@@ -34,6 +34,9 @@ import {
   type LeaferOperationKind,
   type LeaferOperationRequest,
   type LeaferVectorEditRequest,
+  type LeaferVectorCutRequest,
+  type LeaferVectorCutResponse,
+  type LeaferVectorEditTool,
 } from "@opendesign/leafer-engine";
 import type { TextLayoutProvider } from "@opendesign/text-service";
 import {
@@ -95,6 +98,7 @@ export function Canvas({
   const [vectorEditState, setVectorEditState] = useState<{
     nodeId: string;
     selectedVertexIds: readonly string[];
+    tool: LeaferVectorEditTool;
   } | null>(null);
   const tool = isTool(snapshot.state.tool) ? snapshot.state.tool : "select";
   const booleanEditScope = useMemo(
@@ -145,7 +149,11 @@ export function Canvas({
       ) {
         return false;
       }
-      setVectorEditState({ nodeId: node.id, selectedVertexIds: [] });
+      setVectorEditState({
+        nodeId: node.id,
+        selectedVertexIds: [],
+        tool: "move",
+      });
       return true;
     },
     [runtime],
@@ -178,6 +186,22 @@ export function Canvas({
   const handleCanvasKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
       if (event.target !== event.currentTarget) return;
+      if (
+        vectorEditScope &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.key.toLowerCase() === "x" || event.key.toLowerCase() === "v")
+      ) {
+        const nextTool = event.key.toLowerCase() === "x" ? "cut" : "move";
+        setVectorEditState((current) =>
+          current ? { ...current, tool: nextTool } : current,
+        );
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       const currentSelection = runtime.getSnapshot().state.selection.nodeIds;
       if (
         event.key === "Enter" &&
@@ -206,7 +230,7 @@ export function Canvas({
       event.preventDefault();
       event.stopPropagation();
     },
-    [enterVectorEdit, runtime, selectBooleanTarget],
+    [enterVectorEdit, runtime, selectBooleanTarget, vectorEditScope],
   );
 
   const handleCanvasDoubleClick = useCallback(
@@ -307,7 +331,8 @@ export function Canvas({
   const applyVectorPathAction = useCallback(
     (
       action:
-        { action: "set-closed"; closed: boolean } | { action: "reverse-path" },
+        | { action: "set-closed"; closed: boolean; pathId?: string }
+        | { action: "reverse-path"; pathId?: string },
     ) => {
       const current = runtime.getSnapshot();
       const nodeId = vectorEditState?.nodeId;
@@ -334,6 +359,57 @@ export function Canvas({
       runtime,
       vectorEditState?.nodeId,
     ],
+  );
+
+  const applyVectorCut = useCallback(
+    (request: LeaferVectorCutRequest): LeaferVectorCutResponse => {
+      const current = runtime.getSnapshot();
+      const plan = planVectorSemanticEdit(
+        current.document,
+        activePageId,
+        request.nodeId,
+        {
+          action: "cut-path",
+          at: request.at,
+          pathId: request.pathId,
+        },
+      );
+      if (!plan.ok || !plan.cutResult) {
+        onTransactionError(
+          plan.ok ? t("canvas.vectorCutUnavailable") : plan.message,
+        );
+        return { ok: false };
+      }
+      const cutResult = plan.cutResult;
+      const accepted = applyOperations({
+        kind: "vector",
+        operations: [...plan.operations],
+      });
+      if (!accepted) return { ok: false };
+      const applied = runtime.getSnapshot().document.nodesById[request.nodeId];
+      if (
+        !applied ||
+        (applied.kind !== "path" && applied.kind !== "vector") ||
+        !("network" in applied.properties)
+      ) {
+        onTransactionError(t("canvas.vectorCutApplyMissing"));
+        return { ok: false };
+      }
+      setVectorEditState((state) =>
+        state?.nodeId === request.nodeId
+          ? {
+              ...state,
+              selectedVertexIds: [...cutResult.cutVertexIds],
+            }
+          : state,
+      );
+      return {
+        ok: true,
+        network: applied.properties.network,
+        selectedVertexIds: cutResult.cutVertexIds,
+      };
+    },
+    [activePageId, applyOperations, onTransactionError, runtime, t],
   );
 
   const createNode = useCallback(
@@ -512,6 +588,7 @@ export function Canvas({
       onSelectionChange: (nodeIds, anchorNodeId) => {
         runtime.setSelection(nodeIds, anchorNodeId);
       },
+      onVectorCut: applyVectorCut,
       onVectorEdit: applyVectorEdit,
       onVectorEditExit: exitVectorEdit,
       onVectorEditSelectionChange: (selectedVertexIds) => {
@@ -552,6 +629,7 @@ export function Canvas({
     };
   }, [
     applyOperations,
+    applyVectorCut,
     applyVectorEdit,
     createNode,
     createVectorNode,
@@ -592,6 +670,7 @@ export function Canvas({
               nodeId: vectorEditScope.nodeId,
               readOnly: vectorEditScope.readOnly,
               selectedVertexIds: vectorEditScope.selectedVertexIds,
+              tool: vectorEditState?.tool ?? "move",
             },
           }
         : {}),
@@ -609,6 +688,7 @@ export function Canvas({
     snapshot.state.selection,
     snapshot.state.viewport,
     tool,
+    vectorEditState?.tool,
     vectorEditScope,
   ]);
 
@@ -642,7 +722,9 @@ export function Canvas({
     editScopeVector &&
     (editScopeVector.kind === "path" || editScopeVector.kind === "vector") &&
     "network" in editScopeVector.properties
-      ? editScopeVector.properties.network.paths[0]?.closed
+      ? editScopeVector.properties.network.paths.find(
+          (path) => path.id === vectorEditScope?.activePathId,
+        )?.closed
       : undefined;
 
   return (
@@ -702,12 +784,43 @@ export function Canvas({
                   <small>
                     {vectorEditScope.readOnly
                       ? t("canvas.vectorEditingReadOnly")
-                      : t("canvas.vectorEditingHint", {
-                          count: vectorEditScope.selectedVertexIds.length,
-                        })}
+                      : vectorEditState?.tool === "cut"
+                        ? t("canvas.vectorCutHint")
+                        : t("canvas.vectorEditingHint", {
+                            count: vectorEditScope.selectedVertexIds.length,
+                          })}
                   </small>
                 </span>
                 <span className={styles.vectorTools}>
+                  <span
+                    aria-label={t("canvas.vectorEditTool")}
+                    className={styles.vectorModes}
+                    role="group"
+                  >
+                    {(
+                      [
+                        ["move", "canvas.vectorToolMove", "V"],
+                        ["cut", "canvas.vectorToolCut", "X"],
+                      ] as const
+                    ).map(([mode, label, shortcut]) => (
+                      <button
+                        aria-keyshortcuts={shortcut}
+                        aria-pressed={vectorEditState?.tool === mode}
+                        disabled={vectorEditScope.readOnly && mode === "cut"}
+                        key={mode}
+                        onClick={() => {
+                          setVectorEditState((current) =>
+                            current ? { ...current, tool: mode } : current,
+                          );
+                          requestAnimationFrame(() => host.current?.focus());
+                        }}
+                        title={`${t(label)} (${shortcut})`}
+                        type="button"
+                      >
+                        {t(label)}
+                      </button>
+                    ))}
+                  </span>
                   <span
                     aria-label={t("canvas.vectorPointMode")}
                     className={styles.vectorModes}
@@ -754,6 +867,7 @@ export function Canvas({
                           applyVectorPathAction({
                             action: "set-closed",
                             closed: !editScopeVectorClosed,
+                            pathId: vectorEditScope.activePathId,
                           });
                         }
                         requestAnimationFrame(() => host.current?.focus());
@@ -765,9 +879,15 @@ export function Canvas({
                         : t("canvas.vectorPathClose")}
                     </button>
                     <button
-                      disabled={vectorEditScope.readOnly}
+                      disabled={
+                        vectorEditScope.readOnly ||
+                        vectorEditScope.activePathId === undefined
+                      }
                       onClick={() => {
-                        applyVectorPathAction({ action: "reverse-path" });
+                        applyVectorPathAction({
+                          action: "reverse-path",
+                          pathId: vectorEditScope.activePathId,
+                        });
                         requestAnimationFrame(() => host.current?.focus());
                       }}
                       type="button"

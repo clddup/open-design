@@ -3354,10 +3354,30 @@ describe("App", () => {
         nodeId: "editable_vector",
         readOnly: false,
         selectedVertexIds: [],
+        tool: "move",
       }),
     );
     expect(screen.getByText("Editing Logo curve")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Smooth" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.keyDown(canvas, { key: "x", code: "KeyX" });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope?.tool).toBe("cut"),
+    );
+    expect(
+      screen.getByText("Click a point or path to create a break"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cut" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.keyDown(canvas, { key: "v", code: "KeyV" });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope?.tool).toBe("move"),
+    );
 
     act(() => {
       leaferCallbacks().onVectorEditSelectionChange?.(["vertex_b"]);
@@ -3412,6 +3432,41 @@ describe("App", () => {
       "editable_vector",
     ]);
     expect(document.activeElement).toBe(canvas);
+
+    const beforeCutRevision = runtime().getSnapshot().document.revision;
+    let cutResponse:
+      ReturnType<NonNullable<LeaferEngineCallbacks["onVectorCut"]>> | undefined;
+    act(() => {
+      cutResponse = leaferCallbacks().onVectorCut?.({
+        at: { kind: "segment", segmentId: "segment_ab", t: 0.5 },
+        nodeId: "editable_vector",
+        pathId: "path_open",
+      });
+    });
+    expect(cutResponse).toMatchObject({
+      ok: true,
+      selectedVertexIds: ["vertex_edit_1", "vertex_edit_2"],
+    });
+    expect(runtime().getSnapshot().document.revision).toBe(
+      beforeCutRevision + 1,
+    );
+    const cutNode = runtime().getSnapshot().document.nodesById.editable_vector;
+    if (
+      !cutNode ||
+      cutNode.kind !== "vector" ||
+      !("network" in cutNode.properties)
+    ) {
+      throw new Error("Missing cut vector fixture");
+    }
+    expect(cutNode.properties.network.paths[0]?.closed).toBe(false);
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope?.selectedVertexIds).toEqual([
+        "vertex_edit_1",
+        "vertex_edit_2",
+      ]),
+    );
+    expect(screen.getByRole("button", { name: "Close path" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Reverse" })).toBeEnabled();
 
     const beforeEditRevision = runtime().getSnapshot().document.revision;
     const currentNode =

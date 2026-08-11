@@ -33,7 +33,7 @@
   top: 10px;
   left: 50%;
   display: grid;
-  max-width: min(760px, calc(100% - 24px));
+  max-width: min(920px, calc(100% - 24px));
   gap: 6px;
   translate: -50% 0;
   pointer-events: none;
@@ -142,6 +142,19 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
+}
+
+@media (max-width: 900px) {
+  .editScope:has(.vectorTools) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .vectorTools {
+    grid-row: 2;
+    grid-column: 2 / 4;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
 
 .vectorTools {

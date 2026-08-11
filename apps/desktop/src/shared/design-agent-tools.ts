@@ -428,12 +428,24 @@ export type DesignVectorToolInput =
       label: string;
       nodeId: string;
       pageId: string;
+      pathId?: string;
     }
   | {
       action: "reverse-path";
       label: string;
       nodeId: string;
       pageId: string;
+      pathId?: string;
+    }
+  | {
+      action: "cut-path";
+      at:
+        | { kind: "vertex"; vertexId: string }
+        | { kind: "segment"; segmentId: string; t: number };
+      label: string;
+      nodeId: string;
+      pageId: string;
+      pathId: string;
     };
 
 // The canonical DesignOperation schema is deliberately exhaustive and is used
@@ -1175,15 +1187,41 @@ const MODEL_ARRANGE_SCHEMA = {
 const MODEL_VECTOR_EDIT_SCHEMA = {
   type: "object",
   description:
-    "Edit one explicit existing editable Vector Network by stable Page and node ID. set-closed requires closed; reverse-path does not accept it. The host derives all segment, region, bounds, and transform changes.",
+    "Edit one explicit existing editable Vector Network by stable Page, node, path, vertex, and segment IDs from inspection. set-closed requires closed; cut-path requires pathId and at. The host derives all new geometry, bounds, and transforms.",
   properties: {
-    action: { enum: ["set-closed", "reverse-path"] },
+    action: { enum: ["set-closed", "reverse-path", "cut-path"] },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     nodeId: { type: "string", minLength: 1, maxLength: 256 },
+    pathId: { type: "string", minLength: 1, maxLength: 128 },
     closed: {
       type: "boolean",
       description: "Required only for set-closed.",
+    },
+    at: {
+      description:
+        "Required only for cut-path. t follows the inspected path run direction and must be between 0 and 1.",
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            kind: { const: "vertex" },
+            vertexId: { type: "string", minLength: 1, maxLength: 128 },
+          },
+          required: ["kind", "vertexId"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: {
+            kind: { const: "segment" },
+            segmentId: { type: "string", minLength: 1, maxLength: 128 },
+            t: { type: "number", minimum: 0, maximum: 1 },
+          },
+          required: ["kind", "segmentId", "t"],
+          additionalProperties: false,
+        },
+      ],
     },
   },
   required: ["action", "label", "pageId", "nodeId"],
@@ -1780,7 +1818,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_VECTOR_TOOL_NAME,
     description:
-      "Edit one existing non-branching editable Vector Network without asking the model to rewrite vertices, segments, path runs, regions, bounds, or transforms. set-closed opens or closes its single contour with stable retained geometry IDs; reverse-path reverses traversal while preserving effective closed-region winding. Targets are explicit stable Page and node IDs returned by inspection, never the send-time or live selection. The host computes geometry through the same versioned vector-edit service as the human canvas, previews the change, and applies one atomic undoable EditorRuntime transaction. It rejects missing, locked, stale, out-of-scope, already-satisfied, invalid, branching, or multi-contour targets. Cut, connect/disconnect, multiple contours, branches, flatten, and outline stroke are separate capabilities and must not be simulated with this tool.",
+      "Edit one existing non-branching editable Vector Network without asking the model to rewrite vertices, segments, path runs, regions, bounds, or transforms. set-closed opens or closes one explicit contour; reverse-path reverses one contour while preserving effective closed-region winding; cut-path creates a true break at an inspected vertex or at parameter t on an inspected line/cubic segment. A closed contour becomes open, while an open contour becomes two independently editable open path runs with stable retained IDs and host-authored endpoint, segment, and path IDs. Targets are explicit stable Page, node, path, vertex, and segment IDs returned by inspection, never the send-time or live selection. The host computes geometry through the same versioned vector-edit service as the human canvas, previews the change, and applies one atomic undoable EditorRuntime transaction. It rejects missing, locked, stale, out-of-scope, already-satisfied, invalid, branching, or connected path-run targets. Drag-across Cut, connect/disconnect, branches, flatten, and outline stroke are separate capabilities and must not be simulated with this tool.",
     inputSchema: MODEL_VECTOR_EDIT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2683,17 +2721,51 @@ export function isDesignVectorToolInput(
 ): input is DesignVectorToolInput {
   if (
     !isRecord(input) ||
-    (input.action !== "set-closed" && input.action !== "reverse-path") ||
+    (input.action !== "set-closed" &&
+      input.action !== "reverse-path" &&
+      input.action !== "cut-path") ||
     !safeLabel(input.label) ||
     !safeId(input.pageId) ||
     !safeId(input.nodeId)
   ) {
     return false;
   }
-  return input.action === "set-closed"
-    ? typeof input.closed === "boolean" &&
-        exactKeys(input, ["action", "closed", "label", "nodeId", "pageId"])
-    : exactKeys(input, ["action", "label", "nodeId", "pageId"]);
+  const optionalPathId =
+    input.pathId === undefined ||
+    (typeof input.pathId === "string" && safeId(input.pathId));
+  if (!optionalPathId) return false;
+  if (input.action === "set-closed") {
+    return (
+      typeof input.closed === "boolean" &&
+      exactKeys(
+        input,
+        input.pathId === undefined
+          ? ["action", "closed", "label", "nodeId", "pageId"]
+          : ["action", "closed", "label", "nodeId", "pageId", "pathId"],
+      )
+    );
+  }
+  if (input.action === "reverse-path") {
+    return exactKeys(
+      input,
+      input.pathId === undefined
+        ? ["action", "label", "nodeId", "pageId"]
+        : ["action", "label", "nodeId", "pageId", "pathId"],
+    );
+  }
+  if (!safeId(input.pathId) || !isRecord(input.at)) return false;
+  return (
+    exactKeys(input, ["action", "at", "label", "nodeId", "pageId", "pathId"]) &&
+    (input.at.kind === "vertex"
+      ? safeId(input.at.vertexId) && exactKeys(input.at, ["kind", "vertexId"])
+      : input.at.kind === "segment" &&
+        safeId(input.at.segmentId) &&
+        typeof input.at.t === "number" &&
+        Number.isFinite(input.at.t) &&
+        input.at.t >= 0 &&
+        input.at.t <= 1 &&
+        exactKeys(input.at, ["kind", "segmentId", "t"]))
+  );
 }
 
 export function isDesignHierarchyToolInput(

@@ -21,10 +21,13 @@ import {
 } from "@opendesign/geometry-service/editable-vector";
 import {
   deleteVectorVertices,
+  findVectorPathIdForVertex,
   listVectorVertexHandles,
   moveVectorHandle,
   moveVectorVertices,
+  nearestVectorSegmentPoint,
   setVectorPointMode,
+  type VectorCutLocation,
   type VectorHandleReference,
 } from "@opendesign/geometry-service/vector-edit";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
@@ -196,6 +199,7 @@ type VectorEditDrag =
 
 interface VectorEditSession {
   anchorControls: LeaferElement[];
+  cutHitPath: LeaferElement;
   drag: VectorEditDrag | null;
   handleControls: LeaferElement[];
   handlePath: LeaferElement;
@@ -205,6 +209,7 @@ interface VectorEditSession {
   pathElement: LeaferElement;
   readOnly: boolean;
   selectedVertexIds: string[];
+  tool: "move" | "cut";
   tracePath: LeaferElement;
 }
 
@@ -1748,17 +1753,26 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         opacity: 0.55,
         stroke: LEAFER_EDITOR_SELECTION_COLOR,
       }) as LeaferElement;
+      const cutHitPath = new this.#leafer.Path({
+        cursor: "crosshair",
+        editable: false,
+        fill: null,
+        hittable: scope.tool === "cut" && !scope.readOnly,
+        stroke: "rgba(0, 0, 0, 0.001)",
+      }) as LeaferElement;
       const handlePath = new this.#leafer.Path({
         editable: false,
         fill: null,
         hittable: false,
         stroke: "#8b8b89",
       }) as LeaferElement;
+      overlayGroup.add(cutHitPath);
       overlayGroup.add(tracePath);
       overlayGroup.add(handlePath);
       parent.add(overlayGroup);
       session = {
         anchorControls: [],
+        cutHitPath,
         drag: null,
         handleControls: [],
         handlePath,
@@ -1768,6 +1782,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         pathElement,
         readOnly: scope.readOnly,
         selectedVertexIds,
+        tool: scope.tool,
         tracePath,
       };
       this.#vectorEdit = session;
@@ -1775,6 +1790,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       session.pathElement = pathElement;
       session.readOnly = scope.readOnly;
       session.selectedVertexIds = selectedVertexIds;
+      session.tool = scope.tool;
       if (!session.drag) session.network = structuredClone(network);
     }
     session.overlayGroup.setTransform({ ...pathElement.localTransform });
@@ -1798,6 +1814,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const anchorSize = 8 / zoom;
     const handleSize = 6 / zoom;
     session.pathElement.set({ path: serialized.path });
+    session.cutHitPath.set({
+      hittable: session.tool === "cut" && !session.readOnly,
+      path: serialized.path,
+      strokeWidth: 14 / zoom,
+    });
     session.tracePath.set({ path: serialized.path, strokeWidth: 1.5 / zoom });
     session.anchorControls.forEach((control) => {
       control.remove();
@@ -1813,7 +1834,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     for (const vertex of session.network.vertices) {
       const isSelected = selected.has(vertex.id);
       const anchor = new this.#leafer.Ellipse({
-        cursor: session.readOnly ? "default" : "pointer",
+        cursor: session.readOnly
+          ? "default"
+          : session.tool === "cut"
+            ? "crosshair"
+            : "pointer",
         editable: false,
         fill: isSelected ? LEAFER_EDITOR_SELECTION_COLOR : "#ffffff",
         height: anchorSize,
@@ -1833,7 +1858,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
 
     const handleParts: string[] = [];
-    for (const vertexId of session.selectedVertexIds) {
+    for (const vertexId of session.tool === "move"
+      ? session.selectedVertexIds
+      : []) {
       const vertex = session.network.vertices.find(
         (candidate) => candidate.id === vertexId,
       );
@@ -1894,6 +1921,34 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (pointer.isCancel || pointer.right || pointer.middle) return;
     const target = isElement(pointer.target) ? pointer.target : undefined;
     const control = target ? this.#vectorEditControls.get(target) : undefined;
+    if (session.tool === "cut") {
+      if (session.readOnly) return;
+      if (control?.kind === "vertex") {
+        const pathId = findVectorPathIdForVertex(
+          session.network,
+          control.vertexId,
+        );
+        if (pathId) {
+          this.#submitVectorCut(pathId, {
+            kind: "vertex",
+            vertexId: control.vertexId,
+          });
+        }
+        return;
+      }
+      if (target === session.cutHitPath) {
+        const local = pointer.getInnerPoint(session.pathElement);
+        const hit = nearestVectorSegmentPoint(session.network, local);
+        if (hit) {
+          this.#submitVectorCut(hit.pathId, {
+            kind: "segment",
+            segmentId: hit.segmentId,
+            t: hit.t,
+          });
+        }
+      }
+      return;
+    }
     if (!control) {
       if (target && this.#nodeId(target) === session.nodeId) {
         this.#setVectorVertexSelection([]);
@@ -2004,6 +2059,30 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
     if (this.#vectorEdit === session) {
       session.network = structuredClone(network);
+      this.#renderVectorEditOverlay();
+    }
+    return true;
+  }
+
+  #submitVectorCut(pathId: string, at: VectorCutLocation): boolean {
+    const session = this.#vectorEdit;
+    if (!session || !this.#callbacks.onVectorCut) {
+      this.#report(new Error("Vector cut callback is unavailable"));
+      return false;
+    }
+    const response = this.#callbacks.onVectorCut({
+      at,
+      nodeId: session.nodeId,
+      pathId,
+    });
+    if (!response.ok) {
+      this.#restoreProjection();
+      return false;
+    }
+    if (this.#vectorEdit === session) {
+      session.network = structuredClone(response.network);
+      session.selectedVertexIds = [...response.selectedVertexIds];
+      this.#callbacks.onVectorEditSelectionChange?.(response.selectedVertexIds);
       this.#renderVectorEditOverlay();
     }
     return true;

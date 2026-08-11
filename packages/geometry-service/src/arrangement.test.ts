@@ -20,7 +20,7 @@ const items = (
 
 describe("geometry arrangement", () => {
   it("exposes a stable service contract version", () => {
-    expect(GEOMETRY_SERVICE_CONTRACT_VERSION).toBe(5);
+    expect(GEOMETRY_SERVICE_CONTRACT_VERSION).toBe(6);
   });
 
   it("aligns unequal items against the requested selection edge or center", () => {

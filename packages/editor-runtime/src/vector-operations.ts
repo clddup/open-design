@@ -6,10 +6,13 @@ import type {
   VectorPointMode,
 } from "@opendesign/design-contracts";
 import {
+  cutVectorPath,
+  findVectorPathIdForVertex,
   inferVectorPointMode,
   reverseVectorPath,
   setVectorPathClosed,
   vectorNetworkEditability,
+  type VectorCutLocation,
 } from "@opendesign/geometry-service/vector-edit";
 import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 import { isEffectivelyLocked } from "./layer-operations.js";
@@ -22,10 +25,18 @@ export type VectorOperationFailureCode =
   | "unsupported-topology";
 
 export type VectorSemanticEdit =
-  { action: "set-closed"; closed: boolean } | { action: "reverse-path" };
+  | { action: "set-closed"; closed: boolean; pathId?: string }
+  | { action: "reverse-path"; pathId?: string }
+  | {
+      action: "cut-path";
+      at: VectorCutLocation;
+      pathId: string;
+    };
 
 export interface VectorEditScope {
+  activePathId?: string;
   nodeId: string;
+  pathCount: number;
   pointMode?: VectorPointMode;
   readOnly: boolean;
   readOnlyReason?: string;
@@ -33,7 +44,14 @@ export interface VectorEditScope {
 }
 
 export type VectorOperationPlan =
-  | { ok: true; operations: readonly DesignOperation[] }
+  | {
+      ok: true;
+      operations: readonly DesignOperation[];
+      cutResult?: {
+        cutVertexIds: readonly [string, string];
+        pathIds: readonly string[];
+      };
+    }
   | {
       ok: false;
       code: VectorOperationFailureCode;
@@ -73,6 +91,18 @@ export function resolveVectorEditScope(
   const modes = new Set(
     selected.map((vertexId) => inferVectorPointMode(network, vertexId)),
   );
+  const selectedPathIds = new Set(
+    selected.flatMap((vertexId) => {
+      const pathId = findVectorPathIdForVertex(network, vertexId);
+      return pathId ? [pathId] : [];
+    }),
+  );
+  const activePathId =
+    selectedPathIds.size === 1
+      ? [...selectedPathIds][0]
+      : selectedPathIds.size === 0 && network.paths.length === 1
+        ? network.paths[0]?.id
+        : undefined;
   const readOnly = locked || !editability.editable;
   const readOnlyReason = locked
     ? "The vector or one of its ancestors is locked"
@@ -80,7 +110,9 @@ export function resolveVectorEditScope(
       ? null
       : editability.reason;
   return {
+    ...(activePathId ? { activePathId } : {}),
     nodeId: node.id,
+    pathCount: network.paths.length,
     ...(selected.length > 0 && modes.size === 1
       ? { pointMode: [...modes][0]! }
       : {}),
@@ -181,23 +213,54 @@ export function planVectorSemanticEdit(
       message: `Editable vector ${nodeId} is locked`,
     };
   }
-  const edited =
-    edit.action === "set-closed"
-      ? setVectorPathClosed(node.properties.network, edit.closed)
-      : reverseVectorPath(node.properties.network);
-  if (!edited.ok) {
+  if (edit.action === "cut-path") {
+    const cut = cutVectorPath(node.properties.network, edit.pathId, edit.at);
+    if (!cut.ok) return vectorOperationFailure(cut);
+    const plan = planVectorNetworkUpdate(document, pageId, nodeId, cut.network);
+    if (!plan.ok) return plan;
     return {
-      ok: false,
-      code:
-        edited.code === "no-op"
-          ? "no-op"
-          : edited.code === "unsupported-topology"
-            ? "unsupported-topology"
-            : "invalid-geometry",
-      message: edited.message,
+      ...plan,
+      cutResult: {
+        cutVertexIds: cut.cutVertexIds,
+        pathIds: cut.pathIds,
+      },
     };
   }
+  const edited =
+    edit.action === "set-closed"
+      ? setVectorPathClosed(node.properties.network, edit.closed, edit.pathId)
+      : reverseVectorPath(node.properties.network, edit.pathId);
+  if (!edited.ok) {
+    return vectorOperationFailure(edited);
+  }
   return planVectorNetworkUpdate(document, pageId, nodeId, edited.network);
+}
+
+function vectorOperationFailure(failure: {
+  code:
+    | "invalid-network"
+    | "missing-handle"
+    | "missing-path"
+    | "missing-segment"
+    | "missing-vertex"
+    | "no-op"
+    | "unsupported-topology";
+  message: string;
+}): Extract<VectorOperationPlan, { ok: false }> {
+  return {
+    ok: false,
+    code:
+      failure.code === "no-op"
+        ? "no-op"
+        : failure.code === "unsupported-topology"
+          ? "unsupported-topology"
+          : failure.code === "missing-path" ||
+              failure.code === "missing-segment" ||
+              failure.code === "missing-vertex"
+            ? "not-found"
+            : "invalid-geometry",
+    message: failure.message,
+  };
 }
 
 export function planDeleteVectorNode(

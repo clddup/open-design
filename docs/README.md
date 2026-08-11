@@ -69,3 +69,4 @@
 | [0035](adr/0035-versioned-text-wrapping-and-overflow.md)                 | 已接受     | 版本化文字换行、溢出与 SVG Text metadata                           |
 | [0036](adr/0036-versioned-text-auto-size-and-layout-service.md)          | 已接受     | Text Auto Size 与可替换 Text Layout Service                        |
 | [0037](adr/0037-versioned-vector-topology-operations.md)                 | 已接受     | 单轮廓 Open/Close/Reverse 与开放 region 语义                       |
+| [0038](adr/0038-versioned-vector-click-cut.md)                           | 已接受     | 点击 Cut、精确 cubic 拆分与互不连接多轮廓编辑                      |

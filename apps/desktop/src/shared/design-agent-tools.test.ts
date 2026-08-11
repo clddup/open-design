@@ -1482,12 +1482,22 @@ describe("design Agent tool contract", () => {
       nodeId: "logo_contour",
       pageId: "page_brand",
     };
+    const cut = {
+      action: "cut-path",
+      at: { kind: "segment", segmentId: "segment_logo_2", t: 0.4 },
+      label: "Cut the logo contour",
+      nodeId: "logo_contour",
+      pageId: "page_brand",
+      pathId: "path_logo",
+    };
 
     expect(tool).toMatchObject({
       risk: "design_write",
       approval: "never",
     });
-    expect(tool?.description).toContain("stable Page and node IDs");
+    expect(tool?.description).toContain(
+      "stable Page, node, path, vertex, and segment IDs",
+    );
     expect(tool?.description).toContain("one atomic undoable");
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, close)).toBe(
       true,
@@ -1495,6 +1505,21 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, reverse)).toBe(
       true,
     );
+    expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, cut)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...cut,
+        at: { ...cut.at, t: 1.2 },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...cut,
+        pathId: undefined,
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
         ...close,

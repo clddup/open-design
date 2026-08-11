@@ -11,6 +11,7 @@ import {
   planVectorNetworkUpdate,
   planVectorSemanticEdit,
   resolveVectorEditScope,
+  type VectorSemanticEdit,
 } from "./vector-operations.js";
 
 function network(): VectorNetwork {
@@ -80,7 +81,9 @@ describe("vector editing runtime plans", () => {
         ["vertex_b"],
       ),
     ).toEqual({
+      activePathId: "path_open",
       nodeId: "vector_editable",
+      pathCount: 1,
       pointMode: "corner",
       readOnly: false,
       selectedVertexIds: ["vertex_b"],
@@ -197,8 +200,7 @@ describe("vector editing runtime plans", () => {
     const runtime = new EditorRuntime(documentWithVector());
     const applySemanticEdit = (
       transactionId: string,
-      edit:
-        { action: "set-closed"; closed: boolean } | { action: "reverse-path" },
+      edit: VectorSemanticEdit,
     ) => {
       const snapshot = runtime.getSnapshot();
       const plan = planVectorSemanticEdit(
@@ -293,6 +295,123 @@ describe("vector editing runtime plans", () => {
         action: "reverse-path",
       }),
     ).toMatchObject({ ok: false, code: "locked" });
+  });
+
+  it("cuts a path through the semantic planner as one revision and preserves both editable contours", () => {
+    const runtime = new EditorRuntime(documentWithVector());
+    const before = runtime.getSnapshot();
+    const plan = planVectorSemanticEdit(
+      before.document,
+      "page_welcome",
+      "vector_editable",
+      {
+        action: "cut-path",
+        pathId: "path_open",
+        at: { kind: "segment", segmentId: "segment_bc", t: 0.5 },
+      },
+    );
+    expect(plan).toMatchObject({
+      ok: true,
+      cutResult: {
+        cutVertexIds: ["vertex_edit_1", "vertex_edit_2"],
+        pathIds: ["path_open", "path_edit_1"],
+      },
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    const preview = runtime.preview({
+      transactionId: "cut_vector_preview",
+      documentId: before.document.documentId,
+      baseRevision: before.document.revision,
+      actor: { type: "user", id: "local-user" },
+      label: "Cut vector path",
+      commands: [...plan.operations],
+    });
+    expect(preview).toMatchObject({ ok: true });
+    const applied = runtime.apply({
+      transactionId: "cut_vector",
+      documentId: before.document.documentId,
+      baseRevision: before.document.revision,
+      actor: { type: "user", id: "local-user" },
+      label: "Cut vector path",
+      commands: [...plan.operations],
+    });
+    expect(applied).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(vectorNetworkFrom(runtime).paths.map((path) => path.id)).toEqual([
+      "path_open",
+      "path_edit_1",
+    ]);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(vectorNetworkFrom(runtime)).toEqual(network());
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(vectorNetworkFrom(reopened)).toEqual(vectorNetworkFrom(runtime));
+  });
+
+  it("resolves the active contour from point selection and rejects stale cut IDs", () => {
+    const document = documentWithVector();
+    const node = document.nodesById.vector_editable;
+    if (!node || node.kind !== "vector" || !("network" in node.properties)) {
+      throw new Error("Missing editable vector");
+    }
+    const cut = planVectorSemanticEdit(
+      document,
+      "page_welcome",
+      "vector_editable",
+      {
+        action: "cut-path",
+        pathId: "path_open",
+        at: { kind: "vertex", vertexId: "vertex_b" },
+      },
+    );
+    if (!cut.ok) throw new Error(cut.message);
+    const runtime = new EditorRuntime(document);
+    const snapshot = runtime.getSnapshot();
+    const applied = runtime.apply({
+      transactionId: "cut_for_scope",
+      documentId: snapshot.document.documentId,
+      baseRevision: snapshot.document.revision,
+      actor: { type: "user", id: "local-user" },
+      label: "Cut vector path",
+      commands: [...cut.operations],
+    });
+    expect(applied).toMatchObject({ ok: true });
+    expect(
+      resolveVectorEditScope(
+        runtime.getSnapshot().document,
+        "page_welcome",
+        ["vector_editable"],
+        "vector_editable",
+        ["vertex_edit_1"],
+      ),
+    ).toMatchObject({
+      activePathId: "path_edit_1",
+      pathCount: 2,
+      readOnly: false,
+    });
+    const bothEndpoints = resolveVectorEditScope(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["vector_editable"],
+      "vector_editable",
+      ["vertex_b", "vertex_edit_1"],
+    );
+    expect(bothEndpoints).toMatchObject({ pathCount: 2, readOnly: false });
+    expect(Object.hasOwn(bothEndpoints ?? {}, "activePathId")).toBe(false);
+    expect(
+      planVectorSemanticEdit(
+        runtime.getSnapshot().document,
+        "page_welcome",
+        "vector_editable",
+        {
+          action: "cut-path",
+          pathId: "path_open",
+          at: { kind: "segment", segmentId: "stale_segment", t: 0.5 },
+        },
+      ),
+    ).toMatchObject({ ok: false, code: "not-found" });
   });
 });
 
