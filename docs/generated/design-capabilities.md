@@ -2,9 +2,9 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-11 · 文档协议：`1.7.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-11 · 文档协议：`1.8.0` · 画布基线：`leafer-editor@2.2.9`
 
-当前状态：可用 0 项，降级可用 13 项，不可用 7 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
+当前状态：可用 0 项，降级可用 14 项，不可用 6 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
 ## 基础工作流
 
@@ -33,7 +33,7 @@
 创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。
 
 - ID：`layers.hierarchy`
-- 实现方：DesignDocument 1.7.0 + EditorRuntime
+- 实现方：DesignDocument 1.8.0 + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
 - 证据：自动化 7 项；实机 0 项
 - 限制：画布直接操作时的自动归属仍未补齐；图层面板中的显式跨容器重挂载目前以指针拖放为主。
@@ -44,7 +44,7 @@
 通过人工 UI 与 Agent 共用的 planner 对齐多层对象、固定两端均分横向或纵向间隙，并设置正数、零或负数的一维精确间距。
 
 - ID：`transform.precise-arrangement`
-- 实现方：@opendesign/geometry-service contract v2 + EditorRuntime
+- 实现方：@opendesign/geometry-service contract v3 + EditorRuntime
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
 - 证据：自动化 5 项；实机 0 项
 - 限制：单层相对父级对齐、二维 Tidy up、Smart Selection 画布间距手柄、翻转/原点、吸附、参考线、标尺和像素网格取整仍未补齐。
@@ -54,27 +54,30 @@
 
 ## 矢量
 
-### 可编辑 Path 与 Pen — 降级可用
+### 可编辑 Path、Pen 与节点编辑 — 降级可用
 
-使用 Pen 创建可编辑三次曲线轮廓，或精确保留 SVG Path 数据，并通过同一 Path 投影渲染专业外观。
+使用 Pen 创建可编辑三次曲线轮廓、继续调整已有节点和贝塞尔手柄，或精确保留 SVG Path 数据，并通过同一 Path 投影渲染。
 
 - ID：`vector.path-rendering`
-- 实现方：DesignDocument 1.7.0 + editable-vector geometry service + Leafer Pen/Path adapter + controlled SVG metadata
+- 实现方：DesignDocument 1.8.0 + vector-edit geometry service + EditorRuntime vector planner + Leafer Pen/point overlay + controlled SVG metadata v2
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 13 项；实机 0 项
+- 证据：自动化 15 项；实机 0 项
 - 限制：Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。
-- 限制：已有节点的顶点/手柄编辑、节点类型、多轮廓、分支创建、连接/断开、反转、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。
+- 限制：Enter 或双击可进入单轮廓节点编辑，支持单选/Shift 多选、节点与手柄拖动、持久化的直角/平滑/镜像/独立模式、Delete/Backspace、锁定只读、Done/Escape、精确 bounds，以及每次完成动作一条事务。
+- 限制：开放/闭合转换、多轮廓、分支创建、连接/断开、反转、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。
 - 限制：受控 OpenDesign SVG metadata 只在通过 schema、拓扑且与标准渲染 path 精确匹配时保留 editable network；没有 metadata 的外部 SVG 保持为精确 path 数据，不猜测可编辑拓扑。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
 - 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/pen.rs)
+- 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/path_edit.rs)
+- 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-ui/src/widgets/canvas_path_overlay.rs)
 
 ### 直线与箭头 — 降级可用
 
 创建并直接编辑有方向的直线，独立设置起终点装饰和专业描边，并通过 SVG 保持可编辑交换。
 
 - ID：`vector.line-arrow`
-- 实现方：DesignDocument 1.7.0 + Leafer Arrow / LineEditTool + SVG controlled markers
+- 实现方：DesignDocument 1.8.0 + Leafer Arrow / LineEditTool + SVG controlled markers
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 8 项；实机 0 项
 - 限制：当前切片支持单段可编辑直线、Shift 45 度约束、Alt 中心绘制、独立的无/线性箭头/三角/反向三角/圆点/菱形端点、端帽/连接/虚线控制和原生端点拖动；折线连接器、正交路由、吸附、标签挂接及 macOS/Windows 打包交互证据仍未完成。
@@ -90,7 +93,7 @@
 创建、缩放、调整外观并交换语义化 Polygon 与 Star 节点，不将其扁平化为普通 Path。
 
 - ID：`vector.regular-shapes`
-- 实现方：DesignDocument 1.7.0 + Leafer Polygon/Star + controlled SVG regular-shape metadata
+- 实现方：DesignDocument 1.8.0 + Leafer Polygon/Star + controlled SVG regular-shape metadata
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 9 项；实机 0 项
 - 限制：Polygon 支持 3–60 个顶点；Star 支持 3–60 个顶点和归一化内径。Shift 将绘制边界约束为正方形，Alt/Option 从中心绘制。Leafer cornerRadius 可渲染实时圆角图形，但 Figma 式 corner smoothing 尚未进入 OpenDesign 协议。
@@ -103,23 +106,25 @@
 - 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/svg_import/nodes.rs)
 - 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-ui/src/svg_export.rs)
 
-### Pen 与节点编辑 — 不可用
+### Pen 与节点编辑 — 降级可用
 
 通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。
 
 - ID：`vector.pen-node-editing`
-- 实现方：Not implemented
-- 表面：contract=unavailable；runtime=unavailable；human=unavailable；agent=unavailable；render=degraded；export=unavailable
-- 证据：自动化 0 项；实机 0 项
-- 限制：工具栏 Pen 仍禁用；PathKit 不提供 OpenDesign 所需的节点、边、手柄、命中测试或矢量网络交互语义。
+- 实现方：DesignDocument 1.8.0 Vector Network + vector-edit geometry service + EditorRuntime planner + Leafer native overlays
+- 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
+- 证据：自动化 7 项；实机 0 项
+- 限制：Pen 和已有节点编辑已支持单条非分叉轮廓；分支、多轮廓、连接/断开、开放/闭合转换、反转、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
+- 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/path_edit.rs)
 
 ### 布尔运算 — 降级可用
 
 非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。
 
 - ID：`vector.boolean-operations`
-- 实现方：DesignDocument 1.7.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection
+- 实现方：DesignDocument 1.8.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
 - 证据：自动化 13 项；实机 0 项
 - 限制：递归 resolver 会把 Rectangle、Ellipse、零圆角 Polygon/Star、Path、Vector 与嵌套 Boolean 转换为包含 fill+stroke 的 PathKit 几何，应用局部 transform、保留真实空结果，并在不持久化 provider 输出的前提下投影稳定的 Leafer synthetic Path。
@@ -133,7 +138,7 @@
 应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。
 
 - ID：`appearance.paints-effects-masks`
-- 实现方：DesignDocument 1.7.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter
+- 实现方：DesignDocument 1.8.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 7 项；实机 0 项
 - 限制：可编辑 SVG 边界现可保留最多八个普通零 spread 投影、一层 layer blur、效果顺序/可见性、圆角 Frame clipsContent，以及有序的 alpha/luminance/outline/clipping 同级蒙版段；内阴影、背景模糊、光晕、阴影 spread/blend、任意组合蒙版图、Electron 视觉基线、专业取色器和共享颜色样式仍未完成。
@@ -157,7 +162,7 @@
 非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。
 
 - ID：`image.crop-adjustments`
-- 实现方：DesignDocument 1.7.0 + OpenDesign Image service crop geometry + Leafer projection
+- 实现方：DesignDocument 1.8.0 + OpenDesign Image service crop geometry + Leafer projection
 - 表面：contract=degraded；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=unavailable
 - 证据：自动化 7 项；实机 0 项
 - 限制：检查器与专用 Agent 工具已共用非破坏 placement 和来源替换语义，但画布直接裁剪控件、调整滤镜、导出保真及 macOS/Windows 原生交互证据仍未完成。
@@ -181,7 +186,7 @@
 创建、渲染、变换和编辑使用单一共享字体样式与对齐方式的文字图层。
 
 - ID：`text.single-style`
-- 实现方：DesignDocument 1.7.0 + Leafer TextEditor
+- 实现方：DesignDocument 1.8.0 + Leafer TextEditor
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=unavailable
 - 证据：自动化 5 项；实机 0 项
 - 限制：字体可用性、跨平台 shaping、溢出和视觉保真仍需 macOS/Windows 验收。

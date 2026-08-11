@@ -1236,6 +1236,26 @@ textarea {
   color: var(--ui-text-faint);
   font: inherit;
 }
+.canvas-edit-scope:has(.canvas-vector-modes) {
+  grid-template-columns: auto minmax(120px, 1fr) auto auto;
+}
+.canvas-vector-modes {
+  display: inline-flex;
+  gap: 2px;
+}
+.canvas-vector-modes button {
+  min-width: 0;
+  height: 22px;
+  padding: 0 5px;
+}
+.canvas-vector-modes button[aria-pressed="true"] {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent-text);
+  background: var(--ui-accent-soft);
+}
+.canvas-vector-modes button:disabled {
+  opacity: 0.45;
+}
 .canvas-fidelity-warning__actions {
   display: flex;
   grid-column: 2;

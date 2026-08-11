@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.7.0`
+- 文档协议：`DesignDocument 1.8.0`
 - Agent 协议：`3.5.0`
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
@@ -38,8 +38,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   36 files / 282 tests
-└── desktop tests   44 files / 335 tests
+├── package tests   38 files / 298 tests
+└── desktop tests   44 files / 336 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -51,7 +51,7 @@ pnpm build          passed
 
 测试覆盖的关键路径包括：
 
-- DesignDocument 1.4 schema/migration、正式 Path/Vector 外观、非破坏 Image placement 与 Boolean Group、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
+- DesignDocument 1.8 schema/migration、正式 Path/Vector 外观与持久 Bézier point mode、非破坏 Image placement 与 Boolean Group、事务、revision、preview、history、undo/redo、asset 引用安全和 Agent 渐进事务回滚。
 - `DesignCapabilityManifest v1` 的严格字段、唯一 ID、六表面状态、证据派生与不可变快照；Agent system context、只读 `get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON，`capabilities:check` 会拒绝文档漂移。
 - `inspect_document` 不把 image asset 的 data URI 或外部 URI 放入模型上下文；Agent Runtime 会同时压缩当前轮和旧 journal 中意外出现的超长工具字段，避免图片文档在下一轮触发 `context_too_large`。
 - Agent Runtime 在完整 run 边界生成累计 `context.compacted` checkpoint，并在同一 Run 的每个 Provider turn 前重新预算；旧 assistant/tool 段超限时变成临时有界 checkpoint，当前用户原文和最近完整 tool call/result 段继续保留。测试覆盖原始 Timeline 不删除、checkpoint 范围单调增加、旧全文退出模型投影、第八轮自动恢复，以及单次当前输入或最小必要段仍超预算时才返回 `context_budget_exceeded`。模型投影同时限制超长单字段和超过 `50000` 字符的完整结构化工具结果，原始 journal 不丢失；预算错误按 system、tool schemas、Conversation/tool results 和 framing 分账。Main 从可信 Model Profile 注入窗口和输出预算；可信 token 预算存在时不会再被固定字符阈值误杀，缺少模型窗口时才使用字符保底；固定协议无法适配小窗口时返回独立的 `model_context_incompatible`。
@@ -74,8 +74,9 @@ pnpm build          passed
 - host-only 图片放置以单个 Page-targeted `put_asset + insert_element(image)` 事务进入 `EditorRuntime`；测试验证单次 revision、发送时存在选区也能在固定 Page 新增 asset/node、当前活动页面变化不漂移目标，以及一次 undo 同时移除 asset/node。
 - 人工检查器与 `opendesign_update_image` 共用 `planImageNodeUpdate`：明确 Page/node ID 的 placement 与来源替换进入单个事务，保留现有 placement，未共享的旧 asset 可安全清理，共享 Image/Path/Vector paint 资源不会误删；文件选择取消/失败不产生 revision，Agent 执行不读取发送时或实时选区。
 - `opendesign_edit_hierarchy` 对现有节点提供显式 ID 的编组/解组、前移/后移/置顶/置底和跨 Page root/Frame/Group 重挂载语义；宿主与人工 UI 复用同一 planner，保持世界 transform 与多选内部顺序，固定 Frame 尺寸，自底向上重算受影响 Group bounds，并以一个原子事务写入和一次撤销。人工入口包含 Layer order 菜单、macOS `⌘/⌥⌘ + [ ]`、Windows `Ctrl/Ctrl+Shift + [ ]` 快捷键，以及图层树 before/inside/after 指针拖放。测试覆盖两个平台状态下的拖放、选区保持、保存重开、undo/redo、stale revision、Page Mutation Target、锁定、混合父级、cycle、空来源 Group、不可逆 transform、无效 index、外部拖放数据拒绝、继承外观 warning 与提交前取消；这仍是自动化 DOM/Runtime 证据，不冒充 Electron 实机指针验证。
-- `@opendesign/geometry-service` contract v2 的根入口提供不持有文档状态的纯排列结果；EditorRuntime 的 `planArrangeNodes` 将六向多层对齐、固定两端横/纵均分和明确正数/零/负数间距映射为一个原子事务，并自底向上维护 Group bounds。Inspector 与 `opendesign_arrange_layers` 共用该 planner；Agent 必须提供检查所得的稳定 Page/node IDs，发送时或实时选区不作为写目标。测试覆盖不等尺寸、旋转/缩放父级、负间距、两端固定、Group rebase、保存重开、undo/redo、锁定、不可逆 transform、Page scope、无操作拒绝，以及 macOS/Windows Renderer 状态；尚未执行真实 Electron 指针/键盘产品 smoke。
+- `@opendesign/geometry-service` contract v3 的根入口提供不持有文档状态的纯排列结果；EditorRuntime 的 `planArrangeNodes` 将六向多层对齐、固定两端横/纵均分和明确正数/零/负数间距映射为一个原子事务，并自底向上维护 Group bounds。Inspector 与 `opendesign_arrange_layers` 共用该 planner；Agent 必须提供检查所得的稳定 Page/node IDs，发送时或实时选区不作为写目标。测试覆盖不等尺寸、旋转/缩放父级、负间距、两端固定、Group rebase、保存重开、undo/redo、锁定、不可逆 transform、Page scope、无操作拒绝，以及 macOS/Windows Renderer 状态；尚未执行真实 Electron 指针/键盘产品 smoke。
 - 隔离的 `@opendesign/geometry-service/vector-path` 子入口固定 `pathkit-wasm 1.0.0`；实际 WASM corpus 覆盖 cubic union/subtract/intersect/exclude、复合孔洞、合法空结果、self-intersection simplify、Canvas/SVG transform、精确两段 dash、开放路径 outline stroke、fill rule、tight bounds、确定性输出、非法输入和资源预算。`boolean-resolver` 递归覆盖 Rectangle/Ellipse/Path/Vector/嵌套 Boolean、源层 fill+stroke、inside/center/outside stroke、visibility、空结果和精确 cache invalidation。所有 PathKit 对象显式释放，公共结果不暴露 WASM/Skia 对象。Renderer 仅在 Page 存在 Boolean 时加载独立 `browser-vector-path` 与 WASM 产物；Main/Preload/Agent 不包含该实现。同一 corpus 的 macOS/Windows 原生加载、性能与内存门禁仍待 CI。
+- 同一 contract v3 的隔离 `vector-edit` 子入口提供单轮廓节点多选移动、corner/smooth/mirrored/independent 手柄耦合、point mode 与节点删除；EditorRuntime planner 负责 tight bounds 归一化、局部 offset 与原 transform 组合、锁定/Page/revision 边界和一次事务。Leafer adapter 把普通 selection、Pen 与已有路径编辑作为互斥状态，提供独立 trace/anchor/handle overlay；测试覆盖 Enter/双击进入、Shift 节点多选、手柄拖动、Delete/Backspace、Done/Escape、只读、失败恢复、增量 revision、保存重开和 undo/redo。分支、多轮廓、open/closed、connect/disconnect、reverse/cut、套索、多点变换框、像素基线与 macOS/Windows 打包交互仍未验收。
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。
 
@@ -92,9 +93,9 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、13 项降级可用和 7 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.7.0`、EditorRuntime、Geometry/Image service、Leafer adapter、属性检查器和 Agent tools 已经打通正式 Line/Arrow、Polygon/Star、精确 path-data、editable Vector Network / Pen、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement、来源替换和视觉复核的基础路径。Pen 专项证据覆盖 `P`、click 放点、drag 镜像 cubic handles、首点闭合、Enter/Escape 开放完成、Backspace 回退、切换工具收尾、tight bounds、单事务、保存重开/undo/redo、Agent network schema、Boolean 消费与受控 SVG metadata 往返；Pen 模式隐藏 selection/hover chrome，hover 使用中性完整 bounds，画布键盘焦点只显示中性边界。已有 network 的节点/手柄编辑、分支/多轮廓、像素基线和双平台打包交互仍未验收，因此能力保持 `degraded`。三个固定专业 fixture 进一步证明现有语义可以组成完整企鹅层级、复杂海报文档和保留源 operand 的 Boolean 品牌主件，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、真实 Electron 像素截图、Agent 重放和完整专业导出仍未完成，因此不能据此把完整工作流标为可用。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、14 项降级可用和 6 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.8.0`、EditorRuntime、Geometry/Image service、Leafer adapter、属性检查器和 Agent tools 已经打通正式 Line/Arrow、Polygon/Star、精确 path-data、editable Vector Network / Pen、已有单轮廓节点编辑、主要外观、图片读取、全局生图、图片放置、非破坏图片 placement、来源替换和视觉复核的基础路径。Pen 专项证据覆盖 `P`、click 放点、drag 镜像 cubic handles、首点闭合、Enter/Escape 开放完成、Backspace 回退、切换工具收尾、tight bounds、单事务、保存重开/undo/redo、Agent network schema、Boolean 消费与受控 SVG metadata 往返；已有路径专项证据覆盖节点选择/多选移动、手柄耦合、四种 point mode、删除、锁定只读、普通 selection/Pen/path-edit chrome 互斥、失败恢复和 SVG metadata v2。分支/多轮廓、open/closed、connect/disconnect、reverse/cut、像素基线和双平台打包交互仍未验收，因此能力保持 `degraded`。三个固定专业 fixture 进一步证明现有语义可以组成完整企鹅层级、复杂海报文档和保留源 operand 的 Boolean 品牌主件，而不是只能稳定使用椭圆和矩形；画布直接 Crop 模式、图片调整、真实 Electron 像素截图、Agent 重放和完整专业导出仍未完成，因此不能据此把完整工作流标为可用。
 
-仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify、transform、dash 和 outline stroke 的底层计算边界；editable-vector 子入口提供稳定 ID 拓扑校验、确定性 cubic 序列化、分支检测与 tight bounds。`DesignDocument 1.7.0` 与 EditorRuntime 建立非破坏 Boolean Group、正式 LineNode、PolygonNode、StarNode 与 Vector Network 的独立节点语义、迁移、持久化与 undo/redo；`path` 与 `network` 严格互斥。递归 Boolean resolver 现可处理 Rectangle/Ellipse/尖角 Polygon/Star/两种 Path/Vector/嵌套 Boolean，Leafer synthetic result 已让 Render 表面可用，且没有持久化 provider 派生 path。人工 Pen 与 Agent typed tool 已能创建同一种 editable network，但已有节点编辑、flatten 和 outline stroke 仍未完成。仓库独立 `@opendesign/import-export-service` 的安全 SVG v1 继续由 EditorRuntime planner、Main 文件桥、人工入口和 Agent handle 复用；OpenDesign editable network 通过有界受控 metadata 往返，并在导入时同时校验 schema、拓扑和标准 `d` 匹配。没有 metadata 的外部 SVG 继续导入为精确 path-data，不猜测 network。文字、图片、复杂 effects/combined mask graph、angular gradient、多 paint、outline stroke 保真与双平台打包产品 smoke 仍未完成，因此 SVG capability 保持 `degraded`。仓库仍没有独立 Layout 或 Text/Font service 包；组件、Variant 和 Token 仍为占位数据。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
+仓库当前已有独立 `@opendesign/geometry-service`：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify、transform、dash 和 outline stroke 的底层计算边界；editable-vector 子入口提供稳定 ID 拓扑校验、确定性 cubic 序列化、分支检测与 tight bounds，vector-edit 子入口提供单轮廓节点和手柄的纯几何操作。`DesignDocument 1.8.0` 与 EditorRuntime 建立非破坏 Boolean Group、正式 LineNode、PolygonNode、StarNode、Vector Network 与持久 point mode 的独立节点语义、迁移、持久化、节点编辑 planner 和 undo/redo；`path` 与 `network` 严格互斥。递归 Boolean resolver 现可处理 Rectangle/Ellipse/尖角 Polygon/Star/两种 Path/Vector/嵌套 Boolean，Leafer synthetic result 已让 Render 表面可用，且没有持久化 provider 派生 path。人工 Pen、已有单轮廓节点编辑与 Agent typed network 已消费同一种 editable network；flatten 和 outline stroke 的产品命令仍未完成。仓库独立 `@opendesign/import-export-service` 的安全 SVG v1 继续由 EditorRuntime planner、Main 文件桥、人工入口和 Agent handle 复用；OpenDesign editable network 通过有界受控 metadata v2 往返 point mode，并在导入时同时校验 schema、拓扑和标准 `d` 匹配；v1 metadata 继续兼容读取且不发明 point mode。没有 metadata 的外部 SVG 继续导入为精确 path-data，不猜测 network。文字、图片、复杂 effects/combined mask graph、angular gradient、多 paint、outline stroke 保真与双平台打包产品 smoke 仍未完成，因此 SVG capability 保持 `degraded`。仓库仍没有独立 Layout 或 Text/Font service 包；组件、Variant 和 Token 仍为占位数据。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
 
 Agent Runtime 与 Main 当前强制执行“inspect → typed plan → 实质初稿 → `capture_canvas` → typed visual review → refinement → `capture_canvas`”。所有新 composition 必须位于计划 Frame 内；全局生图只能使用计划声明的 role，默认不能用一张 raster 替代可编辑设计。该流程显著收紧敷衍路径，但仍不能单独保证审美、文字可读性或交付保真；后续交付必须按照 [`roadmap.md`](roadmap.md) 的像素基线、固定样张、capability manifest、专业 service 和人工验收推进。
 

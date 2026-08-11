@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.7.0",
+    "documentSchemaVersion": "1.8.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.5.0"
   },
@@ -38,9 +38,10 @@
       "version": "1.0.0",
       "source": "https://github.com/google/skia/tree/main/modules/pathkit",
       "license": "BSD-3-Clause",
-      "productionStatus": "boolean-and-pen-authoring-native-gate-pending",
+      "productionStatus": "boolean-pen-and-single-contour-point-editing-native-gate-pending",
       "entrypoint": "@opendesign/geometry-service/vector-path",
       "editableVectorEntrypoint": "@opendesign/geometry-service/editable-vector",
+      "vectorEditEntrypoint": "@opendesign/geometry-service/vector-edit",
       "resolverEntrypoint": "@opendesign/geometry-service/boolean-resolver",
       "browserEntrypoint": "@opendesign/geometry-service/browser-vector-path"
     },
@@ -79,8 +80,8 @@
     "agentCore": "pnpm agent-core:check && pnpm exec vitest run packages/agent-runtime/src/pi-core-adapter.test.ts packages/agent-runtime/src/pi-model-gateway-adapter.test.ts packages/agent-runtime/src/pi-run-event-adapter.test.ts packages/agent-runtime/src/pi-tool-adapter.test.ts packages/agent-runtime/src/pi-completion-guard-adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/agent/pi-production-tool-adapter.test.ts",
     "contracts": "pnpm exec vitest run packages/design-contracts/src/index.test.ts",
     "editorRuntime": "pnpm exec vitest run packages/editor-runtime/src/index.test.ts",
-    "vectorGeometry": "pnpm --filter @opendesign/geometry-service typecheck && pnpm exec vitest run packages/geometry-service/src/vector-path.test.ts packages/geometry-service/src/boolean-resolver.test.ts packages/geometry-service/src/editable-vector.test.ts",
-    "leafer": "pnpm exec vitest run packages/leafer-engine/src/pen-tool.test.ts packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts packages/leafer-engine/src/professional-fixtures.test.ts",
+    "vectorGeometry": "pnpm --filter @opendesign/geometry-service typecheck && pnpm exec vitest run packages/geometry-service/src/vector-path.test.ts packages/geometry-service/src/boolean-resolver.test.ts packages/geometry-service/src/editable-vector.test.ts packages/geometry-service/src/vector-edit.test.ts packages/editor-runtime/src/vector-operations.test.ts",
+    "leafer": "pnpm exec vitest run packages/leafer-engine/src/pen-tool.test.ts packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts packages/leafer-engine/src/professional-fixtures.test.ts apps/desktop/src/renderer/App.test.tsx",
     "svgInterchange": "pnpm --filter @opendesign/import-export-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/import-export-service/src/svg-editable-vector.test.ts packages/import-export-service/src/svg.test.ts packages/editor-runtime/src/svg-import-operations.test.ts packages/editor-runtime/src/svg-export-operations.test.ts packages/agent-contracts/src/index.test.ts packages/session-store/src/index.test.ts packages/agent-runtime/src/pi-context-adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/desktop-api.test.ts src/shared/design-agent-tools.test.ts src/shared/design-tool-bridge.test.ts src/main/svg/svg-file-service.test.ts src/main/svg/svg-file-ipc.test.ts src/renderer/design-tool-execution.test.ts src/renderer/components/AgentTimeline.test.tsx src/main/agent/agent-attachment-host.test.ts src/main/agent/agent-reference-host.test.ts src/main/agent/agent-svg-import-host.test.ts src/main/agent/agent-svg-export-host.test.ts src/main/agent/global-task-coordinator.test.ts src/agent/design-completion-guard.test.ts src/agent/pi-production-tool-adapter.test.ts src/agent/production-context-budget.test.ts"
   }
 }

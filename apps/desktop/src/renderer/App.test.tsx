@@ -51,6 +51,7 @@ const leaferHarness = vi.hoisted(() => ({
   input: null as LeaferEngineSyncInput | null,
   sync: vi.fn(),
   retryBooleanGeometry: vi.fn(() => true),
+  setVectorPointMode: vi.fn(() => true),
 }));
 
 vi.mock("@opendesign/leafer-engine", () => ({
@@ -64,6 +65,7 @@ vi.mock("@opendesign/leafer-engine", () => ({
       return Promise.resolve({
         dispose: () => canvas.remove(),
         retryBooleanGeometry: leaferHarness.retryBooleanGeometry,
+        setVectorPointMode: leaferHarness.setVectorPointMode,
         sync: (input: LeaferEngineSyncInput) => {
           leaferHarness.input = input;
           leaferHarness.sync(input);
@@ -101,6 +103,7 @@ beforeEach(() => {
   leaferHarness.input = null;
   leaferHarness.sync.mockClear();
   leaferHarness.retryBooleanGeometry.mockClear();
+  leaferHarness.setVectorPointMode.mockClear();
   svgHarness.runImport.mockReset();
   svgHarness.runExport.mockReset();
   Object.defineProperties(HTMLElement.prototype, {
@@ -2366,6 +2369,159 @@ describe("App", () => {
       "feature_two",
     ]);
     expect(screen.getByText(`Editing ${booleanNode.name}`)).toBeInTheDocument();
+  });
+
+  it("enters editable vector points, exposes point modes, and commits through one Runtime transaction", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    act(() => {
+      const current = runtime().getSnapshot();
+      const result = runtime().apply({
+        transactionId: "insert_editable_vector",
+        documentId: current.document.documentId,
+        baseRevision: current.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Insert editable vector",
+        commands: [
+          {
+            commandId: "insert_editable_vector",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 0,
+            node: {
+              id: "editable_vector",
+              name: "Logo curve",
+              parentId: "frame_welcome",
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 40, 40],
+              size: { width: 120, height: 60 },
+              opacity: 1,
+              extensions: {},
+              kind: "vector",
+              properties: {
+                network: {
+                  vertices: [
+                    {
+                      id: "vertex_a",
+                      x: 0,
+                      y: 0,
+                      handleMode: "corner",
+                    },
+                    {
+                      id: "vertex_b",
+                      x: 60,
+                      y: 60,
+                      handleMode: "corner",
+                    },
+                    {
+                      id: "vertex_c",
+                      x: 120,
+                      y: 0,
+                      handleMode: "corner",
+                    },
+                  ],
+                  segments: [
+                    {
+                      id: "segment_ab",
+                      startVertexId: "vertex_a",
+                      endVertexId: "vertex_b",
+                    },
+                    {
+                      id: "segment_bc",
+                      startVertexId: "vertex_b",
+                      endVertexId: "vertex_c",
+                    },
+                  ],
+                  paths: [
+                    {
+                      id: "path_open",
+                      closed: false,
+                      segments: [
+                        { segmentId: "segment_ab", reversed: false },
+                        { segmentId: "segment_bc", reversed: false },
+                      ],
+                    },
+                  ],
+                  regions: [],
+                },
+                fills: [],
+                strokes: [{ type: "solid", color: "#151515", opacity: 1 }],
+                strokeWidth: 2,
+              },
+            },
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      runtime().setSelection(["editable_vector"], "editable_vector");
+    });
+
+    const canvas = screen.getByRole("main", { name: "Design canvas" });
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Enter" });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope).toEqual({
+        nodeId: "editable_vector",
+        readOnly: false,
+        selectedVertexIds: [],
+      }),
+    );
+    expect(screen.getByText("Editing Logo curve")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Smooth" })).toBeDisabled();
+
+    act(() => {
+      leaferCallbacks().onVectorEditSelectionChange?.(["vertex_b"]);
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope?.selectedVertexIds).toEqual([
+        "vertex_b",
+      ]),
+    );
+    expect(screen.getByRole("button", { name: "Corner" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await user.click(screen.getByRole("button", { name: "Smooth" }));
+    expect(leaferHarness.setVectorPointMode).toHaveBeenCalledWith("smooth");
+
+    const beforeEditRevision = runtime().getSnapshot().document.revision;
+    const currentNode =
+      runtime().getSnapshot().document.nodesById.editable_vector;
+    if (
+      !currentNode ||
+      currentNode.kind !== "vector" ||
+      !("network" in currentNode.properties)
+    ) {
+      throw new Error("Missing editable vector fixture");
+    }
+    const editedNetwork = structuredClone(currentNode.properties.network);
+    editedNetwork.vertices[1] = {
+      ...editedNetwork.vertices[1],
+      x: 72,
+      y: 48,
+      handleMode: "smooth",
+    };
+    act(() => {
+      expect(
+        leaferCallbacks().onVectorEdit?.({
+          deleteNode: false,
+          network: editedNetwork,
+          nodeId: "editable_vector",
+        }),
+      ).toBe(true);
+    });
+    expect(runtime().getSnapshot().document.revision).toBe(
+      beforeEditRevision + 1,
+    );
+    expect(runtime().getSnapshot().state.history.undo.at(-1)?.label).toBe(
+      "Edit vector points",
+    );
+
+    act(() => leaferCallbacks().onVectorEditExit?.());
+    expect(screen.queryByText("Editing Logo curve")).not.toBeInTheDocument();
   });
 
   it("reorders selected siblings from the layer-order menu and macOS shortcuts", async () => {

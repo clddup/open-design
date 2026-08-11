@@ -17,9 +17,9 @@ describe("Pen draft state", () => {
 
     expect(penDraftToVectorNetwork(draft, false)).toEqual({
       vertices: [
-        { id: "vertex_1", x: 10, y: 20 },
-        { id: "vertex_2", x: 110, y: 20 },
-        { id: "vertex_3", x: 80, y: 120 },
+        { handleMode: "corner", id: "vertex_1", x: 10, y: 20 },
+        { handleMode: "corner", id: "vertex_2", x: 110, y: 20 },
+        { handleMode: "corner", id: "vertex_3", x: 80, y: 120 },
       ],
       segments: [
         {

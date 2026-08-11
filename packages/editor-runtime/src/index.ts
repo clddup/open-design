@@ -60,6 +60,14 @@ export {
   type BooleanSelectionDirection,
 } from "./selection-navigation.js";
 export {
+  planDeleteVectorNode,
+  planVectorNetworkUpdate,
+  resolveVectorEditScope,
+  type VectorEditScope,
+  type VectorOperationFailureCode,
+  type VectorOperationPlan,
+} from "./vector-operations.js";
+export {
   planImageNodeUpdate,
   type ImageUpdateFailureCode,
   type ImageUpdateOperation,

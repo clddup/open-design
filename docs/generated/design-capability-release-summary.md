@@ -2,7 +2,7 @@
 
 # Design capability release summary
 
-Manifest v1 (2026-08-11) · 0 available · 13 degraded · 7 unavailable
+Manifest v1 (2026-08-11) · 0 available · 14 degraded · 6 unavailable
 
 This block is the release-note view of the same manifest used by the built-in Agent and generated help. It must not be edited by hand.
 
@@ -16,9 +16,10 @@ This block is the release-note view of the same manifest used by the built-in Ag
 - `canvas.navigation-selection` — Canvas navigation and selection
 - `layers.hierarchy` — Layer hierarchy
 - `transform.precise-arrangement` — Precise arrangement
-- `vector.path-rendering` — Editable paths and Pen
+- `vector.path-rendering` — Editable paths, Pen, and point editing
 - `vector.line-arrow` — Lines and arrows
 - `vector.regular-shapes` — Regular polygons and stars
+- `vector.pen-node-editing` — Pen and node editing
 - `vector.boolean-operations` — Boolean operations
 - `appearance.paints-effects-masks` — Paints, effects, and masks
 - `image.import-generation-placement` — Image import, generation, and placement
@@ -28,7 +29,6 @@ This block is the release-note view of the same manifest used by the built-in Ag
 
 ## Unavailable
 
-- `vector.pen-node-editing` — Pen and node editing
 - `image.ai-editing` — AI image editing
 - `text.rich-typography` — Rich typography
 - `layout.auto-layout` — Auto layout

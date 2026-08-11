@@ -12,4 +12,6 @@ export type {
   LeaferFidelityWarning,
   LeaferOperationKind,
   LeaferOperationRequest,
+  LeaferVectorEditRequest,
+  LeaferVectorEditScope,
 } from "./types.js";

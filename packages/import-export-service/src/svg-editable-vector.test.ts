@@ -76,6 +76,22 @@ describe("controlled editable-vector SVG metadata", () => {
         "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
       ),
     ).toEqual({ status: "valid", network });
+    expect(element.getAttribute("data-opendesign-vector-network-version")).toBe(
+      "2",
+    );
+  });
+
+  it("continues to read version 1 metadata without inventing handle modes", () => {
+    const element = pathElement();
+    expect(writeSvgEditableVector(element, network)).toBe(true);
+    element.setAttribute("data-opendesign-vector-network-version", "1");
+
+    expect(
+      readSvgEditableVector(
+        element,
+        "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
+      ),
+    ).toEqual({ status: "valid", network });
   });
 
   it("rejects missing versions, malformed topology, and changed path data", () => {

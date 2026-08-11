@@ -4,6 +4,7 @@ import type {
   DesignOperation,
   SelectionState,
   VectorNetwork,
+  VectorPointMode,
   ViewportState,
 } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
@@ -23,7 +24,7 @@ export type LeaferCanvasTool =
 export type LeaferBoxCreateTool = Exclude<LeaferCanvasTool, "select" | "pen">;
 
 export type LeaferOperationKind =
-  "move" | "resize" | "rotate" | "skew" | "transform" | "text";
+  "move" | "resize" | "rotate" | "skew" | "transform" | "text" | "vector";
 
 export interface LeaferOperationRequest {
   kind: LeaferOperationKind;
@@ -54,12 +55,19 @@ export interface LeaferCreateVectorRequest {
   y: number;
 }
 
+export type LeaferVectorEditRequest =
+  | { deleteNode: true; nodeId: string }
+  | { deleteNode: false; network: VectorNetwork; nodeId: string };
+
 export interface LeaferEngineCallbacks {
   onCreate(request: LeaferCreateRequest): boolean;
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
   onOperations(request: LeaferOperationRequest): boolean;
   onSelectionChange(nodeIds: string[], anchorNodeId?: string): void;
+  onVectorEdit?(request: LeaferVectorEditRequest): boolean;
+  onVectorEditExit?(): void;
+  onVectorEditSelectionChange?(vertexIds: readonly string[]): void;
   onViewportChange(viewport: ViewportState): void;
   onWarning?(warning: LeaferFidelityWarning): void;
   onWarningsChange?(warnings: readonly LeaferFidelityWarning[]): void;
@@ -71,6 +79,12 @@ export interface LeaferBooleanEditScope {
   selectedOperandIds: readonly string[];
 }
 
+export interface LeaferVectorEditScope {
+  nodeId: string;
+  readOnly: boolean;
+  selectedVertexIds: readonly string[];
+}
+
 export interface LeaferEngineSyncInput {
   booleanEditScope?: LeaferBooleanEditScope;
   document: DesignDocument;
@@ -78,6 +92,7 @@ export interface LeaferEngineSyncInput {
   pageId: string;
   selection: SelectionState;
   tool: LeaferCanvasTool;
+  vectorEditScope?: LeaferVectorEditScope;
   viewport: ViewportState;
 }
 
@@ -102,5 +117,6 @@ export interface LeaferEngineOptions {
 export interface LeaferEngineAdapter {
   dispose(): void;
   retryBooleanGeometry(): boolean;
+  setVectorPointMode(mode: VectorPointMode): boolean;
   sync(input: LeaferEngineSyncInput): void;
 }

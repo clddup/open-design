@@ -4,6 +4,8 @@ import type {
   DesignOperation,
   Point,
   Transform,
+  VectorNetwork,
+  VectorPointMode,
   ViewportState,
 } from "@opendesign/design-contracts";
 import { normalizeLineEndpoints } from "@opendesign/design-contracts";
@@ -13,7 +15,18 @@ import {
   type BooleanGeometryResolution,
   type BooleanGeometryResolver,
 } from "@opendesign/geometry-service/boolean-resolver";
-import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
+import {
+  normalizeVectorNetwork,
+  serializeVectorNetwork,
+} from "@opendesign/geometry-service/editable-vector";
+import {
+  deleteVectorVertices,
+  listVectorVertexHandles,
+  moveVectorHandle,
+  moveVectorVertices,
+  setVectorPointMode,
+  type VectorHandleReference,
+} from "@opendesign/geometry-service/vector-edit";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
@@ -99,6 +112,46 @@ interface BoxSelectSession {
   startClient: { x: number; y: number };
 }
 
+type VectorEditControl =
+  | { kind: "vertex"; vertexId: string }
+  | {
+      kind: "handle";
+      reference: VectorHandleReference;
+      vertexId: string;
+    };
+
+type VectorEditDrag =
+  | {
+      before: VectorNetwork;
+      kind: "vertices";
+      moved: boolean;
+      startClient: Point;
+      startLocal: Point;
+      vertexIds: readonly string[];
+    }
+  | {
+      before: VectorNetwork;
+      kind: "handle";
+      moved: boolean;
+      reference: VectorHandleReference;
+      startClient: Point;
+      vertexId: string;
+    };
+
+interface VectorEditSession {
+  anchorControls: LeaferElement[];
+  drag: VectorEditDrag | null;
+  handleControls: LeaferElement[];
+  handlePath: LeaferElement;
+  network: VectorNetwork;
+  nodeId: string;
+  overlayGroup: LeaferGroup;
+  pathElement: LeaferElement;
+  readOnly: boolean;
+  selectedVertexIds: string[];
+  tracePath: LeaferElement;
+}
+
 const MATRIX_EPSILON = 0.000_001;
 const MIN_DRAW_DISTANCE = 4;
 const PEN_CLOSE_DISTANCE = 10;
@@ -140,6 +193,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #textBefore: { nodeId: string; text: string } | null = null;
   #cancelTextEdit = false;
   #transform: TransformSession | null = null;
+  #vectorEdit: VectorEditSession | null = null;
+  readonly #vectorEditControls = new WeakMap<
+    LeaferElement,
+    VectorEditControl
+  >();
   #viewportFrame: number | null = null;
   #editorFrame: number | null = null;
   #editorRefreshNeedsTreeBounds = false;
@@ -196,6 +254,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   sync(input: LeaferEngineSyncInput): void {
     if (this.#disposed) return;
     const previous = this.#input;
+    if (
+      previous?.vectorEditScope?.nodeId !== input.vectorEditScope?.nodeId ||
+      previous?.document.documentId !== input.document.documentId ||
+      previous?.pageId !== input.pageId
+    ) {
+      this.#cancelVectorEdit();
+    }
     const pendingPenRequest =
       previous?.tool === "pen" && input.tool !== "pen" && this.#pen
         ? this.#takePenRequest(false)
@@ -247,6 +312,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           changedNodeIds.has(nodeId) ||
           (projection.affectedNodeIds?.has(nodeId) === true &&
             isLockedSpec(projection.elementsById.get(nodeId)));
+        if (
+          this.#vectorEdit &&
+          (identityChanged ||
+            !contiguousChanges ||
+            invalidatesInteraction(this.#vectorEdit.nodeId))
+        ) {
+          this.#cancelVectorEdit();
+        }
         if (identityChanged) this.#editor.visible = false;
         if (
           identityChanged ||
@@ -309,6 +382,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           ),
         );
       }
+      this.#syncVectorEdit();
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection.nodeIds);
@@ -332,6 +406,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#boxSelect = null;
     this.#cancelDraw();
     this.#cancelPen();
+    this.#cancelVectorEdit();
     if (this.#viewportFrame !== null) cancelAnimationFrame(this.#viewportFrame);
     if (this.#editorFrame !== null) cancelAnimationFrame(this.#editorFrame);
     this.#cancelBooleanPreview();
@@ -357,6 +432,28 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#geometryLoadPromise = null;
     this.#refreshBooleanGeometry();
     return true;
+  }
+
+  setVectorPointMode(mode: VectorPointMode): boolean {
+    const session = this.#vectorEdit;
+    if (
+      !session ||
+      session.readOnly ||
+      session.drag ||
+      session.selectedVertexIds.length === 0
+    ) {
+      return false;
+    }
+    const result = setVectorPointMode(
+      session.network,
+      session.selectedVertexIds,
+      mode,
+    );
+    if (!result.ok) {
+      this.#report(new Error(result.message));
+      return false;
+    }
+    return this.#submitVectorEdit(result.network);
   }
 
   #listen(): void {
@@ -411,19 +508,23 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#finishBoxSelect(event);
       this.#finishDraw(event);
     });
-    this.#app.on(PointerEvent.DOWN, (event: unknown) =>
-      this.#penPointerDown(event),
-    );
-    this.#app.on(PointerEvent.MOVE, (event: unknown) =>
-      this.#penPointerMove(event),
-    );
-    this.#app.on(PointerEvent.UP, (event: unknown) =>
-      this.#penPointerUp(event),
-    );
+    this.#app.on(PointerEvent.DOWN, (event: unknown) => {
+      this.#penPointerDown(event);
+      this.#vectorEditPointerDown(event);
+    });
+    this.#app.on(PointerEvent.MOVE, (event: unknown) => {
+      this.#penPointerMove(event);
+      this.#vectorEditPointerMove(event);
+    });
+    this.#app.on(PointerEvent.UP, (event: unknown) => {
+      this.#penPointerUp(event);
+      this.#vectorEditPointerUp(event);
+    });
 
     const viewportChanged = () => {
       this.#scheduleViewport();
       this.#scheduleEditorRefresh();
+      this.#renderVectorEditOverlay();
     };
     this.#app.tree.on(MoveEvent.MOVE, viewportChanged);
     this.#app.tree.on(MoveEvent.END, viewportChanged);
@@ -752,9 +853,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const drawing = tool !== "select";
     const mode = drawing ? "draw" : "normal";
     if (this.#app.mode !== mode) this.#app.mode = mode;
-    if (this.#editor.visible !== !drawing) this.#editor.visible = !drawing;
-    if (this.#editor.hittable !== !drawing) this.#editor.hittable = !drawing;
-    if (drawing) this.#editor.hoverTarget = null as never;
+    const showEditor = !drawing && !this.#input?.vectorEditScope;
+    if (this.#editor.visible !== showEditor) this.#editor.visible = showEditor;
+    if (this.#editor.hittable !== showEditor)
+      this.#editor.hittable = showEditor;
+    if (!showEditor) this.#editor.hoverTarget = null as never;
   }
 
   #syncViewport(viewport: ViewportState): void {
@@ -1169,6 +1272,348 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#editor.target = target.length === 0 ? (null as never) : target;
       this.#scheduleEditorRefresh();
     }
+  }
+
+  #syncVectorEdit(): void {
+    const input = this.#input;
+    const scope = input?.vectorEditScope;
+    if (!input || !scope) {
+      this.#cancelVectorEdit();
+      return;
+    }
+    const node = input.document.nodesById[scope.nodeId];
+    const pathElement = this.#elements.get(scope.nodeId);
+    if (
+      !node ||
+      (node.kind !== "path" && node.kind !== "vector") ||
+      !("network" in node.properties) ||
+      !pathElement
+    ) {
+      this.#cancelVectorEdit();
+      return;
+    }
+    const network = node.properties.network;
+    const selectedVertexIds = [...new Set(scope.selectedVertexIds)].filter(
+      (vertexId) => network.vertices.some((vertex) => vertex.id === vertexId),
+    );
+    let session = this.#vectorEdit;
+    if (!session || session.nodeId !== scope.nodeId) {
+      this.#cancelVectorEdit();
+      const parent = pathElement.parent as LeaferGroup | undefined;
+      if (!parent || typeof parent.add !== "function") return;
+      const overlayGroup = new this.#leafer.Group({
+        editable: false,
+        hitChildren: true,
+      }) as LeaferGroup;
+      const tracePath = new this.#leafer.Path({
+        editable: false,
+        fill: null,
+        hittable: false,
+        opacity: 0.55,
+        stroke: LEAFER_EDITOR_SELECTION_COLOR,
+      }) as LeaferElement;
+      const handlePath = new this.#leafer.Path({
+        editable: false,
+        fill: null,
+        hittable: false,
+        stroke: "#8b8b89",
+      }) as LeaferElement;
+      overlayGroup.add(tracePath);
+      overlayGroup.add(handlePath);
+      parent.add(overlayGroup);
+      session = {
+        anchorControls: [],
+        drag: null,
+        handleControls: [],
+        handlePath,
+        network: structuredClone(network),
+        nodeId: scope.nodeId,
+        overlayGroup,
+        pathElement,
+        readOnly: scope.readOnly,
+        selectedVertexIds,
+        tracePath,
+      };
+      this.#vectorEdit = session;
+    } else {
+      session.pathElement = pathElement;
+      session.readOnly = scope.readOnly;
+      session.selectedVertexIds = selectedVertexIds;
+      if (!session.drag) session.network = structuredClone(network);
+    }
+    session.overlayGroup.setTransform({ ...pathElement.localTransform });
+    this.#renderVectorEditOverlay();
+  }
+
+  #renderVectorEditOverlay(): void {
+    const session = this.#vectorEdit;
+    if (!session) return;
+    const serialized = serializeVectorNetwork(session.network);
+    if (!serialized.ok) {
+      this.#report(
+        new Error(serialized.issues.map((issue) => issue.message).join("; ")),
+      );
+      return;
+    }
+    const zoom = Math.max(
+      MATRIX_EPSILON,
+      Math.abs(this.#input?.viewport.zoom ?? 1),
+    );
+    const anchorSize = 8 / zoom;
+    const handleSize = 6 / zoom;
+    session.pathElement.set({ path: serialized.path });
+    session.tracePath.set({ path: serialized.path, strokeWidth: 1.5 / zoom });
+    session.anchorControls.forEach((control) => {
+      control.remove();
+      control.destroy();
+    });
+    session.handleControls.forEach((control) => {
+      control.remove();
+      control.destroy();
+    });
+    session.anchorControls = [];
+    session.handleControls = [];
+    const selected = new Set(session.selectedVertexIds);
+    for (const vertex of session.network.vertices) {
+      const isSelected = selected.has(vertex.id);
+      const anchor = new this.#leafer.Ellipse({
+        cursor: session.readOnly ? "default" : "pointer",
+        editable: false,
+        fill: isSelected ? LEAFER_EDITOR_SELECTION_COLOR : "#ffffff",
+        height: anchorSize,
+        hittable: true,
+        stroke: LEAFER_EDITOR_SELECTION_COLOR,
+        strokeWidth: 1.5 / zoom,
+        width: anchorSize,
+        x: vertex.x - anchorSize / 2,
+        y: vertex.y - anchorSize / 2,
+      }) as LeaferElement;
+      session.anchorControls.push(anchor);
+      this.#vectorEditControls.set(anchor, {
+        kind: "vertex",
+        vertexId: vertex.id,
+      });
+      session.overlayGroup.add(anchor);
+    }
+
+    const handleParts: string[] = [];
+    for (const vertexId of session.selectedVertexIds) {
+      const vertex = session.network.vertices.find(
+        (candidate) => candidate.id === vertexId,
+      );
+      if (!vertex) continue;
+      for (const handle of listVectorVertexHandles(session.network, vertexId)) {
+        handleParts.push(
+          `M ${vertex.x} ${vertex.y} L ${handle.position.x} ${handle.position.y}`,
+        );
+        const control = new this.#leafer.Ellipse({
+          cursor: session.readOnly ? "default" : "pointer",
+          editable: false,
+          fill: LEAFER_EDITOR_SELECTION_COLOR,
+          height: handleSize,
+          hittable: !session.readOnly,
+          stroke: "#ffffff",
+          strokeWidth: 1 / zoom,
+          width: handleSize,
+          x: handle.position.x - handleSize / 2,
+          y: handle.position.y - handleSize / 2,
+        }) as LeaferElement;
+        session.handleControls.push(control);
+        this.#vectorEditControls.set(control, {
+          kind: "handle",
+          reference: {
+            segmentId: handle.segmentId,
+            side: handle.side,
+          },
+          vertexId,
+        });
+        session.overlayGroup.add(control);
+      }
+    }
+    session.handlePath.set({
+      path: handleParts.join(" "),
+      strokeWidth: 1 / zoom,
+    });
+  }
+
+  #setVectorVertexSelection(vertexIds: readonly string[]): void {
+    const session = this.#vectorEdit;
+    if (!session) return;
+    const available = new Set(
+      session.network.vertices.map((vertex) => vertex.id),
+    );
+    const selected = [...new Set(vertexIds)].filter((vertexId) =>
+      available.has(vertexId),
+    );
+    if (sameStringList(selected, session.selectedVertexIds)) return;
+    session.selectedVertexIds = selected;
+    this.#callbacks.onVectorEditSelectionChange?.(selected);
+    this.#renderVectorEditOverlay();
+  }
+
+  #vectorEditPointerDown(event: unknown): void {
+    const session = this.#vectorEdit;
+    if (!session || session.drag || this.#disposed) return;
+    const pointer = asLeaferEvent(event);
+    if (pointer.isCancel || pointer.right || pointer.middle) return;
+    const target = isElement(pointer.target) ? pointer.target : undefined;
+    const control = target ? this.#vectorEditControls.get(target) : undefined;
+    if (!control) {
+      if (target && this.#nodeId(target) === session.nodeId) {
+        this.#setVectorVertexSelection([]);
+      }
+      return;
+    }
+
+    if (control.kind === "vertex") {
+      const current = new Set(session.selectedVertexIds);
+      if (pointer.shiftKey) {
+        if (current.has(control.vertexId)) current.delete(control.vertexId);
+        else current.add(control.vertexId);
+      } else if (!current.has(control.vertexId)) {
+        current.clear();
+        current.add(control.vertexId);
+      }
+      this.#setVectorVertexSelection([...current]);
+      if (session.readOnly || !current.has(control.vertexId)) return;
+      session.drag = {
+        before: structuredClone(session.network),
+        kind: "vertices",
+        moved: false,
+        startClient: eventClientPoint(pointer),
+        startLocal: pointer.getInnerPoint(session.pathElement),
+        vertexIds: [...current],
+      };
+      return;
+    }
+
+    if (!session.selectedVertexIds.includes(control.vertexId)) {
+      this.#setVectorVertexSelection([control.vertexId]);
+    }
+    if (session.readOnly) return;
+    session.drag = {
+      before: structuredClone(session.network),
+      kind: "handle",
+      moved: false,
+      reference: control.reference,
+      startClient: eventClientPoint(pointer),
+      vertexId: control.vertexId,
+    };
+  }
+
+  #vectorEditPointerMove(event: unknown): void {
+    const session = this.#vectorEdit;
+    const drag = session?.drag;
+    if (!session || !drag || this.#disposed) return;
+    const pointer = asLeaferEvent(event);
+    if (pointer.isCancel) return;
+    const client = eventClientPoint(pointer);
+    drag.moved ||= pointDistance(drag.startClient, client) >= MIN_DRAW_DISTANCE;
+    if (!drag.moved) return;
+    const local = pointer.getInnerPoint(session.pathElement);
+    const result =
+      drag.kind === "vertices"
+        ? moveVectorVertices(drag.before, drag.vertexIds, {
+            x: local.x - drag.startLocal.x,
+            y: local.y - drag.startLocal.y,
+          })
+        : (() => {
+            const vertex = drag.before.vertices.find(
+              (candidate) => candidate.id === drag.vertexId,
+            );
+            return vertex
+              ? moveVectorHandle(drag.before, drag.reference, {
+                  x: local.x - vertex.x,
+                  y: local.y - vertex.y,
+                })
+              : {
+                  ok: false as const,
+                  code: "missing-vertex" as const,
+                  message: `Vector vertex ${drag.vertexId} does not exist`,
+                };
+          })();
+    if (!result.ok) {
+      this.#report(new Error(result.message));
+      return;
+    }
+    session.network = result.network;
+    this.#renderVectorEditOverlay();
+  }
+
+  #vectorEditPointerUp(event: unknown): void {
+    const session = this.#vectorEdit;
+    const drag = session?.drag;
+    if (!session || !drag) return;
+    this.#vectorEditPointerMove(event);
+    const moved = drag.moved;
+    const network = session.network;
+    session.drag = null;
+    if (moved) this.#submitVectorEdit(network);
+  }
+
+  #submitVectorEdit(network: VectorNetwork): boolean {
+    const session = this.#vectorEdit;
+    if (!session || !this.#callbacks.onVectorEdit) {
+      this.#report(new Error("Vector editing callback is unavailable"));
+      return false;
+    }
+    const accepted = this.#callbacks.onVectorEdit({
+      deleteNode: false,
+      network,
+      nodeId: session.nodeId,
+    });
+    if (!accepted) {
+      this.#restoreProjection();
+      return false;
+    }
+    if (this.#vectorEdit === session) {
+      session.network = structuredClone(network);
+      this.#renderVectorEditOverlay();
+    }
+    return true;
+  }
+
+  #deleteSelectedVectorVertices(): boolean {
+    const session = this.#vectorEdit;
+    if (!session) return false;
+    if (session.readOnly || session.selectedVertexIds.length === 0) return true;
+    const result = deleteVectorVertices(
+      session.network,
+      session.selectedVertexIds,
+    );
+    if (!result.ok) {
+      this.#report(new Error(result.message));
+      return true;
+    }
+    const accepted = result.deleteNode
+      ? (this.#callbacks.onVectorEdit?.({
+          deleteNode: true,
+          nodeId: session.nodeId,
+        }) ?? false)
+      : this.#submitVectorEdit(result.network);
+    if (accepted) {
+      this.#callbacks.onVectorEditSelectionChange?.([]);
+      if (result.deleteNode) this.#callbacks.onVectorEditExit?.();
+    }
+    return true;
+  }
+
+  #cancelVectorEdit(): void {
+    const session = this.#vectorEdit;
+    if (!session) return;
+    this.#vectorEdit = null;
+    const node = this.#input?.document.nodesById[session.nodeId];
+    if (
+      node &&
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties
+    ) {
+      const authoritative = serializeVectorNetwork(node.properties.network);
+      if (authoritative.ok)
+        session.pathElement.set({ path: authoritative.path });
+    }
+    session.overlayGroup.remove();
+    session.overlayGroup.destroy();
   }
 
   #penPointerDown(event: unknown): void {
@@ -1653,6 +2098,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       });
       this.#syncViewport(this.#input.viewport);
       this.#syncSelection(this.#input.selection.nodeIds);
+      this.#syncVectorEdit();
     } finally {
       this.#synchronizing = false;
     }
@@ -1676,6 +2122,25 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #onWindowKeyDown = (event: KeyboardEvent) => {
+    if (this.#vectorEdit && !isKeyboardInputTarget(event.target)) {
+      if (event.code === "Escape" || event.code === "Enter") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (this.#vectorEdit.drag) {
+          this.#vectorEdit.network = this.#vectorEdit.drag.before;
+          this.#vectorEdit.drag = null;
+          this.#renderVectorEditOverlay();
+        }
+        this.#callbacks.onVectorEditExit?.();
+        return;
+      }
+      if (event.code === "Backspace" || event.code === "Delete") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.#deleteSelectedVectorVertices();
+        return;
+      }
+    }
     if (this.#pen) {
       if (event.code === "Escape" || event.code === "Enter") {
         event.preventDefault();
@@ -2048,6 +2513,17 @@ function eventClientPoint(event: LeaferEventLike): Point {
 
 function pointDistance(left: Point, right: Point): number {
   return Math.hypot(left.x - right.x, left.y - right.y);
+}
+
+function isKeyboardInputTarget(target: EventTarget | null): boolean {
+  return (
+    typeof HTMLElement !== "undefined" &&
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "SELECT")
+  );
 }
 
 function isElement(value: unknown): value is LeaferElement {

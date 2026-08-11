@@ -9,6 +9,7 @@ import type {
   LeaferCreateVectorRequest,
   LeaferEngineCallbacks,
   LeaferEngineSyncInput,
+  LeaferVectorEditRequest,
 } from "./types.js";
 
 const leaferHarness = vi.hoisted(() => ({
@@ -1286,8 +1287,13 @@ describe("Leafer engine selection bounds synchronization", () => {
         y: 30,
         network: {
           vertices: [
-            { id: "vertex_1", x: 0, y: 0 },
-            { id: "vertex_2", x: 100, y: 60 },
+            { handleMode: "mirrored", id: "vertex_1", x: 0, y: 0 },
+            {
+              handleMode: "mirrored",
+              id: "vertex_2",
+              x: 100,
+              y: 60,
+            },
           ],
           segments: [
             {
@@ -1406,6 +1412,130 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(onCreateVector).toHaveBeenCalledWith(
       expect.objectContaining({ closed: false }),
     );
+    adapter.dispose();
+  });
+
+  it("enters vector edit with mutually exclusive chrome and commits a vertex drag once", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(withVectorEditFixture(createInput()));
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !path?.parent) throw new Error("Missing editable vector");
+    const overlay = path.parent.children.at(-1);
+    if (!(overlay instanceof FakeGroup))
+      throw new Error("Missing vector overlay");
+    const anchors = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    expect(anchors).toHaveLength(3);
+    expect(app.editor.visible).toBe(false);
+    expect(app.editor.hittable).toBe(false);
+    expect(app.editor.hoverTarget).toBeNull();
+
+    app.emit("pointer.down", pointerEvent(0, 0, anchors[0]!));
+    app.emit("pointer.move", pointerEvent(24, 12, anchors[0]!));
+    app.emit("pointer.up", pointerEvent(24, 12, anchors[0]!));
+
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith(["vertex_a"]);
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    expect(request).toMatchObject({
+      deleteNode: false,
+      nodeId: "editable_curve",
+    });
+    if (!request || request.deleteNode) {
+      throw new Error("Expected a vector network update");
+    }
+    expect(request.network.vertices).toContainEqual(
+      expect.objectContaining({ id: "vertex_a", x: 24, y: 12 }),
+    );
+    adapter.dispose();
+  });
+
+  it("edits mirrored vector handles and point modes through the same callback", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    const input = withVectorEditFixture(createInput(), ["vertex_b"], true);
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !path?.parent) throw new Error("Missing editable vector");
+    const overlay = path.parent.children.at(-1);
+    if (!(overlay instanceof FakeGroup))
+      throw new Error("Missing vector overlay");
+    const controls = overlay.children.filter(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    const handles = controls.slice(3);
+    expect(handles).toHaveLength(2);
+
+    app.emit("pointer.down", pointerEvent(40, 20, handles[0]!));
+    app.emit("pointer.move", pointerEvent(30, 24, handles[0]!));
+    app.emit("pointer.up", pointerEvent(30, 24, handles[0]!));
+
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) throw new Error("Missing vector edit");
+    const segmentAb = request.network.segments.find(
+      (segment) => segment.id === "segment_ab",
+    );
+    const segmentBc = request.network.segments.find(
+      (segment) => segment.id === "segment_bc",
+    );
+    expect(segmentAb?.tangentEnd).toEqual({ x: -30, y: -6 });
+    expect(segmentBc?.tangentStart).toEqual({ x: 30, y: 6 });
+
+    onVectorEdit.mockClear();
+    expect(adapter.setVectorPointMode("corner")).toBe(true);
+    expect(onVectorEdit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deleteNode: false,
+        nodeId: "editable_curve",
+      }),
+    );
+    const cornerRequest = onVectorEdit.mock.calls[0]?.[0];
+    if (!cornerRequest || cornerRequest.deleteNode) {
+      throw new Error("Missing corner vector edit");
+    }
+    expect(cornerRequest.network.segments[0]?.tangentEnd).toBeUndefined();
+    expect(cornerRequest.network.segments[1]?.tangentStart).toBeUndefined();
+    adapter.dispose();
+  });
+
+  it("deletes selected vector vertices and exits when the contour becomes invalid", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditExit = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditExit,
+    });
+    adapter.sync(
+      withVectorEditFixture(createInput(), ["vertex_a", "vertex_b"]),
+    );
+
+    emitWindowKey("Delete");
+
+    expect(onVectorEdit).toHaveBeenCalledWith({
+      deleteNode: true,
+      nodeId: "editable_curve",
+    });
+    expect(onVectorEditExit).toHaveBeenCalledTimes(1);
     adapter.dispose();
   });
 
@@ -1571,6 +1701,86 @@ function withLineFixture(input: LeaferEngineSyncInput): LeaferEngineSyncInput {
   };
 }
 
+function withVectorEditFixture(
+  input: LeaferEngineSyncInput,
+  selectedVertexIds: readonly string[] = [],
+  mirrored = false,
+): LeaferEngineSyncInput {
+  const document = structuredClone(input.document);
+  const frame = document.nodesById.frame_welcome;
+  if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+  document.nodesById.editable_curve = {
+    id: "editable_curve",
+    name: "Editable curve",
+    parentId: frame.id,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 40, 60],
+    size: { width: 120, height: 30 },
+    opacity: 1,
+    extensions: {},
+    kind: "vector",
+    properties: {
+      network: {
+        vertices: [
+          { id: "vertex_a", x: 0, y: 0, handleMode: "corner" },
+          {
+            id: "vertex_b",
+            x: 60,
+            y: 30,
+            handleMode: mirrored ? "mirrored" : "corner",
+          },
+          { id: "vertex_c", x: 120, y: 0, handleMode: "corner" },
+        ],
+        segments: [
+          {
+            id: "segment_ab",
+            startVertexId: "vertex_a",
+            endVertexId: "vertex_b",
+            ...(mirrored ? { tangentEnd: { x: -20, y: 0 } } : {}),
+          },
+          {
+            id: "segment_bc",
+            startVertexId: "vertex_b",
+            endVertexId: "vertex_c",
+            ...(mirrored ? { tangentStart: { x: 20, y: 0 } } : {}),
+          },
+        ],
+        paths: [
+          {
+            id: "path_open",
+            closed: false,
+            segments: [
+              { segmentId: "segment_ab", reversed: false },
+              { segmentId: "segment_bc", reversed: false },
+            ],
+          },
+        ],
+        regions: [],
+      },
+      fillRule: "nonzero",
+      fills: [],
+      strokes: [{ type: "solid", color: "#151515", opacity: 1 }],
+      strokeWidth: 2,
+    },
+  };
+  frame.childIds.push("editable_curve");
+  return {
+    ...input,
+    document,
+    selection: {
+      nodeIds: ["editable_curve"],
+      anchorNodeId: "editable_curve",
+    },
+    vectorEditScope: {
+      nodeId: "editable_curve",
+      readOnly: false,
+      selectedVertexIds,
+    },
+  };
+}
+
 function fakeVectorGeometryProvider(): VectorGeometryProvider {
   const result = (
     path: string,
@@ -1646,6 +1856,22 @@ function boxDragEvent(
     getInnerPoint: () => ({ x, y }),
     shiftKey: modifiers.shiftKey ?? false,
     target: {},
+  };
+}
+
+function pointerEvent(
+  x: number,
+  y: number,
+  target: FakeElement,
+  modifiers: { shiftKey?: boolean } = {},
+) {
+  return {
+    altKey: false,
+    clientX: x,
+    clientY: y,
+    getInnerPoint: () => ({ x, y }),
+    shiftKey: modifiers.shiftKey ?? false,
+    target,
   };
 }
 

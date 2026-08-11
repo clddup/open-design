@@ -14,7 +14,10 @@ import type {
 import type { EditorRuntime, EditorSnapshot } from "@opendesign/editor-runtime";
 import {
   navigateBooleanSelection,
+  planDeleteVectorNode,
+  planVectorNetworkUpdate,
   resolveBooleanEditScope,
+  resolveVectorEditScope,
 } from "@opendesign/editor-runtime";
 import {
   createLeaferEngineAdapter,
@@ -25,6 +28,7 @@ import {
   type LeaferFidelityWarning,
   type LeaferOperationKind,
   type LeaferOperationRequest,
+  type LeaferVectorEditRequest,
 } from "@opendesign/leafer-engine";
 import {
   useCallback,
@@ -63,6 +67,10 @@ export function Canvas({
   const [fidelityWarnings, setFidelityWarnings] = useState<
     readonly LeaferFidelityWarning[]
   >([]);
+  const [vectorEditState, setVectorEditState] = useState<{
+    nodeId: string;
+    selectedVertexIds: readonly string[];
+  } | null>(null);
   const tool = isTool(snapshot.state.tool) ? snapshot.state.tool : "select";
   const booleanEditScope = useMemo(
     () =>
@@ -73,6 +81,49 @@ export function Canvas({
       ),
     [activePageId, snapshot.document, snapshot.state.selection.nodeIds],
   );
+  const vectorEditScope = useMemo(
+    () =>
+      resolveVectorEditScope(
+        snapshot.document,
+        activePageId,
+        snapshot.state.selection.nodeIds,
+        tool === "select" ? (vectorEditState?.nodeId ?? null) : null,
+        vectorEditState?.selectedVertexIds ?? [],
+      ),
+    [
+      activePageId,
+      snapshot.document,
+      snapshot.state.selection.nodeIds,
+      tool,
+      vectorEditState,
+    ],
+  );
+
+  useEffect(() => {
+    if (vectorEditState && !vectorEditScope) setVectorEditState(null);
+  }, [vectorEditScope, vectorEditState]);
+
+  const enterVectorEdit = useCallback(
+    (nodeIds: readonly string[]) => {
+      if (nodeIds.length !== 1) return false;
+      const node = runtime.getSnapshot().document.nodesById[nodeIds[0] ?? ""];
+      if (
+        !node ||
+        (node.kind !== "path" && node.kind !== "vector") ||
+        !("network" in node.properties)
+      ) {
+        return false;
+      }
+      setVectorEditState({ nodeId: node.id, selectedVertexIds: [] });
+      return true;
+    },
+    [runtime],
+  );
+
+  const exitVectorEdit = useCallback(() => {
+    setVectorEditState(null);
+    requestAnimationFrame(() => host.current?.focus());
+  }, []);
 
   const selectBooleanTarget = useCallback(
     (
@@ -97,6 +148,15 @@ export function Canvas({
     (event: KeyboardEvent<HTMLElement>) => {
       if (event.target !== event.currentTarget) return;
       const currentSelection = runtime.getSnapshot().state.selection.nodeIds;
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        enterVectorEdit(currentSelection)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       const direction =
         event.key === "Enter"
           ? event.shiftKey
@@ -115,7 +175,7 @@ export function Canvas({
       event.preventDefault();
       event.stopPropagation();
     },
-    [runtime, selectBooleanTarget],
+    [enterVectorEdit, runtime, selectBooleanTarget],
   );
 
   const handleCanvasDoubleClick = useCallback(
@@ -127,11 +187,16 @@ export function Canvas({
         return;
       }
       const currentSelection = runtime.getSnapshot().state.selection.nodeIds;
+      if (enterVectorEdit(currentSelection)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (!selectBooleanTarget(currentSelection, "enter")) return;
       event.preventDefault();
       event.stopPropagation();
     },
-    [runtime, selectBooleanTarget],
+    [enterVectorEdit, runtime, selectBooleanTarget],
   );
 
   useEffect(() => {
@@ -163,6 +228,31 @@ export function Canvas({
       return true;
     },
     [onTransactionError, runtime, t],
+  );
+
+  const applyVectorEdit = useCallback(
+    (request: LeaferVectorEditRequest) => {
+      const current = runtime.getSnapshot();
+      const plan = request.deleteNode
+        ? planDeleteVectorNode(current.document, activePageId, request.nodeId)
+        : planVectorNetworkUpdate(
+            current.document,
+            activePageId,
+            request.nodeId,
+            request.network,
+          );
+      if (!plan.ok) {
+        onTransactionError(plan.message);
+        return false;
+      }
+      const accepted = applyOperations({
+        kind: "vector",
+        operations: [...plan.operations],
+      });
+      if (accepted && request.deleteNode) setVectorEditState(null);
+      return accepted;
+    },
+    [activePageId, applyOperations, onTransactionError, runtime],
   );
 
   const createNode = useCallback(
@@ -325,6 +415,15 @@ export function Canvas({
       onSelectionChange: (nodeIds, anchorNodeId) => {
         runtime.setSelection(nodeIds, anchorNodeId);
       },
+      onVectorEdit: applyVectorEdit,
+      onVectorEditExit: exitVectorEdit,
+      onVectorEditSelectionChange: (selectedVertexIds) => {
+        setVectorEditState((current) =>
+          current
+            ? { ...current, selectedVertexIds: [...selectedVertexIds] }
+            : current,
+        );
+      },
       onWarningsChange: (warnings) => {
         setFidelityWarnings((current) =>
           sameFidelityWarnings(current, warnings) ? current : [...warnings],
@@ -355,8 +454,10 @@ export function Canvas({
     };
   }, [
     applyOperations,
+    applyVectorEdit,
     createNode,
     createVectorNode,
+    exitVectorEdit,
     runtime,
     t,
     updateViewport,
@@ -379,6 +480,15 @@ export function Canvas({
       pageId: activePageId,
       selection: snapshot.state.selection,
       tool,
+      ...(vectorEditScope
+        ? {
+            vectorEditScope: {
+              nodeId: vectorEditScope.nodeId,
+              readOnly: vectorEditScope.readOnly,
+              selectedVertexIds: vectorEditScope.selectedVertexIds,
+            },
+          }
+        : {}),
       viewport: snapshot.state.viewport,
     };
     latestInput.current = input;
@@ -390,6 +500,7 @@ export function Canvas({
     snapshot.state.selection,
     snapshot.state.viewport,
     tool,
+    vectorEditScope,
   ]);
 
   const seriousBooleanWarnings = fidelityWarnings.filter(
@@ -415,6 +526,9 @@ export function Canvas({
   const editScopeBoolean = booleanEditScope
     ? snapshot.document.nodesById[booleanEditScope.booleanId]
     : undefined;
+  const editScopeVector = vectorEditScope
+    ? snapshot.document.nodesById[vectorEditScope.nodeId]
+    : undefined;
 
   return (
     <main
@@ -433,8 +547,69 @@ export function Canvas({
           <small>{renderError}</small>
         </div>
       )}
-      {(booleanEditScope || activeWarning) && (
+      {(vectorEditScope || booleanEditScope || activeWarning) && (
         <div className="canvas-context-stack">
+          {vectorEditScope &&
+            editScopeVector &&
+            (editScopeVector.kind === "path" ||
+              editScopeVector.kind === "vector") && (
+              <div className="canvas-edit-scope" role="status">
+                <span className="canvas-edit-scope__mark" />
+                <span>
+                  <strong>
+                    {t("canvas.vectorEditing", {
+                      name: editScopeVector.name || t("node.vector"),
+                    })}
+                  </strong>
+                  <small>
+                    {vectorEditScope.readOnly
+                      ? t("canvas.vectorEditingReadOnly")
+                      : t("canvas.vectorEditingHint", {
+                          count: vectorEditScope.selectedVertexIds.length,
+                        })}
+                  </small>
+                </span>
+                <span
+                  aria-label={t("canvas.vectorPointMode")}
+                  className="canvas-vector-modes"
+                  role="group"
+                >
+                  {(
+                    [
+                      ["corner", "canvas.vectorPointCorner"],
+                      ["smooth", "canvas.vectorPointSmooth"],
+                      ["mirrored", "canvas.vectorPointMirrored"],
+                      ["independent", "canvas.vectorPointIndependent"],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      aria-pressed={vectorEditScope.pointMode === mode}
+                      disabled={
+                        vectorEditScope.readOnly ||
+                        vectorEditScope.selectedVertexIds.length === 0
+                      }
+                      key={mode}
+                      onClick={() => {
+                        adapter.current?.setVectorPointMode(mode);
+                        requestAnimationFrame(() => host.current?.focus());
+                      }}
+                      title={t(label)}
+                      type="button"
+                    >
+                      {t(label)}
+                    </button>
+                  ))}
+                </span>
+                <button
+                  aria-label={t("canvas.exitVectorEditing")}
+                  onClick={exitVectorEdit}
+                  type="button"
+                >
+                  {t("common.done")}
+                  <kbd>Esc</kbd>
+                </button>
+              </div>
+            )}
           {booleanEditScope && editScopeBoolean?.kind === "boolean" && (
             <div className="canvas-edit-scope" role="status">
               <span className="canvas-edit-scope__mark" />
@@ -575,6 +750,8 @@ function operationLabel(
       return t("canvas.skewLayers");
     case "text":
       return t("canvas.editText");
+    case "vector":
+      return t("canvas.editVector");
     case "transform":
       return t("canvas.transformLayers");
   }

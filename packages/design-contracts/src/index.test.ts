@@ -220,9 +220,9 @@ describe("design contract schemas", () => {
       properties: {
         network: {
           vertices: [
-            { id: "vertex_a", x: 0, y: 0 },
-            { id: "vertex_b", x: 100, y: 0 },
-            { id: "vertex_c", x: 50, y: 100 },
+            { id: "vertex_a", x: 0, y: 0, handleMode: "corner" },
+            { id: "vertex_b", x: 100, y: 0, handleMode: "smooth" },
+            { id: "vertex_c", x: 50, y: 100, handleMode: "independent" },
           ],
           segments: [
             {
@@ -272,6 +272,24 @@ describe("design contract schemas", () => {
       Value.Check(DesignNodeSchema, {
         ...vectorNode,
         properties: { ...vectorNode.properties, path: "M 0 0 L 100 0" },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: {
+          ...vectorNode.properties,
+          network: {
+            ...vectorNode.properties.network,
+            vertices: [
+              {
+                ...vectorNode.properties.network.vertices[0],
+                handleMode: "automatic",
+              },
+              ...vectorNode.properties.network.vertices.slice(1),
+            ],
+          },
+        },
       }),
     ).toBe(false);
     expect(
@@ -785,5 +803,81 @@ describe("design contract schemas", () => {
     if (!path || path.kind !== "path") throw new Error("Missing path");
     expect(path.properties).toHaveProperty("path");
     expect(path.properties).not.toHaveProperty("network");
+  });
+
+  it("migrates a 1.7 editable network without inventing handle behavior", () => {
+    const source = {
+      format: DESIGN_FORMAT,
+      schemaVersion: "1.7.0",
+      documentId: "document_vector_1_7",
+      revision: 3,
+      pageOrder: ["page_1"],
+      pagesById: {
+        page_1: {
+          id: "page_1",
+          name: "Page 1",
+          rootNodeIds: ["vector_1"],
+          extensions: {},
+        },
+      },
+      nodesById: {
+        vector_1: {
+          id: "vector_1",
+          name: "Legacy editable vector",
+          parentId: null,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 0, 0],
+          size: { width: 100, height: 0 },
+          opacity: 1,
+          extensions: {},
+          kind: "vector",
+          properties: {
+            network: {
+              vertices: [
+                { id: "vertex_a", x: 0, y: 0 },
+                { id: "vertex_b", x: 100, y: 0 },
+              ],
+              segments: [
+                {
+                  id: "segment_ab",
+                  startVertexId: "vertex_a",
+                  endVertexId: "vertex_b",
+                },
+              ],
+              paths: [
+                {
+                  id: "path_open",
+                  closed: false,
+                  segments: [{ segmentId: "segment_ab", reversed: false }],
+                },
+              ],
+              regions: [],
+            },
+            fills: [],
+            strokes: [{ type: "solid", color: "#151515", opacity: 1 }],
+            strokeWidth: 2,
+          },
+        },
+      },
+      componentsById: {},
+      variantSetsById: {},
+      tokenCollectionsById: {},
+      tokensById: {},
+      interactionsById: {},
+      assetsById: {},
+      extensions: {},
+    };
+
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    const node = migrated?.nodesById.vector_1;
+    if (!node || node.kind !== "vector" || !("network" in node.properties)) {
+      throw new Error("Missing migrated vector");
+    }
+    expect(node.properties.network.vertices).toEqual(
+      source.nodesById.vector_1.properties.network.vertices,
+    );
   });
 });

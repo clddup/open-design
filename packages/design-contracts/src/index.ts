@@ -1,7 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.7.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.8.0" as const;
+export const EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION = "1.7.0" as const;
 export const REGULAR_SHAPE_DESIGN_SCHEMA_VERSION = "1.6.0" as const;
 export const LINE_DESIGN_SCHEMA_VERSION = "1.5.0" as const;
 export const MASK_DESIGN_SCHEMA_VERSION = "1.4.0" as const;
@@ -457,11 +458,19 @@ export const VectorGeometryIdSchema = Type.String({
   pattern: "^[A-Za-z][A-Za-z0-9._:-]*$",
 });
 
+export const VectorPointModeSchema = Type.Union([
+  Type.Literal("corner"),
+  Type.Literal("smooth"),
+  Type.Literal("mirrored"),
+  Type.Literal("independent"),
+]);
+
 export const VectorVertexSchema = Type.Object(
   {
     id: VectorGeometryIdSchema,
     x: Type.Number(),
     y: Type.Number(),
+    handleMode: Type.Optional(VectorPointModeSchema),
   },
   { additionalProperties: false },
 );
@@ -1261,6 +1270,7 @@ export type MaskMode = Static<typeof MaskModeSchema>;
 export type LineEndpoint = Static<typeof LineEndpointSchema>;
 export type BooleanOperation = Static<typeof BooleanOperationSchema>;
 export type VectorVertex = Static<typeof VectorVertexSchema>;
+export type VectorPointMode = Static<typeof VectorPointModeSchema>;
 export type VectorSegment = Static<typeof VectorSegmentSchema>;
 export type VectorSegmentReference = Static<
   typeof VectorSegmentReferenceSchema
@@ -1418,7 +1428,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       schemaVersion !== IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== MASK_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== LINE_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== REGULAR_SHAPE_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== REGULAR_SHAPE_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }

@@ -8,7 +8,8 @@ import {
   validateVectorNetwork,
 } from "@opendesign/geometry-service/editable-vector";
 
-const VECTOR_NETWORK_VERSION = "1";
+const VECTOR_NETWORK_VERSION = "2";
+const SUPPORTED_VECTOR_NETWORK_VERSIONS = new Set(["1", "2"]);
 const VERSION_ATTRIBUTE = "data-opendesign-vector-network-version";
 const NETWORK_ATTRIBUTE = "data-opendesign-vector-network";
 const MAX_NETWORK_CHARACTERS = 1_000_000;
@@ -46,7 +47,11 @@ export function readSvgEditableVector(
       "Editable vector metadata requires an OpenDesign Path or Vector kind",
     );
   }
-  if (element.getAttribute(VERSION_ATTRIBUTE) !== VECTOR_NETWORK_VERSION) {
+  if (
+    !SUPPORTED_VECTOR_NETWORK_VERSIONS.has(
+      element.getAttribute(VERSION_ATTRIBUTE) ?? "",
+    )
+  ) {
     return invalid(
       "Editable vector metadata version is missing or unsupported",
     );

@@ -141,6 +141,7 @@ describe("design Agent tool contract", () => {
     expect(schema).toContain('"path"');
     expect(schema).toContain('"network"');
     expect(schema).toContain('"tangentStart"');
+    expect(schema).toContain('"handleMode"');
     expect(schema).toContain('"fillRule"');
     expect(schema).toContain('"fills"');
     expect(schema).toContain('"strokes"');

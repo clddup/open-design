@@ -1,7 +1,12 @@
-import type { Point, VectorNetwork } from "@opendesign/design-contracts";
+import type {
+  Point,
+  VectorNetwork,
+  VectorPointMode,
+} from "@opendesign/design-contracts";
 import { serializeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 
 export interface PenDraftVertex extends Point {
+  handleMode: VectorPointMode;
   id: string;
   tangentIn?: Point;
   tangentOut?: Point;
@@ -39,10 +44,12 @@ export function setPenVertexHandle(
   if (Math.hypot(outgoing.x, outgoing.y) < HANDLE_EPSILON) {
     delete vertex.tangentIn;
     delete vertex.tangentOut;
+    vertex.handleMode = "corner";
     return;
   }
   vertex.tangentIn = { x: -outgoing.x, y: -outgoing.y };
   vertex.tangentOut = { ...outgoing };
+  vertex.handleMode = "mirrored";
 }
 
 export function penDraftToVectorNetwork(
@@ -50,7 +57,12 @@ export function penDraftToVectorNetwork(
   closed: boolean,
 ): VectorNetwork | null {
   if (draft.vertices.length < 2) return null;
-  const vertices = draft.vertices.map(({ id, x, y }) => ({ id, x, y }));
+  const vertices = draft.vertices.map(({ handleMode, id, x, y }) => ({
+    handleMode,
+    id,
+    x,
+    y,
+  }));
   const segments = draft.vertices.slice(1).map((vertex, index) => {
     const start = draft.vertices[index]!;
     return {
@@ -146,7 +158,12 @@ export function penDraftHandlePath(draft: PenDraft): string | null {
 }
 
 function penVertex(index: number, point: Point): PenDraftVertex {
-  return { id: `vertex_${index + 1}`, x: point.x, y: point.y };
+  return {
+    handleMode: "corner",
+    id: `vertex_${index + 1}`,
+    x: point.x,
+    y: point.y,
+  };
 }
 
 function pointDistance(left: Point, right: Point): number {

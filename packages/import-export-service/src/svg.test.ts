@@ -311,7 +311,7 @@ describe("versioned SVG interchange", () => {
     if (!exported.ok) return;
     expect(exported.issues).toEqual([]);
     expect(exported.svg).toContain(
-      'data-opendesign-vector-network-version="1"',
+      'data-opendesign-vector-network-version="2"',
     );
     const imported = importSvg(
       { svg: exported.svg, idPrefix: "editable_vector" },

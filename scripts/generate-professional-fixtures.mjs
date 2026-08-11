@@ -1327,7 +1327,7 @@ function document({
 }) {
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.7.0",
+    schemaVersion: "1.8.0",
     documentId,
     revision: 0,
     pageOrder: [pageId],

@@ -83,7 +83,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P1：专业能力契约
 
 - 把 P0-C 的初始 capability manifest 提升为版本化公共契约，并为 Renderer、Agent、MCP 和发布说明提供同一只读查询入口。未知能力必须拒绝，降级能力必须返回结构化限制和 fidelity warning。
-- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.7.0` 已统一正式 Line/Arrow、Polygon/Star 与 editable Vector Network / Pen 创作，后续仍需已有路径节点编辑、分支与多轮廓、Slice、constraints/layout、富文本/font、图片 adjustments、Component/Instance/Variant、style/token binding 和 export settings。
+- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.8.0` 已统一正式 Line/Arrow、Polygon/Star、editable Vector Network / Pen 创作与已有单轮廓节点编辑，后续仍需分支与多轮廓、Slice、constraints/layout、富文本/font、图片 adjustments、Component/Instance/Variant、style/token binding 和 export settings。
 - 为 Geometry、Layout、Text/Font、Image 和 Import/Export service 建立窄、版本化的输入输出接口。服务只能返回纯结果、诊断或候选 `DesignOperation[]`，不能保存第二份文档或直接修改 Leafer 场景。
 - 提供确定性迁移、未知版本拒绝、保存重开、preview、undo/redo、Agent schema、provider 映射和 fidelity warning 测试；不得把长期语义藏进 `extensions`。
 
@@ -103,7 +103,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 增加 `DesignDocument 1.5.0` 正式 Line/Arrow：唯一持久 LineNode、有向归一化端点、独立端点装饰、开放中心描边、`L` / `Shift+L`、Shift 45 度、Alt 中心绘制、Inspector、Leafer Arrow/LineEditTool 端点写回、Agent schema 与受控 SVG marker 已打通；折线 connector、路由/吸附、标签、像素基线和 macOS/Windows 打包产品交互证据继续保持明确限制。
 - [x] 增加 `DesignDocument 1.6.0` 正式 Polygon/Star：唯一持久语义节点、3–60 顶点、Star 归一化内径、实时圆角、Shift/Alt 创建、Inspector、Leafer 原生投影、Agent schema、尖角 PathKit Boolean 与受控 SVG 逐点校验已打通；corner smoothing、rounded outline、像素基线和 macOS/Windows 打包产品交互证据继续保持明确限制。
 - [x] 增加 `DesignDocument 1.7.0` editable Vector Network 与首个 Pen 创作切片：`path` / `network` 严格互斥，稳定 vertex/segment/path/region ID、拓扑 invariant、cubic tight bounds、保存重开/undo/redo、Leafer-native preview/anchor/handle、`P`、click/drag/close/Enter/Escape/Backspace/tool-switch、单事务写入、Agent schema、Boolean 消费和受控 SVG network metadata 已打通；当前只创建单条非分叉 contour，macOS/Windows 打包交互和像素证据继续保持明确限制。
-- [ ] 在 `1.7.0` network 上完成已有 Path/Vector 的节点/手柄编辑、corner/smooth/asymmetric 节点类型、开放/闭合切换、分支、多轮廓、连接/断开、路径反转、flatten、outline stroke 与正式 Slice。节点编辑继续对照 Figma Vector Network，并使用 OpenPencil 固定提交 `449f31dd8b7df12965f65d9da774597332fc153d` 的 `path_edit.rs`、overlay 和 history 测试作为行为基准，不引入其 runtime、文档或工具权限边界。
+- [x] 增加 `DesignDocument 1.8.0` 已有单轮廓节点编辑：持久 corner/smooth/mirrored/independent handle mode，Enter/双击进入，单选/Shift 多选节点移动，选中节点手柄拖动，Delete/Backspace，锁定只读，Done/Escape，普通 selection/Pen/path-edit chrome 互斥，pointer-up/point-mode/delete 单事务，cubic tight bounds 与 transform offset 组合、保存重开/undo/redo、Agent schema 和受控 SVG metadata v2 均已打通；实现对照 Figma Vector Network 与 OpenPencil 固定提交 `449f31dd8b7df12965f65d9da774597332fc153d` 的 `path_edit.rs`、`canvas_path_overlay.rs` 和 history 行为，不引入其 runtime、文档或工具权限边界。
+- [ ] 继续完成开放/闭合转换、分支、多轮廓、连接/断开、路径反转、路径切断、套索、多节点变换框、flatten、outline stroke 与正式 Slice；补真实像素 baseline 和 macOS/Windows 打包产品交互证据。
 - 扩展剩余图层与精确变换工作流：重命名、批量属性、单层相对父级对齐、二维 Tidy up/画布间距手柄、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
 - 人工命令与 Agent typed tools 调用同一 geometry service，并把结果作为一个可预览、可撤销的 `DesignTransaction` 应用。SVG 导入导出必须经过同一公共 Path 语义，不能泄漏 provider 私有命令。
 
