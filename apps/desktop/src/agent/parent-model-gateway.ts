@@ -40,13 +40,25 @@ export class ParentModelGateway implements ModelGateway {
           code: "model_bridge_invalid_response",
           message: `Model host returned an invalid response: ${modelBridgeResponseValidationError(message)}`,
           retryable: true,
+          modelRequestId: requestId,
         },
       });
       complete(pending);
       return true;
     }
     if (message.type === "model.event") {
-      enqueue(pending, message.event);
+      enqueue(
+        pending,
+        message.event.type === "attempt.failed"
+          ? {
+              ...message.event,
+              error: {
+                ...message.event.error,
+                modelRequestId: requestId,
+              },
+            }
+          : message.event,
+      );
       return true;
     }
     if (!message.ok) {
@@ -57,6 +69,7 @@ export class ParentModelGateway implements ModelGateway {
           code: "model_bridge_failed",
           message: message.error,
           retryable: true,
+          modelRequestId: requestId,
         },
       });
     }
@@ -83,6 +96,7 @@ export class ParentModelGateway implements ModelGateway {
             code: "cancelled",
             message: "Model request was cancelled",
             retryable: false,
+            modelRequestId: requestId,
           },
         });
         complete(pending);

@@ -104,6 +104,11 @@ export interface ModelError {
   retryable: boolean;
   provider?: string;
   providerRequestId?: string;
+  modelRequestId?: string;
+  timeout?: {
+    phase: "first-response" | "stream-idle" | "total";
+    thresholdMs: number;
+  };
 }
 
 export interface ModelRequest {

@@ -1,6 +1,7 @@
 import type {
   AgentAttachment,
   AgentEvent,
+  AgentRunFailure,
   AgentToolFailureDetails,
   AssistantTimelineBlock,
   SessionTimelineItem,
@@ -60,6 +61,7 @@ type TimelineItem = {
   order: number;
   approvalId?: string;
   toolCallId?: string;
+  historical?: boolean;
 };
 
 export type AgentTimelineProps = {
@@ -163,6 +165,78 @@ function friendlyAgentError(message: string, t: Translate): string {
     return t("agent.canvasScopeConflict");
   }
   return message;
+}
+
+function runFailurePresentation(
+  failure: AgentRunFailure | undefined,
+  fallback: string,
+  locale: AppLocale,
+  t: Translate,
+): { title: string; detail: string } {
+  if (!failure) {
+    return {
+      title: t("agent.taskFailed"),
+      detail: friendlyAgentError(fallback, t),
+    };
+  }
+  const timeout = failure.timeout;
+  const title = timeout
+    ? timeout.phase === "first-response"
+      ? t("agent.timeoutFirstResponse")
+      : timeout.phase === "stream-idle"
+        ? t("agent.timeoutStreamIdle")
+        : t("agent.timeoutTotal")
+    : failure.code === "context_budget_exceeded" ||
+        failure.code === "model_context_incompatible"
+      ? t("agent.contextLimit")
+      : t("agent.taskFailed");
+  const primary = timeout
+    ? timeout.phase === "first-response"
+      ? t("agent.timeoutFirstResponseDetail", {
+          duration: formatTimeoutThreshold(timeout.thresholdMs, locale),
+        })
+      : timeout.phase === "stream-idle"
+        ? t("agent.timeoutStreamIdleDetail", {
+            duration: formatTimeoutThreshold(timeout.thresholdMs, locale),
+          })
+        : t("agent.timeoutTotalDetail", {
+            duration: formatTimeoutThreshold(timeout.thresholdMs, locale),
+          })
+    : friendlyAgentError(failure.message || fallback, t);
+  const correlation = [
+    failure.modelRequestId
+      ? t("agent.modelRequestId", { id: failure.modelRequestId })
+      : null,
+    failure.providerRequestId
+      ? t("agent.providerRequestId", { id: failure.providerRequestId })
+      : timeout
+        ? t("agent.providerRequestIdUnavailable")
+        : null,
+  ].filter((value): value is string => value !== null);
+  return {
+    title,
+    detail: [
+      primary,
+      failure.retryable
+        ? t("agent.failureRetryable")
+        : t("agent.failureNeedsChange"),
+      ...correlation,
+    ].join("\n"),
+  };
+}
+
+function formatTimeoutThreshold(
+  milliseconds: number,
+  locale: AppLocale,
+): string {
+  const formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
+  if (milliseconds >= 60_000 && milliseconds % 60_000 === 0) {
+    return `${formatter.format(milliseconds / 60_000)} min`;
+  }
+  if (milliseconds >= 1_000) {
+    return `${formatter.format(milliseconds / 1_000)} s`;
+  }
+  return `${formatter.format(milliseconds)} ms`;
 }
 
 function structuredToolFailureDetail(
@@ -401,6 +475,15 @@ function projectTimeline(
         : item.status === "error" || item.status === "budget"
           ? "error"
           : "done";
+    const failurePresentation =
+      item.status === "error"
+        ? runFailurePresentation(
+            item.failure,
+            item.failure?.message ?? t("agent.tryAgain"),
+            locale,
+            t,
+          )
+        : undefined;
     return {
       ...base,
       state,
@@ -420,7 +503,7 @@ function projectTimeline(
               ? t("agent.taskStopped")
               : item.status === "budget"
                 ? t("agent.contextLimit")
-                : t("agent.taskFailed"),
+                : (failurePresentation?.title ?? t("agent.taskFailed")),
       detail:
         item.status === "started"
           ? undefined
@@ -429,7 +512,7 @@ function projectTimeline(
             : item.status === "budget"
               ? t("agent.contextLimitDetail")
               : item.status === "error"
-                ? t("agent.tryAgain")
+                ? (failurePresentation?.detail ?? t("agent.tryAgain"))
                 : undefined,
     };
   });
@@ -504,6 +587,12 @@ function projectEvents(
     }
     if (event.type === "agent.error") {
       if (event.runId) finalizeRunActivity(event.runId);
+      const failurePresentation = runFailurePresentation(
+        event.failure,
+        event.message,
+        locale,
+        t,
+      );
       updateEvent(
         event.runId
           ? `run:${event.runId}`
@@ -514,9 +603,11 @@ function projectEvents(
           kind: event.runId ? "run" : "system",
           time: t("common.error"),
           title: event.runId
-            ? t("agent.taskFailed")
+            ? failurePresentation.title
             : t("agent.agentUnavailable"),
-          detail: friendlyAgentError(event.message, t),
+          detail: event.runId
+            ? failurePresentation.detail
+            : friendlyAgentError(event.message, t),
         },
       );
     }
@@ -627,6 +718,7 @@ function projectEvents(
     }
     if (event.type === "run.completed") {
       finalizeRunActivity(event.runId);
+      const existing = items.get(`run:${event.runId}`);
       const failed =
         event.stopReason === "error" || event.stopReason === "budget";
       updateEvent(`run:${event.runId}`, {
@@ -641,7 +733,9 @@ function projectEvents(
               ? t("agent.taskStopped")
               : event.stopReason === "budget"
                 ? t("agent.contextLimit")
-                : t("agent.taskFailed"),
+                : existing?.state === "error"
+                  ? existing.title
+                  : t("agent.taskFailed"),
         detail:
           event.stopReason === "complete"
             ? undefined
@@ -649,7 +743,9 @@ function projectEvents(
               ? t("agent.requestCancelled")
               : event.stopReason === "budget"
                 ? t("agent.contextLimitDetail")
-                : t("agent.tryAgain"),
+                : existing?.state === "error"
+                  ? existing.detail
+                  : t("agent.tryAgain"),
       });
     }
   });
@@ -694,6 +790,7 @@ function mergeTimeline(
       order: durableItem?.order ?? item.order,
     });
   }
+  const latestRunId = [...runOrder.keys()].at(-1);
   return [...merged.values()]
     .map((item) => {
       if (
@@ -710,6 +807,18 @@ function mergeTimeline(
           item.state === "stopping")
       ) {
         return finalizeTimelineActivity(item);
+      }
+      if (
+        item.kind === "run" &&
+        item.state === "error" &&
+        item.runId !== latestRunId
+      ) {
+        return {
+          ...item,
+          state: "done" as const,
+          historical: true,
+          title: t("agent.previousRunFailed"),
+        };
       }
       return item;
     })
@@ -1248,7 +1357,7 @@ export function AgentTimeline({
           ) : (
             items.map((item) => (
               <li
-                className={`agent-thread__item agent-thread__item--${item.state}${item.kind ? ` agent-thread__item--${item.kind}` : ""}`}
+                className={`agent-thread__item agent-thread__item--${item.state}${item.kind ? ` agent-thread__item--${item.kind}` : ""}${item.historical ? " agent-thread__item--historical" : ""}`}
                 key={item.id}
               >
                 {item.kind === "user" || item.kind === "assistant" ? (

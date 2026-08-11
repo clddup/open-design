@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DESIGN_AGENT_TOOL_SPECS } from "./design-agent-tools";
-import { isModelBridgeRequest } from "./model-bridge";
+import { isModelBridgeRequest, isModelBridgeResponse } from "./model-bridge";
 
 const attachmentId = `image_${"a".repeat(64)}`;
 const documentId = `file_${"b".repeat(64)}`;
@@ -25,6 +25,46 @@ function requestWith(content: unknown, tools: unknown[] = []) {
 }
 
 describe("Model bridge request guard", () => {
+  it("accepts only bounded structured Provider failures", () => {
+    const response = {
+      type: "model.event",
+      requestId: "model_request_1",
+      event: {
+        type: "attempt.failed",
+        attemptId: "attempt_1",
+        error: {
+          code: "provider_timeout",
+          message: "Provider stream timed out",
+          retryable: true,
+          provider: "provider_1",
+          providerRequestId: "provider_request_1",
+          timeout: { phase: "stream-idle", thresholdMs: 120_000 },
+        },
+      },
+    };
+    expect(isModelBridgeResponse(response)).toBe(true);
+    expect(
+      isModelBridgeResponse({
+        ...response,
+        event: {
+          ...response.event,
+          error: { ...response.event.error, credential: "secret" },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isModelBridgeResponse({
+        ...response,
+        event: {
+          ...response.event,
+          error: {
+            ...response.event.error,
+            timeout: { phase: "unknown", thresholdMs: 0 },
+          },
+        },
+      }),
+    ).toBe(false);
+  });
   it("accepts a bounded content-addressed image reference", () => {
     expect(
       isModelBridgeRequest(

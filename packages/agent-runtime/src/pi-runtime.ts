@@ -13,7 +13,10 @@ import {
 } from "./index.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import { prepareOpenDesignPiContext } from "./pi-context-adapter.js";
-import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
+import {
+  createPiModelFailurePort,
+  createPiModelGatewayStreamFn,
+} from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
 
 const DEFAULT_LIMITS: AgentRuntimeLimits = {
@@ -132,6 +135,7 @@ export class OpenDesignPiRuntime {
       const agentReference: {
         current?: ReturnType<typeof createOpenDesignPiAgent>;
       } = {};
+      const modelFailurePort = createPiModelFailurePort();
       const adapter = new PiRunEventAdapter({
         request,
         sessionStore: this.options.sessionStore,
@@ -147,6 +151,7 @@ export class OpenDesignPiRuntime {
           ? {}
           : { completionGuard: this.options.completionGuard }),
         contextFailurePort: prepared.context,
+        modelFailurePort,
         requestContinuation: (message) =>
           agentReference.current?.steer(message),
         maxToolCalls: this.#limits.maxToolCalls,
@@ -169,6 +174,7 @@ export class OpenDesignPiRuntime {
         streamFn: createPiModelGatewayStreamFn({
           modelGateway: this.options.modelGateway,
           contextProjection: prepared.context,
+          failurePort: modelFailurePort,
           nextAttemptId: () => `${request.runId}_attempt_${++attempt}`,
           now: () => this.#now().getTime(),
         }),

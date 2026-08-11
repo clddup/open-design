@@ -125,12 +125,66 @@ describe("ParentModelGateway", () => {
       done: false,
       value: {
         type: "attempt.failed",
-        error: { code: "model_bridge_invalid_response" },
+        error: {
+          code: "model_bridge_invalid_response",
+          modelRequestId: request.requestId,
+        },
       },
     });
     await expect(iterator.next()).resolves.toEqual({
       done: true,
       value: undefined,
     });
+  });
+
+  it("adds the Main model request ID without losing Provider correlation", async () => {
+    const messages: unknown[] = [];
+    const gateway = new ParentModelGateway({
+      postMessage: (message) => messages.push(message),
+    });
+    const stream = gateway.stream({
+      attemptId: "attempt_timeout",
+      modelSelection: {
+        providerId: "provider_1",
+        modelId: "design-model",
+      },
+      system: "System",
+      messages: [{ role: "user", content: "Hello" }],
+      tools: [],
+      signal: new AbortController().signal,
+    });
+    const iterator = stream[Symbol.asyncIterator]();
+    const first = iterator.next();
+    await Promise.resolve();
+    const request = messages[0] as { requestId: string };
+
+    gateway.handleMessage({
+      type: "model.event",
+      requestId: request.requestId,
+      event: {
+        type: "attempt.failed",
+        attemptId: "attempt_timeout",
+        error: {
+          code: "provider_timeout",
+          message: "Provider stream timed out",
+          retryable: true,
+          provider: "provider_1",
+          providerRequestId: "provider_request_1",
+          timeout: { phase: "stream-idle", thresholdMs: 120_000 },
+        },
+      },
+    });
+
+    await expect(first).resolves.toMatchObject({
+      value: {
+        type: "attempt.failed",
+        error: {
+          providerRequestId: "provider_request_1",
+          modelRequestId: request.requestId,
+          timeout: { phase: "stream-idle", thresholdMs: 120_000 },
+        },
+      },
+    });
+    await iterator.return?.();
   });
 });

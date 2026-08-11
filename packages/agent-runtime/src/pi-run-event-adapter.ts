@@ -6,6 +6,7 @@ import type {
 } from "@earendil-works/pi-agent-core";
 import type {
   AgentEvent,
+  AgentRunFailure,
   AgentToolFailureDetails,
   AssistantTimelineBlock,
   RunStopReason,
@@ -31,6 +32,7 @@ import {
   type PiToolApprovalResolved,
 } from "./pi-tool-adapter.js";
 import type { PiContextFailurePort } from "./pi-context-adapter.js";
+import type { PiModelFailurePort } from "./pi-model-gateway-adapter.js";
 import { appendRunJournalEvent } from "./run-journal-writer.js";
 
 export interface PiRunEventAdapterOptions {
@@ -42,6 +44,7 @@ export interface PiRunEventAdapterOptions {
   approvalPort?: ApprovalPort;
   completionGuard?: CompletionGuardPort;
   contextFailurePort?: PiContextFailurePort;
+  modelFailurePort?: PiModelFailurePort;
   requestContinuation?: (message: UserMessage) => void;
   maxToolCalls?: number;
   maxTurns?: number;
@@ -76,6 +79,7 @@ export class PiRunEventAdapter {
   readonly #maxCompletionGuardRejections: number;
   readonly #maxTotalTokens: number;
   readonly #maxTurns: number;
+  readonly #modelFailurePort: PiModelFailurePort | undefined;
   readonly #now: () => Date;
   readonly #request: AgentRunRequest;
   readonly #requestContinuation: ((message: UserMessage) => void) | undefined;
@@ -84,7 +88,7 @@ export class PiRunEventAdapter {
   #activeToolResultCallId: string | undefined;
   #activeUserMessage = false;
   #ended = false;
-  #forcedError: { code: string; message: string } | undefined;
+  #forcedError: AgentRunFailure | undefined;
   #forcedStopReason: RunStopReason | undefined;
   #guardRejections = 0;
   #initialPromptConsumed = false;
@@ -108,6 +112,7 @@ export class PiRunEventAdapter {
     this.#now = options.now ?? (() => new Date());
     this.#completionGuard = options.completionGuard;
     this.#contextFailurePort = options.contextFailurePort;
+    this.#modelFailurePort = options.modelFailurePort;
     this.#requestContinuation = options.requestContinuation;
     this.#maxTurns = options.maxTurns ?? 8;
     this.#maxTotalTokens = options.maxTotalTokens ?? 200_000;
@@ -410,6 +415,7 @@ export class PiRunEventAdapter {
       this.#forcedError = {
         code: "completion_guard_interrupted",
         message: "Pi Agent ended before completion review settled",
+        retryable: true,
       };
     }
     if (this.#activeToolResultCallId !== undefined) {
@@ -418,12 +424,18 @@ export class PiRunEventAdapter {
       this.#forcedError = {
         code: "tool_result_interrupted",
         message: "Pi Agent ended during a tool-result message",
+        retryable: true,
       };
     }
     const contextFailure = this.#contextFailurePort?.consumeFailure();
     if (contextFailure !== undefined) {
       this.#forcedStopReason = "error";
-      this.#forcedError = contextFailure;
+      this.#forcedError = { ...contextFailure, retryable: false };
+    }
+    const modelFailure = this.#modelFailurePort?.consumeFailure();
+    if (modelFailure !== undefined && modelFailure.code !== "cancelled") {
+      this.#forcedStopReason = "error";
+      this.#forcedError = structuredClone(modelFailure);
     }
     const stopReason =
       this.#forcedStopReason ??
@@ -440,17 +452,26 @@ export class PiRunEventAdapter {
       const invalidToolStop =
         this.#lastAssistantStopReason === "toolUse" &&
         !this.#lastAssistantHadToolCalls;
+      const failure: AgentRunFailure =
+        this.#forcedError ??
+        (invalidToolStop
+          ? {
+              code: "invalid_model_response",
+              message: "Model stopped for tool use without a tool call",
+              retryable: true,
+            }
+          : {
+              code: "run_failed",
+              message: this.#lastAssistantError ?? "Pi Agent run failed",
+              retryable: true,
+            });
+      this.#forcedError = failure;
       await this.#publish({
         type: "agent.error",
-        code:
-          this.#forcedError?.code ??
-          (invalidToolStop ? "invalid_model_response" : "run_failed"),
-        message:
-          this.#forcedError?.message ??
-          (invalidToolStop
-            ? "Model stopped for tool use without a tool call"
-            : (this.#lastAssistantError ?? "Pi Agent run failed")),
+        code: failure.code,
+        message: failure.message,
         runId: this.#request.runId,
+        failure,
       });
     }
     const finishedAt = this.#now().toISOString();
@@ -461,6 +482,9 @@ export class PiRunEventAdapter {
         startedAt: this.#startedAt,
         finishedAt,
         stopReason,
+        ...(this.#forcedError === undefined
+          ? {}
+          : { failure: this.#forcedError }),
       },
       finishedAt,
     );
@@ -527,6 +551,7 @@ export class PiRunEventAdapter {
       this.#forcedError = {
         code: "completion_guard_failed",
         message: errorMessage(error),
+        retryable: true,
       };
       return;
     }
@@ -549,6 +574,7 @@ export class PiRunEventAdapter {
       this.#forcedError = {
         code: "completion_guard_blocked",
         message: decision.message,
+        retryable: true,
       };
       return;
     }

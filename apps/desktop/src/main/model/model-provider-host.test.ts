@@ -126,13 +126,19 @@ describe("ModelProviderHost", () => {
         },
         new AbortController().signal,
       );
-      const rejected = expect(pending).rejects.toThrow(
-        "Model provider timed out after 50 ms waiting for a response",
-      );
-
       await vi.advanceTimersByTimeAsync(51);
-
-      await rejected;
+      await expect(pending).resolves.toContainEqual({
+        type: "attempt.failed",
+        attemptId: "attempt_stalled",
+        error: {
+          code: "provider_timeout",
+          message:
+            "Model provider timed out after 50 ms waiting for a response",
+          retryable: true,
+          provider: "provider_1",
+          timeout: { phase: "first-response", thresholdMs: 50 },
+        },
+      });
       expect(fetch).toHaveBeenCalledOnce();
       expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     } finally {
@@ -166,13 +172,142 @@ describe("ModelProviderHost", () => {
         },
         new AbortController().signal,
       );
-      const rejected = expect(pending).rejects.toThrow(
-        "Model provider stream timed out after 50 ms without activity",
-      );
-
       await vi.advanceTimersByTimeAsync(101);
+      await expect(pending).resolves.toContainEqual({
+        type: "attempt.failed",
+        attemptId: "attempt_idle",
+        error: {
+          code: "provider_timeout",
+          message:
+            "Model provider stream timed out after 50 ms without activity",
+          retryable: true,
+          provider: "provider_1",
+          timeout: { phase: "stream-idle", thresholdMs: 50 },
+        },
+      });
+      expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
 
-      await rejected;
+  it("aborts and closes the canonical source iterator after watchdog timeout", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    const closeIterator = vi.fn(() =>
+      Promise.resolve({ done: true as const, value: undefined }),
+    );
+    let sourceSignal: AbortSignal | undefined;
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      {
+        firstResponseTimeoutMs: 50,
+        idleTimeoutMs: 100,
+        totalTimeoutMs: 500,
+      },
+      () => ({
+        stream(request) {
+          sourceSignal = request.signal;
+          let first = true;
+          return {
+            [Symbol.asyncIterator]() {
+              return {
+                next() {
+                  if (first) {
+                    first = false;
+                    return Promise.resolve({
+                      done: false as const,
+                      value: {
+                        type: "attempt.started" as const,
+                        attemptId: request.attemptId,
+                        model: request.modelSelection.modelId,
+                        identity: {
+                          ...request.modelSelection,
+                          apiFormat: "openai-responses" as const,
+                        },
+                      },
+                    });
+                  }
+                  return new Promise(() => undefined);
+                },
+                return: closeIterator,
+              };
+            },
+          };
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        {
+          attemptId: "attempt_iterator",
+          sessionId: "session_iterator",
+          modelSelection: selection,
+          system: "System",
+          messages: [{ role: "user", content: "Design" }],
+          tools: [],
+        },
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(51);
+      const events = await pending;
+      expect(events.at(-1)).toMatchObject({
+        type: "attempt.failed",
+        error: {
+          timeout: { phase: "first-response", thresholdMs: 50 },
+        },
+      });
+      expect(sourceSignal?.aborted).toBe(true);
+      expect(closeIterator).toHaveBeenCalledOnce();
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("distinguishes the total Provider deadline from stream idle timeout", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(partialChatResponse());
+    const host = new ModelProviderHost(store, cipher, fetch, undefined, {
+      firstResponseTimeoutMs: 50,
+      idleTimeoutMs: 200,
+      totalTimeoutMs: 80,
+    });
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        {
+          attemptId: "attempt_total",
+          sessionId: "session_total",
+          modelSelection: selection,
+          system: "System",
+          messages: [{ role: "user", content: "Design a settings page" }],
+          tools: [],
+        },
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(81);
+      await expect(pending).resolves.toContainEqual({
+        type: "attempt.failed",
+        attemptId: "attempt_total",
+        error: {
+          code: "provider_timeout",
+          message: "Model provider timed out after the 80 ms total time limit",
+          retryable: true,
+          provider: "provider_1",
+          timeout: { phase: "total", thresholdMs: 80 },
+        },
+      });
       expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     } finally {
       store.close();

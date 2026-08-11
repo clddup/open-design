@@ -56,7 +56,7 @@ Pi Agent 只负责通用模型/工具轮次。以下状态和策略继续由 Ope
 迁移增加四个窄 adapter：
 
 1. Model adapter 把 OpenDesign `ModelGateway` 转成 Pi `StreamFn`，继续通过 ParentModelGateway 请求 Main。Adapter 不在 utility process 解析凭据或直接调用 Provider。
-2. Message/event adapter 在 OpenDesign canonical message、Pi message 和当前 `AgentEvent 3.6` 之间转换。未知 block、超大字段和不完整 tool pair 必须显式失败，不能静默丢弃。
+2. Message/event adapter 在 OpenDesign canonical message、Pi message 和当前 `AgentEvent 3.7` 之间转换。未知 block、超大字段和不完整 tool pair 必须显式失败，不能静默丢弃。
 3. Tool adapter 把已校验的 OpenDesign tool definition 包装为 Pi `AgentTool`。实际执行仍进入当前 ToolExecutor/Main/Renderer host，Pi 不取得引擎句柄。
 4. Context adapter 通过 `transformContext` 在每次 Provider call 前应用 OpenDesign token 预算、内容寻址附件和 checkpoint 投影。
 
@@ -91,7 +91,7 @@ Pi 导出的 compaction 纯函数可以作为后续语义 compactor provider，�
 
 截至 2026-08-11，阶段 1 已完成 contract/parity tests。ModelGateway bridge 将 Pi user/assistant/tool-result context 转换为 OpenDesign canonical message，并把 canonical reasoning/text/tool-call stream 按相同 block 生命周期转换回 Pi event；identity、response ID、原始 stop reason、usage、取消、content filter 和失败均有明确终态。桥接器拒绝错 `attemptId`、重复/未知/未完成 block、block 类型漂移和 utility process 内的 inline image/base64，并已通过 `Pi Agent → ModelGateway → OpenDesign tool → 第二个 Provider turn` 的端到端测试。OpenAI Responses、OpenAI Chat Completions 与 Anthropic Messages 的 Pi/canonical API identity 往返均有独立覆盖。它不解析凭据，也不绕过 ParentModelGateway。
 
-Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message lifecycle 投影为当前 `AgentEvent 3.6`、`message.user`、`message.assistant` 和终态 `run.state`。切换前的双路径测试固定了成功 transcript、Provider failure 和“tool-use stop 但没有 tool call”的用户可见事件与 journal 语义；切换后 production composition test 直接比较完整 `OpenDesignPiRuntime` 和底层 adapter，旧循环与双路径测试已经删除。“tool-use stop 但没有 tool call”产生可见 `invalid_model_response`，不只留下 error 状态。
+Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message lifecycle 投影为当前 `AgentEvent 3.7`、`message.user`、`message.assistant` 和终态 `run.state`。切换前的双路径测试固定了成功 transcript、Provider failure 和“tool-use stop 但没有 tool call”的用户可见事件与 journal 语义；切换后 production composition test 直接比较完整 `OpenDesignPiRuntime` 和底层 adapter，旧循环与双路径测试已经删除。“tool-use stop 但没有 tool call”产生可见 `invalid_model_response`，不只留下 error 状态。
 
 ### 阶段 2：工具和完成策略 parity
 
@@ -99,7 +99,7 @@ Pi run event adapter 使用唯一原子 journal writer，把 Pi model/message li
 - 覆盖可恢复 tool failure、不可恢复 bridge failure、停止、max turns、max tool calls 和 total token budget。
 - 把现有 plan/review completion guard 接到 Pi turn 生命周期，不能只依赖 system prompt。
 
-截至 2026-08-11，第一项与 `max tool calls` 已完成。一个通用 Pi tool adapter 直接复用十六个生产工具的原始标准 JSON Schema、OpenDesign 业务 validator、`ToolExecutorPort`、`ApprovalPort`、可信 Run context 和顺序执行，不为每个工具建立分支实现，也不把 TypeBox 私有标记发送给 Provider。Pi tool lifecycle 会写入现有 `tool.requested/progress/completed/failed`、approval 和 `design.revision` journal，并生成当前 `AgentEvent 3.6`；结构化结果仍按单字段/总量上限投影给模型，原始结果及内容寻址附件元数据进入 journal，inline base64 与 SVG XML 不进入 Pi transcript。测试覆盖成功的两轮工具循环、progress、revision、附件、业务 validator、审批拒绝、工具预算和非法 revision；桌面生产目录门禁证明十六个公开工具全部注册且三个 internal host 工具未暴露。迁移实现只从 `@opendesign/agent-runtime/pi-migration` 子入口导出，正式切换前不会因根 barrel 让旧生产 Agent bundle 提前包含未启用的 Pi loop。
+截至 2026-08-11，第一项与 `max tool calls` 已完成。一个通用 Pi tool adapter 直接复用十六个生产工具的原始标准 JSON Schema、OpenDesign 业务 validator、`ToolExecutorPort`、`ApprovalPort`、可信 Run context 和顺序执行，不为每个工具建立分支实现，也不把 TypeBox 私有标记发送给 Provider。Pi tool lifecycle 会写入现有 `tool.requested/progress/completed/failed`、approval 和 `design.revision` journal，并生成当前 `AgentEvent 3.7`；结构化结果仍按单字段/总量上限投影给模型，原始结果及内容寻址附件元数据进入 journal，inline base64 与 SVG XML 不进入 Pi transcript。测试覆盖成功的两轮工具循环、progress、revision、附件、业务 validator、审批拒绝、工具预算和非法 revision；桌面生产目录门禁证明十六个公开工具全部注册且三个 internal host 工具未暴露。迁移实现只从 `@opendesign/agent-runtime/pi-migration` 子入口导出，正式切换前不会因根 barrel 让旧生产 Agent bundle 提前包含未启用的 Pi loop。
 
 现有 plan/review `CompletionGuardPort` 也已接到 Pi `turn_end`：无工具的候选完成在 review 决定前保持 provisional，不写 journal；拒绝时发送空 `message.completed` 清除临时内容，把可信反馈作为不持久化的内部 steering 注入同一 Run，允许后才持久化最终 assistant。拒绝上限、guard failure、max turns 与累计 total token budget 都产生明确 stop/error 状态。专项测试证明首轮拒绝后会发起第二次 Provider call，journal 只保留最终获准消息；达到上限时不会留下虚假完成。
 

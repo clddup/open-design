@@ -5,6 +5,7 @@ import type {
   CanonicalStreamEvent,
   ModelApiFormat,
   ModelGateway,
+  ModelError,
   ModelReasoningEffort,
   ModelRequest,
   ModelStopReason,
@@ -28,8 +29,28 @@ import {
 export interface PiModelGatewayAdapterOptions {
   modelGateway: ModelGateway;
   contextProjection?: PiModelContextProjectionPort;
+  failurePort?: PiModelFailurePort;
   nextAttemptId?: () => string;
   now?: () => number;
+}
+
+export interface PiModelFailurePort {
+  recordFailure(failure: ModelError): void;
+  consumeFailure(): ModelError | undefined;
+}
+
+export function createPiModelFailurePort(): PiModelFailurePort {
+  let latest: ModelError | undefined;
+  return {
+    recordFailure(failure) {
+      latest = structuredClone(failure);
+    },
+    consumeFailure() {
+      const failure = latest;
+      latest = undefined;
+      return failure === undefined ? undefined : structuredClone(failure);
+    },
+  };
 }
 
 export interface PiContextFailure {
@@ -70,6 +91,16 @@ export function createPiModelGatewayStreamFn(
         options.contextProjection,
       );
     } catch (error) {
+      if (!(error instanceof PiContextProjectionError)) {
+        options.failurePort?.recordFailure({
+          code: "model_request_invalid",
+          message:
+            error instanceof Error
+              ? error.message
+              : "ModelGateway request conversion failed",
+          retryable: false,
+        });
+      }
       output.stopReason = streamOptions?.signal?.aborted ? "aborted" : "error";
       output.errorMessage =
         error instanceof Error
@@ -83,7 +114,14 @@ export function createPiModelGatewayStreamFn(
       });
       return stream;
     }
-    void pumpModelGateway(options.modelGateway, request, output, stream, now);
+    void pumpModelGateway(
+      options.modelGateway,
+      request,
+      output,
+      stream,
+      now,
+      options.failurePort,
+    );
     return stream;
   };
 }
@@ -94,6 +132,7 @@ async function pumpModelGateway(
   output: AssistantMessage,
   stream: AssistantMessageEventStream,
   now: () => number,
+  failurePort?: PiModelFailurePort,
 ): Promise<void> {
   const blocks = new Map<string, BridgeBlockState>();
   let started = false;
@@ -169,6 +208,7 @@ async function pumpModelGateway(
         continue;
       }
       terminal = true;
+      failurePort?.recordFailure(event.error);
       output.stopReason =
         event.error.code === "cancelled" ? "aborted" : "error";
       output.errorMessage = event.error.message;
@@ -187,6 +227,12 @@ async function pumpModelGateway(
     }
   } catch (error) {
     if (terminal) return;
+    failurePort?.recordFailure({
+      code: "model_gateway_protocol_error",
+      message:
+        error instanceof Error ? error.message : "ModelGateway bridge failed",
+      retryable: true,
+    });
     output.stopReason = request.signal.aborted ? "aborted" : "error";
     output.errorMessage =
       error instanceof Error ? error.message : "ModelGateway bridge failed";

@@ -649,6 +649,23 @@ export const enMessages = {
   "agent.agentUnavailable": "Agent unavailable",
   "agent.modelInterrupted": "The model response was interrupted. Try again.",
   "agent.modelTimedOut": "The model took too long to respond. Try again.",
+  "agent.timeoutFirstResponse": "Model did not start responding",
+  "agent.timeoutFirstResponseDetail":
+    "No Provider response arrived within {{duration}}.",
+  "agent.timeoutStreamIdle": "Model response stalled",
+  "agent.timeoutStreamIdleDetail":
+    "The response stream had no activity for {{duration}}.",
+  "agent.timeoutTotal": "Model time limit reached",
+  "agent.timeoutTotalDetail":
+    "The Provider request reached its {{duration}} total time limit.",
+  "agent.failureRetryable": "This request can be retried.",
+  "agent.failureNeedsChange":
+    "Adjust the request or configuration before retrying.",
+  "agent.modelRequestId": "Model request: {{id}}",
+  "agent.providerRequestId": "Provider request: {{id}}",
+  "agent.providerRequestIdUnavailable":
+    "Provider request ID was not available before the stream ended.",
+  "agent.previousRunFailed": "Previous task ended",
   "agent.requestCancelled": "Stopped",
   "agent.canvasChanged":
     "The canvas changed before this step could be applied. The Agent can inspect it and retry.",
@@ -1407,6 +1424,20 @@ const zhCNMessages = {
   "agent.agentUnavailable": "Agent 暂不可用",
   "agent.modelInterrupted": "模型响应中断，请重试。",
   "agent.modelTimedOut": "模型响应超时，请重试。",
+  "agent.timeoutFirstResponse": "等待模型首个响应超时",
+  "agent.timeoutFirstResponseDetail":
+    "在 {{duration}} 内没有收到 Provider 的首个响应。",
+  "agent.timeoutStreamIdle": "模型响应流已停滞",
+  "agent.timeoutStreamIdleDetail": "响应流连续 {{duration}} 没有新内容。",
+  "agent.timeoutTotal": "模型处理达到总时限",
+  "agent.timeoutTotalDetail": "Provider 请求已达到 {{duration}} 的总处理时限。",
+  "agent.failureRetryable": "可直接重试本次请求。",
+  "agent.failureNeedsChange": "调整请求或配置后再重试。",
+  "agent.modelRequestId": "模型请求：{{id}}",
+  "agent.providerRequestId": "Provider 请求：{{id}}",
+  "agent.providerRequestIdUnavailable":
+    "响应结束前未取得 Provider request ID。",
+  "agent.previousRunFailed": "之前的任务已结束",
   "agent.requestCancelled": "已停止",
   "agent.canvasChanged": "应用前画布已发生变化，Agent 可重新读取后重试。",
   "agent.canvasScopeConflict":

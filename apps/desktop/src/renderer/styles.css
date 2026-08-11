@@ -2553,6 +2553,21 @@ textarea {
   border-color: var(--ui-danger);
   background: var(--ui-danger);
 }
+.agent-thread__item--historical .agent-activity {
+  padding: 3px;
+  border: 0;
+  color: var(--ui-text-faint);
+  background: transparent;
+}
+.agent-thread__item--historical .agent-activity__indicator {
+  border-color: var(--ui-text-faint);
+  background: transparent;
+  box-shadow: none;
+}
+.agent-thread__item--historical .agent-activity__copy strong {
+  color: var(--ui-text-faint);
+  font-weight: 500;
+}
 .agent-activity__copy,
 .agent-activity__copy strong,
 .agent-activity__copy small {

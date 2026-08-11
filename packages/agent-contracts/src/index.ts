@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const AGENT_PROTOCOL_VERSION = "3.6.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.7.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
@@ -55,6 +55,31 @@ const ToolFailureFields = {
   recoverable: Type.Optional(Type.Boolean()),
   details: Type.Optional(AgentToolFailureDetailsSchema),
 };
+
+export const AgentRunFailureSchema = Type.Object(
+  {
+    code: IdSchema,
+    message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    retryable: Type.Boolean(),
+    provider: Type.Optional(IdSchema),
+    providerRequestId: Type.Optional(IdSchema),
+    modelRequestId: Type.Optional(IdSchema),
+    timeout: Type.Optional(
+      Type.Object(
+        {
+          phase: Type.Union([
+            Type.Literal("first-response"),
+            Type.Literal("stream-idle"),
+            Type.Literal("total"),
+          ]),
+          thresholdMs: Type.Integer({ minimum: 1, maximum: 86_400_000 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
 
 export const AgentImageAttachmentSchema = Type.Object(
   {
@@ -394,6 +419,7 @@ export const RunTimelineItemSchema = Type.Object(
     finishedAt: Type.Optional(TimestampSchema),
     stopReason: Type.Optional(RunStopReasonSchema),
     modelSelection: Type.Optional(ModelSelectionSchema),
+    failure: Type.Optional(AgentRunFailureSchema),
   },
   { additionalProperties: false },
 );
@@ -442,6 +468,7 @@ export const DurableTimelineEventSchema = Type.Union([
           finishedAt: Type.Optional(TimestampSchema),
           stopReason: Type.Optional(RunStopReasonSchema),
           modelSelection: Type.Optional(ModelSelectionSchema),
+          failure: Type.Optional(AgentRunFailureSchema),
         },
         { additionalProperties: false },
       ),
@@ -695,6 +722,7 @@ export const AgentEventSchema = Type.Union([
       message: Type.String({ minLength: 1, maxLength: 20_000 }),
       runId: Type.Optional(RunIdSchema),
       requestId: Type.Optional(IdSchema),
+      failure: Type.Optional(AgentRunFailureSchema),
     },
     { additionalProperties: false },
   ),
@@ -833,6 +861,11 @@ export type AgentToolFailureIssue = Static<typeof AgentToolFailureIssueSchema>;
 export type AgentToolFailureDetails = Static<
   typeof AgentToolFailureDetailsSchema
 >;
+export type AgentRunFailure = Static<typeof AgentRunFailureSchema>;
+
+export function isAgentRunFailure(value: unknown): value is AgentRunFailure {
+  return Value.Check(AgentRunFailureSchema, value);
+}
 
 export function isAgentAttachment(value: unknown): value is AgentAttachment {
   return Value.Check(AgentAttachmentSchema, value);
@@ -863,7 +896,11 @@ export function isDurableTimelineEvent(
 ): value is DurableTimelineEvent {
   return (
     Value.Check(DurableTimelineEventSchema, value) &&
-    (value.type !== "message.user" || isSelectionScope(value.payload.scope))
+    (value.type !== "message.user" || isSelectionScope(value.payload.scope)) &&
+    (value.type !== "run.state" ||
+      value.payload.failure === undefined ||
+      (value.payload.status === "error" &&
+        value.payload.stopReason === "error"))
   );
 }
 
@@ -882,9 +919,17 @@ export function isAgentRequest(value: unknown): value is AgentRequest {
 export function isAgentEvent(value: unknown): value is AgentEvent {
   return (
     Value.Check(AgentEventSchema, value) &&
+    (value.type !== "agent.error" ||
+      value.failure === undefined ||
+      (value.failure.code === value.code &&
+        value.failure.message === value.message)) &&
     (value.type !== "session.history" ||
       value.timeline.every(
-        (item) => item.type !== "user.message" || isSelectionScope(item.scope),
+        (item) =>
+          (item.type !== "user.message" || isSelectionScope(item.scope)) &&
+          (item.type !== "run" ||
+            item.failure === undefined ||
+            (item.status === "error" && item.stopReason === "error")),
       ))
   );
 }

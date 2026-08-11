@@ -35,6 +35,19 @@ export interface AssistantTimelineBlock {
   summary?: string;
 }
 
+export interface SessionRunFailure {
+  code: string;
+  message: string;
+  retryable: boolean;
+  provider?: string;
+  providerRequestId?: string;
+  modelRequestId?: string;
+  timeout?: {
+    phase: "first-response" | "stream-idle" | "total";
+    thresholdMs: number;
+  };
+}
+
 export type SessionAttachment =
   | {
       attachmentId: string;
@@ -134,6 +147,7 @@ export type SessionTimelineItem =
       finishedAt?: string;
       stopReason?: RunStopReason;
       modelSelection?: SessionModelSelection;
+      failure?: SessionRunFailure;
     });
 
 export type SelectionScope =
@@ -469,6 +483,11 @@ export class JsonlSessionStore implements SessionStore {
             startedAt: run.startedAt,
             finishedAt,
             stopReason: "error",
+            failure: {
+              code: "run_interrupted",
+              message: "Run was interrupted when OpenDesign stopped",
+              retryable: true,
+            },
           },
         };
         assertJournalEvent(event);
@@ -509,6 +528,9 @@ export function projectTimeline(
           ...(payload.modelSelection === undefined
             ? {}
             : { modelSelection: payload.modelSelection }),
+          ...(payload.failure === undefined
+            ? {}
+            : { failure: structuredClone(payload.failure) }),
         });
       } else {
         items.set(key, {
@@ -526,6 +548,9 @@ export function projectTimeline(
           ...(payload.modelSelection === undefined
             ? {}
             : { modelSelection: payload.modelSelection }),
+          ...(payload.failure === undefined
+            ? {}
+            : { failure: structuredClone(payload.failure) }),
         });
       }
       continue;
@@ -912,7 +937,11 @@ function isJournalEvent(value: unknown): value is JournalEvent {
         (payload.stopReason === undefined ||
           isRunStopReason(payload.stopReason)) &&
         (payload.modelSelection === undefined ||
-          isModelSelection(payload.modelSelection))
+          isModelSelection(payload.modelSelection)) &&
+        (payload.failure === undefined ||
+          (payload.status === "error" &&
+            payload.stopReason === "error" &&
+            isRunFailure(payload.failure)))
       );
     case "message.user":
       return (
@@ -1111,6 +1140,53 @@ function isModelSelection(value: unknown): value is SessionModelSelection {
   );
 }
 
+function isRunFailure(value: unknown): value is SessionRunFailure {
+  if (
+    !isRecord(value) ||
+    !boundedIdentifier(value.code) ||
+    !isNonEmptyString(value.message) ||
+    value.message.length > 20_000 ||
+    typeof value.retryable !== "boolean" ||
+    (value.provider !== undefined && !boundedIdentifier(value.provider)) ||
+    (value.providerRequestId !== undefined &&
+      !boundedIdentifier(value.providerRequestId)) ||
+    (value.modelRequestId !== undefined &&
+      !boundedIdentifier(value.modelRequestId))
+  ) {
+    return false;
+  }
+  if (
+    value.timeout !== undefined &&
+    (!isRecord(value.timeout) ||
+      !["first-response", "stream-idle", "total"].includes(
+        String(value.timeout.phase),
+      ) ||
+      !Number.isInteger(value.timeout.thresholdMs) ||
+      Number(value.timeout.thresholdMs) < 1 ||
+      Number(value.timeout.thresholdMs) > 86_400_000 ||
+      Object.keys(value.timeout).some(
+        (key) => !["phase", "thresholdMs"].includes(key),
+      ))
+  ) {
+    return false;
+  }
+  return Object.keys(value).every((key) =>
+    [
+      "code",
+      "message",
+      "retryable",
+      "provider",
+      "providerRequestId",
+      "modelRequestId",
+      "timeout",
+    ].includes(key),
+  );
+}
+
+function boundedIdentifier(value: unknown): value is string {
+  return isNonEmptyString(value) && value.length <= 256;
+}
+
 function isToolRisk(value: unknown): value is ToolRisk {
   return (
     value === "read" ||
@@ -1178,6 +1254,7 @@ interface RunStatePayload {
   finishedAt?: string;
   stopReason?: RunStopReason;
   modelSelection?: SessionModelSelection;
+  failure?: SessionRunFailure;
 }
 
 interface UserMessagePayload {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AGENT_PROTOCOL_VERSION } from "@opendesign/agent-contracts";
 import {
   AgentHost,
   createAgentEnvironment,
@@ -323,10 +324,13 @@ describe("AgentHost model bridge", () => {
     host.start();
     postToHost({
       type: "agent.ready",
-      protocolVersion: "3.6.0",
+      protocolVersion: AGENT_PROTOCOL_VERSION,
       runtimeVersion: "0.0.0",
     });
-    postToHost({ type: "agent.connected", protocolVersion: "3.6.0" });
+    postToHost({
+      type: "agent.connected",
+      protocolVersion: AGENT_PROTOCOL_VERSION,
+    });
     postToHost({
       type: "tool.requested",
       runId: "run_pages",

@@ -183,6 +183,11 @@ describe("Pi completion guard adapter", () => {
       code: "completion_guard_blocked",
       message: "Rendered review is still missing.",
       runId: request.runId,
+      failure: {
+        code: "completion_guard_blocked",
+        message: "Rendered review is still missing.",
+        retryable: true,
+      },
     });
     expect(result.events.at(-1)).toMatchObject({
       type: "run.completed",

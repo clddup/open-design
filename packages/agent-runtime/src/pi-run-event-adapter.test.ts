@@ -14,7 +14,10 @@ import {
 import { describe, expect, it } from "vitest";
 import { type AgentRunRequest, type ToolExecutionEvent } from "./index.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
-import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
+import {
+  createPiModelFailurePort,
+  createPiModelGatewayStreamFn,
+} from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
 import { OpenDesignPiRuntime } from "./pi-runtime.js";
 
@@ -143,13 +146,25 @@ describe("Pi run event adapter", () => {
     );
     expect(pi.events).toContainEqual({
       type: "agent.error",
-      code: "run_failed",
+      code: "upstream_error",
       message: "Provider failed",
       runId: request.runId,
+      failure: {
+        code: "upstream_error",
+        message: "Provider failed",
+        retryable: true,
+        provider: "configured-provider",
+      },
     });
     expect(pi.events.at(-1)).toMatchObject({
       type: "run.completed",
       stopReason: "error",
+    });
+    const timeline = await pi.store.readTimeline(request.sessionId);
+    expect(timeline.find((item) => item.type === "run")).toMatchObject({
+      type: "run",
+      status: "error",
+      failure: { code: "upstream_error" },
     });
   });
 
@@ -178,6 +193,11 @@ describe("Pi run event adapter", () => {
       code: "invalid_model_response",
       message: "Model stopped for tool use without a tool call",
       runId: request.runId,
+      failure: {
+        code: "invalid_model_response",
+        message: "Model stopped for tool use without a tool call",
+        retryable: true,
+      },
     });
   });
 
@@ -289,6 +309,7 @@ async function runProduction(modelGateway: ModelGateway) {
 async function runPi(modelGateway: ModelGateway) {
   const store = new MemorySessionStore();
   const events: AgentEvent[] = [];
+  const modelFailurePort = createPiModelFailurePort();
   const agent = createOpenDesignPiAgent({
     initialState: {
       messages: [],
@@ -311,6 +332,7 @@ async function runPi(modelGateway: ModelGateway) {
     sessionId: request.sessionId,
     streamFn: createPiModelGatewayStreamFn({
       modelGateway,
+      failurePort: modelFailurePort,
       nextAttemptId: () => `${request.runId}_attempt_1`,
       now: () => fixedNow().getTime(),
     }),
@@ -321,6 +343,7 @@ async function runPi(modelGateway: ModelGateway) {
     emit: (event) => {
       events.push(event);
     },
+    modelFailurePort,
     now: fixedNow,
   });
   const unsubscribe = agent.subscribe((event) => adapter.accept(event));

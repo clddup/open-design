@@ -239,7 +239,9 @@ function isCanonicalStreamEvent(value: unknown): value is CanonicalStreamEvent {
   if (!record(value) || !safeId(value.attemptId)) return false;
   if (value.type === "attempt.started") {
     return (
-      safeText(value.model, 256) && isResolvedModelIdentity(value.identity)
+      safeText(value.model, 256) &&
+      isResolvedModelIdentity(value.identity) &&
+      (value.providerRequestId === undefined || safeId(value.providerRequestId))
     );
   }
   if (value.type === "block.started") {
@@ -262,7 +264,9 @@ function isCanonicalStreamEvent(value: unknown): value is CanonicalStreamEvent {
         "content_filter",
         "error",
         "other",
-      ].includes(String(value.stopReason)) && isUsage(value.usage)
+      ].includes(String(value.stopReason)) &&
+      isUsage(value.usage) &&
+      (value.providerRequestId === undefined || safeId(value.providerRequestId))
     );
   }
   return (
@@ -270,7 +274,36 @@ function isCanonicalStreamEvent(value: unknown): value is CanonicalStreamEvent {
     record(value.error) &&
     safeText(value.error.code, 256) &&
     safeText(value.error.message, 20_000) &&
-    typeof value.error.retryable === "boolean"
+    typeof value.error.retryable === "boolean" &&
+    (value.error.provider === undefined || safeId(value.error.provider)) &&
+    (value.error.providerRequestId === undefined ||
+      safeId(value.error.providerRequestId)) &&
+    (value.error.modelRequestId === undefined ||
+      safeId(value.error.modelRequestId)) &&
+    (value.error.timeout === undefined ||
+      isModelTimeout(value.error.timeout)) &&
+    Object.keys(value.error).every((key) =>
+      [
+        "code",
+        "message",
+        "retryable",
+        "provider",
+        "providerRequestId",
+        "modelRequestId",
+        "timeout",
+      ].includes(key),
+    )
+  );
+}
+
+function isModelTimeout(value: unknown): boolean {
+  return (
+    record(value) &&
+    ["first-response", "stream-idle", "total"].includes(String(value.phase)) &&
+    Number.isInteger(value.thresholdMs) &&
+    Number(value.thresholdMs) > 0 &&
+    Number(value.thresholdMs) <= 86_400_000 &&
+    Object.keys(value).every((key) => ["phase", "thresholdMs"].includes(key))
   );
 }
 

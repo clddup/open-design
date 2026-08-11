@@ -635,6 +635,118 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("attempt_1");
   });
 
+  it.each([
+    [
+      "first-response" as const,
+      180_000,
+      "Model did not start responding",
+      "No Provider response arrived within 3 min.",
+    ],
+    [
+      "stream-idle" as const,
+      120_000,
+      "Model response stalled",
+      "The response stream had no activity for 2 min.",
+    ],
+    [
+      "total" as const,
+      900_000,
+      "Model time limit reached",
+      "The Provider request reached its 15 min total time limit.",
+    ],
+  ])(
+    "keeps %s timeout phase, threshold, correlation, and retry semantics visible",
+    (phase, thresholdMs, title, detail) => {
+      const { container } = render(
+        <AgentTimeline
+          activeRunId={null}
+          conversationId="conversation_1"
+          conversationTitle="Conversation"
+          error={null}
+          events={[
+            {
+              type: "agent.error",
+              code: "provider_timeout",
+              runId: `run_${phase}`,
+              message: "Provider timed out",
+              failure: {
+                code: "provider_timeout",
+                message: "Provider timed out",
+                retryable: true,
+                provider: "provider_1",
+                ...(phase === "stream-idle"
+                  ? { providerRequestId: "provider_request_1" }
+                  : {}),
+                modelRequestId: `model_request_${phase}`,
+                timeout: { phase, thresholdMs },
+              },
+            },
+            {
+              type: "run.completed",
+              runId: `run_${phase}`,
+              finishedAt: now,
+              stopReason: "error",
+            },
+          ]}
+          onStop={vi.fn()}
+          onSubmit={vi.fn().mockResolvedValue(true)}
+          timeline={[]}
+        />,
+      );
+
+      expect(screen.getByText(title)).toBeInTheDocument();
+      expect(container).toHaveTextContent(detail);
+      expect(container).toHaveTextContent(
+        `Model request: model_request_${phase}`,
+      );
+      expect(container).toHaveTextContent(
+        phase === "stream-idle"
+          ? "Provider request: provider_request_1"
+          : "Provider request ID was not available before the stream ended.",
+      );
+      expect(container).toHaveTextContent("This request can be retried.");
+    },
+  );
+
+  it("downgrades an old terminal error to a compact history row when a new Run starts", () => {
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_current"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[
+          {
+            type: "agent.error",
+            code: "context_budget_exceeded",
+            runId: "run_previous",
+            message: "Conversation context remains too large",
+            failure: {
+              code: "context_budget_exceeded",
+              message: "Conversation context remains too large",
+              retryable: false,
+            },
+          },
+          {
+            type: "run.started",
+            runId: "run_current",
+            startedAt: now,
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    const historyRow = screen.getByText("Previous task ended").closest("li");
+    expect(historyRow).toHaveClass("agent-thread__item--historical");
+    expect(historyRow).toHaveClass("agent-thread__item--done");
+    expect(historyRow).not.toHaveClass("agent-thread__item--error");
+    expect(screen.getByText("Working on your design")).toBeInTheDocument();
+    expect(container.querySelectorAll(".agent-message__caret")).toHaveLength(0);
+  });
+
   it("finalizes a failed partial message and leaves only the current Run streaming", () => {
     const { container } = render(
       <AgentTimeline

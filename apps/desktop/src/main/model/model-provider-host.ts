@@ -2,6 +2,7 @@ import {
   ModelResponseAccumulator,
   MultiProtocolModelGateway,
   type CanonicalStreamEvent,
+  type ModelGateway,
   type ModelRequest,
   type ModelSelection,
 } from "@opendesign/model-gateway";
@@ -80,6 +81,9 @@ export class ModelProviderHost {
     private readonly fetch: typeof globalThis.fetch = globalThis.fetch,
     private readonly attachmentResolver?: ModelAttachmentResolver,
     private readonly streamTimeouts: ModelStreamTimeouts = defaultModelStreamTimeouts,
+    private readonly gatewayFactory?: (
+      selection: ModelSelection,
+    ) => ModelGateway,
   ) {
     assertModelStreamTimeouts(streamTimeouts);
   }
@@ -266,12 +270,15 @@ export class ModelProviderHost {
     const startedAt = Date.now();
     let waitingForFirstResponse = true;
     let completed = false;
+    let providerRequestId: string | undefined;
     try {
       while (true) {
         const elapsed = Date.now() - startedAt;
         const totalRemaining = this.streamTimeouts.totalTimeoutMs - elapsed;
         if (totalRemaining <= 0) {
           throw modelTimeout(
+            "total",
+            this.streamTimeouts.totalTimeoutMs,
             `Model provider timed out after the ${this.streamTimeouts.totalTimeoutMs} ms total time limit`,
           );
         }
@@ -281,6 +288,12 @@ export class ModelProviderHost {
         const totalExpiresFirst = totalRemaining <= phaseTimeout;
         const timeoutMs = Math.min(phaseTimeout, totalRemaining);
         const timeoutError = modelTimeout(
+          totalExpiresFirst
+            ? "total"
+            : waitingForFirstResponse
+              ? "first-response"
+              : "stream-idle",
+          totalExpiresFirst ? this.streamTimeouts.totalTimeoutMs : phaseTimeout,
           totalExpiresFirst
             ? `Model provider timed out after the ${this.streamTimeouts.totalTimeoutMs} ms total time limit`
             : waitingForFirstResponse
@@ -300,8 +313,35 @@ export class ModelProviderHost {
         if (result.value.type !== "attempt.started") {
           waitingForFirstResponse = false;
         }
+        if (
+          (result.value.type === "attempt.started" ||
+            result.value.type === "attempt.completed") &&
+          result.value.providerRequestId !== undefined
+        ) {
+          providerRequestId = result.value.providerRequestId;
+        }
         yield result.value;
       }
+    } catch (error) {
+      if (error instanceof ModelStreamTimeoutError) {
+        yield {
+          type: "attempt.failed",
+          attemptId: request.attemptId,
+          error: {
+            code: "provider_timeout",
+            message: error.message,
+            retryable: true,
+            provider: request.modelSelection.providerId,
+            ...(providerRequestId === undefined ? {} : { providerRequestId }),
+            timeout: {
+              phase: error.phase,
+              thresholdMs: error.thresholdMs,
+            },
+          },
+        };
+        return;
+      }
+      throw error;
     } finally {
       signal.removeEventListener("abort", abort);
       if (!completed && !controller.signal.aborted) {
@@ -385,7 +425,8 @@ export class ModelProviderHost {
     };
   }
 
-  private gateway(selection: ModelSelection): MultiProtocolModelGateway {
+  private gateway(selection: ModelSelection): ModelGateway {
+    if (this.gatewayFactory) return this.gatewayFactory(selection);
     const { provider, model } = this.resolveSelection(selection);
     const credential = this.credential(provider.providerId);
     return new MultiProtocolModelGateway({
@@ -557,7 +598,7 @@ function nextModelEvent(
   iterator: AsyncIterator<CanonicalStreamEvent>,
   controller: AbortController,
   timeoutMs: number,
-  timeoutError: DOMException,
+  timeoutError: Error,
 ): Promise<IteratorResult<CanonicalStreamEvent>> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -608,8 +649,23 @@ function nextModelEvent(
   });
 }
 
-function modelTimeout(message: string): DOMException {
-  return new DOMException(message, "TimeoutError");
+class ModelStreamTimeoutError extends Error {
+  constructor(
+    readonly phase: "first-response" | "stream-idle" | "total",
+    readonly thresholdMs: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "TimeoutError";
+  }
+}
+
+function modelTimeout(
+  phase: ModelStreamTimeoutError["phase"],
+  thresholdMs: number,
+  message: string,
+): ModelStreamTimeoutError {
+  return new ModelStreamTimeoutError(phase, thresholdMs, message);
 }
 
 function assertModelStreamTimeouts(timeouts: ModelStreamTimeouts): void {

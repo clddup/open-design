@@ -15,6 +15,7 @@ import {
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import {
+  createPiModelFailurePort,
   createPiModelGatewayStreamFn,
   projectPiMessageToCanonical,
 } from "./pi-model-gateway-adapter.js";
@@ -314,6 +315,7 @@ describe("Pi ModelGateway adapter", () => {
   });
 
   it("encodes gateway failures and forbidden inline images as Pi error events", async () => {
+    const failurePort = createPiModelFailurePort();
     const failedGateway: ModelGateway = {
       async *stream(request): AsyncIterable<CanonicalStreamEvent> {
         await Promise.resolve();
@@ -346,17 +348,28 @@ describe("Pi ModelGateway adapter", () => {
             message: "Provider failed",
             retryable: true,
             provider: "configured-provider",
+            modelRequestId: "model_request_1",
+            timeout: { phase: "stream-idle", thresholdMs: 120_000 },
           },
         };
       },
     };
     const streamFn = createPiModelGatewayStreamFn({
       modelGateway: failedGateway,
+      failurePort,
     });
     const failed = await streamFn(model, { messages: [] }).result();
     expect(failed).toMatchObject({
       stopReason: "error",
       errorMessage: "Provider failed",
+    });
+    expect(failurePort.consumeFailure()).toEqual({
+      code: "upstream_error",
+      message: "Provider failed",
+      retryable: true,
+      provider: "configured-provider",
+      modelRequestId: "model_request_1",
+      timeout: { phase: "stream-idle", thresholdMs: 120_000 },
     });
 
     const forbidden = await streamFn(model, {

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "recordedAt": "2026-08-11",
   "policy": {
     "allowFloatingRefs": false,
@@ -9,7 +9,7 @@
     "documentFormat": "dev.opendesign.document",
     "documentSchemaVersion": "1.8.0",
     "runtimeProtocolVersion": "0.1.0",
-    "agentProtocolVersion": "3.6.0",
+    "agentProtocolVersion": "3.7.0",
     "geometryServiceContractVersion": 4
   },
   "components": {

@@ -210,6 +210,10 @@ describe("session journal recovery", () => {
       status: "error",
       finishedAt: "2026-08-10T01:00:00.000Z",
       stopReason: "error",
+      failure: {
+        code: "run_interrupted",
+        retryable: true,
+      },
     });
     expect(timeline.find((item) => item.type === "tool")).toMatchObject({
       type: "tool",
@@ -222,6 +226,43 @@ describe("session journal recovery", () => {
       store.reconcileInterruptedRuns("2026-08-10T02:00:00.000Z"),
     ).resolves.toEqual({ recoveredRuns: 0, recoveredTools: 0 });
     await expect(store.read("session_1")).resolves.toHaveLength(4);
+  });
+
+  it("projects structured Provider failures while accepting legacy terminal runs", async () => {
+    const store = new SqliteSessionStore(":memory:");
+    await store.append(
+      event(1, "run.state", {
+        status: "started",
+        startedAt: "2026-08-11T00:00:00.000Z",
+      }),
+    );
+    await store.append(
+      event(2, "run.state", {
+        status: "error",
+        startedAt: "2026-08-11T00:00:00.000Z",
+        finishedAt: "2026-08-11T00:03:00.000Z",
+        stopReason: "error",
+        failure: {
+          code: "provider_timeout",
+          message: "Provider did not start responding",
+          retryable: true,
+          provider: "provider_1",
+          modelRequestId: "model_request_1",
+          timeout: { phase: "first-response", thresholdMs: 180_000 },
+        },
+      }),
+    );
+
+    const timeline = await store.readTimeline("session_1");
+    expect(timeline.find((item) => item.type === "run")).toMatchObject({
+      type: "run",
+      failure: {
+        code: "provider_timeout",
+        modelRequestId: "model_request_1",
+        timeout: { phase: "first-response", thresholdMs: 180_000 },
+      },
+    });
+    store.close();
   });
 
   it("rejects attachment metadata that contains a local path", () => {

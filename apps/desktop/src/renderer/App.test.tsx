@@ -4407,7 +4407,7 @@ describe("App", () => {
 
     act(() => {
       emitDiagnosticEvent?.({
-        version: 2,
+        version: 3,
         eventId: "diagnostic_revision_conflict",
         occurredAt: now,
         level: "error",

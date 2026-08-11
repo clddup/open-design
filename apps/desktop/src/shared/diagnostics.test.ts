@@ -63,6 +63,30 @@ describe("diagnostic contract", () => {
     expect(formatDiagnosticReport(event)).toContain(event.message);
   });
 
+  it("preserves structured Provider timeout evidence in copied diagnostics", () => {
+    const timeoutEvent: DiagnosticEvent = {
+      ...event,
+      code: "provider_timeout",
+      message: "Provider stream timed out",
+      failure: {
+        code: "provider_timeout",
+        message: "Provider stream timed out",
+        retryable: true,
+        provider: "provider_1",
+        providerRequestId: "provider_request_1",
+        modelRequestId: "model_request_1",
+        timeout: { phase: "stream-idle", thresholdMs: 120_000 },
+      },
+    };
+
+    expect(isDiagnosticEvent(timeoutEvent)).toBe(true);
+    const report = formatDiagnosticReport(timeoutEvent);
+    expect(report).toContain("Failure:");
+    expect(report).toContain('"phase": "stream-idle"');
+    expect(report).toContain('"modelRequestId": "model_request_1"');
+    expect(report).toContain('"providerRequestId": "provider_request_1"');
+  });
+
   it("preserves invariant targets in the copy-ready diagnostic", () => {
     const invariantEvent: DiagnosticEvent = {
       ...event,

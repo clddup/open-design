@@ -168,7 +168,12 @@ function diagnosticContextForAgentEvent(
   event: AgentEvent,
 ): DiagnosticContext | undefined {
   const runId = "runId" in event ? event.runId : undefined;
-  const requestId = "requestId" in event ? event.requestId : undefined;
+  const requestId =
+    "requestId" in event
+      ? event.requestId
+      : event.type === "agent.error"
+        ? event.failure?.modelRequestId
+        : undefined;
   const toolCallId = "toolCallId" in event ? event.toolCallId : undefined;
   const conversationId = runId
     ? conversationIdByRunId.get(runId)
@@ -190,10 +195,12 @@ function recordAgentDiagnostic(event: AgentEvent): void {
   if (event.type === "agent.error") {
     publishDiagnostic({
       level: "error",
-      source: "agent",
+      source:
+        event.failure?.provider === undefined ? "agent" : "model-provider",
       presentation: "toast",
       code: event.code,
       message: event.message,
+      ...(event.failure === undefined ? {} : { failure: event.failure }),
       ...(diagnosticContextForAgentEvent(event)
         ? { context: diagnosticContextForAgentEvent(event) }
         : {}),

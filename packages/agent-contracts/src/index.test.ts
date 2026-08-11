@@ -5,6 +5,7 @@ import {
   AgentRequestSchema,
   MAX_SELECTED_NODE_IDS,
   SelectionScopeSchema,
+  isAgentEvent,
   isAgentRequest,
   isSelectionScope,
 } from "./index.js";
@@ -274,6 +275,48 @@ describe("Agent contracts", () => {
       Value.Check(AgentEventSchema, {
         ...failure,
         details: { ...failure.details, filePath: "C:\\private\\draft" },
+      }),
+    ).toBe(false);
+  });
+
+  it("carries bounded structured Provider failure diagnostics", () => {
+    const failure = {
+      code: "provider_timeout",
+      message: "Provider stream timed out",
+      retryable: true,
+      provider: "provider_1",
+      providerRequestId: "provider_request_1",
+      modelRequestId: "model_request_1",
+      timeout: { phase: "stream-idle", thresholdMs: 120_000 },
+    } as const;
+    expect(
+      Value.Check(AgentEventSchema, {
+        type: "agent.error",
+        code: failure.code,
+        message: failure.message,
+        runId: "run_1",
+        failure,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AgentEventSchema, {
+        type: "agent.error",
+        code: failure.code,
+        message: failure.message,
+        runId: "run_1",
+        failure: {
+          ...failure,
+          timeout: { phase: "socket", thresholdMs: -1 },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isAgentEvent({
+        type: "agent.error",
+        code: failure.code,
+        message: failure.message,
+        runId: "run_1",
+        failure: { ...failure, message: "Contradictory failure" },
       }),
     ).toBe(false);
   });
