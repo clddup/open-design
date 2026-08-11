@@ -1128,16 +1128,6 @@ function resolveExistingArtboardDescendants(
       descendants.add(node.id);
     }
   }
-  for (const region of target.composition.regions) {
-    if (
-      inspection.nodesById.has(region.nodeId) &&
-      !descendants.has(region.nodeId)
-    ) {
-      throw new Error(
-        `design_workflow.existing_artboard_invalid: Existing planned region ${region.nodeId} is outside artboard ${frameId}; inspect again and correct the plan`,
-      );
-    }
-  }
   return descendants;
 }
 
@@ -1189,6 +1179,14 @@ function assertDeliveryTargetStructure(
     throw new Error(
       `design_workflow.delivery_structure_incomplete: Delivery target ${target.delivery.targetId} requires Frame ${artboardId} on Page ${target.planned.pageId}; inspect the current document and finish that target before capturing again`,
     );
+  }
+  if (target.planned.artboard.mode === "existing") {
+    if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, artboardId)) {
+      throw new Error(
+        `design_workflow.delivery_structure_incomplete: Existing delivery artboard ${artboardId} has no real editable content; add or refine material layers inside the artboard before capturing again`,
+      );
+    }
+    return;
   }
   for (const region of target.planned.composition.regions) {
     const regionNode = inspection.nodesById.get(region.nodeId);
@@ -1282,6 +1280,7 @@ function resolvePlannedStructureGeometry(
       }
   >();
   for (const target of state.targetsById.values()) {
+    if (target.planned.artboard.mode !== "create") continue;
     registerPlannedNode(plannedNodes, target.planned.artboard.frameId, {
       kind: "artboard",
       target,
@@ -1503,7 +1502,9 @@ function assertPlannedArtboardWrite(
         );
       }
     }
-    assertPlannedRegionWrites(inserts, state.planned);
+    if (artboard.mode === "create") {
+      assertPlannedRegionWrites(inserts, state.planned);
+    }
     assertInitialArtboardMaterial(inserts, state.planned);
     return;
   }
@@ -1524,7 +1525,9 @@ function assertPlannedArtboardWrite(
       );
     }
   }
-  assertPlannedRegionWrites(inserts, state.planned);
+  if (artboard.mode === "create") {
+    assertPlannedRegionWrites(inserts, state.planned);
+  }
 }
 
 function assertPlannedRegionWrites(

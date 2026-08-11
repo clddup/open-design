@@ -332,20 +332,27 @@ export function generationSkeletonFromAcceptedPlan(
       transform,
       width: useActualArtboard ? actualArtboard.size.width : artboard.width,
     },
-    regions: target.composition.regions
-      .filter(
-        (region) =>
-          !generationRegionFulfilled(document, artboard.frameId, region.nodeId),
-      )
-      .map((region) => ({
-        height: region.height,
-        id: region.nodeId,
-        name: region.name,
-        role: region.role,
-        width: region.width,
-        x: region.x,
-        y: region.y,
-      })),
+    regions:
+      artboard.mode === "existing"
+        ? []
+        : target.composition.regions
+            .filter(
+              (region) =>
+                !generationRegionFulfilled(
+                  document,
+                  artboard.frameId,
+                  region.nodeId,
+                ),
+            )
+            .map((region) => ({
+              height: region.height,
+              id: region.nodeId,
+              name: region.name,
+              role: region.role,
+              width: region.width,
+              x: region.x,
+              y: region.y,
+            })),
   };
 }
 

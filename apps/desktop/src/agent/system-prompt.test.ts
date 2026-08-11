@@ -49,6 +49,12 @@ describe("OpenDesign Agent system prompt", () => {
       "call opendesign_define_design_plan",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "For artboard.mode=existing, regions are logical planning and review areas",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "always set node.childIds to an empty array",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "call opendesign_record_visual_review",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

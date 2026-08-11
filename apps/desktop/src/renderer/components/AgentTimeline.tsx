@@ -50,11 +50,14 @@ type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 type TimelineItem = {
   id: string;
   runId?: string;
-  kind?: "assistant" | "user" | "tool" | "run" | "approval" | "system";
+  kind?:
+    "assistant" | "reasoning" | "user" | "tool" | "run" | "approval" | "system";
   state: "done" | "active" | "stopping" | "queued" | "error";
   time: string;
   title: string;
   detail?: string;
+  reasoning?: string;
+  reasoningCount?: number;
   attachments?: AgentAttachment[];
   toolName?: string;
   routine?: boolean;
@@ -124,17 +127,6 @@ function assistantReasoningSummary(blocks: AssistantTimelineBlock[]): string {
     )
     .filter(Boolean)
     .join("\n");
-}
-
-function assistantVisibleDetail(
-  blocks: AssistantTimelineBlock[],
-  t: Translate,
-): string {
-  const reasoning = assistantReasoningSummary(blocks);
-  const text = assistantText(blocks);
-  return [reasoning ? `${t("agent.designThinking")}\n${reasoning}` : "", text]
-    .filter(Boolean)
-    .join("\n\n");
 }
 
 function isNativeDesignTool(toolName: string | undefined): boolean {
@@ -409,14 +401,22 @@ function projectTimeline(
       };
     }
     if (item.type === "assistant.message") {
-      const detail = assistantVisibleDetail(item.blocks, t);
+      const detail = assistantText(item.blocks);
+      const reasoning = assistantReasoningSummary(item.blocks);
+      const reasoningOnly = detail.length === 0 && reasoning.length > 0;
       return {
         ...base,
-        routine: detail.length === 0,
+        routine: detail.length === 0 && reasoning.length === 0,
         state: "done",
-        kind: "assistant",
-        title: t("agent.response"),
-        detail,
+        kind: reasoningOnly ? "reasoning" : "assistant",
+        title: reasoningOnly ? t("agent.designProcess") : t("agent.response"),
+        ...(detail ? { detail } : {}),
+        ...(reasoning
+          ? {
+              reasoning,
+              reasoningCount: 1,
+            }
+          : {}),
       };
     }
     if (item.type === "tool") {
@@ -660,14 +660,18 @@ function projectEvents(
     }
     if (event.type === "message.completed") {
       hideGenericRunStatus(event.runId);
-      const detail = assistantVisibleDetail(event.blocks, t);
+      const detail = assistantText(event.blocks);
+      const reasoning = assistantReasoningSummary(event.blocks);
+      const reasoningOnly = detail.length === 0 && reasoning.length > 0;
       updateEvent(`message:${event.messageId}`, {
-        routine: detail.length === 0,
+        routine: detail.length === 0 && reasoning.length === 0,
         state: "done",
-        kind: "assistant",
+        kind: reasoningOnly ? "reasoning" : "assistant",
         time: t("common.now"),
-        title: t("agent.response"),
-        detail,
+        title: reasoningOnly ? t("agent.designProcess") : t("agent.response"),
+        detail: detail || undefined,
+        reasoning: reasoning || undefined,
+        reasoningCount: reasoning ? 1 : undefined,
       });
     }
     if (event.type === "tool.requested") {
@@ -818,7 +822,7 @@ function mergeTimeline(
     });
   }
   const latestRunId = [...runOrder.keys()].at(-1);
-  return [...merged.values()]
+  const ordered = [...merged.values()]
     .map((item) => {
       if (
         item.runId === stoppingRunId &&
@@ -869,6 +873,46 @@ function mergeTimeline(
       }
       return left.order - right.order || left.id.localeCompare(right.id);
     });
+  return mergeReasoningByRun(ordered, t);
+}
+
+function mergeReasoningByRun(
+  items: readonly TimelineItem[],
+  t: Translate,
+): TimelineItem[] {
+  const merged: TimelineItem[] = [];
+  const indexByRunId = new Map<string, number>();
+  for (const item of items) {
+    if (item.kind !== "reasoning" || !item.runId || !item.reasoning) {
+      merged.push(item);
+      continue;
+    }
+    const existingIndex = indexByRunId.get(item.runId);
+    if (existingIndex === undefined) {
+      indexByRunId.set(item.runId, merged.length);
+      merged.push(item);
+      continue;
+    }
+    const existing = merged[existingIndex];
+    if (!existing) {
+      merged.push(item);
+      continue;
+    }
+    const summaries = [existing.reasoning, item.reasoning].filter(
+      (summary): summary is string => Boolean(summary),
+    );
+    merged[existingIndex] = {
+      ...existing,
+      reasoning: summaries.join("\n\n"),
+      reasoningCount:
+        (existing.reasoningCount ?? 1) + (item.reasoningCount ?? 1),
+      title: t("agent.designProcessCount", {
+        count: (existing.reasoningCount ?? 1) + (item.reasoningCount ?? 1),
+      }),
+      time: item.time,
+    };
+  }
+  return merged;
 }
 
 function finalizeTimelineActivity(item: TimelineItem): TimelineItem {
@@ -877,6 +921,28 @@ function finalizeTimelineActivity(item: TimelineItem): TimelineItem {
     state: "done",
     ...(item.kind === "assistant" ? {} : { routine: true }),
   };
+}
+
+function ReasoningDisclosure({
+  item,
+  t,
+}: {
+  item: TimelineItem;
+  t: Translate;
+}) {
+  if (!item.reasoning) return null;
+  return (
+    <details className="agent-reasoning">
+      <summary>
+        <span aria-hidden="true" className="agent-reasoning__chevron">
+          ›
+        </span>
+        <span>{item.title}</span>
+      </summary>
+      <p>{item.reasoning}</p>
+      <small>{t("agent.reasoningSummaryNotice")}</small>
+    </details>
+  );
 }
 
 export function AgentTimeline({
@@ -945,7 +1011,7 @@ export function AgentTimeline({
   const timelineRenderMarker = items
     .map(
       (item) =>
-        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}`,
+        `${item.id}:${item.state}:${item.title.length}:${item.detail?.length ?? 0}:${item.reasoning?.length ?? 0}`,
     )
     .join("|");
   const hasConversation = conversationTitle !== null;
@@ -1394,17 +1460,36 @@ export function AgentTimeline({
                 className={`agent-thread__item agent-thread__item--${item.state}${item.kind ? ` agent-thread__item--${item.kind}` : ""}${item.historical ? " agent-thread__item--historical" : ""}`}
                 key={item.id}
               >
-                {item.kind === "user" || item.kind === "assistant" ? (
+                {item.kind === "reasoning" ? (
+                  <ReasoningDisclosure item={item} t={t} />
+                ) : item.kind === "user" || item.kind === "assistant" ? (
                   <article className="agent-message" title={item.time}>
-                    <p>
-                      {item.detail}
-                      {item.kind === "assistant" && item.state === "active" && (
-                        <span
-                          aria-hidden="true"
-                          className="agent-message__caret"
-                        />
-                      )}
-                    </p>
+                    {(item.detail || item.state === "active") && (
+                      <p>
+                        {item.detail}
+                        {item.kind === "assistant" &&
+                          item.state === "active" && (
+                            <span
+                              aria-hidden="true"
+                              className="agent-message__caret"
+                            />
+                          )}
+                      </p>
+                    )}
+                    {item.kind === "assistant" && (
+                      <ReasoningDisclosure
+                        item={{
+                          ...item,
+                          title:
+                            item.reasoningCount && item.reasoningCount > 1
+                              ? t("agent.designProcessCount", {
+                                  count: item.reasoningCount,
+                                })
+                              : t("agent.designProcess"),
+                        }}
+                        t={t}
+                      />
+                    )}
                     {item.attachments && item.attachments.length > 0 && (
                       <TimelineAttachments attachments={item.attachments} />
                     )}

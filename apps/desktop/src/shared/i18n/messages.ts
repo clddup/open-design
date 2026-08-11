@@ -605,6 +605,10 @@ export const enMessages = {
   "agent.you": "You",
   "agent.response": "Agent response",
   "agent.designThinking": "Design rationale",
+  "agent.designProcess": "Design process",
+  "agent.designProcessCount": "Design process · {{count}} steps",
+  "agent.reasoningSummaryNotice":
+    "Model process summary. It does not indicate a system test or an executed canvas operation.",
   "agent.responseCompleted": "Response completed",
   "agent.operationCompleted": "Operation completed",
   "agent.appliedRevision": "Applied at revision {{revision}}",
@@ -1381,6 +1385,10 @@ const zhCNMessages = {
   "agent.you": "你",
   "agent.response": "Agent 回复",
   "agent.designThinking": "设计思路",
+  "agent.designProcess": "设计过程",
+  "agent.designProcessCount": "设计过程 · {{count}} 步",
+  "agent.reasoningSummaryNotice":
+    "这是模型返回的过程摘要，不代表系统正在测试，也不代表画布操作已经执行。",
   "agent.responseCompleted": "回复已完成",
   "agent.operationCompleted": "操作已完成",
   "agent.appliedRevision": "已应用于 revision {{revision}}",

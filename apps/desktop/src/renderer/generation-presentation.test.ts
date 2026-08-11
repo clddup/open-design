@@ -705,6 +705,49 @@ describe("Renderer typed plan skeleton presentation", () => {
   });
 });
 
+it("treats existing-artboard regions as logical review areas instead of physical skeleton layers", () => {
+  const runtime = new EditorRuntime(createWelcomeDocument());
+  expect(
+    runtime.apply({
+      transactionId: "transaction_existing_artboard",
+      documentId: "document_welcome",
+      baseRevision: 0,
+      actor: { type: "agent", id: "agent_conversation" },
+      label: "Register existing artboard",
+      commands: [
+        {
+          commandId: "insert_existing_artboard",
+          type: "insert_element",
+          pageId: "page_welcome",
+          parentId: null,
+          index: 1,
+          node: frameNode(),
+        },
+      ],
+    }).ok,
+  ).toBe(true);
+  const accepted = {
+    id: "run_existing:tool_plan",
+    plan: {
+      ...generationPlan,
+      artboard: { ...generationPlan.artboard, mode: "existing" as const },
+    },
+    runId: "run_existing",
+    toolCallId: "tool_plan",
+  };
+
+  expect(
+    generationSkeletonFromAcceptedPlan(
+      accepted,
+      runtime.getSnapshot().document,
+      "page_welcome",
+    ),
+  ).toMatchObject({
+    artboard: { frameId: "poster_artboard", pending: false },
+    regions: [],
+  });
+});
+
 function acceptPlanPresentation(runId: string, toolCallId: string) {
   const requested = projectGenerationPlanPresentationEvent(
     EMPTY_GENERATION_PLAN_PRESENTATION_STATE,

@@ -816,10 +816,28 @@ describe("AgentTimeline", () => {
         ],
       },
       {
-        itemId: "tool:durable_canvas_tool",
+        itemId: "message:reasoning_only_2",
         sessionId: "conversation_1",
         runId: "run_history_1",
         sequence: 2,
+        createdAt: now,
+        updatedAt: now,
+        type: "assistant.message",
+        messageId: "reasoning_only_2",
+        blocks: [
+          {
+            blockId: "reasoning_block_2",
+            type: "reasoning_summary",
+            status: "completed",
+            summary: "Checking spacing and hierarchy",
+          },
+        ],
+      },
+      {
+        itemId: "tool:durable_canvas_tool",
+        sessionId: "conversation_1",
+        runId: "run_history_1",
+        sequence: 3,
         createdAt: now,
         updatedAt: now,
         type: "tool",
@@ -848,8 +866,18 @@ describe("AgentTimeline", () => {
     );
 
     expect(screen.getByText("Canvas updated")).toBeInTheDocument();
-    expect(container).toHaveTextContent("Design rationale");
+    const disclosure = screen
+      .getByText("Design process · 2 steps")
+      .closest("details");
+    expect(disclosure).not.toHaveAttribute("open");
+    expect(container.querySelectorAll(".agent-reasoning")).toHaveLength(1);
+    fireEvent.click(screen.getByText("Design process · 2 steps"));
+    expect(disclosure).toHaveAttribute("open");
     expect(container).toHaveTextContent("Planning internal");
+    expect(container).toHaveTextContent("Checking spacing and hierarchy");
+    expect(container).toHaveTextContent(
+      "It does not indicate a system test or an executed canvas operation.",
+    );
     expect(container).not.toHaveTextContent("revision");
     expect(container).not.toHaveTextContent("Response completed");
   });

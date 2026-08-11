@@ -774,9 +774,10 @@ async function executeDesignToolRequestUnsafe(
   )) {
     throw new Error(`Unsupported design tool: ${request.call.toolName}`);
   }
+  const commands = normalizeAgentInsertHierarchy(request.call.input.commands);
   assertCommandsWithinMutationTarget(
     document,
-    request.call.input.commands,
+    commands,
     request.context.mutationTarget,
   );
   const transactionId = `transaction_agent_${request.call.toolCallId}_${Date.now()}`;
@@ -793,7 +794,7 @@ async function executeDesignToolRequestUnsafe(
     ...(request.call.input.summary === undefined
       ? {}
       : { summary: request.call.input.summary }),
-    commands: request.call.input.commands,
+    commands,
   } satisfies DesignTransaction;
   const preview = runtime.preview(transaction);
   if (!preview.ok)
@@ -806,6 +807,87 @@ async function executeDesignToolRequestUnsafe(
     options.signal,
     options.stageDelayMs ?? 100,
   );
+}
+
+function normalizeAgentInsertHierarchy(
+  commands: readonly DesignOperation[],
+): DesignOperation[] {
+  const insertByNodeId = new Map<
+    string,
+    {
+      command: Extract<DesignOperation, { type: "insert_element" }>;
+      index: number;
+    }
+  >();
+  commands.forEach((command, index) => {
+    if (command.type !== "insert_element") return;
+    insertByNodeId.set(command.node.id, { command, index });
+  });
+  return commands.map((command, index) => {
+    if (
+      command.type !== "insert_element" ||
+      command.node.childIds.length === 0
+    ) {
+      return command;
+    }
+    for (const childId of command.node.childIds) {
+      const child = insertByNodeId.get(childId);
+      if (
+        !child ||
+        child.index <= index ||
+        child.command.parentId !== command.node.id ||
+        child.command.node.parentId !== command.node.id
+      ) {
+        throw insertHierarchyToolError(
+          command,
+          childId,
+          `Agent insert ${command.commandId} declares child ${childId} in node.childIds without a later matching insert_element command. Keep insert_element node.childIds empty and express hierarchy only through each child command's parentId and index`,
+        );
+      }
+    }
+    return {
+      ...command,
+      node: {
+        ...command.node,
+        childIds: [],
+      },
+    };
+  });
+}
+
+function insertHierarchyToolError(
+  command: Extract<DesignOperation, { type: "insert_element" }>,
+  childId: string,
+  message: string,
+): DesignTransactionToolError {
+  const issue: AgentToolFailureIssue = {
+    commandId: command.commandId,
+    nodeId: command.node.id,
+    path: `/nodesById/${escapeJsonPointerSegment(command.node.id)}/childIds`,
+    message,
+  };
+  return new DesignTransactionToolError({
+    code: "design.invalid",
+    message,
+    retryable: false,
+    recoverable: true,
+    details: {
+      kind: "design-transaction",
+      fingerprint: `design_${hashFailureText(
+        `${command.commandId}\u0000${command.node.id}\u0000${childId}\u0000${message}`,
+      )}`,
+      issues: [issue],
+      recovery: {
+        action: "inspect-and-revise",
+        toolName: "opendesign_inspect_document",
+        required: true,
+      },
+    },
+  });
+}
+
+function escapeJsonPointerSegment(value: string): string {
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
 }
 
 function canRebasePlannedInsert(

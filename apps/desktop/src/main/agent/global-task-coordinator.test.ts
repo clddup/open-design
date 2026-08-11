@@ -1294,6 +1294,23 @@ describe("GlobalTaskCoordinator", () => {
   it("resolves existing artboard descendants from the authoritative inspection", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const document = withExistingArtboard(opened.document, pageId);
+    const logicalRegionIdCollision = insertExistingChild(
+      pageId,
+      null,
+      "workspace_primary",
+    ).commands[0];
+    if (
+      !logicalRegionIdCollision ||
+      logicalRegionIdCollision.type !== "insert_element"
+    ) {
+      throw new Error("Logical region collision fixture is invalid");
+    }
+    document.pagesById[pageId].rootNodeIds.push(
+      logicalRegionIdCollision.node.id,
+    );
+    document.nodesById[logicalRegionIdCollision.node.id] = structuredClone(
+      logicalRegionIdCollision.node,
+    );
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
       type: "run.start",
@@ -1356,16 +1373,109 @@ describe("GlobalTaskCoordinator", () => {
         ),
       ),
     ).not.toThrow();
+    const logicalRegionWrite = insertExistingChild(
+      pageId,
+      "existing_nested_frame",
+      "workspace_navigation",
+    );
+    const resolvedLogicalRegion = coordinator.assertDesignPlanForApply(
+      context,
+      logicalRegionWrite,
+    );
+    expect(resolvedLogicalRegion?.input.commands[0]).toMatchObject({
+      parentId: "existing_nested_frame",
+      node: {
+        id: "workspace_navigation",
+        parentId: "existing_nested_frame",
+        transform: [1, 0, 0, 1, 24, 24],
+        size: { width: 120, height: 80 },
+      },
+    });
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      logicalRegionWrite,
+      resolvedLogicalRegion,
+      1,
+    );
+    coordinator.handleAgentEvent({
+      type: "tool.completed",
+      runId: context.runId,
+      toolCallId: "tool_existing_logical_region",
+      result: { ok: true },
+      revision: 1,
+    });
+    const contextAtRevision1 = { ...context, revision: 1 };
+    expect(
+      coordinator.recordCanvasCapture(contextAtRevision1, 1),
+    ).toMatchObject({
+      reviewEligible: true,
+      deliveryTargetId: "existing_artboard",
+    });
+    coordinator.registerVisualReview(contextAtRevision1, visualReview);
+    const refinement: DesignApplyToolInput = {
+      label: "Refine existing logical region",
+      commands: [
+        {
+          commandId: "refine_workspace_navigation",
+          type: "update_properties",
+          nodeId: "workspace_navigation",
+          opacity: 0.96,
+        },
+      ],
+    };
+    const refinementAuthorization = coordinator.assertDesignPlanForApply(
+      contextAtRevision1,
+      refinement,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      refinement,
+      refinementAuthorization,
+      2,
+    );
+    coordinator.handleAgentEvent({
+      type: "tool.completed",
+      runId: context.runId,
+      toolCallId: "tool_existing_refinement",
+      result: { ok: true },
+      revision: 2,
+    });
+    const verifiedDocument = withExistingArtboard(opened.document, pageId);
+    const existingNested = verifiedDocument.nodesById.existing_nested_frame;
+    const logicalRegionCommand = logicalRegionWrite.commands[0];
+    if (
+      !existingNested ||
+      !logicalRegionCommand ||
+      logicalRegionCommand.type !== "insert_element"
+    ) {
+      throw new Error("Existing logical region fixture is invalid");
+    }
+    verifiedDocument.revision = 2;
+    existingNested.childIds.push(logicalRegionCommand.node.id);
+    verifiedDocument.nodesById[logicalRegionCommand.node.id] = structuredClone(
+      logicalRegionCommand.node,
+    );
+    const contextAtRevision2 = { ...context, revision: 2 };
+    coordinator.recordDocumentInspection(
+      contextAtRevision2,
+      inspectionResult(verifiedDocument, pageId),
+    );
+    expect(
+      coordinator.recordCanvasCapture(contextAtRevision2, 2),
+    ).toMatchObject({
+      verified: true,
+      nextAction: "complete-delivery",
+    });
     expect(() =>
       coordinator.assertDesignPlanForImagePlacement(
-        context,
+        contextAtRevision2,
         "hero",
         "existing_nested_frame",
       ),
     ).not.toThrow();
     expect(() =>
       coordinator.assertDesignPlanForApply(
-        context,
+        contextAtRevision2,
         insertExistingChild(pageId, null, "scattered_existing_child"),
       ),
     ).toThrow("outside the planned artboard Frame");

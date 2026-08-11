@@ -842,7 +842,7 @@ describe("Renderer design tool scope", () => {
                   kind: "frame",
                   name: "Mascot",
                   parentId: null,
-                  childIds: [],
+                  childIds: ["mascot_body"],
                   visible: true,
                   locked: false,
                   transform: [1, 0, 0, 1, 900, 80],
@@ -900,6 +900,72 @@ describe("Renderer design tool scope", () => {
     expect(runtime.getSnapshot().document.nodesById.mascot_body?.parentId).toBe(
       "mascot_frame",
     );
+  });
+
+  it("rejects unmatched predeclared insert children before writing a revision", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "apply_unmatched_children",
+        call: {
+          toolCallId: "tool_apply_unmatched_children",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Create incomplete group",
+            commands: [
+              {
+                commandId: "insert_incomplete_group",
+                type: "insert_element",
+                pageId: "page_welcome",
+                parentId: "frame_welcome",
+                index: 4,
+                node: {
+                  id: "incomplete_group",
+                  kind: "group",
+                  name: "Incomplete group",
+                  parentId: "frame_welcome",
+                  childIds: ["missing_child"],
+                  visible: true,
+                  locked: false,
+                  transform: [1, 0, 0, 1, 0, 0],
+                  size: { width: 100, height: 100 },
+                  opacity: 1,
+                  properties: {},
+                  extensions: {},
+                },
+              },
+            ],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: "design.invalid",
+        recoverable: true,
+        retryable: false,
+        details: {
+          kind: "design-transaction",
+          issues: [
+            {
+              commandId: "insert_incomplete_group",
+              nodeId: "incomplete_group",
+              path: "/nodesById/incomplete_group/childIds",
+            },
+          ],
+        },
+      },
+    });
+    if (response.ok) throw new Error("Invalid child hierarchy was accepted");
+    expect(response.error.details?.issues[0]?.message).toContain(
+      "Keep insert_element node.childIds empty",
+    );
+    expect(runtime.getSnapshot().document.revision).toBe(0);
   });
 
   it("still rejects a parent that was not on the target page or created earlier", async () => {

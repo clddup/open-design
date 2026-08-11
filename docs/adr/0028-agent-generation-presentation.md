@@ -50,9 +50,9 @@ reveal 与 tween 共用一条 presentation RAF，不为每个节点建立 timer�
 
 `DesignPlanToolInput version: 3` 在正式写入前按用户请求声明 `1..N` 个交付 target，每项包含画板 Page 坐标、尺寸，以及主要区域的稳定 `nodeId`、角色和画板局部 bounds。Renderer 会临时记录 Provider 的 `tool.requested`，但只有 Main 对同一 Run/tool call 返回字段完全匹配的 `tool.completed { status: "accepted" }` 后，才允许 Leafer 在独立 `sky` 层展示当前活动 Page 中首个未完成 target 的骨架。version 2 历史 tool/journal 继续按单 target 投影；失败、畸形或不匹配结果不会显示未经信任的结构。
 
-骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架按稳定 Frame ID 切换到权威当前 transform，而不是继续持有计划时的 Page 绝对位置；用户只平移该顶层 Frame 时，区域骨架和 Agent cursor 随真实 Frame 移动。Frame 尺寸、旋转/倾斜、父级、Page 或身份改变会使结构投影失效并要求重新 inspect/replan，不能把真正的布局变化伪装成平移。声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。
+create target 的骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架按稳定 Frame ID 切换到权威当前 transform，而不是继续持有计划时的 Page 绝对位置；用户只平移该顶层 Frame 时，区域骨架和 Agent cursor 随真实 Frame 移动。Frame 尺寸、旋转/倾斜、父级、Page 或身份改变会使结构投影失效并要求重新 inspect/replan，不能把真正的布局变化伪装成平移。create 声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。existing target 的 region 只属于逻辑规划/审查，不显示待物化紫框，不要求真实图层匹配其 ID、直属关系或 bounds；画布只显示权威 existing Frame 与 Agent 语义活动。
 
-计划画板和区域 ID 在一个计划中全局唯一。Provider 仍声明每个区域的画板局部 bounds 和容器种类，但 Main 在执行时从已接受计划编译这些结构节点的可信 Page、parent、局部 transform 与 size；模型不再重复换算世界坐标。Main 继续要求区域根是画板直属、轴对齐并匹配计划 bounds；新 target 的首个正式事务必须带真实内容，而某个计划区域首次写入正式文档时也必须在同一事务包含真实内容。纯空画板/区域只允许作为这里的可丢弃骨架存在，不能先进入 revision 再依赖后续视觉审查发现问题。
+计划画板和区域 ID 在一个计划中全局唯一。Provider 仍声明每个区域的画板局部 bounds 和容器种类，但 Main 只为 create target 从已接受计划编译这些结构节点的可信 Page、parent、局部 transform 与 size；模型不再重复换算世界坐标。create 区域根必须是画板直属、轴对齐并匹配计划 bounds，新 target 的首个正式事务和首次物化区域都必须带真实内容。existing target 保留 regions 作为非写入的审查语义，Main 不编译或强制其几何。纯空 create 画板/区域只允许作为这里的可丢弃骨架存在，不能先进入 revision 再依赖后续视觉审查发现问题。
 
 同一 Run 期间如果用户提交了新的文档 revision，普通更新、移动、删除和替换仍遵循精确 optimistic concurrency。唯一自动 rebase 是 Main 签发 guard 的已建立计划目标内纯 `insert_element` 事务：Renderer 在当前文档重新验证稳定 Page-root Frame、相同尺寸、仅平移 transform，以及每条新节点祖先链仍到达该 Frame 后，才把事务基于当前 revision 执行。用户平移因此不阻断继续搭建；resize、rotate/skew、reparent、delete、换 Page、目标外写入或任何会覆盖既有节点的命令仍拒绝并要求重新检查。可信工具结果可以报告跨过外部 revision 的单调 `previousRevision → revision`，Agent Runtime 随之推进，不静默覆盖用户状态。
 
@@ -66,7 +66,7 @@ Leafer 在独立于 skeleton、reveal 和 selection 的 `sky` layer 上显示固
 
 普通模式下 cursor 在低频语义目标之间做 180 ms 短位移；Reduced Motion 直接跳到已提交目标。阶段文字同时投影为只读 `aria-live` status，因此状态不只依赖紫色。cursor 不命中、不改变用户选区，也不进入 `DesignDocument`、revision、history、保存、导出或 Conversation journal。
 
-Conversation Timeline 可以显示 Provider 明确返回并已进入 `AssistantTimelineBlock.reasoning_summary` 的有界摘要，使用低权重“设计思路”标签帮助用户理解方向、取舍和下一步。它不是模型隐藏思维链，也不能从加密/省略 reasoning 反推内容；没有 summary 时只显示 typed plan、tool、review 和 delivery 状态。摘要不参与权限、事务、完成判断或画布语义，Provider prose 仍不能驱动 cursor、阶段或完成状态。
+Conversation Timeline 可以显示 Provider 明确返回并已进入 `AssistantTimelineBlock.reasoning_summary` 的有界摘要。同一 Run 的 reasoning-only 消息合并为一个默认折叠的低权重“设计过程 · N 步”，展开后明确标注“模型过程摘要，不代表系统测试或已执行操作”；真实 assistant text 仍作为普通回复显示。它不是模型隐藏思维链，也不能从加密/省略 reasoning 反推内容；没有 summary 时只显示 typed plan、tool、review 和 delivery 状态。摘要不参与权限、事务、完成判断或画布语义，Provider prose 仍不能驱动 cursor、阶段或完成状态。
 
 ### 生命周期与可信截图
 

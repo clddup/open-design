@@ -72,6 +72,7 @@ Conversation 中最后一个 Run 的 error/budget 仍是高权重错误 activity
 - `OpenDesignPiRuntime` 通过 Run 内 failure port 把结构化错误交给 `PiRunEventAdapter`；取消不升级为 error。
 - Agent 协议、journal、session projection、Main diagnostic 和 Renderer Timeline 共同使用受限 failure 结构。
 - Timeline 在 live event、durable history、Conversation 切换和新 Run 开始后使用同一当前/历史层级规则。
+- Renderer 不再把活动 Run 限制为最后 200 个原始 live event。`message.delta` 按 message/block 合并，`tool.progress` 按 tool call 覆盖；`run.started`、`message.completed`、`tool.completed/failed` 与 approval checkpoint 在 Run 进行中也 debounce 请求 `session.history`。durable item 成为同 ID 完成节点的权威状态，live event 只补充尚未落入 history 的活动状态，因此历史投影单调且不会在长流或重试中消失。
 
 ## 验证
 
@@ -80,6 +81,7 @@ Conversation 中最后一个 Run 的 error/budget 仍是高权重错误 activity
 - Pi gateway/run adapter 覆盖结构化 failure 消费、journal 持久化、取消分流和旧泛化错误 fallback。
 - session store 覆盖新 failure 投影、旧无 failure journal 兼容与 interrupted recovery。
 - Renderer 覆盖三种 timeout 文案、阈值、重试语义、请求关联、后续 Run 的历史折叠和当前 Run 活态。
+- Renderer 另覆盖 200 个以上 live event 后完成消息仍存在、活动 Run checkpoint 回读 durable history、同 ID live/durable 合并和 Conversation 隔离。
 - diagnostic v3 覆盖结构校验和复制报告，不包含凭据、用户 prompt 或任意路径。
 
 ## 结果

@@ -145,6 +145,8 @@ const BOOLEAN_OPERATIONS: readonly BooleanOperation[] = [
   "exclude",
 ];
 
+const HISTORY_SYNC_DEBOUNCE_MS = 80;
+
 type AppView = "workspace" | "project" | "editor" | "settings";
 
 const nodeKindKeys: Record<string, MessageKey> = {
@@ -256,6 +258,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   );
   const conversationIdByHistoryRequestId = useRef(new Map<string, string>());
   const latestHistoryRequestId = useRef(new Map<string, string>());
+  const historySyncTimers = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
   const designToolControllers = useRef(new Map<string, AbortController>());
   const svgOperationController = useRef<AbortController | null>(null);
   const autosaveCallbacks = useRef<{
@@ -454,7 +459,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const requestConversationHistory = useCallback(
     async (conversationId: string) => {
       if (!window.desktop) return;
+      const pendingSync = historySyncTimers.current.get(conversationId);
+      if (pendingSync !== undefined) {
+        clearTimeout(pendingSync);
+        historySyncTimers.current.delete(conversationId);
+      }
       const requestId = `history_${Date.now()}_${crypto.randomUUID().replaceAll("-", "")}`;
+      const previousRequestId =
+        latestHistoryRequestId.current.get(conversationId);
+      if (previousRequestId) {
+        conversationIdByHistoryRequestId.current.delete(previousRequestId);
+      }
       latestHistoryRequestId.current.set(conversationId, requestId);
       conversationIdByHistoryRequestId.current.set(requestId, conversationId);
       setAgentByConversationId((current) =>
@@ -488,6 +503,29 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       }
     },
     [t],
+  );
+
+  const scheduleConversationHistory = useCallback(
+    (conversationId: string) => {
+      const current = historySyncTimers.current.get(conversationId);
+      if (current !== undefined) clearTimeout(current);
+      historySyncTimers.current.set(
+        conversationId,
+        setTimeout(() => {
+          historySyncTimers.current.delete(conversationId);
+          void requestConversationHistory(conversationId);
+        }, HISTORY_SYNC_DEBOUNCE_MS),
+      );
+    },
+    [requestConversationHistory],
+  );
+
+  useEffect(
+    () => () => {
+      historySyncTimers.current.forEach((timer) => clearTimeout(timer));
+      historySyncTimers.current.clear();
+    },
+    [],
   );
 
   useEffect(() => {
@@ -597,6 +635,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           latestHistoryRequestId.current.get(event.sessionId) !==
           event.requestId
         ) {
+          conversationIdByHistoryRequestId.current.delete(event.requestId);
           return;
         }
         latestHistoryRequestId.current.delete(event.sessionId);
@@ -607,12 +646,11 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             return {
               ...previous,
               timeline: event.timeline,
-              events: activeRunId
-                ? previous.events.filter(
-                    (candidate) =>
-                      "runId" in candidate && candidate.runId === activeRunId,
-                  )
-                : [],
+              events: pruneLiveEventsCoveredByTimeline(
+                previous.events,
+                event.timeline,
+                activeRunId,
+              ),
               error: null,
             };
           }),
@@ -686,7 +724,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       setAgentByConversationId((current) =>
         updateConversationAgentState(current, conversationId, (previous) => ({
           ...previous,
-          events: [...previous.events.slice(-199), event],
+          events: appendLiveAgentEvent(previous.events, event),
           activeRunId:
             event.type === "run.completed" || event.type === "agent.error"
               ? previous.activeRunId === runId
@@ -698,6 +736,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           error: event.type === "agent.error" ? event.message : previous.error,
         })),
       );
+      if (isDurableAgentCheckpoint(event)) {
+        scheduleConversationHistory(conversationId);
+      }
       if (event.type === "run.completed" || event.type === "agent.error") {
         if (event.type === "run.completed") {
           void requestConversationHistory(conversationId);
@@ -708,7 +749,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         }
       }
     });
-  }, [requestConversationHistory, workspace]);
+  }, [requestConversationHistory, scheduleConversationHistory, workspace]);
 
   useEffect(() => {
     const desktop = window.desktop;
@@ -2869,6 +2910,132 @@ function touchConversationCollections(
     }),
   );
   return changed ? collections : current;
+}
+
+function appendLiveAgentEvent(
+  events: readonly AgentEvent[],
+  event: AgentEvent,
+): AgentEvent[] {
+  if (event.type === "message.delta") {
+    const index = events.findIndex(
+      (candidate) =>
+        candidate.type === "message.delta" &&
+        candidate.runId === event.runId &&
+        candidate.messageId === event.messageId &&
+        candidate.blockId === event.blockId,
+    );
+    if (index >= 0) {
+      return events.map((candidate, candidateIndex) =>
+        candidateIndex === index && candidate.type === "message.delta"
+          ? { ...candidate, delta: `${candidate.delta}${event.delta}` }
+          : candidate,
+      );
+    }
+  }
+  if (event.type === "tool.progress") {
+    return [
+      ...events.filter(
+        (candidate) =>
+          candidate.type !== "tool.progress" ||
+          candidate.toolCallId !== event.toolCallId,
+      ),
+      event,
+    ];
+  }
+  if (event.type === "message.completed") {
+    return [
+      ...events.filter(
+        (candidate) =>
+          !(
+            candidate.type === "message.delta" &&
+            candidate.runId === event.runId &&
+            candidate.messageId === event.messageId
+          ),
+      ),
+      event,
+    ];
+  }
+  if (event.type === "tool.completed" || event.type === "tool.failed") {
+    return [
+      ...events.filter(
+        (candidate) =>
+          candidate.type !== "tool.progress" ||
+          candidate.toolCallId !== event.toolCallId,
+      ),
+      event,
+    ];
+  }
+  return [...events, event];
+}
+
+function pruneLiveEventsCoveredByTimeline(
+  events: readonly AgentEvent[],
+  timeline: readonly SessionTimelineItem[],
+  activeRunId: string | null,
+): AgentEvent[] {
+  const durableMessages = new Set(
+    timeline.flatMap((item) =>
+      item.type === "assistant.message" ? [item.messageId] : [],
+    ),
+  );
+  const durableTools = new Map(
+    timeline.flatMap((item) =>
+      item.type === "tool" ? [[item.toolCallId, item.status] as const] : [],
+    ),
+  );
+  const durableApprovals = new Map(
+    timeline.flatMap((item) =>
+      item.type === "approval" ? [[item.approvalId, item.status] as const] : [],
+    ),
+  );
+  const durableRuns = new Map(
+    timeline.flatMap((item) =>
+      item.type === "run" ? [[item.runId, item.status] as const] : [],
+    ),
+  );
+  return events.filter((event) => {
+    if ("runId" in event && event.runId !== activeRunId) return false;
+    if (
+      (event.type === "message.delta" || event.type === "message.completed") &&
+      durableMessages.has(event.messageId)
+    ) {
+      return false;
+    }
+    if (
+      event.type === "tool.requested" ||
+      event.type === "tool.progress" ||
+      event.type === "tool.completed" ||
+      event.type === "tool.failed"
+    ) {
+      const status = durableTools.get(event.toolCallId);
+      if (status === "completed" || status === "failed") return false;
+    }
+    if (event.type === "approval.requested") {
+      return !durableApprovals.has(event.approvalId);
+    }
+    if (event.type === "approval.resolved") {
+      return durableApprovals.get(event.approvalId) !== "resolved";
+    }
+    if (event.type === "run.started") {
+      return !durableRuns.has(event.runId);
+    }
+    if (event.type === "run.completed") {
+      const status = durableRuns.get(event.runId);
+      return status === undefined || status === "started";
+    }
+    return true;
+  });
+}
+
+function isDurableAgentCheckpoint(event: AgentEvent): boolean {
+  return (
+    event.type === "run.started" ||
+    event.type === "message.completed" ||
+    event.type === "tool.completed" ||
+    event.type === "tool.failed" ||
+    event.type === "approval.requested" ||
+    event.type === "approval.resolved"
+  );
 }
 
 function agentEventActivityAt(event: AgentEvent): string | null {

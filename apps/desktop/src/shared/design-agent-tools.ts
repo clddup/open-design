@@ -832,7 +832,7 @@ const MODEL_NODE_PROPERTY_PATCH_SCHEMA = {
 const MODEL_NODE_SCHEMA = {
   type: "object",
   description:
-    "A complete OpenDesign node. All common fields are required. childIds and parentId must agree with the transaction hierarchy; a new composite container can be inserted before its children in the same ordered transaction.",
+    "A complete OpenDesign node. All common fields are required. For insert_element, childIds must be empty; create hierarchy with later child insert_element commands using parentId and index. replace_subtree keeps its explicit full subtree contract.",
   properties: {
     id: { type: "string", minLength: 1, maxLength: 256 },
     name: { type: "string" },
@@ -845,6 +845,8 @@ const MODEL_NODE_SCHEMA = {
     childIds: {
       type: "array",
       uniqueItems: true,
+      description:
+        "Use an empty array for insert_element. The host derives children from later insert_element parentId/index commands.",
       items: { type: "string", minLength: 1, maxLength: 256 },
     },
     visible: { type: "boolean" },

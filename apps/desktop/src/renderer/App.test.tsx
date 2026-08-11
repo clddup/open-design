@@ -964,6 +964,106 @@ describe("App", () => {
     expect(screen.queryByText("Stale history")).not.toBeInTheDocument();
   });
 
+  it("keeps completed messages visible through more than 200 live events and refreshes durable history during an active Run", async () => {
+    const { user, conversation } = await openProjectConversation();
+    const initialHistory = historyRequests(conversation.conversationId).at(-1);
+    if (!initialHistory) throw new Error("Initial history request is missing");
+    act(() => {
+      emitAgentEvent?.({
+        type: "session.history",
+        requestId: initialHistory.requestId,
+        sessionId: conversation.conversationId,
+        timeline: [],
+      });
+    });
+
+    await user.type(screen.getByLabelText("Continue the task"), "Keep history");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const run = runRequests(conversation.conversationId).at(-1);
+    if (!run) throw new Error("Run request is missing");
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: run.runId,
+        startedAt: now,
+      });
+      emitAgentEvent?.({
+        type: "message.completed",
+        runId: run.runId,
+        messageId: "message_first_completed",
+        blocks: [
+          {
+            blockId: "block_first_completed",
+            type: "text",
+            text: "First completed response",
+          },
+        ],
+      });
+      for (let index = 0; index < 205; index += 1) {
+        emitAgentEvent?.({
+          type: "tool.progress",
+          runId: run.runId,
+          toolCallId: "tool_long_running",
+          progress: index / 205,
+          message: `progress ${index}`,
+        });
+      }
+    });
+
+    expect(screen.getByText("First completed response")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        historyRequests(conversation.conversationId).length,
+      ).toBeGreaterThan(1),
+    );
+    const checkpointHistory = historyRequests(conversation.conversationId).at(
+      -1,
+    );
+    if (!checkpointHistory) {
+      throw new Error("Checkpoint history request is missing");
+    }
+    act(() => {
+      emitAgentEvent?.({
+        type: "session.history",
+        requestId: checkpointHistory.requestId,
+        sessionId: conversation.conversationId,
+        timeline: [
+          {
+            itemId: "run:history_active",
+            sessionId: conversation.conversationId,
+            runId: run.runId,
+            sequence: 1,
+            createdAt: now,
+            updatedAt: now,
+            type: "run",
+            status: "started",
+            startedAt: now,
+          },
+          {
+            itemId: "message:message_first_completed",
+            sessionId: conversation.conversationId,
+            runId: run.runId,
+            sequence: 2,
+            createdAt: now,
+            updatedAt: now,
+            type: "assistant.message",
+            messageId: "message_first_completed",
+            blocks: [
+              {
+                blockId: "block_first_completed",
+                type: "text",
+                text: "First completed response",
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    expect(screen.getByText("First completed response")).toBeInTheDocument();
+    expect(screen.getByText("Request in progress")).toBeInTheDocument();
+  });
+
   it("counts only active Global Tasks while retaining terminal history", async () => {
     vi.mocked(window.desktop!.listGlobalTasks).mockResolvedValueOnce([
       globalTask("running"),
