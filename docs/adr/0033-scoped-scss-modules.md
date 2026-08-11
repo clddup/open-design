@@ -49,6 +49,11 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
   surface variant，不接管页面导航或业务状态。Home 页面样式继续拆为共享
   `HomeSurface.module.scss` 与各自的 `WorkspaceHome.module.scss`、
   `ProjectHome.module.scss`，共享 shell/panel/空态不会迫使两个页面共用业务布局。
+- Settings 按所有权拆为 `SettingsPage.module.scss` 与 `SettingsForms.module.scss`：
+  前者拥有窗口壳、垂直导航、General 与恢复态，后者拥有 Conversation Provider 和
+  独立全局生图配置共用的 field/credential/status/model-list 语义。React draft、保存、
+  测试连接与凭据状态仍由原表单单一持有；后续提取组件时必须沿此状态边界移动，不能
+  为缩短文件建立第二份 draft。无引用的旧 provider status 样式已删除。
 - `sass` 固定为 `1.102.0`，仅用于 Vite 编译期；许可记录进入第三方声明。
 - TypeScript 通过 `vite/client` 读取 module 类型，Vite 生产构建验证 SCSS Modules 可编译和合并。
 - 后续迁移需保持键盘/焦点、主题、窄窗口、Reduced Motion 和视觉状态测试；仅减少全局行数不构成完成证据。

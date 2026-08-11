@@ -23,6 +23,8 @@ import type {
 import type { AppLocale } from "../../shared/i18n/locale";
 import { useI18n } from "../i18n";
 import { HomeTitlebar } from "./HomeTitlebar";
+import formStyles from "./SettingsForms.module.scss";
+import styles from "./SettingsPage.module.scss";
 
 type SettingsTab = "general" | "models" | "image-generation";
 
@@ -91,7 +93,7 @@ function SettingsPageContent({
   };
 
   return (
-    <div className="settings-shell">
+    <div className={styles.shell}>
       <HomeTitlebar
         actions={
           <IconButton
@@ -105,14 +107,14 @@ function SettingsPageContent({
         platform={platform}
         surface="solid"
       />
-      <main className="settings-workbench">
-        <aside aria-label={t("settings.title")} className="settings-navigation">
+      <main className={styles.workbench}>
+        <aside aria-label={t("settings.title")} className={styles.navigation}>
           <div aria-orientation="vertical" role="tablist">
             {settingsTabs.map((tab) => (
               <button
                 aria-controls={`settings-${tab}-panel`}
                 aria-selected={activeTab === tab}
-                className="settings-navigation__item"
+                className={styles.navigationItem}
                 id={`settings-${tab}-tab`}
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -145,7 +147,7 @@ function SettingsPageContent({
             ))}
           </div>
         </aside>
-        <section className="settings-content">
+        <section className={styles.content}>
           <div
             aria-labelledby="settings-general-tab"
             hidden={activeTab !== "general"}
@@ -226,7 +228,7 @@ class SettingsErrorBoundary extends Component<
   render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <div className="settings-shell">
+      <div className={styles.shell}>
         <HomeTitlebar
           actions={
             <IconButton
@@ -240,7 +242,7 @@ class SettingsErrorBoundary extends Component<
           platform={this.props.platform}
           surface="solid"
         />
-        <main className="settings-recovery" role="alert">
+        <main className={styles.recovery} role="alert">
           <Glyph name="settings" size={22} />
           <h1>{this.props.title}</h1>
           <p>{this.props.description}</p>
@@ -269,7 +271,7 @@ function SettingsHeading({
   description: string;
 }) {
   return (
-    <header className="settings-heading">
+    <header className={styles.heading}>
       <h1>{title}</h1>
       <p>{description}</p>
     </header>
@@ -286,7 +288,7 @@ function SettingsRow({
   label: string;
 }) {
   return (
-    <section className="settings-row">
+    <section className={styles.row}>
       <div>
         <strong>{label}</strong>
         {description && <small>{description}</small>}
@@ -308,7 +310,7 @@ function SegmentedControl<Value extends string>({
   value: Value;
 }) {
   return (
-    <div aria-label={label} className="settings-segmented" role="group">
+    <div aria-label={label} className={styles.segmented} role="group">
       {options.map((option) => (
         <button
           aria-pressed={value === option.value}
@@ -438,7 +440,7 @@ function GlobalImageGenerationForm() {
 
   return (
     <form
-      className="settings-global-image"
+      className={formStyles.globalImage}
       onSubmit={(event) => void save(event)}
     >
       <SettingsHeading
@@ -446,22 +448,25 @@ function GlobalImageGenerationForm() {
         title={t("settings.imageGenerationTitle")}
       />
       {status && (
-        <p className={`settings-feedback is-${status.tone}`} role="status">
+        <p
+          className={`${formStyles.feedback} ${status.tone === "success" ? formStyles.feedbackSuccess : formStyles.feedbackError}`}
+          role="status"
+        >
           {status.message}
         </p>
       )}
       {loading || !draft ? (
-        <div className="settings-provider__empty-detail">
+        <div className={formStyles.providerEmptyDetail}>
           <strong>{t("settings.loadingImageGeneration")}</strong>
         </div>
       ) : (
-        <section className="settings-global-image__form">
-          <div className="settings-provider__detail-heading">
+        <section className={formStyles.globalImageForm}>
+          <div className={formStyles.providerDetailHeading}>
             <span>
               <strong>{t("settings.globalImageGeneration")}</strong>
               <small>{t("settings.globalImageGenerationHint")}</small>
             </span>
-            <label className="settings-checkbox">
+            <label className={formStyles.checkbox}>
               <input
                 checked={draft.enabled}
                 disabled={saving}
@@ -476,8 +481,8 @@ function GlobalImageGenerationForm() {
               <span>{t("settings.enabled")}</span>
             </label>
           </div>
-          <div className="settings-provider__grid">
-            <label className="settings-field is-wide">
+          <div className={formStyles.providerGrid}>
+            <label className={`${formStyles.field} ${formStyles.fieldWide}`}>
               <span>{t("settings.baseUrl")}</span>
               <input
                 aria-label={t("settings.imageGenerationBaseUrl")}
@@ -495,7 +500,7 @@ function GlobalImageGenerationForm() {
               />
               <small>{t("settings.baseUrlHint")}</small>
             </label>
-            <label className="settings-field">
+            <label className={formStyles.field}>
               <span>{t("settings.imageGenerationApi")}</span>
               <select
                 aria-label={t("settings.imageGenerationApi")}
@@ -513,7 +518,7 @@ function GlobalImageGenerationForm() {
                 </option>
               </select>
             </label>
-            <label className="settings-field">
+            <label className={formStyles.field}>
               <span>{t("settings.authMode")}</span>
               <select
                 aria-label={t("settings.imageGenerationAuthMode")}
@@ -531,7 +536,7 @@ function GlobalImageGenerationForm() {
                 <option value="none">{t("settings.authNone")}</option>
               </select>
             </label>
-            <label className="settings-field is-wide">
+            <label className={`${formStyles.field} ${formStyles.fieldWide}`}>
               <span>{t("settings.imageGenerationModelId")}</span>
               <input
                 aria-label={t("settings.imageGenerationModelId")}
@@ -548,7 +553,7 @@ function GlobalImageGenerationForm() {
               />
               <small>{t("settings.imageGenerationModelHint")}</small>
             </label>
-            <label className="settings-field is-wide">
+            <label className={`${formStyles.field} ${formStyles.fieldWide}`}>
               <span>{t("settings.apiKey")}</span>
               <input
                 aria-label={t("settings.imageGenerationApiKey")}
@@ -568,7 +573,7 @@ function GlobalImageGenerationForm() {
             </label>
           </div>
           {hasApiKey && draft.authMode !== "none" && (
-            <label className="settings-checkbox">
+            <label className={formStyles.checkbox}>
               <input
                 checked={clearApiKey}
                 disabled={saving}
@@ -581,11 +586,11 @@ function GlobalImageGenerationForm() {
               <span>{t("settings.clearApiKey")}</span>
             </label>
           )}
-          <p className="settings-security-note">
+          <p className={formStyles.securityNote}>
             <Glyph name="lock" size={14} />
             {t("settings.imageGenerationCredentialBoundary")}
           </p>
-          <footer className="settings-provider__actions">
+          <footer className={formStyles.providerActions}>
             <span />
             <span />
             <span />
@@ -834,19 +839,22 @@ function ModelProviderForm() {
   };
 
   return (
-    <form className="settings-provider" onSubmit={submit}>
+    <form className={formStyles.provider} onSubmit={submit}>
       <SettingsHeading
         description={t("settings.modelsDescription")}
         title={t("settings.modelsTitle")}
       />
       {status && (
-        <p className={`settings-feedback is-${status.tone}`} role="status">
+        <p
+          className={`${formStyles.feedback} ${status.tone === "success" ? formStyles.feedbackSuccess : formStyles.feedbackError}`}
+          role="status"
+        >
           {status.message}
         </p>
       )}
-      <div className="settings-provider__workspace">
-        <aside className="settings-provider__list">
-          <div className="settings-provider__list-heading">
+      <div className={formStyles.providerWorkspace}>
+        <aside className={formStyles.providerList}>
+          <div className={formStyles.providerListHeading}>
             <strong>{t("settings.providers")}</strong>
             <button onClick={addProvider} type="button">
               <Glyph name="plus" size={14} />
@@ -854,14 +862,14 @@ function ModelProviderForm() {
             </button>
           </div>
           {loading ? (
-            <p className="settings-provider__empty">
+            <p className={formStyles.providerEmpty}>
               {t("settings.loadingProviders")}
             </p>
           ) : catalog?.providers.length ? (
             catalog.providers.map((provider) => (
               <button
                 aria-pressed={selectedProviderId === provider.providerId}
-                className="settings-provider__list-item"
+                className={formStyles.providerListItem}
                 key={provider.providerId}
                 onClick={() => {
                   if (!dirty || selectedProviderId === provider.providerId) {
@@ -870,7 +878,9 @@ function ModelProviderForm() {
                 }}
                 type="button"
               >
-                <span className={provider.enabled ? "is-enabled" : undefined} />
+                <span
+                  className={provider.enabled ? formStyles.enabled : undefined}
+                />
                 <span>
                   <strong>{provider.name}</strong>
                   <small>
@@ -881,20 +891,22 @@ function ModelProviderForm() {
               </button>
             ))
           ) : (
-            <p className="settings-provider__empty">
+            <p className={formStyles.providerEmpty}>
               {t("settings.noProviders")}
             </p>
           )}
         </aside>
-        <section className="settings-provider__detail">
+        <section className={formStyles.providerDetail}>
           {loading ? (
-            <div className="settings-provider__empty-detail">
+            <div className={formStyles.providerEmptyDetail}>
               <strong>{t("settings.loadingProviders")}</strong>
             </div>
           ) : draft ? (
             <>
-              <div className="settings-provider__detail-heading">
-                <label className="settings-field is-inline">
+              <div className={formStyles.providerDetailHeading}>
+                <label
+                  className={`${formStyles.field} ${formStyles.fieldInline}`}
+                >
                   <span>{t("settings.providerName")}</span>
                   <input
                     aria-label={t("settings.providerName")}
@@ -909,7 +921,7 @@ function ModelProviderForm() {
                     value={draft.name}
                   />
                 </label>
-                <label className="settings-checkbox">
+                <label className={formStyles.checkbox}>
                   <input
                     checked={draft.enabled}
                     disabled={busy}
@@ -924,8 +936,10 @@ function ModelProviderForm() {
                   <span>{t("settings.enabled")}</span>
                 </label>
               </div>
-              <div className="settings-provider__grid">
-                <label className="settings-field is-wide">
+              <div className={formStyles.providerGrid}>
+                <label
+                  className={`${formStyles.field} ${formStyles.fieldWide}`}
+                >
                   <span>{t("settings.baseUrl")}</span>
                   <input
                     aria-label={t("settings.baseUrl")}
@@ -943,7 +957,7 @@ function ModelProviderForm() {
                   />
                   <small>{t("settings.baseUrlHint")}</small>
                 </label>
-                <label className="settings-field">
+                <label className={formStyles.field}>
                   <span>{t("settings.apiFormat")}</span>
                   <select
                     aria-label={t("settings.apiFormat")}
@@ -972,7 +986,7 @@ function ModelProviderForm() {
                     </option>
                   </select>
                 </label>
-                <label className="settings-field">
+                <label className={formStyles.field}>
                   <span>{t("settings.authMode")}</span>
                   <select
                     aria-label={t("settings.authMode")}
@@ -992,7 +1006,9 @@ function ModelProviderForm() {
                     <option value="none">{t("settings.authNone")}</option>
                   </select>
                 </label>
-                <label className="settings-field is-wide">
+                <label
+                  className={`${formStyles.field} ${formStyles.fieldWide}`}
+                >
                   <span>{t("settings.apiKey")}</span>
                   <input
                     aria-label={t("settings.apiKey")}
@@ -1012,7 +1028,7 @@ function ModelProviderForm() {
                 </label>
               </div>
               {hasApiKey && draft.authMode !== "none" && (
-                <label className="settings-checkbox">
+                <label className={formStyles.checkbox}>
                   <input
                     checked={clearApiKey}
                     disabled={busy}
@@ -1032,12 +1048,12 @@ function ModelProviderForm() {
                   updateDraft((current) => ({ ...current, models }))
                 }
               />
-              <p className="settings-security-note">
+              <p className={formStyles.securityNote}>
                 <Glyph name="lock" size={14} />
                 {t("settings.credentialBoundary")}
               </p>
-              <footer className="settings-provider__actions">
-                <label className="settings-checkbox">
+              <footer className={formStyles.providerActions}>
+                <label className={formStyles.checkbox}>
                   <input
                     checked={setAsDefault}
                     disabled={busy}
@@ -1074,7 +1090,7 @@ function ModelProviderForm() {
               </footer>
             </>
           ) : (
-            <div className="settings-provider__empty-detail">
+            <div className={formStyles.providerEmptyDetail}>
               <strong>{t("settings.noProviders")}</strong>
               <Button onClick={addProvider} type="button">
                 {t("settings.addProvider")}
@@ -1106,7 +1122,7 @@ function ModelListEditor({
       ),
     );
   return (
-    <section className="settings-models-list">
+    <section className={formStyles.modelsList}>
       <header>
         <span>
           <strong>{t("settings.modelList")}</strong>
@@ -1122,8 +1138,8 @@ function ModelListEditor({
         </button>
       </header>
       {models.map((model, index) => (
-        <div className="settings-model-row" key={index}>
-          <label className="settings-field">
+        <div className={formStyles.modelRow} key={index}>
+          <label className={formStyles.field}>
             <span>{t("settings.modelId")}</span>
             <input
               aria-label={`${t("settings.modelId")} ${index + 1}`}
@@ -1136,7 +1152,7 @@ function ModelListEditor({
               value={model.modelId}
             />
           </label>
-          <label className="settings-field">
+          <label className={formStyles.field}>
             <span>{t("settings.modelName")}</span>
             <input
               aria-label={`${t("settings.modelName")} ${index + 1}`}
@@ -1148,7 +1164,7 @@ function ModelListEditor({
               value={model.name}
             />
           </label>
-          <label className="settings-field is-number">
+          <label className={`${formStyles.field} ${formStyles.fieldNumber}`}>
             <span>{t("settings.contextWindow")}</span>
             <input
               aria-label={`${t("settings.contextWindow")} ${index + 1}`}
@@ -1165,7 +1181,7 @@ function ModelListEditor({
               value={model.contextWindow}
             />
           </label>
-          <label className="settings-field is-number">
+          <label className={`${formStyles.field} ${formStyles.fieldNumber}`}>
             <span>{t("settings.maxOutput")}</span>
             <input
               aria-label={`${t("settings.maxOutput")} ${index + 1}`}
@@ -1182,8 +1198,8 @@ function ModelListEditor({
               value={model.maxOutputTokens}
             />
           </label>
-          <div className="settings-model-row__capabilities">
-            <label className="settings-checkbox">
+          <div className={formStyles.modelCapabilities}>
+            <label className={formStyles.checkbox}>
               <input
                 checked={model.capabilities.toolUse}
                 disabled={busy}
@@ -1200,7 +1216,7 @@ function ModelListEditor({
               />
               <span>{t("settings.toolUse")}</span>
             </label>
-            <label className="settings-checkbox">
+            <label className={formStyles.checkbox}>
               <input
                 checked={model.capabilities.imageInput}
                 disabled={busy}
@@ -1217,7 +1233,7 @@ function ModelListEditor({
               />
               <span>{t("settings.imageInput")}</span>
             </label>
-            <label className="settings-checkbox">
+            <label className={formStyles.checkbox}>
               <input
                 checked={model.capabilities.reasoning}
                 disabled={busy}
