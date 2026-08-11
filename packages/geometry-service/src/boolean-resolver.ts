@@ -14,7 +14,10 @@ import type {
   VectorGeometryProvider,
   VectorGeometryResult,
 } from "./vector-path.js";
-import { resolvePathPropertiesData } from "./editable-vector.js";
+import {
+  resolvePathPropertiesData,
+  vectorNetworkHasFillRegion,
+} from "./editable-vector.js";
 
 export const BOOLEAN_GEOMETRY_RESOLVER_VERSION = 1 as const;
 
@@ -396,7 +399,11 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
       booleanFillRule !== undefined
         ? { ...core, fillRule: booleanFillRule }
         : core;
-    const hasFill = properties.fills.some((paint) => paint.visible !== false);
+    const hasFill =
+      (!(node.kind === "path" || node.kind === "vector") ||
+        !("network" in node.properties) ||
+        vectorNetworkHasFillRegion(node.properties.network)) &&
+      properties.fills.some((paint) => paint.visible !== false);
     const hasStroke =
       properties.strokeWidth > 0 &&
       properties.strokes.some((paint) => paint.visible !== false);
@@ -723,7 +730,10 @@ function appearanceGeometrySignature(node: ShapeNode): unknown {
       : undefined;
   const properties = node.properties;
   return [
-    properties.fills.some((paint) => paint.visible !== false),
+    (!(node.kind === "path" || node.kind === "vector") ||
+      !("network" in node.properties) ||
+      vectorNetworkHasFillRegion(node.properties.network)) &&
+      properties.fills.some((paint) => paint.visible !== false),
     properties.strokes.some((paint) => paint.visible !== false),
     properties.strokeWidth,
     properties.strokeAlign ?? "center",

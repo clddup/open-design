@@ -3371,8 +3371,47 @@ describe("App", () => {
       "aria-pressed",
       "true",
     );
+    expect(screen.getByRole("button", { name: "Close path" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Smooth" }));
     expect(leaferHarness.setVectorPointMode).toHaveBeenCalledWith("smooth");
+
+    const beforeCloseRevision = runtime().getSnapshot().document.revision;
+    await user.click(screen.getByRole("button", { name: "Close path" }));
+    expect(runtime().getSnapshot().document.revision).toBe(
+      beforeCloseRevision + 1,
+    );
+    const closedNode =
+      runtime().getSnapshot().document.nodesById.editable_vector;
+    if (
+      !closedNode ||
+      closedNode.kind !== "vector" ||
+      !("network" in closedNode.properties)
+    ) {
+      throw new Error("Missing closed vector fixture");
+    }
+    expect(closedNode.properties.network.paths[0]?.closed).toBe(true);
+    expect(screen.getByRole("button", { name: "Open path" })).toBeEnabled();
+
+    const beforeReverse = structuredClone(closedNode.properties.network);
+    await user.click(screen.getByRole("button", { name: "Reverse" }));
+    const reversedNode =
+      runtime().getSnapshot().document.nodesById.editable_vector;
+    if (
+      !reversedNode ||
+      reversedNode.kind !== "vector" ||
+      !("network" in reversedNode.properties)
+    ) {
+      throw new Error("Missing reversed vector fixture");
+    }
+    expect(reversedNode.properties.network.paths[0]?.segments).toEqual(
+      [...(beforeReverse.paths[0]?.segments ?? [])]
+        .reverse()
+        .map((reference) => ({ ...reference, reversed: !reference.reversed })),
+    );
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
+      "editable_vector",
+    ]);
+    expect(document.activeElement).toBe(canvas);
 
     const beforeEditRevision = runtime().getSnapshot().document.revision;
     const currentNode =

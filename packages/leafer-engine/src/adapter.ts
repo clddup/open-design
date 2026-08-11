@@ -352,12 +352,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       },
     });
     this.#editor = this.#app.editor as LeaferEditor;
-    // Agent presentation has its own non-interactive render plane. Keeping it
-    // out of both the document tree and Leafer's editor sky gives it exactly
-    // one viewport transform: the one copied from the authoritative tree
-    // below. The editor sky can lag or lead the tree while a real pan/zoom
-    // gesture is in flight, so using it as the parent makes world overlays
-    // visibly drift even when a later frame eventually corrects them.
+    // Agent presentation has its own non-interactive render plane. Leafer may
+    // move every App render plane during a design viewport gesture, so child
+    // overlays must always be expressed relative to this plane's current
+    // transform instead of assuming that the plane stays at identity.
     const generationPresentationRoot = new leafer.Leafer({
       type: "draw",
     });
@@ -2569,14 +2567,22 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       screen.y <= hostBounds.height + 24;
     this.#generationActivityLayer.visible = onScreen;
     if (!onScreen) return;
-    this.#generationActivityLayer.setTransform({
-      a: 1,
-      b: 0,
-      c: 0,
-      d: 1,
-      e: screen.x,
-      f: screen.y,
-    });
+    const layerTransform = matrixRelativeToParent(
+      this.#generationPresentationRoot.localTransform,
+      {
+        a: 1,
+        b: 0,
+        c: 0,
+        d: 1,
+        e: screen.x,
+        f: screen.y,
+      },
+    );
+    if (!layerTransform) {
+      this.#generationActivityLayer.visible = false;
+      return;
+    }
+    this.#generationActivityLayer.setTransform(layerTransform);
     const badgeWidth = Math.max(
       1,
       Number(this.#generationActivityElements.badge.width) || 148,
@@ -2725,11 +2731,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #syncGenerationSkeletonViewport(): void {
     if (!this.#generationSkeletonId) return;
     const treeTransform = this.#app.tree.localTransform;
-    if (!matrixIsFinite(treeTransform)) {
+    const layerTransform = matrixRelativeToParent(
+      this.#generationPresentationRoot.localTransform,
+      treeTransform,
+    );
+    if (!layerTransform) {
       this.#generationSkeletonLayer.visible = false;
       return;
     }
-    this.#generationSkeletonLayer.setTransform({ ...treeTransform });
+    this.#generationSkeletonLayer.setTransform(layerTransform);
     this.#generationSkeletonLayer.visible = true;
     const zoom = Math.max(MATRIX_EPSILON, Math.abs(treeTransform.a || 1));
     const inverseZoom = 1 / zoom;
@@ -2764,9 +2774,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationViewportFrame = requestAnimationFrame(() => {
       this.#generationViewportFrame = null;
       if (this.#disposed) return;
-      // Re-read the authoritative tree after Leafer has settled kinetic pan or
-      // zoom. The presentation plane is independent from the editor sky, so
-      // this is idempotent and cannot apply the viewport twice.
+      // Leafer can settle the document and presentation render planes in
+      // different frames. Re-read both and recompute their relative transform
+      // so kinetic pan/zoom never leaves an intermediate offset behind.
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
     });
@@ -3454,6 +3464,41 @@ function toMatrix(transform: Transform): AffineMatrix {
     d: transform[3],
     e: transform[4],
     f: transform[5],
+  };
+}
+
+function matrixRelativeToParent(
+  parent: AffineMatrix,
+  desired: AffineMatrix,
+): AffineMatrix | undefined {
+  const determinant = parent.a * parent.d - parent.b * parent.c;
+  if (
+    !Number.isFinite(determinant) ||
+    Math.abs(determinant) <= MATRIX_EPSILON ||
+    !matrixIsFinite(parent) ||
+    !matrixIsFinite(desired)
+  ) {
+    return undefined;
+  }
+  const inverse = {
+    a: parent.d / determinant,
+    b: -parent.b / determinant,
+    c: -parent.c / determinant,
+    d: parent.a / determinant,
+    e: (parent.c * parent.f - parent.d * parent.e) / determinant,
+    f: (parent.b * parent.e - parent.a * parent.f) / determinant,
+  };
+  return {
+    a: normalizeNumber(inverse.a * desired.a + inverse.c * desired.b),
+    b: normalizeNumber(inverse.b * desired.a + inverse.d * desired.b),
+    c: normalizeNumber(inverse.a * desired.c + inverse.c * desired.d),
+    d: normalizeNumber(inverse.b * desired.c + inverse.d * desired.d),
+    e: normalizeNumber(
+      inverse.a * desired.e + inverse.c * desired.f + inverse.e,
+    ),
+    f: normalizeNumber(
+      inverse.b * desired.e + inverse.d * desired.f + inverse.f,
+    ),
   };
 }
 

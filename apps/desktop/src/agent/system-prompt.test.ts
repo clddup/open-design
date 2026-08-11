@@ -100,6 +100,12 @@ describe("OpenDesign Agent system prompt", () => {
       "Smart Selection canvas handles, reflow editing, and Auto Layout remain separate",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "use opendesign_edit_vector with the explicit stable Page and node IDs",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "preserves retained geometry IDs, effective region winding",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "Every Run starts with an immutable Current Page mutation target",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

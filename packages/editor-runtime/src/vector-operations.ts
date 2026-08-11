@@ -7,13 +7,22 @@ import type {
 } from "@opendesign/design-contracts";
 import {
   inferVectorPointMode,
+  reverseVectorPath,
+  setVectorPathClosed,
   vectorNetworkEditability,
 } from "@opendesign/geometry-service/vector-edit";
 import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 import { isEffectivelyLocked } from "./layer-operations.js";
 
 export type VectorOperationFailureCode =
-  "invalid-geometry" | "locked" | "not-found" | "unsupported-topology";
+  | "invalid-geometry"
+  | "locked"
+  | "no-op"
+  | "not-found"
+  | "unsupported-topology";
+
+export type VectorSemanticEdit =
+  { action: "set-closed"; closed: boolean } | { action: "reverse-path" };
 
 export interface VectorEditScope {
   nodeId: string;
@@ -144,6 +153,51 @@ export function planVectorNetworkUpdate(
       },
     ],
   };
+}
+
+export function planVectorSemanticEdit(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+  edit: VectorSemanticEdit,
+): VectorOperationPlan {
+  const node = document.nodesById[nodeId];
+  if (
+    !node ||
+    (node.kind !== "path" && node.kind !== "vector") ||
+    !("network" in node.properties) ||
+    !nodeBelongsToPage(document, pageId, node.id)
+  ) {
+    return {
+      ok: false,
+      code: "not-found",
+      message: `Editable vector ${nodeId} does not exist on page ${pageId}`,
+    };
+  }
+  if (isEffectivelyLocked(document, node.id)) {
+    return {
+      ok: false,
+      code: "locked",
+      message: `Editable vector ${nodeId} is locked`,
+    };
+  }
+  const edited =
+    edit.action === "set-closed"
+      ? setVectorPathClosed(node.properties.network, edit.closed)
+      : reverseVectorPath(node.properties.network);
+  if (!edited.ok) {
+    return {
+      ok: false,
+      code:
+        edited.code === "no-op"
+          ? "no-op"
+          : edited.code === "unsupported-topology"
+            ? "unsupported-topology"
+            : "invalid-geometry",
+      message: edited.message,
+    };
+  }
+  return planVectorNetworkUpdate(document, pageId, nodeId, edited.network);
 }
 
 export function planDeleteVectorNode(

@@ -81,6 +81,7 @@ import {
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  DESIGN_VECTOR_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
@@ -93,6 +94,7 @@ import {
   isDesignApplyToolInput,
   isDesignPlanToolInput,
   isDesignPageToolInput,
+  isDesignVectorToolInput,
   isPageStructureAccessToolInput,
   isDesignVisualReviewToolInput,
   isGenerateImageToolInput,
@@ -108,6 +110,7 @@ import {
   UPDATE_IMAGE_TOOL_NAME,
   type DesignArrangeToolInput,
   type DesignHierarchyToolInput,
+  type DesignVectorToolInput,
 } from "../shared/design-agent-tools";
 
 const applicationId = "design.open.app";
@@ -1559,11 +1562,21 @@ void app.whenReady().then(async () => {
     }
     if (
       call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
-      call.toolName === DESIGN_ARRANGE_TOOL_NAME
+      call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
+      call.toolName === DESIGN_VECTOR_TOOL_NAME
     ) {
+      if (
+        call.toolName === DESIGN_VECTOR_TOOL_NAME &&
+        !isDesignVectorToolInput(call.input)
+      ) {
+        throw new TypeError("Invalid vector edit tool input");
+      }
       globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
       const targetRefs = materialTargetRefsForStructuredTool(
-        call.input as DesignHierarchyToolInput | DesignArrangeToolInput,
+        call.input as
+          | DesignHierarchyToolInput
+          | DesignArrangeToolInput
+          | DesignVectorToolInput,
       );
       const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
         context,
@@ -1580,7 +1593,10 @@ void app.whenReady().then(async () => {
         targetIds,
         result.designRevision?.revision,
         createdNodeIdsForStructuredTool(
-          call.input as DesignHierarchyToolInput | DesignArrangeToolInput,
+          call.input as
+            | DesignHierarchyToolInput
+            | DesignArrangeToolInput
+            | DesignVectorToolInput,
         ),
       );
       return withDesignDelivery(result, context.runId);
@@ -1758,8 +1774,10 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
 }
 
 function materialTargetRefsForStructuredTool(
-  input: DesignHierarchyToolInput | DesignArrangeToolInput,
+  input:
+    DesignHierarchyToolInput | DesignArrangeToolInput | DesignVectorToolInput,
 ): { nodeIds: string[]; parentId?: string | null } {
+  if ("nodeId" in input) return { nodeIds: [input.nodeId] };
   if ("nodeIds" in input) {
     return {
       nodeIds: [...input.nodeIds],
@@ -1771,7 +1789,8 @@ function materialTargetRefsForStructuredTool(
 }
 
 function createdNodeIdsForStructuredTool(
-  input: DesignHierarchyToolInput | DesignArrangeToolInput,
+  input:
+    DesignHierarchyToolInput | DesignArrangeToolInput | DesignVectorToolInput,
 ): string[] {
   if (input.action === "group") return [input.groupId];
   if (input.action === "create-boolean") return [input.booleanId];

@@ -27,6 +27,7 @@ export type VectorEditFailureCode =
   | "invalid-network"
   | "missing-handle"
   | "missing-vertex"
+  | "no-op"
   | "unsupported-topology";
 
 export type VectorEditResult =
@@ -164,6 +165,101 @@ export function moveVectorVertices(
       ? { ...vertex, x: vertex.x + delta.x, y: vertex.y + delta.y }
       : vertex,
   );
+  return validated(next);
+}
+
+/**
+ * Opens or closes the one non-branching contour supported by the current
+ * vector-edit slice. The operation keeps every retained vertex/segment ID
+ * stable and authors only the missing closing edge/region when closing.
+ */
+export function setVectorPathClosed(
+  network: VectorNetwork,
+  closed: boolean,
+): VectorEditResult {
+  const failure = editableFailure(network);
+  if (failure) return failure;
+  const contour = editableContour(network);
+  if (!contour) return unsupportedTopology();
+  if (contour.closed === closed) {
+    return noOp(
+      `Vector path ${contour.pathId} is already ${closed ? "closed" : "open"}`,
+    );
+  }
+  if (closed && contour.vertexIds.length < 3) {
+    return unsupportedTopology(
+      "A closed vector contour requires at least three vertices",
+    );
+  }
+
+  const next = structuredClone(network);
+  const path = next.paths[0]!;
+  if (closed) {
+    const firstVertexId = contour.vertexIds[0]!;
+    const lastVertexId = contour.vertexIds.at(-1)!;
+    const closingSegmentId = nextSegmentId(
+      new Set(next.segments.map((segment) => segment.id)),
+    );
+    const closingSegment: VectorSegment = {
+      id: closingSegmentId,
+      startVertexId: lastVertexId,
+      endVertexId: firstVertexId,
+    };
+    mirrorEndpointHandleIntoClosingSegment(
+      network,
+      lastVertexId,
+      "outgoing",
+      closingSegment,
+    );
+    mirrorEndpointHandleIntoClosingSegment(
+      network,
+      firstVertexId,
+      "incoming",
+      closingSegment,
+    );
+    next.segments.push(closingSegment);
+    path.segments.push({ segmentId: closingSegmentId, reversed: false });
+    path.closed = true;
+    next.regions.push({
+      id: nextRegionId(new Set(next.regions.map((region) => region.id))),
+      windingRule: "nonzero",
+      loops: [{ pathId: path.id, reversed: false }],
+    });
+    return validated(next);
+  }
+
+  const closingReference = path.segments.at(-1)!;
+  path.segments = path.segments.slice(0, -1);
+  path.closed = false;
+  next.segments = next.segments.filter(
+    (segment) => segment.id !== closingReference.segmentId,
+  );
+  next.regions = next.regions.filter(
+    (region) => !region.loops.some((loop) => loop.pathId === path.id),
+  );
+  return validated(next);
+}
+
+/**
+ * Reverses traversal without replacing any geometry IDs. Region loop
+ * direction is toggled with the path so the effective winding remains
+ * visually equivalent for nonzero fills.
+ */
+export function reverseVectorPath(network: VectorNetwork): VectorEditResult {
+  const failure = editableFailure(network);
+  if (failure) return failure;
+  const next = structuredClone(network);
+  const path = next.paths[0]!;
+  path.segments = [...path.segments].reverse().map((reference) => ({
+    segmentId: reference.segmentId,
+    reversed: !reference.reversed,
+  }));
+  next.regions = next.regions.map((region) => ({
+    ...region,
+    loops: region.loops.map((loop) =>
+      loop.pathId === path.id ? { ...loop, reversed: !loop.reversed } : loop,
+    ),
+  }));
   return validated(next);
 }
 
@@ -597,6 +693,30 @@ function nextSegmentId(usedIds: ReadonlySet<string>): string {
   return `segment_edit_${index}`;
 }
 
+function nextRegionId(usedIds: ReadonlySet<string>): string {
+  let index = 1;
+  while (usedIds.has(`region_edit_${index}`)) index += 1;
+  return `region_edit_${index}`;
+}
+
+function mirrorEndpointHandleIntoClosingSegment(
+  network: VectorNetwork,
+  vertexId: string,
+  direction: "incoming" | "outgoing",
+  closingSegment: VectorSegment,
+): void {
+  const mode = inferVectorPointMode(network, vertexId);
+  if (mode !== "smooth" && mode !== "mirrored") return;
+  const reference = contourHandles(network, vertexId)?.find(
+    (candidate) => candidate.direction !== direction,
+  );
+  const existing = reference ? readHandle(network, reference) : undefined;
+  if (!meaningful(existing)) return;
+  const mirrored = scale(existing!, -1);
+  if (direction === "outgoing") closingSegment.tangentStart = mirrored;
+  else closingSegment.tangentEnd = mirrored;
+}
+
 function directedVertexIds(
   segment: VectorSegment,
   reference: VectorSegmentReference,
@@ -631,11 +751,17 @@ function missingHandle(
   return { ok: false, code: "missing-handle", message };
 }
 
-function unsupportedTopology(): Extract<VectorEditResult, { ok: false }> {
+function noOp(message: string): Extract<VectorEditResult, { ok: false }> {
+  return { ok: false, code: "no-op", message };
+}
+
+function unsupportedTopology(
+  message = "This editing slice supports one non-branching contour",
+): Extract<VectorEditResult, { ok: false }> {
   return {
     ok: false,
     code: "unsupported-topology",
-    message: "This editing slice supports one non-branching contour",
+    message,
   };
 }
 

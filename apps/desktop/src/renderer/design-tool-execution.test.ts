@@ -14,6 +14,7 @@ import {
   EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  DESIGN_VECTOR_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
@@ -2184,6 +2185,170 @@ describe("Renderer semantic hierarchy tool", () => {
     });
   });
 
+  it("edits an explicit vector contour atomically without reading or changing live selection", async () => {
+    const runtime = createEditableVectorRuntime();
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const closed = await executeDesignToolRequest(
+      {
+        requestId: "vector_close",
+        call: {
+          toolCallId: "tool_vector_close",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "set-closed",
+            closed: true,
+            label: "Close the logo contour",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+          },
+        },
+        context: selectionContext,
+      },
+      runtime,
+      "page_changed_after_send",
+    );
+
+    expect(closed).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-closed",
+          atomic: true,
+          closed: true,
+          nodeId: "editable_logo_contour",
+          pageId: "page_welcome",
+          pathId: "logo_path",
+          revision: 1,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    const beforeReverse = editableVectorNetwork(runtime);
+
+    const reversed = await executeDesignToolRequest(
+      {
+        requestId: "vector_reverse",
+        call: {
+          toolCallId: "tool_vector_reverse",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "reverse-path",
+            label: "Reverse the logo contour",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+          },
+        },
+        context: { ...selectionContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(reversed).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "reverse-path",
+          atomic: true,
+          closed: true,
+          revision: 2,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).paths[0]?.segments).toEqual(
+      [...(beforeReverse.paths[0]?.segments ?? [])]
+        .reverse()
+        .map((reference) => ({ ...reference, reversed: !reference.reversed })),
+    );
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(editableVectorNetwork(runtime)).toEqual(beforeReverse);
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(editableVectorNetwork(reopened)).toEqual(
+      editableVectorNetwork(runtime),
+    );
+  });
+
+  it("rejects no-op, locked, out-of-scope, and stale Agent vector edits", async () => {
+    const noOpRuntime = createEditableVectorRuntime();
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "vector_noop",
+          call: {
+            toolCallId: "tool_vector_noop",
+            toolName: DESIGN_VECTOR_TOOL_NAME,
+            input: {
+              action: "set-closed",
+              closed: false,
+              label: "Keep the contour open",
+              nodeId: "editable_logo_contour",
+              pageId: "page_welcome",
+            },
+          },
+          context: pageContext,
+        },
+        noOpRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("vector-edit.no-op");
+    expect(noOpRuntime.getSnapshot().document.revision).toBe(0);
+
+    const lockedRuntime = createEditableVectorRuntime();
+    const lockedDocument = structuredClone(
+      lockedRuntime.getSnapshot().document,
+    );
+    lockedDocument.nodesById.frame_welcome.locked = true;
+    const inheritedLockedRuntime = new EditorRuntime(lockedDocument);
+    await expect(
+      executeDesignToolRequest(
+        vectorToolRequest("vector_locked", "page_welcome"),
+        inheritedLockedRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("vector-edit.locked");
+
+    await expect(
+      executeDesignToolRequest(
+        vectorToolRequest("vector_wrong_page", "page_other"),
+        createEditableVectorRuntime(),
+        "page_welcome",
+      ),
+    ).rejects.toThrow("outside the registered page mutation target");
+
+    const staleRuntime = createEditableVectorRuntime();
+    const snapshot = staleRuntime.getSnapshot();
+    expect(
+      staleRuntime.apply({
+        transactionId: "user_changed_before_vector",
+        documentId: snapshot.document.documentId,
+        baseRevision: snapshot.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Change before vector edit",
+        commands: [
+          {
+            commandId: "rename_before_vector",
+            type: "update_properties",
+            nodeId: "title_welcome",
+            name: "Changed",
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+    await expect(
+      executeDesignToolRequest(
+        vectorToolRequest("vector_stale", "page_welcome"),
+        staleRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("expected 0, current 1");
+  });
+
   it("arranges explicit layers atomically without using or resetting selection", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     runtime.setSelection(["title_welcome"], "title_welcome");
@@ -2533,3 +2698,89 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(scopedRuntime.getSnapshot().state.history.canUndo).toBe(false);
   });
 });
+
+function createEditableVectorRuntime(): EditorRuntime {
+  const document = structuredClone(createWelcomeDocument());
+  const frame = document.nodesById.frame_welcome;
+  if (!frame || frame.kind !== "frame")
+    throw new Error("Missing frame fixture");
+  const vector: DesignNode = {
+    id: "editable_logo_contour",
+    kind: "vector",
+    name: "Editable logo contour",
+    parentId: frame.id,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 40, 40],
+    size: { width: 120, height: 80 },
+    opacity: 1,
+    properties: {
+      network: {
+        vertices: [
+          { id: "vertex_a", x: 0, y: 0, handleMode: "corner" },
+          { id: "vertex_b", x: 120, y: 0, handleMode: "corner" },
+          { id: "vertex_c", x: 60, y: 80, handleMode: "corner" },
+        ],
+        segments: [
+          {
+            id: "segment_ab",
+            startVertexId: "vertex_a",
+            endVertexId: "vertex_b",
+          },
+          {
+            id: "segment_bc",
+            startVertexId: "vertex_b",
+            endVertexId: "vertex_c",
+          },
+        ],
+        paths: [
+          {
+            id: "logo_path",
+            closed: false,
+            segments: [
+              { segmentId: "segment_ab", reversed: false },
+              { segmentId: "segment_bc", reversed: false },
+            ],
+          },
+        ],
+        regions: [],
+      },
+      fills: [{ type: "solid", color: "#151515", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+    },
+    extensions: {},
+  };
+  document.nodesById[vector.id] = vector;
+  frame.childIds.push(vector.id);
+  return new EditorRuntime(document);
+}
+
+function editableVectorNetwork(runtime: EditorRuntime) {
+  const node = runtime.getSnapshot().document.nodesById.editable_logo_contour;
+  if (!node || node.kind !== "vector" || !("network" in node.properties)) {
+    throw new Error("Missing editable vector fixture");
+  }
+  return node.properties.network;
+}
+
+function vectorToolRequest(
+  requestId: string,
+  pageId: string,
+): RendererDesignToolRequest {
+  return {
+    requestId,
+    call: {
+      toolCallId: `tool_${requestId}`,
+      toolName: DESIGN_VECTOR_TOOL_NAME,
+      input: {
+        action: "reverse-path",
+        label: "Reverse the logo contour",
+        nodeId: "editable_logo_contour",
+        pageId,
+      },
+    },
+    context: pageContext,
+  };
+}

@@ -16,6 +16,7 @@ import {
   navigateBooleanSelection,
   planDeleteVectorNode,
   planVectorNetworkUpdate,
+  planVectorSemanticEdit,
   resolveBooleanEditScope,
   resolveVectorEditScope,
   screenToDocument,
@@ -301,6 +302,38 @@ export function Canvas({
       return accepted;
     },
     [activePageId, applyOperations, onTransactionError, runtime],
+  );
+
+  const applyVectorPathAction = useCallback(
+    (
+      action:
+        { action: "set-closed"; closed: boolean } | { action: "reverse-path" },
+    ) => {
+      const current = runtime.getSnapshot();
+      const nodeId = vectorEditState?.nodeId;
+      if (!nodeId) return false;
+      const plan = planVectorSemanticEdit(
+        current.document,
+        activePageId,
+        nodeId,
+        action,
+      );
+      if (!plan.ok) {
+        onTransactionError(plan.message);
+        return false;
+      }
+      return applyOperations({
+        kind: "vector",
+        operations: [...plan.operations],
+      });
+    },
+    [
+      activePageId,
+      applyOperations,
+      onTransactionError,
+      runtime,
+      vectorEditState?.nodeId,
+    ],
   );
 
   const createNode = useCallback(
@@ -605,6 +638,12 @@ export function Canvas({
   const editScopeVector = vectorEditScope
     ? snapshot.document.nodesById[vectorEditScope.nodeId]
     : undefined;
+  const editScopeVectorClosed =
+    editScopeVector &&
+    (editScopeVector.kind === "path" || editScopeVector.kind === "vector") &&
+    "network" in editScopeVector.properties
+      ? editScopeVector.properties.network.paths[0]?.closed
+      : undefined;
 
   return (
     <main
@@ -668,36 +707,74 @@ export function Canvas({
                         })}
                   </small>
                 </span>
-                <span
-                  aria-label={t("canvas.vectorPointMode")}
-                  className={styles.vectorModes}
-                  role="group"
-                >
-                  {(
-                    [
-                      ["corner", "canvas.vectorPointCorner"],
-                      ["smooth", "canvas.vectorPointSmooth"],
-                      ["mirrored", "canvas.vectorPointMirrored"],
-                      ["independent", "canvas.vectorPointIndependent"],
-                    ] as const
-                  ).map(([mode, label]) => (
+                <span className={styles.vectorTools}>
+                  <span
+                    aria-label={t("canvas.vectorPointMode")}
+                    className={styles.vectorModes}
+                    role="group"
+                  >
+                    {(
+                      [
+                        ["corner", "canvas.vectorPointCorner"],
+                        ["smooth", "canvas.vectorPointSmooth"],
+                        ["mirrored", "canvas.vectorPointMirrored"],
+                        ["independent", "canvas.vectorPointIndependent"],
+                      ] as const
+                    ).map(([mode, label]) => (
+                      <button
+                        aria-pressed={vectorEditScope.pointMode === mode}
+                        disabled={
+                          vectorEditScope.readOnly ||
+                          vectorEditScope.selectedVertexIds.length === 0
+                        }
+                        key={mode}
+                        onClick={() => {
+                          adapter.current?.setVectorPointMode(mode);
+                          requestAnimationFrame(() => host.current?.focus());
+                        }}
+                        title={t(label)}
+                        type="button"
+                      >
+                        {t(label)}
+                      </button>
+                    ))}
+                  </span>
+                  <span
+                    aria-label={t("canvas.vectorPathActions")}
+                    className={styles.vectorActions}
+                    role="group"
+                  >
                     <button
-                      aria-pressed={vectorEditScope.pointMode === mode}
                       disabled={
                         vectorEditScope.readOnly ||
-                        vectorEditScope.selectedVertexIds.length === 0
+                        editScopeVectorClosed === undefined
                       }
-                      key={mode}
                       onClick={() => {
-                        adapter.current?.setVectorPointMode(mode);
+                        if (editScopeVectorClosed !== undefined) {
+                          applyVectorPathAction({
+                            action: "set-closed",
+                            closed: !editScopeVectorClosed,
+                          });
+                        }
                         requestAnimationFrame(() => host.current?.focus());
                       }}
-                      title={t(label)}
                       type="button"
                     >
-                      {t(label)}
+                      {editScopeVectorClosed
+                        ? t("canvas.vectorPathOpen")
+                        : t("canvas.vectorPathClose")}
                     </button>
-                  ))}
+                    <button
+                      disabled={vectorEditScope.readOnly}
+                      onClick={() => {
+                        applyVectorPathAction({ action: "reverse-path" });
+                        requestAnimationFrame(() => host.current?.focus());
+                      }}
+                      type="button"
+                    >
+                      {t("canvas.vectorPathReverse")}
+                    </button>
+                  </span>
                 </span>
                 <button
                   aria-label={t("canvas.exitVectorEditing")}

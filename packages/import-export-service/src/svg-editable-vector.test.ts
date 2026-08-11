@@ -1,4 +1,9 @@
 import type { VectorNetwork } from "@opendesign/design-contracts";
+import { serializeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
+import {
+  reverseVectorPath,
+  setVectorPathClosed,
+} from "@opendesign/geometry-service/vector-edit";
 import { DOMImplementation } from "@xmldom/xmldom";
 import { describe, expect, it } from "vitest";
 import {
@@ -92,6 +97,35 @@ describe("controlled editable-vector SVG metadata", () => {
         "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
       ),
     ).toEqual({ status: "valid", network });
+  });
+
+  it("round-trips open/closed and reversed traversal semantics exactly", () => {
+    const reversed = reverseVectorPath(network);
+    if (!reversed.ok) throw new Error(reversed.message);
+    const reversedPath = serializeVectorNetwork(reversed.network);
+    if (!reversedPath.ok) throw new Error("Reversed path did not serialize");
+    const reversedElement = pathElement();
+    expect(writeSvgEditableVector(reversedElement, reversed.network)).toBe(
+      true,
+    );
+    expect(readSvgEditableVector(reversedElement, reversedPath.path)).toEqual({
+      status: "valid",
+      network: reversed.network,
+    });
+    expect(reversed.network.regions[0]?.loops[0]?.reversed).toBe(true);
+
+    const opened = setVectorPathClosed(network, false);
+    if (!opened.ok) throw new Error(opened.message);
+    const openPath = serializeVectorNetwork(opened.network);
+    if (!openPath.ok) throw new Error("Open path did not serialize");
+    const openElement = pathElement();
+    expect(writeSvgEditableVector(openElement, opened.network)).toBe(true);
+    expect(readSvgEditableVector(openElement, openPath.path)).toEqual({
+      status: "valid",
+      network: opened.network,
+    });
+    expect(opened.network.paths[0]?.closed).toBe(false);
+    expect(opened.network.regions).toEqual([]);
   });
 
   it("rejects missing versions, malformed topology, and changed path data", () => {

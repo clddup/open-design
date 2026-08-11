@@ -428,6 +428,26 @@ describe("Renderer typed plan skeleton presentation", () => {
     expect(refinement.activityByRunId.run_stages).toMatchObject({
       phase: "refining",
     });
+
+    const vectorRefinement = projectGenerationPlanPresentationEvent(
+      reviewCompleted,
+      {
+        type: "tool.requested",
+        runId: "run_stages",
+        toolCallId: "tool_vector_refinement",
+        toolName: "opendesign_edit_vector",
+        input: {
+          action: "reverse-path",
+          label: "Reverse contour",
+          nodeId: "logo_contour",
+          pageId: "page_welcome",
+        },
+        risk: "design_write",
+      },
+    );
+    expect(vectorRefinement.activityByRunId.run_stages).toMatchObject({
+      phase: "refining",
+    });
   });
 
   it("uses planned artboard geometry and replaces fulfilled regions with committed nodes", () => {

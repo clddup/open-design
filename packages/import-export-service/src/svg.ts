@@ -18,6 +18,7 @@ import type {
 import {
   normalizeVectorNetwork,
   resolvePathPropertiesData,
+  vectorNetworkHasFillRegion,
 } from "@opendesign/geometry-service/editable-vector";
 import { DOMImplementation, DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import {
@@ -758,7 +759,15 @@ function exportNode(
       node,
       options.maskSource === true,
     );
-    applyExportShapeAppearance(context, element, node.id, node.properties);
+    applyExportShapeAppearance(
+      context,
+      element,
+      node.id,
+      "network" in node.properties &&
+        !vectorNetworkHasFillRegion(node.properties.network)
+        ? { ...node.properties, fills: [] }
+        : node.properties,
+    );
     return element;
   } finally {
     context.visiting.delete(nodeId);

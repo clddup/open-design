@@ -217,7 +217,7 @@
         "en": "Create editable cubic contours with Pen, refine existing vertices and Bézier handles, or preserve exact SVG path data, then render all forms through one Path projection.",
         "zh-CN": "使用 Pen 创建可编辑三次曲线轮廓、继续调整已有节点和贝塞尔手柄，或精确保留 SVG Path 数据，并通过同一 Path 投影渲染。"
       },
-      "provider": "DesignDocument 1.10.0 + vector-edit geometry service + EditorRuntime vector planner + Leafer Pen/point overlay + controlled SVG metadata v2",
+      "provider": "DesignDocument 1.10.0 + Geometry Service contract v5 vector-edit + EditorRuntime vector planner + Leafer Pen/point overlay + controlled SVG metadata v2",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -240,12 +240,12 @@
           "zh-CN": "Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。"
         },
         {
-          "en": "Enter or double-click opens one-contour point editing with single/Shift multi-selection, vertex and handle drag, persistent corner/smooth/mirrored/independent modes, Delete/Backspace, read-only lock behavior, Done/Escape, tight bounds, and one transaction per completed action.",
-          "zh-CN": "Enter 或双击可进入单轮廓节点编辑，支持单选/Shift 多选、节点与手柄拖动、持久化的直角/平滑/镜像/独立模式、Delete/Backspace、锁定只读、Done/Escape、精确 bounds，以及每次完成动作一条事务。"
+          "en": "Enter or double-click opens one-contour point editing with single/Shift multi-selection, vertex and handle drag, persistent corner/smooth/mirrored/independent modes, Open/Close, Reverse, Delete/Backspace, read-only lock behavior, Done/Escape, tight bounds, and one transaction per completed action. The dedicated Agent vector tool uses the same semantic planner and stable node IDs.",
+          "zh-CN": "Enter 或双击可进入单轮廓节点编辑，支持单选/Shift 多选、节点与手柄拖动、持久化的直角/平滑/镜像/独立模式、开放/闭合、反转、Delete/Backspace、锁定只读、Done/Escape、精确 bounds，以及每次完成动作一条事务；专用 Agent 矢量工具通过稳定节点 ID 复用同一语义 planner。"
         },
         {
-          "en": "Open/closed conversion, multiple contours, branch creation, connect/disconnect, reverse, flatten, outline stroke, complete external SVG fidelity, pixel baselines, and packaged macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "开放/闭合转换、多轮廓、分支创建、连接/断开、反转、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。"
+          "en": "Multiple contours, branch creation, connect/disconnect, Cut, lasso, multi-point transform boxes, flatten, outline stroke, complete external SVG fidelity, pixel baselines, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "多轮廓、分支创建、连接/断开、路径切断、套索、多节点变换框、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。"
         },
         {
           "en": "Controlled OpenDesign SVG metadata preserves schema-valid editable networks only when it exactly matches the standard rendered path. External SVG without metadata remains exact path data rather than guessed editable topology.",
@@ -266,6 +266,7 @@
           "packages/import-export-service/src/svg-editable-vector.test.ts",
           "packages/import-export-service/src/svg.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
           "packages/editor-runtime/src/diagnostics.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts"
@@ -412,7 +413,7 @@
         "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles.",
         "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。"
       },
-      "provider": "DesignDocument 1.10.0 Vector Network + vector-edit geometry service + EditorRuntime planner + Leafer native overlays",
+      "provider": "DesignDocument 1.10.0 Vector Network + Geometry Service contract v5 vector-edit + EditorRuntime planner + Leafer native overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",
@@ -424,8 +425,8 @@
       },
       "limitations": [
         {
-          "en": "Pen and existing-node editing are available for one non-branching contour. Branches, multiple contours, connect/disconnect, open/closed conversion, reverse, flatten, outline stroke, lasso, multi-point transform boxes, and packaged dual-platform interaction evidence remain incomplete.",
-          "zh-CN": "Pen 和已有节点编辑已支持单条非分叉轮廓；分支、多轮廓、连接/断开、开放/闭合转换、反转、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。"
+          "en": "Pen and existing-node editing are available for one non-branching contour, including host-derived Open/Close and Reverse through shared human and Agent semantics. Branches, multiple contours, connect/disconnect, Cut, flatten, outline stroke, lasso, multi-point transform boxes, and packaged dual-platform interaction evidence remain incomplete.",
+          "zh-CN": "Pen 和已有节点编辑已支持单条非分叉轮廓，并通过人工与 Agent 共用语义提供宿主计算的开放/闭合和反转；分支、多轮廓、连接/断开、路径切断、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。"
         }
       ],
       "evidence": {
@@ -436,6 +437,8 @@
           "packages/leafer-engine/src/pen-tool.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
           "packages/import-export-service/src/svg-editable-vector.test.ts"
         ],
         "manual": []

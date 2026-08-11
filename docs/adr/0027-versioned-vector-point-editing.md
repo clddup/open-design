@@ -46,7 +46,7 @@ Figma 把普通图层选择和 vector edit mode 分离：Enter 进入，节点�
 
 内部 vertex selection 是 Renderer session state，不进入 `DesignDocument`、Conversation 或 Agent 工具。Agent 仍通过完整 network 的 typed transaction 修改同一公共几何；人工编辑不建立第二份 durable state。
 
-当前交互切片明确拒绝分支和多轮廓写入，但可只读显示。开放/闭合转换、connect/disconnect、reverse、路径切断、套索、多点变换框、flatten、outline stroke 和 Slice 继续后续实现，不能通过隐藏 fallback 或重建 SVG path 字符串冒充完成。
+当前交互切片明确拒绝分支和多轮廓写入，但可只读显示。单轮廓开放/闭合与 reverse 后续已由 [ADR-0037](0037-versioned-vector-topology-operations.md) 完成；connect/disconnect、路径切断、套索、多点变换框、flatten、outline stroke 和 Slice 继续后续实现，不能通过隐藏 fallback 或重建 SVG path 字符串冒充完成。
 
 ## 迁移与失败
 

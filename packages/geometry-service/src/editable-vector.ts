@@ -41,6 +41,15 @@ export function resolvePathPropertiesData(
   return result.ok ? result.path : null;
 }
 
+/**
+ * Vector Network paints apply to explicit closed regions, not to the implicit
+ * straight-line closure that SVG/Canvas renderers otherwise invent for an
+ * open subpath.
+ */
+export function vectorNetworkHasFillRegion(network: VectorNetwork): boolean {
+  return network.regions.some((region) => region.loops.length > 0);
+}
+
 export function serializeVectorNetwork(
   network: VectorNetwork,
 ): VectorNetworkResolution {

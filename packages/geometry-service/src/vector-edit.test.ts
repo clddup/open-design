@@ -6,6 +6,8 @@ import {
   listVectorVertexHandles,
   moveVectorHandle,
   moveVectorVertices,
+  reverseVectorPath,
+  setVectorPathClosed,
   setVectorPointMode,
   vectorNetworkEditability,
 } from "./vector-edit.js";
@@ -230,6 +232,106 @@ describe("editable vector point operations", () => {
     expect(
       deleteVectorVertices(closedNetwork(), ["vertex_a", "vertex_b"]),
     ).toEqual({ ok: true, deleteNode: true });
+  });
+
+  it("closes and reopens one contour with deterministic IDs and region semantics", () => {
+    const source = openNetwork();
+    const closed = setVectorPathClosed(source, true);
+    expect(closed).toMatchObject({ ok: true });
+    if (!closed.ok) throw new Error(closed.message);
+    expect(closed.network.paths[0]).toEqual({
+      id: "path_open",
+      closed: true,
+      segments: [
+        { segmentId: "segment_ab", reversed: false },
+        { segmentId: "segment_bc", reversed: false },
+        { segmentId: "segment_cd", reversed: false },
+        { segmentId: "segment_edit_1", reversed: false },
+      ],
+    });
+    expect(closed.network.segments.at(-1)).toEqual({
+      id: "segment_edit_1",
+      startVertexId: "vertex_d",
+      endVertexId: "vertex_a",
+    });
+    expect(closed.network.regions).toEqual([
+      {
+        id: "region_edit_1",
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_open", reversed: false }],
+      },
+    ]);
+
+    const reopened = setVectorPathClosed(closed.network, false);
+    expect(reopened).toEqual({ ok: true, network: source });
+  });
+
+  it("mirrors smooth and mirrored endpoint handles onto the closing edge", () => {
+    const source = openNetwork();
+    source.vertices[0]!.handleMode = "smooth";
+    source.vertices.at(-1)!.handleMode = "mirrored";
+    source.segments[0]!.tangentStart = { x: 18, y: -6 };
+    source.segments.at(-1)!.tangentEnd = { x: -12, y: 9 };
+
+    const result = setVectorPathClosed(source, true);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.network.segments.at(-1)).toEqual({
+      id: "segment_edit_1",
+      startVertexId: "vertex_d",
+      endVertexId: "vertex_a",
+      tangentStart: { x: 12, y: -9 },
+      tangentEnd: { x: -18, y: 6 },
+    });
+    expect(inferVectorPointMode(result.network, "vertex_a")).toBe("smooth");
+    expect(inferVectorPointMode(result.network, "vertex_d")).toBe("mirrored");
+  });
+
+  it("preserves stable segments and effective region winding when reversing twice", () => {
+    const source = closedNetwork();
+    source.paths[0]!.segments = [
+      { segmentId: "segment_ab", reversed: false },
+      { segmentId: "segment_bc", reversed: false },
+      { segmentId: "segment_cd", reversed: true },
+      { segmentId: "segment_da", reversed: false },
+    ];
+    source.segments[2] = {
+      id: "segment_cd",
+      startVertexId: "vertex_d",
+      endVertexId: "vertex_c",
+    };
+
+    const reversed = reverseVectorPath(source);
+    if (!reversed.ok) throw new Error(reversed.message);
+    expect(reversed.network.paths[0]!.segments).toEqual([
+      { segmentId: "segment_da", reversed: true },
+      { segmentId: "segment_cd", reversed: false },
+      { segmentId: "segment_bc", reversed: true },
+      { segmentId: "segment_ab", reversed: true },
+    ]);
+    expect(reversed.network.regions[0]!.loops[0]!.reversed).toBe(true);
+    expect(reversed.network.segments).toEqual(source.segments);
+
+    const restored = reverseVectorPath(reversed.network);
+    expect(restored).toEqual({ ok: true, network: source });
+  });
+
+  it("rejects topology no-ops and closing a two-point contour", () => {
+    expect(setVectorPathClosed(openNetwork(), false)).toMatchObject({
+      ok: false,
+      code: "no-op",
+    });
+    expect(setVectorPathClosed(closedNetwork(), true)).toMatchObject({
+      ok: false,
+      code: "no-op",
+    });
+    const twoPoint = openNetwork();
+    twoPoint.vertices = twoPoint.vertices.slice(0, 2);
+    twoPoint.segments = twoPoint.segments.slice(0, 1);
+    twoPoint.paths[0]!.segments = twoPoint.paths[0]!.segments.slice(0, 1);
+    expect(setVectorPathClosed(twoPoint, true)).toMatchObject({
+      ok: false,
+      code: "unsupported-topology",
+    });
   });
 
   it("rejects branch and multi-contour networks for this interaction slice", () => {

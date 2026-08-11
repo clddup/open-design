@@ -9,6 +9,7 @@ import { EditorRuntime } from "./runtime.js";
 import {
   planDeleteVectorNode,
   planVectorNetworkUpdate,
+  planVectorSemanticEdit,
   resolveVectorEditScope,
 } from "./vector-operations.js";
 
@@ -191,4 +192,114 @@ describe("vector editing runtime plans", () => {
       ],
     });
   });
+
+  it("applies close, reverse, and open as atomic semantic edits that survive history and reopen", () => {
+    const runtime = new EditorRuntime(documentWithVector());
+    const applySemanticEdit = (
+      transactionId: string,
+      edit:
+        { action: "set-closed"; closed: boolean } | { action: "reverse-path" },
+    ) => {
+      const snapshot = runtime.getSnapshot();
+      const plan = planVectorSemanticEdit(
+        snapshot.document,
+        "page_welcome",
+        "vector_editable",
+        edit,
+      );
+      if (!plan.ok) throw new Error(plan.message);
+      return runtime.apply({
+        transactionId,
+        documentId: snapshot.document.documentId,
+        baseRevision: snapshot.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: transactionId,
+        commands: [...plan.operations],
+      });
+    };
+
+    expect(
+      applySemanticEdit("close_vector", {
+        action: "set-closed",
+        closed: true,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(vectorNetworkFrom(runtime).paths[0]?.closed).toBe(true);
+    expect(vectorNetworkFrom(runtime).regions).toHaveLength(1);
+
+    const closed = structuredClone(vectorNetworkFrom(runtime));
+    expect(
+      applySemanticEdit("reverse_vector", { action: "reverse-path" }),
+    ).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.revision).toBe(2);
+    expect(vectorNetworkFrom(runtime).paths[0]?.segments).toEqual(
+      [...(closed.paths[0]?.segments ?? [])]
+        .reverse()
+        .map((reference) => ({ ...reference, reversed: !reference.reversed })),
+    );
+
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(vectorNetworkFrom(runtime)).toEqual(closed);
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const saved = JSON.stringify(runtime.getSnapshot().document);
+    const reopened = new EditorRuntime(JSON.parse(saved) as unknown);
+    expect(vectorNetworkFrom(reopened)).toEqual(vectorNetworkFrom(runtime));
+
+    expect(
+      applySemanticEdit("open_vector", {
+        action: "set-closed",
+        closed: false,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(vectorNetworkFrom(runtime).paths[0]?.closed).toBe(false);
+    expect(vectorNetworkFrom(runtime).regions).toEqual([]);
+  });
+
+  it("rejects semantic no-ops, unsupported topology, and inherited locks", () => {
+    const document = documentWithVector();
+    expect(
+      planVectorSemanticEdit(document, "page_welcome", "vector_editable", {
+        action: "set-closed",
+        closed: false,
+      }),
+    ).toMatchObject({ ok: false, code: "no-op" });
+
+    const node = document.nodesById.vector_editable;
+    if (!node || node.kind !== "vector" || !("network" in node.properties)) {
+      throw new Error("Missing editable vector");
+    }
+    node.properties.network.paths.push({
+      id: "path_extra",
+      closed: false,
+      segments: [{ segmentId: "segment_extra", reversed: false }],
+    });
+    node.properties.network.vertices.push({ id: "vertex_d", x: 180, y: 0 });
+    node.properties.network.segments.push({
+      id: "segment_extra",
+      startVertexId: "vertex_c",
+      endVertexId: "vertex_d",
+    });
+    expect(
+      planVectorSemanticEdit(document, "page_welcome", "vector_editable", {
+        action: "reverse-path",
+      }),
+    ).toMatchObject({ ok: false, code: "unsupported-topology" });
+
+    const locked = documentWithVector();
+    locked.nodesById.frame_welcome!.locked = true;
+    expect(
+      planVectorSemanticEdit(locked, "page_welcome", "vector_editable", {
+        action: "reverse-path",
+      }),
+    ).toMatchObject({ ok: false, code: "locked" });
+  });
 });
+
+function vectorNetworkFrom(runtime: EditorRuntime): VectorNetwork {
+  const node = runtime.getSnapshot().document.nodesById.vector_editable;
+  if (!node || node.kind !== "vector" || !("network" in node.properties)) {
+    throw new Error("Missing editable vector");
+  }
+  return node.properties.network;
+}

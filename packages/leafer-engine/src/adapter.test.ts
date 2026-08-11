@@ -687,7 +687,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
-  it("keeps generation presentation aligned on an isolated render plane while the editor sky moves independently", async () => {
+  it("keeps generation presentation aligned when the isolated render plane follows the viewport", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
       createCallbacks(),
@@ -742,17 +742,18 @@ describe("Leafer engine selection bounds synchronization", () => {
       f: 40,
     };
     app.tree.localTransform = { ...viewport };
+    if (presentationRoot) presentationRoot.localTransform = { ...viewport };
     app.sky.localTransform = { ...viewport };
     app.emit("viewport.move");
 
-    expect(skeletonLayer?.localTransform).toEqual(viewport);
+    expect(skeletonLayer?.localTransform).toEqual(identityMatrix());
     expect(activityLayer?.localTransform).toEqual({
-      a: 1,
+      a: 2,
       b: 0,
       c: 0,
-      d: 1,
-      e: 425,
-      f: 160,
+      d: 2,
+      e: 1_450,
+      f: 240,
     });
     expect(skeletonLayer?.children[0]?.localTransform).toEqual({
       a: 1,
@@ -766,7 +767,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
-  it("does not double-apply continuous viewport movement when the editor sky settles later", async () => {
+  it("does not double-apply continuous viewport movement when the presentation plane settles later", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
       createCallbacks(),
@@ -820,7 +821,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     };
 
     // Production Leafer can emit MoveEvent.MOVE after the tree has moved but
-    // before the editor sky copies that viewport transform.
+    // before the separate presentation render plane copies that transform.
     app.tree.localTransform = { ...viewport };
     app.emit("viewport.move");
     expect(skeletonLayer?.localTransform).toEqual(viewport);
@@ -833,10 +834,10 @@ describe("Leafer engine selection bounds synchronization", () => {
       f: 160,
     });
 
-    // Keep dragging before the queued reconciliation frame. The editor sky is
-    // still on the previous viewport, but the presentation must follow the
-    // current document tree immediately instead of accumulating both pans.
-    app.sky.localTransform = { ...viewport };
+    // Keep dragging before the queued reconciliation frame. The presentation
+    // plane is still on the previous viewport, so its child receives only the
+    // relative delta needed to match the current document tree.
+    if (presentationRoot) presentationRoot.localTransform = { ...viewport };
     const continuedViewport = {
       a: 0.5,
       b: 0,
@@ -847,27 +848,36 @@ describe("Leafer engine selection bounds synchronization", () => {
     };
     app.tree.localTransform = { ...continuedViewport };
     app.emit("viewport.move");
-    expect(skeletonLayer?.localTransform).toEqual(continuedViewport);
-    expect(activityLayer?.localTransform).toEqual({
+    expect(skeletonLayer?.localTransform).toEqual({
       a: 1,
       b: 0,
       c: 0,
       d: 1,
-      e: 205,
-      f: 60,
+      e: -440,
+      f: -200,
+    });
+    expect(activityLayer?.localTransform).toEqual({
+      a: 2,
+      b: 0,
+      c: 0,
+      d: 2,
+      e: 1_010,
+      f: 40,
     });
 
-    app.sky.localTransform = { ...continuedViewport };
+    if (presentationRoot) {
+      presentationRoot.localTransform = { ...continuedViewport };
+    }
     flushAnimationFrames();
 
-    expect(skeletonLayer?.localTransform).toEqual(continuedViewport);
+    expect(skeletonLayer?.localTransform).toEqual(identityMatrix());
     expect(activityLayer?.localTransform).toEqual({
-      a: 1,
+      a: 2,
       b: 0,
       c: 0,
-      d: 1,
-      e: 205,
-      f: 60,
+      d: 2,
+      e: 1_450,
+      f: 240,
     });
     expect(skeletonLayer?.children[0]?.localTransform).toEqual({
       a: 1,

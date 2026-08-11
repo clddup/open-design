@@ -15,6 +15,7 @@ import {
   type VectorNode,
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "./boolean-resolver.js";
+import { setVectorPathClosed } from "./vector-edit.js";
 import {
   createPathKitGeometryProvider,
   type VectorGeometryProvider,
@@ -171,6 +172,38 @@ describe("non-destructive Boolean geometry resolver", () => {
     expect(resolver.resolve(changed, "page").computedNodeIds).toEqual([
       group.id,
     ]);
+  });
+
+  it("does not invent fill geometry for an editable open contour", () => {
+    const editable = vectorNode("editable_open", "network_boolean_open");
+    if (!("network" in editable.properties)) {
+      throw new Error("Missing editable vector network fixture");
+    }
+    const opened = setVectorPathClosed(editable.properties.network, false);
+    if (!opened.ok) throw new Error(opened.message);
+    editable.properties.network = opened.network;
+    const hidden = rectangle(
+      "hidden_network_open",
+      "network_boolean_open",
+      10,
+      10,
+    );
+    hidden.visible = false;
+    const group = booleanNode("network_boolean_open", null, "union", [
+      editable.id,
+      hidden.id,
+    ]);
+    const result = createBooleanGeometryResolver(provider).resolve(
+      designDocument([group, editable, hidden], [group.id]),
+      "page",
+    );
+
+    expect(result.issues).toEqual([]);
+    expect(result.resultsByNodeId.get(group.id)).toMatchObject({
+      bounds: null,
+      empty: true,
+      path: "",
+    });
   });
 
   it("uses fill plus aligned stroke geometry and supports nested Booleans", () => {

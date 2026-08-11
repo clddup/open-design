@@ -29,7 +29,7 @@ const request: AgentRunRequest = {
 };
 
 describe("production Pi design-tool catalog", () => {
-  it("adapts all seventeen public typed tools without exposing internal host tools", () => {
+  it("adapts all eighteen public typed tools without exposing internal host tools", () => {
     const definitions: AgentToolDefinition[] = DESIGN_AGENT_TOOL_SPECS.map(
       (tool) => ({
         ...tool,
@@ -45,7 +45,7 @@ describe("production Pi design-tool catalog", () => {
       toolDefinitions: definitions,
     });
 
-    expect(DESIGN_AGENT_TOOL_SPECS).toHaveLength(17);
+    expect(DESIGN_AGENT_TOOL_SPECS).toHaveLength(18);
     expect(adapter.tools.map((tool) => tool.name)).toEqual(
       DESIGN_AGENT_TOOL_SPECS.map((tool) => tool.name),
     );

@@ -5,6 +5,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
+  DESIGN_VECTOR_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
@@ -1460,6 +1461,62 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...spacing,
         selectedNodeIds: ["live_selection"],
+      }),
+    ).toBe(false);
+  });
+
+  it("exposes strict semantic vector topology edits without model-authored networks", () => {
+    const tool = DESIGN_AGENT_TOOL_SPECS.find(
+      (candidate) => candidate.name === DESIGN_VECTOR_TOOL_NAME,
+    );
+    const close = {
+      action: "set-closed",
+      closed: true,
+      label: "Close the logo contour",
+      nodeId: "logo_contour",
+      pageId: "page_brand",
+    };
+    const reverse = {
+      action: "reverse-path",
+      label: "Reverse the logo contour",
+      nodeId: "logo_contour",
+      pageId: "page_brand",
+    };
+
+    expect(tool).toMatchObject({
+      risk: "design_write",
+      approval: "never",
+    });
+    expect(tool?.description).toContain("stable Page and node IDs");
+    expect(tool?.description).toContain("one atomic undoable");
+    expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, close)).toBe(
+      true,
+    );
+    expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, reverse)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...close,
+        closed: "yes",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...reverse,
+        closed: false,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...close,
+        network: { vertices: [] },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...close,
+        selectedNodeId: "live_selection",
       }),
     ).toBe(false);
   });

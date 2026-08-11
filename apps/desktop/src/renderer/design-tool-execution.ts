@@ -29,6 +29,7 @@ import {
   planSetBooleanOperation,
   planUngroupBooleanGroup,
   planUngroupNode,
+  planVectorSemanticEdit,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import {
@@ -40,6 +41,7 @@ import {
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  DESIGN_VECTOR_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
@@ -47,6 +49,7 @@ import {
   isDesignApplyToolInput,
   isDesignHierarchyToolInput,
   isDesignPageToolInput,
+  isDesignVectorToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
   isInternalDesignApplyToolInput,
@@ -715,6 +718,91 @@ async function executeDesignToolRequestUnsafe(
           ...(plan.resolvedVerticalSpacing === undefined
             ? {}
             : { resolvedVerticalSpacing: plan.resolvedVerticalSpacing }),
+          revision: result.revision.revision,
+          atomic: true,
+          changes: result.changes,
+          warnings: result.warnings,
+        },
+        designRevision: {
+          previousRevision: transaction.baseRevision,
+          revision: result.revision.revision,
+          transactionId: transaction.transactionId,
+        },
+      },
+    };
+  }
+
+  if (
+    request.call.toolName === DESIGN_VECTOR_TOOL_NAME &&
+    isDesignVectorToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "Vector",
+    );
+    const plan = planVectorSemanticEdit(
+      document,
+      input.pageId,
+      input.nodeId,
+      input.action === "set-closed"
+        ? { action: input.action, closed: input.closed }
+        : { action: input.action },
+    );
+    if (!plan.ok) {
+      throw new Error(`vector-edit.${plan.code}: ${plan.message}`);
+    }
+    assertCommandsWithinMutationTarget(
+      document,
+      plan.operations,
+      request.context.mutationTarget,
+    );
+    const transaction = {
+      transactionId:
+        `transaction_agent_vector_${request.call.toolCallId}_${Date.now()}`.slice(
+          0,
+          256,
+        ),
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: {
+        type: "agent",
+        id: `agent_${request.context.sessionId}`,
+        displayName: "OpenDesign Agent",
+      },
+      label: input.label,
+      commands: [...plan.operations],
+    } satisfies DesignTransaction;
+    throwIfAborted(options.signal);
+    const preview = runtime.preview(transaction);
+    if (!preview.ok) {
+      throw designTransactionToolError(preview.error, transaction.commands);
+    }
+    throwIfAborted(options.signal);
+    const result = runtime.apply(transaction);
+    if (!result.ok) {
+      throw designTransactionToolError(result.error, transaction.commands);
+    }
+    const applied = runtime.getSnapshot().document.nodesById[input.nodeId];
+    const path =
+      applied &&
+      (applied.kind === "path" || applied.kind === "vector") &&
+      "network" in applied.properties
+        ? applied.properties.network.paths[0]
+        : undefined;
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        content: {
+          ok: true,
+          action: input.action,
+          label: input.label,
+          pageId: input.pageId,
+          nodeId: input.nodeId,
+          pathId: path?.id,
+          closed: path?.closed,
           revision: result.revision.revision,
           atomic: true,
           changes: result.changes,

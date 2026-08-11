@@ -845,6 +845,29 @@ describe("Leafer scene projection", () => {
         windingRule: "nonzero",
       },
     });
+
+    const editable = document.nodesById.editable_vector;
+    if (editable.kind !== "vector" || !("network" in editable.properties)) {
+      throw new Error("Missing editable network");
+    }
+    editable.properties.network.paths[0]!.closed = false;
+    editable.properties.network.paths[0]!.segments.pop();
+    editable.properties.network.segments.pop();
+    editable.properties.network.regions = [];
+    editable.properties.strokes = [
+      { type: "solid", color: "#151515", opacity: 1 },
+    ];
+    editable.properties.strokeWidth = 2;
+    expect(
+      projectDesignPage(document, "page_welcome").elementsById.get(
+        "editable_vector",
+      )?.data,
+    ).toMatchObject({
+      path: "M 0 0 C 25 0 75 0 100 0 L 50 100",
+      fill: null,
+      stroke: [{ type: "solid", color: "#151515", opacity: 1 }],
+      strokeWidth: 2,
+    });
   });
 
   it("projects directed Line semantics through Leafer Arrow without flattening endpoints", () => {

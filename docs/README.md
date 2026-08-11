@@ -66,3 +66,6 @@
 | [0032](adr/0032-current-design-file-image-assets.md)                     | 已接受     | 当前 Design File 图片资源与非破坏编辑边界                          |
 | [0033](adr/0033-scoped-scss-modules.md)                                  | 已接受     | Renderer SCSS Modules、共享 token 与全局样式边界                   |
 | [0034](adr/0034-deterministic-layout-quality-gate.md)                    | 已接受     | exact-revision Frame 布局质量报告与最终交付门禁                    |
+| [0035](adr/0035-versioned-text-wrapping-and-overflow.md)                 | 已接受     | 版本化文字换行、溢出与 SVG Text metadata                           |
+| [0036](adr/0036-versioned-text-auto-size-and-layout-service.md)          | 已接受     | Text Auto Size 与可替换 Text Layout Service                        |
+| [0037](adr/0037-versioned-vector-topology-operations.md)                 | 已接受     | 单轮廓 Open/Close/Reverse 与开放 region 语义                       |

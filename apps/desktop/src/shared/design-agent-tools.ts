@@ -32,6 +32,7 @@ export const DESIGN_REVIEW_TOOL_NAME = "opendesign_record_visual_review";
 export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
 export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
 export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
+export const DESIGN_VECTOR_TOOL_NAME = "opendesign_edit_vector";
 export const DESIGN_PAGE_TOOL_NAME = "opendesign_manage_pages";
 export const PAGE_STRUCTURE_ACCESS_TOOL_NAME =
   "opendesign_request_page_structure_access";
@@ -418,6 +419,21 @@ export type DesignArrangeToolInput =
       pageId: string;
       nodeIds: string[];
       spacing: number;
+    };
+
+export type DesignVectorToolInput =
+  | {
+      action: "set-closed";
+      closed: boolean;
+      label: string;
+      nodeId: string;
+      pageId: string;
+    }
+  | {
+      action: "reverse-path";
+      label: string;
+      nodeId: string;
+      pageId: string;
     };
 
 // The canonical DesignOperation schema is deliberately exhaustive and is used
@@ -1156,6 +1172,24 @@ const MODEL_ARRANGE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_VECTOR_EDIT_SCHEMA = {
+  type: "object",
+  description:
+    "Edit one explicit existing editable Vector Network by stable Page and node ID. set-closed requires closed; reverse-path does not accept it. The host derives all segment, region, bounds, and transform changes.",
+  properties: {
+    action: { enum: ["set-closed", "reverse-path"] },
+    label: { type: "string", minLength: 1, maxLength: 256 },
+    pageId: { type: "string", minLength: 1, maxLength: 256 },
+    nodeId: { type: "string", minLength: 1, maxLength: 256 },
+    closed: {
+      type: "boolean",
+      description: "Required only for set-closed.",
+    },
+  },
+  required: ["action", "label", "pageId", "nodeId"],
+  additionalProperties: false,
+} as const;
+
 const MODEL_DESIGN_PLAN_ARTBOARD_SCHEMA = {
   type: "object",
   properties: {
@@ -1744,6 +1778,14 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_VECTOR_TOOL_NAME,
+    description:
+      "Edit one existing non-branching editable Vector Network without asking the model to rewrite vertices, segments, path runs, regions, bounds, or transforms. set-closed opens or closes its single contour with stable retained geometry IDs; reverse-path reverses traversal while preserving effective closed-region winding. Targets are explicit stable Page and node IDs returned by inspection, never the send-time or live selection. The host computes geometry through the same versioned vector-edit service as the human canvas, previews the change, and applies one atomic undoable EditorRuntime transaction. It rejects missing, locked, stale, out-of-scope, already-satisfied, invalid, branching, or multi-contour targets. Cut, connect/disconnect, multiple contours, branches, flatten, and outline stroke are separate capabilities and must not be simulated with this tool.",
+    inputSchema: MODEL_VECTOR_EDIT_SCHEMA,
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
     description:
       "Request one user-approved, Run-scoped capability to modify Page structure or design across Pages in the currently bound Design File. Call this only when the user's request actually requires creating, duplicating, reordering, deleting, or editing another Page. The default Run remains bound to the current Page until the user approves. Approval expires when this Run ends and never grants access to another Design File, Project, directory, or future Run. After approval, inspect the Design File again before calling opendesign_manage_pages or planning work on another Page. Do not call this for renaming the already bound Page or for ordinary edits inside the current Page.",
@@ -1858,6 +1900,9 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === DESIGN_ARRANGE_TOOL_NAME) {
     return isDesignArrangeToolInput(input);
+  }
+  if (toolName === DESIGN_VECTOR_TOOL_NAME) {
+    return isDesignVectorToolInput(input);
   }
   if (toolName === DESIGN_PAGE_TOOL_NAME) {
     return isDesignPageToolInput(input);
@@ -2631,6 +2676,24 @@ export function isDesignApplyToolInput(
   input: unknown,
 ): input is DesignApplyToolInput {
   return validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input);
+}
+
+export function isDesignVectorToolInput(
+  input: unknown,
+): input is DesignVectorToolInput {
+  if (
+    !isRecord(input) ||
+    (input.action !== "set-closed" && input.action !== "reverse-path") ||
+    !safeLabel(input.label) ||
+    !safeId(input.pageId) ||
+    !safeId(input.nodeId)
+  ) {
+    return false;
+  }
+  return input.action === "set-closed"
+    ? typeof input.closed === "boolean" &&
+        exactKeys(input, ["action", "closed", "label", "nodeId", "pageId"])
+    : exactKeys(input, ["action", "label", "nodeId", "pageId"]);
 }
 
 export function isDesignHierarchyToolInput(

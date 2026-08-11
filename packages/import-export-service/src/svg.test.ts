@@ -8,6 +8,7 @@ import {
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "@opendesign/geometry-service/boolean-resolver";
 import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
+import { setVectorPathClosed } from "@opendesign/geometry-service/vector-edit";
 import {
   createPathKitGeometryProvider,
   type VectorGeometryProvider,
@@ -720,6 +721,42 @@ describe("versioned SVG interchange", () => {
     expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
       isDesignDocument,
     );
+
+    const opened = setVectorPathClosed(sourceVector.properties.network, false);
+    if (!opened.ok) throw new Error(opened.message);
+    const openDocument = structuredClone(document);
+    const openVector = openDocument.nodesById.vector_1;
+    if (
+      !openVector ||
+      openVector.kind !== "vector" ||
+      !("network" in openVector.properties)
+    ) {
+      throw new Error("Missing open vector fixture");
+    }
+    openVector.properties.network = opened.network;
+    const openExport = exportSvg({
+      document: openDocument,
+      rootNodeIds: ["vector_1"],
+      viewport: { x: 0, y: 0, width: 150, height: 150 },
+      includeLayerIds: true,
+      title: "Open editable vector",
+    });
+    expect(openExport.ok).toBe(true);
+    if (!openExport.ok) return;
+    expect(openExport.svg).toContain('fill="none"');
+    const openImported = importSvg(
+      { svg: openExport.svg, idPrefix: "editable_vector_open" },
+      geometry,
+    );
+    expect(openImported.ok).toBe(true);
+    if (!openImported.ok) return;
+    const importedOpenVector = openImported.nodes.find(
+      (node) => node.kind === "vector",
+    );
+    expect(importedOpenVector).toMatchObject({
+      kind: "vector",
+      properties: { network: opened.network, fills: [] },
+    });
   });
 
   it("round-trips directed Line geometry and independent standard SVG endpoint markers", () => {

@@ -10,7 +10,10 @@ import type {
 import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
 import { resolveImagePlacement } from "@opendesign/image-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
-import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
+import {
+  resolvePathPropertiesData,
+  vectorNetworkHasFillRegion,
+} from "@opendesign/geometry-service/editable-vector";
 import type { LeaferBooleanEditScope, LeaferFidelityWarning } from "./types.js";
 
 export const BOOLEAN_RESULT_ELEMENT_PREFIX =
@@ -445,9 +448,19 @@ function toElementSpec(
           nodeId: node.id,
         });
       }
+      const shape = mapShapeProperties(
+        document,
+        node.id,
+        node.properties,
+        warnings,
+      );
       data = {
         ...base,
-        ...mapShapeProperties(document, node.id, node.properties, warnings),
+        ...shape,
+        ...("network" in node.properties &&
+        !vectorNetworkHasFillRegion(node.properties.network)
+          ? { fill: null }
+          : {}),
         width: node.size.width,
         height: node.size.height,
         editConfig: { editSize: "scale" },

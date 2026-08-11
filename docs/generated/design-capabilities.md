@@ -59,12 +59,12 @@
 使用 Pen 创建可编辑三次曲线轮廓、继续调整已有节点和贝塞尔手柄，或精确保留 SVG Path 数据，并通过同一 Path 投影渲染。
 
 - ID：`vector.path-rendering`
-- 实现方：DesignDocument 1.10.0 + vector-edit geometry service + EditorRuntime vector planner + Leafer Pen/point overlay + controlled SVG metadata v2
+- 实现方：DesignDocument 1.10.0 + Geometry Service contract v5 vector-edit + EditorRuntime vector planner + Leafer Pen/point overlay + controlled SVG metadata v2
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 15 项；实机 0 项
+- 证据：自动化 16 项；实机 0 项
 - 限制：Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。
-- 限制：Enter 或双击可进入单轮廓节点编辑，支持单选/Shift 多选、节点与手柄拖动、持久化的直角/平滑/镜像/独立模式、Delete/Backspace、锁定只读、Done/Escape、精确 bounds，以及每次完成动作一条事务。
-- 限制：开放/闭合转换、多轮廓、分支创建、连接/断开、反转、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。
+- 限制：Enter 或双击可进入单轮廓节点编辑，支持单选/Shift 多选、节点与手柄拖动、持久化的直角/平滑/镜像/独立模式、开放/闭合、反转、Delete/Backspace、锁定只读、Done/Escape、精确 bounds，以及每次完成动作一条事务；专用 Agent 矢量工具通过稳定节点 ID 复用同一语义 planner。
+- 限制：多轮廓、分支创建、连接/断开、路径切断、套索、多节点变换框、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。
 - 限制：受控 OpenDesign SVG metadata 只在通过 schema、拓扑且与标准渲染 path 精确匹配时保留 editable network；没有 metadata 的外部 SVG 保持为精确 path 数据，不猜测可编辑拓扑。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
@@ -111,10 +111,10 @@
 通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。
 
 - ID：`vector.pen-node-editing`
-- 实现方：DesignDocument 1.10.0 Vector Network + vector-edit geometry service + EditorRuntime planner + Leafer native overlays
+- 实现方：DesignDocument 1.10.0 Vector Network + Geometry Service contract v5 vector-edit + EditorRuntime planner + Leafer native overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 7 项；实机 0 项
-- 限制：Pen 和已有节点编辑已支持单条非分叉轮廓；分支、多轮廓、连接/断开、开放/闭合转换、反转、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。
+- 证据：自动化 9 项；实机 0 项
+- 限制：Pen 和已有节点编辑已支持单条非分叉轮廓，并通过人工与 Agent 共用语义提供宿主计算的开放/闭合和反转；分支、多轮廓、连接/断开、路径切断、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
 - 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/path_edit.rs)
