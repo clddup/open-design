@@ -63,7 +63,7 @@ Leafer 在独立于 skeleton、reveal 和 selection 的 `sky` layer 上显示固
 - 用户启用 Reduced Motion 时不运行节点 reveal，Agent cursor 直接跳到目标；已接受计划仍可显示静态结构骨架，避免丢失进行中状态。
 - Design File/Page 切换、Run 终态、手动停止、Renderer/adapter 错误和 adapter dispose 都必须结束展示、恢复投影 opacity 并移除线框、骨架和 Agent cursor。
 - 用户在生成期间仍可 pan/zoom；viewport 变化不取消 reveal，也不改变事务作用域。
-- `capture_canvas` 在编码前强制结束展示并等待一次绘制帧，确保模型看到可复核的最终 revision，而不是半透明节点或 Agent 线框。
+- `capture_canvas` 不再复制用户活动 viewport 的 Canvas。Main 选择 Run 绑定 Page 或已建立的计划 Frame，Renderer 为 captured revision 创建隔离的 Leafer 投影并直接导出内容 tree；selection、skeleton、cursor、reveal 和活动 tab 均不进入图片，也不中断用户正在观看的生成展示。
 - SVG 等结构化导出继续直接读取权威文档，不序列化展示状态。
 
 ## 当前范围与后续阶段

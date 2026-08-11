@@ -7,7 +7,10 @@ import type {
   TrustedToolContext,
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
-import { validateDesignAgentToolInput } from "./design-agent-tools";
+import {
+  DESIGN_CAPTURE_TOOL_NAME,
+  validateDesignAgentToolInput,
+} from "./design-agent-tools";
 
 export type DesignToolBridgeRequest = {
   type: "design-tool.request";
@@ -39,7 +42,12 @@ export type RendererDesignToolRequest = {
   requestId: string;
   call: ToolCallRequest;
   context: TrustedToolContext;
+  captureTarget?: RendererDesignCaptureTarget;
 };
+
+export type RendererDesignCaptureTarget =
+  | { kind: "page"; pageId: string }
+  | { kind: "frame"; pageId: string; nodeId: string };
 
 export type RendererDesignToolCancel = {
   requestId: string;
@@ -105,12 +113,21 @@ export function designToolBridgeResponseId(value: unknown): string | null {
 export function isRendererDesignToolRequest(
   value: unknown,
 ): value is RendererDesignToolRequest {
-  return (
-    record(value) &&
-    safeId(value.requestId) &&
-    isToolCall(value.call) &&
-    isTrustedContext(value.context)
-  );
+  if (
+    !record(value) ||
+    !safeId(value.requestId) ||
+    !isToolCall(value.call) ||
+    !isTrustedContext(value.context) ||
+    !Object.keys(value).every((key) =>
+      ["requestId", "call", "context", "captureTarget"].includes(key),
+    )
+  ) {
+    return false;
+  }
+  if (value.call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
+    return isRendererDesignCaptureTarget(value.captureTarget);
+  }
+  return value.captureTarget === undefined;
 }
 
 export function isRendererDesignToolCancel(
@@ -169,6 +186,22 @@ function isTrustedContext(value: unknown): value is TrustedToolContext {
         "scope",
         "mutationTarget",
       ].includes(key),
+    )
+  );
+}
+
+function isRendererDesignCaptureTarget(
+  value: unknown,
+): value is RendererDesignCaptureTarget {
+  if (!record(value) || !safeId(value.pageId)) return false;
+  if (value.kind === "page") {
+    return Object.keys(value).every((key) => ["kind", "pageId"].includes(key));
+  }
+  return (
+    value.kind === "frame" &&
+    safeId(value.nodeId) &&
+    Object.keys(value).every((key) =>
+      ["kind", "pageId", "nodeId"].includes(key),
     )
   );
 }

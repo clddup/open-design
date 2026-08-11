@@ -162,11 +162,19 @@ describe("GlobalTaskCoordinator", () => {
       nextAction: "define-plan-write-capture",
       reviewEligible: false,
     });
+    expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
+      kind: "page",
+      pageId,
+    });
     coordinator.registerDesignPlan(context, { ...designPlan, pageId });
     expect(coordinator.recordCanvasCapture(context)).toEqual({
       capturedRevision: 0,
       nextAction: "write-capture",
       reviewEligible: false,
+    });
+    expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
+      kind: "page",
+      pageId,
     });
     expect(() =>
       coordinator.registerVisualReview(context, visualReview),
@@ -304,6 +312,11 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.assertDesignPlanForApply(context, plannedDraft),
     ).not.toThrow();
     coordinator.recordDesignApplyCompleted(context.runId, plannedDraft, 1);
+    expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
+      kind: "frame",
+      nodeId: "workspace_artboard",
+      pageId,
+    });
     expect(() => coordinator.recordCanvasCapture(context, 0)).toThrow(
       "design_workflow.capture_revision_invalid",
     );

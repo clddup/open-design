@@ -109,7 +109,7 @@ OpenPencil 只作为历史调研与迁移记录，不是当前或目标 Agent、
 
 ## 当前实现与迁移
 
-接受本 ADR 不表示目标能力已经完成。当前仓库已经具备 OpenDesign 文档 schema、多 Page 数据结构、单文档 `DesignTransaction`/revision、Workspace/Project/File 持久化与导航、可持久化的 Conversation descriptor、按 Conversation 隔离的会话时间线、单目标 Global Task 投影和基础 Tool Runtime 策略/审批接口。`homeProjectId` 已用于产品归档与 Main 目标校验，同一 Conversation 可在不同 run 中引用不同的已校验 Design File；但当前每个 Agent run 仍以单个 `documentId`、revision 和选区为作用域，尚未实现完整三集合、多 root、跨项目多目标、Main approval bridge或完整四层执行链。OpenPencil host、preload、IPC、vendor/submodule、构建入口和发行资源已经移除。
+接受本 ADR 不表示目标能力已经完成。当前仓库已经具备 OpenDesign 文档 schema、多 Page 数据结构、单文档 `DesignTransaction`/revision、Workspace/Project/File 持久化与导航、可持久化的 Conversation descriptor、按 Conversation 隔离的会话时间线、单目标 Global Task 投影和基础 Tool Runtime 策略/审批接口。`homeProjectId` 已用于产品归档与 Main 目标校验，同一 Conversation 可在不同 run 中引用不同的已校验 Design File。Renderer 现在按 Main 已验证的 Run `documentId` 解析每个已打开 Design File 的唯一 `EditorRuntime`，而不是使用用户当前活动 tab：A 的 Run 会 retain A，用户切到 B 后 A 仍可写入和离屏截图，B 不接收 A 的 revision、selection 或生成展示，切回 A 直接读取其最新权威 snapshot。当前每个 Agent run 仍只拥有单个 Design File/Mutation Target，尚未实现完整三集合、多 root、跨项目多目标、Main approval bridge或完整四层执行链。OpenPencil host、preload、IPC、vendor/submodule、构建入口和发行资源已经移除。
 
 实现必须通过版本化契约和迁移逐步加入新身份与作用域字段。旧会话可以迁移到明确的默认 Workspace 和 Project，但不得把其历史路径自动转换为 attached root 或持久 Capability。
 

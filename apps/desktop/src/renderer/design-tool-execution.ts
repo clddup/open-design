@@ -51,7 +51,7 @@ export async function executeDesignToolRequest(
   runtime: EditorRuntime,
   _activePageId: string,
   options: {
-    captureCanvas?: () => Promise<{
+    captureCanvas?: (document: DesignDocument) => Promise<{
       attachment: {
         attachmentId: string;
         byteSize: number;
@@ -100,7 +100,7 @@ export async function executeDesignToolRequest(
     if (!options.captureCanvas) {
       throw new Error("Canvas preview capture is unavailable");
     }
-    const preview = await options.captureCanvas();
+    const preview = await options.captureCanvas(document);
     return {
       requestId: request.requestId,
       ok: true,

@@ -15,6 +15,11 @@ export interface WorkspaceFileSnapshot extends WorkspaceFileIdentity {
   retainedByRunIds: readonly string[];
 }
 
+export interface WorkspaceDocumentRuntime extends WorkspaceFileIdentity {
+  activePageId: string;
+  runtime: EditorRuntime;
+}
+
 export interface WorkspaceSnapshot {
   version: number;
   activeFileKey: string;
@@ -80,6 +85,21 @@ export class WorkspaceRuntime {
     );
   }
 
+  getRuntimeByDocumentId(documentId: string): WorkspaceDocumentRuntime | null {
+    for (const file of this.#files.values()) {
+      if (file.runtime.getSnapshot().document.documentId === documentId) {
+        return {
+          projectId: file.projectId,
+          designFileId: file.designFileId,
+          name: file.name,
+          activePageId: file.activePageId,
+          runtime: file.runtime,
+        };
+      }
+    }
+    return null;
+  }
+
   openFile(
     identity: WorkspaceFileIdentity,
     document: DesignDocument,
@@ -100,6 +120,8 @@ export class WorkspaceRuntime {
       this.#refresh();
       return existing.runtime;
     }
+
+    this.#assertDocumentIdentityAvailable(document.documentId, key);
 
     const runtime = new EditorRuntime(document);
     this.#files.set(key, {
@@ -128,6 +150,7 @@ export class WorkspaceRuntime {
         `Design file identity is already registered: ${identity.designFileId}`,
       );
     }
+    this.#assertDocumentIdentityAvailable(document.documentId, key);
     this.#files.delete(this.#activeFileKey);
     this.#files.set(key, {
       ...identity,
@@ -244,6 +267,20 @@ export class WorkspaceRuntime {
     const file = this.#files.get(workspaceFileKey(projectId, designFileId));
     if (!file) throw new Error(`Design file is not open: ${designFileId}`);
     return file;
+  }
+
+  #assertDocumentIdentityAvailable(
+    documentId: string,
+    targetKey: string,
+  ): void {
+    for (const [key, file] of this.#files) {
+      if (
+        key !== targetKey &&
+        file.runtime.getSnapshot().document.documentId === documentId
+      ) {
+        throw new Error(`Design document is already open: ${documentId}`);
+      }
+    }
   }
 
   #refresh(): void {

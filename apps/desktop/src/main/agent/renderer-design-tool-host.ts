@@ -4,6 +4,7 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
 import type {
+  RendererDesignCaptureTarget,
   RendererDesignToolCancel,
   RendererDesignToolRequest,
   RendererDesignToolResponse,
@@ -30,6 +31,7 @@ export class RendererDesignToolHost {
     call: ToolCallRequest,
     context: TrustedToolContext,
     signal: AbortSignal,
+    options: { captureTarget?: RendererDesignCaptureTarget } = {},
   ): Promise<TrustedToolResult> {
     const requestId = `renderer_tool_${Date.now()}_${++this.#sequence}`;
     return new Promise((resolve, reject) => {
@@ -59,7 +61,7 @@ export class RendererDesignToolHost {
         timeout,
       });
       try {
-        this.send({ requestId, call, context });
+        this.send({ requestId, call, context, ...options });
       } catch (error) {
         clearTimeout(timeout);
         this.#pending.delete(requestId);

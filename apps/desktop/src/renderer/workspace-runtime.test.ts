@@ -179,6 +179,36 @@ describe("WorkspaceRuntime", () => {
     ).toBe("Mobile App");
   });
 
+  it("resolves the authoritative runtime by stable document identity", () => {
+    const workspace = createWorkspace();
+    const mobile = workspace.getActiveRuntime();
+    workspace.openFile(
+      {
+        projectId: "project_acme",
+        designFileId: "design_website",
+        name: "Website",
+      },
+      createEmptyDesignDocument("document_website", "page_website"),
+    );
+
+    expect(workspace.getRuntimeByDocumentId("document_welcome")).toMatchObject({
+      projectId: "project_acme",
+      designFileId: "design_mobile",
+      runtime: mobile,
+    });
+    expect(workspace.getRuntimeByDocumentId("document_missing")).toBeNull();
+    expect(() =>
+      workspace.openFile(
+        {
+          projectId: "project_other",
+          designFileId: "design_duplicate",
+          name: "Duplicate",
+        },
+        createEmptyDesignDocument("document_welcome", "page_duplicate"),
+      ),
+    ).toThrow("Design document is already open");
+  });
+
   it("publishes immutable snapshots when workspace identity changes", () => {
     const workspace = createWorkspace();
     const listener = vi.fn();

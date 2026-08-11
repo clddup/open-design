@@ -3,6 +3,8 @@ export type {
   LeaferBoxCreateTool,
   LeaferCanvasTool,
   LeaferBooleanEditScope,
+  LeaferCaptureResult,
+  LeaferCaptureTarget,
   LeaferCreateRequest,
   LeaferCreateVectorRequest,
   LeaferEngineAdapter,

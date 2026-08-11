@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DESIGN_CAPTURE_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tools";
@@ -20,6 +21,44 @@ const context = {
 };
 
 describe("Renderer design tool bridge", () => {
+  it("requires a Main-selected Page or Frame target for canvas capture", () => {
+    const request = {
+      requestId: "renderer_capture_1",
+      call: {
+        toolCallId: "capture_1",
+        toolName: DESIGN_CAPTURE_TOOL_NAME,
+        input: {},
+      },
+      context,
+      captureTarget: {
+        kind: "frame" as const,
+        pageId: "page_1",
+        nodeId: "frame_1",
+      },
+    };
+
+    expect(isRendererDesignToolRequest(request)).toBe(true);
+    expect(
+      isRendererDesignToolRequest({ ...request, captureTarget: undefined }),
+    ).toBe(false);
+    expect(
+      isRendererDesignToolRequest({
+        ...request,
+        captureTarget: { ...request.captureTarget, filePath: "C:\\draft" },
+      }),
+    ).toBe(false);
+    expect(
+      isRendererDesignToolRequest({
+        ...request,
+        call: {
+          toolCallId: "inspect_1",
+          toolName: "opendesign_inspect_document",
+          input: {},
+        },
+      }),
+    ).toBe(false);
+  });
+
   it("accepts a bounded internal Image update with an explicit node target", () => {
     const request = {
       requestId: "renderer_request_1",

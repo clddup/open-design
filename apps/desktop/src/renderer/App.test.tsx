@@ -41,6 +41,7 @@ import {
   useEditorSnapshot,
 } from "./editor-runtime";
 import { I18nProvider } from "./i18n";
+import * as designCapture from "./design-capture";
 import * as svgInterchange from "./svg-interchange";
 import type { SuccessfulSvgImportResult } from "./svg-interchange-contract";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
@@ -83,10 +84,14 @@ vi.mock("@opendesign/leafer-engine", () => ({
 }));
 
 vi.mock("./svg-interchange", { spy: true });
+vi.mock("./design-capture", { spy: true });
 
 const svgHarness = {
   runImport: vi.mocked(svgInterchange.runSvgImportInWorker),
   runExport: vi.mocked(svgInterchange.runSvgExportInWorker),
+};
+const captureHarness = {
+  capture: vi.mocked(designCapture.captureDesignTarget),
 };
 
 let emitAgentEvent: ((event: AgentEvent) => void) | undefined;
@@ -114,6 +119,13 @@ beforeEach(() => {
   leaferHarness.setVectorPointMode.mockClear();
   svgHarness.runImport.mockReset();
   svgHarness.runExport.mockReset();
+  captureHarness.capture.mockReset();
+  captureHarness.capture.mockResolvedValue({
+    bytes: new Uint8Array([1, 2, 3]),
+    height: 720,
+    mimeType: "image/jpeg",
+    width: 1_200,
+  });
   Object.defineProperties(HTMLElement.prototype, {
     hasPointerCapture: {
       configurable: true,
@@ -3546,25 +3558,214 @@ describe("App", () => {
     );
   });
 
-  it("finishes disposable generation presentation before Agent canvas capture", async () => {
-    const context = {
-      fillStyle: "",
-      drawImage: vi.fn(),
-      fillRect: vi.fn(),
-    } as unknown as CanvasRenderingContext2D;
-    const getContext = vi
-      .spyOn(HTMLCanvasElement.prototype, "getContext")
-      .mockReturnValue(context);
-    const toBlob = vi
-      .spyOn(HTMLCanvasElement.prototype, "toBlob")
-      .mockImplementation((callback) => {
-        callback(new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }));
+  it("keeps a Run bound to file A while the user works in file B", async () => {
+    const { user, manifest, conversation } = await openProjectConversation();
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Refine file A in the background",
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const run = runRequests(conversation.conversationId).at(-1);
+    if (!run) throw new Error("Agent run request is missing");
+    const plan = rendererGenerationPlan();
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: run.runId,
+        startedAt: now,
       });
+      emitAgentEvent?.({
+        type: "tool.requested",
+        runId: run.runId,
+        toolCallId: "tool_background_plan_a",
+        toolName: DESIGN_PLAN_TOOL_NAME,
+        input: plan,
+        risk: "read",
+      });
+      emitAgentEvent?.({
+        type: "tool.completed",
+        runId: run.runId,
+        toolCallId: "tool_background_plan_a",
+        result: {
+          ok: true,
+          status: "accepted",
+          version: plan.version,
+          deliverable: plan.deliverable,
+          outputMode: plan.outputMode,
+          pageId: plan.pageId,
+          artboard: plan.artboard,
+          regions: plan.composition.regions,
+          editableLayers: plan.editableLayers,
+          rasterAssetRoles: plan.rasterAssetRoles,
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.generationSkeleton?.id).toBe(
+        `${run.runId}:tool_background_plan_a`,
+      ),
+    );
+    const mobileTab = screen.getByRole("tab", { name: /Mobile UI/ });
+    expect(
+      within(mobileTab).getByLabelText("Used by a background task"),
+    ).toBeInTheDocument();
+
+    const websiteDescriptor = manifest.designFiles[1];
+    if (!websiteDescriptor) throw new Error("Website design file is missing");
+    const websiteDocument = structuredClone(createWelcomeDocument());
+    websiteDocument.documentId = websiteDescriptor.documentId;
+    vi.mocked(window.desktop!.readProjectDesignFile).mockResolvedValueOnce({
+      descriptor: websiteDescriptor,
+      document: websiteDocument,
+    });
+    await user.click(screen.getByRole("button", { name: "Acme Design" }));
+    await user.click(screen.getByRole("button", { name: /Website/ }));
+    expect(runtime().getSnapshot().document.documentId).toBe(
+      "document_website",
+    );
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+    expect(leaferHarness.input?.generationSkeleton).toBeUndefined();
+    expect(leaferHarness.input?.generationActivity).toBeUndefined();
+
+    if (!requestDesignTool) throw new Error("Design tool listener is missing");
+    act(() => {
+      requestDesignTool?.({
+        requestId: "renderer_background_file_a",
+        call: {
+          toolCallId: "tool_background_file_a",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Refine file A",
+            commands: [
+              {
+                commandId: "rename_file_a_frame",
+                type: "update_properties",
+                nodeId: "frame_welcome",
+                name: "Agent-updated file A",
+              },
+            ],
+          },
+        },
+        context: {
+          runId: run.runId,
+          sessionId: conversation.conversationId,
+          documentId: "document_mobile",
+          revision: 0,
+          scope: {
+            kind: "page",
+            pageId: "page_welcome",
+            selectedNodeIds: [],
+          },
+          mutationTarget: { kind: "page", pageId: "page_welcome" },
+        },
+      });
+    });
+
+    const resolveDesignToolRequest = vi.mocked(
+      window.desktop!.resolveDesignToolRequest,
+    );
+    await vi.waitFor(() => {
+      const response = resolveDesignToolRequest.mock.calls.find(
+        ([candidate]) => candidate.requestId === "renderer_background_file_a",
+      )?.[0];
+      expect(response?.ok).toBe(true);
+      if (!response?.ok) return;
+      expect(response.result.designRevision?.revision).toBe(1);
+    });
+    expect(runtime().getSnapshot().document.documentId).toBe(
+      "document_website",
+    );
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+    expect(runtime().getSnapshot().document.nodesById.frame_welcome?.name).toBe(
+      "Welcome canvas",
+    );
+
+    const captureAttachmentId = `image_${"d".repeat(64)}`;
+    vi.mocked(window.desktop!.importAgentAttachments).mockResolvedValueOnce([
+      {
+        attachmentId: captureAttachmentId,
+        name: "OpenDesign frame r1.jpg",
+        mimeType: "image/jpeg",
+        byteSize: 3,
+      },
+    ]);
+    const captureTarget = {
+      kind: "frame" as const,
+      pageId: "page_welcome",
+      nodeId: "frame_welcome",
+    };
+    act(() => {
+      requestDesignTool?.({
+        requestId: "renderer_background_capture_a",
+        call: {
+          toolCallId: "tool_background_capture_a",
+          toolName: "opendesign_capture_canvas",
+          input: {},
+        },
+        context: {
+          runId: run.runId,
+          sessionId: conversation.conversationId,
+          documentId: "document_mobile",
+          revision: 1,
+          scope: {
+            kind: "page",
+            pageId: "page_welcome",
+            selectedNodeIds: [],
+          },
+          mutationTarget: { kind: "page", pageId: "page_welcome" },
+        },
+        captureTarget,
+      });
+    });
+    await vi.waitFor(() => {
+      const [capturedDocument, capturedTarget] =
+        captureHarness.capture.mock.calls.at(-1) ?? [];
+      expect(capturedDocument?.documentId).toBe("document_mobile");
+      expect(capturedDocument?.revision).toBe(1);
+      expect(capturedTarget).toEqual(captureTarget);
+      const response = resolveDesignToolRequest.mock.calls.find(
+        ([candidate]) =>
+          candidate.requestId === "renderer_background_capture_a",
+      )?.[0];
+      expect(response?.ok).toBe(true);
+      if (!response?.ok) return;
+      expect(response.result.observedRevision).toBe(1);
+    });
+    expect(runtime().getSnapshot().document.documentId).toBe(
+      "document_website",
+    );
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+
+    await user.click(screen.getByRole("tab", { name: /Mobile UI/ }));
+    expect(runtime().getSnapshot().document.documentId).toBe("document_mobile");
+    expect(runtime().getSnapshot().document.revision).toBe(1);
+    expect(runtime().getSnapshot().document.nodesById.frame_welcome?.name).toBe(
+      "Agent-updated file A",
+    );
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.completed",
+        runId: run.runId,
+        finishedAt: now,
+        stopReason: "complete",
+      });
+    });
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("tab", { name: /Mobile UI/ })).queryByLabelText(
+          "Used by a background task",
+        ),
+      ).toBeNull(),
+    );
+  });
+
+  it("captures the trusted design target without consuming viewport presentation", async () => {
     const attachmentId = `image_${"c".repeat(64)}`;
     vi.mocked(window.desktop!.importAgentAttachments).mockResolvedValueOnce([
       {
         attachmentId,
-        name: "OpenDesign canvas r0.jpg",
+        name: "OpenDesign page r0.jpg",
         mimeType: "image/jpeg",
         byteSize: 3,
       },
@@ -3621,6 +3822,7 @@ describe("App", () => {
     if (!requestDesignTool) throw new Error("Design tool listener is missing");
     leaferHarness.finishGenerationPresentation.mockClear();
     const current = runtime().getSnapshot().document;
+    const captureTarget = { kind: "page" as const, pageId: "page_welcome" };
 
     act(() => {
       requestDesignTool?.({
@@ -3638,13 +3840,17 @@ describe("App", () => {
           scope: { kind: "document", selectedNodeIds: [] },
           mutationTarget: { kind: "document" },
         },
+        captureTarget,
       });
     });
 
     await vi.waitFor(() => {
-      expect(leaferHarness.finishGenerationPresentation).toHaveBeenCalledTimes(
-        1,
+      expect(captureHarness.capture).toHaveBeenCalledWith(
+        current,
+        captureTarget,
+        expect.any(AbortSignal),
       );
+      expect(leaferHarness.finishGenerationPresentation).not.toHaveBeenCalled();
       expect(window.desktop!.resolveDesignToolRequest).toHaveBeenCalledWith(
         expect.objectContaining({
           requestId: "renderer_capture_final_presentation",
@@ -3652,8 +3858,6 @@ describe("App", () => {
         }),
       );
     });
-    getContext.mockRestore();
-    toBlob.mockRestore();
   });
 
   it("reports Leafer failures without corrupting the document", () => {

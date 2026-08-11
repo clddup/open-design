@@ -110,6 +110,17 @@ export interface LeaferGenerationActivity {
   target: Point;
 }
 
+export type LeaferCaptureTarget =
+  | { kind: "page"; pageId: string }
+  | { kind: "frame"; pageId: string; nodeId: string };
+
+export interface LeaferCaptureResult {
+  bytes: Uint8Array;
+  height: number;
+  mimeType: "image/jpeg";
+  width: number;
+}
+
 export type LeaferGenerationSkeletonRole =
   | "structure"
   | "content"
@@ -176,6 +187,7 @@ export interface LeaferEngineOptions {
 }
 
 export interface LeaferEngineAdapter {
+  capture(target: LeaferCaptureTarget): Promise<LeaferCaptureResult>;
   dispose(): void;
   finishGenerationPresentation(): void;
   retryBooleanGeometry(): boolean;

@@ -41,7 +41,6 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import type { MutableRefObject } from "react";
 import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
 import { generationRevealFromEditorEvent } from "../generation-presentation";
@@ -50,7 +49,6 @@ import { isTool } from "../state/editor";
 export function Canvas({
   activeAgentRunId,
   activePageId,
-  captureRef,
   generationActivity,
   generationSkeleton,
   runtime,
@@ -59,7 +57,6 @@ export function Canvas({
 }: {
   activeAgentRunId: string | null;
   activePageId: string;
-  captureRef?: MutableRefObject<CanvasPreviewCapture | null>;
   generationActivity?: LeaferGenerationActivity;
   generationSkeleton?: LeaferGenerationSkeleton;
   runtime: EditorRuntime;
@@ -217,20 +214,6 @@ export function Canvas({
     },
     [enterVectorEdit, runtime, selectBooleanTarget],
   );
-
-  useEffect(() => {
-    const element = host.current;
-    if (!captureRef || !element) return;
-    const capture = async () => {
-      adapter.current?.finishGenerationPresentation();
-      await nextAnimationFrame();
-      return captureCanvasPreview(element);
-    };
-    captureRef.current = capture;
-    return () => {
-      if (captureRef.current === capture) captureRef.current = null;
-    };
-  }, [captureRef]);
 
   const applyOperations = useCallback(
     (request: LeaferOperationRequest) => {
@@ -734,13 +717,6 @@ export function Canvas({
   );
 }
 
-export type CanvasPreviewCapture = () => Promise<{
-  bytes: Uint8Array;
-  height: number;
-  mimeType: "image/jpeg";
-  width: number;
-}>;
-
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(
     () =>
@@ -755,57 +731,6 @@ function useReducedMotion(): boolean {
     return () => media.removeEventListener("change", update);
   }, []);
   return reduced;
-}
-
-function nextAnimationFrame(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
-}
-
-const MAX_CAPTURE_WIDTH = 1_280;
-const MAX_CAPTURE_HEIGHT = 960;
-
-async function captureCanvasPreview(host: HTMLElement) {
-  const canvases = [...host.querySelectorAll("canvas")].filter(
-    (canvas) => canvas.width > 0 && canvas.height > 0,
-  );
-  const source = canvases[0];
-  if (!source) throw new Error("Canvas preview is not ready");
-  const scale = Math.min(
-    1,
-    MAX_CAPTURE_WIDTH / source.width,
-    MAX_CAPTURE_HEIGHT / source.height,
-  );
-  const width = Math.max(1, Math.round(source.width * scale));
-  const height = Math.max(1, Math.round(source.height * scale));
-  const output = document.createElement("canvas");
-  output.width = width;
-  output.height = height;
-  const context = output.getContext("2d");
-  if (!context) throw new Error("Canvas preview encoder is unavailable");
-  const background = getComputedStyle(host).backgroundColor;
-  context.fillStyle =
-    background && background !== "rgba(0, 0, 0, 0)" ? background : "#d9d9d7";
-  context.fillRect(0, 0, width, height);
-  for (const canvas of canvases) {
-    if (canvas.width !== source.width || canvas.height !== source.height) {
-      continue;
-    }
-    context.drawImage(canvas, 0, 0, width, height);
-  }
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    output.toBlob(
-      (value) =>
-        value ? resolve(value) : reject(new Error("Canvas preview failed")),
-      "image/jpeg",
-      0.88,
-    );
-  });
-  return {
-    bytes: new Uint8Array(await blob.arrayBuffer()),
-    height,
-    mimeType: "image/jpeg" as const,
-    width,
-  };
 }
 
 function operationLabel(

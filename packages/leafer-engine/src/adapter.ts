@@ -56,6 +56,8 @@ import {
 } from "./generation-reveal.js";
 import type {
   LeaferBoxCreateTool,
+  LeaferCaptureResult,
+  LeaferCaptureTarget,
   LeaferCanvasTool,
   LeaferCreateRequest,
   LeaferCreateVectorRequest,
@@ -189,6 +191,8 @@ const MAX_SUPPRESSED_GENERATION_SKELETONS = 128;
 const GENERATION_ACTIVITY_BADGE_FILL = "rgba(31, 28, 48, 0.94)";
 const GENERATION_ACTIVITY_MOVE_MS = 180;
 const MAX_SUPPRESSED_GENERATION_ACTIVITIES = 128;
+const MAX_CAPTURE_WIDTH = 1_280;
+const MAX_CAPTURE_HEIGHT = 960;
 
 export async function createLeaferEngineAdapter(
   host: HTMLElement,
@@ -554,6 +558,62 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#synchronizing = false;
     }
     if (pendingPenRequest) this.#submitPenRequest(pendingPenRequest);
+  }
+
+  async capture(target: LeaferCaptureTarget): Promise<LeaferCaptureResult> {
+    if (this.#disposed) throw new Error("Leafer capture adapter is disposed");
+    const input = this.#input;
+    if (!input || input.pageId !== target.pageId) {
+      throw new Error("Leafer capture target is not the projected Page");
+    }
+    if (this.#geometryLoadPromise) await this.#geometryLoadPromise;
+    if (this.#disposed || this.#input !== input) {
+      throw new Error("Leafer capture target changed during rendering");
+    }
+    const leaf =
+      target.kind === "page"
+        ? this.#app.tree
+        : this.#captureFrameElement(target.nodeId);
+    const bounds = leaf.getBounds("render", "local");
+    if (
+      !Number.isFinite(bounds.width) ||
+      !Number.isFinite(bounds.height) ||
+      bounds.width <= 0 ||
+      bounds.height <= 0
+    ) {
+      throw new Error("Leafer capture target has no renderable bounds");
+    }
+    const scale = Math.min(
+      1,
+      MAX_CAPTURE_WIDTH / bounds.width,
+      MAX_CAPTURE_HEIGHT / bounds.height,
+    );
+    const exported = await leaf.export("jpg", {
+      blob: true,
+      pixelRatio: 1,
+      quality: 0.88,
+      scale,
+      smooth: true,
+    });
+    if (exported.error) {
+      throw exported.error instanceof Error
+        ? exported.error
+        : new Error("Leafer capture export failed");
+    }
+    if (!isBlobLike(exported.data)) {
+      throw new Error("Leafer capture did not return image bytes");
+    }
+    const width = finitePositiveInteger(exported.width);
+    const height = finitePositiveInteger(exported.height);
+    if (width === null || height === null) {
+      throw new Error("Leafer capture returned invalid dimensions");
+    }
+    return {
+      bytes: new Uint8Array(await exported.data.arrayBuffer()),
+      height,
+      mimeType: "image/jpeg",
+      width,
+    };
   }
 
   dispose(): void {
@@ -2746,6 +2806,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
   }
 
+  #captureFrameElement(nodeId: string): LeaferElement {
+    const spec = this.#projection?.elementsById.get(nodeId);
+    const element = this.#elements.get(nodeId);
+    if (!spec || spec.kind !== "frame" || !element) {
+      throw new Error(`Leafer capture Frame is unavailable: ${nodeId}`);
+    }
+    return element;
+  }
+
   #nodeId(element: LeaferElement): string | undefined {
     const projectionId = this.#projectionId(element);
     if (!projectionId) return undefined;
@@ -2967,6 +3036,21 @@ function samePoint(left: Point, right: Point): boolean {
 
 function nearlyEqual(left: number, right: number): boolean {
   return Math.abs(left - right) <= MATRIX_EPSILON;
+}
+
+function isBlobLike(value: unknown): value is Blob {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "arrayBuffer" in value &&
+    typeof value.arrayBuffer === "function"
+  );
+}
+
+function finitePositiveInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : null;
 }
 
 function sameTransform(left: Transform, right: Transform): boolean {

@@ -54,6 +54,17 @@ class FakeElement extends FakeEventTarget {
   strokeWidth = 0;
   transformCalls = 0;
   forceUpdate = vi.fn();
+  export = vi.fn((_format: string, options?: { scale?: number }) => {
+    const scale = options?.scale ?? 1;
+    const bounds = this.getBounds();
+    return Promise.resolve({
+      data: new Blob([new Uint8Array([1, 2, 3])], {
+        type: "image/jpeg",
+      }),
+      width: Math.max(1, Math.round(bounds.width * scale)),
+      height: Math.max(1, Math.round(bounds.height * scale)),
+    });
+  });
 
   constructor(data?: Record<string, unknown>) {
     super();
@@ -68,6 +79,10 @@ class FakeElement extends FakeEventTarget {
   setTransform(transform: ReturnType<typeof identityMatrix>): void {
     this.transformCalls += 1;
     this.localTransform = { ...transform };
+  }
+
+  getBounds(): { x: number; y: number; width: number; height: number } {
+    return { x: 0, y: 0, width: this.width, height: this.height };
   }
 
   remove(): void {
@@ -93,6 +108,33 @@ class FakeGroup extends FakeElement {
 
   add(child: FakeElement): void {
     this.addAt(child, this.children.length);
+  }
+
+  override getBounds(): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } {
+    if (this.width > 0 && this.height > 0) return super.getBounds();
+    if (this.children.length === 0) return super.getBounds();
+    const left = Math.min(
+      ...this.children.map((child) => child.localTransform.e),
+    );
+    const top = Math.min(
+      ...this.children.map((child) => child.localTransform.f),
+    );
+    const right = Math.max(
+      ...this.children.map(
+        (child) => child.localTransform.e + Math.max(0, child.width),
+      ),
+    );
+    const bottom = Math.max(
+      ...this.children.map(
+        (child) => child.localTransform.f + Math.max(0, child.height),
+      ),
+    );
+    return { x: left, y: top, width: right - left, height: bottom - top };
   }
 }
 
@@ -343,6 +385,63 @@ describe("Leafer engine selection bounds synchronization", () => {
       wheel: { zoomSpeed: 0.16 },
       zoom: { min: 0.1, max: 8 },
     });
+    adapter.dispose();
+  });
+
+  it("exports a deterministic Frame image without using the viewport", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const input = createInput();
+    adapter.sync({
+      ...input,
+      viewport: {
+        ...input.viewport,
+        panX: -8_000,
+        panY: 4_000,
+        zoom: 0.25,
+      },
+    });
+
+    const result = await adapter.capture({
+      kind: "frame",
+      pageId: "page_welcome",
+      nodeId: "frame_welcome",
+    });
+
+    expect([...result.bytes]).toEqual([1, 2, 3]);
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(result.width).toBeGreaterThan(0);
+    expect(result.height).toBeGreaterThan(0);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const frame = findElement(app.tree, "frame_welcome");
+    expect(frame?.export).toHaveBeenCalledWith(
+      "jpg",
+      expect.objectContaining({
+        blob: true,
+        pixelRatio: 1,
+        quality: 0.88,
+      }),
+    );
+    const pageResult = await adapter.capture({
+      kind: "page",
+      pageId: "page_welcome",
+    });
+    expect(pageResult.width).toBeGreaterThan(0);
+    expect(pageResult.height).toBeGreaterThan(0);
+    expect(app.tree.export).toHaveBeenCalledWith(
+      "jpg",
+      expect.objectContaining({ blob: true, pixelRatio: 1 }),
+    );
+    await expect(
+      adapter.capture({
+        kind: "frame",
+        pageId: "page_welcome",
+        nodeId: "missing_frame",
+      }),
+    ).rejects.toThrow("Leafer capture Frame is unavailable");
     adapter.dispose();
   });
 

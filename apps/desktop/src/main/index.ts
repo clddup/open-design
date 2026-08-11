@@ -1364,11 +1364,15 @@ void app.whenReady().then(async () => {
       );
       return result;
     }
-    const result = await rendererDesignToolHost.execute(call, context, signal);
-    if (call.toolName === DESIGN_INSPECT_TOOL_NAME) {
-      globalTaskCoordinator.recordDocumentInspection(context);
-    }
     if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
+      const captureTarget =
+        globalTaskCoordinator.resolveCanvasCaptureTarget(context);
+      const result = await rendererDesignToolHost.execute(
+        call,
+        context,
+        signal,
+        { captureTarget },
+      );
       const reviewWorkflow = globalTaskCoordinator.recordCanvasCapture(
         context,
         result.observedRevision,
@@ -1382,9 +1386,14 @@ void app.whenReady().then(async () => {
         ...result,
         content: {
           ...result.content,
+          captureTarget,
           reviewWorkflow,
         },
       };
+    }
+    const result = await rendererDesignToolHost.execute(call, context, signal);
+    if (call.toolName === DESIGN_INSPECT_TOOL_NAME) {
+      globalTaskCoordinator.recordDocumentInspection(context);
     }
     return result;
   });

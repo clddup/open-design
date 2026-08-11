@@ -21,6 +21,7 @@ import {
   type PlaceableRasterAssetRole,
   type RasterAssetRole,
 } from "../../shared/design-agent-tools.js";
+import type { RendererDesignCaptureTarget } from "../../shared/design-tool-bridge.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 type RunScopedEvent = AgentEvent & { runId: string };
@@ -313,6 +314,32 @@ export class GlobalTaskCoordinator {
       nextAction: "record-visual-review",
       reviewEligible: true,
     };
+  }
+
+  resolveCanvasCaptureTarget(
+    context: TrustedToolContext,
+  ): RendererDesignCaptureTarget {
+    this.assertDesignToolContext(context);
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (state?.artboardEstablished) {
+      return {
+        kind: "frame",
+        pageId: state.plan.pageId,
+        nodeId: state.plan.artboard.frameId,
+      };
+    }
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    const pageId =
+      state?.plan.pageId ??
+      (binding?.mutationTarget.kind === "page"
+        ? binding.mutationTarget.pageId
+        : binding?.scope.pageId);
+    if (!pageId) {
+      throw new Error(
+        "Canvas capture requires a Page in the registered Run scope",
+      );
+    }
+    return { kind: "page", pageId };
   }
 
   registerVisualReview(

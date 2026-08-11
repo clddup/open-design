@@ -59,7 +59,7 @@ import type {
 } from "../shared/desktop-api";
 import type { MessageKey } from "../shared/i18n/messages";
 import { AgentTimeline } from "./components/AgentTimeline";
-import { Canvas, type CanvasPreviewCapture } from "./components/Canvas";
+import { Canvas } from "./components/Canvas";
 import { DiagnosticNotifications } from "./components/DiagnosticNotifications";
 import { DesignFileTabs } from "./components/DesignFileTabs";
 import {
@@ -86,6 +86,7 @@ import {
 } from "./editor-runtime";
 import { useI18n } from "./i18n";
 import { executeDesignToolRequest } from "./design-tool-execution";
+import { captureDesignTarget } from "./design-capture";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
   clearGenerationPlanPresentationRun,
@@ -236,11 +237,16 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const settingsReturnView = useRef<Exclude<AppView, "settings">>("workspace");
   const transactionCounter = useRef(0);
   const conversationIdByRunId = useRef(new Map<string, string>());
+  const designFileByRunId = useRef(
+    new Map<
+      string,
+      { projectId: string; designFileId: string; documentId: string }
+    >(),
+  );
   const conversationIdByHistoryRequestId = useRef(new Map<string, string>());
   const latestHistoryRequestId = useRef(new Map<string, string>());
   const designToolControllers = useRef(new Map<string, AbortController>());
   const svgOperationController = useRef<AbortController | null>(null);
-  const canvasPreviewCapture = useRef<CanvasPreviewCapture | null>(null);
   const { document: designDocument, state } = snapshot;
   const tool: Tool = isTool(state.tool) ? state.tool : "select";
   const selectedNode =
@@ -317,21 +323,30 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     ? (agentByConversationId[activeConversation.conversationId] ??
       EMPTY_AGENT_STATE)
     : EMPTY_AGENT_STATE;
-  const generationSkeleton = useMemo(() => {
+  const activeCanvasAgentRunId = (() => {
     const runId = activeAgentState.activeRunId;
+    if (!runId) return null;
+    return designFileByRunId.current.get(runId)?.documentId ===
+      designDocument.documentId
+      ? runId
+      : null;
+  })();
+  const generationSkeleton = useMemo(() => {
+    const runId = activeCanvasAgentRunId;
+    if (!runId) return undefined;
     return generationSkeletonFromAcceptedPlan(
-      runId ? generationPlanPresentation.acceptedByRunId[runId] : undefined,
+      generationPlanPresentation.acceptedByRunId[runId],
       designDocument,
       activePageId,
     );
   }, [
-    activeAgentState.activeRunId,
+    activeCanvasAgentRunId,
     activePageId,
     designDocument,
     generationPlanPresentation.acceptedByRunId,
   ]);
   const generationActivity = useMemo(() => {
-    const runId = activeAgentState.activeRunId;
+    const runId = activeCanvasAgentRunId;
     if (!runId) return undefined;
     const projected = generationActivityFromAcceptedPlan(
       generationPlanPresentation.acceptedByRunId[runId],
@@ -349,7 +364,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           : `AI · ${stage} · ${Math.round(projected.progress * 100)}%`,
     };
   }, [
-    activeAgentState.activeRunId,
+    activeCanvasAgentRunId,
     activePageId,
     designDocument,
     generationPlanPresentation.acceptedByRunId,
@@ -504,6 +519,20 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       );
 
       const runId = "runId" in event ? event.runId : undefined;
+      if (
+        runId &&
+        (event.type === "run.completed" || event.type === "agent.error")
+      ) {
+        const target = designFileByRunId.current.get(runId);
+        if (target) {
+          workspace.releaseFileForRun(
+            target.projectId,
+            target.designFileId,
+            runId,
+          );
+          designFileByRunId.current.delete(runId);
+        }
+      }
       const conversationId = runId
         ? conversationIdByRunId.current.get(runId)
         : event.type === "agent.error" && event.requestId
@@ -573,7 +602,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         }
       }
     });
-  }, [requestConversationHistory]);
+  }, [requestConversationHistory, workspace]);
 
   useEffect(() => {
     const desktop = window.desktop;
@@ -588,40 +617,58 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       const controller = new AbortController();
       designToolControllers.current.set(request.requestId, controller);
       void Promise.resolve()
-        .then(() =>
-          executeDesignToolRequest(request, runtime, activePageId, {
-            captureCanvas: async () => {
-              const capture = canvasPreviewCapture.current;
-              if (!capture) throw new Error("Canvas preview is not ready");
-              const preview = await capture();
-              const selected = await desktop.importAgentAttachments([
-                {
-                  name: `OpenDesign canvas r${runtime.getSnapshot().document.revision}.jpg`,
-                  bytes: preview.bytes,
-                },
-              ]);
-              const attachment = selected[0];
-              if (
-                !attachment ||
-                !attachment.attachmentId.startsWith("image_") ||
-                attachment.mimeType !== preview.mimeType
-              ) {
-                throw new Error("Canvas preview attachment import failed");
-              }
-              return {
-                attachment: {
-                  attachmentId: attachment.attachmentId,
-                  name: attachment.name,
-                  mimeType: attachment.mimeType,
-                  byteSize: attachment.byteSize,
-                },
-                height: preview.height,
-                width: preview.width,
-              };
+        .then(() => {
+          const target = workspace.getRuntimeByDocumentId(
+            request.context.documentId,
+          );
+          if (!target) {
+            throw new Error(
+              `Design tool document is not open: ${request.context.documentId}`,
+            );
+          }
+          return executeDesignToolRequest(
+            request,
+            target.runtime,
+            target.activePageId,
+            {
+              captureCanvas: async (capturedDocument) => {
+                if (!request.captureTarget) {
+                  throw new Error("Canvas capture target is unavailable");
+                }
+                const preview = await captureDesignTarget(
+                  capturedDocument,
+                  request.captureTarget,
+                  controller.signal,
+                );
+                const selected = await desktop.importAgentAttachments([
+                  {
+                    name: `OpenDesign ${request.captureTarget.kind} r${capturedDocument.revision}.jpg`,
+                    bytes: preview.bytes,
+                  },
+                ]);
+                const attachment = selected[0];
+                if (
+                  !attachment ||
+                  !attachment.attachmentId.startsWith("image_") ||
+                  attachment.mimeType !== preview.mimeType
+                ) {
+                  throw new Error("Canvas preview attachment import failed");
+                }
+                return {
+                  attachment: {
+                    attachmentId: attachment.attachmentId,
+                    name: attachment.name,
+                    mimeType: attachment.mimeType,
+                    byteSize: attachment.byteSize,
+                  },
+                  height: preview.height,
+                  width: preview.width,
+                };
+              },
+              signal: controller.signal,
             },
-            signal: controller.signal,
-          }),
-        )
+          );
+        })
         .then(
           (response) => desktop.resolveDesignToolRequest(response),
           (error: unknown) => {
@@ -664,7 +711,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       }
       designToolControllers.current.clear();
     };
-  }, [activePageId, runtime]);
+  }, [workspace]);
 
   const applyCommands = useCallback(
     (label: string, commands: DesignOperation[]) => {
@@ -1798,6 +1845,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     const current = runtime.getSnapshot();
     const runId = `run_${Date.now()}_${++runCounter.current}`;
     const conversationId = activeConversation.conversationId;
+    const activeFile = workspaceSnapshot.files[workspaceSnapshot.activeFileKey];
+    if (!activeFile) return false;
     const createdAt = new Date().toISOString();
     const request: AgentRequest = {
       type: "run.start",
@@ -1818,6 +1867,16 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       modelSelection,
     };
     conversationIdByRunId.current.set(runId, conversationId);
+    workspace.retainFileForRun(
+      activeFile.projectId,
+      activeFile.designFileId,
+      runId,
+    );
+    designFileByRunId.current.set(runId, {
+      projectId: activeFile.projectId,
+      designFileId: activeFile.designFileId,
+      documentId: current.document.documentId,
+    });
     setAgentByConversationId((currentState) =>
       updateConversationAgentState(currentState, conversationId, (previous) => {
         const maximumSequence = previous.timeline.reduce(
@@ -1868,6 +1927,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       return true;
     } catch (error) {
       conversationIdByRunId.current.delete(runId);
+      workspace.releaseFileForRun(
+        activeFile.projectId,
+        activeFile.designFileId,
+        runId,
+      );
+      designFileByRunId.current.delete(runId);
       setAgentByConversationId((currentState) =>
         updateConversationAgentState(
           currentState,
@@ -2097,9 +2162,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               snapshot={workspaceSnapshot}
             />
             <Canvas
-              activeAgentRunId={activeAgentState.activeRunId}
+              activeAgentRunId={activeCanvasAgentRunId}
               activePageId={activePageId}
-              captureRef={canvasPreviewCapture}
               generationActivity={generationActivity}
               generationSkeleton={generationSkeleton}
               onTransactionError={setEditorError}
