@@ -1,0 +1,115 @@
+.root {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  min-width: 112px;
+  max-width: 210px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  overflow: hidden;
+  border: 0;
+  border-right: 1px solid var(--ui-border);
+  color: var(--ui-text-muted);
+  background: transparent;
+  font-size: 10px;
+
+  &:hover:not([aria-selected="true"]) {
+    color: var(--ui-text);
+    background: var(--ui-surface-raised);
+  }
+
+  &:focus-visible {
+    z-index: 1;
+    outline: 1px solid var(--ui-focus);
+    outline-offset: -2px;
+  }
+}
+
+.name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active {
+  color: var(--ui-text);
+  background: var(--ui-canvas);
+
+  &::after {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: var(--ui-accent);
+    content: "";
+  }
+}
+
+.editing {
+  min-width: 156px;
+}
+
+.input {
+  width: min(150px, 100%);
+  min-width: 0;
+  height: 22px;
+  padding: 0 5px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 3px;
+  outline: 0;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  font: inherit;
+
+  &:focus-visible {
+    box-shadow: 0 0 0 1px var(--ui-focus);
+  }
+
+  &[aria-invalid="true"] {
+    border-color: var(--ui-danger);
+    box-shadow: 0 0 0 1px var(--ui-danger);
+  }
+
+  &:disabled {
+    cursor: progress;
+    opacity: 0.7;
+  }
+}
+
+.activity {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ui-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-accent) 16%, transparent);
+}
+
+@media (max-width: 860px) {
+  .tab {
+    min-width: 96px;
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  .editing {
+    min-width: 132px;
+  }
+}

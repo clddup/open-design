@@ -40,6 +40,10 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
   Windows minimize/maximize/close、文档保存状态、工具 pressed/disabled/focus 与
   1100/860 像素窄窗口行为仍由原组件拥有；平台测试改用 banner、group 与 accessible
   name，不再依赖全局 `.titlebar` 类名。
+- `DesignFileTabs.module.scss` 独立拥有文件 tab 的横向滚动、active、hover、focus、
+  重命名 pending/error 和后台 Run 指示状态；组件继续只消费稳定 Workspace snapshot，
+  不因样式迁移复制 File/Project/Agent 状态。专项测试覆盖跨 Project 复合身份、键盘
+  roving focus、F2/双击重命名、Enter/blur/Escape、失败重试和异步持久化 pending。
 - `sass` 固定为 `1.102.0`，仅用于 Vite 编译期；许可记录进入第三方声明。
 - TypeScript 通过 `vite/client` 读取 module 类型，Vite 生产构建验证 SCSS Modules 可编译和合并。
 - 后续迁移需保持键盘/焦点、主题、窄窗口、Reduced Motion 和视觉状态测试；仅减少全局行数不构成完成证据。

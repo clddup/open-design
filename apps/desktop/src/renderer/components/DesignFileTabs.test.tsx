@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -196,6 +196,32 @@ describe("DesignFileTabs", () => {
     expect(onRename).toHaveBeenCalledOnce();
     expect(
       await screen.findByRole("textbox", { name: "Rename Mobile UI" }),
+    ).toHaveFocus();
+  });
+
+  it("exposes a non-interactive pending state until persistence completes", async () => {
+    const user = userEvent.setup();
+    let resolveRename: ((renamed: boolean) => void) | undefined;
+    const onRename = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveRename = resolve;
+        }),
+    );
+    render(<Tabs onActivate={vi.fn()} onRename={onRename} />);
+
+    await user.dblClick(screen.getByRole("tab", { name: "Mobile UI" }));
+    const input = screen.getByRole("textbox", { name: "Rename Mobile UI" });
+    await user.clear(input);
+    await user.type(input, "Saved design{Enter}");
+
+    expect(input).toBeDisabled();
+    expect(input).toHaveAttribute("aria-busy", "true");
+    expect(resolveRename).toBeTypeOf("function");
+
+    act(() => resolveRename?.(true));
+    expect(
+      await screen.findByRole("tab", { name: "Saved design" }),
     ).toHaveFocus();
   });
 

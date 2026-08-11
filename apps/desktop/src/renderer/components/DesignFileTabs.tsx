@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useI18n } from "../i18n";
 import type { WorkspaceSnapshot } from "../workspace-runtime";
+import styles from "./DesignFileTabs.module.scss";
 
 type RenameState = {
   draft: string;
@@ -145,7 +146,7 @@ export function DesignFileTabs({
   return (
     <div
       aria-label={t("tabs.openDesignFiles")}
-      className="design-file-tabs"
+      className={styles.root}
       role="tablist"
     >
       {snapshot.openFileKeys.map((key) => {
@@ -157,7 +158,7 @@ export function DesignFileTabs({
           const errorId = `design-file-rename-error-${file.designFileId}`;
           return (
             <div
-              className={`design-file-tab design-file-tab--editing${active ? " design-file-tab--active" : ""}`}
+              className={`${styles.tab} ${styles.editing}${active ? ` ${styles.active}` : ""}`}
               key={key}
             >
               <Glyph name="frame" size={13} />
@@ -166,7 +167,7 @@ export function DesignFileTabs({
                 aria-describedby={renameState.error ? errorId : undefined}
                 aria-invalid={renameState.error}
                 aria-label={t("tabs.renameFile", { name: file.name })}
-                className="design-file-tab__input"
+                className={styles.input}
                 disabled={renameState.saving}
                 maxLength={256}
                 onBlur={() => void commitRename(key, false)}
@@ -200,7 +201,10 @@ export function DesignFileTabs({
                 </span>
               )}
               {file.retainedByRunIds.length > 0 && (
-                <i aria-label={t("tabs.backgroundTask")} />
+                <i
+                  aria-label={t("tabs.backgroundTask")}
+                  className={styles.activity}
+                />
               )}
             </div>
           );
@@ -209,7 +213,7 @@ export function DesignFileTabs({
         return (
           <button
             aria-selected={active}
-            className="design-file-tab"
+            className={`${styles.tab}${active ? ` ${styles.active}` : ""}`}
             key={key}
             onClick={() => onActivate(file.projectId, file.designFileId)}
             onDoubleClick={(event: MouseEvent<HTMLButtonElement>) => {
@@ -228,9 +232,12 @@ export function DesignFileTabs({
             type="button"
           >
             <Glyph name="frame" size={13} />
-            <span className="design-file-tab__name">{file.name}</span>
+            <span className={styles.name}>{file.name}</span>
             {file.retainedByRunIds.length > 0 && (
-              <i aria-label={t("tabs.backgroundTask")} />
+              <i
+                aria-label={t("tabs.backgroundTask")}
+                className={styles.activity}
+              />
             )}
           </button>
         );
