@@ -652,6 +652,82 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("keeps generation presentation aligned when Leafer sky follows the viewport", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    const skeleton: LeaferGenerationSkeleton = {
+      id: "run_plan:tool_plan:target_home",
+      artboard: {
+        frameId: "home_artboard",
+        height: 900,
+        pending: true,
+        transform: [1, 0, 0, 1, 1_240, 80],
+        width: 420,
+      },
+      regions: [
+        {
+          height: 120,
+          id: "home_header",
+          name: "Header",
+          role: "structure",
+          width: 372,
+          x: 24,
+          y: 24,
+        },
+      ],
+    };
+    const activity = {
+      id: "run_plan:tool_apply:requested",
+      label: "AI · Building the design",
+      phase: "building" as const,
+      target: { x: 1_450, y: 240 },
+    };
+    adapter.sync({
+      ...first,
+      generationActivity: activity,
+      generationSkeleton: skeleton,
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const skeletonLayer = app.sky.children[0] as FakeGroup | undefined;
+    const activityLayer = app.sky.children[1] as FakeGroup | undefined;
+
+    const viewport = {
+      a: 0.5,
+      b: 0,
+      c: 0,
+      d: 0.5,
+      e: -300,
+      f: 40,
+    };
+    app.tree.localTransform = { ...viewport };
+    app.sky.localTransform = { ...viewport };
+    app.emit("viewport.move");
+
+    expect(skeletonLayer?.localTransform).toEqual(identityMatrix());
+    expect(activityLayer?.localTransform).toEqual({
+      a: 2,
+      b: 0,
+      c: 0,
+      d: 2,
+      e: 1_450,
+      f: 240,
+    });
+    expect(skeletonLayer?.children[0]?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 1_240,
+      f: 80,
+    });
+
+    adapter.dispose();
+  });
+
   it("shows a non-interactive Agent cursor for trusted semantic activity", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),

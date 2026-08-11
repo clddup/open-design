@@ -52,6 +52,8 @@ reveal 与 tween 共用一条 presentation RAF，不为每个节点建立 timer�
 
 create target 的骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架按稳定 Frame ID 切换到权威当前 transform，而不是继续持有计划时的 Page 绝对位置；用户只平移该顶层 Frame 时，区域骨架和 Agent cursor 随真实 Frame 移动。Frame 尺寸、旋转/倾斜、父级、Page 或身份改变会使结构投影失效并要求重新 inspect/replan，不能把真正的布局变化伪装成平移。create 声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。existing target 的 region 只属于逻辑规划/审查，不显示待物化紫框，不要求真实图层匹配其 ID、直属关系或 bounds；画布只显示权威 existing Frame 与 Agent 语义活动。
 
+Leafer `App` 的 document `tree` 与 editor `sky` 是独立图层，并且真实 `design` 交互会让 `sky` 自身参与 viewport 变换。所有挂在 `sky` 内的世界坐标展示必须使用 `sky⁻¹ × tree` 的相对变换；固定屏幕尺寸的 Agent cursor 则使用 `sky⁻¹ × screen`。禁止直接把 `tree.localTransform` 再赋给 `sky` 子层，否则真实 pan/zoom 会把同一 viewport 应用两次并造成骨架、cursor 与设计内容错位。回归测试必须同时覆盖测试替身中静止的 `sky` 和生产行为中随 viewport 变换的 `sky`。
+
 计划画板和区域 ID 在一个计划中全局唯一。Provider 仍声明每个区域的画板局部 bounds 和容器种类，但 Main 只为 create target 从已接受计划编译这些结构节点的可信 Page、parent、局部 transform 与 size；模型不再重复换算世界坐标。create 区域根必须是画板直属、轴对齐并匹配计划 bounds，新 target 的首个正式事务和首次物化区域都必须带真实内容。existing target 保留 regions 作为非写入的审查语义，Main 不编译或强制其几何。纯空 create 画板/区域只允许作为这里的可丢弃骨架存在，不能先进入 revision 再依赖后续视觉审查发现问题。
 
 同一 Run 期间如果用户提交了新的文档 revision，普通更新、移动、删除和替换仍遵循精确 optimistic concurrency。唯一自动 rebase 是 Main 签发 guard 的已建立计划目标内纯 `insert_element` 事务：Renderer 在当前文档重新验证稳定 Page-root Frame、相同尺寸、仅平移 transform，以及每条新节点祖先链仍到达该 Frame 后，才把事务基于当前 revision 执行。用户平移因此不阻断继续搭建；resize、rotate/skew、reparent、delete、换 Page、目标外写入或任何会覆盖既有节点的命令仍拒绝并要求重新检查。可信工具结果可以报告跨过外部 revision 的单调 `previousRevision → revision`，Agent Runtime 随之推进，不静默覆盖用户状态。

@@ -114,6 +114,15 @@ interface GenerationActivityElements {
   label: LeaferElement;
 }
 
+interface AffineMatrix {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+}
+
 interface ActiveGenerationTween {
   current: GenerationTweenFrame;
   plan: GenerationTweenPlan;
@@ -2524,14 +2533,22 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       screen.y <= hostBounds.height + 24;
     this.#generationActivityLayer.visible = onScreen;
     if (!onScreen) return;
-    this.#generationActivityLayer.setTransform({
-      a: 1,
-      b: 0,
-      c: 0,
-      d: 1,
-      e: screen.x,
-      f: screen.y,
-    });
+    const layerTransform = matrixRelativeToParent(
+      this.#app.sky.localTransform,
+      {
+        a: 1,
+        b: 0,
+        c: 0,
+        d: 1,
+        e: screen.x,
+        f: screen.y,
+      },
+    );
+    if (!layerTransform) {
+      this.#generationActivityLayer.visible = false;
+      return;
+    }
+    this.#generationActivityLayer.setTransform(layerTransform);
     const badgeWidth = Math.max(
       1,
       Number(this.#generationActivityElements.badge.width) || 148,
@@ -2679,13 +2696,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #syncGenerationSkeletonViewport(): void {
     if (!this.#generationSkeletonId) return;
-    this.#generationSkeletonLayer.setTransform({
-      ...this.#app.tree.localTransform,
-    });
-    const zoom = Math.max(
-      MATRIX_EPSILON,
-      Math.abs(this.#app.tree.localTransform.a || 1),
+    const treeTransform = this.#app.tree.localTransform;
+    const layerTransform = matrixRelativeToParent(
+      this.#app.sky.localTransform,
+      treeTransform,
     );
+    if (!layerTransform) {
+      this.#generationSkeletonLayer.visible = false;
+      return;
+    }
+    this.#generationSkeletonLayer.setTransform(layerTransform);
+    this.#generationSkeletonLayer.visible = true;
+    const zoom = Math.max(MATRIX_EPSILON, Math.abs(treeTransform.a || 1));
     const inverseZoom = 1 / zoom;
     for (const element of this.#generationSkeletonStrokes) {
       element.set({
@@ -3381,7 +3403,7 @@ function emptyBooleanResolution(pageId: string): BooleanGeometryResolution {
   };
 }
 
-function toMatrix(transform: Transform) {
+function toMatrix(transform: Transform): AffineMatrix {
   return {
     a: transform[0],
     b: transform[1],
@@ -3390,6 +3412,47 @@ function toMatrix(transform: Transform) {
     e: transform[4],
     f: transform[5],
   };
+}
+
+function matrixRelativeToParent(
+  parent: AffineMatrix,
+  desired: AffineMatrix,
+): AffineMatrix | undefined {
+  const determinant = parent.a * parent.d - parent.b * parent.c;
+  if (
+    !Number.isFinite(determinant) ||
+    Math.abs(determinant) <= MATRIX_EPSILON ||
+    !matrixIsFinite(parent) ||
+    !matrixIsFinite(desired)
+  ) {
+    return undefined;
+  }
+  const inverse = {
+    a: parent.d / determinant,
+    b: -parent.b / determinant,
+    c: -parent.c / determinant,
+    d: parent.a / determinant,
+    e: (parent.c * parent.f - parent.d * parent.e) / determinant,
+    f: (parent.b * parent.e - parent.a * parent.f) / determinant,
+  };
+  return {
+    a: normalizeNumber(inverse.a * desired.a + inverse.c * desired.b),
+    b: normalizeNumber(inverse.b * desired.a + inverse.d * desired.b),
+    c: normalizeNumber(inverse.a * desired.c + inverse.c * desired.d),
+    d: normalizeNumber(inverse.b * desired.c + inverse.d * desired.d),
+    e: normalizeNumber(
+      inverse.a * desired.e + inverse.c * desired.f + inverse.e,
+    ),
+    f: normalizeNumber(
+      inverse.b * desired.e + inverse.d * desired.f + inverse.f,
+    ),
+  };
+}
+
+function matrixIsFinite(matrix: AffineMatrix): boolean {
+  return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].every(
+    Number.isFinite,
+  );
 }
 
 function changeSetNodeIds(changes: DesignChangeSet): Set<string> {
