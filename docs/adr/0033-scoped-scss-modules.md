@@ -54,6 +54,10 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
   独立全局生图配置共用的 field/credential/status/model-list 语义。React draft、保存、
   测试连接与凭据状态仍由原表单单一持有；后续提取组件时必须沿此状态边界移动，不能
   为缩短文件建立第二份 draft。无引用的旧 provider status 样式已删除。
+- Canvas 的 Leafer host、context stack、Boolean/Vector edit scope、fidelity warning、
+  render error 与 asset drop 已全部归入 `Canvas.module.scss`；依赖 context stack 的
+  双击事件隔离使用 module 生成的类名，不再保留裸 selector 协议。旧静态 SVG 样张的
+  artboard/nav/hero/card/trust 规则经全仓引用审计后删除，不迁移死样式。
 - `sass` 固定为 `1.102.0`，仅用于 Vite 编译期；许可记录进入第三方声明。
 - TypeScript 通过 `vite/client` 读取 module 类型，Vite 生产构建验证 SCSS Modules 可编译和合并。
 - 后续迁移需保持键盘/焦点、主题、窄窗口、Reduced Motion 和视觉状态测试；仅减少全局行数不构成完成证据。
@@ -63,3 +67,6 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
 - AgentTimeline 当前仍承载 timeline projection 与 composer state；本次样式边界
   已明确，但 React 组件提取必须保持自动滚动、durable/live 合并、附件导入、审批
   和 active Run 生命周期的单一所有者，不能为缩短文件建立第二份状态。
+- 历史 `styles.css` 已从 3562 行收口为 93 行，只保留 reset、Electron no-drag、
+  visually-hidden、App shell、Workspace grid/窄窗口和全局 Reduced Motion；这些是
+  本 ADR 明确允许的全局契约，继续机械迁移不构成收益。

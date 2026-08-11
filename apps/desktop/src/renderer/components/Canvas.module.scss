@@ -1,3 +1,226 @@
+.root {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--ui-canvas);
+  background-image: radial-gradient(
+    var(--ui-border-strong) 0.65px,
+    transparent 0.65px
+  );
+  background-size: 16px 16px;
+}
+
+.leafer {
+  isolation: isolate;
+  outline: none;
+  touch-action: none;
+
+  &:focus-visible {
+    box-shadow: inset 0 0 0 1px var(--ui-border-strong);
+  }
+
+  > :global(.leafer-app-view),
+  > :global(.leafer-canvas-view) {
+    position: absolute;
+    inset: 0;
+  }
+}
+
+.contextStack {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 50%;
+  display: grid;
+  max-width: min(560px, calc(100% - 24px));
+  gap: 6px;
+  translate: -50% 0;
+  pointer-events: none;
+}
+
+.editScope,
+.fidelityWarning {
+  display: grid;
+  min-height: 34px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 9px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  box-shadow: var(--ui-shadow-sm);
+  pointer-events: auto;
+
+  > span:nth-child(2) {
+    display: grid;
+    min-width: 0;
+    gap: 1px;
+  }
+
+  strong {
+    overflow: hidden;
+    font-size: 10px;
+    font-weight: 620;
+    line-height: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  small {
+    overflow: hidden;
+    color: var(--ui-text-muted);
+    font-size: 9px;
+    line-height: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  button {
+    display: inline-flex;
+    height: 24px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 7px;
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    color: var(--ui-text);
+    background: var(--ui-surface-sunken);
+    font-size: 9px;
+
+    &:hover {
+      border-color: var(--ui-border-strong);
+      background: var(--ui-surface-sunken);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--ui-focus);
+      outline-offset: 1px;
+    }
+  }
+}
+
+.editScope:has(.vectorModes) {
+  grid-template-columns: auto minmax(120px, 1fr) auto auto;
+}
+
+.contextMark,
+.warningMark {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.contextMark {
+  border: 1px solid var(--ui-accent);
+  background: var(--ui-accent-soft);
+
+  &::before {
+    width: 6px;
+    height: 6px;
+    border: 1px solid var(--ui-accent);
+    border-radius: 1px;
+    content: "";
+    rotate: 45deg;
+  }
+}
+
+.editScope kbd {
+  color: var(--ui-text-faint);
+  font: inherit;
+}
+
+.vectorModes {
+  display: inline-flex;
+  gap: 2px;
+
+  button {
+    min-width: 0;
+    height: 22px;
+    padding: 0 5px;
+
+    &[aria-pressed="true"] {
+      border-color: var(--ui-accent);
+      color: var(--ui-accent-text);
+      background: var(--ui-accent-soft);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+    }
+  }
+}
+
+.fidelityWarning {
+  grid-template-columns: auto minmax(0, 1fr);
+  border-color: var(--ui-warning-border);
+}
+
+.warningMark {
+  color: var(--ui-warning-text);
+  background: var(--ui-warning-soft);
+}
+
+.warningActions {
+  display: flex;
+  grid-column: 2;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.status {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  min-width: 260px;
+  grid-template-columns: 18px auto;
+  align-items: center;
+  gap: 3px 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  background: var(--ui-surface-raised);
+  box-shadow: var(--ui-shadow-lg);
+  translate: -50% -50%;
+
+  strong {
+    color: var(--ui-text);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  small {
+    max-width: 360px;
+    color: var(--ui-text-muted);
+    font-size: 10px;
+    line-height: 1.4;
+  }
+}
+
+.statusMark {
+  width: 8px;
+  height: 8px;
+  grid-row: 1 / span 2;
+  border: 2px solid var(--ui-text-faint);
+  border-top-color: var(--ui-accent);
+  border-radius: 50%;
+  animation: status-spin 900ms linear infinite;
+}
+
+@keyframes status-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
 .assetDrop::after {
   position: absolute;
   z-index: 5;

@@ -209,7 +209,7 @@ export function Canvas({
     (event: MouseEvent<HTMLElement>) => {
       if (
         event.target instanceof Element &&
-        event.target.closest(".canvas-context-stack")
+        event.target.closest(`.${styles.contextStack}`)
       ) {
         return;
       }
@@ -604,7 +604,7 @@ export function Canvas({
   return (
     <main
       aria-label={t("canvas.label")}
-      className={`canvas-area canvas-area--leafer${
+      className={`${styles.root} ${styles.leafer}${
         assetDropActive ? ` ${styles.assetDrop}` : ""
       }`}
       onDragLeave={(event) => {
@@ -635,20 +635,20 @@ export function Canvas({
         </span>
       )}
       {renderError && (
-        <div className="canvas-status" role="alert">
-          <span className="canvas-status__mark" />
+        <div className={styles.status} role="alert">
+          <span className={styles.statusMark} />
           <strong>{t("canvas.unavailable")}</strong>
           <small>{renderError}</small>
         </div>
       )}
       {(vectorEditScope || booleanEditScope || activeWarning) && (
-        <div className="canvas-context-stack">
+        <div className={styles.contextStack}>
           {vectorEditScope &&
             editScopeVector &&
             (editScopeVector.kind === "path" ||
               editScopeVector.kind === "vector") && (
-              <div className="canvas-edit-scope" role="status">
-                <span className="canvas-edit-scope__mark" />
+              <div className={styles.editScope} role="status">
+                <span className={styles.contextMark} />
                 <span>
                   <strong>
                     {t("canvas.vectorEditing", {
@@ -665,7 +665,7 @@ export function Canvas({
                 </span>
                 <span
                   aria-label={t("canvas.vectorPointMode")}
-                  className="canvas-vector-modes"
+                  className={styles.vectorModes}
                   role="group"
                 >
                   {(
@@ -705,8 +705,8 @@ export function Canvas({
               </div>
             )}
           {booleanEditScope && editScopeBoolean?.kind === "boolean" && (
-            <div className="canvas-edit-scope" role="status">
-              <span className="canvas-edit-scope__mark" />
+            <div className={styles.editScope} role="status">
+              <span className={styles.contextMark} />
               <span>
                 <strong>
                   {t("canvas.booleanEditing", {
@@ -736,13 +736,13 @@ export function Canvas({
             </div>
           )}
           {activeWarning && warningBoolean?.kind === "boolean" && (
-            <div className="canvas-fidelity-warning" role="alert">
-              <span className="canvas-fidelity-warning__mark">!</span>
+            <div className={styles.fidelityWarning} role="alert">
+              <span className={styles.warningMark}>!</span>
               <span>
                 <strong>{t("canvas.booleanRenderWarning")}</strong>
                 <small>{activeWarning.message}</small>
               </span>
-              <span className="canvas-fidelity-warning__actions">
+              <span className={styles.warningActions}>
                 {!booleanEditScope && (
                   <button
                     onClick={() => {
