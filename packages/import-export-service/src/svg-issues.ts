@@ -21,6 +21,7 @@ export const SVG_INTERCHANGE_ISSUE_CODES = [
   "stroke-alignment-flattened",
   "unsupported-css",
   "unsupported-element",
+  "unsupported-filter",
   "unsupported-gradient",
   "unsupported-paint",
   "unsafe-xml",

@@ -21,6 +21,11 @@ import {
   type Matrix,
 } from "transformation-matrix";
 import { SVG_MAX_CHARACTERS } from "./limits.js";
+import {
+  appendSvgEffectFilter,
+  collectSvgFilterDefinitions,
+  readSvgFilterEffects,
+} from "./svg-filter-effects.js";
 import type {
   SvgInterchangeIssue,
   SvgInterchangeIssueCode,
@@ -125,12 +130,14 @@ interface ExportContext {
   document: Document;
   exportedNodeIds: string[];
   gradientSequence: number;
+  filterSequence: number;
   issues: SvgInterchangeIssue[];
   request: SvgExportRequest;
   visiting: Set<string>;
 }
 
 interface ImportContext {
+  filterDefinitions: ReadonlyMap<string, Element>;
   geometry: VectorGeometryProvider;
   gradientDefinitions: ReadonlyMap<string, Element>;
   idPrefix: string;
@@ -247,6 +254,7 @@ export function exportSvg(request: SvgExportRequest): SvgExportResult {
     definitions,
     document: xmlDocument,
     exportedNodeIds: [],
+    filterSequence: 0,
     gradientSequence: 0,
     issues,
     request,
@@ -347,6 +355,7 @@ export function importSvg(
   const issues: SvgInterchangeIssue[] = [];
   const rootStyle = readImportedStyle(root, DEFAULT_IMPORTED_STYLE, issues);
   const context: ImportContext = {
+    filterDefinitions: collectSvgFilterDefinitions(root),
     geometry,
     gradientDefinitions: collectGradientDefinitions(root),
     idPrefix: request.idPrefix,
@@ -355,6 +364,12 @@ export function importSvg(
     nodes: [],
   };
   const rootNodeId = nextImportedNodeId(context, "root");
+  const rootEffects = readSvgFilterEffects({
+    definitions: context.filterDefinitions,
+    element: root,
+    nodeId: rootNodeId,
+  });
+  issues.push(...rootEffects.issues);
   const childIds: string[] = [];
   for (const child of elementChildren(root)) {
     const childId = importElement(context, child, rootNodeId, rootStyle, 1);
@@ -393,6 +408,9 @@ export function importSvg(
       height: sourceViewport.height,
     },
     opacity: readOpacity(root.getAttribute("opacity"), 1),
+    ...(rootEffects.effects.length === 0
+      ? {}
+      : { effects: [...rootEffects.effects] }),
     properties: {},
     extensions: {
       svgImport: {
@@ -593,15 +611,17 @@ function applyExportNodeAppearance(
   if (node.blendMode && node.blendMode !== "pass-through") {
     element.setAttribute("style", `mix-blend-mode:${node.blendMode}`);
   }
-  if (node.effects?.some((effect) => effect.visible !== false)) {
-    context.issues.push(
-      svgIssue(
-        "effect-omitted",
-        "warning",
-        `Effects on ${node.id} require the later SVG filter fidelity slice`,
-        { nodeId: node.id },
-      ),
-    );
+  if ((node.effects?.length ?? 0) > 0) {
+    const result = appendSvgEffectFilter({
+      definitions: context.definitions,
+      document: context.document,
+      filterId: `od_filter_${++context.filterSequence}_${sanitizeXmlId(node.id)}`,
+      node,
+    });
+    context.issues.push(...result.issues);
+    if (result.filterId) {
+      element.setAttribute("filter", `url(#${result.filterId})`);
+    }
   }
   if (node.maskMode && node.maskMode !== "none") {
     context.issues.push(
@@ -832,8 +852,14 @@ function importElement(
   }
 
   const localStyle = readImportedStyle(element, inheritedStyle, context.issues);
-  reportUnsupportedElementAttributes(element, context.issues);
   const nodeId = nextImportedNodeId(context, tag);
+  const filterEffects = readSvgFilterEffects({
+    definitions: context.filterDefinitions,
+    element,
+    nodeId,
+  });
+  context.issues.push(...filterEffects.issues);
+  reportUnsupportedElementAttributes(element, context.issues);
   const transform = readElementTransform(element, context.issues);
   const common = {
     id: nodeId,
@@ -845,6 +871,9 @@ function importElement(
       element.getAttribute("visibility") !== "hidden",
     locked: false,
     opacity: readOpacity(element.getAttribute("opacity"), 1),
+    ...(filterEffects.effects.length === 0
+      ? {}
+      : { effects: [...filterEffects.effects] }),
     extensions: {
       svgImport: {
         version: SVG_INTERCHANGE_VERSION,
@@ -1239,6 +1268,7 @@ function readImportedStyle(
     "fill",
     "fill-opacity",
     "fill-rule",
+    "filter",
     "stroke",
     "stroke-opacity",
     "stroke-width",
@@ -1454,17 +1484,6 @@ function reportUnsupportedElementAttributes(
           "unsupported-css",
           "warning",
           "SVG class selectors are not resolved by the editable import boundary",
-          { sourceElement: element.localName },
-        ),
-      );
-      continue;
-    }
-    if (name === "filter") {
-      issues.push(
-        svgIssue(
-          "effect-omitted",
-          "warning",
-          "SVG filter effects are not preserved by the current import slice",
           { sourceElement: element.localName },
         ),
       );

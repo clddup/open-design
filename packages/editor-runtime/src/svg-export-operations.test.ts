@@ -386,6 +386,7 @@ describe("SVG export request planner", () => {
     if (!exported.ok) return;
     expect(exported.issues.map((issue) => issue.code)).toEqual([
       "effect-omitted",
+      "effect-omitted",
       "angular-gradient-flattened",
       "stroke-alignment-flattened",
       "boolean-flattened",

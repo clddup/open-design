@@ -1,6 +1,6 @@
 # ADR-0023：版本化 SVG 交换服务与显式保真边界
 
-- 状态：已接受（纯 service、EditorRuntime planner、Main 文件桥、人工入口与 Agent 导入/导出完成；格式保真与打包实机待完成）
+- 状态：已接受（纯 service、EditorRuntime planner、Main 文件桥、人工入口、Agent 导入/导出与基础 filter effects 完成；剩余格式保真与打包实机待完成）
 - 日期：2026-08-11
 - 补充：ADR-0011、ADR-0012、ADR-0015、ADR-0021、ADR-0022
 - 固定依赖：`@xmldom/xmldom 0.8.13`、`transformation-matrix 3.1.0`
@@ -58,10 +58,21 @@ Figma 当前允许导出 layer、Frame、Group、Section、Slice 和 Page，默�
 
 - Group、Rectangle、Ellipse、Path、Vector；外部 line/polyline/polygon 转为正式 Vector path；
 - 层级、可见性、opacity、SVG transform list、viewBox、solid、linear/radial gradient、fill rule、center stroke、cap/join/dash；
+- 最多八个普通混合、零 spread 的 drop shadow 与一层 layer blur；效果数组顺序和 `visible` 可确定性往返，标准单个 `feDropShadow`/`feGaussianBlur` 可直接导入；
 - 固定字符数、元素数、节点数与深度预算；确定性 ID 和输出顺序；
 - 导入结果重新通过完整 `DesignDocument` schema/invariant 校验测试。
 
-当前仍明确报告或拒绝：Text、Image、Instance、stylesheet、`use`、clip/mask、filter/effects、image paint、angular gradient、多个叠加 paint、inside/outside stroke、user-space gradient、复杂 gradient transform 和外部 URL。这里的“拒绝”是保真边界，不把危险或无法表达的数据保存到 `extensions` 后继续执行。
+当前仍明确报告或拒绝：Text、Image、Instance、stylesheet、`use`、clip/mask、inner shadow、background blur、inner/outer glow、grayscale、shadow spread/非普通 blend、复杂 filter graph、image paint、angular gradient、多个叠加 paint、inside/outside stroke、user-space gradient、复杂 gradient transform 和外部 URL。这里的“拒绝”是保真边界，不把危险或无法表达的数据保存到 `extensions` 后继续执行。
+
+### 基础 SVG filter effects 语义
+
+Figma 当前把 shadow、blur、effect visibility 和 effect order 作为正式图层外观：单层最多可持有八个 drop shadow、八个 inner shadow 和一个 layer blur。OpenDesign 首个 SVG filter 子集先覆盖能由当前标准 SVG 和文档语义确定性表达的共同部分，不因渲染后端“看起来能画”就猜测复杂 graph。
+
+W3C `feDropShadow` 是包含输入图像再次合成的 shorthand。若为多个阴影各自产生一个 `feDropShadow` 再 `feMerge`，半透明源图会被重复叠加。导出器因此把每个 drop shadow 展开为独立的 `SourceAlpha → feGaussianBlur → feOffset → feFlood → feComposite` shadow-only 分支，再按效果顺序与唯一源图合成；layer blur 使用独立 `SourceGraphic → feGaussianBlur` 结果。`blur/radius` 与标准差使用可逆的 `stdDeviation = radius / 2` 映射，filter 使用显式 `userSpaceOnUse` 区域，并按 stroke、offset 和四倍标准差扩展边界，避免默认 filter region 裁切。
+
+不可见但受支持的 effect 仍写入无输出分支，并以有界 `data-opendesign-effect-*` 元数据保留编辑状态；最终 `feMerge` 只引用可见分支。该元数据不改变标准 SVG 的视觉结果，也不能恢复缺失的非 OpenDesign graph。导入只接受本地 `url(#id)`：OpenDesign 生成的受控 graph、单个标准 `feDropShadow` 和单个标准 `feGaussianBlur` 会进入正式 `DesignNode.effects`；外部 URL 直接拒绝，未解析引用、各向异性 blur、超预算数值和任意复杂 graph 返回 `unsupported-filter` fidelity warning，不藏入 `extensions` 或假装无损。
+
+这个扩展没有改变公开结果 shape 或节点协议，只扩大 `SVG_INTERCHANGE_VERSION = 1` 的已支持标准子集，因此不升级交换版本。若后续公开 issue/result 结构、filter graph 语义或 effect 数据契约改变，必须升级版本并提供迁移行为。
 
 ### Boolean 的标准 SVG 语义
 
@@ -83,6 +94,7 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - `OD-BRAND-01` 的真实 PathKit Boolean result 导出为单一 SVG path，源 operand 不进入 SVG；
 - re-import 返回可编辑 Vector，重应用 transform 后与原 Boolean result 的 normalized path、fill rule 和 bounds 一致；
 - Path/Vector/Rectangle/Ellipse、group hierarchy、transform、solid/linear gradient、stroke 和 dash 确定性往返；
+- 多个 drop shadow、layer blur、effect visibility/order、filter region 与标准 shorthand 确定性往返；spread、inner/background/glow/grayscale 和复杂 graph 均返回明确保真报告，外部 filter URL 稳定拒绝；
 - 导入候选树可组成合法 `DesignDocument`；
 - EditorRuntime planner 校验显式 Page/Frame/Group 目标、锁定祖先、插入位置、候选 schema、唯一根、可达性、parent/child 对称、ID 冲突、asset 引用和事务命令上限；成功树按 parent-first 顺序进入一个 revision，一次 undo 删除整棵 SVG，保存重开与 redo 保持一致；
 - EditorRuntime 导出 planner 校验显式根层、Page 归属、ancestor/descendant 重复选择、base revision、设置预算与 Boolean snapshot；嵌套变换、Group/Frame bounds、stroke 防裁切、padding、Page paint order 和 0-origin viewport 通过纯 service 产物测试；
@@ -96,7 +108,7 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 ## 后续门禁
 
 1. MCP 后续复用同一版本化 SVG import/export service、资源句柄和事务入口，不新增任意 `filePath` 通道。
-2. 接入 outline stroke、text glyph、effects/filter、mask/clip、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
+2. 接入 outline stroke、text glyph、inner/background/glow/spread/blend 等剩余 filter 语义、mask/clip、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
 3. 在 `OD-BRAND-01` 上保存导出产物、re-import 文档、真实 Leafer 像素 baseline，并完成 macOS/Windows 打包产品 smoke。
 
 ## 参考
@@ -104,6 +116,8 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - [Figma add images and videos：SVG 导入为可编辑 vector](https://help.figma.com/hc/en-us/articles/360040028034-Add-images-and-videos-to-designs)
 - [Figma export static designs：Layer、Frame、Group、Slice 与批量导出](https://help.figma.com/hc/en-us/articles/360040028114-Export-static-designs-from-Figma)
 - [Figma export formats and SVG settings](https://help.figma.com/hc/en-us/articles/13402894554519-Export-formats-and-settings)
+- [Figma effects](https://help.figma.com/hc/en-us/articles/360041488473-Apply-effects-to-layers)
 - [Figma Boolean operations](https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations)
+- [W3C Filter Effects Module Level 1](https://www.w3.org/TR/filter-effects-1/)
 - [xmldom](https://github.com/xmldom/xmldom)
 - [transformation-matrix](https://github.com/chrvadala/transformation-matrix)

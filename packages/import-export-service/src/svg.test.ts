@@ -43,6 +43,9 @@ describe("versioned SVG interchange", () => {
     };
 
     expect(isSvgInterchangeIssue(issue)).toBe(true);
+    expect(
+      isSvgInterchangeIssue({ ...issue, code: "unsupported-filter" }),
+    ).toBe(true);
     expect(isSvgInterchangeIssue({ ...issue, code: "made-up" })).toBe(false);
     expect(isSvgInterchangeIssue({ ...issue, filePath: "/tmp/a.svg" })).toBe(
       false,
@@ -72,6 +75,7 @@ describe("versioned SVG interchange", () => {
     if (!exported.ok || !result) return;
     expect(exported.exportedNodeIds).toEqual(["brand_mark"]);
     expect(exported.issues.map((issue) => issue.code)).toEqual([
+      "effect-omitted",
       "effect-omitted",
       "angular-gradient-flattened",
       "stroke-alignment-flattened",
@@ -203,6 +207,192 @@ describe("versioned SVG interchange", () => {
     );
   });
 
+  it("round-trips multiple drop shadows, layer blur, effect order, and hidden effects deterministically", () => {
+    const document = shapeDocument();
+    const node = document.nodesById.rect_gradient;
+    if (!node || node.kind !== "rectangle") throw new Error("Missing fixture");
+    node.effects = [
+      {
+        type: "drop-shadow",
+        color: "#101828",
+        opacity: 0.42,
+        offset: { x: -6, y: 12 },
+        blur: 24,
+        spread: 0,
+        blendMode: "normal",
+      },
+      {
+        type: "drop-shadow",
+        color: "rgba(98, 229, 255, 0.8)",
+        opacity: 0.7,
+        offset: { x: 8, y: 4 },
+        blur: 10,
+        spread: 0,
+      },
+      {
+        type: "drop-shadow",
+        color: "#f0f9ff",
+        opacity: 0.25,
+        offset: { x: 0, y: 2 },
+        blur: 4,
+        spread: 0,
+        visible: false,
+      },
+      { type: "layer-blur", radius: 6 },
+    ];
+
+    const first = exportSvg({
+      document,
+      rootNodeIds: ["rect_gradient"],
+      viewport: { x: 0, y: 0, width: 160, height: 120 },
+    });
+    const second = exportSvg({
+      document,
+      rootNodeIds: ["rect_gradient"],
+      viewport: { x: 0, y: 0, width: 160, height: 120 },
+    });
+    expect(first).toEqual(second);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.issues).toEqual([]);
+    expect(first.svg).toContain('data-opendesign-filter-version="1"');
+    expect(first.svg.match(/<feGaussianBlur/g)).toHaveLength(4);
+    expect(first.svg.match(/<feMergeNode/g)).toHaveLength(3);
+    expect(first.svg).toContain('data-opendesign-effect-visible="false"');
+    expect(first.svg).toContain('filterUnits="userSpaceOnUse"');
+    expect(first.svg).not.toContain("<feDropShadow");
+    expect(first.svg.match(/in="SourceGraphic"/g)).toHaveLength(1);
+    expect(first.svg).toContain('x="-54"');
+    expect(first.svg).toContain('y="-36"');
+    expect(first.svg).toContain('width="186"');
+    expect(first.svg).toContain('height="156"');
+
+    const imported = importSvg(
+      { svg: first.svg, idPrefix: "effect_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    expect(
+      imported.nodes.find((candidate) => candidate.parentId !== null),
+    ).toMatchObject({ effects: node.effects });
+
+    const tampered = importSvg(
+      {
+        svg: first.svg.replace('in="od_effect_1_shadow"', 'in="SourceGraphic"'),
+        idPrefix: "effect_tampered",
+      },
+      geometry,
+    );
+    expect(tampered.ok).toBe(true);
+    if (!tampered.ok) return;
+    expect(tampered.issues).toMatchObject([
+      { code: "unsupported-filter", severity: "warning" },
+    ]);
+    expect(
+      tampered.nodes.find((candidate) => candidate.parentId !== null)?.effects,
+    ).toBeUndefined();
+
+    expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
+      isDesignDocument,
+    );
+  });
+
+  it("imports the bounded standard feDropShadow and feGaussianBlur shorthand subset", () => {
+    const shadow = importSvg(
+      {
+        idPrefix: "standard_shadow",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60"><defs><filter id="shadow"><feDropShadow in="SourceGraphic" dx="3" dy="7" stdDeviation="5" flood-color="#334455" flood-opacity="0.35"/></filter></defs><rect id="card" width="60" height="40" filter="url(#shadow)"/></svg>`,
+      },
+      geometry,
+    );
+    expect(shadow.ok).toBe(true);
+    if (!shadow.ok) return;
+    expect(shadow.issues).toEqual([]);
+    expect(findImportedSource(shadow.nodes, "card")).toMatchObject({
+      effects: [
+        {
+          type: "drop-shadow",
+          color: "#334455",
+          opacity: 0.35,
+          offset: { x: 3, y: 7 },
+          blur: 10,
+          spread: 0,
+        },
+      ],
+    });
+
+    const blur = importSvg(
+      {
+        idPrefix: "standard_blur",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60"><defs><filter id="blur"><feGaussianBlur in="SourceGraphic" stdDeviation="4"/></filter></defs><ellipse id="orb" cx="30" cy="30" rx="20" ry="20" style="filter:url(#blur)"/></svg>`,
+      },
+      geometry,
+    );
+    expect(blur.ok).toBe(true);
+    if (!blur.ok) return;
+    expect(blur.issues).toEqual([]);
+    expect(findImportedSource(blur.nodes, "orb")).toMatchObject({
+      effects: [{ type: "layer-blur", radius: 8 }],
+    });
+  });
+
+  it("reports unsupported effect semantics and complex filter graphs without silently flattening them", () => {
+    const document = shapeDocument();
+    const node = document.nodesById.rect_gradient;
+    if (!node || node.kind !== "rectangle") throw new Error("Missing fixture");
+    node.effects = [
+      {
+        type: "drop-shadow",
+        color: "#000000",
+        opacity: 0.5,
+        offset: { x: 0, y: 8 },
+        blur: 16,
+        spread: 2,
+      },
+      {
+        type: "inner-shadow",
+        color: "#ffffff",
+        opacity: 0.3,
+        offset: { x: 0, y: 2 },
+        blur: 8,
+        spread: 0,
+      },
+      { type: "background-blur", radius: 12 },
+      { type: "grayscale", amount: 0.4 },
+    ];
+    const exported = exportSvg({
+      document,
+      rootNodeIds: ["rect_gradient"],
+      viewport: { x: 0, y: 0, width: 160, height: 120 },
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues).toHaveLength(4);
+    expect(
+      exported.issues.every((issue) => issue.code === "effect-omitted"),
+    ).toBe(true);
+    expect(exported.issues.map((issue) => issue.message).join("\n")).toMatch(
+      /spread 2[\s\S]*inner-shadow[\s\S]*background-blur[\s\S]*grayscale/,
+    );
+    expect(exported.svg).not.toContain("<filter");
+
+    const complex = importSvg(
+      {
+        idPrefix: "complex_filter",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><defs><filter id="complex"><feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/><feColorMatrix in="blur" type="saturate" values="0.5"/></filter></defs><rect id="shape" width="40" height="40" filter="url(#complex)"/></svg>`,
+      },
+      geometry,
+    );
+    expect(complex.ok).toBe(true);
+    if (!complex.ok) return;
+    expect(complex.issues).toMatchObject([
+      { code: "unsupported-filter", severity: "warning" },
+    ]);
+    expect(findImportedSource(complex.nodes, "shape")?.effects).toBeUndefined();
+  });
+
   it("parses standard SVG transform lists and normalizes viewBox coordinates without flattening hierarchy", () => {
     const imported = importSvg(
       {
@@ -316,6 +506,20 @@ describe("versioned SVG interchange", () => {
     expect(external.ok).toBe(false);
     expect(
       external.issues.some((issue) => issue.code === "external-reference"),
+    ).toBe(true);
+
+    const externalFilter = importSvg(
+      {
+        idPrefix: "external_filter",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0H10V10Z" filter="url(https://example.test/effects.svg#shadow)"/></svg>`,
+      },
+      geometry,
+    );
+    expect(externalFilter.ok).toBe(false);
+    expect(
+      externalFilter.issues.some(
+        (issue) => issue.code === "external-reference",
+      ),
     ).toBe(true);
 
     const document = readBrandFixture();
