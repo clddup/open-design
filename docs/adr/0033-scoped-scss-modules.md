@@ -22,7 +22,9 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
 
 ## 结果与验证
 
-- AssetsPanel 和 Canvas 新增拖放态作为首批 `*.module.scss`，没有继续向全局文件追加业务规则。
+- AssetsPanel、Canvas 新增拖放态与完整 LeftSidebar 导航已迁入各自的
+  `*.module.scss`；LeftSidebar 的 Page、图层树、搜索、锁定和拖放状态不再依赖
+  全局类名，交互测试改用语义 role 定位。
 - `sass` 固定为 `1.102.0`，仅用于 Vite 编译期；许可记录进入第三方声明。
 - TypeScript 通过 `vite/client` 读取 module 类型，Vite 生产构建验证 SCSS Modules 可编译和合并。
 - 后续迁移需保持键盘/焦点、主题、窄窗口、Reduced Motion 和视觉状态测试；仅减少全局行数不构成完成证据。

@@ -3436,7 +3436,7 @@ describe("App", () => {
       const source = screen.getByRole("button", { name: "Title" });
       const target = screen
         .getByRole("button", { name: "Capabilities" })
-        .closest(".layer-row");
+        .closest('[role="treeitem"]');
       if (!target) throw new Error("Missing target layer row");
       vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
         top: 100,
@@ -3495,7 +3495,7 @@ describe("App", () => {
     const source = screen.getByRole("button", { name: "Welcome canvas" });
     const target = screen
       .getByRole("button", { name: "Capabilities" })
-      .closest(".layer-row");
+      .closest('[role="treeitem"]');
     if (!target) throw new Error("Missing target layer row");
     vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
       top: 100,

@@ -27,6 +27,7 @@ import type { AssetActionResult, DesignAssetReference } from "../design-assets";
 import { useI18n } from "../i18n";
 import type { SidebarTab } from "../state/editor";
 import { AssetsPanel } from "./AssetsPanel";
+import styles from "./LeftSidebar.module.scss";
 
 const nodeIcons: Record<NodeKind, GlyphName> = {
   frame: "frame",
@@ -492,9 +493,9 @@ export function LeftSidebar({
   };
 
   return (
-    <aside aria-label={t("sidebar.navigation")} className="left-sidebar">
+    <aside aria-label={t("sidebar.navigation")} className={styles.root}>
       <div
-        className="panel-tabs"
+        className={styles.tabs}
         role="tablist"
         aria-label={t("sidebar.views")}
       >
@@ -521,7 +522,7 @@ export function LeftSidebar({
           {t("sidebar.assets")}
         </button>
       </div>
-      <div className="sidebar-search">
+      <div className={styles.search}>
         <Glyph name="search" />
         <input
           aria-label={
@@ -545,12 +546,15 @@ export function LeftSidebar({
       {tab === "layers" ? (
         <div
           aria-labelledby="sidebar-layers-tab"
-          className="document-tree"
+          className={styles.documentTree}
           id="sidebar-layers"
           role="tabpanel"
         >
-          <nav aria-label={t("sidebar.documentPages")} className="page-list">
-            <div className="page-list__heading">
+          <nav
+            aria-label={t("sidebar.documentPages")}
+            className={styles.pageList}
+          >
+            <div className={styles.pageHeading}>
               <span>{t("sidebar.pages")}</span>
               <IconButton
                 icon="plus"
@@ -563,11 +567,16 @@ export function LeftSidebar({
               if (!page) return null;
               return (
                 <div
-                  className={`page-list__row${
+                  className={[
+                    styles.pageRow,
                     activePageDrop?.pageId === pageId
-                      ? ` page-list__row--drop-${activePageDrop.position}`
-                      : ""
-                  }`}
+                      ? activePageDrop.position === "before"
+                        ? styles.pageRowDropBefore
+                        : styles.pageRowDropAfter
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   draggable={editingPageId !== pageId}
                   key={pageId}
                   onDragEnd={() => {
@@ -622,7 +631,7 @@ export function LeftSidebar({
                   }}
                 >
                   {editingPageId === pageId ? (
-                    <div className="page-list__editor">
+                    <div className={styles.pageEditor}>
                       <Glyph name="frame" size={14} />
                       <input
                         aria-invalid={pageNameError ? "true" : undefined}
@@ -665,7 +674,7 @@ export function LeftSidebar({
                       aria-current={
                         pageId === activePageId ? "page" : undefined
                       }
-                      className="page-list__item"
+                      className={styles.pageItem}
                       onClick={() => onPageChange(pageId)}
                       onDoubleClick={() => beginPageRename(pageId, page.name)}
                       onKeyDown={(event) => {
@@ -700,7 +709,7 @@ export function LeftSidebar({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      className="page-list__delete"
+                      className={styles.pageDelete}
                       disabled={document.pageOrder.length <= 1}
                       onSelect={() => deletePage(pageId)}
                     >
@@ -710,16 +719,16 @@ export function LeftSidebar({
                 </div>
               );
             })}
-            <span aria-live="polite" className="page-list__status">
+            <span aria-live="polite" className={styles.pageStatus}>
               {pageNameError ?? pageStatus}
             </span>
           </nav>
           <div
             aria-label={t("sidebar.documentLayers")}
-            className="layer-tree"
+            className={styles.layerTree}
             role="tree"
           >
-            <span className="layer-tree__heading">{t("sidebar.layers")}</span>
+            <span className={styles.layerHeading}>{t("sidebar.layers")}</span>
             {layers.map(({ node, depth, effectiveLocked, inheritedLocked }) => {
               const selected = selectedIds.has(node.id);
               const hasChildren = node.childIds.length > 0;
@@ -729,17 +738,23 @@ export function LeftSidebar({
                   aria-expanded={hasChildren ? !collapsed : undefined}
                   aria-level={depth + 1}
                   aria-selected={selected}
-                  className={`layer-row${
+                  className={[
+                    styles.layerRow,
                     booleanEditScope?.booleanId === node.id
-                      ? " layer-row--edit-scope-parent"
+                      ? styles.layerEditScopeParent
                       : node.parentId === booleanEditScope?.booleanId
-                        ? " layer-row--edit-scope-operand"
-                        : ""
-                  }${
+                        ? styles.layerEditScopeOperand
+                        : null,
                     activeDrop?.nodeId === node.id
-                      ? ` layer-row--drop-${activeDrop.position}`
-                      : ""
-                  }`}
+                      ? activeDrop.position === "before"
+                        ? styles.layerDropBefore
+                        : activeDrop.position === "inside"
+                          ? styles.layerDropInside
+                          : styles.layerDropAfter
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   key={node.id}
                   onDragLeave={(event) => {
                     const nextTarget = event.relatedTarget;
@@ -768,7 +783,7 @@ export function LeftSidebar({
                           : "sidebar.collapseNode",
                         { name: node.name || t(nodeKindKeys[node.kind]) },
                       )}
-                      className="layer-row__disclosure"
+                      className={styles.layerDisclosure}
                       onClick={() => toggleNode(node.id)}
                       type="button"
                     >
@@ -779,7 +794,7 @@ export function LeftSidebar({
                     </button>
                   )}
                   <button
-                    className="layer-row__main"
+                    className={styles.layerMain}
                     draggable={!effectiveLocked}
                     onDragEnd={() => {
                       if (draggedNodeIds.current) {
@@ -808,7 +823,7 @@ export function LeftSidebar({
                     </span>
                   </button>
                   {activeDrop?.nodeId === node.id && (
-                    <span aria-hidden="true" className="layer-row__drop-label">
+                    <span aria-hidden="true" className={styles.layerDropLabel}>
                       {t(
                         activeDrop.position === "before"
                           ? "sidebar.dropBeforeShort"
@@ -818,11 +833,9 @@ export function LeftSidebar({
                       )}
                     </span>
                   )}
-                  <span className="layer-row__actions">
+                  <span className={styles.layerActions}>
                     <IconButton
-                      className={
-                        effectiveLocked ? "layer-row__lock--active" : ""
-                      }
+                      className={effectiveLocked ? styles.layerLockActive : ""}
                       disabled={inheritedLocked && !node.locked}
                       icon={effectiveLocked ? "lock" : "unlock"}
                       label={t(
@@ -856,7 +869,7 @@ export function LeftSidebar({
                 </div>
               );
             })}
-            <span className="layer-tree__drag-status" role="status">
+            <span className={styles.dragStatus} role="status">
               {dragStatus}
             </span>
           </div>

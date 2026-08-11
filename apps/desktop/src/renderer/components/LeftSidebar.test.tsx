@@ -428,7 +428,7 @@ describe("LeftSidebar layer tree", () => {
     const source = screen.getByRole("button", { name: "Title" });
     const target = screen
       .getByRole("button", { name: "Capabilities" })
-      .closest(".layer-row");
+      .closest('[role="treeitem"]');
     if (!target) throw new Error("Missing target layer row");
     vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
       top: 100,
@@ -497,7 +497,7 @@ describe("LeftSidebar layer tree", () => {
     const source = screen.getByRole("button", { name: "Title" });
     const target = screen
       .getByRole("button", { name: "Capabilities" })
-      .closest(".layer-row");
+      .closest('[role="treeitem"]');
     if (!target) throw new Error("Missing target layer row");
     vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
       top: 100,
