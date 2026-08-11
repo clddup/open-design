@@ -13,6 +13,7 @@ import type {
   DesignOperation,
   Transform,
 } from "@opendesign/design-contracts";
+import type { DesignLayoutQualityReport } from "@opendesign/editor-runtime";
 import {
   DESIGN_DELIVERY_LEDGER_VERSION,
   WORKSPACE_CONTRACT_VERSION,
@@ -441,6 +442,7 @@ export class GlobalTaskCoordinator {
   recordCanvasCapture(
     context: TrustedToolContext,
     observedRevision = context.revision,
+    layoutQuality?: DesignLayoutQualityReport,
   ) {
     this.assertDesignToolContext(context);
     if (!Number.isSafeInteger(observedRevision) || observedRevision < 0) {
@@ -465,6 +467,17 @@ export class GlobalTaskCoordinator {
         "design_workflow.capture_revision_invalid: The rendered capture predates the latest material design revision; capture the current canvas again",
       );
     }
+    if (!layoutQuality) {
+      throw new Error(
+        "design_workflow.layout_quality_unavailable: A delivery Frame capture requires a trusted deterministic layout-quality report; inspect and capture the current target again",
+      );
+    }
+    assertLayoutQualityMatchesCapture(
+      context,
+      target,
+      observedRevision,
+      layoutQuality,
+    );
     const captureSequence = target.captureCount + 1;
     if (target.delivery.status === "refined") {
       const inspection = this.#inspectionsByRunId.get(context.runId);
@@ -474,6 +487,16 @@ export class GlobalTaskCoordinator {
         );
       }
       assertDeliveryTargetStructure(inspection, target);
+      if (layoutQuality.errorCount > 0) {
+        const failures = layoutQuality.issues
+          .filter((issue) => issue.severity === "error")
+          .slice(0, 8)
+          .map((issue) => `${issue.code} (${issue.nodeId}): ${issue.message}`)
+          .join("; ");
+        throw new Error(
+          `design_workflow.layout_quality_failed: Final delivery target ${target.delivery.targetId} has ${layoutQuality.errorCount} deterministic layout error(s): ${failures}. Correct the reported nodes, inspect the current document, and capture this target again`,
+        );
+      }
     }
     target.captureCount = captureSequence;
     target.lastCaptureRevision = observedRevision;
@@ -1204,6 +1227,24 @@ function assertDeliveryTargetStructure(
         `design_workflow.delivery_structure_incomplete: Planned region ${region.nodeId} is empty; add real editable design content before capturing the target again`,
       );
     }
+  }
+}
+
+function assertLayoutQualityMatchesCapture(
+  context: TrustedToolContext,
+  target: DesignDeliveryTargetState,
+  observedRevision: number,
+  layoutQuality: DesignLayoutQualityReport,
+): void {
+  if (
+    layoutQuality.documentId !== context.documentId ||
+    layoutQuality.revision !== observedRevision ||
+    layoutQuality.pageId !== target.planned.pageId ||
+    layoutQuality.artboardFrameId !== target.planned.artboard.frameId
+  ) {
+    throw new Error(
+      "design_workflow.layout_quality_unavailable: The deterministic layout-quality report does not match the current delivery document, revision, Page, and Frame; inspect and capture the current target again",
+    );
   }
 }
 

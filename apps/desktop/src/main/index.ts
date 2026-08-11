@@ -30,6 +30,7 @@ import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
 import { AgentSvgImportHost } from "./agent/agent-svg-import-host";
 import { AgentRasterExportHost } from "./agent/agent-raster-export-host";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
+import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
 import { GlobalTaskCoordinator } from "./agent/global-task-coordinator";
@@ -1593,6 +1594,16 @@ void app.whenReady().then(async () => {
         signal,
         { captureTarget },
       );
+      if (!isRecordValue(result.content)) {
+        throw new TypeError(
+          "Canvas capture returned invalid structured content",
+        );
+      }
+      const layoutQuality = requireCanvasCaptureLayoutQuality(
+        result,
+        context.documentId,
+        captureTarget,
+      );
       const inspection = await rendererDesignToolHost.execute(
         {
           toolCallId: `${call.toolCallId}_delivery_inspection`,
@@ -1611,12 +1622,8 @@ void app.whenReady().then(async () => {
       const reviewWorkflow = globalTaskCoordinator.recordCanvasCapture(
         context,
         result.observedRevision,
+        layoutQuality,
       );
-      if (!isRecordValue(result.content)) {
-        throw new TypeError(
-          "Canvas capture returned invalid structured content",
-        );
-      }
       return {
         ...result,
         content: {

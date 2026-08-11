@@ -513,6 +513,11 @@ describe("Renderer design tool scope", () => {
           input: {},
         },
         context: pageContext,
+        captureTarget: {
+          kind: "frame",
+          pageId: "page_welcome",
+          nodeId: "frame_welcome",
+        },
       },
       runtime,
       "page_welcome",
@@ -536,6 +541,13 @@ describe("Renderer design tool scope", () => {
           height: 768,
           attachment,
           attachments: [attachment],
+          layoutQuality: {
+            version: 1,
+            documentId: "document_welcome",
+            revision: 0,
+            pageId: "page_welcome",
+            artboardFrameId: "frame_welcome",
+          },
         },
       },
     });

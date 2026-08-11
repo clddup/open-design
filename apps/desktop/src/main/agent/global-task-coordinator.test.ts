@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { DesignDocument } from "@opendesign/design-contracts";
+import {
+  diagnoseDesignTargetLayout,
+  type DesignLayoutQualityReport,
+} from "@opendesign/editor-runtime";
 import { ProjectHost } from "../project/project-host.js";
 import { WorkspaceStore } from "../project/workspace-store.js";
 import { GlobalTaskCoordinator } from "./global-task-coordinator.js";
@@ -406,6 +410,25 @@ function inspectionResult(
   };
 }
 
+function cleanLayoutQuality(
+  documentId: string,
+  pageId: string,
+  artboardFrameId: string,
+  revision: number,
+): DesignLayoutQualityReport {
+  return {
+    version: 1,
+    documentId,
+    revision,
+    pageId,
+    artboardFrameId,
+    checkedNodeCount: 1,
+    errorCount: 0,
+    warningCount: 0,
+    issues: [],
+  };
+}
+
 function insertExistingChild(
   pageId: string,
   parentId: string | null,
@@ -737,7 +760,16 @@ describe("GlobalTaskCoordinator", () => {
     expect(() => coordinator.recordCanvasCapture(context, 0)).toThrow(
       "design_workflow.capture_revision_invalid",
     );
-    expect(coordinator.recordCanvasCapture(context, 1)).toEqual({
+    expect(() => coordinator.recordCanvasCapture(context, 1)).toThrow(
+      "design_workflow.layout_quality_unavailable",
+    );
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        1,
+        cleanLayoutQuality(context.documentId, pageId, "workspace_artboard", 1),
+      ),
+    ).toEqual({
       captureSequence: 1,
       capturedRevision: 1,
       deliveryTargetId: "workspace_artboard",
@@ -751,7 +783,13 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.registerVisualReview(context, visualReview),
     ).toThrow("design_workflow.capture_required");
-    expect(coordinator.recordCanvasCapture(context, 1)).toEqual({
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        1,
+        cleanLayoutQuality(context.documentId, pageId, "workspace_artboard", 1),
+      ),
+    ).toEqual({
       captureSequence: 2,
       capturedRevision: 1,
       deliveryTargetId: "workspace_artboard",
@@ -985,7 +1023,18 @@ describe("GlobalTaskCoordinator", () => {
       pageId,
       nodeId: "frame_home",
     });
-    coordinator.recordCanvasCapture(context, 1);
+    expect(() =>
+      coordinator.recordCanvasCapture(
+        context,
+        1,
+        diagnoseDesignTargetLayout(draftedDocument, pageId, "frame_profile"),
+      ),
+    ).toThrow("design_workflow.layout_quality_unavailable");
+    coordinator.recordCanvasCapture(
+      context,
+      1,
+      diagnoseDesignTargetLayout(draftedDocument, pageId, "frame_home"),
+    );
     coordinator.registerVisualReview(context, visualReview);
     const refineHome: DesignApplyToolInput = {
       label: "Refine Home hierarchy",
@@ -1017,7 +1066,32 @@ describe("GlobalTaskCoordinator", () => {
     expect(coordinator.resolveCanvasCaptureTarget(context)).toMatchObject({
       nodeId: "frame_home",
     });
-    expect(coordinator.recordCanvasCapture(context, 2)).toMatchObject({
+    const overflowingHome = structuredClone(homeRefinedDocument);
+    const overflowingHomeMaterial =
+      overflowingHome.nodesById.frame_home_content_material;
+    if (!overflowingHomeMaterial) {
+      throw new Error("Home material fixture is missing");
+    }
+    overflowingHomeMaterial.transform = [1, 0, 0, 1, 500, 900];
+    const failingHomeQuality = diagnoseDesignTargetLayout(
+      overflowingHome,
+      pageId,
+      "frame_home",
+    );
+    expect(failingHomeQuality.errorCount).toBeGreaterThan(0);
+    expect(() =>
+      coordinator.recordCanvasCapture(context, 2, failingHomeQuality),
+    ).toThrow("design_workflow.layout_quality_failed");
+    expect(
+      coordinator.getDeliveryLedger(context.runId)?.targets[0]?.status,
+    ).toBe("refined");
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        2,
+        diagnoseDesignTargetLayout(homeRefinedDocument, pageId, "frame_home"),
+      ),
+    ).toMatchObject({
       deliveryTargetId: "target_home",
       nextAction: "continue-next-target",
       verified: true,
@@ -1026,7 +1100,11 @@ describe("GlobalTaskCoordinator", () => {
     expect(coordinator.resolveCanvasCaptureTarget(context)).toMatchObject({
       nodeId: "frame_profile",
     });
-    coordinator.recordCanvasCapture(context, 2);
+    coordinator.recordCanvasCapture(
+      context,
+      2,
+      diagnoseDesignTargetLayout(homeRefinedDocument, pageId, "frame_profile"),
+    );
     coordinator.registerVisualReview(context, visualReview);
     const refineProfile: DesignApplyToolInput = {
       label: "Refine Profile hierarchy",
@@ -1051,11 +1129,25 @@ describe("GlobalTaskCoordinator", () => {
     );
     const profileRefinedDocument = structuredClone(homeRefinedDocument);
     profileRefinedDocument.revision = 3;
+    const profileFrame = profileRefinedDocument.nodesById.frame_profile;
+    if (profileFrame?.kind !== "frame") {
+      throw new Error("Profile Frame fixture is missing");
+    }
+    profileFrame.properties.clipsContent = false;
     coordinator.recordDocumentInspection(
       context,
       inspectionResult(profileRefinedDocument, pageId),
     );
-    expect(coordinator.recordCanvasCapture(context, 3)).toMatchObject({
+    const profileQuality = diagnoseDesignTargetLayout(
+      profileRefinedDocument,
+      pageId,
+      "frame_profile",
+    );
+    expect(profileQuality.errorCount).toBe(0);
+    expect(profileQuality.warningCount).toBeGreaterThan(0);
+    expect(
+      coordinator.recordCanvasCapture(context, 3, profileQuality),
+    ).toMatchObject({
       deliveryTargetId: "target_profile",
       nextAction: "complete-delivery",
       verified: true,
@@ -1139,7 +1231,17 @@ describe("GlobalTaskCoordinator", () => {
       authorization,
       1,
     );
-    coordinator.recordCanvasCapture(context, 1);
+    const draftedDocument = withDraftedTargets(
+      opened.document,
+      pageId,
+      plan.targets,
+      1,
+    );
+    coordinator.recordCanvasCapture(
+      context,
+      1,
+      diagnoseDesignTargetLayout(draftedDocument, pageId, "frame_home"),
+    );
     coordinator.registerVisualReview(context, visualReview);
     const refinement: DesignApplyToolInput = {
       label: "Refine Home shell",
@@ -1173,9 +1275,13 @@ describe("GlobalTaskCoordinator", () => {
       inspectionResult(emptyDocument, pageId),
     );
 
-    expect(() => coordinator.recordCanvasCapture(context, 2)).toThrow(
-      "Planned region frame_home_content is empty",
-    );
+    expect(() =>
+      coordinator.recordCanvasCapture(
+        context,
+        2,
+        diagnoseDesignTargetLayout(emptyDocument, pageId, "frame_home"),
+      ),
+    ).toThrow("Planned region frame_home_content is empty");
     expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
       activeTargetId: "target_home",
       targets: [{ targetId: "target_home", status: "refined" }],
@@ -1406,7 +1512,11 @@ describe("GlobalTaskCoordinator", () => {
     });
     const contextAtRevision1 = { ...context, revision: 1 };
     expect(
-      coordinator.recordCanvasCapture(contextAtRevision1, 1),
+      coordinator.recordCanvasCapture(
+        contextAtRevision1,
+        1,
+        cleanLayoutQuality(context.documentId, pageId, "existing_artboard", 1),
+      ),
     ).toMatchObject({
       reviewEligible: true,
       deliveryTargetId: "existing_artboard",
@@ -1461,7 +1571,15 @@ describe("GlobalTaskCoordinator", () => {
       inspectionResult(verifiedDocument, pageId),
     );
     expect(
-      coordinator.recordCanvasCapture(contextAtRevision2, 2),
+      coordinator.recordCanvasCapture(
+        contextAtRevision2,
+        2,
+        diagnoseDesignTargetLayout(
+          verifiedDocument,
+          pageId,
+          "existing_artboard",
+        ),
+      ),
     ).toMatchObject({
       verified: true,
       nextAction: "complete-delivery",

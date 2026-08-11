@@ -63,3 +63,6 @@
 | [0029](adr/0029-contextual-page-structure-approval.md)                   | 已接受     | 默认 Page 目标与按需 Page 结构一次性授权                           |
 | [0030](adr/0030-structured-provider-failures-and-run-history.md)         | 已接受     | Provider 结构化失败、超时阶段与历史终态折叠                        |
 | [0031](adr/0031-versioned-professional-raster-export.md)                 | 已接受     | PNG/JPEG/WebP 专业导出、离屏 Leafer 与 Main 原生保存               |
+| [0032](adr/0032-current-design-file-image-assets.md)                     | 已接受     | 当前 Design File 图片资源与非破坏编辑边界                          |
+| [0033](adr/0033-scoped-scss-modules.md)                                  | 已接受     | Renderer SCSS Modules、共享 token 与全局样式边界                   |
+| [0034](adr/0034-deterministic-layout-quality-gate.md)                    | 已接受     | exact-revision Frame 布局质量报告与最终交付门禁                    |

@@ -105,6 +105,15 @@ export {
   type DesignFeatureSummary,
 } from "./diagnostics.js";
 export {
+  DESIGN_LAYOUT_QUALITY_REPORT_VERSION,
+  diagnoseDesignTargetLayout,
+  isDesignLayoutQualityReport,
+  type DesignLayoutQualityCode,
+  type DesignLayoutQualityIssue,
+  type DesignLayoutQualityReport,
+  type DesignLayoutQualitySeverity,
+} from "./layout-quality.js";
+export {
   EditorRuntime,
   diffDocuments,
   type EditorRuntimeListener,

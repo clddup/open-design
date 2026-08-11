@@ -12,6 +12,7 @@ import type {
   DesignTransactionSuccess,
 } from "@opendesign/design-contracts";
 import {
+  diagnoseDesignTargetLayout,
   diagnoseDesignPages,
   planArrangeNodes,
   planCreatePage,
@@ -136,7 +137,18 @@ async function executeDesignToolRequestUnsafe(
     if (!options.captureCanvas) {
       throw new Error("Canvas preview capture is unavailable");
     }
+    if (!request.captureTarget) {
+      throw new Error("Canvas capture target is unavailable");
+    }
     const preview = await options.captureCanvas(document);
+    const layoutQuality =
+      request.captureTarget.kind === "frame"
+        ? diagnoseDesignTargetLayout(
+            document,
+            request.captureTarget.pageId,
+            request.captureTarget.nodeId,
+          )
+        : undefined;
     return {
       requestId: request.requestId,
       ok: true,
@@ -149,6 +161,7 @@ async function executeDesignToolRequestUnsafe(
           height: preview.height,
           attachment: preview.attachment,
           attachments: [preview.attachment],
+          ...(layoutQuality ? { layoutQuality } : {}),
         },
       },
     };
