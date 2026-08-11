@@ -76,6 +76,66 @@ describe("design render diagnostics", () => {
       }),
     );
   });
+
+  it("treats one-dimensional stroked Line and Vector geometry as drawable", () => {
+    const document = structuredClone(
+      createEmptyDesignDocument("document_linear", "page_linear"),
+    );
+    document.nodesById.line_horizontal = {
+      ...baseNode("line_horizontal", "line", null),
+      size: { width: 120, height: 0 },
+      properties: {
+        fills: [],
+        strokes: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokeWidth: 2,
+        strokeAlign: "center",
+        start: { x: 0, y: 0.5 },
+        end: { x: 1, y: 0.5 },
+        startEndpoint: "none",
+        endEndpoint: "none",
+      },
+    };
+    document.nodesById.vector_vertical = {
+      ...baseNode("vector_vertical", "vector", null),
+      size: { width: 0, height: 120 },
+      properties: {
+        network: {
+          vertices: [
+            { id: "vertex_a", x: 0, y: 0 },
+            { id: "vertex_b", x: 0, y: 120 },
+          ],
+          segments: [
+            {
+              id: "segment_ab",
+              startVertexId: "vertex_a",
+              endVertexId: "vertex_b",
+            },
+          ],
+          paths: [
+            {
+              id: "path_1",
+              closed: false,
+              segments: [{ segmentId: "segment_ab", reversed: false }],
+            },
+          ],
+          regions: [],
+        },
+        fills: [],
+        strokes: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokeWidth: 2,
+      },
+    };
+    document.pagesById.page_linear!.rootNodeIds = [
+      "line_horizontal",
+      "vector_vertical",
+    ];
+
+    expect(
+      diagnoseDesignPages(document, ["page_linear"]).items.filter(
+        (item) => item.code === "invisible-node",
+      ),
+    ).toEqual([]);
+  });
 });
 
 function brokenDocument(): DesignDocument {

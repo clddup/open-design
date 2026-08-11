@@ -654,6 +654,10 @@ describe("Leafer scene projection", () => {
     };
     frame.childIds.push("penguin_path");
 
+    const penguinPath = document.nodesById.penguin_path;
+    if (penguinPath.kind !== "path" || !("path" in penguinPath.properties)) {
+      throw new Error("Expected an exact path-data fixture");
+    }
     expect(
       projectDesignPage(document, "page_welcome").elementsById.get(
         "penguin_path",
@@ -661,7 +665,7 @@ describe("Leafer scene projection", () => {
     ).toMatchObject({
       tag: "Path",
       data: {
-        path: document.nodesById.penguin_path.properties.path,
+        path: penguinPath.properties.path,
         fill: [
           {
             type: "linear",
@@ -693,6 +697,87 @@ describe("Leafer scene projection", () => {
             color: { r: 34, g: 211, b: 238, a: 0.65 },
           },
         ],
+      },
+    });
+  });
+
+  it("projects editable vector networks through the same Leafer Path backend", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    document.nodesById.editable_vector = {
+      id: "editable_vector",
+      name: "Editable vector",
+      parentId: frame.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 40, 60],
+      size: { width: 100, height: 100 },
+      opacity: 1,
+      extensions: {},
+      kind: "vector",
+      properties: {
+        network: {
+          vertices: [
+            { id: "vertex_a", x: 0, y: 0 },
+            { id: "vertex_b", x: 100, y: 0 },
+            { id: "vertex_c", x: 50, y: 100 },
+          ],
+          segments: [
+            {
+              id: "segment_ab",
+              startVertexId: "vertex_a",
+              endVertexId: "vertex_b",
+              tangentStart: { x: 25, y: 0 },
+              tangentEnd: { x: -25, y: 0 },
+            },
+            {
+              id: "segment_bc",
+              startVertexId: "vertex_b",
+              endVertexId: "vertex_c",
+            },
+            {
+              id: "segment_ca",
+              startVertexId: "vertex_c",
+              endVertexId: "vertex_a",
+            },
+          ],
+          paths: [
+            {
+              id: "path_1",
+              closed: true,
+              segments: [
+                { segmentId: "segment_ab", reversed: false },
+                { segmentId: "segment_bc", reversed: false },
+                { segmentId: "segment_ca", reversed: false },
+              ],
+            },
+          ],
+          regions: [
+            {
+              id: "region_1",
+              windingRule: "nonzero",
+              loops: [{ pathId: "path_1", reversed: false }],
+            },
+          ],
+        },
+        fills: [{ type: "solid", color: "#4f7fff", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+    };
+    frame.childIds.push("editable_vector");
+
+    expect(
+      projectDesignPage(document, "page_welcome").elementsById.get(
+        "editable_vector",
+      ),
+    ).toMatchObject({
+      tag: "Path",
+      data: {
+        path: "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z",
+        windingRule: "nonzero",
       },
     });
   });

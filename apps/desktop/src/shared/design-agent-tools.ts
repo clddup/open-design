@@ -422,10 +422,114 @@ const MODEL_SHAPE_PROPERTIES = {
   },
 } as const;
 
+const MODEL_VECTOR_GEOMETRY_ID_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  maxLength: 128,
+  pattern: "^[A-Za-z][A-Za-z0-9._:-]*$",
+} as const;
+
+const MODEL_VECTOR_NETWORK_SCHEMA = {
+  type: "object",
+  description:
+    "Editable vector geometry. Vertices and segments use stable IDs scoped to this node; segment tangents are offsets from their corresponding start/end vertices. Ordered path runs own every segment exactly once. Closed path runs may be referenced by fill regions.",
+  properties: {
+    vertices: {
+      type: "array",
+      minItems: 2,
+      maxItems: 16_384,
+      items: {
+        type: "object",
+        properties: {
+          id: MODEL_VECTOR_GEOMETRY_ID_SCHEMA,
+          x: { type: "number" },
+          y: { type: "number" },
+        },
+        required: ["id", "x", "y"],
+        additionalProperties: false,
+      },
+    },
+    segments: {
+      type: "array",
+      minItems: 1,
+      maxItems: 16_384,
+      items: {
+        type: "object",
+        properties: {
+          id: MODEL_VECTOR_GEOMETRY_ID_SCHEMA,
+          startVertexId: MODEL_VECTOR_GEOMETRY_ID_SCHEMA,
+          endVertexId: MODEL_VECTOR_GEOMETRY_ID_SCHEMA,
+          tangentStart: MODEL_POINT_SCHEMA,
+          tangentEnd: MODEL_POINT_SCHEMA,
+        },
+        required: ["id", "startVertexId", "endVertexId"],
+        additionalProperties: false,
+      },
+    },
+    paths: {
+      type: "array",
+      minItems: 1,
+      maxItems: 16_384,
+      items: {
+        type: "object",
+        properties: {
+          id: MODEL_VECTOR_GEOMETRY_ID_SCHEMA,
+          closed: { type: "boolean" },
+          segments: {
+            type: "array",
+            minItems: 1,
+            maxItems: 16_384,
+            items: {
+              type: "object",
+              properties: {
+                segmentId: MODEL_VECTOR_GEOMETRY_ID_SCHEMA,
+                reversed: { type: "boolean" },
+              },
+              required: ["segmentId", "reversed"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["id", "closed", "segments"],
+        additionalProperties: false,
+      },
+    },
+    regions: {
+      type: "array",
+      maxItems: 16_384,
+      items: {
+        type: "object",
+        properties: {
+          id: MODEL_VECTOR_GEOMETRY_ID_SCHEMA,
+          windingRule: { enum: ["nonzero", "evenodd"] },
+          loops: {
+            type: "array",
+            minItems: 1,
+            maxItems: 1_024,
+            items: {
+              type: "object",
+              properties: {
+                pathId: MODEL_VECTOR_GEOMETRY_ID_SCHEMA,
+                reversed: { type: "boolean" },
+              },
+              required: ["pathId", "reversed"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["id", "windingRule", "loops"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["vertices", "segments", "paths", "regions"],
+  additionalProperties: false,
+} as const;
+
 const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
   type: "object",
   description:
-    "Properties must match node.kind. frame: shape fields + cornerRadius + clipsContent; group: empty object; rectangle: shape fields + cornerRadius; ellipse: shape fields; line: empty fills + center stroke fields + normalized directed start/end + independent startEndpoint/endEndpoint; text: content/fontFamily/fontSize/fontWeight/lineHeight/letterSpacing/textAlignHorizontal/textAlignVertical + shape fields; image: assetId/placement/altText/cornerRadius; path or vector: shape fields + SVG path and optional fillRule.",
+    "Properties must match node.kind. frame: shape fields + cornerRadius + clipsContent; group: empty object; rectangle: shape fields + cornerRadius; ellipse: shape fields; line: empty fills + center stroke fields + normalized directed start/end + independent startEndpoint/endEndpoint; text: content/fontFamily/fontSize/fontWeight/lineHeight/letterSpacing/textAlignHorizontal/textAlignVertical + shape fields; image: assetId/placement/altText/cornerRadius; path or vector: shape fields + exactly one geometry source (portable SVG path for exact imported data, or network for editable vertices/segments) + optional fillRule.",
   properties: {
     ...MODEL_SHAPE_PROPERTIES,
     cornerRadius: { type: "number", minimum: 0 },
@@ -509,6 +613,7 @@ const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
       maxLength: 200_000,
       description: "Portable SVG path data in the node's local coordinates.",
     },
+    network: MODEL_VECTOR_NETWORK_SCHEMA,
     fillRule: { enum: ["nonzero", "evenodd"] },
     start: MODEL_NORMALIZED_POINT_SCHEMA,
     end: MODEL_NORMALIZED_POINT_SCHEMA,
@@ -1272,7 +1377,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_APPLY_TOOL_NAME,
     description:
-      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. For organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with portable SVG path data in properties.path; they support the same fills, strokes, gradients, effects, and advanced stroke fields as other shapes. Path coordinates are local to the node and should fit its declared size. Composite designs should create a named Frame or Group before inserting its children later in the same ordered transaction; do not flatten their parts into Page-root layers. It does not create, rename, duplicate, or delete Projects, Design Files, or Pages. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input.",
+      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, cubic segment tangents, ordered path runs, and closed fill regions. The current editable product slice should use one non-branching path run; a closed run needs one matching region, while an open run must have no fill. Existing-node point editing, branch authoring, and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are local to the node and must fit its declared size. Composite designs should create a named Frame or Group before inserting its children later in the same ordered transaction; do not flatten their parts into Page-root layers. It does not create, rename, duplicate, or delete Projects, Design Files, or Pages. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input.",
     inputSchema: {
       ...MODEL_APPLY_TRANSACTION_SCHEMA,
     },

@@ -6,6 +6,7 @@ import { createLeaferEngineAdapter } from "./adapter.js";
 import { booleanResultElementId } from "./mapping.js";
 import type {
   LeaferCreateRequest,
+  LeaferCreateVectorRequest,
   LeaferEngineCallbacks,
   LeaferEngineSyncInput,
 } from "./types.js";
@@ -14,6 +15,7 @@ const leaferHarness = vi.hoisted(() => ({
   app: null as FakeApp | null,
   appConfig: null as Record<string, unknown> | null,
   boxMatches: [] as FakeElement[],
+  windowListeners: new Map<string, Set<(event: KeyboardEvent) => void>>(),
 }));
 
 class FakeEventTarget {
@@ -217,6 +219,11 @@ vi.mock("leafer-editor", () => ({
   InnerEditorEvent: { BEFORE_OPEN: "inner.before-open", CLOSE: "inner.close" },
   MoveEvent: { MOVE: "viewport.move", END: "viewport.move-end" },
   Path: FakePath,
+  PointerEvent: {
+    DOWN: "pointer.down",
+    MOVE: "pointer.move",
+    UP: "pointer.up",
+  },
   Polygon: FakePolygon,
   Rect: FakeRect,
   ResizeEvent: { RESIZE: "viewport.resize" },
@@ -234,6 +241,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     leaferHarness.app = null;
     leaferHarness.appConfig = null;
     leaferHarness.boxMatches = [];
+    leaferHarness.windowListeners.clear();
     animationFrames.clear();
     animationFrameSequence = 0;
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -245,9 +253,20 @@ describe("Leafer engine selection bounds synchronization", () => {
       animationFrames.delete(id);
     });
     vi.stubGlobal("window", {
-      addEventListener: vi.fn(),
+      addEventListener: vi.fn(
+        (type: string, listener: (event: KeyboardEvent) => void) => {
+          const listeners =
+            leaferHarness.windowListeners.get(type) ?? new Set();
+          listeners.add(listener);
+          leaferHarness.windowListeners.set(type, listeners);
+        },
+      ),
       cancelAnimationFrame: (id: number) => animationFrames.delete(id),
-      removeEventListener: vi.fn(),
+      removeEventListener: vi.fn(
+        (type: string, listener: (event: KeyboardEvent) => void) => {
+          leaferHarness.windowListeners.get(type)?.delete(listener);
+        },
+      ),
       requestAnimationFrame: (callback: FrameRequestCallback) => {
         const id = ++animationFrameSequence;
         animationFrames.set(id, callback);
@@ -928,6 +947,34 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("hides selection and hover chrome while the Pen tool owns the canvas", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const input = createInput();
+    adapter.sync(input);
+    flushAnimationFrames();
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const selected = findElement(app.tree, "feature_one");
+    if (!selected) throw new Error("Missing selected fixture");
+    app.editor.hoverTarget = selected;
+
+    adapter.sync({ ...input, tool: "pen" });
+
+    expect(app.editor.visible).toBe(false);
+    expect(app.editor.hittable).toBe(false);
+    expect(app.editor.hoverTarget).toBeNull();
+    expect(app.editor.list).toEqual([selected]);
+
+    adapter.sync(input);
+    expect(app.editor.visible).toBe(true);
+    expect(app.editor.hittable).toBe(true);
+    expect(app.editor.list).toEqual([selected]);
+    adapter.dispose();
+  });
+
   it("recomputes box selection from the pointer-up bounds", async () => {
     const host = createHost();
     const adapter = await createLeaferEngineAdapter(host, createCallbacks());
@@ -1204,6 +1251,164 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("authors an open cubic Pen contour and submits one normalized vector request", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "pen",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+
+    app.emit("pointer.down", boxDragEvent(20, 30));
+    app.emit("pointer.move", boxDragEvent(50, 40));
+    app.emit("pointer.up", boxDragEvent(50, 40));
+    app.emit("pointer.down", boxDragEvent(120, 90));
+    app.emit("pointer.move", boxDragEvent(140, 60));
+    app.emit("pointer.up", boxDragEvent(140, 60));
+    emitWindowKey("Enter");
+
+    expect(onCreateVector).toHaveBeenCalledTimes(1);
+    expect(onCreateVector).toHaveBeenCalledWith(
+      expect.objectContaining({
+        closed: false,
+        pageId: "page_welcome",
+        parentId: null,
+        width: 100,
+        x: 20,
+        y: 30,
+        network: {
+          vertices: [
+            { id: "vertex_1", x: 0, y: 0 },
+            { id: "vertex_2", x: 100, y: 60 },
+          ],
+          segments: [
+            {
+              id: "segment_1",
+              startVertexId: "vertex_1",
+              endVertexId: "vertex_2",
+              tangentStart: { x: 30, y: 10 },
+              tangentEnd: { x: -20, y: 30 },
+            },
+          ],
+          paths: [
+            {
+              id: "path_1",
+              closed: false,
+              segments: [{ segmentId: "segment_1", reversed: false }],
+            },
+          ],
+          regions: [],
+        },
+      }),
+    );
+    expect(onCreateVector.mock.calls[0]?.[0].height).toBeGreaterThan(60);
+    adapter.dispose();
+  });
+
+  it("closes a Pen contour by clicking the first anchor", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "pen",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+
+    clickPenPoint(app, 0, 0);
+    clickPenPoint(app, 100, 0);
+    clickPenPoint(app, 50, 100);
+    app.emit("pointer.move", boxDragEvent(2, 2));
+    app.emit("pointer.down", boxDragEvent(2, 2));
+
+    expect(onCreateVector).toHaveBeenCalledTimes(1);
+    const request = onCreateVector.mock.calls[0]?.[0];
+    expect(request).toMatchObject({
+      closed: true,
+      height: 100,
+      pageId: "page_welcome",
+      parentId: null,
+      width: 100,
+      x: 0,
+      y: 0,
+    });
+    expect(request?.network.segments).toContainEqual({
+      id: "segment_3",
+      startVertexId: "vertex_3",
+      endVertexId: "vertex_1",
+    });
+    expect(request?.network.paths[0]?.closed).toBe(true);
+    expect(request?.network.regions[0]?.id).toBe("region_1");
+    adapter.dispose();
+  });
+
+  it("removes Pen points with Backspace and cancels a one-point contour", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    adapter.sync({
+      ...createInput(),
+      tool: "pen",
+      selection: { nodeIds: [] },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+
+    clickPenPoint(app, 10, 10);
+    clickPenPoint(app, 80, 40);
+    emitWindowKey("Backspace");
+    emitWindowKey("Escape");
+
+    expect(onCreateVector).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("finishes an open Pen contour when the user switches tools", async () => {
+    const onCreateVector = vi.fn<
+      (request: LeaferCreateVectorRequest) => boolean
+    >(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onCreateVector,
+    });
+    const input = {
+      ...createInput(),
+      tool: "pen" as const,
+      selection: { nodeIds: [] },
+    };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    clickPenPoint(app, 10, 10);
+    clickPenPoint(app, 80, 40);
+
+    adapter.sync({ ...input, tool: "select" });
+
+    expect(onCreateVector).toHaveBeenCalledTimes(1);
+    expect(onCreateVector).toHaveBeenCalledWith(
+      expect.objectContaining({ closed: false }),
+    );
+    adapter.dispose();
+  });
+
   it("persists Leafer LineEditTool endpoint drags as one canonical transaction", async () => {
     const onOperations = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {
@@ -1413,6 +1618,7 @@ async function flushMicrotasks(): Promise<void> {
 function createCallbacks(): LeaferEngineCallbacks {
   return {
     onCreate: vi.fn(() => true),
+    onCreateVector: vi.fn(() => true),
     onError: vi.fn(),
     onOperations: vi.fn(() => true),
     onSelectionChange: vi.fn(),
@@ -1441,6 +1647,23 @@ function boxDragEvent(
     shiftKey: modifiers.shiftKey ?? false,
     target: {},
   };
+}
+
+function clickPenPoint(app: FakeApp, x: number, y: number): void {
+  const event = boxDragEvent(x, y);
+  app.emit("pointer.down", event);
+  app.emit("pointer.up", event);
+}
+
+function emitWindowKey(code: string): void {
+  const event = {
+    code,
+    preventDefault: vi.fn(),
+    stopImmediatePropagation: vi.fn(),
+  } as unknown as KeyboardEvent;
+  leaferHarness.windowListeners
+    .get("keydown")
+    ?.forEach((listener) => listener(event));
 }
 
 function flushAnimationFrames(): void {

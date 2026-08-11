@@ -47,9 +47,19 @@ describe("renderer editor state boundary", () => {
 
   it("accepts only the tools implemented by the owned runtime", () => {
     expect(
-      ["select", "frame", "rectangle", "ellipse", "text"].every(isTool),
+      [
+        "select",
+        "frame",
+        "rectangle",
+        "ellipse",
+        "line",
+        "arrow",
+        "polygon",
+        "star",
+        "pen",
+        "text",
+      ].every(isTool),
     ).toBe(true);
-    expect(isTool("pen")).toBe(false);
     expect(isTool("pan")).toBe(false);
   });
 });

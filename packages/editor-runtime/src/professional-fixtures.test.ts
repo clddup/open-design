@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
 import { diagnoseDesignPages } from "./diagnostics.js";
 import {
   documentContentFingerprint,
@@ -116,7 +117,9 @@ describe("professional design fixtures", () => {
           isWithinComposite(document, nodeId, fixture.compositeGroupId),
         ).toBe(true);
         if (node?.kind === "path") {
-          expect(node.properties.path.trim().length).toBeGreaterThan(12);
+          expect(
+            resolvePathPropertiesData(node.properties)?.trim().length,
+          ).toBeGreaterThan(12);
         }
       }
       for (const nodeId of fixture.requiredBooleanNodeIds) {

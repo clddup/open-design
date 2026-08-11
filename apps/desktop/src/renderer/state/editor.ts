@@ -7,6 +7,7 @@ export type Tool =
   | "arrow"
   | "polygon"
   | "star"
+  | "pen"
   | "text";
 
 export type SidebarTab = "layers" | "assets";
@@ -21,6 +22,7 @@ export function isTool(value: unknown): value is Tool {
     value === "arrow" ||
     value === "polygon" ||
     value === "star" ||
+    value === "pen" ||
     value === "text"
   );
 }

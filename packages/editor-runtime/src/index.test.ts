@@ -2,6 +2,7 @@ import type {
   DesignTransaction,
   PathNode,
   RectangleNode,
+  VectorNode,
 } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import {
@@ -52,6 +53,77 @@ function pathNode(id: string, parentId: string | null = null): PathNode {
     opacity: 1,
     properties: {
       path: "M 80 4 C 126 4 154 46 148 108 C 143 171 118 214 80 216 C 42 214 17 171 12 108 C 6 46 34 4 80 4 Z",
+      fillRule: "nonzero",
+      fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+      strokes: [{ type: "solid", color: "#ffffff", opacity: 0.8 }],
+      strokeWidth: 3,
+      strokeAlign: "inside",
+      strokeJoin: "round",
+    },
+    extensions: {},
+  };
+}
+
+function editableVectorNode(
+  id: string,
+  parentId: string | null = null,
+): VectorNode {
+  return {
+    id,
+    kind: "vector",
+    name: id,
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 24, 32],
+    size: { width: 160, height: 220 },
+    opacity: 1,
+    properties: {
+      network: {
+        vertices: [
+          { id: "vertex_a", x: 0, y: 0 },
+          { id: "vertex_b", x: 160, y: 0 },
+          { id: "vertex_c", x: 80, y: 220 },
+        ],
+        segments: [
+          {
+            id: "segment_ab",
+            startVertexId: "vertex_a",
+            endVertexId: "vertex_b",
+          },
+          {
+            id: "segment_bc",
+            startVertexId: "vertex_b",
+            endVertexId: "vertex_c",
+            tangentStart: { x: 0, y: 60 },
+            tangentEnd: { x: 40, y: -40 },
+          },
+          {
+            id: "segment_ca",
+            startVertexId: "vertex_c",
+            endVertexId: "vertex_a",
+          },
+        ],
+        paths: [
+          {
+            id: "path_outer",
+            closed: true,
+            segments: [
+              { segmentId: "segment_ab", reversed: false },
+              { segmentId: "segment_bc", reversed: false },
+              { segmentId: "segment_ca", reversed: false },
+            ],
+          },
+        ],
+        regions: [
+          {
+            id: "region_outer",
+            windingRule: "nonzero",
+            loops: [{ pathId: "path_outer", reversed: false }],
+          },
+        ],
+      },
       fillRule: "nonzero",
       fills: [{ type: "solid", color: "#111827", opacity: 1 }],
       strokes: [{ type: "solid", color: "#ffffff", opacity: 0.8 }],
@@ -121,6 +193,38 @@ describe("document normalization", () => {
     );
   });
 
+  it("rejects editable vector topology that passes the structural schema", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const vector = editableVectorNode("vector_invalid", "frame_welcome");
+    if (!("network" in vector.properties)) {
+      throw new Error("Expected editable vector properties");
+    }
+    vector.properties.network.paths[0]!.segments = [
+      { segmentId: "segment_ab", reversed: false },
+      { segmentId: "segment_ca", reversed: false },
+      { segmentId: "segment_bc", reversed: false },
+    ];
+    document.nodesById.vector_invalid = vector;
+    document.nodesById.frame_welcome!.childIds.push(vector.id);
+
+    expect(() => normalizeDesignDocument(document)).toThrow(
+      DocumentValidationError,
+    );
+    try {
+      normalizeDesignDocument(document);
+    } catch (error) {
+      if (!(error instanceof DocumentValidationError)) throw error;
+      expect(
+        error.issues.some(
+          (issue) =>
+            issue.path.includes(
+              "/nodesById/vector_invalid/properties/network/paths/0/segments",
+            ) && issue.message.includes("not contiguous"),
+        ),
+      ).toBe(true);
+    }
+  });
+
   it("canonicalizes JSON object keys for document fingerprints", () => {
     const left = structuredClone(createWelcomeDocument());
     const right = structuredClone(createWelcomeDocument());
@@ -179,6 +283,48 @@ describe("EditorRuntime transactions", () => {
       kind: "path",
       properties: { fillRule: "nonzero", strokeWidth: 3 },
     });
+  });
+
+  it("persists, reopens, undoes, and redoes editable vector networks", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const change = transaction(runtime, "transaction_editable_vector", [
+      {
+        commandId: "insert_editable_vector",
+        type: "insert_element",
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        index: 4,
+        node: editableVectorNode("editable_vector", "frame_welcome"),
+      },
+    ]);
+
+    expect(runtime.apply(change)).toMatchObject({
+      ok: true,
+      changes: { addedNodeIds: ["editable_vector"] },
+    });
+    const reopened = normalizeDesignDocument(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expect(reopened.nodesById.editable_vector).toEqual(
+      runtime.getSnapshot().document.nodesById.editable_vector,
+    );
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(runtime.getSnapshot().document.nodesById.editable_vector).toBe(
+      undefined,
+    );
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const redone = runtime.getSnapshot().document.nodesById.editable_vector;
+    expect(redone).toMatchObject({ kind: "vector" });
+    if (
+      !redone ||
+      redone.kind !== "vector" ||
+      !("network" in redone.properties)
+    ) {
+      throw new Error("Missing redone editable vector");
+    }
+    expect(redone.properties.network.vertices.map(({ id }) => id)).toContain(
+      "vertex_a",
+    );
   });
 
   it("rolls back every command when an atomic apply fails", () => {

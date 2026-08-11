@@ -127,14 +127,20 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
   });
 
-  it("exposes formal SVG path appearance semantics to the model", () => {
+  it("exposes mutually exclusive path-data and editable-network semantics to the model", () => {
     const apply = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
     );
     const schema = JSON.stringify(apply?.inputSchema);
 
-    expect(apply?.description).toContain("portable SVG path data");
+    expect(apply?.description).toContain("properties.network");
+    expect(apply?.description).toContain("exact imported SVG path data");
+    expect(apply?.description).toContain(
+      "never provide path and network together",
+    );
     expect(schema).toContain('"path"');
+    expect(schema).toContain('"network"');
+    expect(schema).toContain('"tangentStart"');
     expect(schema).toContain('"fillRule"');
     expect(schema).toContain('"fills"');
     expect(schema).toContain('"strokes"');
@@ -366,6 +372,104 @@ describe("design Agent tool contract", () => {
               properties: {
                 ...input.commands[0]?.node.properties,
                 path: "<svg onload=bad()>",
+              },
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts editable vector network transactions and rejects dual geometry facts", () => {
+    const input = {
+      label: "Create editable mascot contour",
+      commands: [
+        {
+          commandId: "insert_vector",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: null,
+          index: 0,
+          node: {
+            id: "vector_1",
+            name: "Editable mascot contour",
+            parentId: null,
+            childIds: [],
+            visible: true,
+            locked: false,
+            transform: [1, 0, 0, 1, 0, 0],
+            size: { width: 120, height: 160 },
+            opacity: 1,
+            extensions: {},
+            kind: "vector",
+            properties: {
+              network: {
+                vertices: [
+                  { id: "vertex_a", x: 0, y: 0 },
+                  { id: "vertex_b", x: 120, y: 0 },
+                  { id: "vertex_c", x: 60, y: 160 },
+                ],
+                segments: [
+                  {
+                    id: "segment_ab",
+                    startVertexId: "vertex_a",
+                    endVertexId: "vertex_b",
+                    tangentStart: { x: 30, y: 0 },
+                    tangentEnd: { x: -30, y: 0 },
+                  },
+                  {
+                    id: "segment_bc",
+                    startVertexId: "vertex_b",
+                    endVertexId: "vertex_c",
+                  },
+                  {
+                    id: "segment_ca",
+                    startVertexId: "vertex_c",
+                    endVertexId: "vertex_a",
+                  },
+                ],
+                paths: [
+                  {
+                    id: "path_outer",
+                    closed: true,
+                    segments: [
+                      { segmentId: "segment_ab", reversed: false },
+                      { segmentId: "segment_bc", reversed: false },
+                      { segmentId: "segment_ca", reversed: false },
+                    ],
+                  },
+                ],
+                regions: [
+                  {
+                    id: "region_outer",
+                    windingRule: "nonzero",
+                    loops: [{ pathId: "path_outer", reversed: false }],
+                  },
+                ],
+              },
+              fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+            },
+          },
+        },
+      ],
+    };
+
+    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        commands: [
+          {
+            ...input.commands[0],
+            node: {
+              ...input.commands[0]?.node,
+              properties: {
+                ...input.commands[0]?.node.properties,
+                path: "M 0 0 L 120 0 L 60 160 Z",
               },
             },
           },

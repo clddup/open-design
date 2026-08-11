@@ -5,6 +5,7 @@ import type {
   Paint,
   Rect,
 } from "@opendesign/design-contracts";
+import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
 import { getNodeBounds } from "./geometry.js";
 
 export const DESIGN_DIAGNOSTIC_REPORT_VERSION = 1 as const;
@@ -166,10 +167,7 @@ function diagnoseNode(
       nodeId: node.id,
       message: `Node ${node.id} has zero opacity`,
     });
-  } else if (
-    node.kind !== "group" &&
-    (node.size.width <= 0 || node.size.height <= 0)
-  ) {
+  } else if (hasNoDrawableSize(node)) {
     items.push({
       code: "invisible-node",
       severity: "warning",
@@ -181,7 +179,7 @@ function diagnoseNode(
 
   if (
     (node.kind === "path" || node.kind === "vector") &&
-    node.properties.path.trim().length === 0
+    (resolvePathPropertiesData(node.properties)?.trim().length ?? 0) === 0
   ) {
     items.push({
       code: "empty-path",
@@ -219,6 +217,14 @@ function diagnoseNode(
       message: `Node ${node.id} has no visible fill, stroke, or effect`,
     });
   }
+}
+
+function hasNoDrawableSize(node: DesignNode): boolean {
+  if (node.kind === "group") return false;
+  if (node.kind === "line" || node.kind === "path" || node.kind === "vector") {
+    return node.size.width <= 0 && node.size.height <= 0;
+  }
+  return node.size.width <= 0 || node.size.height <= 0;
 }
 
 function diagnoseAsset(

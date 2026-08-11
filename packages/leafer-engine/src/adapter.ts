@@ -2,6 +2,7 @@ import type {
   DesignChangeSet,
   DesignDocument,
   DesignOperation,
+  Point,
   Transform,
   ViewportState,
 } from "@opendesign/design-contracts";
@@ -12,6 +13,7 @@ import {
   type BooleanGeometryResolution,
   type BooleanGeometryResolver,
 } from "@opendesign/geometry-service/boolean-resolver";
+import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
@@ -24,9 +26,21 @@ import {
   type LeaferElementTag,
   type LeaferSceneProjection,
 } from "./mapping.js";
+import {
+  appendPenVertex,
+  createPenDraft,
+  penDraftHandlePath,
+  penDraftPreviewPath,
+  penDraftToVectorNetwork,
+  removeLastPenVertex,
+  setPenVertexHandle,
+  type PenDraft,
+} from "./pen-tool.js";
 import type {
+  LeaferBoxCreateTool,
   LeaferCanvasTool,
   LeaferCreateRequest,
+  LeaferCreateVectorRequest,
   LeaferEngineAdapter,
   LeaferEngineCallbacks,
   LeaferEngineOptions,
@@ -61,7 +75,22 @@ interface DrawSession {
   lineEnd?: { x: number; y: number };
   start: { x: number; y: number };
   startClient: { x: number; y: number };
-  tool: Exclude<LeaferCanvasTool, "select">;
+  tool: LeaferBoxCreateTool;
+}
+
+interface PenSession {
+  activeVertexIndex: number | null;
+  anchors: LeaferElement[];
+  closeCandidate: boolean;
+  cursor: Point;
+  draft: PenDraft;
+  handlePath: LeaferElement;
+  pageId: string;
+  parent: LeaferGroup;
+  parentId: string | null;
+  pointerDownClient: Point | null;
+  previewGroup: LeaferGroup;
+  previewPath: LeaferElement;
 }
 
 interface BoxSelectSession {
@@ -72,6 +101,7 @@ interface BoxSelectSession {
 
 const MATRIX_EPSILON = 0.000_001;
 const MIN_DRAW_DISTANCE = 4;
+const PEN_CLOSE_DISTANCE = 10;
 const MIN_VIEWPORT_ZOOM = 0.1;
 const MAX_VIEWPORT_ZOOM = 8;
 const WHEEL_ZOOM_SPEED = 0.16;
@@ -104,6 +134,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #boxSelect: BoxSelectSession | null = null;
   #draw: DrawSession | null = null;
   #input: LeaferEngineSyncInput | null = null;
+  #pen: PenSession | null = null;
   #projection: LeaferSceneProjection | null = null;
   #synchronizing = false;
   #textBefore: { nodeId: string; text: string } | null = null;
@@ -165,6 +196,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   sync(input: LeaferEngineSyncInput): void {
     if (this.#disposed) return;
     const previous = this.#input;
+    const pendingPenRequest =
+      previous?.tool === "pen" && input.tool !== "pen" && this.#pen
+        ? this.#takePenRequest(false)
+        : null;
     this.#input = input;
     const identityChanged =
       !previous ||
@@ -226,6 +261,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         if (
           identityChanged ||
           !contiguousChanges ||
+          (this.#pen?.parentId !== undefined &&
+            this.#pen.parentId !== null &&
+            invalidatesInteraction(this.#pen.parentId))
+        ) {
+          this.#cancelPen();
+        }
+        if (
+          identityChanged ||
+          !contiguousChanges ||
           (this.#transform &&
             [...this.#transform.before.keys()].some((nodeId) =>
               invalidatesInteraction(nodeId),
@@ -273,6 +317,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     } finally {
       this.#synchronizing = false;
     }
+    if (pendingPenRequest) this.#submitPenRequest(pendingPenRequest);
   }
 
   dispose(): void {
@@ -286,6 +331,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#booleanNodeIds.clear();
     this.#boxSelect = null;
     this.#cancelDraw();
+    this.#cancelPen();
     if (this.#viewportFrame !== null) cancelAnimationFrame(this.#viewportFrame);
     if (this.#editorFrame !== null) cancelAnimationFrame(this.#editorFrame);
     this.#cancelBooleanPreview();
@@ -323,6 +369,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       EditorSkewEvent,
       InnerEditorEvent,
       MoveEvent,
+      PointerEvent,
       ResizeEvent,
       ZoomEvent,
     } = this.#leafer;
@@ -364,6 +411,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#finishBoxSelect(event);
       this.#finishDraw(event);
     });
+    this.#app.on(PointerEvent.DOWN, (event: unknown) =>
+      this.#penPointerDown(event),
+    );
+    this.#app.on(PointerEvent.MOVE, (event: unknown) =>
+      this.#penPointerMove(event),
+    );
+    this.#app.on(PointerEvent.UP, (event: unknown) =>
+      this.#penPointerUp(event),
+    );
 
     const viewportChanged = () => {
       this.#scheduleViewport();
@@ -1049,6 +1105,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       return;
     }
     const drag = asLeaferEvent(event);
+    const client = eventClientPoint(drag);
     this.#boxSelect = {
       additiveNodeIds: new Set(
         drag.shiftKey
@@ -1059,7 +1116,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           : [],
       ),
       start: drag.getInnerPoint(this.#editor.selector),
-      startClient: { x: drag.clientX, y: drag.clientY },
+      startClient: client,
     };
   }
 
@@ -1068,11 +1125,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#boxSelect = null;
     if (!session || this.#disposed) return;
     const drag = asLeaferEvent(event);
+    const client = eventClientPoint(drag);
     if (
       drag.isCancel ||
       Math.hypot(
-        drag.clientX - session.startClient.x,
-        drag.clientY - session.startClient.y,
+        client.x - session.startClient.x,
+        client.y - session.startClient.y,
       ) < MIN_DRAW_DISTANCE
     ) {
       return;
@@ -1113,9 +1171,248 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
   }
 
+  #penPointerDown(event: unknown): void {
+    const input = this.#input;
+    if (!input || input.tool !== "pen" || this.#disposed) return;
+    const pointer = asLeaferEvent(event);
+    if (pointer.isCancel || pointer.right || pointer.middle) return;
+    const existing = this.#pen;
+    if (existing) {
+      const point = pointer.getInnerPoint(existing.parent);
+      if (this.#isPenCloseCandidate(existing, point)) {
+        this.#finishPen(true);
+        return;
+      }
+      const previous = existing.draft.vertices.at(-1);
+      const zoom = Math.max(MATRIX_EPSILON, Math.abs(input.viewport.zoom));
+      if (
+        previous &&
+        pointDistance(previous, point) * zoom < MIN_DRAW_DISTANCE
+      ) {
+        return;
+      }
+      if (!appendPenVertex(existing.draft, point)) return;
+      existing.activeVertexIndex = existing.draft.vertices.length - 1;
+      existing.closeCandidate = false;
+      existing.cursor = point;
+      existing.pointerDownClient = eventClientPoint(pointer);
+      this.#updatePenPreview();
+      return;
+    }
+
+    const parentId = this.#resolveDrawParent(pointer.target, "pen");
+    if (parentId === undefined) return;
+    const parent = parentId
+      ? (this.#elements.get(parentId) as LeaferGroup | undefined)
+      : (this.#app.tree as unknown as LeaferGroup);
+    if (!parent) return;
+    const point = pointer.getInnerPoint(parent);
+    const previewGroup = new this.#leafer.Group({
+      editable: false,
+      hittable: false,
+    }) as LeaferGroup;
+    const previewPath = new this.#leafer.Path({
+      editable: false,
+      fill: null,
+      hittable: false,
+      stroke: LEAFER_EDITOR_SELECTION_COLOR,
+      strokeCap: "round",
+      strokeJoin: "round",
+    }) as LeaferElement;
+    const handlePath = new this.#leafer.Path({
+      editable: false,
+      fill: null,
+      hittable: false,
+      stroke: "#8aa4ff",
+    }) as LeaferElement;
+    previewGroup.add(previewPath);
+    previewGroup.add(handlePath);
+    parent.add(previewGroup);
+    this.#pen = {
+      activeVertexIndex: 0,
+      anchors: [],
+      closeCandidate: false,
+      cursor: point,
+      draft: createPenDraft(point),
+      handlePath,
+      pageId: input.pageId,
+      parent,
+      parentId,
+      pointerDownClient: eventClientPoint(pointer),
+      previewGroup,
+      previewPath,
+    };
+    this.#updatePenPreview();
+  }
+
+  #penPointerMove(event: unknown): void {
+    const session = this.#pen;
+    const input = this.#input;
+    if (!session || !input || input.tool !== "pen" || this.#disposed) return;
+    const pointer = asLeaferEvent(event);
+    if (pointer.isCancel) return;
+    const point = pointer.getInnerPoint(session.parent);
+    session.cursor = point;
+    if (
+      session.activeVertexIndex !== null &&
+      session.pointerDownClient !== null
+    ) {
+      const vertex = session.draft.vertices[session.activeVertexIndex];
+      const client = eventClientPoint(pointer);
+      const dragged =
+        pointDistance(session.pointerDownClient, client) >= MIN_DRAW_DISTANCE;
+      if (vertex) {
+        setPenVertexHandle(
+          session.draft,
+          session.activeVertexIndex,
+          dragged
+            ? { x: point.x - vertex.x, y: point.y - vertex.y }
+            : { x: 0, y: 0 },
+        );
+      }
+      session.closeCandidate = false;
+    } else {
+      session.closeCandidate = this.#isPenCloseCandidate(session, point);
+    }
+    this.#updatePenPreview();
+  }
+
+  #penPointerUp(event: unknown): void {
+    const session = this.#pen;
+    if (!session || session.activeVertexIndex === null) return;
+    this.#penPointerMove(event);
+    if (!this.#pen) return;
+    this.#pen.activeVertexIndex = null;
+    this.#pen.pointerDownClient = null;
+    this.#pen.closeCandidate = this.#isPenCloseCandidate(
+      this.#pen,
+      this.#pen.cursor,
+    );
+    this.#updatePenPreview();
+  }
+
+  #isPenCloseCandidate(session: PenSession, point: Point): boolean {
+    const first = session.draft.vertices[0];
+    if (!first || session.draft.vertices.length < 3) return false;
+    const zoom = Math.max(
+      MATRIX_EPSILON,
+      Math.abs(this.#input?.viewport.zoom ?? 1),
+    );
+    return pointDistance(first, point) * zoom <= PEN_CLOSE_DISTANCE;
+  }
+
+  #updatePenPreview(): void {
+    const session = this.#pen;
+    if (!session) return;
+    const zoom = Math.max(
+      MATRIX_EPSILON,
+      Math.abs(this.#input?.viewport.zoom ?? 1),
+    );
+    const anchorSize = 7 / zoom;
+    const path = penDraftPreviewPath(
+      session.draft,
+      session.cursor,
+      session.closeCandidate,
+    );
+    session.previewPath.set({
+      path: path ?? "",
+      fill: session.closeCandidate
+        ? {
+            type: "solid",
+            color: LEAFER_EDITOR_SELECTION_COLOR,
+            opacity: 0.08,
+          }
+        : "transparent",
+      strokeWidth: 1.5 / zoom,
+    });
+    session.handlePath.set({
+      path: penDraftHandlePath(session.draft) ?? "",
+      strokeWidth: 1 / zoom,
+    });
+
+    while (session.anchors.length > session.draft.vertices.length) {
+      const anchor = session.anchors.pop();
+      anchor?.remove();
+      anchor?.destroy();
+    }
+    session.draft.vertices.forEach((vertex, index) => {
+      let anchor = session.anchors[index];
+      if (!anchor) {
+        anchor = new this.#leafer.Ellipse({
+          editable: false,
+          hittable: false,
+        });
+        session.anchors.push(anchor);
+        session.previewGroup.add(anchor);
+      }
+      const closeTarget = index === 0 && session.closeCandidate;
+      anchor.set({
+        x: vertex.x - anchorSize / 2,
+        y: vertex.y - anchorSize / 2,
+        width: anchorSize,
+        height: anchorSize,
+        fill: closeTarget ? LEAFER_EDITOR_SELECTION_COLOR : "#ffffff",
+        stroke: LEAFER_EDITOR_SELECTION_COLOR,
+        strokeWidth: 1.25 / zoom,
+      });
+    });
+  }
+
+  #takePenRequest(closed: boolean): LeaferCreateVectorRequest | null {
+    const session = this.#pen;
+    if (!session) return null;
+    const network = penDraftToVectorNetwork(session.draft, closed);
+    const pageId = session.pageId;
+    const parentId = session.parentId;
+    this.#cancelPen();
+    if (!network) return null;
+    const normalized = normalizeVectorNetwork(network);
+    if (!normalized.ok || !normalized.offset) {
+      const message = normalized.ok
+        ? "Pen geometry could not be normalized"
+        : normalized.issues.map((issue) => issue.message).join("; ");
+      this.#report(new Error(message));
+      return null;
+    }
+    return {
+      closed,
+      height: normalized.bounds.height,
+      network: normalized.network,
+      pageId,
+      parentId,
+      width: normalized.bounds.width,
+      x: normalized.offset.x,
+      y: normalized.offset.y,
+    };
+  }
+
+  #finishPen(closed: boolean): void {
+    const request = this.#takePenRequest(closed);
+    if (request) this.#submitPenRequest(request);
+  }
+
+  #submitPenRequest(request: LeaferCreateVectorRequest): void {
+    const accepted = this.#callbacks.onCreateVector(request);
+    if (!accepted) this.#restoreProjection();
+  }
+
+  #cancelPen(): void {
+    const session = this.#pen;
+    if (!session) return;
+    this.#pen = null;
+    session.previewGroup.remove();
+    session.previewGroup.destroy();
+  }
+
   #startDraw(event: unknown): void {
     const input = this.#input;
-    if (!input || input.tool === "select" || this.#draw || this.#disposed)
+    if (
+      !input ||
+      input.tool === "select" ||
+      input.tool === "pen" ||
+      this.#draw ||
+      this.#disposed
+    )
       return;
     const drag = asLeaferEvent(event);
     const parentId = this.#resolveDrawParent(drag.target, input.tool);
@@ -1125,6 +1422,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       : (this.#app.tree as unknown as LeaferGroup);
     if (!parent) return;
     const start = drag.getInnerPoint(parent);
+    const client = eventClientPoint(drag);
     const preview = this.#createDrawPreview(input.tool);
     const lineTool = input.tool === "line" || input.tool === "arrow";
     preview.set(
@@ -1139,7 +1437,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       preview,
       ...(lineTool ? { lineStart: start, lineEnd: start } : {}),
       start,
-      startClient: { x: drag.clientX, y: drag.clientY },
+      startClient: client,
       tool: input.tool,
     };
   }
@@ -1148,6 +1446,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const session = this.#draw;
     if (!session) return;
     const drag = asLeaferEvent(event);
+    const client = eventClientPoint(drag);
     const parent = session.parentId
       ? (this.#elements.get(session.parentId) as LeaferGroup | undefined)
       : (this.#app.tree as unknown as LeaferGroup);
@@ -1156,8 +1455,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const lineTool = session.tool === "line" || session.tool === "arrow";
     session.dragged =
       Math.hypot(
-        drag.clientX - session.startClient.x,
-        drag.clientY - session.startClient.y,
+        client.x - session.startClient.x,
+        client.y - session.startClient.y,
       ) >= MIN_DRAW_DISTANCE;
     if (lineTool) {
       const endpoints = lineEndpointsFromDrag(
@@ -1223,7 +1522,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!accepted) this.#restoreProjection();
   }
 
-  #createDrawPreview(tool: Exclude<LeaferCanvasTool, "select">): LeaferElement {
+  #createDrawPreview(tool: LeaferBoxCreateTool): LeaferElement {
     if (tool === "line" || tool === "arrow") {
       return new this.#leafer.Arrow({
         editable: false,
@@ -1377,7 +1676,34 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #onWindowKeyDown = (event: KeyboardEvent) => {
+    if (this.#pen) {
+      if (event.code === "Escape" || event.code === "Enter") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (this.#pen.draft.vertices.length >= 2) this.#finishPen(false);
+        else this.#cancelPen();
+        return;
+      }
+      if (event.code === "Backspace" || event.code === "Delete") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        removeLastPenVertex(this.#pen.draft);
+        if (this.#pen.draft.vertices.length === 0) {
+          this.#cancelPen();
+        } else {
+          this.#pen.activeVertexIndex = null;
+          this.#pen.pointerDownClient = null;
+          this.#pen.closeCandidate = false;
+          const last = this.#pen.draft.vertices.at(-1)!;
+          this.#pen.cursor = { x: last.x, y: last.y };
+          this.#updatePenPreview();
+        }
+        return;
+      }
+    }
     if (event.code === "Escape" && this.#draw) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
       this.#cancelDraw();
       return;
     }
@@ -1701,12 +2027,27 @@ interface LeaferEventLike {
   clientY: number;
   getInnerPoint(relative: unknown): { x: number; y: number };
   isCancel?: boolean;
+  middle?: boolean;
+  right?: boolean;
   shiftKey: boolean;
   target: unknown;
+  x?: number;
+  y?: number;
 }
 
 function asLeaferEvent(value: unknown): LeaferEventLike {
   return value as LeaferEventLike;
+}
+
+function eventClientPoint(event: LeaferEventLike): Point {
+  return {
+    x: Number.isFinite(event.clientX) ? event.clientX : (event.x ?? 0),
+    y: Number.isFinite(event.clientY) ? event.clientY : (event.y ?? 0),
+  };
+}
+
+function pointDistance(left: Point, right: Point): number {
+  return Math.hypot(left.x - right.x, left.y - right.y);
 }
 
 function isElement(value: unknown): value is LeaferElement {

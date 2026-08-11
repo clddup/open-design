@@ -3,6 +3,7 @@ import type {
   DesignDocument,
   DesignOperation,
   SelectionState,
+  VectorNetwork,
   ViewportState,
 } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
@@ -16,7 +17,10 @@ export type LeaferCanvasTool =
   | "arrow"
   | "polygon"
   | "star"
+  | "pen"
   | "text";
+
+export type LeaferBoxCreateTool = Exclude<LeaferCanvasTool, "select" | "pen">;
 
 export type LeaferOperationKind =
   "move" | "resize" | "rotate" | "skew" | "transform" | "text";
@@ -33,7 +37,18 @@ export interface LeaferCreateRequest {
   pageId: string;
   parentId: string | null;
   start?: { x: number; y: number };
-  tool: Exclude<LeaferCanvasTool, "select">;
+  tool: LeaferBoxCreateTool;
+  width: number;
+  x: number;
+  y: number;
+}
+
+export interface LeaferCreateVectorRequest {
+  closed: boolean;
+  height: number;
+  network: VectorNetwork;
+  pageId: string;
+  parentId: string | null;
   width: number;
   x: number;
   y: number;
@@ -41,6 +56,7 @@ export interface LeaferCreateRequest {
 
 export interface LeaferEngineCallbacks {
   onCreate(request: LeaferCreateRequest): boolean;
+  onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
   onOperations(request: LeaferOperationRequest): boolean;
   onSelectionChange(nodeIds: string[], anchorNodeId?: string): void;

@@ -64,6 +64,9 @@ describe("OpenDesign Agent system prompt", () => {
       "Build every new composite object",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "editable network of vertices and cubic segment tangents",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "use opendesign_edit_hierarchy with the explicit stable Page and node IDs",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

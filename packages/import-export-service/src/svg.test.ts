@@ -7,6 +7,7 @@ import {
   type Paint,
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "@opendesign/geometry-service/boolean-resolver";
+import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
 import {
   createPathKitGeometryProvider,
   type VectorGeometryProvider,
@@ -108,9 +109,12 @@ describe("versioned SVG interchange", () => {
       },
     });
     if (!importedPath || !isPathLike(importedPath)) return;
+    const importedPathData = resolvePathPropertiesData(importedPath.properties);
+    expect(importedPathData).not.toBeNull();
+    if (importedPathData === null) return;
     const reprojected = geometry.transform(
       {
-        path: importedPath.properties.path,
+        path: importedPathData,
         fillRule: importedPath.properties.fillRule ?? "nonzero",
       },
       importedPath.transform,
@@ -202,6 +206,137 @@ describe("versioned SVG interchange", () => {
     expect(findImportedSource(imported.nodes, "vector_mark")?.kind).toBe(
       "vector",
     );
+    expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
+      isDesignDocument,
+    );
+  });
+
+  it("round-trips controlled editable vector networks without flattening point semantics", () => {
+    const document: DesignDocument = {
+      format: DESIGN_FORMAT,
+      schemaVersion: DESIGN_SCHEMA_VERSION,
+      documentId: "document_editable_vector",
+      revision: 0,
+      pageOrder: ["page_1"],
+      pagesById: {
+        page_1: {
+          id: "page_1",
+          name: "Page 1",
+          rootNodeIds: ["vector_1"],
+          extensions: {},
+        },
+      },
+      nodesById: {
+        vector_1: {
+          id: "vector_1",
+          name: "Editable vector",
+          parentId: null,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 12, 16],
+          size: { width: 100, height: 100 },
+          opacity: 1,
+          extensions: {},
+          kind: "vector",
+          properties: {
+            network: {
+              vertices: [
+                { id: "vertex_a", x: 0, y: 0 },
+                { id: "vertex_b", x: 100, y: 0 },
+                { id: "vertex_c", x: 50, y: 100 },
+              ],
+              segments: [
+                {
+                  id: "segment_ab",
+                  startVertexId: "vertex_a",
+                  endVertexId: "vertex_b",
+                  tangentStart: { x: 25, y: 0 },
+                  tangentEnd: { x: -25, y: 0 },
+                },
+                {
+                  id: "segment_bc",
+                  startVertexId: "vertex_b",
+                  endVertexId: "vertex_c",
+                },
+                {
+                  id: "segment_ca",
+                  startVertexId: "vertex_c",
+                  endVertexId: "vertex_a",
+                },
+              ],
+              paths: [
+                {
+                  id: "path_1",
+                  closed: true,
+                  segments: [
+                    { segmentId: "segment_ab", reversed: false },
+                    { segmentId: "segment_bc", reversed: false },
+                    { segmentId: "segment_ca", reversed: false },
+                  ],
+                },
+              ],
+              regions: [
+                {
+                  id: "region_1",
+                  windingRule: "nonzero",
+                  loops: [{ pathId: "path_1", reversed: false }],
+                },
+              ],
+            },
+            fillRule: "nonzero",
+            fills: [{ type: "solid", color: "#4f7fff", opacity: 1 }],
+            strokes: [],
+            strokeWidth: 0,
+          },
+        },
+      },
+      componentsById: {},
+      variantSetsById: {},
+      tokenCollectionsById: {},
+      tokensById: {},
+      interactionsById: {},
+      assetsById: {},
+      extensions: {},
+    };
+    const exported = exportSvg({
+      document,
+      rootNodeIds: ["vector_1"],
+      viewport: { x: 0, y: 0, width: 150, height: 150 },
+      includeLayerIds: true,
+      title: "Editable vector",
+    });
+
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues).toEqual([]);
+    expect(exported.svg).toContain(
+      'data-opendesign-vector-network-version="1"',
+    );
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "editable_vector" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    const vector = imported.nodes.find((node) => node.kind === "vector");
+    const sourceVector = document.nodesById.vector_1;
+    if (
+      !sourceVector ||
+      sourceVector.kind !== "vector" ||
+      !("network" in sourceVector.properties)
+    ) {
+      throw new Error("Missing editable vector source fixture");
+    }
+    expect(vector).toMatchObject({
+      kind: "vector",
+      transform: [1, 0, 0, 1, 12, 16],
+      size: { width: 100, height: 100 },
+      properties: {
+        network: sourceVector.properties.network,
+      },
+    });
     expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
       isDesignDocument,
     );

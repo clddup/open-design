@@ -8,6 +8,7 @@ import type {
   RectangleNode,
   StarNode,
   TextNode,
+  VectorNode,
   ViewportState,
 } from "@opendesign/design-contracts";
 import type { EditorRuntime, EditorSnapshot } from "@opendesign/editor-runtime";
@@ -18,6 +19,7 @@ import {
 import {
   createLeaferEngineAdapter,
   type LeaferCreateRequest,
+  type LeaferCreateVectorRequest,
   type LeaferEngineAdapter,
   type LeaferEngineSyncInput,
   type LeaferFidelityWarning,
@@ -36,7 +38,7 @@ import {
 import type { MutableRefObject } from "react";
 import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
-import { isTool, type Tool } from "../state/editor";
+import { isTool } from "../state/editor";
 
 export function Canvas({
   activePageId,
@@ -216,6 +218,71 @@ export function Canvas({
     [applyOperations, runtime, t],
   );
 
+  const createVectorNode = useCallback(
+    (request: LeaferCreateVectorRequest) => {
+      const current = runtime.getSnapshot();
+      const parent = request.parentId
+        ? current.document.nodesById[request.parentId]
+        : undefined;
+      if (
+        request.parentId &&
+        (!parent || (parent.kind !== "frame" && parent.kind !== "group"))
+      ) {
+        return false;
+      }
+      const target =
+        parent?.childIds ??
+        current.document.pagesById[request.pageId]?.rootNodeIds;
+      if (!target) return false;
+
+      const id = `vector_${Date.now()}_${current.document.revision}`;
+      const node: VectorNode = {
+        id,
+        name: t("canvas.newNode", { kind: t("node.vector") }),
+        parentId: request.parentId,
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, request.x, request.y],
+        size: { width: request.width, height: request.height },
+        opacity: 1,
+        extensions: {},
+        kind: "vector",
+        properties: {
+          network: request.network,
+          fillRule: "nonzero",
+          fills: request.closed
+            ? [{ type: "solid", color: "#4f7fff", opacity: 1 }]
+            : [],
+          strokes: request.closed
+            ? []
+            : [{ type: "solid", color: "#151515", opacity: 1 }],
+          strokeWidth: request.closed ? 0 : 2,
+          strokeAlign: "center",
+          strokeCap: "round",
+          strokeJoin: "round",
+          dashPattern: [],
+        },
+      };
+      const accepted = applyOperations({
+        kind: "transform",
+        operations: [
+          {
+            commandId: `insert_${id}`,
+            type: "insert_element",
+            pageId: request.pageId,
+            parentId: request.parentId,
+            index: target.length,
+            node,
+          },
+        ],
+      });
+      if (accepted) runtime.setSelection([id], id);
+      return accepted;
+    },
+    [applyOperations, runtime, t],
+  );
+
   const updateViewport = useCallback(
     (viewport: ViewportState) => {
       const current = runtime.getSnapshot().state.viewport;
@@ -249,6 +316,7 @@ export function Canvas({
 
     void createLeaferEngineAdapter(element, {
       onCreate: createNode,
+      onCreateVector: createVectorNode,
       onError: (error) => {
         if (!disposed)
           setRenderError(error.message || t("canvas.renderFailed"));
@@ -285,7 +353,14 @@ export function Canvas({
       adapter.current?.dispose();
       adapter.current = null;
     };
-  }, [applyOperations, createNode, runtime, t, updateViewport]);
+  }, [
+    applyOperations,
+    createNode,
+    createVectorNode,
+    runtime,
+    t,
+    updateViewport,
+  ]);
 
   useEffect(() => {
     const changes = changesByRevision.current.get(snapshot.document.revision);
@@ -506,7 +581,7 @@ function operationLabel(
 }
 
 function createDesignNode(
-  tool: Exclude<Tool, "select">,
+  tool: LeaferCreateRequest["tool"],
   id: string,
   parentId: string | null,
   point: { x: number; y: number },

@@ -14,6 +14,7 @@ import type {
   VectorGeometryProvider,
   VectorGeometryResult,
 } from "./vector-path.js";
+import { resolvePathPropertiesData } from "./editable-vector.js";
 
 export const BOOLEAN_GEOMETRY_RESOLVER_VERSION = 1 as const;
 
@@ -358,7 +359,18 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
         ),
       );
     } else {
-      path = node.properties.path;
+      const resolvedPath = resolvePathPropertiesData(node.properties);
+      if (resolvedPath === null) {
+        return {
+          ok: false,
+          issue: {
+            code: "unsupported-operand",
+            message: `Vector network operand ${node.id} is invalid`,
+            nodeId: node.id,
+          },
+        };
+      }
+      path = resolvedPath;
     }
     return this.#providerAttempt(
       node.id,
@@ -395,10 +407,14 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
     let strokeGeometry: GeometryValue | undefined;
     if (hasStroke) {
       const align = properties.strokeAlign ?? "center";
+      const resolvedPath =
+        node.kind === "path" || node.kind === "vector"
+          ? resolvePathPropertiesData(node.properties)
+          : null;
       if (
         align !== "center" &&
         (node.kind === "path" || node.kind === "vector") &&
-        !hasOnlyClosedSubpaths(node.properties.path)
+        (resolvedPath === null || !hasOnlyClosedSubpaths(resolvedPath))
       ) {
         return {
           ok: false,
@@ -600,10 +616,15 @@ class CachedBooleanGeometryResolver implements BooleanGeometryResolver {
             child.properties.cornerRadius,
           ];
         } else {
-          shape = [
-            child.properties.path,
-            child.properties.fillRule ?? "nonzero",
-          ];
+          const resolvedPath = resolvePathPropertiesData(child.properties);
+          if (resolvedPath === null) {
+            return this.#fail(state, {
+              code: "unsupported-operand",
+              message: `Vector network operand ${child.id} is invalid`,
+              nodeId: child.id,
+            });
+          }
+          shape = [resolvedPath, child.properties.fillRule ?? "nonzero"];
         }
         children.push([
           child.id,

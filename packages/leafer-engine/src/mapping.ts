@@ -10,6 +10,7 @@ import type {
 import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
 import { resolveImagePlacement } from "@opendesign/image-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
+import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
 import type { LeaferBooleanEditScope, LeaferFidelityWarning } from "./types.js";
 
 export const BOOLEAN_RESULT_ELEMENT_PREFIX =
@@ -422,7 +423,8 @@ function toElementSpec(
     case "vector":
     case "path": {
       tag = "Path";
-      const path = readPath(node.properties.path);
+      const pathData = resolvePathPropertiesData(node.properties);
+      const path = pathData === null ? null : readPath(pathData);
       if (!path) {
         warnings.push({
           code: "invalid-path",

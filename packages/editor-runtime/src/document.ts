@@ -13,6 +13,7 @@ import {
   migrateDesignDocument,
   schemaValidationIssues,
 } from "@opendesign/design-contracts";
+import { validateVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 
 export interface DocumentInvariantIssue {
   path: string;
@@ -118,6 +119,17 @@ export function validateDocumentInvariants(
         issues.push({
           path: `/nodesById/${nodeId}/properties/assetId`,
           message: `image asset ${node.properties.assetId} does not exist`,
+        });
+      }
+    }
+    if (
+      (node.kind === "path" || node.kind === "vector") &&
+      "network" in node.properties
+    ) {
+      for (const issue of validateVectorNetwork(node.properties.network)) {
+        issues.push({
+          path: `/nodesById/${nodeId}/properties/network${issue.path}`,
+          message: issue.message,
         });
       }
     }

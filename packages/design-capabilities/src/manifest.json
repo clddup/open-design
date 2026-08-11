@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-11",
-  "documentSchemaVersion": "1.6.0",
+  "documentSchemaVersion": "1.7.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -119,7 +119,7 @@
         "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, cross-container reparenting, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
         "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。"
       },
-      "provider": "DesignDocument 1.6.0 + EditorRuntime",
+      "provider": "DesignDocument 1.7.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -204,40 +204,67 @@
       "id": "vector.path-rendering",
       "category": "vector",
       "status": "degraded",
-      "label": { "en": "SVG path rendering", "zh-CN": "SVG Path 渲染" },
-      "description": {
-        "en": "Persist and render portable SVG path data with fills, strokes, gradients, effects, masks, and blend modes.",
-        "zh-CN": "持久化并渲染可移植 SVG Path 数据及其填充、描边、渐变、效果、蒙版和混合模式。"
+      "label": {
+        "en": "Editable paths and Pen",
+        "zh-CN": "可编辑 Path 与 Pen"
       },
-      "provider": "DesignDocument 1.6.0 + Leafer Path adapter",
-      "requiredSurfaces": ["contract", "runtime", "agent", "render"],
+      "description": {
+        "en": "Create editable cubic contours with Pen, or preserve exact SVG path data, then render both through one Path projection with professional appearance.",
+        "zh-CN": "使用 Pen 创建可编辑三次曲线轮廓，或精确保留 SVG Path 数据，并通过同一 Path 投影渲染专业外观。"
+      },
+      "provider": "DesignDocument 1.7.0 + editable-vector geometry service + Leafer Pen/Path adapter + controlled SVG metadata",
+      "requiredSurfaces": [
+        "contract",
+        "runtime",
+        "human",
+        "agent",
+        "render",
+        "export"
+      ],
       "surfaces": {
         "contract": "available",
         "runtime": "available",
-        "human": "unavailable",
+        "human": "available",
         "agent": "available",
         "render": "available",
-        "export": "unavailable"
+        "export": "degraded"
       },
       "limitations": [
         {
-          "en": "Single-path SVG data and the controlled SVG interchange subset are supported, but there is no Pen tool, point/handle editing, multi-contour vector network, or complete SVG fidelity.",
-          "zh-CN": "当前支持单路径 SVG 数据及受控 SVG 交换子集，但没有 Pen、节点/手柄编辑、多轮廓矢量网络或完整 SVG 保真。"
+          "en": "Pen supports click vertices, click-drag mirrored cubic handles, first-point closure, Enter/Escape open completion, Backspace rollback, tool-switch completion, tight bounds, and one undoable transaction. It currently authors one non-branching contour.",
+          "zh-CN": "Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。"
+        },
+        {
+          "en": "Existing-node vertex/handle editing, point types, multiple contours, branch creation, connect/disconnect, reverse, flatten, outline stroke, complete external SVG fidelity, pixel baselines, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "已有节点的顶点/手柄编辑、节点类型、多轮廓、分支创建、连接/断开、反转、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。"
+        },
+        {
+          "en": "Controlled OpenDesign SVG metadata preserves schema-valid editable networks only when it exactly matches the standard rendered path. External SVG without metadata remains exact path data rather than guessed editable topology.",
+          "zh-CN": "受控 OpenDesign SVG metadata 只在通过 schema、拓扑且与标准渲染 path 精确匹配时保留 editable network；没有 metadata 的外部 SVG 保持为精确 path 数据，不猜测可编辑拓扑。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/design-contracts/src/index.test.ts",
+          "packages/geometry-service/src/editable-vector.test.ts",
+          "packages/editor-runtime/src/index.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
+          "packages/leafer-engine/src/pen-tool.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
           "packages/leafer-engine/src/professional-fixtures.test.ts",
+          "packages/import-export-service/src/svg-editable-vector.test.ts",
+          "packages/import-export-service/src/svg.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/App.test.tsx",
           "packages/editor-runtime/src/diagnostics.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts"
         ],
         "manual": []
       },
       "references": [
-        "https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks"
+        "https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks",
+        "https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers",
+        "https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/pen.rs"
       ]
     },
     {
@@ -249,7 +276,7 @@
         "en": "Create and directly edit directed straight lines with independent start and end decorations, professional stroke controls, and editable SVG interchange.",
         "zh-CN": "创建并直接编辑有方向的直线，独立设置起终点装饰和专业描边，并通过 SVG 保持可编辑交换。"
       },
-      "provider": "DesignDocument 1.6.0 + Leafer Arrow / LineEditTool + SVG controlled markers",
+      "provider": "DesignDocument 1.7.0 + Leafer Arrow / LineEditTool + SVG controlled markers",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -309,7 +336,7 @@
         "en": "Create, resize, restyle, and exchange semantic regular Polygon and Star nodes without flattening them into generic paths.",
         "zh-CN": "创建、缩放、调整外观并交换语义化 Polygon 与 Star 节点，不将其扁平化为普通 Path。"
       },
-      "provider": "DesignDocument 1.6.0 + Leafer Polygon/Star + controlled SVG regular-shape metadata",
+      "provider": "DesignDocument 1.7.0 + Leafer Polygon/Star + controlled SVG regular-shape metadata",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -402,7 +429,7 @@
         "en": "Non-destructive union, subtract, intersect, and exclude groups whose source layers remain editable.",
         "zh-CN": "非破坏性的 union、subtract、intersect 与 exclude，且源图层保持可编辑。"
       },
-      "provider": "DesignDocument 1.6.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
+      "provider": "DesignDocument 1.7.0 + EditorRuntime Boolean planner + recursive Skia PathKit resolver + Leafer derived projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -456,7 +483,7 @@
         "en": "Apply multiple paints and strokes, gradients, shadows, glows, blur, blend modes, masks, and advanced stroke properties.",
         "zh-CN": "应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。"
       },
-      "provider": "DesignDocument 1.6.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
+      "provider": "DesignDocument 1.7.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -548,7 +575,7 @@
         "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
         "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
       },
-      "provider": "DesignDocument 1.6.0 + OpenDesign Image service crop geometry + Leafer projection",
+      "provider": "DesignDocument 1.7.0 + OpenDesign Image service crop geometry + Leafer projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "degraded",
@@ -619,7 +646,7 @@
         "en": "Create, render, transform, and edit a text layer with one shared font style and alignment.",
         "zh-CN": "创建、渲染、变换和编辑使用单一共享字体样式与对齐方式的文字图层。"
       },
-      "provider": "DesignDocument 1.6.0 + Leafer TextEditor",
+      "provider": "DesignDocument 1.7.0 + Leafer TextEditor",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",

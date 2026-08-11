@@ -12,6 +12,7 @@ import {
   type PolygonNode,
   type RectangleNode,
   type StarNode,
+  type VectorNode,
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "./boolean-resolver.js";
 import {
@@ -134,6 +135,42 @@ describe("non-destructive Boolean geometry resolver", () => {
       width: 20,
       height: 20,
     });
+  });
+
+  it("resolves editable vector networks and invalidates changed vertex geometry", () => {
+    const editable = vectorNode("editable", "network_boolean");
+    const hidden = rectangle("hidden_network", "network_boolean", 10, 10);
+    hidden.visible = false;
+    const group = booleanNode("network_boolean", null, "union", [
+      editable.id,
+      hidden.id,
+    ]);
+    const document = designDocument([group, editable, hidden], [group.id]);
+    const resolver = createBooleanGeometryResolver(provider);
+    const first = resolver.resolve(document, "page");
+
+    expect(first.issues).toEqual([]);
+    expect(first.resultsByNodeId.get(group.id)?.bounds).toEqual({
+      x: 12,
+      y: 16,
+      width: 100,
+      height: 100,
+    });
+
+    const changed = structuredClone(document);
+    changed.revision += 1;
+    const changedVector = changed.nodesById.editable;
+    if (
+      !changedVector ||
+      changedVector.kind !== "vector" ||
+      !("network" in changedVector.properties)
+    ) {
+      throw new Error("Missing editable vector operand");
+    }
+    changedVector.properties.network.vertices[2]!.y = 120;
+    expect(resolver.resolve(changed, "page").computedNodeIds).toEqual([
+      group.id,
+    ]);
   });
 
   it("uses fill plus aligned stroke geometry and supports nested Booleans", () => {
@@ -481,6 +518,69 @@ function pathNode(
     },
     size,
     transform,
+    visible: true,
+  };
+}
+
+function vectorNode(id: string, parentId: string | null): VectorNode {
+  return {
+    childIds: [],
+    extensions: {},
+    id,
+    kind: "vector",
+    locked: false,
+    name: id,
+    opacity: 1,
+    parentId,
+    properties: {
+      network: {
+        vertices: [
+          { id: "vertex_a", x: 0, y: 0 },
+          { id: "vertex_b", x: 100, y: 0 },
+          { id: "vertex_c", x: 50, y: 100 },
+        ],
+        segments: [
+          {
+            id: "segment_ab",
+            startVertexId: "vertex_a",
+            endVertexId: "vertex_b",
+          },
+          {
+            id: "segment_bc",
+            startVertexId: "vertex_b",
+            endVertexId: "vertex_c",
+          },
+          {
+            id: "segment_ca",
+            startVertexId: "vertex_c",
+            endVertexId: "vertex_a",
+          },
+        ],
+        paths: [
+          {
+            id: "path_1",
+            closed: true,
+            segments: [
+              { segmentId: "segment_ab", reversed: false },
+              { segmentId: "segment_bc", reversed: false },
+              { segmentId: "segment_ca", reversed: false },
+            ],
+          },
+        ],
+        regions: [
+          {
+            id: "region_1",
+            windingRule: "nonzero",
+            loops: [{ pathId: "path_1", reversed: false }],
+          },
+        ],
+      },
+      fills: [solid("#111827")],
+      strokes: [],
+      strokeWidth: 0,
+    },
+    size: { width: 100, height: 100 },
+    transform: [1, 0, 0, 1, 12, 16],
     visible: true,
   };
 }

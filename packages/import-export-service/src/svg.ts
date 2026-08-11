@@ -15,6 +15,10 @@ import type {
   VectorFillRule,
   VectorGeometryProvider,
 } from "@opendesign/geometry-service/vector-path";
+import {
+  normalizeVectorNetwork,
+  resolvePathPropertiesData,
+} from "@opendesign/geometry-service/editable-vector";
 import { DOMImplementation, DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import {
   applyToPoint,
@@ -61,6 +65,10 @@ import {
   readSvgRegularShape,
   writeSvgRegularShape,
 } from "./svg-regular-shapes.js";
+import {
+  readSvgEditableVector,
+  writeSvgEditableVector,
+} from "./svg-editable-vector.js";
 
 export * from "./svg-issues.js";
 
@@ -667,9 +675,34 @@ function exportNode(
       element = context.document.createElementNS(SVG_NAMESPACE, "polygon");
       writeSvgRegularShape(element, node);
     } else if (node.kind === "path" || node.kind === "vector") {
+      const path = resolvePathPropertiesData(node.properties);
+      if (path === null) {
+        context.issues.push(
+          svgIssue(
+            "invalid-geometry",
+            "error",
+            `Editable vector network ${node.id} is invalid and cannot be exported`,
+            { nodeId: node.id },
+          ),
+        );
+        return null;
+      }
       element = context.document.createElementNS(SVG_NAMESPACE, "path");
-      element.setAttribute("d", node.properties.path);
+      element.setAttribute("d", path);
       element.setAttribute("fill-rule", node.properties.fillRule ?? "nonzero");
+      if (
+        "network" in node.properties &&
+        !writeSvgEditableVector(element, node.properties.network)
+      ) {
+        context.issues.push(
+          svgIssue(
+            "size-limit",
+            "warning",
+            `Editable vector metadata for ${node.id} exceeds its interchange limit and was omitted; standard path geometry remains exported`,
+            { nodeId: node.id },
+          ),
+        );
+      }
     } else {
       context.issues.push(
         svgIssue(
@@ -1836,6 +1869,56 @@ function importElement(
       ),
     );
     return null;
+  }
+  const editableVector = readSvgEditableVector(element, pathData);
+  if (editableVector.status === "invalid") {
+    context.issues.push(
+      svgIssue("invalid-geometry", "error", editableVector.message, {
+        nodeId,
+        sourceElement: tag,
+      }),
+    );
+    return null;
+  }
+  if (editableVector.status === "valid") {
+    const normalizedNetwork = normalizeVectorNetwork(editableVector.network);
+    if (!normalizedNetwork.ok || !normalizedNetwork.offset) {
+      context.issues.push(
+        svgIssue(
+          "invalid-geometry",
+          "error",
+          normalizedNetwork.ok
+            ? "Editable vector metadata could not be normalized"
+            : normalizedNetwork.issues[0]?.message ||
+                "Editable vector metadata has invalid topology",
+          { nodeId, sourceElement: tag },
+        ),
+      );
+      return null;
+    }
+    const sourceKind = element.getAttribute("data-opendesign-kind");
+    const kind = sourceKind === "path" ? "path" : "vector";
+    const node: DesignNode = {
+      ...common,
+      kind,
+      transform: fromMatrix(
+        compose(
+          toMatrix(transform),
+          translate(normalizedNetwork.offset.x, normalizedNetwork.offset.y),
+        ),
+      ),
+      size: {
+        width: normalizedNetwork.bounds.width,
+        height: normalizedNetwork.bounds.height,
+      },
+      properties: {
+        ...properties,
+        network: normalizedNetwork.network,
+        fillRule: localStyle.fillRule,
+      },
+    };
+    context.nodes.push(node);
+    return nodeId;
   }
   const normalized = context.geometry.normalize({
     path: pathData,

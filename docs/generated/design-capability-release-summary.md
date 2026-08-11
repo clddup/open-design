@@ -16,7 +16,7 @@ This block is the release-note view of the same manifest used by the built-in Ag
 - `canvas.navigation-selection` — Canvas navigation and selection
 - `layers.hierarchy` — Layer hierarchy
 - `transform.precise-arrangement` — Precise arrangement
-- `vector.path-rendering` — SVG path rendering
+- `vector.path-rendering` — Editable paths and Pen
 - `vector.line-arrow` — Lines and arrows
 - `vector.regular-shapes` — Regular polygons and stars
 - `vector.boolean-operations` — Boolean operations

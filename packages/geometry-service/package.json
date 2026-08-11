@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./boolean-resolver": "./src/boolean-resolver.ts",
     "./browser-vector-path": "./src/browser-vector-path.ts",
+    "./editable-vector": "./src/editable-vector.ts",
     "./vector-path": "./src/vector-path.ts"
   },
   "scripts": {

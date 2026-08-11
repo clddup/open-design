@@ -204,6 +204,99 @@ describe("design contract schemas", () => {
     ).toBe(false);
   });
 
+  it("defines editable vector networks as an exclusive path geometry source", () => {
+    const vectorNode = {
+      id: "vector_mark",
+      name: "Editable mark",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 20, 30],
+      size: { width: 100, height: 100 },
+      opacity: 1,
+      extensions: {},
+      kind: "vector",
+      properties: {
+        network: {
+          vertices: [
+            { id: "vertex_a", x: 0, y: 0 },
+            { id: "vertex_b", x: 100, y: 0 },
+            { id: "vertex_c", x: 50, y: 100 },
+          ],
+          segments: [
+            {
+              id: "segment_ab",
+              startVertexId: "vertex_a",
+              endVertexId: "vertex_b",
+            },
+            {
+              id: "segment_bc",
+              startVertexId: "vertex_b",
+              endVertexId: "vertex_c",
+            },
+            {
+              id: "segment_ca",
+              startVertexId: "vertex_c",
+              endVertexId: "vertex_a",
+            },
+          ],
+          paths: [
+            {
+              id: "path_outer",
+              closed: true,
+              segments: [
+                { segmentId: "segment_ab", reversed: false },
+                { segmentId: "segment_bc", reversed: false },
+                { segmentId: "segment_ca", reversed: false },
+              ],
+            },
+          ],
+          regions: [
+            {
+              id: "region_outer",
+              windingRule: "nonzero",
+              loops: [{ pathId: "path_outer", reversed: false }],
+            },
+          ],
+        },
+        fillRule: "nonzero",
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+        strokeWidth: 2,
+      },
+    };
+
+    expect(Value.Check(DesignNodeSchema, vectorNode)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: { ...vectorNode.properties, path: "M 0 0 L 100 0" },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: {
+          ...vectorNode.properties,
+          network: {
+            ...vectorNode.properties.network,
+            vertices: [
+              { id: "invalid id", x: 0, y: 0 },
+              ...vectorNode.properties.network.vertices.slice(1),
+            ],
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...vectorNode,
+        properties: { ...vectorNode.properties, unsupportedGeometry: true },
+      }),
+    ).toBe(false);
+  });
+
   it("defines a directed editable line with independent endpoint decorations", () => {
     const lineNode = {
       id: "line_flow",
@@ -606,7 +699,7 @@ describe("design contract schemas", () => {
     });
   });
 
-  it("migrates a 1.5 document to 1.6 without inventing Polygon or Star state", () => {
+  it("migrates a 1.5 document without inventing Polygon, Star, or vector state", () => {
     const lineDocument = {
       format: DESIGN_FORMAT,
       schemaVersion: "1.5.0",
@@ -635,5 +728,62 @@ describe("design contract schemas", () => {
       ...lineDocument,
       schemaVersion: DESIGN_SCHEMA_VERSION,
     });
+  });
+
+  it("migrates a 1.6 document without converting exact path data into an editable network", () => {
+    const regularShapeDocument = {
+      format: DESIGN_FORMAT,
+      schemaVersion: "1.6.0",
+      documentId: "document_regular_shape",
+      revision: 11,
+      pageOrder: ["page_1"],
+      pagesById: {
+        page_1: {
+          id: "page_1",
+          name: "Page 1",
+          rootNodeIds: ["path_1"],
+          extensions: {},
+        },
+      },
+      nodesById: {
+        path_1: {
+          id: "path_1",
+          name: "Exact imported path",
+          parentId: null,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 0, 0],
+          size: { width: 100, height: 100 },
+          opacity: 1,
+          extensions: {},
+          kind: "path",
+          properties: {
+            path: "M 0 0 L 100 0 L 50 100 Z",
+            fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+            strokes: [],
+            strokeWidth: 0,
+          },
+        },
+      },
+      componentsById: {},
+      variantSetsById: {},
+      tokenCollectionsById: {},
+      tokensById: {},
+      interactionsById: {},
+      assetsById: {},
+      extensions: { source: "1.6-fixture" },
+    };
+
+    const migrated = migrateDesignDocument(regularShapeDocument);
+    expect(migrated).toEqual({
+      ...regularShapeDocument,
+      schemaVersion: DESIGN_SCHEMA_VERSION,
+    });
+    const path = migrated?.nodesById.path_1;
+    expect(path?.kind).toBe("path");
+    if (!path || path.kind !== "path") throw new Error("Missing path");
+    expect(path.properties).toHaveProperty("path");
+    expect(path.properties).not.toHaveProperty("network");
   });
 });

@@ -1188,18 +1188,22 @@ describe("App", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("switches tools through EditorRuntime and keeps unsupported pen disabled", async () => {
+  it("switches tools through EditorRuntime and exposes Pen by toolbar and P", async () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(screen.getByRole("button", { name: "Rectangle (R)" }));
     expect(
       screen.getByRole("button", { name: "Rectangle (R)" }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(
-      screen.getByRole("button", {
-        name: "Pen (path editing unavailable) (P)",
-      }),
-    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Pen (P)" }));
+    expect(screen.getByRole("button", { name: "Pen (P)" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.keyDown(window, { code: "KeyV", key: "v" });
+    expect(runtimeOutput()).toHaveAttribute("data-tool", "select");
+    fireEvent.keyDown(window, { code: "KeyP", key: "p" });
+    expect(runtimeOutput()).toHaveAttribute("data-tool", "pen");
   });
 
   it("routes layer selection, property edits, undo, and redo through one runtime", async () => {
@@ -1526,6 +1530,89 @@ describe("App", () => {
 
     fireEvent.keyDown(window, { code: "KeyL", key: "l" });
     expect(runtimeOutput()).toHaveAttribute("data-tool", "line");
+  });
+
+  it("commits one editable Pen vector transaction without leaving the Pen tool", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const before = new Set(
+      Object.keys(runtime().getSnapshot().document.nodesById),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pen (P)" }));
+    act(() => {
+      leaferCallbacks().onCreateVector({
+        closed: false,
+        height: 100,
+        network: {
+          vertices: [
+            { id: "vertex_1", x: 0, y: 0 },
+            { id: "vertex_2", x: 120, y: 40 },
+            { id: "vertex_3", x: 80, y: 100 },
+          ],
+          segments: [
+            {
+              id: "segment_1",
+              startVertexId: "vertex_1",
+              endVertexId: "vertex_2",
+              tangentStart: { x: 30, y: 0 },
+              tangentEnd: { x: -20, y: -10 },
+            },
+            {
+              id: "segment_2",
+              startVertexId: "vertex_2",
+              endVertexId: "vertex_3",
+            },
+          ],
+          paths: [
+            {
+              id: "path_1",
+              closed: false,
+              segments: [
+                { segmentId: "segment_1", reversed: false },
+                { segmentId: "segment_2", reversed: false },
+              ],
+            },
+          ],
+          regions: [],
+        },
+        pageId: "page_welcome",
+        parentId: "frame_welcome",
+        width: 120,
+        x: 360,
+        y: 220,
+      });
+    });
+
+    const snapshot = runtime().getSnapshot();
+    const vectorId = Object.keys(snapshot.document.nodesById).find(
+      (nodeId) => !before.has(nodeId),
+    );
+    const insertedVector = snapshot.document.nodesById[vectorId ?? ""];
+    expect(insertedVector).toMatchObject({
+      kind: "vector",
+      parentId: "frame_welcome",
+      size: { width: 120, height: 100 },
+      transform: [1, 0, 0, 1, 360, 220],
+      properties: {
+        fills: [],
+        strokes: [{ type: "solid", color: "#151515", opacity: 1 }],
+      },
+    });
+    if (
+      !insertedVector ||
+      insertedVector.kind !== "vector" ||
+      !("network" in insertedVector.properties)
+    ) {
+      throw new Error("Missing inserted editable vector");
+    }
+    expect(
+      insertedVector.properties.network.vertices.map(({ id }) => id),
+    ).toContain("vertex_1");
+    expect(insertedVector.properties.network.paths[0]?.closed).toBe(false);
+    expect(snapshot.document.revision).toBe(1);
+    expect(snapshot.state.selection.nodeIds).toEqual([vectorId]);
+    expect(snapshot.state.tool).toBe("pen");
   });
 
   it("creates semantic Polygon and Star nodes as undoable document transactions", async () => {

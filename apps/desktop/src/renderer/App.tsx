@@ -1054,6 +1054,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         r: "rectangle",
         o: "ellipse",
         l: event.shiftKey ? "arrow" : "line",
+        p: "pen",
         t: "text",
       };
       const next = tools[event.key.toLowerCase()];

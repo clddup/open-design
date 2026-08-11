@@ -13,11 +13,10 @@ import { useI18n } from "../i18n";
 import type { Tool } from "../state/editor";
 
 type ToolbarItem = {
-  id: Tool | "pen";
+  id: Tool;
   label: MessageKey;
   icon: GlyphName;
   shortcut?: string;
-  disabled?: boolean;
 };
 
 const tools: ToolbarItem[] = [
@@ -41,10 +40,9 @@ const tools: ToolbarItem[] = [
   { id: "star", label: "toolbar.star", icon: "star" },
   {
     id: "pen",
-    label: "toolbar.penUnavailable",
+    label: "toolbar.pen",
     icon: "pen",
     shortcut: "P",
-    disabled: true,
   },
   { id: "text", label: "toolbar.text", icon: "text", shortcut: "T" },
 ];
@@ -228,7 +226,6 @@ export function Toolbar({
       >
         {tools.map((item) => (
           <IconButton
-            disabled={item.disabled}
             icon={item.icon}
             key={item.id}
             label={
@@ -236,10 +233,8 @@ export function Toolbar({
                 ? `${t(item.label)} (${item.shortcut})`
                 : t(item.label)
             }
-            onClick={() => {
-              if (item.id !== "pen") onToolChange(item.id);
-            }}
-            selected={item.id !== "pen" && tool === item.id}
+            onClick={() => onToolChange(item.id)}
+            selected={tool === item.id}
           />
         ))}
       </div>

@@ -1,7 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.6.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.7.0" as const;
+export const REGULAR_SHAPE_DESIGN_SCHEMA_VERSION = "1.6.0" as const;
 export const LINE_DESIGN_SCHEMA_VERSION = "1.5.0" as const;
 export const MASK_DESIGN_SCHEMA_VERSION = "1.4.0" as const;
 export const IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION = "1.3.0" as const;
@@ -450,7 +451,90 @@ export const PathDataSchema = Type.String({
   pattern: "^[\\t\\n\\r ,.+\\-0-9AaCcEeHhLlMmQqSsTtVvZz]+$",
 });
 
-export const PathPropertiesSchema = Type.Object(
+export const VectorGeometryIdSchema = Type.String({
+  minLength: 1,
+  maxLength: 128,
+  pattern: "^[A-Za-z][A-Za-z0-9._:-]*$",
+});
+
+export const VectorVertexSchema = Type.Object(
+  {
+    id: VectorGeometryIdSchema,
+    x: Type.Number(),
+    y: Type.Number(),
+  },
+  { additionalProperties: false },
+);
+
+export const VectorSegmentSchema = Type.Object(
+  {
+    id: VectorGeometryIdSchema,
+    startVertexId: VectorGeometryIdSchema,
+    endVertexId: VectorGeometryIdSchema,
+    tangentStart: Type.Optional(PointSchema),
+    tangentEnd: Type.Optional(PointSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const VectorSegmentReferenceSchema = Type.Object(
+  {
+    segmentId: VectorGeometryIdSchema,
+    reversed: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export const VectorPathRunSchema = Type.Object(
+  {
+    id: VectorGeometryIdSchema,
+    closed: Type.Boolean(),
+    segments: Type.Array(VectorSegmentReferenceSchema, {
+      minItems: 1,
+      maxItems: 16_384,
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export const VectorRegionSchema = Type.Object(
+  {
+    id: VectorGeometryIdSchema,
+    windingRule: Type.Union([Type.Literal("nonzero"), Type.Literal("evenodd")]),
+    loops: Type.Array(
+      Type.Object(
+        {
+          pathId: VectorGeometryIdSchema,
+          reversed: Type.Boolean(),
+        },
+        { additionalProperties: false },
+      ),
+      { minItems: 1, maxItems: 1_024 },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const VectorNetworkSchema = Type.Object(
+  {
+    vertices: Type.Array(VectorVertexSchema, {
+      minItems: 2,
+      maxItems: 16_384,
+    }),
+    segments: Type.Array(VectorSegmentSchema, {
+      minItems: 1,
+      maxItems: 16_384,
+    }),
+    paths: Type.Array(VectorPathRunSchema, {
+      minItems: 1,
+      maxItems: 16_384,
+    }),
+    regions: Type.Array(VectorRegionSchema, { maxItems: 16_384 }),
+  },
+  { additionalProperties: false },
+);
+
+export const PathDataPropertiesSchema = Type.Object(
   {
     ...ShapeProperties,
     path: PathDataSchema,
@@ -460,6 +544,22 @@ export const PathPropertiesSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export const VectorNetworkPropertiesSchema = Type.Object(
+  {
+    ...ShapeProperties,
+    network: VectorNetworkSchema,
+    fillRule: Type.Optional(
+      Type.Union([Type.Literal("nonzero"), Type.Literal("evenodd")]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const PathPropertiesSchema = Type.Union([
+  PathDataPropertiesSchema,
+  VectorNetworkPropertiesSchema,
+]);
 
 export const BooleanOperationSchema = Type.Union([
   Type.Literal("union"),
@@ -1160,6 +1260,18 @@ export type Effect = Static<typeof EffectSchema>;
 export type MaskMode = Static<typeof MaskModeSchema>;
 export type LineEndpoint = Static<typeof LineEndpointSchema>;
 export type BooleanOperation = Static<typeof BooleanOperationSchema>;
+export type VectorVertex = Static<typeof VectorVertexSchema>;
+export type VectorSegment = Static<typeof VectorSegmentSchema>;
+export type VectorSegmentReference = Static<
+  typeof VectorSegmentReferenceSchema
+>;
+export type VectorPathRun = Static<typeof VectorPathRunSchema>;
+export type VectorRegion = Static<typeof VectorRegionSchema>;
+export type VectorNetwork = Static<typeof VectorNetworkSchema>;
+export type PathDataProperties = Static<typeof PathDataPropertiesSchema>;
+export type VectorNetworkProperties = Static<
+  typeof VectorNetworkPropertiesSchema
+>;
 export type FrameNode = Static<typeof FrameNodeSchema>;
 export type GroupNode = Static<typeof GroupNodeSchema>;
 export type BooleanNode = Static<typeof BooleanNodeSchema>;
@@ -1305,7 +1417,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       schemaVersion !== PATH_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== MASK_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== LINE_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== LINE_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== REGULAR_SHAPE_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
