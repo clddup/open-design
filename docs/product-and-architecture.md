@@ -11,7 +11,7 @@ UI 设计是首要能力和最先打磨的工作流，但不是产品边界。�
 截至 2026-08-11，仓库当前具备：
 
 - OpenDesign 自有的 `DesignDocument 1.8.0`、正式 Line/Arrow、Polygon/Star、互斥的精确 SVG path-data / editable Vector Network、持久 Bézier point mode、非破坏图片 placement 与非破坏 Boolean Group、多 Page、事务、preview、单调 revision、diff、history、undo/redo、checkpoint，以及 `1.0.0` 至 `1.7.0 → 1.8.0` 的确定性迁移。
-- Workspace/Project/Design File 持久化与导航、持久 Conversation、按 Conversation 隔离的时间线和单目标 Global Task 投影。
+- Workspace/Project/Design File 持久化与导航、Project Design File 自动保存、持久 Conversation、按 Conversation 隔离的时间线和单目标 Global Task 投影。
 - 固定 `leafer-editor@2.2.9` 的唯一生产画布路径，覆盖场景投影、pan/zoom、命中、选择、move/resize/rotate/skew 和文本内编辑。旧 Canvas2D、手写选择框和 OpenPencil 运行时已移除。
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask、高级描边和事务化图片 asset 的公共设计语义及属性检查器/Leafer 映射。
 - 独立的 `@opendesign/geometry-service` contract v3：根入口提供确定性排列；隔离的 `vector-path` 子入口固定 `pathkit-wasm 1.0.0`，以短生命周期、纯数据 provider 通过真实 WASM 的 cubic PathOps、孔洞、空结果、simplify、transform、dash、outline stroke、fill rule、bounds、预算和确定性测试；`editable-vector` 子入口验证稳定 vertex/segment/path/region ID、拓扑连续性并确定性生成 cubic path 与 tight bounds；`vector-edit` 子入口负责单轮廓节点多选移动、手柄耦合、point mode 与删除。`DesignDocument 1.8.0` 与 EditorRuntime 保留独立非破坏 Boolean 节点及 planner，并提供正式有向 Line/Arrow、Polygon/Star、editable Vector Network 与节点编辑 planner；Leafer 用 Arrow/LineEditTool、Polygon、Star、Path、Pen overlay 和互斥的 point/handle overlay 投影，Boolean resolver 同时消费精确 path-data 与 network 派生 path。`@opendesign/import-export-service` 的 SVG v1 纯 service contract 可导入可编辑 Line/Path/Vector/基础 shape，并用受控本地 marker 往返 Line 端点、用逐点校验 metadata 往返零圆角 Polygon/Star、用 schema + topology + rendered `d` 三重校验的 editable-network metadata v2 往返 point mode；v1 metadata 继续兼容读取，普通第三方 SVG 仍保留为精确 path-data，不猜测 network。Boolean result 仍作为标准 path 导出并返回 fidelity report。EditorRuntime planner、Main 路径不外泄的 `.svg` 原生打开/保存桥、人工入口和 Agent run-scoped handle 继续复用同一可取消 worker；模型不接收 XML、路径或内部 ID 前缀。分支/多轮廓编辑、完整外观与像素/双平台产品证据仍未完成，因此相关 capability 保持 `degraded`。
@@ -66,7 +66,8 @@ OpenDesign 是跨平台桌面产品，不是 macOS 专用工具。macOS 与 Wind
 3. 主机为 run 固定 Working Set、Mutation Targets 与 Capabilities。三者分别表达可读上下文、计划写目标和策略允许的动作，互不隐式授予。
 4. Agent 读取经授权的最小上下文并返回结构化计划与设计事务；Tool Runtime 执行 Trust、Capability、Approval 与 Sandbox 检查。
 5. OpenDesign EditorRuntime 按每个 Design File 的 `baseRevision` 预演或应用事务，并向 UI 返回变更集、冲突、诊断和渲染状态。
-6. 用户检查单目标或多目标结果，继续编辑、处理冲突、接受替代方案或通过各 Design File 的统一历史撤销。
+6. Project Design File 的新 revision 自动进入按文件串行的原子保存；Agent 写工具在对应 revision 持久化后才向模型返回成功。保存失败保留 dirty 状态并通知用户。
+7. 用户检查单目标或多目标结果，继续编辑、处理冲突、接受替代方案或通过各 Design File 的统一历史撤销。
 
 典型 UI 工作包括从需求生成首版、重排已有界面、建立 token、提取组件、检查一致性和生成交付说明。通用设计工作包括构图、文字层级、矢量编辑、资源替换、多尺寸变体和导出。
 
@@ -188,6 +189,8 @@ OpenDesign 设计内核的目标能力族包括：
 这些是跨 Contracts、EditorRuntime、Main host 和专业 service 的产品能力，不是 `@opendesign/leafer-engine` 单包接口清单。当前 `@opendesign/design-capabilities` 固定 `DesignCapabilityManifest v1`：每项能力同时记录 contract、runtime、human、agent、render 与 export 状态，只有必需表面全通且同时具备自动化和实机证据时才允许标记 `available`。组件、布局和完整静态导出等能力明确返回 `unavailable`；已有 SVG service、Runtime planner、人工导入导出与 Agent 导出入口，但仍缺少 Agent 导入、完整格式保真和产品级实机证据的交换链，以及其他部分链路返回 `degraded`，不能从 schema 占位或第三方引擎说明推断支持。
 
 公共命令使用稳定 ID、预期文档版本和幂等/冲突语义。Design File 是 revision 与提交冲突的边界：不同文件可以并行；同一文件的权威 runtime 在短提交区间内串行处理，并对过期 `baseRevision` 返回结构化 `conflict`，不得静默覆盖。引擎缺少某项能力时返回 `unsupported`，不允许调用者猜测私有 API。详细决策见 [ADR-0003](adr/0003-design-engine-adapter.md) 与 [ADR-0006](adr/0006-project-conversation-agent-scope.md)。
+
+Project Design File 打开后由 Renderer 以稳定 `projectId + designFileId + documentId` 绑定唯一 `EditorRuntime` 和自动保存协调器。普通人工变更短暂 debounce 后通过类型化 Preload 请求 Main；同一文件至多一个保存进行中，保存期间的新 revision 必须随后继续保存，响应的 File/Document/revision 必须与请求匹配，旧或错配结果不能把较新 revision 错误 checkpoint 为已持久化。Agent 事务得到新 revision 后会立即 flush 该目标文件，再把工具成功返回 Runtime；用户切换活动 tab 不会改变保存目标。Main 继续使用 Project mutation queue 与 crash-safe journal 原子提交文档和 manifest。自动保存失败保留 dirty 状态并生成包含 Project/File ID 的结构化诊断；关闭窗口或退出应用时先静默取消本次关闭并 flush 全部 pending Project 文件，失败则保持窗口与可恢复状态。Main 的 `before-quit` 只记录退出意图，ProjectHost、WorkspaceStore 与 Agent 等资源延后到 `will-quit` 才销毁；因此 Renderer 在 `Cmd+Q` 和 Windows 退出期间仍可保存，macOS 会在异步 flush 后恢复原退出意图。独立通过原生打开框加载的外部 `.opendesign` 不属于 Project autosave 范围，仍只在用户明确 Save/Save As 时覆盖。
 
 ## 9. 项目、会话与内置设计 Agent
 

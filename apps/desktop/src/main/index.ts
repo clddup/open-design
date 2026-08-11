@@ -29,6 +29,7 @@ import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
 import { AgentSvgImportHost } from "./agent/agent-svg-import-host";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
 import { createApplicationMenuTemplate } from "./application-menu";
+import { ApplicationLifecycle } from "./application-lifecycle";
 import { GlobalTaskCoordinator } from "./agent/global-task-coordinator";
 import {
   isAllowedRendererNavigation,
@@ -96,6 +97,7 @@ import {
 
 const applicationId = "design.open.app";
 const applicationName = "OpenDesign";
+const applicationLifecycle = new ApplicationLifecycle();
 
 app.setName(applicationName);
 if (process.platform === "win32") app.setAppUserModelId(applicationId);
@@ -1498,6 +1500,10 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
 }
 
 app.on("before-quit", () => {
+  applicationLifecycle.markQuitRequested();
+});
+
+app.on("will-quit", () => {
   agentHost.stop();
   projectIpc = null;
   globalTaskCoordinator = null;
@@ -1519,5 +1525,7 @@ app.on("before-quit", () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (applicationLifecycle.shouldQuitAfterLastWindow(process.platform)) {
+    app.quit();
+  }
 });

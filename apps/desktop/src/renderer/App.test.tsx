@@ -45,6 +45,7 @@ import * as designCapture from "./design-capture";
 import * as svgInterchange from "./svg-interchange";
 import type { SuccessfulSvgImportResult } from "./svg-interchange-contract";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
+import type { ProjectDesignFile } from "../shared/desktop-api";
 import type { DiagnosticEvent } from "../shared/diagnostics";
 import {
   DESIGN_PLAN_TOOL_NAME,
@@ -312,6 +313,23 @@ async function openProjectWithConversations(
   vi.mocked(window.desktop!.openRecentProject).mockResolvedValueOnce(manifest);
   vi.mocked(window.desktop!.listProjectConversations).mockResolvedValueOnce(
     conversations,
+  );
+  vi.mocked(window.desktop!.saveProjectDesignFile).mockImplementation(
+    (request) => {
+      const savedDescriptor = manifest.designFiles.find(
+        (candidate) => candidate.designFileId === request.designFileId,
+      );
+      if (!savedDescriptor) {
+        return Promise.reject(new Error("Design file descriptor is missing"));
+      }
+      return Promise.resolve({
+        descriptor: {
+          ...savedDescriptor,
+          updatedAt: "2026-08-07T12:00:01.000Z",
+        },
+        document: request.document,
+      });
+    },
   );
   const document = structuredClone(createWelcomeDocument());
   document.documentId = descriptor.documentId;
@@ -1085,6 +1103,175 @@ describe("App", () => {
       document,
     });
     expect(window.desktop?.saveDesignFile).not.toHaveBeenCalled();
+  });
+
+  it("automatically saves a changed Project Design File", async () => {
+    await openProjectConversation();
+    const current = runtime().getSnapshot().document;
+    act(() => {
+      const result = runtime().apply({
+        transactionId: "user_autosave_change",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Rename frame",
+        commands: [
+          {
+            commandId: "rename_for_autosave",
+            type: "update_properties",
+            nodeId: "frame_welcome",
+            name: "Autosaved workspace",
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+    });
+    expect(runtimeOutput()).toHaveAttribute("data-dirty", "true");
+
+    await waitFor(
+      () => {
+        const request = vi
+          .mocked(window.desktop!.saveProjectDesignFile)
+          .mock.calls.at(-1)?.[0];
+        expect(request?.projectId).toBe("project_acme");
+        expect(request?.designFileId).toBe("design_mobile");
+        expect(request?.document.revision).toBe(1);
+        expect(runtimeOutput()).toHaveAttribute("data-dirty", "false");
+      },
+      { timeout: 2_000 },
+    );
+  });
+
+  it("keeps a Project Design File dirty and reports autosave failures", async () => {
+    await openProjectConversation();
+    vi.mocked(window.desktop!.saveProjectDesignFile).mockRejectedValueOnce(
+      new Error("Disk is read-only"),
+    );
+    const current = runtime().getSnapshot().document;
+    act(() => {
+      const result = runtime().apply({
+        transactionId: "user_autosave_failure",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Rename without persistence",
+        commands: [
+          {
+            commandId: "rename_for_autosave_failure",
+            type: "update_properties",
+            nodeId: "frame_welcome",
+            name: "Still dirty",
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+    });
+
+    expect(await screen.findByText("Disk is read-only")).toBeInTheDocument();
+    expect(runtimeOutput()).toHaveAttribute("data-dirty", "true");
+    await waitFor(() =>
+      expect(window.desktop!.reportDiagnostic).toHaveBeenCalledWith({
+        level: "error",
+        presentation: "toast",
+        code: "design_autosave_failed",
+        message: "Disk is read-only",
+        context: {
+          projectId: "project_acme",
+          designFileId: "design_mobile",
+        },
+      }),
+    );
+  });
+
+  it("does not silently overwrite an independently opened design document", async () => {
+    renderApp();
+    const current = runtime().getSnapshot().document;
+    act(() => {
+      const result = runtime().apply({
+        transactionId: "external_document_change",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Edit external document",
+        commands: [
+          {
+            commandId: "rename_external_document_frame",
+            type: "update_properties",
+            nodeId: "frame_welcome",
+            name: "Explicit save required",
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(window.desktop!.saveProjectDesignFile).not.toHaveBeenCalled();
+    expect(window.desktop!.saveDesignFile).not.toHaveBeenCalled();
+    expect(runtimeOutput()).toHaveAttribute("data-dirty", "true");
+  });
+
+  it("flushes a pending Project Design File before closing the window", async () => {
+    const { manifest } = await openProjectConversation();
+    const descriptor = manifest.designFiles[0];
+    if (!descriptor) throw new Error("Mobile design file is missing");
+    let finishSave!: (saved: ProjectDesignFile) => void;
+    const pendingSave = new Promise<ProjectDesignFile>((resolve) => {
+      finishSave = resolve;
+    });
+    vi.mocked(window.desktop!.saveProjectDesignFile).mockReturnValueOnce(
+      pendingSave,
+    );
+    const close = vi.spyOn(window, "close").mockImplementation(() => undefined);
+    const current = runtime().getSnapshot().document;
+    act(() => {
+      const result = runtime().apply({
+        transactionId: "user_change_before_close",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Rename before close",
+        commands: [
+          {
+            commandId: "rename_before_close",
+            type: "update_properties",
+            nodeId: "frame_welcome",
+            name: "Saved before close",
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+    });
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    let closeAllowed = true;
+    act(() => {
+      closeAllowed = window.dispatchEvent(beforeUnload);
+    });
+
+    expect(closeAllowed).toBe(false);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+    await waitFor(() => {
+      const request = vi
+        .mocked(window.desktop!.saveProjectDesignFile)
+        .mock.calls.at(-1)?.[0];
+      expect(request?.projectId).toBe(manifest.projectId);
+      expect(request?.designFileId).toBe(descriptor.designFileId);
+      expect(request?.document.revision).toBe(1);
+    });
+    expect(close).not.toHaveBeenCalled();
+
+    finishSave({
+      descriptor: {
+        ...descriptor,
+        updatedAt: "2026-08-11T12:00:00.000Z",
+      },
+      document: runtime().getSnapshot().document,
+    });
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+    close.mockRestore();
   });
 
   it("saves the active file to its own Project after switching across Projects", async () => {
@@ -3509,7 +3696,16 @@ describe("App", () => {
   });
 
   it("applies a native Agent tool transaction through the active EditorRuntime", async () => {
-    renderApp();
+    const { conversation, manifest } = await openProjectConversation();
+    const descriptor = manifest.designFiles[0];
+    if (!descriptor) throw new Error("Mobile design file is missing");
+    let finishSave!: (saved: ProjectDesignFile) => void;
+    const pendingSave = new Promise<ProjectDesignFile>((resolve) => {
+      finishSave = resolve;
+    });
+    vi.mocked(window.desktop!.saveProjectDesignFile).mockReturnValueOnce(
+      pendingSave,
+    );
     const current = runtime().getSnapshot().document;
     if (!requestDesignTool) throw new Error("Design tool listener is missing");
 
@@ -3533,7 +3729,7 @@ describe("App", () => {
         },
         context: {
           runId: "run_1",
-          sessionId: "conversation_1",
+          sessionId: conversation.conversationId,
           documentId: current.documentId,
           revision: current.revision,
           scope: { kind: "document", selectedNodeIds: [] },
@@ -3545,6 +3741,29 @@ describe("App", () => {
     const resolveDesignToolRequest = vi.mocked(
       window.desktop!.resolveDesignToolRequest,
     );
+    await waitFor(() => {
+      const request = vi
+        .mocked(window.desktop!.saveProjectDesignFile)
+        .mock.calls.find(
+          ([candidate]) => candidate.designFileId === "design_mobile",
+        )?.[0];
+      expect(request?.projectId).toBe("project_acme");
+      expect(request?.document.documentId).toBe("document_mobile");
+      expect(request?.document.revision).toBe(1);
+    });
+    expect(
+      resolveDesignToolRequest.mock.calls.some(
+        ([response]) => response.requestId === "renderer_tool_1",
+      ),
+    ).toBe(false);
+
+    finishSave({
+      descriptor: {
+        ...descriptor,
+        updatedAt: "2026-08-11T12:00:00.000Z",
+      },
+      document: runtime().getSnapshot().document,
+    });
     await vi.waitFor(() => {
       const response = resolveDesignToolRequest.mock.calls.at(-1)?.[0];
       expect(response?.requestId).toBe("renderer_tool_1");
@@ -3556,6 +3775,58 @@ describe("App", () => {
     expect(runtime().getSnapshot().document.nodesById.frame_welcome?.name).toBe(
       "Agent-updated canvas",
     );
+  });
+
+  it("does not report an Agent design write as successful when autosave fails", async () => {
+    const { conversation } = await openProjectConversation();
+    vi.mocked(window.desktop!.saveProjectDesignFile).mockRejectedValueOnce(
+      new Error("Disk is read-only"),
+    );
+    const current = runtime().getSnapshot().document;
+    if (!requestDesignTool) throw new Error("Design tool listener is missing");
+
+    act(() => {
+      requestDesignTool?.({
+        requestId: "renderer_tool_autosave_failure",
+        call: {
+          toolCallId: "tool_call_autosave_failure",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Rename without persistence",
+            commands: [
+              {
+                commandId: "rename_without_persistence",
+                type: "update_properties",
+                nodeId: "frame_welcome",
+                name: "Dirty Agent result",
+              },
+            ],
+          },
+        },
+        context: {
+          runId: "run_autosave_failure",
+          sessionId: conversation.conversationId,
+          documentId: current.documentId,
+          revision: current.revision,
+          scope: { kind: "document", selectedNodeIds: [] },
+          mutationTarget: { kind: "document" },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      const response = vi
+        .mocked(window.desktop!.resolveDesignToolRequest)
+        .mock.calls.find(
+          ([candidate]) =>
+            candidate.requestId === "renderer_tool_autosave_failure",
+        )?.[0];
+      expect(response?.ok).toBe(false);
+      if (response?.ok === false)
+        expect(response.error).toBe("Disk is read-only");
+    });
+    expect(runtimeOutput()).toHaveAttribute("data-dirty", "true");
+    expect(await screen.findByText("Disk is read-only")).toBeInTheDocument();
   });
 
   it("keeps a Run bound to file A while the user works in file B", async () => {
@@ -3672,6 +3943,21 @@ describe("App", () => {
       if (!response?.ok) return;
       expect(response.result.designRevision?.revision).toBe(1);
     });
+    const backgroundSave = vi
+      .mocked(window.desktop!.saveProjectDesignFile)
+      .mock.calls.find(
+        ([request]) => request.designFileId === "design_mobile",
+      )?.[0];
+    expect(backgroundSave?.projectId).toBe(manifest.projectId);
+    expect(backgroundSave?.document.documentId).toBe("document_mobile");
+    expect(backgroundSave?.document.revision).toBe(1);
+    expect(
+      vi
+        .mocked(window.desktop!.saveProjectDesignFile)
+        .mock.calls.some(
+          ([request]) => request.designFileId === "design_website",
+        ),
+    ).toBe(false);
     expect(runtime().getSnapshot().document.documentId).toBe(
       "document_website",
     );

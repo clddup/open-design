@@ -54,6 +54,7 @@ import {
 import type {
   DiagnosticContext,
   DiagnosticEvent,
+  ProjectDesignFile,
   RecentProject,
   ThemePreference,
 } from "../shared/desktop-api";
@@ -87,6 +88,10 @@ import {
 import { useI18n } from "./i18n";
 import { executeDesignToolRequest } from "./design-tool-execution";
 import { captureDesignTarget } from "./design-capture";
+import {
+  ProjectAutosaveCoordinator,
+  type ProjectAutosaveTarget,
+} from "./project-autosave";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
   clearGenerationPlanPresentationRun,
@@ -247,7 +252,75 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const latestHistoryRequestId = useRef(new Map<string, string>());
   const designToolControllers = useRef(new Map<string, AbortController>());
   const svgOperationController = useRef<AbortController | null>(null);
+  const autosaveCallbacks = useRef<{
+    onError: (target: ProjectAutosaveTarget, error: unknown) => void;
+    onSaved: (target: ProjectAutosaveTarget, saved: ProjectDesignFile) => void;
+  }>({ onError: () => undefined, onSaved: () => undefined });
+  const projectAutosave = useMemo(
+    () =>
+      new ProjectAutosaveCoordinator({
+        save: async (projectId, designFileId, document) => {
+          const desktop = window.desktop;
+          if (!desktop) throw new Error("Desktop autosave is unavailable");
+          return await desktop.saveProjectDesignFile({
+            projectId,
+            designFileId,
+            document,
+          });
+        },
+        onError: (target, error) =>
+          autosaveCallbacks.current.onError(target, error),
+        onSaved: (target, saved) =>
+          autosaveCallbacks.current.onSaved(target, saved),
+      }),
+    [],
+  );
   const { document: designDocument, state } = snapshot;
+  autosaveCallbacks.current = {
+    onError: (target, error) => {
+      setEditorError(
+        reportRendererError(
+          "design_autosave_failed",
+          error,
+          t("error.autosaveDesignFile"),
+          {
+            projectId: target.projectId,
+            designFileId: target.designFileId,
+          },
+        ),
+      );
+    },
+    onSaved: (target, saved) => {
+      const updateManifest = (project: ProjectManifest): ProjectManifest => ({
+        ...project,
+        updatedAt: saved.descriptor.updatedAt,
+        designFiles: project.designFiles.map((file) =>
+          file.designFileId === saved.descriptor.designFileId
+            ? saved.descriptor
+            : file,
+        ),
+      });
+      setProjectsById((projects) => {
+        const project = projects[target.projectId];
+        return project
+          ? { ...projects, [target.projectId]: updateManifest(project) }
+          : projects;
+      });
+      setActiveProject((project) =>
+        project?.projectId === target.projectId
+          ? updateManifest(project)
+          : project,
+      );
+      workspace.renameFile(
+        target.projectId,
+        target.designFileId,
+        saved.descriptor.name,
+      );
+      if (designDocument.documentId === target.documentId) {
+        setFileName(saved.descriptor.name);
+      }
+    },
+  };
   const tool: Tool = isTool(state.tool) ? state.tool : "select";
   const selectedNode =
     state.selection.nodeIds.length === 1
@@ -469,6 +542,33 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   }, []);
 
   useEffect(() => {
+    return () => projectAutosave.dispose();
+  }, [projectAutosave]);
+
+  useEffect(() => {
+    let closeAfterFlush = false;
+    let flushing = false;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (closeAfterFlush || !projectAutosave.hasPendingWork()) return;
+      event.preventDefault();
+      event.returnValue = false;
+      if (flushing) return;
+      flushing = true;
+      void projectAutosave.flushAll().then(
+        () => {
+          closeAfterFlush = true;
+          window.close();
+        },
+        () => {
+          flushing = false;
+        },
+      );
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [projectAutosave]);
+
+  useEffect(() => {
     return window.desktop?.onNativeThemeChange((isDark) => {
       if (theme === "system") {
         document.documentElement.dataset.theme = isDark ? "dark" : "light";
@@ -667,7 +767,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               },
               signal: controller.signal,
             },
-          );
+          ).then(async (response) => {
+            if (response.ok && response.result.designRevision) {
+              await projectAutosave.flushDocument(request.context.documentId);
+            }
+            return response;
+          });
         })
         .then(
           (response) => desktop.resolveDesignToolRequest(response),
@@ -711,7 +816,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       }
       designToolControllers.current.clear();
     };
-  }, [workspace]);
+  }, [projectAutosave, workspace]);
 
   const applyCommands = useCallback(
     (label: string, commands: DesignOperation[]) => {
@@ -1496,15 +1601,22 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           designFileId: file.descriptor.designFileId,
           name: file.descriptor.name,
         };
+        let openedRuntime;
         if (
           workspaceSnapshot.openFileKeys.length === 1 &&
           workspaceSnapshot.activeProjectId === LOCAL_PROJECT_ID &&
           !runtime.getSnapshot().state.dirty
         ) {
-          workspace.replaceActiveFile(identity, file.document);
+          openedRuntime = workspace.replaceActiveFile(identity, file.document);
         } else {
-          openFile(identity, file.document);
+          openedRuntime = openFile(identity, file.document);
         }
+        projectAutosave.track({
+          projectId: identity.projectId,
+          designFileId: identity.designFileId,
+          documentId: file.document.documentId,
+          runtime: openedRuntime,
+        });
         setFileName(file.descriptor.name);
         setView("editor");
       } catch (error) {
@@ -1520,7 +1632,15 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         setWorkspaceBusy(false);
       }
     },
-    [activeProject, openFile, runtime, t, workspace, workspaceSnapshot],
+    [
+      activeProject,
+      openFile,
+      projectAutosave,
+      runtime,
+      t,
+      workspace,
+      workspaceSnapshot,
+    ],
   );
 
   const openDocument = async () => {
