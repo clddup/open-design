@@ -349,6 +349,7 @@ vi.mock("leafer-editor", () => ({
   },
   Polygon: FakePolygon,
   Rect: FakeRect,
+  RenderEvent: { CHILD_START: "render.child-start" },
   ResizeEvent: { RESIZE: "viewport.resize" },
   Text: FakeText,
   Star: FakeStar,
@@ -888,6 +889,88 @@ describe("Leafer engine selection bounds synchronization", () => {
       e: 1_240,
       f: 80,
     });
+
+    adapter.dispose();
+  });
+
+  it("reconciles a presentation plane that settles after the final viewport event", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    adapter.sync({
+      ...first,
+      generationActivity: {
+        id: "run_plan:tool_apply:requested",
+        label: "AI · Building the design",
+        phase: "building",
+        target: { x: 1_450, y: 240 },
+      },
+      generationSkeleton: {
+        id: "run_plan:tool_plan:target_home",
+        artboard: {
+          frameId: "home_artboard",
+          height: 900,
+          pending: true,
+          transform: [1, 0, 0, 1, 1_240, 80],
+          width: 420,
+        },
+        regions: [
+          {
+            height: 120,
+            id: "home_header",
+            name: "Header",
+            role: "structure",
+            width: 372,
+            x: 24,
+            y: 24,
+          },
+        ],
+      },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const presentationRoot = app.presentationRoots[0];
+    const skeletonLayer = presentationRoot?.children[0] as
+      FakeGroup | undefined;
+    const activityLayer = presentationRoot?.children[1] as
+      FakeGroup | undefined;
+    const viewport = {
+      a: 0.5,
+      b: 0,
+      c: 0,
+      d: 0.5,
+      e: -300,
+      f: 40,
+    };
+
+    // The document tree moves first and the ordinary viewport callback
+    // compensates against the presentation plane's previous identity.
+    app.tree.localTransform = { ...viewport };
+    app.emit("viewport.move");
+    expect(skeletonLayer?.localTransform).toEqual(viewport);
+
+    // Production Leafer may then advance the separate plane without another
+    // MoveEvent reaching the adapter. Rendering this stale child transform
+    // would apply pan/zoom twice, which is the packaged-app regression.
+    if (presentationRoot) presentationRoot.localTransform = { ...viewport };
+    app.emit("render.child-start");
+    expect(skeletonLayer?.localTransform).toEqual(identityMatrix());
+    expect(activityLayer?.localTransform).toEqual({
+      a: 2,
+      b: 0,
+      c: 0,
+      d: 2,
+      e: 1_450,
+      f: 240,
+    });
+
+    const skeletonTransformCalls = skeletonLayer?.transformCalls;
+    const activityTransformCalls = activityLayer?.transformCalls;
+    app.emit("render.child-start");
+    expect(skeletonLayer?.transformCalls).toBe(skeletonTransformCalls);
+    expect(activityLayer?.transformCalls).toBe(activityTransformCalls);
 
     adapter.dispose();
   });

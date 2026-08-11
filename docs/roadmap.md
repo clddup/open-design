@@ -40,6 +40,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 ## P0-B：稳定 Leafer 迁移与 Agent 主流程
 
+- [x] 修复 Agent 骨架/光标在用户观察生成过程时拖动画布产生双重 viewport 的实机时序：继续保留独立 presentation render plane，并在 App 每次真实 child render 前按当前 `presentationRoot⁻¹ × tree/screen` 幂等复核；即使 presentation plane 在最后一个 Move/Zoom event 后才追平，也不会把 pan/zoom 应用两次，稳定帧不再触发额外 render。自动化不替代 macOS/Windows 打包触控板和鼠标实机验收。
 - [x] 为 host-only `put_asset + insert_element(image)` 内部事务补 Renderer 集成测试，验证单次 revision、Page/Selection scope 和一次 undo 同时移除 asset/node。
 - [x] 为 Agent composer 的剪贴板粘贴和文件拖放补交互测试，验证 Renderer 通过窄 Preload API 提交 bytes，最终 run 只携带安全附件元数据；纯文本路径粘贴不被拦截或提前读取。
 - [x] 让 HTTP(S) 图片读取的超时和取消覆盖完整 body stream，而不只覆盖 response headers；慢 body、流式超过 16 MB 和用户取消已有自动化回归。

@@ -119,6 +119,18 @@ interface GenerationActivityElements {
   label: LeaferElement;
 }
 
+interface GenerationActivityViewportState {
+  badgeWidth: number;
+  badgeX: number;
+  badgeY: number;
+  layerTransform: AffineMatrix;
+}
+
+interface GenerationSkeletonViewportState {
+  layerTransform: AffineMatrix;
+  zoom: number;
+}
+
 interface AffineMatrix {
   a: number;
   b: number;
@@ -300,8 +312,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #generationActivityMoveStartedAt: number | null = null;
   #generationActivityTargetPoint: Point | null = null;
   #generationActivityRevealNodeId: string | null = null;
+  #generationActivityViewportState: GenerationActivityViewportState | null =
+    null;
   readonly #generationRevealFocusPoints = new Map<string, Point>();
   readonly #suppressedGenerationActivityIds = new Set<string>();
+  #generationSkeletonViewportState: GenerationSkeletonViewportState | null =
+    null;
 
   constructor(
     host: HTMLElement,
@@ -879,6 +895,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       InnerEditorEvent,
       MoveEvent,
       PointerEvent,
+      RenderEvent,
       ResizeEvent,
       ZoomEvent,
     } = this.#leafer;
@@ -953,6 +970,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#app.on(ZoomEvent.ZOOM, viewportChanged);
     this.#app.on(ZoomEvent.END, viewportChanged);
     this.#app.on(ResizeEvent.RESIZE, viewportChanged);
+    // Leafer applies viewport movement independently to every App render
+    // plane. A real gesture can therefore advance the presentation plane
+    // after the last Move/Zoom callback that reached this adapter. Reconcile
+    // from the transforms that will actually be rendered, rather than from
+    // event delivery alone. The viewport state caches below make this hook
+    // idempotent, so an aligned frame never schedules another render.
+    this.#app.on(RenderEvent.CHILD_START, () => {
+      this.#syncGenerationSkeletonViewport();
+      this.#syncGenerationActivityViewport();
+    });
 
     window.addEventListener("keydown", this.#onWindowKeyDown, true);
     this.#host.addEventListener("contextlost", this.#onContextLost, true);
@@ -2644,7 +2671,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       screen.y >= -24 &&
       screen.x <= hostBounds.width + 24 &&
       screen.y <= hostBounds.height + 24;
-    this.#generationActivityLayer.visible = onScreen;
+    if (this.#generationActivityLayer.visible !== onScreen) {
+      this.#generationActivityLayer.visible = onScreen;
+    }
     if (!onScreen) return;
     const layerTransform = matrixRelativeToParent(
       this.#generationPresentationRoot.localTransform,
@@ -2659,9 +2688,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     );
     if (!layerTransform) {
       this.#generationActivityLayer.visible = false;
+      this.#generationActivityViewportState = null;
       return;
     }
-    this.#generationActivityLayer.setTransform(layerTransform);
     const badgeWidth = Math.max(
       1,
       Number(this.#generationActivityElements.badge.width) || 148,
@@ -2669,6 +2698,23 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const badgeX =
       screen.x + badgeWidth + 28 > hostBounds.width ? -badgeWidth - 14 : 14;
     const badgeY = screen.y + 48 > hostBounds.height ? -40 : 16;
+    const previous = this.#generationActivityViewportState;
+    if (
+      previous &&
+      sameAffineMatrix(previous.layerTransform, layerTransform) &&
+      nearlyEqual(previous.badgeWidth, badgeWidth) &&
+      nearlyEqual(previous.badgeX, badgeX) &&
+      nearlyEqual(previous.badgeY, badgeY)
+    ) {
+      return;
+    }
+    this.#generationActivityViewportState = {
+      badgeWidth,
+      badgeX,
+      badgeY,
+      layerTransform: { ...layerTransform },
+    };
+    this.#generationActivityLayer.setTransform(layerTransform);
     this.#generationActivityElements.badge.set({ x: badgeX, y: badgeY });
     this.#generationActivityElements.label.set({
       width: badgeWidth - 16,
@@ -2722,6 +2768,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationActivityMoveFrom = null;
     this.#generationActivityTargetPoint = null;
     this.#generationActivityRevealNodeId = null;
+    this.#generationActivityViewportState = null;
   }
 
   #syncGenerationSkeleton(
@@ -2816,11 +2863,27 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     );
     if (!layerTransform) {
       this.#generationSkeletonLayer.visible = false;
+      this.#generationSkeletonViewportState = null;
       return;
     }
+    const zoom = Math.max(MATRIX_EPSILON, Math.abs(treeTransform.a || 1));
+    const previous = this.#generationSkeletonViewportState;
+    if (
+      previous &&
+      sameAffineMatrix(previous.layerTransform, layerTransform) &&
+      nearlyEqual(previous.zoom, zoom)
+    ) {
+      if (!this.#generationSkeletonLayer.visible) {
+        this.#generationSkeletonLayer.visible = true;
+      }
+      return;
+    }
+    this.#generationSkeletonViewportState = {
+      layerTransform: { ...layerTransform },
+      zoom,
+    };
     this.#generationSkeletonLayer.setTransform(layerTransform);
     this.#generationSkeletonLayer.visible = true;
-    const zoom = Math.max(MATRIX_EPSILON, Math.abs(treeTransform.a || 1));
     const inverseZoom = 1 / zoom;
     for (const element of this.#generationSkeletonStrokes) {
       element.set({
@@ -2885,6 +2948,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationSkeletonId = null;
     this.#generationSkeletonLabels.length = 0;
     this.#generationSkeletonStrokes.length = 0;
+    this.#generationSkeletonViewportState = null;
   }
 
   #queueGenerationReveal(
@@ -3584,6 +3648,17 @@ function matrixRelativeToParent(
 function matrixIsFinite(matrix: AffineMatrix): boolean {
   return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].every(
     Number.isFinite,
+  );
+}
+
+function sameAffineMatrix(left: AffineMatrix, right: AffineMatrix): boolean {
+  return (
+    nearlyEqual(left.a, right.a) &&
+    nearlyEqual(left.b, right.b) &&
+    nearlyEqual(left.c, right.c) &&
+    nearlyEqual(left.d, right.d) &&
+    nearlyEqual(left.e, right.e) &&
+    nearlyEqual(left.f, right.f)
   );
 }
 
