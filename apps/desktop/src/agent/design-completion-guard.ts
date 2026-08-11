@@ -5,6 +5,11 @@ import type {
   CompletionGuardPort,
 } from "@opendesign/agent-runtime";
 import {
+  isDesignDeliveryLedger,
+  type DesignDeliveryLedger,
+  type DesignDeliveryTarget,
+} from "@opendesign/workspace-contracts";
+import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
@@ -21,6 +26,13 @@ import {
 export function reviewDesignCompletion(
   context: AgentCompletionContext,
 ): AgentCompletionDecision {
+  const delivery = latestDeliveryLedger(context.toolCalls);
+  if (delivery) {
+    const incomplete = delivery.targets.find(
+      (target) => target.status !== "verified",
+    );
+    if (incomplete) return incompleteDeliveryDecision(delivery, incomplete);
+  }
   const generationIndex = context.toolCalls.findIndex(
     (call) => call.toolName === GENERATE_IMAGE_TOOL_NAME,
   );
@@ -120,6 +132,42 @@ export function reviewDesignCompletion(
   }
 
   return { allow: true };
+}
+
+function latestDeliveryLedger(
+  toolCalls: readonly AgentToolCallRecord[],
+): DesignDeliveryLedger | undefined {
+  for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
+    const result = toolCalls[index]?.result;
+    if (!isRecord(result)) continue;
+    const delivery = result.delivery;
+    if (isDesignDeliveryLedger(delivery)) return delivery;
+  }
+  return undefined;
+}
+
+function incompleteDeliveryDecision(
+  ledger: DesignDeliveryLedger,
+  target: DesignDeliveryTarget,
+): AgentCompletionDecision {
+  const completed = ledger.targets.filter(
+    (candidate) => candidate.status === "verified",
+  ).length;
+  const progress = `${completed}/${ledger.targets.length}`;
+  const action =
+    target.status === "pending"
+      ? `Build the required ${target.label} target inside root Frame ${target.rootNodeId}.`
+      : target.status === "drafted"
+        ? `Capture ${target.label} from its bound Frame and inspect the rendered result.`
+        : target.status === "captured"
+          ? `Record a structured visual review for ${target.label}.`
+          : target.status === "reviewed"
+            ? `Apply a concrete refinement to ${target.label} based on that review.`
+            : `Capture ${target.label} again to verify the refined revision.`;
+  return {
+    allow: false,
+    message: `The host delivery ledger is ${progress} verified. ${action} Do not stop or ask the user to send “continue”; complete every declared target in this Run.`,
+  };
 }
 
 function hasPlacedRaster(toolCalls: readonly AgentToolCallRecord[]): boolean {

@@ -3,6 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 
 export const WORKSPACE_CONTRACT_VERSION = 1 as const;
 export const PROJECT_MANIFEST_VERSION = "1.0.0" as const;
+export const DESIGN_DELIVERY_LEDGER_VERSION = 1 as const;
 export const MAX_PROJECT_DESIGN_FILES = 4_096;
 export const MAX_DESIGN_TARGETS = 128;
 export const MAX_SELECTED_NODE_IDS = 512;
@@ -73,6 +74,43 @@ export const GlobalTaskLifecycleSchema = Type.Union([
   Type.Literal("failed"),
   Type.Literal("interrupted"),
 ]);
+
+export const DesignDeliveryStatusSchema = Type.Union([
+  Type.Literal("pending"),
+  Type.Literal("drafted"),
+  Type.Literal("captured"),
+  Type.Literal("reviewed"),
+  Type.Literal("refined"),
+  Type.Literal("verified"),
+]);
+
+export const DesignDeliveryTargetSchema = Type.Object(
+  {
+    targetId: StableIdSchema,
+    label: NameSchema,
+    pageId: StableIdSchema,
+    rootNodeId: StableIdSchema,
+    status: DesignDeliveryStatusSchema,
+    draftRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+    captureRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+    reviewRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+    refinementRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+    verifiedRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+  },
+  { additionalProperties: false },
+);
+
+export const DesignDeliveryLedgerSchema = Type.Object(
+  {
+    version: Type.Literal(DESIGN_DELIVERY_LEDGER_VERSION),
+    targets: Type.Array(DesignDeliveryTargetSchema, {
+      minItems: 1,
+      maxItems: 32,
+    }),
+    activeTargetId: Type.Union([StableIdSchema, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
 
 const ResourcePermissionsSchema = Type.Array(ResourcePermissionSchema, {
   minItems: 1,
@@ -318,6 +356,7 @@ export const GlobalTaskProjectionSchema = Type.Object(
     title: TitleSchema,
     lifecycle: GlobalTaskLifecycleSchema,
     targetSet: RunTargetSetSchema,
+    delivery: Type.Optional(DesignDeliveryLedgerSchema),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
   },
@@ -331,6 +370,9 @@ export type ConversationLifecycle = Static<typeof ConversationLifecycleSchema>;
 export type ResourcePermission = Static<typeof ResourcePermissionSchema>;
 export type RootGrantLifecycle = Static<typeof RootGrantLifecycleSchema>;
 export type GlobalTaskLifecycle = Static<typeof GlobalTaskLifecycleSchema>;
+export type DesignDeliveryStatus = Static<typeof DesignDeliveryStatusSchema>;
+export type DesignDeliveryTarget = Static<typeof DesignDeliveryTargetSchema>;
+export type DesignDeliveryLedger = Static<typeof DesignDeliveryLedgerSchema>;
 export type DesignFileDescriptor = Static<typeof DesignFileDescriptorSchema>;
 export type ProjectManifest = Static<typeof ProjectManifestSchema>;
 export type ProjectDescriptor = Static<typeof ProjectDescriptorSchema>;
@@ -508,7 +550,81 @@ export function isGlobalTaskProjection(
 ): value is GlobalTaskProjection {
   return (
     checkSchema(GlobalTaskProjectionSchema, value) &&
-    isRunTargetSet(value.targetSet)
+    isRunTargetSet(value.targetSet) &&
+    (value.delivery === undefined || isDesignDeliveryLedger(value.delivery))
+  );
+}
+
+export function isDesignDeliveryLedger(
+  value: unknown,
+): value is DesignDeliveryLedger {
+  if (!checkSchema(DesignDeliveryLedgerSchema, value)) return false;
+  if (
+    new Set(value.targets.map((target) => target.targetId)).size !==
+    value.targets.length
+  ) {
+    return false;
+  }
+  if (
+    new Set(
+      value.targets.map((target) => `${target.pageId}:${target.rootNodeId}`),
+    ).size !== value.targets.length
+  ) {
+    return false;
+  }
+  if (
+    value.activeTargetId !== null &&
+    !value.targets.some((target) => target.targetId === value.activeTargetId)
+  ) {
+    return false;
+  }
+  if (
+    value.activeTargetId === null &&
+    value.targets.some((target) => target.status !== "verified")
+  ) {
+    return false;
+  }
+  if (
+    value.activeTargetId !== null &&
+    value.targets.find((target) => target.targetId === value.activeTargetId)
+      ?.status === "verified"
+  ) {
+    return false;
+  }
+  return value.targets.every(hasValidDeliveryRevisions);
+}
+
+function hasValidDeliveryRevisions(target: DesignDeliveryTarget): boolean {
+  const ordered = [
+    target.draftRevision,
+    target.captureRevision,
+    target.reviewRevision,
+    target.refinementRevision,
+    target.verifiedRevision,
+  ];
+  const requiredCount =
+    target.status === "pending"
+      ? 0
+      : target.status === "drafted"
+        ? 1
+        : target.status === "captured"
+          ? 2
+          : target.status === "reviewed"
+            ? 3
+            : target.status === "refined"
+              ? 4
+              : 5;
+  if (
+    ordered.slice(0, requiredCount).some((revision) => revision === undefined)
+  ) {
+    return false;
+  }
+  if (ordered.slice(requiredCount).some((revision) => revision !== undefined)) {
+    return false;
+  }
+  const revisions = ordered.slice(0, requiredCount) as number[];
+  return revisions.every(
+    (revision, index) => index === 0 || revision >= (revisions[index - 1] ?? 0),
   );
 }
 

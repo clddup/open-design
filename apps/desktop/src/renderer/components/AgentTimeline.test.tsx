@@ -20,11 +20,132 @@ async function chooseNextOption(
 }
 
 describe("AgentTimeline", () => {
+  it("shows host-verified multi-target delivery progress", () => {
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "tool:capture_home",
+        sessionId: "conversation_1",
+        runId: "run_1",
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "capture_home",
+        toolName: "opendesign_capture_canvas",
+        input: {},
+        risk: "read",
+        status: "completed",
+        result: {
+          delivery: {
+            version: 1,
+            targets: [
+              {
+                targetId: "target_home",
+                label: "Home",
+                pageId: "page_1",
+                rootNodeId: "frame_home",
+                status: "verified",
+                draftRevision: 1,
+                captureRevision: 1,
+                reviewRevision: 1,
+                refinementRevision: 2,
+                verifiedRevision: 2,
+              },
+              {
+                targetId: "target_profile",
+                label: "Profile",
+                pageId: "page_1",
+                rootNodeId: "frame_profile",
+                status: "pending",
+              },
+            ],
+            activeTargetId: "target_profile",
+          },
+        },
+      },
+    ];
+
+    render(
+      <AgentTimeline
+        activeRunId="run_1"
+        conversationId="conversation_1"
+        conversationTitle="Product suite"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={timeline}
+      />,
+    );
+
+    expect(screen.getByText("1/2 verified")).toBeInTheDocument();
+    expect(
+      screen.getByText("Current: Profile · waiting to be built"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("value", "1");
+    expect(screen.getByRole("progressbar")).toHaveAttribute("max", "2");
+  });
+
+  it("does not present a previous Run delivery ledger as current progress", () => {
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "tool:prior_delivery",
+        sessionId: "conversation_1",
+        runId: "run_previous",
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "prior_delivery",
+        toolName: "opendesign_capture_canvas",
+        input: {},
+        risk: "read",
+        status: "completed",
+        result: {
+          delivery: {
+            version: 1,
+            targets: [
+              {
+                targetId: "target_previous",
+                label: "Previous",
+                pageId: "page_1",
+                rootNodeId: "frame_previous",
+                status: "verified",
+                draftRevision: 1,
+                captureRevision: 1,
+                reviewRevision: 1,
+                refinementRevision: 2,
+                verifiedRevision: 2,
+              },
+            ],
+            activeTargetId: null,
+          },
+        },
+      },
+    ];
+
+    render(
+      <AgentTimeline
+        activeRunId="run_current"
+        conversationId="conversation_1"
+        conversationTitle="Current request"
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={timeline}
+      />,
+    );
+
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(screen.queryByText("1/1 verified")).not.toBeInTheDocument();
+  });
+
   it("lets an editor without a Conversation create one in place", async () => {
     const user = userEvent.setup();
     const onCreateConversation = vi.fn().mockResolvedValue(true);
 
-    const { container } = render(
+    render(
       <AgentTimeline
         activeRunId={null}
         conversationId={null}

@@ -566,6 +566,7 @@ export class OpenDesignPiToolAdapter {
         toolName: definition.name,
         input: parameters,
         status: "completed",
+        result: completedResult.content,
         ...(nextRevision === undefined ? {} : { revision: nextRevision }),
       });
 

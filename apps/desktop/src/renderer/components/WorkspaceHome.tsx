@@ -303,7 +303,17 @@ export function WorkspaceHome({
                   <li className="global-task-row" key={task.taskId}>
                     <span>
                       <strong>{task.title}</strong>
-                      <small>{t(taskLifecycleLabels[task.lifecycle])}</small>
+                      <small>
+                        {t(taskLifecycleLabels[task.lifecycle])}
+                        {task.delivery
+                          ? ` · ${t("agent.deliveryCount", {
+                              completed: task.delivery.targets.filter(
+                                (target) => target.status === "verified",
+                              ).length,
+                              total: task.delivery.targets.length,
+                            })}`
+                          : ""}
+                      </small>
                     </span>
                     {onOpenGlobalTask && (
                       <Button

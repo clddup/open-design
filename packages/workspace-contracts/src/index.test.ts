@@ -1,6 +1,7 @@
 import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it } from "vitest";
 import {
+  DESIGN_DELIVERY_LEDGER_VERSION,
   GlobalTaskProjectionSchema,
   MAX_DESIGN_TARGETS,
   MAX_PROJECT_DESIGN_FILES,
@@ -11,6 +12,7 @@ import {
   RootGrantSchema,
   WORKSPACE_CONTRACT_VERSION,
   isDesignTarget,
+  isDesignDeliveryLedger,
   isGlobalTaskProjection,
   isNormalizedRelativePath,
   isProjectManifest,
@@ -487,6 +489,57 @@ describe("workspace contract schemas", () => {
       createdAt: now,
       updatedAt: now,
     };
+    const delivery = {
+      version: DESIGN_DELIVERY_LEDGER_VERSION,
+      targets: [
+        {
+          targetId: "target_home",
+          label: "Home",
+          pageId: "page_1",
+          rootNodeId: "frame_home",
+          status: "refined" as const,
+          draftRevision: 1,
+          captureRevision: 1,
+          reviewRevision: 1,
+          refinementRevision: 2,
+        },
+        {
+          targetId: "target_profile",
+          label: "Profile",
+          pageId: "page_1",
+          rootNodeId: "frame_profile",
+          status: "pending" as const,
+        },
+      ],
+      activeTargetId: "target_home",
+    };
+    expect(isDesignDeliveryLedger(delivery)).toBe(true);
+    expect(isGlobalTaskProjection({ ...projection, delivery })).toBe(true);
+    expect(
+      isDesignDeliveryLedger({ ...delivery, activeTargetId: "target_missing" }),
+    ).toBe(false);
+    expect(
+      isDesignDeliveryLedger({
+        ...delivery,
+        targets: [
+          {
+            ...delivery.targets[0],
+            status: "verified",
+            verifiedRevision: 3,
+          },
+          {
+            ...delivery.targets[1],
+            status: "verified",
+            draftRevision: 2,
+            captureRevision: 2,
+            reviewRevision: 2,
+            refinementRevision: 3,
+            verifiedRevision: 3,
+          },
+        ],
+        activeTargetId: null,
+      }),
+    ).toBe(true);
     const lifecycles = [
       "queued",
       "running",

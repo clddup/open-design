@@ -7,7 +7,12 @@ import type {
 } from "@opendesign/agent-contracts";
 import { MAX_AGENT_ATTACHMENTS } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
-import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
+import {
+  isDesignDeliveryLedger,
+  type ConversationDescriptor,
+  type DesignDeliveryLedger,
+  type DesignDeliveryStatus,
+} from "@opendesign/workspace-contracts";
 import { Button, DesktopSelect, Glyph, IconButton } from "@opendesign/ui";
 import {
   useEffect,
@@ -114,11 +119,15 @@ function approvalDecisionKey(decision: string): MessageKey {
 }
 
 function friendlyAgentError(message: string, t: Translate): string {
-  if (/^design_workflow\.material_write_required:/i.test(message)) {
+  if (
+    /^design_workflow\.(?:material_write_required|delivery_structure_incomplete):/i.test(
+      message,
+    )
+  ) {
     return t("agent.workflowApplyingDraft");
   }
   if (
-    /^design_workflow\.(?:capture_required|capture_revision_invalid):/i.test(
+    /^design_workflow\.(?:capture_required|capture_revision_invalid|delivery_verification_required):/i.test(
       message,
     )
   ) {
@@ -168,9 +177,48 @@ function structuredToolFailureDetail(
 }
 
 function isRecoverableDesignWorkflowFailure(message: string): boolean {
-  return /^design_workflow\.(?:material_write_required|capture_required|capture_revision_invalid):/i.test(
+  return /^design_workflow\.(?:material_write_required|capture_required|capture_revision_invalid|delivery_verification_required|delivery_structure_incomplete):/i.test(
     message,
   );
+}
+
+function latestDeliveryLedger(
+  timeline: readonly SessionTimelineItem[],
+  events: readonly AgentEvent[],
+  activeRunId: string | null,
+): DesignDeliveryLedger | undefined {
+  let latest: DesignDeliveryLedger | undefined;
+  for (const item of timeline) {
+    if (item.type !== "tool" || item.status !== "completed") continue;
+    if (activeRunId !== null && item.runId !== activeRunId) continue;
+    const delivery = deliveryFromResult(item.result);
+    if (delivery) latest = delivery;
+  }
+  for (const event of events) {
+    if (event.type !== "tool.completed") continue;
+    if (activeRunId !== null && event.runId !== activeRunId) continue;
+    const delivery = deliveryFromResult(event.result);
+    if (delivery) latest = delivery;
+  }
+  return latest;
+}
+
+function deliveryFromResult(value: unknown): DesignDeliveryLedger | undefined {
+  if (!isRecord(value)) return undefined;
+  return isDesignDeliveryLedger(value.delivery) ? value.delivery : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function deliveryStatusKey(status: DesignDeliveryStatus): MessageKey {
+  if (status === "pending") return "agent.deliveryPending";
+  if (status === "drafted") return "agent.deliveryDrafted";
+  if (status === "captured") return "agent.deliveryCaptured";
+  if (status === "reviewed") return "agent.deliveryReviewed";
+  if (status === "refined") return "agent.deliveryRefined";
+  return "agent.deliveryVerified";
 }
 
 function toolTitle(
@@ -705,6 +753,13 @@ export function AgentTimeline({
     locale,
     t,
   );
+  const delivery = latestDeliveryLedger(timeline, events, activeRunId);
+  const verifiedDeliveryCount =
+    delivery?.targets.filter((target) => target.status === "verified").length ??
+    0;
+  const activeDeliveryTarget = delivery?.targets.find(
+    (target) => target.targetId === delivery.activeTargetId,
+  );
   const timelineRenderMarker = items
     .map(
       (item) =>
@@ -1056,6 +1111,38 @@ export function AgentTimeline({
               : t("agent.newConversation")}
           </Button>
         </div>
+        {delivery && (
+          <section
+            aria-label={t("agent.deliveryProgress")}
+            className="agent-delivery"
+          >
+            <div className="agent-delivery__summary">
+              <strong>{t("agent.deliveryProgress")}</strong>
+              <span>
+                {t("agent.deliveryCount", {
+                  completed: verifiedDeliveryCount,
+                  total: delivery.targets.length,
+                })}
+              </span>
+            </div>
+            <progress
+              aria-label={t("agent.deliveryCount", {
+                completed: verifiedDeliveryCount,
+                total: delivery.targets.length,
+              })}
+              max={delivery.targets.length}
+              value={verifiedDeliveryCount}
+            />
+            <small>
+              {activeDeliveryTarget
+                ? t("agent.deliveryCurrent", {
+                    label: activeDeliveryTarget.label,
+                    status: t(deliveryStatusKey(activeDeliveryTarget.status)),
+                  })
+                : t("agent.deliveryComplete")}
+            </small>
+          </section>
+        )}
         <ol
           aria-live="polite"
           className="agent-thread"

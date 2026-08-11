@@ -123,6 +123,49 @@ function expectBlocked(
   expect(result.message).toContain(message);
 }
 
+function deliveryResult(profileStatus: "pending" | "verified") {
+  return {
+    delivery: {
+      version: 1,
+      targets: [
+        {
+          targetId: "target_home",
+          label: "Home",
+          pageId: "page_1",
+          rootNodeId: "frame_home",
+          status: "verified",
+          draftRevision: 5,
+          captureRevision: 5,
+          reviewRevision: 5,
+          refinementRevision: 6,
+          verifiedRevision: 6,
+        },
+        profileStatus === "verified"
+          ? {
+              targetId: "target_profile",
+              label: "Profile",
+              pageId: "page_1",
+              rootNodeId: "frame_profile",
+              status: "verified",
+              draftRevision: 7,
+              captureRevision: 7,
+              reviewRevision: 7,
+              refinementRevision: 8,
+              verifiedRevision: 8,
+            }
+          : {
+              targetId: "target_profile",
+              label: "Profile",
+              pageId: "page_1",
+              rootNodeId: "frame_profile",
+              status: "pending",
+            },
+      ],
+      activeTargetId: profileStatus === "verified" ? null : "target_profile",
+    },
+  };
+}
+
 describe("design completion guard", () => {
   it("allows non-material conversations to finish normally", () => {
     expect(reviewDesignCompletion(context([]))).toEqual({ allow: true });
@@ -164,6 +207,43 @@ describe("design completion guard", () => {
           visualReview,
           refinementWrite,
           finalCapture,
+        ]),
+      ),
+    ).toEqual({ allow: true });
+  });
+
+  it("refuses to finish while any required delivery target is incomplete", () => {
+    const firstTargetVerified = {
+      ...finalCapture,
+      result: deliveryResult("pending"),
+    };
+    expectBlocked(
+      [
+        inspection,
+        designPlan,
+        materialWrite,
+        firstCapture,
+        visualReview,
+        refinementWrite,
+        firstTargetVerified,
+      ],
+      "1/2 verified",
+    );
+    const allTargetsVerified = {
+      ...finalCapture,
+      toolCallId: "capture_all_verified",
+      result: deliveryResult("verified"),
+    };
+    expect(
+      reviewDesignCompletion(
+        context([
+          inspection,
+          designPlan,
+          materialWrite,
+          firstCapture,
+          visualReview,
+          refinementWrite,
+          allTargetsVerified,
         ]),
       ),
     ).toEqual({ allow: true });

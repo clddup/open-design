@@ -9,7 +9,9 @@ import { WorkspaceStore } from "../project/workspace-store.js";
 import { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type {
   DesignApplyToolInput,
+  DesignPlanTarget,
   DesignPlanToolInput,
+  DesignPlanToolInputV3,
 } from "../../shared/design-agent-tools.js";
 
 const modelSelection = {
@@ -94,6 +96,251 @@ const visualReview = {
   effects: "Selection treatment is clear and restrained",
   refinements: ["Reduce inspector contrast", "Remove secondary borders"],
 };
+
+function multiTargetPlan(pageId: string): DesignPlanToolInputV3 {
+  const target = (
+    targetId: string,
+    label: string,
+    frameId: string,
+    x: number,
+  ): DesignPlanTarget => ({
+    targetId,
+    label,
+    pageId,
+    objective: `Design the ${label} screen`,
+    artboard: {
+      mode: "create",
+      frameId,
+      x,
+      y: 80,
+      width: 390,
+      height: 844,
+    },
+    composition: {
+      direction: "Mobile product screen with clear navigation and content",
+      hierarchy: ["Primary navigation", "Main content"],
+      regions: [
+        {
+          nodeId: `${frameId}_content`,
+          name: "Main content",
+          role: "content",
+          x: 24,
+          y: 96,
+          width: 342,
+          height: 700,
+        },
+      ],
+      assetIntegration: "Use editable native shapes and typography",
+      spacingRhythm: "8/12/16/24 px rhythm",
+    },
+    editableLayers: ["Navigation", "Main content"],
+    implementationSteps: ["Create the screen", "Build its content"],
+    validationChecks: ["Check hierarchy", "Check mobile spacing"],
+  });
+  return {
+    version: 3,
+    deliverable: "ui",
+    objective: "Design the requested Home and Profile screens",
+    outputMode: "editable-composition",
+    targets: [
+      target("target_home", "Home", "frame_home", 120),
+      target("target_profile", "Profile", "frame_profile", 558),
+    ],
+    visualSystem: {
+      avoidances: ["No generic card stack", "No placeholder-only content"],
+      formLanguage: "Precise mobile controls with restrained radii",
+      palette: ["#101828", "#FFFFFF", "#2563EB"],
+      surfaceAndDepth: "Use hierarchy and one subtle elevation tier",
+      typography: ["Inter 28/34 heading", "Inter 14/20 body"],
+      effects: ["Subtle navigation shadow"],
+    },
+    rasterAssetRoles: [],
+  };
+}
+
+function draftTargets(
+  pageId: string,
+  targets: readonly DesignPlanTarget[],
+): DesignApplyToolInput {
+  return {
+    label: "Build requested screens",
+    commands: targets.flatMap((target, index) => [
+      {
+        commandId: `insert_${target.artboard.frameId}`,
+        type: "insert_element" as const,
+        pageId,
+        parentId: null,
+        index,
+        node: {
+          id: target.artboard.frameId,
+          kind: "frame" as const,
+          name: target.label,
+          parentId: null,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, target.artboard.x, target.artboard.y] as [
+            number,
+            number,
+            number,
+            number,
+            number,
+            number,
+          ],
+          size: {
+            width: target.artboard.width,
+            height: target.artboard.height,
+          },
+          opacity: 1,
+          properties: {
+            fills: [{ type: "solid" as const, color: "#ffffff", opacity: 1 }],
+            strokes: [],
+            strokeWidth: 0,
+            cornerRadius: 0,
+            clipsContent: true,
+          },
+          extensions: {},
+        },
+      },
+      {
+        commandId: `insert_${target.artboard.frameId}_content`,
+        type: "insert_element" as const,
+        pageId,
+        parentId: target.artboard.frameId,
+        index: 0,
+        node: {
+          id: `${target.artboard.frameId}_content`,
+          kind: "group" as const,
+          name: "Main content",
+          parentId: target.artboard.frameId,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 24, 96] as [
+            number,
+            number,
+            number,
+            number,
+            number,
+            number,
+          ],
+          size: { width: 342, height: 700 },
+          opacity: 1,
+          properties: {},
+          extensions: {},
+        },
+      },
+      {
+        commandId: `insert_${target.artboard.frameId}_material`,
+        type: "insert_element" as const,
+        pageId,
+        parentId: `${target.artboard.frameId}_content`,
+        index: 0,
+        node: {
+          id: `${target.artboard.frameId}_material`,
+          kind: "rectangle" as const,
+          name: "Material content",
+          parentId: `${target.artboard.frameId}_content`,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 0, 0] as [
+            number,
+            number,
+            number,
+            number,
+            number,
+            number,
+          ],
+          size: { width: 280, height: 160 },
+          opacity: 1,
+          properties: {
+            fills: [{ type: "solid" as const, color: "#f1f5f9", opacity: 1 }],
+            strokes: [],
+            strokeWidth: 0,
+            cornerRadius: 16,
+          },
+          extensions: {},
+        },
+      },
+    ]),
+  };
+}
+
+function withDraftedTargets(
+  source: DesignDocument,
+  pageId: string,
+  targets: readonly DesignPlanTarget[],
+  revision: number,
+): DesignDocument {
+  const document = structuredClone(source);
+  document.revision = revision;
+  document.pagesById[pageId].rootNodeIds = targets.map(
+    (target) => target.artboard.frameId,
+  );
+  document.nodesById = {};
+  for (const target of targets) {
+    const region = target.composition.regions[0];
+    if (!region) throw new Error("Target region is missing");
+    document.nodesById[target.artboard.frameId] = {
+      id: target.artboard.frameId,
+      kind: "frame",
+      name: target.label,
+      parentId: null,
+      childIds: [region.nodeId],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, target.artboard.x, target.artboard.y],
+      size: { width: target.artboard.width, height: target.artboard.height },
+      opacity: 1,
+      properties: {
+        fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+      },
+      extensions: {},
+    };
+    document.nodesById[region.nodeId] = {
+      id: region.nodeId,
+      kind: "group",
+      name: region.name,
+      parentId: target.artboard.frameId,
+      childIds: [`${region.nodeId}_material`],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, region.x, region.y],
+      size: { width: region.width, height: region.height },
+      opacity: 1,
+      properties: {},
+      extensions: {},
+    };
+    document.nodesById[`${region.nodeId}_material`] = {
+      id: `${region.nodeId}_material`,
+      kind: "rectangle",
+      name: "Material content",
+      parentId: region.nodeId,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: {
+        width: Math.max(1, region.width),
+        height: Math.max(1, region.height),
+      },
+      opacity: 1,
+      properties: {
+        fills: [{ type: "solid", color: "#f1f5f9", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 16,
+      },
+      extensions: {},
+    };
+  }
+  return document;
+}
 
 async function setup() {
   const store = new WorkspaceStore(":memory:");
@@ -442,10 +689,16 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.assertDesignPlanForApply(context, misplacedDraft),
     ).toThrow("declared position and dimensions");
-    expect(() =>
-      coordinator.assertDesignPlanForApply(context, plannedDraft),
-    ).not.toThrow();
-    coordinator.recordDesignApplyCompleted(context.runId, plannedDraft, 1);
+    const authorization = coordinator.assertDesignPlanForApply(
+      context,
+      plannedDraft,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      plannedDraft,
+      authorization,
+      1,
+    );
     expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
       kind: "frame",
       nodeId: "workspace_artboard",
@@ -457,6 +710,7 @@ describe("GlobalTaskCoordinator", () => {
     expect(coordinator.recordCanvasCapture(context, 1)).toEqual({
       captureSequence: 1,
       capturedRevision: 1,
+      deliveryTargetId: "workspace_artboard",
       nextAction: "record-visual-review",
       reviewEligible: true,
     });
@@ -470,12 +724,13 @@ describe("GlobalTaskCoordinator", () => {
     expect(coordinator.recordCanvasCapture(context, 1)).toEqual({
       captureSequence: 2,
       capturedRevision: 1,
-      nextAction: "record-visual-review",
-      reviewEligible: true,
+      deliveryTargetId: "workspace_artboard",
+      nextAction: "refine-reviewed-target",
+      reviewEligible: false,
     });
     expect(() =>
       coordinator.registerVisualReview(context, visualReview),
-    ).not.toThrow();
+    ).toThrow("design_workflow.capture_required");
     expect(() =>
       coordinator.assertVisualReviewBeforeWrite(context),
     ).not.toThrow();
@@ -546,6 +801,375 @@ describe("GlobalTaskCoordinator", () => {
         "image_generated",
       ),
     ).not.toThrow();
+
+    store.close();
+  });
+
+  it("persists and enforces every user-requested delivery target", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_multi_delivery",
+      sessionId: "conversation_mobile",
+      prompt: "Design the Home and Profile screens",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_multi_delivery",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan = multiTargetPlan(pageId);
+    coordinator.registerDesignPlan(context, plan);
+    expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
+      activeTargetId: "target_home",
+      targets: [
+        { targetId: "target_home", status: "pending" },
+        { targetId: "target_profile", status: "pending" },
+      ],
+    });
+
+    const draft = draftTargets(pageId, plan.targets);
+    const draftAuthorization = coordinator.assertDesignPlanForApply(
+      context,
+      draft,
+    );
+    expect(draftAuthorization?.targetIds).toEqual([
+      "target_home",
+      "target_profile",
+    ]);
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      draft,
+      draftAuthorization,
+      1,
+    );
+    const draftedDocument = withDraftedTargets(
+      opened.document,
+      pageId,
+      plan.targets,
+      1,
+    );
+    expect(coordinator.getDeliveryLedger(context.runId)?.targets).toMatchObject(
+      [
+        { targetId: "target_home", status: "drafted", draftRevision: 1 },
+        { targetId: "target_profile", status: "drafted", draftRevision: 1 },
+      ],
+    );
+
+    expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
+      kind: "frame",
+      pageId,
+      nodeId: "frame_home",
+    });
+    coordinator.recordCanvasCapture(context, 1);
+    coordinator.registerVisualReview(context, visualReview);
+    const refineHome: DesignApplyToolInput = {
+      label: "Refine Home hierarchy",
+      commands: [
+        {
+          commandId: "refine_home",
+          type: "update_properties",
+          nodeId: "frame_home_content",
+          opacity: 0.98,
+        },
+      ],
+    };
+    const homeAuthorization = coordinator.assertDesignPlanForApply(
+      context,
+      refineHome,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      refineHome,
+      homeAuthorization,
+      2,
+    );
+    const homeRefinedDocument = structuredClone(draftedDocument);
+    homeRefinedDocument.revision = 2;
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(homeRefinedDocument, pageId),
+    );
+    expect(coordinator.resolveCanvasCaptureTarget(context)).toMatchObject({
+      nodeId: "frame_home",
+    });
+    expect(coordinator.recordCanvasCapture(context, 2)).toMatchObject({
+      deliveryTargetId: "target_home",
+      nextAction: "continue-next-target",
+      verified: true,
+    });
+
+    expect(coordinator.resolveCanvasCaptureTarget(context)).toMatchObject({
+      nodeId: "frame_profile",
+    });
+    coordinator.recordCanvasCapture(context, 2);
+    coordinator.registerVisualReview(context, visualReview);
+    const refineProfile: DesignApplyToolInput = {
+      label: "Refine Profile hierarchy",
+      commands: [
+        {
+          commandId: "refine_profile",
+          type: "update_properties",
+          nodeId: "frame_profile_content",
+          opacity: 0.98,
+        },
+      ],
+    };
+    const profileAuthorization = coordinator.assertDesignPlanForApply(
+      context,
+      refineProfile,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      refineProfile,
+      profileAuthorization,
+      3,
+    );
+    const profileRefinedDocument = structuredClone(homeRefinedDocument);
+    profileRefinedDocument.revision = 3;
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(profileRefinedDocument, pageId),
+    );
+    expect(coordinator.recordCanvasCapture(context, 3)).toMatchObject({
+      deliveryTargetId: "target_profile",
+      nextAction: "complete-delivery",
+      verified: true,
+    });
+    expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
+      activeTargetId: null,
+      targets: [
+        { targetId: "target_home", status: "verified", verifiedRevision: 2 },
+        {
+          targetId: "target_profile",
+          status: "verified",
+          verifiedRevision: 3,
+        },
+      ],
+    });
+    expect(
+      store.listGlobalTasks().find((task) => task.runId === context.runId)
+        ?.delivery,
+    ).toEqual(coordinator.getDeliveryLedger(context.runId));
+
+    store.close();
+  });
+
+  it("refuses to verify a delivery target whose planned region is empty", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_empty_delivery",
+      sessionId: "conversation_mobile",
+      prompt: "Design one Home screen",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_empty_delivery",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const sourcePlan = multiTargetPlan(pageId);
+    const homeTarget = sourcePlan.targets[0];
+    if (!homeTarget) throw new Error("Home target is missing");
+    const plan: DesignPlanToolInputV3 = {
+      ...sourcePlan,
+      objective: "Design the requested Home screen",
+      targets: [homeTarget],
+    };
+    coordinator.registerDesignPlan(context, plan);
+    const fullDraft = draftTargets(pageId, plan.targets);
+    const emptyDraft: DesignApplyToolInput = {
+      ...fullDraft,
+      commands: fullDraft.commands.filter(
+        (command) =>
+          command.type !== "insert_element" ||
+          command.node.id !== "frame_home_material",
+      ),
+    };
+    const authorization = coordinator.assertDesignPlanForApply(
+      context,
+      emptyDraft,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      emptyDraft,
+      authorization,
+      1,
+    );
+    coordinator.recordCanvasCapture(context, 1);
+    coordinator.registerVisualReview(context, visualReview);
+    const refinement: DesignApplyToolInput = {
+      label: "Refine Home shell",
+      commands: [
+        {
+          commandId: "refine_empty_home",
+          type: "update_properties",
+          nodeId: "frame_home_content",
+          opacity: 0.98,
+        },
+      ],
+    };
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      refinement,
+      coordinator.assertDesignPlanForApply(context, refinement),
+      2,
+    );
+    const emptyDocument = withDraftedTargets(
+      opened.document,
+      pageId,
+      plan.targets,
+      2,
+    );
+    const region = emptyDocument.nodesById.frame_home_content;
+    if (!region) throw new Error("Home region is missing");
+    region.childIds = [];
+    delete emptyDocument.nodesById.frame_home_content_material;
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(emptyDocument, pageId),
+    );
+
+    expect(() => coordinator.recordCanvasCapture(context, 2)).toThrow(
+      "Planned region frame_home_content is empty",
+    );
+    expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
+      activeTargetId: "target_home",
+      targets: [{ targetId: "target_home", status: "refined" }],
+    });
+
+    store.close();
+  });
+
+  it("recovers the first incomplete target from an interrupted persisted ledger", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_interrupted_delivery",
+      sessionId: "conversation_mobile",
+      prompt: "Design the Home and Profile screens",
+      documentId: file.documentId,
+      revision: 0,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const interrupted = store
+      .listGlobalTasks()
+      .find((task) => task.runId === "run_interrupted_delivery");
+    if (!interrupted) throw new Error("Interrupted task is missing");
+    store.saveGlobalTask({
+      ...interrupted,
+      lifecycle: "interrupted",
+      delivery: {
+        version: 1,
+        targets: [
+          {
+            targetId: "target_home",
+            label: "Home",
+            pageId,
+            rootNodeId: "frame_home",
+            status: "verified",
+            draftRevision: 1,
+            captureRevision: 1,
+            reviewRevision: 1,
+            refinementRevision: 2,
+            verifiedRevision: 2,
+          },
+          {
+            targetId: "target_profile",
+            label: "Profile",
+            pageId,
+            rootNodeId: "frame_profile",
+            status: "drafted",
+            draftRevision: 2,
+          },
+        ],
+        activeTargetId: "target_profile",
+      },
+      updatedAt: "2026-08-11T12:00:00.000Z",
+    });
+
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_resumed_delivery",
+      sessionId: "conversation_mobile",
+      prompt: "Finish the design",
+      documentId: file.documentId,
+      revision: 2,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_resumed_delivery",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: 2,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    expect(coordinator.getRecoverableDelivery(context)).toMatchObject({
+      activeTargetId: "target_profile",
+    });
+    const plan = multiTargetPlan(pageId);
+    const existingPlan: DesignPlanToolInputV3 = {
+      ...plan,
+      targets: plan.targets.map((target) => ({
+        ...target,
+        artboard: { ...target.artboard, mode: "existing" },
+      })),
+    };
+    const recoveredDocument = withDraftedTargets(
+      opened.document,
+      pageId,
+      existingPlan.targets,
+      2,
+    );
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(recoveredDocument, pageId),
+    );
+    coordinator.registerDesignPlan(context, existingPlan);
+    expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
+      activeTargetId: "target_profile",
+      targets: [
+        { targetId: "target_home", status: "verified", verifiedRevision: 2 },
+        { targetId: "target_profile", status: "drafted", draftRevision: 2 },
+      ],
+    });
+    expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
+      kind: "frame",
+      pageId,
+      nodeId: "frame_profile",
+    });
 
     store.close();
   });

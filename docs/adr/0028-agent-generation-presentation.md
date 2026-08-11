@@ -44,7 +44,7 @@ reveal ID、时间、线框、临时 opacity 和 animation frame 不进入 `Desi
 
 ### Accepted typed plan 先形成结构骨架
 
-`DesignPlanToolInput version: 2` 在正式写入前声明画板 Page 坐标、尺寸，以及主要区域的稳定 `nodeId`、角色和画板局部 bounds。Renderer 会临时记录 Provider 的 `tool.requested`，但只有 Main 对同一 Run/tool call 返回字段完全匹配的 `tool.completed { status: "accepted" }` 后，才允许 Leafer 在独立 `sky` 层展示骨架。失败、畸形或不匹配结果不会显示未经信任的结构。
+`DesignPlanToolInput version: 3` 在正式写入前按用户请求声明 `1..N` 个交付 target，每项包含画板 Page 坐标、尺寸，以及主要区域的稳定 `nodeId`、角色和画板局部 bounds。Renderer 会临时记录 Provider 的 `tool.requested`，但只有 Main 对同一 Run/tool call 返回字段完全匹配的 `tool.completed { status: "accepted" }` 后，才允许 Leafer 在独立 `sky` 层展示当前活动 Page 中首个未完成 target 的骨架。version 2 历史 tool/journal 继续按单 target 投影；失败、畸形或不匹配结果不会显示未经信任的结构。
 
 骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架切换到权威 Frame transform；声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。Main 同时要求区域根是画板直属、轴对齐并匹配计划 bounds，因此临时结构和正式层级使用同一组稳定 ID/几何。
 

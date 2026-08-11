@@ -17,10 +17,14 @@ import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
 
 const DEFAULT_LIMITS: AgentRuntimeLimits = {
-  maxTurns: 8,
-  maxToolCalls: 32,
+  // A requested design suite may require an independent capture/review/
+  // refinement cycle per target. The total-token budget remains the hard
+  // runaway bound; these structural limits must not terminate an otherwise
+  // healthy multi-target delivery after the first few screens.
+  maxTurns: 160,
+  maxToolCalls: 320,
   maxTotalTokens: 200_000,
-  maxCompletionGuardRejections: 3,
+  maxCompletionGuardRejections: 32,
   maxContextCharacters: 240_000,
 };
 

@@ -21,10 +21,12 @@ export function projectToolResultForModel(value: unknown): unknown {
     0,
     MAX_MODEL_TOOL_RESULT_EXCERPT_CHARACTERS,
   );
+  const workflow = workflowProjection(projected);
   return {
     notice: `[OpenDesign omitted part of an oversized structured tool result (${projectedCharacters} projected characters; model projection limit ${MAX_MODEL_TOOL_RESULT_CHARACTERS})]`,
     summary: summarizeToolResultValue(projected),
     excerpt,
+    ...workflow,
   };
 }
 
@@ -158,4 +160,15 @@ function jsonCharacterLength(value: unknown): number {
   } catch {
     return Number.POSITIVE_INFINITY;
   }
+}
+
+function workflowProjection(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  return {
+    ...(record.delivery === undefined ? {} : { delivery: record.delivery }),
+    ...(record.unfinishedDelivery === undefined
+      ? {}
+      : { unfinishedDelivery: record.unfinishedDelivery }),
+  };
 }

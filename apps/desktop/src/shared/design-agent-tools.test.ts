@@ -221,6 +221,62 @@ describe("design Agent tool contract", () => {
         },
       }),
     ).toBe(false);
+    const targetFromLegacy = (suffix: string, x: number) => ({
+      targetId: `target_${suffix}`,
+      label: suffix === "home" ? "Home" : "Profile",
+      pageId: plan.pageId,
+      objective: `Design the ${suffix} screen`,
+      artboard: {
+        ...plan.artboard,
+        frameId: `artboard_${suffix}`,
+        x,
+      },
+      composition: {
+        ...plan.composition,
+        regions: plan.composition.regions.map((region) => ({
+          ...region,
+          nodeId: `${region.nodeId}_${suffix}`,
+        })),
+      },
+      editableLayers: [...plan.editableLayers],
+      implementationSteps: [...plan.implementationSteps],
+      validationChecks: [...plan.validationChecks],
+    });
+    const multiTargetPlan = {
+      version: 3,
+      deliverable: plan.deliverable,
+      objective: "Design the requested Home and Profile screens",
+      outputMode: plan.outputMode,
+      targets: [
+        targetFromLegacy("home", 120),
+        targetFromLegacy("profile", 1_680),
+      ],
+      visualSystem: plan.visualSystem,
+      rasterAssetRoles: plan.rasterAssetRoles,
+    };
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, multiTargetPlan),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...multiTargetPlan,
+        targets: [
+          multiTargetPlan.targets[0],
+          {
+            ...multiTargetPlan.targets[1],
+            targetId: multiTargetPlan.targets[0]?.targetId,
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...multiTargetPlan,
+        outputMode: "single-raster",
+        rasterAssetRoles: ["final-single-image"],
+        singleRasterEvidence: "one flattened image",
+      }),
+    ).toBe(false);
     expect(validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, review)).toBe(
       true,
     );

@@ -302,6 +302,57 @@ describe("OpenDesign Pi production runtime", () => {
       ),
     ).toHaveLength(0);
   });
+
+  it("does not terminate a healthy multi-target tool loop at the old sixteen-turn limit", async () => {
+    const store = new MemorySessionStore();
+    const toolTurns = Array.from({ length: 20 }, (_, index) => ({
+      blocks: [
+        {
+          id: `suite_probe_block_${index}`,
+          type: "tool_call" as const,
+          toolCallId: `suite_probe_call_${index}`,
+          name: tool.name,
+          input: {},
+        },
+      ],
+      stopReason: "tool_use" as const,
+    }));
+    let executions = 0;
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: new MockModelGateway([
+        ...toolTurns,
+        {
+          blocks: [
+            {
+              id: "suite_complete",
+              type: "text",
+              text: "The requested suite is complete.",
+            },
+          ],
+        },
+      ]),
+      sessionStore: store,
+      toolCatalog: { listTools: () => [tool] },
+      toolExecutor: {
+        async *execute(): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          executions += 1;
+          yield { type: "completed", result: { content: { ok: true } } };
+        },
+      },
+    });
+
+    const events = await collect(runtime, {
+      ...request,
+      runId: "run_pi_multi_target_budget",
+    });
+
+    expect(executions).toBe(20);
+    expect(events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "complete",
+    });
+  });
 });
 
 class AbortableGateway implements ModelGateway {

@@ -570,13 +570,10 @@ describe("Renderer design tool scope", () => {
         recoverable: true,
         details: {
           kind: "design-transaction",
-          fingerprint: expect.stringMatching(/^design_[a-f0-9]{8}$/),
           issues: [
             {
               commandId: "break_feature_stroke",
               nodeId: "feature_one",
-              path: expect.stringContaining("/nodesById/feature_one"),
-              message: expect.any(String),
             },
           ],
           recovery: {
@@ -587,6 +584,11 @@ describe("Renderer design tool scope", () => {
         },
       },
     });
+    if (response.ok) throw new Error("Invalid transaction unexpectedly passed");
+    const details = response.error.details;
+    expect(details?.fingerprint).toMatch(/^design_[a-f0-9]{8}$/);
+    expect(details?.issues[0]?.path).toContain("/nodesById/feature_one");
+    expect(typeof details?.issues[0]?.message).toBe("string");
     expect(runtime.getSnapshot().document.revision).toBe(0);
     expect(
       (

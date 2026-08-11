@@ -129,6 +129,7 @@ export interface AgentToolCallRecord {
   toolName: string;
   input: unknown;
   status: "completed";
+  result?: unknown;
   revision?: number;
 }
 

@@ -52,7 +52,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 将 Provider Catalog 升级到只管理对话模型的 v3，并建立独立 `GlobalImageGenerationSettings v1`：生图服务拥有自己的启用状态、adapter、Base URL、鉴权、凭据和用户模型 ID，不受 Conversation Provider/Model 影响；`generate_image` 结果进入内容寻址附件并由 `place_image` 通过唯一事务放入画布。旧 v2 生图选择确定性迁移后从 Catalog 剥离。
 - [x] 建立跨设计类型的 Agent 质量流程门禁：新建 UI、海报、Logo、插画和品牌物料必须先提交 typed design plan，固定 Frame/Artboard、构图、排版、形态语言、surface/depth、asset role 与反模式；首张 capture 后必须提交 typed visual review 才能 refinement。Main 阻止无计划新建、Page-root 散落、未声明 raster role、默认整图替代可编辑 composition，以及未审查截图后的继续写入。
 - [x] 建立第一阶段 Agent 画布生成过程：三条以内保持原子，大事务按 `EditorRuntime.preview()` 选择文档有效的连续阶段并共享单一撤销组；已提交 Agent 新节点按父级优先执行有界 wireframe/fade reveal。取消回滚、Run 终态/错误/切页清理、Reduced Motion 和 `capture_canvas` 最终态截图已有自动化证据；展示状态不进入文档、history、selection 或导出。
-- [x] 建立第二阶段 Agent 画布结构过程：`DesignPlanToolInput version: 2` 声明画板位置/尺寸和稳定区域 ID/bounds；只有 Main 匹配接受的计划才能在 Leafer `sky` 层显示 Frame/区域 skeleton。正式直属 `Group/Frame` 出现实际内容后逐区替换，空容器不冒充完成；停止、终态、错误、切页、截图和 dispose 均清理，静态 Reduced Motion、pan/zoom 与 selection 分层已有自动化证据。骨架不进入文档、revision、history、selection、保存或导出。
+- [x] 建立第二阶段 Agent 画布结构过程：最初的 `DesignPlanToolInput version: 2` 声明单画板位置/尺寸和稳定区域 ID/bounds，version 3 继续兼容并在当前 Page 投影首个未完成 target；只有 Main 匹配接受的计划才能在 Leafer `sky` 层显示 Frame/区域 skeleton。正式直属 `Group/Frame` 出现实际内容后逐区替换，空容器不冒充完成；停止、终态、错误、切页、截图和 dispose 均清理，静态 Reduced Motion、pan/zoom 与 selection 分层已有自动化证据。骨架不进入文档、revision、history、selection、保存或导出。
 - [x] 建立第三阶段 Agent 语义过程：accepted plan 后才显示独立紫色 Agent cursor 与本地化阶段标签；位置先锚定待完成区域，再只跟随已提交 Agent revision 的新增节点 focus point。typed tool name/结构化 progress 驱动 `structuring/building/assets/reviewing/refining/recovering`，不展示 Provider 自由文本；完成态清除旧百分比和 live/durable timeline progress detail。cursor 不命中、不借用 selection，支持 pan/zoom、离屏隐藏、180 ms 低频位移、Reduced Motion、`aria-live`、停止/截图/终态/错误/切页/dispose 清理，并继续与正式文档分离。
 - [x] 将 material write → capture → visual review 门禁绑定到权威 revision，而不是视口或选区状态：baseline/pre-write、重复和早于最近 material revision 的截图分别返回稳定 `design_workflow.*` 恢复指令；系统提示禁止原样重试，live/durable 时间线默认折叠可自动恢复的门禁失败。pan、zoom、全屏、窗口尺寸和选择变化不改变 revision/mutation target。
 - [x] 将视觉审查从活动 viewport 迁移为绑定 Run Mutation Target/计划 Frame 的确定性离屏 Leafer 渲染：Main 选择已建立的计划 Frame，否则选择绑定 Page；Renderer 按 captured revision 导出 content tree，不包含 selection/skeleton/cursor/reveal。用户在生成期间切换 Design File、pan、zoom、resize 或查看其他区域只能改变本地视图，不能改变 Agent 收到的审查画面、revision 或 mutation target。
@@ -63,7 +63,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 修复 `artboard.mode=existing` 的既有画板误判：Main 从当前 revision 的 `inspect_document` 结构结果验证 Frame/Page 身份并解析完整权威后代集合，既有锁定 Group/Frame 仍可作为 Agent 数据写入容器，新增图层与图片可进入任意真实后代；缺失、错 Page、非 Frame、父链循环和 stale inspection 使用稳定 `design_workflow.inspection_* / existing_artboard_invalid` 恢复码，不再只相信本 Run 新插入节点。
 - [x] 保留 `EditorRuntime` invariant 的 `commandId / nodeId / path / message`，让 Renderer/Main/Agent journal/诊断 UI 共同返回结构化、可复制的可恢复 tool result；失败事务不写文档、不终结 Run，但 Runtime 会阻止后续设计写，直到成功重新 inspect。相同 fingerprint 与相同输入的盲重试有界并被宿主抑制；可信 Run binding、协议损坏等运行前置失败仍终结 Run。该切片升级为 `AgentEvent 3.6`，旧 journal 中只有 code/message 的失败继续可读。
 - [ ] 移除 Composer 常驻“当前页面 / 设计文件”写入范围下拉：默认静默绑定当前 Page，只显示低权重 Page 上下文；新建/复制/排序/删除 Page 或跨 Page 修改时，由 Main 发起一次性“将修改 Untitled 的页面结构”上下文授权，允许后只扩展本 Run 的明确 capability，完成后恢复 Page 默认。底层 Working Set / Mutation Target / Capability 继续分离，不把 UI 简化变成隐式授权。
-- [ ] 将单目标 plan/review 门禁扩展为持久化结构化交付账本：每个用户交付项绑定稳定 Page/Frame/root ID，状态按 `pending → drafted → captured → reviewed → refined → verified` 推进；宿主用权威文档、revision 和 capture 验收 `DesignPlan.regions / implementationSteps / 用户列出的全部界面`，任一必需项未完成时 completion guard 自动续跑。中断/超时从首个未完成项恢复，UI 显示 `1/4 个界面已完成`，已完成项只保留结构摘要以控制上下文。
+- [x] 将单目标 plan/review 门禁扩展为持久化结构化交付账本：`DesignPlan v3` 按用户实际需求声明 `1..N` 个交付 target；单个设计只建立一个 target，明确的一套页面/方案/物料逐项建立 target，不擅自扩张或折叠。每项绑定稳定 Page/Frame/root ID，状态按 `pending → drafted → captured → reviewed → refined → verified` 推进；宿主以权威文档、精确 revision、计划 region 的直属容器和非空实际内容子树，以及两次 capture/review/refinement 证据验收，不信任模型口头“完成”。任一必需 target 未完成时 completion guard 在同 Run 自动续跑，持久任务可在中断后的新 Run 从首个未完成项恢复，UI 显示 `N/M verified`；超大工具结果仍单独保留有界账本摘要。Provider 超时后由 Main 自动创建新 Run 尚未实现，继续由下一条用户消息触发恢复。
 - [ ] 收口 Agent 历史终态与超时表达：新 Run 开始时折叠旧 Run 的“已达到上下文限制”等历史终态，不让它看起来仍在阻塞；Provider 首响应、流空闲、总时限继续使用独立 watchdog，但事件、诊断和 Timeline 必须保留具体 phase、阈值、Provider request ID 与重试语义，不能统一显示成模糊“模型超时”。
 - [ ] 增加属性级 transform/geometry/paint/text tween 和自适应 reveal/tween 节奏；完成 macOS/Windows 实机运动、缩放和帧时间验收。这些过渡只能在合法 revision 之间插值，不得制造第二份可写状态。
 - [ ] 在本仓库启动的 Electron 实例中复验：Agent 渐进事务期间 pan/zoom/resize 后 Leafer editBox 始终贴合选区，不出现巨大蓝色角、残影或输入锁死。
@@ -139,7 +139,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P3-B：布局、组件与设计系统
 
 - 建立 OpenDesign-owned constraints、horizontal/vertical auto layout、wrap、padding/gap、对齐、hug/fill/fixed、min/max、absolute child、layout grid 与响应式求解语义。Layout service 输出确定性布局或候选事务，不保存第二份布局状态。
-- 建立 Component/Instance/detach、nested instance、property/override、Variant/State、共享样式、Token/Variable collection/mode/alias，并提供循环依赖和失效引用诊断。
+- 建立 Component/Instance/detach、nested instance、property/override、Variant/State 与共享样式，并提供循环依赖和失效引用诊断。
+- 建立 Design File/Library 级 Design Token/Variable 系统，而不是应用设置：支持 Color/Number/String/Boolean 等 typed value、Collection/Group、Mode、同类型 alias、属性 scope/binding，以及 primitive → semantic → component 分层。人工 UI 与 Agent 必须共用同一版本化命令；主题/模式切换、alias 继承、循环/失效引用、Library 发布与消费都产生确定性结果。DTCG JSON 导入导出通过独立 service 返回保真报告，不把 token 占位字段描述成已可用。
 - 人工 UI 和 Agent 使用同一组创建组件、生成实例、修改 override、切换 Variant、绑定 Token 和调整布局命令。属性检查器必须区分源组件、实例值、override 与继承值。
 
 完成条件：`OD-UI-01` 在改变容器宽度、组件 Variant 和变量模式后得到确定性结果；实例 override、保存重开、undo/redo 和 Agent 修改保持一致，且没有把 Leafer Flow 或组件私有对象写入文档。
@@ -169,6 +170,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - 增加结构诊断，识别复合对象散落 Page 根层、文字溢出、空 Path、不可见节点、资源缺失、非有限 bounds、完全越界、异常遮挡和无意义碎片层。
 - 增加渲染诊断与可读性检查，覆盖主体比例、层级、留白、对比度、文字可读性和关键内容裁切。启发式诊断必须标注置信度，不能把审美模型输出伪装成确定性错误。
 - 为对齐、布局、布尔、裁剪、组件、变量、导入和导出提供语义化 typed tools，避免模型通过大量低层坐标和节点重建完成专业操作。
+- 低优先级开放用户级与 Project 级设计 Skill/风格规范：记录来源、版本、内容哈希和权限，只影响设计方法、风格与评审标准，不能覆盖系统策略、扩展 Mutation Target 或替代底层设计能力。当前 `@opendesign/discovery` 只有隔离发现/优先级解析，尚未接入生产 Agent、管理 UI 或权限审计链，因此不得宣称已支持自定义 Skill/提示词。
 - 保留“写入 → `capture_canvas` → refinement → `capture_canvas`”可信完成门禁，并加入结构诊断结果、渲染失败和导出失败的阻断条件。截图次数本身不能证明设计质量。
 - 使用固定 prompt、参考资源、模型配置、工具轨迹、最终文档和视觉评分运行回归。任何提示词、模型 adapter、工具 schema 或渲染后端变更都必须重放受影响样张。
 

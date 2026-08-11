@@ -10,7 +10,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_PLAN_TOOL_NAME,
-  type DesignPlanToolInput,
+  type LegacyDesignPlanToolInput,
 } from "../shared/design-agent-tools";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
@@ -73,7 +73,7 @@ const generationPlan = {
   editableLayers: ["Hero visual", "Title", "Supporting copy"],
   implementationSteps: ["Create artboard", "Build regions", "Refine depth"],
   validationChecks: ["Check silhouette", "Check type hierarchy"],
-} satisfies DesignPlanToolInput;
+} satisfies LegacyDesignPlanToolInput;
 
 describe("Renderer Agent generation presentation", () => {
   it("derives parent-first reveal order from committed Agent additions", () => {
@@ -642,7 +642,7 @@ function acceptPlanPresentation(runId: string, toolCallId: string) {
   });
 }
 
-function acceptedPlanResult(plan: DesignPlanToolInput) {
+function acceptedPlanResult(plan: LegacyDesignPlanToolInput) {
   return {
     ok: true,
     status: "accepted",

@@ -24,6 +24,7 @@ import {
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+  designPlanTargets,
   isDesignPlanToolInput,
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
@@ -281,8 +282,27 @@ export function generationSkeletonFromAcceptedPlan(
   document: DesignDocument,
   pageId: string,
 ): LeaferGenerationSkeleton | undefined {
-  if (!accepted || accepted.plan.pageId !== pageId) return undefined;
-  const { artboard } = accepted.plan;
+  if (!accepted) return undefined;
+  const pageTargets = designPlanTargets(accepted.plan).filter(
+    (target) => target.pageId === pageId,
+  );
+  const target =
+    pageTargets.find((candidate) => {
+      const artboard = document.nodesById[candidate.artboard.frameId];
+      return (
+        artboard === undefined ||
+        candidate.composition.regions.some(
+          (region) =>
+            !generationRegionFulfilled(
+              document,
+              candidate.artboard.frameId,
+              region.nodeId,
+            ),
+        )
+      );
+    }) ?? pageTargets[0];
+  if (!target) return undefined;
+  const { artboard } = target;
   const actualArtboard = document.nodesById[artboard.frameId];
   const useActualArtboard =
     actualArtboard?.kind === "frame" &&
@@ -308,7 +328,10 @@ export function generationSkeletonFromAcceptedPlan(
     ? actualArtboard.transform
     : [1, 0, 0, 1, artboard.x, artboard.y];
   return {
-    id: accepted.id,
+    id:
+      accepted.plan.version === 2
+        ? accepted.id
+        : `${accepted.id}:${target.targetId}`,
     artboard: {
       frameId: artboard.frameId,
       height: useActualArtboard ? actualArtboard.size.height : artboard.height,
@@ -316,7 +339,7 @@ export function generationSkeletonFromAcceptedPlan(
       transform,
       width: useActualArtboard ? actualArtboard.size.width : artboard.width,
     },
-    regions: accepted.plan.composition.regions
+    regions: target.composition.regions
       .filter(
         (region) =>
           !generationRegionFulfilled(document, artboard.frameId, region.nodeId),
@@ -488,17 +511,21 @@ function isAcceptedGenerationPlanResult(
   plan: DesignPlanToolInput,
 ): boolean {
   if (!isRecord(value)) return false;
-  return (
+  const common =
     value.ok === true &&
     value.status === "accepted" &&
     value.version === plan.version &&
-    value.pageId === plan.pageId &&
     value.deliverable === plan.deliverable &&
     value.outputMode === plan.outputMode &&
+    sameJson(value.rasterAssetRoles, plan.rasterAssetRoles);
+  if (!common) return false;
+  if (sameJson(value.targets, designPlanTargets(plan))) return true;
+  return (
+    plan.version === 2 &&
+    value.pageId === plan.pageId &&
     sameJson(value.artboard, plan.artboard) &&
     sameJson(value.regions, plan.composition.regions) &&
-    sameJson(value.editableLayers, plan.editableLayers) &&
-    sameJson(value.rasterAssetRoles, plan.rasterAssetRoles)
+    sameJson(value.editableLayers, plan.editableLayers)
   );
 }
 

@@ -210,6 +210,7 @@ describe("OpenDesign Pi tool adapter", () => {
         toolName: moveTool.name,
         input: { dx: 24 },
         status: "completed",
+        result: { ok: true, attachments: [attachment] },
         revision: 13,
       },
     ]);

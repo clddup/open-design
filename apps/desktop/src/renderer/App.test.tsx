@@ -49,7 +49,7 @@ import type { ProjectDesignFile } from "../shared/desktop-api";
 import type { DiagnosticEvent } from "../shared/diagnostics";
 import {
   DESIGN_PLAN_TOOL_NAME,
-  type DesignPlanToolInput,
+  type LegacyDesignPlanToolInput,
 } from "../shared/design-agent-tools";
 
 const leaferHarness = vi.hoisted(() => ({
@@ -4009,7 +4009,12 @@ describe("App", () => {
         )?.[0];
       expect(response?.ok).toBe(false);
       if (response?.ok === false)
-        expect(response.error).toBe("Disk is read-only");
+        expect(response.error).toMatchObject({
+          code: "design_tool_execution_failed",
+          message: "Disk is read-only",
+          recoverable: true,
+          retryable: false,
+        });
     });
     expect(runtimeOutput()).toHaveAttribute("data-dirty", "true");
     expect(await screen.findByText("Disk is read-only")).toBeInTheDocument();
@@ -4413,7 +4418,7 @@ describe("App", () => {
   });
 });
 
-function rendererGenerationPlan(): DesignPlanToolInput {
+function rendererGenerationPlan(): LegacyDesignPlanToolInput {
   return {
     version: 2,
     pageId: "page_welcome",
