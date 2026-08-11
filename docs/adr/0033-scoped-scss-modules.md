@@ -26,9 +26,17 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
   检查器已迁入各自的 `*.module.scss`；Page/图层树、属性编辑、Paint/Effect、
   图片 placement、SVG/Raster 导出反馈和多选排列状态不再依赖全局类名，
   交互测试改用语义 role/label 定位。
+- UtilityDock 与 Agent 工作流按职责拆为 `UtilityDock.module.scss`、
+  `AgentTimeline.module.scss` 和 `AgentComposer.module.scss`，而不是把所有
+  `.agent-*` 机械搬入单一大模块。运行徽标、消息状态、历史终态、流式 caret、
+  reasoning、审批、附件与模型选择测试改用结构化 `data-state/data-kind` 或
+  accessible role/label，不再把样式类名当业务协议。
 - `sass` 固定为 `1.102.0`，仅用于 Vite 编译期；许可记录进入第三方声明。
 - TypeScript 通过 `vite/client` 读取 module 类型，Vite 生产构建验证 SCSS Modules 可编译和合并。
 - 后续迁移需保持键盘/焦点、主题、窄窗口、Reduced Motion 和视觉状态测试；仅减少全局行数不构成完成证据。
 - PropertiesPanel 当前仍是较大的单文件业务组件；样式收口不等同于组件职责已经
   完成拆分，Paint/Effect、Image placement 与 Export 应在后续功能切片中按各自
   事务边界提取，而不是只为缩短行数做无语义拆分。
+- AgentTimeline 当前仍承载 timeline projection 与 composer state；本次样式边界
+  已明确，但 React 组件提取必须保持自动滚动、durable/live 合并、附件导入、审批
+  和 active Run 生命周期的单一所有者，不能为缩短文件建立第二份状态。

@@ -1,5 +1,6 @@
 import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { useI18n } from "../i18n";
+import styles from "./UtilityDock.module.scss";
 
 export type UtilityDockTab = "agent" | "properties";
 
@@ -49,10 +50,10 @@ export function UtilityDock({
   };
 
   return (
-    <aside aria-label={t("utility.dock")} className="utility-dock">
+    <aside aria-label={t("utility.dock")} className={styles.root}>
       <div
         aria-label={t("utility.views")}
-        className="utility-dock__tabs"
+        className={styles.tabs}
         role="tablist"
       >
         <button
@@ -73,7 +74,11 @@ export function UtilityDock({
           {activityLabel && (
             <span
               aria-hidden="true"
-              className={`utility-dock__activity-badge${agentRunning ? " is-running" : ""}`}
+              className={`${styles.activityBadge}${
+                agentRunning ? ` ${styles.activityRunning}` : ""
+              }`}
+              data-agent-activity-badge=""
+              data-running={agentRunning ? "true" : "false"}
             />
           )}
         </button>
@@ -96,10 +101,10 @@ export function UtilityDock({
           {activityLabel}
         </span>
       )}
-      <div className="utility-dock__panels">
+      <div className={styles.panels}>
         <div
           aria-labelledby="utility-agent-tab"
-          className="utility-dock__panel"
+          className={styles.panel}
           hidden={activeTab !== "agent"}
           id="utility-agent-panel"
           role="tabpanel"
@@ -108,7 +113,7 @@ export function UtilityDock({
         </div>
         <div
           aria-labelledby="utility-properties-tab"
-          className="utility-dock__panel"
+          className={styles.panel}
           hidden={activeTab !== "properties"}
           id="utility-properties-panel"
           role="tabpanel"

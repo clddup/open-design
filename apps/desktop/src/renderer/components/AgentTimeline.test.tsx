@@ -244,7 +244,7 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".agent-thread__item")).toHaveLength(2);
+    expect(container.querySelectorAll("[data-agent-item]")).toHaveLength(2);
     expect(screen.queryByText("Task completed")).not.toBeInTheDocument();
     expect(screen.queryByText("Agent response")).not.toBeInTheDocument();
     expect(screen.getAllByText("Design change completed")).toHaveLength(1);
@@ -304,7 +304,7 @@ describe("AgentTimeline", () => {
     );
 
     expect(
-      [...container.querySelectorAll(".agent-message p")].map(
+      [...container.querySelectorAll("[data-agent-message] p")].map(
         (element) => element.textContent,
       ),
     ).toEqual(["First request", "First reply", "Second request"]);
@@ -369,7 +369,9 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".agent-message p")[1]).toHaveTextContent(
+    expect(
+      container.querySelectorAll("[data-agent-message] p")[1],
+    ).toHaveTextContent(
       "Complete opening paragraph. - First point - Final point",
     );
   });
@@ -418,7 +420,7 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".agent-thread__item")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-agent-item]")).toHaveLength(1);
     expect(screen.getByText("Canvas updated")).toBeInTheDocument();
     expect(
       screen.queryByText("Working on your design"),
@@ -627,7 +629,7 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".agent-thread__item")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-agent-item]")).toHaveLength(1);
     expect(
       screen.getByText("The model response was interrupted. Try again."),
     ).toBeInTheDocument();
@@ -740,11 +742,10 @@ describe("AgentTimeline", () => {
     );
 
     const historyRow = screen.getByText("Previous task ended").closest("li");
-    expect(historyRow).toHaveClass("agent-thread__item--historical");
-    expect(historyRow).toHaveClass("agent-thread__item--done");
-    expect(historyRow).not.toHaveClass("agent-thread__item--error");
+    expect(historyRow).toHaveAttribute("data-historical", "true");
+    expect(historyRow).toHaveAttribute("data-state", "done");
     expect(screen.getByText("Working on your design")).toBeInTheDocument();
-    expect(container.querySelectorAll(".agent-message__caret")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-agent-caret]")).toHaveLength(0);
   });
 
   it("finalizes a failed partial message and leaves only the current Run streaming", () => {
@@ -786,13 +787,10 @@ describe("AgentTimeline", () => {
       .getByText("Interrupted response")
       .closest("li");
     const currentMessage = screen.getByText("Current response").closest("li");
-    expect(failedMessage).toHaveClass("agent-thread__item--done");
-    expect(failedMessage).not.toHaveClass("agent-thread__item--active");
-    expect(currentMessage).toHaveClass("agent-thread__item--active");
-    expect(container.querySelectorAll(".agent-message__caret")).toHaveLength(1);
-    expect(
-      currentMessage?.querySelector(".agent-message__caret"),
-    ).not.toBeNull();
+    expect(failedMessage).toHaveAttribute("data-state", "done");
+    expect(currentMessage).toHaveAttribute("data-state", "active");
+    expect(container.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
+    expect(currentMessage?.querySelector("[data-agent-caret]")).not.toBeNull();
   });
 
   it("shows provider reasoning summaries but hides native tool plumbing", () => {
@@ -870,7 +868,9 @@ describe("AgentTimeline", () => {
       .getByText("Design process · 2 steps")
       .closest("details");
     expect(disclosure).not.toHaveAttribute("open");
-    expect(container.querySelectorAll(".agent-reasoning")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-agent-reasoning]")).toHaveLength(
+      1,
+    );
     fireEvent.click(screen.getByText("Design process · 2 steps"));
     expect(disclosure).toHaveAttribute("open");
     expect(container).toHaveTextContent("Planning internal");
@@ -1213,10 +1213,10 @@ describe("AgentTimeline", () => {
 
     expect(
       container.querySelector(
-        ".agent-thread__item--assistant.agent-thread__item--active",
+        '[data-agent-item][data-kind="assistant"][data-state="active"]',
       ),
     ).toBeInTheDocument();
-    const caret = container.querySelector(".agent-message__caret");
+    const caret = container.querySelector("[data-agent-caret]");
     expect(caret).toBeInTheDocument();
     expect(caret?.parentElement?.tagName).toBe("P");
     await user.click(screen.getByRole("button", { name: "Stop" }));
@@ -1225,15 +1225,15 @@ describe("AgentTimeline", () => {
     expect(screen.getByRole("button", { name: "Stopping…" })).toBeDisabled();
     expect(
       container.querySelector(
-        ".agent-thread__item--assistant.agent-thread__item--active",
+        '[data-agent-item][data-kind="assistant"][data-state="active"]',
       ),
     ).not.toBeInTheDocument();
     expect(
       container.querySelector(
-        ".agent-thread__item--assistant.agent-thread__item--stopping",
+        '[data-agent-item][data-kind="assistant"][data-state="stopping"]',
       ),
     ).toBeInTheDocument();
-    expect(container.querySelector(".agent-message__caret")).toBeNull();
+    expect(container.querySelector("[data-agent-caret]")).toBeNull();
   });
 
   it("finalizes a partial assistant message when its Run is cancelled", () => {
@@ -1268,7 +1268,7 @@ describe("AgentTimeline", () => {
     expect(screen.getByText("Task stopped")).toBeInTheDocument();
     expect(
       container.querySelector(
-        ".agent-thread__item--assistant.agent-thread__item--active",
+        '[data-agent-item][data-kind="assistant"][data-state="active"]',
       ),
     ).not.toBeInTheDocument();
   });
@@ -2005,7 +2005,7 @@ describe("AgentTimeline", () => {
       { name: "pasted.png", bytes: pastedBytes },
     ]);
 
-    const dropTarget = prompt.closest(".agent-prompt__editor");
+    const dropTarget = prompt.closest("[data-agent-prompt-editor]");
     expect(dropTarget).not.toBeNull();
     fireEvent.drop(dropTarget!, {
       dataTransfer: { files: [droppedFile], types: ["Files"] },

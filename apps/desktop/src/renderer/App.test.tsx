@@ -3860,7 +3860,9 @@ describe("App", () => {
     expect(propertiesTab).toHaveAttribute("aria-selected", "true");
     expect(agentTab).toHaveAccessibleDescription("Agent request in progress");
     expect(
-      agentTab.querySelector(".utility-dock__activity-badge.is-running"),
+      agentTab.querySelector(
+        '[data-agent-activity-badge][data-running="true"]',
+      ),
     ).toBeInTheDocument();
 
     await user.click(agentTab);
@@ -4187,7 +4189,7 @@ describe("App", () => {
         delta: "Partial design response",
       });
     });
-    expect(document.querySelectorAll(".agent-message__caret")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
     act(() => {
       emitAgentEvent?.({
         type: "agent.error",
@@ -4206,7 +4208,7 @@ describe("App", () => {
     expect(
       screen.queryByRole("button", { name: "Stop" }),
     ).not.toBeInTheDocument();
-    expect(document.querySelector(".agent-message__caret")).toBeNull();
+    expect(document.querySelector("[data-agent-caret]")).toBeNull();
 
     act(() => {
       emitAgentEvent?.({
@@ -4243,12 +4245,13 @@ describe("App", () => {
         delta: "Retry response",
       });
     });
-    expect(document.querySelectorAll(".agent-message__caret")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
     expect(
       screen.getByText("Partial design response").closest("li"),
-    ).toHaveClass("agent-thread__item--done");
-    expect(screen.getByText("Retry response").closest("li")).toHaveClass(
-      "agent-thread__item--active",
+    ).toHaveAttribute("data-state", "done");
+    expect(screen.getByText("Retry response").closest("li")).toHaveAttribute(
+      "data-state",
+      "active",
     );
   });
 
@@ -4276,7 +4279,7 @@ describe("App", () => {
         delta: "Interrupted by process exit",
       });
     });
-    expect(document.querySelectorAll(".agent-message__caret")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
     act(() => {
       emitAgentEvent?.({
         type: "agent.error",
@@ -4292,7 +4295,7 @@ describe("App", () => {
     expect(
       screen.queryByRole("button", { name: "Stop" }),
     ).not.toBeInTheDocument();
-    expect(document.querySelector(".agent-message__caret")).toBeNull();
+    expect(document.querySelector("[data-agent-caret]")).toBeNull();
     await waitFor(() =>
       expect(leaferHarness.finishGenerationPresentation).toHaveBeenCalledTimes(
         1,
@@ -4828,7 +4831,7 @@ describe("App", () => {
     expect(
       alert.closest(".diagnostic-notifications")?.parentElement,
     ).toHaveClass("app-shell");
-    expect(alert.closest(".agent-prompt")).toBeNull();
+    expect(alert.closest("[data-agent-prompt]")).toBeNull();
   });
 
   it("keeps the current document when an opened file is malformed", async () => {

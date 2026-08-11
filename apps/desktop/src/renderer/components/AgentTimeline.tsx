@@ -44,6 +44,8 @@ import {
   DESIGN_REVIEW_TOOL_NAME,
 } from "../../shared/design-agent-tools";
 import { useI18n } from "../i18n";
+import composerStyles from "./AgentComposer.module.scss";
+import styles from "./AgentTimeline.module.scss";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 
@@ -66,6 +68,26 @@ type TimelineItem = {
   toolCallId?: string;
   historical?: boolean;
 };
+
+const itemStateStyles: Record<TimelineItem["state"], string> = {
+  active: styles.itemActive,
+  done: styles.itemDone,
+  error: styles.itemError,
+  queued: styles.itemQueued,
+  stopping: styles.itemStopping,
+};
+
+const itemKindStyles: Partial<
+  Record<NonNullable<TimelineItem["kind"]>, string>
+> = {
+  approval: styles.itemApproval,
+  assistant: styles.itemAssistant,
+  user: styles.itemUser,
+};
+
+function cx(...classNames: Array<string | false | null | undefined>): string {
+  return classNames.filter(Boolean).join(" ");
+}
 
 export type AgentTimelineProps = {
   events: AgentEvent[];
@@ -932,9 +954,9 @@ function ReasoningDisclosure({
 }) {
   if (!item.reasoning) return null;
   return (
-    <details className="agent-reasoning">
+    <details className={styles.reasoning} data-agent-reasoning="">
       <summary>
-        <span aria-hidden="true" className="agent-reasoning__chevron">
+        <span aria-hidden="true" className={styles.reasoningChevron}>
           ›
         </span>
         <span>{item.title}</span>
@@ -1352,10 +1374,10 @@ export function AgentTimeline({
   };
 
   return (
-    <section aria-label={t("agent.timeline")} className="agent-panel">
-      <header className="agent-panel__header">
-        <div className="agent-panel__identity">
-          <span className="agent-mark">
+    <section aria-label={t("agent.timeline")} className={styles.root}>
+      <header className={styles.header}>
+        <div className={styles.identity}>
+          <span className={styles.mark}>
             <Glyph name="agent" />
           </span>
           <span>
@@ -1364,11 +1386,11 @@ export function AgentTimeline({
           </span>
         </div>
       </header>
-      <div className="agent-panel__body">
-        <div className="agent-conversation-bar">
+      <div className={styles.body}>
+        <div className={styles.conversationBar}>
           <DesktopSelect
             ariaLabel={t("agent.conversation")}
-            className="agent-conversation-bar__select"
+            className={styles.conversationSelect}
             disabled={conversations.length === 0}
             onValueChange={(value) => onSelectConversation?.(value)}
             options={conversations.map((conversation) => ({
@@ -1401,9 +1423,9 @@ export function AgentTimeline({
         {delivery && (
           <section
             aria-label={t("agent.deliveryProgress")}
-            className="agent-delivery"
+            className={styles.delivery}
           >
-            <div className="agent-delivery__summary">
+            <div className={styles.deliverySummary}>
               <strong>{t("agent.deliveryProgress")}</strong>
               <span>
                 {t("agent.deliveryCount", {
@@ -1432,7 +1454,7 @@ export function AgentTimeline({
         )}
         <ol
           aria-live="polite"
-          className="agent-thread"
+          className={styles.thread}
           onScroll={(event) => {
             const element = event.currentTarget;
             followsLatest.current =
@@ -1442,7 +1464,7 @@ export function AgentTimeline({
           ref={thread}
         >
           {items.length === 0 ? (
-            <li className="agent-thread__empty">
+            <li className={styles.empty}>
               <strong>
                 {hasConversation
                   ? t("agent.activityEmpty")
@@ -1457,13 +1479,26 @@ export function AgentTimeline({
           ) : (
             items.map((item) => (
               <li
-                className={`agent-thread__item agent-thread__item--${item.state}${item.kind ? ` agent-thread__item--${item.kind}` : ""}${item.historical ? " agent-thread__item--historical" : ""}`}
+                className={cx(
+                  styles.item,
+                  itemStateStyles[item.state],
+                  item.kind ? itemKindStyles[item.kind] : null,
+                  item.historical && styles.itemHistorical,
+                )}
+                data-agent-item=""
+                data-historical={item.historical ? "true" : "false"}
+                data-kind={item.kind ?? "activity"}
+                data-state={item.state}
                 key={item.id}
               >
                 {item.kind === "reasoning" ? (
                   <ReasoningDisclosure item={item} t={t} />
                 ) : item.kind === "user" || item.kind === "assistant" ? (
-                  <article className="agent-message" title={item.time}>
+                  <article
+                    className={styles.message}
+                    data-agent-message=""
+                    title={item.time}
+                  >
                     {(item.detail || item.state === "active") && (
                       <p>
                         {item.detail}
@@ -1471,7 +1506,8 @@ export function AgentTimeline({
                           item.state === "active" && (
                             <span
                               aria-hidden="true"
-                              className="agent-message__caret"
+                              className={styles.messageCaret}
+                              data-agent-caret=""
                             />
                           )}
                       </p>
@@ -1511,14 +1547,14 @@ export function AgentTimeline({
                           })
                         : item.title
                     }
-                    className="agent-approval"
+                    className={styles.approval}
                     role="group"
                   >
                     <span
                       aria-hidden="true"
-                      className="agent-activity__indicator"
+                      className={styles.activityIndicator}
                     />
-                    <span className="agent-approval__copy">
+                    <span className={styles.approvalCopy}>
                       <strong>
                         {item.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME
                           ? t("agent.pageStructureApprovalTitle", {
@@ -1534,7 +1570,7 @@ export function AgentTimeline({
                           : item.detail}
                       </small>
                     </span>
-                    <span className="agent-approval__actions">
+                    <span className={styles.approvalActions}>
                       <Button
                         disabled={resolvingApprovalId !== null}
                         onClick={() => void resolveApproval(item, "deny")}
@@ -1552,12 +1588,12 @@ export function AgentTimeline({
                     </span>
                   </div>
                 ) : (
-                  <div className="agent-activity" title={item.time}>
+                  <div className={styles.activity} title={item.time}>
                     <span
                       aria-hidden="true"
-                      className="agent-activity__indicator"
+                      className={styles.activityIndicator}
                     />
-                    <span className="agent-activity__copy">
+                    <span className={styles.activityCopy}>
                       <strong>{item.title}</strong>
                       {item.detail && <small>{item.detail}</small>}
                     </span>
@@ -1567,9 +1603,17 @@ export function AgentTimeline({
             ))
           )}
         </ol>
-        <form className="agent-prompt" onSubmit={(event) => void submit(event)}>
+        <form
+          className={composerStyles.root}
+          data-agent-prompt=""
+          onSubmit={(event) => void submit(event)}
+        >
           <div
-            className={`agent-prompt__editor${attachmentDropActive ? " agent-prompt__editor--drop" : ""}`}
+            className={cx(
+              composerStyles.editor,
+              attachmentDropActive && composerStyles.editorDrop,
+            )}
+            data-agent-prompt-editor=""
             onDragEnter={(event) => {
               if (event.dataTransfer.types.includes("Files")) {
                 event.preventDefault();
@@ -1590,8 +1634,8 @@ export function AgentTimeline({
             onDrop={handleAttachmentDrop}
           >
             {hasConversation && (
-              <div className="agent-prompt__scope">
-                <span className="agent-prompt__context">
+              <div className={composerStyles.scope}>
+                <span className={composerStyles.context}>
                   <Glyph name="select" size={12} />
                   <span>{t("agent.contextScope", { scope: scopeLabel })}</span>
                 </span>
@@ -1600,7 +1644,7 @@ export function AgentTimeline({
             {attachments.length > 0 && (
               <ul
                 aria-label={t("agent.attachments")}
-                className="agent-prompt__attachments"
+                className={composerStyles.attachments}
               >
                 {attachments.map((attachment) => (
                   <li key={attachment.attachmentId}>
@@ -1612,7 +1656,7 @@ export function AgentTimeline({
                     ) : (
                       <span
                         aria-hidden="true"
-                        className="agent-attachment__file-icon"
+                        className={composerStyles.attachmentFileIcon}
                       >
                         <Glyph name="file" />
                       </span>
@@ -1643,7 +1687,7 @@ export function AgentTimeline({
                 ))}
               </ul>
             )}
-            <div className="agent-prompt__input-row">
+            <div className={composerStyles.inputRow}>
               <textarea
                 aria-label={t("agent.continueTask")}
                 aria-busy={Boolean(activeRunId)}
@@ -1674,7 +1718,7 @@ export function AgentTimeline({
               />
               {activeRunId ? (
                 <Button
-                  className="agent-prompt__stop"
+                  className={composerStyles.stop}
                   disabled={stopping}
                   icon="stop"
                   onClick={() => void stop()}
@@ -1701,10 +1745,10 @@ export function AgentTimeline({
               )}
             </div>
           </div>
-          <div className="agent-prompt__model-row">
+          <div className={composerStyles.modelRow}>
             <DesktopSelect
               ariaLabel={t("agent.model")}
-              className="agent-prompt__model-select"
+              className={composerStyles.modelSelect}
               disabled={Boolean(activeRunId) || modelOptions.length === 0}
               onValueChange={(value) => {
                 const next = modelOptions.find(
@@ -1732,7 +1776,7 @@ export function AgentTimeline({
               selectedCatalogModel.model.reasoningEfforts.length > 1 && (
                 <DesktopSelect
                   ariaLabel={t("agent.reasoning")}
-                  className="agent-prompt__reasoning-select"
+                  className={composerStyles.reasoningSelect}
                   disabled={Boolean(activeRunId)}
                   onValueChange={(value) =>
                     setModelSelection((current) =>
@@ -1758,9 +1802,7 @@ export function AgentTimeline({
               )}
           </div>
           {helperMessage && (
-            <small
-              className={helperIsError ? "agent-prompt__error" : undefined}
-            >
+            <small className={helperIsError ? composerStyles.error : undefined}>
               {helperMessage}
             </small>
           )}
@@ -1804,7 +1846,7 @@ function TimelineAttachments({
   }, [attachments, previews]);
 
   return (
-    <span className="timeline__attachments">
+    <span className={styles.timelineAttachments}>
       {attachments.map((attachment) =>
         previews[attachment.attachmentId] ? (
           <img
