@@ -1412,7 +1412,7 @@ void app.whenReady().then(async () => {
     }
     const result = await rendererDesignToolHost.execute(call, context, signal);
     if (call.toolName === DESIGN_INSPECT_TOOL_NAME) {
-      globalTaskCoordinator.recordDocumentInspection(context);
+      globalTaskCoordinator.recordDocumentInspection(context, result);
     }
     return result;
   });

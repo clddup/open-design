@@ -3,6 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { DesignDocument } from "@opendesign/design-contracts";
 import { ProjectHost } from "../project/project-host.js";
 import { WorkspaceStore } from "../project/workspace-store.js";
 import { GlobalTaskCoordinator } from "./global-task-coordinator.js";
@@ -122,6 +123,136 @@ async function setup() {
   return { store, host, file, opened, pageId };
 }
 
+function inspectionResult(
+  document: DesignDocument,
+  pageId: string,
+  revision = document.revision,
+) {
+  const page = document.pagesById[pageId];
+  if (!page) throw new Error("Inspection Page is missing");
+  return {
+    observedRevision: revision,
+    content: {
+      document: {
+        documentId: document.documentId,
+        revision,
+        pageOrder: [pageId],
+        pagesById: {
+          [pageId]: {
+            id: page.id,
+            name: page.name,
+            rootNodeIds: [...page.rootNodeIds],
+          },
+        },
+        nodesById: structuredClone(document.nodesById),
+      },
+    },
+  };
+}
+
+function insertExistingChild(
+  pageId: string,
+  parentId: string | null,
+  nodeId: string,
+): DesignApplyToolInput {
+  return {
+    label: `Insert ${nodeId}`,
+    commands: [
+      {
+        commandId: `insert_${nodeId}`,
+        type: "insert_element",
+        pageId,
+        parentId,
+        index: 0,
+        node: {
+          id: nodeId,
+          kind: "rectangle",
+          name: nodeId,
+          parentId,
+          childIds: [],
+          visible: true,
+          locked: false,
+          transform: [1, 0, 0, 1, 24, 24],
+          size: { width: 120, height: 80 },
+          opacity: 1,
+          properties: {
+            fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+            strokes: [],
+            strokeWidth: 0,
+            cornerRadius: 0,
+          },
+          extensions: {},
+        },
+      },
+    ],
+  };
+}
+
+function withExistingArtboard(
+  source: DesignDocument,
+  pageId: string,
+): DesignDocument {
+  const document = structuredClone(source);
+  document.pagesById[pageId].rootNodeIds = ["existing_artboard"];
+  document.nodesById = {
+    existing_artboard: {
+      id: "existing_artboard",
+      kind: "frame",
+      name: "Existing artboard",
+      parentId: null,
+      childIds: ["existing_group"],
+      visible: true,
+      locked: true,
+      transform: [1, 0, 0, 1, 80, 64],
+      size: { width: 1120, height: 720 },
+      opacity: 1,
+      properties: {
+        fills: [{ type: "solid", color: "#f8fafc", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+      },
+      extensions: {},
+    },
+    existing_group: {
+      id: "existing_group",
+      kind: "group",
+      name: "Existing Group",
+      parentId: "existing_artboard",
+      childIds: ["existing_nested_frame"],
+      visible: true,
+      locked: true,
+      transform: [1, 0, 0, 1, 24, 24],
+      size: { width: 480, height: 320 },
+      opacity: 1,
+      properties: {},
+      extensions: {},
+    },
+    existing_nested_frame: {
+      id: "existing_nested_frame",
+      kind: "frame",
+      name: "Existing nested Frame",
+      parentId: "existing_group",
+      childIds: [],
+      visible: true,
+      locked: true,
+      transform: [1, 0, 0, 1, 24, 24],
+      size: { width: 240, height: 160 },
+      opacity: 1,
+      properties: {
+        fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: false,
+      },
+      extensions: {},
+    },
+  };
+  return document;
+}
+
 describe("GlobalTaskCoordinator", () => {
   it("enforces a planned artboard and a rendered review before refinement", async () => {
     const { store, host, file, opened, pageId } = await setup();
@@ -155,7 +286,10 @@ describe("GlobalTaskCoordinator", () => {
     expect(() => coordinator.assertDocumentInspected(context)).toThrow(
       "Inspect the bound design document",
     );
-    coordinator.recordDocumentInspection(context);
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
     expect(() => coordinator.assertDocumentInspected(context)).not.toThrow();
     expect(coordinator.recordCanvasCapture(context)).toEqual({
       capturedRevision: 0,
@@ -411,6 +545,154 @@ describe("GlobalTaskCoordinator", () => {
         "workspace_artboard",
         "image_generated",
       ),
+    ).not.toThrow();
+
+    store.close();
+  });
+
+  it("resolves existing artboard descendants from the authoritative inspection", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const document = withExistingArtboard(opened.document, pageId);
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_existing_artboard",
+      sessionId: "conversation_mobile",
+      prompt: "Continue the existing workspace design",
+      documentId: file.documentId,
+      revision: document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_existing_artboard",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(document, pageId),
+    );
+    const existingPlan: DesignPlanToolInput = {
+      ...designPlan,
+      pageId,
+      artboard: {
+        mode: "existing",
+        frameId: "existing_artboard",
+        x: 80,
+        y: 64,
+        width: 1120,
+        height: 720,
+      },
+    };
+
+    expect(() =>
+      coordinator.registerDesignPlan(context, {
+        ...existingPlan,
+        artboard: { ...existingPlan.artboard, frameId: "missing_frame" },
+      }),
+    ).toThrow("design_workflow.existing_artboard_invalid");
+    expect(() =>
+      coordinator.registerDesignPlan(context, existingPlan),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignPlanForApply(
+        context,
+        insertExistingChild(pageId, "existing_group", "nested_group_child"),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignPlanForApply(
+        context,
+        insertExistingChild(
+          pageId,
+          "existing_nested_frame",
+          "nested_frame_child",
+        ),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignPlanForImagePlacement(
+        context,
+        "hero",
+        "existing_nested_frame",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignPlanForApply(
+        context,
+        insertExistingChild(pageId, null, "scattered_existing_child"),
+      ),
+    ).toThrow("outside the planned artboard Frame");
+
+    store.close();
+  });
+
+  it("requires a current inspection revision and recovers after re-inspection", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const document = withExistingArtboard(opened.document, pageId);
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_existing_revision",
+      sessionId: "conversation_mobile",
+      prompt: "Continue after a concurrent canvas revision",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const initialContext = {
+      runId: "run_existing_revision",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      initialContext,
+      inspectionResult(document, pageId),
+    );
+    coordinator.handleAgentEvent({
+      type: "tool.completed",
+      runId: "run_existing_revision",
+      toolCallId: "tool_external_revision",
+      result: { ok: true },
+      revision: opened.document.revision + 1,
+      transactionId: "transaction_external_revision",
+    });
+    const currentContext = {
+      ...initialContext,
+      revision: opened.document.revision + 1,
+    };
+    const existingPlan: DesignPlanToolInput = {
+      ...designPlan,
+      pageId,
+      artboard: {
+        mode: "existing",
+        frameId: "existing_artboard",
+        x: 80,
+        y: 64,
+        width: 1120,
+        height: 720,
+      },
+    };
+    expect(() =>
+      coordinator.registerDesignPlan(currentContext, existingPlan),
+    ).toThrow("design_workflow.inspection_stale");
+
+    coordinator.recordDocumentInspection(
+      currentContext,
+      inspectionResult(document, pageId, currentContext.revision),
+    );
+    expect(() =>
+      coordinator.registerDesignPlan(currentContext, existingPlan),
     ).not.toThrow();
 
     store.close();

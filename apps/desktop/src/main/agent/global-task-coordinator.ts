@@ -4,7 +4,10 @@ import type {
   DesignMutationTarget,
   SelectionScope,
 } from "@opendesign/agent-contracts";
-import type { TrustedToolContext } from "@opendesign/agent-runtime";
+import type {
+  TrustedToolContext,
+  TrustedToolResult,
+} from "@opendesign/agent-runtime";
 import type { DesignDocument } from "@opendesign/design-contracts";
 import {
   WORKSPACE_CONTRACT_VERSION,
@@ -25,6 +28,16 @@ import type { RendererDesignCaptureTarget } from "../../shared/design-tool-bridg
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 type RunScopedEvent = AgentEvent & { runId: string };
+
+type InspectedHierarchy = {
+  documentId: string;
+  nodesById: Map<
+    string,
+    { id: string; kind: string; locked: boolean; parentId: string | null }
+  >;
+  pageRootsById: Map<string, Set<string>>;
+  revision: number;
+};
 
 const activeLifecycles = new Set<GlobalTaskLifecycle>([
   "queued",
@@ -64,7 +77,7 @@ export class GlobalTaskCoordinator {
     string,
     Map<string, RasterAssetRole>
   >();
-  readonly #inspectedRuns = new Set<string>();
+  readonly #inspectionsByRunId = new Map<string, InspectedHierarchy>();
 
   constructor(
     private readonly projectHost: ProjectHost,
@@ -204,11 +217,7 @@ export class GlobalTaskCoordinator {
     plan: DesignPlanToolInput,
   ): void {
     this.assertDesignToolContext(context);
-    if (!this.#inspectedRuns.has(context.runId)) {
-      throw new Error(
-        "Inspect the bound design document before defining a design plan",
-      );
-    }
+    const inspection = this.#requireDocumentInspection(context);
     const existingPlan = this.#designPlansByRunId.get(context.runId);
     if (existingPlan?.materialWriteCompleted) {
       throw new Error(
@@ -236,9 +245,13 @@ export class GlobalTaskCoordinator {
         );
       }
     }
+    const artboardDescendantIds =
+      plan.artboard.mode === "existing"
+        ? resolveExistingArtboardDescendants(inspection, plan)
+        : new Set<string>();
     this.#designPlansByRunId.set(context.runId, {
       artboardEstablished: plan.artboard.mode === "existing",
-      artboardDescendantIds: new Set(),
+      artboardDescendantIds,
       captureCount: 0,
       lastCaptureRevision: null,
       lastReview: null,
@@ -251,18 +264,19 @@ export class GlobalTaskCoordinator {
     this.#generatedRasterRolesByRunId.set(context.runId, new Map());
   }
 
-  recordDocumentInspection(context: TrustedToolContext): void {
+  recordDocumentInspection(
+    context: TrustedToolContext,
+    result: TrustedToolResult,
+  ): void {
     this.assertDesignToolContext(context);
-    this.#inspectedRuns.add(context.runId);
+    this.#inspectionsByRunId.set(
+      context.runId,
+      parseInspectedHierarchy(context, result),
+    );
   }
 
   assertDocumentInspected(context: TrustedToolContext): void {
-    this.assertDesignToolContext(context);
-    if (!this.#inspectedRuns.has(context.runId)) {
-      throw new Error(
-        "Inspect the bound design document before using stable design targets",
-      );
-    }
+    this.#requireDocumentInspection(context);
   }
 
   recordCanvasCapture(
@@ -437,7 +451,10 @@ export class GlobalTaskCoordinator {
         "Image placement requires the planned artboard Frame to be created first",
       );
     }
-    if (parentId !== state.plan.artboard.frameId) {
+    if (
+      parentId !== state.plan.artboard.frameId &&
+      (parentId === null || !state.artboardDescendantIds.has(parentId))
+    ) {
       throw new Error(
         "Design images must be placed inside the planned artboard Frame",
       );
@@ -539,7 +556,7 @@ export class GlobalTaskCoordinator {
       this.#toolBindingsByRunId.delete(runId);
       this.#designPlansByRunId.delete(runId);
       this.#generatedRasterRolesByRunId.delete(runId);
-      this.#inspectedRuns.delete(runId);
+      this.#inspectionsByRunId.delete(runId);
     }
   }
 
@@ -555,7 +572,7 @@ export class GlobalTaskCoordinator {
       this.#toolBindingsByRunId.delete(runId);
       this.#designPlansByRunId.delete(runId);
       this.#generatedRasterRolesByRunId.delete(runId);
-      this.#inspectedRuns.delete(runId);
+      this.#inspectionsByRunId.delete(runId);
       this.#touchConversation(task.conversationId, timestamp);
     }
   }
@@ -576,6 +593,223 @@ export class GlobalTaskCoordinator {
     }
     return state;
   }
+
+  #requireDocumentInspection(context: TrustedToolContext): InspectedHierarchy {
+    this.assertDesignToolContext(context);
+    const inspection = this.#inspectionsByRunId.get(context.runId);
+    if (!inspection) {
+      throw new Error(
+        "design_workflow.inspection_required: Inspect the bound design document before using stable design targets",
+      );
+    }
+    if (inspection.revision !== context.revision) {
+      throw new Error(
+        `design_workflow.inspection_stale: Inspect the current document revision before continuing; inspected ${inspection.revision}, current ${context.revision}`,
+      );
+    }
+    return inspection;
+  }
+}
+
+function parseInspectedHierarchy(
+  context: TrustedToolContext,
+  result: TrustedToolResult,
+): InspectedHierarchy {
+  if (!validRevision(result.observedRevision)) {
+    throw new Error(
+      "design_workflow.inspection_invalid: Document inspection did not return a valid observed revision; inspect again",
+    );
+  }
+  const content = recordValue(result.content);
+  const document = recordValue(content?.document);
+  if (
+    !document ||
+    document.documentId !== context.documentId ||
+    document.revision !== result.observedRevision
+  ) {
+    throw new Error(
+      "design_workflow.inspection_invalid: Document inspection identity or revision is invalid; inspect again",
+    );
+  }
+  const rawPages = recordValue(document.pagesById);
+  const rawNodes = recordValue(document.nodesById);
+  if (!rawPages || !rawNodes) {
+    throw new Error(
+      "design_workflow.inspection_invalid: Document inspection hierarchy is missing; inspect again",
+    );
+  }
+  const pageRootsById = new Map<string, Set<string>>();
+  for (const [pageId, value] of Object.entries(rawPages)) {
+    const page = recordValue(value);
+    if (
+      !page ||
+      page.id !== pageId ||
+      !Array.isArray(page.rootNodeIds) ||
+      !page.rootNodeIds.every(safeHierarchyId) ||
+      new Set(page.rootNodeIds).size !== page.rootNodeIds.length
+    ) {
+      throw new Error(
+        "design_workflow.inspection_invalid: Document inspection contains an invalid Page hierarchy; inspect again",
+      );
+    }
+    pageRootsById.set(pageId, new Set(page.rootNodeIds));
+  }
+  const nodesById = new Map<
+    string,
+    { id: string; kind: string; locked: boolean; parentId: string | null }
+  >();
+  for (const [nodeId, value] of Object.entries(rawNodes)) {
+    const node = recordValue(value);
+    if (
+      !node ||
+      node.id !== nodeId ||
+      !safeHierarchyId(nodeId) ||
+      typeof node.kind !== "string" ||
+      typeof node.locked !== "boolean" ||
+      !(
+        node.parentId === null ||
+        (typeof node.parentId === "string" && safeHierarchyId(node.parentId))
+      )
+    ) {
+      throw new Error(
+        "design_workflow.inspection_invalid: Document inspection contains an invalid node hierarchy; inspect again",
+      );
+    }
+    nodesById.set(nodeId, {
+      id: nodeId,
+      kind: node.kind,
+      locked: node.locked,
+      parentId: node.parentId,
+    });
+  }
+  for (const node of nodesById.values()) {
+    if (node.parentId !== null && !nodesById.has(node.parentId)) {
+      throw new Error(
+        `design_workflow.inspection_invalid: Document inspection is missing parent ${node.parentId}; inspect again`,
+      );
+    }
+    assertAcyclicInspectedParentChain(nodesById, node.id);
+  }
+  for (const roots of pageRootsById.values()) {
+    for (const rootId of roots) {
+      if (nodesById.get(rootId)?.parentId !== null) {
+        throw new Error(
+          "design_workflow.inspection_invalid: Document inspection contains an invalid Page root; inspect again",
+        );
+      }
+    }
+  }
+  return {
+    documentId: context.documentId,
+    nodesById,
+    pageRootsById,
+    revision: result.observedRevision,
+  };
+}
+
+function resolveExistingArtboardDescendants(
+  inspection: InspectedHierarchy,
+  plan: DesignPlanToolInput,
+): Set<string> {
+  const frameId = plan.artboard.frameId;
+  const frame = inspection.nodesById.get(frameId);
+  if (!frame || frame.kind !== "frame") {
+    throw new Error(
+      `design_workflow.existing_artboard_invalid: Existing artboard ${frameId} is missing or is not a Frame; inspect again and choose an existing Frame`,
+    );
+  }
+  if (!inspectedNodeBelongsToPage(inspection, plan.pageId, frameId)) {
+    throw new Error(
+      `design_workflow.existing_artboard_invalid: Existing artboard ${frameId} does not belong to Page ${plan.pageId}; inspect again and choose a Frame on the target Page`,
+    );
+  }
+  const descendants = new Set<string>();
+  for (const node of inspection.nodesById.values()) {
+    if (node.id === frameId) continue;
+    if (inspectedParentChainReaches(inspection.nodesById, node.id, frameId)) {
+      descendants.add(node.id);
+    }
+  }
+  for (const region of plan.composition.regions) {
+    if (
+      inspection.nodesById.has(region.nodeId) &&
+      !descendants.has(region.nodeId)
+    ) {
+      throw new Error(
+        `design_workflow.existing_artboard_invalid: Existing planned region ${region.nodeId} is outside artboard ${frameId}; inspect again and correct the plan`,
+      );
+    }
+  }
+  return descendants;
+}
+
+function inspectedNodeBelongsToPage(
+  inspection: InspectedHierarchy,
+  pageId: string,
+  nodeId: string,
+): boolean {
+  const roots = inspection.pageRootsById.get(pageId);
+  if (!roots) return false;
+  let current: string | null = nodeId;
+  const visited = new Set<string>();
+  while (current !== null && !visited.has(current)) {
+    visited.add(current);
+    const node = inspection.nodesById.get(current);
+    if (!node) return false;
+    if (node.parentId === null) return roots.has(node.id);
+    current = node.parentId;
+  }
+  return false;
+}
+
+function inspectedParentChainReaches(
+  nodesById: InspectedHierarchy["nodesById"],
+  nodeId: string,
+  ancestorId: string,
+): boolean {
+  let current = nodesById.get(nodeId)?.parentId ?? null;
+  const visited = new Set<string>();
+  while (current !== null && !visited.has(current)) {
+    if (current === ancestorId) return true;
+    visited.add(current);
+    current = nodesById.get(current)?.parentId ?? null;
+  }
+  return false;
+}
+
+function assertAcyclicInspectedParentChain(
+  nodesById: InspectedHierarchy["nodesById"],
+  nodeId: string,
+): void {
+  let current: string | null = nodeId;
+  const visited = new Set<string>();
+  while (current !== null) {
+    if (visited.has(current)) {
+      throw new Error(
+        "design_workflow.inspection_invalid: Document inspection contains a parent cycle; inspect again after repairing the document",
+      );
+    }
+    visited.add(current);
+    current = nodesById.get(current)?.parentId ?? null;
+  }
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function safeHierarchyId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 512 &&
+    ![...value].some((character) => {
+      const codePoint = character.codePointAt(0);
+      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
+    })
+  );
 }
 
 function assertPlannedArtboardWrite(
