@@ -44,6 +44,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 为 Agent composer 的剪贴板粘贴和文件拖放补交互测试，验证 Renderer 通过窄 Preload API 提交 bytes，最终 run 只携带安全附件元数据；纯文本路径粘贴不被拦截或提前读取。
 - [x] 让 HTTP(S) 图片读取的超时和取消覆盖完整 body stream，而不只覆盖 response headers；慢 body、流式超过 16 MB 和用户取消已有自动化回归。
 - [x] 为生产模型流增加首响应、流空闲和总时限 watchdog；超时或 Agent 进程退出必须解除 Conversation 的 active Run，返回可重试错误并 abort Main-owned fetch。
+- [x] 修复 Provider 流失败后 partial message 光标残留：`agent.error` 立即收口同 Run 的 message/tool/approval 活动态，Renderer 保留 run-to-conversation 关联直到随后的 `run.completed` 完成历史刷新；新 Run 只能保留自己的一个活动光标，无 run ID 的进程终态也会防御性回收孤儿活动项。
 - [x] 启动时终结 JSONL 中未完成的 Run/pending tool，并同步恢复 Global Task；新 Run 和后续 Agent 活动更新 Conversation `updatedAt`，最近活动会话立即置顶且重启后顺序一致。
 - [x] 修复生产设计工具 schema 被 model bridge 尺寸守卫静默拒绝的问题；完整工具契约必须穿过真实跨进程守卫测试，请求/响应拒绝与畸形 Agent 事件必须返回可见终态并解除 Run。
 - [x] 将 `AgentRequest 3.5` 的发送时选区上下文与单一 Mutation Target 分离；默认写目标冻结为发送时活动 Page，用户之后改变选区或活动页面不缩小、不漂移该 Run 的事务目标；Main 另行注入可信 Model Profile 上下文预算，Renderer 不得伪造；SVG 附件使用独立 run-scoped handle，不冒充 Provider 图片或文档上下文。

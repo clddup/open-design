@@ -39,7 +39,7 @@ pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
 ├── package tests   38 files / 298 tests
-└── desktop tests   44 files / 336 tests
+└── desktop tests   44 files / 337 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -63,7 +63,7 @@ pnpm build          passed
 - Workspace/Project/Design File、Conversation、Global Task、Provider Catalog v3/v1/v2 迁移、独立 `GlobalImageGenerationSettings v1`、两套凭据隔离和跨进程对象校验。
 - OpenAI Responses、OpenAI Chat Completions、Anthropic Messages canonical adapter 与 tool calling。
 - 固定 `@earendil-works/pi-agent-core 0.84.1` 的 headless `Agent` 已进入 utilityProcess 唯一生产入口 `OpenDesignPiRuntime`；旧自研通用循环和旧专属测试已删除，`agent-core:check` 会拒绝旧 `AgentRuntime`、生产 fallback、Pi Coding Agent/TUI、直接 Provider/凭据入口或非 OpenDesign 工具重新出现。新 runner 保留同会话串行、取消、请求处理三方法端口、唯一 journal、历史 tool-call ID 去重和启动恢复。ModelGateway bridge 覆盖三种 API identity、reasoning/text/tool-call、partial arguments、usage、取消和错误；tool/run adapter 覆盖十四个生产工具、标准 JSON Schema、validation、approval、progress、revision、失败、completion guard 和 pending tool 最终化。Context adapter 在每个 Provider turn 通过 `transformContext` 复用 Model Profile/token/字符预算，预算失败在 Provider I/O 前可见；raster/文档附件只以 `image_ref`/`document_ref` 交给 Main，SVG 只投影 run-scoped handle，Pi transcript 不保存 inline base64 或 XML。完整生产 system prompt、十四工具、200K Model Profile 和八轮三图循环在第八轮压缩后完成，七个原始工具结果仍在 journal。本机 protected Vite 8 build 已通过但未启动应用；同 commit 的 macOS/Windows packaged Agent smoke 尚待原生 CI，因此迁移门禁未标记全部完成。
-- 生产 Provider stream 的首响应、空闲和总时限 watchdog 会 abort 实际 fetch；timeout 与 Agent process exit 都会解除 Renderer active Run、恢复可编辑输入并显示可重试错误。
+- 生产 Provider stream 的首响应、空闲和总时限 watchdog 会 abort 实际 fetch；timeout、上游 stream reset 与 Agent process exit 都会解除 Renderer active Run、恢复可编辑输入并显示可重试错误。`agent.error` 会立即收口同 Run 的 partial message/tool/approval，`run.completed` 仍能沿保留的 run-to-conversation 关联刷新 durable history；开始后续 Run 时只有当前 Run 保留活动光标，无 run ID 的进程错误也会回收孤儿活态。
 - 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。生产回归使用完整 system prompt、十四个工具和 200K Model Profile，既证明短消息会进入 Provider，也证明含多模态结果的八轮工具循环会在 Run 内压缩后完成。模型可见 `apply_transaction` Schema 不依赖 `$ref/$defs`，本地仍用完整 `DesignOperationSchema` 校验。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
 - 工具执行、业务校验和设计工具桥失败会作为 `tool.failed` 回到下一轮模型上下文供其重试或解释；模型桥、Provider、Agent 进程/协议和可信 Run binding 失败才会取消 Run。两类路径分别有“继续第二个模型回合”和“相关 Run 终结/解锁”测试。
 - JSONL 启动恢复会一次性终结孤立 started Run 和 pending tool；Global Task 同步转为 interrupted。Conversation 在 Run 注册和后续 Agent 活动时更新持久 `updatedAt`，Renderer 立即按最近活动重排。

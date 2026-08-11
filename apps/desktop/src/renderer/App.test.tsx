@@ -3123,7 +3123,10 @@ describe("App", () => {
   });
 
   it("unlocks the composer when a production model stream times out", async () => {
-    const { user } = await openProjectConversation();
+    const { user, conversation } = await openProjectConversation();
+    const historyCountBeforeRun = historyRequests(
+      conversation.conversationId,
+    ).length;
     await user.type(
       screen.getByLabelText("Continue the task"),
       "Design a profile page",
@@ -3138,6 +3141,16 @@ describe("App", () => {
         runId: request.runId,
         startedAt: now,
       });
+      emitAgentEvent?.({
+        type: "message.delta",
+        runId: request.runId,
+        messageId: "message_interrupted",
+        blockId: "block_interrupted",
+        delta: "Partial design response",
+      });
+    });
+    expect(document.querySelectorAll(".agent-message__caret")).toHaveLength(1);
+    act(() => {
       emitAgentEvent?.({
         type: "agent.error",
         code: "run_failed",
@@ -3155,8 +3168,50 @@ describe("App", () => {
     expect(
       screen.queryByRole("button", { name: "Stop" }),
     ).not.toBeInTheDocument();
+    expect(document.querySelector(".agent-message__caret")).toBeNull();
+
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.completed",
+        runId: request.runId,
+        finishedAt: now,
+        stopReason: "error",
+      });
+    });
+    await waitFor(() =>
+      expect(historyRequests(conversation.conversationId)).toHaveLength(
+        historyCountBeforeRun + 1,
+      ),
+    );
+
     await user.type(retryPrompt, "Retry with a simpler plan");
     expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const retry = runRequests(conversation.conversationId).at(-1);
+    if (!retry || retry.runId === request.runId) {
+      throw new Error("Retry run request is missing");
+    }
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: retry.runId,
+        startedAt: now,
+      });
+      emitAgentEvent?.({
+        type: "message.delta",
+        runId: retry.runId,
+        messageId: "message_retry",
+        blockId: "block_retry",
+        delta: "Retry response",
+      });
+    });
+    expect(document.querySelectorAll(".agent-message__caret")).toHaveLength(1);
+    expect(
+      screen.getByText("Partial design response").closest("li"),
+    ).toHaveClass("agent-thread__item--done");
+    expect(screen.getByText("Retry response").closest("li")).toHaveClass(
+      "agent-thread__item--active",
+    );
   });
 
   it("unlocks every active Conversation when the Agent process exits", async () => {
@@ -3176,6 +3231,16 @@ describe("App", () => {
         startedAt: now,
       });
       emitAgentEvent?.({
+        type: "message.delta",
+        runId: request.runId,
+        messageId: "message_process_exit",
+        blockId: "block_process_exit",
+        delta: "Interrupted by process exit",
+      });
+    });
+    expect(document.querySelectorAll(".agent-message__caret")).toHaveLength(1);
+    act(() => {
+      emitAgentEvent?.({
         type: "agent.error",
         code: "process_exited",
         message: "Agent process exited with code 1",
@@ -3189,6 +3254,7 @@ describe("App", () => {
     expect(
       screen.queryByRole("button", { name: "Stop" }),
     ).not.toBeInTheDocument();
+    expect(document.querySelector(".agent-message__caret")).toBeNull();
   });
 
   it("saves the structured document and checkpoints only on success", async () => {

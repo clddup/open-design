@@ -429,6 +429,54 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("attempt_1");
   });
 
+  it("finalizes a failed partial message and leaves only the current Run streaming", () => {
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_current"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[
+          {
+            type: "message.delta",
+            runId: "run_failed",
+            messageId: "message_failed",
+            blockId: "block_failed",
+            delta: "Interrupted response",
+          },
+          {
+            type: "agent.error",
+            code: "run_failed",
+            runId: "run_failed",
+            message: "stream error: INTERNAL_ERROR; received from peer",
+          },
+          {
+            type: "message.delta",
+            runId: "run_current",
+            messageId: "message_current",
+            blockId: "block_current",
+            delta: "Current response",
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    const failedMessage = screen
+      .getByText("Interrupted response")
+      .closest("li");
+    const currentMessage = screen.getByText("Current response").closest("li");
+    expect(failedMessage).toHaveClass("agent-thread__item--done");
+    expect(failedMessage).not.toHaveClass("agent-thread__item--active");
+    expect(currentMessage).toHaveClass("agent-thread__item--active");
+    expect(container.querySelectorAll(".agent-message__caret")).toHaveLength(1);
+    expect(
+      currentMessage?.querySelector(".agent-message__caret"),
+    ).not.toBeNull();
+  });
+
   it("hides reasoning summaries and native tool plumbing from durable history", () => {
     const timeline: SessionTimelineItem[] = [
       {

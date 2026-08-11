@@ -337,6 +337,18 @@ function projectEvents(
       items.set(run.id, { ...run, routine: true });
     }
   };
+  const finalizeRunActivity = (runId: string) => {
+    items.forEach((item, itemId) => {
+      if (
+        item.runId === runId &&
+        (item.state === "active" ||
+          item.state === "queued" ||
+          item.state === "stopping")
+      ) {
+        items.set(itemId, finalizeTimelineActivity(item));
+      }
+    });
+  };
 
   events.forEach((event, index) => {
     const order = startOrder + index + 1;
@@ -367,11 +379,13 @@ function projectEvents(
       });
     }
     if (event.type === "agent.error") {
+      if (event.runId) finalizeRunActivity(event.runId);
       updateEvent(
         event.runId
           ? `run:${event.runId}`
           : `runtime:error:${event.requestId ?? event.code}`,
         {
+          routine: false,
           state: "error",
           kind: event.runId ? "run" : "system",
           time: t("common.error"),
@@ -479,18 +493,7 @@ function projectEvents(
       });
     }
     if (event.type === "run.completed") {
-      items.forEach((item, itemId) => {
-        if (
-          item.runId === event.runId &&
-          (item.state === "active" || item.state === "queued")
-        ) {
-          items.set(itemId, {
-            ...item,
-            state: "done",
-            ...(item.kind === "assistant" ? {} : { routine: true }),
-          });
-        }
-      });
+      finalizeRunActivity(event.runId);
       const failed =
         event.stopReason === "error" || event.stopReason === "budget";
       updateEvent(`run:${event.runId}`, {
@@ -559,12 +562,24 @@ function mergeTimeline(
     });
   }
   return [...merged.values()]
-    .map((item) =>
-      item.runId === stoppingRunId &&
-      (item.state === "active" || item.state === "queued")
-        ? { ...item, state: "stopping" as const }
-        : item,
-    )
+    .map((item) => {
+      if (
+        item.runId === stoppingRunId &&
+        (item.state === "active" || item.state === "queued")
+      ) {
+        return { ...item, state: "stopping" as const };
+      }
+      if (
+        item.runId &&
+        item.runId !== activeRunId &&
+        (item.state === "active" ||
+          item.state === "queued" ||
+          item.state === "stopping")
+      ) {
+        return finalizeTimelineActivity(item);
+      }
+      return item;
+    })
     .filter((item) => !item.routine)
     .sort((left, right) => {
       const leftRunOrder = left.runId ? runOrder.get(left.runId) : undefined;
@@ -578,6 +593,14 @@ function mergeTimeline(
       }
       return left.order - right.order || left.id.localeCompare(right.id);
     });
+}
+
+function finalizeTimelineActivity(item: TimelineItem): TimelineItem {
+  return {
+    ...item,
+    state: "done",
+    ...(item.kind === "assistant" ? {} : { routine: true }),
+  };
 }
 
 export function AgentTimeline({

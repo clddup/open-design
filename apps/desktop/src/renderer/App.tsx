@@ -511,8 +511,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       if (event.type === "run.completed" || event.type === "agent.error") {
         if (event.type === "run.completed") {
           void requestConversationHistory(conversationId);
+          conversationIdByRunId.current.delete(event.runId);
         }
-        if (runId) conversationIdByRunId.current.delete(runId);
         if (event.type === "agent.error" && event.requestId) {
           conversationIdByHistoryRequestId.current.delete(event.requestId);
         }
