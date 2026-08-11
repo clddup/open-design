@@ -232,12 +232,20 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         hoverPathType: "box",
         hoverStyle: {
           stroke: "#8b8b89",
+          // Leafer's Stroker surface is sized to the target bounds. A centered
+          // one-pixel stroke can therefore lose its right and bottom halves at
+          // fractional viewport zooms. Keep canvas chrome fully inside that
+          // surface so every edge remains visible on macOS and Windows.
+          strokeAlign: "inside",
           strokeWidth: 1,
         },
         moveable: true,
         resizeable: true,
         rotateable: true,
         selectedPathType: "box",
+        selectedStyle: {
+          strokeAlign: "inside",
+        },
         skewable: true,
         openInner: "double",
         stroke: LEAFER_EDITOR_SELECTION_COLOR,
