@@ -65,6 +65,7 @@ import {
   readSvgRegularShape,
   writeSvgRegularShape,
 } from "./svg-regular-shapes.js";
+import { readSvgText, svgTextShapeMatches, writeSvgText } from "./svg-text.js";
 import {
   readSvgEditableVector,
   writeSvgEditableVector,
@@ -703,6 +704,41 @@ function exportNode(
           ),
         );
       }
+    } else if (node.kind === "text") {
+      element = context.document.createElementNS(SVG_NAMESPACE, "text");
+      const result = writeSvgText(element, node);
+      if (!result.ok) {
+        context.issues.push(
+          svgIssue("malformed-svg", "error", result.message, {
+            nodeId: node.id,
+          }),
+        );
+        return null;
+      }
+      if (!result.metadataWritten) {
+        context.issues.push(
+          svgIssue(
+            "size-limit",
+            "warning",
+            `Editable text metadata for ${node.id} exceeds its interchange limit and was omitted; standard SVG text remains exported`,
+            { nodeId: node.id },
+          ),
+        );
+      }
+      context.issues.push(
+        svgIssue(
+          "text-font-not-embedded",
+          "warning",
+          `Text ${node.id} references ${node.properties.fontFamily}; the font is not embedded in this SVG`,
+          { nodeId: node.id },
+        ),
+        svgIssue(
+          "text-layout-fidelity",
+          "warning",
+          `Text ${node.id} uses explicit SVG line positions; automatic wrapping, justify, and exact font shaping remain consumer-dependent`,
+          { nodeId: node.id },
+        ),
+      );
     } else {
       context.issues.push(
         svgIssue(
@@ -1578,12 +1614,7 @@ function importElement(
     );
     return null;
   }
-  if (
-    tag === "image" ||
-    tag === "text" ||
-    tag === "clippath" ||
-    tag === "mask"
-  ) {
+  if (tag === "image" || tag === "clippath" || tag === "mask") {
     context.issues.push(
       svgIssue(
         "unsupported-element",
@@ -1697,6 +1728,55 @@ function importElement(
       ),
       size: { width: bounds.width, height: bounds.height },
       properties: {},
+    };
+    context.nodes.push(node);
+    return nodeId;
+  }
+
+  if (tag === "text") {
+    const serializedText = readSvgText(element);
+    if (serializedText.status === "absent") {
+      context.issues.push(
+        svgIssue(
+          "unsupported-element",
+          "error",
+          "Ordinary SVG <text> requires deterministic font and text-box semantics before editable import",
+          { nodeId, sourceElement: tag },
+        ),
+      );
+      return null;
+    }
+    if (serializedText.status === "invalid") {
+      context.issues.push(
+        svgIssue("text-fidelity-unsupported", "error", serializedText.message, {
+          nodeId,
+          sourceElement: tag,
+        }),
+      );
+      return null;
+    }
+    const shape = importShapeProperties(context, element, localStyle, nodeId);
+    if (!shape) return null;
+    if (!svgTextShapeMatches(serializedText.value.properties, shape)) {
+      context.issues.push(
+        svgIssue(
+          "text-fidelity-unsupported",
+          "error",
+          "OpenDesign text metadata does not match the rendered SVG paint or stroke",
+          { nodeId, sourceElement: tag },
+        ),
+      );
+      return null;
+    }
+    const node: DesignNode = {
+      ...common,
+      kind: "text",
+      transform,
+      size: {
+        width: serializedText.value.width,
+        height: serializedText.value.height,
+      },
+      properties: serializedText.value.properties,
     };
     context.nodes.push(node);
     return nodeId;

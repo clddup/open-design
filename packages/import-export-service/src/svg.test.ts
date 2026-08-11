@@ -211,6 +211,232 @@ describe("versioned SVG interchange", () => {
     );
   });
 
+  it("exports editable Text as standard text/tspan content and round-trips controlled box semantics", () => {
+    const text: DesignNode = {
+      id: "logo_wordmark_restored",
+      kind: "text",
+      name: "OpenDesign wordmark",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 24, 18],
+      size: { width: 240, height: 80 },
+      opacity: 0.92,
+      properties: {
+        content: "OpenDesign\n未来 & <设计>",
+        fontFamily: "Inter",
+        fontSize: 24,
+        fontWeight: 650,
+        lineHeight: 28,
+        letterSpacing: -0.4,
+        textAlignHorizontal: "center",
+        textAlignVertical: "center",
+        fills: [{ type: "solid", color: "#153eaa", opacity: 1 }],
+        strokes: [{ type: "solid", color: "#ffffff", opacity: 0.5 }],
+        strokeWidth: 1,
+        strokeAlign: "center",
+        strokeCap: "round",
+        strokeJoin: "round",
+        dashPattern: [],
+      },
+      extensions: {},
+    };
+    const document = documentFromNodes("svg_text_document", [text], [text.id]);
+
+    const first = exportSvg({
+      document,
+      rootNodeIds: [text.id],
+      viewport: { x: 0, y: 0, width: 300, height: 120 },
+      includeLayerIds: true,
+    });
+    const second = exportSvg({
+      document,
+      rootNodeIds: [text.id],
+      viewport: { x: 0, y: 0, width: 300, height: 120 },
+      includeLayerIds: true,
+    });
+
+    expect(first).toEqual(second);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(
+      first.issues.map(({ code, severity }) => ({ code, severity })),
+    ).toEqual([
+      { code: "text-font-not-embedded", severity: "warning" },
+      { code: "text-layout-fidelity", severity: "warning" },
+    ]);
+    expect(first.svg).toContain("<text");
+    expect(first.svg).toContain('data-opendesign-text-version="1"');
+    expect(first.svg).toContain('font-family="Inter"');
+    expect(first.svg).toContain('font-size="24"');
+    expect(first.svg).toContain('font-weight="650"');
+    expect(first.svg).toContain('letter-spacing="-0.4"');
+    expect(first.svg).toContain('text-anchor="middle"');
+    expect(first.svg).toContain('dominant-baseline="text-before-edge"');
+    expect(first.svg).toContain('xml:space="preserve"');
+    expect(first.svg).toContain('<tspan x="120" y="12">OpenDesign</tspan>');
+    expect(first.svg).toContain(
+      '<tspan x="120" y="40">未来 &amp; &lt;设计&gt;</tspan>',
+    );
+
+    const imported = importSvg(
+      { svg: first.svg, idPrefix: "text_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    expect(findImportedSource(imported.nodes, text.id)).toMatchObject({
+      kind: "text",
+      name: text.name,
+      transform: text.transform,
+      size: text.size,
+      opacity: text.opacity,
+      properties: text.properties,
+    });
+    expect(asDocument(imported.nodes, imported.rootNodeId)).toSatisfy(
+      isDesignDocument,
+    );
+
+    const tamperedContent = importSvg(
+      {
+        svg: first.svg.replace(">OpenDesign</tspan>", ">Tampered</tspan>"),
+        idPrefix: "text_tampered_content",
+      },
+      geometry,
+    );
+    expect(tamperedContent.ok).toBe(false);
+    if (!tamperedContent.ok) {
+      expect(tamperedContent.issues).toContainEqual(
+        expect.objectContaining({
+          code: "text-fidelity-unsupported",
+          severity: "error",
+        }),
+      );
+    }
+
+    const tamperedPaint = importSvg(
+      {
+        svg: first.svg.replace('fill="#153eaa"', 'fill="#ff0000"'),
+        idPrefix: "text_tampered_paint",
+      },
+      geometry,
+    );
+    expect(tamperedPaint.ok).toBe(false);
+    if (!tamperedPaint.ok) {
+      expect(tamperedPaint.issues).toContainEqual(
+        expect.objectContaining({
+          code: "text-fidelity-unsupported",
+          severity: "error",
+        }),
+      );
+    }
+  });
+
+  it("keeps ordinary third-party SVG text outside the editable import boundary", () => {
+    const imported = importSvg(
+      {
+        idPrefix: "external_text",
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80"><text x="0" y="24" font-family="sans-serif" font-size="24">External</text></svg>`,
+      },
+      geometry,
+    );
+    expect(imported.ok).toBe(false);
+    if (!imported.ok) {
+      expect(imported.issues).toContainEqual(
+        expect.objectContaining({
+          code: "unsupported-element",
+          severity: "error",
+          sourceElement: "text",
+        }),
+      );
+    }
+  });
+
+  it("preserves controlled Text gradients and editable stroke alignment while reporting standard SVG degradation", () => {
+    const text: DesignNode = {
+      id: "gradient_wordmark",
+      kind: "text",
+      name: "Gradient wordmark",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 8, 12],
+      size: { width: 260, height: 48 },
+      opacity: 1,
+      properties: {
+        content: "Gradient",
+        fontFamily: "Inter",
+        fontSize: 32,
+        fontWeight: 700,
+        lineHeight: 40,
+        letterSpacing: 0,
+        textAlignHorizontal: "left",
+        textAlignVertical: "top",
+        fills: [
+          {
+            type: "solid",
+            color: "#000000",
+            opacity: 1,
+            visible: false,
+          },
+          {
+            type: "linear-gradient",
+            opacity: 0.9,
+            visible: true,
+            rotation: 18,
+            stops: [
+              { offset: 0, color: "#2563eb", opacity: 1 },
+              { offset: 1, color: "#7c3aed", opacity: 0.8 },
+            ],
+          },
+          { type: "solid", color: "#ff0000", opacity: 1 },
+        ],
+        strokes: [{ type: "solid", color: "#0f172a", opacity: 1 }],
+        strokeWidth: 2,
+        strokeAlign: "outside",
+        strokeCap: "round",
+        strokeJoin: "bevel",
+        dashPattern: [3, 2],
+      },
+      extensions: {},
+    };
+    const document = documentFromNodes(
+      "svg_gradient_text_document",
+      [text],
+      [text.id],
+    );
+    const exported = exportSvg({
+      document,
+      rootNodeIds: [text.id],
+      viewport: { x: 0, y: 0, width: 300, height: 90 },
+      includeLayerIds: true,
+    });
+
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues.map((issue) => issue.code)).toEqual([
+      "text-font-not-embedded",
+      "text-layout-fidelity",
+      "multiple-paints-flattened",
+      "stroke-alignment-flattened",
+    ]);
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "gradient_text_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    expect(findImportedSource(imported.nodes, text.id)).toMatchObject({
+      kind: "text",
+      size: text.size,
+      properties: text.properties,
+    });
+  });
+
   it("round-trips controlled editable vector networks without flattening point semantics", () => {
     const document: DesignDocument = {
       format: DESIGN_FORMAT,

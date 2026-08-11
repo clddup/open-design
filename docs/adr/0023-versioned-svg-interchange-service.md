@@ -1,6 +1,6 @@
 # ADR-0023：版本化 SVG 交换服务与显式保真边界
 
-- 状态：已接受（纯 service、EditorRuntime planner、Main 文件桥、人工入口、Agent 导入/导出与基础 filter effects 完成；剩余格式保真与打包实机待完成）
+- 状态：已接受（纯 service、EditorRuntime planner、Main 文件桥、人工入口、Agent 导入/导出、受控可编辑 Text 与基础 filter effects 完成；剩余格式保真与打包实机待完成）
 - 日期：2026-08-11
 - 补充：ADR-0011、ADR-0012、ADR-0015、ADR-0021、ADR-0022
 - 固定依赖：`@xmldom/xmldom 0.8.13`、`transformation-matrix 3.1.0`
@@ -56,14 +56,20 @@ Figma 当前允许导出 layer、Frame、Group、Section、Slice 和 Page，默�
 
 当前导入/导出覆盖：
 
-- Frame、Group、Rectangle、Ellipse、Path、Vector；外部 line/polyline/polygon 转为正式 Vector path；
+- Frame、Group、Rectangle、Ellipse、Path、Vector，以及标准 `<text>/<tspan>` + 有界受控 metadata 的 OpenDesign Text 往返；外部 line/polyline/polygon 转为正式 Vector path；
 - 层级、可见性、opacity、SVG transform list、viewBox、solid、linear/radial gradient、fill rule、center stroke、cap/join/dash；
 - 圆角 Frame `clipsContent`，以及按父容器 child order 分段的 alpha、luminance、outline、clipping sibling mask；受支持的外部本地 user-space `<mask>/<clipPath>` 引用展开为可编辑同级蒙版组；
 - 最多八个普通混合、零 spread 的 drop shadow 与一层 layer blur；效果数组顺序和 `visible` 可确定性往返，标准单个 `feDropShadow`/`feGaussianBlur` 可直接导入；
 - 固定字符数、元素数、节点数与深度预算；确定性 ID 和输出顺序；
 - 导入结果重新通过完整 `DesignDocument` schema/invariant 校验测试。
 
-当前仍明确报告或拒绝：Text、Image、Instance、stylesheet、`use`、SVG root-level mask/clip、同一元素组合 `mask + clip-path`、`objectBoundingBox` clipPath、包含不受支持 Text/Image source 的 mask、inner shadow、background blur、inner/outer glow、grayscale、shadow spread/非普通 blend、复杂 filter/mask graph、image paint、angular gradient、多个叠加 paint、inside/outside stroke、user-space gradient、复杂 gradient transform 和外部 URL。这里的“拒绝”是保真边界，不把危险或无法表达的数据保存到 `extensions` 后继续执行。
+当前仍明确报告或拒绝：没有 OpenDesign 受控 metadata 的普通第三方 Text、Image、Instance、stylesheet、`use`、SVG root-level mask/clip、同一元素组合 `mask + clip-path`、`objectBoundingBox` clipPath、包含不受支持 Text/Image source 的 mask、inner shadow、background blur、inner/outer glow、grayscale、shadow spread/非普通 blend、复杂 filter/mask graph、image paint、angular gradient、多个叠加 paint、inside/outside stroke、user-space gradient、复杂 gradient transform 和外部 URL。这里的“拒绝”是保真边界，不把危险或无法表达的数据保存到 `extensions` 后继续执行。
+
+### Text 的标准输出与受控可编辑往返
+
+OpenDesign Text 导出为真实的标准 SVG `<text>` 和逐行 `<tspan>`，保留 content、transform、font family/size/weight、line height、letter spacing、水平/垂直对齐、fill、stroke、opacity 与当前受支持 effects；不会用文字转轮廓伪装可编辑文本。行位置由 Text box 和 line height 显式写入，空白通过 `xml:space="preserve"` 保留。
+
+SVG 1.1 不能单独表达 OpenDesign 固定 Text box、自动换行和完整字体布局语义，因此导出同时写入有界、版本化且通过 Text schema 校验的 `data-opendesign-text-version="1"` metadata。重新导入 OpenDesign 自己的产物时，importer 同时校验 metadata、标准 font/alignment/tspan 内容与位置、paint/stroke 表达，任一篡改都返回 `text-fidelity-unsupported`，不会让 metadata 覆盖不匹配的可见 SVG。字体文件不嵌入会返回 `text-font-not-embedded` warning；自动换行、justify 与不同 SVG consumer 的 shaping 差异返回 `text-layout-fidelity` warning，但普通 Text 不再导致整个导出失败。没有受控 metadata 的第三方 `<text>` 继续显式拒绝，直到独立 Text/Font service 能确定性解析字体与 text-box 语义。
 
 ### Frame clipping 与 sibling mask 语义
 
@@ -111,6 +117,7 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 - `OD-BRAND-01` 的真实 PathKit Boolean result 导出为单一 SVG path，源 operand 不进入 SVG；
 - re-import 返回可编辑 Vector，重应用 transform 后与原 Boolean result 的 normalized path、fill rule 和 bounds 一致；
 - Path/Vector/Rectangle/Ellipse、group hierarchy、transform、solid/linear gradient、stroke 和 dash 确定性往返；
+- Text 以标准 `<text>/<tspan>` 输出，并在校验 font、line content/position、paint/stroke 与有界 metadata 后恢复为正式 TextNode；普通第三方 Text、metadata/content/paint 篡改稳定失败；
 - 圆角 Frame `clipsContent` 与四种 ordered sibling mask mode 可确定性往返且不产生 background 假图层；受支持的外部本地 mask/clipPath 展开为合法可编辑树，篡改 definition、外部 URL、objectBoundingBox clip 与循环引用稳定失败；
 - 多个 drop shadow、layer blur、effect visibility/order、filter region 与标准 shorthand 确定性往返；spread、inner/background/glow/grayscale 和复杂 graph 均返回明确保真报告，外部 filter URL 稳定拒绝；
 - 导入候选树可组成合法 `DesignDocument`；
@@ -126,7 +133,7 @@ SVG 始终视为不可信输入。当前边界在 DOM parse 前拒绝 `DOCTYPE`/
 ## 后续门禁
 
 1. MCP 后续复用同一版本化 SVG import/export service、资源句柄和事务入口，不新增任意 `filePath` 通道。
-2. 接入 outline stroke、text glyph、inner/background/glow/spread/blend 等剩余 filter 语义、复杂组合 mask graph、Text/Image mask source、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
+2. 接入可选 outline-text/text glyph、普通第三方 Text 的确定性字体布局、outline stroke、inner/background/glow/spread/blend 等剩余 filter 语义、复杂组合 mask graph、Text/Image mask source、image asset 和多 paint 保真；unsupported 项未清零前不宣称完整 SVG。
 3. 在 `OD-BRAND-01` 上保存导出产物、re-import 文档、真实 Leafer 像素 baseline，并完成 macOS/Windows 打包产品 smoke。
 
 ## 参考
