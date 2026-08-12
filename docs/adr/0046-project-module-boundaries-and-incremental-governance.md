@@ -1,6 +1,6 @@
 # ADR-0046：项目级模块边界与增量治理
 
-- 状态：已接受（Phase 1–3 已实施；后续阶段持续执行）
+- 状态：已接受（Phase 1–4 已实施；后续阶段持续执行）
 - 日期：2026-08-12
 - 关联：ADR-0001、ADR-0002、ADR-0003、ADR-0005、ADR-0006、ADR-0009、ADR-0033
 
@@ -63,6 +63,8 @@ Phase 2 把 Agent Conversation UI 拆成三个明确所有权：`timeline-projec
 
 Phase 3 把人工编辑命令拆成三个层次：`use-editor-command-controller` 是 Renderer 用户事务的唯一入口，每次执行都从 `EditorRuntime` 读取最新 document identity/revision；`use-page-command-controller` 拥有 Page create/rename/duplicate/reorder/delete 的 planner 编排；`use-layer-command-controller` 拥有 Layer capability derivation 以及 duplicate/group/Boolean/reorder/reparent/arrange 的 planner 编排和 selection 结果。controller 不缓存文档或建立 React mirror store，PropertiesPanel 与 LeftSidebar 只共享命令参数/结果类型。复合 Layer 操作仍只产生一条 Runtime transaction 和一条 undo history record；Agent、import/export、component 与 image 写入继续复用同一 `applyCommands` 入口。`App.tsx` 从 Phase 2 的 2882 行降至 2222 行，三个生产 controller 均低于 800 行门禁。
 
+Phase 4 把 Inspector 拆为 Appearance、Paint/Effect、Typography、Image、Component、Export 与 selected-node composition。section 只接收当前权威 `DesignNode`、受控 workflow 设置和语义 callback；`Field`/`TextAreaField` 只保存尚未提交的输入 draft，Component override 只保存当前检查行 key，均不保存 document/node 镜像。属性提交继续由 App 注入的 editor command controller 写入唯一 Runtime；Export operation/settings 继续由 Phase 1 的 import/export workflow 独占。共享控件与 Paint/Effect editor 是无文档所有权的 view primitives，不得反向取得 Runtime。`PropertiesPanel.tsx` 从 2973 行降至 374 行，8 个新生产模块均低于 800 行默认门禁，因此移除其历史超大模块预算。
+
 ### 自动边界和增长门禁
 
 `pnpm architecture:check` 是根 `pnpm verify` 的必经步骤，并校验：
@@ -93,16 +95,17 @@ Phase 3 把人工编辑命令拆成三个层次：`use-editor-command-controller
 
 - 聚合入口会按真实业务所有权逐步收缩，而不是一次性重写。
 - 新代码不能建立跨进程后门、包循环或新的巨型模块。
-- 历史大模块仍然存在，Phase 1–3 不能描述为全项目治理完成；预算只阻止继续恶化，后续阶段必须实际拆除职责。
+- 历史大模块仍然存在，Phase 1–4 不能描述为全项目治理完成；预算只阻止继续恶化，后续阶段必须实际拆除职责。
 - 导入/导出现在具有独立取消和反馈生命周期，并继续从唯一 Runtime snapshot 生成事务或产物。
 - Page 与 Layer view 不再直接拥有 planner/transaction 编排；新增人工编辑命令应进入对应 controller 或新的完整业务 controller，不应重新堆回 `App.tsx`。
+- Inspector section 不拥有 Runtime 或文档副本；新增 property family 应进入对应 section，通过现有语义 callback 提交，不能重新堆回顶层 `PropertiesPanel.tsx`。
 
 ## 验证
 
 - `pnpm architecture:check`
 - Desktop typecheck
 - `use-import-export-workflow.test.ts`：最新 Runtime snapshot、native command、JPEG 背景、互斥、切出 editor、unmount 与 cancellation
-- `diagnostics.test.ts`、PropertiesPanel 和 App 集成测试
+- `diagnostics.test.ts`、PropertiesPanel 和 App 集成测试：Typography 模式约束、Image placement、Paint/Effect、Component override、SVG/raster export、多选排列以及唯一 Runtime 提交链
 - `AgentTimeline.test.tsx`：durable/live 单调投影、近底自动滚动、审批、取消、历史终态与 Conversation epoch 竞态
 - `editor-command-controllers.test.tsx`：唯一 Runtime 写入、Page 操作、Layer capability、复合事务、selection 与 undo
 - Agent Runtime/Main/Renderer 定向测试：Run-scoped approval、Renderer 活动租约、版本化 Plan amendment 与 Text content 规范化

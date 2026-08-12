@@ -78,7 +78,6 @@
     "apps/desktop/src/renderer/App.tsx": 2222,
     "apps/desktop/src/renderer/components/Canvas.tsx": 1338,
     "apps/desktop/src/renderer/components/LeftSidebar.tsx": 898,
-    "apps/desktop/src/renderer/components/PropertiesPanel.tsx": 2973,
     "apps/desktop/src/renderer/components/SettingsPage.tsx": 1353,
     "apps/desktop/src/renderer/design-tool-execution.ts": 2067,
     "apps/desktop/src/shared/design-agent-tools.ts": 3608,
