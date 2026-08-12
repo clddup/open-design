@@ -37,44 +37,17 @@ import {
   type RasterAssetRole,
 } from "../../shared/design-agent-tools.js";
 import type { RendererDesignCaptureTarget } from "../../shared/design-tool-bridge.js";
+import {
+  inspectedNodeBelongsToPage,
+  registerDesignWorkflowPlan,
+  type DesignDeliveryTargetState,
+  type DesignPlanRegistration,
+  type DesignWorkflowState,
+  type InspectedHierarchy,
+} from "./design-plan-registration.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 type RunScopedEvent = AgentEvent & { runId: string };
-
-type InspectedHierarchy = {
-  documentId: string;
-  nodesById: Map<
-    string,
-    {
-      childIds: string[];
-      id: string;
-      kind: string;
-      locked: boolean;
-      parentId: string | null;
-    }
-  >;
-  pageRootsById: Map<string, Set<string>>;
-  revision: number;
-};
-
-type DesignDeliveryTargetState = {
-  artboardDescendantIds: Set<string>;
-  artboardEstablished: boolean;
-  captureCount: number;
-  delivery: DesignDeliveryTarget;
-  lastCaptureRevision: number | null;
-  lastMaterialWriteRevision: number | null;
-  lastReview: DesignVisualReviewToolInput | null;
-  planned: DesignPlanTarget;
-  reviewedCaptureCount: number;
-  reviewedCaptureRevision: number | null;
-};
-
-type DesignWorkflowState = {
-  plan: DesignPlanToolInput;
-  targetOrder: string[];
-  targetsById: Map<string, DesignDeliveryTargetState>;
-};
 
 export type DesignPlanApplyAuthorization = {
   input: DesignApplyToolInput;
@@ -343,24 +316,13 @@ export class GlobalTaskCoordinator {
   registerDesignPlan(
     context: TrustedToolContext,
     plan: DesignPlanToolInput,
-  ): void {
+  ): Omit<DesignPlanRegistration, "state"> {
     this.assertDesignToolContext(context);
     const inspection = this.#requireDocumentInspection(context);
     const existingPlan = this.#designPlansByRunId.get(context.runId);
-    if (
-      existingPlan &&
-      [...existingPlan.targetsById.values()].some(
-        (target) => target.delivery.status !== "pending",
-      )
-    ) {
-      throw new Error(
-        "The design plan cannot be replaced after material design writes have started",
-      );
-    }
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Design plan requires an active Run");
     const targets = designPlanTargets(plan);
-    assertUniquePlannedNodeIds(targets);
     const recoverableDelivery = this.getRecoverableDelivery(context);
     if (
       binding.mutationTarget.kind === "page" &&
@@ -392,56 +354,26 @@ export class GlobalTaskCoordinator {
         );
       }
     }
-    const targetsById = new Map<string, DesignDeliveryTargetState>();
-    for (const target of targets) {
-      if (
-        target.artboard.mode === "create" &&
-        inspection.nodesById.has(target.artboard.frameId)
-      ) {
-        throw new Error(
-          `design_workflow.artboard_already_exists: Planned create target ${target.artboard.frameId} already exists; inspect it as an existing artboard instead`,
-        );
+    const registration = registerDesignWorkflowPlan({
+      existing: existingPlan,
+      inspection,
+      plan,
+      recoverableDelivery,
+    });
+    this.#designPlansByRunId.set(context.runId, registration.state);
+    const generatedRoles =
+      this.#generatedRasterRolesByRunId.get(context.runId) ??
+      new Map<string, RasterAssetRole>();
+    for (const [attachmentId, role] of generatedRoles) {
+      if (!plan.rasterAssetRoles.includes(role)) {
+        generatedRoles.delete(attachmentId);
       }
-      const artboardDescendantIds =
-        target.artboard.mode === "existing"
-          ? resolveExistingArtboardDescendants(inspection, target)
-          : new Set<string>();
-      const recovered = recoverableDelivery?.targets.find(
-        (candidate) =>
-          candidate.targetId === target.targetId &&
-          candidate.pageId === target.pageId &&
-          candidate.rootNodeId === target.artboard.frameId,
-      );
-      const recoveredDelivery = recoverDeliveryTarget(
-        target,
-        recovered,
-        inspection.revision,
-        target.artboard.mode === "existing",
-      );
-      targetsById.set(target.targetId, {
-        artboardEstablished: target.artboard.mode === "existing",
-        artboardDescendantIds,
-        captureCount: 0,
-        delivery: recoveredDelivery,
-        lastCaptureRevision: null,
-        lastMaterialWriteRevision:
-          recoveredDelivery.status === "drafted"
-            ? (recoveredDelivery.draftRevision ?? null)
-            : null,
-        lastReview: null,
-        planned: structuredClone(target),
-        reviewedCaptureCount: 0,
-        reviewedCaptureRevision: null,
-      });
     }
-    const state: DesignWorkflowState = {
-      plan: structuredClone(plan),
-      targetOrder: targets.map((target) => target.targetId),
-      targetsById,
-    };
-    this.#designPlansByRunId.set(context.runId, state);
-    this.#generatedRasterRolesByRunId.set(context.runId, new Map());
-    this.#persistDelivery(context.runId, state);
+    this.#generatedRasterRolesByRunId.set(context.runId, generatedRoles);
+    this.#persistDelivery(context.runId, registration.state);
+    const { state, ...result } = registration;
+    void state;
+    return result;
   }
 
   recordDocumentInspection(
@@ -1158,66 +1090,6 @@ function parseInspectedHierarchy(
   };
 }
 
-function resolveExistingArtboardDescendants(
-  inspection: InspectedHierarchy,
-  target: DesignPlanTarget,
-): Set<string> {
-  const frameId = target.artboard.frameId;
-  const frame = inspection.nodesById.get(frameId);
-  if (!frame || frame.kind !== "frame") {
-    throw new Error(
-      `design_workflow.existing_artboard_invalid: Existing artboard ${frameId} is missing or is not a Frame; inspect again and choose an existing Frame`,
-    );
-  }
-  if (!inspectedNodeBelongsToPage(inspection, target.pageId, frameId)) {
-    throw new Error(
-      `design_workflow.existing_artboard_invalid: Existing artboard ${frameId} does not belong to Page ${target.pageId}; inspect again and choose a Frame on the target Page`,
-    );
-  }
-  const descendants = new Set<string>();
-  for (const node of inspection.nodesById.values()) {
-    if (node.id === frameId) continue;
-    if (inspectedParentChainReaches(inspection.nodesById, node.id, frameId)) {
-      descendants.add(node.id);
-    }
-  }
-  return descendants;
-}
-
-function inspectedNodeBelongsToPage(
-  inspection: InspectedHierarchy,
-  pageId: string,
-  nodeId: string,
-): boolean {
-  const roots = inspection.pageRootsById.get(pageId);
-  if (!roots) return false;
-  let current: string | null = nodeId;
-  const visited = new Set<string>();
-  while (current !== null && !visited.has(current)) {
-    visited.add(current);
-    const node = inspection.nodesById.get(current);
-    if (!node) return false;
-    if (node.parentId === null) return roots.has(node.id);
-    current = node.parentId;
-  }
-  return false;
-}
-
-function inspectedParentChainReaches(
-  nodesById: InspectedHierarchy["nodesById"],
-  nodeId: string,
-  ancestorId: string,
-): boolean {
-  let current = nodesById.get(nodeId)?.parentId ?? null;
-  const visited = new Set<string>();
-  while (current !== null && !visited.has(current)) {
-    if (current === ancestorId) return true;
-    visited.add(current);
-    current = nodesById.get(current)?.parentId ?? null;
-  }
-  return false;
-}
-
 function assertDeliveryTargetStructure(
   inspection: InspectedHierarchy,
   target: DesignDeliveryTargetState,
@@ -1426,26 +1298,6 @@ function registerPlannedNode<T>(
     );
   }
   nodes.set(nodeId, value);
-}
-
-function assertUniquePlannedNodeIds(
-  targets: readonly DesignPlanTarget[],
-): void {
-  const ids = new Set<string>();
-  for (const target of targets) {
-    const plannedNodeIds = [
-      target.artboard.frameId,
-      ...target.composition.regions.map((region) => region.nodeId),
-    ];
-    for (const nodeId of plannedNodeIds) {
-      if (ids.has(nodeId)) {
-        throw new Error(
-          `design_workflow.plan_node_ambiguous: Planned node ID ${nodeId} is reused across delivery targets; inspect and define unique stable IDs`,
-        );
-      }
-      ids.add(nodeId);
-    }
-  }
 }
 
 function assertPlannedTargetWrites(
@@ -1900,35 +1752,6 @@ function deliveryLedger(state: DesignWorkflowState): DesignDeliveryLedger {
       return target ? [structuredClone(target.delivery)] : [];
     }),
     activeTargetId: nextIncompleteTarget(state)?.delivery.targetId ?? null,
-  };
-}
-
-function recoverDeliveryTarget(
-  target: DesignPlanTarget,
-  recovered: DesignDeliveryTarget | undefined,
-  currentRevision: number,
-  artboardExists: boolean,
-): DesignDeliveryTarget {
-  const pending: DesignDeliveryTarget = {
-    targetId: target.targetId,
-    label: target.label,
-    pageId: target.pageId,
-    rootNodeId: target.artboard.frameId,
-    status: "pending",
-  };
-  if (!recovered || !artboardExists || recovered.status === "pending") {
-    return pending;
-  }
-  if (
-    recovered.status === "verified" &&
-    recovered.verifiedRevision === currentRevision
-  ) {
-    return { ...structuredClone(recovered), label: target.label };
-  }
-  return {
-    ...pending,
-    status: "drafted",
-    draftRevision: currentRevision,
   };
 }
 

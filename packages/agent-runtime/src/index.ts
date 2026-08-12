@@ -38,6 +38,7 @@ export interface AgentRunRequest {
 export interface AgentToolDefinition extends CanonicalTool {
   risk: ToolRisk;
   approval: "never" | "required";
+  approvalScope?: "call" | "run";
   approvalPrompt?: {
     title: string;
     summary: string;
@@ -49,7 +50,6 @@ export interface ToolCatalogPort {
   listTools():
     readonly AgentToolDefinition[] | Promise<readonly AgentToolDefinition[]>;
 }
-
 export interface ToolCallRequest {
   toolCallId: string;
   toolName: string;

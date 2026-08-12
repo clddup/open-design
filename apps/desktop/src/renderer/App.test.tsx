@@ -268,6 +268,7 @@ beforeEach(() => {
         },
       ),
     onDesignToolCancel: vi.fn().mockReturnValue(() => undefined),
+    reportDesignToolProgress: vi.fn().mockResolvedValue(true),
     resolveDesignToolRequest: vi.fn().mockResolvedValue(undefined),
     windowAction: vi.fn().mockResolvedValue(undefined),
     onNativeThemeChange: vi.fn().mockReturnValue(() => undefined),
@@ -4894,15 +4895,24 @@ describe("App", () => {
     act(() => {
       emitAgentEvent?.({
         type: "agent.error",
-        code: "run_failed",
+        code: "provider_timeout",
         runId: request.runId,
         message:
           "Model provider timed out after 180000 ms waiting for a response",
+        failure: {
+          code: "provider_timeout",
+          message:
+            "Model provider timed out after 180000 ms waiting for a response",
+          retryable: true,
+          provider: "provider_1",
+          modelRequestId: "model_timeout_1",
+          timeout: { phase: "first-response", thresholdMs: 180_000 },
+        },
       });
     });
 
     expect(
-      screen.getByText("The model took too long to respond. Try again."),
+      screen.getByText("Model did not start responding"),
     ).toBeInTheDocument();
     const retryPrompt = screen.getByLabelText("Continue the task");
     expect(retryPrompt).toBeEnabled();

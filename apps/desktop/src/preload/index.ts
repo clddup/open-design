@@ -82,9 +82,11 @@ import {
 import type { AppLocale } from "../shared/i18n/locale";
 import {
   isRendererDesignToolCancel,
+  isRendererDesignToolProgress,
   isRendererDesignToolRequest,
   isRendererDesignToolResponse,
   type RendererDesignToolCancel,
+  type RendererDesignToolProgress,
   type RendererDesignToolRequest,
   type RendererDesignToolResponse,
 } from "../shared/design-tool-bridge";
@@ -352,6 +354,21 @@ const desktopApi: DesktopApi = Object.freeze({
     };
     ipcRenderer.on(channels.designToolCancel, handler);
     return () => ipcRenderer.removeListener(channels.designToolCancel, handler);
+  },
+  reportDesignToolProgress: async (progress: RendererDesignToolProgress) => {
+    validate(
+      progress,
+      isRendererDesignToolProgress,
+      "Invalid design tool progress",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.designToolProgress,
+      progress,
+    );
+    if (typeof result !== "boolean") {
+      throw new TypeError("Invalid design tool progress response");
+    }
+    return result;
   },
   resolveDesignToolRequest: async (response: RendererDesignToolResponse) => {
     validate(

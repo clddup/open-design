@@ -95,8 +95,6 @@ import {
   useEditorSnapshot,
 } from "./editor-runtime";
 import { useI18n } from "./i18n";
-import { executeDesignToolRequest } from "./design-tool-execution";
-import { captureDesignTarget } from "./design-capture";
 import {
   ProjectAutosaveCoordinator,
   type ProjectAutosaveTarget,
@@ -114,6 +112,7 @@ import { useDesignAssetActions } from "./use-design-asset-actions";
 import { useComponentActions } from "./use-component-actions";
 import { useImportExportWorkflow } from "./features/import-export/use-import-export-workflow";
 import { reportRendererError } from "./diagnostics";
+import { useRendererDesignToolHost } from "./use-renderer-design-tool-host";
 
 const LAYER_ORDER_ACTIONS: readonly LayerOrderAction[] = [
   "bring-forward",
@@ -232,7 +231,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const historySyncTimers = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
-  const designToolControllers = useRef(new Map<string, AbortController>());
   const autosaveCallbacks = useRef<{
     onError: (target: ProjectAutosaveTarget, error: unknown) => void;
     onSaved: (target: ProjectAutosaveTarget, saved: ProjectDesignFile) => void;
@@ -256,6 +254,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       }),
     [],
   );
+  useRendererDesignToolHost(workspace, projectAutosave);
   const { document: designDocument, state } = snapshot;
   autosaveCallbacks.current = {
     onError: (target, error) => {
@@ -744,125 +743,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       }
     });
   }, [requestConversationHistory, scheduleConversationHistory, workspace]);
-
-  useEffect(() => {
-    const desktop = window.desktop;
-    if (
-      !desktop ||
-      typeof desktop.onDesignToolRequest !== "function" ||
-      typeof desktop.resolveDesignToolRequest !== "function"
-    ) {
-      return;
-    }
-    const unsubscribeRequest = desktop.onDesignToolRequest((request) => {
-      const controller = new AbortController();
-      designToolControllers.current.set(request.requestId, controller);
-      void Promise.resolve()
-        .then(() => {
-          const target = workspace.getRuntimeByDocumentId(
-            request.context.documentId,
-          );
-          if (!target) {
-            throw new Error(
-              `Design tool document is not open: ${request.context.documentId}`,
-            );
-          }
-          return executeDesignToolRequest(
-            request,
-            target.runtime,
-            target.activePageId,
-            {
-              captureCanvas: async (capturedDocument) => {
-                if (!request.captureTarget) {
-                  throw new Error("Canvas capture target is unavailable");
-                }
-                const preview = await captureDesignTarget(
-                  capturedDocument,
-                  request.captureTarget,
-                  controller.signal,
-                );
-                const selected = await desktop.importAgentAttachments([
-                  {
-                    name: `OpenDesign ${request.captureTarget.kind} r${capturedDocument.revision}.jpg`,
-                    bytes: preview.bytes,
-                  },
-                ]);
-                const attachment = selected[0];
-                if (
-                  !attachment ||
-                  !attachment.attachmentId.startsWith("image_") ||
-                  attachment.mimeType !== preview.mimeType
-                ) {
-                  throw new Error("Canvas preview attachment import failed");
-                }
-                return {
-                  attachment: {
-                    attachmentId: attachment.attachmentId,
-                    name: attachment.name,
-                    mimeType: attachment.mimeType,
-                    byteSize: attachment.byteSize,
-                  },
-                  height: preview.height,
-                  width: preview.width,
-                };
-              },
-              signal: controller.signal,
-            },
-          ).then(async (response) => {
-            if (response.ok && response.result.designRevision) {
-              await projectAutosave.flushDocument(request.context.documentId);
-            }
-            return response;
-          });
-        })
-        .then(
-          (response) => desktop.resolveDesignToolRequest(response),
-          (error: unknown) => {
-            const message = reportRendererError(
-              "design_tool_execution_failed",
-              error,
-              "Design tool execution failed",
-              {
-                conversationId: request.context.sessionId,
-                runId: request.context.runId,
-                requestId: request.requestId,
-                toolCallId: request.call.toolCallId,
-              },
-              "silent",
-              "warning",
-            );
-            return desktop.resolveDesignToolRequest({
-              requestId: request.requestId,
-              ok: false,
-              error: {
-                code: "design_tool_execution_failed",
-                message,
-                retryable: false,
-                recoverable: true,
-              },
-            });
-          },
-        )
-        .finally(() => {
-          if (
-            designToolControllers.current.get(request.requestId) === controller
-          ) {
-            designToolControllers.current.delete(request.requestId);
-          }
-        });
-    });
-    const unsubscribeCancel = desktop.onDesignToolCancel?.(({ requestId }) => {
-      designToolControllers.current.get(requestId)?.abort();
-    });
-    return () => {
-      unsubscribeRequest();
-      unsubscribeCancel?.();
-      for (const controller of designToolControllers.current.values()) {
-        controller.abort();
-      }
-      designToolControllers.current.clear();
-    };
-  }, [projectAutosave, workspace]);
 
   const applyCommands = useCallback(
     (label: string, commands: DesignOperation[]) => {

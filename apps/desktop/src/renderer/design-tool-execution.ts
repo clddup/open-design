@@ -73,11 +73,17 @@ import {
   type DesignPageToolInput,
 } from "../shared/design-agent-tools";
 import type {
+  RendererDesignToolProgressPhase,
   RendererDesignToolRequest,
   RendererDesignToolResponse,
 } from "../shared/design-tool-bridge";
 import { runSvgExportInWorker, runSvgImportInWorker } from "./svg-interchange";
 import { exportDesignRaster } from "./raster-export";
+import { normalizeAgentTextContent } from "./agent-text-normalization";
+import {
+  throwIfAgentGenerationAborted,
+  waitForCanvasPaint,
+} from "./agent-generation-timing";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -95,6 +101,10 @@ type ExecuteDesignToolOptions = {
   importSvg?: typeof runSvgImportInWorker;
   signal?: AbortSignal;
   stageDelayMs?: number;
+  onProgress?: (
+    phase: RendererDesignToolProgressPhase,
+    progress: number,
+  ) => void;
 };
 
 export async function executeDesignToolRequest(
@@ -124,6 +134,7 @@ async function executeDesignToolRequestUnsafe(
 ): Promise<RendererDesignToolResponse> {
   const snapshot = runtime.getSnapshot();
   const document = snapshot.document;
+  options.onProgress?.("accepted", 0.02);
   if (document.documentId !== request.context.documentId) {
     throw new Error("The active Design File changed before tool execution");
   }
@@ -158,7 +169,9 @@ async function executeDesignToolRequestUnsafe(
     if (!request.captureTarget) {
       throw new Error("Canvas capture target is unavailable");
     }
+    options.onProgress?.("capturing", 0.15);
     const preview = await options.captureCanvas(document);
+    options.onProgress?.("capturing", 0.9);
     const layoutQuality =
       request.captureTarget.kind === "frame"
         ? diagnoseDesignTargetLayout(
@@ -344,7 +357,7 @@ async function executeDesignToolRequestUnsafe(
   ) {
     const input = request.call.input;
     assertPageToolMutationTarget(input, request.context.mutationTarget);
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const operationId =
       `agent_page_${request.call.toolCallId}_${document.revision}`.slice(
         0,
@@ -403,7 +416,7 @@ async function executeDesignToolRequestUnsafe(
     if (!preview.ok) {
       throw designTransactionToolError(preview.error, transaction.commands);
     }
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
       throw designTransactionToolError(result.error, transaction.commands);
@@ -446,7 +459,7 @@ async function executeDesignToolRequestUnsafe(
       request.context.mutationTarget,
       "SVG import",
     );
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const imported = await (options.importSvg ?? runSvgImportInWorker)(
       {
         svg: input.svg,
@@ -455,7 +468,7 @@ async function executeDesignToolRequestUnsafe(
       },
       options.signal,
     );
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const plan = planSvgImport(document, imported, {
       pageId: input.pageId,
       parentId: input.parentId,
@@ -491,7 +504,7 @@ async function executeDesignToolRequestUnsafe(
     if (!preview.ok) {
       throw designTransactionToolError(preview.error, transaction.commands);
     }
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
       throw designTransactionToolError(result.error, transaction.commands);
@@ -536,7 +549,7 @@ async function executeDesignToolRequestUnsafe(
       request.context.mutationTarget,
       "Raster export",
     );
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const exported = await (options.exportRaster ?? exportDesignRaster)(
       document,
       {
@@ -551,7 +564,7 @@ async function executeDesignToolRequestUnsafe(
       },
       options.signal,
     );
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     return {
       requestId: request.requestId,
       ok: true,
@@ -583,7 +596,7 @@ async function executeDesignToolRequestUnsafe(
       request.context.mutationTarget,
       "SVG export",
     );
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const exported = await (options.exportSvg ?? runSvgExportInWorker)(
       {
         document,
@@ -596,7 +609,7 @@ async function executeDesignToolRequestUnsafe(
       },
       options.signal,
     );
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     return {
       requestId: request.requestId,
       ok: true,
@@ -706,12 +719,12 @@ async function executeDesignToolRequestUnsafe(
       label: input.label,
       commands: plan.commands,
     } satisfies DesignTransaction;
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const preview = runtime.preview(transaction);
     if (!preview.ok) {
       throw designTransactionToolError(preview.error, transaction.commands);
     }
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
       throw designTransactionToolError(result.error, transaction.commands);
@@ -840,12 +853,12 @@ async function executeDesignToolRequestUnsafe(
       label: input.label,
       commands: plan.commands,
     } satisfies DesignTransaction;
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const preview = runtime.preview(transaction);
     if (!preview.ok) {
       throw designTransactionToolError(preview.error, transaction.commands);
     }
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
       throw designTransactionToolError(result.error, transaction.commands);
@@ -970,12 +983,12 @@ async function executeDesignToolRequestUnsafe(
       label: input.label,
       commands: [...plan.operations],
     } satisfies DesignTransaction;
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const preview = runtime.preview(transaction);
     if (!preview.ok) {
       throw designTransactionToolError(preview.error, transaction.commands);
     }
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
       throw designTransactionToolError(result.error, transaction.commands);
@@ -1101,12 +1114,12 @@ async function executeDesignToolRequestUnsafe(
       label: input.label,
       commands: plan.commands,
     } satisfies DesignTransaction;
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const preview = runtime.preview(transaction);
     if (!preview.ok) {
       throw designTransactionToolError(preview.error, transaction.commands);
     }
-    throwIfAborted(options.signal);
+    throwIfAgentGenerationAborted(options.signal);
     const result = runtime.apply(transaction);
     if (!result.ok) {
       throw designTransactionToolError(result.error, transaction.commands);
@@ -1153,7 +1166,9 @@ async function executeDesignToolRequestUnsafe(
   )) {
     throw new Error(`Unsupported design tool: ${request.call.toolName}`);
   }
-  const commands = normalizeAgentInsertHierarchy(request.call.input.commands);
+  const commands = normalizeAgentTextContent(
+    normalizeAgentInsertHierarchy(request.call.input.commands),
+  );
   assertCommandsWithinMutationTarget(
     document,
     commands,
@@ -1185,6 +1200,7 @@ async function executeDesignToolRequestUnsafe(
     preview,
     options.signal,
     options.stageDelayMs ?? 100,
+    options.onProgress,
   );
 }
 
@@ -1374,13 +1390,14 @@ async function applyProgressively(
   preview: DesignTransactionSuccess,
   signal: AbortSignal | undefined,
   stageDelayMs: number,
+  onProgress: ExecuteDesignToolOptions["onProgress"],
 ): Promise<RendererDesignToolResponse> {
   const remainingCommands = [...transaction.commands];
   let appliedStages = 0;
   let lastResult: DesignTransactionSuccess | undefined;
   try {
     while (remainingCommands.length > 0) {
-      throwIfAborted(signal);
+      throwIfAgentGenerationAborted(signal);
       const currentRevision = runtime.getSnapshot().document.revision;
       const commands = nextValidProgressiveStage(
         runtime,
@@ -1418,6 +1435,13 @@ async function applyProgressively(
       appliedStages += 1;
       lastResult = result;
       remainingCommands.splice(0, commands.length);
+      onProgress?.(
+        "applying",
+        0.1 +
+          0.8 *
+            ((transaction.commands.length - remainingCommands.length) /
+              transaction.commands.length),
+      );
       if (remainingCommands.length > 0) {
         await waitForCanvasPaint(signal, stageDelayMs);
       }
@@ -1616,64 +1640,6 @@ function hashFailureText(value: string): string {
     hash = Math.imul(hash, 0x01000193);
   }
   return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (!signal?.aborted) return;
-  throw new DOMException("Design generation stopped", "AbortError");
-}
-
-async function waitForCanvasPaint(
-  signal: AbortSignal | undefined,
-  delayMs: number,
-): Promise<void> {
-  await waitForAnimationFrame(signal);
-  await waitForAnimationFrame(signal);
-  if (delayMs <= 0) return;
-  await waitForDelay(signal, delayMs);
-}
-
-function waitForAnimationFrame(signal: AbortSignal | undefined): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const frame = { current: undefined as number | undefined };
-    const finish = () => {
-      signal?.removeEventListener("abort", abort);
-      resolve();
-    };
-    const abort = () => {
-      if (frame.current !== undefined) {
-        window.cancelAnimationFrame(frame.current);
-      }
-      reject(new DOMException("Design generation stopped", "AbortError"));
-    };
-    if (signal?.aborted) {
-      abort();
-      return;
-    }
-    signal?.addEventListener("abort", abort, { once: true });
-    frame.current = window.requestAnimationFrame(finish);
-  });
-}
-
-function waitForDelay(
-  signal: AbortSignal | undefined,
-  delayMs: number,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      signal?.removeEventListener("abort", abort);
-      resolve();
-    }, delayMs);
-    const abort = () => {
-      window.clearTimeout(timeout);
-      reject(new DOMException("Design generation stopped", "AbortError"));
-    };
-    if (signal?.aborted) {
-      abort();
-      return;
-    }
-    signal?.addEventListener("abort", abort, { once: true });
-  });
 }
 
 function createScopedInspection(

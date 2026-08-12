@@ -315,6 +315,45 @@ describe("Renderer typed plan skeleton presentation", () => {
     ).toEqual(EMPTY_GENERATION_PLAN_PRESENTATION_STATE);
   });
 
+  it("replaces the visible skeleton with the authoritative amended plan", () => {
+    const requestedPlan = structuredClone(generationPlan);
+    const amendedPlan: LegacyDesignPlanToolInput = {
+      ...structuredClone(generationPlan),
+      objective: "Create a stronger editorial launch poster",
+      composition: {
+        ...structuredClone(generationPlan.composition),
+        direction: "Asymmetric editorial composition with stronger overlap",
+      },
+    };
+    const requested = projectGenerationPlanPresentationEvent(
+      EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+      {
+        type: "tool.requested",
+        runId: "run_amended_plan",
+        toolCallId: "tool_amended_plan",
+        toolName: DESIGN_PLAN_TOOL_NAME,
+        input: requestedPlan,
+        risk: "read",
+      },
+    );
+    const accepted = projectGenerationPlanPresentationEvent(requested, {
+      type: "tool.completed",
+      runId: "run_amended_plan",
+      toolCallId: "tool_amended_plan",
+      result: {
+        ...acceptedPlanResult(amendedPlan),
+        status: "amended",
+        planRevision: 2,
+        changedTargetIds: [amendedPlan.artboard.frameId],
+        plan: amendedPlan,
+      },
+    });
+
+    expect(accepted.acceptedByRunId.run_amended_plan?.plan).toEqual(
+      amendedPlan,
+    );
+  });
+
   it("rejects failed, malformed, or mismatched plan events", () => {
     const malformed = projectGenerationPlanPresentationEvent(
       EMPTY_GENERATION_PLAN_PRESENTATION_STATE,

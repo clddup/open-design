@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   AgentAttachment,
@@ -17,6 +17,16 @@ async function chooseNextOption(
 ) {
   screen.getByRole("combobox", { name: selectName }).focus();
   await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 }
 
 describe("AgentTimeline", () => {
@@ -753,6 +763,46 @@ describe("AgentTimeline", () => {
     expect(container).toHaveTextContent("This request can be retried.");
   });
 
+  it("classifies a Renderer activity timeout as a canvas failure", () => {
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_canvas_timeout"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[
+          {
+            type: "tool.requested",
+            runId: "run_canvas_timeout",
+            toolCallId: "tool_canvas_timeout",
+            toolName: "opendesign_capture_canvas",
+            input: {},
+            risk: "read",
+          },
+          {
+            type: "tool.failed",
+            runId: "run_canvas_timeout",
+            toolCallId: "tool_canvas_timeout",
+            code: "renderer_idle_timeout",
+            message:
+              "renderer_tool.timeout.idle: Renderer design work made no progress for 90000 ms during capturing",
+            retryable: true,
+            recoverable: true,
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(screen.getByText("Canvas operation stalled")).toBeInTheDocument();
+    expect(container).toHaveTextContent(
+      "The canvas operation stopped reporting progress",
+    );
+    expect(container).not.toHaveTextContent("The model took too long");
+  });
+
   it("shows one live reconnect status and clears it after recovery", () => {
     const props = {
       activeRunId: "run_retry",
@@ -1195,6 +1245,42 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("capture_canvas once");
   });
 
+  it("keeps recoverable pre-execution corrections out of the visible timeline", () => {
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_recovery"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[
+          {
+            type: "tool.requested",
+            runId: "run_recovery",
+            toolCallId: "tool_invalid",
+            toolName: "opendesign_create_or_edit_pages",
+            input: {},
+            risk: "design_write",
+          },
+          {
+            type: "tool.failed",
+            runId: "run_recovery",
+            toolCallId: "tool_invalid",
+            code: "invalid_tool_input",
+            message:
+              'Validation failed for tool "opendesign_create_or_edit_pages": action: must be string',
+            recoverable: true,
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(container).not.toHaveTextContent("Design change failed");
+    expect(container).not.toHaveTextContent("Validation failed");
+  });
+
   it("keeps the complete Conversation history visible", () => {
     const timeline: SessionTimelineItem[] = Array.from(
       { length: 45 },
@@ -1288,6 +1374,113 @@ describe("AgentTimeline", () => {
     expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Stop" }).closest("form")).toBe(
       screen.getByLabelText("Continue the task").closest("form"),
+    );
+  });
+
+  it("discards late attachment and submit results after switching Conversations", async () => {
+    const user = userEvent.setup();
+    const attachmentSelection =
+      deferred<Awaited<ReturnType<DesktopApi["selectAgentAttachments"]>>>();
+    const submission = deferred<boolean>();
+    const onSubmit = vi.fn().mockReturnValue(submission.promise);
+    window.desktop = {
+      getModelProviderCatalog: vi.fn().mockResolvedValue({
+        version: 3,
+        providers: [
+          {
+            providerId: "provider_1",
+            name: "Primary",
+            enabled: true,
+            apiFormat: "openai-responses",
+            authMode: "bearer",
+            baseUrl: "https://api.openai.com/v1",
+            models: [
+              {
+                modelId: "vision-model",
+                name: "Vision model",
+                contextWindow: 200_000,
+                maxOutputTokens: 16_384,
+                capabilities: {
+                  toolUse: true,
+                  imageInput: true,
+                  reasoning: false,
+                },
+                reasoningEfforts: ["off"],
+              },
+            ],
+            hasApiKey: true,
+            updatedAt: now,
+          },
+        ],
+        defaultSelection: {
+          providerId: "provider_1",
+          modelId: "vision-model",
+          reasoningEffort: "off",
+        },
+      }),
+      onModelProviderCatalogChange: vi.fn().mockReturnValue(() => undefined),
+      selectAgentAttachments: vi
+        .fn<DesktopApi["selectAgentAttachments"]>()
+        .mockReturnValue(attachmentSelection.promise),
+    } as unknown as DesktopApi;
+    const renderConversation = (conversationId: string, title: string) => (
+      <AgentTimeline
+        activeRunId={null}
+        conversationId={conversationId}
+        conversationTitle={title}
+        error={null}
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={onSubmit}
+        timeline={[]}
+      />
+    );
+    const { rerender } = render(
+      renderConversation("conversation_1", "Conversation 1"),
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Add attachments" }),
+    );
+    rerender(renderConversation("conversation_2", "Conversation 2"));
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Keep this second draft",
+    );
+    await act(async () => {
+      attachmentSelection.resolve([
+        {
+          attachmentId: `image_${"a".repeat(64)}`,
+          name: "stale.png",
+          mimeType: "image/png",
+          byteSize: 512,
+          previewDataUrl: "data:image/png;base64,c3RhbGU=",
+        },
+      ]);
+      await attachmentSelection.promise;
+    });
+    expect(screen.queryByText("stale.png")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Continue the task")).toHaveValue(
+      "Keep this second draft",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      "Keep this second draft",
+      expect.objectContaining({ modelId: "vision-model" }),
+      [],
+    );
+    rerender(renderConversation("conversation_3", "Conversation 3"));
+    await user.type(
+      screen.getByLabelText("Continue the task"),
+      "Do not clear this third draft",
+    );
+    await act(async () => {
+      submission.resolve(true);
+      await submission.promise;
+    });
+    expect(screen.getByLabelText("Continue the task")).toHaveValue(
+      "Do not clear this third draft",
     );
   });
 

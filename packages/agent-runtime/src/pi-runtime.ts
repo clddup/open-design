@@ -253,6 +253,10 @@ function isSafeToolDefinition(tool: AgentToolDefinition): boolean {
     tool.description.length > 0 &&
     tool.inputSchema.type === "object" &&
     tool.inputSchema.additionalProperties === false &&
+    (tool.approvalScope === undefined ||
+      tool.approvalScope === "call" ||
+      tool.approvalScope === "run") &&
+    !(tool.approvalScope === "run" && tool.approval !== "required") &&
     (tool.approvalPrompt === undefined ||
       (typeof tool.approvalPrompt.title === "string" &&
         typeof tool.approvalPrompt.summary === "string" &&

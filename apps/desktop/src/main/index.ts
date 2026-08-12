@@ -30,6 +30,7 @@ import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
 import { AgentSvgImportHost } from "./agent/agent-svg-import-host";
 import { AgentRasterExportHost } from "./agent/agent-raster-export-host";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
+import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
 import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
@@ -51,7 +52,10 @@ import { ImageGenerationHost } from "./model/image-generation-host";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
 import { DiagnosticLog } from "./diagnostics/diagnostic-log";
 import { resolveRendererUrl } from "./renderer-url";
-import { isRendererDesignToolResponse } from "../shared/design-tool-bridge";
+import {
+  isRendererDesignToolProgress,
+  isRendererDesignToolResponse,
+} from "../shared/design-tool-bridge";
 import {
   channels,
   isDeleteModelProviderProfileRequest,
@@ -91,10 +95,8 @@ import {
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
-  designPlanTargets,
   isDesignApplyToolInput,
   isDesignComponentToolInput,
-  isDesignPlanToolInput,
   isDesignPageToolInput,
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
@@ -524,6 +526,15 @@ function registerProjectIpc() {
       return requireProjectIpc().listProjectConversations(args[0]);
     },
   );
+  ipcMain.handle(channels.designToolProgress, (event, ...args: unknown[]) => {
+    assertMainRenderer(event);
+    assertArgumentCount(args, 1);
+    const progress = args[0];
+    if (!isRendererDesignToolProgress(progress)) {
+      throw new TypeError("Invalid design tool progress");
+    }
+    return rendererDesignToolHost.progress(progress);
+  });
   ipcMain.handle(
     channels.resolveDesignToolRequest,
     (event, ...args: unknown[]) => {
@@ -1191,23 +1202,7 @@ void app.whenReady().then(async () => {
       };
     }
     if (call.toolName === DESIGN_PLAN_TOOL_NAME) {
-      if (!isDesignPlanToolInput(call.input)) {
-        throw new TypeError("Invalid design plan tool input");
-      }
-      globalTaskCoordinator.registerDesignPlan(context, call.input);
-      const targets = designPlanTargets(call.input);
-      return {
-        content: {
-          ok: true,
-          status: "accepted",
-          version: call.input.version,
-          deliverable: call.input.deliverable,
-          outputMode: call.input.outputMode,
-          targets,
-          rasterAssetRoles: call.input.rasterAssetRoles,
-          delivery: globalTaskCoordinator.getDeliveryLedger(context.runId),
-        },
-      };
+      return handleDesignPlanTool(globalTaskCoordinator, context, call.input);
     }
     if (call.toolName === DESIGN_REVIEW_TOOL_NAME) {
       if (!isDesignVisualReviewToolInput(call.input)) {

@@ -1177,6 +1177,163 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("versions plan amendments while preserving material target identities", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_plan_amendment",
+      sessionId: "conversation_mobile",
+      prompt: "Design the Home and Profile screens",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_plan_amendment",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan = multiTargetPlan(pageId);
+    expect(coordinator.registerDesignPlan(context, plan)).toMatchObject({
+      status: "accepted",
+      planRevision: 1,
+    });
+    expect(
+      coordinator.registerDesignPlan(context, structuredClone(plan)),
+    ).toMatchObject({
+      status: "unchanged",
+      planRevision: 1,
+      changedTargetIds: [],
+    });
+
+    const home = plan.targets[0];
+    if (!home) throw new Error("Home target is missing");
+    const draft = draftTargets(pageId, [home]);
+    const authorization = coordinator.assertDesignPlanForApply(context, draft);
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      draft,
+      authorization,
+      1,
+    );
+    coordinator.handleAgentEvent({
+      type: "tool.completed",
+      runId: context.runId,
+      toolCallId: "tool_home_draft",
+      result: { ok: true },
+      revision: 1,
+    });
+    const draftedDocument = withDraftedTargets(
+      opened.document,
+      pageId,
+      [home],
+      1,
+    );
+    const contextAtRevision1 = { ...context, revision: 1 };
+    coordinator.recordDocumentInspection(
+      contextAtRevision1,
+      inspectionResult(draftedDocument, pageId),
+    );
+
+    const profile = plan.targets[1];
+    if (!profile) throw new Error("Profile target is missing");
+    const settings: DesignPlanTarget = {
+      ...structuredClone(profile),
+      targetId: "target_settings",
+      label: "Settings",
+      objective: "Design the Settings screen",
+      artboard: {
+        ...profile.artboard,
+        frameId: "frame_settings",
+        x: 996,
+      },
+      composition: {
+        ...structuredClone(profile.composition),
+        regions: profile.composition.regions.map((region) => ({
+          ...region,
+          nodeId: region.nodeId.replace("frame_profile", "frame_settings"),
+        })),
+      },
+    };
+    const amended: DesignPlanToolInputV3 = {
+      ...structuredClone(plan),
+      objective: "Design the Home, Profile, and Settings screens",
+      targets: [
+        {
+          ...structuredClone(home),
+          implementationSteps: [
+            ...home.implementationSteps,
+            "Improve the Home hierarchy after visual review",
+          ],
+        },
+        structuredClone(profile),
+        settings,
+      ],
+      visualSystem: {
+        ...structuredClone(plan.visualSystem),
+        formLanguage: "Sharper mobile hierarchy with asymmetric emphasis",
+      },
+    };
+    const registration = coordinator.registerDesignPlan(
+      contextAtRevision1,
+      amended,
+    );
+    expect(registration).toMatchObject({
+      status: "amended",
+      planRevision: 2,
+    });
+    expect(registration.changedTargetIds).toContain("target_home");
+    expect(registration.changedTargetIds).toContain("target_settings");
+    expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
+      activeTargetId: "target_home",
+      targets: [
+        {
+          targetId: "target_home",
+          pageId,
+          rootNodeId: "frame_home",
+          status: "drafted",
+          draftRevision: 1,
+        },
+        { targetId: "target_profile", status: "pending" },
+        { targetId: "target_settings", status: "pending" },
+      ],
+    });
+
+    expect(() =>
+      coordinator.registerDesignPlan(contextAtRevision1, {
+        ...amended,
+        targets: amended.targets.filter(
+          (target) => target.targetId !== "target_home",
+        ),
+      }),
+    ).toThrow("Material target target_home cannot be removed");
+    expect(() =>
+      coordinator.registerDesignPlan(contextAtRevision1, {
+        ...amended,
+        targets: amended.targets.map((target) =>
+          target.targetId === "target_home"
+            ? {
+                ...target,
+                artboard: { ...target.artboard, frameId: "frame_home_v2" },
+              }
+            : target,
+        ),
+      }),
+    ).toThrow("must preserve its Page and artboard Frame ID");
+
+    store.close();
+  });
+
   it("refuses to verify a delivery target whose planned region is empty", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

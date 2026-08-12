@@ -64,9 +64,10 @@ Renderer 历史上把工作台、画布、Agent、属性面板和业务组件样
 - PropertiesPanel 当前仍是较大的单文件业务组件；样式收口不等同于组件职责已经
   完成拆分，Paint/Effect、Image placement 与 Export 应在后续功能切片中按各自
   事务边界提取，而不是只为缩短行数做无语义拆分。
-- AgentTimeline 当前仍承载 timeline projection 与 composer state；本次样式边界
-  已明确，但 React 组件提取必须保持自动滚动、durable/live 合并、附件导入、审批
-  和 active Run 生命周期的单一所有者，不能为缩短文件建立第二份状态。
+- Agent Conversation 的 React 职责已按 ADR-0046 Phase 2 完成拆分：纯
+  timeline projection、每 Conversation composer controller 与受控 Composer view
+  分别拥有明确边界；AgentTimeline 继续拥有自动滚动与审批展示。样式模块边界与
+  状态所有权一致，没有为缩短文件建立第二份 Timeline、draft 或 active Run 状态。
 - 历史 `styles.css` 已从 3562 行收口为 93 行，只保留 reset、Electron no-drag、
   visually-hidden、App shell、Workspace grid/窄窗口和全局 Reduced Motion；这些是
   本 ADR 明确允许的全局契约，继续机械迁移不构成收益。

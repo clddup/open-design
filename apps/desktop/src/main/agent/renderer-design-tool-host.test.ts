@@ -78,4 +78,108 @@ describe("RendererDesignToolHost", () => {
     });
     await expect(result).resolves.toMatchObject({ observedRevision: 0 });
   });
+
+  it("renews an idle lease from Renderer progress without extending the total limit", async () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn();
+      const sendCancel = vi.fn();
+      const host = new RendererDesignToolHost(send, sendCancel, {
+        firstResponseTimeoutMs: 20,
+        idleTimeoutMs: 30,
+        totalTimeoutMs: 100,
+      });
+      const result = host.execute(
+        {
+          toolCallId: "tool_progress_1",
+          toolName: "opendesign_inspect_document",
+          input: {},
+        },
+        {
+          runId: "run_1",
+          sessionId: "conversation_1",
+          documentId: "document_1",
+          revision: 0,
+          scope: { kind: "document", selectedNodeIds: [] },
+          mutationTarget: { kind: "document" },
+        },
+        new AbortController().signal,
+      );
+      const request = send.mock.calls[0]?.[0] as { requestId: string };
+
+      await vi.advanceTimersByTimeAsync(10);
+      expect(
+        host.progress({
+          requestId: request.requestId,
+          phase: "accepted",
+          progress: 0.02,
+        }),
+      ).toBe(true);
+      await vi.advanceTimersByTimeAsync(25);
+      expect(
+        host.progress({
+          requestId: request.requestId,
+          phase: "applying",
+          progress: 0.5,
+        }),
+      ).toBe(true);
+      await vi.advanceTimersByTimeAsync(25);
+      expect(sendCancel).not.toHaveBeenCalled();
+      host.resolve({
+        requestId: request.requestId,
+        ok: true,
+        result: { content: { ok: true } },
+      });
+      await expect(result).resolves.toMatchObject({ content: { ok: true } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns a structured Renderer idle timeout instead of a model timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn();
+      const sendCancel = vi.fn();
+      const host = new RendererDesignToolHost(send, sendCancel, {
+        firstResponseTimeoutMs: 20,
+        idleTimeoutMs: 30,
+        totalTimeoutMs: 100,
+      });
+      const result = host.execute(
+        {
+          toolCallId: "tool_idle_1",
+          toolName: "opendesign_inspect_document",
+          input: {},
+        },
+        {
+          runId: "run_1",
+          sessionId: "conversation_1",
+          documentId: "document_1",
+          revision: 0,
+          scope: { kind: "document", selectedNodeIds: [] },
+          mutationTarget: { kind: "document" },
+        },
+        new AbortController().signal,
+      );
+      const request = send.mock.calls[0]?.[0] as { requestId: string };
+      host.progress({
+        requestId: request.requestId,
+        phase: "capturing",
+        progress: 0.3,
+      });
+      const rejection = expect(result).rejects.toMatchObject({
+        cause: {
+          code: "renderer_idle_timeout",
+          retryable: true,
+          recoverable: true,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(31);
+      await rejection;
+      expect(sendCancel).toHaveBeenCalledWith({ requestId: request.requestId });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

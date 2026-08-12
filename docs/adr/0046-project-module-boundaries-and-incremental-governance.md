@@ -1,6 +1,6 @@
 # ADR-0046：项目级模块边界与增量治理
 
-- 状态：已接受（Phase 1 已实施；后续阶段持续执行）
+- 状态：已接受（Phase 1–2 已实施；后续阶段持续执行）
 - 日期：2026-08-12
 - 关联：ADR-0001、ADR-0002、ADR-0003、ADR-0005、ADR-0006、ADR-0009、ADR-0033
 
@@ -57,6 +57,10 @@ View 只接收显式 props 和语义命令。高频画布状态不放入通用 R
 
 Phase 1 已把人工 SVG 导入、SVG/PNG/JPEG/WebP 导出、设置、反馈、取消和原生命令订阅迁入 `features/import-export`，把 Renderer 诊断工具迁入独立模块。`App.tsx` 只组合该 feature；PropertiesPanel 只消费 feature types/commands。此变更没有增加第二份文档状态或改变导入导出协议。
 
+Phase 2 把 Agent Conversation UI 拆成三个明确所有权：`timeline-projection` 纯合并 durable journal 与 live events，`use-agent-composer-controller` 独占每 Conversation 的 draft/附件/model/submit/stop，`AgentComposer` 只负责受控桌面 view；`AgentTimeline` 只组合历史、审批、交付进度和滚动跟随。Conversation epoch 在所有异步成功、失败和 finally 分支校验，旧会话迟到的附件或 submit 不能清空、覆盖新会话。可见 Timeline 不等于模型上下文，也不等于设计文档 revision；三者分别由 session journal/context adapter/EditorRuntime 持有。
+
+该阶段没有把 Page 权限、Renderer tool lease 或 Design Plan 状态放进 React。Run-scoped Page approval 仍由 Agent adapter + Main capability 共同校验；Renderer tool 首响应/空闲/总时限由 Main host 持有；版本化 Plan 与 delivery ledger 由 GlobalTaskCoordinator 持有。UI 只投影这些可信状态。`AgentTimeline.tsx` 从历史 1994 行降至 555 行，所有新 conversation 模块低于 800 行，旧预算已移除。
+
 ### 自动边界和增长门禁
 
 `pnpm architecture:check` 是根 `pnpm verify` 的必经步骤，并校验：
@@ -87,7 +91,7 @@ Phase 1 已把人工 SVG 导入、SVG/PNG/JPEG/WebP 导出、设置、反馈、�
 
 - 聚合入口会按真实业务所有权逐步收缩，而不是一次性重写。
 - 新代码不能建立跨进程后门、包循环或新的巨型模块。
-- 历史 28 个大模块仍然存在，Phase 1 不能描述为全项目治理完成；预算只阻止继续恶化，后续阶段必须实际拆除职责。
+- 历史大模块仍然存在，Phase 1–2 不能描述为全项目治理完成；预算只阻止继续恶化，后续阶段必须实际拆除职责。
 - 导入/导出现在具有独立取消和反馈生命周期，并继续从唯一 Runtime snapshot 生成事务或产物。
 
 ## 验证
@@ -96,4 +100,6 @@ Phase 1 已把人工 SVG 导入、SVG/PNG/JPEG/WebP 导出、设置、反馈、�
 - Desktop typecheck
 - `use-import-export-workflow.test.ts`：最新 Runtime snapshot、native command、JPEG 背景、互斥、切出 editor、unmount 与 cancellation
 - `diagnostics.test.ts`、PropertiesPanel 和 App 集成测试
+- `AgentTimeline.test.tsx`：durable/live 单调投影、近底自动滚动、审批、取消、历史终态与 Conversation epoch 竞态
+- Agent Runtime/Main/Renderer 定向测试：Run-scoped approval、Renderer 活动租约、版本化 Plan amendment 与 Text content 规范化
 - 全仓 `pnpm verify`

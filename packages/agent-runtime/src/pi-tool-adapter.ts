@@ -27,6 +27,7 @@ import {
   validateDesignRevision,
   validateObservedRevision,
 } from "./tool-execution-semantics.js";
+import { selectSafeDefinitions } from "./tool-definition-safety.js";
 
 const TOOL_RESULT_KIND = "opendesign.tool-result";
 const TOOL_PROGRESS_KIND = "opendesign.tool-progress";
@@ -129,6 +130,7 @@ export class OpenDesignPiToolAdapter {
   readonly #maxToolCalls: number;
   readonly #now: () => Date;
   readonly #records: AgentToolCallRecord[] = [];
+  readonly #runApprovals = new Set<string>();
   readonly #request: AgentRunRequest;
   readonly #seen = new Set<string>();
   readonly #toolExecutor: ToolExecutorPort | undefined;
@@ -336,15 +338,17 @@ export class OpenDesignPiToolAdapter {
       return this.#block(
         active.toolCallId,
         "unknown_tool",
-        "Tool call was rejected before execution",
+        `Tool ${active.toolName} is not registered for this run`,
       );
     }
     if (!definition.validateInput(context.args)) {
-      return this.#block(
-        active.toolCallId,
+      const schemaFailure = failure(
         "invalid_tool_input",
-        "Tool call was rejected before execution",
+        `The ${active.toolName} arguments do not match its schema. Review the tool parameters and submit a corrected call.`,
+        true,
       );
+      this.#failures.set(active.toolCallId, schemaFailure);
+      return { block: true, reason: modelFailureText(schemaFailure) };
     }
     if (
       this.#inspectionRequiredFailure &&
@@ -395,7 +399,7 @@ export class OpenDesignPiToolAdapter {
       return this.#block(
         active.toolCallId,
         "tool_executor_unavailable",
-        "Tool call was rejected before execution",
+        `The trusted executor for ${active.toolName} is unavailable`,
       );
     }
     if (signal?.aborted) {
@@ -408,6 +412,12 @@ export class OpenDesignPiToolAdapter {
       );
     }
     if (definition.approval !== "required") return undefined;
+    if (
+      definition.approvalScope === "run" &&
+      this.#runApprovals.has(definition.name)
+    ) {
+      return undefined;
+    }
 
     const approvalId = `${active.toolCallId}_approval`;
     const approval = {
@@ -456,6 +466,9 @@ export class OpenDesignPiToolAdapter {
         "Host denied this tool call",
       );
     }
+    if (definition.approvalScope === "run") {
+      this.#runApprovals.add(definition.name);
+    }
     return undefined;
   };
 
@@ -486,7 +499,13 @@ export class OpenDesignPiToolAdapter {
   ) {
     try {
       if (!definition.validateInput(parameters)) {
-        throw new TypeError("Tool call was rejected before execution");
+        throw new TrustedToolExecutionError(
+          failure(
+            "invalid_tool_input",
+            `The ${definition.name} arguments do not match its schema. Review the tool parameters and submit a corrected call.`,
+            true,
+          ),
+        );
       }
       if (this.#toolExecutor === undefined) {
         throw new Error("Tool executor became unavailable");
@@ -660,35 +679,6 @@ export class OpenDesignPiToolAdapter {
     }
     return active;
   }
-}
-
-function selectSafeDefinitions(
-  definitions: readonly AgentToolDefinition[],
-): AgentToolDefinition[] {
-  const safe: AgentToolDefinition[] = [];
-  const names = new Set<string>();
-  for (const definition of definitions) {
-    if (
-      definition.name.length === 0 ||
-      !definition.name.startsWith("opendesign_") ||
-      definition.description.length === 0 ||
-      definition.inputSchema.type !== "object" ||
-      definition.inputSchema.additionalProperties !== false ||
-      typeof definition.validateInput !== "function" ||
-      (definition.approvalPrompt !== undefined &&
-        (typeof definition.approvalPrompt.title !== "string" ||
-          typeof definition.approvalPrompt.summary !== "string" ||
-          definition.approvalPrompt.title.length === 0 ||
-          definition.approvalPrompt.title.length > 2_000 ||
-          definition.approvalPrompt.summary.length > 20_000)) ||
-      names.has(definition.name)
-    ) {
-      continue;
-    }
-    names.add(definition.name);
-    safe.push(definition);
-  }
-  return safe;
 }
 
 function readProgressDetails(value: unknown): PiToolProgressDetails {

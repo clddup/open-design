@@ -55,6 +55,15 @@ export type RendererDesignToolCancel = {
   requestId: string;
 };
 
+export type RendererDesignToolProgressPhase =
+  "accepted" | "applying" | "capturing" | "persisting";
+
+export type RendererDesignToolProgress = {
+  requestId: string;
+  phase: RendererDesignToolProgressPhase;
+  progress: number;
+};
+
 export type RendererDesignToolResponse =
   | { requestId: string; ok: true; result: TrustedToolResult }
   | { requestId: string; ok: false; error: TrustedToolFailure };
@@ -139,6 +148,25 @@ export function isRendererDesignToolCancel(
     record(value) &&
     safeId(value.requestId) &&
     Object.keys(value).every((key) => key === "requestId")
+  );
+}
+
+export function isRendererDesignToolProgress(
+  value: unknown,
+): value is RendererDesignToolProgress {
+  return (
+    record(value) &&
+    safeId(value.requestId) &&
+    ["accepted", "applying", "capturing", "persisting"].includes(
+      String(value.phase),
+    ) &&
+    typeof value.progress === "number" &&
+    Number.isFinite(value.progress) &&
+    value.progress >= 0 &&
+    value.progress <= 1 &&
+    Object.keys(value).every((key) =>
+      ["requestId", "phase", "progress"].includes(key),
+    )
   );
 }
 

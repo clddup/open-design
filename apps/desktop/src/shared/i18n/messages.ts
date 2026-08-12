@@ -765,7 +765,16 @@ export const enMessages = {
   "agent.pagesUpdated": "Pages updated",
   "agent.agentUnavailable": "Agent unavailable",
   "agent.modelInterrupted": "The model response was interrupted. Try again.",
-  "agent.modelTimedOut": "The model took too long to respond. Try again.",
+  "agent.canvasToolTimedOut": "The canvas operation took too long.",
+  "agent.canvasToolDidNotStart": "Canvas operation did not start",
+  "agent.canvasToolFirstResponseTimeoutDetail":
+    "The canvas did not acknowledge this operation in time. It was cancelled safely and can be retried.",
+  "agent.canvasToolStalled": "Canvas operation stalled",
+  "agent.canvasToolIdleTimeoutDetail":
+    "The canvas operation stopped reporting progress. It was cancelled safely; no partial transaction was committed.",
+  "agent.canvasToolLimitReached": "Canvas operation reached its time limit",
+  "agent.canvasToolTotalTimeoutDetail":
+    "The canvas operation reached its total execution limit. Retry it as smaller design steps.",
   "agent.timeoutFirstResponse": "Model did not start responding",
   "agent.timeoutFirstResponseDetail":
     "No Provider response arrived within {{duration}}.",
@@ -793,21 +802,10 @@ export const enMessages = {
     "This change did not match the active canvas scope. The Agent can inspect the canvas and try again.",
   "agent.contextLimitDetail": "Start a new message to continue.",
   "agent.tryAgain": "Try again or continue with a new instruction.",
-  "agent.modelRunning": "Waiting for the model",
-  "agent.modelRunningDetail":
-    "The request was sent. Model output and native tool calls will stream below.",
-  "agent.inspectDocument": "Inspect current document",
-  "agent.inspectDocumentRequested":
-    "Reading the active page, node tree, selection, and revision",
-  "agent.applyTransaction": "Apply design transaction",
-  "agent.applyCommandsRequested": "Preparing {{count}} design operations",
   "agent.taskCompleted": "Task completed",
   "agent.taskStopped": "Task stopped",
   "agent.contextLimit": "Context limit reached",
   "agent.taskFailed": "Task failed",
-  "agent.inspecting":
-    "Inspecting the current document and planning structured edits",
-  "agent.runEnded": "Run ended with status: {{status}}",
   "agent.runtimeStarting": "Design agent starting",
   "agent.runtimeDetail": "Runtime {{runtime}} · Protocol {{protocol}}",
   "agent.handshakeCompleted": "Agent handshake completed",
@@ -1663,7 +1661,16 @@ const zhCNMessages = {
   "agent.pagesUpdated": "页面已更新",
   "agent.agentUnavailable": "Agent 暂不可用",
   "agent.modelInterrupted": "模型响应中断，请重试。",
-  "agent.modelTimedOut": "模型响应超时，请重试。",
+  "agent.canvasToolTimedOut": "画布操作处理时间过长。",
+  "agent.canvasToolDidNotStart": "画布操作未开始处理",
+  "agent.canvasToolFirstResponseTimeoutDetail":
+    "画布未及时确认这次操作，系统已安全取消，可以直接重试。",
+  "agent.canvasToolStalled": "画布操作已停滞",
+  "agent.canvasToolIdleTimeoutDetail":
+    "画布操作长时间没有阶段进度，系统已安全取消，未提交半成品事务。",
+  "agent.canvasToolLimitReached": "画布操作达到总时限",
+  "agent.canvasToolTotalTimeoutDetail":
+    "画布操作达到总执行时限，请拆成更小的设计步骤后重试。",
   "agent.timeoutFirstResponse": "等待模型首个响应超时",
   "agent.timeoutFirstResponseDetail":
     "在 {{duration}} 内没有收到 Provider 的首个响应。",
@@ -1687,19 +1694,10 @@ const zhCNMessages = {
     "这次修改与当前画布作用域不匹配，Agent 可重新读取画布后重试。",
   "agent.contextLimitDetail": "发送新消息即可继续。",
   "agent.tryAgain": "请重试，或发送新的修改要求。",
-  "agent.modelRunning": "正在等待模型",
-  "agent.modelRunningDetail":
-    "请求已发送，模型输出和原生工具调用会实时显示在下方。",
-  "agent.inspectDocument": "检查当前设计文档",
-  "agent.inspectDocumentRequested": "读取当前页面、节点树、选区与 revision",
-  "agent.applyTransaction": "应用设计事务",
-  "agent.applyCommandsRequested": "准备应用 {{count}} 项设计操作",
   "agent.taskCompleted": "任务已完成",
   "agent.taskStopped": "任务已停止",
   "agent.contextLimit": "已达到上下文限制",
   "agent.taskFailed": "任务失败",
-  "agent.inspecting": "正在检查当前文档并规划结构化修改",
-  "agent.runEnded": "Run 结束状态：{{status}}",
   "agent.runtimeStarting": "设计 Agent 正在启动",
   "agent.runtimeDetail": "Runtime {{runtime}} · 协议 {{protocol}}",
   "agent.handshakeCompleted": "Agent 握手已完成",

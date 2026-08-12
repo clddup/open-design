@@ -38,6 +38,7 @@ import { isAppLocale, type AppLocale } from "./i18n/locale";
 import type {
   RendererDesignToolRequest,
   RendererDesignToolCancel,
+  RendererDesignToolProgress,
   RendererDesignToolResponse,
 } from "./design-tool-bridge";
 import type { DiagnosticEvent, RendererDiagnosticReport } from "./diagnostics";
@@ -64,10 +65,7 @@ export {
 
 export type ThemePreference = "light" | "dark" | "system";
 
-export type PlatformInfo = {
-  platform: NodeJS.Platform;
-  version: string;
-};
+export type PlatformInfo = { platform: NodeJS.Platform; version: string };
 
 export type WindowAction = "minimize" | "toggle-maximize" | "close";
 
@@ -82,9 +80,7 @@ export type SaveDesignFileRequest = {
   saveAs?: boolean;
 };
 
-export type SaveDesignFileResult = {
-  name: string;
-};
+export type SaveDesignFileResult = { name: string };
 
 export type OpenSvgFile = {
   name: string;
@@ -310,6 +306,9 @@ export interface DesktopApi {
   onDesignToolCancel: (
     listener: (request: RendererDesignToolCancel) => void,
   ) => () => void;
+  reportDesignToolProgress: (
+    progress: RendererDesignToolProgress,
+  ) => Promise<boolean>;
   resolveDesignToolRequest: (
     response: RendererDesignToolResponse,
   ) => Promise<void>;
@@ -389,6 +388,7 @@ export const channels = {
   selectDesignImage: "design-image:select",
   designToolRequest: "design-tool:request",
   designToolCancel: "design-tool:cancel",
+  designToolProgress: "design-tool:progress",
   resolveDesignToolRequest: "design-tool:resolve",
   windowAction: "window:action",
   openDesignFile: "design-file:open",

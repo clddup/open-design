@@ -21,6 +21,7 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "../shared/design-agent-tools";
 import type { RendererDesignToolRequest } from "../shared/design-tool-bridge";
+import { decodeAgentTextLineBreaks } from "./agent-text-normalization";
 import { executeDesignToolRequest } from "./design-tool-execution";
 import type {
   runSvgExportInWorker,
@@ -104,6 +105,90 @@ function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
 }
 
 describe("Renderer design tool scope", () => {
+  it("decodes model-escaped line breaks only in Agent text content", async () => {
+    expect(decodeAgentTextLineBreaks("Line one\\nLine two")).toBe(
+      "Line one\nLine two",
+    );
+    expect(decodeAgentTextLineBreaks("Line one\\r\\nLine two")).toBe(
+      "Line one\nLine two",
+    );
+    expect(decodeAgentTextLineBreaks(String.raw`C:\new\reference.png`)).toBe(
+      String.raw`C:\new\reference.png`,
+    );
+    expect(decodeAgentTextLineBreaks(String.raw`Keep \\n literal`)).toBe(
+      String.raw`Keep \\n literal`,
+    );
+
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const frame = runtime.getSnapshot().document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "apply_escaped_text",
+        call: {
+          toolCallId: "tool_escaped_text",
+          toolName: "opendesign_apply_transaction",
+          input: {
+            label: "Add multiline copy",
+            summary: String.raw`Preserve C:\new\reference.png`,
+            commands: [
+              {
+                commandId: "insert_escaped_text",
+                type: "insert_element",
+                pageId: "page_welcome",
+                parentId: frame.id,
+                index: frame.childIds.length,
+                node: {
+                  id: "agent_escaped_text",
+                  kind: "text",
+                  name: "Multiline copy",
+                  parentId: frame.id,
+                  childIds: [],
+                  visible: true,
+                  locked: false,
+                  transform: [1, 0, 0, 1, 64, 620],
+                  size: { width: 480, height: 96 },
+                  opacity: 1,
+                  properties: {
+                    content: "Line one\\nLine two",
+                    fontFamily: "Inter, sans-serif",
+                    fontSize: 28,
+                    fontWeight: 700,
+                    lineHeight: 36,
+                    letterSpacing: 0,
+                    textAlignHorizontal: "left",
+                    textAlignVertical: "top",
+                    textResize: "fixed",
+                    textWrap: "word",
+                    textOverflow: "visible",
+                    fills: [{ type: "solid", color: "#151515", opacity: 1 }],
+                    strokes: [],
+                    strokeWidth: 0,
+                  },
+                  extensions: {},
+                },
+              },
+            ],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+      { stageDelayMs: 0 },
+    );
+
+    expect(response.ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.agent_escaped_text,
+    ).toMatchObject({ properties: { content: "Line one\nLine two" } });
+    if (response.ok) {
+      expect(response.result.content).toMatchObject({
+        label: "Add multiline copy",
+      });
+    }
+  });
+
   it("creates, inspects, overrides, and detaches components through the typed tool", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const createComponent = await executeDesignToolRequest(

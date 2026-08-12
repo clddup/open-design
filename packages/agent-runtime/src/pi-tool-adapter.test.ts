@@ -592,6 +592,90 @@ describe("OpenDesign Pi tool adapter", () => {
     });
   });
 
+  it("reuses one allowed Run-scoped approval for later calls in the same Run", async () => {
+    const approvalTool: AgentToolDefinition = {
+      ...moveTool,
+      approval: "required",
+      approvalScope: "run",
+      approvalPrompt: {
+        title: "Modify Page structure",
+        summary: "Allow this task to update Pages in the current design file.",
+      },
+    };
+    let approvalRequests = 0;
+    let executions = 0;
+    const result = await runPiToolLoop({
+      gateway: new RecordingGateway(
+        new MockModelGateway([
+          toolTurn("page_call_1", "page_call_1", 1),
+          toolTurn("page_call_2", "page_call_2", 2),
+          { blocks: [{ id: "done", type: "text", text: "Done" }] },
+        ]),
+      ),
+      definitions: [approvalTool],
+      toolExecutor: {
+        async *execute(): AsyncIterable<ToolExecutionEvent> {
+          executions += 1;
+          await Promise.resolve();
+          yield { type: "completed", result: { content: { ok: true } } };
+        },
+      },
+      approvalPort: {
+        requestApproval: () => {
+          approvalRequests += 1;
+          return Promise.resolve("allow_once");
+        },
+      },
+    });
+
+    expect(approvalRequests).toBe(1);
+    expect(executions).toBe(2);
+    expect(
+      result.events.filter((event) => event.type === "approval.requested"),
+    ).toHaveLength(1);
+    expect(
+      result.events.filter((event) => event.type === "tool.completed"),
+    ).toHaveLength(2);
+  });
+
+  it("returns a recoverable schema failure instead of a generic pre-execution rejection", async () => {
+    const result = await runPiToolLoop({
+      gateway: new RecordingGateway(
+        new MockModelGateway([
+          {
+            blocks: [
+              {
+                id: "invalid_move",
+                type: "tool_call",
+                toolCallId: "invalid_move_1",
+                name: moveTool.name,
+                input: { dx: "wrong" },
+              },
+            ],
+            stopReason: "tool_use",
+          },
+          { blocks: [{ id: "recovered", type: "text", text: "Recovered" }] },
+        ]),
+      ),
+      definitions: [moveTool],
+      toolExecutor: neverToolExecutor(),
+    });
+
+    const failure = result.events.find(
+      (event) =>
+        event.type === "tool.failed" && event.toolCallId === "invalid_move_1",
+    );
+    expect(failure).toMatchObject({
+      type: "tool.failed",
+      code: "invalid_tool_input",
+      recoverable: true,
+    });
+    expect(failure?.message).toContain("dx: must be number");
+    expect(JSON.stringify(result.events)).not.toContain(
+      "Tool call was rejected before execution",
+    );
+  });
+
   it("finalizes a tool requested at cancellation without calling the executor", async () => {
     const cancelled = await runPiToolLoop({
       gateway: new RecordingGateway(

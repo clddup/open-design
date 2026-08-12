@@ -522,12 +522,8 @@ export type DesignVectorToolInput =
       start: Point;
     };
 
-// The canonical DesignOperation schema is deliberately exhaustive and is used
-// for the trusted runtime validation below. Serializing that TypeBox union into
-// a model tool repeated the complete node union for insert and replace, turning
-// one tool into a 300+ KB request. The model-facing schema describes the same
-// public command surface in a compact form; it is guidance, never the trust
-// boundary. Every generated command still has to pass isDesignOperation().
+// The exhaustive runtime schema stays the trust boundary. This compact model
+// schema avoids repeating a 300+ KB node union and remains guidance only.
 const MODEL_BLEND_MODES = [
   "pass-through",
   "normal",
@@ -2043,6 +2039,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     },
     risk: "design_write" as const,
     approval: "required" as const,
+    approvalScope: "run" as const,
     approvalPrompt: {
       title: "Allow Page structure changes",
       summary:

@@ -159,7 +159,7 @@ export function projectGenerationPlanPresentationEvent(
     delete requestedByCallId[callId];
     if (
       event.type === "tool.failed" ||
-      !isAcceptedGenerationPlanResult(event.result, requestedPlan.plan)
+      !acceptedGenerationPlan(event.result, requestedPlan.plan)
     ) {
       return { ...state, requestedByCallId };
     }
@@ -171,7 +171,10 @@ export function projectGenerationPlanPresentationEvent(
         ...state.acceptedByRunId,
         [event.runId]: {
           id: callId,
-          plan: structuredClone(requestedPlan.plan),
+          plan: structuredClone(
+            acceptedGenerationPlan(event.result, requestedPlan.plan) ??
+              requestedPlan.plan,
+          ),
           runId: event.runId,
           toolCallId: event.toolCallId,
         },
@@ -539,27 +542,33 @@ function generationPlanCallId(runId: string, toolCallId: string): string {
   return `${runId}:${toolCallId}`;
 }
 
-function isAcceptedGenerationPlanResult(
+function acceptedGenerationPlan(
   value: unknown,
   plan: DesignPlanToolInput,
-): boolean {
-  if (!isRecord(value)) return false;
+): DesignPlanToolInput | undefined {
+  if (!isRecord(value)) return undefined;
+  const authoritative = isDesignPlanToolInput(value.plan) ? value.plan : plan;
   const common =
     value.ok === true &&
-    value.status === "accepted" &&
-    value.version === plan.version &&
-    value.deliverable === plan.deliverable &&
-    value.outputMode === plan.outputMode &&
-    sameJson(value.rasterAssetRoles, plan.rasterAssetRoles);
-  if (!common) return false;
-  if (sameJson(value.targets, designPlanTargets(plan))) return true;
-  return (
-    plan.version === 2 &&
-    value.pageId === plan.pageId &&
-    sameJson(value.artboard, plan.artboard) &&
-    sameJson(value.regions, plan.composition.regions) &&
-    sameJson(value.editableLayers, plan.editableLayers)
-  );
+    (value.status === "accepted" ||
+      value.status === "unchanged" ||
+      value.status === "amended") &&
+    value.version === authoritative.version &&
+    value.deliverable === authoritative.deliverable &&
+    value.outputMode === authoritative.outputMode &&
+    sameJson(value.rasterAssetRoles, authoritative.rasterAssetRoles);
+  if (!common) return undefined;
+  if (sameJson(value.targets, designPlanTargets(authoritative))) {
+    return structuredClone(authoritative);
+  }
+  return plan.version === 2 &&
+    authoritative.version === 2 &&
+    value.pageId === authoritative.pageId &&
+    sameJson(value.artboard, authoritative.artboard) &&
+    sameJson(value.regions, authoritative.composition.regions) &&
+    sameJson(value.editableLayers, authoritative.editableLayers)
+    ? structuredClone(authoritative)
+    : undefined;
 }
 
 function generationRegionFulfilled(
