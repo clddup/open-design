@@ -3,11 +3,13 @@ import type {
   VectorNetwork,
   VectorPathRun,
   VectorPointMode,
+  VectorRegion,
   VectorSegment,
   VectorSegmentReference,
   VectorVertex,
 } from "@opendesign/design-contracts";
 import {
+  serializeVectorNetwork,
   validateVectorNetwork,
   vectorNetworkHasBranches,
 } from "./editable-vector.js";
@@ -365,6 +367,7 @@ export function cutVectorNetworkByLine(
   }
 
   const affected: Array<{
+    compoundRegion?: CompoundRegionCutContext;
     contour: EditableContour;
     intersections: readonly ContourLineCutIntersection[];
   }> = [];
@@ -376,19 +379,35 @@ export function cutVectorNetworkByLine(
       const sourceRegions = network.regions.filter((region) =>
         region.loops.some((loop) => loop.pathId === contour.pathId),
       );
-      if (
-        sourceRegions.length > 1 ||
-        sourceRegions.some((region) => region.loops.length !== 1)
-      ) {
+      if (sourceRegions.length > 1) {
         return unsupportedTopology(
-          `Drag Cut through compound region path ${contour.pathId} requires hole redistribution`,
+          `Drag Cut path ${contour.pathId} belongs to multiple fill regions`,
         );
+      }
+      let compoundRegion: CompoundRegionCutContext | undefined;
+      const sourceRegion = sourceRegions[0];
+      if (sourceRegion && sourceRegion.loops.length > 1) {
+        const resolved = resolveCompoundRegionCut(
+          network,
+          sourceRegion,
+          contour.pathId,
+          start,
+          end,
+        );
+        if (!resolved.ok) return resolved;
+        compoundRegion = resolved.context;
       }
       if (resolved.intersections.length !== 2) {
         return unsupportedTopology(
           `Drag Cut currently requires exactly two crossing intersections per closed contour; ${contour.pathId} has ${resolved.intersections.length}`,
         );
       }
+      affected.push({
+        ...(compoundRegion ? { compoundRegion } : {}),
+        contour,
+        intersections: resolved.intersections,
+      });
+      continue;
     }
     affected.push({ contour, intersections: resolved.intersections });
   }
@@ -401,7 +420,14 @@ export function cutVectorNetworkByLine(
   const intersections: VectorLineCutIntersection[] = [];
   for (const target of affected) {
     const result = target.contour.closed
-      ? divideClosedContourByLine(divided, target.contour, target.intersections)
+      ? divideClosedContourByLine(
+          divided,
+          target.contour,
+          target.intersections,
+          start,
+          end,
+          target.compoundRegion,
+        )
       : divideOpenContourByLine(divided, target.contour, target.intersections);
     if (!result.ok) return result;
     divided = result.network;
@@ -462,7 +488,7 @@ type ContourLineCutIntersectionResult =
 type DivideClosedContourResult =
   | {
       ok: true;
-      extractedPathIds: readonly [string];
+      extractedPathIds: readonly string[];
       network: VectorNetwork;
     }
   | { ok: false; code: VectorEditFailureCode; message: string };
@@ -473,6 +499,21 @@ type DivideOpenContourResult =
       extractedPathIds: readonly string[];
       network: VectorNetwork;
     }
+  | { ok: false; code: VectorEditFailureCode; message: string };
+
+type LineSide = -1 | 1;
+
+interface CompoundRegionCutContext {
+  holes: readonly {
+    loop: VectorRegion["loops"][number];
+    side: LineSide;
+  }[];
+  outerLoop: VectorRegion["loops"][number];
+  regionId: string;
+}
+
+type CompoundRegionCutResolution =
+  | { ok: true; context: CompoundRegionCutContext }
   | { ok: false; code: VectorEditFailureCode; message: string };
 
 function contourLineCutIntersections(
@@ -563,10 +604,175 @@ function contourLineCutIntersections(
   return { ok: true, intersections };
 }
 
+function resolveCompoundRegionCut(
+  network: VectorNetwork,
+  region: VectorRegion,
+  cutPathId: string,
+  lineStart: Point,
+  lineEnd: Point,
+): CompoundRegionCutResolution {
+  const outerLoop = compoundRegionOuterLoop(network, region);
+  if (!outerLoop) {
+    return unsupportedTopology(
+      `Compound region ${region.id} does not have one unambiguous outer loop`,
+    );
+  }
+  if (outerLoop.pathId !== cutPathId) {
+    return unsupportedTopology(
+      `Drag Cut through compound hole ${cutPathId} requires crossed-hole boundary stitching`,
+    );
+  }
+
+  const holes: Array<CompoundRegionCutContext["holes"][number]> = [];
+  for (const loop of region.loops) {
+    const owners = network.regions.filter((candidate) =>
+      candidate.loops.some((item) => item.pathId === loop.pathId),
+    );
+    if (owners.length !== 1) {
+      return unsupportedTopology(
+        `Compound loop ${loop.pathId} must belong to exactly one fill region`,
+      );
+    }
+    if (loop.pathId === outerLoop.pathId) continue;
+    const side = strictContourSideOfLine(
+      network,
+      loop.pathId,
+      lineStart,
+      lineEnd,
+    );
+    if (side === null) {
+      return unsupportedTopology(
+        `Drag Cut through or touching compound hole ${loop.pathId} requires crossed-hole boundary stitching`,
+      );
+    }
+    holes.push({ loop: structuredClone(loop), side });
+  }
+  return {
+    ok: true,
+    context: {
+      holes,
+      outerLoop: structuredClone(outerLoop),
+      regionId: region.id,
+    },
+  };
+}
+
+function compoundRegionOuterLoop(
+  network: VectorNetwork,
+  region: VectorRegion,
+): VectorRegion["loops"][number] | null {
+  const bounds = new Map<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >();
+  for (const loop of region.loops) {
+    const serialized = serializeVectorNetwork(
+      vectorNetworkSubset(network, [loop.pathId]),
+    );
+    if (!serialized.ok) return null;
+    bounds.set(loop.pathId, serialized.bounds);
+  }
+  const candidates = region.loops.filter((candidate) => {
+    const outer = bounds.get(candidate.pathId)!;
+    return region.loops.every((loop) =>
+      boundsContain(outer, bounds.get(loop.pathId)!),
+    );
+  });
+  return candidates.length === 1 ? candidates[0]! : null;
+}
+
+function boundsContain(
+  outer: { x: number; y: number; width: number; height: number },
+  inner: { x: number; y: number; width: number; height: number },
+): boolean {
+  return (
+    outer.x <= inner.x + HANDLE_EPSILON &&
+    outer.y <= inner.y + HANDLE_EPSILON &&
+    outer.x + outer.width >= inner.x + inner.width - HANDLE_EPSILON &&
+    outer.y + outer.height >= inner.y + inner.height - HANDLE_EPSILON
+  );
+}
+
+function strictContourSideOfLine(
+  network: VectorNetwork,
+  pathId: string,
+  lineStart: Point,
+  lineEnd: Point,
+): LineSide | null {
+  const contour = editableContour(network, pathId);
+  if (!contour) return null;
+  const vertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  const segments = new Map(
+    network.segments.map((segment) => [segment.id, segment]),
+  );
+  let positive = true;
+  let negative = true;
+  for (const reference of contour.references) {
+    const curve = directedCurve(
+      segments.get(reference.segmentId)!,
+      reference,
+      vertices,
+    );
+    const points = [
+      curve.start,
+      add(curve.start, curve.tangentStart ?? { x: 0, y: 0 }),
+      add(curve.end, curve.tangentEnd ?? { x: 0, y: 0 }),
+      curve.end,
+    ];
+    for (const point of points) {
+      const side = signedLineDistance(lineStart, lineEnd, point);
+      positive &&= side > LINE_CUT_SIDE_EPSILON;
+      negative &&= side < -LINE_CUT_SIDE_EPSILON;
+    }
+  }
+  return positive ? 1 : negative ? -1 : null;
+}
+
+function dividedClosedContourSide(
+  network: VectorNetwork,
+  pathId: string,
+  lineStart: Point,
+  lineEnd: Point,
+): LineSide | null {
+  const contour = editableContour(network, pathId);
+  if (!contour) return null;
+  const vertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  const segments = new Map(
+    network.segments.map((segment) => [segment.id, segment]),
+  );
+  let resolved: LineSide | undefined;
+  for (const reference of contour.references) {
+    const curve = directedCurve(
+      segments.get(reference.segmentId)!,
+      reference,
+      vertices,
+    );
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      const distanceFromLine = signedLineDistance(
+        lineStart,
+        lineEnd,
+        editableCurvePoint(curve, t),
+      );
+      if (Math.abs(distanceFromLine) <= LINE_CUT_SIDE_EPSILON) continue;
+      const side: LineSide = distanceFromLine > 0 ? 1 : -1;
+      if (resolved !== undefined && resolved !== side) return null;
+      resolved = side;
+    }
+  }
+  return resolved ?? null;
+}
+
 function divideClosedContourByLine(
   network: VectorNetwork,
   sourceContour: EditableContour,
   intersections: readonly ContourLineCutIntersection[],
+  lineStart: Point,
+  lineEnd: Point,
+  compoundRegion?: CompoundRegionCutContext,
 ): DivideClosedContourResult {
   const [earlier, later] = intersections;
   if (!earlier || !later) {
@@ -653,7 +859,11 @@ function divideClosedContourByLine(
         `Drag Cut could not restore regions for ${sourceContour.pathId}`,
       );
     }
-    const sourceLoopReversed = sourceRegion.loops[0]?.reversed ?? false;
+    const sourceLoopReversed =
+      compoundRegion?.outerLoop.reversed ??
+      sourceRegion.loops.find((loop) => loop.pathId === sourceContour.pathId)
+        ?.reversed ??
+      false;
     for (const region of [retainedRegion, extractedRegion]) {
       region.windingRule = sourceRegion.windingRule;
       region.loops[0]!.reversed = sourceLoopReversed;
@@ -665,6 +875,41 @@ function divideClosedContourByLine(
       if (conflict) conflict.id = retainedRegion.id;
       retainedRegion.id = sourceRegion.id;
     }
+
+    const extractedPathIds = [extractedPathId];
+    if (compoundRegion) {
+      const retainedSide = dividedClosedContourSide(
+        closed,
+        retainedPathId,
+        lineStart,
+        lineEnd,
+      );
+      const extractedSide = dividedClosedContourSide(
+        closed,
+        extractedPathId,
+        lineStart,
+        lineEnd,
+      );
+      if (
+        retainedSide === null ||
+        extractedSide === null ||
+        retainedSide === extractedSide
+      ) {
+        return unsupportedTopology(
+          `Drag Cut could not classify divided sides for compound region ${compoundRegion.regionId}`,
+        );
+      }
+      for (const hole of compoundRegion.holes) {
+        const targetRegion: VectorRegion =
+          hole.side === retainedSide ? retainedRegion : extractedRegion;
+        targetRegion.loops.push(structuredClone(hole.loop));
+        if (targetRegion === extractedRegion) {
+          extractedPathIds.push(hole.loop.pathId);
+        }
+      }
+    }
+
+    return { ok: true, extractedPathIds, network: closed };
   }
 
   return { ok: true, extractedPathIds: [extractedPathId], network: closed };

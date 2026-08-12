@@ -53,7 +53,11 @@ export function vectorNetworkHasFillRegion(network: VectorNetwork): boolean {
 export function serializeVectorNetwork(
   network: VectorNetwork,
 ): VectorNetworkResolution {
-  const issues = validateVectorNetwork(network);
+  const loopDirections = regionLoopDirections(network);
+  const issues = [
+    ...validateVectorNetwork(network),
+    ...renderTraversalIssues(network, loopDirections),
+  ];
   if (issues.length > 0) return { ok: false, issues };
   const vertices = new Map(
     network.vertices.map((vertex) => [vertex.id, vertex]),
@@ -65,7 +69,8 @@ export function serializeVectorNetwork(
   let bounds: MutableBounds | undefined;
 
   for (const path of network.paths) {
-    const firstReference = path.segments[0]!;
+    const references = renderedPathReferences(path, loopDirections);
+    const firstReference = references[0]!;
     const firstSegment = segments.get(firstReference.segmentId)!;
     const firstVertex = directedVertices(
       firstSegment,
@@ -77,7 +82,7 @@ export function serializeVectorNetwork(
     );
     includePoint((next) => (bounds = next), bounds, firstVertex);
 
-    for (const reference of path.segments) {
+    for (const reference of references) {
       const segment = segments.get(reference.segmentId)!;
       const directed = directedVertices(segment, reference, vertices);
       const tangentStart = reference.reversed
@@ -109,6 +114,48 @@ export function serializeVectorNetwork(
 
   const resolvedBounds = boundsToRect(bounds);
   return { ok: true, bounds: resolvedBounds, network, path: parts.join(" ") };
+}
+
+function renderTraversalIssues(
+  network: VectorNetwork,
+  directions: ReadonlyMap<string, ReadonlySet<boolean>>,
+): VectorNetworkIssue[] {
+  const issues: VectorNetworkIssue[] = [];
+  for (const [pathId, values] of directions) {
+    if (values.size > 1) {
+      issues.push({
+        path: `/paths/${network.paths.findIndex((path) => path.id === pathId)}`,
+        message: `path ${pathId} has conflicting region loop directions that cannot share one rendered path`,
+      });
+    }
+  }
+  return issues;
+}
+
+function renderedPathReferences(
+  path: VectorPathRun,
+  loopDirections: ReadonlyMap<string, ReadonlySet<boolean>>,
+): readonly VectorSegmentReference[] {
+  const directions = loopDirections.get(path.id);
+  if (!directions?.has(true)) return path.segments;
+  return [...path.segments].reverse().map((reference) => ({
+    segmentId: reference.segmentId,
+    reversed: !reference.reversed,
+  }));
+}
+
+function regionLoopDirections(
+  network: VectorNetwork,
+): Map<string, Set<boolean>> {
+  const result = new Map<string, Set<boolean>>();
+  for (const region of network.regions) {
+    for (const loop of region.loops) {
+      const directions = result.get(loop.pathId) ?? new Set<boolean>();
+      directions.add(loop.reversed);
+      result.set(loop.pathId, directions);
+    }
+  }
+  return result;
 }
 
 export function normalizeVectorNetwork(

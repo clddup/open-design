@@ -77,6 +77,34 @@ function closedNetwork(): VectorNetwork {
   };
 }
 
+function compoundNetwork(): VectorNetwork {
+  const source = closedNetwork();
+  source.vertices.push(
+    { id: "vertex_e", x: 30, y: 30, handleMode: "corner" },
+    { id: "vertex_f", x: 70, y: 30, handleMode: "corner" },
+    { id: "vertex_g", x: 70, y: 70, handleMode: "corner" },
+    { id: "vertex_h", x: 30, y: 70, handleMode: "corner" },
+  );
+  source.segments.push(
+    { id: "segment_ef", startVertexId: "vertex_e", endVertexId: "vertex_f" },
+    { id: "segment_fg", startVertexId: "vertex_f", endVertexId: "vertex_g" },
+    { id: "segment_gh", startVertexId: "vertex_g", endVertexId: "vertex_h" },
+    { id: "segment_he", startVertexId: "vertex_h", endVertexId: "vertex_e" },
+  );
+  source.paths.push({
+    id: "path_hole",
+    closed: true,
+    segments: [
+      { segmentId: "segment_ef", reversed: false },
+      { segmentId: "segment_fg", reversed: false },
+      { segmentId: "segment_gh", reversed: false },
+      { segmentId: "segment_he", reversed: false },
+    ],
+  });
+  source.regions[0]!.loops.push({ pathId: "path_hole", reversed: true });
+  return source;
+}
+
 function documentWithVector(): DesignDocument {
   const document = structuredClone(createWelcomeDocument());
   const frame = document.nodesById.frame_welcome;
@@ -609,6 +637,86 @@ describe("vector editing runtime plans", () => {
       JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
     );
     expect(vectorNetworkFrom(reopened, "vector_open_cut_result")).toEqual(
+      extracted,
+    );
+  });
+
+  it("redistributes an uncut compound hole and preserves it through runtime history", () => {
+    const document = documentWithVector();
+    const source = document.nodesById.vector_editable;
+    if (
+      !source ||
+      source.kind !== "vector" ||
+      !("network" in source.properties)
+    ) {
+      throw new Error("Missing compound Vector fixture");
+    }
+    source.properties.network = compoundNetwork();
+    const runtime = new EditorRuntime(document);
+    const before = runtime.getSnapshot();
+    const plan = planVectorSemanticEdit(
+      before.document,
+      "page_welcome",
+      "vector_editable",
+      {
+        action: "cut-with-line",
+        start: { x: -20, y: 10 },
+        end: { x: 120, y: 10 },
+        resultNodeId: "vector_compound_cut_result",
+      },
+    );
+    expect(plan).toMatchObject({
+      ok: true,
+      lineCutResult: {
+        extractedPathIds: ["path_edit_1", "path_hole"],
+        intersectionCount: 2,
+        retainedPathIds: ["path_closed"],
+      },
+      operations: [
+        {
+          type: "update_properties",
+          nodeId: "vector_editable",
+          transform: [0, 1, -1, 0, 100, 200],
+          size: { width: 100, height: 10 },
+        },
+        {
+          type: "insert_element",
+          node: {
+            id: "vector_compound_cut_result",
+            transform: [0, 1, -1, 0, 90, 200],
+            size: { width: 100, height: 90 },
+          },
+        },
+      ],
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    const transaction = {
+      transactionId: "divide_compound_vector",
+      documentId: before.document.documentId,
+      baseRevision: before.document.revision,
+      actor: { type: "user" as const, id: "local-user" },
+      label: "Divide compound vector object",
+      commands: [...plan.operations],
+    };
+    expect(runtime.preview(transaction)).toMatchObject({ ok: true });
+    expect(runtime.apply(transaction)).toMatchObject({ ok: true });
+    const retained = vectorNetworkFrom(runtime);
+    const extracted = vectorNetworkFrom(runtime, "vector_compound_cut_result");
+    expect(retained.regions[0]?.loops).toEqual([
+      { pathId: "path_closed", reversed: false },
+    ]);
+    expect(extracted.regions[0]?.loops).toEqual([
+      { pathId: "path_edit_1", reversed: false },
+      { pathId: "path_hole", reversed: true },
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(vectorNetworkFrom(runtime)).toEqual(compoundNetwork());
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(vectorNetworkFrom(reopened, "vector_compound_cut_result")).toEqual(
       extracted,
     );
   });

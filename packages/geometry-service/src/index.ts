@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 8 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 9 as const;
 
 export {
   alignItems,

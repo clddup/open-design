@@ -5,6 +5,7 @@ import {
   type DesignDocument,
   type DesignNode,
   type Paint,
+  type VectorNetwork,
 } from "@opendesign/design-contracts";
 import { createBooleanGeometryResolver } from "@opendesign/geometry-service/boolean-resolver";
 import {
@@ -1052,6 +1053,120 @@ describe("versioned SVG interchange", () => {
           network.paths.every((path) => !path.closed),
       ),
     ).toBe(true);
+  });
+
+  it("round-trips a divided compound region with its uncut hole on the containing sibling", () => {
+    const network = compoundSvgNetwork();
+    const divided = cutVectorNetworkByLine(
+      network,
+      { x: -10, y: 20 },
+      { x: 110, y: 20 },
+    );
+    if (!divided.ok) throw new Error(divided.message);
+    const retained = normalizeVectorNetwork(divided.retainedNetwork);
+    const extracted = normalizeVectorNetwork(divided.extractedNetwork);
+    if (
+      !retained.ok ||
+      !retained.offset ||
+      !extracted.ok ||
+      !extracted.offset
+    ) {
+      throw new Error("Divided compound SVG fixtures did not normalize");
+    }
+    const retainedNode: DesignNode = {
+      id: "compound_retained",
+      name: "Compound retained",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, retained.offset.x, retained.offset.y],
+      size: {
+        width: retained.bounds.width,
+        height: retained.bounds.height,
+      },
+      opacity: 1,
+      extensions: {},
+      kind: "vector",
+      properties: {
+        network: retained.network,
+        fillRule: "nonzero",
+        fills: [{ type: "solid", color: "#4f7fff", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+      },
+    };
+    const extractedNode = structuredClone(retainedNode);
+    extractedNode.id = "compound_extracted";
+    extractedNode.name = "Compound extracted";
+    extractedNode.transform = [
+      1,
+      0,
+      0,
+      1,
+      extracted.offset.x,
+      extracted.offset.y,
+    ];
+    extractedNode.size = {
+      width: extracted.bounds.width,
+      height: extracted.bounds.height,
+    };
+    if (!("network" in extractedNode.properties)) {
+      throw new Error("Missing extracted compound network");
+    }
+    extractedNode.properties.network = extracted.network;
+    const document = documentFromNodes(
+      "svg_compound_cut_document",
+      [retainedNode, extractedNode],
+      [retainedNode.id, extractedNode.id],
+    );
+
+    const exported = exportSvg({
+      document,
+      rootNodeIds: [retainedNode.id, extractedNode.id],
+      viewport: { x: 0, y: 0, width: 120, height: 120 },
+      includeLayerIds: true,
+      title: "Divided compound editable vector",
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues).toEqual([]);
+    expect(
+      exported.svg.match(/data-opendesign-vector-network-version="2"/g),
+    ).toHaveLength(2);
+    const pathData = [...exported.svg.matchAll(/\sd="([^"]+)"/g)]
+      .map((match) => match[1])
+      .filter((path): path is string => Boolean(path));
+    expect(pathData).toHaveLength(2);
+    expect(pathData[0]?.match(/ Z/g)).toHaveLength(1);
+    expect(pathData[1]?.match(/ Z/g)).toHaveLength(2);
+
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "editable_vector_compound_divided" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    const importedNetworks = imported.nodes
+      .filter(
+        (node): node is Extract<DesignNode, { kind: "vector" }> =>
+          node.kind === "vector",
+      )
+      .map((node) => {
+        if (!("network" in node.properties)) {
+          throw new Error("Imported compound Vector lost editable metadata");
+        }
+        return node.properties.network;
+      });
+    expect(importedNetworks).toEqual([retained.network, extracted.network]);
+    expect(importedNetworks[0]?.regions[0]?.loops).toEqual([
+      { pathId: "compound_outer_path", reversed: false },
+    ]);
+    expect(importedNetworks[1]?.regions[0]?.loops).toEqual([
+      { pathId: "path_edit_1", reversed: false },
+      { pathId: "compound_hole_path", reversed: true },
+    ]);
   });
 
   it("round-trips directed Line geometry and independent standard SVG endpoint markers", () => {
@@ -2389,6 +2504,95 @@ function documentFromNodes(
     interactionsById: {},
     assetsById: {},
     extensions: {},
+  };
+}
+
+function compoundSvgNetwork(): VectorNetwork {
+  return {
+    vertices: [
+      { id: "compound_outer_a", x: 0, y: 0 },
+      { id: "compound_outer_b", x: 100, y: 0 },
+      { id: "compound_outer_c", x: 100, y: 100 },
+      { id: "compound_outer_d", x: 0, y: 100 },
+      { id: "compound_hole_a", x: 30, y: 40 },
+      { id: "compound_hole_b", x: 70, y: 40 },
+      { id: "compound_hole_c", x: 70, y: 70 },
+      { id: "compound_hole_d", x: 30, y: 70 },
+    ],
+    segments: [
+      {
+        id: "compound_outer_ab",
+        startVertexId: "compound_outer_a",
+        endVertexId: "compound_outer_b",
+      },
+      {
+        id: "compound_outer_bc",
+        startVertexId: "compound_outer_b",
+        endVertexId: "compound_outer_c",
+      },
+      {
+        id: "compound_outer_cd",
+        startVertexId: "compound_outer_c",
+        endVertexId: "compound_outer_d",
+      },
+      {
+        id: "compound_outer_da",
+        startVertexId: "compound_outer_d",
+        endVertexId: "compound_outer_a",
+      },
+      {
+        id: "compound_hole_ab",
+        startVertexId: "compound_hole_a",
+        endVertexId: "compound_hole_b",
+      },
+      {
+        id: "compound_hole_bc",
+        startVertexId: "compound_hole_b",
+        endVertexId: "compound_hole_c",
+      },
+      {
+        id: "compound_hole_cd",
+        startVertexId: "compound_hole_c",
+        endVertexId: "compound_hole_d",
+      },
+      {
+        id: "compound_hole_da",
+        startVertexId: "compound_hole_d",
+        endVertexId: "compound_hole_a",
+      },
+    ],
+    paths: [
+      {
+        id: "compound_outer_path",
+        closed: true,
+        segments: [
+          { segmentId: "compound_outer_ab", reversed: false },
+          { segmentId: "compound_outer_bc", reversed: false },
+          { segmentId: "compound_outer_cd", reversed: false },
+          { segmentId: "compound_outer_da", reversed: false },
+        ],
+      },
+      {
+        id: "compound_hole_path",
+        closed: true,
+        segments: [
+          { segmentId: "compound_hole_ab", reversed: false },
+          { segmentId: "compound_hole_bc", reversed: false },
+          { segmentId: "compound_hole_cd", reversed: false },
+          { segmentId: "compound_hole_da", reversed: false },
+        ],
+      },
+    ],
+    regions: [
+      {
+        id: "compound_region",
+        windingRule: "nonzero",
+        loops: [
+          { pathId: "compound_outer_path", reversed: false },
+          { pathId: "compound_hole_path", reversed: true },
+        ],
+      },
+    ],
   };
 }
 

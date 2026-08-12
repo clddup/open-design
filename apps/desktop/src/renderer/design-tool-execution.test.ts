@@ -2395,6 +2395,99 @@ describe("Renderer semantic hierarchy tool", () => {
     ).toBeDefined();
   });
 
+  it("moves an uncut compound hole into the Agent-created sibling layer", async () => {
+    const runtime = createCompoundEditableVectorRuntime();
+    runtime.setSelection(["title_welcome"], "title_welcome");
+
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_compound_line_cut",
+        call: {
+          toolCallId: "tool/vector compound line cut",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "cut-with-line",
+            end: { x: 130, y: 20 },
+            label: "Divide the compound logo contour",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            start: { x: -10, y: 20 },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    const resultNodeId = "vector_cut_tool_vector_compound_line_cut_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "cut-with-line",
+          atomic: true,
+          intersectionCount: 2,
+          resultNodeIds: ["editable_logo_contour", resultNodeId],
+          revision: 1,
+        },
+      },
+    });
+    const retained = editableVectorNetwork(runtime);
+    const extracted = runtime.getSnapshot().document.nodesById[resultNodeId];
+    if (
+      !extracted ||
+      extracted.kind !== "vector" ||
+      !("network" in extracted.properties)
+    ) {
+      throw new Error("Missing Agent compound Cut result");
+    }
+    expect(retained.regions[0]?.loops).toEqual([
+      { pathId: "logo_path", reversed: false },
+    ]);
+    expect(extracted.properties.network.paths.map((path) => path.id)).toEqual([
+      "path_edit_1",
+      "logo_hole_path",
+    ]);
+    expect(extracted.properties.network.regions[0]?.loops).toEqual([
+      { pathId: "path_edit_1", reversed: false },
+      { pathId: "logo_hole_path", reversed: true },
+    ]);
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById[resultNodeId],
+    ).toBeUndefined();
+
+    const crossedRuntime = createCompoundEditableVectorRuntime();
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "vector_crossed_hole_cut",
+          call: {
+            toolCallId: "tool_vector_crossed_hole_cut",
+            toolName: DESIGN_VECTOR_TOOL_NAME,
+            input: {
+              action: "cut-with-line",
+              end: { x: 130, y: 45 },
+              label: "Cut through the compound logo hole",
+              nodeId: "editable_logo_contour",
+              pageId: "page_welcome",
+              start: { x: -10, y: 45 },
+            },
+          },
+          context: pageContext,
+        },
+        crossedRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("crossed-hole boundary stitching");
+    expect(crossedRuntime.getSnapshot().document.revision).toBe(0);
+  });
+
   it("divides multiple explicit Vector layers with one document-space line and one undo step", async () => {
     const sourceRuntime = createClosedEditableVectorRuntime();
     const document = structuredClone(sourceRuntime.getSnapshot().document);
@@ -3061,6 +3154,62 @@ function createClosedEditableVectorRuntime(): EditorRuntime {
       loops: [{ pathId: path.id, reversed: false }],
     },
   ];
+  return new EditorRuntime(document);
+}
+
+function createCompoundEditableVectorRuntime(): EditorRuntime {
+  const runtime = createClosedEditableVectorRuntime();
+  const document = structuredClone(runtime.getSnapshot().document);
+  const vector = document.nodesById.editable_logo_contour;
+  if (
+    !vector ||
+    vector.kind !== "vector" ||
+    !("network" in vector.properties)
+  ) {
+    throw new Error("Missing compound editable vector fixture");
+  }
+  vector.properties.network.vertices.push(
+    { id: "logo_hole_a", x: 40, y: 35, handleMode: "corner" },
+    { id: "logo_hole_b", x: 80, y: 35, handleMode: "corner" },
+    { id: "logo_hole_c", x: 70, y: 60, handleMode: "corner" },
+    { id: "logo_hole_d", x: 50, y: 60, handleMode: "corner" },
+  );
+  vector.properties.network.segments.push(
+    {
+      id: "logo_hole_ab",
+      startVertexId: "logo_hole_a",
+      endVertexId: "logo_hole_b",
+    },
+    {
+      id: "logo_hole_bc",
+      startVertexId: "logo_hole_b",
+      endVertexId: "logo_hole_c",
+    },
+    {
+      id: "logo_hole_cd",
+      startVertexId: "logo_hole_c",
+      endVertexId: "logo_hole_d",
+    },
+    {
+      id: "logo_hole_da",
+      startVertexId: "logo_hole_d",
+      endVertexId: "logo_hole_a",
+    },
+  );
+  vector.properties.network.paths.push({
+    id: "logo_hole_path",
+    closed: true,
+    segments: [
+      { segmentId: "logo_hole_ab", reversed: false },
+      { segmentId: "logo_hole_bc", reversed: false },
+      { segmentId: "logo_hole_cd", reversed: false },
+      { segmentId: "logo_hole_da", reversed: false },
+    ],
+  });
+  vector.properties.network.regions[0].loops.push({
+    pathId: "logo_hole_path",
+    reversed: true,
+  });
   return new EditorRuntime(document);
 }
 

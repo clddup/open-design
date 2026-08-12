@@ -884,6 +884,42 @@ describe("Leafer scene projection", () => {
     delete document.nodesById[extracted.id];
     editable.properties.network = originalNetwork;
 
+    const compoundNetwork = structuredClone(originalNetwork);
+    compoundNetwork.vertices.push(
+      { id: "hole_a", x: 35, y: 30 },
+      { id: "hole_b", x: 65, y: 30 },
+      { id: "hole_c", x: 50, y: 60 },
+    );
+    compoundNetwork.segments.push(
+      { id: "hole_ab", startVertexId: "hole_a", endVertexId: "hole_b" },
+      { id: "hole_bc", startVertexId: "hole_b", endVertexId: "hole_c" },
+      { id: "hole_ca", startVertexId: "hole_c", endVertexId: "hole_a" },
+    );
+    compoundNetwork.paths.push({
+      id: "path_hole",
+      closed: true,
+      segments: [
+        { segmentId: "hole_ab", reversed: false },
+        { segmentId: "hole_bc", reversed: false },
+        { segmentId: "hole_ca", reversed: false },
+      ],
+    });
+    compoundNetwork.regions[0]!.loops.push({
+      pathId: "path_hole",
+      reversed: true,
+    });
+    editable.properties.network = compoundNetwork;
+    expect(
+      projectDesignPage(document, "page_welcome").elementsById.get(
+        "editable_vector",
+      )?.data,
+    ).toMatchObject({
+      path: "M 0 0 C 25 0 75 0 100 0 L 50 100 L 0 0 Z M 35 30 L 50 60 L 65 30 L 35 30 Z",
+      fill: [{ type: "solid", color: "#4f7fff", opacity: 1, visible: true }],
+      windingRule: "nonzero",
+    });
+    editable.properties.network = originalNetwork;
+
     const opened = setVectorPathClosed(
       editable.properties.network,
       false,

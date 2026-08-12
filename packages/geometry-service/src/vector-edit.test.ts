@@ -755,7 +755,142 @@ describe("editable vector point operations", () => {
     expect(result.extractedNetwork.paths[0]?.closed).toBe(true);
   });
 
-  it("ignores open endpoints and rejects overlapping, non-crossing, and multi-face drag cuts explicitly", () => {
+  it("moves an uncut compound hole with the divided side that contains it", () => {
+    const source = compoundRegionNetwork();
+    source.regions[0]!.loops.reverse();
+    const result = cutVectorNetworkByLine(
+      source,
+      { x: -20, y: 10 },
+      { x: 120, y: 10 },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      retainedPathIds: ["path_closed"],
+      extractedPathIds: ["path_edit_1", "path_hole"],
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.retainedNetwork.regions).toEqual([
+      {
+        id: "region_face",
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_closed", reversed: false }],
+      },
+    ]);
+    expect(result.extractedNetwork.paths.map((path) => path.id)).toEqual([
+      "path_edit_1",
+      "path_hole",
+    ]);
+    expect(result.extractedNetwork.regions).toEqual([
+      expect.objectContaining({
+        windingRule: "nonzero",
+        loops: [
+          { pathId: "path_edit_1", reversed: false },
+          { pathId: "path_hole", reversed: true },
+        ],
+      }),
+    ]);
+    expect(vectorNetworkEditability(result.retainedNetwork)).toEqual({
+      editable: true,
+    });
+    expect(vectorNetworkEditability(result.extractedNetwork)).toEqual({
+      editable: true,
+    });
+  });
+
+  it("keeps an uncut compound hole in the retained source side", () => {
+    const result = cutVectorNetworkByLine(
+      compoundRegionNetwork(),
+      { x: -20, y: 70 },
+      { x: 120, y: 70 },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      retainedPathIds: ["path_closed", "path_hole"],
+      extractedPathIds: ["path_edit_1"],
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.retainedNetwork.regions).toEqual([
+      {
+        id: "region_face",
+        windingRule: "nonzero",
+        loops: [
+          { pathId: "path_closed", reversed: false },
+          { pathId: "path_hole", reversed: true },
+        ],
+      },
+    ]);
+    expect(result.extractedNetwork.regions).toEqual([
+      expect.objectContaining({
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_edit_1", reversed: false }],
+      }),
+    ]);
+  });
+
+  it("redistributes multiple uncut holes to opposite divided sides", () => {
+    const source = compoundRegionNetwork();
+    source.vertices = source.vertices.map((vertex) => {
+      if (vertex.id === "vertex_e") return { ...vertex, y: 8 };
+      if (vertex.id === "vertex_f") return { ...vertex, y: 8 };
+      if (vertex.id === "vertex_g") return { ...vertex, y: 28 };
+      if (vertex.id === "vertex_h") return { ...vertex, y: 28 };
+      return vertex;
+    });
+    source.vertices.push(
+      { id: "vertex_i", x: 30, y: 52 },
+      { id: "vertex_j", x: 70, y: 52 },
+      { id: "vertex_k", x: 70, y: 72 },
+      { id: "vertex_l", x: 30, y: 72 },
+    );
+    source.segments.push(
+      { id: "segment_ij", startVertexId: "vertex_i", endVertexId: "vertex_j" },
+      { id: "segment_jk", startVertexId: "vertex_j", endVertexId: "vertex_k" },
+      { id: "segment_kl", startVertexId: "vertex_k", endVertexId: "vertex_l" },
+      { id: "segment_li", startVertexId: "vertex_l", endVertexId: "vertex_i" },
+    );
+    source.paths.push({
+      id: "path_hole_second",
+      closed: true,
+      segments: [
+        { segmentId: "segment_ij", reversed: false },
+        { segmentId: "segment_jk", reversed: false },
+        { segmentId: "segment_kl", reversed: false },
+        { segmentId: "segment_li", reversed: false },
+      ],
+    });
+    source.regions[0]!.loops.push({
+      pathId: "path_hole_second",
+      reversed: true,
+    });
+
+    const result = cutVectorNetworkByLine(
+      source,
+      { x: -20, y: 40 },
+      { x: 120, y: 40 },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      retainedPathIds: ["path_closed", "path_hole"],
+      extractedPathIds: ["path_edit_1", "path_hole_second"],
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.retainedNetwork.regions[0]?.loops).toEqual([
+      { pathId: "path_closed", reversed: false },
+      { pathId: "path_hole", reversed: true },
+    ]);
+    expect(result.extractedNetwork.regions[0]?.loops).toEqual([
+      { pathId: "path_edit_1", reversed: false },
+      { pathId: "path_hole_second", reversed: true },
+    ]);
+    expect(vectorNetworkEditability(result.retainedNetwork)).toEqual({
+      editable: true,
+    });
+    expect(vectorNetworkEditability(result.extractedNetwork)).toEqual({
+      editable: true,
+    });
+  });
+
+  it("ignores open endpoints and rejects overlapping, non-crossing, and crossed-hole drag cuts explicitly", () => {
     expect(
       cutVectorNetworkByLine(
         openNetwork(),
@@ -787,7 +922,63 @@ describe("editable vector point operations", () => {
       code: "unsupported-topology",
     });
     if (compound.ok) throw new Error("Compound region Cut should fail");
-    expect(compound.message).toContain("hole redistribution");
+    expect(compound.message).toContain("crossed-hole boundary stitching");
+  });
+
+  it("rejects direct hole cuts, ambiguous outers, and shared compound loops", () => {
+    const directHole = cutVectorNetworkByLine(
+      compoundRegionNetwork(),
+      { x: 20, y: 40 },
+      { x: 80, y: 40 },
+    );
+    expect(directHole).toMatchObject({
+      ok: false,
+      code: "unsupported-topology",
+    });
+    if (directHole.ok) throw new Error("Direct hole Cut should fail");
+    expect(directHole.message).toContain("crossed-hole boundary stitching");
+
+    const ambiguous = compoundRegionNetwork();
+    ambiguous.vertices = ambiguous.vertices.map((vertex) => {
+      if (vertex.id.startsWith("vertex_a")) return { ...vertex, x: 0, y: 0 };
+      if (vertex.id === "vertex_b") return { ...vertex, x: 80, y: 0 };
+      if (vertex.id === "vertex_c") return { ...vertex, x: 80, y: 80 };
+      if (vertex.id === "vertex_d") return { ...vertex, x: 0, y: 80 };
+      if (vertex.id === "vertex_e") return { ...vertex, x: 20, y: -10 };
+      if (vertex.id === "vertex_f") return { ...vertex, x: 100, y: -10 };
+      if (vertex.id === "vertex_g") return { ...vertex, x: 100, y: 70 };
+      if (vertex.id === "vertex_h") return { ...vertex, x: 20, y: 70 };
+      return vertex;
+    });
+    const ambiguousOuter = cutVectorNetworkByLine(
+      ambiguous,
+      { x: -20, y: 40 },
+      { x: 120, y: 40 },
+    );
+    expect(ambiguousOuter).toMatchObject({
+      ok: false,
+      code: "unsupported-topology",
+    });
+    if (ambiguousOuter.ok) throw new Error("Ambiguous outer Cut should fail");
+    expect(ambiguousOuter.message).toContain("unambiguous outer loop");
+
+    const shared = compoundRegionNetwork();
+    shared.regions.push({
+      id: "region_shared_hole",
+      windingRule: "evenodd",
+      loops: [{ pathId: "path_hole", reversed: false }],
+    });
+    const sharedLoop = cutVectorNetworkByLine(
+      shared,
+      { x: -20, y: 10 },
+      { x: 120, y: 10 },
+    );
+    expect(sharedLoop).toMatchObject({
+      ok: false,
+      code: "unsupported-topology",
+    });
+    if (sharedLoop.ok) throw new Error("Shared compound loop Cut should fail");
+    expect(sharedLoop.message).toContain("exactly one fill region");
   });
 
   it("splits line and reversed cubic segments exactly with stable directed IDs", () => {

@@ -73,3 +73,4 @@
 | [0039](adr/0039-versioned-vector-drag-cut.md)                            | 已接受     | 拖拽 Cut、真实闭合连接边与独立结果图层                             |
 | [0040](adr/0040-multi-vector-edit-and-document-space-cut.md)             | 已接受     | 多 Vector 编辑集合、文档坐标切线与原子多层 Cut                     |
 | [0041](adr/0041-versioned-open-stroke-drag-cut.md)                       | 已接受     | 开放描边多交点 Cut、无闭合分片与 SVG 往返                          |
+| [0042](adr/0042-versioned-compound-hole-cut-redistribution.md)           | 已接受     | 复合孔洞 Cut 重分配、有效 loop 方向与 sibling 往返                 |

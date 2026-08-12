@@ -23,6 +23,7 @@ import {
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import type { SvgInterchangeIssue } from "@opendesign/import-export-service";
+import type { VectorNode } from "@opendesign/design-contracts";
 import type {
   LeaferEngineCallbacks,
   LeaferEngineSyncInput,
@@ -3759,6 +3760,88 @@ describe("App", () => {
     ).toBeUndefined();
   });
 
+  it("keeps an uncut compound hole with its Canvas-created sibling", async () => {
+    renderApp();
+    act(() => {
+      const current = runtime().getSnapshot();
+      const result = runtime().apply({
+        transactionId: "insert_compound_vector",
+        documentId: current.document.documentId,
+        baseRevision: current.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Insert compound vector",
+        commands: [
+          {
+            commandId: "insert_compound_vector",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 0,
+            node: compoundCanvasVector("frame_welcome"),
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      runtime().setSelection(["compound_vector"], "compound_vector");
+    });
+    const canvas = screen.getByRole("main", { name: "Design canvas" });
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Enter" });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope).toMatchObject({
+        activeNodeId: "compound_vector",
+        nodes: [{ nodeId: "compound_vector", readOnly: false }],
+      }),
+    );
+
+    const beforeRevision = runtime().getSnapshot().document.revision;
+    let response:
+      | ReturnType<NonNullable<LeaferEngineCallbacks["onVectorLineCut"]>>
+      | undefined;
+    act(() => {
+      response = leaferCallbacks().onVectorLineCut?.({
+        end: { x: 260, y: 114 },
+        nodeIds: ["compound_vector"],
+        start: { x: 100, y: 114 },
+      });
+    });
+    expect(response).toMatchObject({ ok: true });
+    if (!response?.ok) throw new Error("Missing compound vector Cut response");
+    const resultNodeId = response.resultNodeIds[1];
+    expect(resultNodeId).toMatch(/^vector_cut_[a-f0-9]{32}$/);
+    expect(runtime().getSnapshot().document.revision).toBe(beforeRevision + 1);
+    const retained = runtime().getSnapshot().document.nodesById.compound_vector;
+    const extracted = runtime().getSnapshot().document.nodesById[resultNodeId];
+    if (
+      !retained ||
+      retained.kind !== "vector" ||
+      !("network" in retained.properties) ||
+      !extracted ||
+      extracted.kind !== "vector" ||
+      !("network" in extracted.properties)
+    ) {
+      throw new Error("Missing divided compound Vector fixtures");
+    }
+    expect(retained.properties.network.regions[0]?.loops).toEqual([
+      { pathId: "compound_outer_path", reversed: false },
+    ]);
+    expect(extracted.properties.network.regions[0]?.loops).toEqual([
+      { pathId: "path_edit_1", reversed: false },
+      { pathId: "compound_hole_path", reversed: true },
+    ]);
+    expect(runtime().getSnapshot().state.selection).toEqual({
+      nodeIds: ["compound_vector", resultNodeId],
+      anchorNodeId: resultNodeId,
+    });
+    expect(runtime().getSnapshot().state.history.undo.at(-1)?.label).toBe(
+      "Edit vector points",
+    );
+    expect(runtime().undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime().getSnapshot().document.nodesById[resultNodeId],
+    ).toBeUndefined();
+  });
+
   it("reorders selected siblings from the layer-order menu and macOS shortcuts", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -5399,6 +5482,113 @@ function rendererGenerationPlan(): LegacyDesignPlanToolInput {
       "Refine depth and hierarchy",
     ],
     validationChecks: ["Check silhouette", "Check type hierarchy"],
+  };
+}
+
+function compoundCanvasVector(parentId: string): VectorNode {
+  return {
+    id: "compound_vector",
+    name: "Compound badge",
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 40, 40],
+    size: { width: 100, height: 100 },
+    opacity: 1,
+    extensions: {},
+    kind: "vector",
+    properties: {
+      network: {
+        vertices: [
+          { id: "compound_outer_a", x: 0, y: 0 },
+          { id: "compound_outer_b", x: 100, y: 0 },
+          { id: "compound_outer_c", x: 100, y: 100 },
+          { id: "compound_outer_d", x: 0, y: 100 },
+          { id: "compound_hole_a", x: 30, y: 30 },
+          { id: "compound_hole_b", x: 70, y: 30 },
+          { id: "compound_hole_c", x: 70, y: 70 },
+          { id: "compound_hole_d", x: 30, y: 70 },
+        ],
+        segments: [
+          {
+            id: "compound_outer_ab",
+            startVertexId: "compound_outer_a",
+            endVertexId: "compound_outer_b",
+          },
+          {
+            id: "compound_outer_bc",
+            startVertexId: "compound_outer_b",
+            endVertexId: "compound_outer_c",
+          },
+          {
+            id: "compound_outer_cd",
+            startVertexId: "compound_outer_c",
+            endVertexId: "compound_outer_d",
+          },
+          {
+            id: "compound_outer_da",
+            startVertexId: "compound_outer_d",
+            endVertexId: "compound_outer_a",
+          },
+          {
+            id: "compound_hole_ab",
+            startVertexId: "compound_hole_a",
+            endVertexId: "compound_hole_b",
+          },
+          {
+            id: "compound_hole_bc",
+            startVertexId: "compound_hole_b",
+            endVertexId: "compound_hole_c",
+          },
+          {
+            id: "compound_hole_cd",
+            startVertexId: "compound_hole_c",
+            endVertexId: "compound_hole_d",
+          },
+          {
+            id: "compound_hole_da",
+            startVertexId: "compound_hole_d",
+            endVertexId: "compound_hole_a",
+          },
+        ],
+        paths: [
+          {
+            id: "compound_outer_path",
+            closed: true,
+            segments: [
+              { segmentId: "compound_outer_ab", reversed: false },
+              { segmentId: "compound_outer_bc", reversed: false },
+              { segmentId: "compound_outer_cd", reversed: false },
+              { segmentId: "compound_outer_da", reversed: false },
+            ],
+          },
+          {
+            id: "compound_hole_path",
+            closed: true,
+            segments: [
+              { segmentId: "compound_hole_ab", reversed: false },
+              { segmentId: "compound_hole_bc", reversed: false },
+              { segmentId: "compound_hole_cd", reversed: false },
+              { segmentId: "compound_hole_da", reversed: false },
+            ],
+          },
+        ],
+        regions: [
+          {
+            id: "compound_region",
+            windingRule: "nonzero",
+            loops: [
+              { pathId: "compound_outer_path", reversed: false },
+              { pathId: "compound_hole_path", reversed: true },
+            ],
+          },
+        ],
+      },
+      fills: [{ type: "solid", color: "#151515", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+    },
   };
 }
 

@@ -96,6 +96,57 @@ describe("editable vector geometry", () => {
     });
   });
 
+  it("serializes compound region loops in their effective fill direction", () => {
+    const network = closedNetwork();
+    network.vertices.push(
+      { id: "vertex_d", x: 40, y: 40 },
+      { id: "vertex_e", x: 80, y: 40 },
+      { id: "vertex_f", x: 60, y: 80 },
+    );
+    network.segments.push(
+      { id: "segment_de", startVertexId: "vertex_d", endVertexId: "vertex_e" },
+      { id: "segment_ef", startVertexId: "vertex_e", endVertexId: "vertex_f" },
+      { id: "segment_fd", startVertexId: "vertex_f", endVertexId: "vertex_d" },
+    );
+    network.paths.push({
+      id: "path_hole",
+      closed: true,
+      segments: [
+        { segmentId: "segment_de", reversed: false },
+        { segmentId: "segment_ef", reversed: false },
+        { segmentId: "segment_fd", reversed: false },
+      ],
+    });
+    network.regions[0]!.loops.push({
+      pathId: "path_hole",
+      reversed: true,
+    });
+
+    expect(serializeVectorNetwork(network)).toMatchObject({
+      ok: true,
+      path: "M 10 20 L 110 20 L 110 120 L 10 20 Z M 40 40 L 60 80 L 80 40 L 40 40 Z",
+    });
+  });
+
+  it("rejects conflicting effective directions for one rendered path", () => {
+    const network = closedNetwork();
+    network.regions.push({
+      id: "region_conflict",
+      windingRule: "nonzero",
+      loops: [{ pathId: "path_closed", reversed: true }],
+    });
+
+    const result = serializeVectorNetwork(network);
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) throw new Error("Conflicting loop directions should fail");
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ path: "/paths/0" }),
+    );
+    expect(result.issues[0]?.message).toContain(
+      "conflicting region loop directions",
+    );
+  });
+
   it("normalizes editable coordinates and returns the required node offset", () => {
     const result = normalizeVectorNetwork(closedNetwork());
     expect(result).toMatchObject({

@@ -217,7 +217,7 @@
         "en": "Create editable cubic contours with Pen, refine existing vertices and Bézier handles, or preserve exact SVG path data, then render all forms through one Path projection.",
         "zh-CN": "使用 Pen 创建可编辑三次曲线轮廓、继续调整已有节点和贝塞尔手柄，或精确保留 SVG Path 数据，并通过同一 Path 投影渲染。"
       },
-      "provider": "DesignDocument 1.10.0 + Geometry Service contract v8 vector-edit/Cut + EditorRuntime vector planner + Leafer Pen/point/Cut overlay + controlled SVG metadata v2",
+      "provider": "DesignDocument 1.10.0 + Geometry Service contract v9 vector-edit/Cut + EditorRuntime vector planner + Leafer Pen/point/Cut overlay + controlled SVG metadata v2",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -244,8 +244,8 @@
           "zh-CN": "Enter 或双击可让一个或多个已选 Vector 图层进入互不连接的非分支多轮廓节点编辑；每层拥有独立 trace、anchors、节点选区和只读状态，Shift 点击加入图层，macOS Command / Windows Control 点击切换成员，命中层成为 active。节点与手柄拖动、持久化直角/平滑/镜像/独立模式、明确轮廓的开放/闭合与反转、Delete/Backspace、Done/Escape、精确 bounds 和每次完成动作一条事务继续可用；专用 Agent 矢量工具通过稳定几何 ID 复用同一语义 planner。"
         },
         {
-          "en": "Cut mode (X) creates a true break by clicking a vertex or line/cubic segment, and can drag one finite document-space line through multiple Vector layers. Crossed closed contours become independently editable sibling layers with real closing connectors; open strokes split at every transverse crossing into alternating retained/extracted open path runs without connectors, regions, or implicit fill. The host resolves each layer's world transform, leaves un-crossed layers unchanged, preserves source path IDs, creates result layer IDs, and applies every affected source/result pair in one atomic revision and undo step. Compound holes, concave closed contours with more than two crossings, connected/branching networks, connect/disconnect, lasso, multi-point transform boxes, flatten, outline stroke, complete external SVG fidelity, pixel baselines, and packaged macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "Cut 模式（X）既可点击节点或直线/三次曲线创建真实断点，也可用一条 document-space 有限切线拖过多个 Vector 图层。命中的闭合轮廓被分成拥有真实闭合连接边、可独立编辑的兄弟图层；开放描边按所有真实横穿交点切开，沿路径顺序交替进入保留/提取图层，不添加连接边、region 或隐式填充。宿主解析逐层 world transform，不改未命中层，保留源 path ID、生成结果 layer ID，并把全部受影响 source/result pairs 合并为一次原子 revision 和 undo。复合孔洞、闭合凹形单轮廓超过两次交点、连接/分支网络、连接/断开、套索、多节点变换框、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。"
+          "en": "Cut mode (X) creates a true break by clicking a vertex or line/cubic segment, and can drag one finite document-space line through multiple Vector layers. Crossed closed contours become independently editable sibling layers with real closing connectors; open strokes split at every transverse crossing into alternating retained/extracted open path runs. In a compound region with one unambiguous outer loop, every uncut hole strictly on one side follows the sibling that contains it with stable IDs and effective winding. The host resolves world transforms and applies all source/result pairs in one atomic revision and undo step. Crossed-hole boundary stitching, concave closed contours with more than two crossings, nested/overlapping compound regions, connected/branching networks, connect/disconnect, lasso, multi-point transform boxes, flatten, outline stroke, complete external SVG fidelity, pixel baselines, and packaged macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "Cut 模式（X）既可点击节点或直线/三次曲线创建真实断点，也可用一条 document-space 有限切线拖过多个 Vector 图层。命中的闭合轮廓被分成拥有真实闭合连接边、可独立编辑的兄弟图层；开放描边按所有真实横穿交点切开。对具有唯一外轮廓的复合 region，严格位于切线一侧且未被切到的孔洞以稳定 ID 和有效 winding 跟随实际包含它的兄弟图层。宿主解析 world transform，并把全部 source/result pairs 合并为一次原子 revision 和 undo。穿孔边界缝合、闭合凹形单轮廓超过两次交点、嵌套/重叠复合 region、连接/分支网络、连接/断开、套索、多节点变换框、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。"
         },
         {
           "en": "Controlled OpenDesign SVG metadata preserves schema-valid editable networks only when it exactly matches the standard rendered path. External SVG without metadata remains exact path data rather than guessed editable topology.",
@@ -413,7 +413,7 @@
         "en": "Create and refine open, closed, branching, and curved vector geometry using points and Bézier handles.",
         "zh-CN": "通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。"
       },
-      "provider": "DesignDocument 1.10.0 Vector Network + Geometry Service contract v8 vector-edit/Cut + EditorRuntime planner + Leafer native overlays",
+      "provider": "DesignDocument 1.10.0 Vector Network + Geometry Service contract v9 vector-edit/Cut + EditorRuntime planner + Leafer native overlays",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",
@@ -425,8 +425,8 @@
       },
       "limitations": [
         {
-          "en": "Pen authors one non-branching contour. Existing-node editing supports a collection of Vector layers containing disjoint non-branching contours, including host-derived Open/Close, Reverse, click Cut, and one finite document-space drag Cut across multiple layers through shared human and Agent semantics. Crossed closed contours receive real connectors; open contours split at every transverse crossing without becoming closed or filled. Every affected layer produces retained and extracted siblings in a single atomic revision, and viewport movement does not alter the line or geometry. Compound holes, concave closed-contour multi-intersection cases, connected/branching networks, connect/disconnect, flatten, outline stroke, lasso, multi-point transform boxes, and packaged dual-platform interaction evidence remain incomplete.",
-          "zh-CN": "Pen 当前创建单条非分支轮廓；已有节点编辑支持包含互不连接非分支多轮廓的多 Vector layer collection，并通过人工与 Agent 共用语义提供宿主计算的开放/闭合、反转、点击 Cut 和跨多层的 document-space 有限线拖拽 Cut。命中的闭合轮廓补真实连接边；开放轮廓按全部横穿交点切开且不会被闭合或填充。全部受影响图层在一次原子 revision 中生成保留与提取兄弟层，viewport 移动不改变切线或 geometry。复合孔洞、闭合凹形多交点、连接/分支网络、连接/断开、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。"
+          "en": "Pen authors one non-branching contour. Existing-node editing supports collections of Vector layers with disjoint non-branching contours and shared human/Agent Open/Close, Reverse, click Cut, and document-space drag Cut semantics. Crossed closed contours receive real connectors; open contours split at every transverse crossing; uncut compound holes strictly on one side follow the containing sibling with effective loop direction. Every affected layer produces retained/extracted siblings in one atomic revision, and viewport movement does not alter geometry. Crossed-hole stitching, concave closed-contour multi-intersection, nested/overlapping compound regions, connected/branching networks, connect/disconnect, flatten, outline stroke, lasso, multi-point transform boxes, and packaged dual-platform interaction evidence remain incomplete.",
+          "zh-CN": "Pen 当前创建单条非分支轮廓；已有节点编辑支持包含互不连接非分支多轮廓的多 Vector layer collection，并通过人工与 Agent 共用语义提供开放/闭合、反转、点击 Cut 和 document-space 拖拽 Cut。命中的闭合轮廓补真实连接边，开放轮廓按全部横穿交点切开，严格位于切线一侧的未切 compound hole 以有效 loop direction 跟随实际包含它的 sibling。全部受影响图层只产生一次原子 revision，viewport 移动不改变 geometry。穿孔缝合、闭合凹形多交点、嵌套/重叠复合 region、连接/分支网络、连接/断开、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。"
         }
       ],
       "evidence": {

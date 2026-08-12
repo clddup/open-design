@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 15,
+  "schemaVersion": 16,
   "recordedAt": "2026-08-12",
   "policy": {
     "allowFloatingRefs": false,
@@ -10,7 +10,7 @@
     "documentSchemaVersion": "1.10.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.7.0",
-    "geometryServiceContractVersion": 8,
+    "geometryServiceContractVersion": 9,
     "textLayoutServiceContractVersion": 1
   },
   "components": {
@@ -40,7 +40,7 @@
       "version": "1.0.0",
       "source": "https://github.com/google/skia/tree/main/modules/pathkit",
       "license": "BSD-3-Clause",
-      "productionStatus": "boolean-pen-open-stroke-drag-cut-native-gate-pending",
+      "productionStatus": "boolean-pen-compound-hole-cut-native-gate-pending",
       "entrypoint": "@opendesign/geometry-service/vector-path",
       "editableVectorEntrypoint": "@opendesign/geometry-service/editable-vector",
       "vectorEditEntrypoint": "@opendesign/geometry-service/vector-edit",

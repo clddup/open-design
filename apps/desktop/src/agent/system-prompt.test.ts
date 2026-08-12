@@ -109,6 +109,9 @@ describe("OpenDesign Agent system prompt", () => {
       "open contours split at every transverse crossing",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "An uncut compound hole that stays strictly on one side follows the sibling",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "preserves retained geometry IDs, effective region winding",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
