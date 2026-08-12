@@ -2400,10 +2400,13 @@ describe("Renderer semantic hierarchy tool", () => {
     const document = structuredClone(sourceRuntime.getSnapshot().document);
     const frame = document.nodesById.frame_welcome;
     const first = document.nodesById.editable_logo_contour;
-    if (!frame || frame.kind !== "frame" || !first) {
+    const openSource =
+      createEditableVectorRuntime().getSnapshot().document.nodesById
+        .editable_logo_contour;
+    if (!frame || frame.kind !== "frame" || !first || !openSource) {
       throw new Error("Missing multi-Vector Cut fixture");
     }
-    const second = structuredClone(first);
+    const second = structuredClone(openSource);
     second.id = "editable_logo_shadow";
     second.name = "Editable logo shadow";
     second.transform = [1, 0, 0, 1, 220, 40];
@@ -2456,7 +2459,7 @@ describe("Renderer semantic hierarchy tool", () => {
               resultNodeId: firstResultId,
             },
             {
-              intersectionCount: 2,
+              intersectionCount: 1,
               nodeId: "editable_logo_shadow",
               resultNodeId: secondResultId,
             },
@@ -2471,6 +2474,19 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(
       runtime.getSnapshot().document.nodesById[secondResultId],
     ).toBeDefined();
+    const secondRetained =
+      runtime.getSnapshot().document.nodesById.editable_logo_shadow;
+    const secondExtracted =
+      runtime.getSnapshot().document.nodesById[secondResultId];
+    for (const node of [secondRetained, secondExtracted]) {
+      if (!node || node.kind !== "vector" || !("network" in node.properties)) {
+        throw new Error("Missing divided open Vector fixture");
+      }
+      expect(node.properties.network.paths.every((path) => !path.closed)).toBe(
+        true,
+      );
+      expect(node.properties.network.regions).toEqual([]);
+    }
     expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
       "title_welcome",
     ]);

@@ -3605,18 +3605,42 @@ describe("App", () => {
       const first = afterFirst.document.nodesById.closed_vector;
       if (!first) throw new Error("Missing first closed Vector fixture");
       const second = structuredClone(first);
-      second.id = "closed_vector_second";
-      second.name = "Second badge contour";
+      second.id = "open_vector_second";
+      second.name = "Open badge stroke";
       second.transform = [1, 0, 0, 1, 220, 40];
+      if (second.kind !== "vector" || !("network" in second.properties)) {
+        throw new Error("Missing second Vector network fixture");
+      }
+      second.properties.network.segments =
+        second.properties.network.segments.filter(
+          (segment) => segment.id !== "segment_da",
+        );
+      second.properties.network.paths = [
+        {
+          id: "path_closed",
+          closed: false,
+          segments: [
+            { segmentId: "segment_ab", reversed: false },
+            { segmentId: "segment_bc", reversed: false },
+            { segmentId: "segment_cd", reversed: false },
+          ],
+        },
+      ];
+      second.properties.network.regions = [];
+      second.properties.fills = [];
+      second.properties.strokes = [
+        { type: "solid", color: "#151515", opacity: 1 },
+      ];
+      second.properties.strokeWidth = 2;
       const secondResult = runtime().apply({
-        transactionId: "insert_second_closed_vector",
+        transactionId: "insert_second_open_vector",
         documentId: afterFirst.document.documentId,
         baseRevision: afterFirst.document.revision,
         actor: { type: "user", id: "local-user" },
-        label: "Insert second closed vector",
+        label: "Insert second open vector",
         commands: [
           {
-            commandId: "insert_second_closed_vector",
+            commandId: "insert_second_open_vector",
             type: "insert_element",
             pageId: "page_welcome",
             parentId: "frame_welcome",
@@ -3627,8 +3651,8 @@ describe("App", () => {
       });
       if (!secondResult.ok) throw new Error(secondResult.error.message);
       runtime().setSelection(
-        ["closed_vector", "closed_vector_second"],
-        "closed_vector_second",
+        ["closed_vector", "open_vector_second"],
+        "open_vector_second",
       );
     });
     const canvas = screen.getByRole("main", { name: "Design canvas" });
@@ -3636,22 +3660,20 @@ describe("App", () => {
     fireEvent.keyDown(canvas, { key: "Enter" });
     await waitFor(() =>
       expect(leaferHarness.input?.vectorEditScope).toMatchObject({
-        activeNodeId: "closed_vector_second",
+        activeNodeId: "open_vector_second",
         nodes: [
           { nodeId: "closed_vector", readOnly: false },
-          { nodeId: "closed_vector_second", readOnly: false },
+          { nodeId: "open_vector_second", readOnly: false },
         ],
       }),
     );
-    expect(
-      screen.getByText("Editing Second badge contour"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Editing Open badge stroke")).toBeInTheDocument();
     expect(screen.getByText(/2 vector layers/)).toBeInTheDocument();
 
     act(() => {
       leaferCallbacks().onVectorEditScopeChange?.({
         mode: "toggle",
-        nodeId: "closed_vector_second",
+        nodeId: "open_vector_second",
       });
     });
     await waitFor(() =>
@@ -3666,7 +3688,7 @@ describe("App", () => {
     act(() => {
       leaferCallbacks().onVectorEditScopeChange?.({
         mode: "add",
-        nodeId: "closed_vector_second",
+        nodeId: "open_vector_second",
       });
     });
     await waitFor(() =>
@@ -3685,7 +3707,7 @@ describe("App", () => {
     act(() => {
       response = leaferCallbacks().onVectorLineCut?.({
         end: { x: 450, y: 144 },
-        nodeIds: ["closed_vector", "closed_vector_second"],
+        nodeIds: ["closed_vector", "open_vector_second"],
         start: { x: 100, y: 144 },
       });
     });
@@ -3700,7 +3722,7 @@ describe("App", () => {
       nodeIds: [
         "closed_vector",
         firstResultNodeId,
-        "closed_vector_second",
+        "open_vector_second",
         secondResultNodeId,
       ],
       anchorNodeId: secondResultNodeId,
@@ -3713,6 +3735,17 @@ describe("App", () => {
     expect(retained?.size).toEqual({ width: 100, height: 40 });
     expect(extracted?.size).toEqual({ width: 100, height: 60 });
     expect(secondExtracted?.size).toEqual({ width: 100, height: 60 });
+    const secondRetained =
+      runtime().getSnapshot().document.nodesById.open_vector_second;
+    for (const node of [secondRetained, secondExtracted]) {
+      if (!node || node.kind !== "vector" || !("network" in node.properties)) {
+        throw new Error("Missing divided open Vector fixture");
+      }
+      expect(node.properties.network.paths.every((path) => !path.closed)).toBe(
+        true,
+      );
+      expect(node.properties.network.regions).toEqual([]);
+    }
     expect(screen.queryByText("Editing Badge contour")).not.toBeInTheDocument();
     expect(runtime().getSnapshot().state.history.undo.at(-1)?.label).toBe(
       "Edit vector points",

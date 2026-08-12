@@ -591,6 +591,102 @@ describe("editable vector point operations", () => {
     }
   });
 
+  it("divides an open stroke at one crossing without inventing connectors or regions", () => {
+    const result = cutVectorNetworkByLine(
+      openNetwork(),
+      { x: 90, y: -20 },
+      { x: 90, y: 50 },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      retainedPathIds: ["path_open"],
+      extractedPathIds: ["path_edit_1"],
+      intersections: [{ pathId: "path_open", point: { x: 90, y: 15 } }],
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.retainedNetwork.paths).toEqual([
+      expect.objectContaining({ id: "path_open", closed: false }),
+    ]);
+    expect(result.extractedNetwork.paths).toEqual([
+      expect.objectContaining({ id: "path_edit_1", closed: false }),
+    ]);
+    for (const divided of [result.retainedNetwork, result.extractedNetwork]) {
+      expect(divided.regions).toEqual([]);
+      expect(vectorNetworkEditability(divided)).toEqual({ editable: true });
+    }
+  });
+
+  it("alternates open-stroke pieces across three crossings and preserves source traversal order", () => {
+    const result = cutVectorNetworkByLine(
+      openNetwork(),
+      { x: -20, y: 15 },
+      { x: 200, y: 15 },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      retainedPathIds: ["path_open", "path_edit_2"],
+      extractedPathIds: ["path_edit_3", "path_edit_1"],
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(
+      result.intersections.map((intersection) => intersection.point),
+    ).toEqual([
+      { x: 30, y: 15 },
+      { x: 90, y: 15 },
+      { x: 150, y: 15 },
+    ]);
+    expect(result.retainedNetwork.paths).toHaveLength(2);
+    expect(result.extractedNetwork.paths).toHaveLength(2);
+    expect(result.retainedNetwork.paths.every((path) => !path.closed)).toBe(
+      true,
+    );
+    expect(result.extractedNetwork.paths.every((path) => !path.closed)).toBe(
+      true,
+    );
+    expect(result.retainedNetwork.regions).toEqual([]);
+    expect(result.extractedNetwork.regions).toEqual([]);
+    expect(vectorNetworkEditability(result.retainedNetwork)).toEqual({
+      editable: true,
+    });
+    expect(vectorNetworkEditability(result.extractedNetwork)).toEqual({
+      editable: true,
+    });
+  });
+
+  it("remaps two open-stroke crossings on one cubic without reusing a stale parameter", () => {
+    const source = sameSegmentDoubleCrossingNetwork();
+    source.vertices = source.vertices.slice(0, 2);
+    source.segments = source.segments.slice(0, 1);
+    source.paths = [
+      {
+        id: "path_open",
+        closed: false,
+        segments: [{ segmentId: "segment_curve", reversed: false }],
+      },
+    ];
+    source.regions = [];
+    const result = cutVectorNetworkByLine(
+      source,
+      { x: -20, y: 0 },
+      { x: 120, y: 0 },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      retainedPathIds: ["path_open", "path_edit_1"],
+      extractedPathIds: ["path_edit_2"],
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.intersections).toHaveLength(2);
+    expect(result.retainedNetwork.paths).toHaveLength(2);
+    expect(result.extractedNetwork.paths).toHaveLength(1);
+    expect(vectorNetworkEditability(result.retainedNetwork)).toEqual({
+      editable: true,
+    });
+    expect(vectorNetworkEditability(result.extractedNetwork)).toEqual({
+      editable: true,
+    });
+  });
+
   it("solves two crossings on one cubic before remapping the second split", () => {
     const result = cutVectorNetworkByLine(
       sameSegmentDoubleCrossingNetwork(),
@@ -659,14 +755,14 @@ describe("editable vector point operations", () => {
     expect(result.extractedNetwork.paths[0]?.closed).toBe(true);
   });
 
-  it("rejects open, overlapping, non-crossing, and multi-face drag cuts explicitly", () => {
+  it("ignores open endpoints and rejects overlapping, non-crossing, and multi-face drag cuts explicitly", () => {
     expect(
       cutVectorNetworkByLine(
         openNetwork(),
-        { x: 90, y: -100 },
-        { x: 90, y: 100 },
+        { x: 0, y: -100 },
+        { x: 0, y: 100 },
       ),
-    ).toMatchObject({ ok: false, code: "unsupported-topology" });
+    ).toMatchObject({ ok: false, code: "no-op" });
     expect(
       cutVectorNetworkByLine(
         closedNetwork(),

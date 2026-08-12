@@ -543,6 +543,76 @@ describe("vector editing runtime plans", () => {
     expect(vectorNetworkFrom(reopened, "vector_cut_result")).toEqual(extracted);
   });
 
+  it("divides an open stroke into adjacent editable layers without closing either path", () => {
+    const runtime = new EditorRuntime(documentWithVector());
+    const before = runtime.getSnapshot();
+    const plan = planVectorSemanticEdit(
+      before.document,
+      "page_welcome",
+      "vector_editable",
+      {
+        action: "cut-with-line",
+        start: { x: 50, y: -20 },
+        end: { x: 50, y: 20 },
+        resultNodeId: "vector_open_cut_result",
+      },
+    );
+    expect(plan).toMatchObject({
+      ok: true,
+      lineCutResult: {
+        extractedPathIds: ["path_edit_1"],
+        intersectionCount: 1,
+        resultNodeIds: ["vector_editable", "vector_open_cut_result"],
+        retainedPathIds: ["path_open"],
+      },
+      operations: [
+        {
+          type: "update_properties",
+          nodeId: "vector_editable",
+          transform: [0, 1, -1, 0, 100, 200],
+          size: { width: 50, height: 0 },
+        },
+        {
+          type: "insert_element",
+          node: {
+            id: "vector_open_cut_result",
+            transform: [0, 1, -1, 0, 100, 250],
+            size: { width: 50, height: 100 },
+          },
+        },
+      ],
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    const transaction = {
+      transactionId: "divide_open_vector",
+      documentId: before.document.documentId,
+      baseRevision: before.document.revision,
+      actor: { type: "user" as const, id: "local-user" },
+      label: "Divide open vector stroke",
+      commands: [...plan.operations],
+    };
+    expect(runtime.preview(transaction)).toMatchObject({ ok: true });
+    expect(runtime.apply(transaction)).toMatchObject({ ok: true });
+    const retained = vectorNetworkFrom(runtime);
+    const extracted = vectorNetworkFrom(runtime, "vector_open_cut_result");
+    expect(retained.paths.every((path) => !path.closed)).toBe(true);
+    expect(extracted.paths.every((path) => !path.closed)).toBe(true);
+    expect(retained.regions).toEqual([]);
+    expect(extracted.regions).toEqual([]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.vector_open_cut_result,
+    ).toBeUndefined();
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(vectorNetworkFrom(reopened, "vector_open_cut_result")).toEqual(
+      extracted,
+    );
+  });
+
   it("rejects stale result IDs and inherited locks before planning a line Cut", () => {
     const document = documentWithVector();
     const source = document.nodesById.vector_editable;
@@ -592,6 +662,10 @@ describe("vector editing runtime plans", () => {
     second.id = "vector_second";
     second.name = "Second curve";
     second.transform = [1, 0, 0, 1, 180, 40];
+    if (!("network" in second.properties)) {
+      throw new Error("Missing second editable Vector network");
+    }
+    second.properties.network = network();
     document.nodesById[second.id] = second;
     frame.childIds.push(second.id);
 
@@ -623,7 +697,7 @@ describe("vector editing runtime plans", () => {
           {
             nodeId: "vector_second",
             resultNodeId: "vector_second_cut",
-            intersectionCount: 2,
+            intersectionCount: 1,
           },
         ],
       },

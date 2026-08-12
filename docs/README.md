@@ -72,3 +72,4 @@
 | [0038](adr/0038-versioned-vector-click-cut.md)                           | 已接受     | 点击 Cut、精确 cubic 拆分与互不连接多轮廓编辑                      |
 | [0039](adr/0039-versioned-vector-drag-cut.md)                            | 已接受     | 拖拽 Cut、真实闭合连接边与独立结果图层                             |
 | [0040](adr/0040-multi-vector-edit-and-document-space-cut.md)             | 已接受     | 多 Vector 编辑集合、文档坐标切线与原子多层 Cut                     |
+| [0041](adr/0041-versioned-open-stroke-drag-cut.md)                       | 已接受     | 开放描边多交点 Cut、无闭合分片与 SVG 往返                          |

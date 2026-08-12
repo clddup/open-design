@@ -905,6 +905,153 @@ describe("versioned SVG interchange", () => {
         network.paths.every((path) => path.closed),
       ),
     ).toBe(true);
+
+    const openStrokeNetwork = {
+      vertices: [
+        { id: "open_vertex_a", x: 0, y: 0 },
+        { id: "open_vertex_b", x: 100, y: 100 },
+      ],
+      segments: [
+        {
+          id: "open_segment_ab",
+          startVertexId: "open_vertex_a",
+          endVertexId: "open_vertex_b",
+        },
+      ],
+      paths: [
+        {
+          id: "open_path",
+          closed: false,
+          segments: [
+            { segmentId: "open_segment_ab", reversed: false as const },
+          ],
+        },
+      ],
+      regions: [],
+    };
+    const openDivided = cutVectorNetworkByLine(
+      openStrokeNetwork,
+      { x: 50, y: -10 },
+      { x: 50, y: 110 },
+    );
+    if (!openDivided.ok) throw new Error(openDivided.message);
+    const openRetained = normalizeVectorNetwork(openDivided.retainedNetwork);
+    const openExtracted = normalizeVectorNetwork(openDivided.extractedNetwork);
+    if (
+      !openRetained.ok ||
+      !openRetained.offset ||
+      !openExtracted.ok ||
+      !openExtracted.offset
+    ) {
+      throw new Error("Divided open SVG fixtures did not normalize");
+    }
+    const openDividedDocument = structuredClone(document);
+    const openRetainedNode = openDividedDocument.nodesById.vector_1;
+    if (
+      !openRetainedNode ||
+      openRetainedNode.kind !== "vector" ||
+      !("network" in openRetainedNode.properties)
+    ) {
+      throw new Error("Missing retained open SVG vector fixture");
+    }
+    openRetainedNode.transform = [
+      1,
+      0,
+      0,
+      1,
+      12 + openRetained.offset.x,
+      16 + openRetained.offset.y,
+    ];
+    openRetainedNode.size = {
+      width: openRetained.bounds.width,
+      height: openRetained.bounds.height,
+    };
+    openRetainedNode.properties.network = openRetained.network;
+    openRetainedNode.properties.fills = [];
+    openRetainedNode.properties.strokes = [
+      { type: "solid", color: "#4f7fff", opacity: 1 },
+    ];
+    openRetainedNode.properties.strokeWidth = 2;
+    const openExtractedNode = structuredClone(openRetainedNode);
+    openExtractedNode.id = "vector_open_2";
+    openExtractedNode.name = "Open stroke Cut";
+    openExtractedNode.transform = [
+      1,
+      0,
+      0,
+      1,
+      12 + openExtracted.offset.x,
+      16 + openExtracted.offset.y,
+    ];
+    openExtractedNode.size = {
+      width: openExtracted.bounds.width,
+      height: openExtracted.bounds.height,
+    };
+    if (!("network" in openExtractedNode.properties)) {
+      throw new Error("Missing extracted open SVG vector network fixture");
+    }
+    openExtractedNode.properties.network = openExtracted.network;
+    openDividedDocument.nodesById.vector_open_2 = openExtractedNode;
+    openDividedDocument.pagesById.page_1!.rootNodeIds = [
+      "vector_1",
+      "vector_open_2",
+    ];
+
+    const openDividedExport = exportSvg({
+      document: openDividedDocument,
+      rootNodeIds: ["vector_1", "vector_open_2"],
+      viewport: { x: 0, y: 0, width: 150, height: 150 },
+      includeLayerIds: true,
+      title: "Divided open editable vector",
+    });
+    expect(openDividedExport.ok).toBe(true);
+    if (!openDividedExport.ok) return;
+    expect(openDividedExport.issues).toEqual([]);
+    expect(
+      openDividedExport.svg.match(
+        /data-opendesign-vector-network-version="2"/g,
+      ),
+    ).toHaveLength(2);
+    const openPathData = [...openDividedExport.svg.matchAll(/\sd="([^"]+)"/g)]
+      .map((match) => match[1])
+      .filter((path): path is string => Boolean(path));
+    expect(openPathData).toHaveLength(2);
+    expect(openPathData.every((path) => !path.endsWith(" Z"))).toBe(true);
+
+    const openDividedImported = importSvg(
+      {
+        svg: openDividedExport.svg,
+        idPrefix: "editable_vector_open_divided",
+      },
+      geometry,
+    );
+    expect(openDividedImported.ok).toBe(true);
+    if (!openDividedImported.ok) return;
+    expect(openDividedImported.issues).toEqual([]);
+    const importedOpenDividedNetworks = openDividedImported.nodes
+      .filter(
+        (node): node is Extract<DesignNode, { kind: "vector" }> =>
+          node.kind === "vector",
+      )
+      .map((node) => {
+        if (!("network" in node.properties)) {
+          throw new Error(
+            "Imported divided open Vector lost editable network metadata",
+          );
+        }
+        return node.properties.network;
+      });
+    expect(importedOpenDividedNetworks).toEqual([
+      openRetained.network,
+      openExtracted.network,
+    ]);
+    expect(
+      importedOpenDividedNetworks.every(
+        (network) =>
+          network.regions.length === 0 &&
+          network.paths.every((path) => !path.closed),
+      ),
+    ).toBe(true);
   });
 
   it("round-trips directed Line geometry and independent standard SVG endpoint markers", () => {
