@@ -23,10 +23,63 @@ import {
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
+  normalizeDesignApplyToolInput,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
 
 describe("design Agent tool contract", () => {
+  it("normalizes model insert defaults before the trusted design boundary", () => {
+    const compactInput = {
+      label: "Create poster background",
+      commands: [
+        {
+          commandId: "insert_background",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: "poster_artboard",
+          index: 0,
+          node: {
+            id: "poster_background",
+            name: "Poster background",
+            transform: [1, 0, 0, 1, 0, 0],
+            size: { width: 1200, height: 1600 },
+            kind: "rectangle",
+            properties: {
+              fills: [{ type: "solid", color: "#101820", opacity: 1 }],
+              strokes: [],
+              strokeWidth: 0,
+              cornerRadius: 0,
+            },
+          },
+        },
+      ],
+    };
+
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, compactInput),
+    ).toBe(true);
+    expect(normalizeDesignApplyToolInput(compactInput)).toMatchObject({
+      commands: [
+        {
+          node: {
+            parentId: "poster_artboard",
+            childIds: [],
+            visible: true,
+            locked: false,
+            opacity: 1,
+            extensions: {},
+          },
+        },
+      ],
+    });
+    expect(
+      validateDesignAgentToolInput(
+        INTERNAL_DESIGN_APPLY_TOOL_NAME,
+        compactInput,
+      ),
+    ).toBe(false);
+  });
+
   it("exposes a path-free versioned raster delivery tool with format-specific validation", () => {
     const tool = DESIGN_AGENT_TOOL_SPECS.find(
       (candidate) => candidate.name === EXPORT_RASTER_TOOL_NAME,

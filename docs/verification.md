@@ -41,7 +41,7 @@ pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
 ├── package tests   50 files / 453 tests
-└── desktop tests   60 files / 524 tests
+└── desktop tests   61 files / 531 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -74,8 +74,10 @@ pnpm build          passed
 - Main 对 HTTP 200 后的 SSE body 中断、canonical `retryable` failure 和无 terminal EOF 最多执行 5 次可取消重连，固定退避为 400/900/1800/3200/5000 ms；Timeline 只更新一条 `正在重新连接 N/5` 活态并在恢复后折叠。每个 Provider attempt 在 Main 内缓冲到 terminal，所有失败 attempt 的半截 text/reasoning/tool event 都不进入 Pi、journal 或设计工具；最终失败只公开逻辑 started/failed 终态。专项测试覆盖首次恢复、5 次耗尽、无 terminal EOF、事件顺序、bridge 校验、UI 覆盖/恢复和 connection interruption 与 timeout 文案分流。
 - 完整生产设计工具契约会穿过 Agent→Main model bridge 的真实守卫；守卫分别限制单工具 schema 和集合总大小。生产回归使用完整 system prompt、十九个工具和 200K Model Profile，既证明短消息会进入 Provider，也证明含多模态结果的八轮工具循环会在 Run 内压缩后完成。模型可见 `apply_transaction` Schema 不依赖 `$ref/$defs`，本地仍用完整 `DesignOperationSchema` 校验。模型桥、畸形 Agent 事件与无 run ID 的进程错误会变成可见终态；设计工具桥拒绝会变成回给模型的 `tool.failed`，两者都不再只写日志后让 UI 永久等待。
 - 工具执行、业务校验和设计工具桥失败会作为 `tool.failed` 回到下一轮模型上下文供其重试或解释；模型桥、Provider、Agent 进程/协议和可信 Run binding 失败才会取消 Run。两类路径分别有“继续第二个模型回合”和“相关 Run 终结/解锁”测试。
+- 续跑 inspection 携带的上一 Run `unfinishedDelivery` 会进入完成门禁，仍有 pending/drafted/captured/reviewed/refined target 时模型完成文案不能放行。模型 `insert_element` 可省略由命令/宿主确定的结构样板字段，Main 规范化后重新执行完整 `DesignOperation` 与内部桥校验；replace subtree、未知字段、Instance 绕过和附件冒充 document asset 仍保持拒绝。
 - JSONL 启动恢复会一次性终结孤立 started Run 和 pending tool；Global Task 同步转为 interrupted。Conversation 在 Run 注册和后续 Agent 活动时更新持久 `updatedAt`，Renderer 立即按最近活动重排。
 - Main-owned diagnostic v3 事件经过严格跨进程校验，按大小轮转写入 JSONL，且不接受任意上下文字段；右下角错误通知显示稳定错误码和关联 Run，并复制包含 Conversation/Run/Request/Tool Call ID、应用版本、平台及受限 Provider failure 的诊断文本。failure 只允许 code/message/retryable、Provider/请求 ID 与 timeout phase/阈值，不接受 Prompt、凭据、路径或完整响应。
+- Agent 设计生成另以静默 `design_generation_performance_v1` 诊断汇总单个 Run 的 `T_plan/T1/T2/T_all`、Provider 首事件/首内容/总时长与重试、typed tool 分类往返、Renderer 首确认及 accepted/applying/capturing/persisting 阶段。progressive apply 从 Renderer 可信边界返回实际 canvas wait 次数/总时长和配置的固定 delay 总量；所有聚合均有界且不含 Prompt、设计正文、节点内容或完整工具参数。当前协议没有 `allocated` 状态，因此 `T0` 必须保持 `null` 并注明 `no-allocated-ledger-state`。自动化以 `1/4/12` target 确定性事件序列验证里程碑和聚合语义；它不替代 macOS/Windows 打包产品、真实 Provider 和真实画布的性能样本。
 - 图片/文档附件、内容识别、完整性、大小限制、多模态 `image_ref`、显式本地路径/HTTP(S) 图片读取和未明示 source 拒绝；远程 body stream 的 15 秒超时、用户取消和流式超过 16 MB 均覆盖到 reader 生命周期。
 - `openai-images` adapter 只使用独立应用级配置的 Base URL、鉴权、凭据和任意 model ID 调用 `/images/generations`，GPT Image 2 是首个验证模型；链路校验 `data[0].b64_json`、响应/图片大小、格式、凭据和取消。tool schema 不接受 Provider/Model 覆盖，也不会借用 Conversation Provider；旧 v2 选择和密文迁移已有回归测试。
 - Renderer Agent 对话、属性检查器、设计工具 selection context / Mutation Target / revision、`capture_canvas` 内容寻址多模态结果、取消/继续、i18n 和桌面控件交互；对话在底部时跟随新消息与状态，用户上翻后保持阅读位置，回到底部后恢复跟随；剪贴板文件与拖放文件经 Preload API 导入，run 只接收安全附件元数据，纯文本路径粘贴保持普通输入行为。

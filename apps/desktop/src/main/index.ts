@@ -30,6 +30,11 @@ import { AgentSvgExportHost } from "./agent/agent-svg-export-host";
 import { AgentSvgImportHost } from "./agent/agent-svg-import-host";
 import { AgentRasterExportHost } from "./agent/agent-raster-export-host";
 import { RendererDesignToolHost } from "./agent/renderer-design-tool-host";
+import {
+  DesignGenerationPerformanceTracker,
+  designGenerationPerformanceDiagnostic,
+} from "./agent/design-generation-performance";
+import { reportAgentDiagnostic } from "./agent/agent-diagnostic-reporter";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
 import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
 import { createApplicationMenuTemplate } from "./application-menu";
@@ -95,7 +100,7 @@ import {
   IMPORT_SVG_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
-  isDesignApplyToolInput,
+  normalizeDesignApplyToolInput,
   isDesignComponentToolInput,
   isDesignPageToolInput,
   isDesignVectorToolInput,
@@ -121,6 +126,7 @@ import {
 const applicationId = "design.open.app";
 const applicationName = "OpenDesign";
 const applicationLifecycle = new ApplicationLifecycle();
+const designGenerationPerformance = new DesignGenerationPerformanceTracker();
 
 app.setName(applicationName);
 if (process.platform === "win32") app.setAppUserModelId(applicationId);
@@ -140,6 +146,9 @@ const rendererDesignToolHost = new RendererDesignToolHost(
     if (!window || window.isDestroyed()) return;
     window.webContents.send(channels.designToolCancel, request);
   },
+);
+rendererDesignToolHost.setPerformanceObserver((sample) =>
+  designGenerationPerformance.recordRendererTool(sample),
 );
 const designFileExtension = ".opendesign";
 const maxDesignFileBytes = 64 * 1024 * 1024;
@@ -206,34 +215,6 @@ function diagnosticContextForAgentEvent(
     ...(requestId ? { requestId } : {}),
     ...(toolCallId ? { toolCallId } : {}),
   };
-}
-
-function recordAgentDiagnostic(event: AgentEvent): void {
-  if (event.type === "agent.error") {
-    publishDiagnostic({
-      level: "error",
-      source:
-        event.failure?.provider === undefined ? "agent" : "model-provider",
-      presentation: "toast",
-      code: event.code,
-      message: event.message,
-      ...(event.failure === undefined ? {} : { failure: event.failure }),
-      ...(diagnosticContextForAgentEvent(event)
-        ? { context: diagnosticContextForAgentEvent(event) }
-        : {}),
-    });
-  }
-  if (event.type === "tool.failed") {
-    publishDiagnostic({
-      level: "warning",
-      source: "design-tool",
-      presentation: event.details ? "toast" : "silent",
-      code: event.code,
-      message: event.message,
-      context: diagnosticContextForAgentEvent(event),
-      ...(event.details ? { details: event.details } : {}),
-    });
-  }
 }
 
 function assertMainRenderer(event: Electron.IpcMainInvokeEvent) {
@@ -1032,7 +1013,20 @@ function registerIpc() {
     }
   });
   agentHost.on((event) => {
-    recordAgentDiagnostic(event);
+    reportAgentDiagnostic(
+      event,
+      publishDiagnostic,
+      diagnosticContextForAgentEvent,
+    );
+    const performanceSummary =
+      designGenerationPerformance.recordAgentEvent(event);
+    if (performanceSummary)
+      publishDiagnostic(
+        designGenerationPerformanceDiagnostic(
+          performanceSummary,
+          conversationIdByRunId.get(performanceSummary.runId),
+        ),
+      );
     if (event.type === "session.history") {
       conversationIdByRequestId.delete(event.requestId);
     }
@@ -1161,6 +1155,9 @@ void app.whenReady().then(async () => {
       resolve: (attachmentId) =>
         requireAgentAttachmentHost().resolveModelAttachment(attachmentId),
     },
+  );
+  modelProviderHost.setPerformanceObserver((sample) =>
+    designGenerationPerformance.recordModelProvider(sample),
   );
   agentHost.setModelRequestHandler((request, signal) =>
     requireModelProviderHost().stream(request, signal),
@@ -1508,15 +1505,16 @@ void app.whenReady().then(async () => {
       return withDesignDelivery(result, context.runId);
     }
     if (call.toolName === DESIGN_APPLY_TOOL_NAME) {
-      if (!isDesignApplyToolInput(call.input)) {
+      const normalizedInput = normalizeDesignApplyToolInput(call.input);
+      if (!normalizedInput) {
         throw new TypeError("Invalid design apply tool input");
       }
       globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
       const authorization = globalTaskCoordinator.assertDesignPlanForApply(
         context,
-        call.input,
+        normalizedInput,
       );
-      const resolvedInput = authorization?.input ?? call.input;
+      const resolvedInput = authorization?.input ?? normalizedInput;
       const result = await rendererDesignToolHost.execute(
         authorization
           ? {
@@ -1529,7 +1527,7 @@ void app.whenReady().then(async () => {
                   : {}),
               },
             }
-          : call,
+          : { ...call, input: normalizedInput },
         executionContext,
         signal,
       );

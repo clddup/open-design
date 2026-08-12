@@ -64,9 +64,25 @@ export type RendererDesignToolProgress = {
   progress: number;
 };
 
+export type RendererDesignToolPerformance = {
+  canvasWaitCount: number;
+  canvasWaitMs: number;
+  configuredStageDelayMs: number;
+};
+
 export type RendererDesignToolResponse =
-  | { requestId: string; ok: true; result: TrustedToolResult }
-  | { requestId: string; ok: false; error: TrustedToolFailure };
+  | {
+      requestId: string;
+      ok: true;
+      result: TrustedToolResult;
+      performance?: RendererDesignToolPerformance;
+    }
+  | {
+      requestId: string;
+      ok: false;
+      error: TrustedToolFailure;
+      performance?: RendererDesignToolPerformance;
+    };
 
 export function isDesignToolBridgeRequest(
   value: unknown,
@@ -180,9 +196,46 @@ export function isRendererDesignToolResponse(
   ) {
     return false;
   }
+  if (
+    value.performance !== undefined &&
+    !isRendererDesignToolPerformance(value.performance)
+  ) {
+    return false;
+  }
   return value.ok
-    ? isTrustedToolResult(value.result)
-    : isTrustedToolFailure(value.error);
+    ? isTrustedToolResult(value.result) &&
+        Object.keys(value).every((key) =>
+          ["requestId", "ok", "result", "performance"].includes(key),
+        )
+    : isTrustedToolFailure(value.error) &&
+        Object.keys(value).every((key) =>
+          ["requestId", "ok", "error", "performance"].includes(key),
+        );
+}
+
+function isRendererDesignToolPerformance(
+  value: unknown,
+): value is RendererDesignToolPerformance {
+  return (
+    record(value) &&
+    boundedPerformanceInteger(value.canvasWaitCount, 10_000) &&
+    boundedPerformanceInteger(value.canvasWaitMs, 86_400_000) &&
+    boundedPerformanceInteger(value.configuredStageDelayMs, 86_400_000) &&
+    Object.keys(value).every((key) =>
+      ["canvasWaitCount", "canvasWaitMs", "configuredStageDelayMs"].includes(
+        key,
+      ),
+    )
+  );
+}
+
+function boundedPerformanceInteger(value: unknown, maximum: number): boolean {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= maximum
+  );
 }
 
 export function isTrustedToolFailure(

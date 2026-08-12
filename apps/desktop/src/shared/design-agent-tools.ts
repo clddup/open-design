@@ -1,12 +1,10 @@
 import {
   ComponentOverridePatchSchema,
   isDesignAsset,
-  isDesignOperation,
   isImagePlacement,
   schemaValidationIssues,
   type BooleanOperation,
   type DesignAsset,
-  type DesignOperation,
   type ImagePlacement,
   type Point,
 } from "@opendesign/design-contracts";
@@ -27,6 +25,22 @@ import {
   type RasterExportSize,
 } from "@opendesign/import-export-service/raster";
 import { isPortableFileName } from "./portable-file-name";
+import {
+  isInternalDesignApplyToolInput,
+  normalizeDesignApplyToolInput,
+  type DesignApplyToolInput,
+} from "./design-apply-input";
+export {
+  isDesignApplyToolInput,
+  isInternalDesignApplyToolInput,
+  normalizeDesignApplyToolInput,
+} from "./design-apply-input";
+export type {
+  DesignApplyToolInput,
+  InternalDesignApplyToolInput,
+  PlannedDesignRebaseGuard,
+  PlannedDesignRebaseTarget,
+} from "./design-apply-input";
 export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
@@ -280,28 +294,6 @@ export type InternalUpdateImageToolInput =
       asset: DesignAsset;
       placement?: ImagePlacement;
     };
-
-export type DesignApplyToolInput = {
-  label: string;
-  summary?: string;
-  commands: DesignOperation[];
-};
-
-export type PlannedDesignRebaseTarget = {
-  frameId: string;
-  pageId: string;
-  width: number;
-  height: number;
-};
-
-export type PlannedDesignRebaseGuard = {
-  fromRevision: number;
-  targets: PlannedDesignRebaseTarget[];
-};
-
-export type InternalDesignApplyToolInput = DesignApplyToolInput & {
-  rebaseGuard?: PlannedDesignRebaseGuard;
-};
 
 export type DesignPageToolInput =
   | {
@@ -1045,6 +1037,13 @@ const MODEL_NODE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_INSERT_NODE_SCHEMA = {
+  ...MODEL_NODE_SCHEMA,
+  description:
+    "An OpenDesign node to insert. The trusted host derives parentId from the command and defaults childIds to [], visible to true, locked to false, opacity to 1, and extensions to {}. Do not repeat those structural defaults unless they are intentionally non-default.",
+  required: ["id", "name", "transform", "size", "kind", "properties"],
+} as const;
+
 const MODEL_NODE_OPERATION_SCHEMA = {
   anyOf: [
     {
@@ -1060,7 +1059,7 @@ const MODEL_NODE_OPERATION_SCHEMA = {
           ],
         },
         index: { type: "integer", minimum: 0 },
-        node: MODEL_NODE_SCHEMA,
+        node: MODEL_INSERT_NODE_SCHEMA,
       },
       required: ["commandId", "type", "pageId", "parentId", "index", "node"],
       additionalProperties: false,
@@ -1761,7 +1760,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: PLACE_IMAGE_TOOL_NAME,
     description:
-      "Place an image attachment returned by opendesign_read_image, opendesign_generate_image, or explicitly attached by the user into the currently bound Design File. A successful design plan must declare the image role. Editable posters must place the image inside their planned artboard Frame or one of its inspected/current descendants and cannot use final-single-image. The host imports the approved attachment as a durable project image asset and inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
+      "Place an image attachment returned by opendesign_read_image, opendesign_generate_image, or explicitly attached by the user into the currently bound Design File. A successful design plan must declare the image role. Editable posters must first create their planned artboard Frame with meaningful editable shape/text content, then place the image inside that existing Frame or one of its inspected/current descendants; parentId may never be null for this flow. Do not copy attachmentId into an insert_element image assetId. Editable posters cannot use final-single-image. The host imports the approved attachment as a durable project image asset and inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2070,7 +2069,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_APPLY_TOOL_NAME,
     description:
-      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap and textOverflow choices. The trusted host measures Auto Size with the versioned Leafer Text provider and persists concrete authoritative size, so do not estimate glyph bounds. A size update without an explicit non-fixed textResize switches that text layer to Fixed. max-lines are not available. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are parent-local and must fit the node's declared size. For an accepted plan's stable artboard and region IDs, provide the declared Frame/Group kind and real content; the trusted host compiles their canonical Page/parent/local bounds, so never convert region bounds to world coordinates after the user moves the artboard. A new artboard must include real editable content in its first transaction, and every inserted planned Group/Frame region must include real editable content in that same transaction; empty scaffolding is rejected before it becomes a revision. Composite designs should create a named Frame or Group together with its children in the same ordered transaction; do not flatten their parts into Page-root layers. This node tool does not manage Projects, Design Files, or Pages; use opendesign_manage_pages for Page lifecycle changes. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect the current document and revise the failing command instead of repeating the same transaction.",
+      "Apply one validated, atomic OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap and textOverflow choices. The trusted host measures Auto Size with the versioned Leafer Text provider and persists concrete authoritative size, so do not estimate glyph bounds. A size update without an explicit non-fixed textResize switches that text layer to Fixed. max-lines are not available. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are parent-local and must fit the node's declared size. For an accepted plan's stable artboard and region IDs, provide the declared Frame/Group kind and real content; the trusted host compiles their canonical Page/parent/local bounds, so never convert region bounds to world coordinates after the user moves the artboard. A new artboard must include real editable content in its first transaction, and every inserted planned Group/Frame region must include real editable content in that same transaction; empty scaffolding is rejected before it becomes a revision. Composite designs should create a named Frame or Group together with its children in the same ordered transaction; do not flatten their parts into Page-root layers. An image_<sha256> attachment returned by image generation is not a document assetId: first create the planned artboard with meaningful editable shape/text content, then call opendesign_place_image so the host imports that attachment as a durable asset. This node tool does not manage Projects, Design Files, or Pages; use opendesign_manage_pages for Page lifecycle changes. Use stable unique IDs for new nodes and command IDs. The host supplies document identity, base revision, and Agent actor; never place them in the input. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect the current document and revise the failing command instead of repeating the same transaction.",
     inputSchema: {
       ...MODEL_APPLY_TRANSACTION_SCHEMA,
     },
@@ -2146,51 +2145,10 @@ export function validateDesignAgentToolInput(
   ) {
     return false;
   }
-  const internal = toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME;
-  return (
-    typeof input.label === "string" &&
-    input.label.length > 0 &&
-    input.label.length <= 256 &&
-    (input.summary === undefined ||
-      (typeof input.summary === "string" && input.summary.length <= 2_000)) &&
-    Array.isArray(input.commands) &&
-    input.commands.length > 0 &&
-    input.commands.length <= 1_000 &&
-    input.commands.every((command) => {
-      if (!isDesignOperation(command)) return false;
-      return (
-        command.type !== "insert_page" &&
-        command.type !== "update_page" &&
-        command.type !== "move_page" &&
-        command.type !== "delete_page" &&
-        command.type !== "put_component" &&
-        command.type !== "delete_component" &&
-        !operationWritesInstanceDirectly(command) &&
-        (internal ||
-          (command.type !== "put_asset" && command.type !== "delete_asset"))
-      );
-    }) &&
-    (!internal ||
-      input.rebaseGuard === undefined ||
-      isPlannedDesignRebaseGuard(input.rebaseGuard)) &&
-    Object.keys(input).every((key) =>
-      [
-        "label",
-        "summary",
-        "commands",
-        ...(internal ? ["rebaseGuard"] : []),
-      ].includes(key),
-    )
-  );
-}
-
-function operationWritesInstanceDirectly(command: DesignOperation): boolean {
-  if (command.type === "insert_element")
-    return command.node.kind === "instance";
-  if (command.type === "replace_subtree") {
-    return command.nodes.some((node) => node.kind === "instance");
+  if (toolName === DESIGN_APPLY_TOOL_NAME) {
+    return normalizeDesignApplyToolInput(input) !== undefined;
   }
-  return false;
+  return isInternalDesignApplyToolInput(input);
 }
 
 export function isReadImageToolInput(
@@ -3038,12 +2996,6 @@ export function designApplyRequiresPlan(input: DesignApplyToolInput): boolean {
   );
 }
 
-export function isDesignApplyToolInput(
-  input: unknown,
-): input is DesignApplyToolInput {
-  return validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input);
-}
-
 export function isDesignVectorToolInput(
   input: unknown,
 ): input is DesignVectorToolInput {
@@ -3353,52 +3305,6 @@ export function isPageStructureAccessToolInput(
     boundedText(input.reason, 500) &&
     input.reason.length >= 8 &&
     exactKeys(input, ["actions", "reason"])
-  );
-}
-
-export function isInternalDesignApplyToolInput(
-  input: unknown,
-): input is InternalDesignApplyToolInput {
-  return validateDesignAgentToolInput(INTERNAL_DESIGN_APPLY_TOOL_NAME, input);
-}
-
-function isPlannedDesignRebaseGuard(
-  value: unknown,
-): value is PlannedDesignRebaseGuard {
-  if (
-    !isRecord(value) ||
-    !Number.isSafeInteger(value.fromRevision) ||
-    Number(value.fromRevision) < 0 ||
-    !Array.isArray(value.targets) ||
-    value.targets.length === 0 ||
-    value.targets.length > 32 ||
-    !value.targets.every(isPlannedDesignRebaseTarget) ||
-    !exactKeys(value, ["fromRevision", "targets"])
-  ) {
-    return false;
-  }
-  return (
-    new Set(value.targets.map((target) => target.frameId)).size ===
-    value.targets.length
-  );
-}
-
-function isPlannedDesignRebaseTarget(
-  target: unknown,
-): target is PlannedDesignRebaseTarget {
-  return (
-    isRecord(target) &&
-    safeId(target.frameId) &&
-    safeId(target.pageId) &&
-    typeof target.width === "number" &&
-    Number.isFinite(target.width) &&
-    target.width > 0 &&
-    target.width <= 100_000 &&
-    typeof target.height === "number" &&
-    Number.isFinite(target.height) &&
-    target.height > 0 &&
-    target.height <= 100_000 &&
-    exactKeys(target, ["frameId", "pageId", "width", "height"])
   );
 }
 

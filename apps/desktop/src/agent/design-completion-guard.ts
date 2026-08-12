@@ -143,6 +143,8 @@ function latestDeliveryLedger(
     if (!isRecord(result)) continue;
     const delivery = result.delivery;
     if (isDesignDeliveryLedger(delivery)) return delivery;
+    const unfinishedDelivery = result.unfinishedDelivery;
+    if (isDesignDeliveryLedger(unfinishedDelivery)) return unfinishedDelivery;
   }
   return undefined;
 }

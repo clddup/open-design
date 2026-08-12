@@ -105,6 +105,7 @@ type ExecuteDesignToolOptions = {
     phase: RendererDesignToolProgressPhase,
     progress: number,
   ) => void;
+  onCanvasWait?: (durationMs: number, configuredDelayMs: number) => void;
 };
 
 export async function executeDesignToolRequest(
@@ -1198,9 +1199,7 @@ async function executeDesignToolRequestUnsafe(
     runtime,
     transaction,
     preview,
-    options.signal,
-    options.stageDelayMs ?? 100,
-    options.onProgress,
+    options,
   );
 }
 
@@ -1388,11 +1387,10 @@ async function applyProgressively(
   runtime: EditorRuntime,
   transaction: DesignTransaction,
   preview: DesignTransactionSuccess,
-  signal: AbortSignal | undefined,
-  stageDelayMs: number,
-  onProgress: ExecuteDesignToolOptions["onProgress"],
+  options: ExecuteDesignToolOptions,
 ): Promise<RendererDesignToolResponse> {
   const remainingCommands = [...transaction.commands];
+  const { onCanvasWait, signal, stageDelayMs = 100 } = options;
   let appliedStages = 0;
   let lastResult: DesignTransactionSuccess | undefined;
   try {
@@ -1435,7 +1433,7 @@ async function applyProgressively(
       appliedStages += 1;
       lastResult = result;
       remainingCommands.splice(0, commands.length);
-      onProgress?.(
+      options.onProgress?.(
         "applying",
         0.1 +
           0.8 *
@@ -1443,7 +1441,7 @@ async function applyProgressively(
               transaction.commands.length),
       );
       if (remainingCommands.length > 0) {
-        await waitForCanvasPaint(signal, stageDelayMs);
+        await waitForCanvasPaint(signal, stageDelayMs, onCanvasWait);
       }
     }
   } catch (error) {

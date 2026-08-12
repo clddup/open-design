@@ -6,6 +6,7 @@ import type {
 } from "@opendesign/agent-runtime";
 import type {
   RendererDesignCaptureTarget,
+  RendererDesignToolPerformance,
   RendererDesignToolCancel,
   RendererDesignToolProgress,
   RendererDesignToolRequest,
@@ -13,11 +14,34 @@ import type {
 } from "../../shared/design-tool-bridge";
 
 type PendingRequest = {
+  context: TrustedToolContext;
+  currentPhase?: RendererDesignToolProgress["phase"];
+  currentPhaseStartedAt?: number;
   firstResponseTimeout: ReturnType<typeof setTimeout>;
+  firstResponseMs: number | null;
   idleTimeout?: ReturnType<typeof setTimeout>;
+  phaseDurationMs: Record<RendererDesignToolProgress["phase"], number>;
+  phaseProgressEvents: Record<RendererDesignToolProgress["phase"], number>;
   reject: (error: Error) => void;
   resolve: (result: TrustedToolResult) => void;
+  startedAt: number;
+  toolCallId: string;
+  toolName: string;
   totalTimeout: ReturnType<typeof setTimeout>;
+};
+
+export type RendererDesignToolPerformanceSample = {
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  status: "completed" | "failed" | "cancelled" | "timeout";
+  canvasWaitCount: number | null;
+  canvasWaitMs: number | null;
+  configuredStageDelayMs: number | null;
+  totalMs: number;
+  firstResponseMs: number | null;
+  phaseDurationMs: Record<RendererDesignToolProgress["phase"], number>;
+  phaseProgressEvents: Record<RendererDesignToolProgress["phase"], number>;
 };
 
 export interface RendererDesignToolTimeouts {
@@ -34,6 +58,7 @@ const DEFAULT_RENDERER_TOOL_TIMEOUTS: RendererDesignToolTimeouts = {
 
 export class RendererDesignToolHost {
   readonly #pending = new Map<string, PendingRequest>();
+  #performanceObserver?: (sample: RendererDesignToolPerformanceSample) => void;
   #sequence = 0;
 
   constructor(
@@ -43,6 +68,12 @@ export class RendererDesignToolHost {
     ) => void = () => undefined,
     private readonly timeouts: RendererDesignToolTimeouts = DEFAULT_RENDERER_TOOL_TIMEOUTS,
   ) {}
+
+  setPerformanceObserver(
+    observer: (sample: RendererDesignToolPerformanceSample) => void,
+  ): void {
+    this.#performanceObserver = observer;
+  }
 
   execute(
     call: ToolCallRequest,
@@ -61,6 +92,7 @@ export class RendererDesignToolHost {
         this.#pending.delete(requestId);
         clearPendingTimeouts(pending);
         this.sendCancel({ requestId });
+        this.#recordPerformance(pending, "timeout");
         pending.reject(rendererToolTimeout(phase, thresholdMs));
       };
       const firstResponseTimeout = setTimeout(
@@ -78,10 +110,12 @@ export class RendererDesignToolHost {
         clearPendingTimeouts(pending);
         this.#pending.delete(requestId);
         this.sendCancel({ requestId });
+        this.#recordPerformance(pending, "cancelled");
         reject(new Error("Renderer design tool was cancelled"));
       };
       signal.addEventListener("abort", abort, { once: true });
       this.#pending.set(requestId, {
+        context,
         resolve: (result) => {
           signal.removeEventListener("abort", abort);
           resolve(result);
@@ -91,6 +125,12 @@ export class RendererDesignToolHost {
           reject(error);
         },
         firstResponseTimeout,
+        firstResponseMs: null,
+        phaseDurationMs: emptyPhaseNumbers(),
+        phaseProgressEvents: emptyPhaseNumbers(),
+        startedAt: Date.now(),
+        toolCallId: call.toolCallId,
+        toolName: call.toolName,
         totalTimeout,
       });
       try {
@@ -100,6 +140,7 @@ export class RendererDesignToolHost {
         if (pending) clearPendingTimeouts(pending);
         this.#pending.delete(requestId);
         signal.removeEventListener("abort", abort);
+        if (pending) this.#recordPerformance(pending, "failed");
         reject(
           error instanceof Error
             ? error
@@ -112,6 +153,14 @@ export class RendererDesignToolHost {
   progress(progress: RendererDesignToolProgress): boolean {
     const pending = this.#pending.get(progress.requestId);
     if (!pending) return false;
+    const observedAt = Date.now();
+    pending.firstResponseMs ??= observedAt - pending.startedAt;
+    pending.phaseProgressEvents[progress.phase] += 1;
+    if (pending.currentPhase !== progress.phase) {
+      finishCurrentPhase(pending, observedAt);
+      pending.currentPhase = progress.phase;
+      pending.currentPhaseStartedAt = observedAt;
+    }
     clearTimeout(pending.firstResponseTimeout);
     if (pending.idleTimeout !== undefined) {
       clearTimeout(pending.idleTimeout);
@@ -122,6 +171,7 @@ export class RendererDesignToolHost {
       this.#pending.delete(progress.requestId);
       clearPendingTimeouts(active);
       this.sendCancel({ requestId: progress.requestId });
+      this.#recordPerformance(active, "timeout");
       active.reject(
         rendererToolTimeout(
           "idle",
@@ -138,6 +188,11 @@ export class RendererDesignToolHost {
     if (!pending) return false;
     clearPendingTimeouts(pending);
     this.#pending.delete(response.requestId);
+    this.#recordPerformance(
+      pending,
+      response.ok ? "completed" : "failed",
+      response.performance,
+    );
     if (response.ok) pending.resolve(response.result);
     else
       pending.reject(
@@ -150,10 +205,64 @@ export class RendererDesignToolHost {
     for (const [requestId, pending] of this.#pending) {
       clearPendingTimeouts(pending);
       this.sendCancel({ requestId });
+      this.#recordPerformance(pending, "failed");
       pending.reject(new Error(message));
     }
     this.#pending.clear();
   }
+
+  #recordPerformance(
+    pending: PendingRequest,
+    status: RendererDesignToolPerformanceSample["status"],
+    performance?: RendererDesignToolPerformance,
+  ): void {
+    const finishedAt = Date.now();
+    finishCurrentPhase(pending, finishedAt);
+    try {
+      this.#performanceObserver?.({
+        runId: pending.context.runId,
+        toolCallId: pending.toolCallId,
+        toolName: pending.toolName,
+        status,
+        canvasWaitCount: performance?.canvasWaitCount ?? null,
+        canvasWaitMs: performance?.canvasWaitMs ?? null,
+        configuredStageDelayMs: performance?.configuredStageDelayMs ?? null,
+        totalMs: roundedDuration(finishedAt - pending.startedAt),
+        firstResponseMs:
+          pending.firstResponseMs === null
+            ? null
+            : roundedDuration(pending.firstResponseMs),
+        phaseDurationMs: { ...pending.phaseDurationMs },
+        phaseProgressEvents: { ...pending.phaseProgressEvents },
+      });
+    } catch {
+      // Performance observation must never change tool execution semantics.
+    }
+  }
+}
+
+function finishCurrentPhase(pending: PendingRequest, finishedAt: number): void {
+  if (
+    pending.currentPhase === undefined ||
+    pending.currentPhaseStartedAt === undefined
+  ) {
+    return;
+  }
+  pending.phaseDurationMs[pending.currentPhase] += roundedDuration(
+    finishedAt - pending.currentPhaseStartedAt,
+  );
+  pending.currentPhaseStartedAt = finishedAt;
+}
+
+function emptyPhaseNumbers(): Record<
+  RendererDesignToolProgress["phase"],
+  number
+> {
+  return { accepted: 0, applying: 0, capturing: 0, persisting: 0 };
+}
+
+function roundedDuration(value: number): number {
+  return Math.max(0, Math.round(value));
 }
 
 function clearPendingTimeouts(pending: PendingRequest): void {

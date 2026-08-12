@@ -130,6 +130,29 @@ describe("Renderer design tool bridge", () => {
     expect(
       isRendererDesignToolResponse({
         ...rebasedResult,
+        performance: {
+          canvasWaitCount: 3,
+          canvasWaitMs: 348,
+          configuredStageDelayMs: 300,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isRendererDesignToolResponse({
+        ...rebasedResult,
+        performance: {
+          canvasWaitCount: 3,
+          canvasWaitMs: -1,
+          configuredStageDelayMs: 300,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isRendererDesignToolResponse({ ...rebasedResult, filePath: "/tmp/x" }),
+    ).toBe(false);
+    expect(
+      isRendererDesignToolResponse({
+        ...rebasedResult,
         result: {
           ...rebasedResult.result,
           designRevision: {

@@ -23,6 +23,12 @@ import {
 } from "../../shared/desktop-api";
 import type { WorkspaceStore } from "../project/workspace-store";
 import { createHash } from "node:crypto";
+import {
+  assertModelStreamTimeouts,
+  streamModelProvider,
+  type ModelProviderPerformanceSample,
+  type ModelStreamTimeouts,
+} from "./model-provider-stream";
 
 const catalogKey = "model.provider.catalog.v3";
 const previousCatalogKeys = [
@@ -37,18 +43,11 @@ const emptyCatalog: ModelProviderCatalog = {
   providers: [],
 };
 
-export type ModelStreamTimeouts = {
-  firstResponseTimeoutMs: number;
-  idleTimeoutMs: number;
-  totalTimeoutMs: number;
-};
-
 const defaultModelStreamTimeouts: ModelStreamTimeouts = {
   firstResponseTimeoutMs: 180_000,
   idleTimeoutMs: 120_000,
   totalTimeoutMs: 900_000,
 };
-const transientProviderRetryDelaysMs = [400, 900, 1_800, 3_200, 5_000] as const;
 export interface CredentialCipher {
   available(): boolean;
   encrypt(value: string): Buffer;
@@ -76,6 +75,8 @@ export interface ModelAttachmentResolver {
 }
 
 export class ModelProviderHost {
+  #performanceObserver?: (sample: ModelProviderPerformanceSample) => void;
+
   constructor(
     private readonly store: WorkspaceStore,
     private readonly cipher: CredentialCipher,
@@ -87,6 +88,12 @@ export class ModelProviderHost {
     ) => ModelGateway,
   ) {
     assertModelStreamTimeouts(streamTimeouts);
+  }
+
+  setPerformanceObserver(
+    observer: (sample: ModelProviderPerformanceSample) => void,
+  ): void {
+    this.#performanceObserver = observer;
   }
 
   getCatalog(): ModelProviderCatalog {
@@ -259,189 +266,15 @@ export class ModelProviderHost {
     signal: AbortSignal,
   ): AsyncIterable<CanonicalStreamEvent> {
     const resolved = await this.resolveAttachmentReferences(request);
-    const controller = new AbortController();
-    const abort = () => controller.abort(signal.reason);
-    if (signal.aborted) abort();
-    else signal.addEventListener("abort", abort, { once: true });
-    const startedAt = Date.now();
-    let completed = false;
-    let providerRequestId: string | undefined;
-    let latestAttemptStarted:
-      Extract<CanonicalStreamEvent, { type: "attempt.started" }> | undefined;
-    try {
-      for (
-        let retryIndex = 0;
-        retryIndex <= transientProviderRetryDelaysMs.length;
-        retryIndex += 1
-      ) {
-        providerRequestId = undefined;
-        const attemptController = new AbortController();
-        const abortAttempt = () =>
-          attemptController.abort(controller.signal.reason);
-        if (controller.signal.aborted) abortAttempt();
-        else
-          controller.signal.addEventListener("abort", abortAttempt, {
-            once: true,
-          });
-        const source = this.gateway(request.modelSelection).stream({
-          ...resolved,
-          signal: attemptController.signal,
-        });
-        const iterator = source[Symbol.asyncIterator]();
-        const attemptEvents: CanonicalStreamEvent[] = [];
-        let attemptStarted:
-          | Extract<CanonicalStreamEvent, { type: "attempt.started" }>
-          | undefined;
-        let retry = false;
-        let waitingForFirstResponse = true;
-        try {
-          while (true) {
-            const elapsed = Date.now() - startedAt;
-            const totalRemaining = this.streamTimeouts.totalTimeoutMs - elapsed;
-            if (totalRemaining <= 0) {
-              throw modelTimeout(
-                "total",
-                this.streamTimeouts.totalTimeoutMs,
-                `Model provider timed out after the ${this.streamTimeouts.totalTimeoutMs} ms total time limit`,
-              );
-            }
-            const phaseTimeout = waitingForFirstResponse
-              ? this.streamTimeouts.firstResponseTimeoutMs
-              : this.streamTimeouts.idleTimeoutMs;
-            const totalExpiresFirst = totalRemaining <= phaseTimeout;
-            const timeoutMs = Math.min(phaseTimeout, totalRemaining);
-            const timeoutError = modelTimeout(
-              totalExpiresFirst
-                ? "total"
-                : waitingForFirstResponse
-                  ? "first-response"
-                  : "stream-idle",
-              totalExpiresFirst
-                ? this.streamTimeouts.totalTimeoutMs
-                : phaseTimeout,
-              totalExpiresFirst
-                ? `Model provider timed out after the ${this.streamTimeouts.totalTimeoutMs} ms total time limit`
-                : waitingForFirstResponse
-                  ? `Model provider timed out after ${this.streamTimeouts.firstResponseTimeoutMs} ms waiting for a response`
-                  : `Model provider stream timed out after ${this.streamTimeouts.idleTimeoutMs} ms without activity`,
-            );
-            const result = await nextModelEvent(
-              iterator,
-              attemptController,
-              timeoutMs,
-              timeoutError,
-            );
-            const event: CanonicalStreamEvent = result.done
-              ? {
-                  type: "attempt.failed",
-                  attemptId: request.attemptId,
-                  error: {
-                    code: "provider_error",
-                    message:
-                      "Model provider stream ended without a terminal event",
-                    retryable: true,
-                    provider: request.modelSelection.providerId,
-                    ...(providerRequestId === undefined
-                      ? {}
-                      : { providerRequestId }),
-                  },
-                }
-              : result.value;
-            if (event.type !== "attempt.started") {
-              waitingForFirstResponse = false;
-            }
-            const observedProviderRequestId: string | undefined =
-              event.type === "attempt.failed"
-                ? event.error.providerRequestId
-                : event.type === "attempt.started" ||
-                    event.type === "attempt.completed"
-                  ? event.providerRequestId
-                  : undefined;
-            if (observedProviderRequestId !== undefined) {
-              providerRequestId = observedProviderRequestId;
-            }
-            if (event.type === "attempt.started") {
-              attemptStarted = event;
-              latestAttemptStarted = event;
-              continue;
-            }
-            if (event.type === "attempt.failed") {
-              retry = shouldRetryTransientProviderFailure(
-                event.error,
-                retryIndex,
-              );
-              if (retry) break;
-              completed = true;
-              if (attemptStarted) yield attemptStarted;
-              yield event;
-              return;
-            }
-            if (event.type === "attempt.completed") {
-              completed = true;
-              if (retryIndex > 0) {
-                yield {
-                  type: "attempt.recovered",
-                  attemptId: request.attemptId,
-                  retriesUsed: retryIndex,
-                  maxRetries: transientProviderRetryDelaysMs.length,
-                };
-              }
-              if (attemptStarted) yield attemptStarted;
-              for (const buffered of attemptEvents) yield buffered;
-              yield event;
-              return;
-            }
-            attemptEvents.push(event);
-          }
-        } finally {
-          controller.signal.removeEventListener("abort", abortAttempt);
-          if (!completed && !attemptController.signal.aborted) {
-            attemptController.abort(
-              new DOMException("Model provider attempt closed", "AbortError"),
-            );
-          }
-          void iterator.return?.().catch(() => undefined);
-        }
-        const retryDelay = transientProviderRetryDelaysMs[retryIndex];
-        if (!retry || retryDelay === undefined) return;
-        yield {
-          type: "attempt.retrying",
-          attemptId: request.attemptId,
-          retry: retryIndex + 1,
-          maxRetries: transientProviderRetryDelaysMs.length,
-          delayMs: retryDelay,
-        };
-        await waitForProviderRetry(retryDelay, signal);
-      }
-    } catch (error) {
-      if (error instanceof ModelStreamTimeoutError) {
-        if (latestAttemptStarted) yield latestAttemptStarted;
-        yield {
-          type: "attempt.failed",
-          attemptId: request.attemptId,
-          error: {
-            code: "provider_timeout",
-            message: error.message,
-            retryable: true,
-            provider: request.modelSelection.providerId,
-            ...(providerRequestId === undefined ? {} : { providerRequestId }),
-            timeout: {
-              phase: error.phase,
-              thresholdMs: error.thresholdMs,
-            },
-          },
-        };
-        return;
-      }
-      throw error;
-    } finally {
-      signal.removeEventListener("abort", abort);
-      if (!completed && !controller.signal.aborted) {
-        controller.abort(
-          new DOMException("Model provider stream closed", "AbortError"),
-        );
-      }
-    }
+    yield* streamModelProvider({
+      request: resolved,
+      signal,
+      timeouts: this.streamTimeouts,
+      gateway: (selection) => this.gateway(selection),
+      ...(this.#performanceObserver
+        ? { observePerformance: this.#performanceObserver }
+        : {}),
+    });
   }
 
   private async resolveAttachmentReferences(
@@ -682,134 +515,6 @@ export class ModelProviderHost {
     } catch {
       return null;
     }
-  }
-}
-
-function nextModelEvent(
-  iterator: AsyncIterator<CanonicalStreamEvent>,
-  controller: AbortController,
-  timeoutMs: number,
-  timeoutError: Error,
-): Promise<IteratorResult<CanonicalStreamEvent>> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const cleanup = () => {
-      clearTimeout(timeout);
-      controller.signal.removeEventListener("abort", aborted);
-    };
-    const finish = (
-      action: (value: IteratorResult<CanonicalStreamEvent>) => void,
-      value: IteratorResult<CanonicalStreamEvent>,
-    ) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      action(value);
-    };
-    const fail = (error: unknown) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(
-        error instanceof Error ? error : new Error("Model provider failed"),
-      );
-    };
-    const aborted = () => {
-      fail(
-        controller.signal.reason instanceof Error
-          ? controller.signal.reason
-          : new DOMException("Model request cancelled", "AbortError"),
-      );
-    };
-    const timeout = setTimeout(
-      () => {
-        fail(timeoutError);
-        controller.abort(timeoutError);
-      },
-      Math.max(1, Math.ceil(timeoutMs)),
-    );
-    controller.signal.addEventListener("abort", aborted, { once: true });
-    if (controller.signal.aborted) {
-      aborted();
-      return;
-    }
-    void iterator.next().then(
-      (result) => finish(resolve, result),
-      (error: unknown) => fail(error),
-    );
-  });
-}
-
-function shouldRetryTransientProviderFailure(
-  error: Extract<CanonicalStreamEvent, { type: "attempt.failed" }>["error"],
-  retryIndex: number,
-): boolean {
-  return (
-    error.retryable &&
-    error.timeout === undefined &&
-    (error.code === "provider_error" ||
-      error.code === "provider_request_failed") &&
-    retryIndex < transientProviderRetryDelaysMs.length
-  );
-}
-
-function waitForProviderRetry(
-  delayMs: number,
-  signal: AbortSignal,
-): Promise<void> {
-  if (signal.aborted) {
-    return Promise.reject(
-      signal.reason instanceof Error
-        ? signal.reason
-        : new DOMException("Model request cancelled", "AbortError"),
-    );
-  }
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      signal.removeEventListener("abort", aborted);
-      resolve();
-    }, delayMs);
-    const aborted = () => {
-      clearTimeout(timeout);
-      reject(
-        signal.reason instanceof Error
-          ? signal.reason
-          : new DOMException("Model request cancelled", "AbortError"),
-      );
-    };
-    signal.addEventListener("abort", aborted, { once: true });
-  });
-}
-
-class ModelStreamTimeoutError extends Error {
-  constructor(
-    readonly phase: "first-response" | "stream-idle" | "total",
-    readonly thresholdMs: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "TimeoutError";
-  }
-}
-
-function modelTimeout(
-  phase: ModelStreamTimeoutError["phase"],
-  thresholdMs: number,
-  message: string,
-): ModelStreamTimeoutError {
-  return new ModelStreamTimeoutError(phase, thresholdMs, message);
-}
-
-function assertModelStreamTimeouts(timeouts: ModelStreamTimeouts): void {
-  for (const value of Object.values(timeouts)) {
-    if (!Number.isFinite(value) || value <= 0) {
-      throw new RangeError("Model stream timeouts must be positive");
-    }
-  }
-  if (timeouts.totalTimeoutMs < timeouts.firstResponseTimeoutMs) {
-    throw new RangeError(
-      "Model total timeout cannot be shorter than the first response timeout",
-    );
   }
 }
 

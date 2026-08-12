@@ -7,7 +7,7 @@ import {
   planCreateBooleanGroup,
 } from "@opendesign/editor-runtime";
 import { memoizeTextLayoutProvider } from "@opendesign/text-service";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
@@ -1826,6 +1826,7 @@ describe("Renderer design tool scope", () => {
 
   it("renders a large tool transaction in visible stages with one undo entry", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
+    const onCanvasWait = vi.fn();
     const response = executeDesignToolRequest(
       {
         requestId: "apply_progressive",
@@ -1866,7 +1867,7 @@ describe("Renderer design tool scope", () => {
       },
       runtime,
       "page_welcome",
-      { stageDelayMs: 0 },
+      { stageDelayMs: 0, onCanvasWait },
     );
 
     expect(runtime.getSnapshot().document.revision).toBe(1);
@@ -1886,6 +1887,9 @@ describe("Renderer design tool scope", () => {
       "Finished card",
     );
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(onCanvasWait).toHaveBeenCalledTimes(1);
+    expect(onCanvasWait.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(0);
+    expect(onCanvasWait.mock.calls[0]?.[1]).toBe(0);
 
     expect(runtime.undo().ok).toBe(true);
     expect(runtime.getSnapshot().document.nodesById.feature_one?.name).toBe(

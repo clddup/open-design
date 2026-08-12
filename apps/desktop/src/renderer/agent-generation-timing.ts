@@ -8,11 +8,13 @@ export function throwIfAgentGenerationAborted(
 export async function waitForCanvasPaint(
   signal: AbortSignal | undefined,
   delayMs: number,
+  onWait?: (durationMs: number, configuredDelayMs: number) => void,
 ): Promise<void> {
+  const startedAt = performance.now();
   await waitForAnimationFrame(signal);
   await waitForAnimationFrame(signal);
-  if (delayMs <= 0) return;
-  await waitForDelay(signal, delayMs);
+  if (delayMs > 0) await waitForDelay(signal, delayMs);
+  onWait?.(performance.now() - startedAt, delayMs);
 }
 
 function waitForAnimationFrame(signal: AbortSignal | undefined): Promise<void> {

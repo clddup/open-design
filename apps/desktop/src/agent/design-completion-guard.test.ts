@@ -171,6 +171,19 @@ describe("design completion guard", () => {
     expect(reviewDesignCompletion(context([]))).toEqual({ allow: true });
   });
 
+  it("blocks a resumed Run while inspection reports unfinished delivery", () => {
+    const unfinished = deliveryResult("pending").delivery;
+    expectBlocked(
+      [
+        {
+          ...inspection,
+          result: { unfinishedDelivery: unfinished },
+        },
+      ],
+      "1/2 verified",
+    );
+  });
+
   it("requires capture, refinement, and a final capture in order", () => {
     expectBlocked([materialWrite], "structured design plan");
     expectBlocked([designPlan, materialWrite], "document inspection");

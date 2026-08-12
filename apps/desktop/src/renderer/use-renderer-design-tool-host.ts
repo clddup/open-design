@@ -21,6 +21,11 @@ export function useRendererDesignToolHost(
     }
     const unsubscribeRequest = desktop.onDesignToolRequest((request) => {
       const controller = new AbortController();
+      const toolPerformance = {
+        canvasWaitCount: 0,
+        canvasWaitMs: 0,
+        configuredStageDelayMs: 0,
+      };
       const reportProgress = (
         phase: "accepted" | "applying" | "capturing" | "persisting",
         progress: number,
@@ -84,6 +89,17 @@ export function useRendererDesignToolHost(
                 };
               },
               onProgress: reportProgress,
+              onCanvasWait: (durationMs, configuredDelayMs) => {
+                toolPerformance.canvasWaitCount += 1;
+                toolPerformance.canvasWaitMs += Math.max(
+                  0,
+                  Math.round(durationMs),
+                );
+                toolPerformance.configuredStageDelayMs += Math.max(
+                  0,
+                  Math.round(configuredDelayMs),
+                );
+              },
               signal: controller.signal,
             },
           ).then(async (response) => {
@@ -91,7 +107,7 @@ export function useRendererDesignToolHost(
               reportProgress("persisting", 0.95);
               await projectAutosave.flushDocument(request.context.documentId);
             }
-            return response;
+            return { ...response, performance: toolPerformance };
           });
         })
         .then(
@@ -113,6 +129,7 @@ export function useRendererDesignToolHost(
             return desktop.resolveDesignToolRequest({
               requestId: request.requestId,
               ok: false,
+              performance: toolPerformance,
               error: {
                 code: "design_tool_execution_failed",
                 message,

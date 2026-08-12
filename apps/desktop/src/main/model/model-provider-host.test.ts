@@ -9,6 +9,7 @@ import {
   ModelProviderHost,
   type CredentialCipher,
 } from "./model-provider-host";
+import type { ModelProviderPerformanceSample } from "./model-provider-stream";
 
 const cipher: CredentialCipher = {
   available: () => true,
@@ -154,6 +155,9 @@ describe("ModelProviderHost", () => {
       undefined,
       gatewayFactory,
     );
+    const performance =
+      vi.fn<(sample: ModelProviderPerformanceSample) => void>();
+    host.setPerformanceObserver(performance);
     host.saveProfile({ ...profile, apiKey: "provider-secret" });
 
     try {
@@ -191,6 +195,20 @@ describe("ModelProviderHost", () => {
         type: "attempt.completed",
         providerRequestId: "resp_recovered",
       });
+      expect(performance).toHaveBeenCalledTimes(1);
+      expect(performance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attemptId: "attempt_retry",
+          status: "completed",
+          retries: 1,
+        }),
+      );
+      expect(performance.mock.calls[0]?.[0].totalMs).toBeGreaterThanOrEqual(
+        400,
+      );
+      expect(
+        performance.mock.calls[0]?.[0].firstContentEventMs,
+      ).toBeGreaterThanOrEqual(400);
     } finally {
       store.close();
       vi.useRealTimers();
