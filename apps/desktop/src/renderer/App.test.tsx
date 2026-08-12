@@ -3351,9 +3351,14 @@ describe("App", () => {
     fireEvent.keyDown(canvas, { key: "Enter" });
     await waitFor(() =>
       expect(leaferHarness.input?.vectorEditScope).toEqual({
-        nodeId: "editable_vector",
-        readOnly: false,
-        selectedVertexIds: [],
+        activeNodeId: "editable_vector",
+        nodes: [
+          {
+            nodeId: "editable_vector",
+            readOnly: false,
+            selectedVertexIds: [],
+          },
+        ],
         tool: "move",
       }),
     );
@@ -3382,12 +3387,14 @@ describe("App", () => {
     );
 
     act(() => {
-      leaferCallbacks().onVectorEditSelectionChange?.(["vertex_b"]);
+      leaferCallbacks().onVectorEditSelectionChange?.("editable_vector", [
+        "vertex_b",
+      ]);
     });
     await waitFor(() =>
-      expect(leaferHarness.input?.vectorEditScope?.selectedVertexIds).toEqual([
-        "vertex_b",
-      ]),
+      expect(
+        leaferHarness.input?.vectorEditScope?.nodes[0]?.selectedVertexIds,
+      ).toEqual(["vertex_b"]),
     );
     expect(screen.getByRole("button", { name: "Corner" })).toHaveAttribute(
       "aria-pressed",
@@ -3462,10 +3469,9 @@ describe("App", () => {
     }
     expect(cutNode.properties.network.paths[0]?.closed).toBe(false);
     await waitFor(() =>
-      expect(leaferHarness.input?.vectorEditScope?.selectedVertexIds).toEqual([
-        "vertex_edit_1",
-        "vertex_edit_2",
-      ]),
+      expect(
+        leaferHarness.input?.vectorEditScope?.nodes[0]?.selectedVertexIds,
+      ).toEqual(["vertex_edit_1", "vertex_edit_2"]),
     );
     expect(screen.getByRole("button", { name: "Close path" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Reverse" })).toBeEnabled();
@@ -3507,7 +3513,7 @@ describe("App", () => {
     expect(screen.queryByText("Editing Logo curve")).not.toBeInTheDocument();
   });
 
-  it("divides a closed vector into two selected sibling layers through the Canvas callback", async () => {
+  it("enters multi-Vector edit and divides every crossed layer in one Canvas transaction", async () => {
     renderApp();
     act(() => {
       const current = runtime().getSnapshot();
@@ -3595,16 +3601,82 @@ describe("App", () => {
         ],
       });
       if (!result.ok) throw new Error(result.error.message);
-      runtime().setSelection(["closed_vector"], "closed_vector");
+      const afterFirst = runtime().getSnapshot();
+      const first = afterFirst.document.nodesById.closed_vector;
+      if (!first) throw new Error("Missing first closed Vector fixture");
+      const second = structuredClone(first);
+      second.id = "closed_vector_second";
+      second.name = "Second badge contour";
+      second.transform = [1, 0, 0, 1, 220, 40];
+      const secondResult = runtime().apply({
+        transactionId: "insert_second_closed_vector",
+        documentId: afterFirst.document.documentId,
+        baseRevision: afterFirst.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Insert second closed vector",
+        commands: [
+          {
+            commandId: "insert_second_closed_vector",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 1,
+            node: second,
+          },
+        ],
+      });
+      if (!secondResult.ok) throw new Error(secondResult.error.message);
+      runtime().setSelection(
+        ["closed_vector", "closed_vector_second"],
+        "closed_vector_second",
+      );
     });
     const canvas = screen.getByRole("main", { name: "Design canvas" });
     canvas.focus();
     fireEvent.keyDown(canvas, { key: "Enter" });
     await waitFor(() =>
-      expect(leaferHarness.input?.vectorEditScope?.nodeId).toBe(
-        "closed_vector",
-      ),
+      expect(leaferHarness.input?.vectorEditScope).toMatchObject({
+        activeNodeId: "closed_vector_second",
+        nodes: [
+          { nodeId: "closed_vector", readOnly: false },
+          { nodeId: "closed_vector_second", readOnly: false },
+        ],
+      }),
     );
+    expect(
+      screen.getByText("Editing Second badge contour"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/2 vector layers/)).toBeInTheDocument();
+
+    act(() => {
+      leaferCallbacks().onVectorEditScopeChange?.({
+        mode: "toggle",
+        nodeId: "closed_vector_second",
+      });
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope?.nodes).toEqual([
+        expect.objectContaining({ nodeId: "closed_vector" }),
+      ]),
+    );
+    expect(runtime().getSnapshot().state.selection).toEqual({
+      nodeIds: ["closed_vector"],
+      anchorNodeId: "closed_vector",
+    });
+    act(() => {
+      leaferCallbacks().onVectorEditScopeChange?.({
+        mode: "add",
+        nodeId: "closed_vector_second",
+      });
+    });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope?.nodes).toHaveLength(2),
+    );
+
+    act(() => {
+      leaferCallbacks().onVectorEditActiveNodeChange?.("closed_vector");
+    });
+    expect(screen.getByText("Editing Badge contour")).toBeInTheDocument();
 
     const beforeRevision = runtime().getSnapshot().document.revision;
     let response:
@@ -3612,31 +3684,45 @@ describe("App", () => {
       | undefined;
     act(() => {
       response = leaferCallbacks().onVectorLineCut?.({
-        end: { x: 120, y: 40 },
-        nodeId: "closed_vector",
-        start: { x: -20, y: 40 },
+        end: { x: 450, y: 144 },
+        nodeIds: ["closed_vector", "closed_vector_second"],
+        start: { x: 100, y: 144 },
       });
     });
     expect(response).toMatchObject({ ok: true });
     if (!response?.ok) throw new Error("Missing vector divide response");
-    const resultNodeId = response.resultNodeIds[1];
-    expect(resultNodeId).toMatch(/^vector_cut_[a-f0-9]{32}$/);
+    const firstResultNodeId = response.resultNodeIds[1];
+    const secondResultNodeId = response.resultNodeIds[3];
+    expect(firstResultNodeId).toMatch(/^vector_cut_[a-f0-9]{32}$/);
+    expect(secondResultNodeId).toMatch(/^vector_cut_[a-f0-9]{32}$/);
     expect(runtime().getSnapshot().document.revision).toBe(beforeRevision + 1);
     expect(runtime().getSnapshot().state.selection).toEqual({
-      nodeIds: ["closed_vector", resultNodeId],
-      anchorNodeId: resultNodeId,
+      nodeIds: [
+        "closed_vector",
+        firstResultNodeId,
+        "closed_vector_second",
+        secondResultNodeId,
+      ],
+      anchorNodeId: secondResultNodeId,
     });
     const retained = runtime().getSnapshot().document.nodesById.closed_vector;
-    const extracted = runtime().getSnapshot().document.nodesById[resultNodeId];
+    const extracted =
+      runtime().getSnapshot().document.nodesById[firstResultNodeId];
+    const secondExtracted =
+      runtime().getSnapshot().document.nodesById[secondResultNodeId];
     expect(retained?.size).toEqual({ width: 100, height: 40 });
     expect(extracted?.size).toEqual({ width: 100, height: 60 });
+    expect(secondExtracted?.size).toEqual({ width: 100, height: 60 });
     expect(screen.queryByText("Editing Badge contour")).not.toBeInTheDocument();
     expect(runtime().getSnapshot().state.history.undo.at(-1)?.label).toBe(
       "Edit vector points",
     );
     expect(runtime().undo()).toMatchObject({ ok: true, mode: "undo" });
     expect(
-      runtime().getSnapshot().document.nodesById[resultNodeId],
+      runtime().getSnapshot().document.nodesById[firstResultNodeId],
+    ).toBeUndefined();
+    expect(
+      runtime().getSnapshot().document.nodesById[secondResultNodeId],
     ).toBeUndefined();
   });
 

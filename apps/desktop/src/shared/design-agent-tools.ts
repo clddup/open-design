@@ -455,6 +455,14 @@ export type DesignVectorToolInput =
       nodeId: string;
       pageId: string;
       start: Point;
+    }
+  | {
+      action: "cut-layers-with-line";
+      end: Point;
+      label: string;
+      nodeIds: string[];
+      pageId: string;
+      start: Point;
     };
 
 // The canonical DesignOperation schema is deliberately exhaustive and is used
@@ -1206,14 +1214,29 @@ const MODEL_ARRANGE_SCHEMA = {
 const MODEL_VECTOR_EDIT_SCHEMA = {
   type: "object",
   description:
-    "Edit one explicit existing editable Vector Network by stable Page, node, path, vertex, and segment IDs from inspection. set-closed requires closed; cut-path requires pathId and at; cut-with-line requires start and end in the inspected node's local coordinate space. The host derives all new geometry, result layer IDs, bounds, and transforms.",
+    "Edit explicit existing editable Vector Networks by stable Page, node, path, vertex, and segment IDs from inspection. set-closed requires closed; cut-path requires pathId and at; cut-with-line cuts one node using node-local points; cut-layers-with-line cuts every crossed nodeId using one finite line in document coordinates. The host derives all new geometry, result layer IDs, bounds, transforms, and one atomic transaction.",
   properties: {
     action: {
-      enum: ["set-closed", "reverse-path", "cut-path", "cut-with-line"],
+      enum: [
+        "set-closed",
+        "reverse-path",
+        "cut-path",
+        "cut-with-line",
+        "cut-layers-with-line",
+      ],
     },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     nodeId: { type: "string", minLength: 1, maxLength: 256 },
+    nodeIds: {
+      type: "array",
+      minItems: 1,
+      maxItems: 500,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 256 },
+      description:
+        "Required only for cut-layers-with-line. Explicit stable Vector layer IDs from inspection, in result order.",
+    },
     pathId: { type: "string", minLength: 1, maxLength: 128 },
     closed: {
       type: "boolean",
@@ -1247,15 +1270,29 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
     start: {
       ...MODEL_VECTOR_LOCAL_POINT_SCHEMA,
       description:
-        "Required only for cut-with-line. Start of the finite cutting line in inspected node-local coordinates.",
+        "Required for line Cut. For cut-with-line this is node-local; for cut-layers-with-line this is document-space.",
     },
     end: {
       ...MODEL_VECTOR_LOCAL_POINT_SCHEMA,
       description:
-        "Required only for cut-with-line. End of the finite cutting line in inspected node-local coordinates.",
+        "Required for line Cut. For cut-with-line this is node-local; for cut-layers-with-line this is document-space.",
     },
   },
-  required: ["action", "label", "pageId", "nodeId"],
+  required: ["action", "label", "pageId"],
+  oneOf: [
+    {
+      properties: {
+        action: {
+          enum: ["set-closed", "reverse-path", "cut-path", "cut-with-line"],
+        },
+      },
+      required: ["nodeId"],
+    },
+    {
+      properties: { action: { const: "cut-layers-with-line" } },
+      required: ["nodeIds"],
+    },
+  ],
   additionalProperties: false,
 } as const;
 
@@ -1849,7 +1886,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_VECTOR_TOOL_NAME,
     description:
-      "Edit one existing non-branching editable Vector Network without asking the model to rewrite vertices, segments, path runs, regions, bounds, transforms, or result layer IDs. set-closed opens or closes one explicit contour; reverse-path reverses one contour while preserving effective closed-region winding; cut-path creates a true break at an inspected vertex or at parameter t on an inspected line/cubic segment; cut-with-line divides supported closed contours along one finite line in inspected node-local coordinates and moves the extracted pieces into one host-created sibling Vector layer. Both divided pieces receive real closing connectors and remain editable. Targets are explicit stable Page, node, path, vertex, and segment IDs returned by inspection, never the send-time or live selection. The host computes geometry through the same versioned vector-edit service as the human canvas, previews the complete change, and applies one atomic undoable EditorRuntime transaction. It rejects missing, locked, stale, out-of-scope, already-satisfied, invalid, branching, tangent, overlapping, open-contour, compound-hole, or ambiguous multi-intersection targets. Multi-Vector-layer Cut, open-stroke division, connect/disconnect, branches, flatten, and outline stroke remain separate capabilities and must not be simulated with this tool.",
+      "Edit one or more existing non-branching editable Vector Networks without asking the model to rewrite vertices, segments, path runs, regions, bounds, transforms, or result layer IDs. set-closed opens or closes one explicit contour; reverse-path reverses one contour while preserving effective closed-region winding; cut-path creates a true break at an inspected vertex or at parameter t on an inspected line/cubic segment; cut-with-line divides one supported closed contour using node-local coordinates; cut-layers-with-line applies one document-space line across explicit Vector layer IDs and atomically divides every crossed target into host-created editable sibling layers. Targets are stable Page, node, path, vertex, and segment IDs returned by inspection, never the send-time or live selection. The host resolves each layer's world transform, computes geometry through the same versioned vector-edit service as the human canvas, previews the complete change, and applies one atomic undoable EditorRuntime transaction. Uncrossed targets are unchanged; missing, locked, stale, out-of-scope, non-invertible, invalid, branching, tangent, overlapping, open-contour, compound-hole, and ambiguous multi-intersection targets are rejected. Open-stroke division, connect/disconnect, branches, flatten, and outline stroke remain separate capabilities and must not be simulated with this tool.",
     inputSchema: MODEL_VECTOR_EDIT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2755,13 +2792,26 @@ export function isDesignVectorToolInput(
     (input.action !== "set-closed" &&
       input.action !== "reverse-path" &&
       input.action !== "cut-path" &&
-      input.action !== "cut-with-line") ||
+      input.action !== "cut-with-line" &&
+      input.action !== "cut-layers-with-line") ||
     !safeLabel(input.label) ||
-    !safeId(input.pageId) ||
-    !safeId(input.nodeId)
+    !safeId(input.pageId)
   ) {
     return false;
   }
+  if (input.action === "cut-layers-with-line") {
+    return (
+      Array.isArray(input.nodeIds) &&
+      input.nodeIds.length >= 1 &&
+      input.nodeIds.length <= 500 &&
+      input.nodeIds.every((nodeId) => safeId(nodeId)) &&
+      new Set(input.nodeIds).size === input.nodeIds.length &&
+      finiteBoundedPoint(input.start, 1_000_000) &&
+      finiteBoundedPoint(input.end, 1_000_000) &&
+      exactKeys(input, ["action", "end", "label", "nodeIds", "pageId", "start"])
+    );
+  }
+  if (!safeId(input.nodeId)) return false;
   const optionalPathId =
     input.pathId === undefined ||
     (typeof input.pathId === "string" && safeId(input.pathId));

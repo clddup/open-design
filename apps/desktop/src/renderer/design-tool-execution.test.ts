@@ -2395,6 +2395,95 @@ describe("Renderer semantic hierarchy tool", () => {
     ).toBeDefined();
   });
 
+  it("divides multiple explicit Vector layers with one document-space line and one undo step", async () => {
+    const sourceRuntime = createClosedEditableVectorRuntime();
+    const document = structuredClone(sourceRuntime.getSnapshot().document);
+    const frame = document.nodesById.frame_welcome;
+    const first = document.nodesById.editable_logo_contour;
+    if (!frame || frame.kind !== "frame" || !first) {
+      throw new Error("Missing multi-Vector Cut fixture");
+    }
+    const second = structuredClone(first);
+    second.id = "editable_logo_shadow";
+    second.name = "Editable logo shadow";
+    second.transform = [1, 0, 0, 1, 220, 40];
+    document.nodesById[second.id] = second;
+    frame.childIds.push(second.id);
+    const runtime = new EditorRuntime(document);
+    runtime.setSelection(["title_welcome"], "title_welcome");
+
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_layer_line_cut",
+        call: {
+          toolCallId: "tool/vector layer line cut",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "cut-layers-with-line",
+            end: { x: 450, y: 144 },
+            label: "Divide both logo contours",
+            nodeIds: ["editable_logo_contour", "editable_logo_shadow"],
+            pageId: "page_welcome",
+            start: { x: 100, y: 144 },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_changed_after_send",
+    );
+
+    const firstResultId = "vector_cut_tool_vector_layer_line_cut_0_0";
+    const secondResultId = "vector_cut_tool_vector_layer_line_cut_1_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "cut-layers-with-line",
+          atomic: true,
+          nodeIds: ["editable_logo_contour", "editable_logo_shadow"],
+          resultNodeIds: [
+            "editable_logo_contour",
+            firstResultId,
+            "editable_logo_shadow",
+            secondResultId,
+          ],
+          revision: 1,
+          targets: [
+            {
+              intersectionCount: 2,
+              nodeId: "editable_logo_contour",
+              resultNodeId: firstResultId,
+            },
+            {
+              intersectionCount: 2,
+              nodeId: "editable_logo_shadow",
+              resultNodeId: secondResultId,
+            },
+          ],
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById[firstResultId],
+    ).toBeDefined();
+    expect(
+      runtime.getSnapshot().document.nodesById[secondResultId],
+    ).toBeDefined();
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById[firstResultId],
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById[secondResultId],
+    ).toBeUndefined();
+  });
+
   it("rejects no-op, locked, out-of-scope, and stale Agent vector edits", async () => {
     const noOpRuntime = createEditableVectorRuntime();
     await expect(
@@ -2453,6 +2542,34 @@ describe("Renderer semantic hierarchy tool", () => {
       executeDesignToolRequest(
         vectorToolRequest("vector_locked", "page_welcome"),
         inheritedLockedRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("vector-edit.locked");
+
+    const lockedLayerCutRuntime = createClosedEditableVectorRuntime();
+    const lockedLayerCutDocument = structuredClone(
+      lockedLayerCutRuntime.getSnapshot().document,
+    );
+    lockedLayerCutDocument.nodesById.editable_logo_contour.locked = true;
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "vector_layer_cut_locked",
+          call: {
+            toolCallId: "tool_vector_layer_cut_locked",
+            toolName: DESIGN_VECTOR_TOOL_NAME,
+            input: {
+              action: "cut-layers-with-line",
+              end: { x: 260, y: 144 },
+              label: "Divide the locked logo contour",
+              nodeIds: ["editable_logo_contour"],
+              pageId: "page_welcome",
+              start: { x: 100, y: 144 },
+            },
+          },
+          context: pageContext,
+        },
+        new EditorRuntime(lockedLayerCutDocument),
         "page_welcome",
       ),
     ).rejects.toThrow("vector-edit.locked");

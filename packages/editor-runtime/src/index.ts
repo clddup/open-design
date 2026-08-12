@@ -62,12 +62,16 @@ export {
 export {
   planDeleteVectorNode,
   planVectorNetworkUpdate,
+  planVectorLayersLineCut,
   planVectorSemanticEdit,
+  resolveVectorEditCollectionScope,
   resolveVectorEditScope,
+  type VectorEditCollectionScope,
   type VectorEditScope,
   type VectorOperationFailureCode,
   type VectorOperationPlan,
   type VectorSemanticEdit,
+  type VectorLayerLineCutTarget,
 } from "./vector-operations.js";
 export {
   nodeReferencesAsset,

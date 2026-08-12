@@ -63,8 +63,8 @@
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 16 项；实机 0 项
 - 限制：Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。
-- 限制：Enter 或双击可进入互不连接的非分支多轮廓节点编辑，支持单选/Shift 多选、节点与手柄拖动、持久化的直角/平滑/镜像/独立模式、明确轮廓的开放/闭合与反转、Delete/Backspace、锁定只读、Done/Escape、精确 bounds，以及每次完成动作一条事务；专用 Agent 矢量工具通过稳定几何 ID 复用同一语义 planner。
-- 限制：Cut 模式（X）既可点击节点或直线/三次曲线创建真实断点，也可用一条有限切线拖过单个 Vector 图层，将受支持且互不连接的闭合轮廓分成两个可独立编辑、拥有真实闭合连接边的兄弟图层。点击 Cut 保留未受影响的稳定拓扑 ID；拖拽 Cut 让原图层保留源 path ID，并由宿主创建结果图层。多 Vector 图层同时切割、开放描边切割、复合孔洞、单轮廓超过两次交点的凹形、连接/分支网络、连接/断开、套索、多节点变换框、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。
+- 限制：Enter 或双击可让一个或多个已选 Vector 图层进入互不连接的非分支多轮廓节点编辑；每层拥有独立 trace、anchors、节点选区和只读状态，Shift 点击加入图层，macOS Command / Windows Control 点击切换成员，命中层成为 active。节点与手柄拖动、持久化直角/平滑/镜像/独立模式、明确轮廓的开放/闭合与反转、Delete/Backspace、Done/Escape、精确 bounds 和每次完成动作一条事务继续可用；专用 Agent 矢量工具通过稳定几何 ID 复用同一语义 planner。
+- 限制：Cut 模式（X）既可点击节点或直线/三次曲线创建真实断点，也可用一条 document-space 有限切线拖过多个 Vector 图层，将每个实际命中的受支持闭合轮廓分成拥有真实闭合连接边、可独立编辑的兄弟图层。宿主解析逐层 world transform，不改未命中层，保留源 path ID、生成结果 layer ID，并把全部受影响 source/result pairs 合并为一次原子 revision 和 undo。开放描边切割、复合孔洞、单轮廓超过两次交点的凹形、连接/分支网络、连接/断开、套索、多节点变换框、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。
 - 限制：受控 OpenDesign SVG metadata 只在通过 schema、拓扑且与标准渲染 path 精确匹配时保留 editable network；没有 metadata 的外部 SVG 保持为精确 path 数据，不猜测可编辑拓扑。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
@@ -114,7 +114,7 @@
 - 实现方：DesignDocument 1.10.0 Vector Network + Geometry Service contract v7 vector-edit/Cut + EditorRuntime planner + Leafer native overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 9 项；实机 0 项
-- 限制：Pen 当前创建单条非分支轮廓；已有节点编辑支持互不连接的非分支多轮廓，并通过人工与 Agent 共用语义提供宿主计算的开放/闭合、反转、点击 Cut 和有限切线拖拽 Cut。当前拖拽子集可在单个 Vector 图层内把受支持的闭合轮廓分成一个保留图层和一个提取兄弟图层。多 Vector 图层同时切割、开放描边切割、复合孔洞、凹形多交点、连接/分支网络、连接/断开、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。
+- 限制：Pen 当前创建单条非分支轮廓；已有节点编辑支持包含互不连接非分支多轮廓的多 Vector layer collection，并通过人工与 Agent 共用语义提供宿主计算的开放/闭合、反转、点击 Cut 和跨多层的 document-space 有限线拖拽 Cut。每个实际命中的受支持图层生成一个保留层和一个提取兄弟层，全部只产生一次原子 revision；viewport 移动不改变切线或 geometry。开放描边切割、复合孔洞、凹形多交点、连接/分支网络、连接/断开、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
 - 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/path_edit.rs)

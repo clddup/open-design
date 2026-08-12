@@ -17,11 +17,17 @@ import {
   type VectorCutLocation,
 } from "@opendesign/geometry-service/vector-edit";
 import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-vector";
+import {
+  getWorldTransform,
+  invertTransform,
+  transformPoint,
+} from "./geometry.js";
 import { isEffectivelyLocked } from "./layer-operations.js";
 
 export type VectorOperationFailureCode =
   | "invalid-geometry"
   | "locked"
+  | "non-invertible"
   | "no-op"
   | "not-found"
   | "unsupported-topology";
@@ -51,6 +57,17 @@ export interface VectorEditScope {
   selectedVertexIds: readonly string[];
 }
 
+export interface VectorEditCollectionScope {
+  activeNodeId: string;
+  nodeIds: readonly string[];
+  nodes: readonly VectorEditScope[];
+}
+
+export interface VectorLayerLineCutTarget {
+  nodeId: string;
+  resultNodeId: string;
+}
+
 export type VectorOperationPlan =
   | {
       ok: true;
@@ -64,6 +81,16 @@ export type VectorOperationPlan =
         intersectionCount: number;
         resultNodeIds: readonly [string, string];
         retainedPathIds: readonly string[];
+      };
+      layerLineCutResult?: {
+        resultNodeIds: readonly string[];
+        targets: readonly {
+          extractedPathIds: readonly string[];
+          intersectionCount: number;
+          nodeId: string;
+          resultNodeId: string;
+          retainedPathIds: readonly string[];
+        }[];
       };
     }
   | {
@@ -86,7 +113,55 @@ export function resolveVectorEditScope(
   ) {
     return null;
   }
-  const node = document.nodesById[editNodeId];
+  return resolveVectorNodeEditScope(
+    document,
+    pageId,
+    editNodeId,
+    selectedVertexIds,
+  );
+}
+
+export function resolveVectorEditCollectionScope(
+  document: DesignDocument,
+  pageId: string,
+  selectionNodeIds: readonly string[],
+  editNodeIds: readonly string[],
+  activeNodeId: string | null,
+  selectedVertexIdsByNode: Readonly<Record<string, readonly string[]>>,
+): VectorEditCollectionScope | null {
+  if (
+    editNodeIds.length === 0 ||
+    new Set(editNodeIds).size !== editNodeIds.length ||
+    selectionNodeIds.length !== editNodeIds.length ||
+    !sameStringList(selectionNodeIds, editNodeIds) ||
+    !activeNodeId ||
+    !editNodeIds.includes(activeNodeId)
+  ) {
+    return null;
+  }
+  const nodes = editNodeIds.map((nodeId) =>
+    resolveVectorNodeEditScope(
+      document,
+      pageId,
+      nodeId,
+      selectedVertexIdsByNode[nodeId] ?? [],
+    ),
+  );
+  if (nodes.some((scope) => scope === null)) return null;
+  return {
+    activeNodeId,
+    nodeIds: [...editNodeIds],
+    nodes: nodes as VectorEditScope[],
+  };
+}
+
+function resolveVectorNodeEditScope(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+  selectedVertexIds: readonly string[],
+): VectorEditScope | null {
+  const node = document.nodesById[nodeId];
   if (
     !node ||
     (node.kind !== "path" && node.kind !== "vector") ||
@@ -134,6 +209,16 @@ export function resolveVectorEditScope(
     ...(readOnlyReason ? { readOnlyReason } : {}),
     selectedVertexIds: selected,
   };
+}
+
+function sameStringList(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 export function planVectorNetworkUpdate(
@@ -251,6 +336,165 @@ export function planVectorSemanticEdit(
     return vectorOperationFailure(edited);
   }
   return planVectorNetworkUpdate(document, pageId, nodeId, edited.network);
+}
+
+/**
+ * Divides every explicitly targeted Vector layer crossed by one finite line in
+ * document coordinates. Per-layer geometry remains node-local; the trusted
+ * host owns transform inversion, result IDs, sibling insertion order and the
+ * one atomic transaction returned to human and Agent callers.
+ */
+export function planVectorLayersLineCut(
+  document: DesignDocument,
+  pageId: string,
+  targets: readonly VectorLayerLineCutTarget[],
+  start: Point,
+  end: Point,
+): VectorOperationPlan {
+  if (targets.length === 0 || targets.length > 500) {
+    return {
+      ok: false,
+      code: "invalid-geometry",
+      message: "Vector layer Cut requires between 1 and 500 explicit targets",
+    };
+  }
+  const nodeIds = new Set<string>();
+  const resultNodeIds = new Set<string>();
+  for (const target of targets) {
+    if (
+      !target.nodeId ||
+      !target.resultNodeId ||
+      nodeIds.has(target.nodeId) ||
+      resultNodeIds.has(target.resultNodeId)
+    ) {
+      return {
+        ok: false,
+        code: "invalid-geometry",
+        message: "Vector layer Cut requires unique source and result node IDs",
+      };
+    }
+    nodeIds.add(target.nodeId);
+    resultNodeIds.add(target.resultNodeId);
+  }
+
+  const affected: Array<{
+    index: number;
+    operations: readonly DesignOperation[];
+    parentKey: string;
+    result: NonNullable<
+      Extract<VectorOperationPlan, { ok: true }>["lineCutResult"]
+    >;
+    sourceIndex: number;
+    target: VectorLayerLineCutTarget;
+  }> = [];
+  for (const [index, target] of targets.entries()) {
+    const node = document.nodesById[target.nodeId];
+    if (
+      !node ||
+      (node.kind !== "path" && node.kind !== "vector") ||
+      !("network" in node.properties) ||
+      !nodeBelongsToPage(document, pageId, target.nodeId)
+    ) {
+      return {
+        ok: false,
+        code: "not-found",
+        message: `Editable vector ${target.nodeId} does not exist on page ${pageId}`,
+      };
+    }
+    const world = getWorldTransform(document, target.nodeId);
+    const inverse = world ? invertTransform(world) : null;
+    if (!inverse) {
+      return {
+        ok: false,
+        code: "non-invertible",
+        message: `Vector layer ${target.nodeId} has a non-invertible world transform`,
+      };
+    }
+    const plan = planVectorSemanticEdit(document, pageId, target.nodeId, {
+      action: "cut-with-line",
+      start: transformPoint(start, inverse),
+      end: transformPoint(end, inverse),
+      resultNodeId: target.resultNodeId,
+    });
+    if (!plan.ok) {
+      if (plan.code === "no-op") continue;
+      return plan;
+    }
+    if (!plan.lineCutResult) {
+      return {
+        ok: false,
+        code: "invalid-geometry",
+        message: `Vector layer ${target.nodeId} did not produce a line Cut result`,
+      };
+    }
+    const insertion = plan.operations.find(
+      (operation) =>
+        operation.type === "insert_element" &&
+        operation.node.id === target.resultNodeId,
+    );
+    if (!insertion || insertion.type !== "insert_element") {
+      return {
+        ok: false,
+        code: "invalid-geometry",
+        message: `Vector layer ${target.nodeId} did not produce a sibling insertion`,
+      };
+    }
+    affected.push({
+      index,
+      operations: plan.operations,
+      parentKey: insertion.parentId ?? `page:${insertion.pageId}`,
+      result: plan.lineCutResult,
+      sourceIndex: insertion.index - 1,
+      target,
+    });
+  }
+  if (affected.length === 0) {
+    return {
+      ok: false,
+      code: "no-op",
+      message: "Vector layer Cut does not cross any targeted layer",
+    };
+  }
+
+  const parentOrder: string[] = [];
+  const byParent = new Map<string, typeof affected>();
+  for (const entry of affected) {
+    let entries = byParent.get(entry.parentKey);
+    if (!entries) {
+      entries = [];
+      byParent.set(entry.parentKey, entries);
+      parentOrder.push(entry.parentKey);
+    }
+    entries.push(entry);
+  }
+  const operations = parentOrder.flatMap((parentKey) =>
+    [...(byParent.get(parentKey) ?? [])]
+      .sort(
+        (left, right) =>
+          right.sourceIndex - left.sourceIndex || left.index - right.index,
+      )
+      .flatMap((entry) => entry.operations),
+  );
+  const orderedResults = [...affected].sort(
+    (left, right) => left.index - right.index,
+  );
+  return {
+    ok: true,
+    operations,
+    layerLineCutResult: {
+      resultNodeIds: orderedResults.flatMap((entry) => [
+        entry.target.nodeId,
+        entry.target.resultNodeId,
+      ]),
+      targets: orderedResults.map((entry) => ({
+        extractedPathIds: entry.result.extractedPathIds,
+        intersectionCount: entry.result.intersectionCount,
+        nodeId: entry.target.nodeId,
+        resultNodeId: entry.target.resultNodeId,
+        retainedPathIds: entry.result.retainedPathIds,
+      })),
+    },
+  };
 }
 
 function planVectorLineCut(

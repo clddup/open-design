@@ -77,7 +77,7 @@ export interface LeaferVectorCutRequest {
 
 export interface LeaferVectorLineCutRequest {
   end: Point;
-  nodeId: string;
+  nodeIds: readonly string[];
   start: Point;
 }
 
@@ -92,7 +92,7 @@ export type LeaferVectorCutResponse =
 export type LeaferVectorLineCutResponse =
   | {
       ok: true;
-      resultNodeIds: readonly [string, string];
+      resultNodeIds: readonly string[];
     }
   | { ok: false };
 
@@ -107,8 +107,16 @@ export interface LeaferEngineCallbacks {
     request: LeaferVectorLineCutRequest,
   ): LeaferVectorLineCutResponse;
   onVectorEdit?(request: LeaferVectorEditRequest): boolean;
+  onVectorEditActiveNodeChange?(nodeId: string): void;
+  onVectorEditScopeChange?(request: {
+    mode: "add" | "toggle";
+    nodeId: string;
+  }): void;
   onVectorEditExit?(): void;
-  onVectorEditSelectionChange?(vertexIds: readonly string[]): void;
+  onVectorEditSelectionChange?(
+    nodeId: string,
+    vertexIds: readonly string[],
+  ): void;
   onViewportChange(viewport: ViewportState): void;
   onWarning?(warning: LeaferFidelityWarning): void;
   onWarningsChange?(warnings: readonly LeaferFidelityWarning[]): void;
@@ -121,9 +129,12 @@ export interface LeaferBooleanEditScope {
 }
 
 export interface LeaferVectorEditScope {
-  nodeId: string;
-  readOnly: boolean;
-  selectedVertexIds: readonly string[];
+  activeNodeId: string;
+  nodes: readonly {
+    nodeId: string;
+    readOnly: boolean;
+    selectedVertexIds: readonly string[];
+  }[];
   tool: LeaferVectorEditTool;
 }
 

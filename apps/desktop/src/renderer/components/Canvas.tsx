@@ -15,10 +15,11 @@ import type { EditorRuntime, EditorSnapshot } from "@opendesign/editor-runtime";
 import {
   navigateBooleanSelection,
   planDeleteVectorNode,
+  planVectorLayersLineCut,
   planVectorNetworkUpdate,
   planVectorSemanticEdit,
   resolveBooleanEditScope,
-  resolveVectorEditScope,
+  resolveVectorEditCollectionScope,
   screenToDocument,
 } from "@opendesign/editor-runtime";
 import { Glyph } from "@opendesign/ui";
@@ -98,10 +99,13 @@ export function Canvas({
     readonly LeaferFidelityWarning[]
   >([]);
   const [vectorEditState, setVectorEditState] = useState<{
-    nodeId: string;
-    selectedVertexIds: readonly string[];
+    activeNodeId: string;
+    nodeIds: readonly string[];
+    selectedVertexIdsByNode: Readonly<Record<string, readonly string[]>>;
     tool: LeaferVectorEditTool;
   } | null>(null);
+  const vectorEditStateRef = useRef(vectorEditState);
+  vectorEditStateRef.current = vectorEditState;
   const tool = isTool(snapshot.state.tool) ? snapshot.state.tool : "select";
   const booleanEditScope = useMemo(
     () =>
@@ -112,14 +116,15 @@ export function Canvas({
       ),
     [activePageId, snapshot.document, snapshot.state.selection.nodeIds],
   );
-  const vectorEditScope = useMemo(
+  const vectorEditCollectionScope = useMemo(
     () =>
-      resolveVectorEditScope(
+      resolveVectorEditCollectionScope(
         snapshot.document,
         activePageId,
         snapshot.state.selection.nodeIds,
-        tool === "select" ? (vectorEditState?.nodeId ?? null) : null,
-        vectorEditState?.selectedVertexIds ?? [],
+        tool === "select" ? (vectorEditState?.nodeIds ?? []) : [],
+        tool === "select" ? (vectorEditState?.activeNodeId ?? null) : null,
+        vectorEditState?.selectedVertexIdsByNode ?? {},
       ),
     [
       activePageId,
@@ -129,10 +134,19 @@ export function Canvas({
       vectorEditState,
     ],
   );
+  const vectorEditScope = useMemo(
+    () =>
+      vectorEditCollectionScope?.nodes.find(
+        (scope) => scope.nodeId === vectorEditCollectionScope.activeNodeId,
+      ) ?? null,
+    [vectorEditCollectionScope],
+  );
 
   useEffect(() => {
-    if (vectorEditState && !vectorEditScope) setVectorEditState(null);
-  }, [vectorEditScope, vectorEditState]);
+    if (vectorEditState && !vectorEditCollectionScope) {
+      setVectorEditState(null);
+    }
+  }, [vectorEditCollectionScope, vectorEditState]);
 
   useEffect(() => {
     if (activeAgentRunId === null) {
@@ -142,29 +156,101 @@ export function Canvas({
 
   const enterVectorEdit = useCallback(
     (nodeIds: readonly string[]) => {
-      if (nodeIds.length !== 1) return false;
-      const node = runtime.getSnapshot().document.nodesById[nodeIds[0] ?? ""];
-      if (
-        !node ||
-        (node.kind !== "path" && node.kind !== "vector") ||
-        !("network" in node.properties)
-      ) {
+      if (nodeIds.length === 0) return false;
+      const current = runtime.getSnapshot();
+      const editableVectorNodeIds = nodeIds.filter((nodeId) => {
+        const node = current.document.nodesById[nodeId];
+        return (
+          node !== undefined &&
+          (node.kind === "path" || node.kind === "vector") &&
+          "network" in node.properties
+        );
+      });
+      if (editableVectorNodeIds.length !== nodeIds.length) {
         return false;
       }
-      setVectorEditState({
-        nodeId: node.id,
-        selectedVertexIds: [],
-        tool: "move",
-      });
+      const activeNodeId = current.state.selection.anchorNodeId;
+      const activeVectorNodeId =
+        activeNodeId && editableVectorNodeIds.includes(activeNodeId)
+          ? activeNodeId
+          : editableVectorNodeIds.at(-1)!;
+      const nextState = {
+        activeNodeId: activeVectorNodeId,
+        nodeIds: [...editableVectorNodeIds],
+        selectedVertexIdsByNode: Object.fromEntries(
+          editableVectorNodeIds.map((nodeId) => [nodeId, []]),
+        ),
+        tool: "move" as const,
+      };
+      vectorEditStateRef.current = nextState;
+      setVectorEditState(nextState);
       return true;
     },
     [runtime],
   );
 
   const exitVectorEdit = useCallback(() => {
+    vectorEditStateRef.current = null;
     setVectorEditState(null);
     requestAnimationFrame(() => host.current?.focus());
   }, []);
+
+  const changeVectorEditScope = useCallback(
+    (request: { mode: "add" | "toggle"; nodeId: string }) => {
+      const current = vectorEditStateRef.current;
+      if (!current) return;
+      const containsNode = current.nodeIds.includes(request.nodeId);
+      if (
+        request.mode === "toggle" &&
+        containsNode &&
+        current.nodeIds.length === 1
+      ) {
+        vectorEditStateRef.current = null;
+        setVectorEditState(null);
+        return;
+      }
+      const nodeIds =
+        request.mode === "toggle" && containsNode
+          ? current.nodeIds.filter((nodeId) => nodeId !== request.nodeId)
+          : containsNode
+            ? [...current.nodeIds]
+            : [...current.nodeIds, request.nodeId];
+      const selectedVertexIdsByNode = Object.fromEntries(
+        nodeIds.map((nodeId) => [
+          nodeId,
+          current.selectedVertexIdsByNode[nodeId] ?? [],
+        ]),
+      );
+      const activeNodeId = nodeIds.includes(request.nodeId)
+        ? request.nodeId
+        : current.activeNodeId === request.nodeId
+          ? nodeIds.at(-1)!
+          : current.activeNodeId;
+      const snapshot = runtime.getSnapshot();
+      if (
+        !resolveVectorEditCollectionScope(
+          snapshot.document,
+          activePageId,
+          nodeIds,
+          nodeIds,
+          activeNodeId,
+          selectedVertexIdsByNode,
+        )
+      ) {
+        return;
+      }
+      const next = {
+        ...current,
+        activeNodeId,
+        nodeIds,
+        selectedVertexIdsByNode,
+      };
+      vectorEditStateRef.current = next;
+      setVectorEditState(next);
+      runtime.setSelection(nodeIds, activeNodeId);
+    },
+    [activePageId, runtime],
+  );
 
   const selectBooleanTarget = useCallback(
     (
@@ -337,7 +423,7 @@ export function Canvas({
         | { action: "reverse-path"; pathId?: string },
     ) => {
       const current = runtime.getSnapshot();
-      const nodeId = vectorEditState?.nodeId;
+      const nodeId = vectorEditState?.activeNodeId;
       if (!nodeId) return false;
       const plan = planVectorSemanticEdit(
         current.document,
@@ -359,7 +445,7 @@ export function Canvas({
       applyOperations,
       onTransactionError,
       runtime,
-      vectorEditState?.nodeId,
+      vectorEditState?.activeNodeId,
     ],
   );
 
@@ -398,10 +484,13 @@ export function Canvas({
         return { ok: false };
       }
       setVectorEditState((state) =>
-        state?.nodeId === request.nodeId
+        state?.nodeIds.includes(request.nodeId)
           ? {
               ...state,
-              selectedVertexIds: [...cutResult.cutVertexIds],
+              selectedVertexIdsByNode: {
+                ...state.selectedVertexIdsByNode,
+                [request.nodeId]: [...cutResult.cutVertexIds],
+              },
             }
           : state,
       );
@@ -417,19 +506,18 @@ export function Canvas({
   const applyVectorLineCut = useCallback(
     (request: LeaferVectorLineCutRequest): LeaferVectorLineCutResponse => {
       const current = runtime.getSnapshot();
-      const resultNodeId = `vector_cut_${crypto.randomUUID().replaceAll("-", "")}`;
-      const plan = planVectorSemanticEdit(
+      const targets = request.nodeIds.map((nodeId) => ({
+        nodeId,
+        resultNodeId: `vector_cut_${crypto.randomUUID().replaceAll("-", "")}`,
+      }));
+      const plan = planVectorLayersLineCut(
         current.document,
         activePageId,
-        request.nodeId,
-        {
-          action: "cut-with-line",
-          end: request.end,
-          resultNodeId,
-          start: request.start,
-        },
+        targets,
+        request.start,
+        request.end,
       );
-      if (!plan.ok || !plan.lineCutResult) {
+      if (!plan.ok || !plan.layerLineCutResult) {
         onTransactionError(
           plan.ok ? t("canvas.vectorLineCutUnavailable") : plan.message,
         );
@@ -440,14 +528,14 @@ export function Canvas({
         operations: [...plan.operations],
       });
       if (!accepted) return { ok: false };
-      const resultNodeIds = plan.lineCutResult.resultNodeIds;
+      const resultNodeIds = plan.layerLineCutResult.resultNodeIds;
       const applied = runtime.getSnapshot().document;
       if (resultNodeIds.some((nodeId) => !applied.nodesById[nodeId])) {
         onTransactionError(t("canvas.vectorLineCutApplyMissing"));
         return { ok: false };
       }
       setVectorEditState(null);
-      runtime.setSelection([...resultNodeIds], resultNodeIds[1]);
+      runtime.setSelection([...resultNodeIds], resultNodeIds.at(-1));
       requestAnimationFrame(() => host.current?.focus());
       return { ok: true, resultNodeIds };
     },
@@ -632,14 +720,31 @@ export function Canvas({
       },
       onVectorCut: applyVectorCut,
       onVectorEdit: applyVectorEdit,
+      onVectorEditActiveNodeChange: (nodeId) => {
+        setVectorEditState((current) => {
+          if (!current?.nodeIds.includes(nodeId)) return current;
+          const next = { ...current, activeNodeId: nodeId };
+          vectorEditStateRef.current = next;
+          return next;
+        });
+      },
       onVectorEditExit: exitVectorEdit,
+      onVectorEditScopeChange: changeVectorEditScope,
       onVectorLineCut: applyVectorLineCut,
-      onVectorEditSelectionChange: (selectedVertexIds) => {
-        setVectorEditState((current) =>
-          current
-            ? { ...current, selectedVertexIds: [...selectedVertexIds] }
-            : current,
-        );
+      onVectorEditSelectionChange: (nodeId, selectedVertexIds) => {
+        setVectorEditState((current) => {
+          if (!current?.nodeIds.includes(nodeId)) return current;
+          const next = {
+            ...current,
+            activeNodeId: nodeId,
+            selectedVertexIdsByNode: {
+              ...current.selectedVertexIdsByNode,
+              [nodeId]: [...selectedVertexIds],
+            },
+          };
+          vectorEditStateRef.current = next;
+          return next;
+        });
       },
       onWarningsChange: (warnings) => {
         setFidelityWarnings((current) =>
@@ -675,6 +780,7 @@ export function Canvas({
     applyVectorCut,
     applyVectorEdit,
     applyVectorLineCut,
+    changeVectorEditScope,
     createNode,
     createVectorNode,
     exitVectorEdit,
@@ -708,12 +814,15 @@ export function Canvas({
       reducedMotion,
       selection: snapshot.state.selection,
       tool,
-      ...(vectorEditScope
+      ...(vectorEditCollectionScope
         ? {
             vectorEditScope: {
-              nodeId: vectorEditScope.nodeId,
-              readOnly: vectorEditScope.readOnly,
-              selectedVertexIds: vectorEditScope.selectedVertexIds,
+              activeNodeId: vectorEditCollectionScope.activeNodeId,
+              nodes: vectorEditCollectionScope.nodes.map((scope) => ({
+                nodeId: scope.nodeId,
+                readOnly: scope.readOnly,
+                selectedVertexIds: scope.selectedVertexIds,
+              })),
               tool: vectorEditState?.tool ?? "move",
             },
           }
@@ -733,7 +842,7 @@ export function Canvas({
     snapshot.state.viewport,
     tool,
     vectorEditState?.tool,
-    vectorEditScope,
+    vectorEditCollectionScope,
   ]);
 
   const seriousBooleanWarnings = fidelityWarnings.filter(
@@ -762,6 +871,7 @@ export function Canvas({
   const editScopeVector = vectorEditScope
     ? snapshot.document.nodesById[vectorEditScope.nodeId]
     : undefined;
+  const vectorEditLayerCount = vectorEditCollectionScope?.nodes.length ?? 0;
   const editScopeVectorClosed =
     editScopeVector &&
     (editScopeVector.kind === "path" || editScopeVector.kind === "vector") &&
@@ -826,6 +936,11 @@ export function Canvas({
                     })}
                   </strong>
                   <small>
+                    {vectorEditLayerCount > 1
+                      ? `${t("canvas.vectorEditingLayers", {
+                          count: vectorEditLayerCount,
+                        })} · `
+                      : ""}
                     {vectorEditScope.readOnly
                       ? t("canvas.vectorEditingReadOnly")
                       : vectorEditState?.tool === "cut"

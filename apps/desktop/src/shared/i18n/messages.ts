@@ -595,6 +595,7 @@ export const enMessages = {
   "canvas.booleanEditingReadOnly": "Read-only · The Boolean group is locked",
   "canvas.exitBooleanEditing": "Finish editing Boolean sources",
   "canvas.vectorEditing": "Editing {{name}}",
+  "canvas.vectorEditingLayers": "{{count}} vector layers",
   "canvas.vectorEditingHint":
     "{{count}} points selected · Shift-click selects more",
   "canvas.vectorCutHint":
@@ -1469,6 +1470,7 @@ const zhCNMessages = {
   "canvas.booleanEditingReadOnly": "只读 · 布尔组已锁定",
   "canvas.exitBooleanEditing": "完成布尔源图层编辑",
   "canvas.vectorEditing": "正在编辑{{name}}",
+  "canvas.vectorEditingLayers": "{{count}} 个矢量图层",
   "canvas.vectorEditingHint": "已选择 {{count}} 个节点 · Shift 点击可多选",
   "canvas.vectorCutHint":
     "点击节点或路径创建断点，或拖拽穿过对象将其分为独立图层",

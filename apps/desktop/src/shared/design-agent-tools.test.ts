@@ -1498,6 +1498,14 @@ describe("design Agent tool contract", () => {
       pageId: "page_brand",
       start: { x: -8, y: 48 },
     };
+    const layerLineCut = {
+      action: "cut-layers-with-line",
+      end: { x: 512, y: 240 },
+      label: "Divide the selected logo contours",
+      nodeIds: ["logo_contour", "logo_shadow"],
+      pageId: "page_brand",
+      start: { x: 16, y: 240 },
+    };
 
     expect(tool).toMatchObject({
       risk: "design_write",
@@ -1506,7 +1514,7 @@ describe("design Agent tool contract", () => {
     expect(tool?.description).toContain(
       "stable Page, node, path, vertex, and segment IDs",
     );
-    expect(tool?.description).toContain("host-created sibling Vector layer");
+    expect(tool?.description).toContain("host-created editable sibling layers");
     expect(tool?.description).toContain("one atomic undoable");
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, close)).toBe(
       true,
@@ -1520,6 +1528,9 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, lineCut)).toBe(
       true,
     );
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, layerLineCut),
+    ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
         ...cut,
@@ -1572,6 +1583,24 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
         ...lineCut,
         resultNodeId: "model_authored_result",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...layerLineCut,
+        nodeIds: ["logo_contour", "logo_contour"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...layerLineCut,
+        nodeIds: [],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...layerLineCut,
+        resultNodeIds: ["model_authored_result"],
       }),
     ).toBe(false);
   });

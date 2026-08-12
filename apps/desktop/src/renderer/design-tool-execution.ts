@@ -29,6 +29,7 @@ import {
   planSetBooleanOperation,
   planUngroupBooleanGroup,
   planUngroupNode,
+  planVectorLayersLineCut,
   planVectorSemanticEdit,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
@@ -745,35 +746,50 @@ async function executeDesignToolRequestUnsafe(
     const safeToolCallId =
       request.call.toolCallId.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 180) ||
       "tool";
-    const resultNodeId = `vector_cut_${safeToolCallId}_${document.revision}`;
-    const plan = planVectorSemanticEdit(
-      document,
-      input.pageId,
-      input.nodeId,
-      input.action === "set-closed"
-        ? {
-            action: input.action,
-            closed: input.closed,
-            ...(input.pathId ? { pathId: input.pathId } : {}),
-          }
-        : input.action === "reverse-path"
-          ? {
-              action: input.action,
-              ...(input.pathId ? { pathId: input.pathId } : {}),
-            }
-          : input.action === "cut-path"
-            ? {
-                action: input.action,
-                at: input.at,
-                pathId: input.pathId,
-              }
-            : {
-                action: input.action,
-                end: input.end,
-                resultNodeId,
-                start: input.start,
-              },
-    );
+    const plan =
+      input.action === "cut-layers-with-line"
+        ? planVectorLayersLineCut(
+            document,
+            input.pageId,
+            input.nodeIds.map((nodeId, index) => ({
+              nodeId,
+              resultNodeId:
+                `vector_cut_${safeToolCallId}_${index}_${document.revision}`.slice(
+                  0,
+                  256,
+                ),
+            })),
+            input.start,
+            input.end,
+          )
+        : planVectorSemanticEdit(
+            document,
+            input.pageId,
+            input.nodeId,
+            input.action === "set-closed"
+              ? {
+                  action: input.action,
+                  closed: input.closed,
+                  ...(input.pathId ? { pathId: input.pathId } : {}),
+                }
+              : input.action === "reverse-path"
+                ? {
+                    action: input.action,
+                    ...(input.pathId ? { pathId: input.pathId } : {}),
+                  }
+                : input.action === "cut-path"
+                  ? {
+                      action: input.action,
+                      at: input.at,
+                      pathId: input.pathId,
+                    }
+                  : {
+                      action: input.action,
+                      end: input.end,
+                      resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
+                      start: input.start,
+                    },
+          );
     if (!plan.ok) {
       throw new Error(`vector-edit.${plan.code}: ${plan.message}`);
     }
@@ -808,7 +824,11 @@ async function executeDesignToolRequestUnsafe(
     if (!result.ok) {
       throw designTransactionToolError(result.error, transaction.commands);
     }
-    const applied = runtime.getSnapshot().document.nodesById[input.nodeId];
+    const singleNodeId =
+      input.action === "cut-layers-with-line" ? undefined : input.nodeId;
+    const applied = singleNodeId
+      ? runtime.getSnapshot().document.nodesById[singleNodeId]
+      : undefined;
     const network =
       applied &&
       (applied.kind === "path" || applied.kind === "vector") &&
@@ -816,7 +836,8 @@ async function executeDesignToolRequestUnsafe(
         ? applied.properties.network
         : undefined;
     const pathId =
-      input.action === "cut-with-line"
+      input.action === "cut-with-line" ||
+      input.action === "cut-layers-with-line"
         ? undefined
         : (input.pathId ?? network?.paths[0]?.id);
     const path = network?.paths.find((candidate) => candidate.id === pathId);
@@ -829,7 +850,9 @@ async function executeDesignToolRequestUnsafe(
           action: input.action,
           label: input.label,
           pageId: input.pageId,
-          nodeId: input.nodeId,
+          ...(input.action === "cut-layers-with-line"
+            ? { nodeIds: input.nodeIds }
+            : { nodeId: input.nodeId }),
           ...(pathId ? { pathId, closed: path?.closed } : {}),
           ...(plan.cutResult
             ? {
@@ -843,6 +866,12 @@ async function executeDesignToolRequestUnsafe(
                 intersectionCount: plan.lineCutResult.intersectionCount,
                 resultNodeIds: plan.lineCutResult.resultNodeIds,
                 retainedPathIds: plan.lineCutResult.retainedPathIds,
+              }
+            : {}),
+          ...(plan.layerLineCutResult
+            ? {
+                resultNodeIds: plan.layerLineCutResult.resultNodeIds,
+                targets: plan.layerLineCutResult.targets,
               }
             : {}),
           revision: result.revision.revision,

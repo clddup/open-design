@@ -40,7 +40,7 @@
       "version": "1.0.0",
       "source": "https://github.com/google/skia/tree/main/modules/pathkit",
       "license": "BSD-3-Clause",
-      "productionStatus": "boolean-pen-disjoint-multi-contour-and-drag-cut-native-gate-pending",
+      "productionStatus": "boolean-pen-multi-vector-edit-and-drag-cut-native-gate-pending",
       "entrypoint": "@opendesign/geometry-service/vector-path",
       "editableVectorEntrypoint": "@opendesign/geometry-service/editable-vector",
       "vectorEditEntrypoint": "@opendesign/geometry-service/vector-edit",

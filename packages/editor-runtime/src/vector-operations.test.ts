@@ -8,8 +8,10 @@ import { createWelcomeDocument } from "./document.js";
 import { EditorRuntime } from "./runtime.js";
 import {
   planDeleteVectorNode,
+  planVectorLayersLineCut,
   planVectorNetworkUpdate,
   planVectorSemanticEdit,
+  resolveVectorEditCollectionScope,
   resolveVectorEditScope,
   type VectorSemanticEdit,
 } from "./vector-operations.js";
@@ -138,6 +140,69 @@ describe("vector editing runtime plans", () => {
       readOnly: true,
       readOnlyReason: "The vector or one of its ancestors is locked",
     });
+  });
+
+  it("resolves an ordered multi-Vector edit scope with one active layer", () => {
+    const document = documentWithVector();
+    const frame = document.nodesById.frame_welcome;
+    const first = document.nodesById.vector_editable;
+    if (!frame || frame.kind !== "frame" || !first) {
+      throw new Error("Missing multi-layer vector fixture");
+    }
+    const second = structuredClone(first);
+    second.id = "vector_second";
+    document.nodesById[second.id] = second;
+    frame.childIds.push(second.id);
+    expect(
+      resolveVectorEditCollectionScope(
+        document,
+        "page_welcome",
+        [first.id, second.id],
+        [first.id, second.id],
+        second.id,
+        {
+          [first.id]: ["vertex_a"],
+          [second.id]: ["vertex_b"],
+        },
+      ),
+    ).toMatchObject({
+      activeNodeId: "vector_second",
+      nodeIds: ["vector_editable", "vector_second"],
+      nodes: [
+        { nodeId: "vector_editable", selectedVertexIds: ["vertex_a"] },
+        { nodeId: "vector_second", selectedVertexIds: ["vertex_b"] },
+      ],
+    });
+    expect(
+      resolveVectorEditCollectionScope(
+        document,
+        "page_welcome",
+        [second.id, first.id],
+        [first.id, second.id],
+        second.id,
+        {},
+      ),
+    ).toBeNull();
+    expect(
+      resolveVectorEditCollectionScope(
+        document,
+        "page_welcome",
+        [first.id, second.id],
+        [first.id, second.id],
+        "missing",
+        {},
+      ),
+    ).toBeNull();
+    expect(
+      resolveVectorEditCollectionScope(
+        document,
+        "page_welcome",
+        [first.id, first.id],
+        [first.id, first.id],
+        first.id,
+        {},
+      ),
+    ).toBeNull();
   });
 
   it("normalizes edited geometry and composes its offset through the node transform", () => {
@@ -506,6 +571,191 @@ describe("vector editing runtime plans", () => {
         resultNodeId: "vector_cut_result",
       }),
     ).toMatchObject({ ok: false, code: "locked" });
+  });
+
+  it("cuts multiple explicit Vector layers in document coordinates with one stable sibling order", () => {
+    const document = documentWithVector();
+    const frame = document.nodesById.frame_welcome;
+    const first = document.nodesById.vector_editable;
+    if (
+      !frame ||
+      frame.kind !== "frame" ||
+      !first ||
+      first.kind !== "vector" ||
+      !("network" in first.properties)
+    ) {
+      throw new Error("Missing multi-layer vector fixture");
+    }
+    first.transform = [1, 0, 0, 1, 40, 40];
+    first.properties.network = closedNetwork();
+    const second = structuredClone(first);
+    second.id = "vector_second";
+    second.name = "Second curve";
+    second.transform = [1, 0, 0, 1, 180, 40];
+    document.nodesById[second.id] = second;
+    frame.childIds.push(second.id);
+
+    const plan = planVectorLayersLineCut(
+      document,
+      "page_welcome",
+      [
+        { nodeId: first.id, resultNodeId: "vector_first_cut" },
+        { nodeId: second.id, resultNodeId: "vector_second_cut" },
+      ],
+      { x: 100, y: 144 },
+      { x: 400, y: 144 },
+    );
+    expect(plan).toMatchObject({
+      ok: true,
+      layerLineCutResult: {
+        resultNodeIds: [
+          "vector_editable",
+          "vector_first_cut",
+          "vector_second",
+          "vector_second_cut",
+        ],
+        targets: [
+          {
+            nodeId: "vector_editable",
+            resultNodeId: "vector_first_cut",
+            intersectionCount: 2,
+          },
+          {
+            nodeId: "vector_second",
+            resultNodeId: "vector_second_cut",
+            intersectionCount: 2,
+          },
+        ],
+      },
+      operations: [
+        { type: "update_properties", nodeId: "vector_second" },
+        {
+          type: "insert_element",
+          index: 6,
+          node: { id: "vector_second_cut" },
+        },
+        { type: "update_properties", nodeId: "vector_editable" },
+        {
+          type: "insert_element",
+          index: 5,
+          node: { id: "vector_first_cut" },
+        },
+      ],
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    const runtime = new EditorRuntime(document);
+    const before = runtime.getSnapshot();
+    expect(
+      runtime.apply({
+        transactionId: "cut_multiple_vectors",
+        documentId: before.document.documentId,
+        baseRevision: before.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Cut multiple vector layers",
+        commands: [...plan.operations],
+      }),
+    ).toMatchObject({ ok: true });
+    const appliedFrame = runtime.getSnapshot().document.nodesById.frame_welcome;
+    expect(
+      appliedFrame?.kind === "frame" ? appliedFrame.childIds.slice(-4) : [],
+    ).toEqual([
+      "vector_editable",
+      "vector_first_cut",
+      "vector_second",
+      "vector_second_cut",
+    ]);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.vector_first_cut,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.vector_second_cut,
+    ).toBeUndefined();
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+  });
+
+  it("skips un-crossed Vector targets and rejects duplicate or non-invertible targets", () => {
+    const document = documentWithVector();
+    const frame = document.nodesById.frame_welcome;
+    const first = document.nodesById.vector_editable;
+    if (
+      !frame ||
+      frame.kind !== "frame" ||
+      !first ||
+      first.kind !== "vector" ||
+      !("network" in first.properties)
+    ) {
+      throw new Error("Missing multi-layer vector fixture");
+    }
+    first.transform = [1, 0, 0, 1, 40, 40];
+    first.properties.network = closedNetwork();
+    const second = structuredClone(first);
+    second.id = "vector_second";
+    second.transform = [1, 0, 0, 1, 300, 40];
+    document.nodesById[second.id] = second;
+    frame.childIds.push(second.id);
+    const partial = planVectorLayersLineCut(
+      document,
+      "page_welcome",
+      [
+        { nodeId: first.id, resultNodeId: "vector_first_cut" },
+        { nodeId: second.id, resultNodeId: "vector_second_cut" },
+      ],
+      { x: 100, y: 144 },
+      { x: 260, y: 144 },
+    );
+    expect(partial).toMatchObject({
+      ok: true,
+      layerLineCutResult: {
+        resultNodeIds: ["vector_editable", "vector_first_cut"],
+      },
+    });
+    expect(
+      planVectorLayersLineCut(
+        document,
+        "page_welcome",
+        [{ nodeId: "missing_vector", resultNodeId: "missing_vector_cut" }],
+        { x: 100, y: 144 },
+        { x: 500, y: 144 },
+      ),
+    ).toMatchObject({ ok: false, code: "not-found" });
+    expect(
+      planVectorLayersLineCut(
+        document,
+        "page_welcome",
+        [
+          { nodeId: first.id, resultNodeId: "same_result" },
+          { nodeId: second.id, resultNodeId: "same_result" },
+        ],
+        { x: 100, y: 144 },
+        { x: 500, y: 144 },
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-geometry" });
+    second.locked = true;
+    expect(
+      planVectorLayersLineCut(
+        document,
+        "page_welcome",
+        [
+          { nodeId: first.id, resultNodeId: "vector_first_cut" },
+          { nodeId: second.id, resultNodeId: "vector_second_cut" },
+        ],
+        { x: 100, y: 144 },
+        { x: 500, y: 144 },
+      ),
+    ).toMatchObject({ ok: false, code: "locked" });
+    second.locked = false;
+    second.transform = [0, 0, 0, 0, 300, 40];
+    expect(
+      planVectorLayersLineCut(
+        document,
+        "page_welcome",
+        [{ nodeId: second.id, resultNodeId: "vector_second_cut" }],
+        { x: 100, y: 144 },
+        { x: 500, y: 144 },
+      ),
+    ).toMatchObject({ ok: false, code: "non-invertible" });
   });
 
   it("resolves the active contour from point selection and rejects stale cut IDs", () => {

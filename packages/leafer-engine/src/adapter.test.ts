@@ -2860,7 +2860,9 @@ describe("Leafer engine selection bounds synchronization", () => {
     app.emit("pointer.move", pointerEvent(24, 12, anchors[0]!));
     app.emit("pointer.up", pointerEvent(24, 12, anchors[0]!));
 
-    expect(onVectorEditSelectionChange).toHaveBeenCalledWith(["vertex_a"]);
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", [
+      "vertex_a",
+    ]);
     expect(onVectorEdit).toHaveBeenCalledTimes(1);
     const request = onVectorEdit.mock.calls[0]?.[0];
     expect(request).toMatchObject({
@@ -2936,7 +2938,7 @@ describe("Leafer engine selection bounds synchronization", () => {
       nodeId: "editable_curve",
       pathId: "path_open",
     });
-    expect(onVectorEditSelectionChange).toHaveBeenCalledWith([
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", [
       "vertex_edit_1",
       "vertex_edit_2",
     ]);
@@ -2951,7 +2953,10 @@ describe("Leafer engine selection bounds synchronization", () => {
       ...input,
       vectorEditScope: {
         ...input.vectorEditScope!,
-        readOnly: true,
+        nodes: input.vectorEditScope!.nodes.map((item) => ({
+          ...item,
+          readOnly: true,
+        })),
         tool: "cut",
       },
     });
@@ -2961,7 +2966,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
-  it("previews a node-local drag Cut, cancels with Escape, and submits only on pointer up", async () => {
+  it("previews a document-space drag Cut, cancels with Escape, and submits only on pointer up", async () => {
     const onVectorLineCut = vi.fn(() => ({
       ok: true as const,
       resultNodeIds: ["editable_curve", "vector_cut_result"] as const,
@@ -3007,7 +3012,10 @@ describe("Leafer engine selection bounds synchronization", () => {
       ...input,
       vectorEditScope: {
         ...input.vectorEditScope!,
-        readOnly: true,
+        nodes: input.vectorEditScope!.nodes.map((item) => ({
+          ...item,
+          readOnly: true,
+        })),
         tool: "cut",
       },
     });
@@ -3032,7 +3040,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     app.emit("pointer.up", pointerEvent(140, 20, app.tree));
     expect(onVectorLineCut).toHaveBeenCalledWith({
       end: { x: 140, y: 20 },
-      nodeId: "editable_curve",
+      nodeIds: ["editable_curve"],
       start: { x: -20, y: 20 },
     });
     expect((guide as FakePath & { visible: boolean }).visible).toBe(false);
@@ -3045,6 +3053,98 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     emitWindowKey("Escape");
     expect(onVectorEditExit).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
+  it("keeps multiple Vector layers in one edit scope and submits one shared line Cut", async () => {
+    const onVectorEditActiveNodeChange = vi.fn();
+    const onVectorEditScopeChange = vi.fn();
+    const onVectorEditSelectionChange = vi.fn();
+    const onVectorLineCut = vi.fn(() => ({
+      ok: true as const,
+      resultNodeIds: [
+        "editable_curve",
+        "editable_curve_cut",
+        "editable_curve_second",
+        "editable_curve_second_cut",
+      ],
+    }));
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEditActiveNodeChange,
+      onVectorEditScopeChange,
+      onVectorEditSelectionChange,
+      onVectorLineCut,
+    });
+    const input = withMultiVectorEditFixture(createInput());
+    adapter.sync({
+      ...input,
+      selection: {
+        nodeIds: ["editable_curve"],
+        anchorNodeId: "editable_curve",
+      },
+      vectorEditScope: {
+        activeNodeId: "editable_curve",
+        nodes: [input.vectorEditScope!.nodes[0]!],
+        tool: "move",
+      },
+    });
+    const app = leaferHarness.app;
+    const firstPath = app && findElement(app.tree, "editable_curve");
+    const secondPath = app && findElement(app.tree, "editable_curve_second");
+    if (!app || !firstPath?.parent || !secondPath?.parent) {
+      throw new Error("Missing multi-Vector fixture");
+    }
+    app.emit(
+      "pointer.down",
+      pointerEvent(0, 0, secondPath, { shiftKey: true }),
+    );
+    expect(onVectorEditScopeChange).toHaveBeenCalledWith({
+      mode: "add",
+      nodeId: "editable_curve_second",
+    });
+
+    adapter.sync(input);
+    app.emit("pointer.down", pointerEvent(0, 0, secondPath, { ctrlKey: true }));
+    expect(onVectorEditScopeChange).toHaveBeenLastCalledWith({
+      mode: "toggle",
+      nodeId: "editable_curve_second",
+    });
+    const overlays = firstPath.parent.children.filter(
+      (child): child is FakeGroup =>
+        child instanceof FakeGroup &&
+        child.children.filter(
+          (control): control is FakeEllipse => control instanceof FakeEllipse,
+        ).length === 3,
+    );
+    expect(overlays).toHaveLength(2);
+    const secondAnchor = overlays[1]?.children.find(
+      (child): child is FakeEllipse => child instanceof FakeEllipse,
+    );
+    if (!secondAnchor) throw new Error("Missing second Vector anchor");
+
+    app.emit("pointer.down", pointerEvent(0, 0, secondAnchor));
+    app.emit("pointer.up", pointerEvent(0, 0, secondAnchor));
+    expect(onVectorEditActiveNodeChange).toHaveBeenCalledWith(
+      "editable_curve_second",
+    );
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith(
+      "editable_curve_second",
+      ["vertex_a"],
+    );
+
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope!, tool: "cut" },
+    });
+    app.emit("pointer.down", pointerEvent(-20, 20, app.tree));
+    app.emit("pointer.move", pointerEvent(300, 20, app.tree));
+    app.emit("pointer.up", pointerEvent(300, 20, app.tree));
+    expect(onVectorLineCut).toHaveBeenCalledWith({
+      end: { x: 300, y: 20 },
+      nodeIds: ["editable_curve", "editable_curve_second"],
+      start: { x: -20, y: 20 },
+    });
     adapter.dispose();
   });
 
@@ -3362,9 +3462,56 @@ function withVectorEditFixture(
       anchorNodeId: "editable_curve",
     },
     vectorEditScope: {
-      nodeId: "editable_curve",
-      readOnly: false,
-      selectedVertexIds,
+      activeNodeId: "editable_curve",
+      nodes: [
+        {
+          nodeId: "editable_curve",
+          readOnly: false,
+          selectedVertexIds,
+        },
+      ],
+      tool: "move",
+    },
+  };
+}
+
+function withMultiVectorEditFixture(
+  input: LeaferEngineSyncInput,
+): LeaferEngineSyncInput {
+  const single = withVectorEditFixture(input);
+  const document = structuredClone(single.document);
+  const frame = document.nodesById.frame_welcome;
+  const first = document.nodesById.editable_curve;
+  if (!frame || frame.kind !== "frame" || !first) {
+    throw new Error("Missing editable Vector fixture");
+  }
+  const second = structuredClone(first);
+  second.id = "editable_curve_second";
+  second.name = "Second editable curve";
+  second.transform = [1, 0, 0, 1, 220, 60];
+  document.nodesById[second.id] = second;
+  frame.childIds.push(second.id);
+  return {
+    ...single,
+    document,
+    selection: {
+      nodeIds: [first.id, second.id],
+      anchorNodeId: second.id,
+    },
+    vectorEditScope: {
+      activeNodeId: first.id,
+      nodes: [
+        {
+          nodeId: first.id,
+          readOnly: false,
+          selectedVertexIds: [],
+        },
+        {
+          nodeId: second.id,
+          readOnly: false,
+          selectedVertexIds: [],
+        },
+      ],
       tool: "move",
     },
   };
@@ -3452,13 +3599,15 @@ function pointerEvent(
   x: number,
   y: number,
   target: FakeElement,
-  modifiers: { shiftKey?: boolean } = {},
+  modifiers: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean } = {},
 ) {
   return {
     altKey: false,
     clientX: x,
     clientY: y,
+    ctrlKey: modifiers.ctrlKey ?? false,
     getInnerPoint: () => ({ x, y }),
+    metaKey: modifiers.metaKey ?? false,
     shiftKey: modifiers.shiftKey ?? false,
     target,
   };
