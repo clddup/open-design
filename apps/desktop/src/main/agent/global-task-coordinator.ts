@@ -1850,9 +1850,7 @@ function nodeBelongsToPage(
 }
 
 function isConflictCode(code: string): boolean {
-  return ["conflict", "revision", "stale"].some((part) =>
-    code.toLowerCase().includes(part),
-  );
+  return /conflict|revision|stale/i.test(code);
 }
 
 function validRevision(value: number | undefined): value is number {

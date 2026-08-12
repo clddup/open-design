@@ -662,7 +662,7 @@ describe("OpenDesign Pi tool adapter", () => {
     });
 
     const failure = result.events.find(
-      (event) =>
+      (event): event is Extract<AgentEvent, { type: "tool.failed" }> =>
         event.type === "tool.failed" && event.toolCallId === "invalid_move_1",
     );
     expect(failure).toMatchObject({

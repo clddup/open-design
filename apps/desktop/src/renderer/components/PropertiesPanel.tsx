@@ -9,7 +9,6 @@ import type {
   LineEndpoint,
   MaskMode,
   Paint,
-  UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import type {
   ArrangeOperation,
@@ -35,13 +34,9 @@ import type {
   SvgInterchangeFeedback,
   SvgOperationStatus,
 } from "../features/import-export/types";
+import type { UpdatePropertiesPatch } from "../features/editor/types";
 import type { SvgWorkerExportSettings } from "../svg-interchange-contract";
 import styles from "./PropertiesPanel.module.scss";
-
-export type UpdatePropertiesPatch = Omit<
-  UpdatePropertiesCommand,
-  "commandId" | "nodeId" | "type"
->;
 
 export interface ComponentInspectorSource {
   node: DesignNode;

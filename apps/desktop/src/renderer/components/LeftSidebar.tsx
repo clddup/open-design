@@ -24,6 +24,12 @@ import {
 } from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
 import type { AssetActionResult, DesignAssetReference } from "../design-assets";
+import type {
+  LayerDropPosition,
+  LayerReparentRequest,
+  LayerReparentResult,
+  PageActionResult,
+} from "../features/editor/types";
 import { useI18n } from "../i18n";
 import type { SidebarTab } from "../state/editor";
 import { AssetsPanel } from "./AssetsPanel";
@@ -68,19 +74,6 @@ type TreeEntry = {
   inheritedLocked: boolean;
 };
 
-export type LayerDropPosition = "before" | "inside" | "after";
-
-export type LayerReparentRequest = {
-  nodeIds: readonly string[];
-  parentId: string | null;
-  index: number;
-  position: LayerDropPosition;
-  targetNodeId: string;
-};
-
-export type LayerReparentResult =
-  { ok: true; warning?: string } | { ok: false; error: string };
-
 type ActiveLayerDrop = {
   nodeId: string;
   position: LayerDropPosition;
@@ -92,9 +85,6 @@ type ActivePageDrop = {
   pageId: string;
   position: PageDropPosition;
 };
-
-export type PageActionResult =
-  { ok: true; pageId: string; name?: string } | { ok: false; error: string };
 
 function sameParentSelection(
   document: DesignDocument,

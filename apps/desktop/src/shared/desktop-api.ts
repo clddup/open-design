@@ -1288,11 +1288,8 @@ function hasControlCharacter(value: string): boolean {
 }
 
 function isBoundedSvgContents(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= SVG_MAX_CHARACTERS
-  );
+  if (typeof value !== "string") return false;
+  return value.length > 0 && value.length <= SVG_MAX_CHARACTERS;
 }
 
 function isSuggestedFileName(value: unknown): value is string {
