@@ -158,6 +158,12 @@ Renderer 不直接接触 Node.js、Electron、模型密钥或引擎私有 API。
 
 这些名称描述目标边界，不保证相应目录当前已完整实现。仓库中的包结构可以逐步承载这些职责，但应保持依赖方向从产品层指向契约层，而不是反向引用桌面实现。
 
+### 6.1 当前模块依赖与治理边界
+
+生产代码采用有向无环依赖：版本化 Contracts 位于底层；Geometry、Text、Image、Component 和 Import/Export 等纯 service 依赖 Contracts；EditorRuntime 组合 Contracts/service 并保持唯一权威状态；Leafer adapter 只建立当前 revision 的投影；Main、Preload、Agent 和 Renderer 通过可校验 shared bridge 隔离；Renderer feature 最后组合 Runtime、adapter 和窄宿主能力。Renderer、Shared 与 Contracts 均不能反向取得 Electron/Node/Main 实现或渲染后端私有对象。
+
+当前已建立 `pnpm architecture:check`：冻结 workspace 生产依赖 DAG 和 Electron 目录边界；新生产 TypeScript 模块默认不超过 800 行；审计出的 28 个历史超大模块使用只能下降的逐文件预算。行数只是增长报警器，治理单元仍是包含状态、异步生命周期、错误恢复和测试的业务垂直切片。首个切片已将 Renderer SVG/位图导入导出工作流与诊断工具从 `App.tsx` 提取；其他大模块仍在后续阶段，不能描述为治理完成。完整裁决和顺序见 [ADR-0046](adr/0046-project-module-boundaries-and-incremental-governance.md)。
+
 ## 7. Electron 进程模型
 
 ### 7.1 Renderer

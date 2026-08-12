@@ -33,6 +33,7 @@ macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。
 
 ```text
 pnpm format:check   passed
+pnpm architecture:check passed
 pnpm agent-core:check passed
 pnpm capabilities:check passed
 pnpm fixtures:check passed
@@ -40,7 +41,7 @@ pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
 ├── package tests   50 files / 451 tests
-└── desktop tests   57 files / 508 tests
+└── desktop tests   59 files / 514 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main

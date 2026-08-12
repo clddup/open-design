@@ -74,3 +74,7 @@
 | [0040](adr/0040-multi-vector-edit-and-document-space-cut.md)             | 已接受     | 多 Vector 编辑集合、文档坐标切线与原子多层 Cut                     |
 | [0041](adr/0041-versioned-open-stroke-drag-cut.md)                       | 已接受     | 开放描边多交点 Cut、无闭合分片与 SVG 往返                          |
 | [0042](adr/0042-versioned-compound-hole-cut-redistribution.md)           | 已接受     | 复合孔洞 Cut 重分配、有效 loop 方向与 sibling 往返                 |
+| [0043](adr/0043-bounded-provider-reconnect.md)                           | 已接受     | Provider SSE 失败有界重连与 attempt 事件隔离                       |
+| [0044](adr/0044-versioned-crossed-hole-and-concave-cut.md)               | 已接受     | 穿孔与闭合凹形多交点 Cut                                           |
+| [0045](adr/0045-versioned-components-and-instances.md)                   | 已接受     | 版本化 Component Main、Instance、Override 与派生投影               |
+| [0046](adr/0046-project-module-boundaries-and-incremental-governance.md) | 已接受     | 项目模块 DAG、进程边界、增长门禁与分阶段治理                       |

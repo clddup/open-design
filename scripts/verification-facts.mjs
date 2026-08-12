@@ -115,6 +115,7 @@ const blocks = {
   tests: [
     "```text",
     "pnpm format:check   passed",
+    "pnpm architecture:check passed",
     "pnpm agent-core:check passed",
     "pnpm capabilities:check passed",
     "pnpm fixtures:check passed",

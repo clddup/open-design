@@ -8,10 +8,8 @@ import type {
 } from "@opendesign/editor-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
-import {
-  PropertiesPanel,
-  type SvgInterchangeFeedback,
-} from "./PropertiesPanel";
+import { PropertiesPanel } from "./PropertiesPanel";
+import type { SvgInterchangeFeedback } from "../features/import-export/types";
 
 function renderPanel(
   options: {

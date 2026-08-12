@@ -19,11 +19,8 @@ import {
   MAX_ARRANGEMENT_SPACING,
   MAX_SVG_EXPORT_PADDING,
 } from "@opendesign/editor-runtime";
-import type { SvgInterchangeIssue } from "@opendesign/import-export-service";
 import {
   planRasterExportDimensions,
-  type RasterExportBackground,
-  type RasterExportFormat,
   type RasterExportResampling,
   type RasterExportSize,
 } from "@opendesign/import-export-service/raster";
@@ -31,6 +28,13 @@ import { Button, Glyph, IconButton, type GlyphName } from "@opendesign/ui";
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
+import type {
+  ExportFormat,
+  RasterExportFeedback,
+  RasterExportSettings,
+  SvgInterchangeFeedback,
+  SvgOperationStatus,
+} from "../features/import-export/types";
 import type { SvgWorkerExportSettings } from "../svg-interchange-contract";
 import styles from "./PropertiesPanel.module.scss";
 
@@ -38,35 +42,6 @@ export type UpdatePropertiesPatch = Omit<
   UpdatePropertiesCommand,
   "commandId" | "nodeId" | "type"
 >;
-
-export type ExportFormat = "svg" | RasterExportFormat;
-
-export interface RasterExportSettings {
-  format: RasterExportFormat;
-  size: RasterExportSize;
-  background: RasterExportBackground;
-  quality: number;
-  resampling: RasterExportResampling;
-}
-
-export interface SvgOperationStatus {
-  kind: "import" | "export" | "raster-export";
-  name: string;
-}
-
-export interface SvgInterchangeFeedback {
-  kind: "import" | "export";
-  name: string;
-  issues: readonly SvgInterchangeIssue[];
-}
-
-export interface RasterExportFeedback {
-  name: string;
-  format: RasterExportFormat;
-  width: number;
-  height: number;
-  byteSize: number;
-}
 
 export interface ComponentInspectorSource {
   node: DesignNode;

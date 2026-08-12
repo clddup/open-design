@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "productionModuleDefaultLineBudget": 800,
+  "desktopLayers": {
+    "main": {
+      "root": "apps/desktop/src/main",
+      "forbiddenRelativeLayers": ["agent", "preload", "renderer"]
+    },
+    "renderer": {
+      "root": "apps/desktop/src/renderer",
+      "forbiddenBuiltins": ["electron", "node:"],
+      "forbiddenRelativeLayers": ["agent", "main", "preload"]
+    },
+    "shared": {
+      "root": "apps/desktop/src/shared",
+      "forbiddenBuiltins": ["electron", "node:"],
+      "forbiddenRelativeLayers": ["agent", "main", "preload", "renderer"]
+    },
+    "preload": {
+      "root": "apps/desktop/src/preload",
+      "allowedBuiltins": ["electron"],
+      "forbiddenRelativeLayers": ["agent", "main", "renderer"]
+    },
+    "agent": {
+      "root": "apps/desktop/src/agent",
+      "forbiddenBuiltins": ["electron"],
+      "forbiddenRelativeLayers": ["main", "preload", "renderer"]
+    }
+  },
+  "workspaceDependencies": {
+    "@opendesign/agent-contracts": [],
+    "@opendesign/agent-runtime": [
+      "@opendesign/agent-contracts",
+      "@opendesign/model-gateway",
+      "@opendesign/session-store",
+      "@opendesign/tool-runtime"
+    ],
+    "@opendesign/component-service": ["@opendesign/design-contracts"],
+    "@opendesign/design-capabilities": [],
+    "@opendesign/design-contracts": [],
+    "@opendesign/design-engine": ["@opendesign/design-contracts"],
+    "@opendesign/discovery": [],
+    "@opendesign/editor-runtime": [
+      "@opendesign/component-service",
+      "@opendesign/design-contracts",
+      "@opendesign/geometry-service",
+      "@opendesign/import-export-service",
+      "@opendesign/text-service"
+    ],
+    "@opendesign/geometry-service": ["@opendesign/design-contracts"],
+    "@opendesign/image-service": ["@opendesign/design-contracts"],
+    "@opendesign/import-export-service": [
+      "@opendesign/design-contracts",
+      "@opendesign/geometry-service"
+    ],
+    "@opendesign/leafer-engine": [
+      "@opendesign/component-service",
+      "@opendesign/design-contracts",
+      "@opendesign/geometry-service",
+      "@opendesign/image-service",
+      "@opendesign/import-export-service",
+      "@opendesign/text-service"
+    ],
+    "@opendesign/mcp-host": [],
+    "@opendesign/mcp-server": ["@opendesign/design-engine"],
+    "@opendesign/model-gateway": [],
+    "@opendesign/session-store": [],
+    "@opendesign/text-service": [],
+    "@opendesign/tool-runtime": [],
+    "@opendesign/ui": [],
+    "@opendesign/workspace-contracts": []
+  },
+  "productionModuleLineBudgets": {
+    "apps/desktop/src/main/index.ts": 1930,
+    "apps/desktop/src/main/agent/global-task-coordinator.ts": 2037,
+    "apps/desktop/src/main/model/model-provider-host.ts": 912,
+    "apps/desktop/src/main/project/project-host.ts": 1209,
+    "apps/desktop/src/renderer/App.tsx": 2882,
+    "apps/desktop/src/renderer/components/AgentTimeline.tsx": 1994,
+    "apps/desktop/src/renderer/components/Canvas.tsx": 1338,
+    "apps/desktop/src/renderer/components/LeftSidebar.tsx": 908,
+    "apps/desktop/src/renderer/components/PropertiesPanel.tsx": 2978,
+    "apps/desktop/src/renderer/components/SettingsPage.tsx": 1353,
+    "apps/desktop/src/renderer/design-tool-execution.ts": 2101,
+    "apps/desktop/src/shared/design-agent-tools.ts": 3611,
+    "apps/desktop/src/shared/desktop-api.ts": 1360,
+    "apps/desktop/src/shared/i18n/messages.ts": 1827,
+    "packages/agent-contracts/src/index.ts": 983,
+    "packages/agent-runtime/src/index.ts": 1110,
+    "packages/agent-runtime/src/pi-run-event-adapter.ts": 900,
+    "packages/agent-runtime/src/pi-tool-adapter.ts": 821,
+    "packages/design-contracts/src/index.ts": 2045,
+    "packages/editor-runtime/src/layer-operations.ts": 979,
+    "packages/editor-runtime/src/runtime.ts": 1932,
+    "packages/geometry-service/src/boolean-resolver.ts": 870,
+    "packages/geometry-service/src/vector-edit.ts": 2762,
+    "packages/import-export-service/src/svg.ts": 3012,
+    "packages/leafer-engine/src/adapter.ts": 4179,
+    "packages/leafer-engine/src/mapping.ts": 1089,
+    "packages/model-gateway/src/index.ts": 855,
+    "packages/session-store/src/index.ts": 1377
+  }
+}

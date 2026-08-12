@@ -25,6 +25,22 @@ provider adapter → 渲染/导出 → 保存重开 → undo/redo → 自动化�
 
 P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。后续阶段扩展同一批样张，不为新能力重新创建无法比较的一次性演示。
 
+## 项目级架构与模块治理（持续轨）
+
+治理按完整业务所有权逐步执行，不按行数机械拆分，也不一次性重写画布、Agent 或 Runtime。`pnpm architecture:check` 已进入根 verify，固定 Electron 目录边界、20 个 workspace 包的生产依赖 DAG、新模块 800 行默认上限和 28 个历史大模块的只减不增预算；边界变更必须更新 ADR 与机器基线，不能为了通过门禁隐藏依赖。
+
+- [x] Phase 1：从 Renderer `App.tsx` 提取完整 Import/Export feature 和共享诊断模块。feature 自己拥有 SVG/PNG/JPEG/WebP 设置、operation/feedback、互斥、AbortController、原生命令订阅、切出 editor/unmount 取消和诊断；操作开始时读取唯一 EditorRuntime 的最新 snapshot，不复制文档状态。`App.tsx` 当前从 3278 行降至 2882 行，定向 feature/App/Properties 测试覆盖行为。
+- [ ] Phase 2：拆分 Agent Conversation/Timeline 的 durable/live projection、composer draft/attachment 和 active Run 生命周期；必须保持自动滚动、历史单调合并、审批、取消和恢复为单一事实。
+- [ ] Phase 3：提取 Page、Layer 与 editor command controllers；保留一个 Runtime、一个 revision/history 和明确 document identity，不建立 UI mirror store。
+- [ ] Phase 4：按 Appearance、Text、Image、Component、Export 的事务边界拆分 PropertiesPanel；section view 不拥有文档副本。
+- [ ] Phase 5：按 inspection、plan/review、hierarchy/layout、vector、image、component、import/export tool family 拆分 `design-agent-tools`，公共 schema/version 与执行语义保持一致。
+- [ ] Phase 6：拆分 Main bootstrap、窗口生命周期和 IPC registration；Preload 继续只暴露小型类型化能力，Windows/macOS 行为共用窄 adapter。
+- [ ] Phase 7：按 command executor、diff/history 与领域 planner 协作边界收缩 EditorRuntime 聚合模块。
+- [ ] Phase 8：拆分 Leafer mapping、interaction、reconcile、generation presentation 与资源生命周期；Leafer 仍只是可丢弃投影。
+- [ ] Phase 9：按 parse、normalize、fidelity、filter/mask/text/vector 与 serialize family 收缩 SVG 聚合 service。
+
+每阶段先锁定现有行为，迁移完整状态与取消/错误生命周期，补定向测试，再运行全仓 verify 并独立提交。Phase 1 只建立治理方法和首个切片，不代表剩余大模块已完成。规范见 [ADR-0046](adr/0046-project-module-boundaries-and-incremental-governance.md)。
+
 ## P0-A：macOS 与 Windows 一级平台可用
 
 当前仓库已配置 `.github/workflows/native-desktop.yml`：macOS 与 Windows 原生 runner 分别执行共享 `pnpm verify`、目标平台 protected build/安装包、产物内容校验，并直接启动打包后的 `OpenDesign.app` / `OpenDesign.exe` 执行无窗口 Agent smoke；不启动开发 Electron 入口。原生 workflow [31384519288](https://github.com/clddup/open-design/actions/runs/31384519288) 已在两个平台通过并上传产物，macOS arm64 也已在本机生成未签名 DMG/ZIP。自动化 packaged smoke 不能替代干净安装、签名、升级/卸载和人工 GUI 产品 smoke，下面的完整 P0-A 发布门禁仍未完成。

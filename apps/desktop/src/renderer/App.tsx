@@ -17,7 +17,6 @@ import {
   componentSourcePathKey,
   resolveComponentInstance,
 } from "@opendesign/component-service";
-import { RASTER_EXPORT_VERSION } from "@opendesign/import-export-service/raster";
 import {
   canCreateBooleanGroup,
   canDeleteNodes,
@@ -63,7 +62,6 @@ import {
   type CSSProperties,
 } from "react";
 import type {
-  DiagnosticContext,
   DiagnosticEvent,
   ProjectDesignFile,
   RecentProject,
@@ -85,11 +83,6 @@ import { SettingsPage } from "./components/SettingsPage";
 import { Statusbar } from "./components/Statusbar";
 import {
   PropertiesPanel,
-  type ExportFormat,
-  type RasterExportFeedback,
-  type RasterExportSettings,
-  type SvgInterchangeFeedback,
-  type SvgOperationStatus,
   type UpdatePropertiesPatch,
 } from "./components/PropertiesPanel";
 import { Titlebar } from "./components/Titlebar";
@@ -104,7 +97,6 @@ import {
 import { useI18n } from "./i18n";
 import { executeDesignToolRequest } from "./design-tool-execution";
 import { captureDesignTarget } from "./design-capture";
-import { exportDesignRaster, suggestRasterExportName } from "./raster-export";
 import {
   ProjectAutosaveCoordinator,
   type ProjectAutosaveTarget,
@@ -118,17 +110,10 @@ import {
   projectGenerationPlanPresentationEvent,
 } from "./generation-presentation";
 import { isTool, type SidebarTab, type Tool } from "./state/editor";
-import type { SvgWorkerExportSettings } from "./svg-interchange-contract";
-import {
-  captureSvgImportTarget,
-  normalizeSvgExportRoots,
-  planHumanSvgImport,
-  runSvgExportInWorker,
-  runSvgImportInWorker,
-  suggestSvgExportName,
-} from "./svg-interchange";
 import { useDesignAssetActions } from "./use-design-asset-actions";
 import { useComponentActions } from "./use-component-actions";
+import { useImportExportWorkflow } from "./features/import-export/use-import-export-workflow";
+import { reportRendererError } from "./diagnostics";
 
 const LAYER_ORDER_ACTIONS: readonly LayerOrderAction[] = [
   "bring-forward",
@@ -229,28 +214,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     null,
   );
   const [editorError, setEditorError] = useState<string | null>(null);
-  const [svgExportSettings, setSvgExportSettings] =
-    useState<SvgWorkerExportSettings>({
-      includeLayerIds: false,
-      padding: 0,
-    });
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("png");
-  const [rasterExportSettings, setRasterExportSettings] =
-    useState<RasterExportSettings>({
-      format: "png",
-      size: { mode: "scale", value: 1 },
-      background: { mode: "transparent" },
-      quality: 0.9,
-      resampling: "smooth",
-    });
-  const [svgOperation, setSvgOperation] = useState<SvgOperationStatus | null>(
-    null,
-  );
-  const [svgFeedback, setSvgFeedback] = useState<SvgInterchangeFeedback | null>(
-    null,
-  );
-  const [rasterFeedback, setRasterFeedback] =
-    useState<RasterExportFeedback | null>(null);
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
   );
@@ -270,7 +233,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
   const designToolControllers = useRef(new Map<string, AbortController>());
-  const svgOperationController = useRef<AbortController | null>(null);
   const autosaveCallbacks = useRef<{
     onError: (target: ProjectAutosaveTarget, error: unknown) => void;
     onSaved: (target: ProjectAutosaveTarget, saved: ProjectDesignFile) => void;
@@ -931,6 +893,18 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     },
     [applyCommands, t],
   );
+
+  const importExport = useImportExportWorkflow({
+    activeDesignFileId: workspaceSnapshot.activeDesignFileId,
+    activePageId,
+    activeProjectId: workspaceSnapshot.activeProjectId,
+    applyCommands,
+    editorActive: view === "editor",
+    runtime,
+    setEditorError,
+    showProperties: () => setUtilityTab("properties"),
+    t,
+  });
 
   const {
     createComponentFromSelection,
@@ -2031,322 +2005,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     }
   };
 
-  const beginSvgOperation = useCallback((status: SvgOperationStatus) => {
-    if (svgOperationController.current) return null;
-    const controller = new AbortController();
-    svgOperationController.current = controller;
-    setSvgOperation(status);
-    setSvgFeedback(null);
-    setRasterFeedback(null);
-    setEditorError(null);
-    setUtilityTab("properties");
-    return controller;
-  }, []);
-
-  const finishSvgOperation = useCallback((controller: AbortController) => {
-    if (svgOperationController.current !== controller) return;
-    svgOperationController.current = null;
-    setSvgOperation(null);
-  }, []);
-
-  const cancelSvgOperation = useCallback(() => {
-    svgOperationController.current?.abort();
-  }, []);
-
-  const importSvg = useCallback(async () => {
-    const desktop = window.desktop;
-    if (!desktop || view !== "editor" || svgOperationController.current) return;
-    const frozen = runtime.getSnapshot();
-    let target;
-    try {
-      target = captureSvgImportTarget(
-        frozen.document,
-        activePageId,
-        frozen.state.selection.nodeIds,
-        frozen.state.viewport,
-      );
-    } catch (error) {
-      setEditorError(
-        reportRendererError(
-          "svg_import_target_invalid",
-          error,
-          t("error.importSvg"),
-          {
-            projectId: workspaceSnapshot.activeProjectId,
-            designFileId: workspaceSnapshot.activeDesignFileId,
-          },
-        ),
-      );
-      return;
-    }
-    const controller = beginSvgOperation({ kind: "import", name: "SVG" });
-    if (!controller) return;
-    try {
-      const file = await desktop.openSvgFile();
-      if (!file || controller.signal.aborted) return;
-      setSvgOperation({ kind: "import", name: file.name });
-      const operationId = `svg_${crypto.randomUUID().replaceAll("-", "")}`;
-      const imported = await runSvgImportInWorker(
-        {
-          svg: file.contents,
-          idPrefix: operationId,
-          name: file.name,
-        },
-        controller.signal,
-      );
-      const current = runtime.getSnapshot().document;
-      const plan = planHumanSvgImport(current, imported, target, operationId);
-      if (!plan.ok) throw new Error(plan.message);
-      if (
-        !applyCommands(
-          t("history.importSvg", { name: file.name }),
-          plan.commands,
-        )
-      )
-        return;
-      runtime.setSelection([plan.rootNodeId], plan.rootNodeId);
-      setSvgFeedback({
-        kind: "import",
-        name: file.name,
-        issues: imported.issues.map((issue) => ({ ...issue })),
-      });
-    } catch (error) {
-      if (!isAbortError(error)) {
-        setEditorError(
-          reportRendererError(
-            "svg_import_failed",
-            error,
-            t("error.importSvg"),
-            {
-              projectId: workspaceSnapshot.activeProjectId,
-              designFileId: workspaceSnapshot.activeDesignFileId,
-            },
-          ),
-        );
-      }
-    } finally {
-      finishSvgOperation(controller);
-    }
-  }, [
-    activePageId,
-    applyCommands,
-    beginSvgOperation,
-    finishSvgOperation,
-    runtime,
-    t,
-    view,
-    workspaceSnapshot.activeDesignFileId,
-    workspaceSnapshot.activeProjectId,
-  ]);
-
-  const exportSvg = useCallback(async () => {
-    const desktop = window.desktop;
-    if (!desktop || view !== "editor" || svgOperationController.current) return;
-    const frozen = runtime.getSnapshot();
-    if (frozen.state.selection.nodeIds.length === 0) {
-      setUtilityTab("properties");
-      setEditorError(t("error.exportSvgSelection"));
-      return;
-    }
-    let rootNodeIds: string[];
-    let suggestedName: string;
-    try {
-      rootNodeIds = normalizeSvgExportRoots(
-        frozen.document,
-        frozen.state.selection.nodeIds,
-      );
-      suggestedName = suggestSvgExportName(
-        frozen.document,
-        activePageId,
-        rootNodeIds,
-      );
-    } catch (error) {
-      setEditorError(
-        reportRendererError(
-          "svg_export_target_invalid",
-          error,
-          t("error.exportSvg"),
-          {
-            projectId: workspaceSnapshot.activeProjectId,
-            designFileId: workspaceSnapshot.activeDesignFileId,
-          },
-        ),
-      );
-      return;
-    }
-    const controller = beginSvgOperation({
-      kind: "export",
-      name: suggestedName,
-    });
-    if (!controller) return;
-    try {
-      const result = await runSvgExportInWorker(
-        {
-          document: frozen.document,
-          pageId: activePageId,
-          rootNodeIds,
-          settings: { ...svgExportSettings },
-        },
-        controller.signal,
-      );
-      if (controller.signal.aborted) return;
-      const saved = await desktop.saveSvgFile({
-        suggestedName,
-        contents: result.svg,
-      });
-      if (!saved || controller.signal.aborted) return;
-      setSvgFeedback({
-        kind: "export",
-        name: saved.name,
-        issues: result.issues.map((issue) => ({ ...issue })),
-      });
-    } catch (error) {
-      if (!isAbortError(error)) {
-        setEditorError(
-          reportRendererError(
-            "svg_export_failed",
-            error,
-            t("error.exportSvg"),
-            {
-              projectId: workspaceSnapshot.activeProjectId,
-              designFileId: workspaceSnapshot.activeDesignFileId,
-            },
-          ),
-        );
-      }
-    } finally {
-      finishSvgOperation(controller);
-    }
-  }, [
-    activePageId,
-    beginSvgOperation,
-    finishSvgOperation,
-    runtime,
-    svgExportSettings,
-    t,
-    view,
-    workspaceSnapshot.activeDesignFileId,
-    workspaceSnapshot.activeProjectId,
-  ]);
-
-  const exportRaster = useCallback(async () => {
-    const desktop = window.desktop;
-    if (!desktop || view !== "editor" || svgOperationController.current) return;
-    const frozen = runtime.getSnapshot();
-    if (frozen.state.selection.nodeIds.length !== 1) {
-      setUtilityTab("properties");
-      setEditorError(t("error.exportRasterSelection"));
-      return;
-    }
-    const rootNodeId = frozen.state.selection.nodeIds[0];
-    const node = rootNodeId ? frozen.document.nodesById[rootNodeId] : undefined;
-    if (!rootNodeId || !node) {
-      setEditorError(t("error.exportRasterSelection"));
-      return;
-    }
-    const settings = rasterExportSettings;
-    const background =
-      settings.format === "jpeg" && settings.background.mode === "transparent"
-        ? ({ mode: "color", color: "#ffffff" } as const)
-        : settings.background;
-    const suggestedName = suggestRasterExportName(node.name);
-    const controller = beginSvgOperation({
-      kind: "raster-export",
-      name: suggestedName,
-    });
-    if (!controller) return;
-    try {
-      const result = await exportDesignRaster(
-        frozen.document,
-        {
-          version: RASTER_EXPORT_VERSION,
-          pageId: activePageId,
-          rootNodeId,
-          format: settings.format,
-          size: settings.size,
-          background,
-          ...(settings.format === "png" ? {} : { quality: settings.quality }),
-          resampling: settings.resampling,
-        },
-        controller.signal,
-      );
-      if (controller.signal.aborted) return;
-      const saved = await desktop.saveRasterFile({
-        suggestedName,
-        format: settings.format,
-        mimeType: result.mimeType,
-        bytes: result.bytes,
-        width: result.width,
-        height: result.height,
-      });
-      if (!saved || controller.signal.aborted) return;
-      setRasterFeedback({
-        name: saved.name,
-        format: settings.format,
-        width: result.width,
-        height: result.height,
-        byteSize: saved.byteSize,
-      });
-    } catch (error) {
-      if (!isAbortError(error)) {
-        setEditorError(
-          reportRendererError(
-            "raster_export_failed",
-            error,
-            t("error.exportRaster"),
-            {
-              projectId: workspaceSnapshot.activeProjectId,
-              designFileId: workspaceSnapshot.activeDesignFileId,
-            },
-          ),
-        );
-      }
-    } finally {
-      finishSvgOperation(controller);
-    }
-  }, [
-    activePageId,
-    beginSvgOperation,
-    finishSvgOperation,
-    rasterExportSettings,
-    runtime,
-    t,
-    view,
-    workspaceSnapshot.activeDesignFileId,
-    workspaceSnapshot.activeProjectId,
-  ]);
-
-  const exportSelection = useCallback(() => {
-    if (exportFormat === "svg") return exportSvg();
-    return exportRaster();
-  }, [exportFormat, exportRaster, exportSvg]);
-
-  useEffect(() => {
-    const desktop = window.desktop;
-    if (!desktop) return;
-    const unsubscribeImport = desktop.onImportSvgCommand(() => {
-      void importSvg();
-    });
-    const unsubscribeExport = desktop.onExportSvgCommand(() => {
-      void exportSelection();
-    });
-    return () => {
-      unsubscribeImport();
-      unsubscribeExport();
-    };
-  }, [exportSelection, importSvg]);
-
-  useEffect(() => {
-    if (view !== "editor") svgOperationController.current?.abort();
-  }, [view]);
-
-  useEffect(
-    () => () => {
-      svgOperationController.current?.abort();
-    },
-    [],
-  );
-
   const submitAgentTask = async (
     prompt: string,
     modelSelection: ModelSelection,
@@ -2628,8 +2286,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           canExportSvg={state.selection.nodeIds.length > 0}
           dirty={state.dirty}
           documentName={documentName}
-          onExportSvg={() => void exportSelection()}
-          onImportSvg={() => void importSvg()}
+          onExportSvg={() => void importExport.exportSelection()}
+          onImportSvg={() => void importExport.importSvg()}
           onOpen={activeProject ? undefined : () => void openDocument()}
           onProject={activeProject ? () => setView("project") : undefined}
           onSave={() => void saveDocument(false)}
@@ -2640,7 +2298,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           pageName={pageName}
           platform={platform}
           projectName={activeProject?.name}
-          svgBusy={svgOperation !== null}
+          svgBusy={importExport.operation !== null}
           theme={theme}
         />
         <Toolbar
@@ -2802,30 +2460,18 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 node={selectedNode}
                 onArrange={arrangeSelection}
                 onBooleanOperationChange={applyBooleanOperation}
-                onCancelSvgOperation={cancelSvgOperation}
+                onCancelSvgOperation={importExport.cancelOperation}
                 onCreateComponent={createComponentFromSelection}
                 onCreateComponentInstance={createSelectedComponentInstance}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
                 onDetachComponentInstance={detachSelectedInstance}
-                onDismissRasterFeedback={() => setRasterFeedback(null)}
-                onDismissSvgFeedback={() => setSvgFeedback(null)}
+                onDismissRasterFeedback={importExport.dismissRasterFeedback}
+                onDismissSvgFeedback={importExport.dismissSvgFeedback}
                 onDuplicate={duplicateSelection}
                 onGoToComponentMain={goToSelectedInstanceMain}
-                onExportFormatChange={(format) => {
-                  setExportFormat(format);
-                  if (format !== "svg") {
-                    setRasterExportSettings((current) => ({
-                      ...current,
-                      format,
-                      ...(format === "jpeg" &&
-                      current.background.mode === "transparent"
-                        ? { background: { mode: "color", color: "#ffffff" } }
-                        : {}),
-                    }));
-                  }
-                }}
-                onExportRaster={() => void exportRaster()}
-                onExportSvg={() => void exportSvg()}
+                onExportFormatChange={importExport.setExportFormat}
+                onExportRaster={() => void importExport.exportRaster()}
+                onExportSvg={() => void importExport.exportSvg()}
                 onReplaceImage={() => void replaceSelectedImage()}
                 onRemoveComponent={removeSelectedComponent}
                 onResetComponentInstance={resetSelectedInstance}
@@ -2840,15 +2486,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                   sourcePath: readonly string[],
                   patch: ComponentOverridePatch,
                 ) => updateSelectedInstanceSource(sourcePath, patch)}
-                onSvgExportSettingsChange={setSvgExportSettings}
-                onRasterExportSettingsChange={setRasterExportSettings}
-                exportFormat={exportFormat}
-                rasterExportSettings={rasterExportSettings}
-                rasterFeedback={rasterFeedback}
+                onSvgExportSettingsChange={importExport.setSvgExportSettings}
+                onRasterExportSettingsChange={
+                  importExport.setRasterExportSettings
+                }
+                exportFormat={importExport.exportFormat}
+                rasterExportSettings={importExport.rasterExportSettings}
+                rasterFeedback={importExport.rasterFeedback}
                 selectionCount={state.selection.nodeIds.length}
-                svgExportSettings={svgExportSettings}
-                svgFeedback={svgFeedback}
-                svgOperation={svgOperation}
+                svgExportSettings={importExport.svgExportSettings}
+                svgFeedback={importExport.svgFeedback}
+                svgOperation={importExport.operation}
               />
             }
           />
@@ -3231,48 +2879,4 @@ function agentEventActivityAt(event: AgentEvent): string | null {
     return new Date().toISOString();
   }
   return null;
-}
-
-function errorMessage(error: unknown, fallback: string) {
-  if (!(error instanceof Error)) return fallback;
-  const message = error.message
-    .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, "")
-    .trim();
-  if (
-    !message ||
-    /(?:SQLITE_|UNIQUE constraint failed|FOREIGN KEY constraint failed)/i.test(
-      message,
-    )
-  ) {
-    return fallback;
-  }
-  return message;
-}
-
-function isAbortError(error: unknown): boolean {
-  return (
-    (error instanceof DOMException && error.name === "AbortError") ||
-    (error instanceof Error && error.name === "AbortError")
-  );
-}
-
-function reportRendererError(
-  code: string,
-  error: unknown,
-  fallback: string,
-  context?: DiagnosticContext,
-  presentation: "silent" | "toast" = "toast",
-  level: "warning" | "error" = "error",
-): string {
-  const message = errorMessage(error, fallback);
-  void window.desktop
-    ?.reportDiagnostic?.({
-      level,
-      presentation,
-      code,
-      message,
-      ...(context ? { context } : {}),
-    })
-    .catch(() => undefined);
-  return message;
 }
