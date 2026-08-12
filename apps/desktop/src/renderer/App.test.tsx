@@ -3842,6 +3842,156 @@ describe("App", () => {
     ).toBeUndefined();
   });
 
+  it("stitches a crossed compound hole through the Canvas host in one undo step", async () => {
+    renderApp();
+    act(() => {
+      const current = runtime().getSnapshot();
+      const result = runtime().apply({
+        transactionId: "insert_crossed_compound_vector",
+        documentId: current.document.documentId,
+        baseRevision: current.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Insert crossed compound vector",
+        commands: [
+          {
+            commandId: "insert_crossed_compound_vector",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 0,
+            node: compoundCanvasVector("frame_welcome"),
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      runtime().setSelection(["compound_vector"], "compound_vector");
+    });
+    const canvas = screen.getByRole("main", { name: "Design canvas" });
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Enter" });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope).toMatchObject({
+        activeNodeId: "compound_vector",
+        nodes: [{ nodeId: "compound_vector", readOnly: false }],
+      }),
+    );
+
+    const beforeRevision = runtime().getSnapshot().document.revision;
+    let response:
+      | ReturnType<NonNullable<LeaferEngineCallbacks["onVectorLineCut"]>>
+      | undefined;
+    act(() => {
+      response = leaferCallbacks().onVectorLineCut?.({
+        end: { x: 260, y: 144 },
+        nodeIds: ["compound_vector"],
+        start: { x: 100, y: 144 },
+      });
+    });
+    expect(response).toMatchObject({ ok: true });
+    if (!response?.ok) throw new Error("Missing crossed-hole Cut response");
+    const resultNodeId = response.resultNodeIds[1];
+    for (const nodeId of ["compound_vector", resultNodeId]) {
+      const node = runtime().getSnapshot().document.nodesById[nodeId];
+      if (!node || node.kind !== "vector" || !("network" in node.properties)) {
+        throw new Error("Missing Canvas crossed-hole result");
+      }
+      expect(node.properties.network.paths).toHaveLength(1);
+      expect(node.properties.network.regions).toHaveLength(1);
+      expect(node.properties.network.regions[0]?.loops).toEqual([
+        expect.objectContaining({ reversed: false }),
+      ]);
+    }
+    expect(runtime().getSnapshot().document.revision).toBe(beforeRevision + 1);
+    expect(runtime().getSnapshot().state.selection).toEqual({
+      nodeIds: ["compound_vector", resultNodeId],
+      anchorNodeId: resultNodeId,
+    });
+    expect(runtime().getSnapshot().state.history.undo.at(-1)?.label).toBe(
+      "Edit vector points",
+    );
+    expect(runtime().undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime().getSnapshot().document.nodesById[resultNodeId],
+    ).toBeUndefined();
+  });
+
+  it("keeps one retained and two extracted concave components editable from Canvas", async () => {
+    renderApp();
+    act(() => {
+      const current = runtime().getSnapshot();
+      const result = runtime().apply({
+        transactionId: "insert_concave_vector",
+        documentId: current.document.documentId,
+        baseRevision: current.document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Insert concave vector",
+        commands: [
+          {
+            commandId: "insert_concave_vector",
+            type: "insert_element",
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 0,
+            node: concaveCanvasVector("frame_welcome"),
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      runtime().setSelection(["concave_vector"], "concave_vector");
+    });
+    const canvas = screen.getByRole("main", { name: "Design canvas" });
+    canvas.focus();
+    fireEvent.keyDown(canvas, { key: "Enter" });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope).toMatchObject({
+        activeNodeId: "concave_vector",
+        nodes: [{ nodeId: "concave_vector", readOnly: false }],
+      }),
+    );
+
+    let response:
+      | ReturnType<NonNullable<LeaferEngineCallbacks["onVectorLineCut"]>>
+      | undefined;
+    act(() => {
+      response = leaferCallbacks().onVectorLineCut?.({
+        end: { x: 260, y: 154 },
+        nodeIds: ["concave_vector"],
+        start: { x: 100, y: 154 },
+      });
+    });
+    expect(response).toMatchObject({ ok: true });
+    if (!response?.ok) throw new Error("Missing concave Cut response");
+    const resultNodeId = response.resultNodeIds[1];
+    const retained = runtime().getSnapshot().document.nodesById.concave_vector;
+    const extracted = runtime().getSnapshot().document.nodesById[resultNodeId];
+    if (
+      !retained ||
+      retained.kind !== "vector" ||
+      !("network" in retained.properties) ||
+      !extracted ||
+      extracted.kind !== "vector" ||
+      !("network" in extracted.properties)
+    ) {
+      throw new Error("Missing Canvas concave Cut result");
+    }
+    expect(retained.properties.network.paths.map((path) => path.id)).toEqual([
+      "path_concave",
+    ]);
+    expect(extracted.properties.network.paths.map((path) => path.id)).toEqual([
+      "path_edit_1",
+      "path_edit_2",
+    ]);
+    expect(extracted.properties.network.regions).toHaveLength(2);
+    expect(runtime().getSnapshot().state.selection).toEqual({
+      nodeIds: ["concave_vector", resultNodeId],
+      anchorNodeId: resultNodeId,
+    });
+    expect(runtime().undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime().getSnapshot().document.nodesById[resultNodeId],
+    ).toBeUndefined();
+  });
+
   it("reorders selected siblings from the layer-order menu and macOS shortcuts", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -5582,6 +5732,68 @@ function compoundCanvasVector(parentId: string): VectorNode {
               { pathId: "compound_outer_path", reversed: false },
               { pathId: "compound_hole_path", reversed: true },
             ],
+          },
+        ],
+      },
+      fills: [{ type: "solid", color: "#151515", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+    },
+  };
+}
+
+function concaveCanvasVector(parentId: string): VectorNode {
+  const points = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [70, 100],
+    [70, 30],
+    [30, 30],
+    [30, 100],
+    [0, 100],
+  ] as const;
+  const vertexIds = points.map((_point, index) => `vertex_concave_${index}`);
+  const segmentIds = points.map((_point, index) => `segment_concave_${index}`);
+  return {
+    id: "concave_vector",
+    name: "Concave badge",
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 40, 40],
+    size: { width: 100, height: 100 },
+    opacity: 1,
+    extensions: {},
+    kind: "vector",
+    properties: {
+      network: {
+        vertices: points.map(([x, y], index) => ({
+          id: vertexIds[index],
+          x,
+          y,
+        })),
+        segments: points.map((_point, index) => ({
+          id: segmentIds[index],
+          startVertexId: vertexIds[index],
+          endVertexId: vertexIds[(index + 1) % vertexIds.length],
+        })),
+        paths: [
+          {
+            id: "path_concave",
+            closed: true,
+            segments: segmentIds.map((segmentId) => ({
+              segmentId,
+              reversed: false,
+            })),
+          },
+        ],
+        regions: [
+          {
+            id: "region_concave",
+            windingRule: "nonzero",
+            loops: [{ pathId: "path_concave", reversed: false }],
           },
         ],
       },

@@ -1515,6 +1515,10 @@ describe("design Agent tool contract", () => {
       "stable Page, node, path, vertex, and segment IDs",
     );
     expect(tool?.description).toContain("host-created editable sibling layers");
+    expect(tool?.description).toContain("same-side cut connectors");
+    expect(tool?.description).toContain(
+      "crossed-hole boundaries become continuous",
+    );
     expect(tool?.description).toContain("one atomic undoable");
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, close)).toBe(
       true,

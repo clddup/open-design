@@ -117,6 +117,17 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 完成条件：能力清单与真实 UI、Agent tool catalog 和 adapter 行为一致；所有 service 接口存在契约测试；未实现能力保持明确 `unavailable`，不能通过占位 JSON 或提示词伪装支持。
 
+## P1-C：组件实例主流程
+
+组件不再等待完整布局/变量阶段。它直接决定多页面 UI、导航、按钮、卡片、表单、表格和 Tabbar 能否保持结构一致，也是 Agent 避免反复复制散图层的主流程能力。
+
+- [ ] 完成 `Component → Instance → Override → Reset/Detach` 首个垂直切片：定义 OpenDesign-owned main component 与 instance reference，实例默认解析源组件当前结构；宿主维护稳定 source/instance/node 身份和失效引用诊断，禁止把 Leafer 对象或一份深拷贝当组件事实。
+- [ ] 支持嵌套 instance 与有界 override：首批至少覆盖文字内容、可见性、受支持外观、实例交换和 nested property；源组件结构/默认属性更新后，未 override 的值同步，override 值保持，删除/重命名源节点有确定性迁移或明确 orphan 诊断。
+- [ ] 人工 UI 提供 Create component、Create instance、Go to main、Reset overrides、Detach；Layers 与 Inspector 区分 main/instance/override/inherited value。Agent 使用同一组 typed semantic tools，只提交稳定 component/instance/property IDs，不重建整棵图层来模拟实例。
+- [ ] Canvas 投影、hit testing、selection、bounds、保存重开、undo/redo、复制/跨 Page、SVG/位图导出和 autosave 消费同一解析结果；循环引用、跨 Design File 未授权引用、missing main、locked/out-of-scope 和 revision conflict 原子失败。
+
+完成条件：在同一 Design File 的至少两个 Page 中复用导航、按钮和卡片组件；修改 main 后所有未 override 实例同步，实例文字/可见性 override 保持；人工与 Agent 操作、保存重开、undo/redo 和导出一致。此切片完成前不宣称已支持组件。
+
 ## P2：精确图层、变换与矢量
 
 - [x] 建立 `@opendesign/geometry-service` 的首个纯排列 provider；多层对齐、固定两端均分和明确一维间距由 EditorRuntime 转成单次事务，人工 Inspector 与 Agent typed tool 共用，不在 React、prompt 或 Leafer adapter 中重复计算。
@@ -139,7 +150,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成多 Vector 编辑集合与跨层拖拽 Cut：一个或多个已选 Vector layers 可通过 Enter/双击进入同一 scope，全部显示独立 trace/anchors，命中层成为 active；Shift 点击加入图层，macOS Command / Windows Control 点击切换成员。拖拽同时保留 document-space 公共切线、node-local guide 与 client threshold，pan/zoom 不改变目标或 revision。Runtime 对每层 world transform 求逆，跳过未命中层、拒绝 locked/non-invertible/不支持拓扑，并把所有命中层按稳定 sibling 顺序合并为一次 preview/apply、revision 和 undo。人工 Canvas 与 Agent `cut-layers-with-line` 共用 planner；模型不提供结果 ID 或 network。见 ADR-0040。
 - [x] 将 Geometry Service 升级为 contract v8，并完成开放描边有限线 Cut 垂直切片：开放 contour 按路径 traversal 上所有真实横穿交点切开，路径片段依次交替进入 retained/extracted sibling，含源起点的首片保留 source path ID；不添加 connector、不闭合、不创建 region 或隐式 Fill。单交点、同一 cubic 多交点与任意多个交点均由宿主确定性分割，endpoint 接触不产生操作，tangent/overlap 继续明确失败。人工 Canvas 与 Agent 单层/多层 Cut 共用同一 Geometry/Runtime planner，闭合与开放目标可在一次 document-space 事务中混合；保存重开、undo/redo 与标准无 `Z` SVG + metadata v2 往返保持可编辑。见 ADR-0041。
 - [x] 将 Geometry Service 升级为 contract v9，并完成未穿孔洞的 compound region Cut 重分配：当唯一 outer loop 被横穿两次且每个 inner loop 严格位于切线一侧时，孔洞以稳定 path/segment/vertex ID、loop direction 和 region winding 跟随实际包含它的 retained/extracted sibling；loop 数组顺序不参与 ownership。`serializeVectorNetwork` 现按 `loop.reversed` 输出有效闭合方向，Leafer、Boolean 与标准 SVG `d` 不再把 nonzero hole 填实；同 path 冲突方向显式失败。人工/Agent、单/多层 planner、tight bounds、save/reopen、undo/redo 与 metadata v2 往返继续复用同一事务；穿过或接触 hole 仍原子拒绝。见 ADR-0042。
-- [ ] 继续完成 crossed-hole boundary stitching、闭合凹形多交点、连接/断开、分支网络、套索、多节点变换框、flatten、outline stroke 与正式 Slice；补真实像素 baseline 和 macOS/Windows 打包产品交互证据。
+- [x] 将 Geometry Service 升级为 contract v10，完成 crossed-hole boundary stitching 与闭合凹形多交点 Cut：全部 closed boundary arcs 与同侧 connectors 组成无向临时图并做 cycle decomposition；包含源 outer 起点的 component 保留源 path/region ID，其余一个或多个 component 进入同一 extracted Vector sibling。切线穿过 outer + hole 时重建为连续 single-loop 结果，不保留失效 hole；未切 loops 按真实包含关系分配。Runtime、Canvas、Agent、SVG metadata v2、保存重开和单次 undo 共用同一语义，viewport pan/zoom 不改变 document-space 切线；见 ADR-0044。
+- [ ] 继续完成连接/断开、分支网络、套索、多节点变换框、flatten、outline stroke 与正式 Slice；补真实像素 baseline 和 macOS/Windows 打包产品交互证据。嵌套/重叠 compound regions、direct-hole-only Cut 与 self-intersection 继续结构化拒绝。
 - 扩展剩余图层与精确变换工作流：重命名、批量属性、单层相对父级对齐、Smart Selection 画布间距手柄与回流、翻转、原点、智能吸附、参考线、标尺、像素对齐、画布直接操作时自动归属，以及显式跨容器键盘目标选择。
 - 人工命令与 Agent typed tools 调用同一 geometry service，并把结果作为一个可预览、可撤销的 `DesignTransaction` 应用。SVG 导入导出必须经过同一公共 Path 语义，不能泄漏 provider 私有命令。
 
@@ -156,10 +168,10 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 完成条件：`OD-POSTER-01` 在保存重开后保持字体、图片裁剪和复杂外观，并能输出 1×/2× 专业位图；导出尺寸、alpha、资源引用和视觉基线通过自动化及 Electron 实机验证。
 
-## P3-B：布局、组件与设计系统
+## P3-B：响应式布局、Variants 与设计系统
 
 - 建立 OpenDesign-owned constraints、horizontal/vertical auto layout、wrap、padding/gap、对齐、hug/fill/fixed、min/max、absolute child、layout grid 与响应式求解语义。Layout service 输出确定性布局或候选事务，不保存第二份布局状态。
-- 建立 Component/Instance/detach、nested instance、property/override、Variant/State 与共享样式，并提供循环依赖和失效引用诊断。
+- 在 P1-C Component/Instance 主流程上继续建立 Variant Set、State、Boolean/Text/Instance-swap properties、共享样式与 Library 发布/消费，并扩展跨文件更新、循环依赖和失效引用诊断。
 - 建立 Design File/Library 级 Design Token/Variable 系统，而不是应用设置：支持 Color/Number/String/Boolean 等 typed value、Collection/Group、Mode、同类型 alias、属性 scope/binding，以及 primitive → semantic → component 分层。人工 UI 与 Agent 必须共用同一版本化命令；主题/模式切换、alias 继承、循环/失效引用、Library 发布与消费都产生确定性结果。DTCG JSON 导入导出通过独立 service 返回保真报告，不把 token 占位字段描述成已可用。
 - 人工 UI 和 Agent 使用同一组创建组件、生成实例、修改 override、切换 Variant、绑定 Token 和调整布局命令。属性检查器必须区分源组件、实例值、override 与继承值。
 

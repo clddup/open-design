@@ -220,6 +220,50 @@ function compoundRegionNetwork(): VectorNetwork {
   return source;
 }
 
+function concaveFourCrossingNetwork(): VectorNetwork {
+  const points = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [70, 100],
+    [70, 30],
+    [30, 30],
+    [30, 100],
+    [0, 100],
+  ] as const;
+  const vertexIds = points.map((_point, index) => `vertex_concave_${index}`);
+  const segmentIds = points.map((_point, index) => `segment_concave_${index}`);
+  return {
+    vertices: points.map(([x, y], index) => ({
+      id: vertexIds[index]!,
+      x,
+      y,
+    })),
+    segments: points.map((_point, index) => ({
+      id: segmentIds[index]!,
+      startVertexId: vertexIds[index]!,
+      endVertexId: vertexIds[(index + 1) % vertexIds.length]!,
+    })),
+    paths: [
+      {
+        id: "path_concave",
+        closed: true,
+        segments: segmentIds.map((segmentId) => ({
+          segmentId,
+          reversed: false,
+        })),
+      },
+    ],
+    regions: [
+      {
+        id: "region_concave",
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_concave", reversed: false }],
+      },
+    ],
+  };
+}
+
 describe("editable vector point operations", () => {
   it("moves multiple selected vertices without changing tangent offsets", () => {
     const network = openNetwork();
@@ -755,6 +799,37 @@ describe("editable vector point operations", () => {
     expect(result.extractedNetwork.paths[0]?.closed).toBe(true);
   });
 
+  it("divides a concave closed region across four crossings into one retained and two extracted components", () => {
+    const result = cutVectorNetworkByLine(
+      concaveFourCrossingNetwork(),
+      { x: -20, y: 50 },
+      { x: 120, y: 50 },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      retainedPathIds: ["path_concave"],
+      extractedPathIds: ["path_edit_1", "path_edit_2"],
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.intersections.map((item) => item.point)).toEqual([
+      { x: 0, y: 50 },
+      { x: 30, y: 50 },
+      { x: 70, y: 50 },
+      { x: 100, y: 50 },
+    ]);
+    expect(result.retainedNetwork.regions).toHaveLength(1);
+    expect(result.extractedNetwork.regions).toHaveLength(2);
+    expect(result.extractedNetwork.paths.every((path) => path.closed)).toBe(
+      true,
+    );
+    expect(vectorNetworkEditability(result.retainedNetwork)).toEqual({
+      editable: true,
+    });
+    expect(vectorNetworkEditability(result.extractedNetwork)).toEqual({
+      editable: true,
+    });
+  });
+
   it("moves an uncut compound hole with the divided side that contains it", () => {
     const source = compoundRegionNetwork();
     source.regions[0]!.loops.reverse();
@@ -890,7 +965,7 @@ describe("editable vector point operations", () => {
     });
   });
 
-  it("ignores open endpoints and rejects overlapping, non-crossing, and crossed-hole drag cuts explicitly", () => {
+  it("ignores open endpoints, rejects overlap/non-crossing, and stitches crossed-hole boundaries", () => {
     expect(
       cutVectorNetworkByLine(
         openNetwork(),
@@ -918,11 +993,30 @@ describe("editable vector point operations", () => {
       { x: 120, y: 40 },
     );
     expect(compound).toMatchObject({
-      ok: false,
-      code: "unsupported-topology",
+      ok: true,
+      retainedPathIds: ["path_closed"],
+      extractedPathIds: ["path_edit_1"],
     });
-    if (compound.ok) throw new Error("Compound region Cut should fail");
-    expect(compound.message).toContain("crossed-hole boundary stitching");
+    if (!compound.ok) throw new Error(compound.message);
+    expect(compound.intersections.map((item) => item.point)).toEqual([
+      { x: 0, y: 40 },
+      { x: 30, y: 40 },
+      { x: 70, y: 40 },
+      { x: 100, y: 40 },
+    ]);
+    for (const divided of [
+      compound.retainedNetwork,
+      compound.extractedNetwork,
+    ]) {
+      expect(divided.paths).toHaveLength(1);
+      expect(divided.regions).toEqual([
+        expect.objectContaining({
+          windingRule: "nonzero",
+          loops: [expect.objectContaining({ reversed: false })],
+        }),
+      ]);
+      expect(vectorNetworkEditability(divided)).toEqual({ editable: true });
+    }
   });
 
   it("rejects direct hole cuts, ambiguous outers, and shared compound loops", () => {
@@ -936,7 +1030,7 @@ describe("editable vector point operations", () => {
       code: "unsupported-topology",
     });
     if (directHole.ok) throw new Error("Direct hole Cut should fail");
-    expect(directHole.message).toContain("crossed-hole boundary stitching");
+    expect(directHole.message).toContain("outer boundary");
 
     const ambiguous = compoundRegionNetwork();
     ambiguous.vertices = ambiguous.vertices.map((vertex) => {

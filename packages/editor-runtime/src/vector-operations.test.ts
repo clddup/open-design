@@ -105,6 +105,50 @@ function compoundNetwork(): VectorNetwork {
   return source;
 }
 
+function concaveFourCrossingNetwork(): VectorNetwork {
+  const points = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [70, 100],
+    [70, 30],
+    [30, 30],
+    [30, 100],
+    [0, 100],
+  ] as const;
+  const vertexIds = points.map((_point, index) => `vertex_concave_${index}`);
+  const segmentIds = points.map((_point, index) => `segment_concave_${index}`);
+  return {
+    vertices: points.map(([x, y], index) => ({
+      id: vertexIds[index]!,
+      x,
+      y,
+    })),
+    segments: points.map((_point, index) => ({
+      id: segmentIds[index]!,
+      startVertexId: vertexIds[index]!,
+      endVertexId: vertexIds[(index + 1) % vertexIds.length]!,
+    })),
+    paths: [
+      {
+        id: "path_concave",
+        closed: true,
+        segments: segmentIds.map((segmentId) => ({
+          segmentId,
+          reversed: false,
+        })),
+      },
+    ],
+    regions: [
+      {
+        id: "region_concave",
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_concave", reversed: false }],
+      },
+    ],
+  };
+}
+
 function documentWithVector(): DesignDocument {
   const document = structuredClone(createWelcomeDocument());
   const frame = document.nodesById.frame_welcome;
@@ -719,6 +763,141 @@ describe("vector editing runtime plans", () => {
     expect(vectorNetworkFrom(reopened, "vector_compound_cut_result")).toEqual(
       extracted,
     );
+  });
+
+  it("stitches a crossed compound hole into two editable sibling regions", () => {
+    const document = documentWithVector();
+    const source = document.nodesById.vector_editable;
+    if (
+      !source ||
+      source.kind !== "vector" ||
+      !("network" in source.properties)
+    ) {
+      throw new Error("Missing compound Vector fixture");
+    }
+    source.properties.network = compoundNetwork();
+    const runtime = new EditorRuntime(document);
+    const before = runtime.getSnapshot();
+    const plan = planVectorSemanticEdit(
+      before.document,
+      "page_welcome",
+      source.id,
+      {
+        action: "cut-with-line",
+        start: { x: -20, y: 40 },
+        end: { x: 120, y: 40 },
+        resultNodeId: "vector_crossed_hole_result",
+      },
+    );
+    expect(plan).toMatchObject({
+      ok: true,
+      lineCutResult: {
+        intersectionCount: 4,
+        retainedPathIds: ["path_closed"],
+        extractedPathIds: ["path_edit_1"],
+      },
+      operations: [
+        {
+          type: "update_properties",
+          nodeId: source.id,
+          size: { width: 100, height: 40 },
+        },
+        {
+          type: "insert_element",
+          node: {
+            id: "vector_crossed_hole_result",
+            size: { width: 100, height: 60 },
+          },
+        },
+      ],
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    const transaction = {
+      transactionId: "divide_crossed_hole_vector",
+      documentId: before.document.documentId,
+      baseRevision: before.document.revision,
+      actor: { type: "user" as const, id: "local-user" },
+      label: "Divide crossed compound vector",
+      commands: [...plan.operations],
+    };
+    expect(runtime.preview(transaction)).toMatchObject({ ok: true });
+    expect(runtime.apply(transaction)).toMatchObject({ ok: true });
+    for (const nodeId of [source.id, "vector_crossed_hole_result"]) {
+      const divided = vectorNetworkFrom(runtime, nodeId);
+      expect(divided.paths).toHaveLength(1);
+      expect(divided.regions).toHaveLength(1);
+      expect(divided.regions[0]?.loops).toEqual([
+        expect.objectContaining({ reversed: false }),
+      ]);
+    }
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(vectorNetworkFrom(runtime)).toEqual(compoundNetwork());
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(vectorNetworkFrom(reopened, "vector_crossed_hole_result")).toEqual(
+      vectorNetworkFrom(runtime, "vector_crossed_hole_result"),
+    );
+  });
+
+  it("extracts both lower components of a four-crossing concave region into one sibling", () => {
+    const document = documentWithVector();
+    const source = document.nodesById.vector_editable;
+    if (
+      !source ||
+      source.kind !== "vector" ||
+      !("network" in source.properties)
+    ) {
+      throw new Error("Missing concave Vector fixture");
+    }
+    source.properties.network = concaveFourCrossingNetwork();
+    const plan = planVectorSemanticEdit(document, "page_welcome", source.id, {
+      action: "cut-with-line",
+      start: { x: -20, y: 50 },
+      end: { x: 120, y: 50 },
+      resultNodeId: "vector_concave_result",
+    });
+    expect(plan).toMatchObject({
+      ok: true,
+      lineCutResult: {
+        intersectionCount: 4,
+        retainedPathIds: ["path_concave"],
+        extractedPathIds: ["path_edit_1", "path_edit_2"],
+        resultNodeIds: [source.id, "vector_concave_result"],
+      },
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    const runtime = new EditorRuntime(document);
+    expect(
+      runtime.apply({
+        transactionId: "divide_concave_vector",
+        documentId: document.documentId,
+        baseRevision: document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Divide concave vector",
+        commands: [...plan.operations],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(vectorNetworkFrom(runtime).paths.map((path) => path.id)).toEqual([
+      "path_concave",
+    ]);
+    const extracted = vectorNetworkFrom(runtime, "vector_concave_result");
+    expect(extracted.paths.map((path) => path.id)).toEqual([
+      "path_edit_1",
+      "path_edit_2",
+    ]);
+    expect(extracted.regions).toHaveLength(2);
+    expect(
+      runtime.getSnapshot().document.nodesById.vector_concave_result?.size,
+    ).toEqual({ width: 100, height: 50 });
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.vector_concave_result,
+    ).toBeUndefined();
   });
 
   it("rejects stale result IDs and inherited locks before planning a line Cut", () => {

@@ -2463,29 +2463,109 @@ describe("Renderer semantic hierarchy tool", () => {
     ).toBeUndefined();
 
     const crossedRuntime = createCompoundEditableVectorRuntime();
-    await expect(
-      executeDesignToolRequest(
-        {
-          requestId: "vector_crossed_hole_cut",
-          call: {
-            toolCallId: "tool_vector_crossed_hole_cut",
-            toolName: DESIGN_VECTOR_TOOL_NAME,
-            input: {
-              action: "cut-with-line",
-              end: { x: 130, y: 45 },
-              label: "Cut through the compound logo hole",
-              nodeId: "editable_logo_contour",
-              pageId: "page_welcome",
-              start: { x: -10, y: 45 },
-            },
+    const crossed = await executeDesignToolRequest(
+      {
+        requestId: "vector_crossed_hole_cut",
+        call: {
+          toolCallId: "tool_vector_crossed_hole_cut",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "cut-with-line",
+            end: { x: 130, y: 45 },
+            label: "Cut through the compound logo hole",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            start: { x: -10, y: 45 },
           },
-          context: pageContext,
         },
-        crossedRuntime,
-        "page_welcome",
-      ),
-    ).rejects.toThrow("crossed-hole boundary stitching");
-    expect(crossedRuntime.getSnapshot().document.revision).toBe(0);
+        context: pageContext,
+      },
+      crossedRuntime,
+      "page_welcome",
+    );
+    const crossedResultNodeId = "vector_cut_tool_vector_crossed_hole_cut_0";
+    expect(crossed).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "cut-with-line",
+          atomic: true,
+          intersectionCount: 4,
+          resultNodeIds: ["editable_logo_contour", crossedResultNodeId],
+          revision: 1,
+        },
+      },
+    });
+    for (const nodeId of ["editable_logo_contour", crossedResultNodeId]) {
+      const node = crossedRuntime.getSnapshot().document.nodesById[nodeId];
+      if (!node || node.kind !== "vector" || !("network" in node.properties)) {
+        throw new Error("Missing crossed-hole Agent Cut result");
+      }
+      expect(node.properties.network.paths).toHaveLength(1);
+      expect(node.properties.network.regions).toHaveLength(1);
+      expect(node.properties.network.regions[0]?.loops).toEqual([
+        expect.objectContaining({ reversed: false }),
+      ]);
+    }
+    expect(crossedRuntime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
+  it("extracts a concave four-crossing design into one host-created sibling", async () => {
+    const runtime = createConcaveEditableVectorRuntime();
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_concave_line_cut",
+        call: {
+          toolCallId: "tool/vector concave line cut",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "cut-with-line",
+            end: { x: 120, y: 50 },
+            label: "Divide the concave logo contour",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            start: { x: -20, y: 50 },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    const resultNodeId = "vector_cut_tool_vector_concave_line_cut_0";
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          atomic: true,
+          extractedPathIds: ["path_edit_1", "path_edit_2"],
+          intersectionCount: 4,
+          retainedPathIds: ["path_concave"],
+          resultNodeIds: ["editable_logo_contour", resultNodeId],
+          revision: 1,
+        },
+      },
+    });
+    const retained = editableVectorNetwork(runtime);
+    const extracted = runtime.getSnapshot().document.nodesById[resultNodeId];
+    expect(retained.paths.map((path) => path.id)).toEqual(["path_concave"]);
+    if (
+      !extracted ||
+      extracted.kind !== "vector" ||
+      !("network" in extracted.properties)
+    ) {
+      throw new Error("Missing concave Agent Cut result");
+    }
+    expect(extracted.properties.network.paths.map((path) => path.id)).toEqual([
+      "path_edit_1",
+      "path_edit_2",
+    ]);
+    expect(extracted.properties.network.regions).toHaveLength(2);
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
   it("divides multiple explicit Vector layers with one document-space line and one undo step", async () => {
@@ -3210,6 +3290,63 @@ function createCompoundEditableVectorRuntime(): EditorRuntime {
     pathId: "logo_hole_path",
     reversed: true,
   });
+  return new EditorRuntime(document);
+}
+
+function createConcaveEditableVectorRuntime(): EditorRuntime {
+  const runtime = createClosedEditableVectorRuntime();
+  const document = structuredClone(runtime.getSnapshot().document);
+  const vector = document.nodesById.editable_logo_contour;
+  if (
+    !vector ||
+    vector.kind !== "vector" ||
+    !("network" in vector.properties)
+  ) {
+    throw new Error("Missing concave editable vector fixture");
+  }
+  const points = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [70, 100],
+    [70, 30],
+    [30, 30],
+    [30, 100],
+    [0, 100],
+  ] as const;
+  const vertexIds = points.map((_point, index) => `vertex_concave_${index}`);
+  const segmentIds = points.map((_point, index) => `segment_concave_${index}`);
+  vector.size = { width: 100, height: 100 };
+  vector.properties.network = {
+    vertices: points.map(([x, y], index) => ({
+      id: vertexIds[index],
+      x,
+      y,
+      handleMode: "corner",
+    })),
+    segments: points.map((_point, index) => ({
+      id: segmentIds[index],
+      startVertexId: vertexIds[index],
+      endVertexId: vertexIds[(index + 1) % vertexIds.length],
+    })),
+    paths: [
+      {
+        id: "path_concave",
+        closed: true,
+        segments: segmentIds.map((segmentId) => ({
+          segmentId,
+          reversed: false,
+        })),
+      },
+    ],
+    regions: [
+      {
+        id: "region_concave",
+        windingRule: "nonzero",
+        loops: [{ pathId: "path_concave", reversed: false }],
+      },
+    ],
+  };
   return new EditorRuntime(document);
 }
 

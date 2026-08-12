@@ -3052,6 +3052,64 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("keeps an in-progress Cut in document space while the viewport pans and zooms", async () => {
+    const onVectorLineCut = vi.fn(() => ({
+      ok: true as const,
+      resultNodeIds: ["editable_curve", "vector_cut_result"] as const,
+    }));
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorLineCut,
+    });
+    const input = withVectorEditFixture(createInput());
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope!, tool: "cut" },
+    });
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !path?.parent) throw new Error("Missing editable vector");
+    const overlay = path.parent.children.at(-1);
+    if (!(overlay instanceof FakeGroup)) {
+      throw new Error("Missing vector overlay");
+    }
+    const guide = overlay.children
+      .filter((child): child is FakePath => child instanceof FakePath)
+      .at(-1);
+    if (!guide) throw new Error("Missing Cut guide");
+
+    const documentPoint = { x: -20, y: 20 };
+    const start = pointerEvent(-20, 20, app.tree);
+    start.getInnerPoint = (target?: unknown) =>
+      target === app.tree ? documentPoint : { x: -20, y: 20 };
+    app.emit("pointer.down", start);
+
+    const movedDocumentPoint = { x: 140, y: 20 };
+    const move = pointerEvent(140, 20, app.tree);
+    move.getInnerPoint = (target?: unknown) =>
+      target === app.tree ? movedDocumentPoint : { x: 140, y: 20 };
+    app.emit("pointer.move", move);
+    expect(guide.path).toBe("M -20 20 L 140 20");
+
+    app.tree.localTransform = { a: 2, b: 0, c: 0, d: 2, e: 320, f: -180 };
+    app.emit("viewport.zoom");
+    app.emit("viewport.move");
+    expect(onVectorLineCut).not.toHaveBeenCalled();
+    expect(guide.path).toBe("M -20 20 L 140 20");
+
+    const end = pointerEvent(640, -140, app.tree);
+    end.getInnerPoint = (target?: unknown) =>
+      target === app.tree ? movedDocumentPoint : { x: 140, y: 20 };
+    app.emit("pointer.up", end);
+    expect(onVectorLineCut).toHaveBeenCalledWith({
+      end: movedDocumentPoint,
+      nodeIds: ["editable_curve"],
+      start: documentPoint,
+    });
+    expect((guide as FakePath & { visible: boolean }).visible).toBe(false);
+    adapter.dispose();
+  });
+
   it("keeps multiple Vector layers in one edit scope and submits one shared line Cut", async () => {
     const onVectorEditActiveNodeChange = vi.fn();
     const onVectorEditScopeChange = vi.fn();
@@ -3585,7 +3643,10 @@ function boxDragEvent(
     altKey: modifiers.altKey ?? false,
     clientX: x,
     clientY: y,
-    getInnerPoint: () => ({ x, y }),
+    getInnerPoint: (coordinates?: unknown) => {
+      void coordinates;
+      return { x, y };
+    },
     shiftKey: modifiers.shiftKey ?? false,
     target: {},
   };

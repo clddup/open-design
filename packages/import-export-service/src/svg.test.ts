@@ -1169,6 +1169,127 @@ describe("versioned SVG interchange", () => {
     ]);
   });
 
+  it("round-trips crossed-hole stitching as two standard editable closed paths", () => {
+    const divided = cutVectorNetworkByLine(
+      compoundSvgNetwork(),
+      { x: -10, y: 50 },
+      { x: 110, y: 50 },
+    );
+    if (!divided.ok) throw new Error(divided.message);
+    const retained = normalizeVectorNetwork(divided.retainedNetwork);
+    const extracted = normalizeVectorNetwork(divided.extractedNetwork);
+    if (
+      !retained.ok ||
+      !retained.offset ||
+      !extracted.ok ||
+      !extracted.offset
+    ) {
+      throw new Error("Crossed-hole SVG fixtures did not normalize");
+    }
+    const nodes = [
+      editableVectorNode("crossed_hole_retained", retained),
+      editableVectorNode("crossed_hole_extracted", extracted),
+    ];
+    const document = documentFromNodes(
+      "svg_crossed_hole_cut_document",
+      nodes,
+      nodes.map((node) => node.id),
+    );
+    const exported = exportSvg({
+      document,
+      rootNodeIds: nodes.map((node) => node.id),
+      viewport: { x: 0, y: 0, width: 120, height: 120 },
+      includeLayerIds: true,
+      title: "Crossed-hole editable vector",
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues).toEqual([]);
+    const pathData = [...exported.svg.matchAll(/\sd="([^"]+)"/g)]
+      .map((match) => match[1])
+      .filter((path): path is string => Boolean(path));
+    expect(pathData).toHaveLength(2);
+    expect(pathData.every((path) => path.match(/ Z/g)?.length === 1)).toBe(
+      true,
+    );
+
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "editable_crossed_hole" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    const importedNetworks = importedVectorNetworks(imported.nodes);
+    expect(importedNetworks).toEqual([retained.network, extracted.network]);
+    expect(
+      importedNetworks.every(
+        (network) =>
+          network.paths.length === 1 &&
+          network.paths[0]?.closed === true &&
+          network.regions.length === 1 &&
+          network.regions[0]?.loops.length === 1,
+      ),
+    ).toBe(true);
+  });
+
+  it("round-trips a concave four-crossing Cut with two closed subpaths in one sibling", () => {
+    const divided = cutVectorNetworkByLine(
+      concaveSvgNetwork(),
+      { x: -10, y: 50 },
+      { x: 110, y: 50 },
+    );
+    if (!divided.ok) throw new Error(divided.message);
+    const retained = normalizeVectorNetwork(divided.retainedNetwork);
+    const extracted = normalizeVectorNetwork(divided.extractedNetwork);
+    if (
+      !retained.ok ||
+      !retained.offset ||
+      !extracted.ok ||
+      !extracted.offset
+    ) {
+      throw new Error("Concave SVG fixtures did not normalize");
+    }
+    const nodes = [
+      editableVectorNode("concave_retained", retained),
+      editableVectorNode("concave_extracted", extracted),
+    ];
+    const document = documentFromNodes(
+      "svg_concave_cut_document",
+      nodes,
+      nodes.map((node) => node.id),
+    );
+    const exported = exportSvg({
+      document,
+      rootNodeIds: nodes.map((node) => node.id),
+      viewport: { x: 0, y: 0, width: 120, height: 120 },
+      includeLayerIds: true,
+      title: "Concave divided editable vector",
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.issues).toEqual([]);
+    const pathData = [...exported.svg.matchAll(/\sd="([^"]+)"/g)]
+      .map((match) => match[1])
+      .filter((path): path is string => Boolean(path));
+    expect(pathData).toHaveLength(2);
+    expect(pathData[0]?.match(/ Z/g)).toHaveLength(1);
+    expect(pathData[1]?.match(/ Z/g)).toHaveLength(2);
+
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "editable_concave_cut" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.issues).toEqual([]);
+    const importedNetworks = importedVectorNetworks(imported.nodes);
+    expect(importedNetworks).toEqual([retained.network, extracted.network]);
+    expect(importedNetworks[0]?.paths).toHaveLength(1);
+    expect(importedNetworks[1]?.paths).toHaveLength(2);
+    expect(importedNetworks[1]?.regions).toHaveLength(2);
+  });
+
   it("round-trips directed Line geometry and independent standard SVG endpoint markers", () => {
     const line: DesignNode = {
       id: "flow_line",
@@ -2594,6 +2715,94 @@ function compoundSvgNetwork(): VectorNetwork {
       },
     ],
   };
+}
+
+function concaveSvgNetwork(): VectorNetwork {
+  const points = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [70, 100],
+    [70, 30],
+    [30, 30],
+    [30, 100],
+    [0, 100],
+  ] as const;
+  const vertexIds = points.map((_point, index) => `concave_vertex_${index}`);
+  const segmentIds = points.map((_point, index) => `concave_segment_${index}`);
+  return {
+    vertices: points.map(([x, y], index) => ({
+      id: vertexIds[index]!,
+      x,
+      y,
+    })),
+    segments: points.map((_point, index) => ({
+      id: segmentIds[index]!,
+      startVertexId: vertexIds[index]!,
+      endVertexId: vertexIds[(index + 1) % vertexIds.length]!,
+    })),
+    paths: [
+      {
+        id: "concave_path",
+        closed: true,
+        segments: segmentIds.map((segmentId) => ({
+          segmentId,
+          reversed: false,
+        })),
+      },
+    ],
+    regions: [
+      {
+        id: "concave_region",
+        windingRule: "nonzero",
+        loops: [{ pathId: "concave_path", reversed: false }],
+      },
+    ],
+  };
+}
+
+function editableVectorNode(
+  id: string,
+  normalized: Extract<ReturnType<typeof normalizeVectorNetwork>, { ok: true }>,
+): Extract<DesignNode, { kind: "vector" }> {
+  if (!normalized.offset) throw new Error("Editable Vector offset is missing");
+  return {
+    id,
+    name: id,
+    parentId: null,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, normalized.offset.x, normalized.offset.y],
+    size: {
+      width: normalized.bounds.width,
+      height: normalized.bounds.height,
+    },
+    opacity: 1,
+    extensions: {},
+    kind: "vector",
+    properties: {
+      network: normalized.network,
+      fillRule: "nonzero",
+      fills: [{ type: "solid", color: "#4f7fff", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+    },
+  };
+}
+
+function importedVectorNetworks(nodes: readonly DesignNode[]): VectorNetwork[] {
+  return nodes
+    .filter(
+      (node): node is Extract<DesignNode, { kind: "vector" }> =>
+        node.kind === "vector",
+    )
+    .map((node) => {
+      if (!("network" in node.properties)) {
+        throw new Error("Imported Vector lost editable metadata");
+      }
+      return node.properties.network;
+    });
 }
 
 function shapeDocument(): DesignDocument {
