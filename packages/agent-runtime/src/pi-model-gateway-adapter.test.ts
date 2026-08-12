@@ -314,6 +314,59 @@ describe("Pi ModelGateway adapter", () => {
     }
   });
 
+  it("forwards retry lifecycle without exposing it as assistant content", async () => {
+    const reconnects: CanonicalStreamEvent[] = [];
+    const gateway: ModelGateway = {
+      async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+        await Promise.resolve();
+        yield {
+          type: "attempt.retrying",
+          attemptId: request.attemptId,
+          retry: 1,
+          maxRetries: 5,
+          delayMs: 400,
+        };
+        yield {
+          type: "attempt.recovered",
+          attemptId: request.attemptId,
+          retriesUsed: 1,
+          maxRetries: 5,
+        };
+        yield {
+          type: "attempt.started",
+          attemptId: request.attemptId,
+          model: request.modelSelection.modelId,
+          identity: {
+            ...request.modelSelection,
+            apiFormat: "openai-responses",
+          },
+        };
+        yield {
+          type: "attempt.completed",
+          attemptId: request.attemptId,
+          stopReason: "complete",
+          usage: {
+            inputTokens: 1,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            reasoningTokens: 0,
+          },
+        };
+      },
+    };
+    const result = await createPiModelGatewayStreamFn({
+      modelGateway: gateway,
+      onRetryEvent: (event) => reconnects.push(event),
+    })(model, { messages: [] }).result();
+
+    expect(reconnects.map((event) => event.type)).toEqual([
+      "attempt.retrying",
+      "attempt.recovered",
+    ]);
+    expect(result).toMatchObject({ stopReason: "stop", content: [] });
+  });
+
   it("encodes gateway failures and forbidden inline images as Pi error events", async () => {
     const failurePort = createPiModelFailurePort();
     const failedGateway: ModelGateway = {

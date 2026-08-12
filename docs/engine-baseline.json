@@ -9,7 +9,7 @@
     "documentFormat": "dev.opendesign.document",
     "documentSchemaVersion": "1.10.0",
     "runtimeProtocolVersion": "0.1.0",
-    "agentProtocolVersion": "3.7.0",
+    "agentProtocolVersion": "3.8.0",
     "geometryServiceContractVersion": 9,
     "textLayoutServiceContractVersion": 1
   },

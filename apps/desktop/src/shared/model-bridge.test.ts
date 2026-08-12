@@ -65,6 +65,34 @@ describe("Model bridge request guard", () => {
       }),
     ).toBe(false);
   });
+  it("accepts bounded reconnect lifecycle events", () => {
+    expect(
+      isModelBridgeResponse({
+        type: "model.event",
+        requestId: "model_request_1",
+        event: {
+          type: "attempt.retrying",
+          attemptId: "attempt_1",
+          retry: 2,
+          maxRetries: 5,
+          delayMs: 900,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isModelBridgeResponse({
+        type: "model.event",
+        requestId: "model_request_1",
+        event: {
+          type: "attempt.retrying",
+          attemptId: "attempt_1",
+          retry: 6,
+          maxRetries: 5,
+          delayMs: 0,
+        },
+      }),
+    ).toBe(false);
+  });
   it("accepts a bounded content-addressed image reference", () => {
     expect(
       isModelBridgeRequest(

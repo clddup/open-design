@@ -710,6 +710,110 @@ describe("AgentTimeline", () => {
     },
   );
 
+  it("distinguishes a Provider connection interruption from a timeout", () => {
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[
+          {
+            type: "agent.error",
+            code: "provider_error",
+            runId: "run_terminated",
+            message: "terminated",
+            failure: {
+              code: "provider_error",
+              message: "terminated",
+              retryable: true,
+              provider: "provider_1",
+              providerRequestId: "resp_terminated",
+              modelRequestId: "model_terminated",
+            },
+          },
+          {
+            type: "run.completed",
+            runId: "run_terminated",
+            finishedAt: now,
+            stopReason: "error",
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(
+      screen.getByText("Model connection interrupted"),
+    ).toBeInTheDocument();
+    expect(container).toHaveTextContent("terminated");
+    expect(container).not.toHaveTextContent("timed out");
+    expect(container).toHaveTextContent("This request can be retried.");
+  });
+
+  it("shows one live reconnect status and clears it after recovery", () => {
+    const props = {
+      activeRunId: "run_retry",
+      conversationId: "conversation_1",
+      conversationTitle: "Conversation",
+      error: null,
+      onStop: vi.fn(),
+      onSubmit: vi.fn().mockResolvedValue(true),
+      timeline: [],
+    };
+    const { rerender } = render(
+      <AgentTimeline
+        {...props}
+        events={[
+          { type: "run.started", runId: "run_retry", startedAt: now },
+          {
+            type: "model.retrying",
+            runId: "run_retry",
+            retry: 1,
+            maxRetries: 5,
+            delayMs: 400,
+          },
+          {
+            type: "model.retrying",
+            runId: "run_retry",
+            retry: 2,
+            maxRetries: 5,
+            delayMs: 900,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Reconnecting 2/5")).toBeInTheDocument();
+    expect(screen.queryByText("Reconnecting 1/5")).not.toBeInTheDocument();
+
+    rerender(
+      <AgentTimeline
+        {...props}
+        events={[
+          { type: "run.started", runId: "run_retry", startedAt: now },
+          {
+            type: "model.retrying",
+            runId: "run_retry",
+            retry: 2,
+            maxRetries: 5,
+            delayMs: 900,
+          },
+          {
+            type: "model.recovered",
+            runId: "run_retry",
+            retriesUsed: 2,
+            maxRetries: 5,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText(/Reconnecting/)).not.toBeInTheDocument();
+  });
+
   it("downgrades an old terminal error to a compact history row when a new Run starts", () => {
     const { container } = render(
       <AgentTimeline

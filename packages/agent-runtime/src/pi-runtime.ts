@@ -177,6 +177,24 @@ export class OpenDesignPiRuntime {
           failurePort: modelFailurePort,
           nextAttemptId: () => `${request.runId}_attempt_${++attempt}`,
           now: () => this.#now().getTime(),
+          onRetryEvent: (event) => {
+            if (event.type === "attempt.retrying") {
+              emit({
+                type: "model.retrying",
+                runId: request.runId,
+                retry: event.retry,
+                maxRetries: 5,
+                delayMs: event.delayMs,
+              });
+              return;
+            }
+            emit({
+              type: "model.recovered",
+              runId: request.runId,
+              retriesUsed: event.retriesUsed,
+              maxRetries: 5,
+            });
+          },
         }),
         transformContext: prepared.context.transformContext,
         beforeToolCall: adapter.beforeToolCall,

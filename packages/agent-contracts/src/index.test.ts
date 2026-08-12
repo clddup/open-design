@@ -320,4 +320,33 @@ describe("Agent contracts", () => {
       }),
     ).toBe(false);
   });
+
+  it("accepts only bounded five-retry model reconnect lifecycle events", () => {
+    expect(
+      isAgentEvent({
+        type: "model.retrying",
+        runId: "run_1",
+        retry: 2,
+        maxRetries: 5,
+        delayMs: 900,
+      }),
+    ).toBe(true);
+    expect(
+      isAgentEvent({
+        type: "model.recovered",
+        runId: "run_1",
+        retriesUsed: 3,
+        maxRetries: 5,
+      }),
+    ).toBe(true);
+    expect(
+      isAgentEvent({
+        type: "model.retrying",
+        runId: "run_1",
+        retry: 6,
+        maxRetries: 5,
+        delayMs: 0,
+      }),
+    ).toBe(false);
+  });
 });

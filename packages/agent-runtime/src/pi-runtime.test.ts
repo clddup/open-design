@@ -164,6 +164,90 @@ describe("OpenDesign Pi production runtime", () => {
     );
   });
 
+  it("publishes transient reconnect lifecycle without writing it to the journal", async () => {
+    const store = new MemorySessionStore();
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: {
+        async *stream(
+          modelRequest: ModelRequest,
+        ): AsyncIterable<CanonicalStreamEvent> {
+          await Promise.resolve();
+          yield {
+            type: "attempt.retrying",
+            attemptId: modelRequest.attemptId,
+            retry: 1,
+            maxRetries: 5,
+            delayMs: 400,
+          };
+          yield {
+            type: "attempt.recovered",
+            attemptId: modelRequest.attemptId,
+            retriesUsed: 1,
+            maxRetries: 5,
+          };
+          yield attemptStarted(modelRequest);
+          yield {
+            type: "block.started",
+            attemptId: modelRequest.attemptId,
+            blockId: "reconnect_text",
+            kind: "text",
+          };
+          yield {
+            type: "block.completed",
+            attemptId: modelRequest.attemptId,
+            block: {
+              id: "reconnect_text",
+              type: "text",
+              text: "Recovered.",
+            },
+          };
+          yield {
+            type: "attempt.completed",
+            attemptId: modelRequest.attemptId,
+            stopReason: "complete",
+            usage: emptyUsage(),
+          };
+        },
+      },
+      sessionStore: store,
+    });
+
+    const events = await collect(runtime, {
+      ...request,
+      runId: "run_pi_reconnect",
+    });
+    const eventTypes = events.map((event) => event.type);
+
+    expect(eventTypes.indexOf("model.retrying")).toBeGreaterThan(
+      eventTypes.indexOf("run.started"),
+    );
+    expect(eventTypes.indexOf("model.recovered")).toBeGreaterThan(
+      eventTypes.indexOf("model.retrying"),
+    );
+    expect(events).toContainEqual({
+      type: "model.retrying",
+      runId: "run_pi_reconnect",
+      retry: 1,
+      maxRetries: 5,
+      delayMs: 400,
+    });
+    expect(events).toContainEqual({
+      type: "model.recovered",
+      runId: "run_pi_reconnect",
+      retriesUsed: 1,
+      maxRetries: 5,
+    });
+    expect(events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "complete",
+    });
+    expect(
+      store.events.some((event) =>
+        ["model.retrying", "model.recovered"].includes(event.type),
+      ),
+    ).toBe(false);
+  });
+
   it("cancels the active Pi loop and publishes a terminal cancelled run", async () => {
     const store = new MemorySessionStore();
     const gateway = new AbortableGateway();

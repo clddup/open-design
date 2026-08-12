@@ -244,6 +244,25 @@ function isCanonicalStreamEvent(value: unknown): value is CanonicalStreamEvent {
       (value.providerRequestId === undefined || safeId(value.providerRequestId))
     );
   }
+  if (value.type === "attempt.retrying") {
+    return (
+      Number.isInteger(value.retry) &&
+      Number(value.retry) >= 1 &&
+      Number(value.retry) <= 5 &&
+      value.maxRetries === 5 &&
+      Number.isInteger(value.delayMs) &&
+      Number(value.delayMs) > 0 &&
+      Number(value.delayMs) <= 60_000
+    );
+  }
+  if (value.type === "attempt.recovered") {
+    return (
+      Number.isInteger(value.retriesUsed) &&
+      Number(value.retriesUsed) >= 1 &&
+      Number(value.retriesUsed) <= 5 &&
+      value.maxRetries === 5
+    );
+  }
   if (value.type === "block.started") {
     return (
       safeId(value.blockId) &&

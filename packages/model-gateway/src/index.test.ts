@@ -97,6 +97,50 @@ function anthropicStreamingResponse(
 
 describe("multi-protocol model gateway", () => {
   it.each([
+    ["transport termination", "terminated", true],
+    ["HTTP 400 invalid request", "invalid", false],
+    ["wrapped context overflow", "context", false],
+  ])("classifies %s retryability", async (_name, kind, retryable) => {
+    const fetch: typeof globalThis.fetch =
+      kind === "terminated"
+        ? () => Promise.reject(new Error("terminated"))
+        : () =>
+            Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  error: {
+                    code:
+                      kind === "context"
+                        ? "internal_server_error"
+                        : "invalid_request_error",
+                    message:
+                      kind === "context"
+                        ? "upstream internal_server_error: context_too_large"
+                        : "Invalid request",
+                    type: "invalid_request_error",
+                  },
+                }),
+                {
+                  status: 400,
+                  headers: { "Content-Type": "application/json" },
+                },
+              ),
+            );
+    const gateway = new MultiProtocolModelGateway(
+      configuration("openai-responses", fetch),
+    );
+    const events: CanonicalStreamEvent[] = [];
+
+    for await (const event of gateway.stream(modelRequest()))
+      events.push(event);
+
+    expect(events.at(-1)).toMatchObject({
+      type: "attempt.failed",
+      error: { retryable },
+    });
+  });
+
+  it.each([
     ["openai-responses" as const, "https://openai.example/v1/responses"],
     [
       "openai-chat-completions" as const,

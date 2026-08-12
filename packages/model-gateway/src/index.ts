@@ -1,4 +1,5 @@
 import {
+  isRetryableAssistantError,
   type Api,
   type AssistantMessage,
   type AssistantMessageEvent,
@@ -52,6 +53,19 @@ export type CanonicalStreamEvent =
       model: string;
       identity: ResolvedModelIdentity;
       providerRequestId?: string;
+    }
+  | {
+      type: "attempt.retrying";
+      attemptId: string;
+      retry: number;
+      maxRetries: number;
+      delayMs: number;
+    }
+  | {
+      type: "attempt.recovered";
+      attemptId: string;
+      retriesUsed: number;
+      maxRetries: number;
     }
   | {
       type: "block.started";
@@ -692,7 +706,11 @@ function mapPiEvent(
       error: {
         code: event.reason === "aborted" ? "cancelled" : "provider_error",
         message: event.error.errorMessage ?? "Model provider request failed",
-        retryable: event.reason !== "aborted",
+        retryable:
+          event.reason !== "aborted" &&
+          isRetryableProviderFailureMessage(
+            event.error.errorMessage ?? "Model provider request failed",
+          ),
         provider: event.error.provider,
         ...(event.error.responseId
           ? { providerRequestId: event.error.responseId }
@@ -748,12 +766,34 @@ function modelError(
   provider: string,
   aborted: boolean,
 ): ModelError {
+  const message =
+    error instanceof Error ? error.message : "Model request failed";
   return {
     code: aborted ? "cancelled" : "provider_request_failed",
-    message: error instanceof Error ? error.message : "Model request failed",
-    retryable: !aborted,
+    message,
+    retryable: !aborted && isRetryableProviderFailureMessage(message),
     provider,
   };
+}
+
+const deterministicProviderFailurePattern =
+  /context[_ -]?(?:too[_ -]?large|length|window)|input exceeds|invalid[_ -]?request|authentication|unauthorized|forbidden|permission denied|api[_ -]?key|content[_ -]?filter|moderation|unsupported|schema|validation/i;
+
+function isRetryableProviderFailureMessage(message: string): boolean {
+  const status = message.match(
+    /(?:api error|http|status(?: code)?)\s*\(?\s*(\d{3})\b/i,
+  )?.[1];
+  if (status !== undefined) {
+    const value = Number(status);
+    if (value >= 400 && value < 500 && ![408, 409, 429].includes(value)) {
+      return false;
+    }
+  }
+  if (deterministicProviderFailurePattern.test(message)) return false;
+  return isRetryableAssistantError({
+    stopReason: "error",
+    errorMessage: message,
+  } as AssistantMessage);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

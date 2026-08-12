@@ -230,7 +230,10 @@ function runFailurePresentation(
     : failure.code === "context_budget_exceeded" ||
         failure.code === "model_context_incompatible"
       ? t("agent.contextLimit")
-      : t("agent.taskFailed");
+      : failure.code === "provider_error" ||
+          failure.code === "provider_request_failed"
+        ? t("agent.providerConnectionInterrupted")
+        : t("agent.taskFailed");
   const primary = timeout
     ? timeout.phase === "first-response"
       ? t("agent.timeoutFirstResponseDetail", {
@@ -666,6 +669,26 @@ function projectEvents(
         kind: "run",
         time: eventTime(event.startedAt, locale, t),
         title: t("agent.workingDesign"),
+      });
+    }
+    if (event.type === "model.retrying") {
+      updateEvent(`model-retry:${event.runId}`, {
+        state: "active",
+        kind: "system",
+        time: t("common.now"),
+        title: t("agent.reconnecting", {
+          attempt: event.retry,
+          total: event.maxRetries,
+        }),
+      });
+    }
+    if (event.type === "model.recovered") {
+      updateEvent(`model-retry:${event.runId}`, {
+        routine: true,
+        state: "done",
+        kind: "system",
+        time: t("common.done"),
+        title: t("agent.connectionRecovered"),
       });
     }
     if (event.type === "message.delta") {

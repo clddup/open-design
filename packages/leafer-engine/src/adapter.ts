@@ -388,24 +388,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       },
     });
     this.#editor = this.#app.editor as LeaferEditor;
-    // Agent presentation has its own non-interactive render plane. Leafer may
-    // move every App render plane during a design viewport gesture, so child
-    // overlays must always be expressed relative to this plane's current
-    // transform instead of assuming that the plane stays at identity.
-    const generationPresentationRoot = new leafer.Leafer({
-      type: "draw",
-    });
-    const editorSkyIndex = this.#app.children.indexOf(this.#app.sky);
-    // Keep Leafer's editor sky as the top interaction plane. App.add() also
-    // initializes this render plane exactly once, avoiding duplicate child
-    // lifecycle listeners from addLeafer() followed by reordering.
-    this.#app.add(
-      generationPresentationRoot,
-      editorSkyIndex >= 0 ? editorSkyIndex : undefined,
-    );
-    this.#generationPresentationRoot = generationPresentationRoot;
-    this.#generationPresentationRoot.hitChildren = false;
-    this.#generationPresentationRoot.hittable = false;
+    // World-space Agent presentation belongs to Leafer's built-in editor sky.
+    // The sky is the same viewport plane used by selection chrome, so a pan or
+    // zoom cannot advance the document and Agent skeleton on two independently
+    // scheduled canvases. Keep both Agent layers below the Editor child and
+    // make them fully non-interactive.
+    this.#generationPresentationRoot = this.#app.sky as unknown as LeaferGroup;
     this.#generationSkeletonLayer = new leafer.Group({
       editable: false,
       hitChildren: false,
@@ -988,12 +976,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#app.on(ZoomEvent.ZOOM, viewportChanged);
     this.#app.on(ZoomEvent.END, viewportChanged);
     this.#app.on(ResizeEvent.RESIZE, viewportChanged);
-    // Leafer applies viewport movement independently to every App render
-    // plane. A real gesture can therefore advance the presentation plane
-    // after the last Move/Zoom callback that reached this adapter. Reconcile
-    // from the transforms that will actually be rendered, rather than from
-    // event delivery alone. The viewport state caches below make this hook
-    // idempotent, so an aligned frame never schedules another render.
+    // Read the sky transform at its actual render boundary. Programmatic
+    // viewport sync and gesture propagation can update tree/sky in different
+    // callbacks, but no Agent child is rendered until this reconciliation has
+    // expressed it relative to the sky's settled transform.
     this.#app.on(RenderEvent.CHILD_START, () => {
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
@@ -3134,9 +3120,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationViewportFrame = requestAnimationFrame(() => {
       this.#generationViewportFrame = null;
       if (this.#disposed) return;
-      // Leafer can settle the document and presentation render planes in
-      // different frames. Re-read both and recompute their relative transform
-      // so kinetic pan/zoom never leaves an intermediate offset behind.
+      // Leafer can settle the document tree and built-in editor sky in
+      // different callbacks. Re-read both and recompute their relative
+      // transform so kinetic pan/zoom never leaves an intermediate offset.
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
     });

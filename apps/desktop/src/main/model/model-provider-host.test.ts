@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SaveModelProviderProfileRequest } from "../../shared/desktop-api";
 import { WorkspaceStore } from "../project/workspace-store";
+import type {
+  CanonicalStreamEvent,
+  ModelGateway,
+} from "@opendesign/model-gateway";
 import {
   ModelProviderHost,
   type CredentialCipher,
@@ -103,6 +107,402 @@ function partialChatResponse() {
 }
 
 describe("ModelProviderHost", () => {
+  it("retries a transient Provider termination before semantic output", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    let callCount = 0;
+    const attemptSignals: AbortSignal[] = [];
+    const gatewayFactory = (): ModelGateway => ({
+      async *stream(request) {
+        await Promise.resolve();
+        callCount += 1;
+        attemptSignals.push(request.signal);
+        yield startedEvent(request.attemptId);
+        if (callCount === 1) {
+          yield {
+            type: "attempt.failed",
+            attemptId: request.attemptId,
+            error: {
+              code: "provider_error",
+              message: "terminated",
+              retryable: true,
+              provider: "provider_1",
+              providerRequestId: "resp_interrupted",
+            },
+          };
+          return;
+        }
+        yield {
+          type: "block.started",
+          attemptId: request.attemptId,
+          blockId: "text",
+          kind: "text",
+        };
+        yield {
+          type: "block.completed",
+          attemptId: request.attemptId,
+          block: { id: "text", type: "text", text: "Recovered" },
+        };
+        yield completedEvent(request.attemptId, "resp_recovered");
+      },
+    });
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      gatewayFactory,
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        baseRequest("attempt_retry"),
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(401);
+      const events = await pending;
+      expect(callCount).toBe(2);
+      expect(attemptSignals).toHaveLength(2);
+      expect(attemptSignals[0]?.aborted).toBe(true);
+      expect(attemptSignals[1]?.aborted).toBe(false);
+      expect(attemptSignals[0]).not.toBe(attemptSignals[1]);
+      expect(
+        events.filter((event) => event.type === "attempt.started"),
+      ).toHaveLength(1);
+      expect(events).toContainEqual({
+        type: "attempt.retrying",
+        attemptId: "attempt_retry",
+        retry: 1,
+        maxRetries: 5,
+        delayMs: 400,
+      });
+      expect(events).toContainEqual({
+        type: "attempt.recovered",
+        attemptId: "attempt_retry",
+        retriesUsed: 1,
+        maxRetries: 5,
+      });
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: "attempt.failed" }),
+      );
+      expect(events.at(-1)).toMatchObject({
+        type: "attempt.completed",
+        providerRequestId: "resp_recovered",
+      });
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not attach a failed retry request ID to a later terminal failure", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    let callCount = 0;
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          await Promise.resolve();
+          callCount += 1;
+          yield startedEvent(request.attemptId);
+          yield {
+            type: "attempt.failed",
+            attemptId: request.attemptId,
+            error: {
+              code: "provider_error",
+              message: "terminated",
+              retryable: true,
+              provider: "provider_1",
+              ...(callCount === 1
+                ? { providerRequestId: "resp_first_interrupted" }
+                : {}),
+            },
+          };
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        baseRequest("attempt_request_id"),
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(11_301);
+      const events = await pending;
+      expect(callCount).toBe(6);
+      expect(events.at(-1)).toEqual({
+        type: "attempt.failed",
+        attemptId: "attempt_request_id",
+        error: {
+          code: "provider_error",
+          message: "terminated",
+          retryable: true,
+          provider: "provider_1",
+        },
+      });
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels immediately while waiting to reconnect", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    let callCount = 0;
+    let markRetryScheduled!: () => void;
+    const retryScheduled = new Promise<void>((resolve) => {
+      markRetryScheduled = resolve;
+    });
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          await Promise.resolve();
+          callCount += 1;
+          yield startedEvent(request.attemptId);
+          yield {
+            type: "attempt.failed",
+            attemptId: request.attemptId,
+            error: {
+              code: "provider_error",
+              message: "terminated",
+              retryable: true,
+              provider: "provider_1",
+            },
+          };
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+    const controller = new AbortController();
+    const events: CanonicalStreamEvent[] = [];
+
+    try {
+      const pending = (async () => {
+        for await (const event of host.stream(
+          baseRequest("attempt_cancel_retry"),
+          controller.signal,
+        )) {
+          events.push(event);
+          if (event.type === "attempt.retrying") markRetryScheduled();
+        }
+      })();
+      await retryScheduled;
+      controller.abort(new DOMException("User cancelled", "AbortError"));
+      await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+
+      expect(callCount).toBe(1);
+      expect(events).toEqual([
+        {
+          type: "attempt.retrying",
+          attemptId: "attempt_cancel_retry",
+          retry: 1,
+          maxRetries: 5,
+          delayMs: 400,
+        },
+      ]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps partial output private while bounded retries are exhausted", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    let callCount = 0;
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          await Promise.resolve();
+          callCount += 1;
+          yield startedEvent(request.attemptId);
+          yield {
+            type: "block.started",
+            attemptId: request.attemptId,
+            blockId: "partial_tool",
+            kind: "tool_call",
+          };
+          yield {
+            type: "attempt.failed",
+            attemptId: request.attemptId,
+            error: {
+              code: "provider_error",
+              message: "terminated",
+              retryable: true,
+              provider: "provider_1",
+            },
+          };
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        baseRequest("attempt_no_retry"),
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(11_301);
+      const events = await pending;
+
+      expect(callCount).toBe(6);
+      expect(
+        events.filter((event) => event.type === "block.started"),
+      ).toHaveLength(0);
+      expect(
+        events.filter((event) => event.type === "attempt.retrying"),
+      ).toHaveLength(5);
+      expect(events.at(-1)).toMatchObject({
+        type: "attempt.failed",
+        error: { message: "terminated" },
+      });
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reconnects when an HTTP stream ends without a terminal event", async () => {
+    vi.useFakeTimers();
+    const store = new WorkspaceStore(":memory:");
+    let callCount = 0;
+    const host = new ModelProviderHost(
+      store,
+      cipher,
+      globalThis.fetch,
+      undefined,
+      undefined,
+      () => ({
+        async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+          await Promise.resolve();
+          callCount += 1;
+          yield startedEvent(request.attemptId);
+          if (callCount === 1) return;
+          yield {
+            type: "block.started",
+            attemptId: request.attemptId,
+            blockId: "text",
+            kind: "text",
+          };
+          yield {
+            type: "block.completed",
+            attemptId: request.attemptId,
+            block: { id: "text", type: "text", text: "Recovered" },
+          };
+          yield completedEvent(request.attemptId, "resp_recovered");
+        },
+      }),
+    );
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    try {
+      const pending = host.complete(
+        baseRequest("attempt_early_eof"),
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(401);
+      const events = await pending;
+
+      expect(callCount).toBe(2);
+      expect(events).toContainEqual({
+        type: "attempt.retrying",
+        attemptId: "attempt_early_eof",
+        retry: 1,
+        maxRetries: 5,
+        delayMs: 400,
+      });
+      expect(events.at(-1)).toMatchObject({
+        type: "attempt.completed",
+        providerRequestId: "resp_recovered",
+      });
+    } finally {
+      store.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ["provider_timeout", true],
+    ["provider_error", false],
+    ["context_too_large", true],
+  ])(
+    "does not reconnect deterministic %s failures",
+    async (code, retryable) => {
+      const store = new WorkspaceStore(":memory:");
+      let callCount = 0;
+      const host = new ModelProviderHost(
+        store,
+        cipher,
+        globalThis.fetch,
+        undefined,
+        undefined,
+        () => ({
+          async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+            await Promise.resolve();
+            callCount += 1;
+            yield startedEvent(request.attemptId);
+            yield {
+              type: "attempt.failed",
+              attemptId: request.attemptId,
+              error: {
+                code,
+                message: "Deterministic failure",
+                retryable,
+                provider: "provider_1",
+                ...(code === "provider_timeout"
+                  ? {
+                      timeout: {
+                        phase: "stream-idle" as const,
+                        thresholdMs: 120_000,
+                      },
+                    }
+                  : {}),
+              },
+            };
+          },
+        }),
+      );
+      host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+      try {
+        const events = await host.complete(
+          baseRequest(`attempt_${code}`),
+          new AbortController().signal,
+        );
+        expect(callCount).toBe(1);
+        expect(events).not.toContainEqual(
+          expect.objectContaining({ type: "attempt.retrying" }),
+        );
+        expect(events.at(-1)).toMatchObject({
+          type: "attempt.failed",
+          error: { code },
+        });
+      } finally {
+        store.close();
+      }
+    },
+  );
+
   it("aborts a production model stream that produces no response events", async () => {
     vi.useFakeTimers();
     const store = new WorkspaceStore(":memory:");
@@ -139,6 +539,10 @@ describe("ModelProviderHost", () => {
           timeout: { phase: "first-response", thresholdMs: 50 },
         },
       });
+      await expect(pending).resolves.toMatchObject([
+        { type: "attempt.started", attemptId: "attempt_stalled" },
+        { type: "attempt.failed", attemptId: "attempt_stalled" },
+      ]);
       expect(fetch).toHaveBeenCalledOnce();
       expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     } finally {
@@ -679,6 +1083,50 @@ describe("ModelProviderHost", () => {
     store.close();
   });
 });
+
+function baseRequest(attemptId: string) {
+  return {
+    attemptId,
+    sessionId: "session_retry",
+    modelSelection: selection,
+    system: "System",
+    messages: [{ role: "user" as const, content: "Design" }],
+    tools: [],
+  };
+}
+
+function startedEvent(
+  attemptId: string,
+): Extract<CanonicalStreamEvent, { type: "attempt.started" }> {
+  return {
+    type: "attempt.started",
+    attemptId,
+    model: "design-model",
+    identity: {
+      ...selection,
+      apiFormat: "openai-chat-completions",
+    },
+  };
+}
+
+function completedEvent(
+  attemptId: string,
+  providerRequestId: string,
+): Extract<CanonicalStreamEvent, { type: "attempt.completed" }> {
+  return {
+    type: "attempt.completed",
+    attemptId,
+    stopReason: "complete",
+    providerRequestId,
+    usage: {
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+    },
+  };
+}
 
 function requestUrl(input: Parameters<typeof globalThis.fetch>[0] | undefined) {
   if (typeof input === "string") return input;

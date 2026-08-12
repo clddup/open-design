@@ -745,6 +745,9 @@ export const enMessages = {
   "agent.timeoutTotal": "Model time limit reached",
   "agent.timeoutTotalDetail":
     "The Provider request reached its {{duration}} total time limit.",
+  "agent.providerConnectionInterrupted": "Model connection interrupted",
+  "agent.reconnecting": "Reconnecting {{attempt}}/{{total}}",
+  "agent.connectionRecovered": "Model connection recovered",
   "agent.failureRetryable": "This request can be retried.",
   "agent.failureNeedsChange":
     "Adjust the request or configuration before retrying.",
@@ -1608,6 +1611,9 @@ const zhCNMessages = {
   "agent.timeoutStreamIdleDetail": "响应流连续 {{duration}} 没有新内容。",
   "agent.timeoutTotal": "模型处理达到总时限",
   "agent.timeoutTotalDetail": "Provider 请求已达到 {{duration}} 的总处理时限。",
+  "agent.providerConnectionInterrupted": "模型连接已中断",
+  "agent.reconnecting": "正在重新连接 {{attempt}}/{{total}}",
+  "agent.connectionRecovered": "模型连接已恢复",
   "agent.failureRetryable": "可直接重试本次请求。",
   "agent.failureNeedsChange": "调整请求或配置后再重试。",
   "agent.modelRequestId": "模型请求：{{id}}",

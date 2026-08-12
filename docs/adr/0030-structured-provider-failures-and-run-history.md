@@ -3,7 +3,7 @@
 - 状态：已接受
 - 日期：2026-08-11
 - 文档协议：不变（`DesignDocument 1.8.0`）
-- Agent 协议：`3.7.0`
+- Agent 协议：`3.8.0`
 - 关联：ADR-0008、ADR-0016、ADR-0017、ADR-0020、ADR-0028
 
 ## 背景
@@ -45,7 +45,7 @@ Pi 的 `AssistantMessage.errorMessage` 继续只承担 Pi loop 的终止语义�
 
 该 port 不写第二份 transcript，不持久化 Provider 内容，也不授权工具。用户取消产生的 `cancelled` failure 只维持取消终态，不得把 Run 改成 error。上下文预算、completion guard 和协议失败在 OpenDesign 边界补成同一受限 `AgentRunFailure`，但不会冒充 Provider timeout。
 
-### AgentEvent 3.7 与 durable journal
+### AgentEvent 3.8 与 durable journal
 
 `agent.error` 增加可选、严格校验的 `failure`；`run.state` 与 `SessionTimelineItem.run` 保存同一结构。`agent.error.code/message` 继续保留，兼容现有消费方与简短状态展示。
 
@@ -97,8 +97,8 @@ Conversation 中最后一个 Run 的 error/budget 仍是高权重错误 activity
 
 - Agent、session 与 diagnostic 协议都要维护严格、重复的运行时校验；新增 failure 字段必须同步边界测试。
 - 首响应超时通常没有 Provider request ID，只能依赖本地 model request ID；这是上游尚未返回 ID 的事实，不应通过伪造解决。
-- 当前只表达一次 Provider attempt 的终态。Provider 级自动 retry、退避、熔断和多 attempt 汇总仍需后续独立策略。
+- ADR-0043 已在一次 Provider turn 内增加有界自动重连与 transient UI；熔断、多候选模型切换、服务端 resume cursor 和跨 Run 自动恢复仍未实现。
 
 ## 复审条件
 
-如果接入 Provider 自动重试、多候选模型切换、服务端异步任务、可恢复 SSE cursor、跨设备 Conversation 或外部遥测，应复审 attempt/run failure 的聚合、隐私、保留期和 UI 层级。不得把一次 attempt 的 request ID 当成整个 Conversation 的稳定身份。
+如果接入多候选模型切换、服务端异步任务、可恢复 SSE cursor、跨设备 Conversation 或外部遥测，应复审 attempt/run failure 的聚合、隐私、保留期和 UI 层级。不得把一次 attempt 的 request ID 当成整个 Conversation 的稳定身份。

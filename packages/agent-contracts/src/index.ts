@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const AGENT_PROTOCOL_VERSION = "3.7.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.8.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
@@ -731,6 +731,25 @@ export const AgentEventSchema = Type.Union([
       type: Type.Literal("run.started"),
       runId: RunIdSchema,
       startedAt: TimestampSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("model.retrying"),
+      runId: RunIdSchema,
+      retry: Type.Integer({ minimum: 1, maximum: 5 }),
+      maxRetries: Type.Literal(5),
+      delayMs: Type.Integer({ minimum: 1, maximum: 60_000 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("model.recovered"),
+      runId: RunIdSchema,
+      retriesUsed: Type.Integer({ minimum: 1, maximum: 5 }),
+      maxRetries: Type.Literal(5),
     },
     { additionalProperties: false },
   ),

@@ -48,11 +48,11 @@ reveal 与 tween 共用一条 presentation RAF，不为每个节点建立 timer�
 
 ### Accepted typed plan 先形成结构骨架
 
-`DesignPlanToolInput version: 3` 在正式写入前按用户请求声明 `1..N` 个交付 target，每项包含画板 Page 坐标、尺寸，以及主要区域的稳定 `nodeId`、角色和画板局部 bounds。Renderer 会临时记录 Provider 的 `tool.requested`，但只有 Main 对同一 Run/tool call 返回字段完全匹配的 `tool.completed { status: "accepted" }` 后，才允许 Leafer 在独立的非交互 presentation render plane 展示当前活动 Page 中首个未完成 target 的骨架。version 2 历史 tool/journal 继续按单 target 投影；失败、畸形或不匹配结果不会显示未经信任的结构。
+`DesignPlanToolInput version: 3` 在正式写入前按用户请求声明 `1..N` 个交付 target，每项包含画板 Page 坐标、尺寸，以及主要区域的稳定 `nodeId`、角色和画板局部 bounds。Renderer 会临时记录 Provider 的 `tool.requested`，但只有 Main 对同一 Run/tool call 返回字段完全匹配的 `tool.completed { status: "accepted" }` 后，才允许 Leafer 在内置 editor `sky` 的非交互底层展示当前活动 Page 中首个未完成 target 的骨架。version 2 历史 tool/journal 继续按单 target 投影；失败、畸形或不匹配结果不会显示未经信任的结构。
 
 create target 的骨架使用与 selection 蓝框不同的低透明紫色区域、细虚线和固定屏幕尺寸标签；它不命中、不抢选区，也不会限制用户 pan/zoom。计划画板创建后，骨架按稳定 Frame ID 切换到权威当前 transform，而不是继续持有计划时的 Page 绝对位置；用户只平移该顶层 Frame 时，区域骨架和 Agent cursor 随真实 Frame 移动。Frame 尺寸、旋转/倾斜、父级、Page 或身份改变会使结构投影失效并要求重新 inspect/replan，不能把真正的布局变化伪装成平移。create 声明区域只有在对应 ID 的正式 `Group/Frame` 下出现实际非容器内容后才逐区移除，空容器和嵌套空容器不能冒充完成。existing target 的 region 只属于逻辑规划/审查，不显示待物化紫框，不要求真实图层匹配其 ID、直属关系或 bounds；画布只显示权威 existing Frame 与 Agent 语义活动。
 
-Leafer `App` 的 document `tree`、editor `sky` 与第三个 `type: "draw"` presentation render plane 是独立图层，真实 `design` 交互可能让这些 render plane 在同一次 pan/zoom 中参与变换并以不同事件时序更新。骨架和 cursor 不挂到 `sky`，也不能假设 presentation plane 永远保持 identity；骨架使用 `presentationRoot⁻¹ × tree` 得到父级局部变换，固定屏幕尺寸的 Agent cursor 先用 tree matrix 做 world→screen，再通过 `presentationRoot⁻¹ × screen` 得到局部变换。这样无论 presentation plane 已跟随 viewport、暂时落后一帧或保持 identity，组合后的屏幕结果都只包含一份 viewport。Viewport 事件即时同步并在下一 animation frame 对 kinetic pan/zoom 做幂等复核；App 每次实际绘制子 render plane 前还必须从当前矩阵再次复核，覆盖 presentation plane 在最后一个 Move/Zoom 回调之后才追平的情况。重复复核不得写文档或持续触发新 render。回归测试必须覆盖连续多个 MoveEvent、presentation plane 落后/追平 tree、程序化 viewport、无后续 viewport event 的 render settle 和最终稳定帧。
+骨架和 cursor 不再创建第四个 Leafer canvas/render plane，而是作为完全不可命中的 Group 插在内置 editor `sky` 的 Editor child 之前，因此 selection/edit box 始终位于展示层上方。document `tree` 与 `sky` 在真实 pan/zoom 回调中仍可能先后取得稳定 transform；骨架使用 `sky⁻¹ × tree` 得到父级局部变换，固定屏幕尺寸的 Agent cursor 先用 tree matrix 做 world→screen，再通过 `sky⁻¹ × screen` 得到局部变换。Viewport 事件即时同步并在下一 animation frame 对 kinetic pan/zoom 做幂等复核；App 每次实际绘制 child 前从当前 tree/sky matrix 再复核一次，覆盖最后一个 Move/Zoom 回调之后才稳定的情况。重复复核不得写文档或持续触发新 render。回归测试覆盖连续多个 MoveEvent、sky 落后/追平 tree、程序化 viewport、无后续 viewport event 的 render settle 和最终稳定帧。
 
 计划画板和区域 ID 在一个计划中全局唯一。Provider 仍声明每个区域的画板局部 bounds 和容器种类，但 Main 只为 create target 从已接受计划编译这些结构节点的可信 Page、parent、局部 transform 与 size；模型不再重复换算世界坐标。create 区域根必须是画板直属、轴对齐并匹配计划 bounds，新 target 的首个正式事务和首次物化区域都必须带真实内容。existing target 保留 regions 作为非写入的审查语义，Main 不编译或强制其几何。纯空 create 画板/区域只允许作为这里的可丢弃骨架存在，不能先进入 revision 再依赖后续视觉审查发现问题。
 
@@ -64,7 +64,7 @@ Leafer `App` 的 document `tree`、editor `sky` 与第三个 `type: "draw"` pres
 
 已接受计划存在后，Renderer 才把当前 Run 投影为 `structuring / building / assets / reviewing / refining / recovering` 六类本地语义阶段。阶段由固定 typed tool name、Main/Runtime 生命周期和结构化数值 progress 映射；Provider/tool 的自由文本 progress message 不进入画布标签。`requested` 只表示该步骤正在准备或执行，`completed` 会清除上一阶段百分比，不能出现“已完成”却仍保留“正在验证”的矛盾组合。右侧时间线的 live event 与 durable journal 投影同样在完成时清除陈旧 progress detail。
 
-Leafer 在独立于 document tree、editor `sky`、reveal 和 selection 的 presentation render plane 上显示固定屏幕尺寸的紫色 Agent cursor 与文字标签。正式写入前，它锚定第一个未完成计划区域；每个 Agent revision 提交后，Renderer 从权威文档计算新增节点中心，cursor 只沿这些已提交 focus points 移动。它不会根据 token、推理文本、自由文本进度或尚未执行的节点猜测位置。pan/zoom 只重算 screen projection，不修改 document revision 或 mutation target；离开视口时 cursor 隐藏而不是错误吸附到窗口边缘。
+Leafer 在 editor `sky` 中 selection/EditBox 下方的非交互展示层显示固定屏幕尺寸的紫色 Agent cursor 与文字标签。正式写入前，它锚定第一个未完成计划区域；每个 Agent revision 提交后，Renderer 从权威文档计算新增节点中心，cursor 只沿这些已提交 focus points 移动。它不会根据 token、推理文本、自由文本进度或尚未执行的节点猜测位置。pan/zoom 只重算 screen projection，不修改 document revision 或 mutation target；离开视口时 cursor 隐藏而不是错误吸附到窗口边缘。
 
 普通模式下 cursor 在低频语义目标之间做 180 ms 短位移；Reduced Motion 直接跳到已提交目标。阶段文字同时投影为只读 `aria-live` status，因此状态不只依赖紫色。cursor 不命中、不改变用户选区，也不进入 `DesignDocument`、revision、history、保存、导出或 Conversation journal。
 

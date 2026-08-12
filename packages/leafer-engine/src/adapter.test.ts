@@ -573,9 +573,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.sync({ ...first, generationSkeleton: skeleton });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    expect(app.children).toEqual([app.tree, app.presentationRoots[0], app.sky]);
-    const layer = app.presentationRoots[0]?.children[0] as
-      FakeGroup | undefined;
+    expect(app.children).toEqual([app.tree, app.sky]);
+    const layer = app.sky.children[0] as FakeGroup | undefined;
     const artboard = layer?.children[0] as FakeGroup | undefined;
     expect(layer).toMatchObject({
       visible: true,
@@ -689,7 +688,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
-  it("keeps generation presentation aligned when the isolated render plane follows the viewport", async () => {
+  it("keeps generation presentation aligned when the editor sky follows the viewport", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
       createCallbacks(),
@@ -729,7 +728,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    const presentationRoot = app.presentationRoots[0];
+    const presentationRoot = app.sky;
     const skeletonLayer = presentationRoot?.children[0] as
       FakeGroup | undefined;
     const activityLayer = presentationRoot?.children[1] as
@@ -808,7 +807,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    const presentationRoot = app.presentationRoots[0];
+    const presentationRoot = app.sky;
     const skeletonLayer = presentationRoot?.children[0] as
       FakeGroup | undefined;
     const activityLayer = presentationRoot?.children[1] as
@@ -823,7 +822,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     };
 
     // Production Leafer can emit MoveEvent.MOVE after the tree has moved but
-    // before the separate presentation render plane copies that transform.
+    // before the built-in editor sky observes the settled transform.
     app.tree.localTransform = { ...viewport };
     app.emit("viewport.move");
     expect(skeletonLayer?.localTransform).toEqual(viewport);
@@ -836,9 +835,9 @@ describe("Leafer engine selection bounds synchronization", () => {
       f: 160,
     });
 
-    // Keep dragging before the queued reconciliation frame. The presentation
-    // plane is still on the previous viewport, so its child receives only the
-    // relative delta needed to match the current document tree.
+    // Keep dragging before the queued reconciliation frame. The editor sky is
+    // still on the previous viewport, so its child receives only the relative
+    // delta needed to match the current document tree.
     if (presentationRoot) presentationRoot.localTransform = { ...viewport };
     const continuedViewport = {
       a: 0.5,
@@ -893,7 +892,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
-  it("reconciles a presentation plane that settles after the final viewport event", async () => {
+  it("reconciles the editor sky after the final viewport event", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
       createCallbacks(),
@@ -931,7 +930,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    const presentationRoot = app.presentationRoots[0];
+    const presentationRoot = app.sky;
     const skeletonLayer = presentationRoot?.children[0] as
       FakeGroup | undefined;
     const activityLayer = presentationRoot?.children[1] as
@@ -946,12 +945,12 @@ describe("Leafer engine selection bounds synchronization", () => {
     };
 
     // The document tree moves first and the ordinary viewport callback
-    // compensates against the presentation plane's previous identity.
+    // compensates against the editor sky's previous identity.
     app.tree.localTransform = { ...viewport };
     app.emit("viewport.move");
     expect(skeletonLayer?.localTransform).toEqual(viewport);
 
-    // Production Leafer may then advance the separate plane without another
+    // Production Leafer may then advance the editor sky without another
     // MoveEvent reaching the adapter. Rendering this stale child transform
     // would apply pan/zoom twice, which is the packaged-app regression.
     if (presentationRoot) presentationRoot.localTransform = { ...viewport };
@@ -990,8 +989,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.sync({ ...first, generationActivity: activity });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    const layer = app.presentationRoots[0]?.children[1] as
-      FakeGroup | undefined;
+    const layer = app.sky.children[1] as FakeGroup | undefined;
     expect(layer).toMatchObject({
       visible: true,
       localTransform: { a: 1, b: 0, c: 0, d: 1, e: 400, f: 300 },
@@ -1165,8 +1163,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
     const card = findElement(app.tree, "generated_card");
-    const activityLayer = app.presentationRoots[0]?.children[1] as
-      FakeGroup | undefined;
+    const activityLayer = app.sky.children[1] as FakeGroup | undefined;
     const stroker = leaferHarness.strokers[0];
     expect(card?.opacity).toBe(0);
     expect(stroker).toBeDefined();
@@ -1266,8 +1263,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(findElement(app.tree, "reduced_motion_card")?.opacity).toBe(1);
     expect(leaferHarness.strokers[0]?.target).toBeNull();
     expect(
-      (app.presentationRoots[0]?.children[1] as FakeGroup | undefined)
-        ?.localTransform,
+      (app.sky.children[1] as FakeGroup | undefined)?.localTransform,
     ).toEqual({ a: 1, b: 0, c: 0, d: 1, e: 900, f: 500 });
     adapter.sync({
       ...first,

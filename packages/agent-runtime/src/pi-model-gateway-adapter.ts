@@ -32,6 +32,12 @@ export interface PiModelGatewayAdapterOptions {
   failurePort?: PiModelFailurePort;
   nextAttemptId?: () => string;
   now?: () => number;
+  onRetryEvent?: (
+    event: Extract<
+      CanonicalStreamEvent,
+      { type: "attempt.retrying" | "attempt.recovered" }
+    >,
+  ) => void;
 }
 
 export interface PiModelFailurePort {
@@ -121,6 +127,7 @@ export function createPiModelGatewayStreamFn(
       stream,
       now,
       options.failurePort,
+      options.onRetryEvent,
     );
     return stream;
   };
@@ -133,6 +140,12 @@ async function pumpModelGateway(
   stream: AssistantMessageEventStream,
   now: () => number,
   failurePort?: PiModelFailurePort,
+  onRetryEvent?: (
+    event: Extract<
+      CanonicalStreamEvent,
+      { type: "attempt.retrying" | "attempt.recovered" }
+    >,
+  ) => void,
 ): Promise<void> {
   const blocks = new Map<string, BridgeBlockState>();
   let started = false;
@@ -151,6 +164,13 @@ async function pumpModelGateway(
         }
         started = true;
         applyIdentity(output, event.identity, event.providerRequestId);
+        continue;
+      }
+      if (
+        event.type === "attempt.retrying" ||
+        event.type === "attempt.recovered"
+      ) {
+        onRetryEvent?.(event);
         continue;
       }
       if (!started) {
