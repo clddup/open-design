@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { relativeWorkspacePath } from "./workspace-path.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const baseline = await json("scripts/architecture-baseline.json");
@@ -26,7 +28,9 @@ async function verifyDesktopLayers() {
               : specifier === prefix,
           )
         ) {
-          fail(`${relative(root, file)} imports forbidden ${specifier}`);
+          fail(
+            `${relativeWorkspacePath(root, file)} imports forbidden ${specifier}`,
+          );
         }
         if (
           policy.allowedBuiltins &&
@@ -37,7 +41,9 @@ async function verifyDesktopLayers() {
               : specifier === prefix,
           )
         ) {
-          fail(`${relative(root, file)} imports unapproved ${specifier}`);
+          fail(
+            `${relativeWorkspacePath(root, file)} imports unapproved ${specifier}`,
+          );
         }
         if (!specifier.startsWith(".")) continue;
         const target = resolve(dirname(file), specifier);
@@ -52,7 +58,7 @@ async function verifyDesktopLayers() {
             target.startsWith(`${forbiddenRoot}${sep}`)
           ) {
             fail(
-              `${relative(root, file)} crosses ${layerName} → ${forbiddenLayer}`,
+              `${relativeWorkspacePath(root, file)} crosses ${layerName} → ${forbiddenLayer}`,
             );
           }
         }
@@ -65,7 +71,7 @@ async function verifyWorkspaceDependencies() {
   const packages = await packageManifests();
   const actual = {};
   for (const manifestPath of packages) {
-    const manifest = await json(relative(root, manifestPath));
+    const manifest = await json(relativeWorkspacePath(root, manifestPath));
     if (
       typeof manifest.name !== "string" ||
       !manifest.name.startsWith("@opendesign/")
@@ -100,7 +106,7 @@ async function verifyProductionModuleBudgets() {
   );
   for (const relativeRoot of ["apps/desktop/src", "packages"]) {
     for (const path of await sourceFiles(relativeRoot)) {
-      const relativePath = relative(root, path);
+      const relativePath = relativeWorkspacePath(root, path);
       if (budgetedPaths.has(relativePath)) continue;
       const lineCount = await sourceLineCount(path);
       if (lineCount > baseline.productionModuleDefaultLineBudget) {
