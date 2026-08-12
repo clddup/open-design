@@ -4,6 +4,10 @@ import type {
   SelectionScope,
 } from "@opendesign/agent-contracts";
 import type { TrustedToolFailure } from "@opendesign/agent-runtime";
+import {
+  componentSourcePathKey,
+  resolveComponentInstance,
+} from "@opendesign/component-service";
 import type {
   DesignDocument,
   DesignError,
@@ -12,11 +16,15 @@ import type {
   DesignTransactionSuccess,
 } from "@opendesign/design-contracts";
 import {
+  componentMainNodeId,
   diagnoseDesignTargetLayout,
   diagnoseDesignPages,
   planArrangeNodes,
   planCreatePage,
   planCreateBooleanGroup,
+  planCreateComponent,
+  planCreateInstance,
+  planDetachComponentInstance,
   planDeletePage,
   planDuplicatePage,
   planGroupNodes,
@@ -25,8 +33,11 @@ import {
   planReorderNodes,
   planRenamePage,
   planReorderPage,
+  planResetComponentOverrides,
+  planRemoveComponent,
   planSvgImport,
   planSetBooleanOperation,
+  planSetComponentOverride,
   planUngroupBooleanGroup,
   planUngroupNode,
   planVectorLayersLineCut,
@@ -36,6 +47,7 @@ import {
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_COMPONENT_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
@@ -48,6 +60,7 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   isDesignArrangeToolInput,
   isDesignApplyToolInput,
+  isDesignComponentToolInput,
   isDesignHierarchyToolInput,
   isDesignPageToolInput,
   isDesignVectorToolInput,
@@ -56,6 +69,7 @@ import {
   isInternalDesignApplyToolInput,
   isInternalImportSvgToolInput,
   isInternalUpdateImageToolInput,
+  type DesignComponentToolInput,
   type DesignPageToolInput,
 } from "../shared/design-agent-tools";
 import type {
@@ -166,6 +180,148 @@ async function executeDesignToolRequestUnsafe(
           attachment: preview.attachment,
           attachments: [preview.attachment],
           ...(layoutQuality ? { layoutQuality } : {}),
+        },
+      },
+    };
+  }
+
+  if (
+    request.call.toolName === DESIGN_COMPONENT_TOOL_NAME &&
+    isDesignComponentToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    if (document.revision !== request.context.revision) {
+      throw new Error(
+        `Component operation revision conflict: expected ${request.context.revision}, current ${document.revision}`,
+      );
+    }
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "Component operation",
+    );
+    assertComponentInputPage(document, input);
+    const operationId =
+      `agent_component_${request.call.toolCallId}_${document.revision}`.slice(
+        0,
+        220,
+      );
+    if (input.action === "go-to-main") {
+      const mainNodeId = componentMainNodeId(document, input.instanceId);
+      if (!mainNodeId)
+        throw new Error(`Instance ${input.instanceId} does not exist`);
+      const pageId = document.pageOrder.find((candidatePageId) =>
+        pageNodeIds(document, candidatePageId).has(mainNodeId),
+      );
+      if (!pageId)
+        throw new Error(`Component main ${mainNodeId} is not on a Page`);
+      return {
+        requestId: request.requestId,
+        ok: true,
+        result: {
+          observedRevision: document.revision,
+          content: {
+            kind: "component-location-result",
+            version: 1,
+            instanceId: input.instanceId,
+            mainNodeId,
+            pageId,
+            revision: document.revision,
+          },
+        },
+      };
+    }
+    const plan =
+      input.action === "create-component"
+        ? planCreateComponent(document, {
+            componentId: input.componentId,
+            nodeId: input.nodeId,
+            name: input.name,
+            commandPrefix: operationId,
+          })
+        : input.action === "create-instance"
+          ? planCreateInstance(document, {
+              componentId: input.componentId,
+              instanceId: input.instanceId,
+              pageId: input.pageId,
+              parentId: input.parentId,
+              index: input.index,
+              transform: [1, 0, 0, 1, input.x, input.y],
+              ...(input.name === undefined ? {} : { name: input.name }),
+              commandPrefix: operationId,
+            })
+          : input.action === "remove-component"
+            ? planRemoveComponent(document, {
+                componentId: input.componentId,
+                commandPrefix: operationId,
+              })
+            : input.action === "set-override"
+              ? planSetComponentOverride(document, {
+                  instanceId: input.instanceId,
+                  sourcePath: input.sourcePath,
+                  patch: input.patch,
+                  commandPrefix: operationId,
+                })
+              : input.action === "reset-overrides"
+                ? planResetComponentOverrides(document, {
+                    instanceId: input.instanceId,
+                    ...(input.sourcePath === undefined
+                      ? {}
+                      : { sourcePath: input.sourcePath }),
+                    commandPrefix: operationId,
+                  })
+                : planDetachComponentInstance(document, {
+                    instanceId: input.instanceId,
+                    commandPrefix: operationId,
+                  });
+    if (!plan.ok) {
+      throw new Error(`component-operation.${plan.code}: ${plan.message}`);
+    }
+    assertCommandsWithinMutationTarget(
+      document,
+      plan.commands,
+      request.context.mutationTarget,
+      { allowComponentCommands: true },
+    );
+    const transaction = {
+      transactionId: `transaction_${operationId}`,
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: {
+        type: "agent",
+        id: `agent_${request.context.sessionId}`,
+        displayName: "OpenDesign Agent",
+      },
+      label: input.label,
+      commands: plan.commands,
+    } satisfies DesignTransaction;
+    const preview = runtime.preview(transaction);
+    if (!preview.ok) {
+      throw designTransactionToolError(preview.error, transaction.commands);
+    }
+    const result = runtime.apply(transaction);
+    if (!result.ok) {
+      throw designTransactionToolError(result.error, transaction.commands);
+    }
+    return {
+      requestId: request.requestId,
+      ok: true,
+      result: {
+        observedRevision: result.revision.revision,
+        content: {
+          kind: "component-operation-result",
+          version: 1,
+          action: input.action,
+          componentId: plan.componentId,
+          ...(plan.instanceId ? { instanceId: plan.instanceId } : {}),
+          mainNodeId: plan.mainNodeId,
+          revision: result.revision.revision,
+          atomic: true,
+        },
+        designRevision: {
+          previousRevision: transaction.baseRevision,
+          revision: result.revision.revision,
+          transactionId: transaction.transactionId,
         },
       },
     };
@@ -1600,6 +1756,55 @@ function createScopedInspection(
     }),
   );
   const diagnostics = diagnoseDesignPages(document, pageIds);
+  const scopedComponentIds = collectScopedComponentIds(document, nodeIds);
+  const componentsById = Object.fromEntries(
+    [...scopedComponentIds].flatMap((componentId) => {
+      const component = document.componentsById[componentId];
+      if (!component) return [];
+      return [
+        [
+          component.id,
+          {
+            id: component.id,
+            name: component.name,
+            rootNodeId: component.rootNodeId,
+            sourceNodeIds: [
+              ...componentSourceNodeIdsForInspection(
+                document,
+                component.rootNodeId,
+              ),
+            ],
+          },
+        ],
+      ] as const;
+    }),
+  );
+  const instancesById: Record<string, unknown> = {};
+  for (const node of Object.values(nodesById)) {
+    if (node.kind !== "instance") continue;
+    const resolution = resolveComponentInstance(document, node.id);
+    instancesById[node.id] = !resolution.ok
+      ? {
+          componentId: node.properties.componentId,
+          issues: resolution.issues,
+        }
+      : {
+          componentId: node.properties.componentId,
+          overrides: structuredClone(node.properties.overrides),
+          sourceNodes: resolution.overrideTargets.map((resolved) => ({
+            sourcePath: [...resolved.sourcePath],
+            sourceNodeId: resolved.sourceNodeId,
+            kind: resolved.node.kind,
+            name: resolved.node.name,
+            projectionId:
+              resolution.nodes.find(
+                (candidate) =>
+                  componentSourcePathKey(candidate.sourcePath) ===
+                  componentSourcePathKey(resolved.sourcePath),
+              )?.projectionId ?? null,
+          })),
+        };
+  }
 
   return {
     document: {
@@ -1609,6 +1814,8 @@ function createScopedInspection(
       pagesById,
       nodesById,
       assetsById,
+      componentsById,
+      instancesById,
       designSystemIds: {
         components: Object.keys(document.componentsById),
         variantSets: Object.keys(document.variantSetsById),
@@ -1633,12 +1840,110 @@ function createScopedInspection(
   };
 }
 
+function componentSourceNodeIdsForInspection(
+  document: DesignDocument,
+  rootNodeId: string,
+): Set<string> {
+  const result = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (result.has(nodeId)) return;
+    const node = document.nodesById[nodeId];
+    if (!node) return;
+    result.add(nodeId);
+    node.childIds.forEach(visit);
+  };
+  visit(rootNodeId);
+  return result;
+}
+
+function collectScopedComponentIds(
+  document: DesignDocument,
+  nodeIds: ReadonlySet<string>,
+): Set<string> {
+  const componentIds = new Set<string>();
+  const pending = Object.values(document.componentsById)
+    .filter((component) => nodeIds.has(component.rootNodeId))
+    .map((component) => component.id);
+  for (const nodeId of nodeIds) {
+    const node = document.nodesById[nodeId];
+    if (node?.kind === "instance") pending.push(node.properties.componentId);
+  }
+  while (pending.length > 0) {
+    const componentId = pending.pop();
+    if (!componentId || componentIds.has(componentId)) continue;
+    componentIds.add(componentId);
+    for (const sourceNodeId of componentSourceNodeIdsForInspection(
+      document,
+      document.componentsById[componentId]?.rootNodeId ?? "",
+    )) {
+      const source = document.nodesById[sourceNodeId];
+      if (source?.kind === "instance")
+        pending.push(source.properties.componentId);
+    }
+  }
+  return componentIds;
+}
+
+function assertComponentInputPage(
+  document: DesignDocument,
+  input: DesignComponentToolInput,
+): void {
+  if (!document.pagesById[input.pageId]) {
+    throw new Error(`Component operation Page not found: ${input.pageId}`);
+  }
+  const ids = pageNodeIds(document, input.pageId);
+  if (input.action === "create-component") {
+    if (!ids.has(input.nodeId)) {
+      throw new Error(
+        `Component source ${input.nodeId} is outside Page ${input.pageId}`,
+      );
+    }
+    return;
+  }
+  if (input.action === "remove-component") {
+    const mainNodeId = document.componentsById[input.componentId]?.rootNodeId;
+    if (!mainNodeId || !ids.has(mainNodeId)) {
+      throw new Error(
+        `Component ${input.componentId} main is outside Page ${input.pageId}`,
+      );
+    }
+    return;
+  }
+  if (input.action === "create-instance") {
+    if (input.parentId !== null && !ids.has(input.parentId)) {
+      throw new Error(
+        `Component instance parent ${input.parentId} is outside Page ${input.pageId}`,
+      );
+    }
+    return;
+  }
+  if (!ids.has(input.instanceId)) {
+    throw new Error(
+      `Component instance ${input.instanceId} is outside Page ${input.pageId}`,
+    );
+  }
+}
+
 function assertCommandsWithinMutationTarget(
   document: DesignDocument,
   commands: readonly DesignOperation[],
   mutationTarget: DesignMutationTarget,
-  options: { allowedAssetDeletionId?: string } = {},
+  options: {
+    allowedAssetDeletionId?: string;
+    allowComponentCommands?: boolean;
+  } = {},
 ): void {
+  for (const command of commands) {
+    if (
+      (command.type === "put_component" ||
+        command.type === "delete_component") &&
+      !options.allowComponentCommands
+    ) {
+      throw new Error(
+        "Agent component changes require the dedicated component tool",
+      );
+    }
+  }
   if (mutationTarget.kind === "document") return;
   const pageId = requiredMutationPageId(document, mutationTarget);
   const allowedNodeIds = mutationTargetNodeIds(document, mutationTarget);
@@ -1671,6 +1976,12 @@ function assertCommandsWithinMutationTarget(
     if (command.type === "delete_asset") {
       if (options.allowedAssetDeletionId === command.assetId) continue;
       throw new Error("Agent asset deletion requires a dedicated scoped tool");
+    }
+    if (
+      command.type === "put_component" ||
+      command.type === "delete_component"
+    ) {
+      continue;
     }
     if (
       command.type === "insert_page" ||

@@ -33,8 +33,8 @@ describe("design capability manifest", () => {
   it("does not mark evidence-free professional workflows available", () => {
     expect(summarizeCapabilityStatuses()).toEqual({
       available: 0,
-      degraded: 15,
-      unavailable: 5,
+      degraded: 16,
+      unavailable: 4,
     });
     expect(getDesignCapability("appearance.paints-effects-masks")?.status).toBe(
       "degraded",
@@ -75,10 +75,10 @@ describe("design capability manifest", () => {
     );
     expect(components).toMatchObject({
       id: "components.instances-variants",
-      status: "unavailable",
+      status: "degraded",
       name: "Components, instances, and variants",
-      provider: "Not implemented",
-      evidence: { automated: 0, manual: 0 },
+      provider: "@opendesign/component-service contract v1",
+      evidence: { automated: 10, manual: 0 },
     });
   });
 

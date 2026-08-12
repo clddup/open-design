@@ -797,6 +797,12 @@ function applyOperation(
     case "delete_asset":
       deleteAsset(document, command);
       return;
+    case "put_component":
+      putComponent(document, command);
+      return;
+    case "delete_component":
+      deleteComponent(document, command);
+      return;
     case "insert_page":
       insertPage(document, command);
       return;
@@ -891,6 +897,7 @@ function deletePage(
   const nodeIds = page.rootNodeIds.flatMap((nodeId) =>
     collectSubtreeIds(document, nodeId),
   );
+  assertComponentSourcesRemain(document, new Set(nodeIds), command.commandId);
   document.pageOrder.splice(document.pageOrder.indexOf(command.pageId), 1);
   delete document.pagesById[command.pageId];
   for (const nodeId of nodeIds) delete document.nodesById[nodeId];
@@ -940,6 +947,44 @@ function deleteAsset(
   delete document.assetsById[command.assetId];
 }
 
+function putComponent(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "put_component" }>,
+): void {
+  const existing = document.componentsById[command.component.id];
+  if (existing && existing.rootNodeId !== command.component.rootNodeId) {
+    throw new OperationError(
+      command.commandId,
+      `Component ${command.component.id} is already bound to ${existing.rootNodeId}`,
+      "duplicate",
+    );
+  }
+  document.componentsById[command.component.id] = structuredClone(
+    command.component,
+  );
+}
+
+function deleteComponent(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "delete_component" }>,
+): void {
+  if (!document.componentsById[command.componentId]) {
+    throw notFound(command.commandId, command.componentId);
+  }
+  const referencingInstance = Object.values(document.nodesById).find(
+    (node) =>
+      node.kind === "instance" &&
+      node.properties.componentId === command.componentId,
+  );
+  if (referencingInstance) {
+    throw new OperationError(
+      command.commandId,
+      `Component ${command.componentId} is still referenced by instance ${referencingInstance.id}`,
+    );
+  }
+  delete document.componentsById[command.componentId];
+}
+
 function insertElement(
   document: DesignDocument,
   command: Extract<DesignOperation, { type: "insert_element" }>,
@@ -982,6 +1027,14 @@ function updateProperties(
 ): void {
   const node = document.nodesById[command.nodeId];
   if (!node) throw notFound(command.commandId, command.nodeId);
+  if (node.kind === "instance" && command.size !== undefined) {
+    throw new OperationError(
+      command.commandId,
+      "Instance size follows its main component; resize the main component or detach the instance",
+      "invalid",
+      { path: `/nodesById/${escapeJsonPointer(node.id)}/size` },
+    );
+  }
   assertBooleanOperandUpdateAllowed(document, node, command);
   const fields = [
     "name",
@@ -1077,6 +1130,8 @@ function deleteElement(
   const node = document.nodesById[command.nodeId];
   const location = locateNode(document, command.nodeId);
   if (!node || !location) throw notFound(command.commandId, command.nodeId);
+  const deletedIds = new Set(collectSubtreeIds(document, command.nodeId));
+  assertComponentSourcesRemain(document, deletedIds, command.commandId);
   const source = targetChildren(
     document,
     location.pageId,
@@ -1084,7 +1139,7 @@ function deleteElement(
     command.commandId,
   );
   source.splice(location.index, 1);
-  for (const nodeId of collectSubtreeIds(document, command.nodeId)) {
+  for (const nodeId of deletedIds) {
     delete document.nodesById[nodeId];
   }
 }
@@ -1117,6 +1172,10 @@ function replaceSubtree(
     );
   }
   const oldIds = new Set(collectSubtreeIds(document, command.rootNodeId));
+  const removedIds = new Set(
+    [...oldIds].filter((nodeId) => !replacement.has(nodeId)),
+  );
+  assertComponentSourcesRemain(document, removedIds, command.commandId);
   for (const node of command.nodes) {
     if (!oldIds.has(node.id) && document.nodesById[node.id]) {
       throw new OperationError(
@@ -1403,6 +1462,23 @@ function collectSubtreeIds(
   return ids;
 }
 
+function assertComponentSourcesRemain(
+  document: DesignDocument,
+  removedNodeIds: ReadonlySet<string>,
+  commandId: string,
+): void {
+  if (removedNodeIds.size === 0) return;
+  for (const component of Object.values(document.componentsById)) {
+    if (!removedNodeIds.has(component.rootNodeId)) continue;
+    throw new OperationError(
+      commandId,
+      `Component ${component.id} must be deleted or detached from its instances before removing main ${component.rootNodeId}`,
+      "invalid",
+      { path: `/componentsById/${escapeJsonPointer(component.id)}/rootNodeId` },
+    );
+  }
+}
+
 function diffDocuments(
   before: DesignDocument,
   after: DesignDocument,
@@ -1419,6 +1495,10 @@ function diffDocuments(
   const changedPageIds: string[] = [];
   const removedPageIds: string[] = [];
   const pageChanges: NonNullable<DesignChangeSet["pageChanges"]> = [];
+  const addedComponentIds: string[] = [];
+  const changedComponentIds: string[] = [];
+  const removedComponentIds: string[] = [];
+  const componentChanges: NonNullable<DesignChangeSet["componentChanges"]> = [];
   const ids = new Set([
     ...Object.keys(before.nodesById),
     ...Object.keys(after.nodesById),
@@ -1533,6 +1613,55 @@ function diffDocuments(
     });
   }
 
+  const componentIds = new Set([
+    ...Object.keys(before.componentsById),
+    ...Object.keys(after.componentsById),
+  ]);
+  for (const componentId of componentIds) {
+    const oldComponent = before.componentsById[componentId];
+    const newComponent = after.componentsById[componentId];
+    if (!oldComponent && newComponent) {
+      addedComponentIds.push(componentId);
+      componentChanges.push({
+        type: "added",
+        componentId,
+        after: newComponent,
+        changedFields: ["component"],
+      });
+      continue;
+    }
+    if (oldComponent && !newComponent) {
+      removedComponentIds.push(componentId);
+      componentChanges.push({
+        type: "removed",
+        componentId,
+        before: oldComponent,
+        changedFields: ["component"],
+      });
+      continue;
+    }
+    if (!oldComponent || !newComponent) continue;
+    const changedFields = [
+      "name",
+      "rootNodeId",
+      "description",
+      "extensions",
+    ].filter(
+      (field) =>
+        JSON.stringify(oldComponent[field as keyof typeof oldComponent]) !==
+        JSON.stringify(newComponent[field as keyof typeof newComponent]),
+    );
+    if (changedFields.length === 0) continue;
+    changedComponentIds.push(componentId);
+    componentChanges.push({
+      type: "updated",
+      componentId,
+      before: oldComponent,
+      after: newComponent,
+      changedFields,
+    });
+  }
+
   return deepFreeze({
     documentId: before.documentId,
     fromRevision: before.revision,
@@ -1547,6 +1676,10 @@ function diffDocuments(
     changedPageIds,
     removedPageIds,
     pageChanges,
+    addedComponentIds,
+    changedComponentIds,
+    removedComponentIds,
+    componentChanges,
     changes,
   });
 }

@@ -8,10 +8,15 @@ import type {
 import type { ModelSelection } from "@opendesign/model-gateway";
 import type {
   BooleanOperation,
+  ComponentOverridePatch,
   DesignDocument,
   DesignOperation,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
+import {
+  componentSourcePathKey,
+  resolveComponentInstance,
+} from "@opendesign/component-service";
 import { RASTER_EXPORT_VERSION } from "@opendesign/import-export-service/raster";
 import {
   canCreateBooleanGroup,
@@ -123,6 +128,7 @@ import {
   suggestSvgExportName,
 } from "./svg-interchange";
 import { useDesignAssetActions } from "./use-design-asset-actions";
+import { useComponentActions } from "./use-component-actions";
 
 const LAYER_ORDER_ACTIONS: readonly LayerOrderAction[] = [
   "bring-forward",
@@ -341,6 +347,30 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       : undefined;
   const selectedBooleanParent = selectedNode?.parentId
     ? designDocument.nodesById[selectedNode.parentId]
+    : undefined;
+  const selectedComponent = selectedNode
+    ? selectedNode.kind === "instance"
+      ? designDocument.componentsById[selectedNode.properties.componentId]
+      : Object.values(designDocument.componentsById).find(
+          (component) => component.rootNodeId === selectedNode.id,
+        )
+    : undefined;
+  const selectedComponentContext = selectedComponent
+    ? {
+        componentName: selectedComponent.name,
+        isMain: selectedNode?.kind !== "instance",
+        overrideCount:
+          selectedNode?.kind === "instance"
+            ? selectedNode.properties.overrides.length
+            : 0,
+        sourceNodes:
+          selectedNode?.kind === "instance"
+            ? resolvedInstanceSourceNodes(designDocument, selectedNode.id)
+            : [],
+        availableComponents: Object.values(designDocument.componentsById).map(
+          (component) => ({ id: component.id, name: component.name }),
+        ),
+      }
     : undefined;
   const canGroupSelection = canGroupNodes(
     designDocument,
@@ -901,6 +931,27 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     },
     [applyCommands, t],
   );
+
+  const {
+    createComponentFromSelection,
+    createSelectedComponentInstance,
+    detachSelectedInstance,
+    goToSelectedInstanceMain,
+    locateComponentMain,
+    placeComponentFromAssets,
+    removeSelectedComponent,
+    resetSelectedInstance,
+    resetSelectedInstanceSource,
+    updateSelectedInstanceSource,
+  } = useComponentActions({
+    activePageId,
+    activatePage,
+    applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  });
 
   const createPage = useCallback((): PageActionResult => {
     const current = runtime.getSnapshot().document;
@@ -2638,8 +2689,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             onDuplicatePage={duplicatePage}
             onImportAsset={importImageAsset}
             onLocateAsset={locateImageAsset}
+            onLocateComponent={locateComponentMain}
             onPageChange={activatePage}
             onPlaceAsset={placeImageAsset}
+            onPlaceComponent={placeComponentFromAssets}
             onRenamePage={renamePage}
             onReorderPage={reorderPage}
             onReplaceAsset={replaceImageAsset}
@@ -2735,6 +2788,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             properties={
               <PropertiesPanel
                 arrangement={arrangementMetrics}
+                componentContext={selectedComponentContext}
                 booleanOperationEditable={canChangeSelectedBoolean}
                 booleanOperandParent={
                   selectedBooleanParent?.kind === "boolean"
@@ -2749,10 +2803,14 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onArrange={arrangeSelection}
                 onBooleanOperationChange={applyBooleanOperation}
                 onCancelSvgOperation={cancelSvgOperation}
+                onCreateComponent={createComponentFromSelection}
+                onCreateComponentInstance={createSelectedComponentInstance}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
+                onDetachComponentInstance={detachSelectedInstance}
                 onDismissRasterFeedback={() => setRasterFeedback(null)}
                 onDismissSvgFeedback={() => setSvgFeedback(null)}
                 onDuplicate={duplicateSelection}
+                onGoToComponentMain={goToSelectedInstanceMain}
                 onExportFormatChange={(format) => {
                   setExportFormat(format);
                   if (format !== "svg") {
@@ -2769,12 +2827,19 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onExportRaster={() => void exportRaster()}
                 onExportSvg={() => void exportSvg()}
                 onReplaceImage={() => void replaceSelectedImage()}
+                onRemoveComponent={removeSelectedComponent}
+                onResetComponentInstance={resetSelectedInstance}
+                onResetComponentSourceOverride={resetSelectedInstanceSource}
                 onSelectBooleanParent={(nodeId) =>
                   runtime.setSelection([nodeId], nodeId)
                 }
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}
+                onUpdateComponentOverride={(
+                  sourcePath: readonly string[],
+                  patch: ComponentOverridePatch,
+                ) => updateSelectedInstanceSource(sourcePath, patch)}
                 onSvgExportSettingsChange={setSvgExportSettings}
                 onRasterExportSettingsChange={setRasterExportSettings}
                 exportFormat={exportFormat}
@@ -3132,6 +3197,26 @@ function isDurableAgentCheckpoint(event: AgentEvent): boolean {
     event.type === "approval.requested" ||
     event.type === "approval.resolved"
   );
+}
+
+function resolvedInstanceSourceNodes(
+  document: DesignDocument,
+  instanceId: string,
+) {
+  const instance = document.nodesById[instanceId];
+  if (!instance || instance.kind !== "instance") return [];
+  const resolution = resolveComponentInstance(document, instanceId);
+  if (!resolution.ok) return [];
+  const overrideKeys = new Set(
+    instance.properties.overrides.map((override) =>
+      componentSourcePathKey(override.sourcePath),
+    ),
+  );
+  return resolution.overrideTargets.map((resolved) => ({
+    node: resolved.node,
+    overridden: overrideKeys.has(componentSourcePathKey(resolved.sourcePath)),
+    sourcePath: [...resolved.sourcePath],
+  }));
 }
 
 function agentEventActivityAt(event: AgentEvent): string | null {

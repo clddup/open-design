@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
+  ComponentOverridePatchSchema,
   DesignNodeSchema,
   DesignOperationSchema,
   DesignTransactionSchema,
@@ -85,6 +86,21 @@ function operation() {
 }
 
 describe("design contract schemas", () => {
+  it("validates component overrides without permitting structural edits", () => {
+    expect(
+      Value.Check(ComponentOverridePatchSchema, {
+        visible: false,
+        opacity: 0.8,
+        properties: { content: "Buy now" },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ComponentOverridePatchSchema, {
+        transform: [1, 0, 0, 1, 40, 40],
+      }),
+    ).toBe(false);
+  });
+
   it("rejects unknown operation and transaction properties", () => {
     expect(Value.Check(DesignOperationSchema, operation())).toBe(true);
     expect(
@@ -1083,6 +1099,33 @@ describe("design contract schemas", () => {
       size: text.size,
       properties: { textResize: "fixed" },
     });
+  });
+
+  it("migrates 1.10 documents but refuses ambiguous legacy instance semantics", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.10.0" as typeof source.schemaVersion;
+    expect(migrateDesignDocument(source)?.schemaVersion).toBe(
+      DESIGN_SCHEMA_VERSION,
+    );
+
+    const legacyInstance = structuredClone(source) as Record<string, unknown>;
+    legacyInstance.nodesById = {
+      instance_legacy: {
+        id: "instance_legacy",
+        kind: "instance",
+        name: "Unknown legacy instance",
+        parentId: null,
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, 0, 0],
+        size: { width: 100, height: 40 },
+        opacity: 1,
+        properties: {},
+        extensions: {},
+      },
+    };
+    expect(migrateDesignDocument(legacyInstance)).toBeNull();
   });
 
   it("enforces canonical wrapping and overflow for Auto Size text", () => {

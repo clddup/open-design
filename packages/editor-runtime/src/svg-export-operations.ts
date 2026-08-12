@@ -5,6 +5,7 @@ import type {
   Rect,
   Transform,
 } from "@opendesign/design-contracts";
+import { materializeComponentInstances } from "@opendesign/component-service";
 import {
   BOOLEAN_GEOMETRY_RESOLVER_VERSION,
   type BooleanGeometryResolution,
@@ -124,9 +125,23 @@ export function planSvgExportRequest(
       (pageOrder.get(left) ?? Number.MAX_SAFE_INTEGER) -
       (pageOrder.get(right) ?? Number.MAX_SAFE_INTEGER),
   );
-  const booleanNodeIds = collectRenderedBooleanNodeIds(document, rootNodeIds);
+  let exportDocument: DesignDocument;
+  try {
+    exportDocument = materializeComponentInstances(document);
+  } catch (error) {
+    return failure(
+      "invalid-geometry",
+      error instanceof Error
+        ? error.message
+        : "Component instance cannot be resolved",
+    );
+  }
+  const booleanNodeIds = collectRenderedBooleanNodeIds(
+    exportDocument,
+    rootNodeIds,
+  );
   const resolvedBooleanPaths = resolveBooleanSnapshot(
-    document,
+    exportDocument,
     input.pageId,
     booleanNodeIds,
     input.booleanSnapshot,
@@ -134,11 +149,11 @@ export function planSvgExportRequest(
   if (!resolvedBooleanPaths.ok) return resolvedBooleanPaths;
 
   const boundsContext: ExportBoundsContext = {
-    document,
+    document: exportDocument,
     resolvedBooleanPaths: resolvedBooleanPaths.paths,
     selectedFrameRoots: new Set(
       rootNodeIds.filter(
-        (nodeId) => document.nodesById[nodeId]?.kind === "frame",
+        (nodeId) => exportDocument.nodesById[nodeId]?.kind === "frame",
       ),
     ),
   };
@@ -176,7 +191,7 @@ export function planSvgExportRequest(
   ];
   const rootTransformEntries: Array<[string, Transform]> = [];
   for (const nodeId of rootNodeIds) {
-    const world = getWorldTransform(document, nodeId);
+    const world = getWorldTransform(exportDocument, nodeId);
     if (!world) {
       return failure(
         "invalid-bounds",
@@ -191,7 +206,7 @@ export function planSvgExportRequest(
   const rootTransformOverrides = Object.fromEntries(rootTransformEntries);
 
   const request: SvgExportRequest = {
-    document,
+    document: exportDocument,
     rootNodeIds,
     viewport,
     rootTransformOverrides,

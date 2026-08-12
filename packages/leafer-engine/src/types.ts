@@ -233,6 +233,7 @@ export interface LeaferFidelityWarning {
     | "boolean-geometry-pending"
     | "boolean-geometry-provider-failed"
     | "boolean-geometry-unsupported"
+    | "component-resolution-failed"
     | "invalid-path"
     | "missing-image"
     | "unsupported-color-alpha"

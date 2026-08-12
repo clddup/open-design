@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-12",
-  "documentSchemaVersion": "1.10.0",
+  "documentSchemaVersion": "1.11.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -780,7 +780,7 @@
     {
       "id": "components.instances-variants",
       "category": "design-system",
-      "status": "unavailable",
+      "status": "degraded",
       "label": {
         "en": "Components, instances, and variants",
         "zh-CN": "组件、实例与 Variants"
@@ -789,23 +789,37 @@
         "en": "Create main components, instances, nested instances, overrides, component properties, and variant sets.",
         "zh-CN": "创建主组件、实例、嵌套实例、override、组件属性与 Variant Set。"
       },
-      "provider": "Not implemented",
+      "provider": "@opendesign/component-service contract v1",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
-        "contract": "unavailable",
-        "runtime": "unavailable",
-        "human": "unavailable",
-        "agent": "unavailable",
-        "render": "unavailable",
-        "export": "unavailable"
+        "contract": "available",
+        "runtime": "available",
+        "human": "available",
+        "agent": "available",
+        "render": "available",
+        "export": "available"
       },
       "limitations": [
         {
-          "en": "Current component, variant, and instance fields are placeholders and do not define usable semantics. The Component → Instance → Override → Reset/Detach vertical slice is promoted to P1-C but remains unavailable until every required surface is implemented and verified.",
-          "zh-CN": "当前 component、variant 和 instance 字段只是占位，不具备可用语义。Component → Instance → Override → Reset/Detach 垂直切片已提升为 P1-C，但在全部必需表面实现并验收前仍保持不可用。"
+          "en": "Same-file main components, linked and nested instances, stable source-path overrides, nested instance swap, reset/detach, Assets/Inspector UI, typed Agent operations, Canvas projection, SVG/raster export, persistence, autosave, and history are implemented. Variant sets, formal component properties, cross-file libraries, orphan migration after destructive source edits, direct on-canvas inner override selection, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "已实现同一 Design File 内的主组件、链接/嵌套实例、稳定 sourcePath override、嵌套实例交换、reset/detach、Assets/Inspector 人工 UI、Agent typed tool、Canvas 投影、SVG/位图导出、持久化、autosave 与 history。Variant Set、正式 Component Properties、跨文件 Library、破坏性源节点修改后的 orphan 迁移、画布直接选择内部 override 目标，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
-      "evidence": { "automated": [], "manual": [] },
+      "evidence": {
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/editor-runtime/src/component-operations.test.ts",
+          "packages/editor-runtime/src/component-svg-export.test.ts",
+          "packages/leafer-engine/src/component-projection.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/project-autosave.test.ts",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
+        ],
+        "manual": []
+      },
       "references": [
         "https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma",
         "https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants"

@@ -23,6 +23,7 @@ export type GlyphName =
   | "chevron-right"
   | "close"
   | "comment"
+  | "component"
   | "distribute-horizontal"
   | "distribute-vertical"
   | "duplicate"
@@ -32,6 +33,7 @@ export type GlyphName =
   | "file"
   | "frame"
   | "image"
+  | "instance"
   | "layers"
   | "line"
   | "arrow"
@@ -135,6 +137,12 @@ const paths: Record<GlyphName, ReactNode> = {
   comment: (
     <path d="M20 15a3 3 0 0 1-3 3H9l-5 3v-6a3 3 0 0 1-1-2V7a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3z" />
   ),
+  component: (
+    <>
+      <path d="m12 3 9 9-9 9-9-9z" />
+      <path d="m12 7 5 5-5 5-5-5z" />
+    </>
+  ),
   duplicate: (
     <>
       <rect x="8" y="8" width="11" height="11" rx="2" />
@@ -184,6 +192,12 @@ const paths: Record<GlyphName, ReactNode> = {
       <rect x="3.5" y="5" width="17" height="14" rx="2" />
       <circle cx="9" cy="10" r="1.5" />
       <path d="m5.5 17 4.2-4.2 3 3 2.2-2.2 3.6 3.4" />
+    </>
+  ),
+  instance: (
+    <>
+      <path d="m12 3 9 9-9 9-9-9z" />
+      <circle cx="12" cy="12" r="2.25" />
     </>
   ),
   layers: (

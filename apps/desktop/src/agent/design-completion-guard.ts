@@ -13,6 +13,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
@@ -241,9 +242,23 @@ function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
     call.toolName === UPDATE_IMAGE_TOOL_NAME ||
     call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
     call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
+    (call.toolName === DESIGN_COMPONENT_TOOL_NAME &&
+      isMaterialComponentWrite(call.input)) ||
     (call.toolName === DESIGN_APPLY_TOOL_NAME &&
       readCommands(call.input).length > 0)
   );
+}
+
+function isMaterialComponentWrite(input: unknown): boolean {
+  if (!isRecord(input)) return false;
+  if (
+    input.action === "create-instance" ||
+    input.action === "reset-overrides"
+  ) {
+    return true;
+  }
+  if (input.action !== "set-override" || !isRecord(input.patch)) return false;
+  return Object.keys(input.patch).some((key) => key !== "name");
 }
 
 function readCommands(

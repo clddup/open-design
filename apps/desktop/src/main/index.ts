@@ -78,6 +78,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -92,6 +93,7 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   designPlanTargets,
   isDesignApplyToolInput,
+  isDesignComponentToolInput,
   isDesignPlanToolInput,
   isDesignPageToolInput,
   isDesignVectorToolInput,
@@ -109,6 +111,7 @@ import {
   READ_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
   type DesignArrangeToolInput,
+  type DesignComponentToolInput,
   type DesignHierarchyToolInput,
   type DesignVectorToolInput,
 } from "../shared/design-agent-tools";
@@ -1560,6 +1563,36 @@ void app.whenReady().then(async () => {
         signal,
       );
     }
+    if (call.toolName === DESIGN_COMPONENT_TOOL_NAME) {
+      if (!isDesignComponentToolInput(call.input)) {
+        throw new TypeError("Invalid component tool input");
+      }
+      globalTaskCoordinator.assertComponentToolAccess(context, call.input);
+      globalTaskCoordinator.assertDocumentInspected(context);
+      const materialWrite = componentToolIsMaterialWrite(call.input);
+      if (materialWrite) {
+        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+      }
+      const result = await rendererDesignToolHost.execute(
+        call,
+        executionContext,
+        signal,
+      );
+      if (!materialWrite) return result;
+      const targetRefs = materialTargetRefsForComponentTool(call.input);
+      const targetIds = globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
+        context,
+        targetRefs.nodeIds,
+        targetRefs.parentId,
+      );
+      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+        context.runId,
+        targetIds,
+        result.designRevision?.revision,
+        targetRefs.createdNodeIds,
+      );
+      return withDesignDelivery(result, context.runId);
+    }
     if (
       call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
       call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
@@ -1786,6 +1819,44 @@ function materialTargetRefsForStructuredTool(
   }
   if ("groupId" in input) return { nodeIds: [input.groupId] };
   return { nodeIds: [input.booleanId] };
+}
+
+function materialTargetRefsForComponentTool(input: DesignComponentToolInput): {
+  nodeIds: string[];
+  parentId?: string | null;
+  createdNodeIds: string[];
+} {
+  switch (input.action) {
+    case "create-component":
+      return { nodeIds: [input.nodeId], createdNodeIds: [] };
+    case "remove-component":
+      return { nodeIds: [], createdNodeIds: [] };
+    case "create-instance":
+      return {
+        nodeIds: [],
+        parentId: input.parentId,
+        createdNodeIds: [input.instanceId],
+      };
+    case "set-override":
+    case "reset-overrides":
+    case "detach-instance":
+      return { nodeIds: [input.instanceId], createdNodeIds: [] };
+    case "go-to-main":
+      return { nodeIds: [input.instanceId], createdNodeIds: [] };
+  }
+}
+
+function componentToolIsMaterialWrite(
+  input: DesignComponentToolInput,
+): boolean {
+  if (
+    input.action === "create-instance" ||
+    input.action === "reset-overrides"
+  ) {
+    return true;
+  }
+  if (input.action !== "set-override") return false;
+  return Object.keys(input.patch).some((key) => key !== "name");
 }
 
 function createdNodeIdsForStructuredTool(

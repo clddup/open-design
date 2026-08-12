@@ -755,6 +755,12 @@ export function canDeleteNodes(
   }
   const roots = topLevelSelection(document, uniqueNodeIds);
   if (roots.length === 0) return false;
+  const componentMainIds = new Set(
+    Object.values(document.componentsById).map(
+      (component) => component.rootNodeId,
+    ),
+  );
+  if (roots.some((nodeId) => componentMainIds.has(nodeId))) return false;
   const selected = new Set(roots);
   if (
     roots.some(

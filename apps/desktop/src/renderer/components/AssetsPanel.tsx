@@ -21,6 +21,8 @@ import styles from "./AssetsPanel.module.scss";
 export function AssetsPanel({
   document,
   query,
+  onLocateComponent,
+  onPlaceComponent,
   onDelete,
   onImport,
   onLocate,
@@ -29,6 +31,8 @@ export function AssetsPanel({
 }: {
   document: DesignDocument;
   query: string;
+  onLocateComponent: (componentId: string) => void;
+  onPlaceComponent: (componentId: string) => AssetActionResult;
   onDelete: (assetId: string) => AssetActionResult;
   onImport: () => Promise<AssetActionResult>;
   onLocate: (reference: DesignAssetReference) => void;
@@ -40,6 +44,21 @@ export function AssetsPanel({
   const filtered = useMemo(
     () => filterDesignImageAssets(entries, query),
     [entries, query],
+  );
+  const components = useMemo(
+    () =>
+      Object.values(document.componentsById)
+        .filter((component) =>
+          component.name
+            .toLocaleLowerCase()
+            .includes(query.trim().toLocaleLowerCase()),
+        )
+        .sort(
+          (left, right) =>
+            left.name.localeCompare(right.name) ||
+            left.id.localeCompare(right.id),
+        ),
+    [document, query],
   );
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [status, setStatus] = useState("");
@@ -95,6 +114,57 @@ export function AssetsPanel({
       id="sidebar-assets"
       role="tabpanel"
     >
+      <div className={styles.heading}>
+        <span>{t("sidebar.fileComponents")}</span>
+      </div>
+      {Object.keys(document.componentsById).length === 0 ? (
+        <div className={styles.compactEmpty}>
+          <Glyph name="component" size={17} />
+          <span>{t("sidebar.noComponentsHint")}</span>
+        </div>
+      ) : components.length === 0 ? (
+        <div className={styles.compactEmpty}>
+          <Glyph name="search" size={15} />
+          <span>{t("sidebar.noMatchingComponents")}</span>
+        </div>
+      ) : (
+        <div
+          aria-label={t("sidebar.components")}
+          className={styles.componentItems}
+        >
+          {components.map((component) => {
+            const count = Object.values(document.nodesById).filter(
+              (node) =>
+                node.kind === "instance" &&
+                node.properties.componentId === component.id,
+            ).length;
+            return (
+              <div className={styles.componentItem} key={component.id}>
+                <button
+                  aria-label={t("sidebar.placeComponent", {
+                    name: component.name,
+                  })}
+                  onClick={() => report(onPlaceComponent(component.id))}
+                  type="button"
+                >
+                  <Glyph name="component" size={16} />
+                  <span>
+                    <strong title={component.name}>{component.name}</strong>
+                    <small>{t("sidebar.componentInstances", { count })}</small>
+                  </span>
+                </button>
+                <IconButton
+                  icon="select"
+                  label={t("sidebar.locateComponentMain", {
+                    name: component.name,
+                  })}
+                  onClick={() => onLocateComponent(component.id)}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className={styles.heading}>
         <span>{t("sidebar.fileImages")}</span>
         <IconButton

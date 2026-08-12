@@ -8,6 +8,10 @@ import type {
   Transform,
 } from "@opendesign/design-contracts";
 import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
+import {
+  COMPONENT_PROJECTION_PREFIX,
+  resolveComponentInstance,
+} from "@opendesign/component-service";
 import { resolveImagePlacement } from "@opendesign/image-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
 import {
@@ -71,13 +75,55 @@ export function projectDesignPage(
   const elementsById = new Map<string, LeaferElementSpec>();
   const warnings: LeaferFidelityWarning[] = [];
   const visited = new Set<string>();
+  const projectedNodesById: DesignDocument["nodesById"] = {
+    ...document.nodesById,
+  };
+
+  for (const instance of Object.values(document.nodesById)) {
+    if (instance.kind !== "instance") continue;
+    const resolution = resolveComponentInstance(document, instance.id);
+    if (!resolution.ok) continue;
+    for (const resolved of resolution.nodes) {
+      projectedNodesById[resolved.projectionId] = resolved.node;
+    }
+  }
+  const projectionDocument = { ...document, nodesById: projectedNodesById };
 
   const visit = (nodeId: string) => {
     if (visited.has(nodeId)) return;
     visited.add(nodeId);
     const node = document.nodesById[nodeId];
     if (!node) return;
-    const spec = toElementSpec(document, node, warnings);
+    if (node.kind === "instance") {
+      const resolution = resolveComponentInstance(document, node.id);
+      if (!resolution.ok) {
+        warnings.push(
+          ...resolution.issues.map((issue) => ({
+            code: "component-resolution-failed" as const,
+            message: issue.message,
+            nodeId: node.id,
+          })),
+        );
+        const fallback = toElementSpec(document, node, warnings);
+        elementsById.set(node.id, fallback);
+        return;
+      }
+      for (const resolved of resolution.nodes) {
+        const spec = toElementSpec(
+          projectionDocument,
+          resolved.node,
+          warnings,
+          {
+            nodeId: node.id,
+            kind: resolved.root ? "instance" : resolved.node.kind,
+            sourceNodeId: resolved.sourceNodeId,
+          },
+        );
+        elementsById.set(resolved.projectionId, spec);
+      }
+      return;
+    }
+    const spec = toElementSpec(projectionDocument, node, warnings);
     elementsById.set(node.id, spec);
     node.childIds.forEach(visit);
   };
@@ -108,6 +154,17 @@ export function projectDesignPageIncrementally(
   }
   const page = document.pagesById[pageId];
   if (!page) throw new Error(`Page ${pageId} does not exist`);
+
+  if (
+    [...previous.elementsById.keys()].some((id) =>
+      id.startsWith(COMPONENT_PROJECTION_PREFIX),
+    ) ||
+    [...collectPageNodeIds(document, page.rootNodeIds)].some(
+      (nodeId) => document.nodesById[nodeId]?.kind === "instance",
+    )
+  ) {
+    return diffProjectedScene(previous, projectDesignPage(document, pageId));
+  }
 
   const activeNodeIds = collectPageNodeIds(document, page.rootNodeIds);
   const affectedNodeIds = new Set([
@@ -182,6 +239,24 @@ export function projectDesignPageIncrementally(
   };
 }
 
+function diffProjectedScene(
+  previous: LeaferSceneProjection,
+  next: LeaferSceneProjection,
+): LeaferSceneProjection {
+  const affectedNodeIds = new Set<string>();
+  const ids = new Set([
+    ...previous.elementsById.keys(),
+    ...next.elementsById.keys(),
+  ]);
+  for (const id of ids) {
+    const before = previous.elementsById.get(id);
+    const after = next.elementsById.get(id);
+    if (JSON.stringify(before) !== JSON.stringify(after))
+      affectedNodeIds.add(id);
+  }
+  return { ...next, affectedNodeIds };
+}
+
 function collectPageNodeIds(
   document: DesignDocument,
   rootNodeIds: readonly string[],
@@ -249,6 +324,11 @@ function toElementSpec(
   document: DesignDocument,
   node: DesignNode,
   warnings: LeaferFidelityWarning[],
+  identity?: {
+    kind: DesignNode["kind"];
+    nodeId: string;
+    sourceNodeId: string;
+  },
 ): LeaferElementSpec {
   const effectivelyLocked = isEffectivelyLocked(document, node);
   const parent = node.parentId ? document.nodesById[node.parentId] : undefined;
@@ -263,11 +343,20 @@ function toElementSpec(
     // reject direct manipulation, so interaction locking stays in our adapter.
     locked: false,
     editable: true,
+    ...(identity?.kind === "instance"
+      ? {
+          editConfig: {
+            preventEditInner: true,
+            resizeable: false,
+          },
+        }
+      : {}),
     ...mapNodeAppearance(node, warnings),
     data: {
       opendesignLocked: effectivelyLocked,
-      opendesignNodeId: node.id,
-      opendesignNodeKind: node.kind,
+      opendesignNodeId: identity?.nodeId ?? node.id,
+      opendesignNodeKind: identity?.kind ?? node.kind,
+      ...(identity ? { opendesignSourceNodeId: identity.sourceNodeId } : {}),
     },
   };
   let tag: LeaferElementTag;
@@ -484,7 +573,7 @@ function toElementSpec(
     childIds: [...node.childIds],
     data,
     id: node.id,
-    kind: node.kind,
+    kind: identity?.kind ?? node.kind,
     parentId: node.parentId,
     tag,
     transform: [...node.transform],

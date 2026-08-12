@@ -23,6 +23,72 @@
   gap: 2px;
 }
 
+.componentItems {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.componentItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  align-items: center;
+  border-radius: 5px;
+
+  &:hover,
+  &:focus-within {
+    background: var(--ui-surface-sunken);
+  }
+
+  > button:first-child {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: center;
+    gap: 5px;
+    padding: 6px 4px;
+    border: 0;
+    color: var(--ui-accent);
+    background: transparent;
+    text-align: left;
+
+    > span {
+      display: grid;
+      min-width: 0;
+      gap: 2px;
+    }
+
+    strong,
+    small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    strong {
+      color: var(--ui-text);
+      font-size: 11px;
+      font-weight: 550;
+    }
+
+    small {
+      color: var(--ui-text-faint);
+      font-size: 9px;
+    }
+  }
+}
+
+.compactEmpty {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  padding: 8px 4px;
+  color: var(--ui-text-faint);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
 .item {
   display: grid;
   min-width: 0;

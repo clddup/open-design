@@ -10,7 +10,11 @@ function pageActionProps() {
     onDeleteAsset: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
     onImportAsset: vi.fn(() => Promise.resolve({ ok: true } as const)),
     onLocateAsset: vi.fn(),
+    onLocateComponent: vi.fn(),
     onPlaceAsset: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
+    onPlaceComponent: vi.fn(
+      () => ({ ok: false, error: "Unavailable" }) as const,
+    ),
     onReplaceAsset: vi.fn(() => Promise.resolve({ ok: true } as const)),
     onCreatePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
     onDeletePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),

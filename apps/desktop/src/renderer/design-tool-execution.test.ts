@@ -10,6 +10,7 @@ import { memoizeTextLayoutProvider } from "@opendesign/text-service";
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
+  DESIGN_COMPONENT_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
@@ -103,6 +104,183 @@ function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
 }
 
 describe("Renderer design tool scope", () => {
+  it("creates, inspects, overrides, and detaches components through the typed tool", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const createComponent = await executeDesignToolRequest(
+      {
+        requestId: "component_create",
+        call: {
+          toolCallId: "tool_component_create",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "create-component",
+            label: "Create feature component",
+            pageId: "page_welcome",
+            nodeId: "feature_group",
+            componentId: "component_feature",
+            name: "Feature",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(createComponent).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "create-component",
+          componentId: "component_feature",
+          mainNodeId: "feature_group",
+        },
+      },
+    });
+
+    const createInstance = await executeDesignToolRequest(
+      {
+        requestId: "component_instance",
+        call: {
+          toolCallId: "tool_component_instance",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "create-instance",
+            label: "Place feature instance",
+            pageId: "page_welcome",
+            componentId: "component_feature",
+            instanceId: "feature_instance",
+            parentId: "frame_welcome",
+            index: 4,
+            x: 720,
+            y: 560,
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(createInstance).toMatchObject({
+      ok: true,
+      result: { content: { instanceId: "feature_instance", revision: 2 } },
+    });
+
+    const sourceNodeId =
+      runtime.getSnapshot().document.nodesById.feature_group?.childIds[0];
+    if (!sourceNodeId) throw new Error("Feature component has no source layer");
+    const override = await executeDesignToolRequest(
+      {
+        requestId: "component_override",
+        call: {
+          toolCallId: "tool_component_override",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "set-override",
+            label: "Hide feature source",
+            pageId: "page_welcome",
+            instanceId: "feature_instance",
+            sourcePath: [sourceNodeId],
+            patch: { visible: false },
+          },
+        },
+        context: { ...pageContext, revision: 2 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(override.ok).toBe(true);
+
+    const inspection = await executeDesignToolRequest(
+      {
+        requestId: "inspect_components",
+        call: {
+          toolCallId: "tool_inspect_components",
+          toolName: "opendesign_inspect_document",
+          input: {},
+        },
+        context: { ...pageContext, revision: 3 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(inspection).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          document: {
+            componentsById: {
+              component_feature: { rootNodeId: "feature_group" },
+            },
+            instancesById: {
+              feature_instance: {
+                componentId: "component_feature",
+                overrides: [{ sourcePath: [sourceNodeId] }],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const detached = await executeDesignToolRequest(
+      {
+        requestId: "component_detach",
+        call: {
+          toolCallId: "tool_component_detach",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "detach-instance",
+            label: "Detach feature instance",
+            pageId: "page_welcome",
+            instanceId: "feature_instance",
+          },
+        },
+        context: { ...pageContext, revision: 3 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(detached.ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.feature_instance?.kind,
+    ).not.toBe("instance");
+
+    const removed = await executeDesignToolRequest(
+      {
+        requestId: "component_remove",
+        call: {
+          toolCallId: "tool_component_remove",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "remove-component",
+            label: "Remove feature component identity",
+            pageId: "page_welcome",
+            componentId: "component_feature",
+          },
+        },
+        context: { ...pageContext, revision: 4 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(removed).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "remove-component",
+          componentId: "component_feature",
+          revision: 5,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.componentsById.component_feature,
+    ).toBeUndefined();
+    expect(runtime.getSnapshot().document.nodesById.feature_group?.kind).toBe(
+      "group",
+    );
+  });
+
   it("applies host-ID Page lifecycle operations only within their explicit mutation scope", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     runtime.setSelection(["title_welcome"], "title_welcome");

@@ -28,6 +28,7 @@ import {
   designApplyRequiresPlan,
   designPlanTargets,
   type DesignApplyToolInput,
+  type DesignComponentToolInput,
   type DesignPlanTarget,
   type DesignPlanToolInput,
   type DesignVisualReviewToolInput,
@@ -317,6 +318,25 @@ export class GlobalTaskCoordinator {
     }
     throw new Error(
       "design_workflow.page_structure_access_required: Call opendesign_request_page_structure_access and wait for the user's one-time approval before modifying Page structure or another Page",
+    );
+  }
+
+  assertComponentToolAccess(
+    context: TrustedToolContext,
+    input: DesignComponentToolInput,
+  ): void {
+    this.assertDesignToolContext(context);
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (!binding) throw new Error("Component tool requires an active Run");
+    if (
+      binding.mutationTarget.kind === "document" ||
+      this.hasPageStructureAccess(context.runId) ||
+      input.pageId === binding.mutationTarget.pageId
+    ) {
+      return;
+    }
+    throw new Error(
+      "design_workflow.page_structure_access_required: Call opendesign_request_page_structure_access and wait for the user's one-time approval before modifying components on another Page",
     );
   }
 
@@ -842,6 +862,16 @@ export class GlobalTaskCoordinator {
       );
     }
     return [...targets];
+  }
+
+  resolveMaterialTargetIdsIfPlanned(
+    context: TrustedToolContext,
+    nodeIds: readonly string[],
+    parentId?: string | null,
+  ): string[] {
+    this.assertDesignToolContext(context);
+    if (!this.#designPlansByRunId.has(context.runId)) return [];
+    return this.resolveMaterialTargetIds(context, nodeIds, parentId);
   }
 
   getDeliveryLedger(runId: string): DesignDeliveryLedger | undefined {

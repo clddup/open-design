@@ -1,7 +1,9 @@
 import {
+  ComponentOverridePatchSchema,
   isDesignAsset,
   isDesignOperation,
   isImagePlacement,
+  schemaValidationIssues,
   type BooleanOperation,
   type DesignAsset,
   type DesignOperation,
@@ -35,6 +37,7 @@ export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
 export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
 export const DESIGN_VECTOR_TOOL_NAME = "opendesign_edit_vector";
 export const DESIGN_PAGE_TOOL_NAME = "opendesign_manage_pages";
+export const DESIGN_COMPONENT_TOOL_NAME = "opendesign_manage_components";
 export const PAGE_STRUCTURE_ACCESS_TOOL_NAME =
   "opendesign_request_page_structure_access";
 export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
@@ -330,6 +333,60 @@ export type DesignPageToolInput =
       action: "delete";
       label: string;
       pageId: string;
+    };
+
+export type DesignComponentToolInput =
+  | {
+      action: "create-component";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      componentId: string;
+      name: string;
+    }
+  | {
+      action: "create-instance";
+      label: string;
+      pageId: string;
+      componentId: string;
+      instanceId: string;
+      parentId: string | null;
+      index: number;
+      x: number;
+      y: number;
+      name?: string;
+    }
+  | {
+      action: "remove-component";
+      label: string;
+      pageId: string;
+      componentId: string;
+    }
+  | {
+      action: "set-override";
+      label: string;
+      pageId: string;
+      instanceId: string;
+      sourcePath: string[];
+      patch: Record<string, unknown>;
+    }
+  | {
+      action: "reset-overrides";
+      label: string;
+      pageId: string;
+      instanceId: string;
+      sourcePath?: string[];
+    }
+  | {
+      action: "detach-instance";
+      label: string;
+      pageId: string;
+      instanceId: string;
+    }
+  | {
+      action: "go-to-main";
+      pageId: string;
+      instanceId: string;
     };
 
 export type PageStructureAccessAction =
@@ -1211,6 +1268,64 @@ const MODEL_ARRANGE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_COMPONENT_SCHEMA = {
+  type: "object",
+  description:
+    "Create a main component from an existing Frame/Group, remove component identity when no instances remain, place an instance, set/reset an instance override by stable sourcePath, detach an instance, or locate its main component. The host resolves source paths and never exposes or persists derived instance children.",
+  properties: {
+    action: {
+      enum: [
+        "create-component",
+        "create-instance",
+        "remove-component",
+        "set-override",
+        "reset-overrides",
+        "detach-instance",
+        "go-to-main",
+      ],
+    },
+    label: { type: "string", minLength: 1, maxLength: 256 },
+    pageId: { type: "string", minLength: 1, maxLength: 256 },
+    nodeId: { type: "string", minLength: 1, maxLength: 256 },
+    componentId: { type: "string", minLength: 1, maxLength: 256 },
+    instanceId: { type: "string", minLength: 1, maxLength: 256 },
+    name: { type: "string", minLength: 1, maxLength: 256 },
+    parentId: {
+      anyOf: [
+        { type: "string", minLength: 1, maxLength: 256 },
+        { type: "null" },
+      ],
+    },
+    index: { type: "integer", minimum: 0 },
+    x: { type: "number" },
+    y: { type: "number" },
+    sourcePath: {
+      type: "array",
+      minItems: 1,
+      maxItems: 64,
+      items: { type: "string", minLength: 1, maxLength: 256 },
+    },
+    patch: {
+      type: "object",
+      minProperties: 1,
+      properties: {
+        name: { type: "string" },
+        visible: { type: "boolean" },
+        opacity: { type: "number", minimum: 0, maximum: 1 },
+        blendMode: { enum: MODEL_BLEND_MODES },
+        effects: { type: "array", items: MODEL_EFFECT_SCHEMA },
+        maskMode: {
+          enum: ["none", "alpha", "luminance", "clipping", "outline"],
+        },
+        properties: MODEL_NODE_PROPERTY_PATCH_SCHEMA,
+      },
+      additionalProperties: false,
+    },
+  },
+  required: ["action", "pageId"],
+  additionalProperties: false,
+} as const;
+
 const MODEL_VECTOR_EDIT_SCHEMA = {
   type: "object",
   description:
@@ -1892,6 +2007,14 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_COMPONENT_TOOL_NAME,
+    description:
+      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the main component; remove-component keeps its layers but removes component identity after all instances are detached or deleted; create-instance places a linked instance on an explicit Page; set-override changes supported text, appearance, visibility, effects, or nested componentId using a stable sourcePath returned by inspection; reset-overrides restores main values; detach-instance converts the resolved instance to ordinary editable layers; go-to-main returns the source Page and main layer without writing. Main updates propagate to every instance while supported overrides remain. Instance structure cannot be directly inserted, deleted, moved, or reordered. Cross-Page actions require the same one-time Page structure access as other cross-Page writes. All writes are previewed and applied as one undoable transaction.",
+    inputSchema: MODEL_COMPONENT_SCHEMA,
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
     description:
       "Request one user-approved, Run-scoped capability to modify Page structure or design across Pages in the currently bound Design File. Call this only when the user's request actually requires creating, duplicating, reordering, deleting, or editing another Page. The default Run remains bound to the current Page until the user approves. Approval expires when this Run ends and never grants access to another Design File, Project, directory, or future Run. After approval, inspect the Design File again before calling opendesign_manage_pages or planning work on another Page. Do not call this for renaming the already bound Page or for ordinary edits inside the current Page.",
@@ -2013,6 +2136,9 @@ export function validateDesignAgentToolInput(
   if (toolName === DESIGN_PAGE_TOOL_NAME) {
     return isDesignPageToolInput(input);
   }
+  if (toolName === DESIGN_COMPONENT_TOOL_NAME) {
+    return isDesignComponentToolInput(input);
+  }
   if (toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
     return isPageStructureAccessToolInput(input);
   }
@@ -2040,6 +2166,9 @@ export function validateDesignAgentToolInput(
         command.type !== "update_page" &&
         command.type !== "move_page" &&
         command.type !== "delete_page" &&
+        command.type !== "put_component" &&
+        command.type !== "delete_component" &&
+        !operationWritesInstanceDirectly(command) &&
         (internal ||
           (command.type !== "put_asset" && command.type !== "delete_asset"))
       );
@@ -2056,6 +2185,15 @@ export function validateDesignAgentToolInput(
       ].includes(key),
     )
   );
+}
+
+function operationWritesInstanceDirectly(command: DesignOperation): boolean {
+  if (command.type === "insert_element")
+    return command.node.kind === "instance";
+  if (command.type === "replace_subtree") {
+    return command.nodes.some((node) => node.kind === "instance");
+  }
+  return false;
 }
 
 export function isReadImageToolInput(
@@ -2769,6 +2907,131 @@ export function isDesignVisualReviewToolInput(
       "refinements",
     ])
   );
+}
+
+export function isDesignComponentToolInput(
+  input: unknown,
+): input is DesignComponentToolInput {
+  if (
+    !isRecord(input) ||
+    typeof input.action !== "string" ||
+    typeof input.pageId !== "string" ||
+    input.pageId.length === 0
+  ) {
+    return false;
+  }
+  const label =
+    input.action === "go-to-main" ||
+    (typeof input.label === "string" &&
+      input.label.length > 0 &&
+      input.label.length <= 256);
+  if (!label) return false;
+  const id = (value: unknown) =>
+    typeof value === "string" && value.length > 0 && value.length <= 256;
+  const sourcePath = (value: unknown) =>
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= 64 &&
+    value.every(id);
+  switch (input.action) {
+    case "create-component":
+      return (
+        id(input.nodeId) &&
+        id(input.componentId) &&
+        id(input.name) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "nodeId",
+          "componentId",
+          "name",
+        ])
+      );
+    case "create-instance":
+      return (
+        id(input.componentId) &&
+        id(input.instanceId) &&
+        (input.parentId === null || id(input.parentId)) &&
+        Number.isInteger(input.index) &&
+        (input.index as number) >= 0 &&
+        typeof input.x === "number" &&
+        Number.isFinite(input.x) &&
+        typeof input.y === "number" &&
+        Number.isFinite(input.y) &&
+        (input.name === undefined || id(input.name)) &&
+        exactKeys(
+          input,
+          input.name === undefined
+            ? [
+                "action",
+                "label",
+                "pageId",
+                "componentId",
+                "instanceId",
+                "parentId",
+                "index",
+                "x",
+                "y",
+              ]
+            : [
+                "action",
+                "label",
+                "pageId",
+                "componentId",
+                "instanceId",
+                "parentId",
+                "index",
+                "x",
+                "y",
+                "name",
+              ],
+        )
+      );
+    case "remove-component":
+      return (
+        id(input.componentId) &&
+        exactKeys(input, ["action", "label", "pageId", "componentId"])
+      );
+    case "set-override":
+      return (
+        id(input.instanceId) &&
+        sourcePath(input.sourcePath) &&
+        schemaValidationIssues(ComponentOverridePatchSchema, input.patch)
+          .length === 0 &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "instanceId",
+          "sourcePath",
+          "patch",
+        ])
+      );
+    case "reset-overrides":
+      return (
+        id(input.instanceId) &&
+        (input.sourcePath === undefined || sourcePath(input.sourcePath)) &&
+        exactKeys(
+          input,
+          input.sourcePath === undefined
+            ? ["action", "label", "pageId", "instanceId"]
+            : ["action", "label", "pageId", "instanceId", "sourcePath"],
+        )
+      );
+    case "detach-instance":
+      return (
+        id(input.instanceId) &&
+        exactKeys(input, ["action", "label", "pageId", "instanceId"])
+      );
+    case "go-to-main":
+      return (
+        id(input.instanceId) &&
+        exactKeys(input, ["action", "pageId", "instanceId"])
+      );
+    default:
+      return false;
+  }
 }
 
 export function designApplyRequiresPlan(input: DesignApplyToolInput): boolean {

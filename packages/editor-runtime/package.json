@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@opendesign/component-service": "workspace:*",
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/geometry-service": "workspace:*",
     "@opendesign/import-export-service": "workspace:*",

@@ -22,6 +22,14 @@ function renderPanel(
     operation?: { kind: "import" | "export"; name: string } | null;
     exportFormat?: "svg" | "png" | "jpeg" | "webp";
     selectionCount?: number;
+    componentContext?: {
+      availableComponents: readonly { id: string; name: string }[];
+      componentName: string;
+      isMain: boolean;
+      overrideCount: number;
+      sourceNodes: readonly [];
+    };
+    onRemoveComponent?: () => void;
   } = {},
 ) {
   const onCancelSvgOperation = vi.fn();
@@ -40,18 +48,26 @@ function renderPanel(
           arrangement={options.arrangement ?? null}
           booleanOperationEditable={false}
           canDelete
+          componentContext={options.componentContext}
           node={options.node}
           onArrange={onArrange}
           onBooleanOperationChange={vi.fn()}
           onCancelSvgOperation={onCancelSvgOperation}
+          onCreateComponent={vi.fn()}
+          onCreateComponentInstance={vi.fn()}
           onDelete={vi.fn()}
+          onDetachComponentInstance={vi.fn()}
           onDismissRasterFeedback={vi.fn()}
           onDismissSvgFeedback={onDismissSvgFeedback}
           onDuplicate={vi.fn()}
+          onGoToComponentMain={vi.fn()}
           onExportFormatChange={vi.fn()}
           onExportRaster={onExportRaster}
           onExportSvg={onExportSvg}
           onReplaceImage={vi.fn()}
+          onRemoveComponent={options.onRemoveComponent ?? vi.fn()}
+          onResetComponentInstance={vi.fn()}
+          onResetComponentSourceOverride={vi.fn()}
           onSelectBooleanParent={vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onRasterExportSettingsChange={onRasterExportSettingsChange}
@@ -68,6 +84,7 @@ function renderPanel(
           }}
           rasterFeedback={null}
           onUpdate={onUpdate}
+          onUpdateComponentOverride={vi.fn()}
           selectionCount={options.selectionCount ?? 2}
           svgExportSettings={{ includeLayerIds: false, padding: 0 }}
           svgFeedback={options.feedback ?? null}
@@ -267,6 +284,26 @@ describe("PropertiesPanel SVG workflow", () => {
 });
 
 describe("PropertiesPanel line workflow", () => {
+  it("removes component identity from the selected main through the component section", async () => {
+    const user = userEvent.setup();
+    const onRemoveComponent = vi.fn();
+    renderPanel({
+      componentContext: {
+        availableComponents: [],
+        componentName: "Directed connector",
+        isMain: true,
+        overrideCount: 0,
+        sourceNodes: [],
+      },
+      node: lineNode,
+      onRemoveComponent,
+      selectionCount: 1,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Remove component" }));
+    expect(onRemoveComponent).toHaveBeenCalledOnce();
+  });
+
   it("configures and starts a single-target professional raster export", async () => {
     const user = userEvent.setup();
     const { onExportRaster, onRasterExportSettingsChange } = renderPanel({

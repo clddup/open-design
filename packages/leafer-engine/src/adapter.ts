@@ -1357,10 +1357,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #emitSelection(): void {
     if (this.#synchronizing || this.#disposed) return;
-    const nodeIds = this.#editor.list.flatMap((element) => {
-      const nodeId = this.#nodeId(element as LeaferElement);
-      return nodeId ? [nodeId] : [];
-    });
+    const nodeIds = [
+      ...new Set(
+        this.#editor.list.flatMap((element) => {
+          const nodeId = this.#nodeId(element as LeaferElement);
+          return nodeId ? [nodeId] : [];
+        }),
+      ),
+    ];
     this.#callbacks.onSelectionChange(nodeIds, nodeIds.at(-1));
   }
 

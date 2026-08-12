@@ -24,6 +24,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
+  DESIGN_COMPONENT_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "../shared/design-agent-tools";
 import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt";
@@ -40,7 +41,7 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("production Agent context budget", () => {
-  it("reaches the provider with the complete production prompt and eighteen tools", async () => {
+  it("reaches the provider with the complete production prompt and nineteen tools", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-context-"));
     try {
       const gateway = new RecordingGateway(
@@ -88,7 +89,10 @@ describe("production Agent context budget", () => {
 
       expect(gateway.requests).toHaveLength(1);
       expect(gateway.requests[0]?.system).toBe(OPENDESIGN_AGENT_SYSTEM_PROMPT);
-      expect(gateway.requests[0]?.tools).toHaveLength(18);
+      expect(gateway.requests[0]?.tools).toHaveLength(19);
+      expect(gateway.requests[0]?.tools).toContainEqual(
+        expect.objectContaining({ name: DESIGN_COMPONENT_TOOL_NAME }),
+      );
       expect(events).not.toContainEqual(
         expect.objectContaining({ type: "agent.error" }),
       );
@@ -193,7 +197,7 @@ describe("production Agent context budget", () => {
         gateway.requests.every(
           (request) =>
             request.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-            request.tools.length === 18,
+            request.tools.length === 19,
         ),
       ).toBe(true);
       expect(
@@ -369,7 +373,7 @@ describe("production Agent context budget", () => {
         gateway.requests.every(
           (providerRequest) =>
             providerRequest.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-            providerRequest.tools.length === 18,
+            providerRequest.tools.length === 19,
         ),
       ).toBe(true);
       expect(

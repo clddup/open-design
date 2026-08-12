@@ -2,7 +2,11 @@ import {
   createWelcomeDocument,
   EditorRuntime,
 } from "@opendesign/editor-runtime";
-import type { DesignChangeSet } from "@opendesign/design-contracts";
+import type {
+  DesignChangeSet,
+  DesignDocument,
+  DesignNode,
+} from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import { cutVectorPath } from "@opendesign/geometry-service/vector-edit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -531,6 +535,42 @@ describe("Leafer engine selection bounds synchronization", () => {
         resampling: "smooth",
       }),
     ).rejects.toThrow("Leafer raster export layer is unavailable");
+    adapter.dispose();
+  });
+
+  it("exports resolved component pixels and deduplicates internal instance selection", async () => {
+    const onSelectionChange = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onSelectionChange,
+    });
+    adapter.sync(componentInput());
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const root = findElement(app.tree, "button_instance");
+    const projected = root instanceof FakeGroup ? root.children : [];
+    expect(root).toBeInstanceOf(FakeFrame);
+    expect(projected.length).toBe(2);
+
+    app.editor.target = projected;
+    app.editor.emit("editor.select");
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      ["button_instance"],
+      "button_instance",
+    );
+
+    await expect(
+      adapter.exportRaster({
+        version: 1,
+        pageId: "instances",
+        rootNodeId: "button_instance",
+        format: "png",
+        size: { mode: "scale", value: 1 },
+        background: { mode: "transparent" },
+        resampling: "smooth",
+      }),
+    ).resolves.toMatchObject({ mimeType: "image/png" });
+    expect(root?.export).toHaveBeenCalled();
     adapter.dispose();
   });
 
@@ -3328,6 +3368,139 @@ function createInput(): LeaferEngineSyncInput {
     document: createWelcomeDocument(),
     pageId: "page_welcome",
     selection: { nodeIds: ["feature_one"], anchorNodeId: "feature_one" },
+    tool: "select",
+    viewport: { panX: 0, panY: 0, zoom: 1, width: 1024, height: 768 },
+  };
+}
+
+function componentInput(): LeaferEngineSyncInput {
+  const main: Extract<DesignNode, { kind: "frame" }> = {
+    id: "button_main",
+    name: "Button",
+    parentId: null,
+    childIds: ["button_bg", "button_label"],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 120, height: 44 },
+    opacity: 1,
+    extensions: {},
+    kind: "frame",
+    properties: {
+      fills: [],
+      strokes: [],
+      strokeWidth: 0,
+      cornerRadius: 10,
+      clipsContent: false,
+    },
+  };
+  const background: Extract<DesignNode, { kind: "rectangle" }> = {
+    id: "button_bg",
+    name: "Background",
+    parentId: "button_main",
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 120, height: 44 },
+    opacity: 1,
+    extensions: {},
+    kind: "rectangle",
+    properties: {
+      fills: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+      cornerRadius: 10,
+    },
+  };
+  const label: Extract<DesignNode, { kind: "text" }> = {
+    id: "button_label",
+    name: "Label",
+    parentId: "button_main",
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 20, 10],
+    size: { width: 80, height: 24 },
+    opacity: 1,
+    extensions: {},
+    kind: "text",
+    properties: {
+      content: "Continue",
+      fontFamily: "Inter",
+      fontSize: 14,
+      fontWeight: 500,
+      lineHeight: 20,
+      letterSpacing: 0,
+      textAlignHorizontal: "center",
+      textAlignVertical: "center",
+      textResize: "fixed",
+      textWrap: "word",
+      textOverflow: "visible",
+      fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+    },
+  };
+  const instance: Extract<DesignNode, { kind: "instance" }> = {
+    id: "button_instance",
+    name: "Button instance",
+    parentId: null,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 80, 60],
+    size: { width: 120, height: 44 },
+    opacity: 1,
+    extensions: {},
+    kind: "instance",
+    properties: { componentId: "button", overrides: [] },
+  };
+  const document: DesignDocument = {
+    format: "dev.opendesign.document",
+    schemaVersion: "1.11.0",
+    documentId: "component-raster",
+    revision: 1,
+    pageOrder: ["main", "instances"],
+    pagesById: {
+      main: {
+        id: "main",
+        name: "Components",
+        rootNodeIds: ["button_main"],
+        extensions: {},
+      },
+      instances: {
+        id: "instances",
+        name: "Screen",
+        rootNodeIds: ["button_instance"],
+        extensions: {},
+      },
+    },
+    nodesById: {
+      button_main: main,
+      button_bg: background,
+      button_label: label,
+      button_instance: instance,
+    },
+    componentsById: {
+      button: {
+        id: "button",
+        name: "Button",
+        rootNodeId: "button_main",
+        extensions: {},
+      },
+    },
+    variantSetsById: {},
+    tokenCollectionsById: {},
+    tokensById: {},
+    interactionsById: {},
+    assetsById: {},
+    extensions: {},
+  };
+  return {
+    document,
+    pageId: "instances",
+    selection: { nodeIds: [] },
     tool: "select",
     viewport: { panX: 0, panY: 0, zoom: 1, width: 1024, height: 768 },
   };

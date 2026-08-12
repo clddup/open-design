@@ -13,6 +13,10 @@ import {
   migrateDesignDocument,
   schemaValidationIssues,
 } from "@opendesign/design-contracts";
+import {
+  componentSourceNodeIds,
+  resolveComponentInstance,
+} from "@opendesign/component-service";
 import { validateVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 
 export interface DocumentInvariantIssue {
@@ -83,6 +87,54 @@ export function validateDocumentInvariants(
     }
   }
 
+  const componentRoots = new Map<string, string>();
+  for (const [componentId, component] of Object.entries(
+    document.componentsById,
+  )) {
+    if (component.id !== componentId) {
+      issues.push({
+        path: `/componentsById/${componentId}/id`,
+        message: "component id must match its map key",
+      });
+    }
+    const root = ownValue(document.nodesById, component.rootNodeId);
+    if (!root) {
+      issues.push({
+        path: `/componentsById/${componentId}/rootNodeId`,
+        message: `component root ${component.rootNodeId} does not exist`,
+      });
+      continue;
+    }
+    if (root.kind !== "frame" && root.kind !== "group") {
+      issues.push({
+        path: `/componentsById/${componentId}/rootNodeId`,
+        message: "component roots must be Frames or Groups",
+      });
+    }
+    const existing = componentRoots.get(component.rootNodeId);
+    if (existing) {
+      issues.push({
+        path: `/componentsById/${componentId}/rootNodeId`,
+        message: `component root is already owned by ${existing}`,
+      });
+    }
+    componentRoots.set(component.rootNodeId, componentId);
+  }
+
+  const sourceOwner = new Map<string, string>();
+  for (const componentId of Object.keys(document.componentsById)) {
+    for (const nodeId of componentSourceNodeIds(document, componentId)) {
+      const existing = sourceOwner.get(nodeId);
+      if (existing && existing !== componentId) {
+        issues.push({
+          path: `/componentsById/${componentId}/rootNodeId`,
+          message: `component source ${nodeId} is already owned by ${existing}`,
+        });
+      }
+      sourceOwner.set(nodeId, componentId);
+    }
+  }
+
   for (const [nodeId, node] of Object.entries(document.nodesById)) {
     if (node.id !== nodeId) {
       issues.push({
@@ -120,6 +172,28 @@ export function validateDocumentInvariants(
           path: `/nodesById/${nodeId}/properties/assetId`,
           message: `image asset ${node.properties.assetId} does not exist`,
         });
+      }
+    }
+    if (node.kind === "instance") {
+      const duplicateOverridePaths = new Set<string>();
+      for (const [index, override] of node.properties.overrides.entries()) {
+        const key = JSON.stringify(override.sourcePath);
+        if (duplicateOverridePaths.has(key)) {
+          issues.push({
+            path: `/nodesById/${nodeId}/properties/overrides/${index}/sourcePath`,
+            message: "instance override source paths must be unique",
+          });
+        }
+        duplicateOverridePaths.add(key);
+      }
+      const resolution = resolveComponentInstance(document, node.id);
+      if (!resolution.ok) {
+        for (const issue of resolution.issues) {
+          issues.push({
+            path: `/nodesById/${nodeId}/properties`,
+            message: issue.message,
+          });
+        }
       }
     }
     if (

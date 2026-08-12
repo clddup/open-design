@@ -74,6 +74,17 @@ export {
   type VectorLayerLineCutTarget,
 } from "./vector-operations.js";
 export {
+  componentMainNodeId,
+  planCreateComponent,
+  planCreateInstance,
+  planDetachComponentInstance,
+  planResetComponentOverrides,
+  planRemoveComponent,
+  planSetComponentOverride,
+  type ComponentOperationFailureCode,
+  type ComponentOperationPlan,
+} from "./component-operations.js";
+export {
   nodeReferencesAsset,
   planDeleteImageAsset,
   planImageNodeUpdate,

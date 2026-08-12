@@ -6,7 +6,9 @@ import {
 } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const DESIGN_SCHEMA_VERSION = "1.10.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.11.0" as const;
+export const COMPONENT_DESIGN_SCHEMA_VERSION = "1.11.0" as const;
+export const ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION = "1.10.0" as const;
 export const TEXT_LAYOUT_DESIGN_SCHEMA_VERSION = "1.9.0" as const;
 export const VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION = "1.8.0" as const;
 export const EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION = "1.7.0" as const;
@@ -637,6 +639,49 @@ export const BooleanPropertiesSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ComponentOverridePatchSchema = Type.Object(
+  {
+    name: Type.Optional(Type.String()),
+    visible: Type.Optional(Type.Boolean()),
+    opacity: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+    blendMode: Type.Optional(BlendModeSchema),
+    effects: Type.Optional(Type.Array(EffectSchema)),
+    maskMode: Type.Optional(MaskModeSchema),
+    properties: Type.Optional(JsonObjectSchema),
+  },
+  { additionalProperties: false, minProperties: 1 },
+);
+
+export const ComponentOverrideSchema = Type.Object(
+  {
+    sourcePath: Type.Array(Type.String({ minLength: 1 }), {
+      minItems: 1,
+      maxItems: 64,
+    }),
+    patch: ComponentOverridePatchSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const InstancePropertiesSchema = Type.Object(
+  {
+    componentId: Type.String({ minLength: 1 }),
+    overrides: Type.Array(ComponentOverrideSchema, { maxItems: 4_096 }),
+  },
+  { additionalProperties: false },
+);
+
+export const ComponentDefinitionSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1, maxLength: 256 }),
+    rootNodeId: Type.String({ minLength: 1 }),
+    description: Type.Optional(Type.String({ maxLength: 2_000 })),
+    extensions: JsonObjectSchema,
+  },
+  { additionalProperties: false },
+);
+
 const NodeBaseProperties = {
   id: Type.String({ minLength: 1 }),
   name: Type.String(),
@@ -761,17 +806,15 @@ export const PathNodeSchema = Type.Object(
   { additionalProperties: false },
 );
 
-const FutureNodeProperties = {
-  ...NodeBaseProperties,
-  properties: JsonObjectSchema,
-};
-
-export const FutureNodeSchema = Type.Union([
-  Type.Object(
-    { ...FutureNodeProperties, kind: Type.Literal("instance") },
-    { additionalProperties: false },
-  ),
-]);
+export const InstanceNodeSchema = Type.Object(
+  {
+    ...NodeBaseProperties,
+    childIds: Type.Array(Type.String(), { maxItems: 0 }),
+    kind: Type.Literal("instance"),
+    properties: InstancePropertiesSchema,
+  },
+  { additionalProperties: false },
+);
 
 export const DesignNodeSchema = Type.Union([
   FrameNodeSchema,
@@ -786,7 +829,7 @@ export const DesignNodeSchema = Type.Union([
   ImageNodeSchema,
   VectorNodeSchema,
   PathNodeSchema,
-  FutureNodeSchema,
+  InstanceNodeSchema,
 ]);
 
 export const DesignPageSchema = Type.Object(
@@ -840,7 +883,7 @@ export const DesignDocumentSchema = Type.Object(
     }),
     pagesById: Type.Record(Type.String(), DesignPageSchema),
     nodesById: Type.Record(Type.String(), DesignNodeSchema),
-    componentsById: Type.Record(Type.String(), JsonValueSchema),
+    componentsById: Type.Record(Type.String(), ComponentDefinitionSchema),
     variantSetsById: Type.Record(Type.String(), JsonValueSchema),
     tokenCollectionsById: Type.Record(Type.String(), JsonValueSchema),
     tokensById: Type.Record(Type.String(), JsonValueSchema),
@@ -936,6 +979,24 @@ export const DeleteAssetCommandSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const PutComponentCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("put_component"),
+    component: ComponentDefinitionSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const DeleteComponentCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("delete_component"),
+    componentId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 export const InsertPageCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -991,6 +1052,8 @@ export const DesignOperationSchema: TUnion<
     typeof NodeDesignOperationSchema,
     typeof PutAssetCommandSchema,
     typeof DeleteAssetCommandSchema,
+    typeof PutComponentCommandSchema,
+    typeof DeleteComponentCommandSchema,
     typeof InsertPageCommandSchema,
     typeof UpdatePageCommandSchema,
     typeof MovePageCommandSchema,
@@ -1000,6 +1063,8 @@ export const DesignOperationSchema: TUnion<
   NodeDesignOperationSchema,
   PutAssetCommandSchema,
   DeleteAssetCommandSchema,
+  PutComponentCommandSchema,
+  DeleteComponentCommandSchema,
   InsertPageCommandSchema,
   UpdatePageCommandSchema,
   MovePageCommandSchema,
@@ -1116,6 +1181,21 @@ export const PageChangeSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ComponentChangeSchema = Type.Object(
+  {
+    type: Type.Union([
+      Type.Literal("added"),
+      Type.Literal("updated"),
+      Type.Literal("removed"),
+    ]),
+    componentId: Type.String({ minLength: 1 }),
+    before: Type.Optional(ComponentDefinitionSchema),
+    after: Type.Optional(ComponentDefinitionSchema),
+    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
+  },
+  { additionalProperties: false },
+);
+
 export const DesignChangeSetSchema = Type.Object(
   {
     documentId: Type.String({ minLength: 1 }),
@@ -1142,7 +1222,17 @@ export const DesignChangeSetSchema = Type.Object(
     removedPageIds: Type.Optional(
       Type.Array(Type.String(), { uniqueItems: true }),
     ),
+    addedComponentIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    changedComponentIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    removedComponentIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
     pageChanges: Type.Optional(Type.Array(PageChangeSchema)),
+    componentChanges: Type.Optional(Type.Array(ComponentChangeSchema)),
     changes: Type.Array(NodeChangeSchema),
   },
   { additionalProperties: false },
@@ -1441,6 +1531,12 @@ export type TextNode = Static<typeof TextNodeSchema>;
 export type ImageNode = Static<typeof ImageNodeSchema>;
 export type VectorNode = Static<typeof VectorNodeSchema>;
 export type PathNode = Static<typeof PathNodeSchema>;
+export type InstanceNode = Static<typeof InstanceNodeSchema>;
+export type ComponentDefinition = Static<typeof ComponentDefinitionSchema>;
+export type ComponentOverride = Static<typeof ComponentOverrideSchema>;
+export type ComponentOverridePatch = Static<
+  typeof ComponentOverridePatchSchema
+>;
 export type DesignNode = Static<typeof DesignNodeSchema>;
 export type DesignPage = Static<typeof DesignPageSchema>;
 export type DesignAsset = Static<typeof DesignAssetSchema>;
@@ -1454,6 +1550,10 @@ export type DeleteElementCommand = Static<typeof DeleteElementCommandSchema>;
 export type ReplaceSubtreeCommand = Static<typeof ReplaceSubtreeCommandSchema>;
 export type PutAssetCommand = Static<typeof PutAssetCommandSchema>;
 export type DeleteAssetCommand = Static<typeof DeleteAssetCommandSchema>;
+export type PutComponentCommand = Static<typeof PutComponentCommandSchema>;
+export type DeleteComponentCommand = Static<
+  typeof DeleteComponentCommandSchema
+>;
 export type InsertPageCommand = Static<typeof InsertPageCommandSchema>;
 export type UpdatePageCommand = Static<typeof UpdatePageCommandSchema>;
 export type MovePageCommand = Static<typeof MovePageCommandSchema>;
@@ -1466,6 +1566,7 @@ export type DesignError = Static<typeof DesignErrorSchema>;
 export type Revision = Static<typeof RevisionSchema>;
 export type NodeChange = Static<typeof NodeChangeSchema>;
 export type PageChange = Static<typeof PageChangeSchema>;
+export type ComponentChange = Static<typeof ComponentChangeSchema>;
 export type DesignChangeSet = Static<typeof DesignChangeSetSchema>;
 export type DesignDiff = DesignChangeSet;
 export type FidelityWarning = Static<typeof FidelityWarningSchema>;
@@ -1654,13 +1755,20 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       schemaVersion !== REGULAR_SHAPE_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== TEXT_LAYOUT_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== TEXT_LAYOUT_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
   try {
     const migrated = structuredClone(value) as Record<string, unknown>;
     migrated.schemaVersion = DESIGN_SCHEMA_VERSION;
+    if (
+      schemaVersion === ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
+      hasLegacyInstanceNodes(migrated)
+    ) {
+      return null;
+    }
     if (
       schemaVersion === LEGACY_DESIGN_SCHEMA_VERSION ||
       schemaVersion === APPEARANCE_DESIGN_SCHEMA_VERSION
@@ -1673,6 +1781,18 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
   } catch {
     return null;
   }
+}
+
+function hasLegacyInstanceNodes(document: Record<string, unknown>): boolean {
+  const nodes = document.nodesById;
+  if (!nodes || typeof nodes !== "object" || Array.isArray(nodes)) return false;
+  return Object.values(nodes).some(
+    (node) =>
+      node !== null &&
+      typeof node === "object" &&
+      !Array.isArray(node) &&
+      (node as { kind?: unknown }).kind === "instance",
+  );
 }
 
 function migrateTextNodes(document: Record<string, unknown>): void {

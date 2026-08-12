@@ -2,9 +2,9 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-12 · 文档协议：`1.10.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-12 · 文档协议：`1.11.0` · 画布基线：`leafer-editor@2.2.9`
 
-当前状态：可用 0 项，降级可用 15 项，不可用 5 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
+当前状态：可用 0 项，降级可用 16 项，不可用 4 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
 ## 基础工作流
 
@@ -218,15 +218,15 @@
 
 ## 设计系统
 
-### 组件、实例与 Variants — 不可用
+### 组件、实例与 Variants — 降级可用
 
 创建主组件、实例、嵌套实例、override、组件属性与 Variant Set。
 
 - ID：`components.instances-variants`
-- 实现方：Not implemented
-- 表面：contract=unavailable；runtime=unavailable；human=unavailable；agent=unavailable；render=unavailable；export=unavailable
-- 证据：自动化 0 项；实机 0 项
-- 限制：当前 component、variant 和 instance 字段只是占位，不具备可用语义。Component → Instance → Override → Reset/Detach 垂直切片已提升为 P1-C，但在全部必需表面实现并验收前仍保持不可用。
+- 实现方：@opendesign/component-service contract v1
+- 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
+- 证据：自动化 10 项；实机 0 项
+- 限制：已实现同一 Design File 内的主组件、链接/嵌套实例、稳定 sourcePath override、嵌套实例交换、reset/detach、Assets/Inspector 人工 UI、Agent typed tool、Canvas 投影、SVG/位图导出、持久化、autosave 与 history。Variant Set、正式 Component Properties、跨文件 Library、破坏性源节点修改后的 orphan 迁移、画布直接选择内部 override 目标，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants)
 

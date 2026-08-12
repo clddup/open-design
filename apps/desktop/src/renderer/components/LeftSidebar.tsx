@@ -42,7 +42,7 @@ const nodeIcons: Record<NodeKind, GlyphName> = {
   image: "assets",
   vector: "pen",
   path: "pen",
-  instance: "assets",
+  instance: "instance",
 };
 
 const nodeKindKeys: Record<NodeKind, MessageKey> = {
@@ -220,9 +220,11 @@ export function LeftSidebar({
   onRenamePage,
   onReorderPage,
   onDeleteAsset,
+  onLocateComponent,
   onImportAsset,
   onLocateAsset,
   onPlaceAsset,
+  onPlaceComponent,
   onReplaceAsset,
   onDelete,
   onSelect,
@@ -242,9 +244,11 @@ export function LeftSidebar({
   onRenamePage: (pageId: string, name: string) => PageActionResult;
   onReorderPage: (pageId: string, index: number) => PageActionResult;
   onDeleteAsset: (assetId: string) => AssetActionResult;
+  onLocateComponent: (componentId: string) => void;
   onImportAsset: () => Promise<AssetActionResult>;
   onLocateAsset: (reference: DesignAssetReference) => void;
   onPlaceAsset: (assetId: string) => AssetActionResult;
+  onPlaceComponent: (componentId: string) => AssetActionResult;
   onReplaceAsset: (assetId: string) => Promise<AssetActionResult>;
   onDelete: (nodeId: string) => void;
   onSelect: (nodeId: string) => void;
@@ -273,6 +277,11 @@ export function LeftSidebar({
   const revealedSelectionKey = useRef<string | null>(null);
   const layers = flattenPageTree(document, activePageId, collapsedNodeIds);
   const selectedIds = new Set(selectedNodeIds);
+  const componentMainNodeIds = new Set(
+    Object.values(document.componentsById).map(
+      (component) => component.rootNodeId,
+    ),
+  );
   const booleanEditScope = resolveBooleanEditScope(
     document,
     activePageId,
@@ -814,7 +823,14 @@ export function LeftSidebar({
                     tabIndex={node.id === firstFocusableId ? 0 : -1}
                     type="button"
                   >
-                    <Glyph name={nodeIcons[node.kind]} size={14} />
+                    <Glyph
+                      name={
+                        componentMainNodeIds.has(node.id)
+                          ? "component"
+                          : nodeIcons[node.kind]
+                      }
+                      size={14}
+                    />
                     <span>
                       {node.name ||
                         t("sidebar.untitledNode", {
@@ -880,7 +896,9 @@ export function LeftSidebar({
           onDelete={onDeleteAsset}
           onImport={onImportAsset}
           onLocate={onLocateAsset}
+          onLocateComponent={onLocateComponent}
           onPlace={onPlaceAsset}
+          onPlaceComponent={onPlaceComponent}
           onReplace={onReplaceAsset}
           query={assetQuery}
         />

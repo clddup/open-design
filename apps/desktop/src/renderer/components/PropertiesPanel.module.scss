@@ -49,6 +49,101 @@
   scrollbar-width: thin;
 }
 
+.componentCard {
+  display: grid;
+  gap: 8px;
+
+  > span {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+    color: var(--ui-accent);
+
+    > span {
+      display: grid;
+      min-width: 0;
+      gap: 2px;
+    }
+
+    strong,
+    small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    strong {
+      color: var(--ui-text);
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    small {
+      color: var(--ui-text-faint);
+      font-size: 9px;
+    }
+  }
+
+  :global(.ui-button) {
+    min-height: 25px;
+    justify-content: flex-start;
+    font-size: 10px;
+  }
+}
+
+.componentActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+
+  :global(.ui-button:last-child) {
+    grid-column: 1 / -1;
+  }
+}
+
+.componentOverrideEditor {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 7px;
+  margin-top: 3px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.componentOverrideHeading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ui-text-muted);
+  font-size: 9px;
+
+  button {
+    min-height: 20px;
+    padding: 0 5px;
+    border: 0;
+    color: var(--ui-accent-text);
+    background: transparent;
+    font-size: 9px;
+
+    &:disabled {
+      opacity: 0.4;
+    }
+  }
+}
+
+.componentOverrideGroup {
+  display: grid;
+  gap: 5px;
+
+  > span {
+    color: var(--ui-text-muted);
+    font-size: 9px;
+  }
+}
+
 .operationNotice {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) auto;

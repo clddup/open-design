@@ -45,7 +45,7 @@ describe("production Pi design-tool catalog", () => {
       toolDefinitions: definitions,
     });
 
-    expect(DESIGN_AGENT_TOOL_SPECS).toHaveLength(18);
+    expect(DESIGN_AGENT_TOOL_SPECS).toHaveLength(19);
     expect(adapter.tools.map((tool) => tool.name)).toEqual(
       DESIGN_AGENT_TOOL_SPECS.map((tool) => tool.name),
     );

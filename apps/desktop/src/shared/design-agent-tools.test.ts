@@ -4,6 +4,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPABILITIES_TOOL_NAME,
+  DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -160,6 +161,85 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(PAGE_STRUCTURE_ACCESS_TOOL_NAME, {
         actions: ["filesystem"],
         reason: input.reason,
+      }),
+    ).toBe(false);
+  });
+
+  it("validates dedicated component actions and rejects component definition bypasses", () => {
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "set-override",
+        label: "Override button label",
+        pageId: "page_home",
+        instanceId: "button_instance",
+        sourcePath: ["button_main", "button_label"],
+        patch: { properties: { content: "Buy now" }, opacity: 0.9 },
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "set-override",
+        label: "Invalid override",
+        pageId: "page_home",
+        instanceId: "button_instance",
+        sourcePath: ["button_main", "button_label"],
+        patch: { transform: [1, 0, 0, 1, 0, 0] },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "remove-component",
+        label: "Remove component identity",
+        pageId: "page_home",
+        componentId: "component_button",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        label: "Bypass component tool",
+        commands: [
+          {
+            commandId: "put_component",
+            type: "put_component",
+            component: {
+              id: "component_button",
+              name: "Button",
+              rootNodeId: "button_main",
+              extensions: {},
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        label: "Bypass instance creation",
+        commands: [
+          {
+            commandId: "insert_instance",
+            type: "insert_element",
+            pageId: "page_home",
+            parentId: null,
+            index: 0,
+            node: {
+              id: "button_instance",
+              kind: "instance",
+              name: "Button instance",
+              parentId: null,
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 0, 0],
+              size: { width: 120, height: 40 },
+              opacity: 1,
+              properties: {
+                componentId: "component_button",
+                overrides: [],
+              },
+              extensions: {},
+            },
+          },
+        ],
       }),
     ).toBe(false);
   });

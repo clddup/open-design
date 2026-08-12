@@ -1751,6 +1751,29 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.assertPageToolAccess(context, { action: "create" }),
     ).toThrow("page_structure_access_required");
+    expect(() =>
+      coordinator.assertComponentToolAccess(context, {
+        action: "create-component",
+        label: "Create component",
+        pageId,
+        nodeId: "feature_group",
+        componentId: "component_feature",
+        name: "Feature",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertComponentToolAccess(context, {
+        action: "create-instance",
+        label: "Place component on Research",
+        pageId: "page_research",
+        componentId: "component_feature",
+        instanceId: "instance_feature",
+        parentId: null,
+        index: 0,
+        x: 40,
+        y: 40,
+      }),
+    ).toThrow("page_structure_access_required");
     expect(coordinator.resolveExecutionContext(context).mutationTarget).toEqual(
       { kind: "page", pageId },
     );
@@ -1793,6 +1816,19 @@ describe("GlobalTaskCoordinator", () => {
     ).not.toThrow();
     expect(() =>
       coordinator.assertPageToolAccess(context, { action: "create" }),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertComponentToolAccess(context, {
+        action: "create-instance",
+        label: "Place component on Research",
+        pageId: "page_research",
+        componentId: "component_feature",
+        instanceId: "instance_feature",
+        parentId: null,
+        index: 0,
+        x: 40,
+        y: 40,
+      }),
     ).not.toThrow();
 
     coordinator.handleAgentEvent({

@@ -1,6 +1,7 @@
 import {
   createWelcomeDocument,
   EditorRuntime,
+  planCreateComponent,
 } from "@opendesign/editor-runtime";
 import type { DesignDocument } from "@opendesign/design-contracts";
 import type { ProjectDesignFile } from "../shared/desktop-api";
@@ -40,6 +41,43 @@ describe("ProjectAutosaveCoordinator", () => {
     );
     expect(runtime.getSnapshot().state.dirty).toBe(false);
     expect(runtime.getSnapshot().state.checkpointRevision).toBe(1);
+    coordinator.dispose();
+  });
+
+  it("autosaves component definitions through the same document checkpoint", async () => {
+    vi.useFakeTimers();
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const save: AutosaveFunction = vi.fn(
+      (_projectId: string, _designFileId: string, document: DesignDocument) =>
+        Promise.resolve(savedFile(document)),
+    );
+    const coordinator = new ProjectAutosaveCoordinator({ delayMs: 50, save });
+    coordinator.track(target(runtime));
+    const plan = planCreateComponent(runtime.getSnapshot().document, {
+      componentId: "component_features",
+      nodeId: "feature_group",
+      name: "Features",
+      commandPrefix: "component-features",
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    const current = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "component-features",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "tester" },
+        label: "Create component",
+        commands: plan.commands,
+      }).ok,
+    ).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(save).toHaveBeenCalledTimes(1);
+    const savedDocument = vi.mocked(save).mock.calls[0]?.[2];
+    expect(savedDocument?.componentsById.component_features).toMatchObject({
+      rootNodeId: "feature_group",
+    });
     coordinator.dispose();
   });
 

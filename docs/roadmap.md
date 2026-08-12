@@ -84,8 +84,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 建立人工 UI 与 Agent 共用的层级 planner：支持兄弟层序和 Page root/Frame/Group 跨容器重挂载，保持世界坐标、固定 Frame 尺寸并动态重算 Group bounds；图层树提供 before/inside/after 拖放、明确状态、单 revision/undo 和 macOS/Windows 共享行为测试。
 - [x] 建立 P0 持久上下文压缩：原始 journal 不删除，模型投影按完整 run 边界生成累计 `context.compacted` checkpoint，保留近期用户/Agent 摘录、附件元数据、工具统计和最新 design revision；当前轮与旧 journal 的超长工具字段都会被省略，压缩后仍超本地预算则在 Provider I/O 前返回 `context_budget_exceeded`。
 - [x] 将固定 system/tool 协议与可压缩 Conversation 投影分账；Main 按所选 Model Profile 注入 `contextWindow/maxOutputTokens`，Agent 对文字、图片、文档、工具与输出预留执行启发式 token 预算，并用 `model_context_incompatible` 区分“模型装不下协议”和用户上下文过长。模型可见 `apply_transaction` Schema 从 314,159 字符压至 25,222 字符，完整运行时校验保持不变。
-- [x] 在同一 Run 的每个 Provider turn 前重新预算；旧 assistant/tool 段超限时生成临时有界 checkpoint，保留当前用户原文和最近完整 tool call/result 段。完整生产 system prompt、十八个工具、200K Model Profile 与八轮多模态工具循环已证明第八轮会压缩后继续；结构化工具结果同时具有单字段和整体投影上限，原始 journal 不删除。
-- [ ] 将通用 Agent loop 迁移到固定 `@earendil-works/pi-agent-core` 的 headless `Agent`，通过 OpenDesign adapter 保留 Main 模型/凭据代理、typed design tools、Conversation journal、revision 和 plan/review 门禁；阶段 0—3 已完成核心、三种 API identity、`AgentEvent 3.8`、唯一 journal、十八个生产工具、completion guard、取消/结构化失败分流、累计 checkpoint、逐轮压缩、内容寻址多模态/资源句柄和重启恢复。utilityProcess 唯一入口已切为 `OpenDesignPiRuntime`，旧自研循环与旧测试已删除，历史 tool-call ID 会从 journal 预加载以阻止重放执行。当前只剩同一 commit 的 macOS/Windows protected package 和 packaged Agent smoke 门禁，通过后才勾选完成；不得重新引入双循环/fallback。固定 `0.84.1` 的 `AgentHarness.prompt()` 仍抛出 `HarnessNotImplemented`，不得把未实现的 durable harness 接入生产或建立第二份 session 状态。
+- [x] 在同一 Run 的每个 Provider turn 前重新预算；旧 assistant/tool 段超限时生成临时有界 checkpoint，保留当前用户原文和最近完整 tool call/result 段。完整生产 system prompt、十九个工具、200K Model Profile 与八轮多模态工具循环已证明第八轮会压缩后继续；结构化工具结果同时具有单字段和整体投影上限，原始 journal 不删除。
+- [ ] 将通用 Agent loop 迁移到固定 `@earendil-works/pi-agent-core` 的 headless `Agent`，通过 OpenDesign adapter 保留 Main 模型/凭据代理、typed design tools、Conversation journal、revision 和 plan/review 门禁；阶段 0—3 已完成核心、三种 API identity、`AgentEvent 3.8`、唯一 journal、十九个生产工具、completion guard、取消/结构化失败分流、累计 checkpoint、逐轮压缩、内容寻址多模态/资源句柄和重启恢复。utilityProcess 唯一入口已切为 `OpenDesignPiRuntime`，旧自研循环与旧测试已删除，历史 tool-call ID 会从 journal 预加载以阻止重放执行。当前只剩同一 commit 的 macOS/Windows protected package 和 packaged Agent smoke 门禁，通过后才勾选完成；不得重新引入双循环/fallback。固定 `0.84.1` 的 `AgentHarness.prompt()` 仍抛出 `HarnessNotImplemented`，不得把未实现的 durable harness 接入生产或建立第二份 session 状态。
 - [ ] 接入服务端 Model metadata 探测、Provider/tokenizer/image 精确预算和可选语义 compactor；上游仍返回 `context_too_large` 时只允许重新预算和紧急压缩后自动重试一次。
 - [ ] 补万级节点、连续 Agent revision、效果/图片节点、选区/editBox、pan/zoom 的真实 Electron 帧时间与内存基准，并据此继续压缩结构 ID 遍历和资源失效成本。
 
@@ -111,7 +111,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P1：专业能力契约
 
 - 把 P0-C 的初始 capability manifest 提升为版本化公共契约，并为 Renderer、Agent、MCP 和发布说明提供同一只读查询入口。未知能力必须拒绝，降级能力必须返回结构化限制和 fidelity warning。
-- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.10.0` 已统一正式 Line/Arrow、Polygon/Star、editable Vector Network / Pen 创作、已有单轮廓节点编辑，以及 Fixed/Auto Width/Auto Height 文字、具体权威尺寸与换行/溢出，后续仍需分支与多轮廓、Slice、constraints/layout、Text/Font rich typography 与显式 reflow、图片 adjustments、Component/Instance/Variant、style/token binding 和 export settings。
+- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.11.0` 已在 `1.10.0` 的 Line/Arrow、Polygon/Star、editable Vector Network、文字布局等语义上增加正式 Component/Instance/Override，后续仍需分支与多轮廓、Slice、constraints/layout、Text/Font rich typography、图片 adjustments、Variant/Component Properties、跨文件 Library、style/token binding 和 export settings。
 - 为 Geometry、Layout、Text/Font、Image 和 Import/Export service 建立窄、版本化的输入输出接口。服务只能返回纯结果、诊断或候选 `DesignOperation[]`，不能保存第二份文档或直接修改 Leafer 场景。
 - 提供确定性迁移、未知版本拒绝、保存重开、preview、undo/redo、Agent schema、provider 映射和 fidelity warning 测试；不得把长期语义藏进 `extensions`。
 
@@ -121,12 +121,12 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 组件不再等待完整布局/变量阶段。它直接决定多页面 UI、导航、按钮、卡片、表单、表格和 Tabbar 能否保持结构一致，也是 Agent 避免反复复制散图层的主流程能力。
 
-- [ ] 完成 `Component → Instance → Override → Reset/Detach` 首个垂直切片：定义 OpenDesign-owned main component 与 instance reference，实例默认解析源组件当前结构；宿主维护稳定 source/instance/node 身份和失效引用诊断，禁止把 Leafer 对象或一份深拷贝当组件事实。
-- [ ] 支持嵌套 instance 与有界 override：首批至少覆盖文字内容、可见性、受支持外观、实例交换和 nested property；源组件结构/默认属性更新后，未 override 的值同步，override 值保持，删除/重命名源节点有确定性迁移或明确 orphan 诊断。
-- [ ] 人工 UI 提供 Create component、Create instance、Go to main、Reset overrides、Detach；Layers 与 Inspector 区分 main/instance/override/inherited value。Agent 使用同一组 typed semantic tools，只提交稳定 component/instance/property IDs，不重建整棵图层来模拟实例。
-- [ ] Canvas 投影、hit testing、selection、bounds、保存重开、undo/redo、复制/跨 Page、SVG/位图导出和 autosave 消费同一解析结果；循环引用、跨 Design File 未授权引用、missing main、locked/out-of-scope 和 revision conflict 原子失败。
+- [x] 完成 `Component → Instance → Override → Reset/Detach` 首个垂直切片：`DesignDocument 1.11.0` 与 Component Service v1 定义 OpenDesign-owned Main、轻量 Instance 和当前 revision 的可丢弃派生 subtree；稳定 `sourcePath`、missing/cycle/schema 诊断和原子 Runtime 命令不依赖 Leafer 对象或深拷贝事实。
+- [x] 支持嵌套 Instance 与有界 override：文字、可见性、名称、透明度、blend/mask/effects、fills/strokes 等受支持属性可保持；嵌套 Instance 可交换组件并重新做 cycle 检查。Main 默认值更新会同步，现有 override 合并而不互相覆盖。破坏性删除/重命名后的 orphan 自动迁移仍留给后续 Component Properties 切片，当前在失效前由 Runtime 阻止或在解析时明确失败。
+- [x] 人工 UI 提供 Create component、Create instance、Go to main、Inspector source-layer override、Reset 与 Detach；Assets/Layers/Inspector 区分 Main/Instance/override。Agent 使用专用 `opendesign_manage_components`，通用 apply 不能写 component definition；同 Page 与跨 Page 权限分别校验。
+- [x] Canvas 投影、hit testing、选择去重、Main/Instance direct manipulation、保存重开、undo/redo、复制/跨 Page、SVG/位图导出和 autosave 消费同一解析结果；循环、missing main/source、out-of-scope 与 revision conflict 原子失败。Instance 首版本可移动/旋转/倾斜但不可直接 resize/内部文字编辑；画布直接选择内部 override target 和双平台 GUI 实机证据仍待完成。
 
-完成条件：在同一 Design File 的至少两个 Page 中复用导航、按钮和卡片组件；修改 main 后所有未 override 实例同步，实例文字/可见性 override 保持；人工与 Agent 操作、保存重开、undo/redo 和导出一致。此切片完成前不宣称已支持组件。
+完成条件：自动化已验证同一 Design File 跨 Page Main/Instance、嵌套交换、Main 同步、文字/可见性/外观 override、人工与 Agent 操作、保存重开、autosave、undo/redo 和 SVG/位图导出一致。能力状态为 `degraded`，待 macOS/Windows 打包 GUI smoke 后才可升级为 `available`。Variants/Component Properties 与 Token/Variable 按后续 P3-B 单独推进。
 
 ## P2：精确图层、变换与矢量
 
