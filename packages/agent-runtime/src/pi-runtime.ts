@@ -152,6 +152,7 @@ export class OpenDesignPiRuntime {
           : { completionGuard: this.options.completionGuard }),
         contextFailurePort: prepared.context,
         modelFailurePort,
+        isCancellationRequested: () => active.abortController.signal.aborted,
         requestContinuation: (message) =>
           agentReference.current?.steer(message),
         maxToolCalls: this.#limits.maxToolCalls,

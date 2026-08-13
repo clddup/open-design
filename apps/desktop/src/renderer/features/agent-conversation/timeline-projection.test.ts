@@ -15,6 +15,39 @@ const continuation = {
 };
 
 describe("Agent continuation timeline projection", () => {
+  it("shows only the stopped Run outcome for cancellation cleanup failures", () => {
+    const runId = "run_user_stopped";
+    const items = projectAgentTimeline({
+      activeRunId: null,
+      events: [
+        {
+          type: "tool.failed",
+          runId,
+          toolCallId: "capture_cancelled",
+          code: "run_cancelled",
+          message: "Design tool request was cancelled",
+          retryable: false,
+          recoverable: false,
+        },
+        {
+          type: "run.completed",
+          runId,
+          finishedAt: "2026-08-14T00:00:00.000Z",
+          stopReason: "cancelled",
+        },
+      ],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline: [],
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items.some((item) => item.title === "设计更改失败")).toBe(false);
+    expect(items).toContainEqual(
+      expect.objectContaining({ title: "任务已停止", state: "done" }),
+    );
+  });
+
   it("keeps stale-node and Plan amendment recovery out of the user timeline", () => {
     const events: AgentEvent[] = [
       {

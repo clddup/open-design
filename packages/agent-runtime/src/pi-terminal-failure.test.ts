@@ -18,7 +18,7 @@ describe("terminalRunFailure", () => {
     });
   });
 
-  it("prefers a terminal tool failure and ignores model cancellation", () => {
+  it("keeps user cancellation authoritative over an aborted terminal tool", () => {
     expect(
       terminalRunFailure(
         { code: "cancelled", message: "Cancelled", retryable: false },
@@ -30,12 +30,27 @@ describe("terminalRunFailure", () => {
           runTerminal: true,
         },
       ),
-    ).toMatchObject({ code: "renderer_circuit_open" });
+    ).toBeUndefined();
     expect(
       terminalRunFailure(
         { code: "cancelled", message: "Cancelled", retryable: false },
         undefined,
       ),
     ).toBeUndefined();
+  });
+
+  it("still projects a terminal tool failure for a non-cancelled model error", () => {
+    expect(
+      terminalRunFailure(
+        { code: "provider_error", message: "Disconnected", retryable: true },
+        {
+          code: "renderer_circuit_open",
+          message: "Canvas renderer repeatedly stalled",
+          retryable: false,
+          recoverable: false,
+          runTerminal: true,
+        },
+      ),
+    ).toMatchObject({ code: "renderer_circuit_open" });
   });
 });

@@ -102,7 +102,8 @@ export class ParentModelGateway implements ModelGateway {
         complete(pending);
       }
     };
-    request.signal.addEventListener("abort", abort, { once: true });
+    if (request.signal.aborted) abort();
+    else request.signal.addEventListener("abort", abort, { once: true });
     const serializableRequest: Omit<ModelRequest, "signal"> = {
       attemptId: request.attemptId,
       ...(request.sessionId === undefined
@@ -113,11 +114,13 @@ export class ParentModelGateway implements ModelGateway {
       messages: request.messages,
       tools: request.tools,
     };
-    this.port.postMessage({
-      type: "model.request",
-      requestId,
-      request: serializableRequest,
-    } satisfies ModelBridgeRequest);
+    if (!request.signal.aborted) {
+      this.port.postMessage({
+        type: "model.request",
+        requestId,
+        request: serializableRequest,
+      } satisfies ModelBridgeRequest);
+    }
 
     try {
       while (true) {

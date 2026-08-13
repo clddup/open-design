@@ -179,6 +179,11 @@ function projectDurableTimeline(
   stoppingRunId: string | null,
   t: Translate,
 ): AgentTimelineItem[] {
+  const cancelledRunIds = new Set(
+    timeline.flatMap((item) =>
+      item.type === "run" && item.status === "cancelled" ? [item.runId] : [],
+    ),
+  );
   const continuationByRunId = new Map(
     timeline.flatMap((item) =>
       item.type === "run" && item.continuation
@@ -193,7 +198,17 @@ function projectDurableTimeline(
         : [],
     ),
   );
-  return timeline.map((item) => {
+  const visibleTimeline = timeline.filter(
+    (item) =>
+      !(
+        item.type === "tool" &&
+        item.status === "failed" &&
+        item.error?.code === "run_cancelled" &&
+        item.runId !== undefined &&
+        cancelledRunIds.has(item.runId)
+      ),
+  );
+  return visibleTimeline.map((item) => {
     const base = {
       id: item.itemId,
       ...(item.runId === undefined ? {} : { runId: item.runId }),
@@ -611,6 +626,7 @@ function projectLiveEvents(
       });
     }
     if (event.type === "tool.failed") {
+      if (event.code === "run_cancelled") return;
       const routine = isRoutineRecoverableToolFailure(
         event.code,
         event.message,

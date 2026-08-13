@@ -1,7 +1,43 @@
+import type { CanonicalStreamEvent } from "@opendesign/model-gateway";
 import { describe, expect, it } from "vitest";
 import { ParentModelGateway } from "./parent-model-gateway";
 
 describe("ParentModelGateway", () => {
+  it("terminates a request cancelled before Main can start the attempt", async () => {
+    const messages: unknown[] = [];
+    const gateway = new ParentModelGateway({
+      postMessage: (message) => messages.push(message),
+    });
+    const controller = new AbortController();
+    controller.abort(new DOMException("User stopped the Run", "AbortError"));
+
+    const events: CanonicalStreamEvent[] = [];
+    for await (const event of gateway.stream({
+      attemptId: "attempt_cancelled_before_start",
+      modelSelection: {
+        providerId: "provider_1",
+        modelId: "design-model",
+      },
+      system: "System",
+      messages: [{ role: "user", content: "Hello" }],
+      tools: [],
+      signal: controller.signal,
+    })) {
+      events.push(event);
+    }
+
+    expect(messages).toEqual([
+      expect.objectContaining({ type: "model.cancel" }),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe("attempt.failed");
+    if (events[0]?.type !== "attempt.failed") {
+      throw new Error("Expected a cancelled model attempt");
+    }
+    expect(events[0].error.code).toBe("cancelled");
+    expect(events[0].error.retryable).toBe(false);
+  });
+
   it("correlates Main-owned model events without receiving credentials", async () => {
     const messages: unknown[] = [];
     const gateway = new ParentModelGateway({

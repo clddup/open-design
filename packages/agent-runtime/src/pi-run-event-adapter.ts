@@ -45,6 +45,7 @@ export interface PiRunEventAdapterOptions {
   completionGuard?: CompletionGuardPort;
   contextFailurePort?: PiContextFailurePort;
   modelFailurePort?: PiModelFailurePort;
+  isCancellationRequested?: () => boolean;
   requestContinuation?: (message: UserMessage) => void;
   maxToolCalls?: number;
   maxTurns?: number;
@@ -79,6 +80,7 @@ export class PiRunEventAdapter {
   readonly #maxGeneratedTokens: number;
   readonly #maxTurns: number;
   readonly #modelFailurePort: PiModelFailurePort | undefined;
+  readonly #isCancellationRequested: (() => boolean) | undefined;
   readonly #now: () => Date;
   readonly #request: AgentRunRequest;
   readonly #requestContinuation: ((message: UserMessage) => void) | undefined;
@@ -112,6 +114,7 @@ export class PiRunEventAdapter {
     this.#completionGuard = options.completionGuard;
     this.#contextFailurePort = options.contextFailurePort;
     this.#modelFailurePort = options.modelFailurePort;
+    this.#isCancellationRequested = options.isCancellationRequested;
     this.#requestContinuation = options.requestContinuation;
     this.#maxTurns = options.maxTurns ?? 8;
     this.#maxGeneratedTokens = options.maxGeneratedTokens ?? 200_000;
@@ -400,6 +403,7 @@ export class PiRunEventAdapter {
     });
   }
   async #endRun(): Promise<void> {
+    const cancellationRequested = this.#isCancellationRequested?.() === true;
     if (this.#activeAssistant !== undefined || this.#activeUserMessage) {
       throw new Error("Pi ended a run with an active message");
     }
@@ -408,24 +412,28 @@ export class PiRunEventAdapter {
         this.#pendingCompletion.active.messageId,
       );
       this.#pendingCompletion = undefined;
-      this.#forcedStopReason = "error";
-      this.#forcedError = {
-        code: "completion_guard_interrupted",
-        message: "Pi Agent ended before completion review settled",
-        retryable: true,
-      };
+      if (!cancellationRequested) {
+        this.#forcedStopReason = "error";
+        this.#forcedError = {
+          code: "completion_guard_interrupted",
+          message: "Pi Agent ended before completion review settled",
+          retryable: true,
+        };
+      }
     }
     if (this.#activeToolResultCallId !== undefined) {
       this.#activeToolResultCallId = undefined;
-      this.#forcedStopReason = "error";
-      this.#forcedError = {
-        code: "tool_result_interrupted",
-        message: "Pi Agent ended during a tool-result message",
-        retryable: true,
-      };
+      if (!cancellationRequested) {
+        this.#forcedStopReason = "error";
+        this.#forcedError = {
+          code: "tool_result_interrupted",
+          message: "Pi Agent ended during a tool-result message",
+          retryable: true,
+        };
+      }
     }
     const contextFailure = this.#contextFailurePort?.consumeFailure();
-    if (contextFailure !== undefined) {
+    if (!cancellationRequested && contextFailure !== undefined) {
       this.#forcedStopReason = "error";
       this.#forcedError = { ...contextFailure, retryable: false };
     }
@@ -433,17 +441,18 @@ export class PiRunEventAdapter {
       this.#modelFailurePort?.consumeFailure(),
       this.#toolAdapter?.forcedError,
     );
-    if (terminalFailure !== undefined) {
+    if (!cancellationRequested && terminalFailure !== undefined) {
       this.#forcedStopReason = "error";
       this.#forcedError = terminalFailure;
     }
-    const stopReason =
-      this.#forcedStopReason ??
-      this.#toolAdapter?.forcedStopReason ??
-      toRunStopReason(
-        this.#lastAssistantStopReason,
-        this.#lastAssistantHadToolCalls,
-      );
+    const stopReason = cancellationRequested
+      ? "cancelled"
+      : (this.#forcedStopReason ??
+        this.#toolAdapter?.forcedStopReason ??
+        toRunStopReason(
+          this.#lastAssistantStopReason,
+          this.#lastAssistantHadToolCalls,
+        ));
     for (const failure of this.#toolAdapter?.finalizePendingTools(stopReason) ??
       []) {
       await this.#recordToolFailure(failure);

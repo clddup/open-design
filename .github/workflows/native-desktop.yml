@@ -26,7 +26,6 @@ jobs:
             verify-command: verify:package:mac
             artifact-pattern: |
               apps/desktop/release/*.dmg
-              apps/desktop/release/*.zip
           - name: Windows package and smoke
             os: windows-2022
             package-command: package:win

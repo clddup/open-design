@@ -34,7 +34,6 @@ mac:
   icon: icon.icns
   target:
     - dmg
-    - zip
 
 win:
   icon: icon.ico

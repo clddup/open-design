@@ -45,6 +45,34 @@ const model: Model<"openai-responses"> = {
 };
 
 describe("Pi ModelGateway adapter", () => {
+  it("accepts cancellation as the first terminal event without a protocol error", async () => {
+    const failurePort = createPiModelFailurePort();
+    const gateway: ModelGateway = {
+      async *stream(request): AsyncIterable<CanonicalStreamEvent> {
+        await Promise.resolve();
+        yield {
+          type: "attempt.failed",
+          attemptId: request.attemptId,
+          error: {
+            code: "cancelled",
+            message: "User stopped the Run",
+            retryable: false,
+          },
+        };
+      },
+    };
+    const result = await createPiModelGatewayStreamFn({
+      modelGateway: gateway,
+      failurePort,
+    })(model, { messages: [] }).result();
+
+    expect(result).toMatchObject({
+      stopReason: "aborted",
+      errorMessage: "User stopped the Run",
+    });
+    expect(failurePort.consumeFailure()).toBeUndefined();
+  });
+
   it("rejects SVG resources at the Provider attachment boundary", () => {
     const message = {
       role: "user" as const,

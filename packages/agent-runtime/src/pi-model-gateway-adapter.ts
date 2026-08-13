@@ -173,6 +173,24 @@ async function pumpModelGateway(
         onRetryEvent?.(event);
         continue;
       }
+      if (
+        !started &&
+        event.type === "attempt.failed" &&
+        event.error.code === "cancelled"
+      ) {
+        // Cancellation may win before Main has emitted attempt.started. It is
+        // a valid terminal race, not a provider protocol failure.
+        terminal = true;
+        output.stopReason = "aborted";
+        output.errorMessage = event.error.message;
+        output.timestamp = now();
+        stream.push({
+          type: "error",
+          reason: "aborted",
+          error: snapshotMessage(output),
+        });
+        continue;
+      }
       if (!started) {
         throw new Error(
           `ModelGateway emitted ${event.type} before attempt.started`,

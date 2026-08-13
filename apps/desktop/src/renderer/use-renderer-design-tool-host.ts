@@ -132,6 +132,19 @@ export function useRendererDesignToolHost(
         .then(
           (response) => desktop.resolveDesignToolRequest(response),
           (error: unknown) => {
+            if (controller.signal.aborted) {
+              return desktop.resolveDesignToolRequest({
+                requestId: request.requestId,
+                ok: false,
+                performance: toolPerformance,
+                error: {
+                  code: "run_cancelled",
+                  message: "Design tool request was cancelled",
+                  retryable: false,
+                  recoverable: false,
+                },
+              });
+            }
             const message = reportRendererError(
               "design_tool_execution_failed",
               error,

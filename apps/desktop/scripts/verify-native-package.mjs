@@ -25,7 +25,6 @@ const expectedPrefix = `OpenDesign-${version}-${osName}-${nativeArch}`;
 
 if (platform === "darwin") {
   requireReleaseFile(releaseFiles, `${expectedPrefix}.dmg`);
-  requireReleaseFile(releaseFiles, `${expectedPrefix}.zip`);
 } else {
   requireReleaseFile(releaseFiles, `${expectedPrefix}.exe`);
 }

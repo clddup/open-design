@@ -23,6 +23,7 @@ export function reportAgentDiagnostic(
     });
   }
   if (event.type === "tool.failed") {
+    if (event.code === "run_cancelled") return;
     publish({
       level: "warning",
       source: "design-tool",

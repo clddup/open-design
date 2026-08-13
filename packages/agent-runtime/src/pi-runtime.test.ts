@@ -276,6 +276,72 @@ describe("OpenDesign Pi production runtime", () => {
     expect(runtime.cancel("run_pi_runtime_cancelled")).toBe(false);
   });
 
+  it("keeps cancellation terminal when an in-flight tool aborts with an error", async () => {
+    const store = new MemorySessionStore();
+    let toolStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      toolStarted = resolve;
+    });
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: new MockModelGateway({
+        blocks: [
+          {
+            id: "cancel_tool_block",
+            type: "tool_call",
+            toolCallId: "cancel_tool_call",
+            name: tool.name,
+            input: {},
+          },
+        ],
+        stopReason: "tool_use",
+      }),
+      sessionStore: store,
+      toolCatalog: { listTools: () => [tool] },
+      toolExecutor: {
+        async *execute(
+          _call,
+          _context,
+          signal,
+        ): AsyncIterable<ToolExecutionEvent> {
+          toolStarted();
+          yield { type: "progress", message: "Capturing", progress: 0.5 };
+          await waitForAbort(signal);
+          throw new Error("The operation was aborted");
+        },
+      },
+    });
+    const runId = "run_pi_tool_cancelled";
+    const events: AgentEvent[] = [];
+    const collecting = (async () => {
+      for await (const event of runtime.run({ ...request, runId })) {
+        events.push(event);
+      }
+    })();
+    await started;
+
+    expect(runtime.cancel(runId)).toBe(true);
+    await collecting;
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool.failed",
+        code: "run_cancelled",
+      }),
+    );
+    expect(events.some((event) => event.type === "agent.error")).toBe(false);
+    expect(events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "cancelled",
+    });
+    expect(
+      store.events.find((event) => event.type === "run.state")?.payload,
+    ).toMatchObject({ status: "started" });
+    expect(
+      [...store.events].reverse().find((event) => event.type === "run.state")
+        ?.payload,
+    ).toMatchObject({ status: "cancelled", stopReason: "cancelled" });
+  });
+
   it("does not publish reconnect activity queued after cancellation", async () => {
     const store = new MemorySessionStore();
     const gateway = new CancelRetryGateway();
