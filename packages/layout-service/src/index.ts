@@ -1,7 +1,7 @@
 import { solveHorizontalWrap } from "./wrap-layout.js";
 
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
-export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 5 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 6 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";
@@ -72,6 +72,7 @@ export type LinearAutoLayoutRequest = {
   wrap?: { mode: "wrap"; counterGap: number };
   children: Array<{
     id: string;
+    positioning: "flow" | "absolute";
     width: number;
     height: number;
     sizing: {
@@ -154,20 +155,24 @@ export function solveLinearAutoLayout(
       message: "Linear Auto Layout input is invalid",
     };
   }
+  const flowChildren = request.children.filter(
+    (child) => child.positioning === "flow",
+  );
   if (request.wrap) {
     return solveHorizontalWrap({
       ...request,
       direction: "horizontal",
       wrap: request.wrap,
+      children: flowChildren,
     });
   }
   const horizontalHug = request.frameSizing.horizontal === "hug";
   const verticalHug = request.frameSizing.vertical === "hug";
   if (
     (horizontalHug &&
-      request.children.some((child) => child.sizing.horizontal === "fill")) ||
+      flowChildren.some((child) => child.sizing.horizontal === "fill")) ||
     (verticalHug &&
-      request.children.some((child) => child.sizing.vertical === "fill"))
+      flowChildren.some((child) => child.sizing.vertical === "fill"))
   ) {
     return {
       ok: false,
@@ -175,7 +180,7 @@ export function solveLinearAutoLayout(
       message: "A hugged Auto Layout axis cannot contain a fill child",
     };
   }
-  const limitedChildren = request.children.map((child) => ({
+  const limitedChildren = flowChildren.map((child) => ({
     ...child,
     width:
       child.sizing.horizontal === "fixed"
@@ -236,7 +241,7 @@ export function solveLinearAutoLayout(
       : child.sizing.vertical === "fill";
     return sum + (fill ? 0 : horizontal ? child.width : child.height);
   }, 0);
-  const packedGapTotal = packedGap * Math.max(0, request.children.length - 1);
+  const packedGapTotal = packedGap * Math.max(0, flowChildren.length - 1);
   const fillExtents = distributeBoundedFill(
     Math.max(0, frameMain - mainStart - mainEnd - fixedMain - packedGapTotal),
     fillChildren.map((child) => ({
@@ -474,6 +479,8 @@ function validLinearAutoLayoutRequest(
       ) {
         return false;
       }
+      if (child.positioning !== "flow" && child.positioning !== "absolute")
+        return false;
       if (!validLimits(child.limits)) return false;
       if (
         ![child.sizing.horizontal, child.sizing.vertical].every(

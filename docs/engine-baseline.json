@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 22,
+  "schemaVersion": 23,
   "recordedAt": "2026-08-13",
   "policy": {
     "allowFloatingRefs": false,
@@ -7,12 +7,12 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.17.0",
+    "documentSchemaVersion": "1.18.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.9.0",
     "geometryServiceContractVersion": 10,
     "textLayoutServiceContractVersion": 1,
-    "layoutServiceContractVersion": 5
+    "layoutServiceContractVersion": 6
   },
   "components": {
     "agentCore": {

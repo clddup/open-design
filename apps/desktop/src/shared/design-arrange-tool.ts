@@ -2,6 +2,7 @@ import type {
   AutoLayout,
   LayoutConstraints,
   LayoutLimits,
+  LayoutPositioning,
   LayoutSizing,
 } from "@opendesign/design-contracts";
 import { isValidLayoutLimits } from "@opendesign/design-contracts";
@@ -59,6 +60,14 @@ export type DesignArrangeToolInput =
       sizing: LayoutSizing;
     }
   | {
+      action: "set-layout-positioning";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      positioning: "flow" | LayoutPositioning;
+      constraints?: LayoutConstraints;
+    }
+  | {
       action: "set-layout-limits";
       label: string;
       pageId: string;
@@ -81,7 +90,7 @@ const nodeIds = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies only to direct children of ordinary Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug sizing, fixed or Auto gap, and horizontal Wrap with an independent vertical gap; primaryAlignment=space-between selects Auto gap, which never becomes negative and is resolved independently per wrapped row. set-layout-sizing configures direct-child Fixed/Fill sizing; set-layout-limits adds or clears bounded min/max width and height on an Auto Layout Frame or direct flow child. Frame padding remains a hard minimum. Wrap requires Fixed width and visible Fixed-size children. The host derives all flow geometry.",
+    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies to direct children of ordinary Frames and absolute children of Auto Layout Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug sizing, fixed or Auto gap, and horizontal Wrap with an independent vertical gap; primaryAlignment=space-between selects Auto gap, which never becomes negative and is resolved independently per wrapped row. set-layout-positioning atomically toggles a direct Auto Layout child between flow and absolute, clearing incompatible sizing or constraints. set-layout-sizing configures flow-child Fixed/Fill sizing; set-layout-limits adds or clears bounded min/max width and height on an Auto Layout Frame or direct flow child. Frame padding remains a hard minimum. Wrap requires Fixed width and visible Fixed-size flow children. The host derives all flow geometry.",
   properties: {
     action: {
       enum: [
@@ -100,6 +109,7 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
         "resize-frame",
         "set-auto-layout",
         "set-layout-sizing",
+        "set-layout-positioning",
         "set-layout-limits",
       ],
     },
@@ -131,6 +141,7 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
       required: ["horizontal", "vertical"],
       additionalProperties: false,
     },
+    positioning: { enum: ["flow", "absolute"] },
     frameId: {
       type: "string",
       minLength: 1,
@@ -309,6 +320,23 @@ export function isDesignArrangeToolInput(
       safeId(input.nodeId) &&
       isLayoutSizing(input.sizing) &&
       onlyKeys(input, ["action", "label", "pageId", "nodeId", "sizing"])
+    );
+  }
+  if (action === "set-layout-positioning") {
+    return (
+      safeId(input.nodeId) &&
+      (input.positioning === "flow" || input.positioning === "absolute") &&
+      (input.constraints === undefined ||
+        (input.positioning === "absolute" &&
+          isLayoutConstraints(input.constraints))) &&
+      onlyKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "positioning",
+        "constraints",
+      ])
     );
   }
   if (action === "set-layout-limits") {

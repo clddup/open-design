@@ -4,6 +4,7 @@ const enLayoutMessages = {
   "history.updateAutoLayout": "Update Auto Layout",
   "history.updateAutoLayoutSizing": "Update Auto Layout sizing",
   "history.updateAutoLayoutLimits": "Update Auto Layout limits",
+  "history.updateLayoutPositioning": "Update layout positioning",
   "agent.canvasCircuitOpen": "Canvas renderer repeatedly stalled",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign stopped this task after repeated canvas stalls. Committed design revisions were preserved; restart OpenDesign before retrying visual generation.",
@@ -43,6 +44,7 @@ const enLayoutMessages = {
   "properties.autoLayoutFixed": "Fixed",
   "properties.autoLayoutHug": "Hug contents",
   "properties.autoLayoutFill": "Fill container",
+  "properties.ignoreAutoLayout": "Ignore auto layout",
   "properties.autoLayoutMinWidth": "Min width",
   "properties.autoLayoutMaxWidth": "Max width",
   "properties.autoLayoutMinHeight": "Min height",
@@ -62,6 +64,7 @@ const zhCNLayoutMessages = {
   "history.updateAutoLayout": "更新 Auto Layout",
   "history.updateAutoLayoutSizing": "更新 Auto Layout 尺寸模式",
   "history.updateAutoLayoutLimits": "更新 Auto Layout 尺寸限制",
+  "history.updateLayoutPositioning": "更新布局定位",
   "agent.canvasCircuitOpen": "画布渲染连续停滞",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign 已在画布连续停滞后停止本次任务。已提交的设计 revision 均已保留，请重启 OpenDesign 后再尝试视觉生成。",
@@ -101,6 +104,7 @@ const zhCNLayoutMessages = {
   "properties.autoLayoutFixed": "固定",
   "properties.autoLayoutHug": "适应内容",
   "properties.autoLayoutFill": "填充容器",
+  "properties.ignoreAutoLayout": "忽略自动布局",
   "properties.autoLayoutMinWidth": "最小宽度",
   "properties.autoLayoutMaxWidth": "最大宽度",
   "properties.autoLayoutMinHeight": "最小高度",

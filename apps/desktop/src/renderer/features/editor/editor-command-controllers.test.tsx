@@ -194,6 +194,45 @@ describe("editor command controllers", () => {
     expect(setEditorError).toHaveBeenLastCalledWith(null);
   });
 
+  it("routes flow and absolute child positioning through one reversible planner", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    const runtime = new EditorRuntime(document);
+    const { result, setEditorError } = renderControllers(runtime);
+    act(() =>
+      result.current.editor.setNodeLayoutPositioning(
+        "title_welcome",
+        "absolute",
+        { horizontal: "right", vertical: "top" },
+      ),
+    );
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      layoutPositioning: "absolute",
+      constraints: { horizontal: "right", vertical: "top" },
+    });
+    act(() =>
+      result.current.editor.setNodeLayoutPositioning("title_welcome", null),
+    );
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutPositioning,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.constraints,
+    ).toBeUndefined();
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+  });
+
   it("routes Auto Layout min/max through the dedicated planner and supports clearing", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;

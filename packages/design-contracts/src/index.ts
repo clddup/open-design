@@ -9,6 +9,7 @@ import { checkSchema } from "./schema-check.js";
 import {
   AutoLayoutSchema,
   LayoutConstraintsSchema,
+  LayoutPositioningSchema,
   LayoutSizingSchema,
   LayoutLimitsSchema,
 } from "./layout.js";
@@ -690,6 +691,7 @@ const NodeBaseProperties = {
   size: SizeSchema,
   opacity: Type.Number({ minimum: 0, maximum: 1 }),
   constraints: Type.Optional(LayoutConstraintsSchema),
+  layoutPositioning: Type.Optional(LayoutPositioningSchema),
   layoutSizing: Type.Optional(LayoutSizingSchema),
   layoutLimits: Type.Optional(LayoutLimitsSchema),
   blendMode: Type.Optional(BlendModeSchema),
@@ -923,6 +925,9 @@ export const UpdatePropertiesCommandSchema = Type.Object(
     opacity: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
     constraints: Type.Optional(
       Type.Union([LayoutConstraintsSchema, Type.Null()]),
+    ),
+    layoutPositioning: Type.Optional(
+      Type.Union([LayoutPositioningSchema, Type.Null()]),
     ),
     layoutSizing: Type.Optional(Type.Union([LayoutSizingSchema, Type.Null()])),
     layoutLimits: Type.Optional(Type.Union([LayoutLimitsSchema, Type.Null()])),

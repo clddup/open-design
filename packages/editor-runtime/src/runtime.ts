@@ -1070,6 +1070,7 @@ function updateProperties(
     "size",
     "opacity",
     "constraints",
+    "layoutPositioning",
     "layoutSizing",
     "layoutLimits",
     "blendMode",
@@ -1089,6 +1090,7 @@ function updateProperties(
     if (value === undefined) continue;
     if (
       (field === "constraints" ||
+        field === "layoutPositioning" ||
         field === "layoutSizing" ||
         field === "layoutLimits") &&
       value === null

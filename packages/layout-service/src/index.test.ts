@@ -74,7 +74,7 @@ describe("layout-service constraints v1", () => {
   });
 });
 
-describe("layout-service linear Auto Layout v5", () => {
+describe("layout-service linear Auto Layout v6", () => {
   it("places horizontal children with padding, gap, and two-axis alignment", () => {
     expect(
       solveLinearAutoLayout({
@@ -269,6 +269,29 @@ describe("layout-service linear Auto Layout v5", () => {
         children: [],
       }),
     ).toMatchObject({ ok: false, code: "invalid-input" });
+  });
+
+  it("excludes explicitly absolute children from flow and Hug sizing", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 400, height: 100 },
+        padding: { top: 10, right: 20, bottom: 10, left: 20 },
+        gap: 12,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+        frameSizing: { horizontal: "hug", vertical: "hug" },
+        children: [
+          child("flow", 80, 30),
+          { ...child("badge", 300, 90), positioning: "absolute" },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 120, height: 50 },
+      placements: [{ id: "flow", x: 20, y: 10, width: 80, height: 30 }],
+    });
   });
 
   it("hugs content and distributes main-axis fill space deterministically", () => {
@@ -564,5 +587,11 @@ function child(
   horizontal: "fixed" | "fill" = "fixed",
   vertical: "fixed" | "fill" = "fixed",
 ) {
-  return { id, width, height, sizing: { horizontal, vertical } };
+  return {
+    id,
+    positioning: "flow" as const,
+    width,
+    height,
+    sizing: { horizontal, vertical },
+  };
 }

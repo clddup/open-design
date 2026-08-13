@@ -3,6 +3,7 @@ import type {
   DesignOperation,
   LayoutConstraints,
   LayoutLimits,
+  LayoutPositioning,
   LayoutSizing,
   Size,
   UpdatePropertiesCommand,
@@ -10,6 +11,7 @@ import type {
 import {
   planSetFrameAutoLayout,
   planSetNodeLayoutLimits,
+  planSetNodeLayoutPositioning,
   planSetNodeLayoutSizing,
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
@@ -134,6 +136,30 @@ export function useEditorCommandController({
     [applyCommands, runtime, setEditorError, t],
   );
 
+  const setNodeLayoutPositioning = useCallback(
+    (
+      nodeId: string,
+      positioning: LayoutPositioning | null,
+      constraints?: LayoutConstraints,
+    ) => {
+      const current = runtime.getSnapshot().document;
+      const plan = planSetNodeLayoutPositioning(
+        current,
+        pageIdForNode(current, nodeId),
+        nodeId,
+        positioning === "absolute" ? "absolute" : "flow",
+        `inspector_layout_positioning_${nodeId}`,
+        constraints,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t("history.updateLayoutPositioning"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
   const updateNode = useCallback(
     (nodeId: string, updates: UpdatePropertiesPatch) => {
       const current = runtime.getSnapshot().document;
@@ -227,6 +253,7 @@ export function useEditorCommandController({
     setFrameAutoLayout,
     setNodeConstraints,
     setNodeLayoutLimits,
+    setNodeLayoutPositioning,
     setNodeLayoutSizing,
     updateNode,
   };

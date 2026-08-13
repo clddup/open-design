@@ -93,7 +93,7 @@ for (const source of fixtureSources) {
 const manifest = {
   version: 1,
   generatedBy: generatorPath,
-  documentSchemaVersion: "1.17.0",
+  documentSchemaVersion: "1.18.0",
   engineBaseline: "leafer-editor@2.2.9",
   sourceAssets: [
     {
@@ -154,7 +154,10 @@ function buildPenguinFixture({ promptSha256 }) {
     ],
     effects: [{ type: "layer-blur", radius: 18 }],
     blendMode: "screen",
+    layoutPositioning: "absolute",
+    constraints: { horizontal: "center", vertical: "center" },
   });
+  mascot.group.layoutPositioning = "absolute";
   const caption = text({
     id: "penguin_caption",
     name: "Specimen caption",
@@ -192,6 +195,14 @@ function buildPenguinFixture({ promptSha256 }) {
     ],
     cornerRadius: 32,
     clipsContent: true,
+    autoLayout: {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 40, left: 0 },
+      gap: 0,
+      primaryAlignment: "end",
+      counterAlignment: "center",
+      sizing: { horizontal: "fixed", vertical: "fixed" },
+    },
   });
   const initialDocument = document({
     documentId: "document_od_penguin_01",
@@ -205,6 +216,12 @@ function buildPenguinFixture({ promptSha256 }) {
     transactionId: "fixture_penguin_refinement_01",
     documentId: initialDocument.documentId,
     commands: [
+      {
+        commandId: "reposition_absolute_halo",
+        type: "update_properties",
+        nodeId: backgroundOrb.id,
+        transform: [1, 0, 0, 1, 100, 70],
+      },
       {
         commandId: "pose_right_wing",
         type: "update_properties",
@@ -1327,7 +1344,7 @@ function document({
 }) {
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.17.0",
+    schemaVersion: "1.18.0",
     documentId,
     revision: 0,
     pageOrder: [pageId],
@@ -1408,6 +1425,8 @@ function nodeBase({
   blendMode,
   effects,
   maskMode,
+  constraints,
+  layoutPositioning,
 }) {
   return {
     id,
@@ -1423,6 +1442,8 @@ function nodeBase({
     ...(blendMode === undefined ? {} : { blendMode }),
     ...(effects === undefined ? {} : { effects }),
     ...(maskMode === undefined ? {} : { maskMode }),
+    ...(constraints === undefined ? {} : { constraints }),
+    ...(layoutPositioning === undefined ? {} : { layoutPositioning }),
     extensions: {},
   };
 }
@@ -1433,6 +1454,7 @@ function frame({
   strokeWidth = 0,
   cornerRadius,
   clipsContent,
+  autoLayout,
   ...base
 }) {
   return {
@@ -1443,6 +1465,7 @@ function frame({
       strokeWidth,
       cornerRadius,
       clipsContent,
+      ...(autoLayout === undefined ? {} : { autoLayout }),
     },
   };
 }

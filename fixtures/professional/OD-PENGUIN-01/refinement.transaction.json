@@ -11,6 +11,12 @@
   "summary": "Recorded correction after the first visual inspection.",
   "commands": [
     {
+      "commandId": "reposition_absolute_halo",
+      "type": "update_properties",
+      "nodeId": "penguin_background_orb",
+      "transform": [1, 0, 0, 1, 100, 70]
+    },
+    {
       "commandId": "pose_right_wing",
       "type": "update_properties",
       "nodeId": "penguin_wing_right",

@@ -1,7 +1,10 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const CONSTRAINTS_DESIGN_SCHEMA_VERSION = "1.12.0" as const;
-export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.17.0" as const;
+export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.18.0" as const;
+
+export const LayoutPositioningSchema = Type.Literal("absolute");
+export type LayoutPositioning = Static<typeof LayoutPositioningSchema>;
 
 export const LayoutConstraintsSchema = Type.Object(
   {

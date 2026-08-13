@@ -1181,6 +1181,14 @@ describe("design contract schemas", () => {
     expect(migrated?.nodesById.text_1?.layoutLimits).toBeUndefined();
   });
 
+  it("migrates 1.17 Auto gap documents without inventing absolute children", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.17.0" as typeof source.schemaVersion;
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1?.layoutPositioning).toBeUndefined();
+  });
+
   it("validates strict linear Auto Layout only on Frame properties", () => {
     const frame = {
       id: "frame_layout",
@@ -1427,6 +1435,30 @@ describe("design contract schemas", () => {
         type: "update_properties",
         nodeId: "text_1",
         constraints: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("validates strict absolute child positioning and nullable removal", () => {
+    const text = textDocumentFixture().nodesById.text_1;
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        layoutPositioning: "absolute",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        layoutPositioning: "flow",
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignOperationSchema, {
+        commandId: "clear_positioning",
+        type: "update_properties",
+        nodeId: text.id,
+        layoutPositioning: null,
       }),
     ).toBe(true);
   });

@@ -58,7 +58,8 @@ export function planSetNodeConstraints(
   }
   if (
     parent.properties.autoLayout !== undefined &&
-    parent.properties.autoLayout.mode !== "none"
+    parent.properties.autoLayout.mode !== "none" &&
+    node.layoutPositioning !== "absolute"
   ) {
     return failure(
       "invalid-target",
@@ -213,6 +214,20 @@ function resizeFrame(
       nextSizing.vertical !== sizing.vertical
     )
       frame.properties.autoLayout = autoLayout;
+    for (const childId of frame.childIds) {
+      const child = document.nodesById[childId];
+      if (!child)
+        return failure("not-found", `Layer ${childId} does not exist`);
+      if (child.layoutPositioning !== "absolute") continue;
+      const constrained = resizeConstrainedChild(
+        document,
+        child,
+        previousSize,
+        nextSize,
+        resizedIds,
+      );
+      if (!constrained.ok) return constrained;
+    }
     frame.size = structuredClone(nextSize);
     resizedIds.add(frameId);
     return { ok: true, commands: [], frameId, nodeIds: [...resizedIds] };
@@ -220,69 +235,88 @@ function resizeFrame(
   for (const childId of frame.childIds) {
     const child = document.nodesById[childId];
     if (!child) return failure("not-found", `Layer ${childId} does not exist`);
-    if (!isTranslationOnly(child)) {
-      return failure(
-        "visual-fidelity",
-        `Layer ${childId} has rotation, skew, or local scale; constraints v1 only resizes translation-only Frame children`,
-      );
-    }
-    const constraints = child.constraints ?? DEFAULT_LAYOUT_CONSTRAINTS;
-    const solved = solveConstraints({
-      version: LAYOUT_SERVICE_CONTRACT_VERSION,
-      constraints,
-      child: {
-        x: child.transform[4],
-        y: child.transform[5],
-        width: child.size.width,
-        height: child.size.height,
-      },
-      previousParent: previousSize,
-      nextParent: nextSize,
-    });
-    if (!solved.ok) {
-      return failure(
-        "visual-fidelity",
-        `Layer ${childId} constraints could not be resolved: ${solved.message}`,
-      );
-    }
-    const childNextSize = {
-      width: solved.rect.width,
-      height: solved.rect.height,
-    };
-    const childSizeChanged = !sameSize(child.size, childNextSize);
-    if (
-      childSizeChanged &&
-      (child.kind === "group" ||
-        child.kind === "boolean" ||
-        child.kind === "instance")
-    ) {
-      return failure(
-        "visual-fidelity",
-        `Layer ${childId} cannot be resized by its constraints v1 semantics`,
-      );
-    }
-    if (
-      childSizeChanged &&
-      child.kind === "text" &&
-      child.properties.textResize !== "fixed"
-    ) {
-      return failure(
-        "visual-fidelity",
-        `Auto Size text ${childId} cannot be stretched or scaled before hug/fill sizing is available`,
-      );
-    }
-    child.transform = [1, 0, 0, 1, solved.rect.x, solved.rect.y];
-    if (child.kind === "frame" && childSizeChanged) {
-      const nested = resizeFrame(document, child.id, childNextSize, resizedIds);
-      if (!nested.ok) return nested;
-    } else if (childSizeChanged) {
-      child.size = childNextSize;
-    }
-    resizedIds.add(childId);
+    const constrained = resizeConstrainedChild(
+      document,
+      child,
+      previousSize,
+      nextSize,
+      resizedIds,
+    );
+    if (!constrained.ok) return constrained;
   }
   frame.size = structuredClone(nextSize);
   resizedIds.add(frameId);
   return { ok: true, commands: [], frameId, nodeIds: [...resizedIds] };
+}
+
+function resizeConstrainedChild(
+  document: DesignDocument,
+  child: DesignNode,
+  previousSize: Size,
+  nextSize: Size,
+  resizedIds: Set<string>,
+):
+  | Extract<FrameLayoutOperationPlan, { ok: true }>
+  | Extract<FrameLayoutOperationPlan, { ok: false }> {
+  if (!isTranslationOnly(child)) {
+    return failure(
+      "visual-fidelity",
+      `Layer ${child.id} has rotation, skew, or local scale; constraints v1 only resizes translation-only Frame children`,
+    );
+  }
+  const solved = solveConstraints({
+    version: LAYOUT_SERVICE_CONTRACT_VERSION,
+    constraints: child.constraints ?? DEFAULT_LAYOUT_CONSTRAINTS,
+    child: {
+      x: child.transform[4],
+      y: child.transform[5],
+      width: child.size.width,
+      height: child.size.height,
+    },
+    previousParent: previousSize,
+    nextParent: nextSize,
+  });
+  if (!solved.ok) {
+    return failure(
+      "visual-fidelity",
+      `Layer ${child.id} constraints could not be resolved: ${solved.message}`,
+    );
+  }
+  const childNextSize = {
+    width: solved.rect.width,
+    height: solved.rect.height,
+  };
+  const childSizeChanged = !sameSize(child.size, childNextSize);
+  if (
+    childSizeChanged &&
+    (child.kind === "group" ||
+      child.kind === "boolean" ||
+      child.kind === "instance")
+  ) {
+    return failure(
+      "visual-fidelity",
+      `Layer ${child.id} cannot be resized by its constraints v1 semantics`,
+    );
+  }
+  if (
+    childSizeChanged &&
+    child.kind === "text" &&
+    child.properties.textResize !== "fixed"
+  ) {
+    return failure(
+      "visual-fidelity",
+      `Auto Size text ${child.id} cannot be stretched or scaled before hug/fill sizing is available`,
+    );
+  }
+  child.transform = [1, 0, 0, 1, solved.rect.x, solved.rect.y];
+  if (child.kind === "frame" && childSizeChanged) {
+    const nested = resizeFrame(document, child.id, childNextSize, resizedIds);
+    if (!nested.ok) return nested;
+  } else if (childSizeChanged) {
+    child.size = childNextSize;
+  }
+  resizedIds.add(child.id);
+  return { ok: true, commands: [], nodeIds: [...resizedIds] };
 }
 
 function constraintResizes(

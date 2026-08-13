@@ -14,7 +14,7 @@ import {
 } from "./geometry.js";
 import { normalizeGroupAncestorsInPlace } from "./group-bounds.js";
 import { nodeGeometryUpdate } from "./node-geometry-update.js";
-import { clearOrphanedFlowProperties } from "./auto-layout-property-cleanup.js";
+import { cleanReparentedLayoutProperties } from "./auto-layout-property-cleanup.js";
 export type LayerOperationFailureCode =
   | "invalid-selection"
   | "invalid-target"
@@ -458,12 +458,7 @@ export function planReparentNodes(
       return failure("not-found", `Layer ${nodeId} does not exist`);
     }
     node.parentId = options.parentId;
-    const targetUsesFlow =
-      targetParent?.kind === "frame" &&
-      (targetParent.properties.autoLayout?.mode ?? "none") !== "none";
-    if (targetUsesFlow || targetParent?.kind !== "frame")
-      delete node.constraints;
-    if (!targetUsesFlow) clearOrphanedFlowProperties(node);
+    cleanReparentedLayoutProperties(node, targetParent);
     if (sourceParentId !== options.parentId) {
       node.transform = multiplyTransforms(worldToTarget, world);
     }

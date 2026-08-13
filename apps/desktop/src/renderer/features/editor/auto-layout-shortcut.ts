@@ -41,7 +41,8 @@ export function canShowOrdinaryConstraints(
   return (
     parent?.kind === "frame" &&
     (parent.properties.autoLayout === undefined ||
-      parent.properties.autoLayout.mode === "none")
+      parent.properties.autoLayout.mode === "none" ||
+      node.layoutPositioning === "absolute")
   );
 }
 
@@ -54,14 +55,16 @@ export function canShowAutoLayoutSizing(
   return (
     parent?.kind === "frame" &&
     parent.properties.autoLayout !== undefined &&
-    parent.properties.autoLayout.mode !== "none"
+    parent.properties.autoLayout.mode !== "none" &&
+    node.layoutPositioning !== "absolute"
   );
 }
 
 export function layoutInspectorMode(
   document: DesignDocument,
   node: DesignNode | undefined,
-): "constraints" | "sizing" | "wrap-sizing" | null {
+): "constraints" | "sizing" | "wrap-sizing" | "absolute" | null {
+  if (node?.layoutPositioning === "absolute") return "absolute";
   if (canShowOrdinaryConstraints(document, node)) return "constraints";
   if (canShowAutoLayoutSizing(document, node)) {
     const parent = node?.parentId

@@ -37,7 +37,8 @@ export function commitCanvasOperation({
     return (
       parent?.kind === "frame" &&
       parent.properties.autoLayout !== undefined &&
-      parent.properties.autoLayout.mode !== "none"
+      parent.properties.autoLayout.mode !== "none" &&
+      node?.layoutPositioning !== "absolute"
     );
   });
   if (flowChild?.type === "update_properties") {

@@ -54,6 +54,11 @@ export {
 export { planSetNodeLayoutSizing } from "./auto-layout-sizing-operations.js";
 export { planSetNodeLayoutLimits } from "./auto-layout-limits-operations.js";
 export {
+  planSetNodeLayoutPositioning,
+  type LayoutPositioningIntent,
+  type LayoutPositioningOperationPlan,
+} from "./auto-layout-positioning-operations.js";
+export {
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
   type FrameLayoutOperationFailureCode,

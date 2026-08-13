@@ -1703,6 +1703,14 @@ describe("design Agent tool contract", () => {
       nodeId: "navigation_items",
       limits: { minWidth: 240, maxWidth: 720, minHeight: 44 },
     };
+    const layoutPositioning = {
+      action: "set-layout-positioning",
+      label: "Float navigation badge",
+      pageId: "page_1",
+      nodeId: "navigation_badge",
+      positioning: "absolute",
+      constraints: { horizontal: "right", vertical: "top" },
+    };
 
     expect(arrange).toMatchObject({
       risk: "design_write",
@@ -1715,6 +1723,7 @@ describe("design Agent tool contract", () => {
     expect(arrange?.description).toContain("Auto Layout supports");
     expect(arrange?.description).toContain("Auto gap");
     expect(arrange?.description).toContain("min/max clamping");
+    expect(arrange?.description).toContain("absolute child");
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, distribute),
     ).toBe(true);
@@ -1758,6 +1767,25 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutLimits),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutPositioning),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...layoutPositioning,
+        positioning: "flow",
+        constraints: { horizontal: "right", vertical: "top" },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        action: "set-layout-positioning",
+        label: "Return badge to flow",
+        pageId: "page_1",
+        nodeId: "navigation_badge",
+        positioning: "flow",
+      }),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {

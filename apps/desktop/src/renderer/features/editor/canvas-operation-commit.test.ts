@@ -132,4 +132,68 @@ describe("canvas operation commit", () => {
     );
     expect(runtime.getSnapshot().document.revision).toBe(0);
   });
+
+  it("commits direct move and resize of an absolute Auto Layout child", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 12,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    document.nodesById.title_welcome.layoutPositioning = "absolute";
+    const runtime = new EditorRuntime(document);
+    expect(
+      commitCanvasOperation({
+        label: "Move absolute child",
+        onResizeFrame: vi.fn(() => false),
+        onTransactionError: vi.fn(),
+        request: {
+          kind: "move",
+          selectionNodeIds: ["title_welcome"],
+          operations: [
+            {
+              commandId: "move_absolute_child",
+              type: "update_properties",
+              nodeId: "title_welcome",
+              transform: [1, 0, 0, 1, 240, 180],
+            },
+          ],
+        },
+        runtime,
+        transactionId: "canvas_absolute_move",
+      }),
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.transform,
+    ).toEqual([1, 0, 0, 1, 240, 180]);
+
+    expect(
+      commitCanvasOperation({
+        label: "Resize absolute child",
+        onResizeFrame: vi.fn(() => false),
+        onTransactionError: vi.fn(),
+        request: {
+          kind: "resize",
+          selectionNodeIds: ["title_welcome"],
+          operations: [
+            {
+              commandId: "resize_absolute_child",
+              type: "update_properties",
+              nodeId: "title_welcome",
+              size: { width: 420, height: 96 },
+            },
+          ],
+        },
+        runtime,
+        transactionId: "canvas_absolute_resize",
+      }),
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.size,
+    ).toEqual({ width: 420, height: 96 });
+  });
 });

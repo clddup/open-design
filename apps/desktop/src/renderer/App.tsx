@@ -1910,13 +1910,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onSelectBooleanParent={(nodeId) =>
                   runtime.setSelection([nodeId], nodeId)
                 }
-                onSetConstraints={(constraints) =>
-                  selectedNode &&
-                  editorCommands.setNodeConstraints(
-                    selectedNode.id,
-                    constraints,
-                  )
-                }
+                onSetConstraints={editorCommands.setNodeConstraints}
+                onSetLayoutPositioning={editorCommands.setNodeLayoutPositioning}
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}

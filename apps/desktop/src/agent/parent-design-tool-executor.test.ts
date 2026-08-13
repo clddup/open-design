@@ -55,7 +55,7 @@ describe("ParentDesignToolExecutor", () => {
       status: "degraded",
       name: "Auto layout",
       provider:
-        "DesignDocument 1.17.0 + @opendesign/layout-service Auto Layout contract v5 + EditorRuntime",
+        "DesignDocument 1.18.0 + @opendesign/layout-service Auto Layout contract v6 + EditorRuntime",
       evidence: { automated: 14, manual: 0 },
     });
   });

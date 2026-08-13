@@ -4,6 +4,7 @@ import type {
   DesignNode,
   LayoutConstraints,
   LayoutLimits,
+  LayoutPositioning,
   LayoutSizing,
   LineEndpoint,
 } from "@opendesign/design-contracts";
@@ -86,6 +87,8 @@ export function SelectedNodeProperties({
   layoutSizingAvailable,
   layoutSizingFillAvailable,
   layoutLimitsAvailable,
+  layoutPositioningAvailable,
+  layoutPositioningConstraintsAvailable,
   onBooleanOperationChange,
   onCreateComponent,
   onCreateComponentInstance,
@@ -99,6 +102,7 @@ export function SelectedNodeProperties({
   onResetComponentSourceOverride,
   onSelectBooleanParent,
   onSetConstraints,
+  onSetLayoutPositioning,
   onUpdate,
   onUpdateComponentOverride,
 }: {
@@ -111,6 +115,8 @@ export function SelectedNodeProperties({
   layoutSizingAvailable: boolean;
   layoutSizingFillAvailable: boolean;
   layoutLimitsAvailable: boolean;
+  layoutPositioningAvailable: boolean;
+  layoutPositioningConstraintsAvailable: boolean;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
@@ -123,7 +129,12 @@ export function SelectedNodeProperties({
   onResetComponentInstance: () => void;
   onResetComponentSourceOverride: (sourcePath: readonly string[]) => void;
   onSelectBooleanParent: (nodeId: string) => void;
-  onSetConstraints: (constraints: LayoutConstraints) => void;
+  onSetConstraints: (nodeId: string, constraints: LayoutConstraints) => void;
+  onSetLayoutPositioning: (
+    nodeId: string,
+    positioning: LayoutPositioning | null,
+    constraints?: LayoutConstraints,
+  ) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
@@ -131,6 +142,8 @@ export function SelectedNodeProperties({
   ) => void;
 }) {
   const { t } = useI18n();
+  const flowPositioned =
+    layoutPositioningAvailable && node.layoutPositioning !== "absolute";
   const updateTranslation = (index: 4 | 5, value: number) => {
     const transform: DesignNode["transform"] = [...node.transform];
     transform[index] = value;
@@ -406,8 +419,34 @@ export function SelectedNodeProperties({
         </Section>
       )}
       <Section title={t("properties.layout")}>
+        {layoutPositioningAvailable && (
+          <div className={styles.toggles}>
+            <label>
+              <input
+                aria-label={t("properties.ignoreAutoLayout")}
+                checked={node.layoutPositioning === "absolute"}
+                onChange={(event) =>
+                  onSetLayoutPositioning(
+                    node.id,
+                    event.target.checked ? "absolute" : null,
+                    event.target.checked &&
+                      layoutPositioningConstraintsAvailable
+                      ? (node.constraints ?? {
+                          horizontal: "left",
+                          vertical: "top",
+                        })
+                      : undefined,
+                  )
+                }
+                type="checkbox"
+              />
+              {t("properties.ignoreAutoLayout")}
+            </label>
+          </div>
+        )}
         <div className={styles.grid}>
           <Field
+            disabled={flowPositioned}
             label="X"
             onCommit={(draft) =>
               commitNumber(draft, node.transform[4], (value) =>
@@ -417,6 +456,7 @@ export function SelectedNodeProperties({
             value={formatNumber(node.transform[4])}
           />
           <Field
+            disabled={flowPositioned}
             label="Y"
             onCommit={(draft) =>
               commitNumber(draft, node.transform[5], (value) =>
@@ -463,7 +503,7 @@ export function SelectedNodeProperties({
               <select
                 aria-label={t("properties.horizontalConstraint")}
                 onChange={(event) =>
-                  onSetConstraints({
+                  onSetConstraints(node.id, {
                     horizontal: event.target
                       .value as LayoutConstraints["horizontal"],
                     vertical: node.constraints?.vertical ?? "top",
@@ -487,7 +527,7 @@ export function SelectedNodeProperties({
               <select
                 aria-label={t("properties.verticalConstraint")}
                 onChange={(event) =>
-                  onSetConstraints({
+                  onSetConstraints(node.id, {
                     horizontal: node.constraints?.horizontal ?? "left",
                     vertical: event.target
                       .value as LayoutConstraints["vertical"],

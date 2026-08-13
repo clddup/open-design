@@ -1,9 +1,6 @@
 import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
-  DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
-  DEFAULT_LAYOUT_SIZING,
-  isValidLayoutLimits,
   DesignDocumentSchema,
   type DesignDocument,
   type DesignNode,
@@ -21,11 +18,12 @@ import {
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import { validateVectorNetwork } from "@opendesign/geometry-service/editable-vector";
+import {
+  validateNodeLayoutInvariants,
+  type DocumentInvariantIssue,
+} from "./layout-document-invariants.js";
 
-export interface DocumentInvariantIssue {
-  path: string;
-  message: string;
-}
+export type { DocumentInvariantIssue } from "./layout-document-invariants.js";
 
 export class DocumentValidationError extends Error {
   readonly issues: readonly DocumentInvariantIssue[];
@@ -151,135 +149,7 @@ export function validateDocumentInvariants(
         message: `${node.kind} nodes cannot contain children`,
       });
     }
-    if (
-      node.kind === "frame" &&
-      node.properties.autoLayout?.mode === "horizontal" &&
-      node.properties.autoLayout.wrap &&
-      (node.properties.autoLayout.sizing?.horizontal ?? "fixed") !== "fixed"
-    ) {
-      issues.push({
-        path: `/nodesById/${nodeId}/properties/autoLayout/sizing/horizontal`,
-        message: "wrapped Auto Layout requires fixed Frame width",
-      });
-    }
-    if (node.constraints !== undefined) {
-      const parent = node.parentId
-        ? ownValue(document.nodesById, node.parentId)
-        : undefined;
-      if (parent?.kind !== "frame") {
-        issues.push({
-          path: `/nodesById/${nodeId}/constraints`,
-          message: "constraints are only valid on direct children of a Frame",
-        });
-      }
-      if (node.kind === "group" || node.kind === "boolean") {
-        issues.push({
-          path: `/nodesById/${nodeId}/constraints`,
-          message: `${node.kind} bounds follow their contents and cannot carry constraints v1`,
-        });
-      }
-      if (
-        parent?.kind === "frame" &&
-        parent.properties.autoLayout !== undefined &&
-        parent.properties.autoLayout.mode !== "none"
-      ) {
-        issues.push({
-          path: `/nodesById/${nodeId}/constraints`,
-          message:
-            "ordinary constraints are not valid on children participating in Auto Layout",
-        });
-      }
-    }
-    if (node.layoutSizing !== undefined) {
-      const parent = node.parentId
-        ? ownValue(document.nodesById, node.parentId)
-        : undefined;
-      const flow =
-        parent?.kind === "frame" ? parent.properties.autoLayout : undefined;
-      if (!flow || flow.mode === "none") {
-        issues.push({
-          path: `/nodesById/${nodeId}/layoutSizing`,
-          message:
-            "layout sizing is only valid on direct children of an Auto Layout Frame",
-        });
-      } else {
-        const frameSizing = flow.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING;
-        const childSizing = node.layoutSizing ?? DEFAULT_LAYOUT_SIZING;
-        if (
-          (node.visible &&
-            frameSizing.horizontal === "hug" &&
-            childSizing.horizontal === "fill") ||
-          (node.visible &&
-            frameSizing.vertical === "hug" &&
-            childSizing.vertical === "fill")
-        ) {
-          issues.push({
-            path: `/nodesById/${nodeId}/layoutSizing`,
-            message: "a child cannot fill an axis hugged by its parent Frame",
-          });
-        }
-        if (
-          node.visible &&
-          flow.mode === "horizontal" &&
-          flow.wrap &&
-          (childSizing.horizontal === "fill" || childSizing.vertical === "fill")
-        ) {
-          issues.push({
-            path: `/nodesById/${nodeId}/layoutSizing`,
-            message: "wrapped Auto Layout v1 does not support Fill children",
-          });
-        }
-      }
-      if (
-        (node.kind === "group" || node.kind === "boolean") &&
-        (node.layoutSizing.horizontal === "fill" ||
-          node.layoutSizing.vertical === "fill")
-      ) {
-        issues.push({
-          path: `/nodesById/${nodeId}/layoutSizing`,
-          message: `${node.kind} bounds follow their contents and cannot fill an Auto Layout axis`,
-        });
-      }
-      if (
-        node.kind === "text" &&
-        ((node.properties.textResize === "auto-width" &&
-          (node.layoutSizing.horizontal === "fill" ||
-            node.layoutSizing.vertical === "fill")) ||
-          (node.properties.textResize === "auto-height" &&
-            node.layoutSizing.vertical === "fill"))
-      ) {
-        issues.push({
-          path: `/nodesById/${nodeId}/layoutSizing`,
-          message: `text ${node.properties.textResize} sizing conflicts with the requested fill axis`,
-        });
-      }
-    }
-    if (node.layoutLimits !== undefined) {
-      const parent = node.parentId
-        ? ownValue(document.nodesById, node.parentId)
-        : undefined;
-      const parentFlow =
-        parent?.kind === "frame" ? parent.properties.autoLayout : undefined;
-      const ownFlow =
-        node.kind === "frame" ? node.properties.autoLayout : undefined;
-      const participatesInAutoLayout =
-        (parentFlow !== undefined && parentFlow.mode !== "none") ||
-        (ownFlow !== undefined && ownFlow.mode !== "none");
-      if (!participatesInAutoLayout) {
-        issues.push({
-          path: `/nodesById/${nodeId}/layoutLimits`,
-          message:
-            "layout limits are only valid on an Auto Layout Frame or its direct flow child",
-        });
-      }
-      if (!isValidLayoutLimits(node.layoutLimits)) {
-        issues.push({
-          path: `/nodesById/${nodeId}/layoutLimits`,
-          message:
-            "layout limits must be non-empty, finite, non-negative, and each minimum must not exceed its maximum",
-        });
-      }
-    }
+    issues.push(...validateNodeLayoutInvariants(document, nodeId, node));
     if (node.kind === "boolean") {
       if (node.childIds.length < 2) {
         issues.push({

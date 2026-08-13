@@ -5,6 +5,7 @@ import {
   planSetFrameAutoLayout,
   planSetNodeConstraints,
   planSetNodeLayoutLimits,
+  planSetNodeLayoutPositioning,
   planSetNodeLayoutSizing,
 } from "@opendesign/editor-runtime";
 import type { DesignArrangeToolInput } from "../shared/design-arrange-tool";
@@ -45,6 +46,15 @@ export function planDesignArrangeTool(
       input.nodeId,
       input.sizing,
       commandPrefix,
+    );
+  if (input.action === "set-layout-positioning")
+    return planSetNodeLayoutPositioning(
+      document,
+      input.pageId,
+      input.nodeId,
+      input.positioning,
+      commandPrefix,
+      input.constraints,
     );
   if (input.action === "set-layout-limits")
     return planSetNodeLayoutLimits(

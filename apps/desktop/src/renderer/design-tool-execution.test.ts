@@ -3491,18 +3491,19 @@ describe("Renderer semantic hierarchy tool", () => {
       runtime.getSnapshot().document.nodesById.title_welcome?.layoutSizing,
     ).toEqual({ horizontal: "fill", vertical: "fixed" });
 
-    const limited = await executeDesignToolRequest(
+    const absolute = await executeDesignToolRequest(
       {
-        requestId: "auto_layout_child_limits",
+        requestId: "auto_layout_child_absolute",
         call: {
-          toolCallId: "tool_auto_layout_child_limits",
+          toolCallId: "tool_auto_layout_child_absolute",
           toolName: DESIGN_ARRANGE_TOOL_NAME,
           input: {
-            action: "set-layout-limits",
-            label: "Bound title width",
+            action: "set-layout-positioning",
+            label: "Float title over the flow",
             pageId: "page_welcome",
             nodeId: "title_welcome",
-            limits: { minWidth: 240, maxWidth: 720, minHeight: 48 },
+            positioning: "absolute",
+            constraints: { horizontal: "right", vertical: "top" },
           },
         },
         context: { ...pageContext, revision: 2 },
@@ -3510,21 +3511,51 @@ describe("Renderer semantic hierarchy tool", () => {
       runtime,
       "page_welcome",
     );
-    expect(limited).toMatchObject({
+    expect(absolute).toMatchObject({
       ok: true,
       result: {
         content: {
-          action: "set-layout-limits",
+          action: "set-layout-positioning",
           nodeId: "title_welcome",
-          limits: { minWidth: 240, maxWidth: 720, minHeight: 48 },
+          positioning: "absolute",
+          constraints: { horizontal: "right", vertical: "top" },
           revision: 3,
           atomic: true,
         },
       },
     });
     expect(
-      runtime.getSnapshot().document.nodesById.title_welcome?.layoutLimits,
-    ).toEqual({ minWidth: 240, maxWidth: 720, minHeight: 48 });
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      layoutPositioning: "absolute",
+      constraints: { horizontal: "right", vertical: "top" },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutSizing,
+    ).toBeUndefined();
+
+    const invalidLimits = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_child_limits",
+        call: {
+          toolCallId: "tool_auto_layout_child_limits",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-layout-limits",
+            label: "Bound absolute title width",
+            pageId: "page_welcome",
+            nodeId: "title_welcome",
+            limits: { minWidth: 240, maxWidth: 720, minHeight: 48 },
+          },
+        },
+        context: { ...pageContext, revision: 3 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(invalidLimits.ok).toBe(false);
+    if (invalidLimits.ok) throw new Error("Absolute limits were accepted");
+    expect(invalidLimits.error.message).toContain("flow child");
 
     await expect(
       executeDesignToolRequest(
@@ -3539,7 +3570,7 @@ describe("Renderer semantic hierarchy tool", () => {
                 {
                   commandId: "move_flow_child",
                   type: "update_properties",
-                  nodeId: "title_welcome",
+                  nodeId: "subtitle_welcome",
                   transform: [1, 0, 0, 1, 500, 500],
                 },
               ],
@@ -3564,7 +3595,7 @@ describe("Renderer semantic hierarchy tool", () => {
                 {
                   commandId: "bypass_fill",
                   type: "update_properties",
-                  nodeId: "title_welcome",
+                  nodeId: "subtitle_welcome",
                   layoutSizing: { horizontal: "fixed", vertical: "fixed" },
                 },
               ],
@@ -3590,7 +3621,7 @@ describe("Renderer semantic hierarchy tool", () => {
                 {
                   commandId: "bypass_limits",
                   type: "update_properties",
-                  nodeId: "title_welcome",
+                  nodeId: "subtitle_welcome",
                   layoutLimits: { maxWidth: 400 },
                 },
               ],
@@ -3603,6 +3634,74 @@ describe("Renderer semantic hierarchy tool", () => {
       ),
     ).rejects.toThrow("set-layout-limits");
     expect(runtime.getSnapshot().document.revision).toBe(3);
+
+    const absoluteNode = {
+      ...runtime.getSnapshot().document.nodesById.subtitle_welcome,
+      id: "bypass_absolute",
+      name: "Bypass absolute",
+      parentId: "frame_welcome",
+      layoutPositioning: "absolute" as const,
+    };
+    for (const [requestId, commands] of [
+      [
+        "auto_layout_positioning_update_bypass",
+        [
+          {
+            commandId: "bypass_positioning_update",
+            type: "update_properties" as const,
+            nodeId: "subtitle_welcome",
+            layoutPositioning: "absolute" as const,
+          },
+        ],
+      ],
+      [
+        "auto_layout_positioning_insert_bypass",
+        [
+          {
+            commandId: "bypass_positioning_insert",
+            type: "insert_element" as const,
+            pageId: "page_welcome",
+            parentId: "frame_welcome",
+            index: 4,
+            node: absoluteNode,
+          },
+        ],
+      ],
+      [
+        "auto_layout_positioning_replace_bypass",
+        [
+          {
+            commandId: "bypass_positioning_replace",
+            type: "replace_subtree" as const,
+            rootNodeId: "subtitle_welcome",
+            nodes: [
+              {
+                ...absoluteNode,
+                id: "subtitle_welcome",
+                name: "Replaced subtitle",
+              },
+            ],
+          },
+        ],
+      ],
+    ] as const) {
+      await expect(
+        executeDesignToolRequest(
+          {
+            requestId,
+            call: {
+              toolCallId: `tool_${requestId}`,
+              toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+              input: { label: "Bypass layout positioning", commands },
+            },
+            context: { ...pageContext, revision: 3 },
+          },
+          runtime,
+          "page_welcome",
+        ),
+      ).rejects.toThrow("set-layout-positioning");
+      expect(runtime.getSnapshot().document.revision).toBe(3);
+    }
   });
 
   it("sets horizontal Wrap through the Agent tool and derives wrapped child rows", async () => {

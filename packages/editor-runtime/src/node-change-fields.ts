@@ -14,6 +14,7 @@ export function nodeChangedFields(
     "size",
     "opacity",
     "constraints",
+    "layoutPositioning",
     "layoutSizing",
     "layoutLimits",
     "blendMode",

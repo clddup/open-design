@@ -672,6 +672,93 @@ describe("layer hierarchy operations", () => {
     ).toBeUndefined();
   });
 
+  it("keeps absolute positioning across flow Frames and clears it outside flow", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const source = document.nodesById.frame_welcome;
+    if (source?.kind !== "frame") throw new Error("missing source Frame");
+    source.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    document.nodesById.title_welcome!.layoutPositioning = "absolute";
+    document.nodesById.title_welcome!.constraints = {
+      horizontal: "right",
+      vertical: "bottom",
+    };
+    document.nodesById.target_flow = {
+      ...structuredClone(source),
+      id: "target_flow",
+      name: "Target flow",
+      parentId: null,
+      childIds: [],
+      transform: [1, 0, 0, 1, 2_000, 0],
+    };
+    document.nodesById.target_frame = {
+      ...structuredClone(source),
+      id: "target_frame",
+      name: "Target Frame",
+      parentId: null,
+      childIds: [],
+      transform: [1, 0, 0, 1, 4_000, 0],
+      properties: { ...source.properties, autoLayout: { mode: "none" } },
+    };
+    document.pagesById.page_welcome!.rootNodeIds.push(
+      "target_flow",
+      "target_frame",
+    );
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+
+    const intoFlow = planReparentNodes(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["title_welcome"],
+      {
+        parentId: "target_flow",
+        index: 0,
+        commandPrefix: "absolute_into_flow",
+      },
+    );
+    if (!intoFlow.ok) throw new Error(intoFlow.message);
+    expect(
+      runtime.apply(
+        transaction(runtime, "absolute_into_flow", intoFlow.commands),
+      ).ok,
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      parentId: "target_flow",
+      layoutPositioning: "absolute",
+      constraints: { horizontal: "right", vertical: "bottom" },
+    });
+
+    const outsideFlow = planReparentNodes(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["title_welcome"],
+      {
+        parentId: "target_frame",
+        index: 0,
+        commandPrefix: "absolute_outside_flow",
+      },
+    );
+    if (!outsideFlow.ok) throw new Error(outsideFlow.message);
+    expect(
+      runtime.apply(
+        transaction(runtime, "absolute_outside_flow", outsideFlow.commands),
+      ).ok,
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutPositioning,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.constraints,
+    ).toEqual({ horizontal: "right", vertical: "bottom" });
+  });
+
   it("preserves limits when an Auto Layout Frame leaves its parent flow", () => {
     const document = structuredClone(createWelcomeDocument());
     const outer = document.nodesById.frame_welcome;

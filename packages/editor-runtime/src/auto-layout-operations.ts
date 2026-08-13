@@ -14,6 +14,9 @@ import {
 } from "@opendesign/design-contracts";
 import {
   AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+  DEFAULT_LAYOUT_CONSTRAINTS,
+  LAYOUT_SERVICE_CONTRACT_VERSION,
+  solveConstraints,
   solveLinearAutoLayout,
 } from "@opendesign/layout-service";
 
@@ -97,6 +100,7 @@ export function planSetFrameAutoLayout(
           `Layer ${childId} has rotation, skew, or local scale; linear Auto Layout v1 only positions translation-only direct children`,
         );
       }
+      if (child.layoutPositioning === "absolute") continue;
       const frameSizing = autoLayout.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING;
       const childSizing = child.layoutSizing ?? DEFAULT_LAYOUT_SIZING;
       if (
@@ -126,6 +130,14 @@ export function planSetFrameAutoLayout(
     for (const childId of frame.childIds) {
       const child = document.nodesById[childId];
       if (!child) continue;
+      if (child.layoutPositioning !== undefined) {
+        commands.push({
+          commandId: `${commandPrefix}_clear_positioning_${commands.length}`,
+          type: "update_properties",
+          nodeId: childId,
+          layoutPositioning: null,
+        });
+      }
       if (child.layoutSizing !== undefined) {
         commands.push({
           commandId: `${commandPrefix}_clear_sizing_${commands.length}`,
@@ -167,7 +179,12 @@ export function planSetFrameAutoLayout(
   }
   if (autoLayout.mode !== "none") {
     for (const childId of frame.childIds) {
-      if (document.nodesById[childId]?.constraints === undefined) continue;
+      const child = document.nodesById[childId];
+      if (
+        child?.constraints === undefined ||
+        child.layoutPositioning === "absolute"
+      )
+        continue;
       commands.push({
         commandId: `${commandPrefix}_clear_${commands.length}`,
         type: "update_properties",
@@ -219,6 +236,7 @@ export function resolveAutoLayoutInPlace(
     if (!autoLayout || autoLayout.mode === "none") continue;
     const children: Array<{
       id: string;
+      positioning: "flow" | "absolute";
       width: number;
       height: number;
       sizing: typeof DEFAULT_LAYOUT_SIZING;
@@ -234,11 +252,21 @@ export function resolveAutoLayoutInPlace(
         );
       }
       if (child.constraints !== undefined) {
+        if (child.layoutPositioning === "absolute") continue;
         return resolutionFailure(
           "invalid-layout",
           frameId,
           `Flow child ${childId} cannot use ordinary Frame constraints`,
         );
+      }
+      if (child.layoutPositioning === "absolute") {
+        children.push({
+          id: child.id,
+          positioning: "absolute",
+          ...child.size,
+          sizing: DEFAULT_LAYOUT_SIZING,
+        });
+        continue;
       }
       if (!isTranslationOnly(child)) {
         return resolutionFailure(
@@ -250,6 +278,7 @@ export function resolveAutoLayoutInPlace(
       if (child.visible) {
         children.push({
           id: child.id,
+          positioning: "flow",
           ...child.size,
           sizing: child.layoutSizing ?? DEFAULT_LAYOUT_SIZING,
           ...(child.layoutLimits ? { limits: child.layoutLimits } : {}),
@@ -269,8 +298,43 @@ export function resolveAutoLayoutInPlace(
         `Frame ${frameId} Auto Layout could not be resolved: ${result.message}`,
       );
     }
+    const previousFrameSize = frame.size;
     frame.size = result.frame;
     positioned.add(frame.id);
+    if (
+      previousFrameSize.width !== result.frame.width ||
+      previousFrameSize.height !== result.frame.height
+    ) {
+      for (const childId of frame.childIds) {
+        const child = document.nodesById[childId];
+        if (child?.layoutPositioning !== "absolute") continue;
+        const constrained = solveConstraints({
+          version: LAYOUT_SERVICE_CONTRACT_VERSION,
+          constraints: child.constraints ?? DEFAULT_LAYOUT_CONSTRAINTS,
+          child: {
+            x: child.transform[4],
+            y: child.transform[5],
+            width: child.size.width,
+            height: child.size.height,
+          },
+          previousParent: previousFrameSize,
+          nextParent: result.frame,
+        });
+        if (!constrained.ok) {
+          return resolutionFailure(
+            "invalid-layout",
+            frameId,
+            `Absolute child ${childId} constraints could not be resolved: ${constrained.message}`,
+          );
+        }
+        child.transform = [1, 0, 0, 1, constrained.rect.x, constrained.rect.y];
+        child.size = {
+          width: constrained.rect.width,
+          height: constrained.rect.height,
+        };
+        positioned.add(child.id);
+      }
+    }
     for (const placement of result.placements) {
       const child = document.nodesById[placement.id];
       if (!child) {
@@ -369,6 +433,7 @@ function solveFrame(
   autoLayout: AutoLayoutFlow,
   children: Array<{
     id: string;
+    positioning: "flow" | "absolute";
     width: number;
     height: number;
     sizing: LayoutSizing;

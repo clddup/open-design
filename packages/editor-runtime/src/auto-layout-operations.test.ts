@@ -13,6 +13,7 @@ import {
   planResizeFrameWithConstraints,
   planSetFrameAutoLayout,
   planSetNodeLayoutLimits,
+  planSetNodeLayoutPositioning,
   planSetNodeLayoutSizing,
   planSetNodeConstraints,
 } from "./index.js";
@@ -128,6 +129,282 @@ describe("linear Auto Layout Runtime", () => {
       ).ok,
     ).toBe(true);
     expectRect(runtime.getSnapshot().document, "one", 20, 70, 80, 20);
+  });
+
+  it("keeps absolute children out of flow and restores them atomically", () => {
+    const runtime = enabledRuntime();
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "initialize_flow_geometry",
+            type: "update_properties",
+            nodeId: "frame",
+            name: "Initialized flow",
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    const absolute = planSetNodeLayoutPositioning(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "two",
+      "absolute",
+      "absolute_two",
+      { horizontal: "right", vertical: "bottom" },
+    );
+    if (!absolute.ok) throw new Error(absolute.message);
+    expect(runtime.apply(transaction(runtime, absolute.commands)).ok).toBe(
+      true,
+    );
+    let document = runtime.getSnapshot().document;
+    expect(document.nodesById.two).toMatchObject({
+      layoutPositioning: "absolute",
+      constraints: { horizontal: "right", vertical: "bottom" },
+    });
+    expectRect(document, "one", 20, 40, 40, 20);
+    expectRect(document, "two", 72, 35, 60, 30);
+
+    const resize = planResizeFrameWithConstraints(
+      document,
+      "page_layout",
+      "frame",
+      { width: 400, height: 160 },
+      "resize_absolute_parent",
+    );
+    if (!resize.ok) throw new Error(resize.message);
+    expect(runtime.apply(transaction(runtime, resize.commands)).ok).toBe(true);
+    document = runtime.getSnapshot().document;
+    expectRect(document, "one", 20, 70, 40, 20);
+    expectRect(document, "two", 172, 95, 60, 30);
+
+    const flow = planSetNodeLayoutPositioning(
+      document,
+      "page_layout",
+      "two",
+      "flow",
+      "flow_two",
+    );
+    if (!flow.ok) throw new Error(flow.message);
+    expect(runtime.apply(transaction(runtime, flow.commands)).ok).toBe(true);
+    document = runtime.getSnapshot().document;
+    expect(document.nodesById.two?.layoutPositioning).toBeUndefined();
+    expect(document.nodesById.two?.constraints).toBeUndefined();
+    expectRect(document, "two", 72, 65, 60, 30);
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.two?.layoutPositioning,
+    ).toBe("absolute");
+    expect(runtime.redo().ok).toBe(true);
+    expect(
+      normalizeDesignDocument(
+        JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+      ).nodesById.two?.layoutPositioning,
+    ).toBeUndefined();
+  });
+
+  it("preserves absolute constraints across flow changes and retains them when flow is disabled", () => {
+    const runtime = enabledRuntime();
+    const absolute = planSetNodeLayoutPositioning(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "two",
+      "absolute",
+      "preserve_absolute",
+      { horizontal: "right", vertical: "bottom" },
+    );
+    if (!absolute.ok) throw new Error(absolute.message);
+    expect(runtime.apply(transaction(runtime, absolute.commands)).ok).toBe(
+      true,
+    );
+
+    const changeFlow = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      { ...horizontal, gap: 24 },
+      "change_flow",
+    );
+    if (!changeFlow.ok) throw new Error(changeFlow.message);
+    expect(changeFlow.commands).not.toContainEqual(
+      expect.objectContaining({ nodeId: "two", constraints: null }),
+    );
+    expect(runtime.apply(transaction(runtime, changeFlow.commands)).ok).toBe(
+      true,
+    );
+    expect(runtime.getSnapshot().document.nodesById.two).toMatchObject({
+      layoutPositioning: "absolute",
+      constraints: { horizontal: "right", vertical: "bottom" },
+    });
+
+    const disable = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      { mode: "none" },
+      "disable_flow",
+    );
+    if (!disable.ok) throw new Error(disable.message);
+    expect(runtime.apply(transaction(runtime, disable.commands)).ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.two?.layoutPositioning,
+    ).toBeUndefined();
+    expect(runtime.getSnapshot().document.nodesById.two?.constraints).toEqual({
+      horizontal: "right",
+      vertical: "bottom",
+    });
+  });
+
+  it("ignores absolute children when a Hug parent resolves", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      ...horizontal,
+      sizing: { horizontal: "hug", vertical: "hug" },
+    };
+    delete document.nodesById.one!.constraints;
+    document.nodesById.two!.layoutPositioning = "absolute";
+    document.nodesById.two!.visible = false;
+    document.nodesById.two!.constraints = {
+      horizontal: "right",
+      vertical: "bottom",
+    };
+    const runtime = new EditorRuntime(document);
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "resolve_hug_with_absolute",
+            type: "update_properties",
+            nodeId: "frame",
+            name: "Resolve Hug",
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    const resolved = runtime.getSnapshot().document;
+    expect(resolved.nodesById.frame?.size).toEqual({ width: 80, height: 40 });
+    expectRect(resolved, "one", 20, 10, 40, 20);
+    expectRect(resolved, "two", -220, -60, 60, 30);
+  });
+
+  it("enforces constraint fidelity for absolute container, Instance, and Auto Size text children", () => {
+    const document = structuredClone(enabledRuntime().getSnapshot().document);
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    document.nodesById.group = {
+      ...rectangle("group", "frame", 0, 0, 40, 40),
+      kind: "group",
+      properties: {},
+    };
+    document.nodesById.boolean = {
+      ...rectangle("boolean", "frame", 0, 0, 40, 40),
+      kind: "boolean",
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        operation: "union",
+      },
+    };
+    document.nodesById.instance = {
+      ...rectangle("instance", "frame", 0, 0, 40, 40),
+      kind: "instance",
+      properties: { componentId: "component", overrides: [] },
+    };
+    document.nodesById.copy = autoHeightText("copy", "frame", 120);
+    frame.childIds.push("group", "boolean", "instance", "copy");
+
+    expect(
+      planSetNodeLayoutPositioning(
+        document,
+        "page_layout",
+        "group",
+        "absolute",
+        "absolute_group",
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      planSetNodeLayoutPositioning(
+        document,
+        "page_layout",
+        "boolean",
+        "absolute",
+        "absolute_boolean",
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      planSetNodeLayoutPositioning(
+        document,
+        "page_layout",
+        "group",
+        "absolute",
+        "constrained_group",
+        { horizontal: "right", vertical: "top" },
+      ),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+    expect(
+      planSetNodeLayoutPositioning(
+        document,
+        "page_layout",
+        "instance",
+        "absolute",
+        "position_instance",
+        { horizontal: "right", vertical: "bottom" },
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      planSetNodeLayoutPositioning(
+        document,
+        "page_layout",
+        "instance",
+        "absolute",
+        "stretch_instance",
+        { horizontal: "left-right", vertical: "top" },
+      ),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+    expect(
+      planSetNodeLayoutPositioning(
+        document,
+        "page_layout",
+        "copy",
+        "absolute",
+        "position_copy",
+        { horizontal: "center", vertical: "bottom" },
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      planSetNodeLayoutPositioning(
+        document,
+        "page_layout",
+        "copy",
+        "absolute",
+        "scale_copy",
+        { horizontal: "scale", vertical: "top" },
+      ),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+  });
+
+  it("rejects absolute positioning outside flow and incompatible child sizing", () => {
+    const ordinary = layoutDocument();
+    ordinary.nodesById.one!.layoutPositioning = "absolute";
+    expect(() => new EditorRuntime(ordinary)).toThrow(
+      "absolute positioning is only valid",
+    );
+
+    const flow = layoutDocument();
+    const frame = flow.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = horizontal;
+    flow.nodesById.one!.layoutPositioning = "absolute";
+    flow.nodesById.one!.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fixed",
+    };
+    expect(() => new EditorRuntime(flow)).toThrow(
+      "layout sizing is only valid on flow children",
+    );
   });
 
   it("reflows Auto gap after insert, hide, resize, reorder, and Frame resize", () => {

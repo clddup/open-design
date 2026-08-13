@@ -878,6 +878,15 @@ async function executeDesignToolRequestUnsafe(
           ...(input.action === "set-layout-sizing"
             ? { nodeId: input.nodeId, sizing: input.sizing }
             : {}),
+          ...(input.action === "set-layout-positioning"
+            ? {
+                nodeId: input.nodeId,
+                positioning: input.positioning,
+                ...(input.constraints
+                  ? { constraints: input.constraints }
+                  : {}),
+              }
+            : {}),
           ...(input.action === "set-layout-limits"
             ? { nodeId: input.nodeId, limits: input.limits }
             : {}),
@@ -885,6 +894,7 @@ async function executeDesignToolRequestUnsafe(
           input.action !== "set-constraints" &&
           input.action !== "set-auto-layout" &&
           input.action !== "set-layout-sizing" &&
+          input.action !== "set-layout-positioning" &&
           input.action !== "set-layout-limits" &&
           "orderedNodeIds" in plan
             ? { orderedNodeIds: plan.orderedNodeIds }
@@ -1227,12 +1237,31 @@ function assertAgentDoesNotBypassAutoLayout(
   commands: readonly DesignOperation[],
 ): void {
   for (const command of commands) {
+    const commandNodes =
+      command.type === "insert_element"
+        ? [command.node]
+        : command.type === "replace_subtree"
+          ? command.nodes
+          : [];
+    if (commandNodes.some((node) => node.layoutPositioning !== undefined)) {
+      throw new Error(
+        `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_arrange_layers action set-layout-positioning`,
+      );
+    }
     if (
       command.type === "update_properties" &&
       command.layoutSizing !== undefined
     ) {
       throw new Error(
         `design_workflow.auto_layout_requires_layout_tool: Configure flow-child sizing with opendesign_arrange_layers action set-layout-sizing`,
+      );
+    }
+    if (
+      command.type === "update_properties" &&
+      command.layoutPositioning !== undefined
+    ) {
+      throw new Error(
+        `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_arrange_layers action set-layout-positioning`,
       );
     }
     if (
@@ -1265,7 +1294,8 @@ function assertAgentDoesNotBypassAutoLayout(
     if (
       parent?.kind !== "frame" ||
       parent.properties.autoLayout === undefined ||
-      parent.properties.autoLayout.mode === "none"
+      parent.properties.autoLayout.mode === "none" ||
+      node.layoutPositioning === "absolute"
     ) {
       continue;
     }

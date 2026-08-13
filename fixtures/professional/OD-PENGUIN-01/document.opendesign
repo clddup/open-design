@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.17.0",
+  "schemaVersion": "1.18.0",
   "documentId": "document_od_penguin_01",
   "revision": 1,
   "pageOrder": ["page_penguin_01"],
@@ -53,7 +53,15 @@
         "strokes": [],
         "strokeWidth": 0,
         "cornerRadius": 32,
-        "clipsContent": true
+        "clipsContent": true,
+        "autoLayout": {
+          "mode": "vertical",
+          "padding": { "top": 0, "right": 0, "bottom": 40, "left": 0 },
+          "gap": 0,
+          "primaryAlignment": "end",
+          "counterAlignment": "center",
+          "sizing": { "horizontal": "fixed", "vertical": "fixed" }
+        }
       }
     },
     "penguin_background_orb": {
@@ -64,11 +72,13 @@
       "childIds": [],
       "visible": true,
       "locked": false,
-      "transform": [1, 0, 0, 1, 90, 80],
+      "transform": [1, 0, 0, 1, 100, 70],
       "size": { "width": 580, "height": 580 },
       "opacity": 1,
       "blendMode": "screen",
       "effects": [{ "type": "layer-blur", "radius": 18 }],
+      "constraints": { "horizontal": "center", "vertical": "center" },
+      "layoutPositioning": "absolute",
       "extensions": {},
       "properties": {
         "fills": [
@@ -117,7 +127,8 @@
       "size": { "width": 420, "height": 570 },
       "opacity": 1,
       "extensions": {},
-      "properties": {}
+      "properties": {},
+      "layoutPositioning": "absolute"
     },
     "penguin_halo": {
       "id": "penguin_halo",

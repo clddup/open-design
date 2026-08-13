@@ -32,8 +32,13 @@ function renderPanel(
       sourceNodes: readonly [];
     };
     onRemoveComponent?: () => void;
-    layoutMode?: "constraints" | "sizing" | "wrap-sizing" | null;
-    onSetConstraints?: (constraints: LayoutConstraints) => void;
+    layoutMode?: "constraints" | "sizing" | "wrap-sizing" | "absolute" | null;
+    onSetConstraints?: (nodeId: string, constraints: LayoutConstraints) => void;
+    onSetLayoutPositioning?: (
+      nodeId: string,
+      positioning: "absolute" | null,
+      constraints?: LayoutConstraints,
+    ) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
   } = {},
 ) {
@@ -76,6 +81,7 @@ function renderPanel(
           onResetComponentSourceOverride={vi.fn()}
           onSelectBooleanParent={vi.fn()}
           onSetConstraints={options.onSetConstraints ?? vi.fn()}
+          onSetLayoutPositioning={options.onSetLayoutPositioning ?? vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onRasterExportSettingsChange={onRasterExportSettingsChange}
           exportFormat={options.exportFormat ?? "svg"}
@@ -259,7 +265,7 @@ describe("PropertiesPanel SVG workflow", () => {
       screen.getByLabelText("Horizontal constraint"),
       "left-right",
     );
-    expect(onSetConstraints).toHaveBeenCalledWith({
+    expect(onSetConstraints).toHaveBeenCalledWith("text_1", {
       horizontal: "left-right",
       vertical: "bottom",
     });
@@ -267,7 +273,7 @@ describe("PropertiesPanel SVG workflow", () => {
       screen.getByLabelText("Vertical constraint"),
       "center",
     );
-    expect(onSetConstraints).toHaveBeenLastCalledWith({
+    expect(onSetConstraints).toHaveBeenLastCalledWith("text_1", {
       horizontal: "right",
       vertical: "center",
     });
@@ -313,6 +319,42 @@ describe("PropertiesPanel SVG workflow", () => {
         },
       },
     });
+  });
+
+  it("toggles an Auto Layout child between flow and absolute positioning", async () => {
+    const user = userEvent.setup();
+    const onSetLayoutPositioning = vi.fn();
+    renderPanel({
+      node: { ...textNode, parentId: "frame_auto" },
+      selectionCount: 1,
+      layoutMode: "sizing",
+      onSetLayoutPositioning,
+    });
+    await user.click(screen.getByLabelText("Ignore auto layout"));
+    expect(onSetLayoutPositioning).toHaveBeenCalledWith("text_1", "absolute", {
+      horizontal: "left",
+      vertical: "top",
+    });
+    cleanup();
+    renderPanel({
+      node: {
+        ...textNode,
+        parentId: "frame_auto",
+        layoutPositioning: "absolute",
+        constraints: { horizontal: "right", vertical: "bottom" },
+      },
+      selectionCount: 1,
+      layoutMode: "absolute",
+      onSetLayoutPositioning,
+    });
+    expect(screen.getByLabelText("Ignore auto layout")).toBeChecked();
+    expect(screen.getByLabelText("Horizontal constraint")).toHaveValue("right");
+    await user.click(screen.getByLabelText("Ignore auto layout"));
+    expect(onSetLayoutPositioning).toHaveBeenLastCalledWith(
+      "text_1",
+      null,
+      undefined,
+    );
   });
 
   it("configures Frame Hug axes and flow-child Fill axes explicitly", async () => {

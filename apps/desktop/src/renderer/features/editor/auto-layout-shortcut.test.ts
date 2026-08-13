@@ -78,6 +78,17 @@ describe("Auto Layout editor shortcut", () => {
     expect(
       layoutInspectorMode(document, document.nodesById.title_welcome),
     ).toBe("sizing");
+    document.nodesById.title_welcome.layoutPositioning = "absolute";
+    expect(
+      layoutInspectorMode(document, document.nodesById.title_welcome),
+    ).toBe("absolute");
+    expect(
+      canShowOrdinaryConstraints(document, document.nodesById.title_welcome),
+    ).toBe(true);
+    expect(
+      canShowAutoLayoutSizing(document, document.nodesById.title_welcome),
+    ).toBe(false);
+    delete document.nodesById.title_welcome.layoutPositioning;
     frame.properties.autoLayout = {
       mode: "horizontal",
       padding: { top: 0, right: 0, bottom: 0, left: 0 },

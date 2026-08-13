@@ -1,7 +1,7 @@
 {
   "version": 1,
   "generatedBy": "scripts/generate-professional-fixtures.mjs",
-  "documentSchemaVersion": "1.17.0",
+  "documentSchemaVersion": "1.18.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "sourceAssets": [
     {
@@ -54,15 +54,15 @@
         },
         "initialDocument": {
           "path": "fixtures/professional/OD-PENGUIN-01/initial.opendesign",
-          "sha256": "0fd1a95f4b8b1fc6d0600a4459e3041705f285ce07fce1ca33b1c579e3f2f455"
+          "sha256": "d1a64a3bbae26ce262886c6443d4e56192ecdb413eb2c726467c6f15a883d6c4"
         },
         "refinementTransaction": {
           "path": "fixtures/professional/OD-PENGUIN-01/refinement.transaction.json",
-          "sha256": "d55dd0470b4f8efae0e90b3116f86661e2ffe1b409a254dbcbdd894173cbe6ad"
+          "sha256": "7bd76ff71db753fa591fcf8609b8933e785aa42db9143905f88ed1781d78e55f"
         },
         "finalDocument": {
           "path": "fixtures/professional/OD-PENGUIN-01/document.opendesign",
-          "sha256": "843479a01ab116a080def52122ea19701d8e9589450c8ed220227b607da1077f"
+          "sha256": "d213943681ee709b620960a763686a8eceb4dfead4b1643ce9a31258cbd5e5dd"
         }
       },
       "evidence": {
@@ -118,7 +118,7 @@
         },
         "initialDocument": {
           "path": "fixtures/professional/OD-POSTER-01/initial.opendesign",
-          "sha256": "d17af1a5ccb003476b4e4e01eff1fe1ef6e8d23e49a0b5aabae9c1a9bf67043c"
+          "sha256": "f7183bc8a88646892332fdd2bc8b2afa880df70312e8dc7a152d8315a8385c88"
         },
         "refinementTransaction": {
           "path": "fixtures/professional/OD-POSTER-01/refinement.transaction.json",
@@ -126,7 +126,7 @@
         },
         "finalDocument": {
           "path": "fixtures/professional/OD-POSTER-01/document.opendesign",
-          "sha256": "5f2e3717fdd4ba605b023b189b17de599a4e8c089729b85be2dd2bed073897c8"
+          "sha256": "23c13ef4b81ecbcf1786ed8bd4d8f1ade2729fc72bcbd27f64128e41c86cf857"
         }
       },
       "evidence": {
@@ -189,7 +189,7 @@
         },
         "initialDocument": {
           "path": "fixtures/professional/OD-BRAND-01/initial.opendesign",
-          "sha256": "b29d22ccaa2715747c0832577b62e6e41aa2260ce787fedf6589a90a740bccbf"
+          "sha256": "5155316261cb7cd65fa3a1cbd1e8fb4d0dd82beeac6bf8ee90e6ce1eeb57c946"
         },
         "refinementTransaction": {
           "path": "fixtures/professional/OD-BRAND-01/refinement.transaction.json",
@@ -197,7 +197,7 @@
         },
         "finalDocument": {
           "path": "fixtures/professional/OD-BRAND-01/document.opendesign",
-          "sha256": "c639161004a2787b26524bd1f9f3c1c5de892952a2c10925cb3b2a5a4aaefdef"
+          "sha256": "7f878e1d4c81856309ad4980b9de9cebef07681c7f9c8b26c981407f83ed79ae"
         }
       },
       "evidence": {

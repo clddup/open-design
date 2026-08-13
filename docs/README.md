@@ -90,3 +90,4 @@
 | [0056](adr/0056-auto-layout-horizontal-wrap-v1.md)                       | 已接受     | Auto Layout 水平 Wrap、独立行距与确定性分行                        |
 | [0057](adr/0057-auto-layout-min-max-v1.md)                               | 已接受     | Auto Layout Min/Max、bounded Fill 与 Padding Minimum               |
 | [0058](adr/0058-auto-layout-auto-gap-v1.md)                              | 已接受     | Auto Layout Auto Gap 与逐 Wrap row 空间分配                        |
+| [0059](adr/0059-auto-layout-absolute-child-v1.md)                        | 已接受     | Auto Layout Ignore Flow / Absolute Child                           |
