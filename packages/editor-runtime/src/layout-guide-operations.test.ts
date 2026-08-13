@@ -58,6 +58,68 @@ describe("layout guide operations", () => {
     });
   });
 
+  it("persists fixed and stretch Columns/Rows without changing child geometry", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const before = structuredClone(
+      runtime.getSnapshot().document.nodesById.feature_one,
+    );
+    const plan = planSetFrameLayoutGuides(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      "frame_welcome",
+      [
+        {
+          id: "columns_12",
+          type: "columns",
+          alignment: "stretch",
+          count: 12,
+          gutter: 24,
+          margin: 64,
+          color: "#ff5a5f",
+          opacity: 0.1,
+        },
+        {
+          id: "rows_bottom",
+          type: "rows",
+          alignment: "end",
+          count: 6,
+          sectionSize: 48,
+          gutter: 16,
+          offset: 32,
+          color: "#3366ff",
+          opacity: 0.08,
+        },
+      ],
+      "responsive_guides",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(runtime.apply(transaction(runtime, plan.commands))).toMatchObject({
+      ok: true,
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome,
+    ).toMatchObject({
+      properties: {
+        layoutGuides: [
+          { type: "columns", alignment: "stretch", count: 12 },
+          { type: "rows", alignment: "end", count: 6 },
+        ],
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById.feature_one).toEqual(
+      before,
+    );
+    expect(
+      normalizeDesignDocument(
+        JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+      ).nodesById.frame_welcome,
+    ).toMatchObject({
+      properties: {
+        layoutGuides: [{ id: "columns_12" }, { id: "rows_bottom" }],
+      },
+    });
+  });
+
   it("rejects duplicates, wrong targets, locked Frames, and no-op changes", () => {
     const document = structuredClone(createWelcomeDocument());
     const guide = {
@@ -142,8 +204,60 @@ describe("layout guide operations", () => {
     ).toMatchObject({ ok: false, code: "invalid-target" });
     frame.properties.layoutGuides = [{ ...guide, size: 1 }];
     expect(() => normalizeDesignDocument(denseDocument)).toThrow(
-      "4096-line safety limit",
+      "4096-primitive safety limit",
     );
+  });
+
+  it("rejects invalid Columns/Rows values and collapsed Stretch sections", () => {
+    const document = createWelcomeDocument();
+    const columns = {
+      id: "columns_12",
+      type: "columns" as const,
+      alignment: "stretch" as const,
+      count: 12,
+      gutter: 24,
+      margin: 64,
+      color: "#ff5a5f",
+      opacity: 0.1,
+    };
+    expect(
+      planSetFrameLayoutGuides(
+        document,
+        "page_welcome",
+        "frame_welcome",
+        [{ ...columns, count: 4_097 }],
+        "too_many_columns",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(
+      planSetFrameLayoutGuides(
+        document,
+        "page_welcome",
+        "frame_welcome",
+        [{ ...columns, gutter: 200, margin: 500 }],
+        "collapsed_columns",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(
+      planSetFrameLayoutGuides(
+        document,
+        "page_welcome",
+        "frame_welcome",
+        [
+          {
+            id: "rows_center",
+            type: "rows",
+            alignment: "center",
+            count: 4,
+            sectionSize: 0,
+            gutter: 16,
+            color: "#ff5a5f",
+            opacity: 0.1,
+          },
+        ],
+        "zero_rows",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
   });
 });
 

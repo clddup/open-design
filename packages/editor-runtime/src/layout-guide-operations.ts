@@ -3,6 +3,7 @@ import type {
   DesignOperation,
   LayoutGuide,
 } from "@opendesign/design-contracts";
+import { layoutGuideGeometryIsValid } from "@opendesign/design-contracts";
 
 export type LayoutGuideOperationPlan =
   | {
@@ -42,37 +43,13 @@ export function planSetFrameLayoutGuides(
       "A Frame can contain at most 8 layout guides",
     );
   }
-  if (
-    guides.some(
-      (guide) =>
-        typeof guide.id !== "string" ||
-        guide.id.length === 0 ||
-        guide.id.length > 256 ||
-        guide.type !== "grid" ||
-        !Number.isFinite(guide.size) ||
-        guide.size < 1 ||
-        guide.size > 10_000 ||
-        typeof guide.color !== "string" ||
-        guide.color.length === 0 ||
-        guide.color.length > 128 ||
-        !Number.isFinite(guide.opacity) ||
-        guide.opacity < 0 ||
-        guide.opacity > 1,
-    )
-  ) {
+  if (guides.some((guide) => !layoutGuideValueIsValid(guide))) {
     return failure("invalid-target", "Layout guide values are invalid");
   }
-  if (
-    guides.some(
-      (guide) =>
-        Math.max(0, Math.ceil(frame.size.width / guide.size) - 1) +
-          Math.max(0, Math.ceil(frame.size.height / guide.size) - 1) >
-        4_096,
-    )
-  ) {
+  if (guides.some((guide) => !layoutGuideGeometryIsValid(frame.size, guide))) {
     return failure(
       "invalid-target",
-      "Layout guide density exceeds the 4096-line safety limit for this Frame",
+      "Layout guide geometry exceeds the Frame or 4096-primitive safety limit",
     );
   }
   const ids = new Set<string>();
@@ -101,6 +78,41 @@ export function planSetFrameLayoutGuides(
       },
     ],
   };
+}
+
+function layoutGuideValueIsValid(guide: LayoutGuide): boolean {
+  const appearanceIsValid =
+    typeof guide.id === "string" &&
+    guide.id.length > 0 &&
+    guide.id.length <= 256 &&
+    typeof guide.color === "string" &&
+    guide.color.length > 0 &&
+    guide.color.length <= 128 &&
+    Number.isFinite(guide.opacity) &&
+    guide.opacity >= 0 &&
+    guide.opacity <= 1;
+  if (!appearanceIsValid) return false;
+  if (guide.type === "grid") {
+    return (
+      Number.isFinite(guide.size) && guide.size >= 1 && guide.size <= 10_000
+    );
+  }
+  if (
+    !Number.isInteger(guide.count) ||
+    guide.count < 1 ||
+    guide.count > 4_096 ||
+    !finiteNonNegative(guide.gutter)
+  ) {
+    return false;
+  }
+  if (guide.alignment === "stretch") return finiteNonNegative(guide.margin);
+  if (!Number.isFinite(guide.sectionSize) || guide.sectionSize <= 0)
+    return false;
+  return guide.alignment === "center" || finiteNonNegative(guide.offset);
+}
+
+function finiteNonNegative(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 1_000_000;
 }
 
 function belongsToPage(

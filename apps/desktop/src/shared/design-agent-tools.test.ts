@@ -1726,6 +1726,39 @@ describe("design Agent tool contract", () => {
         },
       ],
     };
+    const columnStretchGuide = {
+      ...layoutGuides,
+      label: "Show 12-column layout",
+      layoutGuides: [
+        {
+          id: "columns_12",
+          type: "columns",
+          alignment: "stretch",
+          count: 12,
+          gutter: 24,
+          margin: 64,
+          color: "#ff5a5f",
+          opacity: 0.1,
+        },
+      ],
+    };
+    const rowEndGuide = {
+      ...layoutGuides,
+      label: "Show bottom-aligned rows",
+      layoutGuides: [
+        {
+          id: "rows_bottom",
+          type: "rows",
+          alignment: "end",
+          count: 4,
+          gutter: 16,
+          sectionSize: 40,
+          offset: 24,
+          color: "#3366ff",
+          opacity: 0.12,
+        },
+      ],
+    };
 
     expect(arrange).toMatchObject({
       risk: "design_write",
@@ -1789,6 +1822,35 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutGuides),
     ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(
+        DESIGN_ARRANGE_TOOL_NAME,
+        columnStretchGuide,
+      ),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, rowEndGuide),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...columnStretchGuide,
+        layoutGuides: [
+          { ...columnStretchGuide.layoutGuides[0], margin: undefined },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...rowEndGuide,
+        layoutGuides: [{ ...rowEndGuide.layoutGuides[0], count: 2.5 }],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...rowEndGuide,
+        layoutGuides: [{ ...rowEndGuide.layoutGuides[0], offset: undefined }],
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...layoutGuides,

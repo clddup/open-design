@@ -10,7 +10,9 @@ import {
   EffectSchema,
   MAX_TRANSACTION_COMMANDS,
   AUTO_LAYOUT_DESIGN_SCHEMA_VERSION,
+  LAYOUT_GUIDE_COLUMNS_ROWS_DESIGN_SCHEMA_VERSION,
   LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION,
+  LayoutGuideSchema,
   PaintSchema,
   isDesignTransaction,
   migrateDesignDocument,
@@ -26,7 +28,10 @@ const actor = { type: "user" as const, id: "user_1" };
 it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(AUTO_LAYOUT_DESIGN_SCHEMA_VERSION).toBe("1.18.0");
   expect(LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION).toBe("1.19.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION);
+  expect(LAYOUT_GUIDE_COLUMNS_ROWS_DESIGN_SCHEMA_VERSION).toBe("1.20.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(
+    LAYOUT_GUIDE_COLUMNS_ROWS_DESIGN_SCHEMA_VERSION,
+  );
 });
 
 function textDocumentFixture() {
@@ -1248,6 +1253,74 @@ describe("design contract schemas", () => {
         },
       }),
     ).toBe(true);
+  });
+
+  it("validates strict fixed and stretch Columns/Rows guide variants", () => {
+    const base = {
+      id: "guide",
+      color: "#ff5a5f",
+      opacity: 0.1,
+    };
+    for (const guide of [
+      {
+        ...base,
+        type: "columns",
+        alignment: "stretch",
+        count: 12,
+        gutter: 24,
+        margin: 64,
+      },
+      {
+        ...base,
+        type: "columns",
+        alignment: "start",
+        count: 4,
+        sectionSize: 80,
+        gutter: 16,
+        offset: 24,
+      },
+      {
+        ...base,
+        type: "rows",
+        alignment: "center",
+        count: 6,
+        sectionSize: 48,
+        gutter: 12,
+      },
+      {
+        ...base,
+        type: "rows",
+        alignment: "end",
+        count: 6,
+        sectionSize: 48,
+        gutter: 12,
+        offset: 32,
+      },
+    ]) {
+      expect(Value.Check(LayoutGuideSchema, guide)).toBe(true);
+    }
+    expect(
+      Value.Check(LayoutGuideSchema, {
+        ...base,
+        type: "columns",
+        alignment: "stretch",
+        count: 12,
+        gutter: 24,
+        margin: 64,
+        sectionSize: 80,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(LayoutGuideSchema, {
+        ...base,
+        type: "rows",
+        alignment: "center",
+        count: 6,
+        sectionSize: 48,
+        gutter: 12,
+        offset: 32,
+      }),
+    ).toBe(false);
   });
 
   it("validates strict linear Auto Layout only on Frame properties", () => {

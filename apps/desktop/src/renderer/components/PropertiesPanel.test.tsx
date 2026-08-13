@@ -357,10 +357,11 @@ describe("PropertiesPanel SVG workflow", () => {
       onSetFrameLayoutGuides,
     });
 
-    await user.click(screen.getByRole("button", { name: "Add grid" }));
+    await user.click(screen.getByRole("button", { name: "Add layout guide" }));
+    await user.click(screen.getByRole("menuitem", { name: "Uniform grid" }));
     expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith("frame_guides", [
       {
-        id: "frame_guides_grid_1",
+        id: "frame_guides_guide_1",
         type: "grid",
         size: 8,
         color: "#ff5a5f",
@@ -393,7 +394,7 @@ describe("PropertiesPanel SVG workflow", () => {
       { ...guide, size: 16 },
     ]);
 
-    const color = screen.getByLabelText("Grid color grid_custom");
+    const color = screen.getByLabelText("Guide color grid_custom");
     await user.clear(color);
     await user.type(color, "#3366ff");
     await user.tab();
@@ -401,7 +402,7 @@ describe("PropertiesPanel SVG workflow", () => {
       { ...guide, color: "#3366ff" },
     ]);
 
-    const opacity = screen.getByLabelText("Grid opacity grid_custom");
+    const opacity = screen.getByLabelText("Guide opacity grid_custom");
     await user.clear(opacity);
     await user.type(opacity, "0.25");
     await user.tab();
@@ -410,9 +411,105 @@ describe("PropertiesPanel SVG workflow", () => {
     ]);
 
     await user.click(
-      screen.getByRole("button", { name: "Remove grid grid_custom" }),
+      screen.getByRole("button", { name: "Remove layout guide grid_custom" }),
     );
     expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith("frame_guides", []);
+  });
+
+  it("adds and edits conditional Columns and Rows layout guide fields", async () => {
+    const user = userEvent.setup();
+    const onSetFrameLayoutGuides =
+      vi.fn<(frameId: string, layoutGuides: readonly LayoutGuide[]) => void>();
+    const frame: Extract<DesignNode, { kind: "frame" }> = {
+      id: "frame_axis_guides",
+      kind: "frame",
+      name: "Responsive page",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 1440, height: 1024 },
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+      },
+      extensions: {},
+    };
+    renderPanel({ node: frame, selectionCount: 1, onSetFrameLayoutGuides });
+    await user.click(screen.getByRole("button", { name: "Add layout guide" }));
+    await user.click(screen.getByRole("menuitem", { name: "Columns" }));
+    const columns: LayoutGuide = {
+      id: "frame_axis_guides_guide_1",
+      type: "columns",
+      alignment: "stretch",
+      count: 12,
+      gutter: 24,
+      margin: 64,
+      color: "#ff5a5f",
+      opacity: 0.12,
+    };
+    expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith(frame.id, [
+      columns,
+    ]);
+
+    cleanup();
+    renderPanel({
+      node: {
+        ...frame,
+        properties: { ...frame.properties, layoutGuides: [columns] },
+      },
+      selectionCount: 1,
+      onSetFrameLayoutGuides,
+    });
+    expect(screen.getByLabelText(`Margin ${columns.id}`)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(`Section size ${columns.id}`),
+    ).not.toBeInTheDocument();
+    const margin = screen.getByLabelText(`Margin ${columns.id}`);
+    await user.clear(margin);
+    await user.type(margin, "80");
+    await user.tab();
+    expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith(frame.id, [
+      { ...columns, margin: 80 },
+    ]);
+
+    const rows: LayoutGuide = {
+      id: "rows_bottom",
+      type: "rows",
+      alignment: "end",
+      count: 4,
+      gutter: 16,
+      sectionSize: 40,
+      offset: 24,
+      color: "#3366ff",
+      opacity: 0.1,
+    };
+    cleanup();
+    renderPanel({
+      node: {
+        ...frame,
+        properties: { ...frame.properties, layoutGuides: [rows] },
+      },
+      selectionCount: 1,
+      onSetFrameLayoutGuides,
+    });
+    expect(screen.getByLabelText(`Section size ${rows.id}`)).toHaveValue(40);
+    expect(screen.getByLabelText(`Offset ${rows.id}`)).toHaveValue(24);
+    expect(
+      screen.queryByLabelText(`Margin ${rows.id}`),
+    ).not.toBeInTheDocument();
+    const offset = screen.getByLabelText(`Offset ${rows.id}`);
+    await user.clear(offset);
+    await user.type(offset, "32");
+    await user.tab();
+    expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith(frame.id, [
+      { ...rows, offset: 32 },
+    ]);
   });
 
   it("uses a free stable guide ID and disables the ninth guide", async () => {
@@ -452,9 +549,10 @@ describe("PropertiesPanel SVG workflow", () => {
       selectionCount: 1,
       onSetFrameLayoutGuides,
     });
-    await user.click(screen.getByRole("button", { name: "Add grid" }));
+    await user.click(screen.getByRole("button", { name: "Add layout guide" }));
+    await user.click(screen.getByRole("menuitem", { name: "Uniform grid" }));
     expect(onSetFrameLayoutGuides.mock.calls.at(-1)?.[1].at(-1)?.id).toBe(
-      "frame_guides_grid_2",
+      "frame_guides_guide_1",
     );
 
     cleanup();
@@ -466,7 +564,7 @@ describe("PropertiesPanel SVG workflow", () => {
           layoutGuides: [
             ...guides,
             {
-              id: "frame_guides_grid_2",
+              id: "frame_guides_guide_1",
               type: "grid",
               size: 24,
               color: "#3366ff",
@@ -478,7 +576,9 @@ describe("PropertiesPanel SVG workflow", () => {
       selectionCount: 1,
       onSetFrameLayoutGuides,
     });
-    expect(screen.getByRole("button", { name: "Add grid" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Add layout guide" }),
+    ).toBeDisabled();
   });
 
   it("toggles an Auto Layout child between flow and absolute positioning", async () => {

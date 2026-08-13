@@ -87,6 +87,7 @@ import {
 import {
   createLayoutGuideOverlayPlan,
   layoutGuideDocumentTransform,
+  reconcileLayoutGuideElements,
 } from "./layout-guide-overlay.js";
 import type {
   LeaferBoxCreateTool,
@@ -287,6 +288,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #generationSkeletonLayer: LeaferGroup;
   readonly #layoutGuideLayer: LeaferGroup;
   readonly #layoutGuideElements = new Map<string, LeaferElement>();
+  readonly #layoutGuideAreaIds = new Set<string>();
   #layoutGuideFingerprint: string | null = null;
   readonly #elements = new Map<string, LeaferElement>();
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
@@ -791,6 +793,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       element.destroy();
     });
     this.#layoutGuideElements.clear();
+    this.#layoutGuideAreaIds.clear();
     this.#layoutGuideFingerprint = null;
     this.#layoutGuideLayer.remove();
     this.#layoutGuideLayer.destroy();
@@ -1328,40 +1331,25 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const plan = input
       ? createLayoutGuideOverlayPlan(input.document, frameId)
       : { fingerprint: null, specs: [] };
-    if (
-      plan.fingerprint !== null &&
-      plan.fingerprint === this.#layoutGuideFingerprint
-    ) {
-      this.#syncLayoutGuideViewport();
-      return;
-    }
-    const expected = new Set<string>();
-    for (const spec of plan.specs) {
-      expected.add(spec.id);
-      let element = this.#layoutGuideElements.get(spec.id);
-      if (!element) {
-        element = new this.#leafer.Path({
+    const result = reconcileLayoutGuideElements({
+      areaIds: this.#layoutGuideAreaIds,
+      createElement: () =>
+        new this.#leafer.Path({
           editable: false,
           hittable: false,
           strokeAlign: "center",
-        });
-        this.#layoutGuideElements.set(spec.id, element);
-        this.#layoutGuideLayer.add(element);
-      }
-      element.set({
-        path: spec.path,
-        stroke: spec.color || LAYOUT_GUIDE_DEFAULT_COLOR,
-        opacity: spec.opacity,
-      });
+        }),
+      defaultColor: LAYOUT_GUIDE_DEFAULT_COLOR,
+      elements: this.#layoutGuideElements,
+      fingerprint: this.#layoutGuideFingerprint,
+      layer: this.#layoutGuideLayer,
+      plan,
+    });
+    this.#layoutGuideFingerprint = result.fingerprint;
+    if (!result.changed) {
+      this.#syncLayoutGuideViewport();
+      return;
     }
-    for (const [id, element] of this.#layoutGuideElements) {
-      if (expected.has(id)) continue;
-      element.remove();
-      element.destroy();
-      this.#layoutGuideElements.delete(id);
-    }
-    this.#layoutGuideFingerprint = plan.fingerprint;
-    this.#layoutGuideLayer.visible = expected.size > 0;
     this.#syncLayoutGuideViewport();
   }
 
@@ -1394,11 +1382,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!this.#layoutGuideLayer.visible) this.#layoutGuideLayer.visible = true;
     const zoom = Math.max(MATRIX_EPSILON, Math.abs(tree.a || 1));
     const strokeWidth = 1 / zoom;
-    for (const element of this.#layoutGuideElements.values()) {
+    for (const [id, element] of this.#layoutGuideElements) {
       if (!sameAffineMatrix(element.localTransform, relative, MATRIX_EPSILON)) {
         element.setTransform(relative);
       }
-      if (!nearlyEqual(Number(element.strokeWidth), strokeWidth)) {
+      if (this.#layoutGuideAreaIds.has(id)) continue;
+      if (
+        element.stroke &&
+        !nearlyEqual(Number(element.strokeWidth), strokeWidth)
+      ) {
         element.set({ strokeWidth });
       }
     }

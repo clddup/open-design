@@ -618,6 +618,126 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("projects fixed and stretch Columns/Rows as clipped non-interactive areas", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = createInput();
+    const document = structuredClone(first.document);
+    const frame = document.nodesById.frame_welcome;
+    if (!frame || frame.kind !== "frame") throw new Error("Missing frame");
+    frame.properties.layoutGuides = [
+      {
+        id: "columns_stretch",
+        type: "columns",
+        alignment: "stretch",
+        count: 4,
+        gutter: 20,
+        margin: 40,
+        color: "#ff5a5f",
+        opacity: 0.1,
+      },
+      {
+        id: "rows_end",
+        type: "rows",
+        alignment: "end",
+        count: 2,
+        sectionSize: 80,
+        gutter: 16,
+        offset: 32,
+        color: "#3366ff",
+        opacity: 0.08,
+      },
+    ];
+    adapter.sync({
+      ...first,
+      document,
+      layoutGuideFrameId: frame.id,
+      selection: { nodeIds: [frame.id], anchorNodeId: frame.id },
+    });
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const layer = app.sky.children[1] as FakeGroup | undefined;
+    const columns = layer?.children[0] as FakePath | undefined;
+    const rows = layer?.children[1] as FakePath | undefined;
+    expect(columns).toMatchObject({
+      editable: false,
+      fill: "#ff5a5f",
+      hittable: false,
+      opacity: 0.1,
+      strokeWidth: 0,
+    });
+    expect(String(columns?.path)).toContain("M 40 0 H 285 V 720 H 40 Z");
+    expect(String(columns?.path)).toContain("M 835 0 H 1080 V 720 H 835 Z");
+    expect(rows).toMatchObject({
+      fill: "#3366ff",
+      opacity: 0.08,
+      strokeWidth: 0,
+    });
+    expect(String(rows?.path)).toContain("M 0 512 H 1120 V 592 H 0 Z");
+    expect(String(rows?.path)).toContain("M 0 608 H 1120 V 688 H 0 Z");
+
+    const resized = structuredClone(document);
+    resized.revision += 1;
+    const resizedFrame = resized.nodesById.frame_welcome;
+    if (!resizedFrame || resizedFrame.kind !== "frame")
+      throw new Error("Missing resized frame");
+    resizedFrame.size = { width: 720, height: 480 };
+    adapter.sync({
+      ...first,
+      document: resized,
+      layoutGuideFrameId: resizedFrame.id,
+      selection: {
+        nodeIds: [resizedFrame.id],
+        anchorNodeId: resizedFrame.id,
+      },
+    });
+    expect(String(columns?.path)).toContain("M 40 0 H 185 V 480 H 40 Z");
+    expect(String(columns?.path)).toContain("M 535 0 H 680 V 480 H 535 Z");
+    expect(String(rows?.path)).toContain("M 0 272 H 720 V 352 H 0 Z");
+
+    await adapter.capture({
+      kind: "frame",
+      pageId: "page_welcome",
+      nodeId: resizedFrame.id,
+    });
+    expect(columns?.export).not.toHaveBeenCalled();
+    expect(rows?.syncExport).not.toHaveBeenCalled();
+
+    const switched = structuredClone(resized);
+    switched.revision += 1;
+    const switchedFrame = switched.nodesById.frame_welcome;
+    if (!switchedFrame || switchedFrame.kind !== "frame")
+      throw new Error("Missing switched frame");
+    switchedFrame.properties.layoutGuides = [
+      {
+        id: "columns_stretch",
+        type: "grid",
+        size: 160,
+        color: "#22c55e",
+        opacity: 0.2,
+      },
+    ];
+    adapter.sync({
+      ...first,
+      document: switched,
+      layoutGuideFrameId: switchedFrame.id,
+      selection: {
+        nodeIds: [switchedFrame.id],
+        anchorNodeId: switchedFrame.id,
+      },
+    });
+    expect(columns).toMatchObject({
+      fill: "rgba(0, 0, 0, 0)",
+      stroke: "#22c55e",
+      strokeWidth: 1,
+    });
+    expect(layer?.children).toEqual([columns]);
+    adapter.dispose();
+  });
+
   it("exports a delivery raster with explicit format, size, background, quality, and resampling", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),

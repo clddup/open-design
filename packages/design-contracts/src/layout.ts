@@ -3,18 +3,98 @@ import { Type, type Static } from "@sinclair/typebox";
 export const CONSTRAINTS_DESIGN_SCHEMA_VERSION = "1.12.0" as const;
 export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.18.0" as const;
 
-export const LayoutGuideSchema = Type.Object(
+const LayoutGuideAppearanceSchema = {
+  id: Type.String({ minLength: 1, maxLength: 256 }),
+  color: Type.String({ minLength: 1, maxLength: 128 }),
+  opacity: Type.Number({ minimum: 0, maximum: 1 }),
+};
+
+export const UniformLayoutGuideSchema = Type.Object(
   {
-    id: Type.String({ minLength: 1, maxLength: 256 }),
+    ...LayoutGuideAppearanceSchema,
     type: Type.Literal("grid"),
     size: Type.Number({ minimum: 1, maximum: 10_000 }),
-    color: Type.String({ minLength: 1, maxLength: 128 }),
-    opacity: Type.Number({ minimum: 0, maximum: 1 }),
   },
   { additionalProperties: false },
 );
 
+const LayoutGuideAxisTypeSchema = Type.Union([
+  Type.Literal("columns"),
+  Type.Literal("rows"),
+]);
+const LayoutGuideCountSchema = Type.Integer({ minimum: 1, maximum: 4_096 });
+const LayoutGuideDistanceSchema = Type.Number({
+  minimum: 0,
+  maximum: 1_000_000,
+});
+
+export const StretchLayoutGuideSchema = Type.Object(
+  {
+    ...LayoutGuideAppearanceSchema,
+    type: LayoutGuideAxisTypeSchema,
+    alignment: Type.Literal("stretch"),
+    count: LayoutGuideCountSchema,
+    gutter: LayoutGuideDistanceSchema,
+    margin: LayoutGuideDistanceSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const CenteredLayoutGuideSchema = Type.Object(
+  {
+    ...LayoutGuideAppearanceSchema,
+    type: LayoutGuideAxisTypeSchema,
+    alignment: Type.Literal("center"),
+    count: LayoutGuideCountSchema,
+    gutter: LayoutGuideDistanceSchema,
+    sectionSize: Type.Number({ exclusiveMinimum: 0, maximum: 1_000_000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const EdgeAlignedLayoutGuideSchema = Type.Object(
+  {
+    ...LayoutGuideAppearanceSchema,
+    type: LayoutGuideAxisTypeSchema,
+    alignment: Type.Union([Type.Literal("start"), Type.Literal("end")]),
+    count: LayoutGuideCountSchema,
+    gutter: LayoutGuideDistanceSchema,
+    sectionSize: Type.Number({ exclusiveMinimum: 0, maximum: 1_000_000 }),
+    offset: LayoutGuideDistanceSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const LayoutGuideSchema = Type.Union([
+  UniformLayoutGuideSchema,
+  StretchLayoutGuideSchema,
+  CenteredLayoutGuideSchema,
+  EdgeAlignedLayoutGuideSchema,
+]);
+
 export type LayoutGuide = Static<typeof LayoutGuideSchema>;
+
+export function layoutGuidePrimitiveCount(
+  frameSize: { width: number; height: number },
+  guide: LayoutGuide,
+): number {
+  if (guide.type !== "grid") return guide.count;
+  return (
+    Math.max(0, Math.ceil(frameSize.width / guide.size) - 1) +
+    Math.max(0, Math.ceil(frameSize.height / guide.size) - 1)
+  );
+}
+
+export function layoutGuideGeometryIsValid(
+  frameSize: { width: number; height: number },
+  guide: LayoutGuide,
+): boolean {
+  if (layoutGuidePrimitiveCount(frameSize, guide) > 4_096) return false;
+  if (guide.type === "grid" || guide.alignment !== "stretch") return true;
+  const axisSize =
+    guide.type === "columns" ? frameSize.width : frameSize.height;
+  return axisSize - guide.margin * 2 - guide.gutter * (guide.count - 1) > 0;
+}
 
 export const LayoutPositioningSchema = Type.Literal("absolute");
 export type LayoutPositioning = Static<typeof LayoutPositioningSchema>;

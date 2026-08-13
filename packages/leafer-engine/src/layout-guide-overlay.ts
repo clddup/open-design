@@ -1,4 +1,8 @@
-import type { DesignDocument, Transform } from "@opendesign/design-contracts";
+import type {
+  DesignDocument,
+  LayoutGuide,
+  Transform,
+} from "@opendesign/design-contracts";
 
 export interface LayoutGuideAffineMatrix {
   a: number;
@@ -10,10 +14,85 @@ export interface LayoutGuideAffineMatrix {
 }
 
 export interface LayoutGuideOverlaySpec {
+  area: boolean;
   color: string;
   id: string;
   opacity: number;
   path: string;
+}
+
+export interface LayoutGuideOverlayElement {
+  destroy(): void;
+  remove(): void;
+  set(properties: Record<string, unknown>): void;
+}
+
+export interface LayoutGuideOverlayLayer {
+  add(element: LayoutGuideOverlayElement): void;
+  visible?: boolean | number;
+}
+
+export function reconcileLayoutGuideElements(options: {
+  areaIds: Set<string>;
+  createElement: () => LayoutGuideOverlayElement;
+  defaultColor: string;
+  elements: Map<string, LayoutGuideOverlayElement>;
+  fingerprint: string | null;
+  layer: LayoutGuideOverlayLayer;
+  plan: {
+    fingerprint: string | null;
+    specs: readonly LayoutGuideOverlaySpec[];
+  };
+}): { changed: boolean; fingerprint: string | null } {
+  const {
+    areaIds,
+    createElement,
+    defaultColor,
+    elements,
+    fingerprint,
+    layer,
+    plan,
+  } = options;
+  if (plan.fingerprint !== null && plan.fingerprint === fingerprint) {
+    return { changed: false, fingerprint };
+  }
+  const expected = new Set<string>();
+  for (const spec of plan.specs) {
+    expected.add(spec.id);
+    let element = elements.get(spec.id);
+    if (!element) {
+      element = createElement();
+      elements.set(spec.id, element);
+      layer.add(element);
+    }
+    if (spec.area) areaIds.add(spec.id);
+    else areaIds.delete(spec.id);
+    element.set(
+      spec.area
+        ? {
+            fill: spec.color || defaultColor,
+            path: spec.path,
+            stroke: "rgba(0, 0, 0, 0)",
+            strokeWidth: 0,
+            opacity: spec.opacity,
+          }
+        : {
+            fill: "rgba(0, 0, 0, 0)",
+            path: spec.path,
+            stroke: spec.color || defaultColor,
+            opacity: spec.opacity,
+          },
+    );
+  }
+  for (const [id, element] of elements) {
+    if (expected.has(id)) continue;
+    element.remove();
+    element.destroy();
+    elements.delete(id);
+    areaIds.delete(id);
+  }
+  layer.visible = expected.size > 0;
+  return { changed: true, fingerprint: plan.fingerprint };
 }
 
 export function createLayoutGuideOverlayPlan(
@@ -35,12 +114,59 @@ export function createLayoutGuideOverlayPlan(
       world,
     }),
     specs: guides.map((guide) => ({
+      area: guide.type !== "grid",
       color: guide.color,
       id: `${frame.id}:guide:${guide.id}`,
       opacity: guide.opacity,
-      path: uniformGridPath(frame.size.width, frame.size.height, guide.size),
+      path:
+        guide.type === "grid"
+          ? uniformGridPath(frame.size.width, frame.size.height, guide.size)
+          : axisGuidePath(frame.size.width, frame.size.height, guide),
     })),
   };
+}
+
+function axisGuidePath(
+  frameWidth: number,
+  frameHeight: number,
+  guide: Exclude<LayoutGuide, { type: "grid" }>,
+): string {
+  const axisSize = guide.type === "columns" ? frameWidth : frameHeight;
+  const crossSize = guide.type === "columns" ? frameHeight : frameWidth;
+  const sectionSize =
+    guide.alignment === "stretch"
+      ? (axisSize - guide.margin * 2 - guide.gutter * (guide.count - 1)) /
+        guide.count
+      : guide.sectionSize;
+  const span = sectionSize * guide.count + guide.gutter * (guide.count - 1);
+  const origin =
+    guide.alignment === "stretch"
+      ? guide.margin
+      : guide.alignment === "start"
+        ? guide.offset
+        : guide.alignment === "end"
+          ? axisSize - guide.offset - span
+          : (axisSize - span) / 2;
+  return Array.from({ length: guide.count }, (_, index) => {
+    const start = origin + index * (sectionSize + guide.gutter);
+    const clippedStart = Math.max(0, start);
+    const clippedEnd = Math.min(axisSize, start + sectionSize);
+    if (clippedEnd <= clippedStart) return "";
+    return guide.type === "columns"
+      ? rectanglePath(clippedStart, 0, clippedEnd - clippedStart, crossSize)
+      : rectanglePath(0, clippedStart, crossSize, clippedEnd - clippedStart);
+  })
+    .filter(Boolean)
+    .join(" ");
+}
+
+function rectanglePath(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): string {
+  return `M ${x} ${y} H ${x + width} V ${y + height} H ${x} Z`;
 }
 
 export function layoutGuideDocumentTransform(

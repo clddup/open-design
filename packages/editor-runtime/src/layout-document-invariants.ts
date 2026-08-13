@@ -2,6 +2,7 @@ import {
   DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
   DEFAULT_LAYOUT_SIZING,
   isValidLayoutLimits,
+  layoutGuideGeometryIsValid,
   type DesignDocument,
   type DesignNode,
 } from "@opendesign/design-contracts";
@@ -39,14 +40,11 @@ export function validateNodeLayoutInvariants(
         break;
       }
       guideIds.add(guide.id);
-      const lineCount =
-        Math.max(0, Math.ceil(node.size.width / guide.size) - 1) +
-        Math.max(0, Math.ceil(node.size.height / guide.size) - 1);
-      if (lineCount > 4_096) {
+      if (!layoutGuideGeometryIsValid(node.size, guide)) {
         issues.push({
           path: `/nodesById/${nodeId}/properties/layoutGuides`,
           message:
-            "layout guide density exceeds the 4096-line safety limit for this Frame",
+            "layout guide geometry exceeds the Frame or 4096-primitive safety limit",
         });
         break;
       }

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-14",
-  "documentSchemaVersion": "1.19.0",
+  "documentSchemaVersion": "1.20.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -796,10 +796,10 @@
       "status": "degraded",
       "label": { "en": "Auto layout", "zh-CN": "Auto Layout" },
       "description": {
-        "en": "Lay out Frames responsively and add non-exported uniform Layout Guides without changing child geometry.",
-        "zh-CN": "响应式布局 Frame，并添加不改变 child 几何且不导出的 Uniform Layout Guide。"
+        "en": "Lay out Frames responsively and add non-exported Uniform, Columns, or Rows Layout Guides without changing child geometry.",
+        "zh-CN": "响应式布局 Frame，并添加不改变 child 几何且不导出的 Uniform、Columns 或 Rows Layout Guide。"
       },
-      "provider": "DesignDocument 1.19.0 Layout Guide + @opendesign/layout-service Auto Layout contract v6 + EditorRuntime",
+      "provider": "DesignDocument 1.20.0 Layout Guide + @opendesign/layout-service Auto Layout contract v6 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -811,8 +811,8 @@
       },
       "limitations": [
         {
-          "en": "Uniform Layout Guides support stable size, color, and opacity on Frames and remain outside layout, capture, and export. Columns/Rows guides, guide styles and variables, snapping, Auto Layout Grid tracks/cells/span/reflow, counter-axis Auto gap, vertical wrap, Wrap+Fill, baseline, rotated absolute children, canvas reflow handles, SVG round-trip metadata, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "Uniform Layout Guide 支持 Frame 上稳定的 size、color 与 opacity，并保持在布局、capture 和 export 之外。Columns/Rows guide、guide style 与变量、吸附、Auto Layout Grid 的 track/cell/span/reflow、交叉轴 Auto gap、垂直 wrap、Wrap+Fill、baseline、旋转 absolute child、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
+          "en": "Uniform, Columns, and Rows Layout Guides support stable visual aids on Frames and remain outside layout, child geometry, capture, and export. Guide styles and variables, snapping, Auto Layout Grid tracks/cells/span/reflow, counter-axis Auto gap, vertical wrap, Wrap+Fill, baseline, rotated absolute children, canvas reflow handles, SVG round-trip metadata, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "Uniform、Columns 与 Rows Layout Guide 支持 Frame 上稳定的视觉辅助，并保持在布局、child 几何、capture 和 export 之外。Guide style 与变量、吸附、Auto Layout Grid 的 track/cell/span/reflow、交叉轴 Auto gap、垂直 wrap、Wrap+Fill、baseline、旋转 absolute child、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
       "evidence": {

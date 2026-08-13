@@ -98,7 +98,7 @@ const nodeIds = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies to direct children of ordinary Frames and absolute children of Auto Layout Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug sizing, fixed or Auto gap, and horizontal Wrap with an independent vertical gap; primaryAlignment=space-between selects Auto gap, which never becomes negative and is resolved independently per wrapped row. set-layout-positioning atomically toggles a direct Auto Layout child between flow and absolute, clearing incompatible sizing or constraints. set-layout-sizing configures flow-child Fixed/Fill sizing; set-layout-limits adds or clears bounded min/max width and height on an Auto Layout Frame or direct flow child. Frame padding remains a hard minimum. Wrap requires Fixed width and visible Fixed-size flow children. The host derives all flow geometry.",
+    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies to direct children of ordinary Frames and absolute children of Auto Layout Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug sizing, fixed or Auto gap, and horizontal Wrap with an independent vertical gap; primaryAlignment=space-between selects Auto gap, which never becomes negative and is resolved independently per wrapped row. set-layout-positioning atomically toggles a direct Auto Layout child between flow and absolute, clearing incompatible sizing or constraints. set-layout-sizing configures flow-child Fixed/Fill sizing; set-layout-limits adds or clears bounded min/max width and height on an Auto Layout Frame or direct flow child. set-layout-guides replaces a Frame's non-exported Uniform, Columns, and Rows visual guide set; Columns/Rows use fixed start/center/end or stretch alignment and never alter child geometry. Frame padding remains a hard minimum. Wrap requires Fixed width and visible Fixed-size flow children. The host derives all flow geometry.",
   properties: {
     action: {
       enum: [
@@ -285,21 +285,109 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
         { type: "null" },
       ],
     },
-  },
-  layoutGuides: {
-    type: "array",
-    maxItems: 8,
-    items: {
-      type: "object",
-      properties: {
-        id: { type: "string", minLength: 1, maxLength: 256 },
-        type: { const: "grid" },
-        size: { type: "number", minimum: 1, maximum: 10_000 },
-        color: { type: "string", minLength: 1, maxLength: 128 },
-        opacity: { type: "number", minimum: 0, maximum: 1 },
+    layoutGuides: {
+      type: "array",
+      maxItems: 8,
+      items: {
+        oneOf: [
+          {
+            type: "object",
+            properties: {
+              id: { type: "string", minLength: 1, maxLength: 256 },
+              type: { const: "grid" },
+              size: { type: "number", minimum: 1, maximum: 10_000 },
+              color: { type: "string", minLength: 1, maxLength: 128 },
+              opacity: { type: "number", minimum: 0, maximum: 1 },
+            },
+            required: ["id", "type", "size", "color", "opacity"],
+            additionalProperties: false,
+          },
+          ...(["columns", "rows"] as const).flatMap((type) => [
+            {
+              type: "object",
+              properties: {
+                id: { type: "string", minLength: 1, maxLength: 256 },
+                type: { const: type },
+                alignment: { const: "stretch" },
+                count: { type: "integer", minimum: 1, maximum: 4_096 },
+                gutter: { type: "number", minimum: 0, maximum: 1_000_000 },
+                margin: { type: "number", minimum: 0, maximum: 1_000_000 },
+                color: { type: "string", minLength: 1, maxLength: 128 },
+                opacity: { type: "number", minimum: 0, maximum: 1 },
+              },
+              required: [
+                "id",
+                "type",
+                "alignment",
+                "count",
+                "gutter",
+                "margin",
+                "color",
+                "opacity",
+              ],
+              additionalProperties: false,
+            },
+            {
+              type: "object",
+              properties: {
+                id: { type: "string", minLength: 1, maxLength: 256 },
+                type: { const: type },
+                alignment: { const: "center" },
+                count: { type: "integer", minimum: 1, maximum: 4_096 },
+                gutter: { type: "number", minimum: 0, maximum: 1_000_000 },
+                sectionSize: {
+                  type: "number",
+                  exclusiveMinimum: 0,
+                  maximum: 1_000_000,
+                },
+                color: { type: "string", minLength: 1, maxLength: 128 },
+                opacity: { type: "number", minimum: 0, maximum: 1 },
+              },
+              required: [
+                "id",
+                "type",
+                "alignment",
+                "count",
+                "gutter",
+                "sectionSize",
+                "color",
+                "opacity",
+              ],
+              additionalProperties: false,
+            },
+            {
+              type: "object",
+              properties: {
+                id: { type: "string", minLength: 1, maxLength: 256 },
+                type: { const: type },
+                alignment: { enum: ["start", "end"] },
+                count: { type: "integer", minimum: 1, maximum: 4_096 },
+                gutter: { type: "number", minimum: 0, maximum: 1_000_000 },
+                sectionSize: {
+                  type: "number",
+                  exclusiveMinimum: 0,
+                  maximum: 1_000_000,
+                },
+                offset: { type: "number", minimum: 0, maximum: 1_000_000 },
+                color: { type: "string", minLength: 1, maxLength: 128 },
+                opacity: { type: "number", minimum: 0, maximum: 1 },
+              },
+              required: [
+                "id",
+                "type",
+                "alignment",
+                "count",
+                "gutter",
+                "sectionSize",
+                "offset",
+                "color",
+                "opacity",
+              ],
+              additionalProperties: false,
+            },
+          ]),
+        ],
       },
-      required: ["id", "type", "size", "color", "opacity"],
-      additionalProperties: false,
     },
   },
   required: ["action", "label", "pageId"],
@@ -455,23 +543,89 @@ function isLayoutGuides(value: unknown): value is LayoutGuide[] {
   const ids = new Set<string>();
   return value.every((guide) => {
     if (!isRecord(guide)) return false;
-    const valid =
+    const appearanceIsValid =
       safeId(guide.id) &&
-      guide.type === "grid" &&
-      finite(guide.size) &&
-      guide.size >= 1 &&
-      guide.size <= 10_000 &&
       typeof guide.color === "string" &&
       guide.color.length > 0 &&
       guide.color.length <= 128 &&
       finite(guide.opacity) &&
       guide.opacity >= 0 &&
-      guide.opacity <= 1 &&
-      onlyKeys(guide, ["id", "type", "size", "color", "opacity"]);
+      guide.opacity <= 1;
+    const valid = appearanceIsValid && layoutGuideShapeIsValid(guide);
     if (!valid || ids.has(String(guide.id))) return false;
     ids.add(String(guide.id));
     return true;
   });
+}
+
+function layoutGuideShapeIsValid(guide: Record<string, unknown>): boolean {
+  if (guide.type === "grid") {
+    return (
+      finite(guide.size) &&
+      guide.size >= 1 &&
+      guide.size <= 10_000 &&
+      onlyKeys(guide, ["id", "type", "size", "color", "opacity"])
+    );
+  }
+  if (
+    (guide.type !== "columns" && guide.type !== "rows") ||
+    !Number.isInteger(guide.count) ||
+    Number(guide.count) < 1 ||
+    Number(guide.count) > 4_096 ||
+    !finiteNonNegativeBounded(guide.gutter)
+  ) {
+    return false;
+  }
+  if (guide.alignment === "stretch") {
+    return (
+      finiteNonNegativeBounded(guide.margin) &&
+      onlyKeys(guide, [
+        "id",
+        "type",
+        "alignment",
+        "count",
+        "gutter",
+        "margin",
+        "color",
+        "opacity",
+      ])
+    );
+  }
+  const fixed =
+    finite(guide.sectionSize) &&
+    guide.sectionSize > 0 &&
+    guide.sectionSize <= 1_000_000;
+  if (guide.alignment === "center") {
+    return (
+      fixed &&
+      onlyKeys(guide, [
+        "id",
+        "type",
+        "alignment",
+        "count",
+        "gutter",
+        "sectionSize",
+        "color",
+        "opacity",
+      ])
+    );
+  }
+  return (
+    fixed &&
+    (guide.alignment === "start" || guide.alignment === "end") &&
+    finiteNonNegativeBounded(guide.offset) &&
+    onlyKeys(guide, [
+      "id",
+      "type",
+      "alignment",
+      "count",
+      "gutter",
+      "sectionSize",
+      "offset",
+      "color",
+      "opacity",
+    ])
+  );
 }
 
 function isAutoLayout(value: unknown): value is AutoLayout {
