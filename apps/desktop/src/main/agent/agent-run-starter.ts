@@ -16,6 +16,31 @@ export interface AgentRunStarterDependencies {
   referenceHost: AgentReferenceHost;
 }
 
+export async function handleAgentRunControlRequest(
+  request: Extract<AgentRequest, { type: "run.start" | "run.cancel" }>,
+  dependencies: AgentRunStarterDependencies & {
+    publish: (event: AgentEvent) => void;
+  },
+): Promise<boolean> {
+  if (request.type === "run.start") {
+    if (request.modelContext !== undefined) {
+      throw new TypeError("Renderer cannot supply model context metadata");
+    }
+    const started = await startAgentRun(request, dependencies);
+    if (!started) dependencies.publish(cancelledRun(request.runId));
+    return true;
+  }
+  // Cancellation intent is Main-owned. Redirect a late parent cancellation
+  // to the latest scheduled child so Stop terminates the recovery chain.
+  const cancellationTarget =
+    dependencies.continuationScheduler.requestCancellation(request.runId);
+  if (cancellationTarget && cancellationTarget !== request.runId) {
+    dependencies.agentHost.send({ ...request, runId: cancellationTarget });
+    return true;
+  }
+  return false;
+}
+
 export async function startAgentRun(
   request: RunStartRequest,
   dependencies: AgentRunStarterDependencies,

@@ -368,6 +368,62 @@ describe("PropertiesPanel SVG workflow", () => {
     });
   });
 
+  it("sets and clears Auto Layout min/max fields without generic property writes", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    const frame: DesignNode = {
+      id: "frame_limits",
+      kind: "frame",
+      name: "Responsive card",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 160 },
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+        autoLayout: {
+          mode: "vertical",
+          padding: { top: 16, right: 16, bottom: 16, left: 16 },
+          gap: 12,
+          primaryAlignment: "start",
+          counterAlignment: "start",
+        },
+      },
+      extensions: {},
+    };
+    renderPanel({ node: frame, selectionCount: 1, onUpdate });
+    const minWidth = screen.getByLabelText("Min width");
+    await user.type(minWidth, "240");
+    await user.tab();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      layoutLimits: { minWidth: 240 },
+    });
+    cleanup();
+
+    renderPanel({
+      node: {
+        ...textNode,
+        parentId: "frame_limits",
+        layoutLimits: { minWidth: 120 },
+      },
+      selectionCount: 1,
+      layoutMode: "sizing",
+      onUpdate,
+    });
+    const existingMinimum = screen.getByLabelText("Min width");
+    expect(existingMinimum).toHaveValue(120);
+    await user.clear(existingMinimum);
+    await user.tab();
+    expect(onUpdate).toHaveBeenLastCalledWith({ layoutLimits: null });
+  });
+
   it("enables horizontal Wrap with fixed width and an independent default vertical gap", async () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn<(updates: UpdatePropertiesPatch) => void>();

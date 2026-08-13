@@ -1,8 +1,15 @@
-import { EditorRuntime } from "@opendesign/editor-runtime";
+import { isDesignTransaction } from "@opendesign/design-contracts";
+import {
+  EditorRuntime,
+  normalizeDesignDocument,
+} from "@opendesign/editor-runtime";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProfessionalFixtureSmokeBootstrap } from "../shared/professional-fixture-smoke";
+import type {
+  ProfessionalFixtureSmokeBootstrap,
+  ProfessionalFixtureSmokeResult,
+} from "../shared/professional-fixture-smoke";
 import * as designCapture from "./design-capture";
 import { runProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
 
@@ -24,7 +31,9 @@ beforeEach(() => {
 describe("professional fixture smoke renderer", () => {
   it("uses the workspace runtime for initial and refined production captures", async () => {
     const bootstrap = await fixture("OD-PENGUIN-01");
-    const report = vi.fn().mockResolvedValue(undefined);
+    const report = vi
+      .fn<(result: ProfessionalFixtureSmokeResult) => Promise<void>>()
+      .mockResolvedValue(undefined);
     const runtime = new EditorRuntime(bootstrap.initialDocument);
     const replaceDocument = vi.fn().mockReturnValue(runtime);
     const present = vi.fn();
@@ -47,19 +56,18 @@ describe("professional fixture smoke renderer", () => {
     expect(capture).toHaveBeenCalledTimes(2);
     expect(capture.mock.calls[0]?.[0].revision).toBe(0);
     expect(capture.mock.calls[1]?.[0].revision).toBe(1);
-    expect(report).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ok: true,
-        fixtureId: "OD-PENGUIN-01",
-        finalDocument: expect.objectContaining({ revision: 1 }),
-      }),
-    );
+    const result = report.mock.calls[0]?.[0];
+    expect(result?.ok).toBe(true);
+    expect(result?.fixtureId).toBe("OD-PENGUIN-01");
+    expect(result?.ok ? result.finalDocument.revision : undefined).toBe(1);
   });
 
   it("reports capture failure instead of claiming completion", async () => {
     const bootstrap = await fixture("OD-PENGUIN-01");
     capture.mockRejectedValueOnce(new Error("capture unavailable"));
-    const report = vi.fn().mockResolvedValue(undefined);
+    const report = vi
+      .fn<(result: ProfessionalFixtureSmokeResult) => Promise<void>>()
+      .mockResolvedValue(undefined);
     await expect(
       runProfessionalFixtureSmoke({
         desktop: {
@@ -91,11 +99,16 @@ async function fixture(
     readFile(resolve(fixtureRoot, "initial.opendesign"), "utf8"),
     readFile(resolve(fixtureRoot, "refinement.transaction.json"), "utf8"),
   ]);
+  const initialValue: unknown = JSON.parse(initial);
+  const refinementValue: unknown = JSON.parse(refinement);
+  if (!isDesignTransaction(refinementValue)) {
+    throw new TypeError(`Invalid fixture transaction: ${fixtureId}`);
+  }
   return {
     fixtureId,
     pageId: "page_penguin_01",
     artboardId: "penguin_artboard",
-    initialDocument: JSON.parse(initial),
-    refinement: JSON.parse(refinement),
-  } as ProfessionalFixtureSmokeBootstrap;
+    initialDocument: normalizeDesignDocument(initialValue),
+    refinement: refinementValue,
+  };
 }

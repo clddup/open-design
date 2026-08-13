@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const CONSTRAINTS_DESIGN_SCHEMA_VERSION = "1.12.0" as const;
-export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.15.0" as const;
+export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.16.0" as const;
 
 export const LayoutConstraintsSchema = Type.Object(
   {
@@ -43,6 +43,42 @@ export const DEFAULT_LAYOUT_SIZING: LayoutSizing = Object.freeze({
   horizontal: "fixed",
   vertical: "fixed",
 });
+
+const LayoutLimitSchema = Type.Number({ minimum: 0, maximum: 1_000_000 });
+
+export const LayoutLimitsSchema = Type.Object(
+  {
+    minWidth: Type.Optional(LayoutLimitSchema),
+    maxWidth: Type.Optional(LayoutLimitSchema),
+    minHeight: Type.Optional(LayoutLimitSchema),
+    maxHeight: Type.Optional(LayoutLimitSchema),
+  },
+  { additionalProperties: false, minProperties: 1 },
+);
+
+export type LayoutLimits = Static<typeof LayoutLimitsSchema>;
+
+export function isValidLayoutLimits(value: LayoutLimits | undefined): boolean {
+  if (value === undefined) return true;
+  const entries = Object.entries(value);
+  return (
+    entries.length > 0 &&
+    entries.every(
+      ([key, limit]) =>
+        ["minWidth", "maxWidth", "minHeight", "maxHeight"].includes(key) &&
+        typeof limit === "number" &&
+        Number.isFinite(limit) &&
+        limit >= 0 &&
+        limit <= 1_000_000,
+    ) &&
+    (value.minWidth === undefined ||
+      value.maxWidth === undefined ||
+      value.minWidth <= value.maxWidth) &&
+    (value.minHeight === undefined ||
+      value.maxHeight === undefined ||
+      value.minHeight <= value.maxHeight)
+  );
+}
 
 const AutoLayoutFrameAxisSizingSchema = Type.Union([
   Type.Literal("fixed"),

@@ -1,4 +1,5 @@
 import {
+  DESIGN_SCHEMA_VERSION,
   isDesignTransaction,
   type DesignDocument,
   type DesignTransaction,
@@ -24,7 +25,7 @@ describe("professional design fixtures", () => {
   it("pins the fixture and engine contract", () => {
     expect(manifest).toMatchObject({
       version: 1,
-      documentSchemaVersion: "1.15.0",
+      documentSchemaVersion: DESIGN_SCHEMA_VERSION,
       engineBaseline: "leafer-editor@2.2.9",
     });
     expect(manifest.fixtures.map((fixture) => fixture.id)).toEqual([

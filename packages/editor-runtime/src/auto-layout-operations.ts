@@ -5,6 +5,7 @@ import type {
   DesignNode,
   DesignOperation,
   LayoutSizing,
+  LayoutLimits,
 } from "@opendesign/design-contracts";
 import {
   DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
@@ -123,12 +124,44 @@ export function planSetFrameAutoLayout(
     }
   } else {
     for (const childId of frame.childIds) {
-      if (document.nodesById[childId]?.layoutSizing === undefined) continue;
+      const child = document.nodesById[childId];
+      if (!child) continue;
+      if (child.layoutSizing !== undefined) {
+        commands.push({
+          commandId: `${commandPrefix}_clear_sizing_${commands.length}`,
+          type: "update_properties",
+          nodeId: childId,
+          layoutSizing: null,
+        });
+      }
+      const childOwnFlow =
+        child.kind === "frame" ? child.properties.autoLayout : undefined;
+      if (
+        child.layoutLimits !== undefined &&
+        (!childOwnFlow || childOwnFlow.mode === "none")
+      ) {
+        commands.push({
+          commandId: `${commandPrefix}_clear_limits_${commands.length}`,
+          type: "update_properties",
+          nodeId: childId,
+          layoutLimits: null,
+        });
+      }
+    }
+    const parent = frame.parentId
+      ? document.nodesById[frame.parentId]
+      : undefined;
+    const parentFlow =
+      parent?.kind === "frame" ? parent.properties.autoLayout : undefined;
+    if (
+      frame.layoutLimits !== undefined &&
+      (!parentFlow || parentFlow.mode === "none")
+    ) {
       commands.push({
-        commandId: `${commandPrefix}_clear_sizing_${commands.length}`,
+        commandId: `${commandPrefix}_clear_frame_limits_${commands.length}`,
         type: "update_properties",
-        nodeId: childId,
-        layoutSizing: null,
+        nodeId: frame.id,
+        layoutLimits: null,
       });
     }
   }
@@ -189,6 +222,7 @@ export function resolveAutoLayoutInPlace(
       width: number;
       height: number;
       sizing: typeof DEFAULT_LAYOUT_SIZING;
+      limits?: LayoutLimits;
     }> = [];
     for (const childId of frame.childIds) {
       const child = document.nodesById[childId];
@@ -218,10 +252,16 @@ export function resolveAutoLayoutInPlace(
           id: child.id,
           ...child.size,
           sizing: child.layoutSizing ?? DEFAULT_LAYOUT_SIZING,
+          ...(child.layoutLimits ? { limits: child.layoutLimits } : {}),
         });
       }
     }
-    const result = solveFrame(frame.size, autoLayout, children);
+    const result = solveFrame(
+      frame.size,
+      frame.layoutLimits,
+      autoLayout,
+      children,
+    );
     if (!result.ok) {
       return resolutionFailure(
         "invalid-layout",
@@ -325,12 +365,14 @@ function autoLayoutGeometryFingerprint(document: DesignDocument): string {
 
 function solveFrame(
   frame: { width: number; height: number },
+  frameLimits: LayoutLimits | undefined,
   autoLayout: AutoLayoutFlow,
   children: Array<{
     id: string;
     width: number;
     height: number;
     sizing: LayoutSizing;
+    limits?: LayoutLimits;
   }>,
 ) {
   return solveLinearAutoLayout({
@@ -342,6 +384,7 @@ function solveFrame(
     primaryAlignment: autoLayout.primaryAlignment,
     counterAlignment: autoLayout.counterAlignment,
     frameSizing: autoLayout.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
+    ...(frameLimits ? { frameLimits } : {}),
     ...(autoLayout.mode === "horizontal" && autoLayout.wrap
       ? { wrap: autoLayout.wrap }
       : {}),

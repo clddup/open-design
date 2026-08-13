@@ -2,12 +2,14 @@ import type {
   AutoLayout,
   DesignOperation,
   LayoutConstraints,
+  LayoutLimits,
   LayoutSizing,
   Size,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import {
   planSetFrameAutoLayout,
+  planSetNodeLayoutLimits,
   planSetNodeLayoutSizing,
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
@@ -113,10 +115,33 @@ export function useEditorCommandController({
     [applyCommands, runtime, setEditorError, t],
   );
 
+  const setNodeLayoutLimits = useCallback(
+    (nodeId: string, limits: LayoutLimits | null) => {
+      const current = runtime.getSnapshot().document;
+      const plan = planSetNodeLayoutLimits(
+        current,
+        pageIdForNode(current, nodeId),
+        nodeId,
+        limits,
+        `inspector_layout_limits_${nodeId}`,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t("history.updateAutoLayoutLimits"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
   const updateNode = useCallback(
     (nodeId: string, updates: UpdatePropertiesPatch) => {
       const current = runtime.getSnapshot().document;
       const node = current.nodesById[nodeId];
+      if (updates.layoutLimits !== undefined) {
+        setNodeLayoutLimits(nodeId, updates.layoutLimits);
+        return;
+      }
       if (updates.layoutSizing) {
         setNodeLayoutSizing(nodeId, updates.layoutSizing);
         return;
@@ -154,6 +179,7 @@ export function useEditorCommandController({
       runtime,
       setEditorError,
       setFrameAutoLayout,
+      setNodeLayoutLimits,
       setNodeLayoutSizing,
       t,
     ],
@@ -200,6 +226,7 @@ export function useEditorCommandController({
     resizeFrame,
     setFrameAutoLayout,
     setNodeConstraints,
+    setNodeLayoutLimits,
     setNodeLayoutSizing,
     updateNode,
   };

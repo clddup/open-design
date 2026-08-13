@@ -622,14 +622,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     });
   }, [requestConversationHistory, scheduleConversationHistory, workspace]);
 
-  const { applyCommands, resizeFrame, setNodeConstraints, updateNode } =
-    useEditorCommandController({
-      runtime,
-      setEditorError,
-      t,
-      transactionCounter,
-    });
-
+  const editorCommands = useEditorCommandController({
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  });
+  const { applyCommands, resizeFrame, updateNode } = editorCommands;
   const { createPage, deletePage, duplicatePage, renamePage, reorderPage } =
     usePageCommandController({
       applyCommands,
@@ -1911,11 +1910,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onSelectBooleanParent={(nodeId) =>
                   runtime.setSelection([nodeId], nodeId)
                 }
-                onSetConstraints={(constraints) => {
-                  if (selectedNode) {
-                    setNodeConstraints(selectedNode.id, constraints);
-                  }
-                }}
+                onSetConstraints={(constraints) =>
+                  selectedNode &&
+                  editorCommands.setNodeConstraints(
+                    selectedNode.id,
+                    constraints,
+                  )
+                }
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}

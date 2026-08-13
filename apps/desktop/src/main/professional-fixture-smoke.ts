@@ -335,7 +335,8 @@ function fixtureManifestEntry(
   if (!isRecord(value) || !Array.isArray(value.fixtures)) {
     throw new TypeError("Invalid professional fixture manifest");
   }
-  const fixture = value.fixtures.find(
+  const fixtures: unknown[] = value.fixtures;
+  const fixture = fixtures.find(
     (candidate) => isRecord(candidate) && candidate.id === fixtureId,
   );
   if (

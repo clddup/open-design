@@ -1,8 +1,10 @@
 import type {
   AutoLayout,
   LayoutConstraints,
+  LayoutLimits,
   LayoutSizing,
 } from "@opendesign/design-contracts";
+import { isValidLayoutLimits } from "@opendesign/design-contracts";
 
 export type DesignArrangeToolInput =
   | {
@@ -55,6 +57,13 @@ export type DesignArrangeToolInput =
       pageId: string;
       nodeId: string;
       sizing: LayoutSizing;
+    }
+  | {
+      action: "set-layout-limits";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      limits: LayoutLimits | null;
     };
 
 const label = { type: "string", minLength: 1, maxLength: 256 } as const;
@@ -72,7 +81,7 @@ const nodeIds = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies only to direct children of ordinary Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug axis sizing and horizontal Wrap with an independent vertical gap; set-layout-sizing configures direct-child Fixed/Fill sizing. Wrap requires Fixed width and visible Fixed-size children. The host derives all flow geometry.",
+    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies only to direct children of ordinary Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug axis sizing and horizontal Wrap with an independent vertical gap; set-layout-sizing configures direct-child Fixed/Fill sizing; set-layout-limits adds or clears bounded min/max width and height on an Auto Layout Frame or direct flow child. Frame padding remains a hard minimum. Wrap requires Fixed width and visible Fixed-size children. The host derives all flow geometry.",
   properties: {
     action: {
       enum: [
@@ -91,6 +100,7 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
         "resize-frame",
         "set-auto-layout",
         "set-layout-sizing",
+        "set-layout-limits",
       ],
     },
     label,
@@ -235,6 +245,22 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
       required: ["horizontal", "vertical"],
       additionalProperties: false,
     },
+    limits: {
+      anyOf: [
+        {
+          type: "object",
+          minProperties: 1,
+          properties: {
+            minWidth: { type: "number", minimum: 0, maximum: 1_000_000 },
+            maxWidth: { type: "number", minimum: 0, maximum: 1_000_000 },
+            minHeight: { type: "number", minimum: 0, maximum: 1_000_000 },
+            maxHeight: { type: "number", minimum: 0, maximum: 1_000_000 },
+          },
+          additionalProperties: false,
+        },
+        { type: "null" },
+      ],
+    },
   },
   required: ["action", "label", "pageId"],
   additionalProperties: false,
@@ -279,6 +305,14 @@ export function isDesignArrangeToolInput(
       safeId(input.nodeId) &&
       isLayoutSizing(input.sizing) &&
       onlyKeys(input, ["action", "label", "pageId", "nodeId", "sizing"])
+    );
+  }
+  if (action === "set-layout-limits") {
+    return (
+      safeId(input.nodeId) &&
+      (input.limits === null ||
+        (isRecord(input.limits) && isValidLayoutLimits(input.limits))) &&
+      onlyKeys(input, ["action", "label", "pageId", "nodeId", "limits"])
     );
   }
   const layerActions = [

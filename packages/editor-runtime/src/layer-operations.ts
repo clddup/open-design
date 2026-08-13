@@ -14,6 +14,7 @@ import {
 } from "./geometry.js";
 import { normalizeGroupAncestorsInPlace } from "./group-bounds.js";
 import { nodeGeometryUpdate } from "./node-geometry-update.js";
+import { clearOrphanedFlowProperties } from "./auto-layout-property-cleanup.js";
 export type LayerOperationFailureCode =
   | "invalid-selection"
   | "invalid-target"
@@ -462,7 +463,7 @@ export function planReparentNodes(
       (targetParent.properties.autoLayout?.mode ?? "none") !== "none";
     if (targetUsesFlow || targetParent?.kind !== "frame")
       delete node.constraints;
-    if (!targetUsesFlow) delete node.layoutSizing;
+    if (!targetUsesFlow) clearOrphanedFlowProperties(node);
     if (sourceParentId !== options.parentId) {
       node.transform = multiplyTransforms(worldToTarget, world);
     }
@@ -931,7 +932,6 @@ function inheritedVisualContext(
   }
   return result;
 }
-
 function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
   return (
     left.length === right.length &&

@@ -1165,6 +1165,14 @@ describe("design contract schemas", () => {
     );
   });
 
+  it("migrates 1.15 wrap without inventing layout limits", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.15.0" as typeof source.schemaVersion;
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1?.layoutLimits).toBeUndefined();
+  });
+
   it("validates strict linear Auto Layout only on Frame properties", () => {
     const frame = {
       id: "frame_layout",
@@ -1311,6 +1319,58 @@ describe("design contract schemas", () => {
           vertical: "fixed",
           future: true,
         },
+      }),
+    ).toBe(false);
+  });
+
+  it("validates strict layout limits and rejects inverted intervals at public guards", () => {
+    const text = textDocumentFixture().nodesById.text_1;
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        layoutLimits: { minWidth: 80, maxWidth: 320, minHeight: 24 },
+      }),
+    ).toBe(true);
+    for (const layoutLimits of [
+      {},
+      { minWidth: -1 },
+      { maxHeight: 1_000_001 },
+      { minWidth: 20, future: 40 },
+    ]) {
+      expect(Value.Check(DesignNodeSchema, { ...text, layoutLimits })).toBe(
+        false,
+      );
+    }
+    expect(
+      Value.Check(DesignOperationSchema, {
+        commandId: "set_layout_limits",
+        type: "update_properties",
+        nodeId: "text_1",
+        layoutLimits: { minWidth: 80, maxWidth: 320 },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignOperationSchema, {
+        commandId: "clear_layout_limits",
+        type: "update_properties",
+        nodeId: "text_1",
+        layoutLimits: null,
+      }),
+    ).toBe(true);
+    const inverted = {
+      commandId: "invert_layout_limits",
+      type: "update_properties" as const,
+      nodeId: "text_1",
+      layoutLimits: { minWidth: 320, maxWidth: 80 },
+    };
+    expect(Value.Check(DesignOperationSchema, inverted)).toBe(true);
+    expect(
+      isDesignTransaction({
+        transactionId: "transaction_limits",
+        documentId: "document_1",
+        baseRevision: 0,
+        actor,
+        commands: [inverted],
       }),
     ).toBe(false);
   });

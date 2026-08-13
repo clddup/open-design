@@ -180,6 +180,19 @@ describe("design Agent tool contract", () => {
       (candidate) => candidate.name === DESIGN_PAGE_TOOL_NAME,
     );
     expect(tool).toMatchObject({ risk: "design_write", approval: "never" });
+    expect(tool?.inputSchema).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        action: {
+          enum: ["create", "rename", "duplicate", "reorder", "delete"],
+        },
+        label: { type: "string" },
+        pageId: { type: "string" },
+        name: { type: "string" },
+        index: { type: "integer" },
+      },
+    });
     expect(tool?.description).toContain(
       "opendesign_request_page_structure_access",
     );
@@ -1683,6 +1696,13 @@ describe("design Agent tool contract", () => {
       nodeId: "navigation_items",
       sizing: { horizontal: "fill", vertical: "fixed" },
     };
+    const layoutLimits = {
+      action: "set-layout-limits",
+      label: "Bound responsive navigation",
+      pageId: "page_1",
+      nodeId: "navigation_items",
+      limits: { minWidth: 240, maxWidth: 720, minHeight: 44 },
+    };
 
     expect(arrange).toMatchObject({
       risk: "design_write",
@@ -1692,7 +1712,8 @@ describe("design Agent tool contract", () => {
     expect(arrange?.description).toContain("two-dimensional Tidy up");
     expect(arrange?.description).toContain("Smart Selection canvas handles");
     expect(arrange?.description).toContain("Constraints v1");
-    expect(arrange?.description).toContain("Auto Layout v1");
+    expect(arrange?.description).toContain("Auto Layout supports");
+    expect(arrange?.description).toContain("min/max clamping");
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, distribute),
     ).toBe(true);
@@ -1725,6 +1746,27 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutSizing),
     ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutLimits),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...layoutLimits,
+        limits: null,
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...layoutLimits,
+        limits: { minWidth: 720, maxWidth: 240 },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...layoutLimits,
+        limits: { minWidth: 240, future: 1 },
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...autoLayout,

@@ -88,3 +88,4 @@
 | [0054](adr/0054-isolated-agent-capture-export.md)                        | 已接受     | Agent 审查截图与 Leafer 全局异步导出队列隔离                       |
 | [0055](adr/0055-auto-layout-axis-sizing-v1.md)                           | 已接受     | Auto Layout 轴向 Fixed/Hug/Fill 与有界收敛                         |
 | [0056](adr/0056-auto-layout-horizontal-wrap-v1.md)                       | 已接受     | Auto Layout 水平 Wrap、独立行距与确定性分行                        |
+| [0057](adr/0057-auto-layout-min-max-v1.md)                               | 已接受     | Auto Layout Min/Max、bounded Fill 与 Padding Minimum               |

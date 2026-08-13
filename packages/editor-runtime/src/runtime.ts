@@ -1071,6 +1071,7 @@ function updateProperties(
     "opacity",
     "constraints",
     "layoutSizing",
+    "layoutLimits",
     "blendMode",
     "effects",
     "maskMode",
@@ -1087,7 +1088,9 @@ function updateProperties(
     const value = command[field];
     if (value === undefined) continue;
     if (
-      (field === "constraints" || field === "layoutSizing") &&
+      (field === "constraints" ||
+        field === "layoutSizing" ||
+        field === "layoutLimits") &&
       value === null
     ) {
       delete node[field];

@@ -52,6 +52,7 @@ export {
   type AutoLayoutResolution,
 } from "./auto-layout-operations.js";
 export { planSetNodeLayoutSizing } from "./auto-layout-sizing-operations.js";
+export { planSetNodeLayoutLimits } from "./auto-layout-limits-operations.js";
 export {
   planResizeFrameWithConstraints,
   planSetNodeConstraints,

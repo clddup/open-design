@@ -193,4 +193,35 @@ describe("editor command controllers", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
     expect(setEditorError).toHaveBeenLastCalledWith(null);
   });
+
+  it("routes Auto Layout min/max through the dedicated planner and supports clearing", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    const runtime = new EditorRuntime(document);
+    const { result, setEditorError } = renderControllers(runtime);
+    act(() =>
+      result.current.editor.setNodeLayoutLimits("title_welcome", {
+        minWidth: 160,
+        maxWidth: 640,
+        minHeight: 48,
+      }),
+    );
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutLimits,
+    ).toEqual({ minWidth: 160, maxWidth: 640, minHeight: 48 });
+    act(() => result.current.editor.setNodeLayoutLimits("title_welcome", null));
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutLimits,
+    ).toBeUndefined();
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+  });
 });

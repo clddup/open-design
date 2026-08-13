@@ -616,7 +616,7 @@ describe("layer hierarchy operations", () => {
     ).toBeUndefined();
   });
 
-  it("clears child layout sizing when reparenting out of Auto Layout", () => {
+  it("clears child sizing and orphaned limits when reparenting out of Auto Layout", () => {
     const document = structuredClone(createWelcomeDocument());
     const frame = document.nodesById.frame_welcome;
     if (frame?.kind !== "frame") throw new Error("missing Frame");
@@ -630,6 +630,10 @@ describe("layer hierarchy operations", () => {
     document.nodesById.title_welcome!.layoutSizing = {
       horizontal: "fill",
       vertical: "fixed",
+    };
+    document.nodesById.title_welcome!.layoutLimits = {
+      minWidth: 160,
+      maxWidth: 480,
     };
     const runtime = new EditorRuntime(normalizeDesignDocument(document));
     const plan = planReparentNodes(
@@ -650,12 +654,94 @@ describe("layer hierarchy operations", () => {
         layoutSizing: null,
       }),
     );
+    expect(plan.commands).toContainEqual(
+      expect.objectContaining({
+        type: "update_properties",
+        nodeId: "title_welcome",
+        layoutLimits: null,
+      }),
+    );
     expect(
       runtime.apply(transaction(runtime, "move_fill_out", plan.commands)).ok,
     ).toBe(true);
     expect(
       runtime.getSnapshot().document.nodesById.title_welcome?.layoutSizing,
     ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutLimits,
+    ).toBeUndefined();
+  });
+
+  it("preserves limits when an Auto Layout Frame leaves its parent flow", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const outer = document.nodesById.frame_welcome;
+    const nested = document.nodesById.feature_group;
+    if (outer?.kind !== "frame" || nested?.kind !== "group") {
+      throw new Error("missing containers");
+    }
+    outer.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    document.nodesById.nested_flow = {
+      ...outer,
+      id: "nested_flow",
+      name: "Nested flow",
+      parentId: "frame_welcome",
+      childIds: [],
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 200, height: 100 },
+      layoutLimits: { minWidth: 120, maxWidth: 360 },
+      properties: {
+        ...outer.properties,
+        autoLayout: {
+          mode: "horizontal",
+          padding: { top: 8, right: 8, bottom: 8, left: 8 },
+          gap: 8,
+          primaryAlignment: "start",
+          counterAlignment: "start",
+        },
+      },
+    };
+    outer.childIds.push("nested_flow");
+    document.pagesById.page_welcome!.rootNodeIds.push("target_frame");
+    document.nodesById.target_frame = {
+      ...outer,
+      id: "target_frame",
+      name: "Target",
+      parentId: null,
+      childIds: [],
+      properties: { ...outer.properties, autoLayout: { mode: "none" } },
+    };
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planReparentNodes(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["nested_flow"],
+      {
+        parentId: "target_frame",
+        index: 0,
+        commandPrefix: "move_nested_flow",
+      },
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(
+      plan.commands.some(
+        (command) =>
+          command.type === "update_properties" &&
+          command.nodeId === "nested_flow" &&
+          command.layoutLimits === null,
+      ),
+    ).toBe(false);
+    expect(
+      runtime.apply(transaction(runtime, "move_nested_flow", plan.commands)).ok,
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.nested_flow?.layoutLimits,
+    ).toEqual({ minWidth: 120, maxWidth: 360 });
   });
 
   it("expands and rebases a destination Group without moving existing or inserted artwork", () => {

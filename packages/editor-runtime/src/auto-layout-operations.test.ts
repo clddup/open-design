@@ -12,6 +12,7 @@ import {
   normalizeDesignDocument,
   planResizeFrameWithConstraints,
   planSetFrameAutoLayout,
+  planSetNodeLayoutLimits,
   planSetNodeLayoutSizing,
   planSetNodeConstraints,
 } from "./index.js";
@@ -660,6 +661,208 @@ describe("linear Auto Layout Runtime", () => {
         "invalid_wrap_fill",
       ),
     ).toMatchObject({ ok: false, code: "visual-fidelity" });
+  });
+
+  it("applies Frame and fixed-child limits with padding as the hard minimum", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.size = { width: 50, height: 20 };
+    frame.layoutLimits = { maxWidth: 55, minHeight: 70 };
+    frame.properties.autoLayout = {
+      ...horizontal,
+      padding: { top: 30, right: 30, bottom: 30, left: 30 },
+      gap: 0,
+      sizing: { horizontal: "fixed", vertical: "hug" },
+    };
+    frame.childIds = ["one"];
+    document.nodesById.one!.layoutLimits = {
+      minWidth: 120,
+      maxWidth: 140,
+      maxHeight: 8,
+    };
+    delete document.nodesById.one?.constraints;
+    delete document.nodesById.two;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const tx = transaction(runtime, [
+      {
+        commandId: "resolve_limits",
+        type: "update_properties",
+        nodeId: "one",
+        name: "Bounded child",
+      },
+    ]);
+
+    const preview = runtime.preview(tx);
+    expect(preview).toMatchObject({ ok: true });
+    expect(runtime.apply(tx)).toMatchObject({ ok: true });
+    const resolved = runtime.getSnapshot().document;
+    expect(resolved.nodesById.frame?.size).toEqual({ width: 60, height: 70 });
+    expectRect(resolved, "one", 30, 31, 120, 8);
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.redo().ok).toBe(true);
+    expect(
+      normalizeDesignDocument(JSON.parse(JSON.stringify(resolved))),
+    ).toEqual(resolved);
+  });
+
+  it("redistributes Fill siblings at min/max bounds and remeasures bounded Auto Height text", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.size = { width: 360, height: 80 };
+    frame.properties.autoLayout = {
+      ...horizontal,
+      padding: { top: 10, right: 10, bottom: 10, left: 10 },
+      gap: 10,
+      sizing: { horizontal: "fixed", vertical: "hug" },
+    };
+    frame.childIds = ["one", "two", "copy"];
+    delete document.nodesById.one?.constraints;
+    for (const nodeId of ["one", "two"] as const) {
+      document.nodesById[nodeId]!.layoutSizing = {
+        horizontal: "fill",
+        vertical: "fixed",
+      };
+    }
+    document.nodesById.one!.layoutLimits = { maxWidth: 60 };
+    document.nodesById.two!.layoutLimits = { minWidth: 120 };
+    document.nodesById.copy = autoHeightText("copy", "frame", 1);
+    document.nodesById.copy.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fixed",
+    };
+    document.nodesById.copy.layoutLimits = { minWidth: 100, maxWidth: 140 };
+    const measuredWidths: number[] = [];
+    const runtime = new EditorRuntime(normalizeDesignDocument(document), {
+      textLayoutProvider: {
+        id: "bounded-auto-height",
+        version: "1",
+        measure: (request) => {
+          measuredWidths.push(request.width ?? 0);
+          return {
+            ok: true,
+            provider: "bounded-auto-height",
+            providerVersion: "1",
+            size: { width: request.width ?? 0, height: 48 },
+            warnings: [],
+          };
+        },
+      },
+    });
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "resolve_bounded_fill",
+            type: "update_properties",
+            nodeId: "copy",
+            properties: { content: "Bounded responsive copy" },
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    const resolved = runtime.getSnapshot().document;
+    expectRect(resolved, "one", 10, 24, 60, 20);
+    expectRect(resolved, "two", 80, 19, 130, 30);
+    expectRect(resolved, "copy", 220, 10, 130, 48);
+    expect(resolved.nodesById.frame?.size.height).toBe(68);
+    expect(measuredWidths).toContain(130);
+  });
+
+  it("plans layout limits strictly and rejects invalid generic scope atomically", () => {
+    const runtime = enabledRuntime();
+    const plan = planSetNodeLayoutLimits(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "two",
+      { minWidth: 80, maxWidth: 160, minHeight: 24 },
+      "bound_two",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.two?.layoutLimits).toEqual({
+      minWidth: 80,
+      maxWidth: 160,
+      minHeight: 24,
+    });
+    expect(
+      planSetNodeLayoutLimits(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "two",
+        { minWidth: 80, maxWidth: 160, minHeight: 24 },
+        "again",
+      ),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    expect(
+      planSetNodeLayoutLimits(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "two",
+        { minWidth: 200, maxWidth: 100 },
+        "inverted",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+
+    const ordinary = layoutDocument();
+    const ordinaryRuntime = new EditorRuntime(
+      normalizeDesignDocument(ordinary),
+    );
+    const revision = ordinaryRuntime.getSnapshot().document.revision;
+    const invalid = ordinaryRuntime.apply(
+      transaction(ordinaryRuntime, [
+        {
+          commandId: "bypass_limits_scope",
+          type: "update_properties",
+          nodeId: "two",
+          layoutLimits: { minWidth: 80 },
+        },
+      ]),
+    );
+    expect(invalid).toMatchObject({ ok: false });
+    expect(ordinaryRuntime.getSnapshot().document.revision).toBe(revision);
+    expect(ordinaryRuntime.getSnapshot().state.history.undo).toHaveLength(0);
+  });
+
+  it("clears orphaned limits when flow is disabled but preserves nested Frame limits", () => {
+    const runtime = enabledRuntime();
+    const document = structuredClone(runtime.getSnapshot().document);
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    document.nodesById.one!.layoutLimits = { minWidth: 40 };
+    const nested = structuredClone(frame);
+    nested.id = "nested_limits";
+    nested.parentId = "frame";
+    nested.childIds = [];
+    nested.layoutLimits = { minWidth: 100, maxWidth: 240 };
+    nested.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 4, right: 4, bottom: 4, left: 4 },
+      gap: 4,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    document.nodesById.nested_limits = nested;
+    frame.childIds.push("nested_limits");
+    const nestedRuntime = new EditorRuntime(normalizeDesignDocument(document));
+    const disable = planSetFrameAutoLayout(
+      nestedRuntime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      { mode: "none" },
+      "disable_limits",
+    );
+    if (!disable.ok) throw new Error(disable.message);
+    expect(
+      nestedRuntime.apply(transaction(nestedRuntime, disable.commands)).ok,
+    ).toBe(true);
+    const result = nestedRuntime.getSnapshot().document;
+    expect(result.nodesById.one?.layoutLimits).toBeUndefined();
+    expect(result.nodesById.nested_limits?.layoutLimits).toEqual({
+      minWidth: 100,
+      maxWidth: 240,
+    });
   });
 });
 

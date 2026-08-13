@@ -1,0 +1,67 @@
+import type { DesignDocument } from "@opendesign/design-contracts";
+import {
+  planArrangeNodes,
+  planResizeFrameWithConstraints,
+  planSetFrameAutoLayout,
+  planSetNodeConstraints,
+  planSetNodeLayoutLimits,
+  planSetNodeLayoutSizing,
+} from "@opendesign/editor-runtime";
+import type { DesignArrangeToolInput } from "../shared/design-arrange-tool";
+
+export function planDesignArrangeTool(
+  document: DesignDocument,
+  input: DesignArrangeToolInput,
+  commandPrefix: string,
+) {
+  if (input.action === "set-constraints")
+    return planSetNodeConstraints(
+      document,
+      input.pageId,
+      input.nodeId,
+      input.constraints,
+      commandPrefix,
+    );
+  if (input.action === "resize-frame")
+    return planResizeFrameWithConstraints(
+      document,
+      input.pageId,
+      input.frameId,
+      { width: input.width, height: input.height },
+      commandPrefix,
+    );
+  if (input.action === "set-auto-layout")
+    return planSetFrameAutoLayout(
+      document,
+      input.pageId,
+      input.frameId,
+      input.autoLayout,
+      commandPrefix,
+    );
+  if (input.action === "set-layout-sizing")
+    return planSetNodeLayoutSizing(
+      document,
+      input.pageId,
+      input.nodeId,
+      input.sizing,
+      commandPrefix,
+    );
+  if (input.action === "set-layout-limits")
+    return planSetNodeLayoutLimits(
+      document,
+      input.pageId,
+      input.nodeId,
+      input.limits,
+      commandPrefix,
+    );
+  return planArrangeNodes(
+    document,
+    input.pageId,
+    input.nodeIds,
+    input.action === "set-horizontal-spacing" ||
+      input.action === "set-vertical-spacing"
+      ? { action: input.action, spacing: input.spacing }
+      : { action: input.action },
+    commandPrefix,
+  );
+}

@@ -3,6 +3,7 @@ const enLayoutMessages = {
   "history.resizeFrameResponsive": "Resize responsive Frame",
   "history.updateAutoLayout": "Update Auto Layout",
   "history.updateAutoLayoutSizing": "Update Auto Layout sizing",
+  "history.updateAutoLayoutLimits": "Update Auto Layout limits",
   "agent.canvasCircuitOpen": "Canvas renderer repeatedly stalled",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign stopped this task after repeated canvas stalls. Committed design revisions were preserved; restart OpenDesign before retrying visual generation.",
@@ -39,6 +40,11 @@ const enLayoutMessages = {
   "properties.autoLayoutFixed": "Fixed",
   "properties.autoLayoutHug": "Hug contents",
   "properties.autoLayoutFill": "Fill container",
+  "properties.autoLayoutMinWidth": "Min width",
+  "properties.autoLayoutMaxWidth": "Max width",
+  "properties.autoLayoutMinHeight": "Min height",
+  "properties.autoLayoutMaxHeight": "Max height",
+  "properties.autoLayoutLimitUnset": "None",
   "properties.autoLayoutSizingHint":
     "Frames can hug contents; direct children can fill available space. Horizontal Wrap uses a fixed width and Fixed children.",
   "properties.padding.top": "Top",
@@ -52,6 +58,7 @@ const zhCNLayoutMessages = {
   "history.resizeFrameResponsive": "调整响应式画框",
   "history.updateAutoLayout": "更新 Auto Layout",
   "history.updateAutoLayoutSizing": "更新 Auto Layout 尺寸模式",
+  "history.updateAutoLayoutLimits": "更新 Auto Layout 尺寸限制",
   "agent.canvasCircuitOpen": "画布渲染连续停滞",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign 已在画布连续停滞后停止本次任务。已提交的设计 revision 均已保留，请重启 OpenDesign 后再尝试视觉生成。",
@@ -88,6 +95,11 @@ const zhCNLayoutMessages = {
   "properties.autoLayoutFixed": "固定",
   "properties.autoLayoutHug": "适应内容",
   "properties.autoLayoutFill": "填充容器",
+  "properties.autoLayoutMinWidth": "最小宽度",
+  "properties.autoLayoutMaxWidth": "最大宽度",
+  "properties.autoLayoutMinHeight": "最小高度",
+  "properties.autoLayoutMaxHeight": "最大高度",
+  "properties.autoLayoutLimitUnset": "无",
   "properties.autoLayoutSizingHint":
     "画框可适应内容，直属子层可填充可用空间；水平自动换行要求固定宽度与固定尺寸子层。",
   "properties.padding.top": "上内边距",

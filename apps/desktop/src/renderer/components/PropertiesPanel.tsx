@@ -185,6 +185,13 @@ export function PropertiesPanel({
               layoutMode === "sizing" || layoutMode === "wrap-sizing"
             }
             layoutSizingFillAvailable={layoutMode !== "wrap-sizing"}
+            layoutLimitsAvailable={
+              layoutMode === "sizing" ||
+              layoutMode === "wrap-sizing" ||
+              (node.kind === "frame" &&
+                node.properties.autoLayout !== undefined &&
+                node.properties.autoLayout.mode !== "none")
+            }
             onBooleanOperationChange={onBooleanOperationChange}
             onCreateComponent={onCreateComponent}
             onCreateComponentInstance={onCreateComponentInstance}

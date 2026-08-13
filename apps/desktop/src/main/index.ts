@@ -38,9 +38,10 @@ import {
   designGenerationPerformanceDiagnostic,
 } from "./agent/design-generation-performance";
 import { reportAgentDiagnostic } from "./agent/agent-diagnostic-reporter";
+import { handleAgentApprovalRequest } from "./agent/agent-approval-handler";
 import { AgentContinuationScheduler } from "./agent/agent-continuation-scheduler";
 import { prepareAgentContinuation } from "./agent/agent-continuation-host";
-import { startAgentRun } from "./agent/agent-run-starter";
+import { handleAgentRunControlRequest } from "./agent/agent-run-starter";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
 import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
 import { createApplicationMenuTemplate } from "./application-menu";
@@ -938,87 +939,46 @@ function registerIpc() {
       if (!globalTaskCoordinator) {
         throw new Error("Global Task services are not initialized");
       }
-      const pending = agentHost.prepareApprovalResolution(request);
-      const pageStructureInput =
-        pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME &&
-        isPageStructureAccessToolInput(pending.input)
-          ? pending.input
-          : undefined;
-      if (pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
-        if (pending.risk !== "design_write" || !pageStructureInput) {
-          agentHost.rollbackApprovalResolution(request.approvalId);
-          throw new TypeError("Invalid Page structure approval request");
-        }
-        if (request.decision === "allow_session") {
-          agentHost.rollbackApprovalResolution(request.approvalId);
-          throw new TypeError(
-            "Page structure access can only be allowed for the current task",
-          );
-        }
-      }
-      const grantPageStructure =
-        pageStructureInput !== undefined && request.decision === "allow_once";
-      if (grantPageStructure) {
-        globalTaskCoordinator.grantPageStructureAccess(
-          request.runId,
-          request.approvalId,
-          request.toolCallId,
-          pageStructureInput?.actions ?? [],
-        );
-      }
-      try {
-        agentHost.send(request);
-      } catch (error) {
-        agentHost.rollbackApprovalResolution(request.approvalId);
-        if (grantPageStructure) {
-          globalTaskCoordinator.revokePageStructureAccess(
-            request.runId,
-            request.approvalId,
-          );
-        }
-        throw error;
-      }
+      handleAgentApprovalRequest(request, {
+        agentHost,
+        globalTaskCoordinator,
+      });
       return;
     }
     if (request.type === "run.start") {
-      if (request.modelContext !== undefined) {
-        throw new TypeError("Renderer cannot supply model context metadata");
-      }
       if (!globalTaskCoordinator) {
         throw new Error("Global Task services are not initialized");
       }
-      const started = await startAgentRun(request, {
+      await handleAgentRunControlRequest(request, {
         agentHost,
         continuationScheduler: agentContinuationScheduler,
         conversationIdByRunId,
         globalTaskCoordinator,
         modelProviderHost: requireModelProviderHost(),
         referenceHost: requireAgentReferenceHost(),
+        publish: (agentEvent) =>
+          mainWindow?.webContents.send(channels.agentEvent, agentEvent),
       });
-      if (!started) {
-        mainWindow?.webContents.send(channels.agentEvent, {
-          type: "run.completed",
-          runId: request.runId,
-          finishedAt: new Date().toISOString(),
-          stopReason: "cancelled",
-        } satisfies AgentEvent);
-      }
       return;
     }
     if (request.type === "session.history") {
       conversationIdByRequestId.set(request.requestId, request.sessionId);
     }
     if (request.type === "run.cancel") {
-      // Cancellation intent is Main-owned. Record it before forwarding the
-      // request so a Run that is between scheduled continuation and utility
-      // process startup cannot escape a user stop as a new automatic Run.
-      const cancellationTarget = agentContinuationScheduler.requestCancellation(
-        request.runId,
-      );
-      if (cancellationTarget && cancellationTarget !== request.runId) {
-        agentHost.send({ ...request, runId: cancellationTarget });
-        return;
+      if (!globalTaskCoordinator) {
+        throw new Error("Global Task services are not initialized");
       }
+      const handled = await handleAgentRunControlRequest(request, {
+        agentHost,
+        continuationScheduler: agentContinuationScheduler,
+        conversationIdByRunId,
+        globalTaskCoordinator,
+        modelProviderHost: requireModelProviderHost(),
+        referenceHost: requireAgentReferenceHost(),
+        publish: (agentEvent) =>
+          mainWindow?.webContents.send(channels.agentEvent, agentEvent),
+      });
+      if (handled) return;
     }
     try {
       agentHost.send(request);

@@ -18,11 +18,14 @@ export function nodeGeometryUpdate(
   const layoutSizingChanged =
     before.layoutSizing?.horizontal !== after.layoutSizing?.horizontal ||
     before.layoutSizing?.vertical !== after.layoutSizing?.vertical;
+  const layoutLimitsChanged =
+    JSON.stringify(before.layoutLimits) !== JSON.stringify(after.layoutLimits);
   if (
     !transformChanged &&
     !sizeChanged &&
     !constraintsChanged &&
-    !layoutSizingChanged
+    !layoutSizingChanged &&
+    !layoutLimitsChanged
   )
     return null;
   return {
@@ -34,6 +37,9 @@ export function nodeGeometryUpdate(
     ...(constraintsChanged ? { constraints: after.constraints ?? null } : {}),
     ...(layoutSizingChanged
       ? { layoutSizing: after.layoutSizing ?? null }
+      : {}),
+    ...(layoutLimitsChanged
+      ? { layoutLimits: after.layoutLimits ?? null }
       : {}),
   };
 }

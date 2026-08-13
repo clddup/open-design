@@ -18,11 +18,6 @@ import {
   componentMainNodeId,
   diagnoseDesignTargetLayout,
   diagnoseDesignPages,
-  planArrangeNodes,
-  planSetFrameAutoLayout,
-  planSetNodeLayoutSizing,
-  planResizeFrameWithConstraints,
-  planSetNodeConstraints,
   planCreatePage,
   planCreateBooleanGroup,
   planCreateComponent,
@@ -85,6 +80,7 @@ import { exportDesignRaster } from "./raster-export";
 import { normalizeAgentTextContent } from "./agent-text-normalization";
 import { throwIfAgentGenerationAborted } from "./agent-generation-timing";
 import { executeSemanticDesignTransaction } from "./design-transaction-steps";
+import { planDesignArrangeTool } from "./design-arrange-tool-plan";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -820,49 +816,7 @@ async function executeDesignToolRequestUnsafe(
     );
     const commandPrefix =
       `arrange_${input.action}_${request.call.toolCallId}`.slice(0, 200);
-    const plan =
-      input.action === "set-constraints"
-        ? planSetNodeConstraints(
-            document,
-            input.pageId,
-            input.nodeId,
-            input.constraints,
-            commandPrefix,
-          )
-        : input.action === "resize-frame"
-          ? planResizeFrameWithConstraints(
-              document,
-              input.pageId,
-              input.frameId,
-              { width: input.width, height: input.height },
-              commandPrefix,
-            )
-          : input.action === "set-auto-layout"
-            ? planSetFrameAutoLayout(
-                document,
-                input.pageId,
-                input.frameId,
-                input.autoLayout,
-                commandPrefix,
-              )
-            : input.action === "set-layout-sizing"
-              ? planSetNodeLayoutSizing(
-                  document,
-                  input.pageId,
-                  input.nodeId,
-                  input.sizing,
-                  commandPrefix,
-                )
-              : planArrangeNodes(
-                  document,
-                  input.pageId,
-                  input.nodeIds,
-                  input.action === "set-horizontal-spacing" ||
-                    input.action === "set-vertical-spacing"
-                    ? { action: input.action, spacing: input.spacing }
-                    : { action: input.action },
-                  commandPrefix,
-                );
+    const plan = planDesignArrangeTool(document, input, commandPrefix);
     if (!plan.ok) {
       throw new Error(`arrange.${plan.code}: ${plan.message}`);
     }
@@ -924,10 +878,14 @@ async function executeDesignToolRequestUnsafe(
           ...(input.action === "set-layout-sizing"
             ? { nodeId: input.nodeId, sizing: input.sizing }
             : {}),
+          ...(input.action === "set-layout-limits"
+            ? { nodeId: input.nodeId, limits: input.limits }
+            : {}),
           ...(input.action !== "resize-frame" &&
           input.action !== "set-constraints" &&
           input.action !== "set-auto-layout" &&
           input.action !== "set-layout-sizing" &&
+          input.action !== "set-layout-limits" &&
           "orderedNodeIds" in plan
             ? { orderedNodeIds: plan.orderedNodeIds }
             : {}),
@@ -1275,6 +1233,14 @@ function assertAgentDoesNotBypassAutoLayout(
     ) {
       throw new Error(
         `design_workflow.auto_layout_requires_layout_tool: Configure flow-child sizing with opendesign_arrange_layers action set-layout-sizing`,
+      );
+    }
+    if (
+      command.type === "update_properties" &&
+      command.layoutLimits !== undefined
+    ) {
+      throw new Error(
+        `design_workflow.auto_layout_requires_layout_tool: Configure Auto Layout min/max sizing with opendesign_arrange_layers action set-layout-limits`,
       );
     }
     if (

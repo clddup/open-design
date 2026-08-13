@@ -5,11 +5,17 @@ import {
   type TUnion,
 } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
+import { checkSchema } from "./schema-check.js";
 import {
   AutoLayoutSchema,
   LayoutConstraintsSchema,
   LayoutSizingSchema,
+  LayoutLimitsSchema,
 } from "./layout.js";
+import {
+  designDocumentHasValidLayoutLimits,
+  designOperationHasValidLayoutLimits,
+} from "./layout-limits-validation.js";
 import * as versions from "./versions.js";
 export * from "./versions.js";
 export * from "./layout.js";
@@ -685,6 +691,7 @@ const NodeBaseProperties = {
   opacity: Type.Number({ minimum: 0, maximum: 1 }),
   constraints: Type.Optional(LayoutConstraintsSchema),
   layoutSizing: Type.Optional(LayoutSizingSchema),
+  layoutLimits: Type.Optional(LayoutLimitsSchema),
   blendMode: Type.Optional(BlendModeSchema),
   effects: Type.Optional(Type.Array(EffectSchema)),
   maskMode: Type.Optional(MaskModeSchema),
@@ -918,6 +925,7 @@ export const UpdatePropertiesCommandSchema = Type.Object(
       Type.Union([LayoutConstraintsSchema, Type.Null()]),
     ),
     layoutSizing: Type.Optional(Type.Union([LayoutSizingSchema, Type.Null()])),
+    layoutLimits: Type.Optional(Type.Union([LayoutLimitsSchema, Type.Null()])),
     blendMode: Type.Optional(BlendModeSchema),
     effects: Type.Optional(Type.Array(EffectSchema)),
     maskMode: Type.Optional(MaskModeSchema),
@@ -1722,7 +1730,10 @@ function compareSchemaErrorBranches(
 }
 
 export function isDesignDocument(value: unknown): value is DesignDocument {
-  return checkSchema(DesignDocumentSchema, value);
+  return (
+    checkSchema(DesignDocumentSchema, value) &&
+    designDocumentHasValidLayoutLimits(value as DesignDocument)
+  );
 }
 
 export function isDesignAsset(value: unknown): value is DesignAsset {
@@ -1733,7 +1744,8 @@ export function isImagePlacement(value: unknown): value is ImagePlacement {
   return checkSchema(ImagePlacementSchema, value);
 }
 export function migrateDesignDocument(value: unknown): DesignDocument | null {
-  if (isDesignDocument(value)) return structuredClone(value);
+  if (checkSchema(DesignDocumentSchema, value))
+    return structuredClone(value as DesignDocument);
   const schemaVersion =
     typeof value === "object" && value !== null && !Array.isArray(value)
       ? (value as { schemaVersion?: unknown }).schemaVersion
@@ -1742,21 +1754,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     typeof value !== "object" ||
     value === null ||
     Array.isArray(value) ||
-    (schemaVersion !== versions.LEGACY_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.APPEARANCE_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.PATH_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.MASK_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.LINE_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.REGULAR_SHAPE_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.TEXT_LAYOUT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.COMPONENT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.FRAME_CONSTRAINTS_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.LINEAR_AUTO_LAYOUT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.AUTO_LAYOUT_SIZING_DESIGN_SCHEMA_VERSION)
+    !versions.MIGRATABLE_DESIGN_SCHEMA_VERSIONS.includes(String(schemaVersion))
   ) {
     return null;
   }
@@ -1775,7 +1773,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     ) {
       migratePathNodes(migrated, schemaVersion);
     }
-    migrateImageNodes(migrated, schemaVersion);
+    migrateImageNodes(migrated, String(schemaVersion));
     migrateTextNodes(migrated);
     return isDesignDocument(migrated) ? migrated : null;
   } catch {
@@ -2017,13 +2015,18 @@ function migratePathNodes(
 }
 
 export function isDesignOperation(value: unknown): value is DesignOperation {
-  return checkSchema(DesignOperationSchema, value);
+  return checkSchema(DesignOperationSchema, value)
+    ? designOperationHasValidLayoutLimits(value as DesignOperation)
+    : false;
 }
 
 export function isDesignTransaction(
   value: unknown,
 ): value is DesignTransaction {
-  return checkSchema(DesignTransactionSchema, value);
+  if (!checkSchema(DesignTransactionSchema, value)) return false;
+  return (value as DesignTransaction).commands.every(
+    designOperationHasValidLayoutLimits,
+  );
 }
 
 export function isDesignTransactionResult(
@@ -2034,12 +2037,4 @@ export function isDesignTransactionResult(
 
 export function isEditorEvent(value: unknown): value is EditorEvent {
   return checkSchema(EditorEventSchema, value);
-}
-
-function checkSchema(schema: TSchema, value: unknown): boolean {
-  try {
-    return Value.Check(schema, value);
-  } catch {
-    return false;
-  }
 }

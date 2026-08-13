@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-13",
-  "documentSchemaVersion": "1.15.0",
+  "documentSchemaVersion": "1.16.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -799,7 +799,7 @@
         "en": "Lay out Frames responsively with direction, wrap, padding, gap, alignment, hug, fill, fixed, min/max, and absolute children.",
         "zh-CN": "通过方向、换行、padding、gap、对齐、hug、fill、fixed、min/max 和 absolute child 响应式布局 Frame。"
       },
-      "provider": "DesignDocument 1.15.0 + @opendesign/layout-service Auto Layout contract v3 + EditorRuntime",
+      "provider": "DesignDocument 1.16.0 + @opendesign/layout-service Auto Layout contract v4 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -811,8 +811,8 @@
       },
       "limitations": [
         {
-          "en": "Auto Layout supports per-axis Frame Fixed/Hug, direct-child Fixed/Fill, nested convergence, and horizontal Wrap v1 with greedy rows, independent horizontal/vertical gaps, per-row alignment, hidden-child exclusion, oversized-child overflow, and Fixed/Hug height. Vertical wrap, Wrap+Fill, auto gap, baseline, min/max, ignore-layout children, grid, canvas reflow handles, SVG round-trip metadata, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "Auto Layout 支持 Frame 每轴 Fixed/Hug、直属子层每轴 Fixed/Fill、嵌套收敛，以及水平 Wrap v1 的贪心分行、独立水平/垂直间距、逐行对齐、隐藏子层排除、超宽子层溢出和 Fixed/Hug 高度。垂直 wrap、Wrap+Fill、auto gap、baseline、min/max、ignore-layout child、grid、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
+          "en": "Auto Layout supports per-axis Frame Fixed/Hug, direct-child Fixed/Fill, min/max width and height, padding minimums, bounded Fill redistribution, nested convergence, and horizontal Wrap with greedy rows, independent gaps, per-row alignment, hidden-child exclusion, and oversized-child overflow. Vertical wrap, Wrap+Fill, auto gap, baseline, ignore-layout children, grid, canvas reflow handles, SVG round-trip metadata, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "Auto Layout 支持 Frame 每轴 Fixed/Hug、直属子层每轴 Fixed/Fill、宽高 Min/Max、padding minimum、bounded Fill 重分配、嵌套收敛，以及水平 Wrap 的贪心分行、独立间距、逐行对齐、隐藏子层排除和超宽子层溢出。垂直 wrap、Wrap+Fill、auto gap、baseline、ignore-layout child、grid、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
       "evidence": {

@@ -161,19 +161,17 @@ describe("deterministic delivery layout quality", () => {
     );
     artboard.childIds.push("nested_group");
 
-    expect(
-      diagnoseDesignTargetLayout(document, "page_layout", "artboard").issues,
-    ).toContainEqual(
-      expect.objectContaining({
-        code: "node-fully-outside-artboard",
-        nodeId: "nested_outside",
-        geometry: expect.objectContaining({
-          parentId: "nested_group",
-          currentLocalPosition: { x: 100, y: 20 },
-          recommendedLocalPosition: { x: 20, y: 20 },
-        }),
-      }),
-    );
+    const issue = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+    ).issues.find((candidate) => candidate.nodeId === "nested_outside");
+    expect(issue?.code).toBe("node-fully-outside-artboard");
+    expect(issue?.geometry).toMatchObject({
+      parentId: "nested_group",
+      currentLocalPosition: { x: 100, y: 20 },
+      recommendedLocalPosition: { x: 20, y: 20 },
+    });
   });
 
   it("returns the observed footer recovery as a parent-local position", () => {
@@ -191,20 +189,18 @@ describe("deterministic delivery layout quality", () => {
     artboard.childIds.push(footer.id);
     document.nodesById[footer.id] = footer;
 
-    expect(
-      diagnoseDesignTargetLayout(document, "page_layout", "artboard").issues,
-    ).toContainEqual(
-      expect.objectContaining({
-        code: "node-fully-outside-artboard",
-        nodeId: footer.id,
-        geometry: expect.objectContaining({
-          currentLocalPosition: { x: 72, y: 2_100 },
-          recommendedLocalDelta: { x: 0, y: -780 },
-          recommendedLocalPosition: { x: 72, y: 1_320 },
-          requiresResize: false,
-        }),
-      }),
-    );
+    const issue = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+    ).issues.find((candidate) => candidate.nodeId === footer.id);
+    expect(issue?.code).toBe("node-fully-outside-artboard");
+    expect(issue?.geometry).toMatchObject({
+      currentLocalPosition: { x: 72, y: 2_100 },
+      recommendedLocalDelta: { x: 0, y: -780 },
+      recommendedLocalPosition: { x: 72, y: 1_320 },
+      requiresResize: false,
+    });
   });
 });
 

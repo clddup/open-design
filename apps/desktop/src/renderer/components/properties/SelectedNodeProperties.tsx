@@ -1,10 +1,9 @@
 import type {
-  AutoLayout,
-  AutoLayoutFlow,
   BooleanOperation,
   ComponentOverridePatch,
   DesignNode,
   LayoutConstraints,
+  LayoutLimits,
   LayoutSizing,
   LineEndpoint,
 } from "@opendesign/design-contracts";
@@ -17,6 +16,7 @@ import {
   AppearanceBasicsSection,
   PaintAndEffectsSections,
 } from "./AppearanceSections";
+import { AutoLayoutSection } from "./AutoLayoutSection";
 import {
   ComponentSection,
   type ComponentInspectorContext,
@@ -76,254 +76,6 @@ function lineEndpointKey(endpoint: LineEndpoint): MessageKey {
   return `properties.lineEndpoint.${endpoint}` as MessageKey;
 }
 
-const defaultAutoLayout: AutoLayoutFlow = {
-  mode: "vertical",
-  padding: { top: 0, right: 0, bottom: 0, left: 0 },
-  gap: 0,
-  primaryAlignment: "start",
-  counterAlignment: "start",
-  sizing: { horizontal: "fixed", vertical: "fixed" },
-};
-
-function AutoLayoutSection({
-  autoLayout,
-  onChange,
-}: {
-  autoLayout: AutoLayout;
-  onChange: (autoLayout: AutoLayout) => void;
-}) {
-  const { t } = useI18n();
-  const flow = autoLayout.mode === "none" ? null : autoLayout;
-  const updateFlow = (patch: Partial<AutoLayoutFlow>) => {
-    onChange({ ...(flow ?? defaultAutoLayout), ...patch });
-  };
-  const horizontalFlow = flow?.mode === "horizontal" ? flow : null;
-  const wrapEnabled = horizontalFlow?.wrap?.mode === "wrap";
-  return (
-    <Section title={t("properties.autoLayout")}>
-      <div className={styles.stack}>
-        <label className={styles.select}>
-          <span>{t("properties.autoLayoutDirection")}</span>
-          <select
-            aria-label={t("properties.autoLayoutDirection")}
-            onChange={(event) => {
-              const mode = event.target.value as AutoLayout["mode"];
-              if (mode === "none") {
-                onChange({ mode: "none" });
-                return;
-              }
-              const current = flow ?? defaultAutoLayout;
-              onChange({
-                mode,
-                padding: current.padding,
-                gap: current.gap,
-                primaryAlignment: current.primaryAlignment,
-                counterAlignment: current.counterAlignment,
-                ...(current.sizing ? { sizing: current.sizing } : {}),
-              });
-            }}
-            value={autoLayout.mode}
-          >
-            <option value="none">{t("properties.autoLayoutNone")}</option>
-            <option value="horizontal">
-              {t("properties.autoLayoutHorizontal")}
-            </option>
-            <option value="vertical">
-              {t("properties.autoLayoutVertical")}
-            </option>
-          </select>
-        </label>
-        {flow && (
-          <>
-            {horizontalFlow && (
-              <label className={styles.select}>
-                <span>{t("properties.autoLayoutFlow")}</span>
-                <select
-                  aria-label={t("properties.autoLayoutFlow")}
-                  onChange={(event) => {
-                    if (event.target.value === "wrap") {
-                      onChange({
-                        ...horizontalFlow,
-                        sizing: {
-                          horizontal: "fixed",
-                          vertical: horizontalFlow.sizing?.vertical ?? "fixed",
-                        },
-                        wrap: {
-                          mode: "wrap",
-                          counterGap: horizontalFlow.gap,
-                        },
-                      });
-                      return;
-                    }
-                    onChange({
-                      mode: "horizontal",
-                      padding: horizontalFlow.padding,
-                      gap: horizontalFlow.gap,
-                      primaryAlignment: horizontalFlow.primaryAlignment,
-                      counterAlignment: horizontalFlow.counterAlignment,
-                      ...(horizontalFlow.sizing
-                        ? { sizing: horizontalFlow.sizing }
-                        : {}),
-                    });
-                  }}
-                  value={wrapEnabled ? "wrap" : "single-line"}
-                >
-                  <option value="single-line">
-                    {t("properties.autoLayoutSingleLine")}
-                  </option>
-                  <option value="wrap">{t("properties.autoLayoutWrap")}</option>
-                </select>
-              </label>
-            )}
-            <div className={styles.grid}>
-              {(["horizontal", "vertical"] as const).map((axis) => (
-                <label className={styles.select} key={axis}>
-                  <span>
-                    {t(
-                      axis === "horizontal"
-                        ? "properties.autoLayoutWidthSizing"
-                        : "properties.autoLayoutHeightSizing",
-                    )}
-                  </span>
-                  <select
-                    aria-label={t(
-                      axis === "horizontal"
-                        ? "properties.autoLayoutWidthSizing"
-                        : "properties.autoLayoutHeightSizing",
-                    )}
-                    onChange={(event) =>
-                      updateFlow({
-                        sizing: {
-                          horizontal: flow.sizing?.horizontal ?? "fixed",
-                          vertical: flow.sizing?.vertical ?? "fixed",
-                          [axis]: event.target.value as "fixed" | "hug",
-                        },
-                      })
-                    }
-                    value={flow.sizing?.[axis] ?? "fixed"}
-                  >
-                    <option value="fixed">
-                      {t("properties.autoLayoutFixed")}
-                    </option>
-                    <option
-                      disabled={axis === "horizontal" && wrapEnabled}
-                      value="hug"
-                    >
-                      {t("properties.autoLayoutHug")}
-                    </option>
-                  </select>
-                </label>
-              ))}
-            </div>
-            <div className={styles.grid}>
-              <Field
-                accessibleLabel={t("properties.autoLayoutGap")}
-                label={t("properties.autoLayoutGap")}
-                min={0}
-                onCommit={(value) =>
-                  commitNumber(value, flow.gap, (gap) => updateFlow({ gap }), {
-                    min: 0,
-                  })
-                }
-                type="number"
-                value={formatNumber(flow.gap)}
-              />
-              {horizontalFlow?.wrap && (
-                <Field
-                  accessibleLabel={t("properties.autoLayoutCounterGap")}
-                  label={t("properties.autoLayoutCounterGap")}
-                  min={0}
-                  onCommit={(value) =>
-                    commitNumber(
-                      value,
-                      horizontalFlow.wrap?.counterGap ?? horizontalFlow.gap,
-                      (counterGap) =>
-                        onChange({
-                          ...horizontalFlow,
-                          wrap: { mode: "wrap", counterGap },
-                        }),
-                      { min: 0 },
-                    )
-                  }
-                  type="number"
-                  value={formatNumber(horizontalFlow.wrap.counterGap)}
-                />
-              )}
-              <label className={styles.select}>
-                <span>{t("properties.autoLayoutPrimary")}</span>
-                <select
-                  aria-label={t("properties.autoLayoutPrimary")}
-                  onChange={(event) =>
-                    updateFlow({
-                      primaryAlignment: event.target
-                        .value as AutoLayoutFlow["primaryAlignment"],
-                    })
-                  }
-                  value={flow.primaryAlignment}
-                >
-                  <AlignmentOptions />
-                </select>
-              </label>
-              <label className={styles.select}>
-                <span>{t("properties.autoLayoutCounter")}</span>
-                <select
-                  aria-label={t("properties.autoLayoutCounter")}
-                  onChange={(event) =>
-                    updateFlow({
-                      counterAlignment: event.target
-                        .value as AutoLayoutFlow["counterAlignment"],
-                    })
-                  }
-                  value={flow.counterAlignment}
-                >
-                  <AlignmentOptions />
-                </select>
-              </label>
-            </div>
-            <div className={styles.grid}>
-              {(["top", "right", "bottom", "left"] as const).map((side) => (
-                <Field
-                  accessibleLabel={t(`properties.padding.${side}`)}
-                  key={side}
-                  label={t(`properties.padding.${side}`)}
-                  min={0}
-                  onCommit={(value) =>
-                    commitNumber(
-                      value,
-                      flow.padding[side],
-                      (next) =>
-                        updateFlow({
-                          padding: { ...flow.padding, [side]: next },
-                        }),
-                      { min: 0 },
-                    )
-                  }
-                  type="number"
-                  value={formatNumber(flow.padding[side])}
-                />
-              ))}
-            </div>
-            <small className={styles.hint}>
-              {t("properties.autoLayoutSizingHint")}
-            </small>
-          </>
-        )}
-      </div>
-    </Section>
-  );
-}
-
-function AlignmentOptions() {
-  const { t } = useI18n();
-  return (
-    <>
-      <option value="start">{t("properties.autoLayoutStart")}</option>
-      <option value="center">{t("properties.autoLayoutCenter")}</option>
-      <option value="end">{t("properties.autoLayoutEnd")}</option>
-    </>
-  );
-}
-
 export function SelectedNodeProperties({
   node,
   componentContext,
@@ -333,6 +85,7 @@ export function SelectedNodeProperties({
   constraintsAvailable,
   layoutSizingAvailable,
   layoutSizingFillAvailable,
+  layoutLimitsAvailable,
   onBooleanOperationChange,
   onCreateComponent,
   onCreateComponentInstance,
@@ -357,6 +110,7 @@ export function SelectedNodeProperties({
   constraintsAvailable: boolean;
   layoutSizingAvailable: boolean;
   layoutSizingFillAvailable: boolean;
+  layoutLimitsAvailable: boolean;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
@@ -384,6 +138,43 @@ export function SelectedNodeProperties({
   };
   const updateSize = (dimension: "height" | "width", value: number) => {
     onUpdate({ size: { ...node.size, [dimension]: value } });
+  };
+  const updateLayoutLimit = (
+    key: keyof LayoutLimits,
+    draft: string,
+  ): string | null => {
+    const normalized = draft.trim();
+    const next = { ...(node.layoutLimits ?? {}) };
+    if (!normalized) {
+      delete next[key];
+      onUpdate({
+        layoutLimits: Object.keys(next).length === 0 ? null : next,
+      });
+      return "";
+    }
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1_000_000) {
+      return null;
+    }
+    if (
+      (key === "minWidth" &&
+        next.maxWidth !== undefined &&
+        parsed > next.maxWidth) ||
+      (key === "maxWidth" &&
+        next.minWidth !== undefined &&
+        parsed < next.minWidth) ||
+      (key === "minHeight" &&
+        next.maxHeight !== undefined &&
+        parsed > next.maxHeight) ||
+      (key === "maxHeight" &&
+        next.minHeight !== undefined &&
+        parsed < next.minHeight)
+    ) {
+      return null;
+    }
+    next[key] = parsed;
+    onUpdate({ layoutLimits: next });
+    return formatNumber(parsed);
   };
 
   return (
@@ -762,6 +553,34 @@ export function SelectedNodeProperties({
                 </option>
               </select>
             </label>
+          </div>
+        )}
+        {layoutLimitsAvailable && (
+          <div className={styles.grid}>
+            {(
+              [
+                ["minWidth", "properties.autoLayoutMinWidth"],
+                ["maxWidth", "properties.autoLayoutMaxWidth"],
+                ["minHeight", "properties.autoLayoutMinHeight"],
+                ["maxHeight", "properties.autoLayoutMaxHeight"],
+              ] as const
+            ).map(([key, label]) => (
+              <Field
+                accessibleLabel={t(label)}
+                key={key}
+                label={t(label)}
+                min={0}
+                max={1_000_000}
+                onCommit={(draft) => updateLayoutLimit(key, draft)}
+                placeholder={t("properties.autoLayoutLimitUnset")}
+                suffix="px"
+                value={
+                  node.layoutLimits?.[key] === undefined
+                    ? ""
+                    : formatNumber(node.layoutLimits[key])
+                }
+              />
+            ))}
           </div>
         )}
       </Section>

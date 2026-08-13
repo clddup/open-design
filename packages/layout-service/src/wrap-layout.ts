@@ -1,3 +1,4 @@
+import { clampLayoutExtent, resolveFrameExtent } from "./index.js";
 import type {
   AutoLayoutAlignment,
   ConstraintRect,
@@ -31,20 +32,35 @@ export function solveHorizontalWrap(
   ) {
     return conflict("Wrapped Auto Layout v1 does not support Fill children");
   }
+  const children = request.children.map((child) => ({
+    ...child,
+    width: clampLayoutExtent(child.width, child.limits, "horizontal"),
+    height: clampLayoutExtent(child.height, child.limits, "vertical"),
+  }));
+  const frameWidth = resolveFrameExtent(
+    request.frame.width,
+    request.frameLimits,
+    "horizontal",
+    request.padding.left + request.padding.right,
+  );
   const innerWidth = Math.max(
     0,
-    request.frame.width - request.padding.left - request.padding.right,
+    frameWidth - request.padding.left - request.padding.right,
   );
-  const rows = wrapRows(request.children, innerWidth, request.gap);
+  const rows = wrapRows(children, innerWidth, request.gap);
   const contentHeight =
     rows.reduce((sum, row) => sum + row.height, 0) +
     request.wrap.counterGap * Math.max(0, rows.length - 1);
   const frame: ConstraintSize = {
-    width: request.frame.width,
-    height:
+    width: frameWidth,
+    height: resolveFrameExtent(
       request.frameSizing.vertical === "hug"
         ? request.padding.top + contentHeight + request.padding.bottom
         : request.frame.height,
+      request.frameLimits,
+      "vertical",
+      request.padding.top + request.padding.bottom,
+    ),
   };
   const blockFree =
     frame.height - request.padding.top - request.padding.bottom - contentHeight;

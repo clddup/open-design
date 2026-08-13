@@ -1,7 +1,7 @@
 import { solveHorizontalWrap } from "./wrap-layout.js";
 
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
-export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 3 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 4 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";
@@ -49,6 +49,12 @@ export type AutoLayoutPadding = {
   bottom: number;
   left: number;
 };
+export type AutoLayoutLimits = {
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+};
 export type LinearAutoLayoutRequest = {
   version: typeof AUTO_LAYOUT_SERVICE_CONTRACT_VERSION;
   direction: AutoLayoutDirection;
@@ -61,6 +67,7 @@ export type LinearAutoLayoutRequest = {
     horizontal: AutoLayoutFrameAxisSizing;
     vertical: AutoLayoutFrameAxisSizing;
   };
+  frameLimits?: AutoLayoutLimits;
   wrap?: { mode: "wrap"; counterGap: number };
   children: Array<{
     id: string;
@@ -70,6 +77,7 @@ export type LinearAutoLayoutRequest = {
       horizontal: AutoLayoutChildAxisSizing;
       vertical: AutoLayoutChildAxisSizing;
     };
+    limits?: AutoLayoutLimits;
   }>;
 };
 export type LinearAutoLayoutResult =
@@ -166,23 +174,44 @@ export function solveLinearAutoLayout(
       message: "A hugged Auto Layout axis cannot contain a fill child",
     };
   }
+  const limitedChildren = request.children.map((child) => ({
+    ...child,
+    width:
+      child.sizing.horizontal === "fixed"
+        ? clampLayoutExtent(child.width, child.limits, "horizontal")
+        : child.width,
+    height:
+      child.sizing.vertical === "fixed"
+        ? clampLayoutExtent(child.height, child.limits, "vertical")
+        : child.height,
+  }));
   const frame = {
-    width: horizontalHug
-      ? huggedExtent(
-          request.children.map((child) => child.width),
-          request.direction === "horizontal",
-          request.gap,
-          request.padding.left + request.padding.right,
-        )
-      : request.frame.width,
-    height: verticalHug
-      ? huggedExtent(
-          request.children.map((child) => child.height),
-          request.direction === "vertical",
-          request.gap,
-          request.padding.top + request.padding.bottom,
-        )
-      : request.frame.height,
+    width: resolveFrameExtent(
+      horizontalHug
+        ? huggedExtent(
+            limitedChildren.map((child) => child.width),
+            request.direction === "horizontal",
+            request.gap,
+            request.padding.left + request.padding.right,
+          )
+        : request.frame.width,
+      request.frameLimits,
+      "horizontal",
+      request.padding.left + request.padding.right,
+    ),
+    height: resolveFrameExtent(
+      verticalHug
+        ? huggedExtent(
+            limitedChildren.map((child) => child.height),
+            request.direction === "vertical",
+            request.gap,
+            request.padding.top + request.padding.bottom,
+          )
+        : request.frame.height,
+      request.frameLimits,
+      "vertical",
+      request.padding.top + request.padding.bottom,
+    ),
   };
   const horizontal = request.direction === "horizontal";
   const mainStart = horizontal ? request.padding.left : request.padding.top;
@@ -193,42 +222,53 @@ export function solveLinearAutoLayout(
     : request.padding.right;
   const frameMain = horizontal ? frame.width : frame.height;
   const frameCounter = horizontal ? frame.height : frame.width;
-  const mainFillCount = request.children.filter((child) =>
+  const fillChildren = limitedChildren.filter((child) =>
     horizontal
       ? child.sizing.horizontal === "fill"
       : child.sizing.vertical === "fill",
-  ).length;
-  const fixedMain = request.children.reduce((sum, child) => {
+  );
+  const fixedMain = limitedChildren.reduce((sum, child) => {
     const fill = horizontal
       ? child.sizing.horizontal === "fill"
       : child.sizing.vertical === "fill";
     return sum + (fill ? 0 : horizontal ? child.width : child.height);
   }, 0);
   const gapTotal = request.gap * Math.max(0, request.children.length - 1);
-  const fillMain =
-    mainFillCount === 0
-      ? 0
-      : Math.max(0, frameMain - mainStart - mainEnd - fixedMain - gapTotal) /
-        mainFillCount;
-  const resolvedChildren = request.children.map((child) => ({
+  const fillExtents = distributeBoundedFill(
+    Math.max(0, frameMain - mainStart - mainEnd - fixedMain - gapTotal),
+    fillChildren.map((child) => ({
+      id: child.id,
+      ...(child.limits ? { limits: child.limits } : {}),
+    })),
+    horizontal ? "horizontal" : "vertical",
+  );
+  const resolvedChildren = limitedChildren.map((child) => ({
     ...child,
     width:
       child.sizing.horizontal === "fill"
         ? horizontal
-          ? fillMain
-          : Math.max(
-              0,
-              frame.width - request.padding.left - request.padding.right,
+          ? (fillExtents.get(child.id) ?? 0)
+          : clampLayoutExtent(
+              Math.max(
+                0,
+                frame.width - request.padding.left - request.padding.right,
+              ),
+              child.limits,
+              "horizontal",
             )
         : child.width,
     height:
       child.sizing.vertical === "fill"
         ? horizontal
-          ? Math.max(
-              0,
-              frame.height - request.padding.top - request.padding.bottom,
+          ? clampLayoutExtent(
+              Math.max(
+                0,
+                frame.height - request.padding.top - request.padding.bottom,
+              ),
+              child.limits,
+              "vertical",
             )
-          : fillMain
+          : (fillExtents.get(child.id) ?? 0)
         : child.height,
   }));
   const contentMain =
@@ -269,6 +309,69 @@ function huggedExtent(
         extents.reduce((sum, extent) => sum + extent, 0) +
         gap * (extents.length - 1)
     : padding + Math.max(...extents);
+}
+
+export function clampLayoutExtent(
+  extent: number,
+  limits: AutoLayoutLimits | undefined,
+  axis: "horizontal" | "vertical",
+): number {
+  const minimum = axis === "horizontal" ? limits?.minWidth : limits?.minHeight;
+  const maximum = axis === "horizontal" ? limits?.maxWidth : limits?.maxHeight;
+  return Math.min(maximum ?? Infinity, Math.max(minimum ?? 0, extent));
+}
+
+export function resolveFrameExtent(
+  extent: number,
+  limits: AutoLayoutLimits | undefined,
+  axis: "horizontal" | "vertical",
+  paddingMinimum: number,
+): number {
+  return Math.max(paddingMinimum, clampLayoutExtent(extent, limits, axis));
+}
+
+function distributeBoundedFill(
+  available: number,
+  children: Array<{ id: string; limits?: AutoLayoutLimits }>,
+  axis: "horizontal" | "vertical",
+): Map<string, number> {
+  const result = new Map<string, number>();
+  const pending = children.map((child) => {
+    const minimum =
+      axis === "horizontal" ? child.limits?.minWidth : child.limits?.minHeight;
+    const maximum =
+      axis === "horizontal" ? child.limits?.maxWidth : child.limits?.maxHeight;
+    return {
+      id: child.id,
+      minimum: minimum ?? 0,
+      maximum: maximum ?? Infinity,
+    };
+  });
+  let remaining = available;
+  while (pending.length > 0) {
+    const share = remaining / pending.length;
+    const upperBounded = pending.filter((child) => child.maximum < share);
+    if (upperBounded.length > 0) {
+      for (const child of upperBounded) {
+        result.set(child.id, child.maximum);
+        remaining -= child.maximum;
+        pending.splice(pending.indexOf(child), 1);
+      }
+      continue;
+    }
+    const lowerBounded = pending.filter((child) => child.minimum > share);
+    if (lowerBounded.length > 0) {
+      for (const child of lowerBounded) {
+        result.set(child.id, child.minimum);
+        remaining -= child.minimum;
+        pending.splice(pending.indexOf(child), 1);
+      }
+      continue;
+    }
+    for (const child of pending) result.set(child.id, Math.max(0, share));
+    break;
+  }
+  return result;
 }
 
 export function isLayoutConstraints(
@@ -351,6 +454,7 @@ function validLinearAutoLayoutRequest(
       ) {
         return false;
       }
+      if (!validLimits(child.limits)) return false;
       if (
         ![child.sizing.horizontal, child.sizing.vertical].every(
           (value) => value === "fixed" || value === "fill",
@@ -360,7 +464,23 @@ function validLinearAutoLayoutRequest(
       }
       ids.add(child.id);
       return true;
-    })
+    }) &&
+    validLimits(request.frameLimits)
+  );
+}
+
+function validLimits(limits: AutoLayoutLimits | undefined): boolean {
+  if (limits === undefined) return true;
+  const values = Object.values(limits);
+  return (
+    values.length > 0 &&
+    values.every(finiteNonNegative) &&
+    (limits.minWidth === undefined ||
+      limits.maxWidth === undefined ||
+      limits.minWidth <= limits.maxWidth) &&
+    (limits.minHeight === undefined ||
+      limits.maxHeight === undefined ||
+      limits.minHeight <= limits.maxHeight)
   );
 }
 

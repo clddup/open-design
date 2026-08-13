@@ -29,7 +29,7 @@ const request: AgentRunRequest = {
 };
 
 describe("production Pi design-tool catalog", () => {
-  it("adapts all eighteen public typed tools without exposing internal host tools", () => {
+  it("adapts all nineteen public typed tools without exposing internal host tools", () => {
     const definitions: AgentToolDefinition[] = DESIGN_AGENT_TOOL_SPECS.map(
       (tool) => ({
         ...tool,

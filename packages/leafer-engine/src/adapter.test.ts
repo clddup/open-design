@@ -7,6 +7,7 @@ import type {
   DesignDocument,
   DesignNode,
 } from "@opendesign/design-contracts";
+import { DESIGN_SCHEMA_VERSION } from "@opendesign/design-contracts";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import { cutVectorPath } from "@opendesign/geometry-service/vector-edit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -3476,7 +3477,7 @@ function componentInput(): LeaferEngineSyncInput {
   };
   const document: DesignDocument = {
     format: "dev.opendesign.document",
-    schemaVersion: "1.15.0",
+    schemaVersion: DESIGN_SCHEMA_VERSION,
     documentId: "component-raster",
     revision: 1,
     pageOrder: ["main", "instances"],

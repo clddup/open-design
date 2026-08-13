@@ -1,4 +1,8 @@
-import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import {
+  DESIGN_SCHEMA_VERSION,
+  type DesignDocument,
+  type DesignNode,
+} from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import { componentProjectionId } from "@opendesign/component-service";
 import {
@@ -149,7 +153,7 @@ function fixture(): DesignDocument {
   };
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.15.0",
+    schemaVersion: DESIGN_SCHEMA_VERSION,
     documentId: "doc",
     revision: 1,
     pageOrder: ["main", "instances"],

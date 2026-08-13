@@ -3491,6 +3491,41 @@ describe("Renderer semantic hierarchy tool", () => {
       runtime.getSnapshot().document.nodesById.title_welcome?.layoutSizing,
     ).toEqual({ horizontal: "fill", vertical: "fixed" });
 
+    const limited = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_child_limits",
+        call: {
+          toolCallId: "tool_auto_layout_child_limits",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-layout-limits",
+            label: "Bound title width",
+            pageId: "page_welcome",
+            nodeId: "title_welcome",
+            limits: { minWidth: 240, maxWidth: 720, minHeight: 48 },
+          },
+        },
+        context: { ...pageContext, revision: 2 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(limited).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-layout-limits",
+          nodeId: "title_welcome",
+          limits: { minWidth: 240, maxWidth: 720, minHeight: 48 },
+          revision: 3,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutLimits,
+    ).toEqual({ minWidth: 240, maxWidth: 720, minHeight: 48 });
+
     await expect(
       executeDesignToolRequest(
         {
@@ -3510,7 +3545,7 @@ describe("Renderer semantic hierarchy tool", () => {
               ],
             },
           },
-          context: { ...pageContext, revision: 2 },
+          context: { ...pageContext, revision: 3 },
         },
         runtime,
         "page_welcome",
@@ -3535,13 +3570,39 @@ describe("Renderer semantic hierarchy tool", () => {
               ],
             },
           },
-          context: { ...pageContext, revision: 2 },
+          context: { ...pageContext, revision: 3 },
         },
         runtime,
         "page_welcome",
       ),
     ).rejects.toThrow("set-layout-sizing");
-    expect(runtime.getSnapshot().document.revision).toBe(2);
+    expect(runtime.getSnapshot().document.revision).toBe(3);
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "auto_layout_limits_bypass",
+          call: {
+            toolCallId: "tool_auto_layout_limits_bypass",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              label: "Bypass limits",
+              commands: [
+                {
+                  commandId: "bypass_limits",
+                  type: "update_properties",
+                  nodeId: "title_welcome",
+                  layoutLimits: { maxWidth: 400 },
+                },
+              ],
+            },
+          },
+          context: { ...pageContext, revision: 3 },
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("set-layout-limits");
+    expect(runtime.getSnapshot().document.revision).toBe(3);
   });
 
   it("sets horizontal Wrap through the Agent tool and derives wrapped child rows", async () => {

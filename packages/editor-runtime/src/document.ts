@@ -3,6 +3,7 @@ import {
   DESIGN_SCHEMA_VERSION,
   DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
   DEFAULT_LAYOUT_SIZING,
+  isValidLayoutLimits,
   DesignDocumentSchema,
   type DesignDocument,
   type DesignNode,
@@ -250,6 +251,32 @@ export function validateDocumentInvariants(
         issues.push({
           path: `/nodesById/${nodeId}/layoutSizing`,
           message: `text ${node.properties.textResize} sizing conflicts with the requested fill axis`,
+        });
+      }
+    }
+    if (node.layoutLimits !== undefined) {
+      const parent = node.parentId
+        ? ownValue(document.nodesById, node.parentId)
+        : undefined;
+      const parentFlow =
+        parent?.kind === "frame" ? parent.properties.autoLayout : undefined;
+      const ownFlow =
+        node.kind === "frame" ? node.properties.autoLayout : undefined;
+      const participatesInAutoLayout =
+        (parentFlow !== undefined && parentFlow.mode !== "none") ||
+        (ownFlow !== undefined && ownFlow.mode !== "none");
+      if (!participatesInAutoLayout) {
+        issues.push({
+          path: `/nodesById/${nodeId}/layoutLimits`,
+          message:
+            "layout limits are only valid on an Auto Layout Frame or its direct flow child",
+        });
+      }
+      if (!isValidLayoutLimits(node.layoutLimits)) {
+        issues.push({
+          path: `/nodesById/${nodeId}/layoutLimits`,
+          message:
+            "layout limits must be non-empty, finite, non-negative, and each minimum must not exceed its maximum",
         });
       }
     }
