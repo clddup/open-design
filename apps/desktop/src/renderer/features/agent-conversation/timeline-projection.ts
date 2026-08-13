@@ -47,9 +47,10 @@ export function projectAgentTimeline({
   [...timeline]
     .sort((left, right) => left.sequence - right.sequence)
     .forEach((item) => recordRun(item.runId));
-  events.forEach((event) =>
-    recordRun("runId" in event ? event.runId : undefined),
-  );
+  events.forEach((event) => {
+    recordRun("runId" in event ? event.runId : undefined);
+    if (event.type === "run.continuation") recordRun(event.nextRunId);
+  });
   const maximumSequence = durable.reduce(
     (maximum, item) => Math.max(maximum, item.order),
     0,
@@ -160,6 +161,13 @@ function projectDurableTimeline(
   locale: AppLocale,
   t: Translate,
 ): AgentTimelineItem[] {
+  const continuationByRunId = new Map(
+    timeline.flatMap((item) =>
+      item.type === "run" && item.continuation
+        ? [[item.runId, item.continuation] as const]
+        : [],
+    ),
+  );
   const runsWithConcreteActivity = new Set(
     timeline.flatMap((item) =>
       item.runId && (item.type === "assistant.message" || item.type === "tool")
@@ -175,6 +183,20 @@ function projectDurableTimeline(
       time: eventTime(item.updatedAt, locale, t),
     };
     if (item.type === "user.message") {
+      const continuation = item.runId
+        ? continuationByRunId.get(item.runId)
+        : undefined;
+      if (continuation) {
+        return {
+          ...base,
+          state: "done",
+          kind: "system",
+          title: `${t("agent.reconnecting", {
+            attempt: continuation.attempt,
+            total: continuation.maxAttempts,
+          })} · ${t("agent.workingDesign")}`,
+        };
+      }
       return {
         ...base,
         state: "done",
@@ -303,13 +325,19 @@ function projectDurableTimeline(
       kind: "run",
       routine:
         item.status === "completed" ||
+        item.continuation !== undefined ||
         (item.status === "started" &&
           (item.runId !== activeRunId ||
             runsWithConcreteActivity.has(item.runId))),
       time: eventTime(item.finishedAt ?? item.startedAt, locale, t),
       title:
         item.status === "started"
-          ? t("agent.workingDesign")
+          ? item.continuation
+            ? `${t("agent.reconnecting", {
+                attempt: item.continuation.attempt,
+                total: item.continuation.maxAttempts,
+              })} · ${t("agent.workingDesign")}`
+            : t("agent.workingDesign")
           : item.status === "completed"
             ? t("agent.taskCompleted")
             : item.status === "cancelled"
@@ -421,12 +449,43 @@ function projectLiveEvents(
       );
     }
     if (event.type === "run.started") {
-      updateEvent(`run:${event.runId}`, {
-        state: "active",
-        kind: "run",
-        time: eventTime(event.startedAt, locale, t),
-        title: t("agent.workingDesign"),
-      });
+      updateEvent(
+        event.continuation
+          ? `continuation:${event.runId}`
+          : `run:${event.runId}`,
+        {
+          state: "active",
+          kind: "run",
+          time: eventTime(event.startedAt, locale, t),
+          title: event.continuation
+            ? `${t("agent.reconnecting", {
+                attempt: event.continuation.attempt,
+                total: event.continuation.maxAttempts,
+              })} · ${t("agent.workingDesign")}`
+            : t("agent.workingDesign"),
+        },
+      );
+    }
+    if (event.type === "run.continuation") {
+      update(
+        event.nextRunId
+          ? `continuation:${event.nextRunId}`
+          : `continuation:${event.runId}:needs-attention`,
+        order,
+        {
+          runId: event.nextRunId ?? event.runId,
+          state: event.status === "scheduled" ? "active" : "error",
+          kind: "system",
+          time: t("common.now"),
+          title:
+            event.status === "scheduled"
+              ? `${t("agent.reconnecting", {
+                  attempt: event.attempt,
+                  total: event.maxAttempts,
+                })} · ${t("agent.workingDesign")}`
+              : t("agent.requestFailed"),
+        },
+      );
     }
     if (event.type === "model.retrying") {
       updateEvent(`model-retry:${event.runId}`, {

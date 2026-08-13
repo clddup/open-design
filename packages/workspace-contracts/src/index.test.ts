@@ -549,6 +549,7 @@ describe("workspace contract schemas", () => {
       "cancelled",
       "failed",
       "interrupted",
+      "needs_attention",
     ] as const;
 
     for (const lifecycle of lifecycles) {

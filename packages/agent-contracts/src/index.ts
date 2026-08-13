@@ -1,7 +1,9 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
+import { AgentContinuationSchemas } from "./continuation.js";
+export type { AgentRunContinuation } from "./continuation.js";
 
-export const AGENT_PROTOCOL_VERSION = "3.8.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.9.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
@@ -420,6 +422,7 @@ export const RunTimelineItemSchema = Type.Object(
     stopReason: Type.Optional(RunStopReasonSchema),
     modelSelection: Type.Optional(ModelSelectionSchema),
     failure: Type.Optional(AgentRunFailureSchema),
+    continuation: Type.Optional(AgentContinuationSchemas.run),
   },
   { additionalProperties: false },
 );
@@ -469,6 +472,7 @@ export const DurableTimelineEventSchema = Type.Union([
           stopReason: Type.Optional(RunStopReasonSchema),
           modelSelection: Type.Optional(ModelSelectionSchema),
           failure: Type.Optional(AgentRunFailureSchema),
+          continuation: Type.Optional(AgentContinuationSchemas.run),
         },
         { additionalProperties: false },
       ),
@@ -669,6 +673,7 @@ export const AgentRequestSchema = Type.Union([
       mutationTarget: DesignMutationTargetSchema,
       modelSelection: ModelSelectionSchema,
       modelContext: Type.Optional(AgentModelContextSchema),
+      continuation: Type.Optional(AgentContinuationSchemas.run),
     },
     { additionalProperties: false },
   ),
@@ -726,14 +731,8 @@ export const AgentEventSchema = Type.Union([
     },
     { additionalProperties: false },
   ),
-  Type.Object(
-    {
-      type: Type.Literal("run.started"),
-      runId: RunIdSchema,
-      startedAt: TimestampSchema,
-    },
-    { additionalProperties: false },
-  ),
+  AgentContinuationSchemas.startedEvent,
+  AgentContinuationSchemas.continuationEvent,
   Type.Object(
     {
       type: Type.Literal("model.retrying"),

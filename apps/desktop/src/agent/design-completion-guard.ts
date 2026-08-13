@@ -39,7 +39,19 @@ export function reviewDesignCompletion(
   );
   const materialWriteIndex = findMaterialWriteIndex(context.toolCalls);
   if (materialWriteIndex < 0) {
-    if (generationIndex < 0) return { allow: true };
+    if (
+      generationIndex < 0 &&
+      !context.toolCalls.some((call) => call.toolName === DESIGN_PLAN_TOOL_NAME)
+    ) {
+      return { allow: true };
+    }
+    if (generationIndex < 0) {
+      return {
+        allow: false,
+        message:
+          "A structured plan is not a completed design. No material design transaction reached the document. Inspect the live canvas, create or update the planned artboard with valid typed commands, and verify that the document revision advances before finishing.",
+      };
+    }
     return {
       allow: false,
       message:

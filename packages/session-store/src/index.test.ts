@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   JsonlSessionStore,
   SqliteSessionStore,
+  projectTimeline,
   type JournalEvent,
   type SessionStore,
 } from "./index.js";
@@ -182,6 +183,31 @@ async function expectHigherHostRevisionProjection(
 }
 
 describe("session journal recovery", () => {
+  it("preserves automatic continuation provenance on the durable Run", () => {
+    const continuation = {
+      parentRunId: "run_parent",
+      rootRunId: "run_root",
+      attempt: 2 as const,
+      maxAttempts: 3 as const,
+      reason: "budget" as const,
+    };
+    expect(
+      projectTimeline("session_1", [
+        event(1, "run.state", {
+          status: "started",
+          startedAt: new Date(1).toISOString(),
+          continuation,
+        }),
+      ]),
+    ).toContainEqual(
+      expect.objectContaining({
+        type: "run",
+        runId: "run_1",
+        continuation,
+      }),
+    );
+  });
+
   it("terminally recovers interrupted JSONL runs and pending tools once", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-session-"));
     const store = new JsonlSessionStore(join(directory, "events.jsonl"));

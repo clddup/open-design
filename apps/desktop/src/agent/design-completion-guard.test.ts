@@ -171,6 +171,10 @@ describe("design completion guard", () => {
     expect(reviewDesignCompletion(context([]))).toEqual({ allow: true });
   });
 
+  it("rejects a completion claim when planning never produced a design write", () => {
+    expectBlocked([inspection, designPlan], "not a completed design");
+  });
+
   it("blocks a resumed Run while inspection reports unfinished delivery", () => {
     const unfinished = deliveryResult("pending").delivery;
     expectBlocked(

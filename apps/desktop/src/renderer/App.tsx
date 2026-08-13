@@ -78,11 +78,13 @@ import { useImportExportWorkflow } from "./features/import-export/use-import-exp
 import { useEditorCommandController } from "./features/editor/use-editor-command-controller";
 import { useLayerCommandController } from "./features/editor/use-layer-command-controller";
 import { usePageCommandController } from "./features/editor/use-page-command-controller";
+import {
+  projectAgentActiveRunId,
+  projectAgentRunFileBinding,
+} from "./features/agent-conversation/continuation-binding";
 import { reportRendererError } from "./diagnostics";
 import { useRendererDesignToolHost } from "./use-renderer-design-tool-host";
-
 const HISTORY_SYNC_DEBOUNCE_MS = 80;
-
 type AppView = "workspace" | "project" | "editor" | "settings";
 
 type ConversationAgentState = {
@@ -541,21 +543,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         projectGenerationPlanPresentationEvent(current, event),
       );
 
-      const runId = "runId" in event ? event.runId : undefined;
-      if (
-        runId &&
-        (event.type === "run.completed" || event.type === "agent.error")
-      ) {
-        const target = designFileByRunId.current.get(runId);
-        if (target) {
-          workspace.releaseFileForRun(
-            target.projectId,
-            target.designFileId,
-            runId,
-          );
-          designFileByRunId.current.delete(runId);
-        }
-      }
+      const runId = projectAgentRunFileBinding(
+        event,
+        conversationIdByRunId.current,
+        designFileByRunId.current,
+        workspace,
+      );
       const conversationId = runId
         ? conversationIdByRunId.current.get(runId)
         : event.type === "agent.error" && event.requestId
@@ -590,6 +583,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       if (
         event.type === "run.started" ||
         event.type === "run.completed" ||
+        event.type === "run.continuation" ||
         event.type === "approval.requested" ||
         event.type === "approval.resolved" ||
         event.type === "tool.failed"
@@ -604,15 +598,19 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         updateConversationAgentState(current, conversationId, (previous) => ({
           ...previous,
           events: appendLiveAgentEvent(previous.events, event),
-          activeRunId:
-            event.type === "run.completed" || event.type === "agent.error"
-              ? previous.activeRunId === runId
+          activeRunId: projectAgentActiveRunId(
+            previous.activeRunId,
+            event,
+            runId,
+          ),
+          error:
+            event.type === "agent.error"
+              ? event.message
+              : event.type === "run.started" ||
+                  (event.type === "run.continuation" &&
+                    event.status === "scheduled")
                 ? null
-                : previous.activeRunId
-              : event.type === "run.started"
-                ? event.runId
-                : previous.activeRunId,
-          error: event.type === "agent.error" ? event.message : previous.error,
+                : previous.error,
         })),
       );
       if (isDurableAgentCheckpoint(event)) {

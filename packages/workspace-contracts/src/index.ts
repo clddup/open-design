@@ -73,6 +73,7 @@ export const GlobalTaskLifecycleSchema = Type.Union([
   Type.Literal("cancelled"),
   Type.Literal("failed"),
   Type.Literal("interrupted"),
+  Type.Literal("needs_attention"),
 ]);
 
 export const DesignDeliveryStatusSchema = Type.Union([

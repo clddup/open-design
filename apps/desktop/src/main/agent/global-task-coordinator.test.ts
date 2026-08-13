@@ -2099,6 +2099,47 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("keeps a structured provider failure recoverable until Run continuation", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_retryable",
+      sessionId: "conversation_mobile",
+      prompt: "Build the complete page",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    coordinator.handleAgentEvent({
+      type: "agent.error",
+      runId: "run_retryable",
+      code: "provider_timeout",
+      message: "Provider timed out",
+      failure: {
+        code: "provider_timeout",
+        message: "Provider timed out",
+        retryable: true,
+      },
+    });
+    expect(store.listGlobalTasks()[0]?.lifecycle).toBe("failed");
+
+    coordinator.handleAgentEvent({
+      type: "run.continuation",
+      runId: "run_retryable",
+      status: "scheduled",
+      attempt: 1,
+      maxAttempts: 3,
+      reason: "retryable-error",
+      nextRunId: "run_retryable_next",
+    });
+
+    expect(store.listGlobalTasks()[0]?.lifecycle).toBe("interrupted");
+    store.close();
+  });
+
   it("rejects unregistered Conversations and marks stale tasks interrupted", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

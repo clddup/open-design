@@ -51,6 +51,7 @@ const taskLifecycleLabels: Record<GlobalTaskLifecycle, MessageKey> = {
   cancelled: "task.cancelled",
   failed: "task.failed",
   interrupted: "task.interrupted",
+  needs_attention: "agent.requestFailed",
 };
 
 export function WorkspaceHome({

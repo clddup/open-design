@@ -1,12 +1,12 @@
 # OpenDesign 验证状态
 
-- 日期：2026-08-12
+- 日期：2026-08-13
 
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.11.0`
-- Agent 协议：`3.8.0`
+- Agent 协议：`3.9.0`
 - Geometry Service：`contract v10`
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
@@ -40,8 +40,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   50 files / 453 tests
-└── desktop tests   61 files / 531 tests
+├── package tests   50 files / 455 tests
+└── desktop tests   65 files / 545 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main

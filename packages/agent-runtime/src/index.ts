@@ -2,6 +2,7 @@ import {
   isAgentAttachment,
   type AgentAttachment,
   type AgentModelContext,
+  type AgentRunContinuation,
   type AgentToolFailureDetails,
   type ApprovalDecision,
   type DesignMutationTarget,
@@ -21,7 +22,6 @@ import {
   projectToolResultForModel,
   toolResultAttachments,
 } from "./tool-execution-semantics.js";
-
 export interface AgentRunRequest {
   runId: string;
   sessionId: string;
@@ -33,8 +33,8 @@ export interface AgentRunRequest {
   mutationTarget: DesignMutationTarget;
   modelSelection: ModelSelection;
   modelContext?: AgentModelContext;
+  continuation?: AgentRunContinuation;
 }
-
 export interface AgentToolDefinition extends CanonicalTool {
   risk: ToolRisk;
   approval: "never" | "required";

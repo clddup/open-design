@@ -35,6 +35,9 @@ import {
   designGenerationPerformanceDiagnostic,
 } from "./agent/design-generation-performance";
 import { reportAgentDiagnostic } from "./agent/agent-diagnostic-reporter";
+import { AgentContinuationScheduler } from "./agent/agent-continuation-scheduler";
+import { prepareAgentContinuation } from "./agent/agent-continuation-host";
+import { startAgentRun } from "./agent/agent-run-starter";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
 import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
 import { createApplicationMenuTemplate } from "./application-menu";
@@ -123,13 +126,11 @@ import {
   type DesignVectorToolInput,
 } from "../shared/design-agent-tools";
 
-const applicationId = "design.open.app";
-const applicationName = "OpenDesign";
 const applicationLifecycle = new ApplicationLifecycle();
 const designGenerationPerformance = new DesignGenerationPerformanceTracker();
-
-app.setName(applicationName);
-if (process.platform === "win32") app.setAppUserModelId(applicationId);
+const agentContinuationScheduler = new AgentContinuationScheduler();
+app.setName("OpenDesign");
+if (process.platform === "win32") app.setAppUserModelId("design.open.app");
 
 let mainWindow: BrowserWindow | null = null;
 const agentHost = new AgentHost();
@@ -371,7 +372,7 @@ function resolveApplicationIconPath() {
 
 function installApplicationMenu() {
   const template = createApplicationMenuTemplate(
-    applicationName,
+    "OpenDesign",
     process.platform,
     {
       onOpenSettings: () => {
@@ -399,7 +400,7 @@ function createWindow() {
     minWidth: 920,
     minHeight: 620,
     show: false,
-    title: applicationName,
+    title: "OpenDesign",
     icon: resolveApplicationIconPath(),
     titleBarStyle: "hidden",
     trafficLightPosition: { x: 14, y: 15 },
@@ -976,28 +977,14 @@ function registerIpc() {
       if (!globalTaskCoordinator) {
         throw new Error("Global Task services are not initialized");
       }
-      await globalTaskCoordinator.registerRun(request);
-      requireAgentReferenceHost().registerRun(request);
-      conversationIdByRunId.set(request.runId, request.sessionId);
-      try {
-        agentHost.send({
-          ...request,
-          modelContext: requireModelProviderHost().resolveModelContext(
-            request.modelSelection,
-          ),
-        });
-      } catch (error) {
-        conversationIdByRunId.delete(request.runId);
-        requireAgentReferenceHost().releaseRun(request.runId);
-        globalTaskCoordinator.handleAgentEvent({
-          type: "agent.error",
-          code: "request_rejected",
-          message:
-            error instanceof Error ? error.message : "Agent request failed",
-          runId: request.runId,
-        });
-        throw error;
-      }
+      await startAgentRun(request, {
+        agentHost,
+        continuationScheduler: agentContinuationScheduler,
+        conversationIdByRunId,
+        globalTaskCoordinator,
+        modelProviderHost: requireModelProviderHost(),
+        referenceHost: requireAgentReferenceHost(),
+      });
       return;
     }
     if (request.type === "session.history") {
@@ -1027,12 +1014,27 @@ function registerIpc() {
           conversationIdByRunId.get(performanceSummary.runId),
         ),
       );
-    if (event.type === "session.history") {
+    if (event.type === "session.history")
       conversationIdByRequestId.delete(event.requestId);
-    }
-    if (event.type === "agent.error" && event.requestId) {
+    if (event.type === "agent.error" && event.requestId)
       conversationIdByRequestId.delete(event.requestId);
-    }
+    prepareAgentContinuation(event, {
+      continuationScheduler: agentContinuationScheduler,
+      publish: (continuationEvent) =>
+        mainWindow?.webContents.send(channels.agentEvent, continuationEvent),
+      projectHost,
+      starter:
+        globalTaskCoordinator && modelProviderHost && agentReferenceHost
+          ? {
+              agentHost,
+              continuationScheduler: agentContinuationScheduler,
+              conversationIdByRunId,
+              globalTaskCoordinator,
+              modelProviderHost,
+              referenceHost: agentReferenceHost,
+            }
+          : null,
+    });
     if (event.type === "run.completed") {
       agentReferenceHost?.releaseRun(event.runId);
       conversationIdByRunId.delete(event.runId);

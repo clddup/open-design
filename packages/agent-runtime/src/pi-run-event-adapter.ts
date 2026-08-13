@@ -34,7 +34,6 @@ import {
 import type { PiContextFailurePort } from "./pi-context-adapter.js";
 import type { PiModelFailurePort } from "./pi-model-gateway-adapter.js";
 import { appendRunJournalEvent } from "./run-journal-writer.js";
-
 export interface PiRunEventAdapterOptions {
   request: AgentRunRequest;
   sessionStore: SessionStore;
@@ -160,7 +159,6 @@ export class PiRunEventAdapter {
       });
     }
   }
-
   get tools(): readonly AgentTool[] {
     return this.#toolAdapter?.tools ?? [];
   }
@@ -168,7 +166,6 @@ export class PiRunEventAdapter {
   get toolCallRecords(): readonly AgentToolCallRecord[] {
     return this.#toolAdapter?.toolCallRecords ?? [];
   }
-
   readonly beforeToolCall = (
     context: BeforeToolCallContext,
     signal?: AbortSignal,
@@ -226,12 +223,14 @@ export class PiRunEventAdapter {
   async #startRun(): Promise<void> {
     if (this.#started) throw new Error("Pi emitted duplicate agent_start");
     this.#startedAt = this.#now().toISOString();
+    const continuation = this.#request.continuation;
     await this.#append(
       "run.state",
       {
         status: "started",
         startedAt: this.#startedAt,
         modelSelection: this.#request.modelSelection,
+        ...(continuation ? { continuation } : {}),
       },
       this.#startedAt,
     );
@@ -251,6 +250,7 @@ export class PiRunEventAdapter {
       type: "run.started",
       runId: this.#request.runId,
       startedAt: this.#startedAt,
+      ...(continuation ? { continuation } : {}),
     });
   }
 

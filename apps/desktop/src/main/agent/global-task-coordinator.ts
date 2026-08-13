@@ -45,9 +45,12 @@ import {
   type DesignWorkflowState,
   type InspectedHierarchy,
 } from "./design-plan-registration.js";
+import {
+  conversationActivityAt,
+  projectGlobalTaskLifecycle,
+} from "./global-task-lifecycle.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
-type RunScopedEvent = AgentEvent & { runId: string };
 
 export type DesignPlanApplyAuthorization = {
   input: DesignApplyToolInput;
@@ -899,24 +902,49 @@ export class GlobalTaskCoordinator {
         });
       }
     }
-    const task = this.#tasksByRunId.get(runId);
+    const task =
+      this.#tasksByRunId.get(runId) ??
+      (event.type === "run.continuation"
+        ? this.workspaceStore
+            .listGlobalTasks()
+            .find((candidate) => candidate.runId === runId)
+        : undefined);
     if (!task) return;
     const activityAt = conversationActivityAt(event, this.now);
     if (activityAt) this.#touchConversation(task.conversationId, activityAt);
-    const lifecycle = projectLifecycle({ ...event, runId }, task.lifecycle);
-    if (lifecycle === task.lifecycle) return;
+    const lifecycle = projectGlobalTaskLifecycle(
+      { ...event, runId },
+      task.lifecycle,
+    );
+    if (lifecycle === task.lifecycle) {
+      if (event.type === "run.completed") {
+        this.#tasksByRunId.delete(runId);
+        this.#toolBindingsByRunId.delete(runId);
+        this.#designPlansByRunId.delete(runId);
+        this.#generatedRasterRolesByRunId.delete(runId);
+        this.#inspectionsByRunId.delete(runId);
+        this.#pageStructureAccessByRunId.delete(runId);
+      }
+      return;
+    }
     const updated: GlobalTaskProjection = {
       ...task,
       lifecycle,
       updatedAt: this.now().toISOString(),
     };
     this.workspaceStore.saveGlobalTask(updated);
-    if (activeLifecycles.has(lifecycle)) {
+    const awaitsRunTerminal =
+      event.type === "agent.error" && event.failure !== undefined;
+    if (activeLifecycles.has(lifecycle) || awaitsRunTerminal) {
       this.#tasksByRunId.set(runId, updated);
     } else {
       this.#tasksByRunId.delete(runId);
     }
-    if (event.type === "run.completed" || event.type === "agent.error") {
+    if (
+      event.type === "run.completed" ||
+      event.type === "run.continuation" ||
+      (event.type === "agent.error" && !awaitsRunTerminal)
+    ) {
       this.#toolBindingsByRunId.delete(runId);
       this.#designPlansByRunId.delete(runId);
       this.#generatedRasterRolesByRunId.delete(runId);
@@ -1777,23 +1805,6 @@ function sameMutationTarget(
   );
 }
 
-function conversationActivityAt(
-  event: AgentEvent,
-  now: () => Date,
-): string | null {
-  if (event.type === "run.started") return event.startedAt;
-  if (event.type === "run.completed") return event.finishedAt;
-  if (
-    event.type === "message.completed" ||
-    event.type === "tool.completed" ||
-    event.type === "tool.failed" ||
-    event.type === "agent.error"
-  ) {
-    return now().toISOString();
-  }
-  return null;
-}
-
 function sameScope(left: SelectionScope, right: SelectionScope): boolean {
   if (left.kind !== right.kind) return false;
   const leftPageId = "pageId" in left ? left.pageId : undefined;
@@ -1810,23 +1821,6 @@ function sameScope(left: SelectionScope, right: SelectionScope): boolean {
       (nodeId, index) => nodeId === right.selectedNodeIds[index],
     )
   );
-}
-
-function projectLifecycle(
-  event: RunScopedEvent,
-  current: GlobalTaskLifecycle,
-): GlobalTaskLifecycle {
-  if (event.type === "run.started") return "running";
-  if (event.type === "approval.requested") return "waiting_approval";
-  if (event.type === "approval.resolved") return "running";
-  if (event.type === "tool.failed" && isConflictCode(event.code)) {
-    return "conflict";
-  }
-  if (event.type === "agent.error") return "failed";
-  if (event.type !== "run.completed") return current;
-  if (event.stopReason === "complete") return "completed";
-  if (event.stopReason === "cancelled") return "cancelled";
-  return "failed";
 }
 
 function nodeBelongsToPage(
@@ -1847,10 +1841,6 @@ function nodeBelongsToPage(
     if (node) pending.push(...node.childIds);
   }
   return false;
-}
-
-function isConflictCode(code: string): boolean {
-  return /conflict|revision|stale/i.test(code);
 }
 
 function validRevision(value: number | undefined): value is number {

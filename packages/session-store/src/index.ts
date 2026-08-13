@@ -2,6 +2,25 @@ import { mkdirSync } from "node:fs";
 import { mkdir, open, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import {
+  isModelSelection,
+  isRunContinuation,
+  isRunFailure,
+  isRunStatus,
+  isRunStopReason,
+  type RunStatePayload,
+  type RunStopReason,
+  type SessionModelSelection,
+  type SessionRunContinuation,
+  type SessionRunFailure,
+} from "./run-state.js";
+export type {
+  ModelReasoningEffort,
+  RunStopReason,
+  SessionModelSelection,
+  SessionRunContinuation,
+  SessionRunFailure,
+} from "./run-state.js";
 
 export type JournalEventType =
   | "session.created"
@@ -33,19 +52,6 @@ export interface AssistantTimelineBlock {
   text?: string;
   status?: "streaming" | "completed" | "omitted";
   summary?: string;
-}
-
-export interface SessionRunFailure {
-  code: string;
-  message: string;
-  retryable: boolean;
-  provider?: string;
-  providerRequestId?: string;
-  modelRequestId?: string;
-  timeout?: {
-    phase: "first-response" | "stream-idle" | "total";
-    thresholdMs: number;
-  };
 }
 
 export type SessionAttachment =
@@ -148,6 +154,7 @@ export type SessionTimelineItem =
       stopReason?: RunStopReason;
       modelSelection?: SessionModelSelection;
       failure?: SessionRunFailure;
+      continuation?: SessionRunContinuation;
     });
 
 export type SelectionScope =
@@ -175,15 +182,6 @@ export type DesignMutationTarget =
 
 export type ToolRisk = "read" | "design_write" | "external" | "destructive";
 export type ApprovalDecision = "allow_once" | "allow_session" | "deny";
-export type RunStopReason = "complete" | "cancelled" | "error" | "budget";
-export type ModelReasoningEffort =
-  "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-export interface SessionModelSelection {
-  providerId: string;
-  modelId: string;
-  reasoningEffort?: ModelReasoningEffort;
-}
-
 export interface SessionProjection {
   sessionId: string;
   lastSequence: number;
@@ -531,6 +529,9 @@ export function projectTimeline(
           ...(payload.failure === undefined
             ? {}
             : { failure: structuredClone(payload.failure) }),
+          ...(payload.continuation === undefined
+            ? {}
+            : { continuation: structuredClone(payload.continuation) }),
         });
       } else {
         items.set(key, {
@@ -551,6 +552,9 @@ export function projectTimeline(
           ...(payload.failure === undefined
             ? {}
             : { failure: structuredClone(payload.failure) }),
+          ...(payload.continuation === undefined
+            ? {}
+            : { continuation: structuredClone(payload.continuation) }),
         });
       }
       continue;
@@ -941,7 +945,9 @@ function isJournalEvent(value: unknown): value is JournalEvent {
         (payload.failure === undefined ||
           (payload.status === "error" &&
             payload.stopReason === "error" &&
-            isRunFailure(payload.failure)))
+            isRunFailure(payload.failure))) &&
+        (payload.continuation === undefined ||
+          isRunContinuation(payload.continuation))
       );
     case "message.user":
       return (
@@ -1105,88 +1111,6 @@ function isJournalEventType(value: unknown): value is JournalEventType {
   );
 }
 
-function isRunStatus(value: unknown): value is RunStatePayload["status"] {
-  return (
-    value === "started" ||
-    value === "completed" ||
-    value === "cancelled" ||
-    value === "error" ||
-    value === "budget"
-  );
-}
-
-function isRunStopReason(value: unknown): value is RunStopReason {
-  return (
-    value === "complete" ||
-    value === "cancelled" ||
-    value === "error" ||
-    value === "budget"
-  );
-}
-
-function isModelSelection(value: unknown): value is SessionModelSelection {
-  if (!isRecord(value)) return false;
-  return (
-    isNonEmptyString(value.providerId) &&
-    isNonEmptyString(value.modelId) &&
-    (value.reasoningEffort === undefined ||
-      value.reasoningEffort === "off" ||
-      value.reasoningEffort === "minimal" ||
-      value.reasoningEffort === "low" ||
-      value.reasoningEffort === "medium" ||
-      value.reasoningEffort === "high" ||
-      value.reasoningEffort === "xhigh" ||
-      value.reasoningEffort === "max")
-  );
-}
-
-function isRunFailure(value: unknown): value is SessionRunFailure {
-  if (
-    !isRecord(value) ||
-    !boundedIdentifier(value.code) ||
-    !isNonEmptyString(value.message) ||
-    value.message.length > 20_000 ||
-    typeof value.retryable !== "boolean" ||
-    (value.provider !== undefined && !boundedIdentifier(value.provider)) ||
-    (value.providerRequestId !== undefined &&
-      !boundedIdentifier(value.providerRequestId)) ||
-    (value.modelRequestId !== undefined &&
-      !boundedIdentifier(value.modelRequestId))
-  ) {
-    return false;
-  }
-  if (
-    value.timeout !== undefined &&
-    (!isRecord(value.timeout) ||
-      !["first-response", "stream-idle", "total"].includes(
-        String(value.timeout.phase),
-      ) ||
-      !Number.isInteger(value.timeout.thresholdMs) ||
-      Number(value.timeout.thresholdMs) < 1 ||
-      Number(value.timeout.thresholdMs) > 86_400_000 ||
-      Object.keys(value.timeout).some(
-        (key) => !["phase", "thresholdMs"].includes(key),
-      ))
-  ) {
-    return false;
-  }
-  return Object.keys(value).every((key) =>
-    [
-      "code",
-      "message",
-      "retryable",
-      "provider",
-      "providerRequestId",
-      "modelRequestId",
-      "timeout",
-    ].includes(key),
-  );
-}
-
-function boundedIdentifier(value: unknown): value is string {
-  return isNonEmptyString(value) && value.length <= 256;
-}
-
 function isToolRisk(value: unknown): value is ToolRisk {
   return (
     value === "read" ||
@@ -1246,15 +1170,6 @@ function isMissingFile(error: unknown): boolean {
     "code" in error &&
     (error as NodeJS.ErrnoException).code === "ENOENT"
   );
-}
-
-interface RunStatePayload {
-  status: "started" | "completed" | "cancelled" | "error" | "budget";
-  startedAt: string;
-  finishedAt?: string;
-  stopReason?: RunStopReason;
-  modelSelection?: SessionModelSelection;
-  failure?: SessionRunFailure;
 }
 
 interface UserMessagePayload {

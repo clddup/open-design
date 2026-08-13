@@ -50,6 +50,52 @@ describe("Agent contracts", () => {
     ).toBe(true);
   });
 
+  it("accepts bounded Main-owned continuation provenance", () => {
+    const continuation = {
+      parentRunId: "run_parent",
+      rootRunId: "run_root",
+      attempt: 1,
+      maxAttempts: 3,
+      reason: "budget",
+    } as const;
+    expect(isAgentRequest({ ...validStart, continuation })).toBe(true);
+    expect(
+      isAgentEvent({
+        type: "run.started",
+        runId: "run_next",
+        startedAt: "2026-08-12T12:00:00.000Z",
+        continuation,
+      }),
+    ).toBe(true);
+    expect(
+      isAgentRequest({
+        ...validStart,
+        continuation: { ...continuation, attempt: 4 },
+      }),
+    ).toBe(false);
+    expect(
+      isAgentEvent({
+        type: "run.continuation",
+        runId: "run_parent",
+        status: "scheduled",
+        attempt: 1,
+        maxAttempts: 3,
+        reason: "budget",
+      }),
+    ).toBe(false);
+    expect(
+      isAgentEvent({
+        type: "run.continuation",
+        runId: "run_parent",
+        status: "scheduled",
+        attempt: 1,
+        maxAttempts: 3,
+        reason: "budget",
+        nextRunId: "run_next",
+      }),
+    ).toBe(true);
+  });
+
   it("accepts only bounded host-resolved model context metadata", () => {
     expect(isAgentRequest(validStart)).toBe(true);
     expect(
