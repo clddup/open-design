@@ -220,6 +220,7 @@ export interface LeaferEngineSyncInput {
   generationActivity?: LeaferGenerationActivity;
   generationReveal?: LeaferGenerationReveal;
   generationSkeleton?: LeaferGenerationSkeleton;
+  layoutGuideFrameId?: string;
   pageId: string;
   reducedMotion?: boolean;
   selection: SelectionState;

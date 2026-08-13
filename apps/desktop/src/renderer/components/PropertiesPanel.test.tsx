@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type {
   DesignNode,
   LayoutConstraints,
+  LayoutGuide,
 } from "@opendesign/design-contracts";
 import type {
   ArrangeOperation,
@@ -38,6 +39,10 @@ function renderPanel(
       nodeId: string,
       positioning: "absolute" | null,
       constraints?: LayoutConstraints,
+    ) => void;
+    onSetFrameLayoutGuides?: (
+      frameId: string,
+      layoutGuides: readonly LayoutGuide[],
     ) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
   } = {},
@@ -82,6 +87,7 @@ function renderPanel(
           onSelectBooleanParent={vi.fn()}
           onSetConstraints={options.onSetConstraints ?? vi.fn()}
           onSetLayoutPositioning={options.onSetLayoutPositioning ?? vi.fn()}
+          onSetFrameLayoutGuides={options.onSetFrameLayoutGuides ?? vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onRasterExportSettingsChange={onRasterExportSettingsChange}
           exportFormat={options.exportFormat ?? "svg"}
@@ -319,6 +325,160 @@ describe("PropertiesPanel SVG workflow", () => {
         },
       },
     });
+  });
+
+  it("adds, edits, and removes a Frame uniform layout guide", async () => {
+    const user = userEvent.setup();
+    const onSetFrameLayoutGuides =
+      vi.fn<(frameId: string, layoutGuides: readonly LayoutGuide[]) => void>();
+    const frame: Extract<DesignNode, { kind: "frame" }> = {
+      id: "frame_guides",
+      kind: "frame",
+      name: "Poster",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 180 },
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+      },
+      extensions: {},
+    };
+    renderPanel({
+      node: frame,
+      selectionCount: 1,
+      onSetFrameLayoutGuides,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add grid" }));
+    expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith("frame_guides", [
+      {
+        id: "frame_guides_grid_1",
+        type: "grid",
+        size: 8,
+        color: "#ff5a5f",
+        opacity: 0.12,
+      },
+    ]);
+
+    cleanup();
+    const guide: LayoutGuide = {
+      id: "grid_custom",
+      type: "grid",
+      size: 8,
+      color: "#ff5a5f",
+      opacity: 0.12,
+    };
+    renderPanel({
+      node: {
+        ...frame,
+        properties: { ...frame.properties, layoutGuides: [guide] },
+      },
+      selectionCount: 1,
+      onSetFrameLayoutGuides,
+    });
+
+    const size = screen.getByLabelText("Grid size grid_custom");
+    await user.clear(size);
+    await user.type(size, "16");
+    await user.tab();
+    expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith("frame_guides", [
+      { ...guide, size: 16 },
+    ]);
+
+    const color = screen.getByLabelText("Grid color grid_custom");
+    await user.clear(color);
+    await user.type(color, "#3366ff");
+    await user.tab();
+    expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith("frame_guides", [
+      { ...guide, color: "#3366ff" },
+    ]);
+
+    const opacity = screen.getByLabelText("Grid opacity grid_custom");
+    await user.clear(opacity);
+    await user.type(opacity, "0.25");
+    await user.tab();
+    expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith("frame_guides", [
+      { ...guide, opacity: 0.25 },
+    ]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Remove grid grid_custom" }),
+    );
+    expect(onSetFrameLayoutGuides).toHaveBeenLastCalledWith("frame_guides", []);
+  });
+
+  it("uses a free stable guide ID and disables the ninth guide", async () => {
+    const user = userEvent.setup();
+    const onSetFrameLayoutGuides =
+      vi.fn<(frameId: string, layoutGuides: readonly LayoutGuide[]) => void>();
+    const guides = Array.from({ length: 7 }, (_, index): LayoutGuide => ({
+      id: `frame_guides_grid_${index === 0 ? 1 : index + 2}`,
+      type: "grid",
+      size: 8 + index,
+      color: "#ff5a5f",
+      opacity: 0.12,
+    }));
+    const frame: Extract<DesignNode, { kind: "frame" }> = {
+      id: "frame_guides",
+      kind: "frame",
+      name: "Poster",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 180 },
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+        layoutGuides: guides,
+      },
+      extensions: {},
+    };
+    renderPanel({
+      node: frame,
+      selectionCount: 1,
+      onSetFrameLayoutGuides,
+    });
+    await user.click(screen.getByRole("button", { name: "Add grid" }));
+    expect(onSetFrameLayoutGuides.mock.calls.at(-1)?.[1].at(-1)?.id).toBe(
+      "frame_guides_grid_2",
+    );
+
+    cleanup();
+    renderPanel({
+      node: {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          layoutGuides: [
+            ...guides,
+            {
+              id: "frame_guides_grid_2",
+              type: "grid",
+              size: 24,
+              color: "#3366ff",
+              opacity: 0.2,
+            },
+          ],
+        },
+      },
+      selectionCount: 1,
+      onSetFrameLayoutGuides,
+    });
+    expect(screen.getByRole("button", { name: "Add grid" })).toBeDisabled();
   });
 
   it("toggles an Auto Layout child between flow and absolute positioning", async () => {

@@ -3,6 +3,7 @@ import type {
   DesignOperation,
   LayoutConstraints,
   LayoutLimits,
+  LayoutGuide,
   LayoutPositioning,
   LayoutSizing,
   Size,
@@ -12,6 +13,7 @@ import {
   planSetFrameAutoLayout,
   planSetNodeLayoutLimits,
   planSetNodeLayoutPositioning,
+  planSetFrameLayoutGuides,
   planSetNodeLayoutSizing,
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
@@ -160,6 +162,25 @@ export function useEditorCommandController({
     [applyCommands, runtime, setEditorError, t],
   );
 
+  const setFrameLayoutGuides = useCallback(
+    (frameId: string, layoutGuides: readonly LayoutGuide[]) => {
+      const current = runtime.getSnapshot().document;
+      const plan = planSetFrameLayoutGuides(
+        current,
+        pageIdForNode(current, frameId),
+        frameId,
+        layoutGuides,
+        `inspector_layout_guides_${frameId}`,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t("history.updateLayoutGuides"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
   const updateNode = useCallback(
     (nodeId: string, updates: UpdatePropertiesPatch) => {
       const current = runtime.getSnapshot().document;
@@ -254,6 +275,7 @@ export function useEditorCommandController({
     setNodeConstraints,
     setNodeLayoutLimits,
     setNodeLayoutPositioning,
+    setFrameLayoutGuides,
     setNodeLayoutSizing,
     updateNode,
   };

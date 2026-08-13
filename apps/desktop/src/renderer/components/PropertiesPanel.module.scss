@@ -461,6 +461,47 @@
   }
 }
 
+.layoutGuide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  gap: 5px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ui-border);
+
+  > .field {
+    grid-column: 1 / -1;
+  }
+
+  :global(.ui-icon-button) {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+.layoutGuideHeading {
+  align-self: center;
+  overflow: hidden;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layoutGuideToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+
+  :global(.ui-button) {
+    min-height: 24px;
+    padding-inline: 6px;
+    font-size: 9px;
+  }
+}
+
 .hint {
   color: var(--ui-text-faint);
   font-size: 9px;

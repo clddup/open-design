@@ -93,7 +93,7 @@ for (const source of fixtureSources) {
 const manifest = {
   version: 1,
   generatedBy: generatorPath,
-  documentSchemaVersion: "1.18.0",
+  documentSchemaVersion: "1.19.0",
   engineBaseline: "leafer-editor@2.2.9",
   sourceAssets: [
     {
@@ -559,6 +559,15 @@ function buildPosterFixture({ iconBase64, promptSha256 }) {
     ],
     cornerRadius: 0,
     clipsContent: true,
+    layoutGuides: [
+      {
+        id: "poster_grid_8",
+        type: "grid",
+        size: 8,
+        color: "#ff5a5f",
+        opacity: 0.12,
+      },
+    ],
   });
   const nodes = [
     artboard,
@@ -1344,7 +1353,7 @@ function document({
 }) {
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.18.0",
+    schemaVersion: "1.19.0",
     documentId,
     revision: 0,
     pageOrder: [pageId],
@@ -1455,6 +1464,7 @@ function frame({
   cornerRadius,
   clipsContent,
   autoLayout,
+  layoutGuides,
   ...base
 }) {
   return {
@@ -1466,6 +1476,7 @@ function frame({
       cornerRadius,
       clipsContent,
       ...(autoLayout === undefined ? {} : { autoLayout }),
+      ...(layoutGuides === undefined ? {} : { layoutGuides }),
     },
   };
 }

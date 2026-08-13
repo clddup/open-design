@@ -3,6 +3,19 @@ import { Type, type Static } from "@sinclair/typebox";
 export const CONSTRAINTS_DESIGN_SCHEMA_VERSION = "1.12.0" as const;
 export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.18.0" as const;
 
+export const LayoutGuideSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1, maxLength: 256 }),
+    type: Type.Literal("grid"),
+    size: Type.Number({ minimum: 1, maximum: 10_000 }),
+    color: Type.String({ minLength: 1, maxLength: 128 }),
+    opacity: Type.Number({ minimum: 0, maximum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type LayoutGuide = Static<typeof LayoutGuideSchema>;
+
 export const LayoutPositioningSchema = Type.Literal("absolute");
 export type LayoutPositioning = Static<typeof LayoutPositioningSchema>;
 

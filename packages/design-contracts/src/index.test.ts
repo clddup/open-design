@@ -9,6 +9,8 @@ import {
   DesignTransactionSchema,
   EffectSchema,
   MAX_TRANSACTION_COMMANDS,
+  AUTO_LAYOUT_DESIGN_SCHEMA_VERSION,
+  LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION,
   PaintSchema,
   isDesignTransaction,
   migrateDesignDocument,
@@ -20,6 +22,12 @@ import {
 } from "./index.js";
 
 const actor = { type: "user" as const, id: "user_1" };
+
+it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
+  expect(AUTO_LAYOUT_DESIGN_SCHEMA_VERSION).toBe("1.18.0");
+  expect(LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION).toBe("1.19.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION);
+});
 
 function textDocumentFixture() {
   return {
@@ -1187,6 +1195,59 @@ describe("design contract schemas", () => {
     const migrated = migrateDesignDocument(source);
     expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
     expect(migrated?.nodesById.text_1?.layoutPositioning).toBeUndefined();
+  });
+
+  it("migrates 1.18 absolute-child documents without inventing layout guides", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.18.0" as typeof source.schemaVersion;
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1?.kind).toBe("text");
+  });
+
+  it("validates strict uniform layout guides on Frames", () => {
+    const frame = {
+      id: "frame_guides",
+      name: "Guides",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 180 },
+      opacity: 1,
+      extensions: {},
+      kind: "frame" as const,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: false,
+        layoutGuides: [
+          {
+            id: "grid_8",
+            type: "grid" as const,
+            size: 8,
+            color: "#ff5a5f",
+            opacity: 0.12,
+          },
+        ],
+      },
+    };
+    expect(Value.Check(DesignNodeSchema, frame)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          layoutGuides: [
+            frame.properties.layoutGuides[0],
+            frame.properties.layoutGuides[0],
+          ],
+        },
+      }),
+    ).toBe(true);
   });
 
   it("validates strict linear Auto Layout only on Frame properties", () => {

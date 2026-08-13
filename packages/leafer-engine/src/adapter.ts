@@ -74,6 +74,20 @@ import {
 } from "./generation-tween.js";
 import { createLeaferTextLayoutProvider } from "./text-layout.js";
 import { exportLeaferCapture } from "./capture-export.js";
+import {
+  generationActivityBadgeWidth,
+  generationSkeletonFill,
+} from "./generation-presentation-style.js";
+import {
+  matrixRelativeToParent,
+  sameAffineMatrix,
+  transformToAffine,
+  type AffineMatrix,
+} from "./affine.js";
+import {
+  createLayoutGuideOverlayPlan,
+  layoutGuideDocumentTransform,
+} from "./layout-guide-overlay.js";
 import type {
   LeaferBoxCreateTool,
   LeaferCaptureResult,
@@ -130,15 +144,6 @@ interface GenerationActivityViewportState {
 interface GenerationSkeletonViewportState {
   layerTransform: AffineMatrix;
   zoom: number;
-}
-
-interface AffineMatrix {
-  a: number;
-  b: number;
-  c: number;
-  d: number;
-  e: number;
-  f: number;
 }
 
 interface ActiveGenerationTween {
@@ -253,6 +258,7 @@ const GENERATION_SKELETON_COLOR = "#7c6ee6";
 const GENERATION_SKELETON_FILL = "rgba(124, 110, 230, 0.08)";
 const MAX_SUPPRESSED_GENERATION_SKELETONS = 128;
 const GENERATION_ACTIVITY_BADGE_FILL = "rgba(31, 28, 48, 0.94)";
+const LAYOUT_GUIDE_DEFAULT_COLOR = "#ff5a5f";
 const GENERATION_ACTIVITY_MOVE_MS = 180;
 const MAX_SUPPRESSED_GENERATION_ACTIVITIES = 128;
 const MAX_CAPTURE_WIDTH = 1_280;
@@ -279,6 +285,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #generationActivityLayer: LeaferGroup;
   readonly #generationPresentationRoot: LeaferGroup;
   readonly #generationSkeletonLayer: LeaferGroup;
+  readonly #layoutGuideLayer: LeaferGroup;
+  readonly #layoutGuideElements = new Map<string, LeaferElement>();
+  #layoutGuideFingerprint: string | null = null;
   readonly #elements = new Map<string, LeaferElement>();
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
   #baseProjection: LeaferSceneProjection | null = null;
@@ -380,11 +389,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       },
     });
     this.#editor = this.#app.editor as LeaferEditor;
-    // World-space Agent presentation belongs to Leafer's built-in editor sky.
+    // World-space editing presentation belongs to Leafer's built-in editor sky.
     // The sky is the same viewport plane used by selection chrome, so a pan or
-    // zoom cannot advance the document and Agent skeleton on two independently
-    // scheduled canvases. Keep both Agent layers below the Editor child and
-    // make them fully non-interactive.
+    // zoom cannot advance the document and overlays on independently scheduled
+    // canvases. Keep these layers below the Editor child and non-interactive.
     this.#generationPresentationRoot = this.#app.sky as unknown as LeaferGroup;
     this.#generationSkeletonLayer = new leafer.Group({
       editable: false,
@@ -393,6 +401,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       visible: false,
     });
     this.#generationPresentationRoot.addAt(this.#generationSkeletonLayer, 0);
+    this.#layoutGuideLayer = new leafer.Group({
+      editable: false,
+      hitChildren: false,
+      hittable: false,
+      visible: false,
+    });
+    this.#generationPresentationRoot.addAt(this.#layoutGuideLayer, 1);
     this.#generationActivityLayer = new leafer.Group({
       editable: false,
       hitChildren: false,
@@ -444,7 +459,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       cursor: activityCursor,
       label: activityLabel,
     };
-    this.#generationPresentationRoot.addAt(this.#generationActivityLayer, 1);
+    this.#generationPresentationRoot.addAt(this.#generationActivityLayer, 2);
     this.#generationRevealStroker = new leafer.Stroker();
     this.#generationRevealStroker.set({
       dashPattern: [6, 4],
@@ -636,6 +651,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection.nodeIds);
+      this.#syncLayoutGuides(input.layoutGuideFrameId);
       this.#syncGenerationSkeleton(input.generationSkeleton);
       this.#syncGenerationActivity(
         input.generationActivity,
@@ -770,6 +786,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#editorRefreshNodeBounds.clear();
     this.#generationActivityLayer.remove();
     this.#generationActivityLayer.destroy();
+    this.#layoutGuideElements.forEach((element) => {
+      element.remove();
+      element.destroy();
+    });
+    this.#layoutGuideElements.clear();
+    this.#layoutGuideFingerprint = null;
+    this.#layoutGuideLayer.remove();
+    this.#layoutGuideLayer.destroy();
     this.#generationSkeletonLayer.remove();
     this.#generationSkeletonLayer.destroy();
     this.#generationRevealStroker.remove();
@@ -918,6 +942,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#scheduleViewport();
       this.#scheduleEditorRefresh();
       this.#renderVectorEditOverlays();
+      this.#syncLayoutGuideViewport();
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
       this.#scheduleGenerationViewportSync();
@@ -937,6 +962,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     // callbacks, but no Agent child is rendered until this reconciliation has
     // expressed it relative to the sky's settled transform.
     this.#app.on(RenderEvent.CHILD_START, () => {
+      this.#syncLayoutGuideViewport();
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
     });
@@ -1010,7 +1036,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const childrenChanged =
         !previousSpec || !sameStringList(previousSpec.childIds, spec.childIds);
       if (dataChanged) element.set(spec.data);
-      if (transformChanged) element.setTransform(toMatrix(spec.transform));
+      if (transformChanged)
+        element.setTransform(transformToAffine(spec.transform));
       if (dataChanged || transformChanged || parentChanged || replaced) {
         changedNodeIds.add(spec.id);
       }
@@ -1291,8 +1318,90 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
     this.#syncGenerationSkeletonViewport();
     this.#syncGenerationActivityViewport();
+    this.#syncLayoutGuides(this.#input?.layoutGuideFrameId);
     this.#scheduleGenerationViewportSync();
     this.#scheduleEditorRefresh();
+  }
+
+  #syncLayoutGuides(frameId: string | undefined): void {
+    const input = this.#input;
+    const plan = input
+      ? createLayoutGuideOverlayPlan(input.document, frameId)
+      : { fingerprint: null, specs: [] };
+    if (
+      plan.fingerprint !== null &&
+      plan.fingerprint === this.#layoutGuideFingerprint
+    ) {
+      this.#syncLayoutGuideViewport();
+      return;
+    }
+    const expected = new Set<string>();
+    for (const spec of plan.specs) {
+      expected.add(spec.id);
+      let element = this.#layoutGuideElements.get(spec.id);
+      if (!element) {
+        element = new this.#leafer.Path({
+          editable: false,
+          hittable: false,
+          strokeAlign: "center",
+        });
+        this.#layoutGuideElements.set(spec.id, element);
+        this.#layoutGuideLayer.add(element);
+      }
+      element.set({
+        path: spec.path,
+        stroke: spec.color || LAYOUT_GUIDE_DEFAULT_COLOR,
+        opacity: spec.opacity,
+      });
+    }
+    for (const [id, element] of this.#layoutGuideElements) {
+      if (expected.has(id)) continue;
+      element.remove();
+      element.destroy();
+      this.#layoutGuideElements.delete(id);
+    }
+    this.#layoutGuideFingerprint = plan.fingerprint;
+    this.#layoutGuideLayer.visible = expected.size > 0;
+    this.#syncLayoutGuideViewport();
+  }
+
+  #syncLayoutGuideViewport(): void {
+    const input = this.#input;
+    const frameId = input?.layoutGuideFrameId;
+    const frame = frameId ? input?.document.nodesById[frameId] : undefined;
+    if (
+      !input ||
+      frame?.kind !== "frame" ||
+      this.#layoutGuideElements.size === 0
+    ) {
+      return;
+    }
+    const tree = this.#app.tree.localTransform;
+    const desired = layoutGuideDocumentTransform(
+      input.document,
+      frame.id,
+      tree,
+    );
+    const relative = matrixRelativeToParent(
+      this.#generationPresentationRoot.localTransform,
+      desired,
+      MATRIX_EPSILON,
+    );
+    if (!relative) {
+      this.#layoutGuideLayer.visible = false;
+      return;
+    }
+    if (!this.#layoutGuideLayer.visible) this.#layoutGuideLayer.visible = true;
+    const zoom = Math.max(MATRIX_EPSILON, Math.abs(tree.a || 1));
+    const strokeWidth = 1 / zoom;
+    for (const element of this.#layoutGuideElements.values()) {
+      if (!sameAffineMatrix(element.localTransform, relative, MATRIX_EPSILON)) {
+        element.setTransform(relative);
+      }
+      if (!nearlyEqual(Number(element.strokeWidth), strokeWidth)) {
+        element.set({ strokeWidth });
+      }
+    }
   }
 
   #syncSelection(nodeIds: readonly string[]): void {
@@ -2852,6 +2961,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         e: screen.x,
         f: screen.y,
       },
+      MATRIX_EPSILON,
     );
     if (!layerTransform) {
       this.#generationActivityLayer.visible = false;
@@ -2868,7 +2978,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const previous = this.#generationActivityViewportState;
     if (
       previous &&
-      sameAffineMatrix(previous.layerTransform, layerTransform) &&
+      sameAffineMatrix(
+        previous.layerTransform,
+        layerTransform,
+        MATRIX_EPSILON,
+      ) &&
       nearlyEqual(previous.badgeWidth, badgeWidth) &&
       nearlyEqual(previous.badgeX, badgeX) &&
       nearlyEqual(previous.badgeY, badgeY)
@@ -2966,7 +3080,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       hitChildren: false,
       hittable: false,
     }) as LeaferGroup;
-    artboardGroup.setTransform(toMatrix(skeleton.artboard.transform));
+    artboardGroup.setTransform(transformToAffine(skeleton.artboard.transform));
     if (skeleton.artboard.pending) {
       const outline = new this.#leafer.Rect({
         cornerRadius: 8,
@@ -2987,7 +3101,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         cornerRadius: 5,
         dashPattern: [5, 4],
         editable: false,
-        fill: generationSkeletonFill(region.role),
+        fill: generationSkeletonFill(region.role, GENERATION_SKELETON_FILL),
         height: region.height,
         hittable: false,
         stroke: GENERATION_SKELETON_COLOR,
@@ -3027,6 +3141,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const layerTransform = matrixRelativeToParent(
       this.#generationPresentationRoot.localTransform,
       treeTransform,
+      MATRIX_EPSILON,
     );
     if (!layerTransform) {
       this.#generationSkeletonLayer.visible = false;
@@ -3037,7 +3152,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const previous = this.#generationSkeletonViewportState;
     if (
       previous &&
-      sameAffineMatrix(previous.layerTransform, layerTransform) &&
+      sameAffineMatrix(
+        previous.layerTransform,
+        layerTransform,
+        MATRIX_EPSILON,
+      ) &&
       nearlyEqual(previous.zoom, zoom)
     ) {
       if (!this.#generationSkeletonLayer.visible) {
@@ -3076,7 +3195,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (
       this.#disposed ||
       this.#generationViewportFrame !== null ||
-      (!this.#generationSkeletonId && !this.#generationActivityId)
+      (!this.#generationSkeletonId &&
+        !this.#generationActivityId &&
+        this.#layoutGuideElements.size === 0)
     ) {
       return;
     }
@@ -3086,6 +3207,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       // Leafer can settle the document tree and built-in editor sky in
       // different callbacks. Re-read both and recompute their relative
       // transform so kinetic pan/zoom never leaves an intermediate offset.
+      this.#syncLayoutGuideViewport();
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
     });
@@ -3449,7 +3571,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const target = this.#projection?.elementsById.get(nodeId);
     if (!element || !target) return;
     element.set(target.data);
-    element.setTransform(toMatrix(target.transform));
+    element.setTransform(transformToAffine(target.transform));
   }
 
   #applyGenerationTweenFrame(
@@ -3457,7 +3579,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     frame: GenerationTweenFrame,
   ): void {
     element.set(frame.data);
-    element.setTransform(toMatrix(frame.transform));
+    element.setTransform(transformToAffine(frame.transform));
   }
 
   #refreshGenerationTweenSelection(nodeIds: ReadonlySet<string>): void {
@@ -3769,69 +3891,6 @@ function emptyBooleanResolution(pageId: string): BooleanGeometryResolution {
   };
 }
 
-function toMatrix(transform: Transform): AffineMatrix {
-  return {
-    a: transform[0],
-    b: transform[1],
-    c: transform[2],
-    d: transform[3],
-    e: transform[4],
-    f: transform[5],
-  };
-}
-
-function matrixRelativeToParent(
-  parent: AffineMatrix,
-  desired: AffineMatrix,
-): AffineMatrix | undefined {
-  const determinant = parent.a * parent.d - parent.b * parent.c;
-  if (
-    !Number.isFinite(determinant) ||
-    Math.abs(determinant) <= MATRIX_EPSILON ||
-    !matrixIsFinite(parent) ||
-    !matrixIsFinite(desired)
-  ) {
-    return undefined;
-  }
-  const inverse = {
-    a: parent.d / determinant,
-    b: -parent.b / determinant,
-    c: -parent.c / determinant,
-    d: parent.a / determinant,
-    e: (parent.c * parent.f - parent.d * parent.e) / determinant,
-    f: (parent.b * parent.e - parent.a * parent.f) / determinant,
-  };
-  return {
-    a: normalizeNumber(inverse.a * desired.a + inverse.c * desired.b),
-    b: normalizeNumber(inverse.b * desired.a + inverse.d * desired.b),
-    c: normalizeNumber(inverse.a * desired.c + inverse.c * desired.d),
-    d: normalizeNumber(inverse.b * desired.c + inverse.d * desired.d),
-    e: normalizeNumber(
-      inverse.a * desired.e + inverse.c * desired.f + inverse.e,
-    ),
-    f: normalizeNumber(
-      inverse.b * desired.e + inverse.d * desired.f + inverse.f,
-    ),
-  };
-}
-
-function matrixIsFinite(matrix: AffineMatrix): boolean {
-  return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f].every(
-    Number.isFinite,
-  );
-}
-
-function sameAffineMatrix(left: AffineMatrix, right: AffineMatrix): boolean {
-  return (
-    nearlyEqual(left.a, right.a) &&
-    nearlyEqual(left.b, right.b) &&
-    nearlyEqual(left.c, right.c) &&
-    nearlyEqual(left.d, right.d) &&
-    nearlyEqual(left.e, right.e) &&
-    nearlyEqual(left.f, right.f)
-  );
-}
-
 function changeSetNodeIds(changes: DesignChangeSet): Set<string> {
   return new Set([
     ...changes.addedNodeIds,
@@ -3865,26 +3924,9 @@ function projectionOpacity(value: unknown): number {
     : 1;
 }
 
-function generationSkeletonFill(
-  role: LeaferGenerationSkeleton["regions"][number]["role"],
-): string {
-  return role === "media" || role === "graphic"
-    ? "rgba(124, 110, 230, 0.12)"
-    : GENERATION_SKELETON_FILL;
-}
-
-function generationActivityBadgeWidth(label: string): number {
-  let width = 28;
-  for (const character of label) {
-    width += character.codePointAt(0)! > 0xff ? 11 : 6.3;
-  }
-  return Math.min(220, Math.max(104, Math.ceil(width)));
-}
-
 function samePoint(left: Point, right: Point): boolean {
   return nearlyEqual(left.x, right.x) && nearlyEqual(left.y, right.y);
 }
-
 function nearlyEqual(left: number, right: number): boolean {
   return Math.abs(left - right) <= MATRIX_EPSILON;
 }
@@ -3903,7 +3945,6 @@ function finitePositiveInteger(value: unknown): number | null {
     ? value
     : null;
 }
-
 function sameTransform(left: Transform, right: Transform): boolean {
   return left.every((value, index) => nearlyEqual(value, right[index] ?? 0));
 }

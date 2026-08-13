@@ -1912,6 +1912,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 }
                 onSetConstraints={editorCommands.setNodeConstraints}
                 onSetLayoutPositioning={editorCommands.setNodeLayoutPositioning}
+                onSetFrameLayoutGuides={editorCommands.setFrameLayoutGuides}
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}

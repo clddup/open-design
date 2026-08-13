@@ -7,6 +7,7 @@ import {
   planSetNodeLayoutLimits,
   planSetNodeLayoutPositioning,
   planSetNodeLayoutSizing,
+  planSetFrameLayoutGuides,
 } from "@opendesign/editor-runtime";
 import type { DesignArrangeToolInput } from "../shared/design-arrange-tool";
 
@@ -62,6 +63,14 @@ export function planDesignArrangeTool(
       input.pageId,
       input.nodeId,
       input.limits,
+      commandPrefix,
+    );
+  if (input.action === "set-layout-guides")
+    return planSetFrameLayoutGuides(
+      document,
+      input.pageId,
+      input.frameId,
+      input.layoutGuides,
       commandPrefix,
     );
   return planArrangeNodes(

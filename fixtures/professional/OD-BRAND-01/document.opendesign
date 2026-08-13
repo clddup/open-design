@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.18.0",
+  "schemaVersion": "1.19.0",
   "documentId": "document_od_brand_01",
   "revision": 1,
   "pageOrder": ["page_brand_01"],

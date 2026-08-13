@@ -3611,6 +3611,111 @@ describe("Renderer semantic hierarchy tool", () => {
     await expect(
       executeDesignToolRequest(
         {
+          requestId: "layout_guides_bypass",
+          call: {
+            toolCallId: "tool_layout_guides_bypass",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              label: "Bypass layout guides",
+              commands: [
+                {
+                  commandId: "bypass_layout_guides",
+                  type: "update_properties",
+                  nodeId: "frame_welcome",
+                  properties: {
+                    layoutGuides: [
+                      {
+                        id: "grid_8",
+                        type: "grid",
+                        size: 8,
+                        color: "#ff5a5f",
+                        opacity: 0.12,
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          context: { ...pageContext, revision: 3 },
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("set-layout-guides");
+    expect(runtime.getSnapshot().document.revision).toBe(3);
+    const frameWithGuides = {
+      ...runtime.getSnapshot().document.nodesById.frame_welcome,
+      id: "frame_with_guides",
+      name: "Bypass guide Frame",
+      parentId: null,
+      childIds: [],
+      properties: {
+        ...runtime.getSnapshot().document.nodesById.frame_welcome?.properties,
+        layoutGuides: [
+          {
+            id: "grid_16",
+            type: "grid" as const,
+            size: 16,
+            color: "#3366ff",
+            opacity: 0.2,
+          },
+        ],
+      },
+    };
+    for (const [requestId, commands] of [
+      [
+        "layout_guides_insert_bypass",
+        [
+          {
+            commandId: "insert_frame_with_guides",
+            type: "insert_element" as const,
+            pageId: "page_welcome",
+            parentId: null,
+            index: 1,
+            node: frameWithGuides,
+          },
+        ],
+      ],
+      [
+        "layout_guides_replace_bypass",
+        [
+          {
+            commandId: "replace_frame_with_guides",
+            type: "replace_subtree" as const,
+            rootNodeId: "frame_welcome",
+            nodes: [
+              {
+                ...frameWithGuides,
+                id: "frame_welcome",
+                name: "Replaced guide Frame",
+              },
+            ],
+          },
+        ],
+      ],
+    ] as const) {
+      await expect(
+        executeDesignToolRequest(
+          {
+            requestId,
+            call: {
+              toolCallId: `tool_${requestId}`,
+              toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+              input: { label: "Bypass layout guides", commands },
+            },
+            context: { ...pageContext, revision: 3 },
+          },
+          runtime,
+          "page_welcome",
+        ),
+      ).rejects.toThrow("set-layout-guides");
+      expect(runtime.getSnapshot().document.revision).toBe(3);
+    }
+
+    await expect(
+      executeDesignToolRequest(
+        {
           requestId: "auto_layout_limits_bypass",
           call: {
             toolCallId: "tool_auto_layout_limits_bypass",
@@ -3702,6 +3807,59 @@ describe("Renderer semantic hierarchy tool", () => {
       ).rejects.toThrow("set-layout-positioning");
       expect(runtime.getSnapshot().document.revision).toBe(3);
     }
+
+    const guides = await executeDesignToolRequest(
+      {
+        requestId: "layout_guides_set",
+        call: {
+          toolCallId: "tool_layout_guides_set",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-layout-guides",
+            label: "Show 8pt grid",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+            layoutGuides: [
+              {
+                id: "grid_8",
+                type: "grid",
+                size: 8,
+                color: "#ff5a5f",
+                opacity: 0.12,
+              },
+            ],
+          },
+        },
+        context: { ...pageContext, revision: 3 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(guides).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-layout-guides",
+          revision: 4,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome,
+    ).toMatchObject({
+      properties: {
+        layoutGuides: [
+          {
+            id: "grid_8",
+            type: "grid",
+            size: 8,
+            color: "#ff5a5f",
+            opacity: 0.12,
+          },
+        ],
+      },
+    });
   });
 
   it("sets horizontal Wrap through the Agent tool and derives wrapped child rows", async () => {

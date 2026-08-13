@@ -3,6 +3,7 @@ import type {
   ComponentOverridePatch,
   DesignNode,
   LayoutConstraints,
+  LayoutGuide,
   LayoutPositioning,
 } from "@opendesign/design-contracts";
 import {
@@ -67,6 +68,7 @@ export function PropertiesPanel({
   onSelectBooleanParent,
   onSetConstraints,
   onSetLayoutPositioning,
+  onSetFrameLayoutGuides,
   onUpdate,
   onUpdateComponentOverride,
   selectionCount,
@@ -110,6 +112,10 @@ export function PropertiesPanel({
     nodeId: string,
     positioning: LayoutPositioning | null,
     constraints?: LayoutConstraints,
+  ) => void;
+  onSetFrameLayoutGuides: (
+    frameId: string,
+    layoutGuides: readonly LayoutGuide[],
   ) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   onUpdateComponentOverride: (
@@ -200,6 +206,7 @@ export function PropertiesPanel({
             layoutPositioningConstraintsAvailable={
               node.kind !== "group" && node.kind !== "boolean"
             }
+            layoutGuidesAvailable={node.kind === "frame"}
             layoutSizingAvailable={
               layoutMode === "sizing" || layoutMode === "wrap-sizing"
             }
@@ -225,6 +232,7 @@ export function PropertiesPanel({
             onSelectBooleanParent={onSelectBooleanParent}
             onSetConstraints={onSetConstraints}
             onSetLayoutPositioning={onSetLayoutPositioning}
+            onSetFrameLayoutGuides={onSetFrameLayoutGuides}
             onUpdate={onUpdate}
             onUpdateComponentOverride={onUpdateComponentOverride}
           />

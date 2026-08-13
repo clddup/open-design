@@ -6,23 +6,17 @@ import {
 } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { checkSchema } from "./schema-check.js";
-import {
-  AutoLayoutSchema,
-  LayoutConstraintsSchema,
-  LayoutPositioningSchema,
-  LayoutSizingSchema,
-  LayoutLimitsSchema,
-} from "./layout.js";
+import * as layout from "./layout.js";
 import {
   designDocumentHasValidLayoutLimits,
   designOperationHasValidLayoutLimits,
 } from "./layout-limits-validation.js";
+import * as limits from "./limits.js";
 import * as versions from "./versions.js";
 export * from "./versions.js";
 export * from "./layout.js";
+export * from "./limits.js";
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
-export const MAX_TRANSACTION_COMMANDS = 500;
-export const MAX_PAGE_TRANSACTION_NODES = 50_000;
 export const JsonValueSchema = Type.Recursive((Self) =>
   Type.Union([
     Type.String(),
@@ -57,7 +51,6 @@ export const TransformSchema = Type.Tuple([
   Type.Number(),
   Type.Number(),
 ]);
-
 export const SizeSchema = Type.Object(
   {
     width: Type.Number({ minimum: 0 }),
@@ -321,7 +314,10 @@ export const FramePropertiesSchema = Type.Object(
     ...ShapeProperties,
     cornerRadius: Type.Number({ minimum: 0 }),
     clipsContent: Type.Boolean(),
-    autoLayout: Type.Optional(AutoLayoutSchema),
+    autoLayout: Type.Optional(layout.AutoLayoutSchema),
+    layoutGuides: Type.Optional(
+      Type.Array(layout.LayoutGuideSchema, { maxItems: 8 }),
+    ),
   },
   { additionalProperties: false },
 );
@@ -690,10 +686,10 @@ const NodeBaseProperties = {
   transform: TransformSchema,
   size: SizeSchema,
   opacity: Type.Number({ minimum: 0, maximum: 1 }),
-  constraints: Type.Optional(LayoutConstraintsSchema),
-  layoutPositioning: Type.Optional(LayoutPositioningSchema),
-  layoutSizing: Type.Optional(LayoutSizingSchema),
-  layoutLimits: Type.Optional(LayoutLimitsSchema),
+  constraints: Type.Optional(layout.LayoutConstraintsSchema),
+  layoutPositioning: Type.Optional(layout.LayoutPositioningSchema),
+  layoutSizing: Type.Optional(layout.LayoutSizingSchema),
+  layoutLimits: Type.Optional(layout.LayoutLimitsSchema),
   blendMode: Type.Optional(BlendModeSchema),
   effects: Type.Optional(Type.Array(EffectSchema)),
   maskMode: Type.Optional(MaskModeSchema),
@@ -924,13 +920,17 @@ export const UpdatePropertiesCommandSchema = Type.Object(
     size: Type.Optional(SizeSchema),
     opacity: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
     constraints: Type.Optional(
-      Type.Union([LayoutConstraintsSchema, Type.Null()]),
+      Type.Union([layout.LayoutConstraintsSchema, Type.Null()]),
     ),
     layoutPositioning: Type.Optional(
-      Type.Union([LayoutPositioningSchema, Type.Null()]),
+      Type.Union([layout.LayoutPositioningSchema, Type.Null()]),
     ),
-    layoutSizing: Type.Optional(Type.Union([LayoutSizingSchema, Type.Null()])),
-    layoutLimits: Type.Optional(Type.Union([LayoutLimitsSchema, Type.Null()])),
+    layoutSizing: Type.Optional(
+      Type.Union([layout.LayoutSizingSchema, Type.Null()]),
+    ),
+    layoutLimits: Type.Optional(
+      Type.Union([layout.LayoutLimitsSchema, Type.Null()]),
+    ),
     blendMode: Type.Optional(BlendModeSchema),
     effects: Type.Optional(Type.Array(EffectSchema)),
     maskMode: Type.Optional(MaskModeSchema),
@@ -1014,7 +1014,7 @@ export const InsertPageCommandSchema = Type.Object(
     index: Type.Integer({ minimum: 0 }),
     page: DesignPageSchema,
     nodes: Type.Array(DesignNodeSchema, {
-      maxItems: MAX_PAGE_TRANSACTION_NODES,
+      maxItems: limits.MAX_PAGE_TRANSACTION_NODES,
     }),
   },
   { additionalProperties: false },
@@ -1118,7 +1118,7 @@ export const DesignTransactionSchema: TSchema & {
     summary: Type.Optional(Type.String()),
     commands: Type.Array(DesignOperationSchema, {
       minItems: 1,
-      maxItems: MAX_TRANSACTION_COMMANDS,
+      maxItems: limits.MAX_TRANSACTION_COMMANDS,
     }),
     extensions: Type.Optional(JsonObjectSchema),
   },

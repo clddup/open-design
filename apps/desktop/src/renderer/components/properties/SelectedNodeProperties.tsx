@@ -3,6 +3,7 @@ import type {
   ComponentOverridePatch,
   DesignNode,
   LayoutConstraints,
+  LayoutGuide,
   LayoutLimits,
   LayoutPositioning,
   LayoutSizing,
@@ -89,6 +90,7 @@ export function SelectedNodeProperties({
   layoutLimitsAvailable,
   layoutPositioningAvailable,
   layoutPositioningConstraintsAvailable,
+  layoutGuidesAvailable,
   onBooleanOperationChange,
   onCreateComponent,
   onCreateComponentInstance,
@@ -103,6 +105,7 @@ export function SelectedNodeProperties({
   onSelectBooleanParent,
   onSetConstraints,
   onSetLayoutPositioning,
+  onSetFrameLayoutGuides,
   onUpdate,
   onUpdateComponentOverride,
 }: {
@@ -117,6 +120,7 @@ export function SelectedNodeProperties({
   layoutLimitsAvailable: boolean;
   layoutPositioningAvailable: boolean;
   layoutPositioningConstraintsAvailable: boolean;
+  layoutGuidesAvailable: boolean;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
@@ -135,6 +139,10 @@ export function SelectedNodeProperties({
     positioning: LayoutPositioning | null,
     constraints?: LayoutConstraints,
   ) => void;
+  onSetFrameLayoutGuides: (
+    frameId: string,
+    layoutGuides: readonly LayoutGuide[],
+  ) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
@@ -144,6 +152,8 @@ export function SelectedNodeProperties({
   const { t } = useI18n();
   const flowPositioned =
     layoutPositioningAvailable && node.layoutPositioning !== "absolute";
+  const frameLayoutGuides =
+    node.kind === "frame" ? (node.properties.layoutGuides ?? []) : [];
   const updateTranslation = (index: 4 | 5, value: number) => {
     const transform: DesignNode["transform"] = [...node.transform];
     transform[index] = value;
@@ -419,6 +429,104 @@ export function SelectedNodeProperties({
         </Section>
       )}
       <Section title={t("properties.layout")}>
+        {layoutGuidesAvailable && node.kind === "frame" && (
+          <div className={styles.stack}>
+            <div className={styles.layoutGuideToolbar}>
+              <span>{t("properties.layoutGuides")}</span>
+              <Button
+                disabled={frameLayoutGuides.length >= 8}
+                icon="plus"
+                onClick={() =>
+                  onSetFrameLayoutGuides(node.id, [
+                    ...frameLayoutGuides,
+                    {
+                      id: nextLayoutGuideId(node.id, frameLayoutGuides),
+                      type: "grid",
+                      size: 8,
+                      color: "#ff5a5f",
+                      opacity: 0.12,
+                    },
+                  ])
+                }
+                tone="quiet"
+              >
+                {t("properties.layoutGuideAdd")}
+              </Button>
+            </div>
+            {frameLayoutGuides.map((guide) => (
+              <div className={styles.layoutGuide} key={guide.id}>
+                <span className={styles.layoutGuideHeading}>
+                  {t("properties.layoutGuideGrid")}
+                </span>
+                <IconButton
+                  icon="trash"
+                  label={`${t("properties.layoutGuideRemove")} ${guide.id}`}
+                  onClick={() =>
+                    onSetFrameLayoutGuides(
+                      node.id,
+                      frameLayoutGuides.filter((item) => item.id !== guide.id),
+                    )
+                  }
+                />
+                <Field
+                  accessibleLabel={`${t("properties.layoutGuideSize")} ${guide.id}`}
+                  label={t("properties.layoutGuideSize")}
+                  min={1}
+                  max={10_000}
+                  onCommit={(value) => {
+                    const size = Number(value);
+                    if (!Number.isFinite(size) || size < 1) return null;
+                    onSetFrameLayoutGuides(
+                      node.id,
+                      frameLayoutGuides.map((item) =>
+                        item.id === guide.id ? { ...item, size } : item,
+                      ),
+                    );
+                    return String(size);
+                  }}
+                  suffix="px"
+                  value={formatNumber(guide.size)}
+                />
+                <Field
+                  accessibleLabel={`${t("properties.layoutGuideColor")} ${guide.id}`}
+                  label={t("properties.layoutGuideColor")}
+                  onCommit={(color) => {
+                    const next = color.trim();
+                    if (!next || next === guide.color) return next;
+                    onSetFrameLayoutGuides(
+                      node.id,
+                      frameLayoutGuides.map((item) =>
+                        item.id === guide.id ? { ...item, color: next } : item,
+                      ),
+                    );
+                    return next;
+                  }}
+                  type="text"
+                  value={guide.color}
+                />
+                <Field
+                  accessibleLabel={`${t("properties.layoutGuideOpacity")} ${guide.id}`}
+                  label={t("properties.layoutGuideOpacity")}
+                  min={0}
+                  max={1}
+                  onCommit={(value) => {
+                    const opacity = Number(value);
+                    if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1)
+                      return null;
+                    onSetFrameLayoutGuides(
+                      node.id,
+                      frameLayoutGuides.map((item) =>
+                        item.id === guide.id ? { ...item, opacity } : item,
+                      ),
+                    );
+                    return String(opacity);
+                  }}
+                  value={formatNumber(guide.opacity)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         {layoutPositioningAvailable && (
           <div className={styles.toggles}>
             <label>
@@ -646,4 +754,14 @@ export function SelectedNodeProperties({
       />
     </div>
   );
+}
+
+function nextLayoutGuideId(
+  frameId: string,
+  guides: readonly LayoutGuide[],
+): string {
+  const existing = new Set(guides.map((guide) => guide.id));
+  let sequence = 1;
+  while (existing.has(`${frameId}_grid_${sequence}`)) sequence += 1;
+  return `${frameId}_grid_${sequence}`;
 }

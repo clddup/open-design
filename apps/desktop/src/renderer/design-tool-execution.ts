@@ -890,12 +890,16 @@ async function executeDesignToolRequestUnsafe(
           ...(input.action === "set-layout-limits"
             ? { nodeId: input.nodeId, limits: input.limits }
             : {}),
+          ...(input.action === "set-layout-guides"
+            ? { frameId: input.frameId, layoutGuides: input.layoutGuides }
+            : {}),
           ...(input.action !== "resize-frame" &&
           input.action !== "set-constraints" &&
           input.action !== "set-auto-layout" &&
           input.action !== "set-layout-sizing" &&
           input.action !== "set-layout-positioning" &&
           input.action !== "set-layout-limits" &&
+          input.action !== "set-layout-guides" &&
           "orderedNodeIds" in plan
             ? { orderedNodeIds: plan.orderedNodeIds }
             : {}),
@@ -1246,6 +1250,19 @@ function assertAgentDoesNotBypassAutoLayout(
     if (commandNodes.some((node) => node.layoutPositioning !== undefined)) {
       throw new Error(
         `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_arrange_layers action set-layout-positioning`,
+      );
+    }
+    const writesLayoutGuides =
+      commandNodes.some(
+        (node) =>
+          node.kind === "frame" && node.properties.layoutGuides !== undefined,
+      ) ||
+      (command.type === "update_properties" &&
+        command.properties !== undefined &&
+        Object.hasOwn(command.properties, "layoutGuides"));
+    if (writesLayoutGuides) {
+      throw new Error(
+        `design_workflow.layout_guides_requires_layout_tool: Configure Frame layout guides with opendesign_arrange_layers action set-layout-guides`,
       );
     }
     if (

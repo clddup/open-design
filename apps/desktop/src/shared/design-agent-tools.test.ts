@@ -1711,6 +1711,21 @@ describe("design Agent tool contract", () => {
       positioning: "absolute",
       constraints: { horizontal: "right", vertical: "top" },
     };
+    const layoutGuides = {
+      action: "set-layout-guides",
+      label: "Show 8pt grid",
+      pageId: "page_1",
+      frameId: "navigation",
+      layoutGuides: [
+        {
+          id: "grid_8",
+          type: "grid",
+          size: 8,
+          color: "#ff5a5f",
+          opacity: 0.12,
+        },
+      ],
+    };
 
     expect(arrange).toMatchObject({
       risk: "design_write",
@@ -1771,6 +1786,18 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutPositioning),
     ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutGuides),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...layoutGuides,
+        layoutGuides: [
+          layoutGuides.layoutGuides[0],
+          layoutGuides.layoutGuides[0],
+        ],
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...layoutPositioning,

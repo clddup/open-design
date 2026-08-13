@@ -28,6 +28,30 @@ export function validateNodeLayoutInvariants(
       message: "wrapped Auto Layout requires fixed Frame width",
     });
   }
+  if (node.kind === "frame" && node.properties.layoutGuides !== undefined) {
+    const guideIds = new Set<string>();
+    for (const guide of node.properties.layoutGuides) {
+      if (guideIds.has(guide.id)) {
+        issues.push({
+          path: `/nodesById/${nodeId}/properties/layoutGuides`,
+          message: "layout guide IDs must be unique within a Frame",
+        });
+        break;
+      }
+      guideIds.add(guide.id);
+      const lineCount =
+        Math.max(0, Math.ceil(node.size.width / guide.size) - 1) +
+        Math.max(0, Math.ceil(node.size.height / guide.size) - 1);
+      if (lineCount > 4_096) {
+        issues.push({
+          path: `/nodesById/${nodeId}/properties/layoutGuides`,
+          message:
+            "layout guide density exceeds the 4096-line safety limit for this Frame",
+        });
+        break;
+      }
+    }
+  }
   const layoutParent = node.parentId
     ? document.nodesById[node.parentId]
     : undefined;

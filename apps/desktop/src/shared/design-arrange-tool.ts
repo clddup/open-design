@@ -1,6 +1,7 @@
 import type {
   AutoLayout,
   LayoutConstraints,
+  LayoutGuide,
   LayoutLimits,
   LayoutPositioning,
   LayoutSizing,
@@ -73,6 +74,13 @@ export type DesignArrangeToolInput =
       pageId: string;
       nodeId: string;
       limits: LayoutLimits | null;
+    }
+  | {
+      action: "set-layout-guides";
+      label: string;
+      pageId: string;
+      frameId: string;
+      layoutGuides: LayoutGuide[];
     };
 
 const label = { type: "string", minLength: 1, maxLength: 256 } as const;
@@ -111,6 +119,7 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
         "set-layout-sizing",
         "set-layout-positioning",
         "set-layout-limits",
+        "set-layout-guides",
       ],
     },
     label,
@@ -277,6 +286,22 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
       ],
     },
   },
+  layoutGuides: {
+    type: "array",
+    maxItems: 8,
+    items: {
+      type: "object",
+      properties: {
+        id: { type: "string", minLength: 1, maxLength: 256 },
+        type: { const: "grid" },
+        size: { type: "number", minimum: 1, maximum: 10_000 },
+        color: { type: "string", minLength: 1, maxLength: 128 },
+        opacity: { type: "number", minimum: 0, maximum: 1 },
+      },
+      required: ["id", "type", "size", "color", "opacity"],
+      additionalProperties: false,
+    },
+  },
   required: ["action", "label", "pageId"],
   additionalProperties: false,
 } as const;
@@ -345,6 +370,13 @@ export function isDesignArrangeToolInput(
       (input.limits === null ||
         (isRecord(input.limits) && isValidLayoutLimits(input.limits))) &&
       onlyKeys(input, ["action", "label", "pageId", "nodeId", "limits"])
+    );
+  }
+  if (action === "set-layout-guides") {
+    return (
+      safeId(input.frameId) &&
+      isLayoutGuides(input.layoutGuides) &&
+      onlyKeys(input, ["action", "label", "pageId", "frameId", "layoutGuides"])
     );
   }
   const layerActions = [
@@ -416,6 +448,30 @@ function isLayoutSizing(value: unknown): value is LayoutSizing {
     ["fixed", "fill"].includes(String(value.vertical)) &&
     onlyKeys(value, ["horizontal", "vertical"])
   );
+}
+
+function isLayoutGuides(value: unknown): value is LayoutGuide[] {
+  if (!Array.isArray(value) || value.length > 8) return false;
+  const ids = new Set<string>();
+  return value.every((guide) => {
+    if (!isRecord(guide)) return false;
+    const valid =
+      safeId(guide.id) &&
+      guide.type === "grid" &&
+      finite(guide.size) &&
+      guide.size >= 1 &&
+      guide.size <= 10_000 &&
+      typeof guide.color === "string" &&
+      guide.color.length > 0 &&
+      guide.color.length <= 128 &&
+      finite(guide.opacity) &&
+      guide.opacity >= 0 &&
+      guide.opacity <= 1 &&
+      onlyKeys(guide, ["id", "type", "size", "color", "opacity"]);
+    if (!valid || ids.has(String(guide.id))) return false;
+    ids.add(String(guide.id));
+    return true;
+  });
 }
 
 function isAutoLayout(value: unknown): value is AutoLayout {

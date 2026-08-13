@@ -59,6 +59,10 @@ export {
   type LayoutPositioningOperationPlan,
 } from "./auto-layout-positioning-operations.js";
 export {
+  planSetFrameLayoutGuides,
+  type LayoutGuideOperationPlan,
+} from "./layout-guide-operations.js";
+export {
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
   type FrameLayoutOperationFailureCode,

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-13",
-  "documentSchemaVersion": "1.18.0",
+  "updatedAt": "2026-08-14",
+  "documentSchemaVersion": "1.19.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -796,10 +796,10 @@
       "status": "degraded",
       "label": { "en": "Auto layout", "zh-CN": "Auto Layout" },
       "description": {
-        "en": "Lay out Frames responsively with direction, wrap, padding, gap, alignment, hug, fill, fixed, min/max, and absolute children.",
-        "zh-CN": "通过方向、换行、padding、gap、对齐、hug、fill、fixed、min/max 和 absolute child 响应式布局 Frame。"
+        "en": "Lay out Frames responsively and add non-exported uniform Layout Guides without changing child geometry.",
+        "zh-CN": "响应式布局 Frame，并添加不改变 child 几何且不导出的 Uniform Layout Guide。"
       },
-      "provider": "DesignDocument 1.18.0 + @opendesign/layout-service Auto Layout contract v6 + EditorRuntime",
+      "provider": "DesignDocument 1.19.0 Layout Guide + @opendesign/layout-service Auto Layout contract v6 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -811,8 +811,8 @@
       },
       "limitations": [
         {
-          "en": "Auto Layout supports per-axis Frame Fixed/Hug, flow-child Fixed/Fill, min/max width and height, padding minimums, bounded Fill redistribution, main-axis Auto gap, nested convergence, horizontal Wrap, and explicit absolute children excluded from flow with responsive constraints. Counter-axis Auto gap, vertical wrap, Wrap+Fill, baseline, grid, rotated absolute children, canvas reflow handles, SVG round-trip metadata, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "Auto Layout 支持 Frame 每轴 Fixed/Hug、flow child 每轴 Fixed/Fill、宽高 Min/Max、padding minimum、bounded Fill 重分配、主轴 Auto gap、嵌套收敛、水平 Wrap，以及退出 flow 并使用响应式 constraints 的明确 absolute child。交叉轴 Auto gap、垂直 wrap、Wrap+Fill、baseline、grid、旋转 absolute child、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
+          "en": "Uniform Layout Guides support stable size, color, and opacity on Frames and remain outside layout, capture, and export. Columns/Rows guides, guide styles and variables, snapping, Auto Layout Grid tracks/cells/span/reflow, counter-axis Auto gap, vertical wrap, Wrap+Fill, baseline, rotated absolute children, canvas reflow handles, SVG round-trip metadata, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "Uniform Layout Guide 支持 Frame 上稳定的 size、color 与 opacity，并保持在布局、capture 和 export 之外。Columns/Rows guide、guide style 与变量、吸附、Auto Layout Grid 的 track/cell/span/reflow、交叉轴 Auto gap、垂直 wrap、Wrap+Fill、baseline、旋转 absolute child、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
       "evidence": {
@@ -820,6 +820,7 @@
           "packages/design-contracts/src/index.test.ts",
           "packages/layout-service/src/index.test.ts",
           "packages/editor-runtime/src/auto-layout-operations.test.ts",
+          "packages/editor-runtime/src/layout-guide-operations.test.ts",
           "packages/editor-runtime/src/frame-layout-operations.test.ts",
           "packages/editor-runtime/src/layer-operations.test.ts",
           "packages/editor-runtime/src/text-layout.test.ts",
@@ -830,12 +831,15 @@
           "apps/desktop/src/renderer/features/editor/editor-command-controllers.test.tsx",
           "apps/desktop/src/renderer/features/editor/canvas-operation-commit.test.ts",
           "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
-          "apps/desktop/src/renderer/App.test.tsx"
+          "apps/desktop/src/renderer/App.test.tsx",
+          "packages/leafer-engine/src/adapter.test.ts"
         ],
         "manual": []
       },
       "references": [
         "https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout",
+        "https://help.figma.com/hc/en-us/articles/360040450513-Create-layout-guides",
+        "https://help.figma.com/hc/en-us/articles/31289469907863-Use-the-grid-auto-layout-flow",
         "https://developers.figma.com/docs/plugins/api/properties/nodes-primaryaxisalignitems/",
         "https://developers.figma.com/docs/plugins/api/properties/nodes-layoutpositioning/"
       ]

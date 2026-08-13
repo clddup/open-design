@@ -1,11 +1,11 @@
 # OpenDesign 验证状态
 
-- 日期：2026-08-13
+- 日期：2026-08-14
 
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.18.0`
+- 文档协议：`DesignDocument 1.19.0`
 - Agent 协议：`3.9.0`
 - Geometry Service：`contract v10`
 - Layout Service：`contract v6`
@@ -18,11 +18,11 @@
 
 ## 平台支持矩阵
 
-| 平台    | 产品级别 | 当前证据                                                                                                                                                                                                    | 发布状态                     |
-| ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| macOS   | 一级支持 | 原生 workflow [31384519288](https://github.com/clddup/open-design/actions/runs/31384519288) 已通过 verify、protected Vite build、未签名 DMG/ZIP、包内容检查、packaged Agent smoke 与 artifact 上传          | 自动化通过；签名/安装待验收  |
-| Windows | 一级支持 | 历史 workflow 已在 Windows runner 通过 verify、protected Vite build、NSIS、包内容检查、packaged executable/Agent smoke 与 artifact 上传；当前 NSIS 已配置 assisted installer 和目录选择，待最新原生产物复验 | 自动化待复验；实机安装待验收 |
-| Linux   | 目标平台 | 保留 electron-builder 配置，当前无原生验证                                                                                                                                                                  | 当前阶段不阻塞               |
+| 平台    | 产品级别 | 当前证据                                                                                                                                                                                                                                                   | 发布状态                        |
+| ------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| macOS   | 一级支持 | 原生 workflow [31384519288](https://github.com/clddup/open-design/actions/runs/31384519288) 历史上已通过 verify、protected Vite build、未签名 DMG/ZIP、包内容检查、packaged Agent smoke 与 artifact 上传；当前 workflow 已改为仅上传 DMG，待下一次反馈验证 | 自动化历史通过；签名/安装待验收 |
+| Windows | 一级支持 | 历史 workflow 已在 Windows runner 通过 verify、protected Vite build、NSIS、包内容检查、packaged executable/Agent smoke 与 artifact 上传；当前 NSIS 已配置 assisted installer 和目录选择，待最新原生产物复验                                                | 自动化待复验；实机安装待验收    |
+| Linux   | 目标平台 | 保留 electron-builder 配置，当前无原生验证                                                                                                                                                                                                                 | 当前阶段不阻塞                  |
 
 macOS 与 Windows 必须在同一待发布 commit 上分别完成原生验证。Electron、TypeScript 和共享测试通过不等于另一操作系统可用，protected V8 bytecode 也不能跨系统构建后复用。
 
@@ -41,8 +41,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   55 files / 536 tests
-└── desktop tests   74 files / 609 tests
+├── package tests   56 files / 546 tests
+└── desktop tests   75 files / 616 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -113,7 +113,7 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、18 项降级可用和 3 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.18.0`、EditorRuntime、Geometry/Image/Text/Layout service、Leafer adapter、属性检查器和 Agent tools 已打通正式 Line/Arrow、Polygon/Star、精确 path-data、editable Vector Network / Pen、互不连接的非分支多 contour、多 Vector edit collection、Open/Close/Reverse、点击 Cut 与 document-space 多层有限线拖拽 Cut，以及 Fixed/Auto Width/Auto Height 单样式文字、主要外观、图片读取/生成/放置/非破坏 placement/来源替换、普通 Frame constraints、Auto Layout 轴向 Fixed/Hug/Fill、Horizontal Wrap、Min/Max、bounded Fill、padding minimum、主轴 Auto gap 与 Absolute child、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Pen/Vector 专项证据覆盖 `P` 创作、逐层节点/手柄/四种 point mode、明确 path 的拓扑操作、点击 vertex/line/cubic Cut、拖拽线混合切割独立 closed/open/compound Vector layers、闭合真实 connector、开放无 connector/region 分片、未切孔洞按包含侧重分配与有效 winding、穿孔连续边界缝合、闭合凹形四交点多 component 提取、host-authored sibling layers、逐层 world transform、锁定/失败恢复、单事务、保存重开/undo/redo、Agent typed schema/selection 隔离、Boolean 消费与受控 SVG metadata v2 往返。Text 专项继续覆盖 resize mode、迁移、Leafer `boxBounds` provider、具体 size、Auto Height reflow、字体 fallback、后台 Workspace、Inspector、Agent 与 SVG Text metadata v3/v2/v1。真实字体栅格、max-lines、字体 asset/替换、显式 reflow、确定性跨平台 shaping、连接/分支 network、connect/disconnect、flatten、outline stroke、Vertical Wrap、Wrap+Fill、grid、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。三个固定专业 fixture 证明现有语义可以组成完整企鹅层级、复杂海报文档和保留源 operand 的 Boolean 品牌主件；画布直接 Crop、图片调整、真实 Electron 像素截图、Agent 重放、批量/Slice/PDF 导出和双平台打包保存实测仍未完成，不能据此把完整工作流标为可用。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、18 项降级可用和 3 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.19.0`、EditorRuntime、Geometry/Image/Text/Layout service、Leafer adapter、属性检查器和 Agent tools 已打通正式 Line/Arrow、Polygon/Star、精确 path-data、editable Vector Network / Pen、互不连接的非分支多 contour、多 Vector edit collection、Open/Close/Reverse、点击 Cut 与 document-space 多层有限线拖拽 Cut，以及 Fixed/Auto Width/Auto Height 单样式文字、主要外观、图片读取/生成/放置/非破坏 placement/来源替换、普通 Frame constraints、Auto Layout 轴向 Fixed/Hug/Fill、Horizontal Wrap、Min/Max、bounded Fill、padding minimum、主轴 Auto gap、Absolute child 与 Frame Uniform Layout Guide、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Pen/Vector 专项证据覆盖 `P` 创作、逐层节点/手柄/四种 point mode、明确 path 的拓扑操作、点击 vertex/line/cubic Cut、拖拽线混合切割独立 closed/open/compound Vector layers、闭合真实 connector、开放无 connector/region 分片、未切孔洞按包含侧重分配与有效 winding、穿孔连续边界缝合、闭合凹形四交点多 component 提取、host-authored sibling layers、逐层 world transform、锁定/失败恢复、单事务、保存重开/undo/redo、Agent typed schema/selection 隔离、Boolean 消费与受控 SVG metadata v2 往返。Text 专项继续覆盖 resize mode、迁移、Leafer `boxBounds` provider、具体 size、Auto Height reflow、字体 fallback、后台 Workspace、Inspector、Agent 与 SVG Text metadata v3/v2/v1。真实字体栅格、max-lines、字体 asset/替换、显式 reflow、确定性跨平台 shaping、连接/分支 network、connect/disconnect、flatten、outline stroke、Vertical Wrap、Wrap+Fill、Columns/Rows guide、Auto Layout Grid、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。三个固定专业 fixture 证明现有语义可以组成完整企鹅层级、复杂海报文档和保留源 operand 的 Boolean 品牌主件；画布直接 Crop、图片调整、真实 Electron 像素截图、Agent 重放、批量/Slice/PDF 导出和双平台打包保存实测仍未完成，不能据此把完整工作流标为可用。
 
 仓库当前已有独立 `@opendesign/geometry-service` contract v10：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify、transform、dash 和 outline stroke 的底层计算边界；editable-vector 子入口提供稳定 ID 拓扑校验、确定性 cubic 序列化、分支检测与 tight bounds，vector-edit 子入口提供互不连接非分支多 contour 的节点/手柄、路径拓扑、点击 Cut，以及开放/闭合 contour、compound holes、穿孔 boundary stitching 与闭合凹形多交点的有限线拖拽 Cut 纯几何操作。EditorRuntime 在其上提供 document-space 多目标编排、逐层 transform inverse、稳定 sibling 插入与原子多层 Cut。`DesignDocument 1.10.0` 与 EditorRuntime 建立非破坏 Boolean Group、正式 LineNode、PolygonNode、StarNode、Vector Network、持久 point mode 和 Text Auto Size/wrapping/overflow 的独立节点语义、迁移、持久化、planner 和 undo/redo；`path` 与 `network` 严格互斥。独立 `@opendesign/text-service` contract v1 由固定 Leafer provider 提供 Auto Width/Auto Height 测量、具体 size 与 font fallback warning，WorkspaceRuntime 把 provider 同步给活动、后台和后打开文件；max-lines、字体资源/替换、显式 reflow 和精确 shaping 仍未实现。递归 Boolean resolver 处理 Rectangle/Ellipse/尖角 Polygon/Star/两种 Path/Vector/嵌套 Boolean，Leafer synthetic result 不持久化 provider 派生 path。人工 Pen/Vector 与 Agent typed vector tool 消费同一种 editable network；flatten 和 outline stroke 产品命令仍未完成。独立 `@opendesign/import-export-service` 安全 SVG v1 继续由 EditorRuntime planner、Main 文件桥、人工入口和 Agent handle 复用；editable network 通过有界 metadata v2 往返 point mode、点击/拖拽 Cut 拓扑，并同时校验 schema、拓扑和标准 `d`；闭合拖拽结果以标准 `Z` paths 往返，开放结果以无 `Z`、无 region paths 往返，compound sibling 以有效反向 hole subpath 往返，穿孔 sibling 各自使用连续单 loop，凹形 extracted sibling 可包含多个 closed paths/regions，多层 Cut 只是一次事务组合多组标准节点。Text 通过标准 `<text>/<tspan>` 和受控 metadata v3 往返 resize mode、具体 size、换行与溢出，v2/v1 继续迁移读取。没有 metadata 的外部 SVG path 保持精确 path-data，不猜测 network；普通第三方 Text 继续拒绝。图片、复杂 effects/combined mask graph、angular gradient、多 paint、outline text/stroke 保真与双平台打包 smoke 仍未完成，因此 SVG capability 保持 `degraded`。仓库已有独立 `@opendesign/layout-service` contract v6；仍没有完整 Text/Font typography service；组件、Variant 和 Token 仍为占位数据。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
 
@@ -171,9 +171,8 @@ Vite 生产构建完成四个环境。共享门禁从实际 `out/` 检查每个�
 本次在 macOS arm64 命令行执行 `package:mac`，由 Vite 8.2.1 在当前平台重新生成 Main/Agent `.jsc`，electron-builder 26.15.3 生成以下未签名产物：
 
 - `OpenDesign-0.0.0-mac-arm64.dmg`
-- `OpenDesign-0.0.0-mac-arm64.zip`
 
-`verify:package:mac` 已检查目标平台/架构命名、非空 DMG/ZIP、unpacked `app.asar`、`icon.png`、`THIRD_PARTY_NOTICES.md`、Main/Agent bytecode wrapper、`.jsc`、bytenode runtime，以及 protected output 中不存在 sourcemap。打包过程没有启动 OpenDesign 窗口；按用户要求，本次未运行 packaged executable smoke。
+`verify:package:mac` 已检查目标平台/架构命名、非空 DMG、unpacked `app.asar`、`icon.png`、`THIRD_PARTY_NOTICES.md`、Main/Agent bytecode wrapper、`.jsc`、bytenode runtime，以及 protected output 中不存在 sourcemap。打包过程没有启动 OpenDesign 窗口；按用户要求，本次未运行 packaged executable smoke。
 
 仓库的 macOS/Windows 原生 workflow 顺序为 `verify → native protected package → package content verification → packaged Agent smoke → artifact upload`；历史 workflow 已在两个平台通过。当前 worktree 修改了 NSIS 安装模式，尚无对应 Windows 原生产物，因此以下发布门禁仍未完成：
 

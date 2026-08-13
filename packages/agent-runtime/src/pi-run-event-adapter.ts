@@ -11,10 +11,6 @@ import type {
   AssistantTimelineBlock,
   RunStopReason,
 } from "@opendesign/agent-contracts";
-import type {
-  ModelApiFormat,
-  ResolvedModelIdentity,
-} from "@opendesign/model-gateway";
 import type { SessionStore } from "@opendesign/session-store";
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
 import {
@@ -34,6 +30,16 @@ import {
 import type { PiContextFailurePort } from "./pi-context-adapter.js";
 import type { PiModelFailurePort } from "./pi-model-gateway-adapter.js";
 import { terminalRunFailure } from "./pi-terminal-failure.js";
+import {
+  blockId,
+  generatedTokens,
+  requireAssistantMessage,
+  toResolvedIdentity,
+  toRunStopReason,
+  toTimelineBlocks,
+  userText,
+  type PiAgentEventMessage,
+} from "./pi-run-event-messages.js";
 import { appendRunJournalEvent } from "./run-journal-writer.js";
 export interface PiRunEventAdapterOptions {
   request: AgentRunRequest;
@@ -779,6 +785,10 @@ export class PiRunEventAdapter {
   }
 }
 
+function snapshotRequest(request: AgentRunRequest): AgentRunRequest {
+  return structuredClone(request);
+}
+
 function projectedInitialUserText(request: AgentRunRequest): string {
   const message = canonicalUserMessage(
     request.prompt,
@@ -786,122 +796,9 @@ function projectedInitialUserText(request: AgentRunRequest): string {
   );
   if (typeof message.content === "string") return message.content;
   const text = message.content.find((block) => block.type === "text");
-  if (!text) {
+  if (!text)
     throw new Error("Canonical initial user message has no text block");
-  }
   return text.text;
-}
-
-type PiAgentEventMessage = Extract<
-  PiAgentEvent,
-  { type: "message_start" | "message_end" }
->["message"];
-
-function toTimelineBlocks(
-  message: AssistantMessage,
-  messageId: string,
-): AssistantTimelineBlock[] {
-  return message.content.flatMap((block, index): AssistantTimelineBlock[] => {
-    if (block.type === "text") {
-      return [
-        {
-          blockId: blockId(messageId, index),
-          type: "text",
-          text: block.text,
-        },
-      ];
-    }
-    if (block.type === "thinking") {
-      const omitted = block.redacted === true || block.thinking.length === 0;
-      return [
-        {
-          blockId: blockId(messageId, index),
-          type: "reasoning_summary",
-          status: omitted ? "omitted" : "completed",
-          ...(omitted ? {} : { summary: block.thinking }),
-        },
-      ];
-    }
-    return [];
-  });
-}
-
-function toResolvedIdentity(
-  message: AssistantMessage,
-  request: AgentRunRequest,
-): ResolvedModelIdentity {
-  return {
-    providerId: message.provider,
-    modelId: message.model,
-    apiFormat: toModelApiFormat(message.api),
-    ...(request.modelSelection.reasoningEffort === undefined
-      ? {}
-      : { reasoningEffort: request.modelSelection.reasoningEffort }),
-    ...(message.responseId === undefined
-      ? {}
-      : { responseId: message.responseId }),
-  };
-}
-
-function toModelApiFormat(api: AssistantMessage["api"]): ModelApiFormat {
-  if (api === "openai-responses") return "openai-responses";
-  if (api === "openai-completions") return "openai-chat-completions";
-  if (api === "anthropic-messages") return "anthropic-messages";
-  throw new TypeError(`Unsupported Pi model API in run journal: ${api}`);
-}
-
-function toRunStopReason(
-  stopReason: AssistantMessage["stopReason"] | undefined,
-  hadToolCalls: boolean,
-): RunStopReason {
-  if (stopReason === "aborted") return "cancelled";
-  if (stopReason === "length") return "budget";
-  if (stopReason === "error" || stopReason === undefined) return "error";
-  if (stopReason === "toolUse" && !hadToolCalls) return "error";
-  return "complete";
-}
-
-function userText(message: UserMessage): string {
-  if (typeof message.content === "string") return message.content;
-  return message.content
-    .map((block) => {
-      if (block.type === "image") {
-        throw new TypeError(
-          "Inline Pi user images cannot be persisted in the OpenDesign journal",
-        );
-      }
-      return block.text;
-    })
-    .join("\n");
-}
-
-function requireAssistantMessage(
-  message: PiAgentEventMessage,
-): AssistantMessage {
-  if (
-    message.role !== "assistant" ||
-    !("stopReason" in message) ||
-    !("content" in message) ||
-    !("api" in message)
-  ) {
-    throw new Error("Pi emitted a non-model assistant message");
-  }
-  return message;
-}
-
-function blockId(messageId: string, contentIndex: number): string {
-  return `${messageId}_block_${contentIndex}`;
-}
-
-function snapshotRequest(request: AgentRunRequest): AgentRunRequest {
-  return structuredClone(request);
-}
-
-function generatedTokens(message: AssistantMessage): number {
-  // Provider output usage already includes reasoning tokens. Repeated input
-  // context is bounded per turn by PiContextAdapter and must not consume the
-  // Run's generation budget again on every tool round-trip.
-  return message.usage.output;
 }
 
 function errorMessage(error: unknown): string {

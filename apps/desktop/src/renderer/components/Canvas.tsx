@@ -802,6 +802,11 @@ export function Canvas({
       ...(generationActivity ? { generationActivity } : {}),
       ...(generationReveal ? { generationReveal } : {}),
       pageId: activePageId,
+      ...(snapshot.state.selection.nodeIds.length === 1 &&
+      snapshot.document.nodesById[snapshot.state.selection.nodeIds[0] ?? ""]
+        ?.kind === "frame"
+        ? { layoutGuideFrameId: snapshot.state.selection.nodeIds[0] }
+        : {}),
       reducedMotion,
       selection: snapshot.state.selection,
       tool,
