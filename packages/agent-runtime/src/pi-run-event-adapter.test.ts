@@ -116,8 +116,8 @@ describe("Pi run event adapter", () => {
       normalizeJournal(production.store.events),
     );
     expect(await pi.store.readTimeline(request.sessionId)).toMatchObject([
-      { type: "run", status: "completed" },
       { type: "user.message", content: request.prompt },
+      { type: "run", status: "completed" },
       {
         type: "assistant.message",
         blocks: [
@@ -131,6 +131,10 @@ describe("Pi run event adapter", () => {
           },
         ],
       },
+    ]);
+    expect(pi.store.events.slice(0, 2).map((event) => event.type)).toEqual([
+      "message.user",
+      "run.state",
     ]);
   });
 

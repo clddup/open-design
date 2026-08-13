@@ -31,7 +31,6 @@ import {
   type LeaferEngineSyncInput,
   type LeaferFidelityWarning,
   type LeaferGenerationActivity,
-  type LeaferGenerationSkeleton,
   type LeaferOperationKind,
   type LeaferOperationRequest,
   type LeaferVectorEditRequest,
@@ -63,7 +62,6 @@ export function Canvas({
   activeAgentRunId,
   activePageId,
   generationActivity,
-  generationSkeleton,
   runtime,
   snapshot,
   onTransactionError,
@@ -73,7 +71,6 @@ export function Canvas({
   activeAgentRunId: string | null;
   activePageId: string;
   generationActivity?: LeaferGenerationActivity;
-  generationSkeleton?: LeaferGenerationSkeleton;
   runtime: EditorRuntime;
   snapshot: EditorSnapshot;
   onTransactionError: (message: string | null) => void;
@@ -809,7 +806,6 @@ export function Canvas({
       ...(changes ? { changes } : {}),
       ...(generationActivity ? { generationActivity } : {}),
       ...(generationReveal ? { generationReveal } : {}),
-      ...(generationSkeleton ? { generationSkeleton } : {}),
       pageId: activePageId,
       reducedMotion,
       selection: snapshot.state.selection,
@@ -835,7 +831,6 @@ export function Canvas({
     activePageId,
     booleanEditScope,
     generationActivity,
-    generationSkeleton,
     snapshot.document,
     reducedMotion,
     snapshot.state.selection,

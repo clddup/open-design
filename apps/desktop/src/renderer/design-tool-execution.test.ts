@@ -1867,7 +1867,7 @@ describe("Renderer design tool scope", () => {
       },
       runtime,
       "page_welcome",
-      { stageDelayMs: 0, onCanvasWait },
+      { onCanvasWait },
     );
 
     expect(runtime.getSnapshot().document.revision).toBe(1);

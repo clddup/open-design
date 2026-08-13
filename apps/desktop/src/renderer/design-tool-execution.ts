@@ -1390,7 +1390,7 @@ async function applyProgressively(
   options: ExecuteDesignToolOptions,
 ): Promise<RendererDesignToolResponse> {
   const remainingCommands = [...transaction.commands];
-  const { onCanvasWait, signal, stageDelayMs = 100 } = options;
+  const { onCanvasWait, signal, stageDelayMs = 0 } = options;
   let appliedStages = 0;
   let lastResult: DesignTransactionSuccess | undefined;
   try {

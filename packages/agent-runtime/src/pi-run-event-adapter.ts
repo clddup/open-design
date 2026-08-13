@@ -224,17 +224,6 @@ export class PiRunEventAdapter {
     if (this.#started) throw new Error("Pi emitted duplicate agent_start");
     this.#startedAt = this.#now().toISOString();
     const continuation = this.#request.continuation;
-    await this.#append(
-      "run.state",
-      {
-        status: "started",
-        startedAt: this.#startedAt,
-        modelSelection: this.#request.modelSelection,
-        ...(continuation ? { continuation } : {}),
-      },
-      this.#startedAt,
-    );
-    this.#started = true;
     await this.#append("message.user", {
       messageId: `${this.#request.runId}_user`,
       content: this.#request.prompt,
@@ -246,6 +235,17 @@ export class PiRunEventAdapter {
       scope: this.#request.scope,
       mutationTarget: this.#request.mutationTarget,
     });
+    await this.#append(
+      "run.state",
+      {
+        status: "started",
+        startedAt: this.#startedAt,
+        modelSelection: this.#request.modelSelection,
+        ...(continuation ? { continuation } : {}),
+      },
+      this.#startedAt,
+    );
+    this.#started = true;
     await this.#publish({
       type: "run.started",
       runId: this.#request.runId,

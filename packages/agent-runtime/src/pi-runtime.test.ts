@@ -151,8 +151,8 @@ describe("OpenDesign Pi production runtime", () => {
       stopReason: "complete",
     });
     expect(store.events.map((event) => event.type)).toEqual([
-      "run.state",
       "message.user",
+      "run.state",
       "message.assistant",
       "tool.requested",
       "tool.completed",

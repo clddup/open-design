@@ -68,7 +68,6 @@ import {
   clearGenerationPlanPresentationRun,
   generationActivityFromAcceptedPlan,
   generationActivityMessageKey,
-  generationSkeletonFromAcceptedPlan,
   projectGenerationPlanPresentationEvent,
 } from "./generation-presentation";
 import { isTool, type SidebarTab, type Tool } from "./state/editor";
@@ -296,20 +295,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       ? runId
       : null;
   })();
-  const generationSkeleton = useMemo(() => {
-    const runId = activeCanvasAgentRunId;
-    if (!runId) return undefined;
-    return generationSkeletonFromAcceptedPlan(
-      generationPlanPresentation.acceptedByRunId[runId],
-      designDocument,
-      activePageId,
-    );
-  }, [
-    activeCanvasAgentRunId,
-    activePageId,
-    designDocument,
-    generationPlanPresentation.acceptedByRunId,
-  ]);
   const generationActivity = useMemo(() => {
     const runId = activeCanvasAgentRunId;
     if (!runId) return undefined;
@@ -1824,7 +1809,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               activeAgentRunId={activeCanvasAgentRunId}
               activePageId={activePageId}
               generationActivity={generationActivity}
-              generationSkeleton={generationSkeleton}
               onTransactionError={setEditorError}
               onAssetDrop={placeImageAssetAtPoint}
               onTextLayoutProviderReady={workspace.setTextLayoutProvider}

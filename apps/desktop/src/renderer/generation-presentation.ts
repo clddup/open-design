@@ -369,27 +369,30 @@ export function generationActivityFromAcceptedPlan(
   if (!accepted || !activity || accepted.runId !== activity.runId) {
     return undefined;
   }
-  const skeleton = generationSkeletonFromAcceptedPlan(
-    accepted,
-    document,
-    pageId,
+  const target = designPlanTargets(accepted.plan).find(
+    (candidate) => candidate.pageId === pageId,
   );
-  if (!skeleton) return undefined;
-  const region = skeleton.regions[0];
-  const localTarget = region
-    ? {
-        x: region.x + region.width / 2,
-        y: region.y + region.height / 2,
-      }
-    : {
-        x: Math.max(0, skeleton.artboard.width - 24),
-        y: Math.min(24, skeleton.artboard.height / 2),
-      };
+  if (!target) return undefined;
+  const artboard = document.nodesById[target.artboard.frameId];
+  if (
+    artboard?.kind !== "frame" ||
+    artboard.parentId !== null ||
+    document.pagesById[pageId]?.rootNodeIds.includes(artboard.id) !== true ||
+    !isTranslationOnly(artboard.transform) ||
+    artboard.size.width !== target.artboard.width ||
+    artboard.size.height !== target.artboard.height
+  ) {
+    return undefined;
+  }
+  const localTarget = {
+    x: Math.max(0, artboard.size.width - 24),
+    y: Math.min(24, artboard.size.height / 2),
+  };
   return {
     id: activity.id,
     phase: activity.phase,
     ...(activity.progress === undefined ? {} : { progress: activity.progress }),
-    target: transformPoint(localTarget, skeleton.artboard.transform),
+    target: transformPoint(localTarget, artboard.transform),
   };
 }
 

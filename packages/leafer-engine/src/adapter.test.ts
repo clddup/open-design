@@ -417,12 +417,7 @@ describe("Leafer engine selection bounds synchronization", () => {
 
     expect(leaferHarness.appConfig).toMatchObject({
       editor: {
-        hoverPathType: "box",
-        hoverStyle: {
-          stroke: "#8b8b89",
-          strokeAlign: "inside",
-          strokeWidth: 1,
-        },
+        hover: false,
         selectedPathType: "box",
         selectedStyle: { strokeAlign: "inside" },
       },

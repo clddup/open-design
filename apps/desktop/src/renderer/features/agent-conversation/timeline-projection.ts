@@ -118,6 +118,10 @@ export function projectAgentTimeline({
       ) {
         return leftRunOrder - rightRunOrder;
       }
+      if (left.runId && left.runId === right.runId) {
+        if (left.kind === "user" && right.kind === "run") return -1;
+        if (left.kind === "run" && right.kind === "user") return 1;
+      }
       return left.order - right.order || left.id.localeCompare(right.id);
     });
   return mergeReasoningByRun(ordered, t);

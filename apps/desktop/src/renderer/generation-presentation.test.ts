@@ -578,11 +578,7 @@ describe("Renderer typed plan skeleton presentation", () => {
         createWelcomeDocument(),
         "page_welcome",
       ),
-    ).toEqual({
-      id: "run_plan:tool_plan:accepted",
-      phase: "structuring",
-      target: { x: 1_640, y: 440 },
-    });
+    ).toBeUndefined();
 
     const nestedEmptyGroup = runtime.apply({
       transactionId: "transaction_plan_empty_nested_group",
@@ -715,7 +711,7 @@ describe("Renderer typed plan skeleton presentation", () => {
         runtime.getSnapshot().document,
         "page_welcome",
       )?.target,
-    ).toEqual({ x: 1_880, y: 600 });
+    ).toEqual({ x: 2_256, y: 264 });
 
     const resized = runtime.apply({
       transactionId: "transaction_resized_artboard",

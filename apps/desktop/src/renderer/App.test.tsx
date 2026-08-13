@@ -4652,7 +4652,7 @@ describe("App", () => {
     expect(screen.getByLabelText("Continue the task")).toBeEnabled();
   });
 
-  it("shows an accepted typed plan on the canvas until the Run ends", async () => {
+  it("keeps an accepted typed plan off canvas until real design exists", async () => {
     const { user, conversation } = await openProjectConversation();
     await user.type(
       screen.getByLabelText("Continue the task"),
@@ -4700,33 +4700,10 @@ describe("App", () => {
       });
     });
     await waitFor(() =>
-      expect(leaferHarness.input?.generationSkeleton).toEqual({
-        id: `${request.runId}:tool_plan_poster`,
-        artboard: {
-          frameId: "poster_artboard",
-          height: 1_000,
-          pending: true,
-          transform: [1, 0, 0, 1, 1_240, 80],
-          width: 800,
-        },
-        regions: plan.composition.regions.map((region) => ({
-          height: region.height,
-          id: region.nodeId,
-          name: region.name,
-          role: region.role,
-          width: region.width,
-          x: region.x,
-          y: region.y,
-        })),
-      }),
+      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
     );
-    expect(leaferHarness.input?.generationActivity).toEqual({
-      id: `${request.runId}:tool_plan_poster:accepted`,
-      label: "AI · Structuring the layout",
-      phase: "structuring",
-      target: { x: 1_640, y: 440 },
-    });
-    expect(screen.getByText("AI · Structuring the layout")).toBeInTheDocument();
+    expect(leaferHarness.input?.generationActivity).toBeUndefined();
+    expect(screen.queryByText("AI · Structuring the layout")).toBeNull();
 
     act(() => {
       emitAgentEvent?.({
@@ -4745,11 +4722,7 @@ describe("App", () => {
         progress: 0.15,
       });
     });
-    await waitFor(() =>
-      expect(leaferHarness.input?.generationActivity?.label).toBe(
-        "AI · Building the design · 15%",
-      ),
-    );
+    expect(leaferHarness.input?.generationActivity).toBeUndefined();
     expect(screen.queryByText("Untrusted progress prose")).toBeNull();
 
     act(() => {
@@ -4760,11 +4733,7 @@ describe("App", () => {
         result: { ok: true },
       });
     });
-    await waitFor(() =>
-      expect(leaferHarness.input?.generationActivity?.label).toBe(
-        "AI · Building the design",
-      ),
-    );
+    expect(leaferHarness.input?.generationActivity).toBeUndefined();
     expect(screen.queryByText("Untrusted progress prose")).toBeNull();
 
     act(() => {
@@ -4784,7 +4753,7 @@ describe("App", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("removes the accepted canvas skeleton immediately when the user stops", async () => {
+  it("keeps plan-only canvas presentation absent when the user stops", async () => {
     const { user, conversation } = await openProjectConversation();
     await user.type(
       screen.getByLabelText("Continue the task"),
@@ -4828,10 +4797,9 @@ describe("App", () => {
       });
     });
     await waitFor(() =>
-      expect(leaferHarness.input?.generationSkeleton?.id).toBe(
-        `${request.runId}:tool_plan_stop`,
-      ),
+      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
     );
+    expect(leaferHarness.input?.generationActivity).toBeUndefined();
 
     await user.click(screen.getByRole("button", { name: "Stop" }));
 
@@ -5229,9 +5197,7 @@ describe("App", () => {
       });
     });
     await waitFor(() =>
-      expect(leaferHarness.input?.generationSkeleton?.id).toBe(
-        `${run.runId}:tool_background_plan_a`,
-      ),
+      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
     );
     const mobileTab = screen.getByRole("tab", { name: /Mobile UI/ });
     expect(
@@ -5455,13 +5421,9 @@ describe("App", () => {
       });
     });
     await waitFor(() =>
-      expect(leaferHarness.input?.generationSkeleton?.id).toBe(
-        `${run.runId}:tool_plan_capture`,
-      ),
+      expect(leaferHarness.input?.generationSkeleton).toBeUndefined(),
     );
-    expect(leaferHarness.input?.generationActivity?.id).toBe(
-      `${run.runId}:tool_plan_capture:accepted`,
-    );
+    expect(leaferHarness.input?.generationActivity).toBeUndefined();
     if (!requestDesignTool) throw new Error("Design tool listener is missing");
     leaferHarness.finishGenerationPresentation.mockClear();
     const current = runtime().getSnapshot().document;

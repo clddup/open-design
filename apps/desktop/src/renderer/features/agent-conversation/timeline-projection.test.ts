@@ -15,6 +15,48 @@ const continuation = {
 };
 
 describe("Agent continuation timeline projection", () => {
+  it("keeps a legacy run-start item after its user message", () => {
+    const now = "2026-08-13T01:00:00.000Z";
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "run:run_legacy",
+        sessionId: "conversation_1",
+        runId: "run_legacy",
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "run",
+        status: "started",
+        startedAt: now,
+      },
+      {
+        itemId: "message:user",
+        sessionId: "conversation_1",
+        runId: "run_legacy",
+        sequence: 2,
+        createdAt: now,
+        updatedAt: now,
+        type: "user.message",
+        messageId: "user",
+        content: "Create a landing page",
+        documentId: "document_1",
+        revision: 4,
+        scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+      },
+    ];
+
+    const items = projectAgentTimeline({
+      activeRunId: "run_legacy",
+      events: [],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline,
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items.map((item) => item.kind)).toEqual(["user", "run"]);
+  });
+
   it("presents an automatic continuation as trusted system work, not user input", () => {
     const now = "2026-08-13T01:00:00.000Z";
     const timeline: SessionTimelineItem[] = [
