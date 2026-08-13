@@ -451,7 +451,7 @@ function cleanLayoutQuality(
   revision: number,
 ): DesignLayoutQualityReport {
   return {
-    version: 1,
+    version: 2,
     documentId,
     revision,
     pageId,
@@ -1159,7 +1159,9 @@ describe("GlobalTaskCoordinator", () => {
     expect(failingHomeQuality.errorCount).toBeGreaterThan(0);
     expect(() =>
       coordinator.recordCanvasCapture(context, 3, failingHomeQuality),
-    ).toThrow("design_workflow.layout_quality_failed");
+    ).toThrow(
+      /design_workflow\.layout_quality_failed:.*set its parent-local position to x=\d+, y=\d+/,
+    );
     expect(
       coordinator.getDeliveryLedger(context.runId)?.targets[0]?.status,
     ).toBe("refined");

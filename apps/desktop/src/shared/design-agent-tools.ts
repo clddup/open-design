@@ -1646,7 +1646,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_CAPTURE_TOOL_NAME,
     description:
-      "Capture the Main-selected target in the Run-bound OpenDesign document as a bounded image and return it as multimodal content together with captureTarget, the observed document revision, and reviewWorkflow. After the planned artboard exists, captureTarget is that exact Frame; otherwise it is the bound Page. Frame captures also return layoutQuality, a trusted exact-revision geometry report with node-specific clipping and artboard-overflow errors or warnings. Use it in the visual review and correct every error before final verification; the host rejects a refined target whose final report still has errors. The capture uses an isolated Leafer projection of the captured revision, so user pan, zoom, selection, window size, or switching to another open Design File cannot change its pixels or mutation target. Call record_visual_review only when reviewWorkflow.reviewEligible is true; otherwise perform reviewWorkflow.nextAction first. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before recording the required visual review. A baseline capture before a write may inform planning but does not unlock review. This does not capture other applications, windows, files, or screens.",
+      "Capture the Main-selected target in the Run-bound OpenDesign document as a bounded image and return it as multimodal content together with captureTarget, the observed document revision, and reviewWorkflow. After the planned artboard exists, captureTarget is that exact Frame; otherwise it is the bound Page. Frame captures also return layoutQuality, a trusted exact-revision geometry report with node-specific clipping and artboard-overflow errors or warnings. Overflow issues include world-space node/artboard bounds plus geometry.currentLocalPosition, recommendedLocalDelta, and recommendedLocalPosition in the node parent's local coordinate space; use the recommended local x/y directly while preserving the node's inspected transform linear terms, and resize only when requiresResize is true. Use it in the visual review and correct every error before final verification; the host rejects a refined target whose final report still has errors. The capture uses an isolated Leafer projection of the captured revision, so user pan, zoom, selection, window size, or switching to another open Design File cannot change its pixels or mutation target. Call record_visual_review only when reviewWorkflow.reviewEligible is true; otherwise perform reviewWorkflow.nextAction first. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before recording the required visual review. A baseline capture before a write may inform planning but does not unlock review. This does not capture other applications, windows, files, or screens.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -3258,7 +3258,7 @@ export function normalizeDesignPageToolInput(
       action: "create",
       label: input.label,
       name: input.name,
-      ...(input.index === undefined ? {} : { index: input.index }),
+      ...(typeof input.index === "number" ? { index: input.index } : {}),
     };
   }
   if (input.action === "rename") {

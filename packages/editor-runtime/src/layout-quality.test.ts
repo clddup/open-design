@@ -16,7 +16,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 1,
+      version: 2,
       checkedNodeCount: 1,
       errorCount: 0,
       warningCount: 0,
@@ -67,6 +67,16 @@ describe("deterministic delivery layout quality", () => {
           code: "node-fully-outside-artboard",
           nodeId: "outside",
           outsideRatio: 1,
+          geometry: {
+            coordinateSpace: "world",
+            nodeBounds: { x: 440, y: 200, width: 30, height: 30 },
+            artboardBounds: { x: 100, y: 80, width: 300, height: 200 },
+            parentId: "artboard",
+            currentLocalPosition: { x: 340, y: 120 },
+            recommendedLocalDelta: { x: -70, y: 0 },
+            recommendedLocalPosition: { x: 270, y: 120 },
+            requiresResize: false,
+          },
         }),
       ]),
     );
@@ -157,6 +167,42 @@ describe("deterministic delivery layout quality", () => {
       expect.objectContaining({
         code: "node-fully-outside-artboard",
         nodeId: "nested_outside",
+        geometry: expect.objectContaining({
+          parentId: "nested_group",
+          currentLocalPosition: { x: 100, y: 20 },
+          recommendedLocalPosition: { x: 20, y: 20 },
+        }),
+      }),
+    );
+  });
+
+  it("returns the observed footer recovery as a parent-local position", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    artboard.size = { width: 1_440, height: 1_500 };
+    const footer = rectangle(
+      "product_footer_region",
+      "artboard",
+      [1, 0, 0, 1, 72, 2_100],
+      1_296,
+      180,
+    );
+    artboard.childIds.push(footer.id);
+    document.nodesById[footer.id] = footer;
+
+    expect(
+      diagnoseDesignTargetLayout(document, "page_layout", "artboard").issues,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "node-fully-outside-artboard",
+        nodeId: footer.id,
+        geometry: expect.objectContaining({
+          currentLocalPosition: { x: 72, y: 2_100 },
+          recommendedLocalDelta: { x: 0, y: -780 },
+          recommendedLocalPosition: { x: 72, y: 1_320 },
+          requiresResize: false,
+        }),
       }),
     );
   });

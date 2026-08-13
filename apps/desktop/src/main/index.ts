@@ -939,11 +939,13 @@ function registerIpc() {
         throw new Error("Global Task services are not initialized");
       }
       const pending = agentHost.prepareApprovalResolution(request);
+      const pageStructureInput =
+        pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME &&
+        isPageStructureAccessToolInput(pending.input)
+          ? pending.input
+          : undefined;
       if (pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
-        if (
-          pending.risk !== "design_write" ||
-          !isPageStructureAccessToolInput(pending.input)
-        ) {
+        if (pending.risk !== "design_write" || !pageStructureInput) {
           agentHost.rollbackApprovalResolution(request.approvalId);
           throw new TypeError("Invalid Page structure approval request");
         }
@@ -955,14 +957,13 @@ function registerIpc() {
         }
       }
       const grantPageStructure =
-        pending.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME &&
-        request.decision === "allow_once";
+        pageStructureInput !== undefined && request.decision === "allow_once";
       if (grantPageStructure) {
         globalTaskCoordinator.grantPageStructureAccess(
           request.runId,
           request.approvalId,
           request.toolCallId,
-          pending.input.actions,
+          pageStructureInput?.actions ?? [],
         );
       }
       try {

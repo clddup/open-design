@@ -140,6 +140,7 @@ export {
   diagnoseDesignTargetLayout,
   isDesignLayoutQualityReport,
   type DesignLayoutQualityCode,
+  type DesignLayoutQualityGeometry,
   type DesignLayoutQualityIssue,
   type DesignLayoutQualityReport,
   type DesignLayoutQualitySeverity,

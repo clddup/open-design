@@ -896,7 +896,7 @@ describe("Renderer design tool scope", () => {
           attachment,
           attachments: [attachment],
           layoutQuality: {
-            version: 1,
+            version: 2,
             documentId: "document_welcome",
             revision: 0,
             pageId: "page_welcome",

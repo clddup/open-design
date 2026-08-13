@@ -3,9 +3,13 @@ import type {
   DesignNode,
   Rect,
 } from "@opendesign/design-contracts";
-import { getNodeBounds } from "./geometry.js";
+import {
+  getNodeBounds,
+  getWorldTransform,
+  invertTransform,
+} from "./geometry.js";
 
-export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 1 as const;
+export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 2 as const;
 
 export type DesignLayoutQualitySeverity = "error" | "warning";
 
@@ -25,8 +29,20 @@ export interface DesignLayoutQualityIssue {
   message: string;
   nodeId: string;
   outsideRatio?: number;
+  geometry?: DesignLayoutQualityGeometry;
   relatedNodeIds: string[];
   severity: DesignLayoutQualitySeverity;
+}
+
+export interface DesignLayoutQualityGeometry {
+  coordinateSpace: "world";
+  nodeBounds: Rect;
+  artboardBounds: Rect;
+  parentId: string | null;
+  currentLocalPosition: { x: number; y: number };
+  recommendedLocalDelta: { x: number; y: number };
+  recommendedLocalPosition: { x: number; y: number };
+  requiresResize: boolean;
 }
 
 export interface DesignLayoutQualityReport {
@@ -136,6 +152,7 @@ export function diagnoseDesignTargetLayout(
       expandRect(artboardBounds, BOUNDS_TOLERANCE),
     );
     if (outsideRatio === 0) continue;
+    const geometry = overflowGeometry(document, node, bounds, artboardBounds);
     if (outsideRatio >= 1) {
       appendQualityIssue(issues, artboardFrameId, {
         code: "node-fully-outside-artboard",
@@ -143,7 +160,11 @@ export function diagnoseDesignTargetLayout(
         nodeId: node.id,
         relatedNodeIds: [artboardFrameId],
         outsideRatio: 1,
-        message: `Visible node ${node.id} is fully outside delivery artboard ${artboardFrameId}`,
+        ...(geometry ? { geometry } : {}),
+        message: overflowMessage(
+          `Visible node ${node.id} is fully outside delivery artboard ${artboardFrameId}`,
+          geometry,
+        ),
       });
       continue;
     }
@@ -155,7 +176,11 @@ export function diagnoseDesignTargetLayout(
         nodeId: node.id,
         relatedNodeIds: [artboardFrameId],
         outsideRatio: roundedRatio,
-        message: `Visible node ${node.id} has ${Math.round(outsideRatio * 100)}% of its area outside delivery artboard ${artboardFrameId}`,
+        ...(geometry ? { geometry } : {}),
+        message: overflowMessage(
+          `Visible node ${node.id} has ${Math.round(outsideRatio * 100)}% of its area outside delivery artboard ${artboardFrameId}`,
+          geometry,
+        ),
       });
     } else if (outsideRatio >= PARTIAL_OVERFLOW_RATIO) {
       appendQualityIssue(issues, artboardFrameId, {
@@ -164,7 +189,11 @@ export function diagnoseDesignTargetLayout(
         nodeId: node.id,
         relatedNodeIds: [artboardFrameId],
         outsideRatio: roundedRatio,
-        message: `Visible node ${node.id} has ${Math.round(outsideRatio * 100)}% of its area outside delivery artboard ${artboardFrameId}`,
+        ...(geometry ? { geometry } : {}),
+        message: overflowMessage(
+          `Visible node ${node.id} has ${Math.round(outsideRatio * 100)}% of its area outside delivery artboard ${artboardFrameId}`,
+          geometry,
+        ),
       });
     }
   }
@@ -236,14 +265,148 @@ function isDesignLayoutQualityIssue(
         Number.isFinite(record.outsideRatio) &&
         record.outsideRatio >= 0 &&
         record.outsideRatio <= 1)) &&
+    (record.geometry === undefined ||
+      isDesignLayoutQualityGeometry(record.geometry)) &&
     recordKeysOnly(record, [
       "code",
       "message",
       "nodeId",
       "outsideRatio",
+      "geometry",
       "relatedNodeIds",
       "severity",
     ])
+  );
+}
+
+function isDesignLayoutQualityGeometry(value: unknown): boolean {
+  const record = recordValue(value);
+  if (!record) return false;
+  return (
+    record.coordinateSpace === "world" &&
+    isFiniteRect(record.nodeBounds) &&
+    isFiniteRect(record.artboardBounds) &&
+    (record.parentId === null || safeText(record.parentId)) &&
+    isFinitePoint(record.currentLocalPosition) &&
+    isFinitePoint(record.recommendedLocalDelta) &&
+    isFinitePoint(record.recommendedLocalPosition) &&
+    typeof record.requiresResize === "boolean" &&
+    recordKeysOnly(record, [
+      "coordinateSpace",
+      "nodeBounds",
+      "artboardBounds",
+      "parentId",
+      "currentLocalPosition",
+      "recommendedLocalDelta",
+      "recommendedLocalPosition",
+      "requiresResize",
+    ])
+  );
+}
+
+function overflowGeometry(
+  document: DesignDocument,
+  node: DesignNode,
+  nodeBounds: Rect,
+  artboardBounds: Rect,
+): DesignLayoutQualityGeometry | undefined {
+  const parentWorld = node.parentId
+    ? getWorldTransform(document, node.parentId)
+    : ([1, 0, 0, 1, 0, 0] as [number, number, number, number, number, number]);
+  const worldToParent = parentWorld ? invertTransform(parentWorld) : null;
+  if (!worldToParent) return undefined;
+  const worldDelta = {
+    x: containmentDelta(
+      nodeBounds.x,
+      nodeBounds.width,
+      artboardBounds.x,
+      artboardBounds.width,
+    ),
+    y: containmentDelta(
+      nodeBounds.y,
+      nodeBounds.height,
+      artboardBounds.y,
+      artboardBounds.height,
+    ),
+  };
+  const localDelta = {
+    x: worldToParent[0] * worldDelta.x + worldToParent[2] * worldDelta.y,
+    y: worldToParent[1] * worldDelta.x + worldToParent[3] * worldDelta.y,
+  };
+  const current = { x: node.transform[4], y: node.transform[5] };
+  return {
+    coordinateSpace: "world",
+    nodeBounds,
+    artboardBounds,
+    parentId: node.parentId,
+    currentLocalPosition: current,
+    recommendedLocalDelta: roundPoint(localDelta),
+    recommendedLocalPosition: roundPoint({
+      x: current.x + localDelta.x,
+      y: current.y + localDelta.y,
+    }),
+    requiresResize:
+      nodeBounds.width > artboardBounds.width + BOUNDS_TOLERANCE ||
+      nodeBounds.height > artboardBounds.height + BOUNDS_TOLERANCE,
+  };
+}
+
+function containmentDelta(
+  nodeStart: number,
+  nodeExtent: number,
+  artboardStart: number,
+  artboardExtent: number,
+): number {
+  const startDelta = artboardStart - nodeStart;
+  const endDelta = artboardStart + artboardExtent - (nodeStart + nodeExtent);
+  if (nodeExtent > artboardExtent) {
+    return Math.abs(startDelta) <= Math.abs(endDelta) ? startDelta : endDelta;
+  }
+  if (nodeStart < artboardStart) return startDelta;
+  if (nodeStart + nodeExtent > artboardStart + artboardExtent) return endDelta;
+  return 0;
+}
+
+function overflowMessage(
+  prefix: string,
+  geometry: DesignLayoutQualityGeometry | undefined,
+): string {
+  if (!geometry) return prefix;
+  const position = geometry.recommendedLocalPosition;
+  return `${prefix}; set its parent-local position to x=${position.x}, y=${position.y}${geometry.requiresResize ? " and resize it to fit the artboard" : ""}`;
+}
+
+function roundPoint(point: { x: number; y: number }): { x: number; y: number } {
+  return { x: roundGeometry(point.x), y: roundGeometry(point.y) };
+}
+
+function roundGeometry(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function isFinitePoint(value: unknown): boolean {
+  const record = recordValue(value);
+  return (
+    record !== null &&
+    typeof record.x === "number" &&
+    Number.isFinite(record.x) &&
+    typeof record.y === "number" &&
+    Number.isFinite(record.y) &&
+    recordKeysOnly(record, ["x", "y"])
+  );
+}
+
+function isFiniteRect(value: unknown): boolean {
+  const record = recordValue(value);
+  return (
+    isFinitePoint({ x: record?.x, y: record?.y }) &&
+    typeof record?.width === "number" &&
+    Number.isFinite(record.width) &&
+    record.width >= 0 &&
+    typeof record.height === "number" &&
+    Number.isFinite(record.height) &&
+    record.height >= 0 &&
+    recordKeysOnly(record, ["x", "y", "width", "height"])
   );
 }
 

@@ -10,7 +10,7 @@ const frameTarget = {
 };
 
 const report: DesignLayoutQualityReport = {
-  version: 1,
+  version: 2,
   documentId: "document_design",
   revision: 7,
   pageId: frameTarget.pageId,
@@ -62,7 +62,7 @@ describe("Main canvas capture layout-quality boundary", () => {
 
   it.each([
     ["missing", missingLayoutQuality],
-    ["malformed", { version: 1 }],
+    ["malformed", { version: 2 }],
     ["wrong document", { ...report, documentId: "document_other" }],
     ["wrong revision", { ...report, revision: 6 }],
     ["wrong Page", { ...report, pageId: "page_other" }],
