@@ -73,11 +73,11 @@ describe("layout-service constraints v1", () => {
   });
 });
 
-describe("layout-service linear Auto Layout v1", () => {
+describe("layout-service linear Auto Layout v3", () => {
   it("places horizontal children with padding, gap, and two-axis alignment", () => {
     expect(
       solveLinearAutoLayout({
-        version: 2,
+        version: 3,
         direction: "horizontal",
         frame: { width: 300, height: 120 },
         padding: { top: 10, right: 20, bottom: 10, left: 20 },
@@ -100,7 +100,7 @@ describe("layout-service linear Auto Layout v1", () => {
   it("places vertical children in order and allows deterministic overflow", () => {
     expect(
       solveLinearAutoLayout({
-        version: 2,
+        version: 3,
         direction: "vertical",
         frame: { width: 80, height: 50 },
         padding: { top: 5, right: 5, bottom: 5, left: 5 },
@@ -123,7 +123,7 @@ describe("layout-service linear Auto Layout v1", () => {
   it("excludes no children implicitly and rejects malformed requests", () => {
     expect(
       solveLinearAutoLayout({
-        version: 2,
+        version: 3,
         direction: "vertical",
         frame: { width: 100, height: 100 },
         padding: { top: 8, right: 8, bottom: 8, left: 8 },
@@ -140,7 +140,7 @@ describe("layout-service linear Auto Layout v1", () => {
     });
     expect(
       solveLinearAutoLayout({
-        version: 2,
+        version: 3,
         direction: "horizontal",
         frame: { width: 100, height: 100 },
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -156,7 +156,7 @@ describe("layout-service linear Auto Layout v1", () => {
   it("hugs content and distributes main-axis fill space deterministically", () => {
     expect(
       solveLinearAutoLayout({
-        version: 2,
+        version: 3,
         direction: "horizontal",
         frame: { width: 300, height: 100 },
         padding: { top: 10, right: 20, bottom: 10, left: 20 },
@@ -184,7 +184,7 @@ describe("layout-service linear Auto Layout v1", () => {
   it("keeps an empty zero-padding Hug Frame stable at zero size", () => {
     expect(
       solveLinearAutoLayout({
-        version: 2,
+        version: 3,
         direction: "vertical",
         frame: { width: 0, height: 0 },
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -204,7 +204,7 @@ describe("layout-service linear Auto Layout v1", () => {
   it("fills the counter axis and rejects fill on a hugged axis", () => {
     expect(
       solveLinearAutoLayout({
-        version: 2,
+        version: 3,
         direction: "vertical",
         frame: { width: 120, height: 100 },
         padding: { top: 10, right: 10, bottom: 10, left: 10 },
@@ -220,7 +220,7 @@ describe("layout-service linear Auto Layout v1", () => {
     });
     expect(
       solveLinearAutoLayout({
-        version: 2,
+        version: 3,
         direction: "vertical",
         frame: { width: 120, height: 100 },
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -231,6 +231,95 @@ describe("layout-service linear Auto Layout v1", () => {
         children: [child("fill", 20, 30, "fill", "fixed")],
       }),
     ).toMatchObject({ ok: false, code: "sizing-conflict" });
+  });
+
+  it("wraps fixed-width children into aligned rows and hugs their total height", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: 3,
+        direction: "horizontal",
+        frame: { width: 220, height: 10 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 10,
+        primaryAlignment: "center",
+        counterAlignment: "center",
+        frameSizing: { horizontal: "fixed", vertical: "hug" },
+        wrap: { mode: "wrap", counterGap: 12 },
+        children: [
+          child("one", 80, 20),
+          child("two", 90, 30),
+          child("three", 60, 25),
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 220, height: 87 },
+      placements: [
+        { id: "one", x: 20, y: 15, width: 80, height: 20 },
+        { id: "two", x: 110, y: 10, width: 90, height: 30 },
+        { id: "three", x: 80, y: 52, width: 60, height: 25 },
+      ],
+    });
+  });
+
+  it("aligns the complete row block in fixed height and preserves oversized overflow", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: 3,
+        direction: "horizontal",
+        frame: { width: 120, height: 150 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 8,
+        primaryAlignment: "start",
+        counterAlignment: "end",
+        frameSizing: fixedFrame,
+        wrap: { mode: "wrap", counterGap: 6 },
+        children: [child("oversized", 140, 20), child("next", 60, 30)],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 120, height: 150 },
+      placements: [
+        { id: "oversized", x: 10, y: 84, width: 140, height: 20 },
+        { id: "next", x: 10, y: 110, width: 60, height: 30 },
+      ],
+    });
+  });
+
+  it("rejects vertical wrap, Hug width, Fill children, and malformed counter gap", () => {
+    const request = {
+      version: 3 as const,
+      direction: "horizontal" as const,
+      frame: { width: 200, height: 100 },
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start" as const,
+      counterAlignment: "start" as const,
+      frameSizing: fixedFrame,
+      wrap: { mode: "wrap" as const, counterGap: 8 },
+      children: [child("one", 60, 20)],
+    };
+    expect(
+      solveLinearAutoLayout({ ...request, direction: "vertical" }),
+    ).toMatchObject({ ok: false, code: "invalid-input" });
+    expect(
+      solveLinearAutoLayout({
+        ...request,
+        frameSizing: { horizontal: "hug", vertical: "fixed" },
+      }),
+    ).toMatchObject({ ok: false, code: "sizing-conflict" });
+    expect(
+      solveLinearAutoLayout({
+        ...request,
+        children: [child("fill", 1, 20, "fill", "fixed")],
+      }),
+    ).toMatchObject({ ok: false, code: "sizing-conflict" });
+    expect(
+      solveLinearAutoLayout({
+        ...request,
+        wrap: { mode: "wrap", counterGap: -1 },
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-input" });
   });
 });
 

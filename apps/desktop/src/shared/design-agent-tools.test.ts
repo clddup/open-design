@@ -1655,6 +1655,17 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, autoLayout),
     ).toBe(true);
+    const wrapAutoLayout = {
+      ...autoLayout,
+      autoLayout: {
+        ...autoLayout.autoLayout,
+        sizing: { horizontal: "fixed", vertical: "hug" },
+        wrap: { mode: "wrap", counterGap: 12 },
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, wrapAutoLayout),
+    ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutSizing),
     ).toBe(true);
@@ -1662,6 +1673,30 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...autoLayout,
         autoLayout: { ...autoLayout.autoLayout, wrap: true },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...wrapAutoLayout,
+        autoLayout: { ...wrapAutoLayout.autoLayout, mode: "vertical" },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...wrapAutoLayout,
+        autoLayout: {
+          ...wrapAutoLayout.autoLayout,
+          wrap: { mode: "wrap", counterGap: -1 },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...wrapAutoLayout,
+        autoLayout: {
+          ...wrapAutoLayout.autoLayout,
+          wrap: { mode: "wrap", counterGap: 12, columns: 3 },
+        },
       }),
     ).toBe(false);
     expect(

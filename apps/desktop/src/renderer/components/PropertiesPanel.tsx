@@ -83,7 +83,7 @@ export function PropertiesPanel({
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
   canDelete: boolean;
-  layoutMode: "constraints" | "sizing" | null;
+  layoutMode: "constraints" | "sizing" | "wrap-sizing" | null;
   onArrange: (operation: ArrangeOperation) => void;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
@@ -181,7 +181,10 @@ export function PropertiesPanel({
             booleanOperandParent={booleanOperandParent}
             canDelete={canDelete}
             constraintsAvailable={layoutMode === "constraints"}
-            layoutSizingAvailable={layoutMode === "sizing"}
+            layoutSizingAvailable={
+              layoutMode === "sizing" || layoutMode === "wrap-sizing"
+            }
+            layoutSizingFillAvailable={layoutMode !== "wrap-sizing"}
             onBooleanOperationChange={onBooleanOperationChange}
             onCreateComponent={onCreateComponent}
             onCreateComponentInstance={onCreateComponentInstance}

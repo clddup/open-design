@@ -1732,7 +1732,6 @@ export function isDesignAsset(value: unknown): value is DesignAsset {
 export function isImagePlacement(value: unknown): value is ImagePlacement {
   return checkSchema(ImagePlacementSchema, value);
 }
-
 export function migrateDesignDocument(value: unknown): DesignDocument | null {
   if (isDesignDocument(value)) return structuredClone(value);
   const schemaVersion =
@@ -1756,7 +1755,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       schemaVersion !== versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== versions.COMPONENT_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== versions.FRAME_CONSTRAINTS_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.LINEAR_AUTO_LAYOUT_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== versions.LINEAR_AUTO_LAYOUT_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.AUTO_LAYOUT_SIZING_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }

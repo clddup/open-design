@@ -76,6 +76,16 @@ export function planSetFrameAutoLayout(
     },
   ];
   if (autoLayout.mode !== "none") {
+    if (
+      autoLayout.mode === "horizontal" &&
+      autoLayout.wrap &&
+      (autoLayout.sizing?.horizontal ?? "fixed") !== "fixed"
+    ) {
+      return failure(
+        "visual-fidelity",
+        `Wrapped Auto Layout Frame ${frameId} requires fixed width`,
+      );
+    }
     for (const childId of frame.childIds) {
       const child = document.nodesById[childId];
       if (!child)
@@ -88,6 +98,17 @@ export function planSetFrameAutoLayout(
       }
       const frameSizing = autoLayout.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING;
       const childSizing = child.layoutSizing ?? DEFAULT_LAYOUT_SIZING;
+      if (
+        child.visible &&
+        autoLayout.mode === "horizontal" &&
+        autoLayout.wrap &&
+        (childSizing.horizontal === "fill" || childSizing.vertical === "fill")
+      ) {
+        return failure(
+          "visual-fidelity",
+          `Wrapped Auto Layout v1 does not support Fill child ${childId}`,
+        );
+      }
       if (
         child.visible &&
         ((frameSizing.horizontal === "hug" &&
@@ -321,6 +342,9 @@ function solveFrame(
     primaryAlignment: autoLayout.primaryAlignment,
     counterAlignment: autoLayout.counterAlignment,
     frameSizing: autoLayout.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
+    ...(autoLayout.mode === "horizontal" && autoLayout.wrap
+      ? { wrap: autoLayout.wrap }
+      : {}),
     children,
   });
 }

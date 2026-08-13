@@ -55,6 +55,16 @@ export function planSetNodeLayoutSizing(
   const frameSizing = flow.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING;
   if (
     node.visible &&
+    flow.mode === "horizontal" &&
+    flow.wrap &&
+    (sizing.horizontal === "fill" || sizing.vertical === "fill")
+  )
+    return failure(
+      "visual-fidelity",
+      `Wrapped Auto Layout v1 does not support Fill child ${nodeId}`,
+    );
+  if (
+    node.visible &&
     ((frameSizing.horizontal === "hug" && sizing.horizontal === "fill") ||
       (frameSizing.vertical === "hug" && sizing.vertical === "fill"))
   )

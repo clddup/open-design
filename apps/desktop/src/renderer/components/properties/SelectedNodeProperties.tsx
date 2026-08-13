@@ -97,6 +97,8 @@ function AutoLayoutSection({
   const updateFlow = (patch: Partial<AutoLayoutFlow>) => {
     onChange({ ...(flow ?? defaultAutoLayout), ...patch });
   };
+  const horizontalFlow = flow?.mode === "horizontal" ? flow : null;
+  const wrapEnabled = horizontalFlow?.wrap?.mode === "wrap";
   return (
     <Section title={t("properties.autoLayout")}>
       <div className={styles.stack}>
@@ -106,11 +108,19 @@ function AutoLayoutSection({
             aria-label={t("properties.autoLayoutDirection")}
             onChange={(event) => {
               const mode = event.target.value as AutoLayout["mode"];
-              onChange(
-                mode === "none"
-                  ? { mode: "none" }
-                  : { ...(flow ?? defaultAutoLayout), mode },
-              );
+              if (mode === "none") {
+                onChange({ mode: "none" });
+                return;
+              }
+              const current = flow ?? defaultAutoLayout;
+              onChange({
+                mode,
+                padding: current.padding,
+                gap: current.gap,
+                primaryAlignment: current.primaryAlignment,
+                counterAlignment: current.counterAlignment,
+                ...(current.sizing ? { sizing: current.sizing } : {}),
+              });
             }}
             value={autoLayout.mode}
           >
@@ -125,6 +135,46 @@ function AutoLayoutSection({
         </label>
         {flow && (
           <>
+            {horizontalFlow && (
+              <label className={styles.select}>
+                <span>{t("properties.autoLayoutFlow")}</span>
+                <select
+                  aria-label={t("properties.autoLayoutFlow")}
+                  onChange={(event) => {
+                    if (event.target.value === "wrap") {
+                      onChange({
+                        ...horizontalFlow,
+                        sizing: {
+                          horizontal: "fixed",
+                          vertical: horizontalFlow.sizing?.vertical ?? "fixed",
+                        },
+                        wrap: {
+                          mode: "wrap",
+                          counterGap: horizontalFlow.gap,
+                        },
+                      });
+                      return;
+                    }
+                    onChange({
+                      mode: "horizontal",
+                      padding: horizontalFlow.padding,
+                      gap: horizontalFlow.gap,
+                      primaryAlignment: horizontalFlow.primaryAlignment,
+                      counterAlignment: horizontalFlow.counterAlignment,
+                      ...(horizontalFlow.sizing
+                        ? { sizing: horizontalFlow.sizing }
+                        : {}),
+                    });
+                  }}
+                  value={wrapEnabled ? "wrap" : "single-line"}
+                >
+                  <option value="single-line">
+                    {t("properties.autoLayoutSingleLine")}
+                  </option>
+                  <option value="wrap">{t("properties.autoLayoutWrap")}</option>
+                </select>
+              </label>
+            )}
             <div className={styles.grid}>
               {(["horizontal", "vertical"] as const).map((axis) => (
                 <label className={styles.select} key={axis}>
@@ -155,7 +205,12 @@ function AutoLayoutSection({
                     <option value="fixed">
                       {t("properties.autoLayoutFixed")}
                     </option>
-                    <option value="hug">{t("properties.autoLayoutHug")}</option>
+                    <option
+                      disabled={axis === "horizontal" && wrapEnabled}
+                      value="hug"
+                    >
+                      {t("properties.autoLayoutHug")}
+                    </option>
                   </select>
                 </label>
               ))}
@@ -173,6 +228,27 @@ function AutoLayoutSection({
                 type="number"
                 value={formatNumber(flow.gap)}
               />
+              {horizontalFlow?.wrap && (
+                <Field
+                  accessibleLabel={t("properties.autoLayoutCounterGap")}
+                  label={t("properties.autoLayoutCounterGap")}
+                  min={0}
+                  onCommit={(value) =>
+                    commitNumber(
+                      value,
+                      horizontalFlow.wrap?.counterGap ?? horizontalFlow.gap,
+                      (counterGap) =>
+                        onChange({
+                          ...horizontalFlow,
+                          wrap: { mode: "wrap", counterGap },
+                        }),
+                      { min: 0 },
+                    )
+                  }
+                  type="number"
+                  value={formatNumber(horizontalFlow.wrap.counterGap)}
+                />
+              )}
               <label className={styles.select}>
                 <span>{t("properties.autoLayoutPrimary")}</span>
                 <select
@@ -256,6 +332,7 @@ export function SelectedNodeProperties({
   canDelete,
   constraintsAvailable,
   layoutSizingAvailable,
+  layoutSizingFillAvailable,
   onBooleanOperationChange,
   onCreateComponent,
   onCreateComponentInstance,
@@ -279,6 +356,7 @@ export function SelectedNodeProperties({
   canDelete: boolean;
   constraintsAvailable: boolean;
   layoutSizingAvailable: boolean;
+  layoutSizingFillAvailable: boolean;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
@@ -659,7 +737,9 @@ export function SelectedNodeProperties({
                 value={node.layoutSizing?.horizontal ?? "fixed"}
               >
                 <option value="fixed">{t("properties.autoLayoutFixed")}</option>
-                <option value="fill">{t("properties.autoLayoutFill")}</option>
+                <option disabled={!layoutSizingFillAvailable} value="fill">
+                  {t("properties.autoLayoutFill")}
+                </option>
               </select>
             </label>
             <label className={styles.select}>
@@ -677,7 +757,9 @@ export function SelectedNodeProperties({
                 value={node.layoutSizing?.vertical ?? "fixed"}
               >
                 <option value="fixed">{t("properties.autoLayoutFixed")}</option>
-                <option value="fill">{t("properties.autoLayoutFill")}</option>
+                <option disabled={!layoutSizingFillAvailable} value="fill">
+                  {t("properties.autoLayoutFill")}
+                </option>
               </select>
             </label>
           </div>

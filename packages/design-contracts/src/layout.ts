@@ -1,8 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const CONSTRAINTS_DESIGN_SCHEMA_VERSION = "1.12.0" as const;
-export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.13.0" as const;
-export const AUTO_LAYOUT_SIZING_DESIGN_SCHEMA_VERSION = "1.14.0" as const;
+export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.15.0" as const;
 
 export const LayoutConstraintsSchema = Type.Object(
   {
@@ -86,6 +85,16 @@ const AutoLayoutFlowProperties = {
   sizing: Type.Optional(AutoLayoutFrameSizingSchema),
 };
 
+export const AutoLayoutWrapSchema = Type.Object(
+  {
+    mode: Type.Literal("wrap"),
+    counterGap: Type.Number({ minimum: 0, maximum: 1_000_000 }),
+  },
+  { additionalProperties: false },
+);
+
+export type AutoLayoutWrap = Static<typeof AutoLayoutWrapSchema>;
+
 export const AutoLayoutSchema = Type.Union([
   Type.Object(
     {
@@ -97,6 +106,7 @@ export const AutoLayoutSchema = Type.Union([
     {
       mode: Type.Literal("horizontal"),
       ...AutoLayoutFlowProperties,
+      wrap: Type.Optional(AutoLayoutWrapSchema),
     },
     { additionalProperties: false },
   ),

@@ -470,6 +470,197 @@ describe("linear Auto Layout Runtime", () => {
       height: 0,
     });
   });
+
+  it("wraps children after insert, hide, resize, reorder, and Frame resize", () => {
+    const runtime = wrappedRuntime();
+    expectRect(runtime.getSnapshot().document, "one", 10, 15, 80, 20);
+    expectRect(runtime.getSnapshot().document, "two", 100, 10, 90, 30);
+    expect(runtime.getSnapshot().document.nodesById.frame?.size.height).toBe(
+      50,
+    );
+
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "insert_wrap_three",
+            type: "insert_element",
+            pageId: "page_layout",
+            parentId: "frame",
+            index: 2,
+            node: rectangle("three", "frame", 0, 0, 60, 25),
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    expectRect(runtime.getSnapshot().document, "three", 10, 52, 60, 25);
+    expect(runtime.getSnapshot().document.nodesById.frame?.size.height).toBe(
+      87,
+    );
+
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "hide_wrap_two",
+            type: "update_properties",
+            nodeId: "two",
+            visible: false,
+          },
+          {
+            commandId: "grow_wrap_three",
+            type: "update_properties",
+            nodeId: "three",
+            size: { width: 80, height: 25 },
+          },
+          {
+            commandId: "reorder_wrap_three",
+            type: "move_element",
+            nodeId: "three",
+            pageId: "page_layout",
+            parentId: "frame",
+            index: 0,
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    expectRect(runtime.getSnapshot().document, "three", 10, 10, 80, 25);
+    expectRect(runtime.getSnapshot().document, "one", 100, 12.5, 80, 20);
+    expect(runtime.getSnapshot().document.nodesById.frame?.size.height).toBe(
+      45,
+    );
+
+    const resize = planResizeFrameWithConstraints(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      { width: 180, height: 45 },
+      "narrow_wrap",
+    );
+    if (!resize.ok) throw new Error(resize.message);
+    expect(runtime.apply(transaction(runtime, resize.commands)).ok).toBe(true);
+    expectRect(runtime.getSnapshot().document, "one", 10, 47, 80, 20);
+    expect(runtime.getSnapshot().document.nodesById.frame?.size.height).toBe(
+      77,
+    );
+  });
+
+  it("keeps wrapped preview/apply/history/reopen deterministic", () => {
+    const runtime = wrappedRuntime();
+    const tx = transaction(runtime, [
+      {
+        commandId: "make_wrap_item_taller",
+        type: "update_properties",
+        nodeId: "two",
+        size: { width: 130, height: 40 },
+      },
+    ]);
+    const preview = runtime.preview(tx);
+    const applied = runtime.apply(tx);
+    expect(preview).toMatchObject({ ok: true });
+    expect(applied).toMatchObject({ ok: true });
+    if (!preview.ok || !applied.ok) return;
+    expect(preview.changes).toEqual(applied.changes);
+    expectRect(runtime.getSnapshot().document, "two", 10, 42, 130, 40);
+    const resolved = runtime.getSnapshot().document;
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.redo().ok).toBe(true);
+    expect(
+      normalizeDesignDocument(JSON.parse(JSON.stringify(resolved))),
+    ).toEqual(resolved);
+  });
+
+  it("propagates wrapped Hug height into a nested Hug ancestor", () => {
+    const document = layoutDocument();
+    const outer = document.nodesById.frame;
+    if (outer?.kind !== "frame") throw new Error("missing frame");
+    const wrapped = structuredClone(outer);
+    wrapped.id = "wrapped";
+    wrapped.parentId = "frame";
+    wrapped.childIds = ["wrap_one", "wrap_two", "wrap_three"];
+    wrapped.size = { width: 180, height: 1 };
+    wrapped.properties.autoLayout = wrapLayout();
+    document.nodesById.wrapped = wrapped;
+    document.nodesById.wrap_one = rectangle(
+      "wrap_one",
+      "wrapped",
+      0,
+      0,
+      80,
+      20,
+    );
+    document.nodesById.wrap_two = rectangle(
+      "wrap_two",
+      "wrapped",
+      0,
+      0,
+      80,
+      30,
+    );
+    document.nodesById.wrap_three = rectangle(
+      "wrap_three",
+      "wrapped",
+      0,
+      0,
+      80,
+      25,
+    );
+    outer.childIds = ["wrapped"];
+    outer.properties.autoLayout = {
+      ...horizontal,
+      sizing: { horizontal: "hug", vertical: "hug" },
+    };
+    delete document.nodesById.one;
+    delete document.nodesById.two;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "trigger_nested_wrap",
+            type: "update_properties",
+            nodeId: "wrap_three",
+            name: "Third tag",
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    const resolved = runtime.getSnapshot().document;
+    expect(resolved.nodesById.wrapped?.size).toEqual({
+      width: 180,
+      height: 119,
+    });
+    expect(resolved.nodesById.frame?.size).toEqual({ width: 220, height: 139 });
+  });
+
+  it("rejects Wrap with Hug width or visible Fill children before apply", () => {
+    const document = layoutDocument();
+    expect(
+      planSetFrameAutoLayout(
+        document,
+        "page_layout",
+        "frame",
+        {
+          ...wrapLayout(),
+          sizing: { horizontal: "hug", vertical: "hug" },
+        },
+        "invalid_wrap_hug",
+      ),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+    document.nodesById.two!.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fixed",
+    };
+    expect(
+      planSetFrameAutoLayout(
+        document,
+        "page_layout",
+        "frame",
+        wrapLayout(),
+        "invalid_wrap_fill",
+      ),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+  });
 });
 
 function enabledRuntime(): EditorRuntime {
@@ -479,6 +670,42 @@ function enabledRuntime(): EditorRuntime {
   frame.properties.autoLayout = horizontal;
   delete document.nodesById.one?.constraints;
   return new EditorRuntime(normalizeDesignDocument(document));
+}
+
+function wrappedRuntime(): EditorRuntime {
+  const document = layoutDocument();
+  const frame = document.nodesById.frame;
+  if (frame?.kind !== "frame") throw new Error("missing frame");
+  frame.size = { width: 200, height: 1 };
+  frame.properties.autoLayout = wrapLayout();
+  document.nodesById.one!.size = { width: 80, height: 20 };
+  document.nodesById.two!.size = { width: 90, height: 30 };
+  delete document.nodesById.one?.constraints;
+  const runtime = new EditorRuntime(normalizeDesignDocument(document));
+  const initialized = runtime.apply(
+    transaction(runtime, [
+      {
+        commandId: "initialize_wrap",
+        type: "update_properties",
+        nodeId: "frame",
+        name: "Wrapped Frame",
+      },
+    ]),
+  );
+  if (!initialized.ok) throw new Error(initialized.error.message);
+  return runtime;
+}
+
+function wrapLayout(): AutoLayoutFlow {
+  return {
+    mode: "horizontal",
+    padding: { top: 10, right: 10, bottom: 10, left: 10 },
+    gap: 10,
+    primaryAlignment: "start",
+    counterAlignment: "center",
+    sizing: { horizontal: "fixed", vertical: "hug" },
+    wrap: { mode: "wrap", counterGap: 12 },
+  };
 }
 
 function layoutDocument(): DesignDocument {

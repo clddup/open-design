@@ -4,6 +4,7 @@ import {
   autoLayoutShortcutRequest,
   canShowOrdinaryConstraints,
   canShowAutoLayoutSizing,
+  layoutInspectorMode,
 } from "./auto-layout-shortcut";
 
 describe("Auto Layout editor shortcut", () => {
@@ -74,6 +75,20 @@ describe("Auto Layout editor shortcut", () => {
     expect(
       canShowAutoLayoutSizing(document, document.nodesById.title_welcome),
     ).toBe(true);
+    expect(
+      layoutInspectorMode(document, document.nodesById.title_welcome),
+    ).toBe("sizing");
+    frame.properties.autoLayout = {
+      mode: "horizontal",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+      wrap: { mode: "wrap", counterGap: 12 },
+    };
+    expect(
+      layoutInspectorMode(document, document.nodesById.title_welcome),
+    ).toBe("wrap-sizing");
     frame.properties.autoLayout = { mode: "none" };
     expect(
       canShowOrdinaryConstraints(document, document.nodesById.title_welcome),

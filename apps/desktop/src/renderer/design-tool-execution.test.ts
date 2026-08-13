@@ -3544,6 +3544,67 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.getSnapshot().document.revision).toBe(2);
   });
 
+  it("sets horizontal Wrap through the Agent tool and derives wrapped child rows", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_wrap",
+        call: {
+          toolCallId: "tool_auto_layout_wrap",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-auto-layout",
+            label: "Wrap landing content",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+            autoLayout: {
+              mode: "horizontal",
+              padding: { top: 24, right: 24, bottom: 24, left: 24 },
+              gap: 16,
+              primaryAlignment: "start",
+              counterAlignment: "start",
+              sizing: { horizontal: "fixed", vertical: "hug" },
+              wrap: { mode: "wrap", counterGap: 20 },
+            },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-auto-layout",
+          frameId: "frame_welcome",
+          autoLayout: {
+            mode: "horizontal",
+            wrap: { mode: "wrap", counterGap: 20 },
+          },
+          revision: 1,
+          atomic: true,
+        },
+      },
+    });
+    const document = runtime.getSnapshot().document;
+    expect(document.nodesById.frame_welcome).toMatchObject({
+      properties: {
+        autoLayout: {
+          mode: "horizontal",
+          sizing: { horizontal: "fixed", vertical: "hug" },
+          wrap: { mode: "wrap", counterGap: 20 },
+        },
+      },
+    });
+    expect(document.nodesById.subtitle_welcome?.transform[5]).toBeGreaterThan(
+      document.nodesById.title_welcome?.transform[5] ?? 0,
+    );
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
   it("sets exact negative Agent spacing and rejects locked or out-of-scope arrangement", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = await executeDesignToolRequest(

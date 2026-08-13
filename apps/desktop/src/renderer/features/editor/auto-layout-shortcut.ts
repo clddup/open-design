@@ -61,9 +61,18 @@ export function canShowAutoLayoutSizing(
 export function layoutInspectorMode(
   document: DesignDocument,
   node: DesignNode | undefined,
-): "constraints" | "sizing" | null {
+): "constraints" | "sizing" | "wrap-sizing" | null {
   if (canShowOrdinaryConstraints(document, node)) return "constraints";
-  if (canShowAutoLayoutSizing(document, node)) return "sizing";
+  if (canShowAutoLayoutSizing(document, node)) {
+    const parent = node?.parentId
+      ? document.nodesById[node.parentId]
+      : undefined;
+    return parent?.kind === "frame" &&
+      parent.properties.autoLayout?.mode === "horizontal" &&
+      parent.properties.autoLayout.wrap?.mode === "wrap"
+      ? "wrap-sizing"
+      : "sizing";
+  }
   return null;
 }
 

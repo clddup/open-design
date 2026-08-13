@@ -1155,6 +1155,16 @@ describe("design contract schemas", () => {
     );
   });
 
+  it("migrates 1.14 sizing without inventing Auto Layout wrap", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.14.0" as typeof source.schemaVersion;
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1).not.toHaveProperty(
+      "properties.autoLayout.wrap",
+    );
+  });
+
   it("validates strict linear Auto Layout only on Frame properties", () => {
     const frame = {
       id: "frame_layout",
@@ -1190,6 +1200,43 @@ describe("design contract schemas", () => {
         properties: {
           ...frame.properties,
           autoLayout: { ...frame.properties.autoLayout, wrap: true },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            ...frame.properties.autoLayout,
+            wrap: { mode: "wrap", counterGap: 12 },
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            ...frame.properties.autoLayout,
+            mode: "vertical",
+            wrap: { mode: "wrap", counterGap: 12 },
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            ...frame.properties.autoLayout,
+            wrap: { mode: "wrap", counterGap: 12, future: true },
+          },
         },
       }),
     ).toBe(false);

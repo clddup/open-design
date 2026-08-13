@@ -1,5 +1,7 @@
+import { solveHorizontalWrap } from "./wrap-layout.js";
+
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
-export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 2 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 3 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";
@@ -59,6 +61,7 @@ export type LinearAutoLayoutRequest = {
     horizontal: AutoLayoutFrameAxisSizing;
     vertical: AutoLayoutFrameAxisSizing;
   };
+  wrap?: { mode: "wrap"; counterGap: number };
   children: Array<{
     id: string;
     width: number;
@@ -141,6 +144,13 @@ export function solveLinearAutoLayout(
       code: "invalid-input",
       message: "Linear Auto Layout input is invalid",
     };
+  }
+  if (request.wrap) {
+    return solveHorizontalWrap({
+      ...request,
+      direction: "horizontal",
+      wrap: request.wrap,
+    });
   }
   const horizontalHug = request.frameSizing.horizontal === "hug";
   const verticalHug = request.frameSizing.vertical === "hug";
@@ -323,6 +333,10 @@ function validLinearAutoLayoutRequest(
       (value) => value === "fixed" || value === "hug",
     ) &&
     finiteNonNegative(request.gap) &&
+    (request.wrap === undefined ||
+      (request.direction === "horizontal" &&
+        request.wrap.mode === "wrap" &&
+        finiteNonNegative(request.wrap.counterGap))) &&
     Object.values(request.padding).every(finiteNonNegative) &&
     [request.primaryAlignment, request.counterAlignment].every((value) =>
       ["start", "center", "end"].includes(value),

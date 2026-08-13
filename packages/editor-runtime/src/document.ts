@@ -150,6 +150,17 @@ export function validateDocumentInvariants(
         message: `${node.kind} nodes cannot contain children`,
       });
     }
+    if (
+      node.kind === "frame" &&
+      node.properties.autoLayout?.mode === "horizontal" &&
+      node.properties.autoLayout.wrap &&
+      (node.properties.autoLayout.sizing?.horizontal ?? "fixed") !== "fixed"
+    ) {
+      issues.push({
+        path: `/nodesById/${nodeId}/properties/autoLayout/sizing/horizontal`,
+        message: "wrapped Auto Layout requires fixed Frame width",
+      });
+    }
     if (node.constraints !== undefined) {
       const parent = node.parentId
         ? ownValue(document.nodesById, node.parentId)
@@ -204,6 +215,17 @@ export function validateDocumentInvariants(
           issues.push({
             path: `/nodesById/${nodeId}/layoutSizing`,
             message: "a child cannot fill an axis hugged by its parent Frame",
+          });
+        }
+        if (
+          node.visible &&
+          flow.mode === "horizontal" &&
+          flow.wrap &&
+          (childSizing.horizontal === "fill" || childSizing.vertical === "fill")
+        ) {
+          issues.push({
+            path: `/nodesById/${nodeId}/layoutSizing`,
+            message: "wrapped Auto Layout v1 does not support Fill children",
           });
         }
       }

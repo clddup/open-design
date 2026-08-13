@@ -32,7 +32,7 @@ function renderPanel(
       sourceNodes: readonly [];
     };
     onRemoveComponent?: () => void;
-    layoutMode?: "constraints" | "sizing" | null;
+    layoutMode?: "constraints" | "sizing" | "wrap-sizing" | null;
     onSetConstraints?: (constraints: LayoutConstraints) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
   } = {},
@@ -366,6 +366,119 @@ describe("PropertiesPanel SVG workflow", () => {
       horizontal: "fill",
       vertical: "fixed",
     });
+  });
+
+  it("enables horizontal Wrap with fixed width and an independent default vertical gap", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn<(updates: UpdatePropertiesPatch) => void>();
+    renderPanel({
+      node: {
+        id: "frame_wrap",
+        kind: "frame",
+        name: "Tag collection",
+        parentId: null,
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, 0, 0],
+        size: { width: 320, height: 160 },
+        opacity: 1,
+        properties: {
+          fills: [],
+          strokes: [],
+          strokeWidth: 0,
+          cornerRadius: 0,
+          clipsContent: true,
+          autoLayout: {
+            mode: "horizontal",
+            padding: { top: 8, right: 12, bottom: 8, left: 12 },
+            gap: 10,
+            primaryAlignment: "start",
+            counterAlignment: "center",
+            sizing: { horizontal: "hug", vertical: "hug" },
+          },
+        },
+        extensions: {},
+      },
+      selectionCount: 1,
+      onUpdate,
+    });
+
+    await user.selectOptions(screen.getByLabelText("Flow"), "wrap");
+    const enabled = onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout;
+    expect(enabled).toMatchObject({
+      mode: "horizontal",
+      sizing: { horizontal: "fixed", vertical: "hug" },
+      wrap: { mode: "wrap", counterGap: 10 },
+    });
+  });
+
+  it("edits Wrap vertical gap, removes Wrap on vertical flow, and disables incompatible sizing", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn<(updates: UpdatePropertiesPatch) => void>();
+    const wrapFrame: DesignNode = {
+      id: "frame_wrap",
+      kind: "frame",
+      name: "Tag collection",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 160 },
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+        autoLayout: {
+          mode: "horizontal",
+          padding: { top: 8, right: 12, bottom: 8, left: 12 },
+          gap: 10,
+          primaryAlignment: "start",
+          counterAlignment: "center",
+          sizing: { horizontal: "fixed", vertical: "hug" },
+          wrap: { mode: "wrap", counterGap: 16 },
+        },
+      },
+      extensions: {},
+    };
+    renderPanel({ node: wrapFrame, selectionCount: 1, onUpdate });
+
+    expect(
+      screen.getAllByRole("option", { name: "Hug contents" })[0],
+    ).toBeDisabled();
+    const counterGap = screen.getByLabelText("Vertical gap");
+    await user.clear(counterGap);
+    await user.type(counterGap, "24");
+    await user.tab();
+    const updated = onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout;
+    expect(updated).toMatchObject({
+      wrap: { mode: "wrap", counterGap: 24 },
+    });
+
+    await user.selectOptions(screen.getByLabelText("Direction"), "vertical");
+    const vertical = onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout;
+    expect(vertical).toMatchObject({ mode: "vertical" });
+    expect(vertical).not.toHaveProperty("wrap");
+    cleanup();
+
+    renderPanel({
+      node: { ...textNode, parentId: "frame_wrap" },
+      selectionCount: 1,
+      layoutMode: "wrap-sizing",
+      onUpdate,
+    });
+    expect(
+      screen.getAllByRole("option", { name: "Fill container" }),
+    ).toHaveLength(2);
+    for (const option of screen.getAllByRole("option", {
+      name: "Fill container",
+    })) {
+      expect(option).toBeDisabled();
+    }
   });
 
   it("shows cancellable background progress and disables conflicting export controls", async () => {
