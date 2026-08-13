@@ -276,4 +276,207 @@ describe("RendererDesignToolHost", () => {
       vi.useRealTimers();
     }
   });
+
+  it("opens a run-scoped circuit after two consecutive canvas stalls", async () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn();
+      const sendCancel = vi.fn();
+      const host = new RendererDesignToolHost(send, sendCancel, {
+        firstResponseTimeoutMs: 20,
+        idleTimeoutMs: 30,
+        totalTimeoutMs: 100,
+      });
+
+      const first = startRequest(host, send, "run_stalled", "capture_1");
+      host.progress({
+        requestId: first.requestId,
+        phase: "capturing",
+        progress: 0.3,
+      });
+      const firstRejection = expect(first.result).rejects.toMatchObject({
+        cause: {
+          code: "renderer_idle_timeout",
+          retryable: true,
+          recoverable: true,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(31);
+      await firstRejection;
+
+      const second = startRequest(host, send, "run_stalled", "capture_2");
+      host.progress({
+        requestId: second.requestId,
+        phase: "capturing",
+        progress: 0.4,
+      });
+      const secondRejection = expect(second.result).rejects.toMatchObject({
+        cause: {
+          code: "renderer_circuit_open",
+          retryable: false,
+          recoverable: false,
+          runTerminal: true,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(31);
+      await secondRejection;
+
+      await expect(
+        host.execute(
+          rendererCall("capture_3"),
+          rendererContext("run_stalled"),
+          new AbortController().signal,
+        ),
+      ).rejects.toMatchObject({
+        cause: { code: "renderer_circuit_open", runTerminal: true },
+      });
+      expect(send).toHaveBeenCalledTimes(2);
+
+      const otherRun = startRequest(host, send, "run_other", "capture_4");
+      host.resolve({
+        requestId: otherRun.requestId,
+        ok: true,
+        result: { content: { ok: true } },
+      });
+      await expect(otherRun.result).resolves.toMatchObject({
+        content: { ok: true },
+      });
+
+      host.forgetRun("run_stalled");
+      const retried = startRequest(host, send, "run_stalled", "capture_5");
+      host.resolve({
+        requestId: retried.requestId,
+        ok: true,
+        result: { content: { ok: true } },
+      });
+      await expect(retried.result).resolves.toMatchObject({
+        content: { ok: true },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears consecutive stalls only after successful canvas work", async () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn();
+      const host = new RendererDesignToolHost(send, vi.fn(), {
+        firstResponseTimeoutMs: 20,
+        idleTimeoutMs: 30,
+        totalTimeoutMs: 100,
+      });
+
+      const first = startRequest(host, send, "run_reset", "capture_1");
+      host.progress({
+        requestId: first.requestId,
+        phase: "capturing",
+        progress: 0.3,
+      });
+      const firstRejection = expect(first.result).rejects.toMatchObject({
+        cause: { code: "renderer_idle_timeout" },
+      });
+      await vi.advanceTimersByTimeAsync(31);
+      await firstRejection;
+
+      const inspect = startRequest(
+        host,
+        send,
+        "run_reset",
+        "inspect_1",
+        "opendesign_inspect_document",
+      );
+      host.resolve({
+        requestId: inspect.requestId,
+        ok: true,
+        result: { content: { revision: 4 }, observedRevision: 4 },
+      });
+      await expect(inspect.result).resolves.toMatchObject({
+        observedRevision: 4,
+      });
+
+      const second = startRequest(host, send, "run_reset", "capture_2");
+      host.progress({
+        requestId: second.requestId,
+        phase: "capturing",
+        progress: 0.4,
+      });
+      const secondRejection = expect(second.result).rejects.toMatchObject({
+        cause: { code: "renderer_circuit_open", runTerminal: true },
+      });
+      await vi.advanceTimersByTimeAsync(31);
+      await secondRejection;
+
+      host.forgetRun("run_reset");
+      const third = startRequest(host, send, "run_reset", "apply_1");
+      host.progress({
+        requestId: third.requestId,
+        phase: "applying",
+        progress: 0.5,
+      });
+      host.resolve({
+        requestId: third.requestId,
+        ok: true,
+        result: { content: { ok: true } },
+      });
+      await expect(third.result).resolves.toMatchObject({
+        content: { ok: true },
+      });
+
+      const afterSuccess = startRequest(host, send, "run_reset", "capture_3");
+      host.progress({
+        requestId: afterSuccess.requestId,
+        phase: "capturing",
+        progress: 0.2,
+      });
+      const afterSuccessRejection = expect(
+        afterSuccess.result,
+      ).rejects.toMatchObject({
+        cause: { code: "renderer_idle_timeout" },
+      });
+      await vi.advanceTimersByTimeAsync(31);
+      await afterSuccessRejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
+
+function rendererCall(
+  toolCallId: string,
+  toolName = "opendesign_capture_canvas",
+) {
+  return { toolCallId, toolName, input: {} };
+}
+
+function rendererContext(runId: string) {
+  return {
+    runId,
+    sessionId: "conversation_1",
+    documentId: "document_1",
+    revision: 4,
+    scope: {
+      kind: "page" as const,
+      pageId: "page_1",
+      selectedNodeIds: [],
+    },
+    mutationTarget: { kind: "page" as const, pageId: "page_1" },
+  };
+}
+
+function startRequest(
+  host: RendererDesignToolHost,
+  send: ReturnType<typeof vi.fn>,
+  runId: string,
+  toolCallId: string,
+  toolName = "opendesign_capture_canvas",
+) {
+  const callIndex = send.mock.calls.length;
+  const result = host.execute(
+    rendererCall(toolCallId, toolName),
+    rendererContext(runId),
+    new AbortController().signal,
+  );
+  const request = send.mock.calls[callIndex]?.[0] as { requestId: string };
+  return { requestId: request.requestId, result };
+}

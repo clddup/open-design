@@ -153,6 +153,31 @@ describe("AgentContinuationScheduler", () => {
     });
   });
 
+  it("does not auto-continue an incomplete delivery after the Renderer circuit opens", () => {
+    const scheduler = new AgentContinuationScheduler();
+    const active = request();
+    scheduler.registerRun(active);
+    recordDelivery(scheduler, active.runId);
+    scheduler.record({
+      type: "agent.error",
+      runId: active.runId,
+      code: "renderer_circuit_open",
+      message: "Canvas renderer repeatedly stalled",
+      failure: {
+        code: "renderer_circuit_open",
+        message: "Canvas renderer repeatedly stalled",
+        retryable: false,
+      },
+    });
+
+    expect(scheduler.record(completed(active.runId, "error"))).toEqual({
+      kind: "needs-attention",
+      attempt: 1,
+      maxAttempts: 3,
+      reason: "non-retryable-error",
+    });
+  });
+
   it("does not continue cancellation or a fully verified delivery", () => {
     const scheduler = new AgentContinuationScheduler();
     const cancelled = request();

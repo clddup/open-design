@@ -11,6 +11,7 @@ import {
   isRendererDesignToolProgress,
   isRendererDesignToolRequest,
   isRendererDesignToolResponse,
+  isTrustedToolFailure,
 } from "./design-tool-bridge";
 
 const context = {
@@ -370,6 +371,34 @@ describe("Renderer design tool bridge", () => {
     };
 
     expect(isRendererDesignToolResponse(failure)).toBe(true);
+    expect(
+      isTrustedToolFailure({
+        code: "renderer_circuit_open",
+        message: "Canvas renderer repeatedly stalled",
+        retryable: false,
+        recoverable: false,
+        runTerminal: true,
+      }),
+    ).toBe(true);
+    expect(
+      isTrustedToolFailure({
+        code: "renderer_circuit_open",
+        message: "Canvas renderer repeatedly stalled",
+        retryable: false,
+        recoverable: false,
+        runTerminal: false,
+      }),
+    ).toBe(false);
+    expect(
+      isTrustedToolFailure({
+        code: "renderer_circuit_open",
+        message: "Canvas renderer repeatedly stalled",
+        retryable: false,
+        recoverable: false,
+        runTerminal: true,
+        restartCommand: "open /Applications/OpenDesign.app",
+      }),
+    ).toBe(false);
     expect(
       isRendererDesignToolResponse({
         ...failure,

@@ -31,6 +31,11 @@ type PendingRequest = {
   totalTimeout: ReturnType<typeof setTimeout>;
 };
 
+type RendererCircuitState = {
+  consecutiveTimeouts: number;
+  open: boolean;
+};
+
 export type RendererDesignToolPerformanceSample = {
   runId: string;
   toolCallId: string;
@@ -56,9 +61,11 @@ const DEFAULT_RENDERER_TOOL_TIMEOUTS: RendererDesignToolTimeouts = {
   idleTimeoutMs: 90_000,
   totalTimeoutMs: 15 * 60_000,
 };
+const RENDERER_CIRCUIT_TIMEOUT_THRESHOLD = 2;
 
 export class RendererDesignToolHost {
   readonly #pending = new Map<string, PendingRequest>();
+  readonly #circuitsByRunId = new Map<string, RendererCircuitState>();
   #performanceObserver?: (sample: RendererDesignToolPerformanceSample) => void;
   #sequence = 0;
 
@@ -85,6 +92,9 @@ export class RendererDesignToolHost {
       reportProgress?: (message: string, progress: number) => void;
     } = {},
   ): Promise<TrustedToolResult> {
+    if (this.#circuitsByRunId.get(context.runId)?.open) {
+      return Promise.reject(rendererCircuitOpen());
+    }
     const requestId = `renderer_tool_${Date.now()}_${++this.#sequence}`;
     return new Promise((resolve, reject) => {
       const failTimeout = (
@@ -97,7 +107,11 @@ export class RendererDesignToolHost {
         clearPendingTimeouts(pending);
         this.sendCancel({ requestId });
         this.#recordPerformance(pending, "timeout");
-        pending.reject(rendererToolTimeout(phase, thresholdMs));
+        pending.reject(
+          this.#recordTimeout(pending)
+            ? rendererCircuitOpen()
+            : rendererToolTimeout(phase, thresholdMs),
+        );
       };
       const firstResponseTimeout = setTimeout(
         () =>
@@ -183,11 +197,13 @@ export class RendererDesignToolHost {
       this.sendCancel({ requestId: progress.requestId });
       this.#recordPerformance(active, "timeout");
       active.reject(
-        rendererToolTimeout(
-          "idle",
-          this.timeouts.idleTimeoutMs,
-          progress.phase,
-        ),
+        this.#recordTimeout(active)
+          ? rendererCircuitOpen()
+          : rendererToolTimeout(
+              "idle",
+              this.timeouts.idleTimeoutMs,
+              progress.phase,
+            ),
       );
     }, this.timeouts.idleTimeoutMs);
     return true;
@@ -203,6 +219,9 @@ export class RendererDesignToolHost {
       response.ok ? "completed" : "failed",
       response.performance,
     );
+    if (response.ok && didPerformCanvasWork(pending)) {
+      this.#circuitsByRunId.delete(pending.context.runId);
+    }
     if (response.ok) pending.resolve(response.result);
     else
       pending.reject(
@@ -219,6 +238,24 @@ export class RendererDesignToolHost {
       pending.reject(new Error(message));
     }
     this.#pending.clear();
+    this.#circuitsByRunId.clear();
+  }
+
+  forgetRun(runId: string): void {
+    this.#circuitsByRunId.delete(runId);
+  }
+
+  #recordTimeout(pending: PendingRequest): boolean {
+    if (!didPerformCanvasWork(pending)) return false;
+    const current = this.#circuitsByRunId.get(pending.context.runId) ?? {
+      consecutiveTimeouts: 0,
+      open: false,
+    };
+    current.consecutiveTimeouts += 1;
+    current.open =
+      current.consecutiveTimeouts >= RENDERER_CIRCUIT_TIMEOUT_THRESHOLD;
+    this.#circuitsByRunId.set(pending.context.runId, current);
+    return current.open;
   }
 
   #recordPerformance(
@@ -249,6 +286,13 @@ export class RendererDesignToolHost {
       // Performance observation must never change tool execution semantics.
     }
   }
+}
+
+function didPerformCanvasWork(pending: PendingRequest): boolean {
+  return (
+    pending.phaseProgressEvents.applying > 0 ||
+    pending.phaseProgressEvents.capturing > 0
+  );
 }
 
 function finishCurrentPhase(pending: PendingRequest, finishedAt: number): void {
@@ -299,6 +343,20 @@ function rendererToolTimeout(
       message,
       retryable: true,
       recoverable: true,
+    } satisfies TrustedToolFailure,
+  });
+}
+
+function rendererCircuitOpen(): Error {
+  const message =
+    "renderer_tool.circuit_open: Canvas rendering repeatedly stalled in this task. OpenDesign stopped the task to preserve committed revisions. Restart OpenDesign before retrying visual generation.";
+  return new Error(message, {
+    cause: {
+      code: "renderer_circuit_open",
+      message,
+      retryable: false,
+      recoverable: false,
+      runTerminal: true,
     } satisfies TrustedToolFailure,
   });
 }

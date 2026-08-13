@@ -40,19 +40,16 @@ export interface PiToolApprovalRequested {
   summary: string;
   risk: ToolRisk;
 }
-
 export interface PiToolApprovalResolved {
   approvalId: string;
   toolCallId: string;
   decision: ApprovalDecision;
   resolvedAt: string;
 }
-
 export interface PiToolLifecyclePort {
   approvalRequested(event: PiToolApprovalRequested): Promise<void>;
   approvalResolved(event: PiToolApprovalResolved): Promise<void>;
 }
-
 export interface OpenDesignPiToolAdapterOptions {
   request: AgentRunRequest;
   definitions: readonly AgentToolDefinition[];
@@ -63,7 +60,6 @@ export interface OpenDesignPiToolAdapterOptions {
   priorToolCallIds?: readonly string[];
   now?: () => Date;
 }
-
 export interface PiToolStartProjection {
   duplicate: boolean;
   input: unknown;
@@ -71,13 +67,11 @@ export interface PiToolStartProjection {
   toolCallId: string;
   toolName: string;
 }
-
 export interface PiToolProgressProjection {
   message: string;
   progress: number;
   toolCallId: string;
 }
-
 export type PiToolTerminalProjection =
   | {
       status: "completed";
@@ -96,13 +90,11 @@ export type PiToolTerminalProjection =
       recoverable: boolean;
       details?: NonNullable<TrustedToolFailure["details"]>;
     };
-
 interface ActiveToolCall extends PiToolStartProjection {
   budgetExceeded: boolean;
   revisionAtStart: number;
   sequence: number;
 }
-
 interface PiToolSuccessDetails {
   kind: typeof TOOL_RESULT_KIND;
   version: 1;
@@ -111,7 +103,6 @@ interface PiToolSuccessDetails {
   observedRevision?: number;
   designRevision?: NonNullable<TrustedToolResult["designRevision"]>;
 }
-
 interface PiToolProgressDetails {
   kind: typeof TOOL_PROGRESS_KIND;
   version: 1;
@@ -136,6 +127,7 @@ export class OpenDesignPiToolAdapter {
   readonly #toolExecutor: ToolExecutorPort | undefined;
   readonly tools: AgentTool[];
   #currentRevision: number;
+  #forcedError: TrustedToolFailure | undefined;
   #forcedStopReason: RunStopReason | undefined;
   #inspectionRequiredFailure: TrustedToolFailure | undefined;
   #toolCallCount = 0;
@@ -174,6 +166,10 @@ export class OpenDesignPiToolAdapter {
 
   get forcedStopReason(): RunStopReason | undefined {
     return this.#forcedStopReason;
+  }
+
+  get forcedError(): TrustedToolFailure | undefined {
+    return this.#forcedError;
   }
 
   get toolCallRecords(): readonly AgentToolCallRecord[] {
@@ -619,6 +615,10 @@ export class OpenDesignPiToolAdapter {
         parameters,
         baseFailure,
       );
+      if (failure.runTerminal) {
+        this.#forcedStopReason = "error";
+        this.#forcedError = failure;
+      }
       this.#failures.set(toolCallId, failure);
       throw new Error(modelFailureText(failure));
     }

@@ -33,6 +33,7 @@ import {
 } from "./pi-tool-adapter.js";
 import type { PiContextFailurePort } from "./pi-context-adapter.js";
 import type { PiModelFailurePort } from "./pi-model-gateway-adapter.js";
+import { terminalRunFailure } from "./pi-terminal-failure.js";
 import { appendRunJournalEvent } from "./run-journal-writer.js";
 export interface PiRunEventAdapterOptions {
   request: AgentRunRequest;
@@ -56,7 +57,6 @@ export interface PiRunEventAdapterOptions {
 interface ActiveAssistantMessage {
   messageId: string;
 }
-
 interface PendingCompletion {
   active: ActiveAssistantMessage;
   blocks: AssistantTimelineBlock[];
@@ -162,7 +162,6 @@ export class PiRunEventAdapter {
   get tools(): readonly AgentTool[] {
     return this.#toolAdapter?.tools ?? [];
   }
-
   get toolCallRecords(): readonly AgentToolCallRecord[] {
     return this.#toolAdapter?.toolCallRecords ?? [];
   }
@@ -309,7 +308,6 @@ export class PiRunEventAdapter {
       delta: update.delta,
     });
   }
-
   async #endMessage(message: PiAgentEventMessage): Promise<void> {
     if (message.role === "toolResult") {
       if (this.#activeToolResultCallId !== message.toolCallId) {
@@ -401,7 +399,6 @@ export class PiRunEventAdapter {
       mutationTarget: this.#request.mutationTarget,
     });
   }
-
   async #endRun(): Promise<void> {
     if (this.#activeAssistant !== undefined || this.#activeUserMessage) {
       throw new Error("Pi ended a run with an active message");
@@ -432,10 +429,13 @@ export class PiRunEventAdapter {
       this.#forcedStopReason = "error";
       this.#forcedError = { ...contextFailure, retryable: false };
     }
-    const modelFailure = this.#modelFailurePort?.consumeFailure();
-    if (modelFailure !== undefined && modelFailure.code !== "cancelled") {
+    const terminalFailure = terminalRunFailure(
+      this.#modelFailurePort?.consumeFailure(),
+      this.#toolAdapter?.forcedError,
+    );
+    if (terminalFailure !== undefined) {
       this.#forcedStopReason = "error";
-      this.#forcedError = structuredClone(modelFailure);
+      this.#forcedError = terminalFailure;
     }
     const stopReason =
       this.#forcedStopReason ??

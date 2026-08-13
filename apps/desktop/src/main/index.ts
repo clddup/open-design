@@ -1022,6 +1022,9 @@ function registerIpc() {
       conversationIdByRequestId.delete(event.requestId);
     if (event.type === "agent.error" && event.requestId)
       conversationIdByRequestId.delete(event.requestId);
+    if (event.type === "run.completed") {
+      rendererDesignToolHost.forgetRun(event.runId);
+    }
     prepareAgentContinuation(event, {
       continuationScheduler: agentContinuationScheduler,
       publish: (continuationEvent) =>

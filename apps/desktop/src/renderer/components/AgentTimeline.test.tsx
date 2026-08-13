@@ -805,6 +805,65 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("The model took too long");
   });
 
+  it("shows a terminal canvas circuit failure without claiming completion", () => {
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_canvas_circuit"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[
+          {
+            type: "tool.requested",
+            runId: "run_canvas_circuit",
+            toolCallId: "tool_canvas_circuit",
+            toolName: "opendesign_capture_canvas",
+            input: {},
+            risk: "read",
+          },
+          {
+            type: "tool.failed",
+            runId: "run_canvas_circuit",
+            toolCallId: "tool_canvas_circuit",
+            code: "renderer_circuit_open",
+            message: "renderer_tool.circuit_open: stopped",
+            retryable: false,
+            recoverable: false,
+          },
+          {
+            type: "agent.error",
+            code: "renderer_circuit_open",
+            runId: "run_canvas_circuit",
+            message: "renderer_tool.circuit_open: stopped",
+            failure: {
+              code: "renderer_circuit_open",
+              message: "renderer_tool.circuit_open: stopped",
+              retryable: false,
+            },
+          },
+          {
+            type: "run.completed",
+            runId: "run_canvas_circuit",
+            finishedAt: now,
+            stopReason: "error",
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(
+      screen.getAllByText("Canvas renderer repeatedly stalled").length,
+    ).toBeGreaterThan(0);
+    expect(container).toHaveTextContent("OpenDesign stopped this task");
+    expect(container).toHaveTextContent(
+      "Committed design revisions were preserved",
+    );
+    expect(container).not.toHaveTextContent("Task completed");
+  });
+
   it("shows one live reconnect status and clears it after recovery", () => {
     const props = {
       activeRunId: "run_retry",

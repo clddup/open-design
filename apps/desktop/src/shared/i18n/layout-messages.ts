@@ -1,6 +1,9 @@
 const enLayoutMessages = {
   "history.updateConstraints": "Update constraints",
   "history.resizeFrameResponsive": "Resize responsive Frame",
+  "agent.canvasCircuitOpen": "Canvas renderer repeatedly stalled",
+  "agent.canvasCircuitOpenDetail":
+    "OpenDesign stopped this task after repeated canvas stalls. Committed design revisions were preserved; restart OpenDesign before retrying visual generation.",
   "properties.layout": "Layout",
   "properties.horizontalConstraint": "Horizontal constraint",
   "properties.verticalConstraint": "Vertical constraint",
@@ -19,6 +22,9 @@ const enLayoutMessages = {
 const zhCNLayoutMessages = {
   "history.updateConstraints": "更新约束",
   "history.resizeFrameResponsive": "调整响应式画框",
+  "agent.canvasCircuitOpen": "画布渲染连续停滞",
+  "agent.canvasCircuitOpenDetail":
+    "OpenDesign 已在画布连续停滞后停止本次任务。已提交的设计 revision 均已保留，请重启 OpenDesign 后再尝试视觉生成。",
   "properties.layout": "布局",
   "properties.horizontalConstraint": "水平约束",
   "properties.verticalConstraint": "垂直约束",

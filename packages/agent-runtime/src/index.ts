@@ -55,7 +55,6 @@ export interface ToolCallRequest {
   toolName: string;
   input: unknown;
 }
-
 export interface TrustedToolContext {
   runId: string;
   sessionId: string;
@@ -75,6 +74,7 @@ export interface TrustedToolFailure {
   message: string;
   retryable: boolean;
   recoverable: boolean;
+  runTerminal?: true;
   details?: AgentToolFailureDetails;
 }
 

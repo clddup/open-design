@@ -186,15 +186,17 @@ export function structuredToolFailureDetail(
   t: Translate,
 ): string {
   const friendly =
-    code === "renderer_first_response_timeout"
-      ? t("agent.canvasToolFirstResponseTimeoutDetail")
-      : code === "renderer_idle_timeout"
-        ? t("agent.canvasToolIdleTimeoutDetail")
-        : code === "renderer_capture_timeout"
+    code === "renderer_circuit_open"
+      ? t("agent.canvasCircuitOpenDetail")
+      : code === "renderer_first_response_timeout"
+        ? t("agent.canvasToolFirstResponseTimeoutDetail")
+        : code === "renderer_idle_timeout"
           ? t("agent.canvasToolIdleTimeoutDetail")
-          : code === "renderer_total_timeout"
-            ? t("agent.canvasToolTotalTimeoutDetail")
-            : friendlyAgentError(message, t);
+          : code === "renderer_capture_timeout"
+            ? t("agent.canvasToolIdleTimeoutDetail")
+            : code === "renderer_total_timeout"
+              ? t("agent.canvasToolTotalTimeoutDetail")
+              : friendlyAgentError(message, t);
   const issue = details?.issues[0];
   if (!issue) return friendly;
   const target = [
@@ -233,6 +235,9 @@ export function isRoutineRecoverableToolFailure(
 }
 
 export function toolFailureTitle(code: string, t: Translate): string {
+  if (code === "renderer_circuit_open") {
+    return t("agent.canvasCircuitOpen");
+  }
   if (code === "renderer_first_response_timeout") {
     return t("agent.canvasToolDidNotStart");
   }

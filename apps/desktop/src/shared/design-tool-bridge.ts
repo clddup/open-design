@@ -280,8 +280,16 @@ export function isTrustedToolFailure(
     !safeText(value.message, 20_000) ||
     typeof value.retryable !== "boolean" ||
     typeof value.recoverable !== "boolean" ||
+    (value.runTerminal !== undefined && value.runTerminal !== true) ||
     !Object.keys(value).every((key) =>
-      ["code", "message", "retryable", "recoverable", "details"].includes(key),
+      [
+        "code",
+        "message",
+        "retryable",
+        "recoverable",
+        "runTerminal",
+        "details",
+      ].includes(key),
     )
   ) {
     return false;

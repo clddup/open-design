@@ -592,6 +592,75 @@ describe("OpenDesign Pi tool adapter", () => {
     });
   });
 
+  it("terminates the run after a host-marked Renderer circuit failure", async () => {
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        toolTurn("capture_stalled", "capture_stalled_1", 4),
+        { blocks: [{ id: "false_done", type: "text", text: "Completed" }] },
+      ]),
+    );
+    const result = await runPiToolLoop({
+      gateway,
+      definitions: [moveTool],
+      toolExecutor: {
+        async *execute(): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield {
+            type: "failed",
+            error: {
+              code: "renderer_circuit_open",
+              message:
+                "Canvas rendering repeatedly stalled; committed revisions were preserved",
+              retryable: false,
+              recoverable: false,
+              runTerminal: true,
+            },
+          };
+        },
+      },
+    });
+
+    expect(gateway.requests).toHaveLength(1);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "tool.failed",
+        toolCallId: "capture_stalled_1",
+        code: "renderer_circuit_open",
+        retryable: false,
+        recoverable: false,
+      }),
+    );
+    expect(result.events).toContainEqual({
+      type: "agent.error",
+      code: "renderer_circuit_open",
+      runId: request.runId,
+      message:
+        "Canvas rendering repeatedly stalled; committed revisions were preserved",
+      failure: {
+        code: "renderer_circuit_open",
+        message:
+          "Canvas rendering repeatedly stalled; committed revisions were preserved",
+        retryable: false,
+      },
+    });
+    expect(result.events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "error",
+    });
+    const terminalState = [...result.store.events]
+      .reverse()
+      .find((event) => event.type === "run.state")?.payload as
+      | {
+          status?: unknown;
+          failure?: { code?: unknown; retryable?: unknown };
+        }
+      | undefined;
+    expect(terminalState).toMatchObject({
+      status: "error",
+      failure: { code: "renderer_circuit_open", retryable: false },
+    });
+  });
+
   it("reuses one allowed Run-scoped approval for later calls in the same Run", async () => {
     const approvalTool: AgentToolDefinition = {
       ...moveTool,
