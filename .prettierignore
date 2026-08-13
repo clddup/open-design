@@ -1,5 +1,6 @@
 node_modules
 dist
 coverage
+output
 vendor
 pnpm-lock.yaml

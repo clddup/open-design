@@ -180,6 +180,10 @@ export function isRendererDesignToolRequest(
   return value.captureTarget === undefined;
 }
 
+export function rendererDesignToolRequestId(value: unknown): string | null {
+  return record(value) && safeId(value.requestId) ? value.requestId : null;
+}
+
 export function isRendererDesignToolCancel(
   value: unknown,
 ): value is RendererDesignToolCancel {

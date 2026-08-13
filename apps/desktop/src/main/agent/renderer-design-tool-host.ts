@@ -155,7 +155,14 @@ export class RendererDesignToolHost {
         totalTimeout,
       });
       try {
-        this.send({ requestId, call, context, ...options });
+        this.send({
+          requestId,
+          call,
+          context,
+          ...(options.captureTarget
+            ? { captureTarget: options.captureTarget }
+            : {}),
+        });
       } catch (error) {
         const pending = this.#pending.get(requestId);
         if (pending) clearPendingTimeouts(pending);
@@ -219,7 +226,7 @@ export class RendererDesignToolHost {
       response.ok ? "completed" : "failed",
       response.performance,
     );
-    if (response.ok && didPerformCanvasWork(pending)) {
+    if (response.ok) {
       this.#circuitsByRunId.delete(pending.context.runId);
     }
     if (response.ok) pending.resolve(response.result);
@@ -246,7 +253,6 @@ export class RendererDesignToolHost {
   }
 
   #recordTimeout(pending: PendingRequest): boolean {
-    if (!didPerformCanvasWork(pending)) return false;
     const current = this.#circuitsByRunId.get(pending.context.runId) ?? {
       consecutiveTimeouts: 0,
       open: false,
@@ -286,13 +292,6 @@ export class RendererDesignToolHost {
       // Performance observation must never change tool execution semantics.
     }
   }
-}
-
-function didPerformCanvasWork(pending: PendingRequest): boolean {
-  return (
-    pending.phaseProgressEvents.applying > 0 ||
-    pending.phaseProgressEvents.capturing > 0
-  );
 }
 
 function finishCurrentPhase(pending: PendingRequest, finishedAt: number): void {

@@ -63,6 +63,7 @@ import { ImageGenerationHost } from "./model/image-generation-host";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
 import { DiagnosticLog } from "./diagnostics/diagnostic-log";
 import { resolveRendererUrl } from "./renderer-url";
+import { configureFixtureSmoke } from "./professional-fixture-smoke";
 import {
   isRendererDesignToolProgress,
   isRendererDesignToolResponse,
@@ -135,6 +136,8 @@ const designGenerationPerformance = new DesignGenerationPerformanceTracker();
 const agentContinuationScheduler = new AgentContinuationScheduler();
 app.setName("OpenDesign");
 if (process.platform === "win32") app.setAppUserModelId("design.open.app");
+
+const fixtureSmoke = configureFixtureSmoke(app, process.env, homedir());
 
 let mainWindow: BrowserWindow | null = null;
 const agentHost = new AgentHost();
@@ -423,7 +426,7 @@ function createWindow() {
   const packagedRendererPath = join(__dirname, "../renderer/index.html");
   const packagedRendererUrl = pathToFileURL(packagedRendererPath).toString();
 
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  mainWindow.once("ready-to-show", () => fixtureSmoke.show(mainWindow));
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternalHttpUrl(url)) void shell.openExternal(url);
     return { action: "deny" };
@@ -609,6 +612,7 @@ function registerIpc() {
     platform: process.platform,
     version: app.getVersion(),
   }));
+  fixtureSmoke.register(ipcMain, assertMainRenderer, () => mainWindow);
   ipcMain.handle(
     channels.getPendingDiagnostics,
     (event, ...args: unknown[]) => {
@@ -1071,7 +1075,8 @@ function registerIpc() {
 void app.whenReady().then(async () => {
   if (
     process.platform === "darwin" &&
-    process.env.OPENDESIGN_AGENT_SMOKE !== "1"
+    process.env.OPENDESIGN_AGENT_SMOKE !== "1" &&
+    !fixtureSmoke.active
   ) {
     app.dock?.setIcon(resolveApplicationIconPath());
   }
@@ -1129,8 +1134,10 @@ void app.whenReady().then(async () => {
     return;
   }
 
+  fixtureSmoke.startTimeout();
+
   const workspaceDatabase = await prepareGlobalWorkspaceDatabase(
-    homedir(),
+    fixtureSmoke.home,
     app.getPath("userData"),
   );
   diagnosticLog = new DiagnosticLog(
@@ -1139,7 +1146,7 @@ void app.whenReady().then(async () => {
   );
   workspaceStore = new WorkspaceStore(workspaceDatabase);
   agentAttachmentHost = new AgentAttachmentHost(
-    join(homedir(), ".opendesign", "attachments"),
+    fixtureSmoke.path(".opendesign", "attachments"),
   );
   agentReferenceHost = new AgentReferenceHost(agentAttachmentHost);
   const persistedLocale = workspaceStore.getPreference("locale");
@@ -1707,7 +1714,7 @@ void app.whenReady().then(async () => {
   globalTaskCoordinator.reconcileInterruptedTasks();
   try {
     const recovered = await new JsonlSessionStore(
-      join(homedir(), ".opendesign", "sessions", "events.jsonl"),
+      fixtureSmoke.path(".opendesign", "sessions", "events.jsonl"),
     ).reconcileInterruptedRuns();
     if (recovered.recoveredRuns > 0) {
       console.info(
@@ -1737,7 +1744,7 @@ void app.whenReady().then(async () => {
     });
   }
   registerIpc();
-  agentHost.start();
+  if (!fixtureSmoke.active) agentHost.start();
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

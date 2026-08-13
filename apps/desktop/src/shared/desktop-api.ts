@@ -34,6 +34,10 @@ import {
   type GlobalTaskProjection,
   type ProjectManifest,
 } from "@opendesign/workspace-contracts";
+import type {
+  ProfessionalFixtureSmokeBootstrap,
+  ProfessionalFixtureSmokeResult,
+} from "./professional-fixture-smoke";
 import { isAppLocale, type AppLocale } from "./i18n/locale";
 import type {
   RendererDesignToolRequest,
@@ -260,6 +264,10 @@ export type ProjectDesignFile = {
 };
 
 export interface DesktopApi {
+  getProfessionalFixtureSmoke: () => Promise<ProfessionalFixtureSmokeBootstrap | null>;
+  reportProfessionalFixtureSmoke: (
+    result: ProfessionalFixtureSmokeResult,
+  ) => Promise<void>;
   getPlatformInfo: () => Promise<PlatformInfo>;
   getPendingDiagnostics: () => Promise<DiagnosticEvent[]>;
   reportDiagnostic: (report: RendererDiagnosticReport) => Promise<void>;
@@ -359,6 +367,8 @@ export interface DesktopApi {
 }
 
 export const channels = {
+  professionalFixtureSmokeGet: "professional-fixture-smoke:get",
+  professionalFixtureSmokeReport: "professional-fixture-smoke:report",
   platformInfo: "app:platform-info",
   getPendingDiagnostics: "diagnostic:get-pending",
   reportDiagnostic: "diagnostic:report",

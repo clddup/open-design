@@ -84,6 +84,7 @@ import {
 } from "./features/agent-conversation/continuation-binding";
 import { reportRendererError } from "./diagnostics";
 import { useRendererDesignToolHost } from "./use-renderer-design-tool-host";
+import { useProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
 const HISTORY_SYNC_DEBOUNCE_MS = 80;
 type AppView = "workspace" | "project" | "editor" | "settings";
 
@@ -195,6 +196,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       }),
     [],
   );
+  useProfessionalFixtureSmoke({
+    activatePage,
+    desktop: window.desktop,
+    replaceDocument,
+    setFileName,
+    setView: () => setView("editor"),
+  });
   useRendererDesignToolHost(workspace, projectAutosave);
   const { document: designDocument, state } = snapshot;
   autosaveCallbacks.current = {

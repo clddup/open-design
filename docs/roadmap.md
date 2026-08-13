@@ -131,6 +131,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 - [ ] 使用当前仓库启动的 Electron 实例执行 `OD-PENGUIN-01` 和 `OD-POSTER-01`，保存原始 prompt、最终 `.opendesign` 文件、两次 `capture_canvas`、中间 refinement、截图、Conversation/Run ID 和相关诊断。
 - [x] 建立可重放专业样张 fixture：固定 prompt、初稿 `.opendesign`、一次 refinement 事务、最终文档和 SHA-256 manifest 均由确定性生成器维护；`EditorRuntime` 与 Leafer 测试从干净文档验证命名 Group、正式 Path、复杂外观、图片、诊断、保存重开和 undo/redo，不依赖开发会话临时状态。
+- [x] 建立无系统文件弹窗的 macOS 源码 Electron fixture smoke：Main 只接受固定样张 ID，在隔离 `home`/`userData` 中启动隐藏窗口；Renderer 通过唯一 Workspace `EditorRuntime` 依次提交初稿、生产 Leafer capture、refinement 和第二次 capture，Main 核对权威最终文档后保存窗口截图、最终 `.opendesign`、DPR、viewport 与 SHA-256 report，并由双层硬超时自动退出。`OD-PENGUIN-01` 与 `OD-POSTER-01` 已在当前 Mac 实机通过；该确定性重放不冒充 live Agent Conversation/Run 重放、打包产物或 Windows 像素 baseline。
 - [ ] 为同一 fixture 建立 macOS/Windows 像素视觉 baseline；必须由真实生产 Leafer 画布渲染并记录平台、DPR、字体、截图和允许差异，结构投影测试不能替代像素证据。
 - [x] 为 Path、渐变、光晕、模糊、blend、mask、图片和文字建立版本化预检：`inspect_document` 返回实际特性计数，并识别空 Path/文字、不可见或无绘制外观节点、丢失/不受支持的图片 asset、非有限 bounds、完全越出 clipping Frame 和异常根图层碎片；Agent prompt 要求先处理 error 并解释 warning。
 - [x] 建立版本化 capability manifest。每项能力记录 `available / degraded / unavailable`、provider、限制、六个产品表面、自动化证据和实机证据；Agent system context、`get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON 事实来源，`capabilities:check` 阻止生成物漂移。能力状态不是设置项，不进入设置页。

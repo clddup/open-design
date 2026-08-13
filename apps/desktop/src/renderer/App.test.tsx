@@ -178,6 +178,8 @@ beforeEach(() => {
     },
   });
   window.desktop = {
+    getProfessionalFixtureSmoke: vi.fn().mockResolvedValue(null),
+    reportProfessionalFixtureSmoke: vi.fn().mockResolvedValue(undefined),
     getPlatformInfo: vi
       .fn()
       .mockResolvedValue({ platform: "darwin", version: "0.0.0" }),

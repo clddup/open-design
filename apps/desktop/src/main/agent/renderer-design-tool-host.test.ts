@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { isRendererDesignToolRequest } from "../../shared/design-tool-bridge";
 import { RendererDesignToolHost } from "./renderer-design-tool-host";
 
 describe("RendererDesignToolHost", () => {
@@ -108,6 +109,9 @@ describe("RendererDesignToolHost", () => {
         { reportProgress },
       );
       const request = send.mock.calls[0]?.[0] as { requestId: string };
+
+      expect(isRendererDesignToolRequest(send.mock.calls[0]?.[0])).toBe(true);
+      expect(send.mock.calls[0]?.[0]).not.toHaveProperty("reportProgress");
 
       await vi.advanceTimersByTimeAsync(10);
       expect(
@@ -357,7 +361,51 @@ describe("RendererDesignToolHost", () => {
     }
   });
 
-  it("clears consecutive stalls only after successful canvas work", async () => {
+  it("terminates the run after two consecutive first-response timeouts", async () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn();
+      const host = new RendererDesignToolHost(send, vi.fn(), {
+        firstResponseTimeoutMs: 20,
+        idleTimeoutMs: 30,
+        totalTimeoutMs: 100,
+      });
+      const first = startRequest(
+        host,
+        send,
+        "run_unacknowledged",
+        "inspect_1",
+        "opendesign_inspect_document",
+      );
+      const firstRejection = expect(first.result).rejects.toMatchObject({
+        cause: { code: "renderer_first_response_timeout", retryable: true },
+      });
+      await vi.advanceTimersByTimeAsync(21);
+      await firstRejection;
+
+      const second = startRequest(
+        host,
+        send,
+        "run_unacknowledged",
+        "inspect_2",
+        "opendesign_inspect_document",
+      );
+      const secondRejection = expect(second.result).rejects.toMatchObject({
+        cause: {
+          code: "renderer_circuit_open",
+          retryable: false,
+          recoverable: false,
+          runTerminal: true,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(21);
+      await secondRejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears consecutive stalls after any successful Renderer response", async () => {
     vi.useFakeTimers();
     try {
       const send = vi.fn();
@@ -402,12 +450,11 @@ describe("RendererDesignToolHost", () => {
         progress: 0.4,
       });
       const secondRejection = expect(second.result).rejects.toMatchObject({
-        cause: { code: "renderer_circuit_open", runTerminal: true },
+        cause: { code: "renderer_idle_timeout", retryable: true },
       });
       await vi.advanceTimersByTimeAsync(31);
       await secondRejection;
 
-      host.forgetRun("run_reset");
       const third = startRequest(host, send, "run_reset", "apply_1");
       host.progress({
         requestId: third.requestId,
