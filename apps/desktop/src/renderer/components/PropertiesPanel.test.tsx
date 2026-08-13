@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
 import { PropertiesPanel } from "./PropertiesPanel";
 import type { SvgInterchangeFeedback } from "../features/import-export/types";
+import type { UpdatePropertiesPatch } from "../features/editor/types";
 
 function renderPanel(
   options: {
@@ -33,6 +34,7 @@ function renderPanel(
     onRemoveComponent?: () => void;
     constraintsAvailable?: boolean;
     onSetConstraints?: (constraints: LayoutConstraints) => void;
+    onUpdate?: (updates: UpdatePropertiesPatch) => void;
   } = {},
 ) {
   const onCancelSvgOperation = vi.fn();
@@ -41,7 +43,7 @@ function renderPanel(
   const onExportRaster = vi.fn();
   const onSvgExportSettingsChange = vi.fn();
   const onRasterExportSettingsChange = vi.fn();
-  const onUpdate = vi.fn();
+  const onUpdate = options.onUpdate ?? vi.fn();
   const onArrange =
     options.onArrange ?? vi.fn<(operation: ArrangeOperation) => void>();
   render(
@@ -268,6 +270,47 @@ describe("PropertiesPanel SVG workflow", () => {
     expect(onSetConstraints).toHaveBeenLastCalledWith({
       horizontal: "right",
       vertical: "center",
+    });
+  });
+
+  it("configures Frame Auto Layout direction, gap, padding, and alignment", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    renderPanel({
+      node: {
+        id: "frame_auto",
+        kind: "frame",
+        name: "Navigation",
+        parentId: null,
+        childIds: [],
+        visible: true,
+        locked: false,
+        transform: [1, 0, 0, 1, 0, 0],
+        size: { width: 320, height: 80 },
+        opacity: 1,
+        properties: {
+          fills: [],
+          strokes: [],
+          strokeWidth: 0,
+          cornerRadius: 0,
+          clipsContent: true,
+        },
+        extensions: {},
+      },
+      selectionCount: 1,
+      onUpdate,
+    });
+    await user.selectOptions(screen.getByLabelText("Direction"), "horizontal");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: {
+        autoLayout: {
+          mode: "horizontal",
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          gap: 0,
+          primaryAlignment: "start",
+          counterAlignment: "start",
+        },
+      },
     });
   });
 

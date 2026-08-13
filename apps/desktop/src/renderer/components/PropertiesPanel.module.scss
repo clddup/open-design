@@ -461,6 +461,12 @@
   }
 }
 
+.hint {
+  color: var(--ui-text-faint);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .toggles {
   display: flex;
   gap: 12px;

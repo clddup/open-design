@@ -23,6 +23,29 @@ export function commitCanvasOperation({
   const current = runtime.getSnapshot();
   const responsive = responsiveFrameResizeRequest(current.document, request);
   if (responsive) return onResizeFrame(responsive.frameId, responsive.size);
+  const flowChild = request.operations.find((operation) => {
+    if (
+      operation.type !== "update_properties" ||
+      (operation.transform === undefined && operation.size === undefined)
+    ) {
+      return false;
+    }
+    const node = current.document.nodesById[operation.nodeId];
+    const parent = node?.parentId
+      ? current.document.nodesById[node.parentId]
+      : undefined;
+    return (
+      parent?.kind === "frame" &&
+      parent.properties.autoLayout !== undefined &&
+      parent.properties.autoLayout.mode !== "none"
+    );
+  });
+  if (flowChild?.type === "update_properties") {
+    onTransactionError(
+      `Layer ${flowChild.nodeId} participates in Auto Layout. Reorder it in Layers or edit the parent layout settings.`,
+    );
+    return false;
+  }
   const result = runtime.apply({
     transactionId,
     documentId: current.document.documentId,

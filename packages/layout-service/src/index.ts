@@ -1,4 +1,5 @@
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";
@@ -35,6 +36,31 @@ export type ConstraintResizeResult =
       code: "invalid-input" | "zero-parent-size";
       message: string;
     };
+
+export type AutoLayoutDirection = "horizontal" | "vertical";
+export type AutoLayoutAlignment = "start" | "center" | "end";
+export type AutoLayoutPadding = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+export type LinearAutoLayoutRequest = {
+  version: typeof AUTO_LAYOUT_SERVICE_CONTRACT_VERSION;
+  direction: AutoLayoutDirection;
+  frame: ConstraintSize;
+  padding: AutoLayoutPadding;
+  gap: number;
+  primaryAlignment: AutoLayoutAlignment;
+  counterAlignment: AutoLayoutAlignment;
+  children: Array<{ id: string; width: number; height: number }>;
+};
+export type LinearAutoLayoutResult =
+  | {
+      ok: true;
+      placements: Array<{ id: string; x: number; y: number }>;
+    }
+  | { ok: false; code: "invalid-input"; message: string };
 
 export const DEFAULT_LAYOUT_CONSTRAINTS: LayoutConstraints = Object.freeze({
   horizontal: "left",
@@ -87,6 +113,50 @@ export function solveConstraints(
   };
 }
 
+export function solveLinearAutoLayout(
+  request: LinearAutoLayoutRequest,
+): LinearAutoLayoutResult {
+  if (!validLinearAutoLayoutRequest(request)) {
+    return {
+      ok: false,
+      code: "invalid-input",
+      message: "Linear Auto Layout input is invalid",
+    };
+  }
+  const horizontal = request.direction === "horizontal";
+  const mainStart = horizontal ? request.padding.left : request.padding.top;
+  const mainEnd = horizontal ? request.padding.right : request.padding.bottom;
+  const counterStart = horizontal ? request.padding.top : request.padding.left;
+  const counterEnd = horizontal
+    ? request.padding.bottom
+    : request.padding.right;
+  const frameMain = horizontal ? request.frame.width : request.frame.height;
+  const frameCounter = horizontal ? request.frame.height : request.frame.width;
+  const contentMain =
+    request.children.reduce(
+      (sum, child) => sum + (horizontal ? child.width : child.height),
+      0,
+    ) +
+    request.gap * Math.max(0, request.children.length - 1);
+  const mainFree = frameMain - mainStart - mainEnd - contentMain;
+  let cursor = mainStart + alignmentOffset(request.primaryAlignment, mainFree);
+  const placements = request.children.map((child) => {
+    const childMain = horizontal ? child.width : child.height;
+    const childCounter = horizontal ? child.height : child.width;
+    const counterFree = frameCounter - counterStart - counterEnd - childCounter;
+    const counter =
+      counterStart + alignmentOffset(request.counterAlignment, counterFree);
+    const placement = {
+      id: child.id,
+      x: horizontal ? cursor : counter,
+      y: horizontal ? counter : cursor,
+    };
+    cursor += childMain + request.gap;
+    return placement;
+  });
+  return { ok: true, placements };
+}
+
 export function isLayoutConstraints(
   value: unknown,
 ): value is LayoutConstraints {
@@ -134,6 +204,50 @@ function finitePositiveSize(value: ConstraintSize): boolean {
     Number.isFinite(value.height) &&
     value.height >= 0
   );
+}
+
+function validLinearAutoLayoutRequest(
+  request: LinearAutoLayoutRequest,
+): boolean {
+  const ids = new Set<string>();
+  return (
+    request.version === AUTO_LAYOUT_SERVICE_CONTRACT_VERSION &&
+    finitePositiveSize(request.frame) &&
+    request.frame.width > 0 &&
+    request.frame.height > 0 &&
+    (request.direction === "horizontal" || request.direction === "vertical") &&
+    finiteNonNegative(request.gap) &&
+    Object.values(request.padding).every(finiteNonNegative) &&
+    [request.primaryAlignment, request.counterAlignment].every((value) =>
+      ["start", "center", "end"].includes(value),
+    ) &&
+    request.children.every((child) => {
+      if (
+        typeof child.id !== "string" ||
+        child.id.length === 0 ||
+        ids.has(child.id) ||
+        !finiteNonNegative(child.width) ||
+        !finiteNonNegative(child.height)
+      ) {
+        return false;
+      }
+      ids.add(child.id);
+      return true;
+    })
+  );
+}
+
+function finiteNonNegative(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 1_000_000;
+}
+
+function alignmentOffset(
+  alignment: AutoLayoutAlignment,
+  available: number,
+): number {
+  if (alignment === "center") return available / 2;
+  if (alignment === "end") return available;
+  return 0;
 }
 
 function finiteRect(value: ConstraintRect): boolean {

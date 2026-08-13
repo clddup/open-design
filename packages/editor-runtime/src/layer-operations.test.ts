@@ -557,6 +557,65 @@ describe("layer hierarchy operations", () => {
     ).toEqual({ horizontal: "left-right", vertical: "top" });
   });
 
+  it("clears ordinary constraints when reparenting into an Auto Layout Frame", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    document.nodesById.source_frame = {
+      ...frame,
+      id: "source_frame",
+      name: "Source",
+      childIds: ["feature_one"],
+      properties: { ...frame.properties, autoLayout: { mode: "none" } },
+    };
+    document.pagesById.page_welcome!.rootNodeIds.push("source_frame");
+    document.nodesById.feature_group!.childIds = [
+      "feature_two",
+      "feature_three",
+    ];
+    document.nodesById.feature_one!.parentId = "source_frame";
+    document.nodesById.feature_one!.constraints = {
+      horizontal: "right",
+      vertical: "bottom",
+    };
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planReparentNodes(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["feature_one"],
+      {
+        parentId: "frame_welcome",
+        index: 1,
+        commandPrefix: "move_into_flow",
+      },
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan.commands).toContainEqual(
+      expect.objectContaining({
+        type: "update_properties",
+        nodeId: "feature_one",
+        constraints: null,
+      }),
+    );
+    expect(
+      runtime.apply(transaction(runtime, "move_into_flow", plan.commands)).ok,
+    ).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.feature_one).toMatchObject({
+      parentId: "frame_welcome",
+      transform: [1, 0, 0, 1, 0, 16],
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.feature_one?.constraints,
+    ).toBeUndefined();
+  });
+
   it("expands and rebases a destination Group without moving existing or inserted artwork", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const before = runtime.getSnapshot().document;

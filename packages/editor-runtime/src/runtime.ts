@@ -36,7 +36,7 @@ import {
   normalizeDesignDocument,
 } from "./document.js";
 import { nodeChangedFields } from "./node-change-fields.js";
-
+import { resolveAutoLayoutInPlace } from "./auto-layout-operations.js";
 export interface EditorSnapshot {
   document: DesignDocument;
   state: EditorState;
@@ -72,7 +72,6 @@ export interface EditorApplyOptions {
   historyGroupId?: string;
   finalizeHistoryGroup?: boolean;
 }
-
 interface StoredTransaction {
   fingerprint: string;
   result: DesignTransactionSuccess;
@@ -516,6 +515,22 @@ export class EditorRuntime {
     try {
       for (const command of transaction.commands)
         applyOperation(draft, command, context);
+      const autoLayout = resolveAutoLayoutInPlace(draft);
+      if (!autoLayout.ok) {
+        throw new OperationError(
+          transaction.commands.at(-1)?.commandId ?? "auto_layout",
+          autoLayout.message,
+          "invalid",
+          {
+            path: `/nodesById/${escapeJsonPointer(autoLayout.frameId)}/properties/autoLayout`,
+            details: {
+              nodeId: autoLayout.frameId,
+              feature: "linear-auto-layout-v1",
+              providerCode: autoLayout.code,
+            },
+          },
+        );
+      }
       draft.revision = this.#document.revision + 1;
       const document = normalizeDesignDocument(draft);
       return {

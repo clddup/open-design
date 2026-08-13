@@ -52,10 +52,11 @@ describe("ParentDesignToolExecutor", () => {
     );
     expect(autoLayout).toMatchObject({
       id: "layout.auto-layout",
-      status: "unavailable",
+      status: "degraded",
       name: "Auto layout",
-      provider: "Not implemented",
-      evidence: { automated: 0, manual: 0 },
+      provider:
+        "DesignDocument 1.13.0 + @opendesign/layout-service linear Auto Layout contract v1 + EditorRuntime",
+      evidence: { automated: 10, manual: 0 },
     });
   });
 

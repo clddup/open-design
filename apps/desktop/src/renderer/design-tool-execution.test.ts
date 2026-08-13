@@ -3404,6 +3404,86 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.getSnapshot().document.revision).toBe(2);
   });
 
+  it("sets Frame Auto Layout through host-derived geometry and one Agent transaction", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_set",
+        call: {
+          toolCallId: "tool_auto_layout_set",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-auto-layout",
+            label: "Create vertical landing flow",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+            autoLayout: {
+              mode: "vertical",
+              padding: { top: 24, right: 32, bottom: 24, left: 32 },
+              gap: 16,
+              primaryAlignment: "start",
+              counterAlignment: "center",
+            },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-auto-layout",
+          frameId: "frame_welcome",
+          autoLayout: {
+            mode: "vertical",
+            gap: 16,
+            counterAlignment: "center",
+          },
+          revision: 1,
+          atomic: true,
+        },
+      },
+    });
+    const document = runtime.getSnapshot().document;
+    expect(document.nodesById.frame_welcome).toMatchObject({
+      properties: { autoLayout: { mode: "vertical", gap: 16 } },
+    });
+    expect(document.nodesById.shape_accent?.transform[5]).toBe(24);
+    expect(document.nodesById.title_welcome?.transform[5]).toBe(48);
+    expect(document.nodesById.subtitle_welcome?.transform[5]).toBe(136);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "auto_layout_bypass",
+          call: {
+            toolCallId: "tool_auto_layout_bypass",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              label: "Bypass flow geometry",
+              commands: [
+                {
+                  commandId: "move_flow_child",
+                  type: "update_properties",
+                  nodeId: "title_welcome",
+                  transform: [1, 0, 0, 1, 500, 500],
+                },
+              ],
+            },
+          },
+          context: { ...pageContext, revision: 1 },
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("auto_layout_requires_layout_tool");
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+  });
+
   it("sets exact negative Agent spacing and rejects locked or out-of-scope arrangement", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = await executeDesignToolRequest(

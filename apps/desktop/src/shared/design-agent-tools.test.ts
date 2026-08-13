@@ -1606,6 +1606,19 @@ describe("design Agent tool contract", () => {
       width: 1440,
       height: 1024,
     };
+    const autoLayout = {
+      action: "set-auto-layout",
+      label: "Build responsive navigation flow",
+      pageId: "page_1",
+      frameId: "navigation",
+      autoLayout: {
+        mode: "horizontal",
+        padding: { top: 12, right: 16, bottom: 12, left: 16 },
+        gap: 8,
+        primaryAlignment: "start",
+        counterAlignment: "center",
+      },
+    };
 
     expect(arrange).toMatchObject({
       risk: "design_write",
@@ -1615,6 +1628,7 @@ describe("design Agent tool contract", () => {
     expect(arrange?.description).toContain("two-dimensional Tidy up");
     expect(arrange?.description).toContain("Smart Selection canvas handles");
     expect(arrange?.description).toContain("Constraints v1");
+    expect(arrange?.description).toContain("Auto Layout v1");
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, distribute),
     ).toBe(true);
@@ -1630,6 +1644,15 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, resizeFrame),
     ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, autoLayout),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...autoLayout,
+        autoLayout: { ...autoLayout.autoLayout, wrap: true },
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...constraints,

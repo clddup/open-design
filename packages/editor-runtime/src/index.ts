@@ -45,6 +45,13 @@ export {
 } from "./arrange-operations.js";
 export { MAX_ARRANGEMENT_SPACING } from "@opendesign/geometry-service";
 export {
+  planSetFrameAutoLayout,
+  resolveAutoLayoutInPlace,
+  type AutoLayoutOperationFailureCode,
+  type AutoLayoutOperationPlan,
+  type AutoLayoutResolution,
+} from "./auto-layout-operations.js";
+export {
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
   type FrameLayoutOperationFailureCode,

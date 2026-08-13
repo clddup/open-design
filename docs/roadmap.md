@@ -146,7 +146,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P1：专业能力契约
 
 - 把 P0-C 的初始 capability manifest 提升为版本化公共契约，并为 Renderer、Agent、MCP 和发布说明提供同一只读查询入口。未知能力必须拒绝，降级能力必须返回结构化限制和 fidelity warning。
-- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.12.0` 已在 `1.11.0` Component/Instance/Override 基础上增加普通 Frame constraints，后续仍需分支与多轮廓、Slice、Auto Layout/Grid、Text/Font rich typography、图片 adjustments、Variant/Component Properties、跨文件 Library、style/token binding 和 export settings。
+- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.13.0` 已在 `1.12.0` 普通 Frame constraints 基础上增加线性 Auto Layout v1，后续仍需分支与多轮廓、Slice、hug/fill/wrap/grid、Text/Font rich typography、图片 adjustments、Variant/Component Properties、跨文件 Library、style/token binding 和 export settings。
 - 为 Geometry、Layout、Text/Font、Image 和 Import/Export service 建立窄、版本化的输入输出接口。服务只能返回纯结果、诊断或候选 `DesignOperation[]`，不能保存第二份文档或直接修改 Leafer 场景。
 - 提供确定性迁移、未知版本拒绝、保存重开、preview、undo/redo、Agent schema、provider 映射和 fidelity warning 测试；不得把长期语义藏进 `extensions`。
 
@@ -206,6 +206,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P3-B：响应式布局、Variants 与设计系统
 
 - [x] 完成普通 Frame constraints v1：`DesignDocument 1.12.0`、独立 Layout Service v1 与 EditorRuntime planner 定义横向 left/right/stretch/center/scale、纵向 top/bottom/stretch/center/scale；Inspector、单选 populated Frame 画布 resize 与 Agent `set-constraints/resize-frame` 共用一个递归原子事务，保存重开、undo/redo、reparent 清除、旧文档迁移和通用 Agent resize 旁路拒绝已有自动化。translation-only、Group/Boolean bounds、Instance resize、Auto Size 文字拉伸和双平台打包 GUI 仍是明确限制。见 ADR-0051。
+- [x] 完成线性 Auto Layout v1：`DesignDocument 1.13.0` 在 Frame properties 持久化 horizontal/vertical flow、四边 padding、固定非负 gap 与主轴/交叉轴 start/center/end；Layout Service 纯函数求解固定尺寸子层，EditorRuntime 在每笔事务的显式命令和文字测量后统一 deepest-first 回流。增删、隐藏/显示、resize、重排、reparent、父 Frame resize、保存重开和 undo/redo 共用同一事实；Inspector、`Shift+A` / `Alt+Shift+A`、Layers 层序、画布边界与 Agent `set-auto-layout` 已贯通。流内普通 constraints 自动清除/隐藏，直接画布 geometry 与 Agent 通用旁路明确拒绝且零 revision。hug/fill、wrap、auto gap、baseline、min/max、ignore-layout child、grid、画布回流手柄、SVG metadata 和双平台打包 GUI 仍待后续。见 ADR-0053。
 - 建立 OpenDesign-owned constraints、horizontal/vertical auto layout、wrap、padding/gap、对齐、hug/fill/fixed、min/max、absolute child、layout grid 与响应式求解语义。Layout service 输出确定性布局或候选事务，不保存第二份布局状态。
 - 在 P1-C Component/Instance 主流程上继续建立 Variant Set、State、Boolean/Text/Instance-swap properties、共享样式与 Library 发布/消费，并扩展跨文件更新、循环依赖和失效引用诊断。
 - 建立 Design File/Library 级 Design Token/Variable 系统，而不是应用设置：支持 Color/Number/String/Boolean 等 typed value、Collection/Group、Mode、同类型 alias、属性 scope/binding，以及 primitive → semantic → component 分层。人工 UI 与 Agent 必须共用同一版本化命令；主题/模式切换、alias 继承、循环/失效引用、Library 发布与消费都产生确定性结果。DTCG JSON 导入导出通过独立 service 返回保真报告，不把 token 占位字段描述成已可用。

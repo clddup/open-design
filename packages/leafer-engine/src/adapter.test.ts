@@ -3458,7 +3458,7 @@ function componentInput(): LeaferEngineSyncInput {
   };
   const document: DesignDocument = {
     format: "dev.opendesign.document",
-    schemaVersion: "1.12.0",
+    schemaVersion: "1.13.0",
     documentId: "component-raster",
     revision: 1,
     pageOrder: ["main", "instances"],

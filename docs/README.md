@@ -78,3 +78,10 @@
 | [0044](adr/0044-versioned-crossed-hole-and-concave-cut.md)               | 已接受     | 穿孔与闭合凹形多交点 Cut                                           |
 | [0045](adr/0045-versioned-components-and-instances.md)                   | 已接受     | 版本化 Component Main、Instance、Override 与派生投影               |
 | [0046](adr/0046-project-module-boundaries-and-incremental-governance.md) | 已接受     | 项目模块 DAG、进程边界、增长门禁与分阶段治理                       |
+| [0047](adr/0047-durable-agent-run-continuation.md)                       | 已接受     | Agent Run 持久续跑、恢复绑定与并发协调                             |
+| [0048](adr/0048-provider-agent-compatibility-preflight.md)               | 已接受     | Provider 与 Agent 工具兼容性预检                                   |
+| [0049](adr/0049-trusted-generation-order-and-presentation.md)            | 已接受     | 可信生成顺序、真实 revision 步骤与过程呈现                         |
+| [0050](adr/0050-allocated-artboards-and-semantic-generation-steps.md)    | 已接受     | 真实画板预分配、allocated ledger 与语义生成步骤                    |
+| [0051](adr/0051-frame-constraints-and-responsive-resize.md)              | 已接受     | Frame constraints 与响应式 resize                                  |
+| [0052](adr/0052-run-scoped-renderer-circuit-breaker.md)                  | 已接受     | Run 级 Renderer 连续停滞熔断                                       |
+| [0053](adr/0053-linear-auto-layout-v1.md)                                | 已接受     | 线性 Auto Layout v1 与事务内自动回流                               |

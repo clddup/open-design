@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.12.0",
+    "documentSchemaVersion": "1.13.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.9.0",
     "geometryServiceContractVersion": 10,
@@ -73,10 +73,10 @@
       "productionStatus": "auto-width-and-auto-height-available-native-gate-pending"
     },
     "layout": {
-      "role": "versioned-frame-constraints-provider",
+      "role": "versioned-frame-constraints-and-linear-auto-layout-provider",
       "contractPackage": "@opendesign/layout-service",
       "contractVersion": 1,
-      "productionStatus": "frame-constraints-available-native-gate-pending"
+      "productionStatus": "frame-constraints-and-linear-auto-layout-available-native-gate-pending"
     },
     "svgInterchange": {
       "role": "structured-svg-import-export-service",

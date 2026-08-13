@@ -458,7 +458,11 @@ export function planReparentNodes(
       return failure("not-found", `Layer ${nodeId} does not exist`);
     }
     node.parentId = options.parentId;
-    if (targetParent?.kind !== "frame") delete node.constraints;
+    const targetFlow =
+      targetParent?.kind === "frame"
+        ? (targetParent.properties.autoLayout?.mode ?? "none")
+        : "horizontal";
+    if (targetFlow !== "none") delete node.constraints;
     if (sourceParentId !== options.parentId) {
       node.transform = multiplyTransforms(worldToTarget, world);
     }

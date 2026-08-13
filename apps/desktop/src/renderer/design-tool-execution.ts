@@ -19,6 +19,7 @@ import {
   diagnoseDesignTargetLayout,
   diagnoseDesignPages,
   planArrangeNodes,
+  planSetFrameAutoLayout,
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
   planCreatePage,
@@ -835,16 +836,24 @@ async function executeDesignToolRequestUnsafe(
               { width: input.width, height: input.height },
               commandPrefix,
             )
-          : planArrangeNodes(
-              document,
-              input.pageId,
-              input.nodeIds,
-              input.action === "set-horizontal-spacing" ||
-                input.action === "set-vertical-spacing"
-                ? { action: input.action, spacing: input.spacing }
-                : { action: input.action },
-              commandPrefix,
-            );
+          : input.action === "set-auto-layout"
+            ? planSetFrameAutoLayout(
+                document,
+                input.pageId,
+                input.frameId,
+                input.autoLayout,
+                commandPrefix,
+              )
+            : planArrangeNodes(
+                document,
+                input.pageId,
+                input.nodeIds,
+                input.action === "set-horizontal-spacing" ||
+                  input.action === "set-vertical-spacing"
+                  ? { action: input.action, spacing: input.spacing }
+                  : { action: input.action },
+                commandPrefix,
+              );
     if (!plan.ok) {
       throw new Error(`arrange.${plan.code}: ${plan.message}`);
     }
@@ -900,8 +909,12 @@ async function executeDesignToolRequestUnsafe(
           ...(input.action === "set-constraints"
             ? { nodeId: input.nodeId, constraints: input.constraints }
             : {}),
+          ...(input.action === "set-auto-layout"
+            ? { frameId: input.frameId, autoLayout: input.autoLayout }
+            : {}),
           ...(input.action !== "resize-frame" &&
           input.action !== "set-constraints" &&
+          input.action !== "set-auto-layout" &&
           "orderedNodeIds" in plan
             ? { orderedNodeIds: plan.orderedNodeIds }
             : {}),
@@ -1203,6 +1216,7 @@ async function executeDesignToolRequestUnsafe(
     normalizeAgentInsertHierarchy(request.call.input.commands),
   );
   assertAgentDoesNotBypassFrameConstraints(document, commands);
+  assertAgentDoesNotBypassAutoLayout(document, commands);
   assertCommandsWithinMutationTarget(
     document,
     commands,
@@ -1235,6 +1249,43 @@ async function executeDesignToolRequestUnsafe(
     execution: options,
     createFailure: designTransactionToolError,
   });
+}
+
+function assertAgentDoesNotBypassAutoLayout(
+  document: DesignDocument,
+  commands: readonly DesignOperation[],
+): void {
+  for (const command of commands) {
+    if (
+      command.type === "update_properties" &&
+      command.properties !== undefined &&
+      Object.hasOwn(command.properties, "autoLayout")
+    ) {
+      throw new Error(
+        `design_workflow.auto_layout_requires_layout_tool: Configure Frame Auto Layout with opendesign_arrange_layers action set-auto-layout`,
+      );
+    }
+    if (
+      command.type !== "update_properties" ||
+      (command.transform === undefined && command.size === undefined)
+    ) {
+      continue;
+    }
+    const node = document.nodesById[command.nodeId];
+    const parent = node?.parentId
+      ? document.nodesById[node.parentId]
+      : undefined;
+    if (
+      parent?.kind !== "frame" ||
+      parent.properties.autoLayout === undefined ||
+      parent.properties.autoLayout.mode === "none"
+    ) {
+      continue;
+    }
+    throw new Error(
+      `design_workflow.auto_layout_requires_layout_tool: Layer ${node.id} participates in Frame ${parent.id} Auto Layout; change the parent with opendesign_arrange_layers action set-auto-layout or reorder hierarchy instead of setting child geometry`,
+    );
+  }
 }
 
 function assertAgentDoesNotBypassFrameConstraints(

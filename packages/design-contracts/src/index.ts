@@ -5,14 +5,10 @@ import {
   type TUnion,
 } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { LayoutConstraintsSchema } from "./layout.js";
+import { AutoLayoutSchema, LayoutConstraintsSchema } from "./layout.js";
 import * as versions from "./versions.js";
 export * from "./versions.js";
-export {
-  CONSTRAINTS_DESIGN_SCHEMA_VERSION,
-  LayoutConstraintsSchema,
-  type LayoutConstraints,
-} from "./layout.js";
+export * from "./layout.js";
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
 export const MAX_TRANSACTION_COMMANDS = 500;
 export const MAX_PAGE_TRANSACTION_NODES = 50_000;
@@ -318,6 +314,7 @@ export const FramePropertiesSchema = Type.Object(
     ...ShapeProperties,
     cornerRadius: Type.Number({ minimum: 0 }),
     clipsContent: Type.Boolean(),
+    autoLayout: Type.Optional(AutoLayoutSchema),
   },
   { additionalProperties: false },
 );
@@ -1755,7 +1752,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       schemaVersion !== versions.VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== versions.TEXT_LAYOUT_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.COMPONENT_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== versions.COMPONENT_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.FRAME_CONSTRAINTS_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }

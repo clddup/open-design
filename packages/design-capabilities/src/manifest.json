@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-12",
-  "documentSchemaVersion": "1.12.0",
+  "documentSchemaVersion": "1.13.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -768,8 +768,8 @@
       },
       "limitations": [
         {
-          "en": "Constraints v1 applies only to translation-only direct children of ordinary Frames. Groups and Boolean bounds, Instance resizing, Auto Size text stretching, Auto Layout, hug/fill, wrap, min/max, grids, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "Constraints v1 仅适用于普通 Frame 中无旋转/倾斜/局部缩放的直属子层。Group/Boolean 边界、Instance resize、Auto Size 文字拉伸、Auto Layout、hug/fill、wrap、min/max、grid，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
+          "en": "Constraints v1 applies only to translation-only direct children of ordinary Frames. Auto Layout flow children use their parent flow instead of constraints. Groups and Boolean bounds, Instance resizing, Auto Size text stretching, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "Constraints v1 仅适用于普通 Frame 中无旋转/倾斜/局部缩放的直属子层；Auto Layout 流内子层改由父流管理，不再使用普通 constraints。Group/Boolean 边界、Instance resize、Auto Size 文字拉伸，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
       "evidence": {
@@ -793,29 +793,43 @@
     {
       "id": "layout.auto-layout",
       "category": "responsive",
-      "status": "unavailable",
+      "status": "degraded",
       "label": { "en": "Auto layout", "zh-CN": "Auto Layout" },
       "description": {
         "en": "Lay out Frames responsively with direction, wrap, padding, gap, alignment, hug, fill, fixed, min/max, and absolute children.",
         "zh-CN": "通过方向、换行、padding、gap、对齐、hug、fill、fixed、min/max 和 absolute child 响应式布局 Frame。"
       },
-      "provider": "Not implemented",
+      "provider": "DesignDocument 1.13.0 + @opendesign/layout-service linear Auto Layout contract v1 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
-        "contract": "unavailable",
-        "runtime": "unavailable",
-        "human": "unavailable",
-        "agent": "unavailable",
-        "render": "unavailable",
-        "export": "unavailable"
+        "contract": "available",
+        "runtime": "available",
+        "human": "available",
+        "agent": "available",
+        "render": "available",
+        "export": "degraded"
       },
       "limitations": [
         {
-          "en": "OpenDesign now has a narrow constraints v1 solver, but no Auto Layout schema or flow solver exists; Leafer Flow state is not accepted as document truth.",
-          "zh-CN": "OpenDesign 已有窄范围 constraints v1 solver，但尚无 Auto Layout schema 或 flow solver；Leafer Flow 状态不能作为文档事实。"
+          "en": "Linear Auto Layout v1 supports horizontal/vertical direction, fixed non-negative gap, four-side padding, start/center/end alignment, fixed-size children, hidden-child exclusion, nested flows, and automatic reflow after content or hierarchy changes. Hug/fill, wrap, auto gap, baseline, min/max, ignore-layout children, grid, canvas reflow handles, SVG round-trip metadata, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "线性 Auto Layout v1 支持水平/垂直方向、固定非负 gap、四边 padding、起始/居中/末端对齐、固定尺寸子层、隐藏子层退出流、嵌套流，以及内容或层级变化后的自动回流。hug/fill、wrap、auto gap、baseline、min/max、ignore-layout child、grid、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
-      "evidence": { "automated": [], "manual": [] },
+      "evidence": {
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/layout-service/src/index.test.ts",
+          "packages/editor-runtime/src/auto-layout-operations.test.ts",
+          "packages/editor-runtime/src/layer-operations.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/editor/editor-command-controllers.test.tsx",
+          "apps/desktop/src/renderer/features/editor/canvas-operation-commit.test.ts",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/renderer/App.test.tsx"
+        ],
+        "manual": []
+      },
       "references": [
         "https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout"
       ]

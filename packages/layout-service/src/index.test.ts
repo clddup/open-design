@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LAYOUT_SERVICE_CONTRACT_VERSION,
   solveConstraints,
+  solveLinearAutoLayout,
   type HorizontalConstraint,
   type VerticalConstraint,
 } from "./index.js";
@@ -69,5 +70,82 @@ describe("layout-service constraints v1", () => {
         nextParent: { width: 100, height: 100 },
       }),
     ).toMatchObject({ ok: false, code: "zero-parent-size" });
+  });
+});
+
+describe("layout-service linear Auto Layout v1", () => {
+  it("places horizontal children with padding, gap, and two-axis alignment", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: 1,
+        direction: "horizontal",
+        frame: { width: 300, height: 120 },
+        padding: { top: 10, right: 20, bottom: 10, left: 20 },
+        gap: 10,
+        primaryAlignment: "center",
+        counterAlignment: "end",
+        children: [
+          { id: "one", width: 40, height: 20 },
+          { id: "two", width: 60, height: 30 },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      placements: [
+        { id: "one", x: 95, y: 90 },
+        { id: "two", x: 145, y: 80 },
+      ],
+    });
+  });
+
+  it("places vertical children in order and allows deterministic overflow", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: 1,
+        direction: "vertical",
+        frame: { width: 80, height: 50 },
+        padding: { top: 5, right: 5, bottom: 5, left: 5 },
+        gap: 8,
+        primaryAlignment: "end",
+        counterAlignment: "center",
+        children: [
+          { id: "one", width: 20, height: 30 },
+          { id: "two", width: 40, height: 30 },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      placements: [
+        { id: "one", x: 30, y: -23 },
+        { id: "two", x: 20, y: 15 },
+      ],
+    });
+  });
+
+  it("excludes no children implicitly and rejects malformed requests", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: 1,
+        direction: "vertical",
+        frame: { width: 100, height: 100 },
+        padding: { top: 8, right: 8, bottom: 8, left: 8 },
+        gap: 4,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+        children: [],
+      }),
+    ).toEqual({ ok: true, placements: [] });
+    expect(
+      solveLinearAutoLayout({
+        version: 1,
+        direction: "horizontal",
+        frame: { width: 100, height: 100 },
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        gap: -1,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+        children: [],
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-input" });
   });
 });

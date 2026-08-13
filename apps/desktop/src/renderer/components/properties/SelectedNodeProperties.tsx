@@ -1,4 +1,6 @@
 import type {
+  AutoLayout,
+  AutoLayoutFlow,
   BooleanOperation,
   ComponentOverridePatch,
   DesignNode,
@@ -71,6 +73,142 @@ function isRegularShapeNode(node: DesignNode): node is RegularShapeNode {
 
 function lineEndpointKey(endpoint: LineEndpoint): MessageKey {
   return `properties.lineEndpoint.${endpoint}` as MessageKey;
+}
+
+const defaultAutoLayout: AutoLayoutFlow = {
+  mode: "vertical",
+  padding: { top: 0, right: 0, bottom: 0, left: 0 },
+  gap: 0,
+  primaryAlignment: "start",
+  counterAlignment: "start",
+};
+
+function AutoLayoutSection({
+  autoLayout,
+  onChange,
+}: {
+  autoLayout: AutoLayout;
+  onChange: (autoLayout: AutoLayout) => void;
+}) {
+  const { t } = useI18n();
+  const flow = autoLayout.mode === "none" ? null : autoLayout;
+  const updateFlow = (patch: Partial<AutoLayoutFlow>) => {
+    onChange({ ...(flow ?? defaultAutoLayout), ...patch });
+  };
+  return (
+    <Section title={t("properties.autoLayout")}>
+      <div className={styles.stack}>
+        <label className={styles.select}>
+          <span>{t("properties.autoLayoutDirection")}</span>
+          <select
+            aria-label={t("properties.autoLayoutDirection")}
+            onChange={(event) => {
+              const mode = event.target.value as AutoLayout["mode"];
+              onChange(
+                mode === "none"
+                  ? { mode: "none" }
+                  : { ...(flow ?? defaultAutoLayout), mode },
+              );
+            }}
+            value={autoLayout.mode}
+          >
+            <option value="none">{t("properties.autoLayoutNone")}</option>
+            <option value="horizontal">
+              {t("properties.autoLayoutHorizontal")}
+            </option>
+            <option value="vertical">
+              {t("properties.autoLayoutVertical")}
+            </option>
+          </select>
+        </label>
+        {flow && (
+          <>
+            <div className={styles.grid}>
+              <Field
+                accessibleLabel={t("properties.autoLayoutGap")}
+                label={t("properties.autoLayoutGap")}
+                min={0}
+                onCommit={(value) =>
+                  commitNumber(value, flow.gap, (gap) => updateFlow({ gap }), {
+                    min: 0,
+                  })
+                }
+                type="number"
+                value={formatNumber(flow.gap)}
+              />
+              <label className={styles.select}>
+                <span>{t("properties.autoLayoutPrimary")}</span>
+                <select
+                  aria-label={t("properties.autoLayoutPrimary")}
+                  onChange={(event) =>
+                    updateFlow({
+                      primaryAlignment: event.target
+                        .value as AutoLayoutFlow["primaryAlignment"],
+                    })
+                  }
+                  value={flow.primaryAlignment}
+                >
+                  <AlignmentOptions />
+                </select>
+              </label>
+              <label className={styles.select}>
+                <span>{t("properties.autoLayoutCounter")}</span>
+                <select
+                  aria-label={t("properties.autoLayoutCounter")}
+                  onChange={(event) =>
+                    updateFlow({
+                      counterAlignment: event.target
+                        .value as AutoLayoutFlow["counterAlignment"],
+                    })
+                  }
+                  value={flow.counterAlignment}
+                >
+                  <AlignmentOptions />
+                </select>
+              </label>
+            </div>
+            <div className={styles.grid}>
+              {(["top", "right", "bottom", "left"] as const).map((side) => (
+                <Field
+                  accessibleLabel={t(`properties.padding.${side}`)}
+                  key={side}
+                  label={t(`properties.padding.${side}`)}
+                  min={0}
+                  onCommit={(value) =>
+                    commitNumber(
+                      value,
+                      flow.padding[side],
+                      (next) =>
+                        updateFlow({
+                          padding: { ...flow.padding, [side]: next },
+                        }),
+                      { min: 0 },
+                    )
+                  }
+                  type="number"
+                  value={formatNumber(flow.padding[side])}
+                />
+              ))}
+            </div>
+            <small className={styles.hint}>
+              {t("properties.autoLayoutFixedOnly")}
+            </small>
+          </>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function AlignmentOptions() {
+  const { t } = useI18n();
+  return (
+    <>
+      <option value="start">{t("properties.autoLayoutStart")}</option>
+      <option value="center">{t("properties.autoLayoutCenter")}</option>
+      <option value="end">{t("properties.autoLayoutEnd")}</option>
+    </>
+  );
 }
 
 export function SelectedNodeProperties({
@@ -228,6 +366,12 @@ export function SelectedNodeProperties({
           </div>
         </div>
       </Section>
+      {node.kind === "frame" && (
+        <AutoLayoutSection
+          autoLayout={node.properties.autoLayout ?? { mode: "none" }}
+          onChange={(autoLayout) => onUpdate({ properties: { autoLayout } })}
+        />
+      )}
       {node.kind === "boolean" && (
         <Section title={t("properties.booleanGroup")}>
           <label className={styles.select}>

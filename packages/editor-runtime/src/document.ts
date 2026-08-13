@@ -164,6 +164,17 @@ export function validateDocumentInvariants(
           message: `${node.kind} bounds follow their contents and cannot carry constraints v1`,
         });
       }
+      if (
+        parent?.kind === "frame" &&
+        parent.properties.autoLayout !== undefined &&
+        parent.properties.autoLayout.mode !== "none"
+      ) {
+        issues.push({
+          path: `/nodesById/${nodeId}/constraints`,
+          message:
+            "ordinary constraints are not valid on children participating in Auto Layout",
+        });
+      }
     }
     if (node.kind === "boolean") {
       if (node.childIds.length < 2) {

@@ -1,6 +1,7 @@
 const enLayoutMessages = {
   "history.updateConstraints": "Update constraints",
   "history.resizeFrameResponsive": "Resize responsive Frame",
+  "history.updateAutoLayout": "Update Auto Layout",
   "agent.canvasCircuitOpen": "Canvas renderer repeatedly stalled",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign stopped this task after repeated canvas stalls. Committed design revisions were preserved; restart OpenDesign before retrying visual generation.",
@@ -17,11 +18,29 @@ const enLayoutMessages = {
   "properties.constraintScale": "Scale",
   "properties.width": "Width",
   "properties.height": "Height",
+  "properties.autoLayout": "Auto layout",
+  "properties.autoLayoutDirection": "Direction",
+  "properties.autoLayoutNone": "None",
+  "properties.autoLayoutHorizontal": "Horizontal",
+  "properties.autoLayoutVertical": "Vertical",
+  "properties.autoLayoutGap": "Gap",
+  "properties.autoLayoutPrimary": "Primary axis",
+  "properties.autoLayoutCounter": "Counter axis",
+  "properties.autoLayoutStart": "Start",
+  "properties.autoLayoutCenter": "Center",
+  "properties.autoLayoutEnd": "End",
+  "properties.autoLayoutFixedOnly":
+    "Linear flow v1 uses fixed child sizes. Hug, fill, wrap, and absolute children are not available yet.",
+  "properties.padding.top": "Top",
+  "properties.padding.right": "Right",
+  "properties.padding.bottom": "Bottom",
+  "properties.padding.left": "Left",
 } as const;
 
 const zhCNLayoutMessages = {
   "history.updateConstraints": "更新约束",
   "history.resizeFrameResponsive": "调整响应式画框",
+  "history.updateAutoLayout": "更新 Auto Layout",
   "agent.canvasCircuitOpen": "画布渲染连续停滞",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign 已在画布连续停滞后停止本次任务。已提交的设计 revision 均已保留，请重启 OpenDesign 后再尝试视觉生成。",
@@ -38,6 +57,23 @@ const zhCNLayoutMessages = {
   "properties.constraintScale": "等比缩放",
   "properties.width": "宽度",
   "properties.height": "高度",
+  "properties.autoLayout": "自动布局",
+  "properties.autoLayoutDirection": "方向",
+  "properties.autoLayoutNone": "无",
+  "properties.autoLayoutHorizontal": "水平",
+  "properties.autoLayoutVertical": "垂直",
+  "properties.autoLayoutGap": "间距",
+  "properties.autoLayoutPrimary": "主轴",
+  "properties.autoLayoutCounter": "交叉轴",
+  "properties.autoLayoutStart": "起始",
+  "properties.autoLayoutCenter": "居中",
+  "properties.autoLayoutEnd": "末端",
+  "properties.autoLayoutFixedOnly":
+    "线性布局 v1 使用固定子层尺寸；hug、fill、wrap 和 absolute child 尚未开放。",
+  "properties.padding.top": "上内边距",
+  "properties.padding.right": "右内边距",
+  "properties.padding.bottom": "下内边距",
+  "properties.padding.left": "左内边距",
 } satisfies Record<keyof typeof enLayoutMessages, string>;
 
 export const layoutMessages = {

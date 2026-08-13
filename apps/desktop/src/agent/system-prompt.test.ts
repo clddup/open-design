@@ -136,7 +136,7 @@ describe("OpenDesign Agent system prompt", () => {
       "Current OpenDesign design capability manifest v1",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "[unavailable] layout.auto-layout",
+      "[degraded] layout.auto-layout",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "[degraded] appearance.paints-effects-masks",

@@ -146,4 +146,25 @@ describe("editor command controllers", () => {
     expect(snapshot.state.history.undo).toHaveLength(2);
     expect(setEditorError).toHaveBeenLastCalledWith(null);
   });
+
+  it("routes Inspector Auto Layout through one host-derived reversible transaction", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const { result, setEditorError } = renderControllers(runtime);
+    act(() =>
+      result.current.editor.setFrameAutoLayout("frame_welcome", {
+        mode: "vertical",
+        padding: { top: 20, right: 20, bottom: 20, left: 20 },
+        gap: 12,
+        primaryAlignment: "start",
+        counterAlignment: "center",
+      }),
+    );
+    const snapshot = runtime.getSnapshot();
+    expect(snapshot.document.nodesById.frame_welcome).toMatchObject({
+      properties: { autoLayout: { mode: "vertical", gap: 12 } },
+    });
+    expect(snapshot.document.revision).toBe(1);
+    expect(snapshot.state.history.undo).toHaveLength(1);
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+  });
 });

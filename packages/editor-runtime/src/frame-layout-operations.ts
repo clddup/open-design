@@ -55,6 +55,15 @@ export function planSetNodeConstraints(
       "Constraints require a layer directly inside a Frame",
     );
   }
+  if (
+    parent.properties.autoLayout !== undefined &&
+    parent.properties.autoLayout.mode !== "none"
+  ) {
+    return failure(
+      "invalid-target",
+      "Flow children use Auto Layout sizing and cannot use ordinary Frame constraints",
+    );
+  }
   if (isEffectivelyLocked(document, nodeId)) {
     return failure("locked", "Locked layers cannot change constraints");
   }
@@ -171,6 +180,14 @@ function resizeFrame(
     return failure("not-found", `Frame ${frameId} does not exist`);
   }
   const previousSize = frame.size;
+  if (
+    frame.properties.autoLayout !== undefined &&
+    frame.properties.autoLayout.mode !== "none"
+  ) {
+    frame.size = structuredClone(nextSize);
+    resizedIds.add(frameId);
+    return { ok: true, commands: [], frameId, nodeIds: [...resizedIds] };
+  }
   for (const childId of frame.childIds) {
     const child = document.nodesById[childId];
     if (!child) return failure("not-found", `Layer ${childId} does not exist`);

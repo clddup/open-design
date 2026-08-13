@@ -1128,12 +1128,73 @@ describe("design contract schemas", () => {
     expect(migrateDesignDocument(legacyInstance)).toBeNull();
   });
 
-  it("migrates 1.11 component documents to 1.12 constraints semantics", () => {
+  it("migrates 1.11 component documents through constraints to current layout semantics", () => {
     const source = textDocumentFixture();
     source.schemaVersion = "1.11.0" as typeof source.schemaVersion;
     const migrated = migrateDesignDocument(source);
     expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
     expect(migrated?.nodesById.text_1?.constraints).toBeUndefined();
+  });
+
+  it("migrates 1.12 documents without inventing Auto Layout", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.12.0" as typeof source.schemaVersion;
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1?.constraints).toBeUndefined();
+  });
+
+  it("validates strict linear Auto Layout only on Frame properties", () => {
+    const frame = {
+      id: "frame_layout",
+      name: "Auto Layout",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 120 },
+      opacity: 1,
+      extensions: {},
+      kind: "frame",
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+        autoLayout: {
+          mode: "horizontal",
+          padding: { top: 12, right: 16, bottom: 12, left: 16 },
+          gap: 8,
+          primaryAlignment: "start",
+          counterAlignment: "center",
+        },
+      },
+    };
+    expect(Value.Check(DesignNodeSchema, frame)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: { ...frame.properties.autoLayout, wrap: true },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        kind: "rectangle",
+        properties: {
+          fills: [],
+          strokes: [],
+          strokeWidth: 0,
+          cornerRadius: 0,
+          autoLayout: frame.properties.autoLayout,
+        },
+      }),
+    ).toBe(false);
   });
 
   it("validates explicit constraints and nullable update removal", () => {

@@ -1,4 +1,5 @@
-export const DESIGN_SCHEMA_VERSION = "1.12.0" as const;
+export const DESIGN_SCHEMA_VERSION = "1.13.0" as const;
+export const FRAME_CONSTRAINTS_DESIGN_SCHEMA_VERSION = "1.12.0" as const;
 export const COMPONENT_DESIGN_SCHEMA_VERSION = "1.11.0" as const;
 export const ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION = "1.10.0" as const;
 export const TEXT_LAYOUT_DESIGN_SCHEMA_VERSION = "1.9.0" as const;
