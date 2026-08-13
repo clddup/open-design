@@ -14,6 +14,7 @@
     "package:win": "pnpm build:protected && electron-builder --win --publish never",
     "preview": "vite preview",
     "smoke:fixture:mac": "pnpm build && node scripts/run-professional-fixture-smoke.mjs",
+    "smoke:fixture:package:mac": "node scripts/run-professional-fixture-smoke.mjs --packaged",
     "verify:package:mac": "node scripts/verify-native-package.mjs --platform darwin",
     "verify:package:win": "node scripts/verify-native-package.mjs --platform win32",
     "typecheck": "tsc --noEmit",

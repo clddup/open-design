@@ -2128,6 +2128,7 @@ describe("GlobalTaskCoordinator", () => {
       context.runId,
       "approval_pages",
       "tool_page_access",
+      ["create-page", "cross-page-edit"],
     );
 
     expect(coordinator.hasPageStructureAccess(context.runId)).toBe(true);
@@ -2150,6 +2151,10 @@ describe("GlobalTaskCoordinator", () => {
       context,
       inspectionResult(fullDocument, pageId, fullDocument.revision, true),
     );
+    expect(() =>
+      coordinator.registerDesignPlan(context, multiTargetPlan(pageId)),
+    ).toThrow("page_creation_required");
+    coordinator.recordPageToolCompleted(context.runId, "create");
     expect(() =>
       coordinator.registerDesignPlan(context, crossPagePlan),
     ).not.toThrow();

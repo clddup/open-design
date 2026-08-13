@@ -95,7 +95,12 @@ export class GlobalTaskCoordinator {
   readonly #inspectionsByRunId = new Map<string, InspectedHierarchy>();
   readonly #pageStructureAccessByRunId = new Map<
     string,
-    { approvalId: string; toolCallId: string }
+    {
+      approvalId: string;
+      toolCallId: string;
+      actions: Set<string>;
+      completedActions: Set<string>;
+    }
   >();
 
   constructor(
@@ -235,6 +240,7 @@ export class GlobalTaskCoordinator {
     runId: string,
     approvalId: string,
     toolCallId: string,
+    actions: readonly string[] = [],
   ): void {
     if (!this.#toolBindingsByRunId.has(runId)) {
       throw new Error(
@@ -244,6 +250,8 @@ export class GlobalTaskCoordinator {
     this.#pageStructureAccessByRunId.set(runId, {
       approvalId,
       toolCallId,
+      actions: new Set(actions),
+      completedActions: new Set(),
     });
     this.#inspectionsByRunId.delete(runId);
   }
@@ -306,6 +314,10 @@ export class GlobalTaskCoordinator {
     );
   }
 
+  recordPageToolCompleted(runId: string, action: string): void {
+    this.#pageStructureAccessByRunId.get(runId)?.completedActions.add(action);
+  }
+
   assertComponentToolAccess(
     context: TrustedToolContext,
     input: DesignComponentToolInput,
@@ -335,6 +347,17 @@ export class GlobalTaskCoordinator {
     const binding = this.#toolBindingsByRunId.get(context.runId);
     if (!binding) throw new Error("Design plan requires an active Run");
     const targets = designPlanTargets(plan);
+    const pageAccess = this.#pageStructureAccessByRunId.get(context.runId);
+    if (
+      pageAccess?.actions.has("create-page") &&
+      !pageAccess.completedActions.has("create") &&
+      targets.length > 1 &&
+      new Set(targets.map((target) => target.pageId)).size === 1
+    ) {
+      throw new Error(
+        "design_workflow.page_creation_required: Create the approved Pages successfully, inspect the current Design File, and bind each requested Page target before defining a multi-target plan; do not replace separate Pages with Frames on one Page",
+      );
+    }
     const recoverableDelivery = this.getRecoverableDelivery(context);
     if (
       binding.mutationTarget.kind === "page" &&

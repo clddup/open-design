@@ -24,6 +24,7 @@ import {
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
   normalizeDesignApplyToolInput,
+  normalizeDesignPageToolInput,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
 
@@ -191,6 +192,20 @@ describe("design Agent tool contract", () => {
       }),
     ).toBe(true);
     expect(
+      normalizeDesignPageToolInput({
+        action: "rename",
+        label: "Rename current page",
+        pageId: "page_research",
+        name: "01 · 品牌",
+        index: 0,
+      }),
+    ).toEqual({
+      action: "rename",
+      label: "Rename current page",
+      pageId: "page_research",
+      name: "01 · 品牌",
+    });
+    expect(
       validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
         action: "rename",
         label: "Rename Page",
@@ -198,6 +213,47 @@ describe("design Agent tool contract", () => {
         name: "Research",
       }),
     ).toBe(true);
+    expect(
+      normalizeDesignPageToolInput({
+        action: "create",
+        label: "Create homepage",
+        pageId: "page_research",
+        name: "02 · 首页",
+        index: 1,
+      }),
+    ).toEqual({
+      action: "create",
+      label: "Create homepage",
+      name: "02 · 首页",
+      index: 1,
+    });
+    expect(
+      validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
+        action: "rename",
+        label: "Rename Page",
+        pageId: "page_research",
+        name: "01 · 品牌",
+        index: 0,
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
+        action: "create",
+        label: "Create Page",
+        pageId: "page_research",
+        name: "02 · 首页",
+        index: 1,
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
+        action: "rename",
+        label: "Rename Page",
+        pageId: "page_research",
+        name: "Research",
+        unexpected: true,
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
         action: "delete",

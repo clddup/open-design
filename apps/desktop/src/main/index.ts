@@ -110,7 +110,7 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   normalizeDesignApplyToolInput,
   isDesignComponentToolInput,
-  isDesignPageToolInput,
+  normalizeDesignPageToolInput,
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
   isDesignVisualReviewToolInput,
@@ -962,6 +962,7 @@ function registerIpc() {
           request.runId,
           request.approvalId,
           request.toolCallId,
+          pending.input.actions,
         );
       }
       try {
@@ -1569,12 +1570,26 @@ void app.whenReady().then(async () => {
         return withDesignDelivery(result, context.runId);
       }
       if (call.toolName === DESIGN_PAGE_TOOL_NAME) {
-        if (!isDesignPageToolInput(call.input)) {
+        const normalizedPageInput = normalizeDesignPageToolInput(call.input);
+        if (!normalizedPageInput) {
           throw new TypeError("Invalid Page tool input");
         }
-        globalTaskCoordinator.assertPageToolAccess(context, call.input);
+        globalTaskCoordinator.assertPageToolAccess(
+          context,
+          normalizedPageInput,
+        );
         globalTaskCoordinator.assertDocumentInspected(context);
-        return await executeRendererTool(call);
+        const result = await executeRendererTool({
+          ...call,
+          input: normalizedPageInput,
+        });
+        if (result.designRevision) {
+          globalTaskCoordinator.recordPageToolCompleted(
+            context.runId,
+            normalizedPageInput.action,
+          );
+        }
+        return result;
       }
       if (call.toolName === DESIGN_COMPONENT_TOOL_NAME) {
         if (!isDesignComponentToolInput(call.input)) {

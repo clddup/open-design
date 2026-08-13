@@ -37,6 +37,18 @@ const resources =
 await requireFile(resolve(resources, "app.asar"));
 await requireFile(resolve(resources, "icon.png"));
 await requireFile(resolve(resources, "THIRD_PARTY_NOTICES.md"));
+await requireFile(resolve(resources, "fixtures/professional/manifest.json"));
+for (const fixtureId of ["OD-PENGUIN-01", "OD-POSTER-01"]) {
+  for (const file of [
+    "initial.opendesign",
+    "refinement.transaction.json",
+    "document.opendesign",
+  ]) {
+    await requireFile(
+      resolve(resources, "fixtures/professional", fixtureId, file),
+    );
+  }
+}
 
 for (const processName of ["main", "agent"]) {
   const directory = resolve(root, "out", processName);

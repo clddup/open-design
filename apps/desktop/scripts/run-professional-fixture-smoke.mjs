@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 const FIXTURE_IDS = new Set(["OD-PENGUIN-01", "OD-POSTER-01", "OD-BRAND-01"]);
-const fixtureId = process.argv.slice(2).find((value) => value !== "--");
+const arguments_ = process.argv.slice(2).filter((value) => value !== "--");
+const packaged = arguments_.includes("--packaged");
+const fixtureId = arguments_.find((value) => !value.startsWith("--"));
 if (!FIXTURE_IDS.has(fixtureId)) {
   throw new Error(
     "Expected fixture ID: OD-PENGUIN-01, OD-POSTER-01, or OD-BRAND-01",
@@ -27,13 +29,16 @@ const outputRoot = await mkdtemp(
   resolve(tmpdir(), `opendesign-${fixtureId.toLowerCase()}-`),
 );
 const require = createRequire(import.meta.url);
-const electronBinary = require("electron");
+const electronBinary = packaged
+  ? await packagedApplicationBinary()
+  : require("electron");
+const applicationArguments = packaged ? [] : [appRoot];
 await rm(evidenceRoot, { recursive: true, force: true });
 
 try {
   const exitCode = await runBoundedElectron(
     electronBinary,
-    appRoot,
+    applicationArguments,
     outputRoot,
   );
   if (exitCode !== 0) {
@@ -68,10 +73,10 @@ try {
 console.log(`Verified professional fixture smoke: ${fixtureId}`);
 console.log(`Evidence: ${evidenceRoot}`);
 
-function runBoundedElectron(binary, root, output) {
+function runBoundedElectron(binary, applicationArguments, output) {
   return new Promise((resolveExit, reject) => {
-    const child = spawn(binary, [root], {
-      cwd: root,
+    const child = spawn(binary, applicationArguments, {
+      cwd: appRoot,
       env: {
         ...process.env,
         OPENDESIGN_PROFESSIONAL_FIXTURE_SMOKE: fixtureId,
@@ -114,4 +119,23 @@ async function verifyEvidence(root, evidence) {
       `Professional fixture smoke hash mismatch: ${evidence.file}`,
     );
   }
+}
+
+async function packagedApplicationBinary() {
+  const releaseRoot = resolve(appRoot, "release");
+  const entries = await readdir(releaseRoot, { withFileTypes: true });
+  const unpacked = entries
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith("mac"))
+    .map((entry) => entry.name)
+    .sort();
+  if (unpacked.length !== 1) {
+    throw new Error(
+      `Expected one packaged macOS app, found: ${unpacked.join(", ") || "none"}`,
+    );
+  }
+  return resolve(
+    releaseRoot,
+    unpacked[0],
+    "OpenDesign.app/Contents/MacOS/OpenDesign",
+  );
 }

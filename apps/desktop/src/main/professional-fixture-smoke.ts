@@ -113,7 +113,9 @@ function createProfessionalFixtureSmokeHost(
   let reported = false;
   return {
     register(ipc, app, assertRenderer, getWindow) {
-      const repositoryRoot = join(app.getAppPath(), "../..");
+      const fixtureOwnerRoot = app.isPackaged
+        ? process.resourcesPath
+        : join(app.getAppPath(), "../..");
       ipc.handle(
         "professional-fixture-smoke:get",
         async (event, ...args: unknown[]) => {
@@ -121,7 +123,7 @@ function createProfessionalFixtureSmokeHost(
           assertArgumentCount(args, 0);
           if (!configuration) return null;
           return loadProfessionalFixtureSmoke(
-            repositoryRoot,
+            fixtureOwnerRoot,
             configuration.fixtureId,
           );
         },
@@ -147,7 +149,7 @@ function createProfessionalFixtureSmokeHost(
           reported = true;
           try {
             await requireProfessionalFixtureSmokeFinalDocument(
-              repositoryRoot,
+              fixtureOwnerRoot,
               result,
             );
             const window = getWindow();
