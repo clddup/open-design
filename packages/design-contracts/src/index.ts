@@ -5,20 +5,14 @@ import {
   type TUnion,
 } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-
-export const DESIGN_SCHEMA_VERSION = "1.11.0" as const;
-export const COMPONENT_DESIGN_SCHEMA_VERSION = "1.11.0" as const;
-export const ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION = "1.10.0" as const;
-export const TEXT_LAYOUT_DESIGN_SCHEMA_VERSION = "1.9.0" as const;
-export const VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION = "1.8.0" as const;
-export const EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION = "1.7.0" as const;
-export const REGULAR_SHAPE_DESIGN_SCHEMA_VERSION = "1.6.0" as const;
-export const LINE_DESIGN_SCHEMA_VERSION = "1.5.0" as const;
-export const MASK_DESIGN_SCHEMA_VERSION = "1.4.0" as const;
-export const IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION = "1.3.0" as const;
-export const PATH_DESIGN_SCHEMA_VERSION = "1.2.0" as const;
-export const APPEARANCE_DESIGN_SCHEMA_VERSION = "1.1.0" as const;
-export const LEGACY_DESIGN_SCHEMA_VERSION = "1.0.0" as const;
+import { LayoutConstraintsSchema } from "./layout.js";
+import * as versions from "./versions.js";
+export * from "./versions.js";
+export {
+  CONSTRAINTS_DESIGN_SCHEMA_VERSION,
+  LayoutConstraintsSchema,
+  type LayoutConstraints,
+} from "./layout.js";
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
 export const MAX_TRANSACTION_COMMANDS = 500;
 export const MAX_PAGE_TRANSACTION_NODES = 50_000;
@@ -692,6 +686,7 @@ const NodeBaseProperties = {
   transform: TransformSchema,
   size: SizeSchema,
   opacity: Type.Number({ minimum: 0, maximum: 1 }),
+  constraints: Type.Optional(LayoutConstraintsSchema),
   blendMode: Type.Optional(BlendModeSchema),
   effects: Type.Optional(Type.Array(EffectSchema)),
   maskMode: Type.Optional(MaskModeSchema),
@@ -874,7 +869,7 @@ export const DesignAssetSchema = Type.Object(
 export const DesignDocumentSchema = Type.Object(
   {
     format: Type.Literal(DESIGN_FORMAT),
-    schemaVersion: Type.Literal(DESIGN_SCHEMA_VERSION),
+    schemaVersion: Type.Literal(versions.DESIGN_SCHEMA_VERSION),
     documentId: Type.String({ minLength: 1 }),
     revision: Type.Integer({ minimum: 0 }),
     pageOrder: Type.Array(Type.String({ minLength: 1 }), {
@@ -921,6 +916,9 @@ export const UpdatePropertiesCommandSchema = Type.Object(
     transform: Type.Optional(TransformSchema),
     size: Type.Optional(SizeSchema),
     opacity: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+    constraints: Type.Optional(
+      Type.Union([LayoutConstraintsSchema, Type.Null()]),
+    ),
     blendMode: Type.Optional(BlendModeSchema),
     effects: Type.Optional(Type.Array(EffectSchema)),
     maskMode: Type.Optional(MaskModeSchema),
@@ -1420,7 +1418,7 @@ export const EditorEventSchema: TSchema = Type.Union([
 
 export const DesignCapabilitiesSchema = Type.Object(
   {
-    schemaVersion: Type.Literal(DESIGN_SCHEMA_VERSION),
+    schemaVersion: Type.Literal(versions.DESIGN_SCHEMA_VERSION),
     nodeKinds: Type.Array(NodeKindSchema, { uniqueItems: true }),
     operations: Type.Array(
       Type.Union([
@@ -1746,32 +1744,33 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     typeof value !== "object" ||
     value === null ||
     Array.isArray(value) ||
-    (schemaVersion !== LEGACY_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== APPEARANCE_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== PATH_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== MASK_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== LINE_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== REGULAR_SHAPE_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== TEXT_LAYOUT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION)
+    (schemaVersion !== versions.LEGACY_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.APPEARANCE_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.PATH_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.MASK_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.LINE_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.REGULAR_SHAPE_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.TEXT_LAYOUT_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.COMPONENT_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }
   try {
     const migrated = structuredClone(value) as Record<string, unknown>;
-    migrated.schemaVersion = DESIGN_SCHEMA_VERSION;
+    migrated.schemaVersion = versions.DESIGN_SCHEMA_VERSION;
     if (
-      schemaVersion === ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
+      schemaVersion === versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
       hasLegacyInstanceNodes(migrated)
     ) {
       return null;
     }
     if (
-      schemaVersion === LEGACY_DESIGN_SCHEMA_VERSION ||
-      schemaVersion === APPEARANCE_DESIGN_SCHEMA_VERSION
+      schemaVersion === versions.LEGACY_DESIGN_SCHEMA_VERSION ||
+      schemaVersion === versions.APPEARANCE_DESIGN_SCHEMA_VERSION
     ) {
       migratePathNodes(migrated, schemaVersion);
     }

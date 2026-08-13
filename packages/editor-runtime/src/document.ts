@@ -148,6 +148,23 @@ export function validateDocumentInvariants(
         message: `${node.kind} nodes cannot contain children`,
       });
     }
+    if (node.constraints !== undefined) {
+      const parent = node.parentId
+        ? ownValue(document.nodesById, node.parentId)
+        : undefined;
+      if (parent?.kind !== "frame") {
+        issues.push({
+          path: `/nodesById/${nodeId}/constraints`,
+          message: "constraints are only valid on direct children of a Frame",
+        });
+      }
+      if (node.kind === "group" || node.kind === "boolean") {
+        issues.push({
+          path: `/nodesById/${nodeId}/constraints`,
+          message: `${node.kind} bounds follow their contents and cannot carry constraints v1`,
+        });
+      }
+    }
     if (node.kind === "boolean") {
       if (node.childIds.length < 2) {
         issues.push({

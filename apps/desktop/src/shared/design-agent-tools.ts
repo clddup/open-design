@@ -30,6 +30,10 @@ import {
   normalizeDesignApplyToolInput,
   type DesignApplyToolInput,
 } from "./design-apply-input";
+import {
+  DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
+  isDesignArrangeToolInput,
+} from "./design-arrange-tool";
 export {
   isDesignApplyToolInput,
   isInternalDesignApplyToolInput,
@@ -41,6 +45,8 @@ export type {
   PlannedDesignRebaseGuard,
   PlannedDesignRebaseTarget,
 } from "./design-apply-input";
+export { isDesignArrangeToolInput } from "./design-arrange-tool";
+export type { DesignArrangeToolInput } from "./design-arrange-tool";
 export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
@@ -445,30 +451,6 @@ export type DesignHierarchyToolInput =
       nodeIds: string[];
       parentId: string | null;
       index: number;
-    };
-
-export type DesignArrangeToolInput =
-  | {
-      action:
-        | "align-left"
-        | "align-horizontal-center"
-        | "align-right"
-        | "align-top"
-        | "align-vertical-center"
-        | "align-bottom"
-        | "distribute-horizontal"
-        | "distribute-vertical"
-        | "tidy-up";
-      label: string;
-      pageId: string;
-      nodeIds: string[];
-    }
-  | {
-      action: "set-horizontal-spacing" | "set-vertical-spacing";
-      label: string;
-      pageId: string;
-      nodeIds: string[];
-      spacing: number;
     };
 
 export type DesignVectorToolInput =
@@ -1242,49 +1224,6 @@ const MODEL_HIERARCHY_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-const MODEL_ARRANGE_SCHEMA = {
-  type: "object",
-  description:
-    "Align requires at least two explicit layers. Distribute requires at least three and preserves the two outermost layers on that axis. Tidy up requires at least three, infers a stable row, column, or two-dimensional grid, uses the most common existing gap on each applicable axis, and anchors a grid at the selection top-left. Set-spacing requires at least two and a finite spacing value; negative spacing intentionally overlaps layers.",
-  properties: {
-    action: {
-      enum: [
-        "align-left",
-        "align-horizontal-center",
-        "align-right",
-        "align-top",
-        "align-vertical-center",
-        "align-bottom",
-        "distribute-horizontal",
-        "distribute-vertical",
-        "tidy-up",
-        "set-horizontal-spacing",
-        "set-vertical-spacing",
-      ],
-    },
-    label: { type: "string", minLength: 1, maxLength: 256 },
-    pageId: { type: "string", minLength: 1, maxLength: 256 },
-    nodeIds: {
-      type: "array",
-      minItems: 2,
-      maxItems: 500,
-      uniqueItems: true,
-      items: { type: "string", minLength: 1, maxLength: 256 },
-      description:
-        "Explicit stable layer IDs from inspection. Selection is context only and is never an implicit target.",
-    },
-    spacing: {
-      type: "number",
-      minimum: -1_000_000,
-      maximum: 1_000_000,
-      description:
-        "Exact pixels between adjacent bounds; required only for set-horizontal-spacing and set-vertical-spacing.",
-    },
-  },
-  required: ["action", "label", "pageId", "nodeIds"],
-  additionalProperties: false,
-} as const;
-
 const MODEL_COMPONENT_SCHEMA = {
   type: "object",
   description:
@@ -2010,8 +1949,8 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_ARRANGE_TOOL_NAME,
     description:
-      "Precisely arrange explicit existing layers in the currently bound Design File using host-computed geometry. It aligns selection bounds, distributes horizontal or vertical spacing while preserving the two outermost layers, sets an exact positive, zero, or negative 1D spacing from the leading layer, or performs deterministic Tidy up. One-dimensional Tidy up changes only the inferred row/column axis using the most common existing gap; two-dimensional Tidy up resolves unequal or sparse row/column cells on both axes and anchors the result at the selection top-left. The host handles rotated/scaled parent transforms, dynamically recomputes affected Group bounds, previews the complete change, and applies one atomic undoable transaction. Targets are stable Page and layer IDs returned by inspection, never the send-time or live user selection. It rejects locked, missing, stale, out-of-scope, non-invertible, ambiguous, no-op, and over-limit operations. Smart Selection canvas handles, reflow editing, and Auto Layout are separate capabilities.",
-    inputSchema: MODEL_ARRANGE_SCHEMA,
+      "Precisely arrange explicit existing layers in the currently bound Design File using host-computed geometry. It aligns selection bounds, distributes or sets exact spacing, performs deterministic one- or two-dimensional Tidy up, assigns horizontal/vertical constraints to a direct ordinary Frame child, or resizes an ordinary Frame while resolving all constrained descendants. Constraints v1 supports left/right/stretch/center/scale and top/bottom/stretch/center/scale on translation-only layers; Auto Size text, Group/Boolean bounds, and Instance resizing fail when the requested constraint would resize them. The host handles geometry, previews the complete change, and applies one atomic undoable transaction. Targets are stable Page and layer IDs returned by inspection, never the send-time or live user selection. It rejects locked, missing, stale, out-of-scope, non-invertible, ambiguous, lossy, no-op, and over-limit operations. Auto Layout, hug/fill, wrap, Smart Selection canvas handles, and reflow editing remain separate capabilities.",
+    inputSchema: DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
   },
@@ -3213,52 +3152,6 @@ function isBooleanOperation(value: unknown): value is BooleanOperation {
     value === "subtract" ||
     value === "intersect" ||
     value === "exclude"
-  );
-}
-
-export function isDesignArrangeToolInput(
-  input: unknown,
-): input is DesignArrangeToolInput {
-  if (!isRecord(input)) return false;
-  const action = input.action;
-  const actions = [
-    "align-left",
-    "align-horizontal-center",
-    "align-right",
-    "align-top",
-    "align-vertical-center",
-    "align-bottom",
-    "distribute-horizontal",
-    "distribute-vertical",
-    "tidy-up",
-    "set-horizontal-spacing",
-    "set-vertical-spacing",
-  ] as const;
-  if (!actions.includes(action as (typeof actions)[number])) return false;
-  const setSpacing =
-    action === "set-horizontal-spacing" || action === "set-vertical-spacing";
-  const distribute =
-    action === "distribute-horizontal" || action === "distribute-vertical";
-  const tidyUp = action === "tidy-up";
-  return (
-    typeof input.label === "string" &&
-    input.label.trim().length > 0 &&
-    input.label.length <= 256 &&
-    safeId(input.pageId) &&
-    Array.isArray(input.nodeIds) &&
-    input.nodeIds.length >= (distribute || tidyUp ? 3 : 2) &&
-    input.nodeIds.length <= 500 &&
-    input.nodeIds.every(safeId) &&
-    new Set(input.nodeIds).size === input.nodeIds.length &&
-    (setSpacing
-      ? finite(input.spacing) && Math.abs(Number(input.spacing)) <= 1_000_000
-      : input.spacing === undefined) &&
-    Object.keys(input).every((key) =>
-      (setSpacing
-        ? ["action", "label", "pageId", "nodeIds", "spacing"]
-        : ["action", "label", "pageId", "nodeIds"]
-      ).includes(key),
-    )
   );
 }
 

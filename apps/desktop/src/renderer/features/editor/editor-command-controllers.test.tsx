@@ -117,4 +117,33 @@ describe("editor command controllers", () => {
       "subtitle_welcome",
     ]);
   });
+
+  it("routes Inspector constraints and populated Frame resize through one responsive planner", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const { result, setEditorError } = renderControllers(runtime);
+    act(() =>
+      result.current.editor.setNodeConstraints("title_welcome", {
+        horizontal: "left-right",
+        vertical: "top",
+      }),
+    );
+    act(() =>
+      result.current.editor.updateNode("frame_welcome", {
+        size: { width: 1600, height: 900 },
+      }),
+    );
+    const snapshot = runtime.getSnapshot();
+    expect(snapshot.document.nodesById.title_welcome?.constraints).toEqual({
+      horizontal: "left-right",
+      vertical: "top",
+    });
+    expect(snapshot.document.nodesById.frame_welcome?.size).toEqual({
+      width: 1600,
+      height: 900,
+    });
+    expect(snapshot.document.nodesById.title_welcome?.size.width).toBe(1200);
+    expect(snapshot.document.revision).toBe(2);
+    expect(snapshot.state.history.undo).toHaveLength(2);
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+  });
 });

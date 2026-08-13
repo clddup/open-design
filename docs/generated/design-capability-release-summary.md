@@ -2,7 +2,7 @@
 
 # Design capability release summary
 
-Manifest v1 (2026-08-12) · 0 available · 16 degraded · 4 unavailable
+Manifest v1 (2026-08-12) · 0 available · 17 degraded · 4 unavailable
 
 This block is the release-note view of the same manifest used by the built-in Agent and generated help. It must not be edited by hand.
 
@@ -25,6 +25,7 @@ This block is the release-note view of the same manifest used by the built-in Ag
 - `image.import-generation-placement` — Image import, generation, and placement
 - `image.crop-adjustments` — Image crop and adjustments
 - `text.single-style` — Single-style text
+- `layout.constraints` — Frame constraints
 - `components.instances-variants` — Components, instances, and variants
 - `delivery.svg-interchange` — Editable SVG interchange
 - `export.static-formats` — Professional static export

@@ -35,6 +35,7 @@ import {
   DocumentValidationError,
   normalizeDesignDocument,
 } from "./document.js";
+import { nodeChangedFields } from "./node-change-fields.js";
 
 export interface EditorSnapshot {
   document: DesignDocument;
@@ -1043,6 +1044,7 @@ function updateProperties(
     "transform",
     "size",
     "opacity",
+    "constraints",
     "blendMode",
     "effects",
     "maskMode",
@@ -1058,6 +1060,10 @@ function updateProperties(
   for (const field of fields) {
     const value = command[field];
     if (value === undefined) continue;
+    if (field === "constraints" && value === null) {
+      delete node.constraints;
+      continue;
+    }
     if (field === "properties" || field === "extensions") {
       Object.assign(node[field], structuredClone(value));
     } else {
@@ -1762,27 +1768,6 @@ function assertBooleanOperandUpdateAllowed(
       "Boolean operand fill and stroke are controlled by its Boolean parent",
     );
   }
-}
-
-function nodeChangedFields(before: DesignNode, after: DesignNode): string[] {
-  const fields = [
-    "name",
-    "parentId",
-    "childIds",
-    "visible",
-    "locked",
-    "transform",
-    "size",
-    "opacity",
-    "blendMode",
-    "effects",
-    "maskMode",
-    "properties",
-    "extensions",
-  ] as const;
-  return fields.filter(
-    (field) => JSON.stringify(before[field]) !== JSON.stringify(after[field]),
-  );
 }
 
 function siblingIndexChanged(

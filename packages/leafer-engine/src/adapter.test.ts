@@ -1951,6 +1951,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     app.editor.editBox.emit("drag.end");
     expect(onOperations).toHaveBeenCalledWith({
       kind: "move",
+      selectionNodeIds: ["boolean_base"],
       operations: [
         expect.objectContaining({
           nodeId: "boolean_base",
@@ -2205,6 +2206,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     app.editor.editBox.emit("drag.end");
     expect(onOperations).toHaveBeenCalledWith({
       kind: "move",
+      selectionNodeIds: ["feature_one"],
       operations: [
         expect.objectContaining({
           type: "update_properties",
@@ -2250,6 +2252,7 @@ describe("Leafer engine selection bounds synchronization", () => {
 
     expect(onOperations).toHaveBeenLastCalledWith({
       kind: "move",
+      selectionNodeIds: [text.id],
       operations: [
         {
           commandId: `leafer_transform_${text.id}`,
@@ -2273,6 +2276,7 @@ describe("Leafer engine selection bounds synchronization", () => {
 
     expect(onOperations).toHaveBeenLastCalledWith({
       kind: "resize",
+      selectionNodeIds: [text.id],
       operations: [
         expect.objectContaining({
           commandId: `leafer_transform_${text.id}`,
@@ -3340,6 +3344,7 @@ describe("Leafer engine selection bounds synchronization", () => {
 
     expect(onOperations).toHaveBeenCalledWith({
       kind: "resize",
+      selectionNodeIds: ["flow_line"],
       operations: [
         {
           commandId: "leafer_transform_flow_line",
@@ -3453,7 +3458,7 @@ function componentInput(): LeaferEngineSyncInput {
   };
   const document: DesignDocument = {
     format: "dev.opendesign.document",
-    schemaVersion: "1.11.0",
+    schemaVersion: "1.12.0",
     documentId: "component-raster",
     revision: 1,
     pageOrder: ["main", "instances"],

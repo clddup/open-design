@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.11.0",
+  "schemaVersion": "1.12.0",
   "documentId": "document_od_penguin_01",
   "revision": 1,
   "pageOrder": ["page_penguin_01"],

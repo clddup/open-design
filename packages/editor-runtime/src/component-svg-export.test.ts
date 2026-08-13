@@ -107,7 +107,7 @@ function fixture(): DesignDocument {
   };
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.11.0",
+    schemaVersion: "1.12.0",
     documentId: "component-export",
     revision: 1,
     pageOrder: ["main-page", "instances"],

@@ -20,7 +20,9 @@ const leaferPackage = await json("packages/leafer-engine/package.json");
 const baseline = await json("docs/engine-baseline.json");
 const workflow = await text(".github/workflows/native-desktop.yml");
 const agentContracts = await text("packages/agent-contracts/src/index.ts");
-const designContracts = await text("packages/design-contracts/src/index.ts");
+const designContractVersions = await text(
+  "packages/design-contracts/src/versions.ts",
+);
 const geometryService = await text("packages/geometry-service/src/index.ts");
 const requireFromDesktop = createRequire(join(desktopRoot, "package.json"));
 const vitestPath = join(
@@ -46,7 +48,7 @@ const agentProtocol = capture(
   "Agent protocol version",
 );
 const documentSchemaVersion = capture(
-  designContracts,
+  designContractVersions,
   /DESIGN_SCHEMA_VERSION\s*=\s*"([^"]+)"/,
   "DesignDocument schema version",
 );

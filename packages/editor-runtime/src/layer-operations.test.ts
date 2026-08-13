@@ -518,6 +518,45 @@ describe("layer hierarchy operations", () => {
     );
   });
 
+  it("clears Frame-relative constraints when reparenting into a Group and restores them on undo", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.nodesById.title_welcome!.constraints = {
+      horizontal: "left-right",
+      vertical: "top",
+    };
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planReparentNodes(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["title_welcome"],
+      {
+        parentId: "feature_group",
+        index: 0,
+        commandPrefix: "move_constrained_title",
+      },
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan.commands).toContainEqual(
+      expect.objectContaining({
+        type: "update_properties",
+        nodeId: "title_welcome",
+        constraints: null,
+      }),
+    );
+    expect(
+      runtime.apply(
+        transaction(runtime, "move_constrained_title", plan.commands),
+      ).ok,
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.constraints,
+    ).toBeUndefined();
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.constraints,
+    ).toEqual({ horizontal: "left-right", vertical: "top" });
+  });
+
   it("expands and rebases a destination Group without moving existing or inserted artwork", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const before = runtime.getSnapshot().document;

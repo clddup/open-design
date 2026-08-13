@@ -1591,6 +1591,21 @@ describe("design Agent tool contract", () => {
       pageId: "page_1",
       nodeIds: ["card_one", "card_two", "card_three", "card_four"],
     };
+    const constraints = {
+      action: "set-constraints",
+      label: "Pin mobile footer",
+      pageId: "page_1",
+      nodeId: "footer",
+      constraints: { horizontal: "left-right", vertical: "bottom" },
+    };
+    const resizeFrame = {
+      action: "resize-frame",
+      label: "Resize responsive screen",
+      pageId: "page_1",
+      frameId: "screen",
+      width: 1440,
+      height: 1024,
+    };
 
     expect(arrange).toMatchObject({
       risk: "design_write",
@@ -1599,6 +1614,7 @@ describe("design Agent tool contract", () => {
     expect(arrange?.description).toContain("host-computed geometry");
     expect(arrange?.description).toContain("two-dimensional Tidy up");
     expect(arrange?.description).toContain("Smart Selection canvas handles");
+    expect(arrange?.description).toContain("Constraints v1");
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, distribute),
     ).toBe(true);
@@ -1608,6 +1624,24 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, tidyUp)).toBe(
       true,
     );
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, constraints),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, resizeFrame),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...constraints,
+        constraints: { horizontal: "stretch", vertical: "bottom" },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...resizeFrame,
+        width: 0,
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...distribute,

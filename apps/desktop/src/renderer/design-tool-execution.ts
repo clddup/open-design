@@ -19,6 +19,8 @@ import {
   diagnoseDesignTargetLayout,
   diagnoseDesignPages,
   planArrangeNodes,
+  planResizeFrameWithConstraints,
+  planSetNodeConstraints,
   planCreatePage,
   planCreateBooleanGroup,
   planCreateComponent,
@@ -814,20 +816,35 @@ async function executeDesignToolRequestUnsafe(
       request.context.mutationTarget,
       "Arrangement",
     );
-    const operation =
-      input.action === "set-horizontal-spacing" ||
-      input.action === "set-vertical-spacing"
-        ? { action: input.action, spacing: input.spacing }
-        : { action: input.action };
     const commandPrefix =
       `arrange_${input.action}_${request.call.toolCallId}`.slice(0, 200);
-    const plan = planArrangeNodes(
-      document,
-      input.pageId,
-      input.nodeIds,
-      operation,
-      commandPrefix,
-    );
+    const plan =
+      input.action === "set-constraints"
+        ? planSetNodeConstraints(
+            document,
+            input.pageId,
+            input.nodeId,
+            input.constraints,
+            commandPrefix,
+          )
+        : input.action === "resize-frame"
+          ? planResizeFrameWithConstraints(
+              document,
+              input.pageId,
+              input.frameId,
+              { width: input.width, height: input.height },
+              commandPrefix,
+            )
+          : planArrangeNodes(
+              document,
+              input.pageId,
+              input.nodeIds,
+              input.action === "set-horizontal-spacing" ||
+                input.action === "set-vertical-spacing"
+                ? { action: input.action, spacing: input.spacing }
+                : { action: input.action },
+              commandPrefix,
+            );
     if (!plan.ok) {
       throw new Error(`arrange.${plan.code}: ${plan.message}`);
     }
@@ -871,20 +888,37 @@ async function executeDesignToolRequestUnsafe(
           action: input.action,
           label: input.label,
           pageId: input.pageId,
-          nodeIds: plan.selectionNodeIds,
-          orderedNodeIds: plan.orderedNodeIds,
-          ...(plan.resolvedSpacing === undefined
+          nodeIds:
+            "selectionNodeIds" in plan ? plan.selectionNodeIds : plan.nodeIds,
+          ...(input.action === "resize-frame"
+            ? {
+                frameId: input.frameId,
+                width: input.width,
+                height: input.height,
+              }
+            : {}),
+          ...(input.action === "set-constraints"
+            ? { nodeId: input.nodeId, constraints: input.constraints }
+            : {}),
+          ...(input.action !== "resize-frame" &&
+          input.action !== "set-constraints" &&
+          "orderedNodeIds" in plan
+            ? { orderedNodeIds: plan.orderedNodeIds }
+            : {}),
+          ...(!("resolvedSpacing" in plan) || plan.resolvedSpacing === undefined
             ? {}
             : { resolvedSpacing: plan.resolvedSpacing }),
-          ...(plan.tidyUpDimension === undefined
+          ...(!("tidyUpDimension" in plan) || plan.tidyUpDimension === undefined
             ? {}
             : { tidyUpDimension: plan.tidyUpDimension }),
-          ...(plan.resolvedHorizontalSpacing === undefined
+          ...(!("resolvedHorizontalSpacing" in plan) ||
+          plan.resolvedHorizontalSpacing === undefined
             ? {}
             : {
                 resolvedHorizontalSpacing: plan.resolvedHorizontalSpacing,
               }),
-          ...(plan.resolvedVerticalSpacing === undefined
+          ...(!("resolvedVerticalSpacing" in plan) ||
+          plan.resolvedVerticalSpacing === undefined
             ? {}
             : { resolvedVerticalSpacing: plan.resolvedVerticalSpacing }),
           revision: result.revision.revision,
@@ -1168,6 +1202,7 @@ async function executeDesignToolRequestUnsafe(
   const commands = normalizeAgentTextContent(
     normalizeAgentInsertHierarchy(request.call.input.commands),
   );
+  assertAgentDoesNotBypassFrameConstraints(document, commands);
   assertCommandsWithinMutationTarget(
     document,
     commands,
@@ -1200,6 +1235,22 @@ async function executeDesignToolRequestUnsafe(
     execution: options,
     createFailure: designTransactionToolError,
   });
+}
+
+function assertAgentDoesNotBypassFrameConstraints(
+  document: DesignDocument,
+  commands: readonly DesignOperation[],
+): void {
+  for (const command of commands) {
+    if (command.type !== "update_properties" || command.size === undefined) {
+      continue;
+    }
+    const node = document.nodesById[command.nodeId];
+    if (node?.kind !== "frame" || node.childIds.length === 0) continue;
+    throw new Error(
+      `design_workflow.frame_resize_requires_layout_tool: Frame ${node.id} has children; resize it with opendesign_arrange_layers action resize-frame so constraints are resolved in one atomic transaction`,
+    );
+  }
 }
 
 function normalizeAgentInsertHierarchy(

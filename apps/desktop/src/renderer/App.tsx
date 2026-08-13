@@ -613,12 +613,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     });
   }, [requestConversationHistory, scheduleConversationHistory, workspace]);
 
-  const { applyCommands, updateNode } = useEditorCommandController({
-    runtime,
-    setEditorError,
-    t,
-    transactionCounter,
-  });
+  const { applyCommands, resizeFrame, setNodeConstraints, updateNode } =
+    useEditorCommandController({
+      runtime,
+      setEditorError,
+      t,
+      transactionCounter,
+    });
 
   const { createPage, deletePage, duplicatePage, renamePage, reorderPage } =
     usePageCommandController({
@@ -1812,6 +1813,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               onTransactionError={setEditorError}
               onAssetDrop={placeImageAssetAtPoint}
               onTextLayoutProviderReady={workspace.setTextLayoutProvider}
+              onResizeFrame={resizeFrame}
               runtime={runtime}
               snapshot={snapshot}
             />
@@ -1877,6 +1879,14 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                     : undefined
                 }
                 canDelete={canDeleteSelection}
+                constraintsAvailable={
+                  selectedNode?.parentId !== null &&
+                  selectedNode?.parentId !== undefined &&
+                  designDocument.nodesById[selectedNode.parentId]?.kind ===
+                    "frame" &&
+                  selectedNode.kind !== "group" &&
+                  selectedNode.kind !== "boolean"
+                }
                 node={selectedNode}
                 onArrange={arrangeSelection}
                 onBooleanOperationChange={applyBooleanOperation}
@@ -1899,6 +1909,11 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onSelectBooleanParent={(nodeId) =>
                   runtime.setSelection([nodeId], nodeId)
                 }
+                onSetConstraints={(constraints) => {
+                  if (selectedNode) {
+                    setNodeConstraints(selectedNode.id, constraints);
+                  }
+                }}
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}

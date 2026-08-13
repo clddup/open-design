@@ -149,6 +149,7 @@ interface TransformSession {
   before: Map<string, ElementState>;
   changed: boolean;
   kind: LeaferOperationKind;
+  selectionNodeIds: string[];
 }
 
 interface DrawSession {
@@ -1347,14 +1348,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #emitSelection(): void {
     if (this.#synchronizing || this.#disposed) return;
-    const nodeIds = [
-      ...new Set(
-        this.#editor.list.flatMap((element) => {
-          const nodeId = this.#nodeId(element as LeaferElement);
-          return nodeId ? [nodeId] : [];
-        }),
-      ),
-    ];
+    const nodeIds = [...new Set(this.#selectedNodeIds())];
     this.#callbacks.onSelectionChange(nodeIds, nodeIds.at(-1));
   }
 
@@ -1371,6 +1365,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       before: this.#capture(nodeIds),
       changed: false,
       kind: this.#currentTransformKind(),
+      selectionNodeIds: this.#selectedNodeIds(),
     };
   }
 
@@ -1398,6 +1393,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const accepted = this.#callbacks.onOperations({
       kind: session.kind,
       operations,
+      selectionNodeIds: session.selectionNodeIds,
     });
     if (!accepted) this.#restoreProjection();
   }
@@ -1614,6 +1610,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     return result;
   }
 
+  #selectedNodeIds(): string[] {
+    return this.#editor.list.flatMap((element) => {
+      const nodeId = this.#nodeId(element as LeaferElement);
+      return nodeId ? [nodeId] : [];
+    });
+  }
+
   #currentTransformKind(): LeaferOperationKind {
     if (this.#editor.resizing) return "resize";
     if (this.#editor.rotating) return "rotate";
@@ -1657,6 +1660,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           properties: { ...node.properties, content },
         },
       ],
+      selectionNodeIds: [before.nodeId],
     });
     if (!accepted) this.#restoreProjection();
   }

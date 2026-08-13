@@ -13,6 +13,7 @@ import {
   multiplyTransforms,
 } from "./geometry.js";
 import { normalizeGroupAncestorsInPlace } from "./group-bounds.js";
+import { nodeGeometryUpdate } from "./node-geometry-update.js";
 
 export type LayerOperationFailureCode =
   | "invalid-selection"
@@ -457,6 +458,7 @@ export function planReparentNodes(
       return failure("not-found", `Layer ${nodeId} does not exist`);
     }
     node.parentId = options.parentId;
+    if (targetParent?.kind !== "frame") delete node.constraints;
     if (sourceParentId !== options.parentId) {
       node.transform = multiplyTransforms(worldToTarget, world);
     }
@@ -475,18 +477,12 @@ export function planReparentNodes(
     const before = document.nodesById[nodeId];
     const after = projected.nodesById[nodeId];
     if (!before || !after) continue;
-    const transformChanged = !arraysEqual(before.transform, after.transform);
-    const sizeChanged =
-      before.size.width !== after.size.width ||
-      before.size.height !== after.size.height;
-    if (!transformChanged && !sizeChanged) continue;
-    updates.push({
-      commandId: `${options.commandPrefix}_update_${updates.length}`,
-      type: "update_properties",
-      nodeId,
-      ...(transformChanged ? { transform: after.transform } : {}),
-      ...(sizeChanged ? { size: after.size } : {}),
-    });
+    const update = nodeGeometryUpdate(
+      before,
+      after,
+      `${options.commandPrefix}_update_${updates.length}`,
+    );
+    if (update) updates.push(update);
   }
   const moves =
     sourceParentId === options.parentId

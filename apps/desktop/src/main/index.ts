@@ -1795,6 +1795,7 @@ function materialTargetRefsForStructuredTool(
     DesignHierarchyToolInput | DesignArrangeToolInput | DesignVectorToolInput,
 ): { nodeIds: string[]; parentId?: string | null } {
   if ("nodeId" in input) return { nodeIds: [input.nodeId] };
+  if ("frameId" in input) return { nodeIds: [input.frameId] };
   if ("nodeIds" in input) {
     return {
       nodeIds: [...input.nodeIds],

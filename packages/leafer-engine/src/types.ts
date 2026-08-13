@@ -37,6 +37,7 @@ export type LeaferOperationKind =
 export interface LeaferOperationRequest {
   kind: LeaferOperationKind;
   operations: DesignOperation[];
+  selectionNodeIds?: string[];
 }
 
 export interface LeaferCreateRequest {

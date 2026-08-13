@@ -1,7 +1,10 @@
 import { TooltipProvider } from "@opendesign/ui";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { DesignNode } from "@opendesign/design-contracts";
+import type {
+  DesignNode,
+  LayoutConstraints,
+} from "@opendesign/design-contracts";
 import type {
   ArrangeOperation,
   ArrangementSelectionMetrics,
@@ -28,6 +31,8 @@ function renderPanel(
       sourceNodes: readonly [];
     };
     onRemoveComponent?: () => void;
+    constraintsAvailable?: boolean;
+    onSetConstraints?: (constraints: LayoutConstraints) => void;
   } = {},
 ) {
   const onCancelSvgOperation = vi.fn();
@@ -46,6 +51,7 @@ function renderPanel(
           arrangement={options.arrangement ?? null}
           booleanOperationEditable={false}
           canDelete
+          constraintsAvailable={options.constraintsAvailable ?? false}
           componentContext={options.componentContext}
           node={options.node}
           onArrange={onArrange}
@@ -67,6 +73,7 @@ function renderPanel(
           onResetComponentInstance={vi.fn()}
           onResetComponentSourceOverride={vi.fn()}
           onSelectBooleanParent={vi.fn()}
+          onSetConstraints={options.onSetConstraints ?? vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onRasterExportSettingsChange={onRasterExportSettingsChange}
           exportFormat={options.exportFormat ?? "svg"}
@@ -231,6 +238,37 @@ describe("PropertiesPanel SVG workflow", () => {
       screen.getByRole("button", { name: "Export 2 selected as SVG…" }),
     );
     expect(onExportSvg).toHaveBeenCalledOnce();
+  });
+
+  it("shows Frame-child constraints and commits both axes explicitly", async () => {
+    const user = userEvent.setup();
+    const onSetConstraints = vi.fn();
+    renderPanel({
+      node: {
+        ...textNode,
+        parentId: "frame_1",
+        constraints: { horizontal: "right", vertical: "bottom" },
+      },
+      selectionCount: 1,
+      constraintsAvailable: true,
+      onSetConstraints,
+    });
+    await user.selectOptions(
+      screen.getByLabelText("Horizontal constraint"),
+      "left-right",
+    );
+    expect(onSetConstraints).toHaveBeenCalledWith({
+      horizontal: "left-right",
+      vertical: "bottom",
+    });
+    await user.selectOptions(
+      screen.getByLabelText("Vertical constraint"),
+      "center",
+    );
+    expect(onSetConstraints).toHaveBeenLastCalledWith({
+      horizontal: "right",
+      vertical: "center",
+    });
   });
 
   it("shows cancellable background progress and disables conflicting export controls", async () => {

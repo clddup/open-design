@@ -1,0 +1,13 @@
+export const DESIGN_SCHEMA_VERSION = "1.12.0" as const;
+export const COMPONENT_DESIGN_SCHEMA_VERSION = "1.11.0" as const;
+export const ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION = "1.10.0" as const;
+export const TEXT_LAYOUT_DESIGN_SCHEMA_VERSION = "1.9.0" as const;
+export const VECTOR_POINT_EDITING_DESIGN_SCHEMA_VERSION = "1.8.0" as const;
+export const EDITABLE_VECTOR_DESIGN_SCHEMA_VERSION = "1.7.0" as const;
+export const REGULAR_SHAPE_DESIGN_SCHEMA_VERSION = "1.6.0" as const;
+export const LINE_DESIGN_SCHEMA_VERSION = "1.5.0" as const;
+export const MASK_DESIGN_SCHEMA_VERSION = "1.4.0" as const;
+export const IMAGE_PLACEMENT_DESIGN_SCHEMA_VERSION = "1.3.0" as const;
+export const PATH_DESIGN_SCHEMA_VERSION = "1.2.0" as const;
+export const APPEARANCE_DESIGN_SCHEMA_VERSION = "1.1.0" as const;
+export const LEGACY_DESIGN_SCHEMA_VERSION = "1.0.0" as const;

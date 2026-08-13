@@ -2,9 +2,9 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-12 · 文档协议：`1.11.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-12 · 文档协议：`1.12.0` · 画布基线：`leafer-editor@2.2.9`
 
-当前状态：可用 0 项，降级可用 16 项，不可用 4 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
+当前状态：可用 0 项，降级可用 17 项，不可用 4 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
 ## 基础工作流
 
@@ -205,6 +205,17 @@
 
 ## 响应式布局
 
+### Frame 响应式约束 — 降级可用
+
+父 Frame 调整尺寸时，将普通直属子层固定到边缘、拉伸、居中或按比例缩放。
+
+- ID：`layout.constraints`
+- 实现方：DesignDocument 1.12.0 + @opendesign/layout-service contract v1 + EditorRuntime
+- 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
+- 证据：自动化 9 项；实机 0 项
+- 限制：Constraints v1 仅适用于普通 Frame 中无旋转/倾斜/局部缩放的直属子层。Group/Boolean 边界、Instance resize、Auto Size 文字拉伸、Auto Layout、hug/fill、wrap、min/max、grid，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957734-Apply-constraints-to-define-how-layers-resize)
+
 ### Auto Layout — 不可用
 
 通过方向、换行、padding、gap、对齐、hug、fill、fixed、min/max 和 absolute child 响应式布局 Frame。
@@ -213,7 +224,7 @@
 - 实现方：Not implemented
 - 表面：contract=unavailable；runtime=unavailable；human=unavailable；agent=unavailable；render=unavailable；export=unavailable
 - 证据：自动化 0 项；实机 0 项
-- 限制：当前没有 OpenDesign 自有布局 schema 与 solver；Leafer Flow 状态不能作为文档事实。
+- 限制：OpenDesign 已有窄范围 constraints v1 solver，但尚无 Auto Layout schema 或 flow solver；Leafer Flow 状态不能作为文档事实。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout)
 
 ## 设计系统

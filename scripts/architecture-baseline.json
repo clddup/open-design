@@ -45,6 +45,7 @@
       "@opendesign/design-contracts",
       "@opendesign/geometry-service",
       "@opendesign/import-export-service",
+      "@opendesign/layout-service",
       "@opendesign/text-service"
     ],
     "@opendesign/geometry-service": ["@opendesign/design-contracts"],
@@ -53,6 +54,7 @@
       "@opendesign/design-contracts",
       "@opendesign/geometry-service"
     ],
+    "@opendesign/layout-service": [],
     "@opendesign/leafer-engine": [
       "@opendesign/component-service",
       "@opendesign/design-contracts",

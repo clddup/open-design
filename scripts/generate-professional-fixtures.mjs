@@ -93,7 +93,7 @@ for (const source of fixtureSources) {
 const manifest = {
   version: 1,
   generatedBy: generatorPath,
-  documentSchemaVersion: "1.11.0",
+  documentSchemaVersion: "1.12.0",
   engineBaseline: "leafer-editor@2.2.9",
   sourceAssets: [
     {
@@ -1327,7 +1327,7 @@ function document({
 }) {
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.11.0",
+    schemaVersion: "1.12.0",
     documentId,
     revision: 0,
     pageOrder: [pageId],

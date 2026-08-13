@@ -45,6 +45,12 @@ export {
 } from "./arrange-operations.js";
 export { MAX_ARRANGEMENT_SPACING } from "@opendesign/geometry-service";
 export {
+  planResizeFrameWithConstraints,
+  planSetNodeConstraints,
+  type FrameLayoutOperationFailureCode,
+  type FrameLayoutOperationPlan,
+} from "./frame-layout-operations.js";
+export {
   canCreateBooleanGroup,
   canUngroupBooleanGroup,
   planCreateBooleanGroup,

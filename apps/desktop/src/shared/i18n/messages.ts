@@ -1,6 +1,8 @@
 import type { AppLocale } from "./locale";
+import { layoutMessages } from "./layout-messages";
 
 export const enMessages = {
+  ...layoutMessages.en,
   "common.cancel": "Cancel",
   "common.create": "Create",
   "common.creating": "Creating",
@@ -406,9 +408,6 @@ export const enMessages = {
   "properties.locked": "Locked",
   "properties.duplicateLayer": "Duplicate layer",
   "properties.deleteLayer": "Delete layer",
-  "properties.layout": "Layout",
-  "properties.width": "Width",
-  "properties.height": "Height",
   "properties.appearance": "Appearance",
   "properties.typography": "Typography",
   "properties.textContent": "Text content",
@@ -927,6 +926,7 @@ export type MessageKey = keyof typeof enMessages;
 export type MessageParameters = Readonly<Record<string, string | number>>;
 
 const zhCNMessages = {
+  ...layoutMessages["zh-CN"],
   "common.cancel": "取消",
   "common.create": "创建",
   "common.creating": "正在创建",
@@ -1318,9 +1318,6 @@ const zhCNMessages = {
   "properties.locked": "锁定",
   "properties.duplicateLayer": "复制图层",
   "properties.deleteLayer": "删除图层",
-  "properties.layout": "布局",
-  "properties.width": "宽度",
-  "properties.height": "高度",
   "properties.appearance": "外观",
   "properties.typography": "文字",
   "properties.textContent": "文本内容",

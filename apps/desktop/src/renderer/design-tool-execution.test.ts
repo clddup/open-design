@@ -3306,6 +3306,104 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
+  it("sets constraints and resizes a populated Frame through one Agent transaction", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const constrained = await executeDesignToolRequest(
+      {
+        requestId: "constraints_set",
+        call: {
+          toolCallId: "tool_constraints_set",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-constraints",
+            label: "Stretch title with screen",
+            pageId: "page_welcome",
+            nodeId: "title_welcome",
+            constraints: { horizontal: "left-right", vertical: "top" },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(constrained).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-constraints",
+          nodeId: "title_welcome",
+          constraints: { horizontal: "left-right", vertical: "top" },
+          atomic: true,
+          revision: 1,
+        },
+      },
+    });
+    const resized = await executeDesignToolRequest(
+      {
+        requestId: "constraints_resize",
+        call: {
+          toolCallId: "tool_constraints_resize",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "resize-frame",
+            label: "Resize responsive screen",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+            width: 1600,
+            height: 900,
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(resized).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "resize-frame",
+          frameId: "frame_welcome",
+          width: 1600,
+          height: 900,
+          atomic: true,
+          revision: 2,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.size.width,
+    ).toBe(1200);
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "constraints_bypass",
+          call: {
+            toolCallId: "tool_constraints_bypass",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              label: "Bypass responsive resize",
+              commands: [
+                {
+                  commandId: "bypass_resize",
+                  type: "update_properties",
+                  nodeId: "frame_welcome",
+                  size: { width: 1800, height: 1000 },
+                },
+              ],
+            },
+          },
+          context: { ...pageContext, revision: 2 },
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("frame_resize_requires_layout_tool");
+    expect(runtime.getSnapshot().document.revision).toBe(2);
+  });
+
   it("sets exact negative Agent spacing and rejects locked or out-of-scope arrangement", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = await executeDesignToolRequest(

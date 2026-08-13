@@ -1128,6 +1128,38 @@ describe("design contract schemas", () => {
     expect(migrateDesignDocument(legacyInstance)).toBeNull();
   });
 
+  it("migrates 1.11 component documents to 1.12 constraints semantics", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.11.0" as typeof source.schemaVersion;
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1?.constraints).toBeUndefined();
+  });
+
+  it("validates explicit constraints and nullable update removal", () => {
+    const text = textDocumentFixture().nodesById.text_1;
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        constraints: { horizontal: "left-right", vertical: "bottom" },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        constraints: { horizontal: "stretch", vertical: "bottom" },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignOperationSchema, {
+        commandId: "clear_constraints",
+        type: "update_properties",
+        nodeId: "text_1",
+        constraints: null,
+      }),
+    ).toBe(true);
+  });
+
   it("enforces canonical wrapping and overflow for Auto Size text", () => {
     const source = textDocumentFixture();
     const text = Object.values(source.nodesById).find(

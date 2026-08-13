@@ -2,6 +2,7 @@ import type {
   BooleanOperation,
   ComponentOverridePatch,
   DesignNode,
+  LayoutConstraints,
   LineEndpoint,
 } from "@opendesign/design-contracts";
 import { Button, Glyph, IconButton, type GlyphName } from "@opendesign/ui";
@@ -78,6 +79,7 @@ export function SelectedNodeProperties({
   booleanOperationEditable,
   booleanOperandParent,
   canDelete,
+  constraintsAvailable,
   onBooleanOperationChange,
   onCreateComponent,
   onCreateComponentInstance,
@@ -90,6 +92,7 @@ export function SelectedNodeProperties({
   onResetComponentInstance,
   onResetComponentSourceOverride,
   onSelectBooleanParent,
+  onSetConstraints,
   onUpdate,
   onUpdateComponentOverride,
 }: {
@@ -98,6 +101,7 @@ export function SelectedNodeProperties({
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
   canDelete: boolean;
+  constraintsAvailable: boolean;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
@@ -110,6 +114,7 @@ export function SelectedNodeProperties({
   onResetComponentInstance: () => void;
   onResetComponentSourceOverride: (sourcePath: readonly string[]) => void;
   onSelectBooleanParent: (nodeId: string) => void;
+  onSetConstraints: (constraints: LayoutConstraints) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
@@ -399,6 +404,60 @@ export function SelectedNodeProperties({
             value={formatNumber(node.size.height)}
           />
         </div>
+        {constraintsAvailable && (
+          <div className={styles.grid}>
+            <label className={styles.select}>
+              <span>{t("properties.horizontalConstraint")}</span>
+              <select
+                aria-label={t("properties.horizontalConstraint")}
+                onChange={(event) =>
+                  onSetConstraints({
+                    horizontal: event.target
+                      .value as LayoutConstraints["horizontal"],
+                    vertical: node.constraints?.vertical ?? "top",
+                  })
+                }
+                value={node.constraints?.horizontal ?? "left"}
+              >
+                <option value="left">{t("properties.constraintLeft")}</option>
+                <option value="right">{t("properties.constraintRight")}</option>
+                <option value="left-right">
+                  {t("properties.constraintLeftRight")}
+                </option>
+                <option value="center">
+                  {t("properties.constraintCenter")}
+                </option>
+                <option value="scale">{t("properties.constraintScale")}</option>
+              </select>
+            </label>
+            <label className={styles.select}>
+              <span>{t("properties.verticalConstraint")}</span>
+              <select
+                aria-label={t("properties.verticalConstraint")}
+                onChange={(event) =>
+                  onSetConstraints({
+                    horizontal: node.constraints?.horizontal ?? "left",
+                    vertical: event.target
+                      .value as LayoutConstraints["vertical"],
+                  })
+                }
+                value={node.constraints?.vertical ?? "top"}
+              >
+                <option value="top">{t("properties.constraintTop")}</option>
+                <option value="bottom">
+                  {t("properties.constraintBottom")}
+                </option>
+                <option value="top-bottom">
+                  {t("properties.constraintTopBottom")}
+                </option>
+                <option value="center">
+                  {t("properties.constraintCenter")}
+                </option>
+                <option value="scale">{t("properties.constraintScale")}</option>
+              </select>
+            </label>
+          </div>
+        )}
       </Section>
       <AppearanceBasicsSection
         appearanceControlled={booleanOperandParent !== undefined}

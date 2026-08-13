@@ -54,6 +54,8 @@ import {
 import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
 import { generationRevealFromEditorEvent } from "../generation-presentation";
+import { commitCanvasOperation } from "../features/editor/canvas-operation-commit";
+import type { ResizeFrameHandler } from "../features/editor/canvas-responsive-resize";
 import { isTool } from "../state/editor";
 import { DESIGN_ASSET_DRAG_MIME } from "../design-assets";
 import styles from "./Canvas.module.scss";
@@ -67,6 +69,7 @@ export function Canvas({
   onTransactionError,
   onAssetDrop,
   onTextLayoutProviderReady,
+  onResizeFrame,
 }: {
   activeAgentRunId: string | null;
   activePageId: string;
@@ -79,6 +82,7 @@ export function Canvas({
     documentPoint: { x: number; y: number },
   ) => { ok: boolean };
   onTextLayoutProviderReady: (provider: TextLayoutProvider) => void;
+  onResizeFrame: ResizeFrameHandler;
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLElement>(null);
@@ -88,7 +92,6 @@ export function Canvas({
   const generationRevealByRevision = useRef(
     new Map<number, NonNullable<LeaferEngineSyncInput["generationReveal"]>>(),
   );
-  const transactionSequence = useRef(0);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [assetDropActive, setAssetDropActive] = useState(false);
   const reducedMotion = useReducedMotion();
@@ -368,24 +371,16 @@ export function Canvas({
   };
 
   const applyOperations = useCallback(
-    (request: LeaferOperationRequest) => {
-      const current = runtime.getSnapshot();
-      const result = runtime.apply({
-        transactionId: `canvas_${Date.now()}_${++transactionSequence.current}`,
-        documentId: current.document.documentId,
-        baseRevision: current.document.revision,
-        actor: { type: "user", id: "local-user" },
+    (request: LeaferOperationRequest) =>
+      commitCanvasOperation({
+        request,
+        runtime,
+        onResizeFrame,
+        onTransactionError,
         label: operationLabel(request.kind, request.operations.length, t),
-        commands: request.operations,
-      });
-      if (!result.ok) {
-        onTransactionError(result.error.message);
-        return false;
-      }
-      onTransactionError(null);
-      return true;
-    },
-    [onTransactionError, runtime, t],
+        transactionId: `canvas_${crypto.randomUUID().replaceAll("-", "")}`,
+      }),
+    [onResizeFrame, onTransactionError, runtime, t],
   );
 
   const applyVectorEdit = useCallback(

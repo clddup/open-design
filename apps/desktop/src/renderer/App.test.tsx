@@ -2398,6 +2398,7 @@ describe("App", () => {
     act(() => {
       leaferCallbacks().onOperations({
         kind: "resize",
+        selectionNodeIds: ["feature_one"],
         operations: [
           {
             commandId: "leafer_resize_feature_one",
@@ -2412,6 +2413,60 @@ describe("App", () => {
       runtime().getSnapshot().document.nodesById.feature_one?.size,
     ).toEqual({ width: 344, height: 240 });
     expect(runtime().getSnapshot().document.revision).toBe(1);
+  });
+
+  it("uses constraints for single populated Frame canvas resize", () => {
+    renderApp();
+    const current = runtime().getSnapshot().document;
+    const setConstraints = current.nodesById.title_welcome;
+    if (!setConstraints) throw new Error("missing title");
+    act(() => {
+      runtime().apply({
+        transactionId: "set_title_constraints",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: [
+          {
+            commandId: "set_constraints",
+            type: "update_properties",
+            nodeId: "title_welcome",
+            constraints: { horizontal: "left-right", vertical: "top" },
+          },
+        ],
+      });
+      runtime().setSelection(["frame_welcome"], "frame_welcome");
+    });
+    act(() => {
+      leaferCallbacks().onOperations({
+        kind: "resize",
+        selectionNodeIds: ["frame_welcome"],
+        operations: [
+          {
+            commandId: "resize_frame",
+            type: "update_properties",
+            nodeId: "frame_welcome",
+            size: { width: 1600, height: 900 },
+          },
+          {
+            commandId: "leafer_scaled_title",
+            type: "update_properties",
+            nodeId: "title_welcome",
+            size: { width: 1028, height: 90 },
+          },
+        ],
+      });
+    });
+    const resized = runtime().getSnapshot();
+    expect(resized.document.nodesById.frame_welcome?.size).toEqual({
+      width: 1600,
+      height: 900,
+    });
+    expect(resized.document.nodesById.title_welcome?.size).toEqual({
+      width: 1200,
+      height: 72,
+    });
+    expect(resized.document.revision).toBe(2);
   });
 
   it("deletes layers and edits fills through the native color input", async () => {

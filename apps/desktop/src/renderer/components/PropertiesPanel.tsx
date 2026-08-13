@@ -2,6 +2,7 @@ import type {
   BooleanOperation,
   ComponentOverridePatch,
   DesignNode,
+  LayoutConstraints,
 } from "@opendesign/design-contracts";
 import {
   MAX_ARRANGEMENT_SPACING,
@@ -43,6 +44,7 @@ export function PropertiesPanel({
   booleanOperationEditable,
   booleanOperandParent,
   canDelete,
+  constraintsAvailable,
   onArrange,
   onBooleanOperationChange,
   onCreateComponent,
@@ -62,6 +64,7 @@ export function PropertiesPanel({
   onResetComponentInstance,
   onResetComponentSourceOverride,
   onSelectBooleanParent,
+  onSetConstraints,
   onUpdate,
   onUpdateComponentOverride,
   selectionCount,
@@ -80,6 +83,7 @@ export function PropertiesPanel({
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
   canDelete: boolean;
+  constraintsAvailable: boolean;
   onArrange: (operation: ArrangeOperation) => void;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
@@ -99,6 +103,7 @@ export function PropertiesPanel({
   onResetComponentInstance: () => void;
   onResetComponentSourceOverride: (sourcePath: readonly string[]) => void;
   onSelectBooleanParent: (nodeId: string) => void;
+  onSetConstraints: (constraints: LayoutConstraints) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
@@ -175,6 +180,7 @@ export function PropertiesPanel({
             booleanOperationEditable={booleanOperationEditable}
             booleanOperandParent={booleanOperandParent}
             canDelete={canDelete}
+            constraintsAvailable={constraintsAvailable}
             onBooleanOperationChange={onBooleanOperationChange}
             onCreateComponent={onCreateComponent}
             onCreateComponentInstance={onCreateComponentInstance}
@@ -187,6 +193,7 @@ export function PropertiesPanel({
             onResetComponentInstance={onResetComponentInstance}
             onResetComponentSourceOverride={onResetComponentSourceOverride}
             onSelectBooleanParent={onSelectBooleanParent}
+            onSetConstraints={onSetConstraints}
             onUpdate={onUpdate}
             onUpdateComponentOverride={onUpdateComponentOverride}
           />
