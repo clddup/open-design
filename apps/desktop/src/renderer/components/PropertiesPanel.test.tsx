@@ -368,6 +368,79 @@ describe("PropertiesPanel SVG workflow", () => {
     });
   });
 
+  it("switches Auto Layout between fixed and Auto gap without editing geometry directly", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn<(updates: UpdatePropertiesPatch) => void>();
+    const frame: DesignNode = {
+      id: "frame_auto_gap",
+      kind: "frame",
+      name: "Responsive navigation",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 80 },
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+        autoLayout: {
+          mode: "horizontal",
+          padding: { top: 12, right: 16, bottom: 12, left: 16 },
+          gap: 8,
+          primaryAlignment: "center",
+          counterAlignment: "center",
+        },
+      },
+      extensions: {},
+    };
+    renderPanel({ node: frame, selectionCount: 1, onUpdate });
+
+    await user.selectOptions(screen.getByLabelText("Gap mode"), "auto");
+    const automatic = onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout;
+    expect(automatic).toEqual({
+      mode: "horizontal",
+      padding: { top: 12, right: 16, bottom: 12, left: 16 },
+      gap: 8,
+      primaryAlignment: "space-between",
+      counterAlignment: "center",
+    });
+    cleanup();
+
+    renderPanel({
+      node: {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            mode: "horizontal",
+            padding: { top: 12, right: 16, bottom: 12, left: 16 },
+            gap: 8,
+            primaryAlignment: "space-between",
+            counterAlignment: "center",
+          },
+        },
+      },
+      selectionCount: 1,
+      onUpdate,
+    });
+    expect(screen.getByLabelText("Gap")).toBeDisabled();
+    expect(screen.queryByLabelText("Primary axis")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Gap mode"), "fixed");
+    const fixed = onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout;
+    expect(fixed).toEqual({
+      mode: "horizontal",
+      padding: { top: 12, right: 16, bottom: 12, left: 16 },
+      gap: 8,
+      primaryAlignment: "start",
+      counterAlignment: "center",
+    });
+  });
+
   it("sets and clears Auto Layout min/max fields without generic property writes", async () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn();

@@ -1173,6 +1173,14 @@ describe("design contract schemas", () => {
     expect(migrated?.nodesById.text_1?.layoutLimits).toBeUndefined();
   });
 
+  it("migrates 1.16 limits without inventing Auto gap", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.16.0" as typeof source.schemaVersion;
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1?.layoutLimits).toBeUndefined();
+  });
+
   it("validates strict linear Auto Layout only on Frame properties", () => {
     const frame = {
       id: "frame_layout",
@@ -1202,6 +1210,30 @@ describe("design contract schemas", () => {
       },
     };
     expect(Value.Check(DesignNodeSchema, frame)).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            ...frame.properties.autoLayout,
+            primaryAlignment: "space-between",
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            ...frame.properties.autoLayout,
+            counterAlignment: "space-between",
+          },
+        },
+      }),
+    ).toBe(false);
     expect(
       Value.Check(DesignNodeSchema, {
         ...frame,

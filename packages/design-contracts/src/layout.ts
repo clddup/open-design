@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 export const CONSTRAINTS_DESIGN_SCHEMA_VERSION = "1.12.0" as const;
-export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.16.0" as const;
+export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.17.0" as const;
 
 export const LayoutConstraintsSchema = Type.Object(
   {
@@ -107,17 +107,22 @@ export const AutoLayoutPaddingSchema = Type.Object(
   { additionalProperties: false },
 );
 
-const AutoLayoutAlignmentSchema = Type.Union([
+const AutoLayoutCounterAlignmentSchema = Type.Union([
   Type.Literal("start"),
   Type.Literal("center"),
   Type.Literal("end"),
 ]);
 
+const AutoLayoutPrimaryAlignmentSchema = Type.Union([
+  AutoLayoutCounterAlignmentSchema,
+  Type.Literal("space-between"),
+]);
+
 const AutoLayoutFlowProperties = {
   padding: AutoLayoutPaddingSchema,
   gap: Type.Number({ minimum: 0, maximum: 1_000_000 }),
-  primaryAlignment: AutoLayoutAlignmentSchema,
-  counterAlignment: AutoLayoutAlignmentSchema,
+  primaryAlignment: AutoLayoutPrimaryAlignmentSchema,
+  counterAlignment: AutoLayoutCounterAlignmentSchema,
   sizing: Type.Optional(AutoLayoutFrameSizingSchema),
 };
 

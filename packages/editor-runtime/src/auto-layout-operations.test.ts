@@ -130,6 +130,91 @@ describe("linear Auto Layout Runtime", () => {
     expectRect(runtime.getSnapshot().document, "one", 20, 70, 80, 20);
   });
 
+  it("reflows Auto gap after insert, hide, resize, reorder, and Frame resize", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.properties.autoLayout = {
+      ...horizontal,
+      primaryAlignment: "space-between",
+    };
+    delete document.nodesById.one?.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "resolve_auto_gap",
+            type: "update_properties",
+            nodeId: "frame",
+            name: "Responsive navigation",
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    expectRect(runtime.getSnapshot().document, "one", 20, 40, 40, 20);
+    expectRect(runtime.getSnapshot().document, "two", 220, 35, 60, 30);
+
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "insert_middle",
+            type: "insert_element",
+            pageId: "page_layout",
+            parentId: "frame",
+            index: 1,
+            node: rectangle("middle", "frame", 0, 0, 20, 40),
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    expectRect(runtime.getSnapshot().document, "middle", 130, 30, 20, 40);
+    expectRect(runtime.getSnapshot().document, "two", 220, 35, 60, 30);
+
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "hide_middle",
+            type: "update_properties",
+            nodeId: "middle",
+            visible: false,
+          },
+          {
+            commandId: "grow_one",
+            type: "update_properties",
+            nodeId: "one",
+            size: { width: 80, height: 20 },
+          },
+          {
+            commandId: "widen_frame",
+            type: "update_properties",
+            nodeId: "frame",
+            size: { width: 400, height: 120 },
+          },
+          {
+            commandId: "reverse_children",
+            type: "move_element",
+            nodeId: "two",
+            pageId: "page_layout",
+            parentId: "frame",
+            index: 0,
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    expectRect(runtime.getSnapshot().document, "two", 20, 45, 60, 30);
+    expectRect(runtime.getSnapshot().document, "one", 300, 50, 80, 20);
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.redo().ok).toBe(true);
+    const reopened = normalizeDesignDocument(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expectRect(reopened, "one", 300, 50, 80, 20);
+  });
+
   it("resolves nested Frames deepest-first after Auto Size text measurement", () => {
     const document = layoutDocument();
     const frame = document.nodesById.frame;

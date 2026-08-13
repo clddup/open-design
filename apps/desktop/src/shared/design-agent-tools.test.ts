@@ -1713,6 +1713,7 @@ describe("design Agent tool contract", () => {
     expect(arrange?.description).toContain("Smart Selection canvas handles");
     expect(arrange?.description).toContain("Constraints v1");
     expect(arrange?.description).toContain("Auto Layout supports");
+    expect(arrange?.description).toContain("Auto gap");
     expect(arrange?.description).toContain("min/max clamping");
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, distribute),
@@ -1731,6 +1732,15 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, autoLayout),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...autoLayout,
+        autoLayout: {
+          ...autoLayout.autoLayout,
+          primaryAlignment: "space-between",
+        },
+      }),
     ).toBe(true);
     const wrapAutoLayout = {
       ...autoLayout,

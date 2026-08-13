@@ -1,7 +1,7 @@
 import { solveHorizontalWrap } from "./wrap-layout.js";
 
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
-export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 4 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 5 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";
@@ -41,6 +41,7 @@ export type ConstraintResizeResult =
 
 export type AutoLayoutDirection = "horizontal" | "vertical";
 export type AutoLayoutAlignment = "start" | "center" | "end";
+export type AutoLayoutPrimaryAlignment = AutoLayoutAlignment | "space-between";
 export type AutoLayoutFrameAxisSizing = "fixed" | "hug";
 export type AutoLayoutChildAxisSizing = "fixed" | "fill";
 export type AutoLayoutPadding = {
@@ -61,7 +62,7 @@ export type LinearAutoLayoutRequest = {
   frame: ConstraintSize;
   padding: AutoLayoutPadding;
   gap: number;
-  primaryAlignment: AutoLayoutAlignment;
+  primaryAlignment: AutoLayoutPrimaryAlignment;
   counterAlignment: AutoLayoutAlignment;
   frameSizing: {
     horizontal: AutoLayoutFrameAxisSizing;
@@ -185,13 +186,15 @@ export function solveLinearAutoLayout(
         ? clampLayoutExtent(child.height, child.limits, "vertical")
         : child.height,
   }));
+  const packedGap =
+    request.primaryAlignment === "space-between" ? 0 : request.gap;
   const frame = {
     width: resolveFrameExtent(
       horizontalHug
         ? huggedExtent(
             limitedChildren.map((child) => child.width),
             request.direction === "horizontal",
-            request.gap,
+            packedGap,
             request.padding.left + request.padding.right,
           )
         : request.frame.width,
@@ -204,7 +207,7 @@ export function solveLinearAutoLayout(
         ? huggedExtent(
             limitedChildren.map((child) => child.height),
             request.direction === "vertical",
-            request.gap,
+            packedGap,
             request.padding.top + request.padding.bottom,
           )
         : request.frame.height,
@@ -233,9 +236,9 @@ export function solveLinearAutoLayout(
       : child.sizing.vertical === "fill";
     return sum + (fill ? 0 : horizontal ? child.width : child.height);
   }, 0);
-  const gapTotal = request.gap * Math.max(0, request.children.length - 1);
+  const packedGapTotal = packedGap * Math.max(0, request.children.length - 1);
   const fillExtents = distributeBoundedFill(
-    Math.max(0, frameMain - mainStart - mainEnd - fixedMain - gapTotal),
+    Math.max(0, frameMain - mainStart - mainEnd - fixedMain - packedGapTotal),
     fillChildren.map((child) => ({
       id: child.id,
       ...(child.limits ? { limits: child.limits } : {}),
@@ -271,13 +274,25 @@ export function solveLinearAutoLayout(
           : (fillExtents.get(child.id) ?? 0)
         : child.height,
   }));
+  const childMainTotal = resolvedChildren.reduce(
+    (sum, child) => sum + (horizontal ? child.width : child.height),
+    0,
+  );
+  const resolvedGap =
+    request.primaryAlignment === "space-between"
+      ? autoGap(
+          frameMain - mainStart - mainEnd - childMainTotal,
+          resolvedChildren.length,
+        )
+      : packedGap;
   const contentMain =
-    resolvedChildren.reduce(
-      (sum, child) => sum + (horizontal ? child.width : child.height),
-      0,
-    ) + gapTotal;
+    childMainTotal + resolvedGap * Math.max(0, resolvedChildren.length - 1);
   const mainFree = frameMain - mainStart - mainEnd - contentMain;
-  let cursor = mainStart + alignmentOffset(request.primaryAlignment, mainFree);
+  let cursor =
+    mainStart +
+    (request.primaryAlignment === "space-between"
+      ? 0
+      : alignmentOffset(request.primaryAlignment, mainFree));
   const placements = resolvedChildren.map((child) => {
     const childMain = horizontal ? child.width : child.height;
     const childCounter = horizontal ? child.height : child.width;
@@ -291,7 +306,7 @@ export function solveLinearAutoLayout(
       x: horizontal ? cursor : counter,
       y: horizontal ? counter : cursor,
     };
-    cursor += childMain + request.gap;
+    cursor += childMain + resolvedGap;
     return placement;
   });
   return { ok: true, frame, placements };
@@ -309,6 +324,10 @@ function huggedExtent(
         extents.reduce((sum, extent) => sum + extent, 0) +
         gap * (extents.length - 1)
     : padding + Math.max(...extents);
+}
+
+export function autoGap(available: number, childCount: number): number {
+  return childCount > 1 ? Math.max(0, available) / (childCount - 1) : 0;
 }
 
 export function clampLayoutExtent(
@@ -441,9 +460,10 @@ function validLinearAutoLayoutRequest(
         request.wrap.mode === "wrap" &&
         finiteNonNegative(request.wrap.counterGap))) &&
     Object.values(request.padding).every(finiteNonNegative) &&
-    [request.primaryAlignment, request.counterAlignment].every((value) =>
-      ["start", "center", "end"].includes(value),
+    ["start", "center", "end", "space-between"].includes(
+      request.primaryAlignment,
     ) &&
+    ["start", "center", "end"].includes(request.counterAlignment) &&
     request.children.every((child) => {
       if (
         typeof child.id !== "string" ||

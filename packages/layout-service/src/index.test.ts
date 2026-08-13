@@ -74,7 +74,7 @@ describe("layout-service constraints v1", () => {
   });
 });
 
-describe("layout-service linear Auto Layout v4", () => {
+describe("layout-service linear Auto Layout v5", () => {
   it("places horizontal children with padding, gap, and two-axis alignment", () => {
     expect(
       solveLinearAutoLayout({
@@ -117,6 +117,123 @@ describe("layout-service linear Auto Layout v4", () => {
       placements: [
         { id: "one", x: 30, y: -23, width: 20, height: 30 },
         { id: "two", x: 20, y: 15, width: 40, height: 30 },
+      ],
+    });
+  });
+
+  it("distributes fixed-frame free space as a non-negative Auto gap", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 300, height: 80 },
+        padding: { top: 10, right: 20, bottom: 10, left: 20 },
+        gap: 99,
+        primaryAlignment: "space-between",
+        counterAlignment: "center",
+        frameSizing: fixedFrame,
+        children: [
+          child("one", 40, 20),
+          child("two", 60, 30),
+          child("three", 20, 10),
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 300, height: 80 },
+      placements: [
+        { id: "one", x: 20, y: 30, width: 40, height: 20 },
+        { id: "two", x: 130, y: 25, width: 60, height: 30 },
+        { id: "three", x: 260, y: 35, width: 20, height: 10 },
+      ],
+    });
+
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "vertical",
+        frame: { width: 100, height: 50 },
+        padding: { top: 5, right: 5, bottom: 5, left: 5 },
+        gap: 40,
+        primaryAlignment: "space-between",
+        counterAlignment: "start",
+        frameSizing: fixedFrame,
+        children: [child("one", 20, 30), child("two", 20, 30)],
+      }),
+    ).toMatchObject({
+      ok: true,
+      placements: [
+        { id: "one", y: 5 },
+        { id: "two", y: 35 },
+      ],
+    });
+  });
+
+  it("starts single children and collapses Auto gap on Hug axes", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 300, height: 80 },
+        padding: { top: 10, right: 20, bottom: 10, left: 20 },
+        gap: 32,
+        primaryAlignment: "space-between",
+        counterAlignment: "start",
+        frameSizing: fixedFrame,
+        children: [child("one", 40, 20)],
+      }),
+    ).toMatchObject({
+      ok: true,
+      placements: [{ id: "one", x: 20 }],
+    });
+
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 300, height: 80 },
+        padding: { top: 10, right: 20, bottom: 10, left: 20 },
+        gap: 32,
+        primaryAlignment: "space-between",
+        counterAlignment: "start",
+        frameSizing: { horizontal: "hug", vertical: "fixed" },
+        children: [child("one", 40, 20), child("two", 60, 20)],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 140, height: 80 },
+      placements: [
+        { id: "one", x: 20, y: 10, width: 40, height: 20 },
+        { id: "two", x: 60, y: 10, width: 60, height: 20 },
+      ],
+    });
+  });
+
+  it("assigns bounded Fill first and returns its unused remainder to Auto gap", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 360, height: 80 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 24,
+        primaryAlignment: "space-between",
+        counterAlignment: "start",
+        frameSizing: fixedFrame,
+        children: [
+          child("fixed", 40, 20),
+          {
+            ...child("bounded_fill", 0, 20, "fill"),
+            limits: { maxWidth: 100 },
+          },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 360, height: 80 },
+      placements: [
+        { id: "fixed", x: 10, y: 10, width: 40, height: 20 },
+        { id: "bounded_fill", x: 250, y: 10, width: 100, height: 20 },
       ],
     });
   });
@@ -344,6 +461,35 @@ describe("layout-service linear Auto Layout v4", () => {
         { id: "one", x: 20, y: 15, width: 80, height: 20 },
         { id: "two", x: 110, y: 10, width: 90, height: 30 },
         { id: "three", x: 80, y: 52, width: 60, height: 25 },
+      ],
+    });
+  });
+
+  it("resolves Auto gap independently for every wrapped row", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
+        direction: "horizontal",
+        frame: { width: 220, height: 100 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 40,
+        primaryAlignment: "space-between",
+        counterAlignment: "start",
+        frameSizing: fixedFrame,
+        wrap: { mode: "wrap", counterGap: 10 },
+        children: [
+          child("one", 80, 20),
+          child("two", 90, 30),
+          child("three", 60, 25),
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 220, height: 100 },
+      placements: [
+        { id: "one", x: 10, y: 10, width: 80, height: 20 },
+        { id: "two", x: 120, y: 10, width: 90, height: 30 },
+        { id: "three", x: 10, y: 50, width: 60, height: 25 },
       ],
     });
   });

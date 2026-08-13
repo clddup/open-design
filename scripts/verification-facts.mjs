@@ -24,6 +24,7 @@ const designContractVersions = await text(
   "packages/design-contracts/src/versions.ts",
 );
 const geometryService = await text("packages/geometry-service/src/index.ts");
+const layoutService = await text("packages/layout-service/src/index.ts");
 const requireFromDesktop = createRequire(join(desktopRoot, "package.json"));
 const vitestPath = join(
   dirname(requireFromDesktop.resolve("vitest/package.json")),
@@ -59,6 +60,13 @@ const geometryServiceContractVersion = Number(
     "Geometry service contract version",
   ),
 );
+const layoutServiceContractVersion = Number(
+  capture(
+    layoutService,
+    /AUTO_LAYOUT_SERVICE_CONTRACT_VERSION\s*=\s*([0-9]+)/,
+    "Auto Layout service contract version",
+  ),
+);
 const engineVersion = baseline.components.leafer.version;
 const agentCoreVersion = baseline.components.agentCore.version;
 const agentCoreStatus = baseline.components.agentCore.productionStatus;
@@ -72,6 +80,11 @@ assertEqual(
   baseline.contracts.geometryServiceContractVersion,
   geometryServiceContractVersion,
   "engine baseline geometry service contract",
+);
+assertEqual(
+  baseline.contracts.layoutServiceContractVersion,
+  layoutServiceContractVersion,
+  "engine baseline Auto Layout service contract",
 );
 assertEqual(
   leaferPackage.dependencies[baseline.components.leafer.dependency],
@@ -111,6 +124,7 @@ const blocks = {
     `- 文档协议：\`DesignDocument ${documentSchemaVersion}\``,
     `- Agent 协议：\`${agentProtocol}\``,
     `- Geometry Service：\`contract v${geometryServiceContractVersion}\``,
+    `- Layout Service：\`contract v${layoutServiceContractVersion}\``,
     `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（${agentCoreStatus}）`,
     `- 生产画布：\`${baseline.components.leafer.dependency} ${engineVersion}\``,
   ].join("\n"),

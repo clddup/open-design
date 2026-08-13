@@ -26,6 +26,7 @@ export function AutoLayoutSection({
   };
   const horizontalFlow = flow?.mode === "horizontal" ? flow : null;
   const wrapEnabled = horizontalFlow?.wrap?.mode === "wrap";
+  const autoGap = flow?.primaryAlignment === "space-between";
   return (
     <Section title={t("properties.autoLayout")}>
       <div className={styles.stack}>
@@ -143,8 +144,31 @@ export function AutoLayoutSection({
               ))}
             </div>
             <div className={styles.grid}>
+              <label className={styles.select}>
+                <span>{t("properties.autoLayoutGapMode")}</span>
+                <select
+                  aria-label={t("properties.autoLayoutGapMode")}
+                  onChange={(event) =>
+                    updateFlow({
+                      primaryAlignment:
+                        event.target.value === "auto"
+                          ? "space-between"
+                          : "start",
+                    })
+                  }
+                  value={autoGap ? "auto" : "fixed"}
+                >
+                  <option value="fixed">
+                    {t("properties.autoLayoutGapFixed")}
+                  </option>
+                  <option value="auto">
+                    {t("properties.autoLayoutGapAuto")}
+                  </option>
+                </select>
+              </label>
               <Field
                 accessibleLabel={t("properties.autoLayoutGap")}
+                disabled={autoGap}
                 label={t("properties.autoLayoutGap")}
                 min={0}
                 onCommit={(value) =>
@@ -152,8 +176,11 @@ export function AutoLayoutSection({
                     min: 0,
                   })
                 }
+                placeholder={
+                  autoGap ? t("properties.autoLayoutGapAuto") : undefined
+                }
                 type="number"
-                value={formatNumber(flow.gap)}
+                value={autoGap ? "" : formatNumber(flow.gap)}
               />
               {horizontalFlow?.wrap && (
                 <Field
@@ -176,13 +203,15 @@ export function AutoLayoutSection({
                   value={formatNumber(horizontalFlow.wrap.counterGap)}
                 />
               )}
-              <AlignmentSelect
-                label={t("properties.autoLayoutPrimary")}
-                onChange={(primaryAlignment) =>
-                  updateFlow({ primaryAlignment })
-                }
-                value={flow.primaryAlignment}
-              />
+              {!autoGap && (
+                <AlignmentSelect
+                  label={t("properties.autoLayoutPrimary")}
+                  onChange={(primaryAlignment) =>
+                    updateFlow({ primaryAlignment })
+                  }
+                  value={flow.primaryAlignment as PackedAlignment}
+                />
+              )}
               <AlignmentSelect
                 label={t("properties.autoLayoutCounter")}
                 onChange={(counterAlignment) =>
@@ -230,8 +259,8 @@ function AlignmentSelect({
   value,
 }: {
   label: string;
-  onChange: (value: AutoLayoutFlow["primaryAlignment"]) => void;
-  value: AutoLayoutFlow["primaryAlignment"];
+  onChange: (value: PackedAlignment) => void;
+  value: PackedAlignment;
 }) {
   const { t } = useI18n();
   return (
@@ -239,9 +268,7 @@ function AlignmentSelect({
       <span>{label}</span>
       <select
         aria-label={label}
-        onChange={(event) =>
-          onChange(event.target.value as AutoLayoutFlow["primaryAlignment"])
-        }
+        onChange={(event) => onChange(event.target.value as PackedAlignment)}
         value={value}
       >
         <option value="start">{t("properties.autoLayoutStart")}</option>
@@ -251,3 +278,8 @@ function AlignmentSelect({
     </label>
   );
 }
+
+type PackedAlignment = Exclude<
+  AutoLayoutFlow["primaryAlignment"],
+  "space-between"
+>;

@@ -3666,6 +3666,53 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
+  it("sets Auto gap through the Agent tool and lets the host derive responsive positions", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_auto_gap",
+        call: {
+          toolCallId: "tool_auto_layout_auto_gap",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-auto-layout",
+            label: "Distribute navigation content",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+            autoLayout: {
+              mode: "horizontal",
+              padding: { top: 24, right: 32, bottom: 24, left: 32 },
+              gap: 16,
+              primaryAlignment: "space-between",
+              counterAlignment: "center",
+            },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-auto-layout",
+          autoLayout: { primaryAlignment: "space-between" },
+          revision: 1,
+          atomic: true,
+        },
+      },
+    });
+    const document = runtime.getSnapshot().document;
+    expect(document.nodesById.shape_accent?.transform[4]).toBe(32);
+    expect(document.nodesById.subtitle_welcome?.transform[4]).toBeGreaterThan(
+      document.nodesById.title_welcome?.transform[4] ?? 0,
+    );
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
   it("sets exact negative Agent spacing and rejects locked or out-of-scope arrangement", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = await executeDesignToolRequest(

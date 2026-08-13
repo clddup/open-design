@@ -1,4 +1,4 @@
-import { clampLayoutExtent, resolveFrameExtent } from "./index.js";
+import { autoGap, clampLayoutExtent, resolveFrameExtent } from "./index.js";
 import type {
   AutoLayoutAlignment,
   ConstraintRect,
@@ -47,7 +47,9 @@ export function solveHorizontalWrap(
     0,
     frameWidth - request.padding.left - request.padding.right,
   );
-  const rows = wrapRows(children, innerWidth, request.gap);
+  const packedGap =
+    request.primaryAlignment === "space-between" ? 0 : request.gap;
+  const rows = wrapRows(children, innerWidth, packedGap);
   const contentHeight =
     rows.reduce((sum, row) => sum + row.height, 0) +
     request.wrap.counterGap * Math.max(0, rows.length - 1);
@@ -68,9 +70,20 @@ export function solveHorizontalWrap(
     request.padding.top + alignmentOffset(request.counterAlignment, blockFree);
   const placements: Array<ConstraintRect & { id: string }> = [];
   for (const row of rows) {
-    const rowFree = innerWidth - row.width;
+    const rowGap =
+      request.primaryAlignment === "space-between"
+        ? autoGap(innerWidth - row.width, row.children.length)
+        : packedGap;
+    const rowContentWidth =
+      request.primaryAlignment === "space-between"
+        ? row.width + rowGap * Math.max(0, row.children.length - 1)
+        : row.width;
+    const rowFree = innerWidth - rowContentWidth;
     let childX =
-      request.padding.left + alignmentOffset(request.primaryAlignment, rowFree);
+      request.padding.left +
+      (request.primaryAlignment === "space-between"
+        ? 0
+        : alignmentOffset(request.primaryAlignment, rowFree));
     for (const child of row.children) {
       placements.push({
         id: child.id,
@@ -81,7 +94,7 @@ export function solveHorizontalWrap(
         width: child.width,
         height: child.height,
       });
-      childX += child.width + request.gap;
+      childX += child.width + rowGap;
     }
     rowY += row.height + request.wrap.counterGap;
   }

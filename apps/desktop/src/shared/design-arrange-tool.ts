@@ -81,7 +81,7 @@ const nodeIds = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies only to direct children of ordinary Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug axis sizing and horizontal Wrap with an independent vertical gap; set-layout-sizing configures direct-child Fixed/Fill sizing; set-layout-limits adds or clears bounded min/max width and height on an Auto Layout Frame or direct flow child. Frame padding remains a hard minimum. Wrap requires Fixed width and visible Fixed-size children. The host derives all flow geometry.",
+    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies only to direct children of ordinary Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug sizing, fixed or Auto gap, and horizontal Wrap with an independent vertical gap; primaryAlignment=space-between selects Auto gap, which never becomes negative and is resolved independently per wrapped row. set-layout-sizing configures direct-child Fixed/Fill sizing; set-layout-limits adds or clears bounded min/max width and height on an Auto Layout Frame or direct flow child. Frame padding remains a hard minimum. Wrap requires Fixed width and visible Fixed-size children. The host derives all flow geometry.",
   properties: {
     action: {
       enum: [
@@ -163,7 +163,9 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
               additionalProperties: false,
             },
             gap: { type: "number", minimum: 0, maximum: 1_000_000 },
-            primaryAlignment: { enum: ["start", "center", "end"] },
+            primaryAlignment: {
+              enum: ["start", "center", "end", "space-between"],
+            },
             counterAlignment: { enum: ["start", "center", "end"] },
             sizing: {
               type: "object",
@@ -213,7 +215,9 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
               additionalProperties: false,
             },
             gap: { type: "number", minimum: 0, maximum: 1_000_000 },
-            primaryAlignment: { enum: ["start", "center", "end"] },
+            primaryAlignment: {
+              enum: ["start", "center", "end", "space-between"],
+            },
             counterAlignment: { enum: ["start", "center", "end"] },
             sizing: {
               type: "object",
@@ -400,7 +404,9 @@ function isAutoLayout(value: unknown): value is AutoLayout {
     ) &&
     onlyKeys(padding, ["top", "right", "bottom", "left"]) &&
     finiteNonNegativeBounded(value.gap) &&
-    ["start", "center", "end"].includes(String(value.primaryAlignment)) &&
+    ["start", "center", "end", "space-between"].includes(
+      String(value.primaryAlignment),
+    ) &&
     ["start", "center", "end"].includes(String(value.counterAlignment)) &&
     (sizing === undefined ||
       (isRecord(sizing) &&
