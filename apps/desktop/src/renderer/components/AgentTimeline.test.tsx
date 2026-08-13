@@ -925,6 +925,94 @@ describe("AgentTimeline", () => {
     expect(screen.queryByText(/Reconnecting/)).not.toBeInTheDocument();
   });
 
+  it("hides reconnect activity as soon as the user stops the Run", async () => {
+    const user = userEvent.setup();
+    const stopResult = deferred<boolean>();
+    render(
+      <AgentTimeline
+        activeRunId="run_retry_stop"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[
+          { type: "run.started", runId: "run_retry_stop", startedAt: now },
+          {
+            type: "model.retrying",
+            runId: "run_retry_stop",
+            retry: 2,
+            maxRetries: 5,
+            delayMs: 900,
+          },
+        ]}
+        onStop={() => stopResult.promise}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+    expect(screen.getByText("Reconnecting 2/5")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(screen.queryByText(/Reconnecting/)).not.toBeInTheDocument();
+    expect(screen.getByText("Stopping request")).toBeInTheDocument();
+    stopResult.resolve(true);
+  });
+
+  it("keeps stopping when a continuation child arrives during cancellation", async () => {
+    const user = userEvent.setup();
+    const stopResult = deferred<boolean>();
+    const baseProps = {
+      conversationId: "conversation_1",
+      conversationTitle: "Conversation",
+      error: null,
+      onStop: () => stopResult.promise,
+      onSubmit: vi.fn().mockResolvedValue(true),
+      timeline: [],
+    };
+    const { rerender } = render(
+      <AgentTimeline
+        {...baseProps}
+        activeRunId="run_parent"
+        events={[{ type: "run.started", runId: "run_parent", startedAt: now }]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+
+    rerender(
+      <AgentTimeline
+        {...baseProps}
+        activeRunId="run_child"
+        events={[
+          {
+            type: "run.continuation",
+            runId: "run_parent",
+            status: "scheduled",
+            attempt: 1,
+            maxAttempts: 3,
+            reason: "incomplete",
+            nextRunId: "run_child",
+          },
+          {
+            type: "run.started",
+            runId: "run_child",
+            startedAt: now,
+            continuation: {
+              parentRunId: "run_parent",
+              rootRunId: "run_parent",
+              attempt: 1,
+              maxAttempts: 3,
+              reason: "incomplete",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Stopping request")).toBeInTheDocument();
+    expect(screen.queryByText(/Reconnecting/)).not.toBeInTheDocument();
+    stopResult.resolve(true);
+  });
+
   it("downgrades an old terminal error to a compact history row when a new Run starts", () => {
     const { container } = render(
       <AgentTimeline

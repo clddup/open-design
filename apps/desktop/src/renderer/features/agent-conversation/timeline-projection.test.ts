@@ -243,4 +243,61 @@ describe("Agent continuation timeline projection", () => {
       }),
     );
   });
+
+  it("removes reconnect projection immediately when its Run is stopping", () => {
+    const now = "2026-08-13T01:00:00.000Z";
+    const runId = "run_stopping_continuation";
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "message:auto-stopping",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "user.message",
+        messageId: "auto-stopping",
+        content: "Automatically continue the unfinished design delivery",
+        documentId: "document_1",
+        revision: 4,
+        scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+      },
+      {
+        itemId: `run:${runId}`,
+        sessionId: "conversation_1",
+        runId,
+        sequence: 2,
+        createdAt: now,
+        updatedAt: now,
+        type: "run",
+        status: "started",
+        startedAt: now,
+        continuation: { ...continuation, parentRunId: "run_old" },
+      },
+    ];
+    const items = projectAgentTimeline({
+      activeRunId: runId,
+      events: [
+        {
+          type: "model.retrying",
+          runId,
+          retry: 2,
+          maxRetries: 5,
+          delayMs: 900,
+        },
+        {
+          type: "run.started",
+          runId,
+          startedAt: now,
+          continuation: { ...continuation, parentRunId: "run_old" },
+        },
+      ],
+      locale: "zh-CN",
+      stoppingRunId: runId,
+      timeline,
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items.some((item) => item.title.includes("重新连接"))).toBe(false);
+  });
 });

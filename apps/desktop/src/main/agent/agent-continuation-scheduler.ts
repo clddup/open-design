@@ -27,24 +27,59 @@ export const AGENT_CONTINUATION_PROMPT =
   "Automatically continue the unfinished design delivery from the previous Run. First inspect the current document and its unfinishedDelivery ledger, preserve every stable target/Page/Frame identity and committed revision, then resume from the first incomplete target. Do not ask the user to send continue and do not declare completion until every target is verified.";
 
 export class AgentContinuationScheduler {
+  readonly #cancellationRequestedRunIds = new Set<string>();
   readonly #deliveryByRunId = new Map<string, DesignDeliveryLedger>();
   readonly #failureByRunId = new Map<
     string,
     Extract<AgentEvent, { type: "agent.error" }>["failure"]
   >();
   readonly #requestsByRunId = new Map<string, RunStartRequest>();
+  readonly #nextRunIdByParentRunId = new Map<string, string>();
   #sequence = 0;
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
   registerRun(request: RunStartRequest): void {
+    if (this.#requestsByRunId.has(request.runId)) {
+      throw new Error(`Agent Run is already registered: ${request.runId}`);
+    }
     this.#requestsByRunId.set(request.runId, structuredClone(request));
   }
 
+  requestCancellation(runId: string): string | null {
+    let targetRunId = runId;
+    const visited = new Set<string>();
+    while (!visited.has(targetRunId)) {
+      visited.add(targetRunId);
+      const nextRunId = this.#nextRunIdByParentRunId.get(targetRunId);
+      if (!nextRunId) break;
+      targetRunId = nextRunId;
+    }
+    if (
+      !this.#requestsByRunId.has(targetRunId) &&
+      !this.#deliveryByRunId.has(targetRunId)
+    ) {
+      return null;
+    }
+    this.#cancellationRequestedRunIds.add(targetRunId);
+    return targetRunId;
+  }
+
+  isCancellationRequested(runId: string): boolean {
+    return this.#cancellationRequestedRunIds.has(runId);
+  }
+
   forgetRun(runId: string): void {
+    this.#cancellationRequestedRunIds.delete(runId);
     this.#requestsByRunId.delete(runId);
     this.#deliveryByRunId.delete(runId);
     this.#failureByRunId.delete(runId);
+    this.#nextRunIdByParentRunId.delete(runId);
+    for (const [parentRunId, nextRunId] of this.#nextRunIdByParentRunId) {
+      if (nextRunId === runId) {
+        this.#nextRunIdByParentRunId.delete(parentRunId);
+      }
+    }
   }
 
   record(event: AgentEvent): AgentContinuationDecision | null {
@@ -61,10 +96,17 @@ export class AgentContinuationScheduler {
     const source = this.#requestsByRunId.get(runId);
     const currentDelivery = this.#deliveryByRunId.get(runId);
     const failure = this.#failureByRunId.get(runId);
+    const cancellationRequested =
+      this.#cancellationRequestedRunIds.delete(runId);
     this.#requestsByRunId.delete(runId);
     this.#deliveryByRunId.delete(runId);
     this.#failureByRunId.delete(runId);
-    if (!source || !currentDelivery || !hasIncompleteTarget(currentDelivery))
+    if (
+      cancellationRequested ||
+      !source ||
+      !currentDelivery ||
+      !hasIncompleteTarget(currentDelivery)
+    )
       return null;
     if (event.stopReason === "cancelled") return null;
 
@@ -85,6 +127,7 @@ export class AgentContinuationScheduler {
     }
     const nextRunId = `run_${this.now()}_auto_${++this.#sequence}`;
     this.#deliveryByRunId.set(nextRunId, structuredClone(currentDelivery));
+    this.#nextRunIdByParentRunId.set(runId, nextRunId);
     return {
       kind: "schedule",
       source: structuredClone(source),

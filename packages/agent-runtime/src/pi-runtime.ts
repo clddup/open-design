@@ -178,6 +178,10 @@ export class OpenDesignPiRuntime {
           nextAttemptId: () => `${request.runId}_attempt_${++attempt}`,
           now: () => this.#now().getTime(),
           onRetryEvent: (event) => {
+            // Provider retry events are transient UI projection only. A retry
+            // already queued by the gateway must not make a cancelled Run look
+            // as though it resumed work after the user pressed Stop.
+            if (active.abortController.signal.aborted) return;
             if (event.type === "attempt.retrying") {
               emit({
                 type: "model.retrying",

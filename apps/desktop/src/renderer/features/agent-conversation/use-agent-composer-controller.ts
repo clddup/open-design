@@ -83,9 +83,10 @@ export function useAgentComposerController({
   );
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [attachmentDropActive, setAttachmentDropActive] = useState(false);
-  const [stopRequestedRunId, setStopRequestedRunId] = useState<string | null>(
-    null,
-  );
+  const [stopRequest, setStopRequest] = useState<{
+    conversationId: string | null;
+    runId: string;
+  } | null>(null);
   const [catalog, setCatalog] = useState<ModelProviderCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [modelSelection, setModelSelectionState] =
@@ -96,14 +97,25 @@ export function useAgentComposerController({
   conversationIdRef.current = conversationId;
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
-  const stopping = activeRunId !== null && stopRequestedRunId === activeRunId;
+  const stopping =
+    activeRunId !== null && stopRequest?.conversationId === conversationId;
   const hasConversation = conversationTitle !== null;
 
   useEffect(() => {
-    if (stopRequestedRunId && stopRequestedRunId !== activeRunId) {
-      setStopRequestedRunId(null);
+    if (!activeRunId) {
+      setStopRequest(null);
+      return;
     }
-  }, [activeRunId, stopRequestedRunId]);
+    if (
+      stopRequest?.conversationId === conversationId &&
+      stopRequest.runId !== activeRunId
+    ) {
+      // A Main-owned continuation may replace the active Run between the
+      // user's click and the cancellation terminal. Stop applies to that
+      // recovery chain, so keep the composer in stopping state for its child.
+      setStopRequest({ conversationId, runId: activeRunId });
+    }
+  }, [activeRunId, conversationId, stopRequest]);
 
   useEffect(() => {
     let active = true;
@@ -171,6 +183,7 @@ export function useAgentComposerController({
     setAttachmentDropActive(false);
     setSelectingAttachments(false);
     setSubmitting(false);
+    setStopRequest(null);
   }, [conversationId]);
 
   const selectedCatalogModel =
@@ -311,15 +324,21 @@ export function useAgentComposerController({
   const stop = async (): Promise<void> => {
     if (!activeRunId || stopping) return;
     const runId = activeRunId;
-    setStopRequestedRunId(runId);
+    setStopRequest({ conversationId, runId });
     try {
       if ((await onStop()) === false) {
-        setStopRequestedRunId((current) =>
-          current === runId ? null : current,
+        setStopRequest((current) =>
+          current?.runId === runId && current.conversationId === conversationId
+            ? null
+            : current,
         );
       }
     } catch {
-      setStopRequestedRunId((current) => (current === runId ? null : current));
+      setStopRequest((current) =>
+        current?.runId === runId && current.conversationId === conversationId
+          ? null
+          : current,
+      );
     }
   };
 

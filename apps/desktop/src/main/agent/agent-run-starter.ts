@@ -1,4 +1,4 @@
-import type { AgentRequest } from "@opendesign/agent-contracts";
+import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
 import type { ModelProviderHost } from "../model/model-provider-host.js";
 import type { AgentContinuationScheduler } from "./agent-continuation-scheduler.js";
 import type { AgentHost } from "./agent-host.js";
@@ -19,7 +19,7 @@ export interface AgentRunStarterDependencies {
 export async function startAgentRun(
   request: RunStartRequest,
   dependencies: AgentRunStarterDependencies,
-): Promise<void> {
+): Promise<boolean> {
   const {
     agentHost,
     continuationScheduler,
@@ -28,17 +28,23 @@ export async function startAgentRun(
     modelProviderHost,
     referenceHost,
   } = dependencies;
-  await globalTaskCoordinator.registerRun(request);
-  referenceHost.registerRun(request);
   continuationScheduler.registerRun(request);
-  conversationIdByRunId.set(request.runId, request.sessionId);
   try {
+    await globalTaskCoordinator.registerRun(request);
+    if (continuationScheduler.isCancellationRequested(request.runId)) {
+      globalTaskCoordinator.handleAgentEvent(cancelledRun(request.runId));
+      continuationScheduler.forgetRun(request.runId);
+      return false;
+    }
+    referenceHost.registerRun(request);
+    conversationIdByRunId.set(request.runId, request.sessionId);
     agentHost.send({
       ...request,
       modelContext: modelProviderHost.resolveModelContext(
         request.modelSelection,
       ),
     });
+    return true;
   } catch (error) {
     conversationIdByRunId.delete(request.runId);
     referenceHost.releaseRun(request.runId);
@@ -51,4 +57,15 @@ export async function startAgentRun(
     });
     throw error;
   }
+}
+
+function cancelledRun(
+  runId: string,
+): Extract<AgentEvent, { type: "run.completed" }> {
+  return {
+    type: "run.completed",
+    runId,
+    finishedAt: new Date().toISOString(),
+    stopReason: "cancelled",
+  };
 }

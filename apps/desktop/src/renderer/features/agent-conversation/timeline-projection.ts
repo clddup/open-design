@@ -39,7 +39,13 @@ export function projectAgentTimeline({
   timeline,
   t,
 }: AgentTimelineProjectionInput): AgentTimelineItem[] {
-  const durable = projectDurableTimeline(timeline, activeRunId, locale, t);
+  const durable = projectDurableTimeline(
+    timeline,
+    activeRunId,
+    locale,
+    stoppingRunId,
+    t,
+  );
   durable.push(...projectDurableDesignSteps(timeline));
   const runOrder = new Map<string, number>();
   const recordRun = (runId: string | undefined) => {
@@ -57,7 +63,13 @@ export function projectAgentTimeline({
     0,
   );
   const merged = new Map(durable.map((item) => [item.id, item]));
-  for (const item of projectLiveEvents(events, maximumSequence, locale, t)) {
+  for (const item of projectLiveEvents(
+    events,
+    maximumSequence,
+    locale,
+    stoppingRunId,
+    t,
+  )) {
     const durableItem = merged.get(item.id);
     if (durableItem?.kind === "assistant" && durableItem.state === "done") {
       // The retained live window can begin mid-stream. A completed journal
@@ -164,6 +176,7 @@ function projectDurableTimeline(
   timeline: readonly SessionTimelineItem[],
   activeRunId: string | null,
   locale: AppLocale,
+  stoppingRunId: string | null,
   t: Translate,
 ): AgentTimelineItem[] {
   const continuationByRunId = new Map(
@@ -194,6 +207,7 @@ function projectDurableTimeline(
       if (continuation) {
         return {
           ...base,
+          routine: item.runId === stoppingRunId,
           state: "done",
           kind: "system",
           title: `${t("agent.reconnecting", {
@@ -368,6 +382,7 @@ function projectLiveEvents(
   events: readonly AgentEvent[],
   startOrder: number,
   locale: AppLocale,
+  stoppingRunId: string | null,
   t: Translate,
 ): AgentTimelineItem[] {
   const items = new Map<string, AgentTimelineItem>();
@@ -454,6 +469,7 @@ function projectLiveEvents(
       );
     }
     if (event.type === "run.started") {
+      if (event.continuation && event.runId === stoppingRunId) return;
       updateEvent(
         event.continuation
           ? `continuation:${event.runId}`
@@ -472,6 +488,7 @@ function projectLiveEvents(
       );
     }
     if (event.type === "run.continuation") {
+      if (event.nextRunId === stoppingRunId) return;
       update(
         event.nextRunId
           ? `continuation:${event.nextRunId}`
@@ -493,6 +510,7 @@ function projectLiveEvents(
       );
     }
     if (event.type === "model.retrying") {
+      if (event.runId === stoppingRunId) return;
       updateEvent(`model-retry:${event.runId}`, {
         state: "active",
         kind: "system",
@@ -504,6 +522,7 @@ function projectLiveEvents(
       });
     }
     if (event.type === "model.recovered") {
+      if (event.runId === stoppingRunId) return;
       updateEvent(`model-retry:${event.runId}`, {
         routine: true,
         state: "done",

@@ -987,7 +987,7 @@ function registerIpc() {
       if (!globalTaskCoordinator) {
         throw new Error("Global Task services are not initialized");
       }
-      await startAgentRun(request, {
+      const started = await startAgentRun(request, {
         agentHost,
         continuationScheduler: agentContinuationScheduler,
         conversationIdByRunId,
@@ -995,10 +995,30 @@ function registerIpc() {
         modelProviderHost: requireModelProviderHost(),
         referenceHost: requireAgentReferenceHost(),
       });
+      if (!started) {
+        mainWindow?.webContents.send(channels.agentEvent, {
+          type: "run.completed",
+          runId: request.runId,
+          finishedAt: new Date().toISOString(),
+          stopReason: "cancelled",
+        } satisfies AgentEvent);
+      }
       return;
     }
     if (request.type === "session.history") {
       conversationIdByRequestId.set(request.requestId, request.sessionId);
+    }
+    if (request.type === "run.cancel") {
+      // Cancellation intent is Main-owned. Record it before forwarding the
+      // request so a Run that is between scheduled continuation and utility
+      // process startup cannot escape a user stop as a new automatic Run.
+      const cancellationTarget = agentContinuationScheduler.requestCancellation(
+        request.runId,
+      );
+      if (cancellationTarget && cancellationTarget !== request.runId) {
+        agentHost.send({ ...request, runId: cancellationTarget });
+        return;
+      }
     }
     try {
       agentHost.send(request);

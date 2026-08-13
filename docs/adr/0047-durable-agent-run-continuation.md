@@ -25,6 +25,8 @@ Main 记录每个 `run.start` 的稳定请求身份、最近一次可信 `delive
 
 每条 continuation 记录 `parentRunId`、`rootRunId`、`attempt`、固定 `maxAttempts=3` 和原因。用户取消不续跑；不可重试错误或三次自动续跑耗尽进入 `needs_attention`。这是一条有界恢复链，不是无限 Agent 循环。
 
+用户取消意图在 Main 收到 `run.cancel` 时立即生效，而不等待 Agent Runtime 发布 terminal。若 continuation 已经 scheduled 但尚未完成文档读取或 Run 注册，Main 必须阻止该 Run 启动并投影 `cancelled` terminal；取消后的 Provider retry/recovered 事件不得重新显示活动状态。这样 Stop 终止的是整条当前恢复链，而不是只尝试终止一个可能已经结束的 utility-process Run。
+
 ### 持久与可见状态分离
 
 continuation provenance 进入下一 Run 的 `run.state` journal，重启后可解释来源。`run.continuation` 是 Main 到 Renderer 的瞬时调度状态：Renderer 将 `nextRunId` 绑定到同一 Conversation，并在旧 Run terminal 与新 Run started 之间保留 Design File 资源和活动反馈。

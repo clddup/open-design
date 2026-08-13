@@ -197,6 +197,34 @@ describe("AgentContinuationScheduler", () => {
     expect(scheduler.record(completed(verified.runId, "budget"))).toBeNull();
   });
 
+  it("honors user cancellation intent even if the Run reports another terminal reason", () => {
+    const scheduler = new AgentContinuationScheduler();
+    const active = request();
+    scheduler.registerRun(active);
+    recordDelivery(scheduler, active.runId);
+
+    expect(scheduler.requestCancellation(active.runId)).toBe(active.runId);
+    expect(scheduler.isCancellationRequested(active.runId)).toBe(true);
+    expect(scheduler.record(completed(active.runId, "complete"))).toBeNull();
+    expect(scheduler.isCancellationRequested(active.runId)).toBe(false);
+  });
+
+  it("redirects a late parent cancellation to its scheduled continuation", () => {
+    const scheduler = new AgentContinuationScheduler(() => 4000);
+    const initial = request();
+    scheduler.registerRun(initial);
+    recordDelivery(scheduler, initial.runId);
+    const decision = scheduler.record(completed(initial.runId, "budget"));
+    if (!decision || decision.kind !== "schedule") {
+      throw new Error("Expected a scheduled continuation");
+    }
+
+    expect(scheduler.requestCancellation(initial.runId)).toBe(
+      decision.nextRunId,
+    );
+    expect(scheduler.isCancellationRequested(decision.nextRunId)).toBe(true);
+  });
+
   it("moves the third failed continuation to needs-attention", () => {
     const scheduler = new AgentContinuationScheduler();
     const third = request({

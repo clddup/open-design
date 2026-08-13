@@ -69,7 +69,16 @@ export function prepareAgentContinuation(
   const request = createContinuationRequest(decision, projectHost);
   publish(scheduled);
   void request
-    .then((next) => startAgentRun(next, starter))
+    .then(async (next) => {
+      const started = await startAgentRun(next, starter);
+      if (started) return;
+      publish({
+        type: "run.completed",
+        runId: next.runId,
+        finishedAt: new Date().toISOString(),
+        stopReason: "cancelled",
+      });
+    })
     .catch((error: unknown) => {
       continuationScheduler.forgetRun(decision.nextRunId);
       const failed: ContinuationEvent = {

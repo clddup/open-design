@@ -276,6 +276,37 @@ describe("OpenDesign Pi production runtime", () => {
     expect(runtime.cancel("run_pi_runtime_cancelled")).toBe(false);
   });
 
+  it("does not publish reconnect activity queued after cancellation", async () => {
+    const store = new MemorySessionStore();
+    const gateway = new CancelRetryGateway();
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+    });
+    const events: AgentEvent[] = [];
+    const runId = "run_pi_cancel_retry_race";
+    const collecting = (async () => {
+      for await (const event of runtime.run({ ...request, runId })) {
+        events.push(event);
+      }
+    })();
+    await gateway.started;
+
+    expect(runtime.cancel(runId)).toBe(true);
+    await collecting;
+
+    expect(
+      events.some(
+        (event) =>
+          event.type === "model.retrying" || event.type === "model.recovered",
+      ),
+    ).toBe(false);
+    expect(events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "cancelled",
+    });
+  });
+
   it("serializes two runs in one Conversation while allowing the caller to start both", async () => {
     const store = new MemorySessionStore();
     const gateway = new OrderedGateway();
@@ -455,6 +486,47 @@ class AbortableGateway implements ModelGateway {
     this.#markStarted();
     yield attemptStarted(modelRequest);
     await waitForAbort(modelRequest.signal);
+    yield {
+      type: "attempt.failed",
+      attemptId: modelRequest.attemptId,
+      error: {
+        code: "cancelled",
+        message: "Request cancelled",
+        retryable: false,
+      },
+    };
+  }
+}
+
+class CancelRetryGateway implements ModelGateway {
+  readonly started: Promise<void>;
+  #markStarted!: () => void;
+
+  constructor() {
+    this.started = new Promise((resolve) => {
+      this.#markStarted = resolve;
+    });
+  }
+
+  async *stream(
+    modelRequest: ModelRequest,
+  ): AsyncIterable<CanonicalStreamEvent> {
+    this.#markStarted();
+    yield attemptStarted(modelRequest);
+    await waitForAbort(modelRequest.signal);
+    yield {
+      type: "attempt.retrying",
+      attemptId: modelRequest.attemptId,
+      retry: 1,
+      maxRetries: 5,
+      delayMs: 400,
+    };
+    yield {
+      type: "attempt.recovered",
+      attemptId: modelRequest.attemptId,
+      retriesUsed: 1,
+      maxRetries: 5,
+    };
     yield {
       type: "attempt.failed",
       attemptId: modelRequest.attemptId,
