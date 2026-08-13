@@ -60,6 +60,7 @@ class FakeElement extends FakeEventTarget {
   strokeWidth = 0;
   transformCalls = 0;
   forceUpdate = vi.fn();
+  leafer: FakeTree | undefined;
   export = vi.fn((_format: string, options?: { scale?: number }) => {
     const scale = options?.scale ?? 1;
     const bounds = this.getBounds();
@@ -71,6 +72,16 @@ class FakeElement extends FakeEventTarget {
       height: Math.max(1, Math.round(bounds.height * scale)),
     });
   });
+  syncExport = vi.fn((_format: string, options?: { scale?: number }) => {
+    const scale = options?.scale ?? 1;
+    const bounds = this.getBounds();
+    return {
+      data: "data:image/jpeg;base64,AQID",
+      width: Math.max(1, Math.round(bounds.width * scale)),
+      height: Math.max(1, Math.round(bounds.height * scale)),
+    };
+  });
+  updateLayout = vi.fn();
 
   constructor(data?: Record<string, unknown>) {
     super();
@@ -119,6 +130,7 @@ class FakeGroup extends FakeElement {
   addAt(child: FakeElement, index: number): void {
     child.remove();
     child.parent = this;
+    child.leafer = this.leafer;
     this.children.splice(index, 0, child);
   }
 
@@ -238,6 +250,12 @@ class FakeStroker extends FakeElement {
 class FakeTree extends FakeGroup {
   override readonly tag: string = "Leafer";
   override forceUpdate = vi.fn();
+  waitViewCompleted = vi.fn((callback: () => void) => callback());
+
+  constructor() {
+    super();
+    this.leafer = this;
+  }
 
   override setTransform(transform: ReturnType<typeof identityMatrix>): void {
     this.localTransform = { ...transform };
@@ -456,23 +474,23 @@ describe("Leafer engine selection bounds synchronization", () => {
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
     const frame = findElement(app.tree, "frame_welcome");
-    expect(frame?.export).toHaveBeenCalledWith(
+    expect(frame?.syncExport).toHaveBeenCalledWith(
       "jpg",
       expect.objectContaining({
-        blob: true,
         pixelRatio: 1,
         quality: 0.88,
       }),
     );
+    expect(frame?.export).not.toHaveBeenCalled();
     const pageResult = await adapter.capture({
       kind: "page",
       pageId: "page_welcome",
     });
     expect(pageResult.width).toBeGreaterThan(0);
     expect(pageResult.height).toBeGreaterThan(0);
-    expect(app.tree.export).toHaveBeenCalledWith(
+    expect(app.tree.syncExport).toHaveBeenCalledWith(
       "jpg",
-      expect.objectContaining({ blob: true, pixelRatio: 1 }),
+      expect.objectContaining({ pixelRatio: 1 }),
     );
     await expect(
       adapter.capture({

@@ -73,6 +73,7 @@ import {
   type GenerationTweenPlan,
 } from "./generation-tween.js";
 import { createLeaferTextLayoutProvider } from "./text-layout.js";
+import { exportLeaferCapture } from "./capture-export.js";
 import type {
   LeaferBoxCreateTool,
   LeaferCaptureResult,
@@ -676,46 +677,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       target.kind === "page"
         ? this.#app.tree
         : this.#captureFrameElement(target.nodeId);
-    const bounds = leaf.getBounds("render", "local");
-    if (
-      !Number.isFinite(bounds.width) ||
-      !Number.isFinite(bounds.height) ||
-      bounds.width <= 0 ||
-      bounds.height <= 0
-    ) {
-      throw new Error("Leafer capture target has no renderable bounds");
-    }
-    const scale = Math.min(
-      1,
-      MAX_CAPTURE_WIDTH / bounds.width,
-      MAX_CAPTURE_HEIGHT / bounds.height,
-    );
-    const exported = await leaf.export("jpg", {
-      blob: true,
-      pixelRatio: 1,
-      quality: 0.88,
-      scale,
-      smooth: true,
+    return exportLeaferCapture(leaf, {
+      height: MAX_CAPTURE_HEIGHT,
+      width: MAX_CAPTURE_WIDTH,
     });
-    if (exported.error) {
-      throw exported.error instanceof Error
-        ? exported.error
-        : new Error("Leafer capture export failed");
-    }
-    if (!isBlobLike(exported.data)) {
-      throw new Error("Leafer capture did not return image bytes");
-    }
-    const width = finitePositiveInteger(exported.width);
-    const height = finitePositiveInteger(exported.height);
-    if (width === null || height === null) {
-      throw new Error("Leafer capture returned invalid dimensions");
-    }
-    return {
-      bytes: new Uint8Array(await exported.data.arrayBuffer()),
-      height,
-      mimeType: "image/jpeg",
-      width,
-    };
   }
 
   async exportRaster(
