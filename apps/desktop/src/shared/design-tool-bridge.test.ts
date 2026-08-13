@@ -7,6 +7,8 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
 } from "./design-agent-tools";
 import {
+  isDesignToolBridgeProgress,
+  isRendererDesignToolProgress,
   isRendererDesignToolRequest,
   isRendererDesignToolResponse,
 } from "./design-tool-bridge";
@@ -26,6 +28,33 @@ const context = {
 };
 
 describe("Renderer design tool bridge", () => {
+  it("accepts only bounded correlated semantic-step progress", () => {
+    expect(
+      isRendererDesignToolProgress({
+        requestId: "renderer_apply_1",
+        phase: "applying",
+        progress: 0.5,
+        message: "设计步骤：导航 · r1",
+      }),
+    ).toBe(true);
+    expect(
+      isDesignToolBridgeProgress({
+        type: "design-tool.progress",
+        requestId: "tool_1",
+        message: "设计步骤：导航 · r1",
+        progress: 0.5,
+      }),
+    ).toBe(true);
+    expect(
+      isDesignToolBridgeProgress({
+        type: "design-tool.progress",
+        requestId: "tool_1",
+        message: "x".repeat(2_001),
+        progress: 0.5,
+      }),
+    ).toBe(false);
+  });
+
   it("accepts bounded raster preparation bytes only for the typed export tool", () => {
     const request = {
       requestId: "renderer_raster_export",

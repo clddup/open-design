@@ -43,7 +43,7 @@ describe("OpenDesign Agent system prompt", () => {
       "Do not stop after summarizing the attachment",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "call opendesign_capture_canvas",
+      "Unless opendesign_capture_canvas",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "call opendesign_define_design_plan",
@@ -55,7 +55,7 @@ describe("OpenDesign Agent system prompt", () => {
       "always set node.childIds to an empty array",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "call opendesign_record_visual_review",
+      "does not unlock opendesign_record_visual_review",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "Default to outputMode editable-composition",

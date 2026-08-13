@@ -5,6 +5,8 @@ export function throwIfAgentGenerationAborted(
   throw new DOMException("Design generation stopped", "AbortError");
 }
 
+const ANIMATION_FRAME_FALLBACK_MS = 250;
+
 export async function waitForCanvasPaint(
   signal: AbortSignal | undefined,
   delayMs: number,
@@ -20,13 +22,21 @@ export async function waitForCanvasPaint(
 function waitForAnimationFrame(signal: AbortSignal | undefined): Promise<void> {
   return new Promise((resolve, reject) => {
     const frame = { current: undefined as number | undefined };
+    const fallback = { current: undefined as number | undefined };
+    let settled = false;
     const finish = () => {
+      if (settled) return;
+      settled = true;
       signal?.removeEventListener("abort", abort);
+      if (fallback.current !== undefined) window.clearTimeout(fallback.current);
       resolve();
     };
     const abort = () => {
+      if (settled) return;
+      settled = true;
       if (frame.current !== undefined)
         window.cancelAnimationFrame(frame.current);
+      if (fallback.current !== undefined) window.clearTimeout(fallback.current);
       reject(new DOMException("Design generation stopped", "AbortError"));
     };
     if (signal?.aborted) {
@@ -35,6 +45,11 @@ function waitForAnimationFrame(signal: AbortSignal | undefined): Promise<void> {
     }
     signal?.addEventListener("abort", abort, { once: true });
     frame.current = window.requestAnimationFrame(finish);
+    fallback.current = window.setTimeout(() => {
+      if (frame.current !== undefined)
+        window.cancelAnimationFrame(frame.current);
+      finish();
+    }, ANIMATION_FRAME_FALLBACK_MS);
   });
 }
 

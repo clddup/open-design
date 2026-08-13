@@ -38,13 +38,17 @@ import {
 } from "../../shared/design-agent-tools.js";
 import type { RendererDesignCaptureTarget } from "../../shared/design-tool-bridge.js";
 import {
-  inspectedNodeBelongsToPage,
   registerDesignWorkflowPlan,
   type DesignDeliveryTargetState,
   type DesignPlanRegistration,
   type DesignWorkflowState,
   type InspectedHierarchy,
 } from "./design-plan-registration.js";
+import {
+  assertDeliveryTargetStructure,
+  assertLayoutQualityMatchesCapture,
+  parseInspectedHierarchy,
+} from "./design-inspection.js";
 import {
   conversationActivityAt,
   projectGlobalTaskLifecycle,
@@ -56,6 +60,11 @@ export type DesignPlanApplyAuthorization = {
   input: DesignApplyToolInput;
   plan: DesignPlanToolInput;
   rebaseGuard?: PlannedDesignRebaseGuard;
+  targetIds: string[];
+};
+
+export type DesignPlanAllocation = {
+  input: DesignApplyToolInput;
   targetIds: string[];
 };
 
@@ -379,6 +388,102 @@ export class GlobalTaskCoordinator {
     return result;
   }
 
+  createDesignPlanAllocation(runId: string): DesignPlanAllocation | undefined {
+    const state = this.#designPlansByRunId.get(runId);
+    if (!state) return undefined;
+    const inspection = this.#inspectionsByRunId.get(runId);
+    const targets = state.targetOrder.flatMap((targetId) => {
+      const target = state.targetsById.get(targetId);
+      return target &&
+        target.planned.artboard.mode === "create" &&
+        target.delivery.status === "pending" &&
+        !target.artboardEstablished
+        ? [target]
+        : [];
+    });
+    if (targets.length === 0) return undefined;
+    const pageRootOffsets = new Map<string, number>();
+    return {
+      targetIds: targets.map((target) => target.delivery.targetId),
+      input: {
+        label:
+          targets.length === 1
+            ? `Allocate ${targets[0]?.delivery.label ?? "design"} artboard`
+            : `Allocate ${targets.length} planned artboards`,
+        summary:
+          "Create stable editable Frame roots before material design work begins",
+        commands: targets.map((target) => {
+          const { artboard } = target.planned;
+          const pageId = target.planned.pageId;
+          const index =
+            (inspection?.pageRootsById.get(pageId)?.size ?? 0) +
+            (pageRootOffsets.get(pageId) ?? 0);
+          pageRootOffsets.set(pageId, (pageRootOffsets.get(pageId) ?? 0) + 1);
+          return {
+            commandId: `allocate_${target.delivery.targetId}`,
+            type: "insert_element" as const,
+            pageId: target.planned.pageId,
+            parentId: null,
+            index,
+            node: {
+              id: artboard.frameId,
+              kind: "frame" as const,
+              name: target.delivery.label,
+              parentId: null,
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, artboard.x, artboard.y] as Transform,
+              size: { width: artboard.width, height: artboard.height },
+              opacity: 1,
+              properties: {
+                fills: [
+                  { type: "solid" as const, color: "#ffffff", opacity: 1 },
+                ],
+                strokes: [],
+                strokeWidth: 0,
+                cornerRadius: 0,
+                clipsContent: true,
+              },
+              extensions: {
+                agentTargetId: target.delivery.targetId,
+              },
+            },
+          };
+        }),
+      },
+    };
+  }
+
+  recordDesignPlanAllocated(
+    runId: string,
+    targetIds: readonly string[],
+    revision?: number,
+  ): void {
+    if (!validRevision(revision)) {
+      throw new Error(
+        "design_workflow.allocation_revision_invalid: Artboard allocation did not return a valid document revision",
+      );
+    }
+    const state = this.#designPlansByRunId.get(runId);
+    if (!state) throw new Error("Artboard allocation requires an active plan");
+    for (const targetId of targetIds) {
+      const target = state.targetsById.get(targetId);
+      if (!target || target.delivery.status !== "pending") {
+        throw new Error(
+          `design_workflow.allocation_state_invalid: Delivery target ${targetId} is not pending allocation`,
+        );
+      }
+      target.artboardEstablished = true;
+      target.delivery = {
+        ...target.delivery,
+        status: "allocated",
+        allocatedRevision: revision,
+      };
+    }
+    this.#persistDelivery(runId, state);
+  }
+
   recordDocumentInspection(
     context: TrustedToolContext,
     result: TrustedToolResult,
@@ -407,10 +512,17 @@ export class GlobalTaskCoordinator {
     }
     const state = this.#designPlansByRunId.get(context.runId);
     const target = state ? nextCaptureTarget(state) : undefined;
-    if (!state || !target || target.delivery.status === "pending") {
+    if (
+      !state ||
+      !target ||
+      target.delivery.status === "pending" ||
+      target.delivery.status === "allocated"
+    ) {
       return {
         capturedRevision: observedRevision,
-        nextAction: state ? "write-capture" : "define-plan-write-capture",
+        nextAction: state
+          ? "write-material-content"
+          : "define-plan-write-capture",
         reviewEligible: false,
       };
     }
@@ -533,7 +645,9 @@ export class GlobalTaskCoordinator {
     if (!target) {
       if (
         [...state.targetsById.values()].some(
-          (candidate) => candidate.delivery.status !== "pending",
+          (candidate) =>
+            candidate.delivery.status !== "pending" &&
+            candidate.delivery.status !== "allocated",
         )
       ) {
         throw new Error(
@@ -638,6 +752,7 @@ export class GlobalTaskCoordinator {
         "Design images must be placed inside the planned artboard Frame",
       );
     }
+    assertActiveMaterialTargets(state, [target.delivery.targetId]);
     return state.plan;
   }
 
@@ -658,6 +773,7 @@ export class GlobalTaskCoordinator {
         "Material design commands must target a declared delivery artboard",
       );
     }
+    assertActiveMaterialTargets(state, targetIds);
     const rebaseTargets = targetIds.flatMap((targetId) => {
       const target = state.targetsById.get(targetId);
       if (!target?.artboardEstablished) return [];
@@ -796,7 +912,9 @@ export class GlobalTaskCoordinator {
         "One design operation cannot move or combine layers across delivery artboards",
       );
     }
-    return [...targets];
+    const targetIds = [...targets];
+    assertActiveMaterialTargets(state, targetIds);
+    return targetIds;
   }
 
   resolveMaterialTargetIdsIfPlanned(
@@ -868,6 +986,7 @@ export class GlobalTaskCoordinator {
         pageId: target.delivery.pageId,
         rootNodeId: target.delivery.rootNodeId,
         status: "drafted",
+        allocatedRevision: target.delivery.allocatedRevision ?? revision,
         draftRevision: revision,
       };
     }
@@ -1005,232 +1124,6 @@ export class GlobalTaskCoordinator {
   }
 }
 
-function parseInspectedHierarchy(
-  context: TrustedToolContext,
-  result: TrustedToolResult,
-): InspectedHierarchy {
-  if (!validRevision(result.observedRevision)) {
-    throw new Error(
-      "design_workflow.inspection_invalid: Document inspection did not return a valid observed revision; inspect again",
-    );
-  }
-  const content = recordValue(result.content);
-  const document = recordValue(content?.document);
-  if (
-    !document ||
-    document.documentId !== context.documentId ||
-    document.revision !== result.observedRevision
-  ) {
-    throw new Error(
-      "design_workflow.inspection_invalid: Document inspection identity or revision is invalid; inspect again",
-    );
-  }
-  const rawPages = recordValue(document.pagesById);
-  const rawNodes = recordValue(document.nodesById);
-  if (!rawPages || !rawNodes) {
-    throw new Error(
-      "design_workflow.inspection_invalid: Document inspection hierarchy is missing; inspect again",
-    );
-  }
-  const pageRootsById = new Map<string, Set<string>>();
-  for (const [pageId, value] of Object.entries(rawPages)) {
-    const page = recordValue(value);
-    if (
-      !page ||
-      page.id !== pageId ||
-      !Array.isArray(page.rootNodeIds) ||
-      !page.rootNodeIds.every(safeHierarchyId) ||
-      new Set(page.rootNodeIds).size !== page.rootNodeIds.length
-    ) {
-      throw new Error(
-        "design_workflow.inspection_invalid: Document inspection contains an invalid Page hierarchy; inspect again",
-      );
-    }
-    pageRootsById.set(pageId, new Set(page.rootNodeIds));
-  }
-  const nodesById = new Map<
-    string,
-    {
-      childIds: string[];
-      id: string;
-      kind: string;
-      locked: boolean;
-      parentId: string | null;
-    }
-  >();
-  for (const [nodeId, value] of Object.entries(rawNodes)) {
-    const node = recordValue(value);
-    if (
-      !node ||
-      node.id !== nodeId ||
-      !safeHierarchyId(nodeId) ||
-      typeof node.kind !== "string" ||
-      typeof node.locked !== "boolean" ||
-      !Array.isArray(node.childIds) ||
-      !node.childIds.every(safeHierarchyId) ||
-      new Set(node.childIds).size !== node.childIds.length ||
-      !(
-        node.parentId === null ||
-        (typeof node.parentId === "string" && safeHierarchyId(node.parentId))
-      )
-    ) {
-      throw new Error(
-        "design_workflow.inspection_invalid: Document inspection contains an invalid node hierarchy; inspect again",
-      );
-    }
-    nodesById.set(nodeId, {
-      childIds: [...node.childIds],
-      id: nodeId,
-      kind: node.kind,
-      locked: node.locked,
-      parentId: node.parentId,
-    });
-  }
-  for (const node of nodesById.values()) {
-    if (node.parentId !== null && !nodesById.has(node.parentId)) {
-      throw new Error(
-        `design_workflow.inspection_invalid: Document inspection is missing parent ${node.parentId}; inspect again`,
-      );
-    }
-    for (const childId of node.childIds) {
-      if (nodesById.get(childId)?.parentId !== node.id) {
-        throw new Error(
-          `design_workflow.inspection_invalid: Document inspection contains inconsistent child ${childId}; inspect again`,
-        );
-      }
-    }
-    assertAcyclicInspectedParentChain(nodesById, node.id);
-  }
-  for (const roots of pageRootsById.values()) {
-    for (const rootId of roots) {
-      if (nodesById.get(rootId)?.parentId !== null) {
-        throw new Error(
-          "design_workflow.inspection_invalid: Document inspection contains an invalid Page root; inspect again",
-        );
-      }
-    }
-  }
-  return {
-    documentId: context.documentId,
-    nodesById,
-    pageRootsById,
-    revision: result.observedRevision,
-  };
-}
-
-function assertDeliveryTargetStructure(
-  inspection: InspectedHierarchy,
-  target: DesignDeliveryTargetState,
-): void {
-  const artboardId = target.planned.artboard.frameId;
-  const artboard = inspection.nodesById.get(artboardId);
-  if (
-    !artboard ||
-    artboard.kind !== "frame" ||
-    !inspectedNodeBelongsToPage(inspection, target.planned.pageId, artboardId)
-  ) {
-    throw new Error(
-      `design_workflow.delivery_structure_incomplete: Delivery target ${target.delivery.targetId} requires Frame ${artboardId} on Page ${target.planned.pageId}; inspect the current document and finish that target before capturing again`,
-    );
-  }
-  if (target.planned.artboard.mode === "existing") {
-    if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, artboardId)) {
-      throw new Error(
-        `design_workflow.delivery_structure_incomplete: Existing delivery artboard ${artboardId} has no real editable content; add or refine material layers inside the artboard before capturing again`,
-      );
-    }
-    return;
-  }
-  for (const region of target.planned.composition.regions) {
-    const regionNode = inspection.nodesById.get(region.nodeId);
-    if (
-      !regionNode ||
-      (regionNode.kind !== "group" && regionNode.kind !== "frame") ||
-      regionNode.parentId !== artboardId
-    ) {
-      throw new Error(
-        `design_workflow.delivery_structure_incomplete: Planned region ${region.nodeId} must be a direct Group or Frame child of delivery artboard ${artboardId}; inspect the current document and finish that region before capturing again`,
-      );
-    }
-    if (!inspectedSubtreeHasMaterialNode(inspection.nodesById, region.nodeId)) {
-      throw new Error(
-        `design_workflow.delivery_structure_incomplete: Planned region ${region.nodeId} is empty; add real editable design content before capturing the target again`,
-      );
-    }
-  }
-}
-
-function assertLayoutQualityMatchesCapture(
-  context: TrustedToolContext,
-  target: DesignDeliveryTargetState,
-  observedRevision: number,
-  layoutQuality: DesignLayoutQualityReport,
-): void {
-  if (
-    layoutQuality.documentId !== context.documentId ||
-    layoutQuality.revision !== observedRevision ||
-    layoutQuality.pageId !== target.planned.pageId ||
-    layoutQuality.artboardFrameId !== target.planned.artboard.frameId
-  ) {
-    throw new Error(
-      "design_workflow.layout_quality_unavailable: The deterministic layout-quality report does not match the current delivery document, revision, Page, and Frame; inspect and capture the current target again",
-    );
-  }
-}
-
-function inspectedSubtreeHasMaterialNode(
-  nodesById: InspectedHierarchy["nodesById"],
-  rootId: string,
-): boolean {
-  const pending = [...(nodesById.get(rootId)?.childIds ?? [])];
-  const visited = new Set<string>();
-  while (pending.length > 0) {
-    const nodeId = pending.pop();
-    if (!nodeId || visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    const node = nodesById.get(nodeId);
-    if (!node) continue;
-    if (node.kind !== "group" && node.kind !== "frame") return true;
-    pending.push(...node.childIds);
-  }
-  return false;
-}
-
-function assertAcyclicInspectedParentChain(
-  nodesById: InspectedHierarchy["nodesById"],
-  nodeId: string,
-): void {
-  let current: string | null = nodeId;
-  const visited = new Set<string>();
-  while (current !== null) {
-    if (visited.has(current)) {
-      throw new Error(
-        "design_workflow.inspection_invalid: Document inspection contains a parent cycle; inspect again after repairing the document",
-      );
-    }
-    visited.add(current);
-    current = nodesById.get(current)?.parentId ?? null;
-  }
-}
-
-function recordValue(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function safeHierarchyId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 512 &&
-    ![...value].some((character) => {
-      const codePoint = character.codePointAt(0);
-      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
-    })
-  );
-}
-
 /**
  * The accepted plan owns only the disposable structural intent. When the
  * model materializes one of those stable IDs, Main compiles its parent-local
@@ -1266,53 +1159,82 @@ function resolvePlannedStructureGeometry(
   }
 
   let changed = false;
-  const commands = input.commands.map((command) => {
+  const commands = input.commands.flatMap((command) => {
     if (command.type !== "insert_element") return command;
     const planned = plannedNodes.get(command.node.id);
     if (!planned) return command;
     if (planned.kind === "artboard") {
       if (command.node.kind !== "frame") return command;
+      if (planned.target.artboardEstablished) {
+        changed = true;
+        return [];
+      }
       const { artboard } = planned.target.planned;
       changed = true;
-      return {
-        ...command,
-        pageId: planned.target.planned.pageId,
-        parentId: null,
-        node: {
-          ...command.node,
+      return [
+        {
+          ...command,
+          pageId: planned.target.planned.pageId,
           parentId: null,
-          transform: [1, 0, 0, 1, artboard.x, artboard.y] as Transform,
-          size: { width: artboard.width, height: artboard.height },
+          node: {
+            ...command.node,
+            parentId: null,
+            transform: [1, 0, 0, 1, artboard.x, artboard.y] as Transform,
+            size: { width: artboard.width, height: artboard.height },
+          },
         },
-      };
+      ];
     }
     if (command.node.kind !== "group" && command.node.kind !== "frame") {
       return command;
     }
     changed = true;
-    return {
-      ...command,
-      pageId: planned.target.planned.pageId,
-      parentId: planned.target.planned.artboard.frameId,
-      node: {
-        ...command.node,
+    return [
+      {
+        ...command,
+        pageId: planned.target.planned.pageId,
         parentId: planned.target.planned.artboard.frameId,
-        transform: [
-          1,
-          0,
-          0,
-          1,
-          planned.region.x,
-          planned.region.y,
-        ] as Transform,
-        size: {
-          width: planned.region.width,
-          height: planned.region.height,
+        node: {
+          ...command.node,
+          parentId: planned.target.planned.artboard.frameId,
+          transform: [
+            1,
+            0,
+            0,
+            1,
+            planned.region.x,
+            planned.region.y,
+          ] as Transform,
+          size: {
+            width: planned.region.width,
+            height: planned.region.height,
+          },
         },
       },
-    };
+    ];
   });
-  return changed ? { ...input, commands } : input;
+  if (commands.length === 0) {
+    throw new Error(
+      "design_workflow.material_write_required: The planned artboard Frame is already allocated; add real editable content inside it instead of recreating the Frame",
+    );
+  }
+  if (!changed) return input;
+  const retainedCommandIds = new Set(
+    commands.map((command) => command.commandId),
+  );
+  const steps = input.steps
+    ?.map((step) => ({
+      ...step,
+      commandIds: step.commandIds.filter((commandId) =>
+        retainedCommandIds.has(commandId),
+      ),
+    }))
+    .filter((step) => step.commandIds.length > 0);
+  return {
+    ...input,
+    commands,
+    ...(steps === undefined ? {} : { steps }),
+  };
 }
 
 function registerPlannedNode<T>(
@@ -1756,6 +1678,7 @@ function nextCaptureTarget(
     "captured",
     "reviewed",
     "drafted",
+    "allocated",
     "pending",
   ] as const) {
     const target = firstTargetWithStatus(state, status);
@@ -1770,6 +1693,27 @@ function nextIncompleteTarget(
   return state.targetOrder
     .map((targetId) => state.targetsById.get(targetId))
     .find((target) => target?.delivery.status !== "verified");
+}
+
+function assertActiveMaterialTargets(
+  state: DesignWorkflowState,
+  targetIds: readonly string[],
+): void {
+  if (targetIds.length === 0) return;
+  const active = nextIncompleteTarget(state);
+  if (!active) {
+    throw new Error(
+      "design_workflow.delivery_already_verified: Every planned target is already verified; amend the plan before applying more material changes",
+    );
+  }
+  const unexpected = targetIds.find(
+    (targetId) => targetId !== active.delivery.targetId,
+  );
+  if (unexpected) {
+    throw new Error(
+      `design_workflow.active_target_required: Complete ${active.delivery.label} (${active.delivery.targetId}) before writing target ${unexpected}; work one target at a time so the first usable design appears early`,
+    );
+  }
 }
 
 function deliveryLedger(state: DesignWorkflowState): DesignDeliveryLedger {

@@ -39,7 +39,7 @@ describe("deterministic design target capture", () => {
       documentSnapshot,
       target,
       undefined,
-      createAdapter,
+      { createAdapter },
     );
 
     expect(result.bytes).toEqual(new Uint8Array([4, 5, 6]));
@@ -72,9 +72,92 @@ describe("deterministic design target capture", () => {
         createWelcomeDocument(),
         { kind: "page", pageId: "page_missing" },
         undefined,
-        createAdapter,
+        { createAdapter },
       ),
     ).rejects.toThrow("Capture Page is unavailable");
     expect(createAdapter).not.toHaveBeenCalled();
+  });
+
+  it("bounds a stalled offscreen export and disposes its surface", async () => {
+    const documentSnapshot = createWelcomeDocument();
+    const adapter = {
+      capture: vi.fn(() => new Promise<never>(() => undefined)),
+      dispose: vi.fn(),
+      exportRaster: vi.fn(),
+      finishGenerationPresentation: vi.fn(),
+      retryBooleanGeometry: vi.fn(),
+      setVectorPointMode: vi.fn(),
+      sync: vi.fn(),
+      textLayoutProvider: {
+        id: "test-text-layout",
+        version: "1",
+        measure: vi.fn(),
+      },
+    } satisfies LeaferEngineAdapter;
+
+    await expect(
+      captureDesignTarget(
+        documentSnapshot,
+        {
+          kind: "frame",
+          pageId: "page_welcome",
+          nodeId: "frame_welcome",
+        },
+        undefined,
+        { createAdapter: vi.fn().mockResolvedValue(adapter), timeoutMs: 5 },
+      ),
+    ).rejects.toThrow("design_capture.export_timeout");
+    expect(adapter.dispose).toHaveBeenCalledTimes(1);
+    expect(
+      document.querySelector('[data-capture-surface="design-target"]'),
+    ).toBeNull();
+  });
+
+  it("reports only real capture stage transitions", async () => {
+    const documentSnapshot = createWelcomeDocument();
+    const onStage = vi.fn();
+    const adapter = {
+      capture: vi.fn().mockResolvedValue({
+        bytes: new Uint8Array([1]),
+        height: 10,
+        mimeType: "image/jpeg" as const,
+        width: 10,
+      }),
+      dispose: vi.fn(),
+      exportRaster: vi.fn(),
+      finishGenerationPresentation: vi.fn(),
+      retryBooleanGeometry: vi.fn(),
+      setVectorPointMode: vi.fn(),
+      sync: vi.fn(),
+      textLayoutProvider: {
+        id: "test-text-layout",
+        version: "1",
+        measure: vi.fn(),
+      },
+    } satisfies LeaferEngineAdapter;
+
+    await captureDesignTarget(
+      documentSnapshot,
+      {
+        kind: "frame",
+        pageId: "page_welcome",
+        nodeId: "frame_welcome",
+      },
+      undefined,
+      {
+        createAdapter: vi.fn().mockResolvedValue(adapter),
+        onStage,
+      },
+    );
+
+    expect(
+      onStage.mock.calls.map((call) => call[0] as string | undefined),
+    ).toEqual([
+      "surface-created",
+      "adapter-created",
+      "scene-synced",
+      "export-started",
+      "export-completed",
+    ]);
   });
 });

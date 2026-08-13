@@ -1,5 +1,8 @@
 import { isAgentRequest, type AgentEvent } from "@opendesign/agent-contracts";
-import type { TrustedToolResult } from "@opendesign/agent-runtime";
+import type {
+  ToolCallRequest,
+  TrustedToolResult,
+} from "@opendesign/agent-runtime";
 import { JsonlSessionStore } from "@opendesign/session-store";
 import {
   app,
@@ -63,6 +66,7 @@ import { resolveRendererUrl } from "./renderer-url";
 import {
   isRendererDesignToolProgress,
   isRendererDesignToolResponse,
+  type RendererDesignCaptureTarget,
 } from "../shared/design-tool-bridge";
 import {
   channels,
@@ -1164,199 +1168,220 @@ void app.whenReady().then(async () => {
   agentHost.setModelRequestHandler((request, signal) =>
     requireModelProviderHost().stream(request, signal),
   );
-  agentHost.setDesignToolRequestHandler(async (call, context, signal) => {
-    if (!globalTaskCoordinator) {
-      throw new FatalAgentRunError(
-        "run_services_unavailable",
-        "Global Task services are not initialized",
-      );
-    }
-    try {
-      globalTaskCoordinator.assertDesignToolContext(context);
-    } catch (error) {
-      throw new FatalAgentRunError(
-        "run_context_invalid",
-        error instanceof Error
-          ? error.message
-          : "Design tool Run context is invalid",
-      );
-    }
-    const executionContext =
-      globalTaskCoordinator.resolveExecutionContext(context);
-    if (call.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
-      if (!isPageStructureAccessToolInput(call.input)) {
-        throw new TypeError("Invalid Page structure access input");
+  agentHost.setDesignToolRequestHandler(
+    async (call, context, signal, reportProgress) => {
+      if (!globalTaskCoordinator) {
+        throw new FatalAgentRunError(
+          "run_services_unavailable",
+          "Global Task services are not initialized",
+        );
       }
-      if (!globalTaskCoordinator.hasPageStructureAccess(context.runId)) {
-        throw new Error("Page structure access was not approved for this Run");
+      try {
+        globalTaskCoordinator.assertDesignToolContext(context);
+      } catch (error) {
+        throw new FatalAgentRunError(
+          "run_context_invalid",
+          error instanceof Error
+            ? error.message
+            : "Design tool Run context is invalid",
+        );
       }
-      return {
-        content: {
-          ok: true,
-          capability: "page-structure",
-          scope: "current-design-file",
-          expires: "run-end",
-          actions: call.input.actions,
-        },
-      };
-    }
-    if (call.toolName === DESIGN_PLAN_TOOL_NAME) {
-      return handleDesignPlanTool(globalTaskCoordinator, context, call.input);
-    }
-    if (call.toolName === DESIGN_REVIEW_TOOL_NAME) {
-      if (!isDesignVisualReviewToolInput(call.input)) {
-        throw new TypeError("Invalid visual review tool input");
+      const executionContext =
+        globalTaskCoordinator.resolveExecutionContext(context);
+      const executeRendererTool = (
+        rendererCall: ToolCallRequest,
+        options: { captureTarget?: RendererDesignCaptureTarget } = {},
+      ) =>
+        rendererDesignToolHost.execute(rendererCall, executionContext, signal, {
+          ...options,
+          reportProgress,
+        });
+      if (call.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
+        if (!isPageStructureAccessToolInput(call.input)) {
+          throw new TypeError("Invalid Page structure access input");
+        }
+        if (!globalTaskCoordinator.hasPageStructureAccess(context.runId)) {
+          throw new Error(
+            "Page structure access was not approved for this Run",
+          );
+        }
+        return {
+          content: {
+            ok: true,
+            capability: "page-structure",
+            scope: "current-design-file",
+            expires: "run-end",
+            actions: call.input.actions,
+          },
+        };
       }
-      globalTaskCoordinator.registerVisualReview(context, call.input);
-      return {
-        content: {
-          ok: true,
-          status: "accepted",
-          refinements: call.input.refinements,
-          delivery: globalTaskCoordinator.getDeliveryLedger(context.runId),
-        },
-      };
-    }
-    if (call.toolName === EXPORT_SVG_TOOL_NAME) {
-      if (!isExportSvgToolInput(call.input)) {
-        throw new TypeError("Invalid SVG export tool input");
+      if (call.toolName === DESIGN_PLAN_TOOL_NAME) {
+        return await handleDesignPlanTool(
+          globalTaskCoordinator,
+          rendererDesignToolHost,
+          call,
+          context,
+          executionContext,
+          signal,
+          reportProgress,
+        );
       }
-      globalTaskCoordinator.assertDocumentInspected(context);
-      return await requireAgentSvgExportHost().execute(
-        call,
-        executionContext,
-        signal,
-      );
-    }
-    if (call.toolName === EXPORT_RASTER_TOOL_NAME) {
-      if (!isExportRasterToolInput(call.input)) {
-        throw new TypeError("Invalid raster export tool input");
+      if (call.toolName === DESIGN_REVIEW_TOOL_NAME) {
+        if (!isDesignVisualReviewToolInput(call.input)) {
+          throw new TypeError("Invalid visual review tool input");
+        }
+        globalTaskCoordinator.registerVisualReview(context, call.input);
+        return {
+          content: {
+            ok: true,
+            status: "accepted",
+            refinements: call.input.refinements,
+            delivery: globalTaskCoordinator.getDeliveryLedger(context.runId),
+          },
+        };
       }
-      globalTaskCoordinator.assertDocumentInspected(context);
-      return await requireAgentRasterExportHost().execute(
-        call,
-        executionContext,
-        signal,
-      );
-    }
-    if (call.toolName === IMPORT_SVG_TOOL_NAME) {
-      if (!isImportSvgToolInput(call.input)) {
-        throw new TypeError("Invalid SVG import tool input");
+      if (call.toolName === EXPORT_SVG_TOOL_NAME) {
+        if (!isExportSvgToolInput(call.input)) {
+          throw new TypeError("Invalid SVG export tool input");
+        }
+        globalTaskCoordinator.assertDocumentInspected(context);
+        return await requireAgentSvgExportHost().execute(
+          call,
+          executionContext,
+          signal,
+        );
       }
-      globalTaskCoordinator.assertDocumentInspected(context);
-      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-      const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
-        context,
-        [],
-        call.input.parentId,
-      );
-      const result = await requireAgentSvgImportHost().execute(
-        call,
-        executionContext,
-        signal,
-      );
-      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-        context.runId,
-        targetIds,
-        result.designRevision?.revision,
-        importedNodeIdsFromResult(result),
-      );
-      return withDesignDelivery(result, context.runId);
-    }
-    if (call.toolName === READ_IMAGE_TOOL_NAME) {
-      if (!isReadImageToolInput(call.input)) {
-        throw new TypeError("Invalid read image tool input");
+      if (call.toolName === EXPORT_RASTER_TOOL_NAME) {
+        if (!isExportRasterToolInput(call.input)) {
+          throw new TypeError("Invalid raster export tool input");
+        }
+        globalTaskCoordinator.assertDocumentInspected(context);
+        return await requireAgentRasterExportHost().execute(
+          call,
+          executionContext,
+          signal,
+        );
       }
-      return await requireAgentReferenceHost().readImage(
-        call.input,
-        context,
-        signal,
-      );
-    }
-    if (call.toolName === GENERATE_IMAGE_TOOL_NAME) {
-      if (!isGenerateImageToolInput(call.input)) {
-        throw new TypeError("Invalid generate image tool input");
+      if (call.toolName === IMPORT_SVG_TOOL_NAME) {
+        if (!isImportSvgToolInput(call.input)) {
+          throw new TypeError("Invalid SVG import tool input");
+        }
+        globalTaskCoordinator.assertDocumentInspected(context);
+        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
+          context,
+          [],
+          call.input.parentId,
+        );
+        const result = await requireAgentSvgImportHost().execute(
+          call,
+          executionContext,
+          signal,
+        );
+        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+          context.runId,
+          targetIds,
+          result.designRevision?.revision,
+          importedNodeIdsFromResult(result),
+        );
+        return withDesignDelivery(result, context.runId);
       }
-      globalTaskCoordinator.assertDesignPlanForRaster(context, call.input.role);
-      const generated = await requireImageGenerationHost().generateImage(
-        call.input,
-        signal,
-      );
-      const attachment = await requireAgentAttachmentHost().importImageBytes(
-        `generated-image.${generated.outputFormat}`,
-        generated.bytes,
-      );
-      const authorized = requireAgentReferenceHost().registerGeneratedImage(
-        {
-          attachmentId: attachment.attachmentId,
-          name: attachment.name,
-          mimeType: attachment.mimeType,
-          byteSize: attachment.byteSize,
-        },
-        context,
-      );
-      globalTaskCoordinator.recordGeneratedRaster(
-        context,
-        authorized.attachmentId,
-        call.input.role,
-      );
-      return {
-        content: {
-          ok: true,
-          sourceKind: "generated",
-          apiFormat: generated.apiFormat,
-          modelId: generated.modelId,
-          ...(generated.providerRequestId
-            ? { providerRequestId: generated.providerRequestId }
-            : {}),
-          size: generated.size,
-          quality: generated.quality,
-          role: call.input.role,
-          outputFormat: generated.outputFormat,
-          attachment: authorized,
-          attachments: [authorized],
-        },
-      };
-    }
-    if (call.toolName === PLACE_IMAGE_TOOL_NAME) {
-      if (!isPlaceImageToolInput(call.input)) {
-        throw new TypeError("Invalid place image tool input");
+      if (call.toolName === READ_IMAGE_TOOL_NAME) {
+        if (!isReadImageToolInput(call.input)) {
+          throw new TypeError("Invalid read image tool input");
+        }
+        return await requireAgentReferenceHost().readImage(
+          call.input,
+          context,
+          signal,
+        );
       }
-      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-      globalTaskCoordinator.assertDesignPlanForImagePlacement(
-        context,
-        call.input.role,
-        call.input.parentId,
-        call.input.attachmentId,
-      );
-      const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
-        context,
-        [],
-        call.input.parentId,
-      );
-      const image = await requireAgentReferenceHost().materializeImage(
-        call.input.attachmentId,
-        context,
-      );
-      const intrinsic = nativeImage
-        .createFromBuffer(Buffer.from(image.data, "base64"))
-        .getSize();
-      const intrinsicWidth = Math.max(1, intrinsic.width);
-      const intrinsicHeight = Math.max(1, intrinsic.height);
-      const width =
-        call.input.width ??
-        (call.input.height
-          ? (call.input.height * intrinsicWidth) / intrinsicHeight
-          : intrinsicWidth);
-      const height =
-        call.input.height ??
-        (call.input.width
-          ? (call.input.width * intrinsicHeight) / intrinsicWidth
-          : intrinsicHeight);
-      const digest = image.attachment.attachmentId.slice("image_".length);
-      const assetId = `asset_${digest}`;
-      const result = await rendererDesignToolHost.execute(
-        {
+      if (call.toolName === GENERATE_IMAGE_TOOL_NAME) {
+        if (!isGenerateImageToolInput(call.input)) {
+          throw new TypeError("Invalid generate image tool input");
+        }
+        globalTaskCoordinator.assertDesignPlanForRaster(
+          context,
+          call.input.role,
+        );
+        const generated = await requireImageGenerationHost().generateImage(
+          call.input,
+          signal,
+        );
+        const attachment = await requireAgentAttachmentHost().importImageBytes(
+          `generated-image.${generated.outputFormat}`,
+          generated.bytes,
+        );
+        const authorized = requireAgentReferenceHost().registerGeneratedImage(
+          {
+            attachmentId: attachment.attachmentId,
+            name: attachment.name,
+            mimeType: attachment.mimeType,
+            byteSize: attachment.byteSize,
+          },
+          context,
+        );
+        globalTaskCoordinator.recordGeneratedRaster(
+          context,
+          authorized.attachmentId,
+          call.input.role,
+        );
+        return {
+          content: {
+            ok: true,
+            sourceKind: "generated",
+            apiFormat: generated.apiFormat,
+            modelId: generated.modelId,
+            ...(generated.providerRequestId
+              ? { providerRequestId: generated.providerRequestId }
+              : {}),
+            size: generated.size,
+            quality: generated.quality,
+            role: call.input.role,
+            outputFormat: generated.outputFormat,
+            attachment: authorized,
+            attachments: [authorized],
+          },
+        };
+      }
+      if (call.toolName === PLACE_IMAGE_TOOL_NAME) {
+        if (!isPlaceImageToolInput(call.input)) {
+          throw new TypeError("Invalid place image tool input");
+        }
+        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        globalTaskCoordinator.assertDesignPlanForImagePlacement(
+          context,
+          call.input.role,
+          call.input.parentId,
+          call.input.attachmentId,
+        );
+        const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
+          context,
+          [],
+          call.input.parentId,
+        );
+        const image = await requireAgentReferenceHost().materializeImage(
+          call.input.attachmentId,
+          context,
+        );
+        const intrinsic = nativeImage
+          .createFromBuffer(Buffer.from(image.data, "base64"))
+          .getSize();
+        const intrinsicWidth = Math.max(1, intrinsic.width);
+        const intrinsicHeight = Math.max(1, intrinsic.height);
+        const width =
+          call.input.width ??
+          (call.input.height
+            ? (call.input.height * intrinsicWidth) / intrinsicHeight
+            : intrinsicWidth);
+        const height =
+          call.input.height ??
+          (call.input.width
+            ? (call.input.width * intrinsicHeight) / intrinsicWidth
+            : intrinsicHeight);
+        const digest = image.attachment.attachmentId.slice("image_".length);
+        const assetId = `asset_${digest}`;
+        const result = await executeRendererTool({
           ...call,
           toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
           input: {
@@ -1412,50 +1437,46 @@ void app.whenReady().then(async () => {
               },
             ],
           },
-        },
-        executionContext,
-        signal,
-      );
-      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-        context.runId,
-        targetIds,
-        result.designRevision?.revision,
-        [call.input.nodeId],
-      );
-      return withDesignDelivery(result, context.runId);
-    }
-    if (call.toolName === UPDATE_IMAGE_TOOL_NAME) {
-      if (!isUpdateImageToolInput(call.input)) {
-        throw new TypeError("Invalid update image tool input");
-      }
-      if (
-        executionContext.mutationTarget.kind === "page" &&
-        executionContext.mutationTarget.pageId !== call.input.pageId
-      ) {
-        throw new Error(
-          "Image update targets a Page outside the active mutation target",
+        });
+        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+          context.runId,
+          targetIds,
+          result.designRevision?.revision,
+          [call.input.nodeId],
         );
+        return withDesignDelivery(result, context.runId);
       }
-      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-      const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
-        context,
-        [call.input.nodeId],
-      );
-      if (call.input.action === "replace-source") {
-        const image = await requireAgentReferenceHost().materializeImage(
-          call.input.attachmentId,
-          context,
-        );
-        const intrinsic = nativeImage
-          .createFromBuffer(Buffer.from(image.data, "base64"))
-          .getSize();
-        if (intrinsic.width <= 0 || intrinsic.height <= 0) {
-          throw new TypeError("Replacement image has invalid dimensions");
+      if (call.toolName === UPDATE_IMAGE_TOOL_NAME) {
+        if (!isUpdateImageToolInput(call.input)) {
+          throw new TypeError("Invalid update image tool input");
         }
-        const digest = image.attachment.attachmentId.slice("image_".length);
-        const assetId = `asset_${digest}`;
-        const result = await rendererDesignToolHost.execute(
-          {
+        if (
+          executionContext.mutationTarget.kind === "page" &&
+          executionContext.mutationTarget.pageId !== call.input.pageId
+        ) {
+          throw new Error(
+            "Image update targets a Page outside the active mutation target",
+          );
+        }
+        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
+          context,
+          [call.input.nodeId],
+        );
+        if (call.input.action === "replace-source") {
+          const image = await requireAgentReferenceHost().materializeImage(
+            call.input.attachmentId,
+            context,
+          );
+          const intrinsic = nativeImage
+            .createFromBuffer(Buffer.from(image.data, "base64"))
+            .getSize();
+          if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+            throw new TypeError("Replacement image has invalid dimensions");
+          }
+          const digest = image.attachment.attachmentId.slice("image_".length);
+          const assetId = `asset_${digest}`;
+          const result = await executeRendererTool({
             ...call,
             toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
             input: {
@@ -1479,10 +1500,19 @@ void app.whenReady().then(async () => {
                 ? {}
                 : { placement: call.input.placement }),
             },
-          },
-          executionContext,
-          signal,
-        );
+          });
+          globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+            context.runId,
+            targetIds,
+            result.designRevision?.revision,
+          );
+          return withDesignDelivery(result, context.runId);
+        }
+        const result = await executeRendererTool({
+          ...call,
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: call.input,
+        });
         globalTaskCoordinator.recordMaterialDesignWriteCompleted(
           context.runId,
           targetIds,
@@ -1490,217 +1520,176 @@ void app.whenReady().then(async () => {
         );
         return withDesignDelivery(result, context.runId);
       }
-      const result = await rendererDesignToolHost.execute(
-        {
-          ...call,
-          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
-          input: call.input,
-        },
-        executionContext,
-        signal,
-      );
-      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-        context.runId,
-        targetIds,
-        result.designRevision?.revision,
-      );
-      return withDesignDelivery(result, context.runId);
-    }
-    if (call.toolName === DESIGN_APPLY_TOOL_NAME) {
-      const normalizedInput = normalizeDesignApplyToolInput(call.input);
-      if (!normalizedInput) {
-        throw new TypeError("Invalid design apply tool input");
-      }
-      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-      const authorization = globalTaskCoordinator.assertDesignPlanForApply(
-        context,
-        normalizedInput,
-      );
-      const resolvedInput = authorization?.input ?? normalizedInput;
-      const result = await rendererDesignToolHost.execute(
-        authorization
-          ? {
-              ...call,
-              toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-              input: {
-                ...resolvedInput,
-                ...(authorization.rebaseGuard
-                  ? { rebaseGuard: authorization.rebaseGuard }
-                  : {}),
-              },
-            }
-          : { ...call, input: normalizedInput },
-        executionContext,
-        signal,
-      );
-      globalTaskCoordinator.assertDesignApplyResult(
-        context,
-        authorization,
-        result,
-      );
-      globalTaskCoordinator.recordDesignApplyCompleted(
-        context.runId,
-        resolvedInput,
-        authorization,
-        result.designRevision?.revision,
-      );
-      return withDesignDelivery(result, context.runId);
-    }
-    if (call.toolName === DESIGN_PAGE_TOOL_NAME) {
-      if (!isDesignPageToolInput(call.input)) {
-        throw new TypeError("Invalid Page tool input");
-      }
-      globalTaskCoordinator.assertPageToolAccess(context, call.input);
-      globalTaskCoordinator.assertDocumentInspected(context);
-      return await rendererDesignToolHost.execute(
-        call,
-        executionContext,
-        signal,
-      );
-    }
-    if (call.toolName === DESIGN_COMPONENT_TOOL_NAME) {
-      if (!isDesignComponentToolInput(call.input)) {
-        throw new TypeError("Invalid component tool input");
-      }
-      globalTaskCoordinator.assertComponentToolAccess(context, call.input);
-      globalTaskCoordinator.assertDocumentInspected(context);
-      const materialWrite = componentToolIsMaterialWrite(call.input);
-      if (materialWrite) {
+      if (call.toolName === DESIGN_APPLY_TOOL_NAME) {
+        const normalizedInput = normalizeDesignApplyToolInput(call.input);
+        if (!normalizedInput) {
+          throw new TypeError("Invalid design apply tool input");
+        }
         globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        const authorization = globalTaskCoordinator.assertDesignPlanForApply(
+          context,
+          normalizedInput,
+        );
+        const resolvedInput = authorization?.input ?? normalizedInput;
+        const result = await executeRendererTool(
+          authorization
+            ? {
+                ...call,
+                toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+                input: {
+                  ...resolvedInput,
+                  ...(authorization.rebaseGuard
+                    ? { rebaseGuard: authorization.rebaseGuard }
+                    : {}),
+                },
+              }
+            : { ...call, input: normalizedInput },
+        );
+        globalTaskCoordinator.assertDesignApplyResult(
+          context,
+          authorization,
+          result,
+        );
+        globalTaskCoordinator.recordDesignApplyCompleted(
+          context.runId,
+          resolvedInput,
+          authorization,
+          result.designRevision?.revision,
+        );
+        return withDesignDelivery(result, context.runId);
       }
-      const result = await rendererDesignToolHost.execute(
-        call,
-        executionContext,
-        signal,
-      );
-      if (!materialWrite) return result;
-      const targetRefs = materialTargetRefsForComponentTool(call.input);
-      const targetIds = globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
-        context,
-        targetRefs.nodeIds,
-        targetRefs.parentId,
-      );
-      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-        context.runId,
-        targetIds,
-        result.designRevision?.revision,
-        targetRefs.createdNodeIds,
-      );
-      return withDesignDelivery(result, context.runId);
-    }
-    if (
-      call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
-      call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
-      call.toolName === DESIGN_VECTOR_TOOL_NAME
-    ) {
+      if (call.toolName === DESIGN_PAGE_TOOL_NAME) {
+        if (!isDesignPageToolInput(call.input)) {
+          throw new TypeError("Invalid Page tool input");
+        }
+        globalTaskCoordinator.assertPageToolAccess(context, call.input);
+        globalTaskCoordinator.assertDocumentInspected(context);
+        return await executeRendererTool(call);
+      }
+      if (call.toolName === DESIGN_COMPONENT_TOOL_NAME) {
+        if (!isDesignComponentToolInput(call.input)) {
+          throw new TypeError("Invalid component tool input");
+        }
+        globalTaskCoordinator.assertComponentToolAccess(context, call.input);
+        globalTaskCoordinator.assertDocumentInspected(context);
+        const materialWrite = componentToolIsMaterialWrite(call.input);
+        if (materialWrite) {
+          globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        }
+        const result = await executeRendererTool(call);
+        if (!materialWrite) return result;
+        const targetRefs = materialTargetRefsForComponentTool(call.input);
+        const targetIds =
+          globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
+            context,
+            targetRefs.nodeIds,
+            targetRefs.parentId,
+          );
+        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+          context.runId,
+          targetIds,
+          result.designRevision?.revision,
+          targetRefs.createdNodeIds,
+        );
+        return withDesignDelivery(result, context.runId);
+      }
       if (
-        call.toolName === DESIGN_VECTOR_TOOL_NAME &&
-        !isDesignVectorToolInput(call.input)
+        call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
+        call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
+        call.toolName === DESIGN_VECTOR_TOOL_NAME
       ) {
-        throw new TypeError("Invalid vector edit tool input");
-      }
-      globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-      const targetRefs = materialTargetRefsForStructuredTool(
-        call.input as
-          | DesignHierarchyToolInput
-          | DesignArrangeToolInput
-          | DesignVectorToolInput,
-      );
-      const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
-        context,
-        targetRefs.nodeIds,
-        targetRefs.parentId,
-      );
-      const result = await rendererDesignToolHost.execute(
-        call,
-        executionContext,
-        signal,
-      );
-      globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-        context.runId,
-        targetIds,
-        result.designRevision?.revision,
-        createdNodeIdsForStructuredTool(
+        if (
+          call.toolName === DESIGN_VECTOR_TOOL_NAME &&
+          !isDesignVectorToolInput(call.input)
+        ) {
+          throw new TypeError("Invalid vector edit tool input");
+        }
+        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        const targetRefs = materialTargetRefsForStructuredTool(
           call.input as
             | DesignHierarchyToolInput
             | DesignArrangeToolInput
             | DesignVectorToolInput,
-        ),
-      );
-      return withDesignDelivery(result, context.runId);
-    }
-    if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
-      const captureTarget =
-        globalTaskCoordinator.resolveCanvasCaptureTarget(context);
-      const result = await rendererDesignToolHost.execute(
-        call,
-        executionContext,
-        signal,
-        { captureTarget },
-      );
-      if (!isRecordValue(result.content)) {
-        throw new TypeError(
-          "Canvas capture returned invalid structured content",
         );
+        const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
+          context,
+          targetRefs.nodeIds,
+          targetRefs.parentId,
+        );
+        const result = await executeRendererTool(call);
+        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+          context.runId,
+          targetIds,
+          result.designRevision?.revision,
+          createdNodeIdsForStructuredTool(
+            call.input as
+              | DesignHierarchyToolInput
+              | DesignArrangeToolInput
+              | DesignVectorToolInput,
+          ),
+        );
+        return withDesignDelivery(result, context.runId);
       }
-      const layoutQuality = requireCanvasCaptureLayoutQuality(
-        result,
-        context.documentId,
-        captureTarget,
-      );
-      const inspection = await rendererDesignToolHost.execute(
-        {
+      if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
+        const captureTarget =
+          globalTaskCoordinator.resolveCanvasCaptureTarget(context);
+        const result = await executeRendererTool(call, { captureTarget });
+        if (!isRecordValue(result.content)) {
+          throw new TypeError(
+            "Canvas capture returned invalid structured content",
+          );
+        }
+        const layoutQuality = requireCanvasCaptureLayoutQuality(
+          result,
+          context.documentId,
+          captureTarget,
+        );
+        const inspection = await executeRendererTool({
           toolCallId: `${call.toolCallId}_delivery_inspection`,
           toolName: DESIGN_INSPECT_TOOL_NAME,
           input: {},
-        },
-        executionContext,
-        signal,
-      );
-      globalTaskCoordinator.recordDocumentInspection(context, inspection);
-      if (inspection.observedRevision !== result.observedRevision) {
-        throw new Error(
-          "design_workflow.capture_revision_invalid: The document changed between the rendered capture and its authoritative verification; capture the current target again",
-        );
-      }
-      const reviewWorkflow = globalTaskCoordinator.recordCanvasCapture(
-        context,
-        result.observedRevision,
-        layoutQuality,
-      );
-      return {
-        ...result,
-        content: {
-          ...result.content,
-          captureTarget,
-          reviewWorkflow,
-          delivery: globalTaskCoordinator.getDeliveryLedger(context.runId),
-        },
-      };
-    }
-    const result = await rendererDesignToolHost.execute(
-      call,
-      executionContext,
-      signal,
-    );
-    if (call.toolName === DESIGN_INSPECT_TOOL_NAME) {
-      globalTaskCoordinator.recordDocumentInspection(context, result);
-      const unfinishedDelivery =
-        globalTaskCoordinator.getRecoverableDelivery(context);
-      if (unfinishedDelivery) {
-        if (!isRecordValue(result.content)) {
-          throw new TypeError(
-            "Document inspection must be structured before attaching recovery state",
+        });
+        globalTaskCoordinator.recordDocumentInspection(context, inspection);
+        if (inspection.observedRevision !== result.observedRevision) {
+          throw new Error(
+            "design_workflow.capture_revision_invalid: The document changed between the rendered capture and its authoritative verification; capture the current target again",
           );
         }
+        const reviewWorkflow = globalTaskCoordinator.recordCanvasCapture(
+          context,
+          result.observedRevision,
+          layoutQuality,
+        );
         return {
           ...result,
-          content: { ...result.content, unfinishedDelivery },
+          content: {
+            ...result.content,
+            captureTarget,
+            reviewWorkflow,
+            delivery: globalTaskCoordinator.getDeliveryLedger(context.runId),
+          },
         };
       }
-    }
-    return result;
-  });
+      const result = await executeRendererTool(call);
+      if (call.toolName === DESIGN_INSPECT_TOOL_NAME) {
+        globalTaskCoordinator.recordDocumentInspection(context, result);
+        const unfinishedDelivery =
+          globalTaskCoordinator.getRecoverableDelivery(context);
+        if (unfinishedDelivery) {
+          if (!isRecordValue(result.content)) {
+            throw new TypeError(
+              "Document inspection must be structured before attaching recovery state",
+            );
+          }
+          return {
+            ...result,
+            content: { ...result.content, unfinishedDelivery },
+          };
+        }
+      }
+      return result;
+    },
+  );
   projectHost = new ProjectHost(workspaceStore);
   projectIpc = new ProjectIpcService(
     projectHost,

@@ -5450,11 +5450,12 @@ describe("App", () => {
     });
 
     await vi.waitFor(() => {
-      expect(captureHarness.capture).toHaveBeenCalledWith(
-        current,
-        captureTarget,
-        expect.any(AbortSignal),
-      );
+      expect(captureHarness.capture).toHaveBeenCalledTimes(1);
+      const captureCall = captureHarness.capture.mock.calls[0];
+      expect(captureCall?.[0]).toBe(current);
+      expect(captureCall?.[1]).toEqual(captureTarget);
+      expect(captureCall?.[2]).toBeInstanceOf(AbortSignal);
+      expect(typeof captureCall?.[3]?.onStage).toBe("function");
       expect(leaferHarness.finishGenerationPresentation).not.toHaveBeenCalled();
       expect(window.desktop!.resolveDesignToolRequest).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -126,7 +126,7 @@ function expectBlocked(
 function deliveryResult(profileStatus: "pending" | "verified") {
   return {
     delivery: {
-      version: 1,
+      version: 2,
       targets: [
         {
           targetId: "target_home",
@@ -134,6 +134,7 @@ function deliveryResult(profileStatus: "pending" | "verified") {
           pageId: "page_1",
           rootNodeId: "frame_home",
           status: "verified",
+          allocatedRevision: 5,
           draftRevision: 5,
           captureRevision: 5,
           reviewRevision: 5,
@@ -147,6 +148,7 @@ function deliveryResult(profileStatus: "pending" | "verified") {
               pageId: "page_1",
               rootNodeId: "frame_profile",
               status: "verified",
+              allocatedRevision: 7,
               draftRevision: 7,
               captureRevision: 7,
               reviewRevision: 7,

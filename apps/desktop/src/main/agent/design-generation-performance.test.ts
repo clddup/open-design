@@ -29,7 +29,7 @@ describe("DesignGenerationPerformanceTracker", () => {
       now = baseTime + 10;
       requested(tracker, runId, "plan", DESIGN_PLAN_TOOL_NAME);
       now = baseTime + 100;
-      completed(tracker, runId, "plan", ledger(targetCount, 0, "pending"));
+      completed(tracker, runId, "plan", ledger(targetCount, 0, "allocated"), 1);
 
       tracker.recordModelProvider({
         attemptId: `${runId}_attempt_1`,
@@ -110,13 +110,13 @@ describe("DesignGenerationPerformanceTracker", () => {
         terminal: "completed",
         milestonesMs: {
           T_plan: 100,
-          T0: null,
+          T0: 100,
           T1: 250,
           T2: 600,
           T_all: allFinishedAt - baseTime,
           firstReviewed: 400,
         },
-        unavailable: { T0: "no-allocated-ledger-state" },
+        unavailable: { T0: null },
         provider: {
           attempts: 1,
           completed: 1,
@@ -212,7 +212,7 @@ function ledger(
     (target) => target.status !== "verified",
   );
   return {
-    version: 1,
+    version: 2,
     targets,
     activeTargetId: firstUnverified?.targetId ?? null,
   };
@@ -220,15 +220,24 @@ function ledger(
 
 function revisionsFor(status: DesignDeliveryStatus) {
   if (status === "pending") return {};
-  if (status === "drafted") return { draftRevision: 1 };
+  if (status === "allocated") return { allocatedRevision: 1 };
+  if (status === "drafted") {
+    return { allocatedRevision: 1, draftRevision: 1 };
+  }
   if (status === "captured") {
-    return { draftRevision: 1, captureRevision: 2 };
+    return { allocatedRevision: 1, draftRevision: 1, captureRevision: 2 };
   }
   if (status === "reviewed") {
-    return { draftRevision: 1, captureRevision: 2, reviewRevision: 2 };
+    return {
+      allocatedRevision: 1,
+      draftRevision: 1,
+      captureRevision: 2,
+      reviewRevision: 2,
+    };
   }
   if (status === "refined") {
     return {
+      allocatedRevision: 1,
       draftRevision: 1,
       captureRevision: 2,
       reviewRevision: 2,
@@ -236,6 +245,7 @@ function revisionsFor(status: DesignDeliveryStatus) {
     };
   }
   return {
+    allocatedRevision: 1,
     draftRevision: 1,
     captureRevision: 2,
     reviewRevision: 2,

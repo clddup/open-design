@@ -6,7 +6,14 @@ import {
 export type DesignApplyToolInput = {
   label: string;
   summary?: string;
+  steps?: DesignApplyStep[];
   commands: DesignOperation[];
+};
+
+export type DesignApplyStep = {
+  stepId: string;
+  label: string;
+  commandIds: string[];
 };
 
 export type PlannedDesignRebaseTarget = {
@@ -22,6 +29,7 @@ export type PlannedDesignRebaseGuard = {
 };
 
 export type InternalDesignApplyToolInput = DesignApplyToolInput & {
+  executionMode?: "atomic";
   rebaseGuard?: PlannedDesignRebaseGuard;
 };
 
@@ -40,6 +48,9 @@ export function normalizeDesignApplyToolInput(
   return {
     label: input.label,
     ...(input.summary === undefined ? {} : { summary: input.summary }),
+    ...(input.steps === undefined
+      ? {}
+      : { steps: structuredClone(input.steps) as DesignApplyStep[] }),
     commands,
   };
 }
@@ -89,6 +100,10 @@ function isNormalizedDesignApplyToolInput(
         isDesignOperation(command) &&
         isPermittedApplyOperation(command, internal),
     ) &&
+    validRawDesignApplySteps(input.steps, input.commands) &&
+    (!internal ||
+      input.executionMode === undefined ||
+      input.executionMode === "atomic") &&
     (!internal ||
       input.rebaseGuard === undefined ||
       isPlannedDesignRebaseGuard(input.rebaseGuard))
@@ -101,6 +116,7 @@ function isApplyInputEnvelope(
 ): input is Record<string, unknown> & {
   label: string;
   summary?: string;
+  steps?: unknown;
   commands: unknown[];
 } {
   return (
@@ -113,14 +129,54 @@ function isApplyInputEnvelope(
     Array.isArray(input.commands) &&
     input.commands.length > 0 &&
     input.commands.length <= 1_000 &&
+    validRawDesignApplySteps(input.steps, input.commands) &&
     Object.keys(input).every((key) =>
       [
         "label",
         "summary",
+        "steps",
         "commands",
-        ...(internal ? ["rebaseGuard"] : []),
+        ...(internal ? ["executionMode", "rebaseGuard"] : []),
       ].includes(key),
     )
+  );
+}
+
+function validRawDesignApplySteps(
+  value: unknown,
+  commands: readonly unknown[],
+): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 32) {
+    return false;
+  }
+  const commandIds = commands.map((command) =>
+    isRecord(command) ? command.commandId : undefined,
+  );
+  const flattened: unknown[] = [];
+  const stepIds = new Set<string>();
+  for (const stepValue of value) {
+    if (!isRecord(stepValue)) return false;
+    const stepId = stepValue.stepId;
+    if (
+      !safeId(stepId) ||
+      stepIds.has(stepId) ||
+      typeof stepValue.label !== "string" ||
+      stepValue.label.length === 0 ||
+      stepValue.label.length > 256 ||
+      !Array.isArray(stepValue.commandIds) ||
+      stepValue.commandIds.length === 0 ||
+      !stepValue.commandIds.every(safeId) ||
+      !hasExactKeys(stepValue, ["stepId", "label", "commandIds"])
+    ) {
+      return false;
+    }
+    stepIds.add(stepId);
+    flattened.push(...stepValue.commandIds);
+  }
+  return (
+    flattened.length === commandIds.length &&
+    flattened.every((commandId, index) => commandId === commandIds[index])
   );
 }
 

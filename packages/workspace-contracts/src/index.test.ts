@@ -13,6 +13,8 @@ import {
   WORKSPACE_CONTRACT_VERSION,
   isDesignTarget,
   isDesignDeliveryLedger,
+  normalizeDesignDeliveryLedger,
+  normalizeGlobalTaskProjection,
   isGlobalTaskProjection,
   isNormalizedRelativePath,
   isProjectManifest,
@@ -498,6 +500,7 @@ describe("workspace contract schemas", () => {
           pageId: "page_1",
           rootNodeId: "frame_home",
           status: "refined" as const,
+          allocatedRevision: 1,
           draftRevision: 1,
           captureRevision: 1,
           reviewRevision: 1,
@@ -530,6 +533,7 @@ describe("workspace contract schemas", () => {
           {
             ...delivery.targets[1],
             status: "verified",
+            allocatedRevision: 2,
             draftRevision: 2,
             captureRevision: 2,
             reviewRevision: 2,
@@ -566,6 +570,45 @@ describe("workspace contract schemas", () => {
     ).toBe(false);
     expect(isGlobalTaskProjection({ ...projection, lifecycle: "paused" })).toBe(
       false,
+    );
+  });
+
+  it("upgrades persisted v1 delivery ledgers without accepting them as v2", () => {
+    const legacy = {
+      version: 1,
+      targets: [
+        {
+          targetId: "target_home",
+          label: "Home",
+          pageId: "page_1",
+          rootNodeId: "frame_home",
+          status: "drafted",
+          draftRevision: 3,
+        },
+      ],
+      activeTargetId: "target_home",
+    };
+    expect(isDesignDeliveryLedger(legacy)).toBe(false);
+    expect(normalizeDesignDeliveryLedger(legacy)).toEqual({
+      ...legacy,
+      version: DESIGN_DELIVERY_LEDGER_VERSION,
+      targets: [{ ...legacy.targets[0], allocatedRevision: 3 }],
+    });
+    const projection = {
+      version: WORKSPACE_CONTRACT_VERSION,
+      taskId: "task_legacy",
+      conversationId: "conversation_1",
+      homeProjectId: "project_home",
+      runId: "run_legacy",
+      title: "Legacy task",
+      lifecycle: "interrupted",
+      targetSet: targetSet(),
+      delivery: legacy,
+      createdAt: now,
+      updatedAt: now,
+    };
+    expect(normalizeGlobalTaskProjection(projection)?.delivery).toEqual(
+      normalizeDesignDeliveryLedger(legacy),
     );
   });
 });

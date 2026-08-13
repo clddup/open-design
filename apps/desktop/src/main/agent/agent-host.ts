@@ -28,8 +28,10 @@ import {
   isDesignToolBridgeCancel,
   isDesignToolBridgeRequest,
   isTrustedToolFailure,
+  type DesignToolBridgeProgress,
   type DesignToolBridgeResponse,
 } from "../../shared/design-tool-bridge";
+import { trustedDesignWorkflowFailure } from "./design-workflow-failure";
 
 export interface AgentHostListener {
   (event: AgentEvent): void;
@@ -47,6 +49,7 @@ export interface DesignToolRequestHandler {
     call: ToolCallRequest,
     context: TrustedToolContext,
     signal: AbortSignal,
+    reportProgress: (message: string, progress: number) => void,
   ): Promise<TrustedToolResult>;
 }
 
@@ -478,7 +481,20 @@ export class AgentHost {
     const controller = new AbortController();
     this.#designToolRequests.set(requestId, controller);
     try {
-      const result = await handler(call, context, controller.signal);
+      const result = await handler(
+        call,
+        context,
+        controller.signal,
+        (message, progress) => {
+          if (this.#process !== child || controller.signal.aborted) return;
+          child.postMessage({
+            type: "design-tool.progress",
+            requestId,
+            message,
+            progress,
+          } satisfies DesignToolBridgeProgress);
+        },
+      );
       if (this.#process !== child || controller.signal.aborted) return;
       child.postMessage({
         type: "design-tool.response",
@@ -528,6 +544,10 @@ function trustedToolFailureFromError(error: unknown): TrustedToolFailure {
     isTrustedToolFailure(error.cause)
   ) {
     return error.cause;
+  }
+  if (error instanceof Error) {
+    const workflowFailure = trustedDesignWorkflowFailure(error);
+    if (workflowFailure) return workflowFailure;
   }
   const fatal = error instanceof FatalAgentRunError;
   return {

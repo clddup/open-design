@@ -190,9 +190,11 @@ export function structuredToolFailureDetail(
       ? t("agent.canvasToolFirstResponseTimeoutDetail")
       : code === "renderer_idle_timeout"
         ? t("agent.canvasToolIdleTimeoutDetail")
-        : code === "renderer_total_timeout"
-          ? t("agent.canvasToolTotalTimeoutDetail")
-          : friendlyAgentError(message, t);
+        : code === "renderer_capture_timeout"
+          ? t("agent.canvasToolIdleTimeoutDetail")
+          : code === "renderer_total_timeout"
+            ? t("agent.canvasToolTotalTimeoutDetail")
+            : friendlyAgentError(message, t);
   const issue = details?.issues[0];
   if (!issue) return friendly;
   const target = [
@@ -207,8 +209,13 @@ export function structuredToolFailureDetail(
 }
 
 export function isRecoverableDesignWorkflowFailure(message: string): boolean {
-  return /^design_workflow\.(?:material_write_required|capture_required|capture_revision_invalid|delivery_verification_required|delivery_structure_incomplete):/i.test(
-    message,
+  return (
+    /^design_workflow\.(?:material_write_required|capture_required|capture_revision_invalid|delivery_verification_required|delivery_structure_incomplete|plan_amendment_invalid):/i.test(
+      message,
+    ) ||
+    /^Design command .+ targets content outside every declared delivery artboard/im.test(
+      message,
+    )
   );
 }
 
@@ -235,11 +242,15 @@ export function toolFailureTitle(code: string, t: Translate): string {
   if (code === "renderer_total_timeout") {
     return t("agent.canvasToolLimitReached");
   }
+  if (code === "renderer_capture_timeout") {
+    return t("agent.canvasToolStalled");
+  }
   return t("agent.changeFailed");
 }
 
 export function deliveryStatusKey(status: DesignDeliveryStatus): MessageKey {
   if (status === "pending") return "agent.deliveryPending";
+  if (status === "allocated") return "agent.designPlanReady";
   if (status === "drafted") return "agent.deliveryDrafted";
   if (status === "captured") return "agent.deliveryCaptured";
   if (status === "reviewed") return "agent.deliveryReviewed";

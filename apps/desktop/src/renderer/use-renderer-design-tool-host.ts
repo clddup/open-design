@@ -2,7 +2,10 @@ import { useEffect, useRef } from "react";
 import type { ProjectAutosaveCoordinator } from "./project-autosave";
 import type { WorkspaceRuntime } from "./workspace-runtime";
 import { executeDesignToolRequest } from "./design-tool-execution";
-import { captureDesignTarget } from "./design-capture";
+import {
+  captureDesignTarget,
+  DesignCaptureTimeoutError,
+} from "./design-capture";
 import { reportRendererError } from "./diagnostics";
 
 export function useRendererDesignToolHost(
@@ -29,12 +32,14 @@ export function useRendererDesignToolHost(
       const reportProgress = (
         phase: "accepted" | "applying" | "capturing" | "persisting",
         progress: number,
+        message?: string,
       ) => {
         void desktop
           .reportDesignToolProgress({
             requestId: request.requestId,
             phase,
             progress,
+            ...(message ? { message } : {}),
           })
           .catch(() => undefined);
       };
@@ -62,7 +67,20 @@ export function useRendererDesignToolHost(
                   capturedDocument,
                   request.captureTarget,
                   controller.signal,
+                  {
+                    onStage: (stage) => {
+                      const progress = {
+                        "surface-created": 0.22,
+                        "adapter-created": 0.34,
+                        "scene-synced": 0.48,
+                        "export-started": 0.6,
+                        "export-completed": 0.76,
+                      }[stage];
+                      reportProgress("capturing", progress);
+                    },
+                  },
                 );
+                reportProgress("capturing", 0.82);
                 const selected = await desktop.importAgentAttachments([
                   {
                     name: `OpenDesign ${request.captureTarget.kind} r${capturedDocument.revision}.jpg`,
@@ -77,6 +95,7 @@ export function useRendererDesignToolHost(
                 ) {
                   throw new Error("Canvas preview attachment import failed");
                 }
+                reportProgress("capturing", 0.9);
                 return {
                   attachment: {
                     attachmentId: attachment.attachmentId,
@@ -131,7 +150,10 @@ export function useRendererDesignToolHost(
               ok: false,
               performance: toolPerformance,
               error: {
-                code: "design_tool_execution_failed",
+                code:
+                  error instanceof DesignCaptureTimeoutError
+                    ? "renderer_capture_timeout"
+                    : "design_tool_execution_failed",
                 message,
                 retryable: false,
                 recoverable: true,

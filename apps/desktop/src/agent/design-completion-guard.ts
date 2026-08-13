@@ -172,13 +172,15 @@ function incompleteDeliveryDecision(
   const action =
     target.status === "pending"
       ? `Build the required ${target.label} target inside root Frame ${target.rootNodeId}.`
-      : target.status === "drafted"
-        ? `Capture ${target.label} from its bound Frame and inspect the rendered result.`
-        : target.status === "captured"
-          ? `Record a structured visual review for ${target.label}.`
-          : target.status === "reviewed"
-            ? `Apply a concrete refinement to ${target.label} based on that review.`
-            : `Capture ${target.label} again to verify the refined revision.`;
+      : target.status === "allocated"
+        ? `Add real editable design content inside the allocated root Frame ${target.rootNodeId} for ${target.label}; the empty Frame is not a draft.`
+        : target.status === "drafted"
+          ? `Capture ${target.label} from its bound Frame and inspect the rendered result.`
+          : target.status === "captured"
+            ? `Record a structured visual review for ${target.label}.`
+            : target.status === "reviewed"
+              ? `Apply a concrete refinement to ${target.label} based on that review.`
+              : `Capture ${target.label} again to verify the refined revision.`;
   return {
     allow: false,
     message: `The host delivery ledger is ${progress} verified. ${action} Do not stop or ask the user to send “continue”; complete every declared target in this Run.`,

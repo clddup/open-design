@@ -19,6 +19,8 @@ export type InspectedHierarchy = {
       kind: string;
       locked: boolean;
       parentId: string | null;
+      size: { width: number; height: number };
+      transform: [number, number, number, number, number, number];
     }
   >;
   pageRootsById: Map<string, Set<string>>;
@@ -63,11 +65,12 @@ export function registerDesignWorkflowPlan(options: {
   const targets = designPlanTargets(plan);
   assertUniquePlannedNodeIds(targets);
   if (existing && sameJson(existing.plan, plan)) {
+    const refreshed = refreshEstablishedTargets(existing, inspection);
     return {
       changedTargetIds: [],
       plan: structuredClone(existing.plan),
       planRevision: existing.planRevision,
-      state: existing,
+      state: refreshed,
       status: "unchanged",
     };
   }
@@ -126,17 +129,26 @@ function preserveMaterialTarget(
   inspection: InspectedHierarchy,
   intentChanged: boolean,
 ): DesignDeliveryTargetState {
+  if (current.delivery.status === "allocated") {
+    assertAllocatedArtboardMatchesInspection(inspection, target);
+  }
   const descendants = resolveExistingArtboardDescendants(inspection, target);
-  const delivery = intentChanged
-    ? {
-        targetId: current.delivery.targetId,
-        label: target.label,
-        pageId: current.delivery.pageId,
-        rootNodeId: current.delivery.rootNodeId,
-        status: "drafted" as const,
-        draftRevision: current.lastMaterialWriteRevision ?? inspection.revision,
-      }
-    : { ...structuredClone(current.delivery), label: target.label };
+  const delivery =
+    intentChanged && isMaterialDelivery(current.delivery)
+      ? {
+          targetId: current.delivery.targetId,
+          label: target.label,
+          pageId: current.delivery.pageId,
+          rootNodeId: current.delivery.rootNodeId,
+          status: "drafted" as const,
+          allocatedRevision:
+            current.delivery.allocatedRevision ??
+            current.lastMaterialWriteRevision ??
+            inspection.revision,
+          draftRevision:
+            current.lastMaterialWriteRevision ?? inspection.revision,
+        }
+      : { ...structuredClone(current.delivery), label: target.label };
   return {
     ...current,
     artboardDescendantIds: descendants,
@@ -158,38 +170,53 @@ function createTargetState(
   inspection: InspectedHierarchy,
   recoverableDelivery: DesignDeliveryLedger | undefined,
 ): DesignDeliveryTargetState {
-  if (
-    target.artboard.mode === "create" &&
-    inspection.nodesById.has(target.artboard.frameId)
-  ) {
-    throw new Error(
-      `design_workflow.artboard_already_exists: Planned create target ${target.artboard.frameId} already exists; inspect it as an existing artboard instead`,
-    );
-  }
-  const artboardDescendantIds =
-    target.artboard.mode === "existing"
-      ? resolveExistingArtboardDescendants(inspection, target)
-      : new Set<string>();
+  const inspectedArtboard = inspection.nodesById.get(target.artboard.frameId);
   const recovered = recoverableDelivery?.targets.find(
     (candidate) =>
       candidate.targetId === target.targetId &&
       candidate.pageId === target.pageId &&
       candidate.rootNodeId === target.artboard.frameId,
   );
+  const recoveredAllocation =
+    target.artboard.mode === "create" &&
+    recovered?.allocatedRevision !== undefined;
+  if (recoveredAllocation) {
+    assertAllocatedArtboardMatchesInspection(inspection, target);
+  }
+  const artboardDescendantIds =
+    target.artboard.mode === "existing" || recoveredAllocation
+      ? resolveExistingArtboardDescendants(inspection, target)
+      : new Set<string>();
+  if (
+    target.artboard.mode === "create" &&
+    inspectedArtboard &&
+    !recoveredAllocation
+  ) {
+    throw new Error(
+      `design_workflow.artboard_already_exists: Planned create target ${target.artboard.frameId} already exists without matching allocation evidence; inspect it as an existing artboard instead`,
+    );
+  }
   const delivery = recoverDeliveryTarget(
     target,
     recovered,
     inspection.revision,
-    target.artboard.mode === "existing",
+    target.artboard.mode === "existing" || recoveredAllocation,
+    target.artboard.mode === "existing" &&
+      inspectedSubtreeHasMaterialNode(
+        inspection.nodesById,
+        target.artboard.frameId,
+      ),
   );
   return {
     artboardDescendantIds,
-    artboardEstablished: target.artboard.mode === "existing",
+    artboardEstablished:
+      target.artboard.mode === "existing" || recoveredAllocation,
     captureCount: 0,
     delivery,
     lastCaptureRevision: null,
-    lastMaterialWriteRevision:
-      delivery.status === "drafted" ? (delivery.draftRevision ?? null) : null,
+    lastMaterialWriteRevision: isMaterialDelivery(delivery)
+      ? (delivery.draftRevision ?? null)
+      : null,
     lastReview: null,
     planned: structuredClone(target),
     reviewedCaptureCount: 0,
@@ -332,6 +359,7 @@ function recoverDeliveryTarget(
   recovered: DesignDeliveryTarget | undefined,
   currentRevision: number,
   artboardExists: boolean,
+  artboardHasMaterial: boolean,
 ): DesignDeliveryTarget {
   const pending: DesignDeliveryTarget = {
     targetId: target.targetId,
@@ -340,15 +368,112 @@ function recoverDeliveryTarget(
     rootNodeId: target.artboard.frameId,
     status: "pending",
   };
-  if (!recovered || !artboardExists || recovered.status === "pending")
-    return pending;
+  if (!artboardExists) return pending;
+  if (!recovered || recovered.status === "pending") {
+    if (artboardHasMaterial) {
+      return {
+        ...pending,
+        status: "drafted",
+        allocatedRevision: currentRevision,
+        draftRevision: currentRevision,
+      };
+    }
+    return {
+      ...pending,
+      status: "allocated",
+      allocatedRevision: currentRevision,
+    };
+  }
+  if (recovered.status === "allocated") {
+    return { ...structuredClone(recovered), label: target.label };
+  }
   if (
     recovered.status === "verified" &&
     recovered.verifiedRevision === currentRevision
   ) {
     return { ...structuredClone(recovered), label: target.label };
   }
-  return { ...pending, status: "drafted", draftRevision: currentRevision };
+  return {
+    ...pending,
+    status: "drafted",
+    allocatedRevision: recovered.allocatedRevision ?? currentRevision,
+    draftRevision: currentRevision,
+  };
+}
+
+function inspectedSubtreeHasMaterialNode(
+  nodesById: InspectedHierarchy["nodesById"],
+  rootId: string,
+): boolean {
+  const pending = [...(nodesById.get(rootId)?.childIds ?? [])];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const nodeId = pending.pop();
+    if (!nodeId || visited.has(nodeId)) continue;
+    visited.add(nodeId);
+    const node = nodesById.get(nodeId);
+    if (!node) continue;
+    if (node.kind !== "group" && node.kind !== "frame") return true;
+    pending.push(...node.childIds);
+  }
+  return false;
+}
+
+function isMaterialDelivery(target: DesignDeliveryTarget): boolean {
+  return target.status !== "pending" && target.status !== "allocated";
+}
+
+function refreshEstablishedTargets(
+  existing: DesignWorkflowState,
+  inspection: InspectedHierarchy,
+): DesignWorkflowState {
+  const targetsById = new Map<string, DesignDeliveryTargetState>();
+  for (const targetId of existing.targetOrder) {
+    const current = existing.targetsById.get(targetId);
+    if (!current) continue;
+    if (!current.artboardEstablished) {
+      targetsById.set(targetId, current);
+      continue;
+    }
+    if (current.planned.artboard.mode === "create") {
+      assertAllocatedArtboardMatchesInspection(inspection, current.planned);
+    } else {
+      resolveExistingArtboardDescendants(inspection, current.planned);
+    }
+    targetsById.set(targetId, {
+      ...current,
+      artboardDescendantIds: resolveExistingArtboardDescendants(
+        inspection,
+        current.planned,
+      ),
+    });
+  }
+  return { ...existing, targetsById };
+}
+
+function assertAllocatedArtboardMatchesInspection(
+  inspection: InspectedHierarchy,
+  target: DesignPlanTarget,
+): void {
+  const frame = inspection.nodesById.get(target.artboard.frameId);
+  if (
+    !frame ||
+    frame.kind !== "frame" ||
+    frame.parentId !== null ||
+    !inspection.pageRootsById
+      .get(target.pageId)
+      ?.has(target.artboard.frameId) ||
+    frame.transform[0] !== 1 ||
+    frame.transform[1] !== 0 ||
+    frame.transform[2] !== 0 ||
+    frame.transform[3] !== 1 ||
+    frame.size.width !== target.artboard.width ||
+    frame.size.height !== target.artboard.height
+  ) {
+    throw new Error(
+      `design_workflow.allocated_artboard_invalid: Allocated artboard ${target.artboard.frameId} was deleted, resized, reparented, or structurally changed; inspect and amend the plan before continuing`,
+    );
+  }
 }
 
 function sameJson(left: unknown, right: unknown): boolean {

@@ -851,6 +851,66 @@ describe("WorkspaceStore", () => {
     store.close();
   });
 
+  it("upgrades persisted v1 delivery ledgers when listing global tasks", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-workspace-v1-"));
+    const databasePath = join(root, "workspace.sqlite");
+    const initialized = new WorkspaceStore(databasePath);
+    initialized.close();
+    const database = new DatabaseSync(databasePath);
+    const primaryTarget = designTarget();
+    const legacy = {
+      version: WORKSPACE_CONTRACT_VERSION,
+      taskId: "task_legacy_delivery",
+      conversationId: "conversation_1",
+      homeProjectId: "project_acme",
+      runId: "run_legacy_delivery",
+      title: "Legacy delivery",
+      lifecycle: "interrupted",
+      targetSet: { targets: [primaryTarget], primaryTarget },
+      delivery: {
+        version: 1,
+        targets: [
+          {
+            targetId: "target_home",
+            label: "Home",
+            pageId: primaryTarget.pageId,
+            rootNodeId: "frame_home",
+            status: "drafted",
+            draftRevision: 3,
+          },
+        ],
+        activeTargetId: "target_home",
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+    database
+      .prepare(
+        "INSERT INTO global_tasks(task_id, home_project_id, projection_json, updated_at) VALUES (?, ?, ?, ?)",
+      )
+      .run(
+        legacy.taskId,
+        legacy.homeProjectId,
+        JSON.stringify(legacy),
+        legacy.updatedAt,
+      );
+    database.close();
+
+    const reopened = new WorkspaceStore(databasePath);
+    expect(reopened.listGlobalTasks()[0]?.delivery).toMatchObject({
+      version: 2,
+      targets: [
+        {
+          targetId: "target_home",
+          status: "drafted",
+          allocatedRevision: 3,
+          draftRevision: 3,
+        },
+      ],
+    });
+    reopened.close();
+  });
+
   it("rejects duplicate Conversation creation and implicit Home Project moves", () => {
     const store = new WorkspaceStore(":memory:");
     const conversation: ConversationDescriptor = {

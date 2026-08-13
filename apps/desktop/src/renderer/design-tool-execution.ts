@@ -13,7 +13,6 @@ import type {
   DesignError,
   DesignOperation,
   DesignTransaction,
-  DesignTransactionSuccess,
 } from "@opendesign/design-contracts";
 import {
   componentMainNodeId,
@@ -80,10 +79,8 @@ import type {
 import { runSvgExportInWorker, runSvgImportInWorker } from "./svg-interchange";
 import { exportDesignRaster } from "./raster-export";
 import { normalizeAgentTextContent } from "./agent-text-normalization";
-import {
-  throwIfAgentGenerationAborted,
-  waitForCanvasPaint,
-} from "./agent-generation-timing";
+import { throwIfAgentGenerationAborted } from "./agent-generation-timing";
+import { executeSemanticDesignTransaction } from "./design-transaction-steps";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -104,6 +101,7 @@ type ExecuteDesignToolOptions = {
   onProgress?: (
     phase: RendererDesignToolProgressPhase,
     progress: number,
+    message?: string,
   ) => void;
   onCanvasWait?: (durationMs: number, configuredDelayMs: number) => void;
 };
@@ -1194,13 +1192,14 @@ async function executeDesignToolRequestUnsafe(
   const preview = runtime.preview(transaction);
   if (!preview.ok)
     throw designTransactionToolError(preview.error, transaction.commands);
-  return await applyProgressively(
+  return await executeSemanticDesignTransaction({
     request,
     runtime,
     transaction,
     preview,
-    options,
-  );
+    execution: options,
+    createFailure: designTransactionToolError,
+  });
 }
 
 function normalizeAgentInsertHierarchy(
@@ -1380,140 +1379,6 @@ function assertPageWithinMutationTarget(
       `${operationName} operation targets Page ${pageId} outside the registered page mutation target`,
     );
   }
-}
-
-async function applyProgressively(
-  request: RendererDesignToolRequest,
-  runtime: EditorRuntime,
-  transaction: DesignTransaction,
-  preview: DesignTransactionSuccess,
-  options: ExecuteDesignToolOptions,
-): Promise<RendererDesignToolResponse> {
-  const remainingCommands = [...transaction.commands];
-  const { onCanvasWait, signal, stageDelayMs = 0 } = options;
-  let appliedStages = 0;
-  let lastResult: DesignTransactionSuccess | undefined;
-  try {
-    while (remainingCommands.length > 0) {
-      throwIfAgentGenerationAborted(signal);
-      const currentRevision = runtime.getSnapshot().document.revision;
-      const commands = nextValidProgressiveStage(
-        runtime,
-        transaction,
-        remainingCommands,
-        appliedStages === 0
-          ? transaction.commands.length <= 3
-            ? transaction.commands.length
-            : 1
-          : 3,
-        appliedStages,
-      );
-      const finalStage = commands.length === remainingCommands.length;
-      const onlyStage =
-        appliedStages === 0 &&
-        finalStage &&
-        remainingCommands.length === transaction.commands.length;
-      const result = runtime.apply(
-        {
-          ...transaction,
-          transactionId: onlyStage
-            ? transaction.transactionId
-            : `${transaction.transactionId}_stage_${appliedStages + 1}`,
-          baseRevision: currentRevision,
-          commands,
-        },
-        {
-          historyGroupId: transaction.transactionId,
-          finalizeHistoryGroup: finalStage,
-        },
-      );
-      if (!result.ok) {
-        throw designTransactionToolError(result.error, commands);
-      }
-      appliedStages += 1;
-      lastResult = result;
-      remainingCommands.splice(0, commands.length);
-      options.onProgress?.(
-        "applying",
-        0.1 +
-          0.8 *
-            ((transaction.commands.length - remainingCommands.length) /
-              transaction.commands.length),
-      );
-      if (remainingCommands.length > 0) {
-        await waitForCanvasPaint(signal, stageDelayMs, onCanvasWait);
-      }
-    }
-  } catch (error) {
-    if (appliedStages > 0) {
-      runtime.rollbackHistoryGroup(
-        transaction.transactionId,
-        transaction.actor.id,
-      );
-    }
-    throw error;
-  }
-  if (!lastResult) throw new Error("Design transaction had no visible stages");
-  const changes = {
-    ...preview.changes,
-    toRevision: lastResult.revision.revision,
-  };
-  return {
-    requestId: request.requestId,
-    ok: true,
-    result: {
-      content: {
-        ok: true,
-        label: transaction.label,
-        revision: lastResult.revision.revision,
-        stages: appliedStages,
-        changes,
-        warnings: lastResult.warnings,
-      },
-      designRevision: {
-        previousRevision: transaction.baseRevision,
-        ...(transaction.baseRevision === request.context.revision
-          ? {}
-          : { rebasedFromRevision: request.context.revision }),
-        revision: lastResult.revision.revision,
-        transactionId: transaction.transactionId,
-      },
-    },
-  };
-}
-
-function nextValidProgressiveStage(
-  runtime: EditorRuntime,
-  transaction: DesignTransaction,
-  remainingCommands: readonly DesignOperation[],
-  preferredCommandCount: number,
-  stageIndex: number,
-): DesignOperation[] {
-  const baseRevision = runtime.getSnapshot().document.revision;
-  const firstCandidateSize = Math.min(
-    Math.max(1, preferredCommandCount),
-    remainingCommands.length,
-  );
-  let lastFailure: ReturnType<EditorRuntime["preview"]> | undefined;
-  for (
-    let commandCount = firstCandidateSize;
-    commandCount <= remainingCommands.length;
-    commandCount += 1
-  ) {
-    const commands = remainingCommands.slice(0, commandCount);
-    const candidate = runtime.preview({
-      ...transaction,
-      transactionId: `${transaction.transactionId}_preview_stage_${stageIndex + 1}_${commandCount}`,
-      baseRevision,
-      commands,
-    });
-    if (candidate.ok) return commands;
-    lastFailure = candidate;
-  }
-  if (lastFailure && !lastFailure.ok) {
-    throw designTransactionToolError(lastFailure.error, remainingCommands);
-  }
-  throw new Error("Design transaction has no document-valid visible stage");
 }
 
 class DesignTransactionToolError extends Error {

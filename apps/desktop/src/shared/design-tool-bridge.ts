@@ -26,6 +26,13 @@ export type DesignToolBridgeCancel = {
   requestId: string;
 };
 
+export type DesignToolBridgeProgress = {
+  type: "design-tool.progress";
+  requestId: string;
+  message: string;
+  progress: number;
+};
+
 export type DesignToolBridgeResponse =
   | {
       type: "design-tool.response";
@@ -62,6 +69,7 @@ export type RendererDesignToolProgress = {
   requestId: string;
   phase: RendererDesignToolProgressPhase;
   progress: number;
+  message?: string;
 };
 
 export type RendererDesignToolPerformance = {
@@ -129,6 +137,21 @@ export function isDesignToolBridgeResponse(
     : isTrustedToolFailure(value.error);
 }
 
+export function isDesignToolBridgeProgress(
+  value: unknown,
+): value is DesignToolBridgeProgress {
+  return (
+    record(value) &&
+    value.type === "design-tool.progress" &&
+    safeId(value.requestId) &&
+    safeText(value.message, 2_000) &&
+    boundedProgress(value.progress) &&
+    Object.keys(value).every((key) =>
+      ["type", "requestId", "message", "progress"].includes(key),
+    )
+  );
+}
+
 export function designToolBridgeResponseId(value: unknown): string | null {
   return record(value) &&
     value.type === "design-tool.response" &&
@@ -181,8 +204,18 @@ export function isRendererDesignToolProgress(
     value.progress >= 0 &&
     value.progress <= 1 &&
     Object.keys(value).every((key) =>
-      ["requestId", "phase", "progress"].includes(key),
-    )
+      ["requestId", "phase", "progress", "message"].includes(key),
+    ) &&
+    (value.message === undefined || safeText(value.message, 2_000))
+  );
+}
+
+function boundedProgress(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
   );
 }
 

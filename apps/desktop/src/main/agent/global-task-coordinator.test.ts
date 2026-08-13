@@ -346,6 +346,40 @@ function withDraftedTargets(
   return document;
 }
 
+function withAllocatedTargets(
+  source: DesignDocument,
+  pageId: string,
+  targets: readonly DesignPlanTarget[],
+  revision: number,
+): DesignDocument {
+  const document = structuredClone(source);
+  document.revision = revision;
+  for (const target of targets) {
+    document.pagesById[pageId].rootNodeIds.push(target.artboard.frameId);
+    document.nodesById[target.artboard.frameId] = {
+      id: target.artboard.frameId,
+      kind: "frame",
+      name: target.label,
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, target.artboard.x, target.artboard.y],
+      size: { width: target.artboard.width, height: target.artboard.height },
+      opacity: 1,
+      properties: {
+        fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+      },
+      extensions: { agentTargetId: target.targetId },
+    };
+  }
+  return document;
+}
+
 async function setup() {
   const store = new WorkspaceStore(":memory:");
   const host = new ProjectHost(store);
@@ -582,7 +616,7 @@ describe("GlobalTaskCoordinator", () => {
     coordinator.registerDesignPlan(context, { ...designPlan, pageId });
     expect(coordinator.recordCanvasCapture(context)).toEqual({
       capturedRevision: 0,
-      nextAction: "write-capture",
+      nextAction: "write-material-content",
       reviewEligible: false,
     });
     expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
@@ -988,39 +1022,77 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.registerDesignPlan(context, ambiguousPlan),
     ).toThrow("plan_node_ambiguous");
     coordinator.registerDesignPlan(context, plan);
+    const allocation = coordinator.createDesignPlanAllocation(context.runId);
+    expect(allocation?.targetIds).toEqual(["target_home", "target_profile"]);
+    expect(allocation?.input.commands).toHaveLength(2);
+    coordinator.recordDesignPlanAllocated(
+      context.runId,
+      allocation?.targetIds ?? [],
+      1,
+    );
     expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
       activeTargetId: "target_home",
       targets: [
-        { targetId: "target_home", status: "pending" },
-        { targetId: "target_profile", status: "pending" },
+        {
+          targetId: "target_home",
+          status: "allocated",
+          allocatedRevision: 1,
+        },
+        {
+          targetId: "target_profile",
+          status: "allocated",
+          allocatedRevision: 1,
+        },
       ],
+    });
+    expect(coordinator.recordCanvasCapture(context, 1)).toMatchObject({
+      nextAction: "write-material-content",
+      reviewEligible: false,
     });
 
     const draft = draftTargets(pageId, plan.targets);
+    expect(() => coordinator.assertDesignPlanForApply(context, draft)).toThrow(
+      "design_workflow.active_target_required",
+    );
+    const homeTarget = plan.targets[0];
+    const profileTarget = plan.targets[1];
+    if (!homeTarget || !profileTarget) {
+      throw new Error("Multi-target fixture is incomplete");
+    }
+    const homeDraft = draftTargets(pageId, [homeTarget]);
     const draftAuthorization = coordinator.assertDesignPlanForApply(
       context,
-      draft,
+      homeDraft,
     );
-    expect(draftAuthorization?.targetIds).toEqual([
-      "target_home",
-      "target_profile",
-    ]);
+    expect(draftAuthorization?.targetIds).toEqual(["target_home"]);
+    expect(
+      draftAuthorization?.input.commands.some(
+        (command) =>
+          command.type === "insert_element" &&
+          command.node.id === homeTarget.artboard.frameId,
+      ),
+    ).toBe(false);
     coordinator.recordDesignApplyCompleted(
       context.runId,
-      draft,
+      draftAuthorization?.input ?? homeDraft,
       draftAuthorization,
-      1,
+      2,
     );
     const draftedDocument = withDraftedTargets(
       opened.document,
       pageId,
-      plan.targets,
-      1,
+      [homeTarget],
+      2,
     );
     expect(coordinator.getDeliveryLedger(context.runId)?.targets).toMatchObject(
       [
-        { targetId: "target_home", status: "drafted", draftRevision: 1 },
-        { targetId: "target_profile", status: "drafted", draftRevision: 1 },
+        {
+          targetId: "target_home",
+          status: "drafted",
+          allocatedRevision: 1,
+          draftRevision: 2,
+        },
+        { targetId: "target_profile", status: "allocated" },
       ],
     );
 
@@ -1032,13 +1104,13 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.recordCanvasCapture(
         context,
-        1,
+        2,
         diagnoseDesignTargetLayout(draftedDocument, pageId, "frame_profile"),
       ),
     ).toThrow("design_workflow.layout_quality_unavailable");
     coordinator.recordCanvasCapture(
       context,
-      1,
+      2,
       diagnoseDesignTargetLayout(draftedDocument, pageId, "frame_home"),
     );
     coordinator.registerVisualReview(context, visualReview);
@@ -1061,10 +1133,10 @@ describe("GlobalTaskCoordinator", () => {
       context.runId,
       refineHome,
       homeAuthorization,
-      2,
+      3,
     );
     const homeRefinedDocument = structuredClone(draftedDocument);
-    homeRefinedDocument.revision = 2;
+    homeRefinedDocument.revision = 3;
     coordinator.recordDocumentInspection(
       context,
       inspectionResult(homeRefinedDocument, pageId),
@@ -1086,7 +1158,7 @@ describe("GlobalTaskCoordinator", () => {
     );
     expect(failingHomeQuality.errorCount).toBeGreaterThan(0);
     expect(() =>
-      coordinator.recordCanvasCapture(context, 2, failingHomeQuality),
+      coordinator.recordCanvasCapture(context, 3, failingHomeQuality),
     ).toThrow("design_workflow.layout_quality_failed");
     expect(
       coordinator.getDeliveryLedger(context.runId)?.targets[0]?.status,
@@ -1094,7 +1166,7 @@ describe("GlobalTaskCoordinator", () => {
     expect(
       coordinator.recordCanvasCapture(
         context,
-        2,
+        3,
         diagnoseDesignTargetLayout(homeRefinedDocument, pageId, "frame_home"),
       ),
     ).toMatchObject({
@@ -1106,10 +1178,31 @@ describe("GlobalTaskCoordinator", () => {
     expect(coordinator.resolveCanvasCaptureTarget(context)).toMatchObject({
       nodeId: "frame_profile",
     });
+    const profileDraft = draftTargets(pageId, [profileTarget]);
+    const profileDraftAuthorization = coordinator.assertDesignPlanForApply(
+      context,
+      profileDraft,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      profileDraftAuthorization?.input ?? profileDraft,
+      profileDraftAuthorization,
+      4,
+    );
+    const profileDraftedDocument = withDraftedTargets(
+      opened.document,
+      pageId,
+      plan.targets,
+      4,
+    );
     coordinator.recordCanvasCapture(
       context,
-      2,
-      diagnoseDesignTargetLayout(homeRefinedDocument, pageId, "frame_profile"),
+      4,
+      diagnoseDesignTargetLayout(
+        profileDraftedDocument,
+        pageId,
+        "frame_profile",
+      ),
     );
     coordinator.registerVisualReview(context, visualReview);
     const refineProfile: DesignApplyToolInput = {
@@ -1131,10 +1224,10 @@ describe("GlobalTaskCoordinator", () => {
       context.runId,
       refineProfile,
       profileAuthorization,
-      3,
+      5,
     );
-    const profileRefinedDocument = structuredClone(homeRefinedDocument);
-    profileRefinedDocument.revision = 3;
+    const profileRefinedDocument = structuredClone(profileDraftedDocument);
+    profileRefinedDocument.revision = 5;
     const profileFrame = profileRefinedDocument.nodesById.frame_profile;
     if (profileFrame?.kind !== "frame") {
       throw new Error("Profile Frame fixture is missing");
@@ -1152,7 +1245,7 @@ describe("GlobalTaskCoordinator", () => {
     expect(profileQuality.errorCount).toBe(0);
     expect(profileQuality.warningCount).toBeGreaterThan(0);
     expect(
-      coordinator.recordCanvasCapture(context, 3, profileQuality),
+      coordinator.recordCanvasCapture(context, 5, profileQuality),
     ).toMatchObject({
       deliveryTargetId: "target_profile",
       nextAction: "complete-delivery",
@@ -1161,11 +1254,11 @@ describe("GlobalTaskCoordinator", () => {
     expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
       activeTargetId: null,
       targets: [
-        { targetId: "target_home", status: "verified", verifiedRevision: 2 },
+        { targetId: "target_home", status: "verified", verifiedRevision: 3 },
         {
           targetId: "target_profile",
           status: "verified",
-          verifiedRevision: 3,
+          verifiedRevision: 5,
         },
       ],
     });
@@ -1475,7 +1568,7 @@ describe("GlobalTaskCoordinator", () => {
       ...interrupted,
       lifecycle: "interrupted",
       delivery: {
-        version: 1,
+        version: 2,
         targets: [
           {
             targetId: "target_home",
@@ -1483,6 +1576,7 @@ describe("GlobalTaskCoordinator", () => {
             pageId,
             rootNodeId: "frame_home",
             status: "verified",
+            allocatedRevision: 1,
             draftRevision: 1,
             captureRevision: 1,
             reviewRevision: 1,
@@ -1495,6 +1589,7 @@ describe("GlobalTaskCoordinator", () => {
             pageId,
             rootNodeId: "frame_profile",
             status: "drafted",
+            allocatedRevision: 1,
             draftRevision: 2,
           },
         ],
@@ -1753,7 +1848,7 @@ describe("GlobalTaskCoordinator", () => {
         "hero",
         "existing_nested_frame",
       ),
-    ).not.toThrow();
+    ).toThrow("design_workflow.delivery_already_verified");
     expect(() =>
       coordinator.assertDesignPlanForApply(
         contextAtRevision2,
@@ -1826,6 +1921,93 @@ describe("GlobalTaskCoordinator", () => {
     expect(() =>
       coordinator.registerDesignPlan(currentContext, existingPlan),
     ).not.toThrow();
+
+    store.close();
+  });
+
+  it("continues an allocated target after translation but rejects structural drift", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_allocated_recovery",
+      sessionId: "conversation_mobile",
+      prompt: "Design Home",
+      documentId: file.documentId,
+      revision: 0,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_allocated_recovery",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: 0,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const source = multiTargetPlan(pageId);
+    const home = source.targets[0];
+    if (!home) throw new Error("Home target is missing");
+    const plan: DesignPlanToolInputV3 = {
+      ...source,
+      objective: "Design Home",
+      targets: [home],
+    };
+    coordinator.registerDesignPlan(context, plan);
+    coordinator.recordDesignPlanAllocated(context.runId, [home.targetId], 1);
+
+    const translated = withAllocatedTargets(opened.document, pageId, [home], 1);
+    const frame = translated.nodesById[home.artboard.frameId];
+    if (frame?.kind !== "frame") throw new Error("Allocated Frame is missing");
+    frame.transform = [1, 0, 0, 1, home.artboard.x + 200, home.artboard.y + 80];
+    const translatedContext = { ...context, revision: 1 };
+    coordinator.handleAgentEvent({
+      type: "tool.completed",
+      runId: context.runId,
+      toolCallId: "allocation_revision",
+      result: { ok: true },
+      revision: 1,
+    });
+    coordinator.recordDocumentInspection(
+      translatedContext,
+      inspectionResult(translated, pageId),
+    );
+    expect(() =>
+      coordinator.registerDesignPlan(translatedContext, plan),
+    ).not.toThrow();
+
+    const resized = structuredClone(translated);
+    const resizedFrame = resized.nodesById[home.artboard.frameId];
+    if (resizedFrame?.kind !== "frame") {
+      throw new Error("Allocated Frame is missing");
+    }
+    resizedFrame.size.width += 1;
+    coordinator.recordDocumentInspection(
+      translatedContext,
+      inspectionResult(resized, pageId),
+    );
+    expect(() =>
+      coordinator.registerDesignPlan(translatedContext, plan),
+    ).toThrow("design_workflow.allocated_artboard_invalid");
+
+    const deleted = structuredClone(translated);
+    delete deleted.nodesById[home.artboard.frameId];
+    deleted.pagesById[pageId].rootNodeIds = deleted.pagesById[
+      pageId
+    ].rootNodeIds.filter((nodeId) => nodeId !== home.artboard.frameId);
+    coordinator.recordDocumentInspection(
+      translatedContext,
+      inspectionResult(deleted, pageId),
+    );
+    expect(() =>
+      coordinator.registerDesignPlan(translatedContext, plan),
+    ).toThrow("design_workflow.allocated_artboard_invalid");
 
     store.close();
   });

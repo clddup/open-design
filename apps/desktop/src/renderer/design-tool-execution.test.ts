@@ -1827,6 +1827,14 @@ describe("Renderer design tool scope", () => {
   it("renders a large tool transaction in visible stages with one undo entry", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const onCanvasWait = vi.fn();
+    const onProgress =
+      vi.fn<
+        (
+          phase: "accepted" | "applying" | "capturing" | "persisting",
+          progress: number,
+          message?: string,
+        ) => void
+      >();
     const response = executeDesignToolRequest(
       {
         requestId: "apply_progressive",
@@ -1835,6 +1843,22 @@ describe("Renderer design tool scope", () => {
           toolName: "opendesign_apply_transaction",
           input: {
             label: "Refine selected card progressively",
+            steps: [
+              {
+                stepId: "structure",
+                label: "Update card structure",
+                commandIds: ["progressive_name_first"],
+              },
+              {
+                stepId: "finish",
+                label: "Finish card treatment",
+                commandIds: [
+                  "progressive_opacity",
+                  "progressive_size",
+                  "progressive_name_final",
+                ],
+              },
+            ],
             commands: [
               {
                 commandId: "progressive_name_first",
@@ -1867,7 +1891,7 @@ describe("Renderer design tool scope", () => {
       },
       runtime,
       "page_welcome",
-      { onCanvasWait },
+      { onCanvasWait, onProgress },
     );
 
     expect(runtime.getSnapshot().document.revision).toBe(1);
@@ -1879,7 +1903,22 @@ describe("Renderer design tool scope", () => {
     expect(completed).toMatchObject({
       ok: true,
       result: {
-        content: { revision: 2, stages: 2 },
+        content: {
+          revision: 2,
+          stages: 2,
+          committedSteps: [
+            {
+              stepIds: ["structure"],
+              label: "Update card structure",
+              revision: 1,
+            },
+            {
+              stepIds: ["finish"],
+              label: "Finish card treatment",
+              revision: 2,
+            },
+          ],
+        },
         designRevision: { previousRevision: 0, revision: 2 },
       },
     });
@@ -1890,11 +1929,97 @@ describe("Renderer design tool scope", () => {
     expect(onCanvasWait).toHaveBeenCalledTimes(1);
     expect(onCanvasWait.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(0);
     expect(onCanvasWait.mock.calls[0]?.[1]).toBe(0);
+    const progressMessages = onProgress.mock.calls.flatMap((call) =>
+      call[2] === undefined ? [] : [call[2]],
+    );
+    expect(progressMessages).toEqual([
+      "设计步骤：Update card structure · r1",
+      "设计步骤：Finish card treatment · r2",
+    ]);
 
     expect(runtime.undo().ok).toBe(true);
     expect(runtime.getSnapshot().document.nodesById.feature_one?.name).toBe(
       "Structured editing",
     );
+  });
+
+  it("allocates many real artboard roots atomically in one revision and undo entry", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const base = runtime.getSnapshot().document;
+    const targets = Array.from({ length: 12 }, (_, index) => ({
+      frameId: `allocated_frame_${index + 1}`,
+      x: 1_280 + (index % 4) * 420,
+      y: Math.floor(index / 4) * 900,
+    }));
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "allocate_12_artboards",
+        call: {
+          toolCallId: "tool_allocate_12_artboards",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+          input: {
+            label: "Allocate 12 planned artboards",
+            executionMode: "atomic",
+            commands: targets.map((target, index) => ({
+              commandId: `allocate_${target.frameId}`,
+              type: "insert_element" as const,
+              pageId: "page_welcome",
+              parentId: null,
+              index: base.pagesById.page_welcome.rootNodeIds.length + index,
+              node: {
+                id: target.frameId,
+                kind: "frame" as const,
+                name: `Screen ${index + 1}`,
+                parentId: null,
+                childIds: [],
+                visible: true,
+                locked: false,
+                transform: [1, 0, 0, 1, target.x, target.y] as const,
+                size: { width: 390, height: 844 },
+                opacity: 1,
+                properties: {
+                  fills: [
+                    { type: "solid" as const, color: "#ffffff", opacity: 1 },
+                  ],
+                  strokes: [],
+                  strokeWidth: 0,
+                  cornerRadius: 0,
+                  clipsContent: true,
+                },
+                extensions: { agentTargetId: `target_${index + 1}` },
+              },
+            })),
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: { revision: 1, stages: 1 },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    const allocated = runtime.getSnapshot();
+    expect(allocated.state.history.undo).toHaveLength(1);
+    expect(
+      targets.every(
+        (target) =>
+          allocated.document.nodesById[target.frameId]?.kind === "frame",
+      ),
+    ).toBe(true);
+    expect(runtime.undo()).toMatchObject({ ok: true });
+    expect(
+      targets.every(
+        (target) =>
+          runtime.getSnapshot().document.nodesById[target.frameId] ===
+          undefined,
+      ),
+    ).toBe(true);
   });
 
   it("keeps invariant-dependent commands together in a document-valid stage", async () => {
@@ -1958,6 +2083,22 @@ describe("Renderer design tool scope", () => {
           toolName: "opendesign_apply_transaction",
           input: {
             label: "Cancelled card refinement",
+            steps: [
+              {
+                stepId: "temporary",
+                label: "Apply temporary card structure",
+                commandIds: ["cancelled_name_first"],
+              },
+              {
+                stepId: "finish",
+                label: "Finish cancelled treatment",
+                commandIds: [
+                  "cancelled_opacity",
+                  "cancelled_size",
+                  "cancelled_name_final",
+                ],
+              },
+            ],
             commands: [
               {
                 commandId: "cancelled_name_first",

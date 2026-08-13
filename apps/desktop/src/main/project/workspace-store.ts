@@ -7,6 +7,7 @@ import {
   isConversationDescriptor,
   isGlobalTaskProjection,
   isRootGrant,
+  normalizeGlobalTaskProjection,
 } from "@opendesign/workspace-contracts";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -379,7 +380,7 @@ export class WorkspaceStore {
         `,
       )
       .all() as Array<{ descriptor_json: string }>;
-    return parseRows(rows, isGlobalTaskProjection);
+    return parseMappedRows(rows, normalizeGlobalTaskProjection);
   }
 
   close(): void {
@@ -431,6 +432,20 @@ function parseRows<T>(
     try {
       const value: unknown = JSON.parse(row.descriptor_json);
       return guard(value) ? [value] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function parseMappedRows<T>(
+  rows: Array<{ descriptor_json: string }>,
+  parse: (value: unknown) => T | null,
+): T[] {
+  return rows.flatMap((row) => {
+    try {
+      const parsed = parse(JSON.parse(row.descriptor_json));
+      return parsed === null ? [] : [parsed];
     } catch {
       return [];
     }

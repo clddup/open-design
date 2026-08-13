@@ -80,6 +80,54 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
   });
 
+  it("requires semantic steps to cover commands exactly once in order", () => {
+    const input = {
+      label: "Build navigation and hero",
+      steps: [
+        {
+          stepId: "navigation",
+          label: "Build navigation",
+          commandIds: ["insert_navigation"],
+        },
+        {
+          stepId: "hero",
+          label: "Build hero",
+          commandIds: ["insert_hero"],
+        },
+      ],
+      commands: [
+        {
+          commandId: "insert_navigation",
+          type: "update_properties",
+          nodeId: "navigation",
+          opacity: 0.9,
+        },
+        {
+          commandId: "insert_hero",
+          type: "update_properties",
+          nodeId: "hero",
+          opacity: 0.95,
+        },
+      ],
+    };
+    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(normalizeDesignApplyToolInput(input)?.steps).toEqual(input.steps);
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        steps: [input.steps[1], input.steps[0]],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        ...input,
+        steps: [input.steps[0]],
+      }),
+    ).toBe(false);
+  });
+
   it("exposes a path-free versioned raster delivery tool with format-specific validation", () => {
     const tool = DESIGN_AGENT_TOOL_SPECS.find(
       (candidate) => candidate.name === EXPORT_RASTER_TOOL_NAME,
@@ -423,7 +471,7 @@ describe("design Agent tool contract", () => {
       DESIGN_AGENT_TOOL_SPECS.find(
         (tool) => tool.name === DESIGN_PLAN_TOOL_NAME,
       ),
-    ).toMatchObject({ risk: "read", approval: "never" });
+    ).toMatchObject({ risk: "design_write", approval: "never" });
     expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, plan)).toBe(
       true,
     );

@@ -22,6 +22,7 @@ type PendingRequest = {
   idleTimeout?: ReturnType<typeof setTimeout>;
   phaseDurationMs: Record<RendererDesignToolProgress["phase"], number>;
   phaseProgressEvents: Record<RendererDesignToolProgress["phase"], number>;
+  reportProgress?: (message: string, progress: number) => void;
   reject: (error: Error) => void;
   resolve: (result: TrustedToolResult) => void;
   startedAt: number;
@@ -79,7 +80,10 @@ export class RendererDesignToolHost {
     call: ToolCallRequest,
     context: TrustedToolContext,
     signal: AbortSignal,
-    options: { captureTarget?: RendererDesignCaptureTarget } = {},
+    options: {
+      captureTarget?: RendererDesignCaptureTarget;
+      reportProgress?: (message: string, progress: number) => void;
+    } = {},
   ): Promise<TrustedToolResult> {
     const requestId = `renderer_tool_${Date.now()}_${++this.#sequence}`;
     return new Promise((resolve, reject) => {
@@ -128,6 +132,9 @@ export class RendererDesignToolHost {
         firstResponseMs: null,
         phaseDurationMs: emptyPhaseNumbers(),
         phaseProgressEvents: emptyPhaseNumbers(),
+        ...(options.reportProgress
+          ? { reportProgress: options.reportProgress }
+          : {}),
         startedAt: Date.now(),
         toolCallId: call.toolCallId,
         toolName: call.toolName,
@@ -156,6 +163,9 @@ export class RendererDesignToolHost {
     const observedAt = Date.now();
     pending.firstResponseMs ??= observedAt - pending.startedAt;
     pending.phaseProgressEvents[progress.phase] += 1;
+    if (progress.message) {
+      pending.reportProgress?.(progress.message, progress.progress);
+    }
     if (pending.currentPhase !== progress.phase) {
       finishCurrentPhase(pending, observedAt);
       pending.currentPhase = progress.phase;

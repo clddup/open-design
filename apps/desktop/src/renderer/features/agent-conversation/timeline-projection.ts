@@ -40,6 +40,7 @@ export function projectAgentTimeline({
   t,
 }: AgentTimelineProjectionInput): AgentTimelineItem[] {
   const durable = projectDurableTimeline(timeline, activeRunId, locale, t);
+  durable.push(...projectDurableDesignSteps(timeline));
   const runOrder = new Map<string, number>();
   const recordRun = (runId: string | undefined) => {
     if (runId && !runOrder.has(runId)) runOrder.set(runId, runOrder.size);
@@ -551,15 +552,31 @@ function projectLiveEvents(
     }
     if (event.type === "tool.progress") {
       const existing = items.get(`tool:${event.toolCallId}`);
+      const committedDesignStep = event.message.startsWith("设计步骤：")
+        ? event.message.slice("设计步骤：".length)
+        : undefined;
       updateEvent(`tool:${event.toolCallId}`, {
         state: "active",
         kind: "tool",
         time: `${Math.round(event.progress * 100)}%`,
         title: existing?.title ?? t("agent.applyingChange"),
-        detail: isNativeDesignTool(existing?.toolName)
-          ? undefined
-          : friendlyAgentError(event.message, t),
+        detail: committedDesignStep
+          ? committedDesignStep
+          : isNativeDesignTool(existing?.toolName)
+            ? undefined
+            : friendlyAgentError(event.message, t),
       });
+      if (committedDesignStep) {
+        const parsed = parseCommittedDesignStep(committedDesignStep);
+        if (parsed) {
+          updateEvent(`design-step:${event.toolCallId}:${parsed.revision}`, {
+            state: "done",
+            kind: "system",
+            time: `r${parsed.revision}`,
+            title: parsed.label,
+          });
+        }
+      }
     }
     if (event.type === "tool.completed") {
       const existing = items.get(`tool:${event.toolCallId}`);
@@ -652,6 +669,52 @@ function projectLiveEvents(
     }
   });
   return [...items.values()];
+}
+
+function projectDurableDesignSteps(
+  timeline: readonly SessionTimelineItem[],
+): AgentTimelineItem[] {
+  return timeline.flatMap((item) => {
+    if (item.type !== "tool" || item.status !== "completed") return [];
+    const steps = committedStepsFromResult(item.result);
+    return steps.map((step, index) => ({
+      id: `design-step:${item.toolCallId}:${step.revision}`,
+      ...(item.runId ? { runId: item.runId } : {}),
+      order: item.sequence + (index + 1) / (steps.length + 1),
+      state: "done" as const,
+      kind: "system" as const,
+      time: `r${step.revision}`,
+      title: step.label,
+    }));
+  });
+}
+
+function committedStepsFromResult(
+  value: unknown,
+): Array<{ label: string; revision: number }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const steps = (value as { committedSteps?: unknown }).committedSteps;
+  if (!Array.isArray(steps) || steps.length > 32) return [];
+  return steps.flatMap((step) => {
+    if (!step || typeof step !== "object" || Array.isArray(step)) return [];
+    const candidate = step as { label?: unknown; revision?: unknown };
+    return typeof candidate.label === "string" &&
+      candidate.label.length > 0 &&
+      candidate.label.length <= 512 &&
+      Number.isSafeInteger(candidate.revision) &&
+      Number(candidate.revision) >= 0
+      ? [{ label: candidate.label, revision: Number(candidate.revision) }]
+      : [];
+  });
+}
+
+function parseCommittedDesignStep(
+  value: string,
+): { label: string; revision: number } | null {
+  const match = /^(.*) · r(\d+)$/.exec(value);
+  if (!match?.[1] || match[1].length > 512) return null;
+  const revision = Number(match[2]);
+  return Number.isSafeInteger(revision) ? { label: match[1], revision } : null;
 }
 
 function deliveryFromResult(value: unknown): DesignDeliveryLedger | undefined {

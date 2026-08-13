@@ -3,7 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 
 export const WORKSPACE_CONTRACT_VERSION = 1 as const;
 export const PROJECT_MANIFEST_VERSION = "1.0.0" as const;
-export const DESIGN_DELIVERY_LEDGER_VERSION = 1 as const;
+export const DESIGN_DELIVERY_LEDGER_VERSION = 2 as const;
 export const MAX_PROJECT_DESIGN_FILES = 4_096;
 export const MAX_DESIGN_TARGETS = 128;
 export const MAX_SELECTED_NODE_IDS = 512;
@@ -78,6 +78,7 @@ export const GlobalTaskLifecycleSchema = Type.Union([
 
 export const DesignDeliveryStatusSchema = Type.Union([
   Type.Literal("pending"),
+  Type.Literal("allocated"),
   Type.Literal("drafted"),
   Type.Literal("captured"),
   Type.Literal("reviewed"),
@@ -92,6 +93,7 @@ export const DesignDeliveryTargetSchema = Type.Object(
     pageId: StableIdSchema,
     rootNodeId: StableIdSchema,
     status: DesignDeliveryStatusSchema,
+    allocatedRevision: Type.Optional(Type.Integer({ minimum: 0 })),
     draftRevision: Type.Optional(Type.Integer({ minimum: 0 })),
     captureRevision: Type.Optional(Type.Integer({ minimum: 0 })),
     reviewRevision: Type.Optional(Type.Integer({ minimum: 0 })),
@@ -597,6 +599,7 @@ export function isDesignDeliveryLedger(
 
 function hasValidDeliveryRevisions(target: DesignDeliveryTarget): boolean {
   const ordered = [
+    target.allocatedRevision,
     target.draftRevision,
     target.captureRevision,
     target.reviewRevision,
@@ -606,15 +609,17 @@ function hasValidDeliveryRevisions(target: DesignDeliveryTarget): boolean {
   const requiredCount =
     target.status === "pending"
       ? 0
-      : target.status === "drafted"
+      : target.status === "allocated"
         ? 1
-        : target.status === "captured"
+        : target.status === "drafted"
           ? 2
-          : target.status === "reviewed"
+          : target.status === "captured"
             ? 3
-            : target.status === "refined"
+            : target.status === "reviewed"
               ? 4
-              : 5;
+              : target.status === "refined"
+                ? 5
+                : 6;
   if (
     ordered.slice(0, requiredCount).some((revision) => revision === undefined)
   ) {
@@ -627,6 +632,61 @@ function hasValidDeliveryRevisions(target: DesignDeliveryTarget): boolean {
   return revisions.every(
     (revision, index) => index === 0 || revision >= (revisions[index - 1] ?? 0),
   );
+}
+
+/** Upgrade persisted v1 delivery ledgers without treating them as current. */
+export function normalizeDesignDeliveryLedger(
+  value: unknown,
+): DesignDeliveryLedger | null {
+  if (isDesignDeliveryLedger(value)) return structuredClone(value);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    (value as { version?: unknown }).version !== 1
+  ) {
+    return null;
+  }
+  const raw = value as Record<string, unknown>;
+  const rawTargets: unknown[] | undefined = Array.isArray(raw.targets)
+    ? (raw.targets as unknown[])
+    : undefined;
+  const targets = rawTargets
+    ? rawTargets.map((target) => {
+        if (
+          typeof target !== "object" ||
+          target === null ||
+          Array.isArray(target)
+        ) {
+          return target;
+        }
+        const rawTarget = target as Record<string, unknown>;
+        return rawTarget.status === "pending"
+          ? { ...rawTarget }
+          : { ...rawTarget, allocatedRevision: rawTarget.draftRevision };
+      })
+    : raw.targets;
+  const candidate = {
+    ...raw,
+    version: DESIGN_DELIVERY_LEDGER_VERSION,
+    targets,
+  };
+  return isDesignDeliveryLedger(candidate) ? structuredClone(candidate) : null;
+}
+
+/** Upgrade a persisted task projection after validating the complete result. */
+export function normalizeGlobalTaskProjection(
+  value: unknown,
+): GlobalTaskProjection | null {
+  if (isGlobalTaskProjection(value)) return structuredClone(value);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const raw = value as Record<string, unknown>;
+  const delivery = normalizeDesignDeliveryLedger(raw.delivery);
+  if (!delivery) return null;
+  const candidate = { ...raw, delivery };
+  return isGlobalTaskProjection(candidate) ? structuredClone(candidate) : null;
 }
 
 function equalDesignTargets(left: DesignTarget, right: DesignTarget): boolean {

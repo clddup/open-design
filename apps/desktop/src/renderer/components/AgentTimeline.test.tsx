@@ -47,7 +47,7 @@ describe("AgentTimeline", () => {
         status: "completed",
         result: {
           delivery: {
-            version: 1,
+            version: 2,
             targets: [
               {
                 targetId: "target_home",
@@ -55,6 +55,7 @@ describe("AgentTimeline", () => {
                 pageId: "page_1",
                 rootNodeId: "frame_home",
                 status: "verified",
+                allocatedRevision: 1,
                 draftRevision: 1,
                 captureRevision: 1,
                 reviewRevision: 1,
@@ -113,7 +114,7 @@ describe("AgentTimeline", () => {
         status: "completed",
         result: {
           delivery: {
-            version: 1,
+            version: 2,
             targets: [
               {
                 targetId: "target_previous",
@@ -121,6 +122,7 @@ describe("AgentTimeline", () => {
                 pageId: "page_1",
                 rootNodeId: "frame_previous",
                 status: "verified",
+                allocatedRevision: 1,
                 draftRevision: 1,
                 captureRevision: 1,
                 reviewRevision: 1,

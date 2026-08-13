@@ -89,6 +89,7 @@ describe("RendererDesignToolHost", () => {
         idleTimeoutMs: 30,
         totalTimeoutMs: 100,
       });
+      const reportProgress = vi.fn();
       const result = host.execute(
         {
           toolCallId: "tool_progress_1",
@@ -104,6 +105,7 @@ describe("RendererDesignToolHost", () => {
           mutationTarget: { kind: "document" },
         },
         new AbortController().signal,
+        { reportProgress },
       );
       const request = send.mock.calls[0]?.[0] as { requestId: string };
 
@@ -121,8 +123,10 @@ describe("RendererDesignToolHost", () => {
           requestId: request.requestId,
           phase: "applying",
           progress: 0.5,
+          message: "设计步骤：导航 · r1",
         }),
       ).toBe(true);
+      expect(reportProgress).toHaveBeenCalledWith("设计步骤：导航 · r1", 0.5);
       await vi.advanceTimersByTimeAsync(25);
       expect(sendCancel).not.toHaveBeenCalled();
       host.resolve({

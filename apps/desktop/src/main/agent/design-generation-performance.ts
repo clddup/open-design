@@ -26,6 +26,7 @@ type DurationAggregate = {
 };
 
 type RunState = {
+  allAllocatedAtMs: number | null;
   agentTools: Record<ToolKind, DurationAggregate>;
   firstReviewedAtMs: number | null;
   firstRevisionAtMs: number | null;
@@ -69,15 +70,13 @@ export type DesignGenerationPerformanceSummary = {
   targetCount: number | null;
   milestonesMs: {
     T_plan: number | null;
-    T0: null;
+    T0: number | null;
     T1: number | null;
     T2: number | null;
     T_all: number | null;
     firstReviewed: number | null;
   };
-  unavailable: {
-    T0: "no-allocated-ledger-state";
-  };
+  unavailable: { T0: null | "allocation-not-observed" };
   provider: {
     attempts: number;
     completed: number;
@@ -258,9 +257,15 @@ export class DesignGenerationPerformanceTracker {
   ): void {
     if (!delivery) return;
     state.targetCount = delivery.targets.length;
+    if (delivery.targets.every((target) => target.status !== "pending")) {
+      state.allAllocatedAtMs ??= observedAtMs;
+    }
     if (
       revision !== undefined &&
-      delivery.targets.some((target) => target.status !== "pending")
+      delivery.targets.some(
+        (target) =>
+          target.status !== "pending" && target.status !== "allocated",
+      )
     ) {
       state.firstRevisionAtMs ??= observedAtMs;
     }
@@ -292,13 +297,15 @@ export class DesignGenerationPerformanceTracker {
       targetCount: state.targetCount,
       milestonesMs: {
         T_plan: elapsedMs(state.startedAtMs, state.planAcceptedAtMs),
-        T0: null,
+        T0: elapsedMs(state.startedAtMs, state.allAllocatedAtMs),
         T1: elapsedMs(state.startedAtMs, state.firstRevisionAtMs),
         T2: elapsedMs(state.startedAtMs, state.firstVerifiedAtMs),
         T_all: elapsedMs(state.startedAtMs, state.allVerifiedAtMs),
         firstReviewed: elapsedMs(state.startedAtMs, state.firstReviewedAtMs),
       },
-      unavailable: { T0: "no-allocated-ledger-state" },
+      unavailable: {
+        T0: state.allAllocatedAtMs === null ? "allocation-not-observed" : null,
+      },
       provider: structuredClone(state.model),
       renderer: structuredClone(state.renderer),
       agentTools: structuredClone(state.agentTools),
@@ -316,6 +323,7 @@ const rendererPhases: readonly RendererPhase[] = [
 
 function createRunState(startedAtMs: number): RunState {
   return {
+    allAllocatedAtMs: null,
     agentTools: {
       plan: emptyAggregate(),
       mutation: emptyAggregate(),

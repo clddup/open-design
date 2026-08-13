@@ -95,6 +95,23 @@ describe("ParentDesignToolExecutor", () => {
 
     expect(
       executor.handleMessage({
+        type: "design-tool.progress",
+        requestId: request.requestId,
+        message: "设计步骤：导航 · r1",
+        progress: 0.5,
+      }),
+    ).toBe(true);
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: {
+        type: "progress",
+        message: "设计步骤：导航 · r1",
+        progress: 0.5,
+      },
+    });
+
+    expect(
+      executor.handleMessage({
         type: "design-tool.response",
         requestId: request.requestId,
         ok: true,

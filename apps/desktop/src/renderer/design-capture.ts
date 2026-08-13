@@ -9,16 +9,41 @@ import {
 
 const CAPTURE_WIDTH = 1_280;
 const CAPTURE_HEIGHT = 960;
+const CAPTURE_EXPORT_TIMEOUT_MS = 30_000;
+
+export type DesignCaptureStage =
+  | "surface-created"
+  | "adapter-created"
+  | "scene-synced"
+  | "export-started"
+  | "export-completed";
+
+export class DesignCaptureTimeoutError extends Error {
+  constructor(readonly thresholdMs: number) {
+    super(
+      `design_capture.export_timeout: Offscreen canvas export did not complete within ${thresholdMs} ms`,
+    );
+    this.name = "DesignCaptureTimeoutError";
+  }
+}
+
+type CaptureDesignTargetOptions = {
+  createAdapter?: (
+    host: HTMLElement,
+    callbacks: LeaferEngineCallbacks,
+  ) => Promise<LeaferEngineAdapter>;
+  onStage?: (stage: DesignCaptureStage) => void;
+  timeoutMs?: number;
+};
 
 export async function captureDesignTarget(
   designDocument: DesignDocument,
   target: LeaferCaptureTarget,
   signal?: AbortSignal,
-  createAdapter: (
-    host: HTMLElement,
-    callbacks: LeaferEngineCallbacks,
-  ) => Promise<LeaferEngineAdapter> = createLeaferEngineAdapter,
+  options: CaptureDesignTargetOptions = {},
 ): Promise<LeaferCaptureResult> {
+  const createAdapter = options.createAdapter ?? createLeaferEngineAdapter;
+  const timeoutMs = options.timeoutMs ?? CAPTURE_EXPORT_TIMEOUT_MS;
   throwIfAborted(signal);
   if (designDocument.pagesById[target.pageId] === undefined) {
     throw new Error(`Capture Page is unavailable: ${target.pageId}`);
@@ -37,6 +62,7 @@ export async function captureDesignTarget(
     width: `${CAPTURE_WIDTH}px`,
   });
   document.body.append(host);
+  options.onStage?.("surface-created");
   let renderError: Error | null = null;
   let adapter: LeaferEngineAdapter | null = null;
   try {
@@ -47,6 +73,7 @@ export async function captureDesignTarget(
       ),
       signal,
     );
+    options.onStage?.("adapter-created");
     throwIfAborted(signal);
     adapter.sync({
       document: designDocument,
@@ -62,14 +89,68 @@ export async function captureDesignTarget(
         height: CAPTURE_HEIGHT,
       },
     });
+    options.onStage?.("scene-synced");
     if (renderError) {
       throw new Error("Leafer target rendering failed", { cause: renderError });
     }
-    return await abortable(adapter.capture(target), signal);
+    options.onStage?.("export-started");
+    const result = await boundedCapture(
+      adapter.capture(target),
+      signal,
+      timeoutMs,
+    );
+    options.onStage?.("export-completed");
+    return result;
   } finally {
     adapter?.dispose();
     host.remove();
   }
+}
+
+function boundedCapture<T>(
+  operation: Promise<T>,
+  signal: AbortSignal | undefined,
+  thresholdMs: number,
+): Promise<T> {
+  if (!Number.isFinite(thresholdMs) || thresholdMs <= 0) {
+    operation.catch(() => undefined);
+    return Promise.reject(new DesignCaptureTimeoutError(thresholdMs));
+  }
+  if (signal?.aborted) {
+    operation.catch(() => undefined);
+    return Promise.reject(
+      new DOMException("The operation was aborted", "AbortError"),
+    );
+  }
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      window.clearTimeout(timeout);
+      operation.catch(() => undefined);
+      reject(new DOMException("The operation was aborted", "AbortError"));
+    };
+    const timeout = window.setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      operation.catch(() => undefined);
+      reject(new DesignCaptureTimeoutError(thresholdMs));
+    }, thresholdMs);
+    signal?.addEventListener("abort", abort, { once: true });
+    operation.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        signal?.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timeout);
+        signal?.removeEventListener("abort", abort);
+        reject(
+          error instanceof Error
+            ? error
+            : new Error("Design target capture failed"),
+        );
+      },
+    );
+  });
 }
 
 function createCaptureCallbacks(
