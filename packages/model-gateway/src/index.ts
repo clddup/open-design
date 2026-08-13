@@ -12,15 +12,13 @@ import {
 import { streamSimple as streamAnthropicMessages } from "@earendil-works/pi-ai/api/anthropic-messages";
 import { streamSimple as streamOpenAICompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import { streamSimple as streamOpenAIResponses } from "@earendil-works/pi-ai/api/openai-responses";
-
+import { exposesReasoningSummary } from "./reasoning-visibility.js";
 export const MODEL_API_FORMATS = [
   "openai-responses",
   "openai-chat-completions",
   "anthropic-messages",
 ] as const;
-
 export const MODEL_AUTH_MODES = ["bearer", "x-api-key", "none"] as const;
-
 export const MODEL_REASONING_EFFORTS = [
   "off",
   "minimal",
@@ -356,6 +354,8 @@ export class MultiProtocolModelGateway implements ModelGateway {
         this.streamOptions(request),
       );
       for await (const event of stream) {
+        if (!exposesReasoningSummary(this.#configuration.apiFormat, event))
+          continue;
         for (const canonical of mapPiEvent(event, request.attemptId)) {
           yield canonical;
         }

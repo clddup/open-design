@@ -79,6 +79,52 @@ function chatResponse(text = "Ready") {
   );
 }
 
+function chatToolResponse() {
+  return new Response(
+    [
+      {
+        id: "chat_tool_1",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: "design-model",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_probe_1",
+                  type: "function",
+                  function: {
+                    name: "opendesign_connection_probe",
+                    arguments:
+                      '{"nonce":"opendesign-probe-v1","width":320,"height":240}',
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      },
+      {
+        id: "chat_tool_1",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: "design-model",
+        choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+        usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 },
+      },
+    ]
+      .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+      .concat("data: [DONE]\n\n")
+      .join(""),
+    { status: 200, headers: { "Content-Type": "text/event-stream" } },
+  );
+}
+
 function partialChatResponse() {
   const encoder = new TextEncoder();
   return new Response(
@@ -963,11 +1009,14 @@ describe("ModelProviderHost", () => {
     const store = new WorkspaceStore(":memory:");
     const fetch = vi
       .fn<typeof globalThis.fetch>()
+      .mockImplementationOnce(() => Promise.resolve(chatResponse()))
+      .mockImplementationOnce(() => Promise.resolve(chatToolResponse()))
       .mockImplementation(() => Promise.resolve(chatResponse()));
     const host = new ModelProviderHost(store, cipher, fetch);
     host.saveProfile({ ...profile, apiKey: "provider-secret" });
 
     await expect(host.testConnection(selection)).resolves.toMatchObject({
+      status: "compatible",
       ok: true,
       providerId: "provider_1",
       modelId: "design-model",
@@ -1000,6 +1049,27 @@ describe("ModelProviderHost", () => {
       "Bearer provider-secret",
     );
     expect(JSON.stringify(events)).not.toContain("provider-secret");
+    store.close();
+  });
+
+  it("reports a text-capable endpoint without parameterized tools as text-only", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockImplementation(() => Promise.resolve(chatResponse()));
+    const host = new ModelProviderHost(store, cipher, fetch);
+    host.saveProfile({ ...profile, apiKey: "provider-secret" });
+
+    const result = await host.testConnection(selection);
+    expect(result).toMatchObject({
+      status: "text-only",
+      ok: false,
+      providerId: "provider_1",
+      modelId: "design-model",
+    });
+    expect(typeof result.textLatencyMs).toBe("number");
+    expect(typeof result.toolLatencyMs).toBe("number");
+    expect(fetch).toHaveBeenCalledTimes(2);
     store.close();
   });
 

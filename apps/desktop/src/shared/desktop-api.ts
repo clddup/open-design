@@ -43,6 +43,11 @@ import type {
 } from "./design-tool-bridge";
 import type { DiagnosticEvent, RendererDiagnosticReport } from "./diagnostics";
 import { isPortableFileName } from "./portable-file-name";
+export {
+  isProviderConnectionResult,
+  type ProviderConnectionResult,
+} from "./provider-connection";
+import type { ProviderConnectionResult } from "./provider-connection";
 
 export {
   formatDiagnosticReport,
@@ -185,14 +190,6 @@ export type SaveGlobalImageGenerationSettingsRequest = {
 };
 
 export type TestModelProviderConnectionRequest = ModelSelection;
-
-export type ProviderConnectionResult = {
-  ok: boolean;
-  message: string;
-  providerId: string;
-  modelId: string;
-  latencyMs: number;
-};
 
 export type AgentAttachmentSelection = AgentAttachment & {
   previewDataUrl?: string;
@@ -727,31 +724,6 @@ export function isSaveGlobalImageGenerationSettingsRequest(
         "clearApiKey",
       ].includes(key),
     )
-  );
-}
-
-export function isProviderConnectionResult(
-  value: unknown,
-): value is ProviderConnectionResult {
-  if (!value || typeof value !== "object") return false;
-  const result = value as Record<string, unknown>;
-  return (
-    typeof result.ok === "boolean" &&
-    typeof result.message === "string" &&
-    result.message.length > 0 &&
-    result.message.length <= 2_000 &&
-    isProviderId(result.providerId) &&
-    isModelName(result.modelId, false) &&
-    typeof result.latencyMs === "number" &&
-    Number.isFinite(result.latencyMs) &&
-    result.latencyMs >= 0 &&
-    hasExactKeys(result, [
-      "ok",
-      "message",
-      "providerId",
-      "modelId",
-      "latencyMs",
-    ])
   );
 }
 

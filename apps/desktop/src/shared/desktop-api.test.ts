@@ -17,6 +17,7 @@ import {
   isGlobalTaskProjectionResult,
   isListProjectConversationsRequest,
   isModelProviderCatalog,
+  isProviderConnectionResult,
   migrateModelProviderCatalog,
   isProjectDesignFile,
   isProjectDesignFileRequest,
@@ -173,6 +174,31 @@ describe("Model provider desktop API guards", () => {
       isSaveModelProviderProfileRequest({
         ...profile,
         baseUrl: "https://secret@models.example/v1",
+      }),
+    ).toBe(false);
+  });
+
+  it("requires an exact Agent compatibility connection result", () => {
+    expect(
+      isProviderConnectionResult({
+        status: "text-only",
+        ok: false,
+        message: "Parameterized tool call was not produced",
+        providerId: "provider_1",
+        modelId: "design-model",
+        latencyMs: 42,
+        textLatencyMs: 10,
+        toolLatencyMs: 32,
+      }),
+    ).toBe(true);
+    expect(
+      isProviderConnectionResult({
+        status: "text-only",
+        ok: true,
+        message: "Contradictory result",
+        providerId: "provider_1",
+        modelId: "design-model",
+        latencyMs: 42,
       }),
     ).toBe(false);
   });

@@ -71,11 +71,14 @@ beforeEach(() => {
       ),
     deleteModelProviderProfile: vi.fn().mockResolvedValue(emptyCatalog),
     testModelProviderConnection: vi.fn().mockResolvedValue({
+      status: "compatible",
       ok: true,
-      message: "Provider connection succeeded",
+      message: "Provider supports Agent tool calling",
       providerId: "provider-test",
       modelId: "design-model",
       latencyMs: 42,
+      textLatencyMs: 10,
+      toolLatencyMs: 32,
     }),
   } as unknown as DesktopApi;
 });
@@ -247,11 +250,45 @@ describe("SettingsPage", () => {
     );
     expect(
       await screen.findByText(
-        "Connected to Design gateway/design-model in 42 ms",
+        "Agent compatible: Design gateway/design-model (42 ms)",
       ),
     ).toBeVisible();
     expect(screen.getByLabelText("API key")).toHaveValue("");
     expect(screen.queryByText("provider-secret")).toBeNull();
+  });
+
+  it("defaults a custom OpenAI-compatible provider to Chat Completions", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+    await openNewProvider(user);
+
+    expect(screen.getByLabelText("API format")).toHaveValue(
+      "openai-chat-completions",
+    );
+  });
+
+  it("does not report text-only endpoints as Agent compatible", async () => {
+    vi.mocked(window.desktop!.testModelProviderConnection).mockResolvedValue({
+      status: "text-only",
+      ok: false,
+      message: "required parameterized tool call was not produced",
+      providerId: "provider-test",
+      modelId: "design-model",
+      latencyMs: 42,
+      textLatencyMs: 10,
+      toolLatencyMs: 32,
+    });
+    const user = userEvent.setup();
+    renderSettings();
+    await openNewProvider(user);
+    await user.type(screen.getByLabelText("Model ID 1"), "design-model");
+    await user.click(screen.getByRole("button", { name: "Save & test" }));
+
+    expect(
+      await screen.findByText(
+        "Text works; Agent tools are incompatible: required parameterized tool call was not produced",
+      ),
+    ).toBeVisible();
   });
 
   it("preserves an unsaved provider/model draft when the locale changes", async () => {

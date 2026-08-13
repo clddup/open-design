@@ -209,44 +209,122 @@ export class ModelProviderHost {
     signal?: AbortSignal,
   ): Promise<ProviderConnectionResult> {
     const startedAt = performance.now();
+    let textLatencyMs: number | undefined;
     try {
-      const accumulator = new ModelResponseAccumulator("connection_test");
-      const controller = signal ? undefined : new AbortController();
-      const timeout = controller
-        ? setTimeout(() => controller.abort(), 30_000)
-        : undefined;
-      try {
-        for await (const event of this.gateway(selection).stream({
-          attemptId: "connection_test",
-          sessionId: "connection_test",
-          modelSelection: selection,
-          system: "Reply with OK.",
-          messages: [{ role: "user", content: "OK" }],
-          tools: [],
-          signal: signal ?? controller!.signal,
-        })) {
-          accumulator.add(event);
-        }
-        accumulator.result();
-      } finally {
-        if (timeout !== undefined) clearTimeout(timeout);
-      }
-      return connectionResult(true, "Provider connection succeeded");
+      await this.runConnectionProbe(
+        selection,
+        "connection_text_test",
+        "Reply with OK.",
+        [{ role: "user", content: "OK" }],
+        [],
+        signal,
+      );
+      textLatencyMs = elapsed(startedAt);
     } catch (error) {
       return connectionResult(
-        false,
+        "unreachable",
         error instanceof Error ? error.message : "Provider connection failed",
       );
     }
 
-    function connectionResult(ok: boolean, message: string) {
+    const toolStartedAt = performance.now();
+    try {
+      const response = await this.runConnectionProbe(
+        selection,
+        "connection_tool_test",
+        "Call opendesign_connection_probe exactly once with nonce opendesign-probe-v1, width 320, and height 240. Do not answer with text.",
+        [
+          {
+            role: "user",
+            content:
+              "Run the Agent tool compatibility probe with every required value.",
+          },
+        ],
+        [connectionProbeTool],
+        signal,
+      );
+      const toolLatencyMs = elapsed(toolStartedAt);
+      const call = response.blocks.find(
+        (block) =>
+          block.type === "tool_call" && block.name === connectionProbeTool.name,
+      );
+      if (
+        response.stopReason !== "tool_use" ||
+        call?.type !== "tool_call" ||
+        !isValidConnectionProbeInput(call.input)
+      ) {
+        return connectionResult(
+          "text-only",
+          "The endpoint returned text but did not produce the required parameterized tool call",
+          toolLatencyMs,
+        );
+      }
+      return connectionResult(
+        "compatible",
+        "Provider supports Agent tool calling",
+        toolLatencyMs,
+      );
+    } catch (error) {
+      return connectionResult(
+        "text-only",
+        error instanceof Error
+          ? error.message
+          : "Agent tool compatibility probe failed",
+        elapsed(toolStartedAt),
+      );
+    }
+
+    function connectionResult(
+      status: ProviderConnectionResult["status"],
+      message: string,
+      toolLatencyMs?: number,
+    ) {
       return {
-        ok,
+        status,
+        ok: status === "compatible",
         message,
         providerId: selection.providerId,
         modelId: selection.modelId,
-        latencyMs: Math.max(0, Math.round(performance.now() - startedAt)),
+        latencyMs: elapsed(startedAt),
+        ...(textLatencyMs === undefined ? {} : { textLatencyMs }),
+        ...(toolLatencyMs === undefined ? {} : { toolLatencyMs }),
       } satisfies ProviderConnectionResult;
+    }
+  }
+
+  private async runConnectionProbe(
+    selection: ModelSelection,
+    attemptId: string,
+    system: string,
+    messages: ModelRequest["messages"],
+    tools: ModelRequest["tools"],
+    externalSignal?: AbortSignal,
+  ) {
+    const accumulator = new ModelResponseAccumulator(attemptId);
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (externalSignal?.aborted) controller.abort();
+    else externalSignal?.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(abort, 30_000);
+    try {
+      for await (const event of this.gateway(selection).stream({
+        attemptId,
+        sessionId: "connection_test",
+        modelSelection: {
+          providerId: selection.providerId,
+          modelId: selection.modelId,
+        },
+        system,
+        messages,
+        tools,
+        signal: controller.signal,
+      })) {
+        accumulator.add(event);
+      }
+      return accumulator.result();
+    } finally {
+      clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", abort);
     }
   }
 
@@ -591,6 +669,37 @@ function snapshotModel(model: ModelProfile): ModelProfile {
     capabilities: { ...model.capabilities },
     reasoningEfforts: [...model.reasoningEfforts],
   };
+}
+
+const connectionProbeTool = {
+  name: "opendesign_connection_probe",
+  description:
+    "Verify that this model can emit a structured, parameterized Agent tool call.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      nonce: { type: "string", const: "opendesign-probe-v1" },
+      width: { type: "number", const: 320 },
+      height: { type: "number", const: 240 },
+    },
+    required: ["nonce", "width", "height"],
+    additionalProperties: false,
+  },
+} satisfies ModelRequest["tools"][number];
+
+function isValidConnectionProbeInput(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const input = value as Record<string, unknown>;
+  return (
+    input.nonce === "opendesign-probe-v1" &&
+    input.width === 320 &&
+    input.height === 240 &&
+    Object.keys(input).length === 3
+  );
+}
+
+function elapsed(startedAt: number): number {
+  return Math.max(0, Math.round(performance.now() - startedAt));
 }
 
 export function modelProviderCredentialKey(providerId: string): string {

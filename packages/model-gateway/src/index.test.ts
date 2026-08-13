@@ -246,6 +246,83 @@ describe("multi-protocol model gateway", () => {
     );
   });
 
+  it("does not expose OpenAI-compatible raw reasoning fields as summaries", async () => {
+    const gateway = new MultiProtocolModelGateway(
+      configuration("openai-chat-completions", () =>
+        Promise.resolve(
+          streamingResponse([
+            {
+              id: "chatcmpl_reasoning",
+              object: "chat.completion.chunk",
+              created: 1,
+              model: "design-model",
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    role: "assistant",
+                    reasoning_content: "private chain of thought",
+                  },
+                  finish_reason: null,
+                },
+              ],
+            },
+            {
+              id: "chatcmpl_reasoning",
+              object: "chat.completion.chunk",
+              created: 1,
+              model: "design-model",
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "call_design_1",
+                        type: "function",
+                        function: {
+                          name: "design.update",
+                          arguments: '{"nodeId":"frame_1"}',
+                        },
+                      },
+                    ],
+                  },
+                  finish_reason: null,
+                },
+              ],
+            },
+            {
+              id: "chatcmpl_reasoning",
+              object: "chat.completion.chunk",
+              created: 1,
+              model: "design-model",
+              choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+              usage: {
+                prompt_tokens: 10,
+                completion_tokens: 8,
+                total_tokens: 18,
+                completion_tokens_details: { reasoning_tokens: 4 },
+              },
+            },
+          ]),
+        ),
+      ),
+    );
+
+    const response = await collect(gateway);
+    expect(response.stopReason).toBe("tool_use");
+    expect(response.blocks).toEqual([
+      expect.objectContaining({
+        type: "tool_call",
+        name: "design.update",
+        input: { nodeId: "frame_1" },
+      }),
+    ]);
+    expect(response.usage.reasoningTokens).toBe(4);
+    expect(JSON.stringify(response.blocks)).not.toContain("chain of thought");
+  });
+
   it("uses OpenAI Responses instead of silently falling back to Chat", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const gateway = new MultiProtocolModelGateway(

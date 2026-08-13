@@ -25,7 +25,6 @@ import { useI18n } from "../i18n";
 import { HomeTitlebar } from "./HomeTitlebar";
 import formStyles from "./SettingsForms.module.scss";
 import styles from "./SettingsPage.module.scss";
-
 type SettingsTab = "general" | "models" | "image-generation";
 
 type SettingsPageProps = {
@@ -34,13 +33,11 @@ type SettingsPageProps = {
   platform: NodeJS.Platform;
   theme: ThemePreference;
 };
-
 const settingsTabs: readonly SettingsTab[] = [
   "general",
   "models",
   "image-generation",
 ];
-
 export function SettingsPage(props: SettingsPageProps) {
   const { t } = useI18n();
   return (
@@ -778,12 +775,15 @@ function ModelProviderForm() {
         );
       setStatus({
         tone: result.ok ? "success" : "error",
-        message: result.ok
-          ? t("settings.connected", {
-              model: `${provider.name}/${result.modelId}`,
-              latency: result.latencyMs,
-            })
-          : t("settings.connectionFailed", { message: result.message }),
+        message:
+          result.status === "compatible"
+            ? t("settings.connected", {
+                model: `${provider.name}/${result.modelId}`,
+                latency: result.latencyMs,
+              })
+            : result.status === "text-only"
+              ? t("settings.textOnly", { message: result.message })
+              : t("settings.connectionFailed", { message: result.message }),
       });
     } catch (error) {
       setStatus({
@@ -1290,7 +1290,7 @@ function newProviderDraft(): ProviderDraft {
     providerId: `provider-${suffix}`,
     name: "Custom provider",
     enabled: true,
-    apiFormat: "openai-responses",
+    apiFormat: "openai-chat-completions",
     authMode: "bearer",
     baseUrl: "https://api.openai.com/v1",
     models: [newModelProfile()],
