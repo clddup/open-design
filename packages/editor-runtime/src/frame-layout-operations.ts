@@ -1,4 +1,5 @@
 import type {
+  AutoLayoutFlow,
   DesignDocument,
   DesignNode,
   DesignOperation,
@@ -146,13 +147,23 @@ export function planResizeFrameWithConstraints(
     if (!before || !after) continue;
     const transformChanged = !sameTransform(before.transform, after.transform);
     const sizeChanged = !sameSize(before.size, after.size);
-    if (!transformChanged && !sizeChanged) continue;
+    const autoLayoutChanged =
+      before.kind === "frame" &&
+      after.kind === "frame" &&
+      JSON.stringify(before.properties.autoLayout) !==
+        JSON.stringify(after.properties.autoLayout);
+    if (!transformChanged && !sizeChanged && !autoLayoutChanged) continue;
     commands.push({
       commandId: `${commandPrefix}_resize_${commands.length}`,
       type: "update_properties",
       nodeId,
       ...(transformChanged ? { transform: after.transform } : {}),
       ...(sizeChanged ? { size: after.size } : {}),
+      ...(autoLayoutChanged &&
+      after.kind === "frame" &&
+      after.properties.autoLayout !== undefined
+        ? { properties: { autoLayout: after.properties.autoLayout } }
+        : {}),
     });
   }
   if (commands.length === 0) {
@@ -184,6 +195,24 @@ function resizeFrame(
     frame.properties.autoLayout !== undefined &&
     frame.properties.autoLayout.mode !== "none"
   ) {
+    const flow = frame.properties.autoLayout;
+    const sizing = flow.sizing ?? { horizontal: "fixed", vertical: "fixed" };
+    const nextSizing = {
+      horizontal:
+        nextSize.width !== frame.size.width
+          ? ("fixed" as const)
+          : sizing.horizontal,
+      vertical:
+        nextSize.height !== frame.size.height
+          ? ("fixed" as const)
+          : sizing.vertical,
+    };
+    const autoLayout: AutoLayoutFlow = { ...flow, sizing: nextSizing };
+    if (
+      nextSizing.horizontal !== sizing.horizontal ||
+      nextSizing.vertical !== sizing.vertical
+    )
+      frame.properties.autoLayout = autoLayout;
     frame.size = structuredClone(nextSize);
     resizedIds.add(frameId);
     return { ok: true, commands: [], frameId, nodeIds: [...resizedIds] };

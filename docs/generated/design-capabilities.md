@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-12 · 文档协议：`1.13.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-13 · 文档协议：`1.14.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 18 项，不可用 3 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -221,10 +221,10 @@
 通过方向、换行、padding、gap、对齐、hug、fill、fixed、min/max 和 absolute child 响应式布局 Frame。
 
 - ID：`layout.auto-layout`
-- 实现方：DesignDocument 1.13.0 + @opendesign/layout-service linear Auto Layout contract v1 + EditorRuntime
+- 实现方：DesignDocument 1.14.0 + @opendesign/layout-service linear Auto Layout contract v2 + EditorRuntime
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 10 项；实机 0 项
-- 限制：线性 Auto Layout v1 支持水平/垂直方向、固定非负 gap、四边 padding、起始/居中/末端对齐、固定尺寸子层、隐藏子层退出流、嵌套流，以及内容或层级变化后的自动回流。hug/fill、wrap、auto gap、baseline、min/max、ignore-layout child、grid、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 证据：自动化 14 项；实机 0 项
+- 限制：线性 Auto Layout 轴向尺寸 v1 支持 Frame 每轴 Fixed/Hug、直属子层每轴 Fixed/Fill、主轴 Fill 确定性平分、交叉轴 Fill、隐藏子层退出流、嵌套收敛，以及水平 Fill + Auto Height 文字重测。wrap、auto gap、baseline、min/max、ignore-layout child、grid、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout)
 
 ## 设计系统

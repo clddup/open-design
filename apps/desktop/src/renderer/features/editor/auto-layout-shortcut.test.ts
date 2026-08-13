@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   autoLayoutShortcutRequest,
   canShowOrdinaryConstraints,
+  canShowAutoLayoutSizing,
 } from "./auto-layout-shortcut";
 
 describe("Auto Layout editor shortcut", () => {
@@ -70,6 +71,9 @@ describe("Auto Layout editor shortcut", () => {
     expect(
       canShowOrdinaryConstraints(document, document.nodesById.title_welcome),
     ).toBe(false);
+    expect(
+      canShowAutoLayoutSizing(document, document.nodesById.title_welcome),
+    ).toBe(true);
     frame.properties.autoLayout = { mode: "none" };
     expect(
       canShowOrdinaryConstraints(document, document.nodesById.title_welcome),

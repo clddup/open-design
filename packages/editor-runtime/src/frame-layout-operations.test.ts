@@ -172,6 +172,52 @@ describe("Frame constraints planner", () => {
       ),
     ).toMatchObject({ ok: false, code: "visual-fidelity" });
   });
+
+  it("switches only manually resized Hug axes to Fixed", () => {
+    const document = structuredClone(layoutDocument());
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 0,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+      sizing: { horizontal: "hug", vertical: "hug" },
+    };
+    for (const childId of frame.childIds)
+      delete document.nodesById[childId]?.constraints;
+    const normalized = normalizeDesignDocument(document);
+    const plan = planResizeFrameWithConstraints(
+      normalized,
+      "page_layout",
+      "frame",
+      { width: 260, height: normalized.nodesById.frame!.size.height },
+      "manual_hug_resize",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan.commands).toHaveLength(1);
+    const command = plan.commands[0];
+    expect(command).toMatchObject({
+      nodeId: "frame",
+      size: { width: 260, height: 200 },
+    });
+    expect(
+      command?.type === "update_properties"
+        ? command.properties?.autoLayout
+        : undefined,
+    ).toMatchObject({ sizing: { horizontal: "fixed", vertical: "hug" } });
+    const runtime = new EditorRuntime(normalized);
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+    expect(
+      (
+        runtime.getSnapshot().document.nodesById.frame as Extract<
+          DesignNode,
+          { kind: "frame" }
+        >
+      ).properties.autoLayout,
+    ).toMatchObject({ sizing: { horizontal: "fixed", vertical: "hug" } });
+  });
 });
 
 function layoutDocument(): DesignDocument {

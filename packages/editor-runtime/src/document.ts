@@ -1,6 +1,8 @@
 import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
+  DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
+  DEFAULT_LAYOUT_SIZING,
   DesignDocumentSchema,
   type DesignDocument,
   type DesignNode,
@@ -173,6 +175,59 @@ export function validateDocumentInvariants(
           path: `/nodesById/${nodeId}/constraints`,
           message:
             "ordinary constraints are not valid on children participating in Auto Layout",
+        });
+      }
+    }
+    if (node.layoutSizing !== undefined) {
+      const parent = node.parentId
+        ? ownValue(document.nodesById, node.parentId)
+        : undefined;
+      const flow =
+        parent?.kind === "frame" ? parent.properties.autoLayout : undefined;
+      if (!flow || flow.mode === "none") {
+        issues.push({
+          path: `/nodesById/${nodeId}/layoutSizing`,
+          message:
+            "layout sizing is only valid on direct children of an Auto Layout Frame",
+        });
+      } else {
+        const frameSizing = flow.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING;
+        const childSizing = node.layoutSizing ?? DEFAULT_LAYOUT_SIZING;
+        if (
+          (node.visible &&
+            frameSizing.horizontal === "hug" &&
+            childSizing.horizontal === "fill") ||
+          (node.visible &&
+            frameSizing.vertical === "hug" &&
+            childSizing.vertical === "fill")
+        ) {
+          issues.push({
+            path: `/nodesById/${nodeId}/layoutSizing`,
+            message: "a child cannot fill an axis hugged by its parent Frame",
+          });
+        }
+      }
+      if (
+        (node.kind === "group" || node.kind === "boolean") &&
+        (node.layoutSizing.horizontal === "fill" ||
+          node.layoutSizing.vertical === "fill")
+      ) {
+        issues.push({
+          path: `/nodesById/${nodeId}/layoutSizing`,
+          message: `${node.kind} bounds follow their contents and cannot fill an Auto Layout axis`,
+        });
+      }
+      if (
+        node.kind === "text" &&
+        ((node.properties.textResize === "auto-width" &&
+          (node.layoutSizing.horizontal === "fill" ||
+            node.layoutSizing.vertical === "fill")) ||
+          (node.properties.textResize === "auto-height" &&
+            node.layoutSizing.vertical === "fill"))
+      ) {
+        issues.push({
+          path: `/nodesById/${nodeId}/layoutSizing`,
+          message: `text ${node.properties.textResize} sizing conflicts with the requested fill axis`,
         });
       }
     }

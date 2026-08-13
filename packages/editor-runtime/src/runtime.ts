@@ -36,7 +36,12 @@ import {
   normalizeDesignDocument,
 } from "./document.js";
 import { nodeChangedFields } from "./node-change-fields.js";
-import { resolveAutoLayoutInPlace } from "./auto-layout-operations.js";
+import { resolveAutoLayoutUntilStable } from "./auto-layout-operations.js";
+import {
+  normalizeTextResizeProperties,
+  textLayoutAffected,
+} from "./text-layout-operations.js";
+
 export interface EditorSnapshot {
   document: DesignDocument;
   state: EditorState;
@@ -72,6 +77,7 @@ export interface EditorApplyOptions {
   historyGroupId?: string;
   finalizeHistoryGroup?: boolean;
 }
+
 interface StoredTransaction {
   fingerprint: string;
   result: DesignTransactionSuccess;
@@ -515,7 +521,11 @@ export class EditorRuntime {
     try {
       for (const command of transaction.commands)
         applyOperation(draft, command, context);
-      const autoLayout = resolveAutoLayoutInPlace(draft);
+      const autoLayoutCommandId =
+        transaction.commands.at(-1)?.commandId ?? "auto_layout";
+      const autoLayout = resolveAutoLayoutUntilStable(draft, (node) =>
+        resolveTextAutoSize(node, autoLayoutCommandId, context),
+      );
       if (!autoLayout.ok) {
         throw new OperationError(
           transaction.commands.at(-1)?.commandId ?? "auto_layout",
@@ -1060,6 +1070,7 @@ function updateProperties(
     "size",
     "opacity",
     "constraints",
+    "layoutSizing",
     "blendMode",
     "effects",
     "maskMode",
@@ -1075,8 +1086,11 @@ function updateProperties(
   for (const field of fields) {
     const value = command[field];
     if (value === undefined) continue;
-    if (field === "constraints" && value === null) {
-      delete node.constraints;
+    if (
+      (field === "constraints" || field === "layoutSizing") &&
+      value === null
+    ) {
+      delete node[field];
       continue;
     }
     if (field === "properties" || field === "extensions") {
@@ -1227,43 +1241,6 @@ function replaceSubtree(
 }
 
 type TextNode = Extract<DesignNode, { kind: "text" }>;
-type TextProperties = TextNode["properties"];
-type MutableTextLayoutProperties = {
-  textOverflow: "visible" | "clip" | "ellipsis";
-  textResize: "auto-width" | "auto-height" | "fixed";
-  textWrap: "none" | "word" | "character";
-};
-
-function normalizeTextResizeProperties(properties: TextProperties): void {
-  const layout = properties as unknown as MutableTextLayoutProperties;
-  if (layout.textResize === "auto-width") {
-    layout.textWrap = "none";
-    layout.textOverflow = "visible";
-    return;
-  }
-  if (layout.textResize === "auto-height") {
-    if (layout.textWrap === "none") layout.textWrap = "word";
-    layout.textOverflow = "visible";
-  }
-}
-
-function textLayoutAffected(
-  command: Extract<DesignOperation, { type: "update_properties" }>,
-  requestedResize: unknown,
-): boolean {
-  if (command.size !== undefined || requestedResize !== undefined) return true;
-  const properties = command.properties;
-  if (!properties) return false;
-  return [
-    "content",
-    "fontFamily",
-    "fontSize",
-    "fontWeight",
-    "lineHeight",
-    "letterSpacing",
-    "textWrap",
-  ].some((field) => Object.hasOwn(properties, field));
-}
 
 function resolveTextAutoSize(
   node: TextNode,

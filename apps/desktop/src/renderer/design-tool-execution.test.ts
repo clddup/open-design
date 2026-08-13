@@ -3456,6 +3456,41 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(document.nodesById.subtitle_welcome?.transform[5]).toBe(136);
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
 
+    const sized = await executeDesignToolRequest(
+      {
+        requestId: "auto_layout_child_fill",
+        call: {
+          toolCallId: "tool_auto_layout_child_fill",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-layout-sizing",
+            label: "Fill title width",
+            pageId: "page_welcome",
+            nodeId: "title_welcome",
+            sizing: { horizontal: "fill", vertical: "fixed" },
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(sized).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-layout-sizing",
+          nodeId: "title_welcome",
+          sizing: { horizontal: "fill", vertical: "fixed" },
+          revision: 2,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutSizing,
+    ).toEqual({ horizontal: "fill", vertical: "fixed" });
+
     await expect(
       executeDesignToolRequest(
         {
@@ -3475,13 +3510,38 @@ describe("Renderer semantic hierarchy tool", () => {
               ],
             },
           },
-          context: { ...pageContext, revision: 1 },
+          context: { ...pageContext, revision: 2 },
         },
         runtime,
         "page_welcome",
       ),
     ).rejects.toThrow("auto_layout_requires_layout_tool");
-    expect(runtime.getSnapshot().document.revision).toBe(1);
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "auto_layout_sizing_bypass",
+          call: {
+            toolCallId: "tool_auto_layout_sizing_bypass",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              label: "Bypass flow sizing",
+              commands: [
+                {
+                  commandId: "bypass_fill",
+                  type: "update_properties",
+                  nodeId: "title_welcome",
+                  layoutSizing: { horizontal: "fixed", vertical: "fixed" },
+                },
+              ],
+            },
+          },
+          context: { ...pageContext, revision: 2 },
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("set-layout-sizing");
+    expect(runtime.getSnapshot().document.revision).toBe(2);
   });
 
   it("sets exact negative Agent spacing and rejects locked or out-of-scope arrangement", async () => {

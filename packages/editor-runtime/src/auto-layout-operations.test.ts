@@ -4,6 +4,7 @@ import type {
   DesignNode,
   DesignTransaction,
 } from "@opendesign/design-contracts";
+import type { TextLayoutProvider } from "@opendesign/text-service";
 import { describe, expect, it } from "vitest";
 import {
   EditorRuntime,
@@ -11,6 +12,7 @@ import {
   normalizeDesignDocument,
   planResizeFrameWithConstraints,
   planSetFrameAutoLayout,
+  planSetNodeLayoutSizing,
   planSetNodeConstraints,
 } from "./index.js";
 
@@ -221,6 +223,253 @@ describe("linear Auto Layout Runtime", () => {
     if (!resize.ok) throw new Error(resize.message);
     expect(resize.commands).toHaveLength(1);
   });
+
+  it("hugs visible content and shares fixed-frame remainder across Fill children", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.properties.autoLayout = {
+      ...horizontal,
+      sizing: { horizontal: "fixed", vertical: "hug" },
+    };
+    document.nodesById.two!.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fixed",
+    };
+    document.nodesById.three = rectangle("three", "frame", 0, 0, 1, 40);
+    document.nodesById.three.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fixed",
+    };
+    document.nodesById.hidden = rectangle("hidden", "frame", 0, 0, 900, 900);
+    document.nodesById.hidden.visible = false;
+    document.nodesById.hidden.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fill",
+    };
+    frame.childIds.push("three", "hidden");
+    delete document.nodesById.one?.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "trigger_flow",
+            type: "update_properties",
+            nodeId: "frame",
+            name: "Resolved flow",
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    const resolved = runtime.getSnapshot().document;
+    expect(resolved.nodesById.frame?.size).toEqual({ width: 300, height: 60 });
+    expectRect(resolved, "one", 20, 20, 40, 20);
+    expectRect(resolved, "two", 72, 15, 98, 30);
+    expectRect(resolved, "three", 182, 10, 98, 40);
+    expectRect(resolved, "hidden", 0, 0, 900, 900);
+  });
+
+  it("converges nested Hug Frames from inner content to outer bounds", () => {
+    const document = layoutDocument();
+    const outer = document.nodesById.frame;
+    if (outer?.kind !== "frame") throw new Error("missing frame");
+    const nested = structuredClone(outer);
+    nested.id = "nested";
+    nested.parentId = "frame";
+    nested.childIds = ["nested_child"];
+    nested.size = { width: 1, height: 1 };
+    nested.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 5, right: 5, bottom: 5, left: 5 },
+      gap: 0,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+      sizing: { horizontal: "hug", vertical: "hug" },
+    };
+    document.nodesById.nested = nested;
+    document.nodesById.nested_child = rectangle(
+      "nested_child",
+      "nested",
+      0,
+      0,
+      40,
+      20,
+    );
+    outer.childIds = ["nested"];
+    outer.properties.autoLayout = {
+      ...horizontal,
+      sizing: { horizontal: "hug", vertical: "hug" },
+    };
+    delete document.nodesById.one;
+    delete document.nodesById.two;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const result = runtime.apply(
+      transaction(runtime, [
+        {
+          commandId: "grow_nested_content",
+          type: "update_properties",
+          nodeId: "nested_child",
+          size: { width: 60, height: 30 },
+        },
+      ]),
+    );
+    expect(result.ok).toBe(true);
+    const resolved = runtime.getSnapshot().document;
+    expectRect(resolved, "nested", 20, 10, 70, 40);
+    expectRect(resolved, "nested_child", 5, 5, 60, 30);
+    expect(resolved.nodesById.frame?.size).toEqual({ width: 110, height: 60 });
+  });
+
+  it("remeasures horizontal Fill + Auto Height text before ancestor Hug settles", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.childIds = ["one", "copy"];
+    frame.properties.autoLayout = {
+      ...horizontal,
+      sizing: { horizontal: "fixed", vertical: "hug" },
+    };
+    delete document.nodesById.one?.constraints;
+    document.nodesById.copy = autoHeightText("copy", "frame", 10);
+    document.nodesById.copy.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fixed",
+    };
+    delete document.nodesById.two;
+    const widths: number[] = [];
+    const provider: TextLayoutProvider = {
+      id: "auto-layout-text",
+      version: "1",
+      measure: (request) => {
+        widths.push(request.width ?? 0);
+        return {
+          ok: true,
+          provider: "auto-layout-text",
+          providerVersion: "1",
+          size: {
+            width: request.width ?? 0,
+            height: (request.width ?? 0) >= 200 ? 48 : 96,
+          },
+          warnings: [],
+        };
+      },
+    };
+    const runtime = new EditorRuntime(normalizeDesignDocument(document), {
+      textLayoutProvider: provider,
+    });
+    const tx = transaction(runtime, [
+      {
+        commandId: "update_copy",
+        type: "update_properties",
+        nodeId: "copy",
+        properties: { content: "A longer responsive sentence" },
+      },
+    ]);
+    const preview = runtime.preview(tx);
+    const applied = runtime.apply(tx);
+    expect(preview).toMatchObject({ ok: true });
+    expect(applied).toMatchObject({ ok: true });
+    const resolved = runtime.getSnapshot().document;
+    expectRect(resolved, "copy", 72, 10, 208, 48);
+    expect(resolved.nodesById.frame?.size).toEqual({ width: 300, height: 68 });
+    expect(widths).toContain(208);
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.redo().ok).toBe(true);
+    expect(
+      normalizeDesignDocument(JSON.parse(JSON.stringify(resolved))),
+    ).toEqual(resolved);
+  });
+
+  it("plans child sizing through strict conflicts, no-op, and reversible cleanup", () => {
+    const runtime = enabledRuntime();
+    const document = runtime.getSnapshot().document;
+    const plan = planSetNodeLayoutSizing(
+      document,
+      "page_layout",
+      "two",
+      { horizontal: "fill", vertical: "fixed" },
+      "fill_two",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.two?.layoutSizing).toEqual({
+      horizontal: "fill",
+      vertical: "fixed",
+    });
+    expect(
+      planSetNodeLayoutSizing(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "two",
+        { horizontal: "fill", vertical: "fixed" },
+        "again",
+      ),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    const disable = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      { mode: "none" },
+      "disable",
+    );
+    if (!disable.ok) throw new Error(disable.message);
+    expect(runtime.apply(transaction(runtime, disable.commands)).ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.two?.layoutSizing,
+    ).toBeUndefined();
+
+    const conflict = layoutDocument();
+    const conflictFrame = conflict.nodesById.frame;
+    if (conflictFrame?.kind !== "frame") throw new Error("missing frame");
+    conflictFrame.properties.autoLayout = {
+      ...horizontal,
+      sizing: { horizontal: "hug", vertical: "fixed" },
+    };
+    delete conflict.nodesById.one?.constraints;
+    expect(
+      planSetNodeLayoutSizing(
+        normalizeDesignDocument(conflict),
+        "page_layout",
+        "two",
+        { horizontal: "fill", vertical: "fixed" },
+        "conflict",
+      ),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+  });
+
+  it("converges an empty zero-padding Hug Frame without a phantom revision failure", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.childIds = [];
+    frame.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 0,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+      sizing: { horizontal: "hug", vertical: "hug" },
+    };
+    delete document.nodesById.one;
+    delete document.nodesById.two;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const result = runtime.apply(
+      transaction(runtime, [
+        {
+          commandId: "rename_empty_hug",
+          type: "update_properties",
+          nodeId: "frame",
+          name: "Empty Hug",
+        },
+      ]),
+    );
+    expect(result).toMatchObject({ ok: true });
+    expect(runtime.getSnapshot().document.nodesById.frame?.size).toEqual({
+      width: 0,
+      height: 0,
+    });
+  });
 });
 
 function enabledRuntime(): EditorRuntime {
@@ -289,6 +538,42 @@ function rectangle(
       strokes: [],
       strokeWidth: 0,
       cornerRadius: 0,
+    },
+    extensions: {},
+  };
+}
+
+function autoHeightText(
+  id: string,
+  parentId: string,
+  width: number,
+): Extract<DesignNode, { kind: "text" }> {
+  return {
+    id,
+    kind: "text",
+    name: id,
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width, height: 24 },
+    opacity: 1,
+    properties: {
+      content: "Responsive copy",
+      fontFamily: "Inter",
+      fontSize: 16,
+      fontWeight: 400,
+      lineHeight: 24,
+      letterSpacing: 0,
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textResize: "auto-height",
+      textWrap: "word",
+      textOverflow: "visible",
+      fills: [],
+      strokes: [],
+      strokeWidth: 0,
     },
     extensions: {},
   };

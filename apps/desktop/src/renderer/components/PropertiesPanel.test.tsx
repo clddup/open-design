@@ -32,7 +32,7 @@ function renderPanel(
       sourceNodes: readonly [];
     };
     onRemoveComponent?: () => void;
-    constraintsAvailable?: boolean;
+    layoutMode?: "constraints" | "sizing" | null;
     onSetConstraints?: (constraints: LayoutConstraints) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
   } = {},
@@ -53,7 +53,7 @@ function renderPanel(
           arrangement={options.arrangement ?? null}
           booleanOperationEditable={false}
           canDelete
-          constraintsAvailable={options.constraintsAvailable ?? false}
+          layoutMode={options.layoutMode ?? null}
           componentContext={options.componentContext}
           node={options.node}
           onArrange={onArrange}
@@ -252,7 +252,7 @@ describe("PropertiesPanel SVG workflow", () => {
         constraints: { horizontal: "right", vertical: "bottom" },
       },
       selectionCount: 1,
-      constraintsAvailable: true,
+      layoutMode: "constraints",
       onSetConstraints,
     });
     await user.selectOptions(
@@ -275,7 +275,7 @@ describe("PropertiesPanel SVG workflow", () => {
 
   it("configures Frame Auto Layout direction, gap, padding, and alignment", async () => {
     const user = userEvent.setup();
-    const onUpdate = vi.fn();
+    const onUpdate = vi.fn<(updates: UpdatePropertiesPatch) => void>();
     renderPanel({
       node: {
         id: "frame_auto",
@@ -309,8 +309,62 @@ describe("PropertiesPanel SVG workflow", () => {
           gap: 0,
           primaryAlignment: "start",
           counterAlignment: "start",
+          sizing: { horizontal: "fixed", vertical: "fixed" },
         },
       },
+    });
+  });
+
+  it("configures Frame Hug axes and flow-child Fill axes explicitly", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn<(updates: UpdatePropertiesPatch) => void>();
+    const onSetLayoutSizing = vi.fn();
+    const frame: DesignNode = {
+      id: "frame_auto",
+      kind: "frame" as const,
+      name: "Flow",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 80 },
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+        autoLayout: {
+          mode: "horizontal" as const,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          gap: 0,
+          primaryAlignment: "start" as const,
+          counterAlignment: "start" as const,
+        },
+      },
+      extensions: {},
+    };
+    renderPanel({ node: frame, selectionCount: 1, onUpdate });
+    await user.selectOptions(screen.getByLabelText("Width sizing"), "hug");
+    const update = onUpdate.mock.calls.at(-1)?.[0];
+    expect(update?.properties?.autoLayout).toMatchObject({
+      sizing: { horizontal: "hug", vertical: "fixed" },
+    });
+    cleanup();
+    renderPanel({
+      node: { ...textNode, parentId: "frame_auto" },
+      selectionCount: 1,
+      layoutMode: "sizing",
+      onUpdate: (updates) => {
+        if (updates.layoutSizing) onSetLayoutSizing(updates.layoutSizing);
+      },
+    });
+    await user.selectOptions(screen.getByLabelText("Width sizing"), "fill");
+    expect(onSetLayoutSizing).toHaveBeenCalledWith({
+      horizontal: "fill",
+      vertical: "fixed",
     });
   });
 

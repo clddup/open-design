@@ -1617,7 +1617,15 @@ describe("design Agent tool contract", () => {
         gap: 8,
         primaryAlignment: "start",
         counterAlignment: "center",
+        sizing: { horizontal: "hug", vertical: "fixed" },
       },
+    };
+    const layoutSizing = {
+      action: "set-layout-sizing",
+      label: "Fill navigation row",
+      pageId: "page_1",
+      nodeId: "navigation_items",
+      sizing: { horizontal: "fill", vertical: "fixed" },
     };
 
     expect(arrange).toMatchObject({
@@ -1648,9 +1656,18 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, autoLayout),
     ).toBe(true);
     expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, layoutSizing),
+    ).toBe(true);
+    expect(
       validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
         ...autoLayout,
         autoLayout: { ...autoLayout.autoLayout, wrap: true },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_ARRANGE_TOOL_NAME, {
+        ...layoutSizing,
+        sizing: { horizontal: "hug", vertical: "fixed" },
       }),
     ).toBe(false);
     expect(

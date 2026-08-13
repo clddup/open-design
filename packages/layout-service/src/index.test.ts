@@ -77,23 +77,22 @@ describe("layout-service linear Auto Layout v1", () => {
   it("places horizontal children with padding, gap, and two-axis alignment", () => {
     expect(
       solveLinearAutoLayout({
-        version: 1,
+        version: 2,
         direction: "horizontal",
         frame: { width: 300, height: 120 },
         padding: { top: 10, right: 20, bottom: 10, left: 20 },
         gap: 10,
         primaryAlignment: "center",
         counterAlignment: "end",
-        children: [
-          { id: "one", width: 40, height: 20 },
-          { id: "two", width: 60, height: 30 },
-        ],
+        frameSizing: fixedFrame,
+        children: [child("one", 40, 20), child("two", 60, 30)],
       }),
     ).toEqual({
       ok: true,
+      frame: { width: 300, height: 120 },
       placements: [
-        { id: "one", x: 95, y: 90 },
-        { id: "two", x: 145, y: 80 },
+        { id: "one", x: 95, y: 90, width: 40, height: 20 },
+        { id: "two", x: 145, y: 80, width: 60, height: 30 },
       ],
     });
   });
@@ -101,23 +100,22 @@ describe("layout-service linear Auto Layout v1", () => {
   it("places vertical children in order and allows deterministic overflow", () => {
     expect(
       solveLinearAutoLayout({
-        version: 1,
+        version: 2,
         direction: "vertical",
         frame: { width: 80, height: 50 },
         padding: { top: 5, right: 5, bottom: 5, left: 5 },
         gap: 8,
         primaryAlignment: "end",
         counterAlignment: "center",
-        children: [
-          { id: "one", width: 20, height: 30 },
-          { id: "two", width: 40, height: 30 },
-        ],
+        frameSizing: fixedFrame,
+        children: [child("one", 20, 30), child("two", 40, 30)],
       }),
     ).toEqual({
       ok: true,
+      frame: { width: 80, height: 50 },
       placements: [
-        { id: "one", x: 30, y: -23 },
-        { id: "two", x: 20, y: 15 },
+        { id: "one", x: 30, y: -23, width: 20, height: 30 },
+        { id: "two", x: 20, y: 15, width: 40, height: 30 },
       ],
     });
   });
@@ -125,27 +123,125 @@ describe("layout-service linear Auto Layout v1", () => {
   it("excludes no children implicitly and rejects malformed requests", () => {
     expect(
       solveLinearAutoLayout({
-        version: 1,
+        version: 2,
         direction: "vertical",
         frame: { width: 100, height: 100 },
         padding: { top: 8, right: 8, bottom: 8, left: 8 },
         gap: 4,
         primaryAlignment: "start",
         counterAlignment: "start",
+        frameSizing: fixedFrame,
         children: [],
       }),
-    ).toEqual({ ok: true, placements: [] });
+    ).toEqual({
+      ok: true,
+      frame: { width: 100, height: 100 },
+      placements: [],
+    });
     expect(
       solveLinearAutoLayout({
-        version: 1,
+        version: 2,
         direction: "horizontal",
         frame: { width: 100, height: 100 },
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
         gap: -1,
         primaryAlignment: "start",
         counterAlignment: "start",
+        frameSizing: fixedFrame,
         children: [],
       }),
     ).toMatchObject({ ok: false, code: "invalid-input" });
   });
+
+  it("hugs content and distributes main-axis fill space deterministically", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: 2,
+        direction: "horizontal",
+        frame: { width: 300, height: 100 },
+        padding: { top: 10, right: 20, bottom: 10, left: 20 },
+        gap: 10,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+        frameSizing: { horizontal: "fixed", vertical: "hug" },
+        children: [
+          child("fixed", 40, 20),
+          child("fill_one", 1, 30, "fill", "fixed"),
+          child("fill_two", 1, 40, "fill", "fixed"),
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 300, height: 60 },
+      placements: [
+        { id: "fixed", x: 20, y: 10, width: 40, height: 20 },
+        { id: "fill_one", x: 70, y: 10, width: 100, height: 30 },
+        { id: "fill_two", x: 180, y: 10, width: 100, height: 40 },
+      ],
+    });
+  });
+
+  it("keeps an empty zero-padding Hug Frame stable at zero size", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: 2,
+        direction: "vertical",
+        frame: { width: 0, height: 0 },
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        gap: 0,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+        frameSizing: { horizontal: "hug", vertical: "hug" },
+        children: [],
+      }),
+    ).toEqual({
+      ok: true,
+      frame: { width: 0, height: 0 },
+      placements: [],
+    });
+  });
+
+  it("fills the counter axis and rejects fill on a hugged axis", () => {
+    expect(
+      solveLinearAutoLayout({
+        version: 2,
+        direction: "vertical",
+        frame: { width: 120, height: 100 },
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        gap: 0,
+        primaryAlignment: "start",
+        counterAlignment: "end",
+        frameSizing: fixedFrame,
+        children: [child("fill", 20, 30, "fill", "fixed")],
+      }),
+    ).toMatchObject({
+      ok: true,
+      placements: [{ id: "fill", x: 10, width: 100 }],
+    });
+    expect(
+      solveLinearAutoLayout({
+        version: 2,
+        direction: "vertical",
+        frame: { width: 120, height: 100 },
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        gap: 0,
+        primaryAlignment: "start",
+        counterAlignment: "start",
+        frameSizing: { horizontal: "hug", vertical: "fixed" },
+        children: [child("fill", 20, 30, "fill", "fixed")],
+      }),
+    ).toMatchObject({ ok: false, code: "sizing-conflict" });
+  });
 });
+
+const fixedFrame = { horizontal: "fixed", vertical: "fixed" } as const;
+
+function child(
+  id: string,
+  width: number,
+  height: number,
+  horizontal: "fixed" | "fill" = "fixed",
+  vertical: "fixed" | "fill" = "fixed",
+) {
+  return { id, width, height, sizing: { horizontal, vertical } };
+}

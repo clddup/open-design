@@ -1,5 +1,5 @@
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
-export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 2 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";
@@ -39,6 +39,8 @@ export type ConstraintResizeResult =
 
 export type AutoLayoutDirection = "horizontal" | "vertical";
 export type AutoLayoutAlignment = "start" | "center" | "end";
+export type AutoLayoutFrameAxisSizing = "fixed" | "hug";
+export type AutoLayoutChildAxisSizing = "fixed" | "fill";
 export type AutoLayoutPadding = {
   top: number;
   right: number;
@@ -53,14 +55,31 @@ export type LinearAutoLayoutRequest = {
   gap: number;
   primaryAlignment: AutoLayoutAlignment;
   counterAlignment: AutoLayoutAlignment;
-  children: Array<{ id: string; width: number; height: number }>;
+  frameSizing: {
+    horizontal: AutoLayoutFrameAxisSizing;
+    vertical: AutoLayoutFrameAxisSizing;
+  };
+  children: Array<{
+    id: string;
+    width: number;
+    height: number;
+    sizing: {
+      horizontal: AutoLayoutChildAxisSizing;
+      vertical: AutoLayoutChildAxisSizing;
+    };
+  }>;
 };
 export type LinearAutoLayoutResult =
   | {
       ok: true;
-      placements: Array<{ id: string; x: number; y: number }>;
+      frame: ConstraintSize;
+      placements: Array<ConstraintRect & { id: string }>;
     }
-  | { ok: false; code: "invalid-input"; message: string };
+  | {
+      ok: false;
+      code: "invalid-input" | "sizing-conflict";
+      message: string;
+    };
 
 export const DEFAULT_LAYOUT_CONSTRAINTS: LayoutConstraints = Object.freeze({
   horizontal: "left",
@@ -123,6 +142,38 @@ export function solveLinearAutoLayout(
       message: "Linear Auto Layout input is invalid",
     };
   }
+  const horizontalHug = request.frameSizing.horizontal === "hug";
+  const verticalHug = request.frameSizing.vertical === "hug";
+  if (
+    (horizontalHug &&
+      request.children.some((child) => child.sizing.horizontal === "fill")) ||
+    (verticalHug &&
+      request.children.some((child) => child.sizing.vertical === "fill"))
+  ) {
+    return {
+      ok: false,
+      code: "sizing-conflict",
+      message: "A hugged Auto Layout axis cannot contain a fill child",
+    };
+  }
+  const frame = {
+    width: horizontalHug
+      ? huggedExtent(
+          request.children.map((child) => child.width),
+          request.direction === "horizontal",
+          request.gap,
+          request.padding.left + request.padding.right,
+        )
+      : request.frame.width,
+    height: verticalHug
+      ? huggedExtent(
+          request.children.map((child) => child.height),
+          request.direction === "vertical",
+          request.gap,
+          request.padding.top + request.padding.bottom,
+        )
+      : request.frame.height,
+  };
   const horizontal = request.direction === "horizontal";
   const mainStart = horizontal ? request.padding.left : request.padding.top;
   const mainEnd = horizontal ? request.padding.right : request.padding.bottom;
@@ -130,17 +181,54 @@ export function solveLinearAutoLayout(
   const counterEnd = horizontal
     ? request.padding.bottom
     : request.padding.right;
-  const frameMain = horizontal ? request.frame.width : request.frame.height;
-  const frameCounter = horizontal ? request.frame.height : request.frame.width;
+  const frameMain = horizontal ? frame.width : frame.height;
+  const frameCounter = horizontal ? frame.height : frame.width;
+  const mainFillCount = request.children.filter((child) =>
+    horizontal
+      ? child.sizing.horizontal === "fill"
+      : child.sizing.vertical === "fill",
+  ).length;
+  const fixedMain = request.children.reduce((sum, child) => {
+    const fill = horizontal
+      ? child.sizing.horizontal === "fill"
+      : child.sizing.vertical === "fill";
+    return sum + (fill ? 0 : horizontal ? child.width : child.height);
+  }, 0);
+  const gapTotal = request.gap * Math.max(0, request.children.length - 1);
+  const fillMain =
+    mainFillCount === 0
+      ? 0
+      : Math.max(0, frameMain - mainStart - mainEnd - fixedMain - gapTotal) /
+        mainFillCount;
+  const resolvedChildren = request.children.map((child) => ({
+    ...child,
+    width:
+      child.sizing.horizontal === "fill"
+        ? horizontal
+          ? fillMain
+          : Math.max(
+              0,
+              frame.width - request.padding.left - request.padding.right,
+            )
+        : child.width,
+    height:
+      child.sizing.vertical === "fill"
+        ? horizontal
+          ? Math.max(
+              0,
+              frame.height - request.padding.top - request.padding.bottom,
+            )
+          : fillMain
+        : child.height,
+  }));
   const contentMain =
-    request.children.reduce(
+    resolvedChildren.reduce(
       (sum, child) => sum + (horizontal ? child.width : child.height),
       0,
-    ) +
-    request.gap * Math.max(0, request.children.length - 1);
+    ) + gapTotal;
   const mainFree = frameMain - mainStart - mainEnd - contentMain;
   let cursor = mainStart + alignmentOffset(request.primaryAlignment, mainFree);
-  const placements = request.children.map((child) => {
+  const placements = resolvedChildren.map((child) => {
     const childMain = horizontal ? child.width : child.height;
     const childCounter = horizontal ? child.height : child.width;
     const counterFree = frameCounter - counterStart - counterEnd - childCounter;
@@ -148,13 +236,29 @@ export function solveLinearAutoLayout(
       counterStart + alignmentOffset(request.counterAlignment, counterFree);
     const placement = {
       id: child.id,
+      width: child.width,
+      height: child.height,
       x: horizontal ? cursor : counter,
       y: horizontal ? counter : cursor,
     };
     cursor += childMain + request.gap;
     return placement;
   });
-  return { ok: true, placements };
+  return { ok: true, frame, placements };
+}
+
+function huggedExtent(
+  extents: readonly number[],
+  flowAxis: boolean,
+  gap: number,
+  padding: number,
+): number {
+  if (extents.length === 0) return padding;
+  return flowAxis
+    ? padding +
+        extents.reduce((sum, extent) => sum + extent, 0) +
+        gap * (extents.length - 1)
+    : padding + Math.max(...extents);
 }
 
 export function isLayoutConstraints(
@@ -212,10 +316,12 @@ function validLinearAutoLayoutRequest(
   const ids = new Set<string>();
   return (
     request.version === AUTO_LAYOUT_SERVICE_CONTRACT_VERSION &&
-    finitePositiveSize(request.frame) &&
-    request.frame.width > 0 &&
-    request.frame.height > 0 &&
+    finiteNonNegative(request.frame.width) &&
+    finiteNonNegative(request.frame.height) &&
     (request.direction === "horizontal" || request.direction === "vertical") &&
+    [request.frameSizing.horizontal, request.frameSizing.vertical].every(
+      (value) => value === "fixed" || value === "hug",
+    ) &&
     finiteNonNegative(request.gap) &&
     Object.values(request.padding).every(finiteNonNegative) &&
     [request.primaryAlignment, request.counterAlignment].every((value) =>
@@ -228,6 +334,13 @@ function validLinearAutoLayoutRequest(
         ids.has(child.id) ||
         !finiteNonNegative(child.width) ||
         !finiteNonNegative(child.height)
+      ) {
+        return false;
+      }
+      if (
+        ![child.sizing.horizontal, child.sizing.vertical].every(
+          (value) => value === "fixed" || value === "fill",
+        )
       ) {
         return false;
       }

@@ -20,6 +20,7 @@ import {
   diagnoseDesignPages,
   planArrangeNodes,
   planSetFrameAutoLayout,
+  planSetNodeLayoutSizing,
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
   planCreatePage,
@@ -844,16 +845,24 @@ async function executeDesignToolRequestUnsafe(
                 input.autoLayout,
                 commandPrefix,
               )
-            : planArrangeNodes(
-                document,
-                input.pageId,
-                input.nodeIds,
-                input.action === "set-horizontal-spacing" ||
-                  input.action === "set-vertical-spacing"
-                  ? { action: input.action, spacing: input.spacing }
-                  : { action: input.action },
-                commandPrefix,
-              );
+            : input.action === "set-layout-sizing"
+              ? planSetNodeLayoutSizing(
+                  document,
+                  input.pageId,
+                  input.nodeId,
+                  input.sizing,
+                  commandPrefix,
+                )
+              : planArrangeNodes(
+                  document,
+                  input.pageId,
+                  input.nodeIds,
+                  input.action === "set-horizontal-spacing" ||
+                    input.action === "set-vertical-spacing"
+                    ? { action: input.action, spacing: input.spacing }
+                    : { action: input.action },
+                  commandPrefix,
+                );
     if (!plan.ok) {
       throw new Error(`arrange.${plan.code}: ${plan.message}`);
     }
@@ -912,9 +921,13 @@ async function executeDesignToolRequestUnsafe(
           ...(input.action === "set-auto-layout"
             ? { frameId: input.frameId, autoLayout: input.autoLayout }
             : {}),
+          ...(input.action === "set-layout-sizing"
+            ? { nodeId: input.nodeId, sizing: input.sizing }
+            : {}),
           ...(input.action !== "resize-frame" &&
           input.action !== "set-constraints" &&
           input.action !== "set-auto-layout" &&
+          input.action !== "set-layout-sizing" &&
           "orderedNodeIds" in plan
             ? { orderedNodeIds: plan.orderedNodeIds }
             : {}),
@@ -1256,6 +1269,14 @@ function assertAgentDoesNotBypassAutoLayout(
   commands: readonly DesignOperation[],
 ): void {
   for (const command of commands) {
+    if (
+      command.type === "update_properties" &&
+      command.layoutSizing !== undefined
+    ) {
+      throw new Error(
+        `design_workflow.auto_layout_requires_layout_tool: Configure flow-child sizing with opendesign_arrange_layers action set-layout-sizing`,
+      );
+    }
     if (
       command.type === "update_properties" &&
       command.properties !== undefined &&

@@ -1,20 +1,19 @@
-import type {
-  DesignDocument,
-  DesignNode,
-  DesignOperation,
-  Transform,
-} from "@opendesign/design-contracts";
-import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
 import {
-  getWorldTransform,
+  MAX_TRANSACTION_COMMANDS,
+  type DesignDocument,
+  type DesignNode,
+  type DesignOperation,
+  type Transform,
+} from "@opendesign/design-contracts";
+import {
   getLocalSelectionBounds,
+  getWorldTransform,
   IDENTITY_TRANSFORM,
   invertTransform,
   multiplyTransforms,
 } from "./geometry.js";
 import { normalizeGroupAncestorsInPlace } from "./group-bounds.js";
 import { nodeGeometryUpdate } from "./node-geometry-update.js";
-
 export type LayerOperationFailureCode =
   | "invalid-selection"
   | "invalid-target"
@@ -458,11 +457,12 @@ export function planReparentNodes(
       return failure("not-found", `Layer ${nodeId} does not exist`);
     }
     node.parentId = options.parentId;
-    const targetFlow =
-      targetParent?.kind === "frame"
-        ? (targetParent.properties.autoLayout?.mode ?? "none")
-        : "horizontal";
-    if (targetFlow !== "none") delete node.constraints;
+    const targetUsesFlow =
+      targetParent?.kind === "frame" &&
+      (targetParent.properties.autoLayout?.mode ?? "none") !== "none";
+    if (targetUsesFlow || targetParent?.kind !== "frame")
+      delete node.constraints;
+    if (!targetUsesFlow) delete node.layoutSizing;
     if (sourceParentId !== options.parentId) {
       node.transform = multiplyTransforms(worldToTarget, world);
     }

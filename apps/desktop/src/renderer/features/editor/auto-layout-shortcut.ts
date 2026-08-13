@@ -45,6 +45,28 @@ export function canShowOrdinaryConstraints(
   );
 }
 
+export function canShowAutoLayoutSizing(
+  document: DesignDocument,
+  node: DesignNode | undefined,
+): boolean {
+  if (!node?.parentId) return false;
+  const parent = document.nodesById[node.parentId];
+  return (
+    parent?.kind === "frame" &&
+    parent.properties.autoLayout !== undefined &&
+    parent.properties.autoLayout.mode !== "none"
+  );
+}
+
+export function layoutInspectorMode(
+  document: DesignDocument,
+  node: DesignNode | undefined,
+): "constraints" | "sizing" | null {
+  if (canShowOrdinaryConstraints(document, node)) return "constraints";
+  if (canShowAutoLayoutSizing(document, node)) return "sizing";
+  return null;
+}
+
 function suggestedAutoLayout(
   frame: Extract<DesignNode, { kind: "frame" }>,
 ): AutoLayoutFlow {

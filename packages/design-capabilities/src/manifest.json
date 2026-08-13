@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-12",
-  "documentSchemaVersion": "1.13.0",
+  "updatedAt": "2026-08-13",
+  "documentSchemaVersion": "1.14.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -799,7 +799,7 @@
         "en": "Lay out Frames responsively with direction, wrap, padding, gap, alignment, hug, fill, fixed, min/max, and absolute children.",
         "zh-CN": "通过方向、换行、padding、gap、对齐、hug、fill、fixed、min/max 和 absolute child 响应式布局 Frame。"
       },
-      "provider": "DesignDocument 1.13.0 + @opendesign/layout-service linear Auto Layout contract v1 + EditorRuntime",
+      "provider": "DesignDocument 1.14.0 + @opendesign/layout-service linear Auto Layout contract v2 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -811,8 +811,8 @@
       },
       "limitations": [
         {
-          "en": "Linear Auto Layout v1 supports horizontal/vertical direction, fixed non-negative gap, four-side padding, start/center/end alignment, fixed-size children, hidden-child exclusion, nested flows, and automatic reflow after content or hierarchy changes. Hug/fill, wrap, auto gap, baseline, min/max, ignore-layout children, grid, canvas reflow handles, SVG round-trip metadata, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "线性 Auto Layout v1 支持水平/垂直方向、固定非负 gap、四边 padding、起始/居中/末端对齐、固定尺寸子层、隐藏子层退出流、嵌套流，以及内容或层级变化后的自动回流。hug/fill、wrap、auto gap、baseline、min/max、ignore-layout child、grid、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
+          "en": "Linear Auto Layout axis sizing v1 supports per-axis Frame Fixed/Hug, direct-child Fixed/Fill, deterministic main-axis Fill sharing, cross-axis Fill, hidden-child exclusion, nested convergence, and horizontal Fill + Auto Height text remeasurement. Wrap, auto gap, baseline, min/max, ignore-layout children, grid, canvas reflow handles, SVG round-trip metadata, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "线性 Auto Layout 轴向尺寸 v1 支持 Frame 每轴 Fixed/Hug、直属子层每轴 Fixed/Fill、主轴 Fill 确定性平分、交叉轴 Fill、隐藏子层退出流、嵌套收敛，以及水平 Fill + Auto Height 文字重测。wrap、auto gap、baseline、min/max、ignore-layout child、grid、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
       "evidence": {
@@ -820,9 +820,13 @@
           "packages/design-contracts/src/index.test.ts",
           "packages/layout-service/src/index.test.ts",
           "packages/editor-runtime/src/auto-layout-operations.test.ts",
+          "packages/editor-runtime/src/frame-layout-operations.test.ts",
           "packages/editor-runtime/src/layer-operations.test.ts",
+          "packages/editor-runtime/src/text-layout.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/features/editor/editor-command-controllers.test.tsx",
+          "apps/desktop/src/renderer/features/editor/auto-layout-shortcut.test.ts",
           "apps/desktop/src/renderer/features/editor/editor-command-controllers.test.tsx",
           "apps/desktop/src/renderer/features/editor/canvas-operation-commit.test.ts",
           "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",

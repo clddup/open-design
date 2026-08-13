@@ -616,6 +616,48 @@ describe("layer hierarchy operations", () => {
     ).toBeUndefined();
   });
 
+  it("clears child layout sizing when reparenting out of Auto Layout", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    document.nodesById.title_welcome!.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fixed",
+    };
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planReparentNodes(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["title_welcome"],
+      {
+        parentId: "feature_group",
+        index: 0,
+        commandPrefix: "move_fill_out",
+      },
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan.commands).toContainEqual(
+      expect.objectContaining({
+        type: "update_properties",
+        nodeId: "title_welcome",
+        layoutSizing: null,
+      }),
+    );
+    expect(
+      runtime.apply(transaction(runtime, "move_fill_out", plan.commands)).ok,
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutSizing,
+    ).toBeUndefined();
+  });
+
   it("expands and rebases a destination Group without moving existing or inserted artwork", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const before = runtime.getSnapshot().document;

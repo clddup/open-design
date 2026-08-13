@@ -1144,6 +1144,17 @@ describe("design contract schemas", () => {
     expect(migrated?.nodesById.text_1?.constraints).toBeUndefined();
   });
 
+  it("migrates 1.13 Auto Layout without inventing Hug or Fill sizing", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.13.0" as typeof source.schemaVersion;
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1?.layoutSizing).toBeUndefined();
+    expect(migrated?.nodesById.text_1).not.toHaveProperty(
+      "properties.autoLayout.sizing",
+    );
+  });
+
   it("validates strict linear Auto Layout only on Frame properties", () => {
     const frame = {
       id: "frame_layout",
@@ -1192,6 +1203,66 @@ describe("design contract schemas", () => {
           strokeWidth: 0,
           cornerRadius: 0,
           autoLayout: frame.properties.autoLayout,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            ...frame.properties.autoLayout,
+            sizing: { horizontal: "hug", vertical: "fixed" },
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            ...frame.properties.autoLayout,
+            sizing: { horizontal: "fill", vertical: "fixed" },
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("validates strict child Fixed/Fill sizing and nullable removal", () => {
+    const text = textDocumentFixture().nodesById.text_1;
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        layoutSizing: { horizontal: "fill", vertical: "fixed" },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        layoutSizing: { horizontal: "hug", vertical: "fixed" },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignOperationSchema, {
+        commandId: "clear_layout_sizing",
+        type: "update_properties",
+        nodeId: "text_1",
+        layoutSizing: null,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignOperationSchema, {
+        commandId: "unknown_layout_sizing",
+        type: "update_properties",
+        nodeId: "text_1",
+        layoutSizing: {
+          horizontal: "fixed",
+          vertical: "fixed",
+          future: true,
         },
       }),
     ).toBe(false);

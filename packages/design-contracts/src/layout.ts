@@ -2,6 +2,7 @@ import { Type, type Static } from "@sinclair/typebox";
 
 export const CONSTRAINTS_DESIGN_SCHEMA_VERSION = "1.12.0" as const;
 export const AUTO_LAYOUT_DESIGN_SCHEMA_VERSION = "1.13.0" as const;
+export const AUTO_LAYOUT_SIZING_DESIGN_SCHEMA_VERSION = "1.14.0" as const;
 
 export const LayoutConstraintsSchema = Type.Object(
   {
@@ -25,6 +26,42 @@ export const LayoutConstraintsSchema = Type.Object(
 
 export type LayoutConstraints = Static<typeof LayoutConstraintsSchema>;
 
+const ChildLayoutAxisSizingSchema = Type.Union([
+  Type.Literal("fixed"),
+  Type.Literal("fill"),
+]);
+
+export const LayoutSizingSchema = Type.Object(
+  {
+    horizontal: ChildLayoutAxisSizingSchema,
+    vertical: ChildLayoutAxisSizingSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type LayoutSizing = Static<typeof LayoutSizingSchema>;
+export const DEFAULT_LAYOUT_SIZING: LayoutSizing = Object.freeze({
+  horizontal: "fixed",
+  vertical: "fixed",
+});
+
+const AutoLayoutFrameAxisSizingSchema = Type.Union([
+  Type.Literal("fixed"),
+  Type.Literal("hug"),
+]);
+
+export const AutoLayoutFrameSizingSchema = Type.Object(
+  {
+    horizontal: AutoLayoutFrameAxisSizingSchema,
+    vertical: AutoLayoutFrameAxisSizingSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type AutoLayoutFrameSizing = Static<typeof AutoLayoutFrameSizingSchema>;
+export const DEFAULT_AUTO_LAYOUT_FRAME_SIZING: AutoLayoutFrameSizing =
+  Object.freeze({ horizontal: "fixed", vertical: "fixed" });
+
 export const AutoLayoutPaddingSchema = Type.Object(
   {
     top: Type.Number({ minimum: 0, maximum: 1_000_000 }),
@@ -46,6 +83,7 @@ const AutoLayoutFlowProperties = {
   gap: Type.Number({ minimum: 0, maximum: 1_000_000 }),
   primaryAlignment: AutoLayoutAlignmentSchema,
   counterAlignment: AutoLayoutAlignmentSchema,
+  sizing: Type.Optional(AutoLayoutFrameSizingSchema),
 };
 
 export const AutoLayoutSchema = Type.Union([

@@ -5,14 +5,17 @@ import {
   type TUnion,
 } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { AutoLayoutSchema, LayoutConstraintsSchema } from "./layout.js";
+import {
+  AutoLayoutSchema,
+  LayoutConstraintsSchema,
+  LayoutSizingSchema,
+} from "./layout.js";
 import * as versions from "./versions.js";
 export * from "./versions.js";
 export * from "./layout.js";
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
 export const MAX_TRANSACTION_COMMANDS = 500;
 export const MAX_PAGE_TRANSACTION_NODES = 50_000;
-
 export const JsonValueSchema = Type.Recursive((Self) =>
   Type.Union([
     Type.String(),
@@ -23,9 +26,7 @@ export const JsonValueSchema = Type.Recursive((Self) =>
     Type.Record(Type.String(), Self),
   ]),
 );
-
 export const JsonObjectSchema = Type.Record(Type.String(), JsonValueSchema);
-
 export const NodeKindSchema = Type.Union([
   Type.Literal("frame"),
   Type.Literal("group"),
@@ -41,7 +42,6 @@ export const NodeKindSchema = Type.Union([
   Type.Literal("path"),
   Type.Literal("instance"),
 ]);
-
 export const TransformSchema = Type.Tuple([
   Type.Number(),
   Type.Number(),
@@ -684,6 +684,7 @@ const NodeBaseProperties = {
   size: SizeSchema,
   opacity: Type.Number({ minimum: 0, maximum: 1 }),
   constraints: Type.Optional(LayoutConstraintsSchema),
+  layoutSizing: Type.Optional(LayoutSizingSchema),
   blendMode: Type.Optional(BlendModeSchema),
   effects: Type.Optional(Type.Array(EffectSchema)),
   maskMode: Type.Optional(MaskModeSchema),
@@ -916,6 +917,7 @@ export const UpdatePropertiesCommandSchema = Type.Object(
     constraints: Type.Optional(
       Type.Union([LayoutConstraintsSchema, Type.Null()]),
     ),
+    layoutSizing: Type.Optional(Type.Union([LayoutSizingSchema, Type.Null()])),
     blendMode: Type.Optional(BlendModeSchema),
     effects: Type.Optional(Type.Array(EffectSchema)),
     maskMode: Type.Optional(MaskModeSchema),
@@ -1753,7 +1755,8 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
       schemaVersion !== versions.TEXT_LAYOUT_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
       schemaVersion !== versions.COMPONENT_DESIGN_SCHEMA_VERSION &&
-      schemaVersion !== versions.FRAME_CONSTRAINTS_DESIGN_SCHEMA_VERSION)
+      schemaVersion !== versions.FRAME_CONSTRAINTS_DESIGN_SCHEMA_VERSION &&
+      schemaVersion !== versions.LINEAR_AUTO_LAYOUT_DESIGN_SCHEMA_VERSION)
   ) {
     return null;
   }

@@ -2,11 +2,13 @@ import type {
   AutoLayout,
   DesignOperation,
   LayoutConstraints,
+  LayoutSizing,
   Size,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import {
   planSetFrameAutoLayout,
+  planSetNodeLayoutSizing,
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
   type EditorRuntime,
@@ -92,10 +94,33 @@ export function useEditorCommandController({
     [applyCommands, runtime, setEditorError, t],
   );
 
+  const setNodeLayoutSizing = useCallback(
+    (nodeId: string, sizing: LayoutSizing) => {
+      const current = runtime.getSnapshot().document;
+      const plan = planSetNodeLayoutSizing(
+        current,
+        pageIdForNode(current, nodeId),
+        nodeId,
+        sizing,
+        `inspector_layout_sizing_${nodeId}`,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t("history.updateAutoLayoutSizing"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
   const updateNode = useCallback(
     (nodeId: string, updates: UpdatePropertiesPatch) => {
       const current = runtime.getSnapshot().document;
       const node = current.nodesById[nodeId];
+      if (updates.layoutSizing) {
+        setNodeLayoutSizing(nodeId, updates.layoutSizing);
+        return;
+      }
       const autoLayout = updates.properties?.autoLayout;
       if (node?.kind === "frame" && isAutoLayout(autoLayout)) {
         setFrameAutoLayout(nodeId, autoLayout);
@@ -124,7 +149,14 @@ export function useEditorCommandController({
       };
       applyCommands(t("history.updateProperties"), [command]);
     },
-    [applyCommands, runtime, setEditorError, setFrameAutoLayout, t],
+    [
+      applyCommands,
+      runtime,
+      setEditorError,
+      setFrameAutoLayout,
+      setNodeLayoutSizing,
+      t,
+    ],
   );
 
   useEffect(() => {
@@ -168,6 +200,7 @@ export function useEditorCommandController({
     resizeFrame,
     setFrameAutoLayout,
     setNodeConstraints,
+    setNodeLayoutSizing,
     updateNode,
   };
 }

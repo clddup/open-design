@@ -5,6 +5,7 @@ import type {
   ComponentOverridePatch,
   DesignNode,
   LayoutConstraints,
+  LayoutSizing,
   LineEndpoint,
 } from "@opendesign/design-contracts";
 import { Button, Glyph, IconButton, type GlyphName } from "@opendesign/ui";
@@ -81,6 +82,7 @@ const defaultAutoLayout: AutoLayoutFlow = {
   gap: 0,
   primaryAlignment: "start",
   counterAlignment: "start",
+  sizing: { horizontal: "fixed", vertical: "fixed" },
 };
 
 function AutoLayoutSection({
@@ -123,6 +125,41 @@ function AutoLayoutSection({
         </label>
         {flow && (
           <>
+            <div className={styles.grid}>
+              {(["horizontal", "vertical"] as const).map((axis) => (
+                <label className={styles.select} key={axis}>
+                  <span>
+                    {t(
+                      axis === "horizontal"
+                        ? "properties.autoLayoutWidthSizing"
+                        : "properties.autoLayoutHeightSizing",
+                    )}
+                  </span>
+                  <select
+                    aria-label={t(
+                      axis === "horizontal"
+                        ? "properties.autoLayoutWidthSizing"
+                        : "properties.autoLayoutHeightSizing",
+                    )}
+                    onChange={(event) =>
+                      updateFlow({
+                        sizing: {
+                          horizontal: flow.sizing?.horizontal ?? "fixed",
+                          vertical: flow.sizing?.vertical ?? "fixed",
+                          [axis]: event.target.value as "fixed" | "hug",
+                        },
+                      })
+                    }
+                    value={flow.sizing?.[axis] ?? "fixed"}
+                  >
+                    <option value="fixed">
+                      {t("properties.autoLayoutFixed")}
+                    </option>
+                    <option value="hug">{t("properties.autoLayoutHug")}</option>
+                  </select>
+                </label>
+              ))}
+            </div>
             <div className={styles.grid}>
               <Field
                 accessibleLabel={t("properties.autoLayoutGap")}
@@ -191,7 +228,7 @@ function AutoLayoutSection({
               ))}
             </div>
             <small className={styles.hint}>
-              {t("properties.autoLayoutFixedOnly")}
+              {t("properties.autoLayoutSizingHint")}
             </small>
           </>
         )}
@@ -218,6 +255,7 @@ export function SelectedNodeProperties({
   booleanOperandParent,
   canDelete,
   constraintsAvailable,
+  layoutSizingAvailable,
   onBooleanOperationChange,
   onCreateComponent,
   onCreateComponentInstance,
@@ -240,6 +278,7 @@ export function SelectedNodeProperties({
   booleanOperandParent?: { id: string; name: string };
   canDelete: boolean;
   constraintsAvailable: boolean;
+  layoutSizingAvailable: boolean;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
@@ -598,6 +637,47 @@ export function SelectedNodeProperties({
                   {t("properties.constraintCenter")}
                 </option>
                 <option value="scale">{t("properties.constraintScale")}</option>
+              </select>
+            </label>
+          </div>
+        )}
+        {layoutSizingAvailable && (
+          <div className={styles.grid}>
+            <label className={styles.select}>
+              <span>{t("properties.autoLayoutWidthSizing")}</span>
+              <select
+                aria-label={t("properties.autoLayoutWidthSizing")}
+                onChange={(event) =>
+                  onUpdate({
+                    layoutSizing: {
+                      horizontal: event.target
+                        .value as LayoutSizing["horizontal"],
+                      vertical: node.layoutSizing?.vertical ?? "fixed",
+                    },
+                  })
+                }
+                value={node.layoutSizing?.horizontal ?? "fixed"}
+              >
+                <option value="fixed">{t("properties.autoLayoutFixed")}</option>
+                <option value="fill">{t("properties.autoLayoutFill")}</option>
+              </select>
+            </label>
+            <label className={styles.select}>
+              <span>{t("properties.autoLayoutHeightSizing")}</span>
+              <select
+                aria-label={t("properties.autoLayoutHeightSizing")}
+                onChange={(event) =>
+                  onUpdate({
+                    layoutSizing: {
+                      horizontal: node.layoutSizing?.horizontal ?? "fixed",
+                      vertical: event.target.value as LayoutSizing["vertical"],
+                    },
+                  })
+                }
+                value={node.layoutSizing?.vertical ?? "fixed"}
+              >
+                <option value="fixed">{t("properties.autoLayoutFixed")}</option>
+                <option value="fill">{t("properties.autoLayoutFill")}</option>
               </select>
             </label>
           </div>

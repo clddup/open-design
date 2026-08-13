@@ -149,7 +149,7 @@ function fixture(): DesignDocument {
   };
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.13.0",
+    schemaVersion: "1.14.0",
     documentId: "doc",
     revision: 1,
     pageOrder: ["main", "instances"],

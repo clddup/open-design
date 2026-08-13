@@ -1,6 +1,7 @@
 import type {
   AutoLayout,
   LayoutConstraints,
+  LayoutSizing,
 } from "@opendesign/design-contracts";
 
 export type DesignArrangeToolInput =
@@ -47,6 +48,13 @@ export type DesignArrangeToolInput =
       pageId: string;
       frameId: string;
       autoLayout: AutoLayout;
+    }
+  | {
+      action: "set-layout-sizing";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      sizing: LayoutSizing;
     };
 
 const label = { type: "string", minLength: 1, maxLength: 256 } as const;
@@ -64,7 +72,7 @@ const nodeIds = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies only to direct children of ordinary Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures a Frame-owned horizontal or vertical fixed-size flow; the host derives all child positions.",
+    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies only to direct children of ordinary Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug axis sizing; set-layout-sizing configures direct-child Fixed/Fill sizing. The host derives all flow geometry.",
   properties: {
     action: {
       enum: [
@@ -82,6 +90,7 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
         "set-constraints",
         "resize-frame",
         "set-auto-layout",
+        "set-layout-sizing",
       ],
     },
     label,
@@ -146,6 +155,15 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
             gap: { type: "number", minimum: 0, maximum: 1_000_000 },
             primaryAlignment: { enum: ["start", "center", "end"] },
             counterAlignment: { enum: ["start", "center", "end"] },
+            sizing: {
+              type: "object",
+              properties: {
+                horizontal: { enum: ["fixed", "hug"] },
+                vertical: { enum: ["fixed", "hug"] },
+              },
+              required: ["horizontal", "vertical"],
+              additionalProperties: false,
+            },
           },
           required: [
             "mode",
@@ -157,6 +175,15 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
           additionalProperties: false,
         })),
       ],
+    },
+    sizing: {
+      type: "object",
+      properties: {
+        horizontal: { enum: ["fixed", "fill"] },
+        vertical: { enum: ["fixed", "fill"] },
+      },
+      required: ["horizontal", "vertical"],
+      additionalProperties: false,
     },
   },
   required: ["action", "label", "pageId"],
@@ -195,6 +222,13 @@ export function isDesignArrangeToolInput(
       safeId(input.frameId) &&
       isAutoLayout(input.autoLayout) &&
       onlyKeys(input, ["action", "label", "pageId", "frameId", "autoLayout"])
+    );
+  }
+  if (action === "set-layout-sizing") {
+    return (
+      safeId(input.nodeId) &&
+      isLayoutSizing(input.sizing) &&
+      onlyKeys(input, ["action", "label", "pageId", "nodeId", "sizing"])
     );
   }
   const layerActions = [
@@ -259,11 +293,21 @@ function isLayoutConstraints(value: unknown): value is LayoutConstraints {
   );
 }
 
+function isLayoutSizing(value: unknown): value is LayoutSizing {
+  return (
+    isRecord(value) &&
+    ["fixed", "fill"].includes(String(value.horizontal)) &&
+    ["fixed", "fill"].includes(String(value.vertical)) &&
+    onlyKeys(value, ["horizontal", "vertical"])
+  );
+}
+
 function isAutoLayout(value: unknown): value is AutoLayout {
   if (!isRecord(value)) return false;
   if (value.mode === "none") return onlyKeys(value, ["mode"]);
   if (value.mode !== "horizontal" && value.mode !== "vertical") return false;
   const padding = value.padding;
+  const sizing = value.sizing;
   return (
     isRecord(padding) &&
     ["top", "right", "bottom", "left"].every((side) =>
@@ -273,12 +317,18 @@ function isAutoLayout(value: unknown): value is AutoLayout {
     finiteNonNegativeBounded(value.gap) &&
     ["start", "center", "end"].includes(String(value.primaryAlignment)) &&
     ["start", "center", "end"].includes(String(value.counterAlignment)) &&
+    (sizing === undefined ||
+      (isRecord(sizing) &&
+        ["fixed", "hug"].includes(String(sizing.horizontal)) &&
+        ["fixed", "hug"].includes(String(sizing.vertical)) &&
+        onlyKeys(sizing, ["horizontal", "vertical"]))) &&
     onlyKeys(value, [
       "mode",
       "padding",
       "gap",
       "primaryAlignment",
       "counterAlignment",
+      "sizing",
     ])
   );
 }

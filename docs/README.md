@@ -86,3 +86,4 @@
 | [0052](adr/0052-run-scoped-renderer-circuit-breaker.md)                  | 已接受     | Run 级 Renderer 连续停滞熔断                                       |
 | [0053](adr/0053-linear-auto-layout-v1.md)                                | 已接受     | 线性 Auto Layout v1 与事务内自动回流                               |
 | [0054](adr/0054-isolated-agent-capture-export.md)                        | 已接受     | Agent 审查截图与 Leafer 全局异步导出队列隔离                       |
+| [0055](adr/0055-auto-layout-axis-sizing-v1.md)                           | 已接受     | Auto Layout 轴向 Fixed/Hug/Fill 与有界收敛                         |

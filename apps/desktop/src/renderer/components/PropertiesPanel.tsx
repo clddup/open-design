@@ -44,7 +44,7 @@ export function PropertiesPanel({
   booleanOperationEditable,
   booleanOperandParent,
   canDelete,
-  constraintsAvailable,
+  layoutMode,
   onArrange,
   onBooleanOperationChange,
   onCreateComponent,
@@ -83,7 +83,7 @@ export function PropertiesPanel({
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
   canDelete: boolean;
-  constraintsAvailable: boolean;
+  layoutMode: "constraints" | "sizing" | null;
   onArrange: (operation: ArrangeOperation) => void;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
@@ -180,7 +180,8 @@ export function PropertiesPanel({
             booleanOperationEditable={booleanOperationEditable}
             booleanOperandParent={booleanOperandParent}
             canDelete={canDelete}
-            constraintsAvailable={constraintsAvailable}
+            constraintsAvailable={layoutMode === "constraints"}
+            layoutSizingAvailable={layoutMode === "sizing"}
             onBooleanOperationChange={onBooleanOperationChange}
             onCreateComponent={onCreateComponent}
             onCreateComponentInstance={onCreateComponentInstance}

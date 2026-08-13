@@ -4,8 +4,13 @@ import type {
   DesignDocument,
   DesignNode,
   DesignOperation,
+  LayoutSizing,
 } from "@opendesign/design-contracts";
-import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
+import {
+  DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
+  DEFAULT_LAYOUT_SIZING,
+  MAX_TRANSACTION_COMMANDS,
+} from "@opendesign/design-contracts";
 import {
   AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
   solveLinearAutoLayout,
@@ -62,6 +67,14 @@ export function planSetFrameAutoLayout(
   if (sameAutoLayout(frame.properties.autoLayout, autoLayout)) {
     return failure("no-op", "Frame already uses the requested Auto Layout");
   }
+  const commands: DesignOperation[] = [
+    {
+      commandId: `${commandPrefix}_frame`,
+      type: "update_properties",
+      nodeId: frameId,
+      properties: { autoLayout },
+    },
+  ];
   if (autoLayout.mode !== "none") {
     for (const childId of frame.childIds) {
       const child = document.nodesById[childId];
@@ -73,16 +86,31 @@ export function planSetFrameAutoLayout(
           `Layer ${childId} has rotation, skew, or local scale; linear Auto Layout v1 only positions translation-only direct children`,
         );
       }
+      const frameSizing = autoLayout.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING;
+      const childSizing = child.layoutSizing ?? DEFAULT_LAYOUT_SIZING;
+      if (
+        child.visible &&
+        ((frameSizing.horizontal === "hug" &&
+          childSizing.horizontal === "fill") ||
+          (frameSizing.vertical === "hug" && childSizing.vertical === "fill"))
+      ) {
+        return failure(
+          "visual-fidelity",
+          `Layer ${childId} cannot fill an axis hugged by Frame ${frameId}`,
+        );
+      }
+    }
+  } else {
+    for (const childId of frame.childIds) {
+      if (document.nodesById[childId]?.layoutSizing === undefined) continue;
+      commands.push({
+        commandId: `${commandPrefix}_clear_sizing_${commands.length}`,
+        type: "update_properties",
+        nodeId: childId,
+        layoutSizing: null,
+      });
     }
   }
-  const commands: DesignOperation[] = [
-    {
-      commandId: `${commandPrefix}_frame`,
-      type: "update_properties",
-      nodeId: frameId,
-      properties: { autoLayout },
-    },
-  ];
   if (autoLayout.mode !== "none") {
     for (const childId of frame.childIds) {
       if (document.nodesById[childId]?.constraints === undefined) continue;
@@ -135,7 +163,12 @@ export function resolveAutoLayoutInPlace(
     }
     const autoLayout = frame.properties.autoLayout;
     if (!autoLayout || autoLayout.mode === "none") continue;
-    const children: Array<{ id: string; width: number; height: number }> = [];
+    const children: Array<{
+      id: string;
+      width: number;
+      height: number;
+      sizing: typeof DEFAULT_LAYOUT_SIZING;
+    }> = [];
     for (const childId of frame.childIds) {
       const child = document.nodesById[childId];
       if (!child) {
@@ -159,7 +192,13 @@ export function resolveAutoLayoutInPlace(
           `Flow child ${childId} has rotation, skew, or local scale; linear Auto Layout v1 only positions translation-only children`,
         );
       }
-      if (child.visible) children.push({ id: child.id, ...child.size });
+      if (child.visible) {
+        children.push({
+          id: child.id,
+          ...child.size,
+          sizing: child.layoutSizing ?? DEFAULT_LAYOUT_SIZING,
+        });
+      }
     }
     const result = solveFrame(frame.size, autoLayout, children);
     if (!result.ok) {
@@ -169,6 +208,8 @@ export function resolveAutoLayoutInPlace(
         `Frame ${frameId} Auto Layout could not be resolved: ${result.message}`,
       );
     }
+    frame.size = result.frame;
+    positioned.add(frame.id);
     for (const placement of result.placements) {
       const child = document.nodesById[placement.id];
       if (!child) {
@@ -179,16 +220,97 @@ export function resolveAutoLayoutInPlace(
         );
       }
       child.transform = [1, 0, 0, 1, placement.x, placement.y];
+      child.size = { width: placement.width, height: placement.height };
       positioned.add(child.id);
     }
   }
   return { ok: true, frameIds, nodeIds: [...positioned] };
 }
 
+export function resolveAutoLayoutUntilStable(
+  document: DesignDocument,
+  resolveWidthDependentText: (
+    node: Extract<DesignNode, { kind: "text" }>,
+  ) => void,
+): AutoLayoutResolution {
+  const flowCount = Object.values(document.nodesById).filter(
+    (node) =>
+      node.kind === "frame" &&
+      node.properties.autoLayout !== undefined &&
+      node.properties.autoLayout.mode !== "none",
+  ).length;
+  const maximumPasses = Math.max(1, flowCount * 2 + 2);
+  let previous = autoLayoutGeometryFingerprint(document);
+  for (let pass = 0; pass < maximumPasses; pass += 1) {
+    const autoHeightWidths = new Map<string, number>();
+    for (const node of Object.values(document.nodesById)) {
+      if (node.kind === "text" && node.properties.textResize === "auto-height")
+        autoHeightWidths.set(node.id, node.size.width);
+    }
+    const resolution = resolveAutoLayoutInPlace(document);
+    if (!resolution.ok) return resolution;
+    for (const [nodeId, previousWidth] of autoHeightWidths) {
+      const node = document.nodesById[nodeId];
+      if (
+        node?.kind === "text" &&
+        node.properties.textResize === "auto-height" &&
+        node.size.width !== previousWidth
+      )
+        resolveWidthDependentText(node);
+    }
+    const next = autoLayoutGeometryFingerprint(document);
+    if (next === previous) return resolution;
+    previous = next;
+  }
+  return resolutionFailure(
+    "invalid-layout",
+    Object.values(document.nodesById).find(
+      (node) =>
+        node.kind === "frame" &&
+        node.properties.autoLayout !== undefined &&
+        node.properties.autoLayout.mode !== "none",
+    )?.id ?? "unknown",
+    `Auto Layout did not converge within ${maximumPasses} passes`,
+  );
+}
+
+function autoLayoutGeometryFingerprint(document: DesignDocument): string {
+  return JSON.stringify(
+    Object.values(document.nodesById)
+      .filter((node) => {
+        if (
+          node.kind === "frame" &&
+          node.properties.autoLayout !== undefined &&
+          node.properties.autoLayout.mode !== "none"
+        )
+          return true;
+        const parent = node.parentId
+          ? document.nodesById[node.parentId]
+          : undefined;
+        return (
+          parent?.kind === "frame" &&
+          parent.properties.autoLayout !== undefined &&
+          parent.properties.autoLayout.mode !== "none"
+        );
+      })
+      .map((node) => ({
+        id: node.id,
+        transform: node.transform,
+        size: node.size,
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  );
+}
+
 function solveFrame(
   frame: { width: number; height: number },
   autoLayout: AutoLayoutFlow,
-  children: Array<{ id: string; width: number; height: number }>,
+  children: Array<{
+    id: string;
+    width: number;
+    height: number;
+    sizing: LayoutSizing;
+  }>,
 ) {
   return solveLinearAutoLayout({
     version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
@@ -198,6 +320,7 @@ function solveFrame(
     gap: autoLayout.gap,
     primaryAlignment: autoLayout.primaryAlignment,
     counterAlignment: autoLayout.counterAlignment,
+    frameSizing: autoLayout.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
     children,
   });
 }

@@ -15,7 +15,16 @@ export function nodeGeometryUpdate(
   const constraintsChanged =
     before.constraints?.horizontal !== after.constraints?.horizontal ||
     before.constraints?.vertical !== after.constraints?.vertical;
-  if (!transformChanged && !sizeChanged && !constraintsChanged) return null;
+  const layoutSizingChanged =
+    before.layoutSizing?.horizontal !== after.layoutSizing?.horizontal ||
+    before.layoutSizing?.vertical !== after.layoutSizing?.vertical;
+  if (
+    !transformChanged &&
+    !sizeChanged &&
+    !constraintsChanged &&
+    !layoutSizingChanged
+  )
+    return null;
   return {
     commandId,
     type: "update_properties",
@@ -23,6 +32,9 @@ export function nodeGeometryUpdate(
     ...(transformChanged ? { transform: after.transform } : {}),
     ...(sizeChanged ? { size: after.size } : {}),
     ...(constraintsChanged ? { constraints: after.constraints ?? null } : {}),
+    ...(layoutSizingChanged
+      ? { layoutSizing: after.layoutSizing ?? null }
+      : {}),
   };
 }
 

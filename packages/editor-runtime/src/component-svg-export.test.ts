@@ -1,4 +1,8 @@
-import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import {
+  DESIGN_SCHEMA_VERSION,
+  type DesignDocument,
+  type DesignNode,
+} from "@opendesign/design-contracts";
 import { exportSvg } from "@opendesign/import-export-service";
 import { describe, expect, it } from "vitest";
 import { planSvgExportRequest } from "./svg-export-operations.js";
@@ -107,7 +111,7 @@ function fixture(): DesignDocument {
   };
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.13.0",
+    schemaVersion: DESIGN_SCHEMA_VERSION,
     documentId: "component-export",
     revision: 1,
     pageOrder: ["main-page", "instances"],

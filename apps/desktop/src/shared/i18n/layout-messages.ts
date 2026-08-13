@@ -2,6 +2,7 @@ const enLayoutMessages = {
   "history.updateConstraints": "Update constraints",
   "history.resizeFrameResponsive": "Resize responsive Frame",
   "history.updateAutoLayout": "Update Auto Layout",
+  "history.updateAutoLayoutSizing": "Update Auto Layout sizing",
   "agent.canvasCircuitOpen": "Canvas renderer repeatedly stalled",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign stopped this task after repeated canvas stalls. Committed design revisions were preserved; restart OpenDesign before retrying visual generation.",
@@ -29,8 +30,13 @@ const enLayoutMessages = {
   "properties.autoLayoutStart": "Start",
   "properties.autoLayoutCenter": "Center",
   "properties.autoLayoutEnd": "End",
-  "properties.autoLayoutFixedOnly":
-    "Linear flow v1 uses fixed child sizes. Hug, fill, wrap, and absolute children are not available yet.",
+  "properties.autoLayoutWidthSizing": "Width sizing",
+  "properties.autoLayoutHeightSizing": "Height sizing",
+  "properties.autoLayoutFixed": "Fixed",
+  "properties.autoLayoutHug": "Hug contents",
+  "properties.autoLayoutFill": "Fill container",
+  "properties.autoLayoutSizingHint":
+    "Frames can hug contents; direct children can fill available space. Wrap and absolute children remain unavailable.",
   "properties.padding.top": "Top",
   "properties.padding.right": "Right",
   "properties.padding.bottom": "Bottom",
@@ -41,6 +47,7 @@ const zhCNLayoutMessages = {
   "history.updateConstraints": "更新约束",
   "history.resizeFrameResponsive": "调整响应式画框",
   "history.updateAutoLayout": "更新 Auto Layout",
+  "history.updateAutoLayoutSizing": "更新 Auto Layout 尺寸模式",
   "agent.canvasCircuitOpen": "画布渲染连续停滞",
   "agent.canvasCircuitOpenDetail":
     "OpenDesign 已在画布连续停滞后停止本次任务。已提交的设计 revision 均已保留，请重启 OpenDesign 后再尝试视觉生成。",
@@ -68,8 +75,13 @@ const zhCNLayoutMessages = {
   "properties.autoLayoutStart": "起始",
   "properties.autoLayoutCenter": "居中",
   "properties.autoLayoutEnd": "末端",
-  "properties.autoLayoutFixedOnly":
-    "线性布局 v1 使用固定子层尺寸；hug、fill、wrap 和 absolute child 尚未开放。",
+  "properties.autoLayoutWidthSizing": "宽度模式",
+  "properties.autoLayoutHeightSizing": "高度模式",
+  "properties.autoLayoutFixed": "固定",
+  "properties.autoLayoutHug": "适应内容",
+  "properties.autoLayoutFill": "填充容器",
+  "properties.autoLayoutSizingHint":
+    "画框可适应内容，直属子层可填充可用空间；wrap 与 absolute child 尚未开放。",
   "properties.padding.top": "上内边距",
   "properties.padding.right": "右内边距",
   "properties.padding.bottom": "下内边距",

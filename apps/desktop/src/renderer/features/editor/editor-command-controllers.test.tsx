@@ -167,4 +167,30 @@ describe("editor command controllers", () => {
     expect(snapshot.state.history.undo).toHaveLength(1);
     expect(setEditorError).toHaveBeenLastCalledWith(null);
   });
+
+  it("routes flow-child Fill sizing through the dedicated planner", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "vertical",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      gap: 8,
+      primaryAlignment: "start",
+      counterAlignment: "start",
+    };
+    const runtime = new EditorRuntime(document);
+    const { result, setEditorError } = renderControllers(runtime);
+    act(() =>
+      result.current.editor.setNodeLayoutSizing("title_welcome", {
+        horizontal: "fill",
+        vertical: "fixed",
+      }),
+    );
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.layoutSizing,
+    ).toEqual({ horizontal: "fill", vertical: "fixed" });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+  });
 });

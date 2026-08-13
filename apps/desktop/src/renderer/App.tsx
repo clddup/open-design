@@ -75,7 +75,7 @@ import { useDesignAssetActions } from "./use-design-asset-actions";
 import { useComponentActions } from "./use-component-actions";
 import { useImportExportWorkflow } from "./features/import-export/use-import-export-workflow";
 import { useEditorCommandController } from "./features/editor/use-editor-command-controller";
-import { canShowOrdinaryConstraints } from "./features/editor/auto-layout-shortcut";
+import { layoutInspectorMode } from "./features/editor/auto-layout-shortcut";
 import { useLayerCommandController } from "./features/editor/use-layer-command-controller";
 import { usePageCommandController } from "./features/editor/use-page-command-controller";
 import {
@@ -1880,10 +1880,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                     : undefined
                 }
                 canDelete={canDeleteSelection}
-                constraintsAvailable={canShowOrdinaryConstraints(
-                  designDocument,
-                  selectedNode,
-                )}
+                layoutMode={layoutInspectorMode(designDocument, selectedNode)}
                 node={selectedNode}
                 onArrange={arrangeSelection}
                 onBooleanOperationChange={applyBooleanOperation}
