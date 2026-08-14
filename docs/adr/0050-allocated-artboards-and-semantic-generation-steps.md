@@ -18,7 +18,7 @@
 
 ### Plan 接受后原子分配真实根
 
-Main 验证 `DesignPlan v3` 后，立即为所有 `artboard.mode=create` target 编译 Page-root Frame insert，并通过现有 Renderer tool host、Preload、唯一 `EditorRuntime` 和 autosave 链执行一次内部原子事务。分配事务只创建稳定 Frame，不创建 Region 或垃圾 Group；全部 Frame 一次成功、一个 revision、一个 undo entry，任一命令失败则 ledger 保持 pending。
+Main 验证当前 `DesignPlan v4`（以及历史兼容 v3）后，立即为所有 `artboard.mode=create` target 编译 Page-root Frame insert，并通过现有 Renderer tool host、Preload、唯一 `EditorRuntime` 和 autosave 链执行一次内部原子事务。分配事务只创建稳定 Frame，不创建 Region 或垃圾 Group；全部 Frame 一次成功、一个 revision、一个 undo entry，任一命令失败则 ledger 保持 pending。v4 的组件策略与最终验证由 ADR-0062 定义，不改变本 ADR 的根分配事务。
 
 Plan 工具结果携带这次 `designRevision`，Agent 下一轮从新 revision 继续。模型若仍重复提交同 ID Frame，Main 只删除冗余 Frame insert并保留真实子层命令；只有重复 Frame 而无材料内容时返回明确恢复错误。
 

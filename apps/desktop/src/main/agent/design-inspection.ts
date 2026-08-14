@@ -4,6 +4,11 @@ import type {
 } from "@opendesign/agent-runtime";
 import type { DesignLayoutQualityReport } from "@opendesign/editor-runtime";
 import {
+  componentStrategyOccurrencesForTarget,
+  designPlanComponentStrategy,
+  type DesignPlanToolInput,
+} from "../../shared/design-agent-tools.js";
+import {
   inspectedNodeBelongsToPage,
   type DesignDeliveryTargetState,
   type InspectedHierarchy,
@@ -75,8 +80,14 @@ export function parseInspectedHierarchy(
         "design_workflow.inspection_invalid: Document inspection contains an invalid node hierarchy; inspect again",
       );
     }
+    const properties = recordValue(node.properties);
+    const componentId =
+      node.kind === "instance" && safeHierarchyId(properties?.componentId)
+        ? properties.componentId
+        : null;
     nodesById.set(nodeId, {
       childIds: [...node.childIds],
+      componentId,
       id: nodeId,
       kind: node.kind,
       locked: node.locked,
@@ -109,7 +120,28 @@ export function parseInspectedHierarchy(
       }
     }
   }
+  const componentsById: InspectedHierarchy["componentsById"] = new Map();
+  for (const [componentId, value] of Object.entries(
+    recordValue(document.componentsById) ?? {},
+  )) {
+    const component = recordValue(value);
+    if (
+      !component ||
+      component.id !== componentId ||
+      !safeHierarchyId(componentId) ||
+      !safeHierarchyId(component.rootNodeId)
+    ) {
+      throw new Error(
+        "design_workflow.inspection_invalid: Document inspection contains an invalid component definition; inspect again",
+      );
+    }
+    componentsById.set(componentId, {
+      id: componentId,
+      rootNodeId: component.rootNodeId,
+    });
+  }
   return {
+    componentsById,
     documentId: context.documentId,
     nodesById,
     pageRootsById,
@@ -120,6 +152,7 @@ export function parseInspectedHierarchy(
 export function assertDeliveryTargetStructure(
   inspection: InspectedHierarchy,
   target: DesignDeliveryTargetState,
+  plan: DesignPlanToolInput,
 ): void {
   const artboardId = target.planned.artboard.frameId;
   const artboard = inspection.nodesById.get(artboardId);
@@ -138,6 +171,7 @@ export function assertDeliveryTargetStructure(
         `design_workflow.delivery_structure_incomplete: Existing delivery artboard ${artboardId} has no real editable content; add or refine material layers inside the artboard before capturing again`,
       );
     }
+    assertDeclaredComponentStrategy(inspection, target, plan);
     return;
   }
   for (const region of target.planned.composition.regions) {
@@ -157,6 +191,79 @@ export function assertDeliveryTargetStructure(
       );
     }
   }
+  assertDeclaredComponentStrategy(inspection, target, plan);
+}
+
+function assertDeclaredComponentStrategy(
+  inspection: InspectedHierarchy,
+  target: DesignDeliveryTargetState,
+  plan: DesignPlanToolInput,
+): void {
+  const strategy = designPlanComponentStrategy(plan);
+  if (!strategy) return;
+  const occurrences = componentStrategyOccurrencesForTarget(
+    strategy,
+    target.delivery.targetId,
+  );
+  for (const occurrence of occurrences) {
+    const node = inspection.nodesById.get(occurrence.nodeId);
+    if (
+      !node ||
+      !inspectedParentChainReaches(
+        inspection.nodesById,
+        occurrence.nodeId,
+        target.planned.artboard.frameId,
+      )
+    ) {
+      throw new Error(
+        `design_workflow.component_strategy_incomplete: Declared semantic object ${occurrence.decisionId} requires node ${occurrence.nodeId} inside delivery artboard ${target.planned.artboard.frameId}; inspect the live hierarchy and implement the declared component decision before capturing again`,
+      );
+    }
+    if (occurrence.decision === "ordinary") {
+      if (node.kind !== "frame" && node.kind !== "group") {
+        throw new Error(
+          `design_workflow.component_strategy_incomplete: Ordinary semantic object ${occurrence.decisionId} must use a named Frame or Group root at ${occurrence.nodeId}; group its meaningful layers without manufacturing a Component, then inspect and capture again`,
+        );
+      }
+      continue;
+    }
+    if (occurrence.decision === "component-main") {
+      if (
+        (node.kind !== "frame" && node.kind !== "group") ||
+        inspection.componentsById.get(occurrence.componentId)?.rootNodeId !==
+          occurrence.nodeId
+      ) {
+        throw new Error(
+          `design_workflow.component_strategy_incomplete: Declared Component Main ${occurrence.componentId} must bind Frame/Group ${occurrence.nodeId}; create it with opendesign_manage_components, inspect the current document, and capture again`,
+        );
+      }
+      continue;
+    }
+    if (
+      node.kind !== "instance" ||
+      node.componentId !== occurrence.componentId ||
+      !inspection.componentsById.has(occurrence.componentId)
+    ) {
+      throw new Error(
+        `design_workflow.component_strategy_incomplete: Declared instance ${occurrence.nodeId} must remain linked to Component ${occurrence.componentId}; place the planned Instance with opendesign_manage_components instead of copying primitive layers, then inspect and capture again`,
+      );
+    }
+  }
+}
+
+function inspectedParentChainReaches(
+  nodesById: InspectedHierarchy["nodesById"],
+  nodeId: string,
+  ancestorId: string,
+): boolean {
+  let current = nodesById.get(nodeId)?.parentId ?? null;
+  const visited = new Set<string>();
+  while (current !== null && !visited.has(current)) {
+    if (current === ancestorId) return true;
+    visited.add(current);
+    current = nodesById.get(current)?.parentId ?? null;
+  }
+  return false;
 }
 
 export function assertLayoutQualityMatchesCapture(

@@ -9,6 +9,7 @@ import type { MessageKey } from "../../../shared/i18n/messages";
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
+  DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -67,6 +68,7 @@ export function isNativeDesignTool(toolName: string | undefined): boolean {
     toolName === DESIGN_REVIEW_TOOL_NAME ||
     toolName === DESIGN_ARRANGE_TOOL_NAME ||
     toolName === DESIGN_HIERARCHY_TOOL_NAME ||
+    toolName === DESIGN_COMPONENT_TOOL_NAME ||
     toolName === DESIGN_PAGE_TOOL_NAME
   );
 }
@@ -79,7 +81,7 @@ export function approvalDecisionKey(decision: string): MessageKey {
 
 export function friendlyAgentError(message: string, t: Translate): string {
   if (
-    /^design_workflow\.(?:material_write_required|delivery_structure_incomplete):/i.test(
+    /^design_workflow\.(?:material_write_required|delivery_structure_incomplete|component_strategy_incomplete):/i.test(
       message,
     )
   ) {
@@ -290,6 +292,11 @@ export function toolTitle(
     return state === "done"
       ? t("agent.hierarchyUpdated")
       : t("agent.organizingLayers");
+  }
+  if (toolName === DESIGN_COMPONENT_TOOL_NAME) {
+    return state === "done"
+      ? t("agent.hierarchyUpdated")
+      : t("agent.updatingComponents");
   }
   if (toolName === DESIGN_ARRANGE_TOOL_NAME) {
     return state === "done"

@@ -3,6 +3,8 @@ import type {
   DesignDeliveryTarget,
 } from "@opendesign/workspace-contracts";
 import {
+  componentStrategyOccurrencesForTarget,
+  designPlanComponentStrategy,
   designPlanTargets,
   type DesignPlanTarget,
   type DesignPlanToolInput,
@@ -10,11 +12,13 @@ import {
 } from "../../shared/design-agent-tools.js";
 
 export type InspectedHierarchy = {
+  componentsById: Map<string, { id: string; rootNodeId: string }>;
   documentId: string;
   nodesById: Map<
     string,
     {
       childIds: string[];
+      componentId: string | null;
       id: string;
       kind: string;
       locked: boolean;
@@ -75,6 +79,7 @@ export function registerDesignWorkflowPlan(options: {
     };
   }
   assertMaterialTargetsRemainStable(existing, plan, targets);
+  assertMaterialComponentDecisionsRemainStable(existing, plan);
   const visualSystemChanged =
     existing !== undefined &&
     !sameJson(existing.plan.visualSystem, plan.visualSystem);
@@ -84,7 +89,11 @@ export function registerDesignWorkflowPlan(options: {
     const current = existing?.targetsById.get(target.targetId);
     if (current && current.delivery.status !== "pending") {
       const targetChanged = !sameJson(current.planned, target);
-      if (targetChanged || visualSystemChanged)
+      const componentStrategyChanged = !sameJson(
+        existing ? componentOccurrences(existing.plan, target.targetId) : [],
+        componentOccurrences(plan, target.targetId),
+      );
+      if (targetChanged || visualSystemChanged || componentStrategyChanged)
         changedTargetIds.push(target.targetId);
       targetsById.set(
         target.targetId,
@@ -92,7 +101,7 @@ export function registerDesignWorkflowPlan(options: {
           current,
           target,
           inspection,
-          targetChanged || visualSystemChanged,
+          targetChanged || visualSystemChanged || componentStrategyChanged,
         ),
       );
       continue;
@@ -121,6 +130,50 @@ export function registerDesignWorkflowPlan(options: {
     state,
     status: existing ? "amended" : "accepted",
   };
+}
+
+function assertMaterialComponentDecisionsRemainStable(
+  existing: DesignWorkflowState | undefined,
+  plan: DesignPlanToolInput,
+): void {
+  if (!existing) return;
+  for (const target of existing.targetsById.values()) {
+    if (!isMaterialDelivery(target.delivery)) continue;
+    const previous = componentOccurrences(
+      existing.plan,
+      target.delivery.targetId,
+    );
+    const next = new Map(
+      componentOccurrences(plan, target.delivery.targetId).map((occurrence) => [
+        occurrence.nodeId,
+        occurrence,
+      ]),
+    );
+    for (const occurrence of previous) {
+      const retained = next.get(occurrence.nodeId);
+      if (!retained) {
+        throw new Error(
+          `design_workflow.plan_amendment_invalid: Material semantic object ${occurrence.decisionId} must retain stable node ${occurrence.nodeId} and an explicit component decision`,
+        );
+      }
+      if (
+        occurrence.decision !== "ordinary" &&
+        (retained.decision !== occurrence.decision ||
+          retained.componentId !== occurrence.componentId)
+      ) {
+        throw new Error(
+          `design_workflow.plan_amendment_invalid: Declared Component occurrence ${occurrence.nodeId} must preserve its Main/Instance role and component ID after material design has started`,
+        );
+      }
+    }
+  }
+}
+
+function componentOccurrences(plan: DesignPlanToolInput, targetId: string) {
+  const strategy = designPlanComponentStrategy(plan);
+  return strategy
+    ? componentStrategyOccurrencesForTarget(strategy, targetId)
+    : [];
 }
 
 function preserveMaterialTarget(

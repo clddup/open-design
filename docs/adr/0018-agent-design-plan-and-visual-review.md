@@ -13,7 +13,7 @@
 
 ## 决策
 
-Agent 新建设计内容前必须先读取文档，再调用 `opendesign_define_design_plan`。当前模型契约为 `DesignPlanToolInput version: 3`；version 2 只为历史 tool input、journal 和旧 generation presentation 兼容保留。计划是 Main 持有的当前 Run 状态，不是第二份设计文档，也不改变 revision。
+Agent 新建设计内容前必须先读取文档，再调用 `opendesign_define_design_plan`。当前模型契约已由 ADR-0062 升级为 `DesignPlanToolInput version: 4`；version 2/3 只为历史 tool input、journal、恢复和旧 generation presentation 兼容保留。计划是 Main 持有的当前 Run 状态，不是第二份设计文档，也不改变 revision。
 
 ### 按用户需求建立 `1..N` 个 target
 

@@ -1,0 +1,322 @@
+import { describe, expect, it } from "vitest";
+import type {
+  DesignPlanTarget,
+  DesignPlanToolInputV4,
+} from "../../shared/design-agent-tools.js";
+import {
+  assertDeliveryTargetStructure,
+  parseInspectedHierarchy,
+} from "./design-inspection.js";
+import type {
+  DesignDeliveryTargetState,
+  InspectedHierarchy,
+} from "./design-plan-registration.js";
+
+const homeTarget = target("target_home", "frame_home", "region_home", "Home");
+const profileTarget = target(
+  "target_profile",
+  "frame_profile",
+  "region_profile",
+  "Profile",
+);
+
+const plan: DesignPlanToolInputV4 = {
+  version: 4,
+  deliverable: "ui",
+  objective: "Design Home and Profile with a reusable navigation identity",
+  outputMode: "editable-composition",
+  targets: [homeTarget, profileTarget],
+  visualSystem: {
+    avoidances: ["No copied navigation primitives", "No empty semantic groups"],
+    formLanguage: "Compact product surfaces with explicit semantic hierarchy",
+    palette: ["#101828", "#FFFFFF", "#2563EB"],
+    surfaceAndDepth: "One restrained elevation tier",
+    typography: ["Inter 28/34", "Inter 14/20"],
+    effects: ["Subtle navigation separator"],
+  },
+  rasterAssetRoles: [],
+  componentStrategy: {
+    summary:
+      "Use one linked navigation component across both screens and preserve the unique hero as an ordinary semantic group.",
+    candidates: [
+      {
+        decisionId: "shared-navigation",
+        label: "Shared navigation",
+        decision: "component",
+        rationale:
+          "The navigation has one stable identity and should receive centralized structural and visual updates.",
+        componentId: "component_navigation",
+        main: {
+          mode: "create",
+          targetId: "target_home",
+          nodeId: "navigation_main",
+        },
+        instances: [
+          {
+            targetId: "target_profile",
+            nodeId: "navigation_profile_instance",
+          },
+        ],
+      },
+      {
+        decisionId: "home-hero",
+        label: "Home hero",
+        decision: "ordinary",
+        rationale:
+          "The hero is unique to Home and has no shared semantic identity or centralized update value.",
+        occurrences: [{ targetId: "target_home", nodeId: "home_hero_group" }],
+      },
+    ],
+  },
+};
+
+describe("Agent design inspection component strategy", () => {
+  it("reads scoped component and instance identity from authoritative inspection", () => {
+    const inspection = parseInspectedHierarchy(
+      {
+        runId: "run_1",
+        sessionId: "conversation_1",
+        documentId: "document_1",
+        revision: 9,
+        scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId: "page_1" },
+      },
+      {
+        observedRevision: 9,
+        content: {
+          document: {
+            documentId: "document_1",
+            revision: 9,
+            pagesById: {
+              page_1: {
+                id: "page_1",
+                rootNodeIds: ["component_main", "instance_1"],
+              },
+            },
+            nodesById: {
+              component_main: inspectedNode("component_main", "group", null),
+              instance_1: {
+                ...inspectedNode("instance_1", "instance", null),
+                properties: {
+                  componentId: "component_navigation",
+                  overrides: [],
+                },
+              },
+            },
+            componentsById: {
+              component_navigation: {
+                id: "component_navigation",
+                name: "Navigation",
+                rootNodeId: "component_main",
+              },
+            },
+          },
+        },
+      },
+    );
+
+    expect(
+      inspection.componentsById.get("component_navigation")?.rootNodeId,
+    ).toBe("component_main");
+    expect(inspection.nodesById.get("instance_1")?.componentId).toBe(
+      "component_navigation",
+    );
+  });
+
+  it("verifies declared Main, Instance, and ordinary semantic roots", () => {
+    const inspection = completeInspection();
+
+    expect(() =>
+      assertDeliveryTargetStructure(inspection, targetState(homeTarget), plan),
+    ).not.toThrow();
+    expect(() =>
+      assertDeliveryTargetStructure(
+        inspection,
+        targetState(profileTarget),
+        plan,
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects copied layers and unbound groups that contradict the declared strategy", () => {
+    const copiedInstance = completeInspection();
+    copiedInstance.nodesById.set("navigation_profile_instance", {
+      ...requiredNode(copiedInstance, "navigation_profile_instance"),
+      kind: "group",
+      componentId: null,
+    });
+    expect(() =>
+      assertDeliveryTargetStructure(
+        copiedInstance,
+        targetState(profileTarget),
+        plan,
+      ),
+    ).toThrow(/component_strategy_incomplete.*must remain linked/i);
+
+    const unboundMain = completeInspection();
+    unboundMain.componentsById.clear();
+    expect(() =>
+      assertDeliveryTargetStructure(unboundMain, targetState(homeTarget), plan),
+    ).toThrow(/component_strategy_incomplete.*Component Main/i);
+
+    const flatOrdinary = completeInspection();
+    flatOrdinary.nodesById.set("home_hero_group", {
+      ...requiredNode(flatOrdinary, "home_hero_group"),
+      kind: "rectangle",
+    });
+    expect(() =>
+      assertDeliveryTargetStructure(
+        flatOrdinary,
+        targetState(homeTarget),
+        plan,
+      ),
+    ).toThrow(/component_strategy_incomplete.*named Frame or Group/i);
+  });
+});
+
+function completeInspection(): InspectedHierarchy {
+  const nodesById: InspectedHierarchy["nodesById"] = new Map();
+  const add = (
+    id: string,
+    kind: string,
+    parentId: string | null,
+    childIds: string[] = [],
+    componentId: string | null = null,
+  ) =>
+    nodesById.set(id, {
+      childIds,
+      componentId,
+      id,
+      kind,
+      locked: false,
+      parentId,
+      size: { width: 100, height: 40 },
+      transform: [1, 0, 0, 1, 0, 0],
+    });
+  add("frame_home", "frame", null, ["region_home"]);
+  add("region_home", "frame", "frame_home", [
+    "home_copy",
+    "navigation_main",
+    "home_hero_group",
+  ]);
+  add("home_copy", "text", "region_home");
+  add("navigation_main", "group", "region_home", ["navigation_label"]);
+  add("navigation_label", "text", "navigation_main");
+  add("home_hero_group", "group", "region_home", ["hero_shape"]);
+  add("hero_shape", "rectangle", "home_hero_group");
+  add("frame_profile", "frame", null, ["region_profile"]);
+  add("region_profile", "frame", "frame_profile", [
+    "profile_copy",
+    "navigation_profile_instance",
+  ]);
+  add("profile_copy", "text", "region_profile");
+  add(
+    "navigation_profile_instance",
+    "instance",
+    "region_profile",
+    [],
+    "component_navigation",
+  );
+  return {
+    componentsById: new Map([
+      [
+        "component_navigation",
+        { id: "component_navigation", rootNodeId: "navigation_main" },
+      ],
+    ]),
+    documentId: "document_1",
+    nodesById,
+    pageRootsById: new Map([
+      ["page_1", new Set(["frame_home", "frame_profile"])],
+    ]),
+    revision: 9,
+  };
+}
+
+function target(
+  targetId: string,
+  frameId: string,
+  regionId: string,
+  label: string,
+): DesignPlanTarget {
+  return {
+    targetId,
+    label,
+    pageId: "page_1",
+    objective: `Design the ${label} screen`,
+    artboard: {
+      mode: "create",
+      frameId,
+      x: 0,
+      y: 0,
+      width: 390,
+      height: 844,
+    },
+    composition: {
+      direction: "Clear product hierarchy",
+      hierarchy: ["Navigation", "Primary content"],
+      regions: [
+        {
+          nodeId: regionId,
+          name: `${label} content`,
+          role: "content",
+          x: 0,
+          y: 0,
+          width: 390,
+          height: 844,
+        },
+      ],
+      assetIntegration: "Use native editable layers without raster imagery",
+      spacingRhythm: "4/8/16/24 px rhythm",
+    },
+    editableLayers: ["Navigation", "Content"],
+    implementationSteps: ["Build hierarchy", "Add content"],
+    validationChecks: ["Check hierarchy", "Check component identity"],
+  };
+}
+
+function targetState(planned: DesignPlanTarget): DesignDeliveryTargetState {
+  return {
+    artboardDescendantIds: new Set(),
+    artboardEstablished: true,
+    captureCount: 1,
+    delivery: {
+      targetId: planned.targetId,
+      label: planned.label,
+      pageId: planned.pageId,
+      rootNodeId: planned.artboard.frameId,
+      status: "refined",
+      allocatedRevision: 1,
+      draftRevision: 2,
+      captureRevision: 2,
+      reviewRevision: 2,
+      refinementRevision: 3,
+    },
+    lastCaptureRevision: 2,
+    lastMaterialWriteRevision: 3,
+    lastReview: null,
+    planned,
+    reviewedCaptureCount: 1,
+    reviewedCaptureRevision: 2,
+  };
+}
+
+function inspectedNode(id: string, kind: string, parentId: string | null) {
+  return {
+    id,
+    kind,
+    name: id,
+    parentId,
+    childIds: [],
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 100, height: 40 },
+    properties: {},
+  };
+}
+
+function requiredNode(inspection: InspectedHierarchy, nodeId: string) {
+  const node = inspection.nodesById.get(nodeId);
+  if (!node) throw new Error(`Missing test node ${nodeId}`);
+  return node;
+}

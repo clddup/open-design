@@ -48,6 +48,8 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "call opendesign_define_design_plan",
     );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("Submit version 4");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("componentStrategy");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "For artboard.mode=existing, regions are logical planning and review areas",
     );

@@ -576,7 +576,7 @@ export class GlobalTaskCoordinator {
           "design_workflow.delivery_verification_required: Final delivery verification requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
         );
       }
-      assertDeliveryTargetStructure(inspection, target);
+      assertDeliveryTargetStructure(inspection, target, state.plan);
       if (layoutQuality.errorCount > 0) {
         const failures = layoutQuality.issues
           .filter((issue) => issue.severity === "error")

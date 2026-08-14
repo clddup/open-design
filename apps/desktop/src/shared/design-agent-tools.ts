@@ -34,6 +34,12 @@ import {
   DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
   isDesignArrangeToolInput,
 } from "./design-arrange-tool";
+import {
+  componentStrategyOccurrencesForTarget,
+  DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA,
+  isDesignPlanComponentStrategy,
+  type DesignPlanComponentStrategy,
+} from "./design-plan-component-strategy";
 export {
   isDesignApplyToolInput,
   isInternalDesignApplyToolInput,
@@ -47,6 +53,15 @@ export type {
 } from "./design-apply-input";
 export { isDesignArrangeToolInput } from "./design-arrange-tool";
 export type { DesignArrangeToolInput } from "./design-arrange-tool";
+export {
+  componentStrategyOccurrencesForTarget,
+  isDesignPlanComponentStrategy,
+} from "./design-plan-component-strategy";
+export type {
+  DesignPlanComponentCandidate,
+  DesignPlanComponentStrategy,
+  DesignPlanSemanticOccurrence,
+} from "./design-plan-component-strategy";
 export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
@@ -165,8 +180,12 @@ export type DesignPlanToolInputV3 = {
   rasterAssetRoles: RasterAssetRole[];
   singleRasterEvidence?: string;
 };
+export type DesignPlanToolInputV4 = Omit<DesignPlanToolInputV3, "version"> & {
+  version: 4;
+  componentStrategy: DesignPlanComponentStrategy;
+};
 export type DesignPlanToolInput =
-  LegacyDesignPlanToolInput | DesignPlanToolInputV3;
+  LegacyDesignPlanToolInput | DesignPlanToolInputV3 | DesignPlanToolInputV4;
 export type DesignVisualReviewToolInput = {
   composition: string;
   hierarchy: string;
@@ -1489,9 +1508,9 @@ const MODEL_DESIGN_PLAN_TARGET_SCHEMA = {
 const MODEL_DESIGN_PLAN_SCHEMA = {
   type: "object",
   description:
-    "Version 3 of the executable delivery plan. targets must match the user's requested scope exactly: one for a single design, or one stable artboard root per requested screen or asset for a set.",
+    "Version 4 of the executable delivery plan. targets must match the user's requested scope exactly and componentStrategy must explicitly judge plausible reusable semantic objects without category or occurrence-count shortcuts.",
   properties: {
-    version: { const: 3 },
+    version: { const: 4 },
     deliverable: {
       enum: [
         "ui",
@@ -1568,6 +1587,7 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
         ],
       },
     },
+    componentStrategy: DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA,
     singleRasterEvidence: {
       type: "string",
       minLength: 1,
@@ -1584,6 +1604,7 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
     "targets",
     "visualSystem",
     "rasterAssetRoles",
+    "componentStrategy",
   ],
   additionalProperties: false,
 } as const;
@@ -1658,7 +1679,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_PLAN_TOOL_NAME,
     description:
-      "Define version 3 of the executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. Every target has its own Page, targetId, Frame geometry, composition regions, editable layers, implementation steps, and validation checks while sharing the visual system and raster policy. For every mode=create target, the trusted host immediately allocates the real empty Page-root Frame in one atomic document transaction and returns the new revision plus an allocated delivery state; do not recreate that Frame, and do not treat allocated as drafted or complete. Start material design in the first active target's allocated Frame, then continue in target order. The host verifies every target through allocated, draft, capture, review, refinement, and final rendered verification before allowing the Run to finish. Existing frameId values must resolve to real inspected Frames; new region roots must be direct axis-aligned children of their declared artboard. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request.",
+      "Define version 4 of the executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. componentStrategy must identify plausible reusable semantic objects, decide component versus ordinary hierarchy from reuse, stable identity, centralized updates, structural consistency, and intended instance differences, and bind every declared occurrence to a stable target/node ID. The host verifies declared Component Mains, Instances, and ordinary semantic containers from the live captured document; an empty candidate list is valid only when the summary explains why no semantic object merits component consideration. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
     inputSchema: MODEL_DESIGN_PLAN_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2538,7 +2559,10 @@ export function isInternalUpdateImageToolInput(
 export function isDesignPlanToolInput(
   input: unknown,
 ): input is DesignPlanToolInput {
-  return isLegacyDesignPlanToolInput(input) || isDesignPlanToolInputV3(input);
+  return (
+    isLegacyDesignPlanToolInput(input) ||
+    isMultiTargetDesignPlanToolInput(input)
+  );
 }
 
 function isLegacyDesignPlanToolInput(
@@ -2666,12 +2690,13 @@ function isLegacyDesignPlanToolInput(
   );
 }
 
-function isDesignPlanToolInputV3(
+function isMultiTargetDesignPlanToolInput(
   input: unknown,
-): input is DesignPlanToolInputV3 {
+): input is DesignPlanToolInputV3 | DesignPlanToolInputV4 {
   if (!isRecord(input)) return false;
+  const version4 = input.version === 4;
   if (
-    input.version !== 3 ||
+    (input.version !== 3 && !version4) ||
     !isDesignDeliverable(input.deliverable) ||
     !boundedText(input.objective, 2_000) ||
     (input.outputMode !== "editable-composition" &&
@@ -2693,6 +2718,7 @@ function isDesignPlanToolInputV3(
       "targets",
       "visualSystem",
       "rasterAssetRoles",
+      ...(version4 ? ["componentStrategy"] : []),
       ...(input.singleRasterEvidence === undefined
         ? []
         : ["singleRasterEvidence"]),
@@ -2701,6 +2727,15 @@ function isDesignPlanToolInputV3(
     return false;
   }
   const targets = input.targets;
+  const componentStrategy = isDesignPlanComponentStrategy(
+    input.componentStrategy,
+    targets.map((target) => target.targetId),
+  )
+    ? input.componentStrategy
+    : undefined;
+  if (version4 && !componentStrategy) {
+    return false;
+  }
   if (
     new Set(targets.map((target) => target.targetId)).size !== targets.length ||
     new Set(targets.map((target) => target.artboard.frameId)).size !==
@@ -2726,11 +2761,24 @@ function isDesignPlanToolInputV3(
   ) {
     return false;
   }
+  if (
+    version4 &&
+    componentStrategy &&
+    targets.some((target) =>
+      componentStrategyOccurrencesForTarget(
+        componentStrategy,
+        target.targetId,
+      ).some((occurrence) => occurrence.nodeId === target.artboard.frameId),
+    )
+  ) {
+    return false;
+  }
   if (input.outputMode === "single-raster") {
     return (
       targets.length === 1 &&
       boundedText(input.singleRasterEvidence, 200) &&
-      input.rasterAssetRoles.includes("final-single-image")
+      input.rasterAssetRoles.includes("final-single-image") &&
+      (!version4 || componentStrategy?.candidates.length === 0)
     );
   }
   return (
@@ -2742,7 +2790,7 @@ function isDesignPlanToolInputV3(
 export function designPlanTargets(
   plan: DesignPlanToolInput,
 ): DesignPlanTarget[] {
-  if (plan.version === 3) return structuredClone(plan.targets);
+  if (plan.version !== 2) return structuredClone(plan.targets);
   return [
     {
       targetId: plan.artboard.frameId,
@@ -2756,6 +2804,14 @@ export function designPlanTargets(
       validationChecks: [...plan.validationChecks],
     },
   ];
+}
+
+export function designPlanComponentStrategy(
+  plan: DesignPlanToolInput,
+): DesignPlanComponentStrategy | undefined {
+  return plan.version === 4
+    ? structuredClone(plan.componentStrategy)
+    : undefined;
 }
 
 function isDesignPlanTarget(value: unknown): value is DesignPlanTarget {

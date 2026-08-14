@@ -536,11 +536,19 @@ describe("design Agent tool contract", () => {
       ],
     };
 
-    expect(
-      DESIGN_AGENT_TOOL_SPECS.find(
-        (tool) => tool.name === DESIGN_PLAN_TOOL_NAME,
-      ),
-    ).toMatchObject({ risk: "design_write", approval: "never" });
+    const planSpec = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_PLAN_TOOL_NAME,
+    );
+    expect(planSpec).toMatchObject({
+      risk: "design_write",
+      approval: "never",
+      inputSchema: {
+        properties: {
+          version: { const: 4 },
+          componentStrategy: { type: "object" },
+        },
+      },
+    });
     expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, plan)).toBe(
       true,
     );
@@ -634,6 +642,111 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, multiTargetPlan),
     ).toBe(true);
+    const componentPlan = {
+      ...multiTargetPlan,
+      version: 4,
+      componentStrategy: {
+        summary:
+          "Use one linked navigation identity across both screens while keeping the one-off hero grouping ordinary.",
+        candidates: [
+          {
+            decisionId: "shared-navigation",
+            label: "Shared navigation",
+            decision: "component",
+            rationale:
+              "The navigation repeats with one stable structure and should receive centralized visual updates.",
+            componentId: "component_navigation",
+            main: {
+              mode: "create",
+              targetId: "target_home",
+              nodeId: "navigation_main",
+            },
+            instances: [
+              {
+                targetId: "target_profile",
+                nodeId: "navigation_profile_instance",
+              },
+            ],
+          },
+          {
+            decisionId: "home-hero",
+            label: "Home hero",
+            decision: "ordinary",
+            rationale:
+              "This hero is a one-off composition region with no shared identity or centralized update value.",
+            occurrences: [
+              { targetId: "target_home", nodeId: "home_hero_group" },
+            ],
+          },
+        ],
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, componentPlan),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...componentPlan,
+        componentStrategy: {
+          ...componentPlan.componentStrategy,
+          candidates: [
+            componentPlan.componentStrategy.candidates[0],
+            {
+              ...componentPlan.componentStrategy.candidates[1],
+              occurrences: [
+                {
+                  targetId: "target_home",
+                  nodeId: "navigation_main",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...componentPlan,
+        componentStrategy: {
+          ...componentPlan.componentStrategy,
+          candidates: [
+            {
+              ...componentPlan.componentStrategy.candidates[0],
+              main: {
+                mode: "create",
+                targetId: "target_profile",
+                nodeId: "navigation_main",
+              },
+              instances: [
+                {
+                  targetId: "target_home",
+                  nodeId: "navigation_home_instance",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...componentPlan,
+        componentStrategy: {
+          ...componentPlan.componentStrategy,
+          candidates: [
+            {
+              ...componentPlan.componentStrategy.candidates[1],
+              occurrences: [
+                {
+                  targetId: "target_home",
+                  nodeId: "artboard_home",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
         ...multiTargetPlan,

@@ -247,7 +247,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 专业设计质量不能只依赖 system prompt。以下工作与 P0-P5 并行，并由 Runtime、service 和固定样张共同验收：
 
 - 增加结构诊断，识别复合对象散落 Page 根层、文字溢出、空 Path、不可见节点、资源缺失、非有限 bounds、完全越界、异常遮挡和无意义碎片层。
-- [ ] 高优先级建立通用语义对象与组件决策门禁：Plan 由 LLM 根据设计意图声明复合对象、独立子对象、组件候选和“不组件化”的理由，判断依据包含同一或跨 target 的重复、稳定语义身份、集中更新价值、结构一致性与实例差异，不按 Logo/按钮等类别或固定出现次数机械决定。宿主只验证模型已声明的决定是否落实为清晰 Group/Frame 层级、Component Main 与 Instance，不凭节点名称猜测语义；一次性布局区域、wrapper、偶发装饰和仅外观相似但语义不同的对象不得为了过门禁滥建组件。用品牌 lockup、重复卡片/按钮、单次插画和相似但不同内容模块等正反样张验收 Layers、Assets、save/reopen、undo、override 与主组件更新传播。
+- [x] 完成通用语义对象与组件决策门禁 v1：DesignPlan v4 由 LLM 根据同一/跨 target 复用、稳定语义身份、集中更新价值、结构一致性与实例差异声明 component/ordinary 候选，不按 Logo/按钮类别或固定次数机械决定；Main 在 exact-revision 最终检查中验证声明的 Frame/Group、Component Main 与 linked Instance，复制散层、脱链实例、未绑定 Main 和扁平 ordinary 对象阻塞 verified。v2/v3 历史计划兼容，材料 amendment 保留稳定语义节点与 Component 身份；固定正反样张及既有 save/reopen、undo、override、同步和导出回归共同验收。门禁当前不猜测模型未声明的相似结构，后续补结构相似度诊断与 design critic。见 ADR-0062。
 - 增加渲染诊断与可读性检查，覆盖主体比例、层级、留白、对比度、文字可读性和关键内容裁切。启发式诊断必须标注置信度，不能把审美模型输出伪装成确定性错误。
 - 为对齐、布局、布尔、裁剪、组件、变量、导入和导出提供语义化 typed tools，避免模型通过大量低层坐标和节点重建完成专业操作。
 - 低优先级开放用户级与 Project 级设计 Skill/风格规范：记录来源、版本、内容哈希和权限，只影响设计方法、风格与评审标准，不能覆盖系统策略、扩展 Mutation Target 或替代底层设计能力。当前 `@opendesign/discovery` 只有隔离发现/优先级解析，尚未接入生产 Agent、管理 UI 或权限审计链，因此不得宣称已支持自定义 Skill/提示词。
