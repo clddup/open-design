@@ -59,7 +59,10 @@ export function planSetFrameAutoLayout(
 ): AutoLayoutOperationPlan {
   const frame = document.nodesById[frameId];
   if (!frame) return failure("not-found", `Frame ${frameId} does not exist`);
-  if (frame.kind !== "frame" || !nodeBelongsToPage(document, pageId, frameId)) {
+  if (
+    !isAutoLayoutContainer(frame) ||
+    !nodeBelongsToPage(document, pageId, frameId)
+  ) {
     return failure(
       "invalid-target",
       `Target ${frameId} must be a Frame on Page ${pageId}`,
@@ -146,8 +149,9 @@ export function planSetFrameAutoLayout(
           layoutSizing: null,
         });
       }
-      const childOwnFlow =
-        child.kind === "frame" ? child.properties.autoLayout : undefined;
+      const childOwnFlow = isAutoLayoutContainer(child)
+        ? child.properties.autoLayout
+        : undefined;
       if (
         child.layoutLimits !== undefined &&
         (!childOwnFlow || childOwnFlow.mode === "none")
@@ -164,7 +168,9 @@ export function planSetFrameAutoLayout(
       ? document.nodesById[frame.parentId]
       : undefined;
     const parentFlow =
-      parent?.kind === "frame" ? parent.properties.autoLayout : undefined;
+      parent && isAutoLayoutContainer(parent)
+        ? parent.properties.autoLayout
+        : undefined;
     if (
       frame.layoutLimits !== undefined &&
       (!parentFlow || parentFlow.mode === "none")
@@ -212,8 +218,8 @@ export function resolveAutoLayoutInPlace(
 ): AutoLayoutResolution {
   const frameIds = Object.values(document.nodesById)
     .filter(
-      (node): node is Extract<DesignNode, { kind: "frame" }> =>
-        node.kind === "frame" &&
+      (node): node is Extract<DesignNode, { kind: "frame" | "slot" }> =>
+        isAutoLayoutContainer(node) &&
         node.properties.autoLayout !== undefined &&
         node.properties.autoLayout.mode !== "none",
     )
@@ -225,7 +231,7 @@ export function resolveAutoLayoutInPlace(
   const positioned = new Set<string>();
   for (const frameId of frameIds) {
     const frame = document.nodesById[frameId];
-    if (frame?.kind !== "frame") {
+    if (!frame || !isAutoLayoutContainer(frame)) {
       return resolutionFailure(
         "not-found",
         frameId,
@@ -360,7 +366,7 @@ export function resolveAutoLayoutUntilStable(
 ): AutoLayoutResolution {
   const flowCount = Object.values(document.nodesById).filter(
     (node) =>
-      node.kind === "frame" &&
+      isAutoLayoutContainer(node) &&
       node.properties.autoLayout !== undefined &&
       node.properties.autoLayout.mode !== "none",
   ).length;
@@ -391,7 +397,7 @@ export function resolveAutoLayoutUntilStable(
     "invalid-layout",
     Object.values(document.nodesById).find(
       (node) =>
-        node.kind === "frame" &&
+        isAutoLayoutContainer(node) &&
         node.properties.autoLayout !== undefined &&
         node.properties.autoLayout.mode !== "none",
     )?.id ?? "unknown",
@@ -404,7 +410,7 @@ function autoLayoutGeometryFingerprint(document: DesignDocument): string {
     Object.values(document.nodesById)
       .filter((node) => {
         if (
-          node.kind === "frame" &&
+          isAutoLayoutContainer(node) &&
           node.properties.autoLayout !== undefined &&
           node.properties.autoLayout.mode !== "none"
         )
@@ -413,7 +419,8 @@ function autoLayoutGeometryFingerprint(document: DesignDocument): string {
           ? document.nodesById[node.parentId]
           : undefined;
         return (
-          parent?.kind === "frame" &&
+          parent !== undefined &&
+          isAutoLayoutContainer(parent) &&
           parent.properties.autoLayout !== undefined &&
           parent.properties.autoLayout.mode !== "none"
         );
@@ -455,6 +462,12 @@ function solveFrame(
       : {}),
     children,
   });
+}
+
+function isAutoLayoutContainer(
+  node: DesignNode,
+): node is Extract<DesignNode, { kind: "frame" | "slot" }> {
+  return node.kind === "frame" || node.kind === "slot";
 }
 
 function sameAutoLayout(

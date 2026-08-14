@@ -4,13 +4,17 @@ import type {
   ComponentOverridePatch,
   DesignDocument,
   DesignOperation,
+  InstanceSwapPreferredValue,
+  SlotSettings,
 } from "@opendesign/design-contracts";
 import {
   componentMainNodeId,
   planAddComponentProperty,
   planAddComponentToVariantSet,
+  planClearComponentSlot,
   planCreateComponent,
   planCreateInstance,
+  planCreateComponentSlotOverride,
   planCombineComponentsAsVariants,
   planDissolveVariantSet,
   planDuplicateVariant,
@@ -21,8 +25,10 @@ import {
   planRemoveVariantFromSet,
   planRenameComponentProperty,
   planResetComponentPropertyValue,
+  planResetComponentSlot,
   planSetComponentOverride,
   planSetComponentPropertyValue,
+  planSetComponentSlotSettings,
   type ComponentOperationPlan,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
@@ -398,6 +404,37 @@ export function useComponentActions({
     [applyPropertyPlan, runtime, t, transactionCounter],
   );
 
+  const setSelectedComponentSlotSettings = useCallback(
+    (
+      propertyName: string,
+      input: {
+        description?: string;
+        preferredValues: readonly InstanceSwapPreferredValue[];
+        settings: SlotSettings;
+      },
+    ) => {
+      const current = runtime.getSnapshot();
+      const nodeId = singleSelection(current.state.selection.nodeIds);
+      const component = Object.values(current.document.componentsById).find(
+        (candidate) => candidate.rootNodeId === nodeId,
+      );
+      if (!component) return;
+      const operationId = `component_slot_settings_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planSetComponentSlotSettings(current.document, {
+        componentId: component.id,
+        propertyName,
+        settings: input.settings,
+        preferredValues: input.preferredValues,
+        ...(input.description === undefined
+          ? {}
+          : { description: input.description }),
+        commandPrefix: operationId,
+      });
+      applyPropertyPlan(t("history.setComponentSlotSettings"), plan);
+    },
+    [applyPropertyPlan, runtime, t, transactionCounter],
+  );
+
   const placeComponentFromAssets = useCallback(
     (componentId: string): AssetActionResult => {
       const current = runtime.getSnapshot();
@@ -523,6 +560,51 @@ export function useComponentActions({
     [applyPropertyPlan, runtime, t, transactionCounter],
   );
 
+  const createSelectedInstanceSlotOverride = useCallback(
+    (propertyName: string) => {
+      const current = runtime.getSnapshot();
+      const instanceId = singleSelection(current.state.selection.nodeIds);
+      if (!instanceId) return;
+      const plan = planCreateComponentSlotOverride(current.document, {
+        instanceId,
+        propertyName,
+        commandPrefix: `component_slot_override_${Date.now()}_${++transactionCounter.current}`,
+      });
+      applyPropertyPlan(t("history.editComponentSlot"), plan);
+    },
+    [applyPropertyPlan, runtime, t, transactionCounter],
+  );
+
+  const clearSelectedInstanceSlot = useCallback(
+    (propertyName: string) => {
+      const current = runtime.getSnapshot();
+      const instanceId = singleSelection(current.state.selection.nodeIds);
+      if (!instanceId) return;
+      const plan = planClearComponentSlot(current.document, {
+        instanceId,
+        propertyName,
+        commandPrefix: `component_slot_clear_${Date.now()}_${++transactionCounter.current}`,
+      });
+      applyPropertyPlan(t("history.clearComponentSlot"), plan);
+    },
+    [applyPropertyPlan, runtime, t, transactionCounter],
+  );
+
+  const resetSelectedInstanceSlot = useCallback(
+    (propertyName: string) => {
+      const current = runtime.getSnapshot();
+      const instanceId = singleSelection(current.state.selection.nodeIds);
+      if (!instanceId) return;
+      const plan = planResetComponentSlot(current.document, {
+        instanceId,
+        propertyName,
+        commandPrefix: `component_slot_reset_${Date.now()}_${++transactionCounter.current}`,
+      });
+      applyPropertyPlan(t("history.resetComponentSlot"), plan);
+    },
+    [applyPropertyPlan, runtime, t, transactionCounter],
+  );
+
   const detachSelectedInstance = useCallback(() => {
     const current = runtime.getSnapshot();
     const instanceId = singleSelection(current.state.selection.nodeIds);
@@ -567,6 +649,13 @@ export function useComponentActions({
     addSelectedComponentProperty,
     addSelectedComponentToVariantSet,
     combineSelectedComponentsAsVariants,
+    componentPropertyActions: {
+      ...variantMatrixActions,
+      onClearComponentSlot: clearSelectedInstanceSlot,
+      onCreateComponentSlotOverride: createSelectedInstanceSlotOverride,
+      onResetComponentSlot: resetSelectedInstanceSlot,
+      onSetComponentSlotSettings: setSelectedComponentSlotSettings,
+    },
     createComponentFromSelection,
     createSelectedComponentInstance,
     detachSelectedInstance,
@@ -583,7 +672,6 @@ export function useComponentActions({
     resetSelectedInstanceSource,
     resetSelectedInstanceComponentProperty,
     setSelectedInstanceComponentProperty,
-    variantMatrixActions,
     updateSelectedInstanceSource,
   };
 }

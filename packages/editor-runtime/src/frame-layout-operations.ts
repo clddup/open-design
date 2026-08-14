@@ -50,7 +50,7 @@ export function planSetNodeConstraints(
     );
   }
   const parent = node.parentId ? document.nodesById[node.parentId] : undefined;
-  if (parent?.kind !== "frame") {
+  if (parent?.kind !== "frame" && parent?.kind !== "slot") {
     return failure(
       "invalid-target",
       "Constraints require a layer directly inside a Frame",
@@ -122,7 +122,10 @@ export function planResizeFrameWithConstraints(
 ): FrameLayoutOperationPlan {
   const frame = document.nodesById[frameId];
   if (!frame) return failure("not-found", `Frame ${frameId} does not exist`);
-  if (frame.kind !== "frame" || !nodeBelongsToPage(document, pageId, frameId)) {
+  if (
+    !isFrameContainer(frame) ||
+    !nodeBelongsToPage(document, pageId, frameId)
+  ) {
     return failure(
       "invalid-target",
       `Target ${frameId} must be a Frame on Page ${pageId}`,
@@ -149,8 +152,8 @@ export function planResizeFrameWithConstraints(
     const transformChanged = !sameTransform(before.transform, after.transform);
     const sizeChanged = !sameSize(before.size, after.size);
     const autoLayoutChanged =
-      before.kind === "frame" &&
-      after.kind === "frame" &&
+      isFrameContainer(before) &&
+      isFrameContainer(after) &&
       JSON.stringify(before.properties.autoLayout) !==
         JSON.stringify(after.properties.autoLayout);
     if (!transformChanged && !sizeChanged && !autoLayoutChanged) continue;
@@ -161,7 +164,7 @@ export function planResizeFrameWithConstraints(
       ...(transformChanged ? { transform: after.transform } : {}),
       ...(sizeChanged ? { size: after.size } : {}),
       ...(autoLayoutChanged &&
-      after.kind === "frame" &&
+      isFrameContainer(after) &&
       after.properties.autoLayout !== undefined
         ? { properties: { autoLayout: after.properties.autoLayout } }
         : {}),
@@ -188,7 +191,7 @@ function resizeFrame(
   | Extract<FrameLayoutOperationPlan, { ok: true }>
   | Extract<FrameLayoutOperationPlan, { ok: false }> {
   const frame = document.nodesById[frameId];
-  if (frame?.kind !== "frame") {
+  if (!frame || !isFrameContainer(frame)) {
     return failure("not-found", `Frame ${frameId} does not exist`);
   }
   const previousSize = frame.size;
@@ -309,7 +312,7 @@ function resizeConstrainedChild(
     );
   }
   child.transform = [1, 0, 0, 1, solved.rect.x, solved.rect.y];
-  if (child.kind === "frame" && childSizeChanged) {
+  if (isFrameContainer(child) && childSizeChanged) {
     const nested = resizeFrame(document, child.id, childNextSize, resizedIds);
     if (!nested.ok) return nested;
   } else if (childSizeChanged) {
@@ -317,6 +320,12 @@ function resizeConstrainedChild(
   }
   resizedIds.add(child.id);
   return { ok: true, commands: [], nodeIds: [...resizedIds] };
+}
+
+function isFrameContainer(
+  node: DesignNode,
+): node is Extract<DesignNode, { kind: "frame" | "slot" }> {
+  return node.kind === "frame" || node.kind === "slot";
 }
 
 function constraintResizes(

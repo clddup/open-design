@@ -1,8 +1,4 @@
-import type {
-  DesignDocument,
-  DesignNode,
-  NodeKind,
-} from "@opendesign/design-contracts";
+import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
 import {
   canDeleteNodes,
   resolveBooleanEditScope,
@@ -13,7 +9,6 @@ import {
   DropdownMenuSeparator,
   Glyph,
   IconButton,
-  type GlyphName,
 } from "@opendesign/ui";
 import {
   useEffect,
@@ -22,7 +17,6 @@ import {
   type CSSProperties,
   type DragEvent as ReactDragEvent,
 } from "react";
-import type { MessageKey } from "../../shared/i18n/messages";
 import type { AssetActionResult, DesignAssetReference } from "../design-assets";
 import type {
   LayerDropPosition,
@@ -33,39 +27,11 @@ import type {
 import { useI18n } from "../i18n";
 import type { SidebarTab } from "../state/editor";
 import { AssetsPanel } from "./AssetsPanel";
+import {
+  layerNodeIcons as nodeIcons,
+  layerNodeKindKeys as nodeKindKeys,
+} from "./layer-node-presentation";
 import styles from "./LeftSidebar.module.scss";
-
-const nodeIcons: Record<NodeKind, GlyphName> = {
-  frame: "frame",
-  group: "layers",
-  boolean: "boolean",
-  rectangle: "rectangle",
-  ellipse: "ellipse",
-  line: "line",
-  polygon: "polygon",
-  star: "star",
-  text: "text",
-  image: "assets",
-  vector: "pen",
-  path: "pen",
-  instance: "instance",
-};
-
-const nodeKindKeys: Record<NodeKind, MessageKey> = {
-  frame: "node.frame",
-  group: "node.group",
-  boolean: "node.boolean",
-  rectangle: "node.rectangle",
-  ellipse: "node.ellipse",
-  line: "node.line",
-  polygon: "node.polygon",
-  star: "node.star",
-  text: "node.text",
-  image: "node.image",
-  vector: "node.vector",
-  path: "node.path",
-  instance: "node.instance",
-};
 
 type TreeEntry = {
   node: DesignNode;
@@ -109,7 +75,10 @@ function dropPosition(
   const bounds = event.currentTarget.getBoundingClientRect();
   const ratio =
     bounds.height > 0 ? (event.clientY - bounds.top) / bounds.height : 0.5;
-  if (canDropInside && (node.kind === "frame" || node.kind === "group")) {
+  if (
+    canDropInside &&
+    (node.kind === "frame" || node.kind === "slot" || node.kind === "group")
+  ) {
     if (ratio < 0.25) return "before";
     if (ratio > 0.75) return "after";
     return "inside";

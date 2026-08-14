@@ -64,4 +64,4 @@ Canvas、SVG/位图导出只投影解析后的成员 subtree，不把 authoring 
 
 - OpenDesign 获得正式 Component Set/VARIANT 数据模型，而不是名称约定或 Renderer 特判。
 - 人工、Agent、Canvas、导出和持久化共享一个解析与事务入口。
-- 能力仍为 `degraded`：Set rename/add/remove/dissolve、二维 property matrix editor、拖拽重排与 default 切换、Slot、跨文件 Library、Figma Plugin/REST import-export、直接画布内部 override 选择和双平台打包 GUI 证据尚未完成。
+- 能力仍为 `degraded`：本文原始切片未实现的 Set 生命周期与二维 property matrix 已由 ADR-0065/0066 完成，Slot 已由 [ADR-0067](0067-figma-compatible-component-slots.md) 完成；拖拽矩阵重排、跨文件 Library、Figma Plugin/REST import-export、直接选择画布内部派生 Main child 和双平台打包 GUI 证据尚未完成。

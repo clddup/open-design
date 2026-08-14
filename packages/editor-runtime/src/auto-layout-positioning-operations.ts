@@ -39,8 +39,15 @@ export function planSetNodeLayoutPositioning(
   }
   const parent = node.parentId ? document.nodesById[node.parentId] : undefined;
   const flow =
-    parent?.kind === "frame" ? parent.properties.autoLayout : undefined;
-  if (!parent || parent.kind !== "frame" || !flow || flow.mode === "none") {
+    parent?.kind === "frame" || parent?.kind === "slot"
+      ? parent.properties.autoLayout
+      : undefined;
+  if (
+    !parent ||
+    (parent.kind !== "frame" && parent.kind !== "slot") ||
+    !flow ||
+    flow.mode === "none"
+  ) {
     return failure(
       "invalid-target",
       "Layout positioning requires a direct child of an Auto Layout Frame",

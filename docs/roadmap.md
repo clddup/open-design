@@ -149,7 +149,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P1：专业能力契约
 
 - 把 P0-C 的初始 capability manifest 提升为版本化公共契约，并为 Renderer、Agent、MCP 和发布说明提供同一只读查询入口。未知能力必须拒绝，降级能力必须返回结构化限制和 fidelity warning。
-- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.23.0` 已在响应式布局、Layout Guide 和 Component Properties 基础上增加 Figma-compatible Component Set/VARIANT、成员生命周期及二维属性矩阵，后续仍需分支网络、Slice、Auto Layout Grid、Text/Font rich typography、图片 adjustments、Slot、画布矩阵重排、跨文件 Library、style/token binding 和 export settings。
+- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.24.0` 已在响应式布局、Layout Guide 和 Component Properties 基础上增加 Figma-compatible Component Set/VARIANT、成员生命周期、二维属性矩阵及 Slot，后续仍需分支网络、Slice、Auto Layout Grid、Text/Font rich typography、图片 adjustments、nested Slot、画布矩阵重排、跨文件 Library、style/token binding 和 export settings。
 - 为 Geometry、Layout、Text/Font、Image 和 Import/Export service 建立窄、版本化的输入输出接口。服务只能返回纯结果、诊断或候选 `DesignOperation[]`，不能保存第二份文档或直接修改 Leafer 场景。
 - 提供确定性迁移、未知版本拒绝、保存重开、preview、undo/redo、Agent schema、provider 映射和 fidelity warning 测试；不得把长期语义藏进 `extensions`。
 
@@ -164,10 +164,11 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成 Figma-compatible Component Properties v1：`DesignDocument 1.21.0` 与 Component Service v2 定义 `componentPropertyDefinitions`、Main sublayer `componentPropertyReferences` 和 Instance assignments，支持 Boolean、Text、Instance swap、preferred values、Main 默认值同步、set/reset、rename/remove 原子清理、cycle validation、advanced override 最终优先级及 detach 物化。Inspector 将 typed properties 置于高级 sourcePath override 之前；Agent 增加 add/rename/remove/set/reset property actions，inspection 返回定义、有效值、assignment 和绑定。隔离的 `@opendesign/figma-interop` 仅以固定官方 Plugin API typings 验证公共形状，不把 Figma 类型泄漏到 Core。
 - [x] 完成 Figma-compatible Component Set/VARIANT v1：`DesignDocument 1.22.0` 定义真实 Set Frame、成员 membership/完整唯一组合、default 与正式 put/delete/change-set；Combine planner 保持 world geometry 并以单事务/单 undo 建 Set。Component Service 先按 VARIANT 选择唯一成员，再应用成员 properties 与 advanced override。Inspector 提供 Set/Variant 身份、Instance select/reset 和 eligible 多选 Combine；Agent 使用 inspection Component/root IDs 的 typed combine action，Canvas/SVG/位图、inspection、迁移、保存重开、history 与隔离 Figma interop 共享同一事实。
 - [x] 完成 Figma-compatible Variant Property Matrix v3：`DesignDocument 1.23.0` 增加正式 `propertyOrder`，与既有 `variantOptions` 分别持久化 property/value 顺序；Runtime 支持 property add/rename/reorder/remove、value rename/reorder 和成员完整组合编辑，保持唯一组合、top-left default 与 Instance resolved member。Set root Inspector、Agent typed actions、inspection、diff/history、迁移、保存重开和渲染/导出继续共用 Component Service v2；见 ADR-0066。
+- [x] 完成 Figma-compatible Component Slots v1：`DesignDocument 1.24.0` 与 Component Service v3 定义正式 Frame-like Slot、Main source/Instance override 存储、唯一合并顺序、Clear/Reset/delete/detach、Variant migration、settings、Component/Component Set preferred values 和指导性 limit warnings。Inspector、Layers、Agent typed actions/inspection、直接画布编辑、空 Slot editor overlay、Canvas/SVG/位图、迁移、保存重开与单 revision/undo 共用同一事实；nested Slot 明确失败封闭。见 ADR-0067。
 - [x] 人工 UI 提供 Create component、Create instance、Go to main、Inspector source-layer override、Reset 与 Detach；Assets/Layers/Inspector 区分 Main/Instance/override。Agent 使用专用 `opendesign_manage_components`，通用 apply 不能写 component definition；同 Page 与跨 Page 权限分别校验。
 - [x] Canvas 投影、hit testing、选择去重、Main/Instance direct manipulation、保存重开、undo/redo、复制/跨 Page、SVG/位图导出和 autosave 消费同一解析结果；循环、missing main/source、out-of-scope 与 revision conflict 原子失败。Instance 首版本可移动/旋转/倾斜但不可直接 resize/内部文字编辑；画布直接选择内部 override target 和双平台 GUI 实机证据仍待完成。
 
-完成条件：自动化已验证同一 Design File 跨 Page Main/Instance、三类 typed property、Component Set/VARIANT、Set 成员生命周期与二维矩阵、嵌套交换、Main 同步、文字/可见性/外观 override、人工与 Agent 操作、保存重开、autosave、undo/redo 和 SVG/位图导出一致。能力状态仍为 `degraded`，因为 Slot、画布矩阵重排、跨文件 Library、画布内部 override 直选和 macOS/Windows 打包 GUI smoke 尚未完成；Token/Variable 继续按后续 P3-B 独立推进。
+完成条件：自动化已验证同一 Design File 跨 Page Main/Instance、四类 typed property（含 Slot）、Component Set/VARIANT、Set 成员生命周期与二维矩阵、嵌套交换、Main/Slot 默认内容同步、人工与 Agent 操作、保存重开、autosave、undo/redo 和 SVG/位图导出一致。能力状态仍为 `degraded`，因为 nested Slot、画布矩阵重排、跨文件 Library、画布内部派生 Main child 直选和 macOS/Windows 打包 GUI smoke 尚未完成；Token/Variable 继续按后续 P3-B 独立推进。
 
 ## P2：精确图层、变换与矢量
 
@@ -221,7 +222,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成 Layout Guide / Uniform Grid v1：`DesignDocument 1.19.0` 在 Frame properties 持久化最多八个稳定 uniform guide 的 size/color/opacity；它们不改变 child 几何或 Auto Layout，只在选中 Frame 时由 Leafer editor sky 投影为不可命中辅助线，pan/zoom/resize 时重算，capture/export 不包含。Inspector 与 Agent `set-layout-guides` 共用 Runtime planner、单 revision/undo/save/reopen；generic apply/insert/replace 旁路失败，重复 ID 和每 guide 4096 线预算关闭。Columns/Rows、margin/gutter/offset、吸附、共享 style、baseline 与 Auto Layout Grid 仍待后续。见 ADR-0060。
 - [x] 完成 Layout Guide / Columns / Rows v2：`DesignDocument 1.20.0` 在同一 Frame guide 集合增加 fixed start/center/end 与 stretch columns/rows，支持 count、sectionSize、gutter、offset/margin；Leafer editor sky 显示裁剪在 Frame 内的不可命中色带，不改变 child/Auto Layout，不进入 capture/export。Inspector 加号菜单、类型/对齐字段、Agent strict schema、迁移、save/reopen、undo/redo、pan/zoom/resize 与 generic 旁路门禁共用同一 planner。Auto Layout Grid 的 track/cell/span/reflow、吸附、共享 style、baseline 与手工参考线仍后续实现。见 ADR-0061。
 - 建立 OpenDesign-owned constraints、horizontal/vertical auto layout、wrap、padding/gap、对齐、hug/fill/fixed、min/max、absolute child、layout grid 与响应式求解语义。Layout service 输出确定性布局或候选事务，不保存第二份布局状态。
-- 在 P1-C 已完成 Boolean/Text/Instance-swap properties、Component Set/VARIANT v1、成员生命周期 v2 与二维属性矩阵 v3 的基础上继续建立 Slot、画布矩阵重排、共享样式与 Library 发布/消费，并扩展 Figma Plugin/REST import-export、跨文件更新、循环依赖和失效引用诊断。
+- 在 P1-C 已完成 Boolean/Text/Instance-swap/SLOT properties、Component Set/VARIANT v1、成员生命周期 v2、二维属性矩阵 v3 与 Slot v1 的基础上继续建立 nested Slot、画布矩阵重排、共享样式与 Library 发布/消费，并扩展 Figma Plugin/REST import-export、跨文件更新、循环依赖和失效引用诊断。
 - 建立 Design File/Library 级 Design Token/Variable 系统，而不是应用设置：支持 Color/Number/String/Boolean 等 typed value、Collection/Group、Mode、同类型 alias、属性 scope/binding，以及 primitive → semantic → component 分层。人工 UI 与 Agent 必须共用同一版本化命令；主题/模式切换、alias 继承、循环/失效引用、Library 发布与消费都产生确定性结果。DTCG JSON 导入导出通过独立 service 返回保真报告，不把 token 占位字段描述成已可用。
 - 人工 UI 和 Agent 使用同一组创建组件、生成实例、修改 override、切换 Variant、绑定 Token 和调整布局命令。属性检查器必须区分源组件、实例值、override 与继承值。
 

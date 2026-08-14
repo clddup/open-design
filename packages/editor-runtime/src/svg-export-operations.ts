@@ -1,9 +1,10 @@
-import type {
-  DesignDocument,
-  DesignNode,
-  Paint,
-  Rect,
-  Transform,
+import {
+  isFrameLikeNode,
+  type DesignDocument,
+  type DesignNode,
+  type Paint,
+  type Rect,
+  type Transform,
 } from "@opendesign/design-contracts";
 import { materializeComponentInstances } from "@opendesign/component-service";
 import {
@@ -151,9 +152,9 @@ export function planSvgExportRequest(
   const boundsContext: ExportBoundsContext = {
     document: exportDocument,
     resolvedBooleanPaths: resolvedBooleanPaths.paths,
-    selectedFrameRoots: new Set(
-      rootNodeIds.filter(
-        (nodeId) => exportDocument.nodesById[nodeId]?.kind === "frame",
+    selectedContainerRoots: new Set(
+      rootNodeIds.filter((nodeId) =>
+        isFrameLikeNode(exportDocument.nodesById[nodeId]),
       ),
     ),
   };
@@ -349,7 +350,7 @@ function collectRenderedBooleanNodeIds(
       ids.push(node.id);
       return;
     }
-    if (node.kind === "frame" || node.kind === "group") {
+    if (isFrameLikeNode(node) || node.kind === "group") {
       node.childIds.forEach(visit);
     }
   };
@@ -360,7 +361,7 @@ function collectRenderedBooleanNodeIds(
 interface ExportBoundsContext {
   document: DesignDocument;
   resolvedBooleanPaths: Readonly<Record<string, SvgResolvedBooleanPath>>;
-  selectedFrameRoots: ReadonlySet<string>;
+  selectedContainerRoots: ReadonlySet<string>;
 }
 
 function renderedNodeBounds(
@@ -377,7 +378,7 @@ function renderedNodeBounds(
     );
   }
   const ownBounds = drawableNodeBounds(context, node);
-  if (node.kind !== "frame" || context.selectedFrameRoots.has(node.id)) {
+  if (!isFrameLikeNode(node) || context.selectedContainerRoots.has(node.id)) {
     return ownBounds;
   }
   return unionRects([
@@ -436,7 +437,7 @@ function shapeProperties(node: DesignNode):
     }
   | undefined {
   if (
-    node.kind === "frame" ||
+    isFrameLikeNode(node) ||
     node.kind === "rectangle" ||
     node.kind === "ellipse" ||
     node.kind === "line" ||

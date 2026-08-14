@@ -411,6 +411,7 @@ export function nodeReferencesAsset(
   if (node.kind === "image") return node.properties.assetId === assetId;
   if (
     node.kind !== "frame" &&
+    node.kind !== "slot" &&
     node.kind !== "rectangle" &&
     node.kind !== "ellipse" &&
     node.kind !== "line" &&

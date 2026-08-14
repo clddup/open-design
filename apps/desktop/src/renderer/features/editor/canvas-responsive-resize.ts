@@ -11,7 +11,11 @@ export function responsiveFrameResizeRequest(
   if (request.kind !== "resize" || selected.length !== 1) return null;
   const frameId = selected[0];
   const frame = frameId ? document.nodesById[frameId] : undefined;
-  if (frame?.kind !== "frame" || frame.childIds.length === 0) return null;
+  if (
+    (frame?.kind !== "frame" && frame?.kind !== "slot") ||
+    frame.childIds.length === 0
+  )
+    return null;
   const update = request.operations.find(
     (operation) =>
       operation.type === "update_properties" &&

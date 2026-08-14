@@ -23,9 +23,13 @@ export function planSetNodeLayoutLimits(
   }
   const parent = node.parentId ? document.nodesById[node.parentId] : undefined;
   const parentFlow =
-    parent?.kind === "frame" ? parent.properties.autoLayout : undefined;
+    parent?.kind === "frame" || parent?.kind === "slot"
+      ? parent.properties.autoLayout
+      : undefined;
   const ownFlow =
-    node.kind === "frame" ? node.properties.autoLayout : undefined;
+    node.kind === "frame" || node.kind === "slot"
+      ? node.properties.autoLayout
+      : undefined;
   const isFlowChild = parentFlow !== undefined && parentFlow.mode !== "none";
   const isFlowFrame = ownFlow !== undefined && ownFlow.mode !== "none";
   if (!isFlowChild && !isFlowFrame) {

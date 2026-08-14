@@ -238,6 +238,21 @@ export function planDuplicateVariant(
     rootNodeId: input.rootNodeId,
     variantProperties: properties.value,
   };
+  component.componentPropertyDefinitions = Object.fromEntries(
+    Object.entries(component.componentPropertyDefinitions).map(
+      ([propertyName, definition]) => [
+        propertyName,
+        definition.type === "SLOT"
+          ? {
+              ...definition,
+              defaultValue:
+                cloned.idMap.get(definition.defaultValue) ??
+                definition.defaultValue,
+            }
+          : definition,
+      ],
+    ),
+  );
   const components = [
     ...context.members.map(({ component }) => component),
     component,

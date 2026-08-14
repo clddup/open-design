@@ -19,7 +19,7 @@ export function validateNodeLayoutInvariants(
 ): DocumentInvariantIssue[] {
   const issues: DocumentInvariantIssue[] = [];
   if (
-    node.kind === "frame" &&
+    (node.kind === "frame" || node.kind === "slot") &&
     node.properties.autoLayout?.mode === "horizontal" &&
     node.properties.autoLayout.wrap &&
     (node.properties.autoLayout.sizing?.horizontal ?? "fixed") !== "fixed"
@@ -54,7 +54,7 @@ export function validateNodeLayoutInvariants(
     ? document.nodesById[node.parentId]
     : undefined;
   const parentFlow =
-    layoutParent?.kind === "frame"
+    layoutParent?.kind === "frame" || layoutParent?.kind === "slot"
       ? layoutParent.properties.autoLayout
       : undefined;
   const absoluteInFlow =
@@ -82,7 +82,7 @@ export function validateNodeLayoutInvariants(
     });
   }
   if (node.constraints !== undefined) {
-    if (layoutParent?.kind !== "frame") {
+    if (layoutParent?.kind !== "frame" && layoutParent?.kind !== "slot") {
       issues.push({
         path: `/nodesById/${nodeId}/constraints`,
         message: "constraints are only valid on direct children of a Frame",
@@ -95,7 +95,7 @@ export function validateNodeLayoutInvariants(
       });
     }
     if (
-      layoutParent?.kind === "frame" &&
+      (layoutParent?.kind === "frame" || layoutParent?.kind === "slot") &&
       layoutParent.properties.autoLayout !== undefined &&
       layoutParent.properties.autoLayout.mode !== "none" &&
       !absoluteInFlow
@@ -168,7 +168,9 @@ export function validateNodeLayoutInvariants(
   }
   if (node.layoutLimits !== undefined) {
     const ownFlow =
-      node.kind === "frame" ? node.properties.autoLayout : undefined;
+      node.kind === "frame" || node.kind === "slot"
+        ? node.properties.autoLayout
+        : undefined;
     const participatesInAutoLayout =
       (parentFlow !== undefined &&
         parentFlow.mode !== "none" &&

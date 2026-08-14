@@ -1,14 +1,13 @@
-import type {
-  DesignDocument,
-  DesignNode,
-  LineEndpoint,
-  Paint,
-  Rect,
-  Transform,
-} from "@opendesign/design-contracts";
 import {
+  isFrameLikeNode,
   normalizeLineEndpoints,
   resolveLineEndpointPoint,
+  type DesignDocument,
+  type DesignNode,
+  type LineEndpoint,
+  type Paint,
+  type Rect,
+  type Transform,
 } from "@opendesign/design-contracts";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
 import type {
@@ -551,7 +550,7 @@ function exportNode(
   context.visiting.add(nodeId);
   context.exportedNodeIds.push(nodeId);
   try {
-    if (node.kind === "group" || node.kind === "frame") {
+    if (node.kind === "group" || isFrameLikeNode(node)) {
       const group = context.document.createElementNS(SVG_NAMESPACE, "g");
       applyExportMetadata(context, group, node);
       applyExportTransform(context, group, node, options.selectedRoot === true);
@@ -561,7 +560,7 @@ function exportNode(
         node,
         options.maskSource === true,
       );
-      if (node.kind === "frame") {
+      if (isFrameLikeNode(node)) {
         const background = context.document.createElementNS(
           SVG_NAMESPACE,
           "rect",
@@ -868,7 +867,7 @@ function exportContainerChildren(
 
 function appendFrameClipDefinition(
   context: ExportContext,
-  node: Extract<DesignNode, { kind: "frame" }>,
+  node: Extract<DesignNode, { kind: "frame" | "slot" }>,
 ): string {
   const clipId = `od_frame_clip_${++context.frameClipSequence}_${sanitizeXmlId(node.id)}`;
   appendSvgFrameClipDefinition({

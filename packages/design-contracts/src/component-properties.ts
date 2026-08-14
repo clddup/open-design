@@ -4,7 +4,23 @@ export const ComponentPropertyTypeSchema = Type.Union([
   Type.Literal("BOOLEAN"),
   Type.Literal("TEXT"),
   Type.Literal("INSTANCE_SWAP"),
+  Type.Literal("SLOT"),
 ]);
+
+export const SlotSettingsSchema = Type.Object(
+  {
+    stretchChildOnInsert: Type.Optional(Type.Boolean()),
+    displayEmptyByDefault: Type.Optional(Type.Boolean()),
+    minChildren: Type.Optional(
+      Type.Union([Type.Integer({ minimum: 0, maximum: 4_096 }), Type.Null()]),
+    ),
+    maxChildren: Type.Optional(
+      Type.Union([Type.Integer({ minimum: 0, maximum: 4_096 }), Type.Null()]),
+    ),
+    allowPreferredValuesOnly: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
 
 export const InstanceSwapPreferredValueSchema = Type.Object(
   {
@@ -39,6 +55,18 @@ export const ComponentPropertyDefinitionSchema = Type.Union([
     },
     { additionalProperties: false },
   ),
+  Type.Object(
+    {
+      type: Type.Literal("SLOT"),
+      defaultValue: Type.String({ minLength: 1, maxLength: 256 }),
+      preferredValues: Type.Optional(
+        Type.Array(InstanceSwapPreferredValueSchema, { maxItems: 1_024 }),
+      ),
+      description: Type.Optional(Type.String({ maxLength: 2_000 })),
+      slotSettings: Type.Optional(SlotSettingsSchema),
+    },
+    { additionalProperties: false },
+  ),
 ]);
 
 export const ComponentPropertyDefinitionsSchema = Type.Record(
@@ -68,6 +96,7 @@ export const ComponentPropertyReferencesSchema = Type.Object(
 );
 
 export type ComponentPropertyType = Static<typeof ComponentPropertyTypeSchema>;
+export type SlotSettings = Static<typeof SlotSettingsSchema>;
 export type InstanceSwapPreferredValue = Static<
   typeof InstanceSwapPreferredValueSchema
 >;

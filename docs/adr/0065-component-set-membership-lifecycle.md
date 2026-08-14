@@ -48,4 +48,4 @@ Inspector 在 Set root 提供 Add variant 与 Dissolve，在成员 Main 提供 D
 
 ## 后果
 
-Component Set 从一次性 Combine 升级为可维护对象，且没有新增 schema 分支或 Figma 专用运行时。Canvas、Assets、SVG/位图和持久化继续消费同一 Component Service 解析结果。二维 property matrix editor、画布拖拽重排、Slot 与跨文件 Library 仍是后续独立切片。
+Component Set 从一次性 Combine 升级为可维护对象，且没有新增 schema 分支或 Figma 专用运行时。Canvas、Assets、SVG/位图和持久化继续消费同一 Component Service 解析结果。二维 property matrix 已由 ADR-0066 完成，Slot 已由 [ADR-0067](0067-figma-compatible-component-slots.md) 完成；画布拖拽矩阵重排与跨文件 Library 仍是后续独立切片。

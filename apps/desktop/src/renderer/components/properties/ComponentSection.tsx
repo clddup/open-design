@@ -6,9 +6,11 @@ import type {
   ComponentOverridePatch,
   DesignNode,
   Effect,
+  InstanceSwapPreferredValue,
   MaskMode,
   VariantPropertyDefinition,
 } from "@opendesign/design-contracts";
+import type { ResolvedComponentSlot } from "@opendesign/component-service";
 import { Button, Glyph } from "@opendesign/ui";
 import { useEffect, useState } from "react";
 import type { MessageKey } from "../../../shared/i18n/messages";
@@ -52,6 +54,12 @@ export interface ComponentInspectorOption {
   name: string;
 }
 
+export interface ComponentInspectorPreferredValueOption {
+  key: string;
+  name: string;
+  type: InstanceSwapPreferredValue["type"];
+}
+
 export interface ComponentInspectorPropertyDefinition {
   definition: ComponentPropertyDefinition;
   propertyName: string;
@@ -63,10 +71,12 @@ export interface ComponentInspectorPropertyValue {
   definition: ComponentPropertyDefinition | VariantPropertyDefinition;
   propertyName: string;
   value: ComponentPropertyAssignment;
+  slot?: ResolvedComponentSlot;
 }
 
 const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   frame: "node.frame",
+  slot: "node.slot",
   group: "node.group",
   boolean: "node.boolean",
   rectangle: "node.rectangle",
@@ -373,6 +383,7 @@ function ComponentOverrideEditor({
 
 export type ComponentInspectorContext = {
   availableComponents: readonly ComponentInspectorOption[];
+  availableSlotPreferredValues: readonly ComponentInspectorPreferredValueOption[];
   componentName: string;
   componentProperties: readonly ComponentInspectorPropertyValue[];
   componentPropertyDefinitions: readonly ComponentInspectorPropertyDefinition[];
@@ -407,6 +418,10 @@ export function ComponentSection({
   onResetComponentSourceOverride,
   onResetComponentProperty,
   onSetComponentProperty,
+  onClearComponentSlot,
+  onCreateComponentSlotOverride,
+  onResetComponentSlot,
+  onSetComponentSlotSettings,
   onUpdateComponentOverride,
 }: {
   componentContext?: ComponentInspectorContext;
@@ -449,6 +464,17 @@ export function ComponentSection({
   onSetComponentProperty: (
     propertyName: string,
     value: ComponentPropertyAssignment,
+  ) => void;
+  onClearComponentSlot: (propertyName: string) => void;
+  onCreateComponentSlotOverride: (propertyName: string) => void;
+  onResetComponentSlot: (propertyName: string) => void;
+  onSetComponentSlotSettings: (
+    propertyName: string,
+    input: {
+      description?: string;
+      preferredValues: readonly InstanceSwapPreferredValue[];
+      settings: import("@opendesign/design-contracts").SlotSettings;
+    },
   ) => void;
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
@@ -513,10 +539,15 @@ export function ComponentSection({
                 )}
               </div>
               <ComponentPropertyAuthoring
+                availableComponents={componentContext.availableComponents}
+                availableSlotPreferredValues={
+                  componentContext.availableSlotPreferredValues
+                }
                 definitions={componentContext.componentPropertyDefinitions}
                 onAdd={onAddComponentProperty}
                 onRemove={onRemoveComponentProperty}
                 onRename={onRenameComponentProperty}
+                onUpdateSlot={onSetComponentSlotSettings}
                 sources={componentContext.sourceNodes}
               />
             </>
@@ -524,7 +555,10 @@ export function ComponentSection({
             <>
               <ComponentPropertyValues
                 availableComponents={componentContext.availableComponents}
+                onClearSlot={onClearComponentSlot}
+                onCreateSlotOverride={onCreateComponentSlotOverride}
                 onReset={onResetComponentProperty}
+                onResetSlot={onResetComponentSlot}
                 onSet={onSetComponentProperty}
                 properties={componentContext.componentProperties}
               />

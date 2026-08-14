@@ -1,9 +1,10 @@
-import type {
-  DesignDocument,
-  DesignNode,
-  Effect,
-  Paint,
-  Rect,
+import {
+  isFrameLikeNode,
+  type DesignDocument,
+  type DesignNode,
+  type Effect,
+  type Paint,
+  type Rect,
 } from "@opendesign/design-contracts";
 import { resolvePathPropertiesData } from "@opendesign/geometry-service/editable-vector";
 import { getNodeBounds } from "./geometry.js";
@@ -131,9 +132,9 @@ function diagnoseNode(
       message: `Node ${node.id} has non-finite geometry or world bounds`,
     });
   } else {
-    const clippingFrame = nearestClippingFrame(document, node);
-    if (clippingFrame) {
-      const clippingBounds = getNodeBounds(document, clippingFrame.id);
+    const clippingContainer = nearestClippingContainer(document, node);
+    if (clippingContainer) {
+      const clippingBounds = getNodeBounds(document, clippingContainer.id);
       if (
         clippingBounds &&
         isFiniteRect(clippingBounds) &&
@@ -144,8 +145,8 @@ function diagnoseNode(
           severity: "warning",
           pageId,
           nodeId: node.id,
-          relatedNodeIds: [clippingFrame.id],
-          message: `Node ${node.id} is fully outside clipping Frame ${clippingFrame.id}`,
+          relatedNodeIds: [clippingContainer.id],
+          message: `Node ${node.id} is fully outside clipping container ${clippingContainer.id}`,
         });
       }
     }
@@ -290,7 +291,7 @@ function countFeatures(node: DesignNode, summary: DesignFeatureSummary): void {
 
 function nodePaints(node: DesignNode): readonly Paint[] {
   if (
-    node.kind === "frame" ||
+    isFrameLikeNode(node) ||
     node.kind === "rectangle" ||
     node.kind === "ellipse" ||
     node.kind === "line" ||
@@ -378,17 +379,17 @@ function isFiniteRect(rect: Rect): boolean {
   );
 }
 
-function nearestClippingFrame(
+function nearestClippingContainer(
   document: DesignDocument,
   node: DesignNode,
-): Extract<DesignNode, { kind: "frame" }> | undefined {
+): import("@opendesign/design-contracts").FrameLikeNode | undefined {
   const seen = new Set<string>();
   let parentId = node.parentId;
   while (parentId && !seen.has(parentId)) {
     seen.add(parentId);
     const parent = document.nodesById[parentId];
     if (!parent) return undefined;
-    if (parent.kind === "frame" && parent.properties.clipsContent) {
+    if (isFrameLikeNode(parent) && parent.properties.clipsContent) {
       return parent;
     }
     parentId = parent.parentId;

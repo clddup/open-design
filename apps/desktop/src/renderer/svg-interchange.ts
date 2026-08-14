@@ -1,7 +1,8 @@
-import type {
-  DesignDocument,
-  Rect,
-  ViewportState,
+import {
+  isFrameLikeNode,
+  type DesignDocument,
+  type Rect,
+  type ViewportState,
 } from "@opendesign/design-contracts";
 import {
   planSvgImport,
@@ -127,7 +128,7 @@ export function captureSvgImportTarget(
       ? document.nodesById[selectedNodeIds[0] ?? ""]
       : undefined;
   const parent =
-    selected?.kind === "frame" || selected?.kind === "group"
+    isFrameLikeNode(selected) || selected?.kind === "group"
       ? selected
       : undefined;
   if (parent && !nodeBelongsToPage(document, pageId, parent.id)) {

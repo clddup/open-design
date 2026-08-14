@@ -4,6 +4,7 @@ import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
   COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION,
+  COMPONENT_SLOT_DESIGN_SCHEMA_VERSION,
   VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION,
   FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
@@ -36,9 +37,8 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION).toBe("1.21.0");
   expect(COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION).toBe("1.22.0");
   expect(VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION).toBe("1.23.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(
-    VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION,
-  );
+  expect(COMPONENT_SLOT_DESIGN_SCHEMA_VERSION).toBe("1.24.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(COMPONENT_SLOT_DESIGN_SCHEMA_VERSION);
 });
 
 function textDocumentFixture() {
@@ -1317,6 +1317,17 @@ describe("design contract schemas", () => {
     expect(source.variantSetsById.button_set).toMatchObject({
       propertyOrder: ["Size", "State"],
     });
+  });
+
+  it("migrates 1.23 documents without inventing Slot state", () => {
+    const source = textDocumentFixture();
+    source.schemaVersion = "1.23.0" as typeof source.schemaVersion;
+
+    const migrated = migrateDesignDocument(source);
+
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1?.kind).toBe("text");
+    expect(migrated?.componentsById).toEqual({});
   });
 
   it("validates strict uniform layout guides on Frames", () => {

@@ -1193,7 +1193,7 @@ const MODEL_HIERARCHY_SCHEMA = {
 const MODEL_COMPONENT_SCHEMA = {
   type: "object",
   description:
-    "Create and place linked components, combine inspected sibling Component Mains into a Figma-compatible Component Set with explicit unique VARIANT values, author Boolean/Text/Instance-swap properties on explicit Main sublayers, set/reset typed instance and VARIANT property values, use advanced sourcePath overrides, detach an instance, or locate its Main. Component, set, root, and property IDs must come from inspection.",
+    "Create and place linked components, combine inspected sibling Component Mains into a Figma-compatible Component Set with explicit unique VARIANT values, author Boolean/Text/Instance-swap/Slot properties on explicit Main sublayers, edit/reset/clear Slot contents and guidance settings, set/reset typed instance and VARIANT property values, use advanced sourcePath overrides, detach an instance, or locate its Main. Component, set, root, and property IDs must come from inspection.",
   properties: {
     action: {
       enum: [
@@ -1217,6 +1217,10 @@ const MODEL_COMPONENT_SCHEMA = {
         "remove-property",
         "set-property",
         "reset-property",
+        "create-slot-override",
+        "clear-slot",
+        "reset-slot",
+        "set-slot-settings",
         "set-override",
         "reset-overrides",
         "detach-instance",
@@ -1291,7 +1295,7 @@ const MODEL_COMPONENT_SCHEMA = {
     name: { type: "string", minLength: 1, maxLength: 256 },
     propertyId: { type: "string", minLength: 1, maxLength: 256 },
     propertyName: { type: "string", minLength: 1, maxLength: 512 },
-    type: { enum: ["BOOLEAN", "TEXT", "INSTANCE_SWAP"] },
+    type: { enum: ["BOOLEAN", "TEXT", "INSTANCE_SWAP", "SLOT"] },
     sourceNodeId: { type: "string", minLength: 1, maxLength: 256 },
     preferredValues: {
       type: "array",
@@ -1306,6 +1310,28 @@ const MODEL_COMPONENT_SCHEMA = {
         additionalProperties: false,
       },
     },
+    settings: {
+      type: "object",
+      properties: {
+        stretchChildOnInsert: { type: "boolean" },
+        displayEmptyByDefault: { type: "boolean" },
+        minChildren: {
+          anyOf: [
+            { type: "integer", minimum: 0, maximum: 4096 },
+            { type: "null" },
+          ],
+        },
+        maxChildren: {
+          anyOf: [
+            { type: "integer", minimum: 0, maximum: 4096 },
+            { type: "null" },
+          ],
+        },
+        allowPreferredValuesOnly: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    description: { type: "string", maxLength: 2000 },
     value: {
       anyOf: [{ type: "boolean" }, { type: "string", maxLength: 100_000 }],
     },
@@ -2030,7 +2056,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_COMPONENT_TOOL_NAME,
     description:
-      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main; combine-as-variants creates one real Component Set Frame from inspected sibling Mains. add-component-to-variant-set, duplicate-variant, remove-variant, and dissolve-variant-set manage Set membership. add/rename/reorder/remove-variant-property, rename/reorder-variant-value, and set-variant-properties edit the Figma-compatible two-dimensional Variant matrix using explicit inspected Set/member roots; the host preserves complete unique combinations, property/value order, top-left defaults, current Instance resolution, one revision, and one undo. create-instance places a linked instance. add/rename/remove-property author Boolean, Text, or Instance-swap properties on explicit Main sublayers; set/reset-property also selects VARIANT values exposed by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. Main edits synchronize property defaults, instance structure cannot be directly mutated, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
+      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main; combine-as-variants creates one real Component Set Frame from inspected sibling Mains. add-component-to-variant-set, duplicate-variant, remove-variant, and dissolve-variant-set manage Set membership. add/rename/reorder/remove-variant-property, rename/reorder-variant-value, and set-variant-properties edit the Figma-compatible two-dimensional Variant matrix using explicit inspected Set/member roots; the host preserves complete unique combinations, property/value order, top-left defaults, current Instance resolution, one revision, and one undo. create-instance places a linked instance. add/rename/remove-property author Boolean, Text, Instance-swap, or Slot properties on explicit Main sublayers. create-slot-override, clear-slot, reset-slot, and set-slot-settings manage bounded instance Slot contents and guidance without detaching the Instance; arbitrary content is inserted only under the real override Slot root returned by a fresh inspection. set/reset-property also selects VARIANT values exposed by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. Main edits synchronize property defaults, ordinary Instance structure remains read-only, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
     inputSchema: MODEL_COMPONENT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,

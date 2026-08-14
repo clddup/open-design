@@ -23,7 +23,11 @@ export function autoLayoutShortcutRequest(
   }
   const nodeId = selection.anchorNodeId ?? selection.nodeIds[0] ?? "";
   const selected = document.nodesById[nodeId];
-  if (selection.nodeIds.length !== 1 || selected?.kind !== "frame") return null;
+  if (
+    selection.nodeIds.length !== 1 ||
+    (selected?.kind !== "frame" && selected?.kind !== "slot")
+  )
+    return null;
   return {
     frameId: selected.id,
     autoLayout: event.altKey ? { mode: "none" } : suggestedAutoLayout(selected),
@@ -39,7 +43,7 @@ export function canShowOrdinaryConstraints(
   }
   const parent = document.nodesById[node.parentId];
   return (
-    parent?.kind === "frame" &&
+    (parent?.kind === "frame" || parent?.kind === "slot") &&
     (parent.properties.autoLayout === undefined ||
       parent.properties.autoLayout.mode === "none" ||
       node.layoutPositioning === "absolute")
@@ -53,7 +57,7 @@ export function canShowAutoLayoutSizing(
   if (!node?.parentId) return false;
   const parent = document.nodesById[node.parentId];
   return (
-    parent?.kind === "frame" &&
+    (parent?.kind === "frame" || parent?.kind === "slot") &&
     parent.properties.autoLayout !== undefined &&
     parent.properties.autoLayout.mode !== "none" &&
     node.layoutPositioning !== "absolute"
@@ -70,7 +74,7 @@ export function layoutInspectorMode(
     const parent = node?.parentId
       ? document.nodesById[node.parentId]
       : undefined;
-    return parent?.kind === "frame" &&
+    return (parent?.kind === "frame" || parent?.kind === "slot") &&
       parent.properties.autoLayout?.mode === "horizontal" &&
       parent.properties.autoLayout.wrap?.mode === "wrap"
       ? "wrap-sizing"
@@ -80,7 +84,7 @@ export function layoutInspectorMode(
 }
 
 function suggestedAutoLayout(
-  frame: Extract<DesignNode, { kind: "frame" }>,
+  frame: Extract<DesignNode, { kind: "frame" | "slot" }>,
 ): AutoLayoutFlow {
   const existing = frame.properties.autoLayout;
   if (existing && existing.mode !== "none") return existing;

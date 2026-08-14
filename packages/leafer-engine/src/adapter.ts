@@ -84,11 +84,7 @@ import {
   transformToAffine,
   type AffineMatrix,
 } from "./affine.js";
-import {
-  createLayoutGuideOverlayPlan,
-  layoutGuideDocumentTransform,
-  reconcileLayoutGuideElements,
-} from "./layout-guide-overlay.js";
+import { EditorOverlayController } from "./editor-overlay-controller.js";
 import type {
   LeaferBoxCreateTool,
   LeaferCaptureResult,
@@ -259,7 +255,6 @@ const GENERATION_SKELETON_COLOR = "#7c6ee6";
 const GENERATION_SKELETON_FILL = "rgba(124, 110, 230, 0.08)";
 const MAX_SUPPRESSED_GENERATION_SKELETONS = 128;
 const GENERATION_ACTIVITY_BADGE_FILL = "rgba(31, 28, 48, 0.94)";
-const LAYOUT_GUIDE_DEFAULT_COLOR = "#ff5a5f";
 const GENERATION_ACTIVITY_MOVE_MS = 180;
 const MAX_SUPPRESSED_GENERATION_ACTIVITIES = 128;
 const MAX_CAPTURE_WIDTH = 1_280;
@@ -286,10 +281,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #generationActivityLayer: LeaferGroup;
   readonly #generationPresentationRoot: LeaferGroup;
   readonly #generationSkeletonLayer: LeaferGroup;
-  readonly #layoutGuideLayer: LeaferGroup;
-  readonly #layoutGuideElements = new Map<string, LeaferElement>();
-  readonly #layoutGuideAreaIds = new Set<string>();
-  #layoutGuideFingerprint: string | null = null;
+  readonly #editorOverlays: EditorOverlayController;
   readonly #elements = new Map<string, LeaferElement>();
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
   #baseProjection: LeaferSceneProjection | null = null;
@@ -403,13 +395,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       visible: false,
     });
     this.#generationPresentationRoot.addAt(this.#generationSkeletonLayer, 0);
-    this.#layoutGuideLayer = new leafer.Group({
-      editable: false,
-      hitChildren: false,
-      hittable: false,
-      visible: false,
+    this.#editorOverlays = new EditorOverlayController({
+      leafer,
+      presentationRoot: this.#generationPresentationRoot,
+      viewportRoot: this.#app.tree as unknown as LeaferGroup,
     });
-    this.#generationPresentationRoot.addAt(this.#layoutGuideLayer, 1);
     this.#generationActivityLayer = new leafer.Group({
       editable: false,
       hitChildren: false,
@@ -461,7 +451,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       cursor: activityCursor,
       label: activityLabel,
     };
-    this.#generationPresentationRoot.addAt(this.#generationActivityLayer, 2);
+    this.#generationPresentationRoot.addAt(this.#generationActivityLayer, 3);
     this.#generationRevealStroker = new leafer.Stroker();
     this.#generationRevealStroker.set({
       dashPattern: [6, 4],
@@ -653,7 +643,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection.nodeIds);
-      this.#syncLayoutGuides(input.layoutGuideFrameId);
+      this.#editorOverlays.sync(input);
       this.#syncGenerationSkeleton(input.generationSkeleton);
       this.#syncGenerationActivity(
         input.generationActivity,
@@ -788,15 +778,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#editorRefreshNodeBounds.clear();
     this.#generationActivityLayer.remove();
     this.#generationActivityLayer.destroy();
-    this.#layoutGuideElements.forEach((element) => {
-      element.remove();
-      element.destroy();
-    });
-    this.#layoutGuideElements.clear();
-    this.#layoutGuideAreaIds.clear();
-    this.#layoutGuideFingerprint = null;
-    this.#layoutGuideLayer.remove();
-    this.#layoutGuideLayer.destroy();
+    this.#editorOverlays.dispose();
     this.#generationSkeletonLayer.remove();
     this.#generationSkeletonLayer.destroy();
     this.#generationRevealStroker.remove();
@@ -945,7 +927,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#scheduleViewport();
       this.#scheduleEditorRefresh();
       this.#renderVectorEditOverlays();
-      this.#syncLayoutGuideViewport();
+      this.#editorOverlays.syncViewport();
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
       this.#scheduleGenerationViewportSync();
@@ -965,7 +947,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     // callbacks, but no Agent child is rendered until this reconciliation has
     // expressed it relative to the sky's settled transform.
     this.#app.on(RenderEvent.CHILD_START, () => {
-      this.#syncLayoutGuideViewport();
+      this.#editorOverlays.syncViewport();
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
     });
@@ -1321,79 +1303,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
     this.#syncGenerationSkeletonViewport();
     this.#syncGenerationActivityViewport();
-    this.#syncLayoutGuides(this.#input?.layoutGuideFrameId);
+    if (this.#input) this.#editorOverlays.sync(this.#input);
     this.#scheduleGenerationViewportSync();
     this.#scheduleEditorRefresh();
-  }
-
-  #syncLayoutGuides(frameId: string | undefined): void {
-    const input = this.#input;
-    const plan = input
-      ? createLayoutGuideOverlayPlan(input.document, frameId)
-      : { fingerprint: null, specs: [] };
-    const result = reconcileLayoutGuideElements({
-      areaIds: this.#layoutGuideAreaIds,
-      createElement: () =>
-        new this.#leafer.Path({
-          editable: false,
-          hittable: false,
-          strokeAlign: "center",
-        }),
-      defaultColor: LAYOUT_GUIDE_DEFAULT_COLOR,
-      elements: this.#layoutGuideElements,
-      fingerprint: this.#layoutGuideFingerprint,
-      layer: this.#layoutGuideLayer,
-      plan,
-    });
-    this.#layoutGuideFingerprint = result.fingerprint;
-    if (!result.changed) {
-      this.#syncLayoutGuideViewport();
-      return;
-    }
-    this.#syncLayoutGuideViewport();
-  }
-
-  #syncLayoutGuideViewport(): void {
-    const input = this.#input;
-    const frameId = input?.layoutGuideFrameId;
-    const frame = frameId ? input?.document.nodesById[frameId] : undefined;
-    if (
-      !input ||
-      frame?.kind !== "frame" ||
-      this.#layoutGuideElements.size === 0
-    ) {
-      return;
-    }
-    const tree = this.#app.tree.localTransform;
-    const desired = layoutGuideDocumentTransform(
-      input.document,
-      frame.id,
-      tree,
-    );
-    const relative = matrixRelativeToParent(
-      this.#generationPresentationRoot.localTransform,
-      desired,
-      MATRIX_EPSILON,
-    );
-    if (!relative) {
-      this.#layoutGuideLayer.visible = false;
-      return;
-    }
-    if (!this.#layoutGuideLayer.visible) this.#layoutGuideLayer.visible = true;
-    const zoom = Math.max(MATRIX_EPSILON, Math.abs(tree.a || 1));
-    const strokeWidth = 1 / zoom;
-    for (const [id, element] of this.#layoutGuideElements) {
-      if (!sameAffineMatrix(element.localTransform, relative, MATRIX_EPSILON)) {
-        element.setTransform(relative);
-      }
-      if (this.#layoutGuideAreaIds.has(id)) continue;
-      if (
-        element.stroke &&
-        !nearlyEqual(Number(element.strokeWidth), strokeWidth)
-      ) {
-        element.set({ strokeWidth });
-      }
-    }
   }
 
   #syncSelection(nodeIds: readonly string[]): void {
@@ -2821,7 +2733,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         ? this.#projection?.elementsById.get(nodeId)
         : undefined;
       if (isLockedSpec(spec)) return undefined;
-      if (spec && (spec.kind === "frame" || spec.kind === "group")) {
+      if (
+        spec &&
+        (spec.kind === "frame" || spec.kind === "slot" || spec.kind === "group")
+      ) {
         return spec.id;
       }
       element = isElement(element.parent) ? element.parent : undefined;
@@ -3189,7 +3104,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#generationViewportFrame !== null ||
       (!this.#generationSkeletonId &&
         !this.#generationActivityId &&
-        this.#layoutGuideElements.size === 0)
+        !this.#editorOverlays.active)
     ) {
       return;
     }
@@ -3199,7 +3114,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       // Leafer can settle the document tree and built-in editor sky in
       // different callbacks. Re-read both and recompute their relative
       // transform so kinetic pan/zoom never leaves an intermediate offset.
-      this.#syncLayoutGuideViewport();
+      this.#editorOverlays.syncViewport();
       this.#syncGenerationSkeletonViewport();
       this.#syncGenerationActivityViewport();
     });

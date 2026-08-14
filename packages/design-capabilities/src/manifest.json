@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-14",
-  "documentSchemaVersion": "1.23.0",
+  "documentSchemaVersion": "1.24.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -853,10 +853,10 @@
         "zh-CN": "组件、实例与 Variants"
       },
       "description": {
-        "en": "Create main components, instances, nested instances, overrides, component properties, and variant sets.",
-        "zh-CN": "创建主组件、实例、嵌套实例、override、组件属性与 Variant Set。"
+        "en": "Create main components, instances, nested instances, overrides, component properties, slots, and variant sets.",
+        "zh-CN": "创建主组件、实例、嵌套实例、override、组件属性、Slot 与 Variant Set。"
       },
-      "provider": "DesignDocument 1.23.0 + @opendesign/component-service contract v2 + isolated @opendesign/figma-interop",
+      "provider": "DesignDocument 1.24.0 + @opendesign/component-service contract v3 + isolated @opendesign/figma-interop",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -868,8 +868,8 @@
       },
       "limitations": [
         {
-          "en": "Same-file Main components, linked/nested instances, Figma-compatible Boolean/Text/Instance-swap properties, real Component Set Frames, unique VARIANT combinations and resolution, Set add/duplicate/remove/dissolve, explicit property/value order, two-dimensional matrix editing with Instance reconciliation, stable source-path advanced overrides, reset/detach, Inspector and multi-select Combine/Add UI, typed Agent actions and inspection, Canvas/SVG/raster projection, migration, persistence, autosave, and history are implemented. Slot properties, on-canvas matrix reordering, cross-file libraries, private .fig decoding, Plugin/REST import-export, direct on-canvas inner override selection, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义的 Boolean/Text/Instance-swap 属性、真实 Component Set Frame、唯一 VARIANT 组合与解析、Set add/duplicate/remove/dissolve、显式 property/value 顺序、二维矩阵编辑与 Instance 迁移、稳定 sourcePath 高级 override、reset/detach、Inspector 与多选 Combine/Add、Agent typed actions 与 inspection、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Slot 属性、画布矩阵重排、跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、画布内部 override 直选和 macOS/Windows 打包 GUI 实机证据仍未完成。"
+          "en": "Same-file Main components, linked/nested instances, Figma-compatible Boolean/Text/Instance-swap/SLOT properties, real Component Set Frames, unique VARIANT resolution, Set lifecycle, matrix editing, stable source-path advanced overrides, Slot settings and guidance, Component/Component Set preferred values, clear/reset/detach materialization, Inspector, typed Agent actions and inspection, persistent override layers, non-exported empty-Slot canvas indicators, Canvas/SVG/raster projection, migration, persistence, autosave, and history are implemented. Nested Slots, on-canvas matrix reordering, cross-file libraries, private .fig decoding, Plugin/REST import-export, direct selection of derived Main children inside instances, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义的 Boolean/Text/Instance-swap/SLOT 属性、真实 Component Set Frame、唯一 VARIANT 解析、Set 生命周期、二维矩阵、稳定 sourcePath 高级 override、Slot settings 与指导性限制、Component/Component Set preferred values、Clear/Reset/Detach 物化、Inspector、Agent typed actions 与 inspection、持久 override 图层、不可导出的空 Slot 画布指示、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。nested Slot、画布矩阵重排、跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、画布内部派生 Main child 直选和 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
       "evidence": {
@@ -877,6 +877,7 @@
           "packages/design-contracts/src/index.test.ts",
           "packages/editor-runtime/src/component-operations.test.ts",
           "packages/editor-runtime/src/component-property-operations.test.ts",
+          "packages/editor-runtime/src/component-slot-operations.test.ts",
           "packages/editor-runtime/src/variant-set.test.ts",
           "packages/figma-interop/src/index.test.ts",
           "packages/editor-runtime/src/component-svg-export.test.ts",
@@ -893,7 +894,9 @@
       "references": [
         "https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma",
         "https://help.figma.com/hc/en-us/articles/5579474826519-Explore-component-properties",
-        "https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants"
+        "https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants",
+        "https://help.figma.com/hc/en-us/articles/38231200344599-Use-slots-to-build-flexible-components-in-Figma",
+        "https://developers.figma.com/docs/plugins/api/SlotNode/"
       ]
     },
     {

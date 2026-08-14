@@ -4,6 +4,7 @@ import type {
   DesignDocument,
   InstanceNode,
 } from "@opendesign/design-contracts";
+import { DESIGN_SCHEMA_VERSION } from "@opendesign/design-contracts";
 import {
   toFigmaComponentProperties,
   toFigmaComponentPropertyDefinitions,
@@ -44,7 +45,7 @@ describe("Figma component property compatibility", () => {
     };
     const document = {
       format: "dev.opendesign.document",
-      schemaVersion: "1.23.0",
+      schemaVersion: DESIGN_SCHEMA_VERSION,
       documentId: "figma-compatibility",
       revision: 1,
       pageOrder: ["page"],
@@ -165,5 +166,34 @@ describe("Figma component property compatibility", () => {
       },
     });
     expect(toFigmaVariantProperties(component)).toEqual({ State: "Hover" });
+  });
+
+  it("projects SLOT definitions and settings to the official Plugin API shape", () => {
+    const component: ComponentDefinition = {
+      id: "card",
+      name: "Card",
+      rootNodeId: "card_main",
+      componentPropertyDefinitions: {
+        "Content#card:content": {
+          type: "SLOT",
+          defaultValue: "card_content",
+          preferredValues: [{ type: "COMPONENT", key: "list_item" }],
+          description: "Use approved content blocks",
+          slotSettings: {
+            stretchChildOnInsert: true,
+            displayEmptyByDefault: true,
+            minChildren: 1,
+            maxChildren: 6,
+            allowPreferredValuesOnly: true,
+          },
+        },
+      },
+      variantProperties: {},
+      extensions: {},
+    };
+
+    expect(toFigmaComponentPropertyDefinitions(component)).toEqual(
+      component.componentPropertyDefinitions,
+    );
   });
 });

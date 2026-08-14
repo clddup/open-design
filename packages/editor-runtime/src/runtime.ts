@@ -42,6 +42,7 @@ import {
   textLayoutAffected,
 } from "./text-layout-operations.js";
 import { synchronizeComponentPropertyDefaults } from "./component-property-defaults.js";
+import { applySlotStretchOnInsert } from "./component-slot-operations.js";
 import { OperationError } from "./operation-error.js";
 import { diffVariantSets } from "./variant-set-diff.js";
 import { deleteVariantSet, putVariantSet } from "./variant-set-runtime.js";
@@ -1023,6 +1024,9 @@ function insertElement(
   assertIndex(target, command.index, command.commandId);
   document.nodesById[command.node.id] = structuredClone(command.node);
   const inserted = document.nodesById[command.node.id];
+  if (inserted && command.parentId) {
+    applySlotStretchOnInsert(document, command.parentId, inserted);
+  }
   if (inserted?.kind === "text") {
     normalizeTextResizeProperties(inserted.properties);
     resolveTextAutoSize(inserted, command.commandId, context);
@@ -1365,8 +1369,10 @@ function targetChildren(
   if (!parent) throw notFound(commandId, parentId);
   if (
     parent.kind !== "frame" &&
+    parent.kind !== "slot" &&
     parent.kind !== "group" &&
-    parent.kind !== "boolean"
+    parent.kind !== "boolean" &&
+    parent.kind !== "instance"
   ) {
     throw new OperationError(
       commandId,
@@ -1701,6 +1707,7 @@ function nodeAssetIds(node: DesignNode): string[] {
   if (node.kind === "image") ids.push(node.properties.assetId);
   if (
     node.kind === "frame" ||
+    node.kind === "slot" ||
     node.kind === "rectangle" ||
     node.kind === "ellipse" ||
     node.kind === "line" ||

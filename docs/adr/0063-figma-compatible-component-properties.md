@@ -69,4 +69,4 @@ Property key 的 `#suffix` 是稳定身份；rename 只修改 `#` 前的标签�
 - OpenDesign 的组件语义可直接映射 Figma 公共 API，同时保持自有权威文档和事务边界。
 - 常用实例差异不再要求用户或模型操作内部 sourcePath，组件使用更接近成熟设计工具。
 - 核心没有 Figma runtime 依赖，也没有私有 `.fig` 绑定；未来生态接入集中在 adapter。
-- 能力仍为 `degraded`。本文原始切片未实现的 Component Set/VARIANT 已由 [ADR-0064](0064-figma-compatible-component-sets-and-variants.md) 完成；Slot、Set add/remove/dissolve、跨文件 Library、Plugin/REST import-export、破坏性源编辑 orphan migration、画布内部 override 直选和双平台打包 GUI 证据尚未完成。
+- 能力仍为 `degraded`。本文原始切片未实现的 Component Set/VARIANT 已由 [ADR-0064](0064-figma-compatible-component-sets-and-variants.md) 完成，Slot 已由 [ADR-0067](0067-figma-compatible-component-slots.md) 完成；跨文件 Library、Plugin/REST import-export、破坏性源编辑 orphan migration、画布内部派生 Main child 直选和双平台打包 GUI 证据尚未完成。

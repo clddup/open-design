@@ -91,6 +91,10 @@ export function PropertiesPanel({
   onUpdate,
   onUpdateComponentOverride,
   onSetComponentProperty,
+  onClearComponentSlot,
+  onCreateComponentSlotOverride,
+  onResetComponentSlot,
+  onSetComponentSlotSettings,
   onSetVariantProperties,
   selectionCount,
   exportFormat,
@@ -174,6 +178,17 @@ export function PropertiesPanel({
   onSetComponentProperty: (
     propertyName: string,
     value: ComponentPropertyAssignment,
+  ) => void;
+  onClearComponentSlot: (propertyName: string) => void;
+  onCreateComponentSlotOverride: (propertyName: string) => void;
+  onResetComponentSlot: (propertyName: string) => void;
+  onSetComponentSlotSettings: (
+    propertyName: string,
+    input: {
+      description?: string;
+      preferredValues: readonly import("@opendesign/design-contracts").InstanceSwapPreferredValue[];
+      settings: import("@opendesign/design-contracts").SlotSettings;
+    },
   ) => void;
   onSetVariantProperties: (
     componentId: string,
@@ -271,7 +286,7 @@ export function PropertiesPanel({
             layoutLimitsAvailable={
               layoutMode === "sizing" ||
               layoutMode === "wrap-sizing" ||
-              (node.kind === "frame" &&
+              ((node.kind === "frame" || node.kind === "slot") &&
                 node.properties.autoLayout !== undefined &&
                 node.properties.autoLayout.mode !== "none")
             }
@@ -306,6 +321,10 @@ export function PropertiesPanel({
             onUpdate={onUpdate}
             onUpdateComponentOverride={onUpdateComponentOverride}
             onSetComponentProperty={onSetComponentProperty}
+            onClearComponentSlot={onClearComponentSlot}
+            onCreateComponentSlotOverride={onCreateComponentSlotOverride}
+            onResetComponentSlot={onResetComponentSlot}
+            onSetComponentSlotSettings={onSetComponentSlotSettings}
             onSetVariantProperties={onSetVariantProperties}
           />
         ) : selectionCount > 1 ? (

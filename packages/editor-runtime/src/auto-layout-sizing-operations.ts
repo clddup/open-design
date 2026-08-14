@@ -23,13 +23,15 @@ export function planSetNodeLayoutSizing(
     );
   const parent = node.parentId ? document.nodesById[node.parentId] : undefined;
   const flow =
-    parent?.kind === "frame" ? parent.properties.autoLayout : undefined;
+    parent?.kind === "frame" || parent?.kind === "slot"
+      ? parent.properties.autoLayout
+      : undefined;
   if (!flow || flow.mode === "none")
     return failure(
       "invalid-target",
       "Auto Layout sizing requires a direct child of an Auto Layout Frame",
     );
-  if (parent?.kind !== "frame")
+  if (parent?.kind !== "frame" && parent?.kind !== "slot")
     return failure("invalid-target", "Auto Layout parent Frame is unavailable");
   if (isEffectivelyLocked(document, nodeId))
     return failure("locked", "Locked layers cannot change Auto Layout sizing");

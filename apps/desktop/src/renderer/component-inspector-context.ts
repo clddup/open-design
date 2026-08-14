@@ -18,6 +18,7 @@ export function createComponentInspectorContext(
   if (selectedVariantSet) {
     return {
       availableComponents: componentOptions(document),
+      availableSlotPreferredValues: slotPreferredValueOptions(document),
       componentName: selectedVariantSet.name,
       componentProperties: [],
       componentPropertyDefinitions: [],
@@ -125,10 +126,23 @@ export function createComponentInspectorContext(
                 selectedNode.properties.componentProperties,
                 propertyName,
               ),
+              ...(definition.type === "SLOT"
+                ? {
+                    slot: instanceResolution.slots.find(
+                      (slot) => slot.propertyName === propertyName,
+                    ),
+                    assigned: Boolean(
+                      instanceResolution.slots.find(
+                        (slot) => slot.propertyName === propertyName,
+                      )?.overridden,
+                    ),
+                  }
+                : {}),
             };
           })
         : [],
     availableComponents: componentOptions(document),
+    availableSlotPreferredValues: slotPreferredValueOptions(document),
     ...(variantSet && effectiveComponent
       ? {
           variantSet: {
@@ -172,6 +186,21 @@ function componentOptions(document: DesignDocument) {
     id: candidate.id,
     name: candidate.name,
   }));
+}
+
+function slotPreferredValueOptions(document: DesignDocument) {
+  return [
+    ...Object.values(document.componentsById).map((candidate) => ({
+      key: candidate.id,
+      name: candidate.name,
+      type: "COMPONENT" as const,
+    })),
+    ...Object.values(document.variantSetsById).map((candidate) => ({
+      key: candidate.id,
+      name: candidate.name,
+      type: "COMPONENT_SET" as const,
+    })),
+  ];
 }
 
 function resolvedInstanceSourceNodes(

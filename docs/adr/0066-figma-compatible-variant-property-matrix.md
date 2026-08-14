@@ -56,4 +56,4 @@ EditorRuntime 新增以下 Set 级 planner：
 
 ## 后果
 
-Component Set 获得可维护的二维 Variant matrix，而不是 JSON key 或图层名称约定。Slot、画布拖拽矩阵重排、非 Variant component property 的统一显式顺序、跨文件 Library、Variables 与 Figma Plugin/REST import-export 仍是后续切片。
+Component Set 获得可维护的二维 Variant matrix，而不是 JSON key 或图层名称约定。Slot 已由 [ADR-0067](0067-figma-compatible-component-slots.md) 完成；画布拖拽矩阵重排、非 Variant component property 的统一显式顺序、跨文件 Library、Variables 与 Figma Plugin/REST import-export 仍是后续切片。

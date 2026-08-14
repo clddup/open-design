@@ -244,7 +244,12 @@ export function cloneComponentSubtree(
   rootNodeId: string,
   prefix: string,
 ):
-  | { ok: true; root: DesignNode; commands: DesignOperation[] }
+  | {
+      ok: true;
+      root: DesignNode;
+      commands: DesignOperation[];
+      idMap: ReadonlyMap<string, string>;
+    }
   | Extract<VariantSetOperationPlan, { ok: false }> {
   const sourceRoot = document.nodesById[sourceRootId];
   if (!sourceRoot)
@@ -298,6 +303,7 @@ export function cloneComponentSubtree(
     ok: true,
     root: { ...structuredClone(sourceRoot), id: rootNodeId },
     commands,
+    idMap,
   };
 }
 

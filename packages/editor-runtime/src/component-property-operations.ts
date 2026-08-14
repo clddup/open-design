@@ -12,9 +12,15 @@ import type {
   DesignNode,
   DesignOperation,
   InstanceSwapPreferredValue,
+  SlotSettings,
   VariantPropertyDefinition,
 } from "@opendesign/design-contracts";
 import type { ComponentOperationPlan } from "./component-operations.js";
+import {
+  hasSlotAncestor,
+  hasSlotDescendant,
+  replaceSlotContainerKindCommand,
+} from "./component-slot-operations.js";
 
 export type ComponentPropertyReferenceField =
   "visible" | "characters" | "mainComponent";
@@ -47,6 +53,8 @@ export function planAddComponentProperty(
     type: ComponentPropertyType;
     sourceNodeId: string;
     preferredValues?: readonly InstanceSwapPreferredValue[];
+    slotSettings?: SlotSettings;
+    description?: string;
     commandPrefix: string;
   },
 ): ComponentOperationPlan {
@@ -81,9 +89,15 @@ export function planAddComponentProperty(
       "Figma component properties must bind a sublayer, not the component root",
     );
   }
+  if (
+    input.type === "SLOT" &&
+    (hasSlotAncestor(document, source) || hasSlotDescendant(document, source))
+  ) {
+    return failure("invalid", "Nested Slots are not supported in Slot v1");
+  }
   const binding = bindingForType(input.type, source);
   if (!binding.ok) return failure("invalid", binding.message);
-  if (source.componentPropertyReferences?.[binding.field]) {
+  if (binding.field && source.componentPropertyReferences?.[binding.field]) {
     return failure(
       "duplicate",
       `${binding.field} is already bound to a component property`,
@@ -100,33 +114,61 @@ export function planAddComponentProperty(
       ? { type: "BOOLEAN", defaultValue: source.visible }
       : input.type === "TEXT" && source.kind === "text"
         ? { type: "TEXT", defaultValue: source.properties.content }
-        : {
-            type: "INSTANCE_SWAP",
-            defaultValue:
-              source.kind === "instance" ? source.properties.componentId : "",
-            ...(preferredValues.values.length > 0
-              ? { preferredValues: preferredValues.values }
-              : {}),
-          };
+        : input.type === "INSTANCE_SWAP"
+          ? {
+              type: "INSTANCE_SWAP",
+              defaultValue:
+                source.kind === "instance" ? source.properties.componentId : "",
+              ...(preferredValues.values.length > 0
+                ? { preferredValues: preferredValues.values }
+                : {}),
+            }
+          : source.kind === "frame"
+            ? {
+                type: "SLOT",
+                defaultValue: source.id,
+                ...(preferredValues.values.length > 0
+                  ? { preferredValues: preferredValues.values }
+                  : {}),
+                ...(input.description?.trim()
+                  ? { description: input.description.trim() }
+                  : {}),
+                ...(input.slotSettings
+                  ? { slotSettings: structuredClone(input.slotSettings) }
+                  : {}),
+              }
+            : { type: "SLOT", defaultValue: "" };
   const nextComponent = structuredClone(component);
   nextComponent.componentPropertyDefinitions[propertyName] = definition;
-  const references: ComponentPropertyReferences = {
-    ...(source.componentPropertyReferences ?? {}),
-    [binding.field]: propertyName,
-  };
-  return success(component.id, component.rootNodeId, source.id, [
-    {
-      commandId: `${input.commandPrefix}_put_property_definition`,
-      type: "put_component",
-      component: nextComponent,
-    },
-    {
+  const commands: DesignOperation[] = [];
+  if (input.type === "SLOT" && source.kind === "frame") {
+    commands.push(
+      replaceSlotContainerKindCommand(
+        document,
+        source,
+        "slot",
+        `${input.commandPrefix}_convert_frame_to_slot`,
+      ),
+    );
+  }
+  commands.push({
+    commandId: `${input.commandPrefix}_put_property_definition`,
+    type: "put_component",
+    component: nextComponent,
+  });
+  if (binding.field) {
+    const references: ComponentPropertyReferences = {
+      ...(source.componentPropertyReferences ?? {}),
+      [binding.field]: propertyName,
+    };
+    commands.push({
       commandId: `${input.commandPrefix}_bind_property_reference`,
       type: "update_properties",
       nodeId: source.id,
       componentPropertyReferences: references,
-    },
-  ]);
+    });
+  }
+  return success(component.id, component.rootNodeId, source.id, commands);
 }
 
 export function planRenameComponentProperty(
@@ -202,13 +244,48 @@ export function planRemoveComponentProperty(
   },
 ): ComponentOperationPlan {
   const component = document.componentsById[input.componentId];
-  if (!component?.componentPropertyDefinitions[input.propertyName]) {
+  const definition =
+    component?.componentPropertyDefinitions[input.propertyName];
+  if (!component || !definition) {
     return failure(
       "missing-component",
       `Component property ${input.propertyName} does not exist`,
     );
   }
   const commands: DesignOperation[] = [];
+  if (definition.type === "SLOT") {
+    const source = document.nodesById[definition.defaultValue];
+    if (source?.kind !== "slot" || source.properties.sourceSlotId !== null) {
+      return failure(
+        "invalid",
+        `Slot ${definition.defaultValue} is unavailable`,
+      );
+    }
+    for (const instance of Object.values(document.nodesById)) {
+      if (instance.kind !== "instance") continue;
+      for (const childId of instance.childIds) {
+        const child = document.nodesById[childId];
+        if (
+          child?.kind === "slot" &&
+          child.properties.sourceSlotId === source.id
+        ) {
+          commands.push({
+            commandId: `${input.commandPrefix}_delete_slot_override_${commands.length}`,
+            type: "delete_element",
+            nodeId: child.id,
+          });
+        }
+      }
+    }
+    commands.push(
+      replaceSlotContainerKindCommand(
+        document,
+        source,
+        "frame",
+        `${input.commandPrefix}_convert_slot_to_frame`,
+      ),
+    );
+  }
   for (const sourceNodeId of componentSourceNodeIds(document, component.id)) {
     const source = document.nodesById[sourceNodeId];
     if (!source?.componentPropertyReferences) continue;
@@ -284,6 +361,12 @@ export function planSetComponentPropertyValue(
       `Component property ${input.propertyName} does not exist`,
     );
   }
+  if (definition.type === "SLOT") {
+    return failure(
+      "invalid",
+      `SLOT property ${input.propertyName} is edited through Slot contents`,
+    );
+  }
   if (!valueMatchesDefinition(definition, input.value)) {
     return failure(
       "invalid",
@@ -340,6 +423,56 @@ export function planSetComponentPropertyValue(
       componentProperties: next,
     },
   };
+  if (definition.type === "VARIANT" && instance.childIds.length > 0) {
+    const beforeResolution = resolveComponentInstance(document, instance.id);
+    const candidateShell = candidate.nodesById[instance.id];
+    if (!beforeResolution.ok || candidateShell?.kind !== "instance") {
+      return failure("invalid", "Current Slot overrides cannot be resolved");
+    }
+    candidateShell.childIds = [];
+    const targetWithoutOverrides = resolveComponentInstance(
+      candidate,
+      instance.id,
+    );
+    candidateShell.childIds = [...instance.childIds];
+    if (!targetWithoutOverrides.ok) {
+      return failure(
+        "invalid",
+        targetWithoutOverrides.issues[0]?.message ??
+          "Target Variant cannot be resolved",
+      );
+    }
+    for (const childId of instance.childIds) {
+      const slotOverride = candidate.nodesById[childId];
+      if (
+        slotOverride?.kind !== "slot" ||
+        slotOverride.properties.sourceSlotId === null
+      )
+        continue;
+      const previousSlot = beforeResolution.slots.find(
+        (slot) =>
+          slot.sourceSlotNodeId === slotOverride.properties.sourceSlotId,
+      );
+      const targetSlot = previousSlot
+        ? targetWithoutOverrides.slots.find(
+            (slot) => slot.propertyName === previousSlot.propertyName,
+          )
+        : undefined;
+      if (!targetSlot) {
+        return failure(
+          "invalid",
+          `Target Variant does not expose matching Slot ${previousSlot?.propertyName ?? slotOverride.properties.sourceSlotId}`,
+        );
+      }
+      slotOverride.properties.sourceSlotId = targetSlot.sourceSlotNodeId;
+      commands.push({
+        commandId: `${input.commandPrefix}_migrate_slot_${commands.length}`,
+        type: "update_properties",
+        nodeId: slotOverride.id,
+        properties: { sourceSlotId: targetSlot.sourceSlotNodeId },
+      });
+    }
+  }
   const resolution = resolveComponentInstance(candidate, instance.id);
   if (!resolution.ok) {
     return failure(
@@ -379,11 +512,32 @@ export function planResetComponentPropertyValue(
     );
   const next = { ...instance.properties.componentProperties };
   if (input.propertyName) {
-    if (!effectivePropertyDefinition(document, component, input.propertyName)) {
+    const definition = effectivePropertyDefinition(
+      document,
+      component,
+      input.propertyName,
+    );
+    if (!definition) {
       return failure(
         "missing-component",
         `Component property ${input.propertyName} does not exist`,
       );
+    }
+    if (definition.type === "SLOT") {
+      return failure(
+        "invalid",
+        `Reset SLOT property ${input.propertyName} with the Slot reset action`,
+      );
+    }
+    if (definition.type === "VARIANT") {
+      return planSetComponentPropertyValue(document, {
+        instanceId: instance.id,
+        propertyName: input.propertyName,
+        value:
+          component.variantProperties[input.propertyName] ??
+          definition.defaultValue,
+        commandPrefix: input.commandPrefix,
+      });
     }
     delete next[input.propertyName];
   } else {
@@ -415,13 +569,25 @@ function bindingForType(
   type: ComponentPropertyType,
   source: DesignNode,
 ):
-  | { ok: true; field: ComponentPropertyReferenceField }
+  | { ok: true; field?: ComponentPropertyReferenceField }
   | { ok: false; message: string } {
   if (type === "BOOLEAN") return { ok: true, field: "visible" };
   if (type === "TEXT") {
     return source.kind === "text"
       ? { ok: true, field: "characters" }
       : { ok: false, message: "TEXT properties require a Text sublayer" };
+  }
+  if (type === "SLOT") {
+    if (source.kind !== "frame") {
+      return { ok: false, message: "SLOT properties require a Frame sublayer" };
+    }
+    if (source.properties.layoutGuides?.length) {
+      return {
+        ok: false,
+        message: "Frames with layout guides cannot be converted to Slots",
+      };
+    }
+    return { ok: true };
   }
   return source.kind === "instance"
     ? { ok: true, field: "mainComponent" }
@@ -438,10 +604,16 @@ function normalizePreferredValues(
 ):
   | { ok: true; values: InstanceSwapPreferredValue[] }
   | { ok: false; message: string } {
-  if (type !== "INSTANCE_SWAP" && values && values.length > 0) {
+  if (
+    type !== "INSTANCE_SWAP" &&
+    type !== "SLOT" &&
+    values &&
+    values.length > 0
+  ) {
     return {
       ok: false,
-      message: "preferredValues are only valid for INSTANCE_SWAP properties",
+      message:
+        "preferredValues are only valid for INSTANCE_SWAP or SLOT properties",
     };
   }
   const unique = new Map<string, InstanceSwapPreferredValue>();

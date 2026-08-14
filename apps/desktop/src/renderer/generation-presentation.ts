@@ -5,6 +5,7 @@ import type {
   Point,
   Transform,
 } from "@opendesign/design-contracts";
+import { isFrameLikeNode } from "@opendesign/design-contracts";
 import { getNodeBounds } from "@opendesign/editor-runtime";
 import type {
   LeaferGenerationActivity,
@@ -593,7 +594,7 @@ function subtreeContainsMaterialNode(
   visited.add(nodeId);
   const node = document.nodesById[nodeId];
   if (!node) return false;
-  if (node.kind !== "group" && node.kind !== "frame") return true;
+  if (node.kind !== "group" && !isFrameLikeNode(node)) return true;
   return node.childIds.some((childId) =>
     subtreeContainsMaterialNode(document, childId, visited),
   );

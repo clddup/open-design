@@ -738,6 +738,107 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("projects empty Component Slots as non-exported editor overlays", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const first = componentInput();
+    const document = structuredClone(first.document);
+    const main = document.nodesById.button_main;
+    const label = document.nodesById.button_label;
+    if (main?.kind !== "frame" || label?.kind !== "text") {
+      throw new Error("Missing Component Slot fixture");
+    }
+    main.childIds = ["button_slot"];
+    document.nodesById.button_slot = {
+      ...structuredClone(main),
+      childIds: [],
+      id: "button_slot",
+      kind: "slot",
+      name: "Content",
+      parentId: main.id,
+      properties: {
+        ...structuredClone(main.properties),
+        sourceSlotId: null,
+      },
+      size: { width: 100, height: 28 },
+      transform: [1, 0, 0, 1, 10, 8],
+    };
+    document.componentsById.button!.componentPropertyDefinitions = {
+      "Content#button:content": {
+        type: "SLOT",
+        defaultValue: "button_slot",
+        slotSettings: { displayEmptyByDefault: true },
+      },
+    };
+    adapter.sync({ ...first, document });
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const layer = app.sky.children[2] as FakeGroup | undefined;
+    const indicator = layer?.children[0] as FakePath | undefined;
+    expect(layer).toMatchObject({
+      editable: false,
+      hitChildren: false,
+      hittable: false,
+      visible: true,
+    });
+    expect(indicator).toMatchObject({
+      dashPattern: [5, 4],
+      editable: false,
+      fill: "rgba(0, 0, 0, 0)",
+      hittable: false,
+      localTransform: { a: 1, b: 0, c: 0, d: 1, e: 90, f: 68 },
+      stroke: "#d946ef",
+      strokeWidth: 1.25,
+    });
+    expect(String(indicator?.path)).toBe("M 0 0 H 100 V 28 H 0 Z");
+
+    app.tree.localTransform = {
+      a: 0.5,
+      b: 0,
+      c: 0,
+      d: 0.5,
+      e: -20,
+      f: 30,
+    };
+    app.emit("viewport.move");
+    expect(indicator).toMatchObject({
+      dashPattern: [10, 8],
+      localTransform: { a: 0.5, b: 0, c: 0, d: 0.5, e: 25, f: 64 },
+      strokeWidth: 2.5,
+    });
+    app.sky.localTransform = { ...app.tree.localTransform };
+    app.emit("render.child-start");
+    expect(indicator?.localTransform).toEqual({
+      a: 1,
+      b: 0,
+      c: 0,
+      d: 1,
+      e: 90,
+      f: 68,
+    });
+
+    await adapter.capture({ kind: "page", pageId: "instances" });
+    expect(indicator?.export).not.toHaveBeenCalled();
+    expect(indicator?.syncExport).not.toHaveBeenCalled();
+
+    const filled = structuredClone(document);
+    filled.revision += 1;
+    const slot = filled.nodesById.button_slot;
+    const filledLabel = filled.nodesById.button_label;
+    if (slot?.kind !== "slot" || filledLabel?.kind !== "text") {
+      throw new Error("Missing filled Component Slot fixture");
+    }
+    slot.childIds = [filledLabel.id];
+    filledLabel.parentId = slot.id;
+    adapter.sync({ ...first, document: filled });
+    expect(layer?.children).toEqual([]);
+    expect(layer?.visible).toBe(false);
+    adapter.dispose();
+  });
+
   it("exports a delivery raster with explicit format, size, background, quality, and resampling", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),
@@ -1020,7 +1121,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     const presentationRoot = app.sky;
     const skeletonLayer = presentationRoot?.children[0] as
       FakeGroup | undefined;
-    const activityLayer = presentationRoot?.children[2] as
+    const activityLayer = presentationRoot?.children[3] as
       FakeGroup | undefined;
 
     const viewport = {
@@ -1099,7 +1200,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     const presentationRoot = app.sky;
     const skeletonLayer = presentationRoot?.children[0] as
       FakeGroup | undefined;
-    const activityLayer = presentationRoot?.children[2] as
+    const activityLayer = presentationRoot?.children[3] as
       FakeGroup | undefined;
     const viewport = {
       a: 0.5,
@@ -1222,7 +1323,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     const presentationRoot = app.sky;
     const skeletonLayer = presentationRoot?.children[0] as
       FakeGroup | undefined;
-    const activityLayer = presentationRoot?.children[2] as
+    const activityLayer = presentationRoot?.children[3] as
       FakeGroup | undefined;
     const viewport = {
       a: 0.5,
@@ -1278,7 +1379,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.sync({ ...first, generationActivity: activity });
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
-    const layer = app.sky.children[2] as FakeGroup | undefined;
+    const layer = app.sky.children[3] as FakeGroup | undefined;
     expect(layer).toMatchObject({
       visible: true,
       localTransform: { a: 1, b: 0, c: 0, d: 1, e: 400, f: 300 },
@@ -1452,7 +1553,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     const app = leaferHarness.app;
     if (!app) throw new Error("Fake Leafer App was not created");
     const card = findElement(app.tree, "generated_card");
-    const activityLayer = app.sky.children[2] as FakeGroup | undefined;
+    const activityLayer = app.sky.children[3] as FakeGroup | undefined;
     const stroker = leaferHarness.strokers[0];
     expect(card?.opacity).toBe(0);
     expect(stroker).toBeDefined();
@@ -1552,7 +1653,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(findElement(app.tree, "reduced_motion_card")?.opacity).toBe(1);
     expect(leaferHarness.strokers[0]?.target).toBeNull();
     expect(
-      (app.sky.children[2] as FakeGroup | undefined)?.localTransform,
+      (app.sky.children[3] as FakeGroup | undefined)?.localTransform,
     ).toEqual({ a: 1, b: 0, c: 0, d: 1, e: 900, f: 500 });
     adapter.sync({
       ...first,

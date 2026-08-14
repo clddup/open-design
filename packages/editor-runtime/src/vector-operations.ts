@@ -531,7 +531,9 @@ function planVectorLineCut(
     };
   }
   const siblings = node.parentId
-    ? parent?.kind === "frame" || parent?.kind === "group"
+    ? parent?.kind === "frame" ||
+      parent?.kind === "slot" ||
+      parent?.kind === "group"
       ? parent.childIds
       : undefined
     : document.pagesById[pageId]?.rootNodeIds;

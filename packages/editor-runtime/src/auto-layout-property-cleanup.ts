@@ -4,7 +4,9 @@ export function clearOrphanedFlowProperties(node: DesignNode): void {
   delete node.layoutPositioning;
   delete node.layoutSizing;
   const ownFlow =
-    node.kind === "frame" ? node.properties.autoLayout : undefined;
+    node.kind === "frame" || node.kind === "slot"
+      ? node.properties.autoLayout
+      : undefined;
   if (!ownFlow || ownFlow.mode === "none") delete node.layoutLimits;
 }
 
@@ -13,10 +15,10 @@ export function cleanReparentedLayoutProperties(
   targetParent: DesignNode | undefined,
 ): void {
   const targetUsesFlow =
-    targetParent?.kind === "frame" &&
+    (targetParent?.kind === "frame" || targetParent?.kind === "slot") &&
     (targetParent.properties.autoLayout?.mode ?? "none") !== "none";
   if (
-    targetParent?.kind !== "frame" ||
+    (targetParent?.kind !== "frame" && targetParent?.kind !== "slot") ||
     (targetUsesFlow && node.layoutPositioning !== "absolute")
   ) {
     delete node.constraints;

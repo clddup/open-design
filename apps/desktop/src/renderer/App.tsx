@@ -676,6 +676,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     addSelectedComponentProperty,
     addSelectedComponentToVariantSet,
     combineSelectedComponentsAsVariants,
+    componentPropertyActions,
     createComponentFromSelection,
     createSelectedComponentInstance,
     detachSelectedInstance,
@@ -692,7 +693,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     resetSelectedInstanceSource,
     resetSelectedInstanceComponentProperty,
     setSelectedInstanceComponentProperty,
-    variantMatrixActions,
     updateSelectedInstanceSource,
   } = useComponentActions({
     activePageId,
@@ -1930,7 +1930,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 }
                 onResetComponentSourceOverride={resetSelectedInstanceSource}
                 onSetComponentProperty={setSelectedInstanceComponentProperty}
-                {...variantMatrixActions}
+                {...componentPropertyActions}
                 onSelectBooleanParent={(nodeId) =>
                   runtime.setSelection([nodeId], nodeId)
                 }

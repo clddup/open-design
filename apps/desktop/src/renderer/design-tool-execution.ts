@@ -1786,7 +1786,8 @@ function assertComponentInputPage(
   if (
     input.action === "remove-component" ||
     input.action === "rename-property" ||
-    input.action === "remove-property"
+    input.action === "remove-property" ||
+    input.action === "set-slot-settings"
   ) {
     const mainNodeId = document.componentsById[input.componentId]?.rootNodeId;
     if (!mainNodeId || !ids.has(mainNodeId)) {

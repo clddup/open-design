@@ -118,6 +118,12 @@ export {
   type ComponentPropertyReferenceField,
 } from "./component-property-operations.js";
 export {
+  planClearComponentSlot,
+  planCreateComponentSlotOverride,
+  planResetComponentSlot,
+  planSetComponentSlotSettings,
+} from "./component-slot-operations.js";
+export {
   planCombineComponentsAsVariants,
   type VariantSetOperationFailureCode,
   type VariantSetOperationPlan,

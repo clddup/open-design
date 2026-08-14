@@ -2,6 +2,8 @@ import type {
   ComponentPropertyAssignment,
   ComponentPropertyType,
   DesignNode,
+  InstanceSwapPreferredValue,
+  SlotSettings,
 } from "@opendesign/design-contracts";
 import { Button, Glyph } from "@opendesign/ui";
 import { useEffect, useState } from "react";
@@ -10,14 +12,17 @@ import { useI18n } from "../../i18n";
 import styles from "../PropertiesPanel.module.scss";
 import type {
   ComponentInspectorOption,
+  ComponentInspectorPreferredValueOption,
   ComponentInspectorPropertyDefinition,
   ComponentInspectorPropertyValue,
   ComponentInspectorSource,
 } from "./ComponentSection";
 import { Field, TextAreaField } from "./controls";
+import { SlotPropertyEditor } from "./SlotPropertyEditor";
 
 const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   frame: "node.frame",
+  slot: "node.slot",
   group: "node.group",
   boolean: "node.boolean",
   rectangle: "node.rectangle",
@@ -43,13 +48,21 @@ function propertyTypeLabel(
 ): string {
   if (type === "BOOLEAN") return t("properties.booleanProperty");
   if (type === "TEXT") return t("properties.textProperty");
-  return t("properties.instanceSwapProperty");
+  if (type === "INSTANCE_SWAP") return t("properties.instanceSwapProperty");
+  return t("properties.slotProperty");
 }
 
 function propertySourceCandidates(
   sources: readonly ComponentInspectorSource[],
   type: ComponentPropertyType,
 ): readonly ComponentInspectorSource[] {
+  if (type === "SLOT") {
+    return sources.filter(
+      (source) =>
+        source.node.kind === "frame" &&
+        (source.node.properties.layoutGuides?.length ?? 0) === 0,
+    );
+  }
   const field =
     type === "BOOLEAN"
       ? "visible"
@@ -66,12 +79,17 @@ function propertySourceCandidates(
 }
 
 export function ComponentPropertyAuthoring({
+  availableComponents,
+  availableSlotPreferredValues,
   definitions,
   onAdd,
   onRemove,
   onRename,
+  onUpdateSlot,
   sources,
 }: {
+  availableComponents: readonly ComponentInspectorOption[];
+  availableSlotPreferredValues: readonly ComponentInspectorPreferredValueOption[];
   definitions: readonly ComponentInspectorPropertyDefinition[];
   onAdd: (input: {
     name: string;
@@ -80,6 +98,14 @@ export function ComponentPropertyAuthoring({
   }) => void;
   onRemove: (propertyName: string) => void;
   onRename: (propertyName: string, name: string) => void;
+  onUpdateSlot: (
+    propertyName: string,
+    input: {
+      description?: string;
+      preferredValues: readonly InstanceSwapPreferredValue[];
+      settings: SlotSettings;
+    },
+  ) => void;
   sources: readonly ComponentInspectorSource[];
 }) {
   const { t } = useI18n();
@@ -115,35 +141,47 @@ export function ComponentPropertyAuthoring({
         </p>
       ) : (
         <div className={styles.componentPropertyList}>
-          {definitions.map((property) => (
-            <div
-              className={styles.componentPropertyDefinition}
-              key={property.propertyName}
-            >
-              <Field
-                accessibleLabel={t("properties.propertyName")}
-                label="P"
-                onCommit={(draft) => {
-                  const next = draft.trim();
-                  if (!next) return null;
-                  if (next !== propertyLabel(property.propertyName)) {
-                    onRename(property.propertyName, next);
-                  }
-                  return next;
-                }}
-                type="text"
-                value={propertyLabel(property.propertyName)}
-              />
-              <span>{propertyTypeLabel(property.definition.type, t)}</span>
-              <button
-                aria-label={`${t("properties.removeProperty")} ${propertyLabel(property.propertyName)}`}
-                onClick={() => onRemove(property.propertyName)}
-                type="button"
-              >
-                <Glyph name="close" size={12} />
-              </button>
-            </div>
-          ))}
+          {definitions.map((property) => {
+            const slotDefinition =
+              property.definition.type === "SLOT" ? property.definition : null;
+            return (
+              <div key={property.propertyName}>
+                <div className={styles.componentPropertyDefinition}>
+                  <Field
+                    accessibleLabel={t("properties.propertyName")}
+                    label="P"
+                    onCommit={(draft) => {
+                      const next = draft.trim();
+                      if (!next) return null;
+                      if (next !== propertyLabel(property.propertyName)) {
+                        onRename(property.propertyName, next);
+                      }
+                      return next;
+                    }}
+                    type="text"
+                    value={propertyLabel(property.propertyName)}
+                  />
+                  <span>{propertyTypeLabel(property.definition.type, t)}</span>
+                  <button
+                    aria-label={`${t("properties.removeProperty")} ${propertyLabel(property.propertyName)}`}
+                    onClick={() => onRemove(property.propertyName)}
+                    type="button"
+                  >
+                    <Glyph name="close" size={12} />
+                  </button>
+                </div>
+                {slotDefinition && (
+                  <SlotPropertyEditor
+                    availableValues={availableSlotPreferredValues}
+                    definition={slotDefinition}
+                    onUpdate={(input) =>
+                      onUpdateSlot(property.propertyName, input)
+                    }
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       <div className={styles.componentPropertyComposer}>
@@ -165,6 +203,7 @@ export function ComponentPropertyAuthoring({
             <option value="INSTANCE_SWAP">
               {t("properties.instanceSwapProperty")}
             </option>
+            <option value="SLOT">{t("properties.slotProperty")}</option>
           </select>
         </label>
         <label className={styles.select}>
@@ -217,11 +256,17 @@ export function ComponentPropertyValues({
   availableComponents,
   onReset,
   onSet,
+  onClearSlot,
+  onCreateSlotOverride,
+  onResetSlot,
   properties,
 }: {
   availableComponents: readonly ComponentInspectorOption[];
   onReset: (propertyName: string) => void;
   onSet: (propertyName: string, value: ComponentPropertyAssignment) => void;
+  onClearSlot: (propertyName: string) => void;
+  onCreateSlotOverride: (propertyName: string) => void;
+  onResetSlot: (propertyName: string) => void;
   properties: readonly ComponentInspectorPropertyValue[];
 }) {
   const { t } = useI18n();
@@ -247,7 +292,51 @@ export function ComponentPropertyValues({
                 {t("properties.resetProperty")}
               </button>
             </div>
-            {property.definition.type === "VARIANT" ? (
+            {property.definition.type === "SLOT" ? (
+              <div className={styles.componentSlotValue}>
+                <span>
+                  {property.slot?.overridden
+                    ? t("properties.slotOverridden", {
+                        count: property.slot.childCount,
+                      })
+                    : t("properties.slotDefault", {
+                        count: property.slot?.childCount ?? 0,
+                      })}
+                </span>
+                {property.slot && property.slot.limitViolations.length > 0 && (
+                  <small role="status">
+                    {t("properties.slotLimitsViolated", {
+                      count: property.slot.limitViolations.length,
+                    })}
+                  </small>
+                )}
+                <div className={styles.componentActions}>
+                  {!property.slot?.overridden && (
+                    <button
+                      onClick={() =>
+                        onCreateSlotOverride(property.propertyName)
+                      }
+                      type="button"
+                    >
+                      {t("properties.editSlotContents")}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onClearSlot(property.propertyName)}
+                    type="button"
+                  >
+                    {t("properties.clearSlot")}
+                  </button>
+                  <button
+                    disabled={!property.slot?.overridden}
+                    onClick={() => onResetSlot(property.propertyName)}
+                    type="button"
+                  >
+                    {t("properties.resetSlot")}
+                  </button>
+                </div>
+              </div>
+            ) : property.definition.type === "VARIANT" ? (
               <label className={styles.select}>
                 <span>{t("properties.variant")}</span>
                 <select

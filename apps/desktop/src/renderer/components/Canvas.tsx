@@ -1,15 +1,16 @@
-import type {
-  DesignChangeSet,
-  DesignNode,
-  EllipseNode,
-  FrameNode,
-  LineNode,
-  PolygonNode,
-  RectangleNode,
-  StarNode,
-  TextNode,
-  VectorNode,
-  ViewportState,
+import {
+  isFrameLikeNode,
+  type DesignChangeSet,
+  type DesignNode,
+  type EllipseNode,
+  type FrameNode,
+  type LineNode,
+  type PolygonNode,
+  type RectangleNode,
+  type StarNode,
+  type TextNode,
+  type VectorNode,
+  type ViewportState,
 } from "@opendesign/design-contracts";
 import type { EditorRuntime, EditorSnapshot } from "@opendesign/editor-runtime";
 import {
@@ -542,7 +543,7 @@ export function Canvas({
         : undefined;
       if (
         request.parentId &&
-        (!parent || (parent.kind !== "frame" && parent.kind !== "group"))
+        (!parent || (!isFrameLikeNode(parent) && parent.kind !== "group"))
       ) {
         return false;
       }
@@ -595,7 +596,7 @@ export function Canvas({
         : undefined;
       if (
         request.parentId &&
-        (!parent || (parent.kind !== "frame" && parent.kind !== "group"))
+        (!parent || (!isFrameLikeNode(parent) && parent.kind !== "group"))
       ) {
         return false;
       }

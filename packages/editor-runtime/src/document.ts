@@ -22,6 +22,7 @@ import {
   validateNodeLayoutInvariants,
   type DocumentInvariantIssue,
 } from "./layout-document-invariants.js";
+import { isBooleanOperandNode, isContainerNode } from "./node-semantics.js";
 import { validateVariantSetInvariants } from "./variant-set-invariants.js";
 
 export type { DocumentInvariantIssue } from "./layout-document-invariants.js";
@@ -141,7 +142,7 @@ export function validateDocumentInvariants(
           message: `component ${definition.defaultValue} does not exist`,
         });
       }
-      if (definition.type === "INSTANCE_SWAP") {
+      if (definition.type === "INSTANCE_SWAP" || definition.type === "SLOT") {
         for (const [index, preferred] of (
           definition.preferredValues ?? []
         ).entries()) {
@@ -155,6 +156,32 @@ export function validateDocumentInvariants(
               message: `preferred ${preferred.type} ${preferred.key} does not exist`,
             });
           }
+        }
+      }
+      if (definition.type === "SLOT") {
+        const slot = ownValue(document.nodesById, definition.defaultValue);
+        if (
+          slot?.kind !== "slot" ||
+          slot.properties.sourceSlotId !== null ||
+          !componentSourceNodeIds(document, componentId).has(slot.id) ||
+          slot.id === component.rootNodeId
+        ) {
+          issues.push({
+            path: `/componentsById/${componentId}/componentPropertyDefinitions/${propertyName}/defaultValue`,
+            message:
+              "SLOT defaultValue must reference a source Slot below the Component root",
+          });
+        }
+        const { minChildren, maxChildren } = definition.slotSettings ?? {};
+        if (
+          minChildren != null &&
+          maxChildren != null &&
+          minChildren > maxChildren
+        ) {
+          issues.push({
+            path: `/componentsById/${componentId}/componentPropertyDefinitions/${propertyName}/slotSettings`,
+            message: "Slot minimum children must not exceed maximum children",
+          });
         }
       }
     }
@@ -183,7 +210,7 @@ export function validateDocumentInvariants(
         message: "node id must match its map key",
       });
     }
-    if (!isContainer(node) && node.childIds.length > 0) {
+    if (!isContainerNode(node) && node.childIds.length > 0) {
       issues.push({
         path: `/nodesById/${nodeId}/childIds`,
         message: `${node.kind} nodes cannot contain children`,
@@ -243,7 +270,7 @@ export function validateDocumentInvariants(
       }
       for (const [index, childId] of node.childIds.entries()) {
         const child = ownValue(document.nodesById, childId);
-        if (child && !isBooleanOperand(child)) {
+        if (child && !isBooleanOperandNode(child)) {
           issues.push({
             path: `/nodesById/${nodeId}/childIds/${index}`,
             message: `${child.kind} nodes cannot be boolean operands`,
@@ -261,6 +288,16 @@ export function validateDocumentInvariants(
       }
     }
     if (node.kind === "instance") {
+      for (const [index, childId] of node.childIds.entries()) {
+        const child = ownValue(document.nodesById, childId);
+        if (child?.kind !== "slot" || child.properties.sourceSlotId === null) {
+          issues.push({
+            path: `/nodesById/${nodeId}/childIds/${index}`,
+            message:
+              "Instance children must be explicit Slot override containers",
+          });
+        }
+      }
       const duplicateOverridePaths = new Set<string>();
       for (const [index, override] of node.properties.overrides.entries()) {
         const key = JSON.stringify(override.sourcePath);
@@ -282,6 +319,51 @@ export function validateDocumentInvariants(
         }
       }
     }
+    if (node.kind === "slot") {
+      if (node.properties.sourceSlotId === null) {
+        const componentId = sourceOwner.get(node.id);
+        const component = componentId
+          ? ownValue(document.componentsById, componentId)
+          : undefined;
+        const definitions = component
+          ? Object.values(component.componentPropertyDefinitions).filter(
+              (definition) =>
+                definition.type === "SLOT" &&
+                definition.defaultValue === node.id,
+            )
+          : [];
+        if (!component || definitions.length !== 1) {
+          issues.push({
+            path: `/nodesById/${nodeId}/properties/sourceSlotId`,
+            message:
+              "A source Slot must belong to exactly one Component SLOT property",
+          });
+        }
+      } else {
+        const parent = node.parentId
+          ? ownValue(document.nodesById, node.parentId)
+          : undefined;
+        const source = ownValue(
+          document.nodesById,
+          node.properties.sourceSlotId,
+        );
+        if (parent?.kind !== "instance") {
+          issues.push({
+            path: `/nodesById/${nodeId}/parentId`,
+            message: "A Slot override must be a direct child of an Instance",
+          });
+        }
+        if (
+          source?.kind !== "slot" ||
+          source.properties.sourceSlotId !== null
+        ) {
+          issues.push({
+            path: `/nodesById/${nodeId}/properties/sourceSlotId`,
+            message: `Slot source ${node.properties.sourceSlotId} does not exist`,
+          });
+        }
+      }
+    }
     if (
       (node.kind === "path" || node.kind === "vector") &&
       "network" in node.properties
@@ -295,6 +377,7 @@ export function validateDocumentInvariants(
     }
     if (
       node.kind === "frame" ||
+      node.kind === "slot" ||
       node.kind === "rectangle" ||
       node.kind === "ellipse" ||
       node.kind === "line" ||
@@ -705,25 +788,6 @@ function hasOwn(record: object, key: PropertyKey): boolean {
 
 function ownValue<T>(record: Record<string, T>, key: string): T | undefined {
   return hasOwn(record, key) ? record[key] : undefined;
-}
-
-function isContainer(node: DesignNode): boolean {
-  return (
-    node.kind === "frame" || node.kind === "group" || node.kind === "boolean"
-  );
-}
-
-function isBooleanOperand(node: DesignNode): boolean {
-  return (
-    node.kind === "rectangle" ||
-    node.kind === "ellipse" ||
-    node.kind === "polygon" ||
-    node.kind === "star" ||
-    node.kind === "text" ||
-    node.kind === "path" ||
-    node.kind === "vector" ||
-    node.kind === "boolean"
-  );
 }
 
 export type { ImageNode };

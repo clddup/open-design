@@ -1,4 +1,5 @@
 import {
+  isFrameLikeNode,
   MAX_TRANSACTION_COMMANDS,
   type DesignDocument,
   type DesignNode,
@@ -314,11 +315,12 @@ export function planReparentNodes(
   if (
     targetParent &&
     targetParent.kind !== "frame" &&
+    targetParent.kind !== "slot" &&
     targetParent.kind !== "group"
   ) {
     return failure(
       "invalid-target",
-      "Layers can only be moved to the Page root, a Frame, or a Group",
+      "Layers can only be moved to the Page root, a Frame, a Slot, or a Group",
     );
   }
   if (targetParent && !nodeBelongsToPage(document, pageId, targetParent.id)) {
@@ -910,7 +912,7 @@ function inheritedVisualContext(
       (node.blendMode !== undefined && node.blendMode !== "pass-through") ||
       (node.effects?.length ?? 0) > 0 ||
       (node.maskMode !== undefined && node.maskMode !== "none") ||
-      (node.kind === "frame" && node.properties.clipsContent);
+      (isFrameLikeNode(node) && node.properties.clipsContent);
     if (nonNeutral) {
       result.push({
         nodeId: node.id,
@@ -919,8 +921,9 @@ function inheritedVisualContext(
         blendMode: node.blendMode ?? "pass-through",
         effects: node.effects ?? [],
         maskMode: node.maskMode ?? "none",
-        clipsContent:
-          node.kind === "frame" ? node.properties.clipsContent : false,
+        clipsContent: isFrameLikeNode(node)
+          ? node.properties.clipsContent
+          : false,
       });
     }
     node = node.parentId ? document.nodesById[node.parentId] : undefined;

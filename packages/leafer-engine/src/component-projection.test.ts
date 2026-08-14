@@ -89,6 +89,67 @@ describe("component projection", () => {
     ).toBe(false);
     expect(projection.warnings).toEqual([]);
   });
+
+  it("projects Slot override contents as editable persistent layers", () => {
+    const document = fixture();
+    const main = document.nodesById.button_main;
+    const instance = document.nodesById.button_instance;
+    if (main?.kind !== "frame" || instance?.kind !== "instance") {
+      throw new Error("Slot projection fixture is unavailable");
+    }
+    main.childIds = ["button_slot"];
+    document.nodesById.button_slot = {
+      ...structuredClone(main),
+      id: "button_slot",
+      name: "Content",
+      parentId: main.id,
+      childIds: ["button_label"],
+      transform: [1, 0, 0, 1, 0, 0],
+      kind: "slot",
+      properties: {
+        ...structuredClone(main.properties),
+        sourceSlotId: null,
+      },
+    };
+    document.nodesById.button_label!.parentId = "button_slot";
+    document.componentsById.button!.componentPropertyDefinitions = {
+      "Content#button:content": {
+        type: "SLOT",
+        defaultValue: "button_slot",
+      },
+    };
+    document.nodesById.button_slot_override = {
+      ...structuredClone(document.nodesById.button_slot),
+      id: "button_slot_override",
+      parentId: instance.id,
+      childIds: ["button_slot_custom"],
+      properties: {
+        ...structuredClone(document.nodesById.button_slot.properties),
+        sourceSlotId: "button_slot",
+      },
+    };
+    document.nodesById.button_slot_custom = {
+      ...structuredClone(document.nodesById.button_bg!),
+      id: "button_slot_custom",
+      parentId: "button_slot_override",
+    };
+    instance.childIds = ["button_slot_override"];
+
+    const projection = projectDesignPage(document, "instances");
+
+    expect(projection.elementsById.get("button_slot_override")?.kind).toBe(
+      "slot",
+    );
+    expect(
+      projection.elementsById.get("button_slot_custom")?.data.data,
+    ).toMatchObject({
+      opendesignNodeId: "button_slot_custom",
+      opendesignSourceNodeId: "button_slot_custom",
+    });
+    expect(
+      projection.elementsById.get("button_slot_override")?.childIds,
+    ).toEqual(["button_slot_custom"]);
+  });
 });
 
 function variantFixture(): DesignDocument {

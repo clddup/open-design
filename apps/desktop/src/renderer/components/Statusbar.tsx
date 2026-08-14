@@ -7,6 +7,7 @@ const nodeKindKeys: Record<NodeKind, MessageKey> = {
   boolean: "node.boolean",
   ellipse: "node.ellipse",
   frame: "node.frame",
+  slot: "node.slot",
   group: "node.group",
   image: "node.image",
   instance: "node.instance",

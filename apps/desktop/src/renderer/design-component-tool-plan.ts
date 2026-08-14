@@ -3,7 +3,9 @@ import {
   planAddComponentProperty,
   planAddComponentToVariantSet,
   planAddVariantProperty,
+  planClearComponentSlot,
   planCreateComponent,
+  planCreateComponentSlotOverride,
   planCreateInstance,
   planCombineComponentsAsVariants,
   planDissolveVariantSet,
@@ -20,8 +22,10 @@ import {
   planReorderVariantValues,
   planResetComponentOverrides,
   planResetComponentPropertyValue,
+  planResetComponentSlot,
   planSetComponentOverride,
   planSetComponentPropertyValue,
+  planSetComponentSlotSettings,
   planSetVariantProperties,
   type ComponentOperationPlan,
   type VariantSetOperationPlan,
@@ -294,6 +298,37 @@ export function planDesignComponentTool(
       return planResetComponentPropertyValue(document, {
         instanceId: input.instanceId,
         propertyName: input.propertyName,
+        commandPrefix,
+      });
+    case "create-slot-override":
+      return planCreateComponentSlotOverride(document, {
+        instanceId: input.instanceId,
+        propertyName: input.propertyName,
+        commandPrefix,
+      });
+    case "clear-slot":
+      return planClearComponentSlot(document, {
+        instanceId: input.instanceId,
+        propertyName: input.propertyName,
+        commandPrefix,
+      });
+    case "reset-slot":
+      return planResetComponentSlot(document, {
+        instanceId: input.instanceId,
+        propertyName: input.propertyName,
+        commandPrefix,
+      });
+    case "set-slot-settings":
+      return planSetComponentSlotSettings(document, {
+        componentId: input.componentId,
+        propertyName: input.propertyName,
+        settings: input.settings,
+        ...(input.preferredValues === undefined
+          ? {}
+          : { preferredValues: input.preferredValues }),
+        ...(input.description === undefined
+          ? {}
+          : { description: input.description }),
         commandPrefix,
       });
     case "set-override":

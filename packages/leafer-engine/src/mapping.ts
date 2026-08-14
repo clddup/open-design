@@ -23,7 +23,6 @@ import type { LeaferBooleanEditScope, LeaferFidelityWarning } from "./types.js";
 export const BOOLEAN_RESULT_ELEMENT_PREFIX =
   "__opendesign_boolean_result__:" as const;
 export const LEAFER_EDITOR_SELECTION_COLOR = "#4f7fff" as const;
-
 export type LeaferElementTag =
   | "Arrow"
   | "Ellipse"
@@ -114,7 +113,7 @@ export function projectDesignPage(
           resolved.node,
           warnings,
           {
-            nodeId: node.id,
+            nodeId: resolved.editableNodeId ?? node.id,
             kind: resolved.root ? "instance" : resolved.node.kind,
             sourceNodeId: resolved.sourceNodeId,
           },
@@ -363,6 +362,7 @@ function toElementSpec(
   let data: Record<string, unknown>;
   switch (node.kind) {
     case "frame":
+    case "slot":
       tag = "Frame";
       data = {
         ...base,

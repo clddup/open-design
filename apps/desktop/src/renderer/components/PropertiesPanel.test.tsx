@@ -1,5 +1,11 @@
 import { TooltipProvider } from "@opendesign/ui";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   DesignNode,
@@ -37,7 +43,7 @@ function renderPanel(
     onAddComponentProperty?: (input: {
       name: string;
       sourceNodeId: string;
-      type: "BOOLEAN" | "TEXT" | "INSTANCE_SWAP";
+      type: "BOOLEAN" | "TEXT" | "INSTANCE_SWAP" | "SLOT";
     }) => void;
     onAddVariantProperty?: (name: string) => void;
     onRemoveVariantProperty?: (propertyName: string) => void;
@@ -60,6 +66,17 @@ function renderPanel(
     onSetComponentProperty?: (
       propertyName: string,
       value: string | boolean,
+    ) => void;
+    onClearComponentSlot?: (propertyName: string) => void;
+    onCreateComponentSlotOverride?: (propertyName: string) => void;
+    onResetComponentSlot?: (propertyName: string) => void;
+    onSetComponentSlotSettings?: (
+      propertyName: string,
+      input: {
+        description?: string;
+        preferredValues: readonly import("@opendesign/design-contracts").InstanceSwapPreferredValue[];
+        settings: import("@opendesign/design-contracts").SlotSettings;
+      },
     ) => void;
     onRemoveComponent?: () => void;
     layoutMode?: "constraints" | "sizing" | "wrap-sizing" | "absolute" | null;
@@ -138,6 +155,14 @@ function renderPanel(
           onSetFrameLayoutGuides={options.onSetFrameLayoutGuides ?? vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onSetComponentProperty={options.onSetComponentProperty ?? vi.fn()}
+          onClearComponentSlot={options.onClearComponentSlot ?? vi.fn()}
+          onCreateComponentSlotOverride={
+            options.onCreateComponentSlotOverride ?? vi.fn()
+          }
+          onResetComponentSlot={options.onResetComponentSlot ?? vi.fn()}
+          onSetComponentSlotSettings={
+            options.onSetComponentSlotSettings ?? vi.fn()
+          }
           onSetVariantProperties={options.onSetVariantProperties ?? vi.fn()}
           onRasterExportSettingsChange={onRasterExportSettingsChange}
           exportFormat={options.exportFormat ?? "svg"}
@@ -1017,6 +1042,7 @@ describe("PropertiesPanel line workflow", () => {
     renderPanel({
       componentContext: {
         availableComponents: [],
+        availableSlotPreferredValues: [],
         componentName: "Primary button",
         componentProperties: [],
         componentPropertyDefinitions: [],
@@ -1049,6 +1075,111 @@ describe("PropertiesPanel line workflow", () => {
     });
   });
 
+  it("authors a Slot only from an eligible Frame sublayer", async () => {
+    const user = userEvent.setup();
+    const onAddComponentProperty = vi.fn();
+    const contentFrame: Extract<DesignNode, { kind: "frame" }> = {
+      id: "card_content",
+      name: "Content",
+      parentId: "card_main",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 16, 16],
+      size: { width: 240, height: 120 },
+      opacity: 1,
+      extensions: {},
+      kind: "frame",
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: false,
+      },
+    };
+    renderPanel({
+      componentContext: {
+        availableComponents: [],
+        availableSlotPreferredValues: [],
+        componentName: "Card",
+        componentProperties: [],
+        componentPropertyDefinitions: [],
+        isMain: true,
+        overrideCount: 0,
+        sourceNodes: [
+          {
+            node: contentFrame,
+            overridden: false,
+            sourcePath: [contentFrame.id],
+          },
+        ],
+      },
+      node: lineNode,
+      onAddComponentProperty,
+      selectionCount: 1,
+    });
+
+    await user.selectOptions(screen.getByLabelText("Property type"), "SLOT");
+    await user.click(screen.getByRole("button", { name: "Add property" }));
+
+    expect(onAddComponentProperty).toHaveBeenCalledWith({
+      name: "Content",
+      sourceNodeId: contentFrame.id,
+      type: "SLOT",
+    });
+  });
+
+  it("configures Component and Component Set preferred values for a Slot", async () => {
+    const user = userEvent.setup();
+    const onSetComponentSlotSettings = vi.fn();
+    const propertyName = "Content#card:content";
+    renderPanel({
+      componentContext: {
+        availableComponents: [],
+        availableSlotPreferredValues: [
+          { key: "row_component", name: "Row", type: "COMPONENT" },
+          { key: "row_set", name: "Row states", type: "COMPONENT_SET" },
+        ],
+        componentName: "Card",
+        componentProperties: [],
+        componentPropertyDefinitions: [
+          {
+            definition: {
+              type: "SLOT",
+              defaultValue: "card_content",
+              slotSettings: { displayEmptyByDefault: true },
+            },
+            propertyName,
+            sourceNodeIds: ["card_content"],
+          },
+        ],
+        isMain: true,
+        overrideCount: 0,
+        sourceNodes: [],
+      },
+      node: lineNode,
+      onSetComponentSlotSettings,
+      selectionCount: 1,
+    });
+
+    await user.click(screen.getByText("Slot settings"));
+    const preferred = screen.getByLabelText(
+      "Preferred instances",
+    ) as HTMLSelectElement;
+    for (const option of preferred.options) option.selected = true;
+    fireEvent.change(preferred);
+
+    expect(onSetComponentSlotSettings).toHaveBeenCalledWith(propertyName, {
+      description: undefined,
+      preferredValues: [
+        { key: "row_component", type: "COMPONENT" },
+        { key: "row_set", type: "COMPONENT_SET" },
+      ],
+      settings: { displayEmptyByDefault: true },
+    });
+  });
+
   it("edits and resets a consolidated instance property before advanced overrides", async () => {
     const user = userEvent.setup();
     const onResetComponentProperty = vi.fn();
@@ -1056,6 +1187,7 @@ describe("PropertiesPanel line workflow", () => {
     renderPanel({
       componentContext: {
         availableComponents: [],
+        availableSlotPreferredValues: [],
         componentName: "Primary button",
         componentProperties: [
           {
@@ -1092,6 +1224,63 @@ describe("PropertiesPanel line workflow", () => {
     );
   });
 
+  it("shows real Slot state and routes edit, clear, and reset actions", async () => {
+    const user = userEvent.setup();
+    const onClearComponentSlot = vi.fn();
+    const onCreateComponentSlotOverride = vi.fn();
+    const onResetComponentSlot = vi.fn();
+    const propertyName = "Content#card:content";
+    renderPanel({
+      componentContext: {
+        availableComponents: [],
+        availableSlotPreferredValues: [],
+        componentName: "Card",
+        componentProperties: [
+          {
+            assigned: true,
+            definition: {
+              type: "SLOT",
+              defaultValue: "card_content",
+              slotSettings: { minChildren: 2 },
+            },
+            propertyName,
+            value: "card_content",
+            slot: {
+              childCount: 1,
+              displayNodeId: "card_content_override",
+              limitViolations: ["BELOW_MIN"],
+              overridden: true,
+              propertyName,
+              settings: { minChildren: 2 },
+              sourceSlotNodeId: "card_content",
+            },
+          },
+        ],
+        componentPropertyDefinitions: [],
+        isMain: false,
+        overrideCount: 0,
+        sourceNodes: [],
+      },
+      node: lineNode,
+      onClearComponentSlot,
+      onCreateComponentSlotOverride,
+      onResetComponentSlot,
+      selectionCount: 1,
+    });
+
+    expect(screen.getByText("Custom contents · 1 layers")).toBeVisible();
+    expect(
+      screen.getByText("1 slot guidance limits need attention"),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Edit contents" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    await user.click(screen.getByRole("button", { name: "Reset to default" }));
+
+    expect(onClearComponentSlot).toHaveBeenCalledWith(propertyName);
+    expect(onResetComponentSlot).toHaveBeenCalledWith(propertyName);
+    expect(onCreateComponentSlotOverride).not.toHaveBeenCalled();
+  });
+
   it("switches and resets a VARIANT property from the Instance inspector", async () => {
     const user = userEvent.setup();
     const onResetComponentProperty = vi.fn();
@@ -1099,6 +1288,7 @@ describe("PropertiesPanel line workflow", () => {
     renderPanel({
       componentContext: {
         availableComponents: [],
+        availableSlotPreferredValues: [],
         componentName: "Button",
         componentProperties: [
           {
@@ -1152,6 +1342,7 @@ describe("PropertiesPanel line workflow", () => {
     renderPanel({
       componentContext: {
         availableComponents: [],
+        availableSlotPreferredValues: [],
         componentName: "Directed connector",
         componentProperties: [],
         componentPropertyDefinitions: [],
@@ -1194,6 +1385,7 @@ describe("PropertiesPanel line workflow", () => {
     renderPanel({
       componentContext: {
         availableComponents: [],
+        availableSlotPreferredValues: [],
         componentName: "Button",
         componentProperties: [],
         componentPropertyDefinitions: [],

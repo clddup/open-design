@@ -50,6 +50,7 @@ export function materialTargetRefsForComponentTool(
       return { nodeIds: [input.sourceNodeId], createdNodeIds: [] };
     case "rename-property":
     case "remove-property":
+    case "set-slot-settings":
       return { nodeIds: [], createdNodeIds: [] };
     case "create-instance":
       return {
@@ -61,6 +62,9 @@ export function materialTargetRefsForComponentTool(
     case "reset-overrides":
     case "set-property":
     case "reset-property":
+    case "create-slot-override":
+    case "clear-slot":
+    case "reset-slot":
     case "detach-instance":
     case "go-to-main":
       return { nodeIds: [input.instanceId], createdNodeIds: [] };
@@ -87,7 +91,11 @@ export function componentToolIsMaterialWrite(
     input.action === "reset-overrides" ||
     input.action === "set-property" ||
     input.action === "reset-property" ||
-    input.action === "remove-property"
+    input.action === "remove-property" ||
+    input.action === "set-slot-settings" ||
+    input.action === "create-slot-override" ||
+    input.action === "clear-slot" ||
+    input.action === "reset-slot"
   ) {
     return true;
   }

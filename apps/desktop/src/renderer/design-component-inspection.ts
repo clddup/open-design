@@ -89,6 +89,7 @@ export function createScopedComponentInspection(
             node.properties.componentProperties,
           ),
           overrides: structuredClone(node.properties.overrides),
+          slots: structuredClone(resolution.slots),
           sourceNodes: resolution.overrideTargets.map((resolved) => ({
             sourcePath: [...resolved.sourcePath],
             sourceNodeId: resolved.sourceNodeId,

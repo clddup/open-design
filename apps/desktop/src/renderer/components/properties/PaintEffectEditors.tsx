@@ -23,6 +23,7 @@ type FillNode = Extract<
       | "boolean"
       | "ellipse"
       | "frame"
+      | "slot"
       | "path"
       | "polygon"
       | "rectangle"
@@ -33,7 +34,7 @@ type FillNode = Extract<
 >;
 type CornerNode = Extract<
   DesignNode,
-  { kind: "frame" | "image" | "polygon" | "rectangle" | "star" }
+  { kind: "frame" | "slot" | "image" | "polygon" | "rectangle" | "star" }
 >;
 type StrokeNode = FillNode | Extract<DesignNode, { kind: "line" }>;
 
@@ -70,6 +71,7 @@ export function isFillNode(node: DesignNode): node is FillNode {
     node.kind === "boolean" ||
     node.kind === "ellipse" ||
     node.kind === "frame" ||
+    node.kind === "slot" ||
     node.kind === "path" ||
     node.kind === "polygon" ||
     node.kind === "rectangle" ||
@@ -82,6 +84,7 @@ export function isFillNode(node: DesignNode): node is FillNode {
 export function isCornerNode(node: DesignNode): node is CornerNode {
   return (
     node.kind === "frame" ||
+    node.kind === "slot" ||
     node.kind === "image" ||
     node.kind === "polygon" ||
     node.kind === "rectangle" ||

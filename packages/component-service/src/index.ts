@@ -3,20 +3,27 @@ import {
   schemaValidationIssues,
   type ComponentPropertyAssignment,
   type ComponentPropertyDefinition,
-  type ComponentPropertyDefinitions,
-  type ComponentOverridePatch,
   type DesignDocument,
   type DesignNode,
   type InstanceNode,
+  type SlotSettings,
 } from "@opendesign/design-contracts";
+import {
+  applyComponentPropertyReferences,
+  applyInstanceShell,
+  applyOverride,
+  effectiveComponentProperties,
+  slotLimitViolations,
+} from "./component-resolution-support.js";
 
-export const COMPONENT_SERVICE_VERSION = 2 as const;
+export const COMPONENT_SERVICE_VERSION = 3 as const;
 export const COMPONENT_PROJECTION_PREFIX = "__opendesign_instance__:";
 
 export type ComponentResolutionIssueCode =
   | "component-cycle"
   | "invalid-component-property"
   | "invalid-override"
+  | "invalid-slot-override"
   | "missing-component"
   | "missing-source-node";
 
@@ -28,6 +35,7 @@ export interface ComponentResolutionIssue {
 }
 
 export interface ResolvedComponentNode {
+  editableNodeId?: string;
   instanceId: string;
   node: DesignNode;
   parentProjectionId: string | null;
@@ -35,6 +43,21 @@ export interface ResolvedComponentNode {
   root: boolean;
   sourceNodeId: string;
   sourcePath: readonly string[];
+  slotPropertyName?: string;
+  slotOverride?: boolean;
+}
+
+export type SlotLimitViolation =
+  "BELOW_MIN" | "ABOVE_MAX" | "HAS_NON_PREFERRED";
+
+export interface ResolvedComponentSlot {
+  childCount: number;
+  displayNodeId: string;
+  limitViolations: readonly SlotLimitViolation[];
+  overridden: boolean;
+  propertyName: string;
+  settings: SlotSettings;
+  sourceSlotNodeId: string;
 }
 
 export interface ResolvedComponentOverrideTarget {
@@ -60,6 +83,7 @@ export type ComponentInstanceResolution =
       instanceId: string;
       nodes: readonly ResolvedComponentNode[];
       overrideTargets: readonly ResolvedComponentOverrideTarget[];
+      slots: readonly ResolvedComponentSlot[];
       sourcePaths: ReadonlySet<string>;
     }
   | {
@@ -206,10 +230,12 @@ function resolveInstance(
   const issues: ComponentResolutionIssue[] = [];
   const nodes: ResolvedComponentNode[] = [];
   const overrideTargets: ResolvedComponentOverrideTarget[] = [];
+  const slots: ResolvedComponentSlot[] = [];
   let rootComponentProperties: Readonly<
     Record<string, ResolvedComponentProperty>
   > = {};
   const sourcePaths = new Set<string>();
+  const usedSlotOverrideIds = new Set<string>();
   let rootResolvedComponentId = instance.properties.componentId;
   const overrides = new Map(
     instance.properties.overrides.map((override) => [
@@ -253,6 +279,44 @@ function resolveInstance(
       });
       return;
     }
+    const slotOverrides = new Map<
+      string,
+      Extract<DesignNode, { kind: "slot" }>
+    >();
+    for (const childId of shell.childIds) {
+      const child = document.nodesById[childId];
+      if (child?.kind !== "slot" || child.properties.sourceSlotId === null)
+        continue;
+      if (slotOverrides.has(child.properties.sourceSlotId)) {
+        issues.push({
+          code: "invalid-slot-override",
+          instanceId: instance.id,
+          message: `Instance ${shell.id} has more than one override for Slot ${child.properties.sourceSlotId}`,
+        });
+        continue;
+      }
+      slotOverrides.set(child.properties.sourceSlotId, child);
+    }
+
+    const sourceChildProjectionId = (
+      childId: string,
+      childNamespace: readonly string[],
+    ): string => {
+      const child = document.nodesById[childId];
+      if (child?.kind === "slot") {
+        const override = slotOverrides.get(child.id);
+        if (override) return override.id;
+      }
+      return componentProjectionId(instance.id, [...childNamespace, childId]);
+    };
+
+    const overrideNodeProjectionId = (
+      nodeId: string,
+      path: readonly string[],
+    ): string =>
+      document.nodesById[nodeId]?.kind === "instance"
+        ? componentProjectionId(instance.id, path)
+        : nodeId;
 
     const visitNode = (
       sourceNodeId: string,
@@ -268,6 +332,135 @@ function resolveInstance(
           message: `Component source node ${sourceNodeId} does not exist`,
           sourcePath,
         });
+        return;
+      }
+      if (source.kind === "slot") {
+        const propertyEntry = Object.entries(
+          definition.componentPropertyDefinitions,
+        ).find(
+          ([, candidate]) =>
+            candidate.type === "SLOT" && candidate.defaultValue === source.id,
+        );
+        if (!propertyEntry) {
+          issues.push({
+            code: "invalid-component-property",
+            instanceId: instance.id,
+            message: `Slot ${source.id} is not bound to a SLOT component property`,
+            sourcePath,
+          });
+          return;
+        }
+        const [propertyName, propertyDefinition] = propertyEntry;
+        if (propertyDefinition.type !== "SLOT") return;
+        const override = slotOverrides.get(source.id);
+        if (override) usedSlotOverrideIds.add(override.id);
+        const projectionId =
+          override?.id ?? componentProjectionId(instance.id, sourcePath);
+        const clone = structuredClone(override ?? source);
+        clone.id = projectionId;
+        clone.parentId = parentId;
+        clone.childIds = override
+          ? override.childIds.map((childId) =>
+              overrideNodeProjectionId(childId, [...sourcePath, childId]),
+            )
+          : source.childIds.map((childId) =>
+              sourceChildProjectionId(childId, namespace),
+            );
+        sourcePaths.add(componentSourcePathKey(sourcePath));
+        overrideTargets.push({
+          node: structuredClone(clone),
+          sourceNodeId,
+          sourcePath,
+        });
+        nodes.push({
+          ...(override ? { editableNodeId: override.id } : {}),
+          instanceId: instance.id,
+          node: clone,
+          parentProjectionId: parentId,
+          projectionId,
+          root: false,
+          sourceNodeId,
+          sourcePath,
+          slotPropertyName: propertyName,
+          slotOverride: Boolean(override),
+        });
+
+        const contentRoot = override ?? source;
+        slots.push({
+          childCount: contentRoot.childIds.length,
+          displayNodeId: projectionId,
+          limitViolations: slotLimitViolations(
+            document,
+            contentRoot.childIds,
+            propertyDefinition,
+          ),
+          overridden: Boolean(override),
+          propertyName,
+          settings: structuredClone(propertyDefinition.slotSettings ?? {}),
+          sourceSlotNodeId: source.id,
+        });
+
+        const visitOverrideNode = (
+          overrideNodeId: string,
+          overrideParentId: string,
+          overridePath: readonly string[],
+        ): void => {
+          const overrideNode = document.nodesById[overrideNodeId];
+          if (!overrideNode) {
+            issues.push({
+              code: "missing-source-node",
+              instanceId: instance.id,
+              message: `Slot override node ${overrideNodeId} does not exist`,
+              sourcePath: overridePath,
+            });
+            return;
+          }
+          if (overrideNode.kind === "instance") {
+            visitComponent(
+              overrideNode.properties.componentId,
+              overrideNode,
+              overridePath,
+              overridePath,
+              overrideParentId,
+              [...componentStack, resolvedComponentId],
+              false,
+            );
+            return;
+          }
+          const displayId = overrideNodeProjectionId(
+            overrideNode.id,
+            overridePath,
+          );
+          const overrideClone = structuredClone(overrideNode);
+          overrideClone.id = displayId;
+          overrideClone.parentId = overrideParentId;
+          overrideClone.childIds = overrideNode.childIds.map((childId) =>
+            overrideNodeProjectionId(childId, [...overridePath, childId]),
+          );
+          nodes.push({
+            editableNodeId: overrideNode.id,
+            instanceId: instance.id,
+            node: overrideClone,
+            parentProjectionId: overrideParentId,
+            projectionId: displayId,
+            root: false,
+            sourceNodeId: overrideNode.id,
+            sourcePath: overridePath,
+          });
+          overrideNode.childIds.forEach((childId) =>
+            visitOverrideNode(childId, displayId, [...overridePath, childId]),
+          );
+        };
+
+        if (override) {
+          override.childIds.forEach((childId) =>
+            visitOverrideNode(childId, projectionId, [...sourcePath, childId]),
+          );
+        } else {
+          source.childIds.forEach((childId) =>
+            visitNode(childId, projectionId, false),
+          );
+        }
         return;
       }
       if (source.kind === "instance") {
@@ -347,7 +540,7 @@ function resolveInstance(
       clone.id = projectionId;
       clone.parentId = nodeRoot ? parentProjectionId : parentId;
       clone.childIds = source.childIds.map((childId) =>
-        componentProjectionId(instance.id, [...namespace, childId]),
+        sourceChildProjectionId(childId, namespace),
       );
       if (nodeRoot) applyInstanceShell(clone, shell);
 
@@ -399,6 +592,20 @@ function resolveInstance(
       });
     }
   }
+  for (const childId of instance.childIds) {
+    const child = document.nodesById[childId];
+    if (
+      child?.kind === "slot" &&
+      child.properties.sourceSlotId !== null &&
+      !usedSlotOverrideIds.has(child.id)
+    ) {
+      issues.push({
+        code: "invalid-slot-override",
+        instanceId: instance.id,
+        message: `Slot override ${child.id} does not match the active component`,
+      });
+    }
+  }
   return issues.length > 0
     ? {
         ok: false,
@@ -413,247 +620,7 @@ function resolveInstance(
         instanceId: instance.id,
         nodes,
         overrideTargets,
+        slots,
         sourcePaths,
       };
-}
-
-function effectiveComponentProperties(
-  document: DesignDocument,
-  componentId: string,
-  assignments: Readonly<Record<string, ComponentPropertyAssignment>>,
-  instanceId: string,
-):
-  | {
-      ok: true;
-      componentId: string;
-      properties: Readonly<Record<string, ResolvedComponentProperty>>;
-    }
-  | { ok: false; issues: ComponentResolutionIssue[] } {
-  const requestedDefinition = document.componentsById[componentId];
-  if (!requestedDefinition) {
-    return {
-      ok: false,
-      issues: [
-        {
-          code: "missing-component",
-          instanceId,
-          message: `Component ${componentId} does not exist`,
-        },
-      ],
-    };
-  }
-  const issues: ComponentResolutionIssue[] = [];
-  const properties: Record<string, ResolvedComponentProperty> = {};
-  let resolvedComponentId = componentId;
-  const variantSet = requestedDefinition.variantSetId
-    ? document.variantSetsById[requestedDefinition.variantSetId]
-    : undefined;
-  if (requestedDefinition.variantSetId && !variantSet) {
-    issues.push({
-      code: "missing-component",
-      instanceId,
-      message: `Variant set ${requestedDefinition.variantSetId} does not exist`,
-    });
-  }
-  if (variantSet) {
-    const requestedVariantProperties: Record<string, string> = {};
-    for (const [propertyName, propertyDefinition] of Object.entries(
-      variantSet.componentPropertyDefinitions,
-    )) {
-      const value =
-        assignments[propertyName] ??
-        requestedDefinition.variantProperties[propertyName];
-      if (
-        typeof value !== "string" ||
-        !propertyDefinition.variantOptions.includes(value)
-      ) {
-        issues.push({
-          code: "invalid-component-property",
-          instanceId,
-          message: `Component property ${propertyName} requires one of ${propertyDefinition.variantOptions.join(", ")}`,
-        });
-        continue;
-      }
-      requestedVariantProperties[propertyName] = value;
-      properties[propertyName] = { type: "VARIANT", value };
-    }
-    const selected = Object.values(document.componentsById).find(
-      (candidate) =>
-        candidate.variantSetId === variantSet.id &&
-        Object.entries(requestedVariantProperties).every(
-          ([propertyName, value]) =>
-            candidate.variantProperties[propertyName] === value,
-        ),
-    );
-    if (!selected) {
-      issues.push({
-        code: "invalid-component-property",
-        instanceId,
-        message: `Variant set ${variantSet.id} has no Component matching ${Object.entries(
-          requestedVariantProperties,
-        )
-          .map(([name, value]) => `${name}=${value}`)
-          .join(", ")}`,
-      });
-    } else {
-      resolvedComponentId = selected.id;
-    }
-  }
-  const definition = document.componentsById[resolvedComponentId];
-  if (!definition) {
-    return { ok: false, issues };
-  }
-  const knownPropertyNames = new Set([
-    ...Object.keys(variantSet?.componentPropertyDefinitions ?? {}),
-    ...Object.keys(definition.componentPropertyDefinitions),
-  ]);
-  for (const propertyName of Object.keys(assignments)) {
-    if (!knownPropertyNames.has(propertyName)) {
-      issues.push({
-        code: "invalid-component-property",
-        instanceId,
-        message: `Component property ${propertyName} does not exist on ${componentId}`,
-      });
-    }
-  }
-  for (const [propertyName, propertyDefinition] of Object.entries(
-    definition.componentPropertyDefinitions,
-  )) {
-    const value = assignments[propertyName] ?? propertyDefinition.defaultValue;
-    if (!componentPropertyValueMatches(propertyDefinition, value)) {
-      issues.push({
-        code: "invalid-component-property",
-        instanceId,
-        message: `Component property ${propertyName} requires ${propertyDefinition.type}`,
-      });
-      continue;
-    }
-    if (
-      propertyDefinition.type === "INSTANCE_SWAP" &&
-      typeof value === "string" &&
-      !document.componentsById[value]
-    ) {
-      issues.push({
-        code: "missing-component",
-        instanceId,
-        message: `Component property ${propertyName} references missing component ${value}`,
-      });
-      continue;
-    }
-    properties[propertyName] = {
-      type: propertyDefinition.type,
-      value,
-      ...(propertyDefinition.type === "INSTANCE_SWAP" &&
-      propertyDefinition.preferredValues
-        ? {
-            preferredValues: structuredClone(
-              propertyDefinition.preferredValues,
-            ),
-          }
-        : {}),
-    };
-  }
-  return issues.length > 0
-    ? { ok: false, issues }
-    : { ok: true, componentId: resolvedComponentId, properties };
-}
-
-function componentPropertyValueMatches(
-  definition: ComponentPropertyDefinition,
-  value: ComponentPropertyAssignment,
-): boolean {
-  return definition.type === "BOOLEAN"
-    ? typeof value === "boolean"
-    : typeof value === "string";
-}
-
-function applyComponentPropertyReferences(
-  source: DesignNode,
-  definitions: ComponentPropertyDefinitions,
-  properties: Readonly<Record<string, ResolvedComponentProperty>>,
-): { ok: true; node: DesignNode } | { ok: false; message: string } {
-  const references = source.componentPropertyReferences;
-  if (!references) return { ok: true, node: structuredClone(source) };
-  const clone = structuredClone(source);
-  for (const [field, propertyName] of Object.entries(references)) {
-    const definition = definitions[propertyName];
-    const property = properties[propertyName];
-    if (!definition || !property) {
-      return {
-        ok: false,
-        message: `Component property reference ${propertyName} on ${source.id} does not exist`,
-      };
-    }
-    if (field === "visible") {
-      if (
-        definition.type !== "BOOLEAN" ||
-        typeof property.value !== "boolean"
-      ) {
-        return {
-          ok: false,
-          message: `Component property ${propertyName} must be BOOLEAN for visible`,
-        };
-      }
-      clone.visible = property.value;
-      continue;
-    }
-    if (field === "characters") {
-      if (
-        clone.kind !== "text" ||
-        definition.type !== "TEXT" ||
-        typeof property.value !== "string"
-      ) {
-        return {
-          ok: false,
-          message: `Component property ${propertyName} must be TEXT on a Text layer`,
-        };
-      }
-      clone.properties.content = property.value;
-      continue;
-    }
-    if (
-      field !== "mainComponent" ||
-      clone.kind !== "instance" ||
-      definition.type !== "INSTANCE_SWAP" ||
-      typeof property.value !== "string"
-    ) {
-      return {
-        ok: false,
-        message: `Component property ${propertyName} must be INSTANCE_SWAP on an Instance`,
-      };
-    }
-    clone.properties.componentId = property.value;
-  }
-  return { ok: true, node: clone };
-}
-
-function applyInstanceShell(node: DesignNode, shell: InstanceNode): void {
-  node.name = shell.name;
-  node.transform = [...shell.transform];
-  node.visible = shell.visible && node.visible;
-  node.locked = shell.locked || node.locked;
-  node.opacity *= shell.opacity;
-  node.effects = [...(node.effects ?? []), ...(shell.effects ?? [])];
-  if (shell.maskMode !== undefined) node.maskMode = shell.maskMode;
-  if (shell.blendMode !== undefined) node.blendMode = shell.blendMode;
-  node.extensions = { ...node.extensions, ...shell.extensions };
-}
-
-function applyOverride(
-  source: DesignNode,
-  patch: ComponentOverridePatch | undefined,
-): DesignNode {
-  const clone = structuredClone(source);
-  if (!patch) return clone;
-  if (patch.name !== undefined) clone.name = patch.name;
-  if (patch.visible !== undefined) clone.visible = patch.visible;
-  if (patch.opacity !== undefined) clone.opacity = patch.opacity;
-  if (patch.blendMode !== undefined) clone.blendMode = patch.blendMode;
-  if (patch.effects !== undefined)
-    clone.effects = structuredClone(patch.effects);
-  if (patch.maskMode !== undefined) clone.maskMode = patch.maskMode;
-  if (patch.properties !== undefined) {
-    Object.assign(clone.properties, structuredClone(patch.properties));
-  }
-  return clone;
 }

@@ -206,6 +206,22 @@
   gap: 5px;
 }
 
+.componentSlotValue {
+  display: grid;
+  gap: 6px;
+
+  > span {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  > small {
+    color: var(--text-warning, #b26a00);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+}
+
 .componentPropertyDefinition {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 22px;

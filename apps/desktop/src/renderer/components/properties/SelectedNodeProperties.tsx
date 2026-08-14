@@ -32,6 +32,7 @@ import { Field, Section, commitNumber, formatNumber } from "./controls";
 
 const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
   frame: "frame",
+  slot: "frame",
   group: "layers",
   boolean: "boolean",
   rectangle: "rectangle",
@@ -48,6 +49,7 @@ const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
 
 const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   frame: "node.frame",
+  slot: "node.slot",
   group: "node.group",
   boolean: "node.boolean",
   rectangle: "node.rectangle",
@@ -125,6 +127,10 @@ export function SelectedNodeProperties({
   onUpdate,
   onUpdateComponentOverride,
   onSetComponentProperty,
+  onClearComponentSlot,
+  onCreateComponentSlotOverride,
+  onResetComponentSlot,
+  onSetComponentSlotSettings,
   onSetVariantProperties,
 }: {
   node: DesignNode;
@@ -193,6 +199,17 @@ export function SelectedNodeProperties({
   onSetComponentProperty: (
     propertyName: string,
     value: ComponentPropertyAssignment,
+  ) => void;
+  onClearComponentSlot: (propertyName: string) => void;
+  onCreateComponentSlotOverride: (propertyName: string) => void;
+  onResetComponentSlot: (propertyName: string) => void;
+  onSetComponentSlotSettings: (
+    propertyName: string,
+    input: {
+      description?: string;
+      preferredValues: readonly import("@opendesign/design-contracts").InstanceSwapPreferredValue[];
+      settings: import("@opendesign/design-contracts").SlotSettings;
+    },
   ) => void;
   onSetVariantProperties: (
     componentId: string,
@@ -324,6 +341,10 @@ export function SelectedNodeProperties({
         onResetComponentSourceOverride={onResetComponentSourceOverride}
         onUpdateComponentOverride={onUpdateComponentOverride}
         onSetComponentProperty={onSetComponentProperty}
+        onClearComponentSlot={onClearComponentSlot}
+        onCreateComponentSlotOverride={onCreateComponentSlotOverride}
+        onResetComponentSlot={onResetComponentSlot}
+        onSetComponentSlotSettings={onSetComponentSlotSettings}
         onSetVariantProperties={onSetVariantProperties}
       />
       <Section title={t("properties.layer")}>
@@ -362,7 +383,7 @@ export function SelectedNodeProperties({
           </div>
         </div>
       </Section>
-      {node.kind === "frame" && (
+      {(node.kind === "frame" || node.kind === "slot") && (
         <AutoLayoutSection
           autoLayout={node.properties.autoLayout ?? { mode: "none" }}
           onChange={(autoLayout) => onUpdate({ properties: { autoLayout } })}

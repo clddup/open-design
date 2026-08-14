@@ -194,11 +194,18 @@ export function useEditorCommandController({
         return;
       }
       const autoLayout = updates.properties?.autoLayout;
-      if (node?.kind === "frame" && isAutoLayout(autoLayout)) {
+      if (
+        (node?.kind === "frame" || node?.kind === "slot") &&
+        isAutoLayout(autoLayout)
+      ) {
         setFrameAutoLayout(nodeId, autoLayout);
         return;
       }
-      if (node?.kind === "frame" && updates.size && node.childIds.length > 0) {
+      if (
+        (node?.kind === "frame" || node?.kind === "slot") &&
+        updates.size &&
+        node.childIds.length > 0
+      ) {
         const plan = planResizeFrameWithConstraints(
           current,
           pageIdForNode(current, nodeId),

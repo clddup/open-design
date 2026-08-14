@@ -35,7 +35,7 @@ export function commitCanvasOperation({
       ? current.document.nodesById[node.parentId]
       : undefined;
     return (
-      parent?.kind === "frame" &&
+      (parent?.kind === "frame" || parent?.kind === "slot") &&
       parent.properties.autoLayout !== undefined &&
       parent.properties.autoLayout.mode !== "none" &&
       node?.layoutPositioning !== "absolute"

@@ -4,216 +4,11 @@ import {
   type ComponentPropertyAssignment,
   type ComponentPropertyType,
   type InstanceSwapPreferredValue,
+  type SlotSettings,
 } from "@opendesign/design-contracts";
 
-export type DesignComponentToolInput =
-  | {
-      action: "create-component";
-      label: string;
-      pageId: string;
-      nodeId: string;
-      componentId: string;
-      name: string;
-    }
-  | {
-      action: "create-instance";
-      label: string;
-      pageId: string;
-      componentId: string;
-      instanceId: string;
-      parentId: string | null;
-      index: number;
-      x: number;
-      y: number;
-      name?: string;
-    }
-  | {
-      action: "remove-component";
-      label: string;
-      pageId: string;
-      componentId: string;
-    }
-  | {
-      action: "combine-as-variants";
-      label: string;
-      pageId: string;
-      componentIds: string[];
-      componentRootNodeIds: string[];
-      variantSetId: string;
-      rootNodeId: string;
-      name: string;
-      variantPropertiesByComponentId: Record<string, Record<string, string>>;
-    }
-  | {
-      action: "add-component-to-variant-set";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      componentId: string;
-      componentRootNodeId: string;
-      variantProperties: Record<string, string>;
-    }
-  | {
-      action: "duplicate-variant";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      sourceComponentId: string;
-      sourceRootNodeId: string;
-      componentId: string;
-      componentRootNodeId: string;
-      name?: string;
-      variantProperties: Record<string, string>;
-    }
-  | {
-      action: "remove-variant";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      componentId: string;
-      componentRootNodeId: string;
-    }
-  | {
-      action: "dissolve-variant-set";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-    }
-  | {
-      action: "add-variant-property";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      propertyName: string;
-      valuesByComponentId: Record<string, string>;
-      index?: number;
-    }
-  | {
-      action: "rename-variant-property";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      propertyName: string;
-      name: string;
-    }
-  | {
-      action: "reorder-variant-properties";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      propertyOrder: string[];
-    }
-  | {
-      action: "remove-variant-property";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      propertyName: string;
-    }
-  | {
-      action: "rename-variant-value";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      propertyName: string;
-      value: string;
-      name: string;
-    }
-  | {
-      action: "reorder-variant-values";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      propertyName: string;
-      values: string[];
-    }
-  | {
-      action: "set-variant-properties";
-      label: string;
-      pageId: string;
-      variantSetId: string;
-      rootNodeId: string;
-      componentId: string;
-      componentRootNodeId: string;
-      variantProperties: Record<string, string>;
-    }
-  | {
-      action: "add-property";
-      label: string;
-      pageId: string;
-      componentId: string;
-      propertyId: string;
-      name: string;
-      type: ComponentPropertyType;
-      sourceNodeId: string;
-      preferredValues?: InstanceSwapPreferredValue[];
-    }
-  | {
-      action: "rename-property";
-      label: string;
-      pageId: string;
-      componentId: string;
-      propertyName: string;
-      name: string;
-    }
-  | {
-      action: "remove-property";
-      label: string;
-      pageId: string;
-      componentId: string;
-      propertyName: string;
-    }
-  | {
-      action: "set-property";
-      label: string;
-      pageId: string;
-      instanceId: string;
-      propertyName: string;
-      value: ComponentPropertyAssignment;
-    }
-  | {
-      action: "reset-property";
-      label: string;
-      pageId: string;
-      instanceId: string;
-      propertyName: string;
-    }
-  | {
-      action: "set-override";
-      label: string;
-      pageId: string;
-      instanceId: string;
-      sourcePath: string[];
-      patch: Record<string, unknown>;
-    }
-  | {
-      action: "reset-overrides";
-      label: string;
-      pageId: string;
-      instanceId: string;
-      sourcePath?: string[];
-    }
-  | {
-      action: "detach-instance";
-      label: string;
-      pageId: string;
-      instanceId: string;
-    }
-  | {
-      action: "go-to-main";
-      pageId: string;
-      instanceId: string;
-    };
+import type { DesignComponentToolInput } from "./design-component-tool-contract";
+export type { DesignComponentToolInput } from "./design-component-tool-contract";
 
 export function isDesignComponentToolInput(
   input: unknown,
@@ -499,6 +294,7 @@ export function isDesignComponentToolInput(
         (input.preferredValues === undefined ||
           preferredValues(input.preferredValues)) &&
         (input.type === "INSTANCE_SWAP" ||
+          input.type === "SLOT" ||
           input.preferredValues === undefined ||
           input.preferredValues.length === 0) &&
         exactKeys(input, [
@@ -564,6 +360,40 @@ export function isDesignComponentToolInput(
           "pageId",
           "instanceId",
           "propertyName",
+        ])
+      );
+    case "create-slot-override":
+    case "clear-slot":
+    case "reset-slot":
+      return (
+        id(input.instanceId) &&
+        propertyName(input.propertyName) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "instanceId",
+          "propertyName",
+        ])
+      );
+    case "set-slot-settings":
+      return (
+        id(input.componentId) &&
+        propertyName(input.propertyName) &&
+        slotSettings(input.settings) &&
+        (input.preferredValues === undefined ||
+          preferredValues(input.preferredValues)) &&
+        (input.description === undefined ||
+          boundedString(input.description, 2_000)) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "componentId",
+          "propertyName",
+          "settings",
+          ...(input.preferredValues === undefined ? [] : ["preferredValues"]),
+          ...(input.description === undefined ? [] : ["description"]),
         ])
       );
     case "set-override":
@@ -708,7 +538,52 @@ function variantProperties(value: unknown): value is Record<string, string> {
 }
 
 function componentPropertyType(value: unknown): value is ComponentPropertyType {
-  return value === "BOOLEAN" || value === "TEXT" || value === "INSTANCE_SWAP";
+  return (
+    value === "BOOLEAN" ||
+    value === "TEXT" ||
+    value === "INSTANCE_SWAP" ||
+    value === "SLOT"
+  );
+}
+
+function slotSettings(value: unknown): value is SlotSettings {
+  if (!isRecord(value)) return false;
+  if (
+    !exactKeys(value, [
+      ...(value.stretchChildOnInsert === undefined
+        ? []
+        : ["stretchChildOnInsert"]),
+      ...(value.displayEmptyByDefault === undefined
+        ? []
+        : ["displayEmptyByDefault"]),
+      ...(value.minChildren === undefined ? [] : ["minChildren"]),
+      ...(value.maxChildren === undefined ? [] : ["maxChildren"]),
+      ...(value.allowPreferredValuesOnly === undefined
+        ? []
+        : ["allowPreferredValuesOnly"]),
+    ])
+  )
+    return false;
+  const optionalBoolean = (candidate: unknown) =>
+    candidate === undefined || typeof candidate === "boolean";
+  const count = (candidate: unknown) =>
+    candidate === undefined ||
+    candidate === null ||
+    (Number.isInteger(candidate) &&
+      (candidate as number) >= 0 &&
+      (candidate as number) <= 4_096);
+  return (
+    optionalBoolean(value.stretchChildOnInsert) &&
+    optionalBoolean(value.displayEmptyByDefault) &&
+    count(value.minChildren) &&
+    count(value.maxChildren) &&
+    optionalBoolean(value.allowPreferredValuesOnly) &&
+    !(
+      typeof value.minChildren === "number" &&
+      typeof value.maxChildren === "number" &&
+      value.minChildren > value.maxChildren
+    )
+  );
 }
 
 function componentPropertyValue(

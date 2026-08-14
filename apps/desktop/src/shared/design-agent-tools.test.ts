@@ -375,6 +375,54 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "add-property",
+        label: "Convert content frame to Slot",
+        pageId: "page_home",
+        componentId: "component_card",
+        propertyId: "card:content",
+        name: "Content",
+        type: "SLOT",
+        sourceNodeId: "card_content_frame",
+        preferredValues: [{ type: "COMPONENT", key: "component_list_item" }],
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "set-slot-settings",
+        label: "Guide card contents",
+        pageId: "page_home",
+        componentId: "component_card",
+        propertyName: "Content#card:content",
+        settings: {
+          minChildren: 1,
+          maxChildren: 6,
+          allowPreferredValuesOnly: true,
+          stretchChildOnInsert: true,
+        },
+        preferredValues: [{ type: "COMPONENT", key: "component_list_item" }],
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "clear-slot",
+        label: "Clear card contents",
+        pageId: "page_home",
+        instanceId: "card_instance",
+        propertyName: "Content#card:content",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "set-slot-settings",
+        label: "Invalid range",
+        pageId: "page_home",
+        componentId: "component_card",
+        propertyName: "Content#card:content",
+        settings: { minChildren: 8, maxChildren: 2 },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
         action: "add-variant-property",
         label: "Add button size matrix",
         pageId: "page_home",

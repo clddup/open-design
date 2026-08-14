@@ -105,11 +105,12 @@ export function planSvgImport(
   if (
     targetParent &&
     targetParent.kind !== "frame" &&
+    targetParent.kind !== "slot" &&
     targetParent.kind !== "group"
   ) {
     return failure(
       "invalid-target",
-      "SVG can only be imported at the Page root, into a Frame, or into a Group",
+      "SVG can only be imported at the Page root, into a Frame, Slot, or Group",
     );
   }
   if (

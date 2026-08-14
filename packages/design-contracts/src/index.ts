@@ -34,19 +34,23 @@ import {
   PointSchema,
   SizeSchema,
   TransformSchema,
-  type NormalizedPoint,
-  type Point,
-  type Size,
 } from "./primitives.js";
 export * from "./component-properties.js";
 export * from "./variant-sets.js";
 export * from "./primitives.js";
 export * from "./versions.js";
+export {
+  normalizeLineEndpoints,
+  resolveLineEndpointPoint,
+  resolveRegularPolygonPoints,
+  resolveStarPoints,
+} from "./regular-geometry.js";
 export * from "./layout.js";
 export * from "./limits.js";
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
 export const NodeKindSchema = Type.Union([
   Type.Literal("frame"),
+  Type.Literal("slot"),
   Type.Literal("group"),
   Type.Literal("boolean"),
   Type.Literal("rectangle"),
@@ -698,6 +702,29 @@ export const FrameNodeSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const SlotPropertiesSchema = Type.Object(
+  {
+    ...ShapeProperties,
+    cornerRadius: Type.Number({ minimum: 0 }),
+    clipsContent: Type.Boolean(),
+    autoLayout: Type.Optional(layout.AutoLayoutSchema),
+    sourceSlotId: Type.Union([
+      Type.String({ minLength: 1, maxLength: 256 }),
+      Type.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const SlotNodeSchema = Type.Object(
+  {
+    ...NodeBaseProperties,
+    kind: Type.Literal("slot"),
+    properties: SlotPropertiesSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const GroupNodeSchema = Type.Object(
   {
     ...NodeBaseProperties,
@@ -800,7 +827,10 @@ export const PathNodeSchema = Type.Object(
 export const InstanceNodeSchema = Type.Object(
   {
     ...NodeBaseProperties,
-    childIds: Type.Array(Type.String(), { maxItems: 0 }),
+    childIds: Type.Array(Type.String({ minLength: 1 }), {
+      uniqueItems: true,
+      maxItems: 4_096,
+    }),
     kind: Type.Literal("instance"),
     properties: InstancePropertiesSchema,
   },
@@ -809,6 +839,7 @@ export const InstanceNodeSchema = Type.Object(
 
 export const DesignNodeSchema = Type.Union([
   FrameNodeSchema,
+  SlotNodeSchema,
   GroupNodeSchema,
   BooleanNodeSchema,
   RectangleNodeSchema,
@@ -1528,6 +1559,7 @@ export type VectorNetworkProperties = Static<
   typeof VectorNetworkPropertiesSchema
 >;
 export type FrameNode = Static<typeof FrameNodeSchema>;
+export type SlotNode = Static<typeof SlotNodeSchema>;
 export type GroupNode = Static<typeof GroupNodeSchema>;
 export type BooleanNode = Static<typeof BooleanNodeSchema>;
 export type RectangleNode = Static<typeof RectangleNodeSchema>;
@@ -1546,6 +1578,12 @@ export type ComponentOverridePatch = Static<
   typeof ComponentOverridePatchSchema
 >;
 export type DesignNode = Static<typeof DesignNodeSchema>;
+export type FrameLikeNode = FrameNode | SlotNode;
+export function isFrameLikeNode(
+  node: DesignNode | undefined,
+): node is FrameLikeNode {
+  return node?.kind === "frame" || node?.kind === "slot";
+}
 export type DesignPage = Static<typeof DesignPageSchema>;
 export type DesignAsset = Static<typeof DesignAssetSchema>;
 export type DesignDocument = Static<typeof DesignDocumentSchema>;
@@ -1817,79 +1855,6 @@ function migrateTextNodes(document: Record<string, unknown>): void {
     textProperties.textWrap ??= "character";
     textProperties.textOverflow ??= "visible";
     textProperties.textResize ??= "fixed";
-  }
-}
-
-export function resolveLineEndpointPoint(
-  size: Size,
-  endpoint: NormalizedPoint,
-): Point {
-  return { x: size.width * endpoint.x, y: size.height * endpoint.y };
-}
-
-export function normalizeLineEndpoints(
-  start: Point,
-  end: Point,
-): {
-  bounds: Rect;
-  start: NormalizedPoint;
-  end: NormalizedPoint;
-} {
-  const x = Math.min(start.x, end.x);
-  const y = Math.min(start.y, end.y);
-  const width = Math.abs(end.x - start.x);
-  const height = Math.abs(end.y - start.y);
-  const normalize = (point: Point): NormalizedPoint => ({
-    x: width === 0 ? 0.5 : (point.x - x) / width,
-    y: height === 0 ? 0.5 : (point.y - y) / height,
-  });
-  return {
-    bounds: { x, y, width, height },
-    start: normalize(start),
-    end: normalize(end),
-  };
-}
-
-export function resolveRegularPolygonPoints(
-  size: Size,
-  pointCount: number,
-): Point[] {
-  assertRegularPointCount(pointCount);
-  const centerX = size.width / 2;
-  const centerY = size.height / 2;
-  return Array.from({ length: pointCount }, (_, index) => {
-    const angle = (index * Math.PI * 2) / pointCount - Math.PI / 2;
-    return {
-      x: centerX + centerX * Math.cos(angle),
-      y: centerY + centerY * Math.sin(angle),
-    };
-  });
-}
-
-export function resolveStarPoints(
-  size: Size,
-  pointCount: number,
-  innerRadius: number,
-): Point[] {
-  assertRegularPointCount(pointCount);
-  if (!Number.isFinite(innerRadius) || innerRadius < 0 || innerRadius > 1) {
-    throw new RangeError("Star innerRadius must be between 0 and 1");
-  }
-  const centerX = size.width / 2;
-  const centerY = size.height / 2;
-  return Array.from({ length: pointCount * 2 }, (_, index) => {
-    const radius = index % 2 === 0 ? 1 : innerRadius;
-    const angle = (index * Math.PI) / pointCount - Math.PI / 2;
-    return {
-      x: centerX + centerX * radius * Math.cos(angle),
-      y: centerY + centerY * radius * Math.sin(angle),
-    };
-  });
-}
-
-function assertRegularPointCount(pointCount: number): void {
-  if (!Number.isInteger(pointCount) || pointCount < 3 || pointCount > 60) {
-    throw new RangeError("Polygon and Star pointCount must be from 3 to 60");
   }
 }
 

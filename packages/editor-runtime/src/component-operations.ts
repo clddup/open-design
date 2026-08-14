@@ -188,6 +188,42 @@ export function planRemoveComponent(
     );
   }
   const commands: DesignOperation[] = [];
+  for (const definition of Object.values(
+    component.componentPropertyDefinitions,
+  )) {
+    if (definition.type !== "SLOT") continue;
+    const slot = document.nodesById[definition.defaultValue];
+    if (slot?.kind !== "slot" || slot.properties.sourceSlotId !== null) {
+      return failure(
+        "invalid",
+        `Component Slot ${definition.defaultValue} is unavailable`,
+      );
+    }
+    const nodes: DesignNode[] = [];
+    const visit = (nodeId: string): void => {
+      const source = document.nodesById[nodeId];
+      if (!source) return;
+      if (source.id === slot.id && source.kind === "slot") {
+        const { sourceSlotId: _sourceSlotId, ...properties } =
+          source.properties;
+        nodes.push({
+          ...structuredClone(source),
+          kind: "frame",
+          properties: structuredClone(properties),
+        });
+      } else {
+        nodes.push(structuredClone(source));
+      }
+      source.childIds.forEach(visit);
+    };
+    visit(slot.id);
+    commands.push({
+      commandId: `${input.commandPrefix}_convert_slot_${commands.length}`,
+      type: "replace_subtree",
+      rootNodeId: slot.id,
+      nodes,
+    });
+  }
   for (const sourceNodeId of componentSourceNodeIds(document, component.id)) {
     const source = document.nodesById[sourceNodeId];
     if (!source?.componentPropertyReferences) continue;
@@ -307,19 +343,29 @@ export function planResetComponentOverrides(
           componentSourcePathKey(input.sourcePath!),
       )
     : [];
-  if (next.length === instance.properties.overrides.length) {
+  const slotOverrideIds = input.sourcePath ? [] : [...instance.childIds];
+  if (
+    next.length === instance.properties.overrides.length &&
+    slotOverrideIds.length === 0
+  ) {
     return failure("no-op", "No matching component override exists");
+  }
+  const commands: DesignOperation[] = slotOverrideIds.map((nodeId, index) => ({
+    commandId: `${input.commandPrefix}_reset_slot_${index}`,
+    type: "delete_element",
+    nodeId,
+  }));
+  if (next.length !== instance.properties.overrides.length) {
+    commands.push({
+      commandId: `${input.commandPrefix}_reset_override`,
+      type: "update_properties",
+      nodeId: instance.id,
+      properties: { overrides: next },
+    });
   }
   return {
     ok: true,
-    commands: [
-      {
-        commandId: `${input.commandPrefix}_reset_override`,
-        type: "update_properties",
-        nodeId: instance.id,
-        properties: { overrides: next },
-      },
-    ],
+    commands,
     componentId: instance.properties.componentId,
     instanceId: instance.id,
     mainNodeId:
@@ -354,7 +400,15 @@ export function planDetachComponentInstance(
     ]),
   );
   const nodes = resolution.nodes.map((resolved) => {
-    const clone = structuredClone(resolved.node);
+    let clone = structuredClone(resolved.node);
+    if (clone.kind === "slot") {
+      const { sourceSlotId: _sourceSlotId, ...properties } = clone.properties;
+      clone = {
+        ...clone,
+        kind: "frame",
+        properties,
+      };
+    }
     delete clone.componentPropertyReferences;
     clone.id = idByProjection.get(resolved.projectionId)!;
     clone.parentId = resolved.parentProjectionId
