@@ -182,10 +182,7 @@ export function toFigmaSharedStylePayload(
       payload: {
         type: "TEXT",
         text: {
-          fontName: {
-            family: value.fontFamily,
-            style: fontWeightName(value.fontWeight),
-          },
+          fontName: toFigmaFontName(value),
           fontSize: value.fontSize,
           lineHeight: { unit: "PIXELS", value: value.lineHeight },
           letterSpacing: { unit: "PIXELS", value: value.letterSpacing },
@@ -270,6 +267,16 @@ export function toFigmaSharedStylePayload(
     } as LayoutGrid;
   });
   return { ok: true, payload: { type: "GRID", layoutGrids } };
+}
+
+export function toFigmaFontName(value: {
+  fontFamily: string;
+  fontWeight: number;
+}): FontName {
+  return {
+    family: value.fontFamily,
+    style: fontWeightName(value.fontWeight),
+  };
 }
 
 function figmaTextDecoration(

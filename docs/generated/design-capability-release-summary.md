@@ -2,7 +2,7 @@
 
 # Design capability release summary
 
-Manifest v1 (2026-08-15) · 0 available · 20 degraded · 2 unavailable
+Manifest v1 (2026-08-15) · 0 available · 21 degraded · 1 unavailable
 
 This block is the release-note view of the same manifest used by the built-in Agent and generated help. It must not be edited by hand.
 
@@ -25,6 +25,7 @@ This block is the release-note view of the same manifest used by the built-in Ag
 - `image.import-generation-placement` — Image import, generation, and placement
 - `image.crop-adjustments` — Image crop and adjustments
 - `text.single-style` — Single-style text
+- `text.rich-typography` — Rich typography
 - `layout.constraints` — Frame constraints
 - `layout.auto-layout` — Auto layout
 - `components.instances-variants` — Components, instances, and variants
@@ -36,4 +37,3 @@ This block is the release-note view of the same manifest used by the built-in Ag
 ## Unavailable
 
 - `image.ai-editing` — AI image editing
-- `text.rich-typography` — Rich typography

@@ -72,6 +72,42 @@ const leafer = {
 } as unknown as Pick<typeof LeaferEditorModule, "Text">;
 
 describe("Leafer text layout provider", () => {
+  it("reports available, missing, and unknown font state through the same provider", () => {
+    const available = createLeaferTextLayoutProvider(leafer, {
+      fontAvailable: (descriptor) => descriptor.includes('"Inter"'),
+    });
+    const unknown = createLeaferTextLayoutProvider(leafer, {
+      fontAvailable: () => undefined,
+    });
+
+    expect(
+      available.inspectFont?.({
+        fontFamily: "Inter, sans-serif",
+        fontWeight: 600,
+      }),
+    ).toMatchObject({ status: "available" });
+    expect(
+      available.inspectFont?.({ fontFamily: "Missing Sans", fontWeight: 400 }),
+    ).toMatchObject({ status: "missing" });
+    expect(
+      unknown.inspectFont?.({ fontFamily: "Unknown Sans", fontWeight: 400 }),
+    ).toMatchObject({ status: "unknown" });
+  });
+
+  it("keeps the default browser probe conservative without font APIs", () => {
+    const provider = createLeaferTextLayoutProvider(leafer);
+
+    expect(
+      provider.inspectFont?.({ fontFamily: "sans-serif", fontWeight: 400 }),
+    ).toMatchObject({ status: "available" });
+    expect(
+      provider.inspectFont?.({
+        fontFamily: "Unverified Sans",
+        fontWeight: 400,
+      }),
+    ).toMatchObject({ status: "unknown" });
+  });
+
   it("measures Auto Width without fixed bounds and caches the result", () => {
     const provider = createLeaferTextLayoutProvider(leafer, {
       fontAvailable: () => true,

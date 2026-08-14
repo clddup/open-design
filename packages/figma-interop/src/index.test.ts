@@ -12,6 +12,7 @@ import {
   toFigmaComponentPropertyReferences,
   toFigmaExplicitVariableModes,
   toFigmaExportSettings,
+  toFigmaFontName,
   toFigmaNodeType,
   toFigmaNodeBoundVariables,
   toFigmaNodeStyleReferences,
@@ -24,6 +25,16 @@ import {
 } from "./index.js";
 
 describe("Figma Shared Style compatibility", () => {
+  it("maps the supported family and numeric-weight subset to Figma FontName", () => {
+    expect(
+      toFigmaFontName({ fontFamily: "IBM Plex Sans", fontWeight: 600 }),
+    ).toEqual({ family: "IBM Plex Sans", style: "Semi Bold" });
+    expect(toFigmaFontName({ fontFamily: "Inter", fontWeight: 900 })).toEqual({
+      family: "Inter",
+      style: "Black",
+    });
+  });
+
   it("preserves stable metadata, folder names, node references and supported payloads", () => {
     const style = {
       id: "brand-primary",

@@ -5,6 +5,7 @@ import {
   type DesignAsset,
   type ImagePlacement,
   type Point,
+  type TextFontDescriptor,
 } from "@opendesign/design-contracts";
 import {
   isSvgInterchangeIssue,
@@ -88,6 +89,7 @@ export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
 export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
 export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
 export const DESIGN_VECTOR_TOOL_NAME = "opendesign_edit_vector";
+export const DESIGN_FONT_TOOL_NAME = "opendesign_manage_fonts";
 export const DESIGN_PAGE_TOOL_NAME = "opendesign_manage_pages";
 export const DESIGN_COMPONENT_TOOL_NAME = "opendesign_manage_components";
 export const DESIGN_VARIABLE_TOOL_NAME = "opendesign_manage_variables";
@@ -382,6 +384,23 @@ export type PageStructureAccessToolInput = {
   actions: PageStructureAccessAction[];
   reason: string;
 };
+
+export type DesignFontToolInput =
+  | {
+      action: "reflow";
+      label: string;
+      pageId: string;
+      nodeIds: string[];
+      expectedFont: TextFontDescriptor;
+    }
+  | {
+      action: "replace";
+      label: string;
+      pageId: string;
+      nodeIds: string[];
+      expectedFont: TextFontDescriptor;
+      replacementFont: TextFontDescriptor;
+    };
 
 export type DesignHierarchyToolInput =
   | {
@@ -1129,6 +1148,16 @@ const MODEL_NODE_OPERATION_SCHEMA = {
       additionalProperties: false,
     },
   ],
+} as const;
+
+const MODEL_FONT_DESCRIPTOR_SCHEMA = {
+  type: "object",
+  properties: {
+    fontFamily: { type: "string", minLength: 1, maxLength: 4_096 },
+    fontWeight: { type: "integer", minimum: 1, maximum: 1_000 },
+  },
+  required: ["fontFamily", "fontWeight"],
+  additionalProperties: false,
 } as const;
 
 const MODEL_APPLY_TRANSACTION_SCHEMA = {
@@ -2324,6 +2353,79 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_FONT_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
+    description:
+      "Inspect the current design first, then explicitly reflow or replace one exact font request on stable Text node IDs inside the active Page. expectedFont must exactly match every target at execution time. reflow keeps the requested font and remeasures Auto Width/Auto Height text; replace atomically changes every target to replacementFont. The host rejects stale, locked, non-Text, cross-Page, or known-missing replacement faces, preserves Fixed text-box size, and runs Auto Size plus Auto Layout through the trusted Text Service. Use the inspection fontAvailability summary; do not guess installed fonts or font paths.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { enum: ["reflow", "replace"] },
+        label: { type: "string", minLength: 1, maxLength: 256 },
+        pageId: { type: "string", minLength: 1, maxLength: 256 },
+        nodeIds: {
+          type: "array",
+          minItems: 1,
+          maxItems: 1_000,
+          uniqueItems: true,
+          items: { type: "string", minLength: 1, maxLength: 256 },
+        },
+        expectedFont: MODEL_FONT_DESCRIPTOR_SCHEMA,
+        replacementFont: MODEL_FONT_DESCRIPTOR_SCHEMA,
+      },
+      oneOf: [
+        {
+          properties: {
+            action: { const: "reflow" },
+            label: { type: "string", minLength: 1, maxLength: 256 },
+            pageId: { type: "string", minLength: 1, maxLength: 256 },
+            nodeIds: {
+              type: "array",
+              minItems: 1,
+              maxItems: 1_000,
+              uniqueItems: true,
+              items: { type: "string", minLength: 1, maxLength: 256 },
+            },
+            expectedFont: MODEL_FONT_DESCRIPTOR_SCHEMA,
+          },
+          required: ["action", "label", "pageId", "nodeIds", "expectedFont"],
+          additionalProperties: false,
+        },
+        {
+          properties: {
+            action: { const: "replace" },
+            label: { type: "string", minLength: 1, maxLength: 256 },
+            pageId: { type: "string", minLength: 1, maxLength: 256 },
+            nodeIds: {
+              type: "array",
+              minItems: 1,
+              maxItems: 1_000,
+              uniqueItems: true,
+              items: { type: "string", minLength: 1, maxLength: 256 },
+            },
+            expectedFont: MODEL_FONT_DESCRIPTOR_SCHEMA,
+            replacementFont: MODEL_FONT_DESCRIPTOR_SCHEMA,
+          },
+          required: [
+            "action",
+            "label",
+            "pageId",
+            "nodeIds",
+            "expectedFont",
+            "replacementFont",
+          ],
+          additionalProperties: false,
+        },
+      ],
+      additionalProperties: false,
+    },
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: DESIGN_APPLY_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "available" as const,
@@ -2334,7 +2436,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       bootstrapInputSchema: DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
     },
     description:
-      "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. When one target needs several meaningful visible stages, provide ordered steps whose commandIds cover every command exactly once and in command order; use semantic units such as navigation, hero, content, and footer, never arbitrary 1–3 command batches. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed plus paragraphIndent, paragraphSpacing, textCase, textDecoration, textTruncation, and maxLines. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap choices and visible/clip overflow. textTruncation disabled requires maxLines null. Ending truncation requires clip overflow on Fixed text; maxLines may be null there to use the fixed text-box height. Ending truncation on Auto Size requires a positive maxLines. The trusted host measures Auto Size and derived ending ellipsis with the versioned Leafer Text provider while preserving the complete authored content and concrete authoritative size, so do not estimate glyph bounds or replace content with a literal ellipsis. A size update without an explicit non-fixed textResize switches that text layer to Fixed. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside the active Frame and do not recreate it. For planned region IDs, provide the declared Group/Frame kind and real content; the trusted host compiles canonical parent-local bounds. Every inserted planned region must include real editable content in the same transaction. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
+      "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. Use opendesign_manage_fonts for explicit file-font reflow or replacement so the general node schema stays compact. When one target needs several meaningful visible stages, provide ordered steps whose commandIds cover every command exactly once and in command order; use semantic units such as navigation, hero, content, and footer, never arbitrary 1–3 command batches. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed plus paragraphIndent, paragraphSpacing, textCase, textDecoration, textTruncation, and maxLines. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap choices and visible/clip overflow. textTruncation disabled requires maxLines null. Ending truncation requires clip overflow on Fixed text; maxLines may be null there to use the fixed text-box height. Ending truncation on Auto Size requires a positive maxLines. The trusted host measures Auto Size and derived ending ellipsis with the versioned Leafer Text provider while preserving the complete authored content and concrete authoritative size, so do not estimate glyph bounds or replace content with a literal ellipsis. A size update without an explicit non-fixed textResize switches that text layer to Fixed. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside the active Frame and do not recreate it. For planned region IDs, provide the declared Group/Frame kind and real content; the trusted host compiles canonical parent-local bounds. Every inserted planned region must include real editable content in the same transaction. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
     inputSchema: {
       ...MODEL_APPLY_TRANSACTION_SCHEMA,
     },
@@ -2393,6 +2495,9 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === DESIGN_VECTOR_TOOL_NAME) {
     return isDesignVectorToolInput(input);
+  }
+  if (toolName === DESIGN_FONT_TOOL_NAME) {
+    return isDesignFontToolInput(input);
   }
   if (toolName === DESIGN_PAGE_TOOL_NAME) {
     return normalizeDesignPageToolInput(input) !== undefined;
@@ -3174,6 +3279,58 @@ export function designApplyRequiresPlan(input: DesignApplyToolInput): boolean {
   return input.commands.some(
     (command) =>
       command.type === "insert_element" || command.type === "replace_subtree",
+  );
+}
+
+export function isDesignFontToolInput(
+  input: unknown,
+): input is DesignFontToolInput {
+  if (
+    !isRecord(input) ||
+    (input.action !== "reflow" && input.action !== "replace") ||
+    !safeLabel(input.label) ||
+    !safeId(input.pageId) ||
+    !Array.isArray(input.nodeIds) ||
+    input.nodeIds.length < 1 ||
+    input.nodeIds.length > 1_000 ||
+    !input.nodeIds.every(safeId) ||
+    new Set(input.nodeIds).size !== input.nodeIds.length ||
+    !isTextFontDescriptor(input.expectedFont)
+  ) {
+    return false;
+  }
+  if (input.action === "reflow") {
+    return exactKeys(input, [
+      "action",
+      "label",
+      "pageId",
+      "nodeIds",
+      "expectedFont",
+    ]);
+  }
+  return (
+    isTextFontDescriptor(input.replacementFont) &&
+    exactKeys(input, [
+      "action",
+      "label",
+      "pageId",
+      "nodeIds",
+      "expectedFont",
+      "replacementFont",
+    ])
+  );
+}
+
+function isTextFontDescriptor(value: unknown): value is TextFontDescriptor {
+  return (
+    isRecord(value) &&
+    typeof value.fontFamily === "string" &&
+    value.fontFamily.trim().length > 0 &&
+    value.fontFamily.length <= 4_096 &&
+    Number.isInteger(value.fontWeight) &&
+    Number(value.fontWeight) >= 1 &&
+    Number(value.fontWeight) <= 1_000 &&
+    exactKeys(value, ["fontFamily", "fontWeight"])
   );
 }
 

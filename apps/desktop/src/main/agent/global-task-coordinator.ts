@@ -1642,6 +1642,21 @@ function targetForCommand(
     }
     return source;
   }
+  if (command.type === "reflow_text") {
+    const targets = command.nodeIds.flatMap((nodeId) => {
+      const target = findTargetForNode(state, nodeId);
+      return target ? [target] : [];
+    });
+    const targetIds = new Set(
+      targets.map((target) => target.delivery.targetId),
+    );
+    if (targetIds.size > 1) {
+      throw new Error(
+        `Design command ${command.commandId} cannot reflow text across delivery artboards`,
+      );
+    }
+    return targets[0];
+  }
   const nodeId =
     command.type === "replace_subtree"
       ? command.rootNodeId
@@ -1680,6 +1695,13 @@ function commandBelongsToTarget(
       target.planned.artboard.frameId,
       insertedParents,
       target.artboardDescendantIds,
+    );
+  }
+  if (command.type === "reflow_text") {
+    return command.nodeIds.every(
+      (nodeId) =>
+        nodeId === target.planned.artboard.frameId ||
+        target.artboardDescendantIds.has(nodeId),
     );
   }
   const nodeId =

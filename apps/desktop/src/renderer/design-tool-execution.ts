@@ -39,6 +39,7 @@ import {
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
+  DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -49,6 +50,7 @@ import {
   isDesignArrangeToolInput,
   isDesignApplyToolInput,
   isDesignComponentToolInput,
+  isDesignFontToolInput,
   isDesignHierarchyToolInput,
   isDesignPageToolInput,
   isDesignVectorToolInput,
@@ -58,6 +60,7 @@ import {
   isInternalImportSvgToolInput,
   isInternalUpdateImageToolInput,
   type DesignComponentToolInput,
+  type DesignFontToolInput,
   type DesignPageToolInput,
 } from "../shared/design-agent-tools";
 import type {
@@ -100,6 +103,9 @@ type ExecuteDesignToolOptions = {
   ) => void;
   onCanvasWait?: (durationMs: number, configuredDelayMs: number) => void;
 };
+
+const MAX_INSPECTED_FONT_REQUESTS = 256;
+const MAX_INSPECTED_FONT_NODE_IDS = 1_000;
 
 export async function executeDesignToolRequest(
   request: RendererDesignToolRequest,
@@ -147,6 +153,7 @@ async function executeDesignToolRequestUnsafe(
           document,
           request.context.mutationTarget,
           request.context.scope,
+          runtime,
         ),
       },
     };
@@ -313,6 +320,60 @@ async function executeDesignToolRequestUnsafe(
         `Design revision conflict: expected ${request.context.revision}, current ${document.revision}`,
       );
     }
+  }
+
+  if (
+    request.call.toolName === DESIGN_FONT_TOOL_NAME &&
+    isDesignFontToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "Font",
+    );
+    assertFontInputPage(document, input);
+    const safeToolCallId =
+      request.call.toolCallId.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 96) ||
+      "tool";
+    const command: Extract<DesignOperation, { type: "reflow_text" }> = {
+      commandId: `font_${input.action}_${safeToolCallId}`.slice(0, 256),
+      type: "reflow_text",
+      nodeIds: [...input.nodeIds],
+      expectedFont: structuredClone(input.expectedFont),
+      ...(input.action === "replace"
+        ? { replacementFont: structuredClone(input.replacementFont) }
+        : {}),
+    };
+    const transaction = {
+      transactionId: `transaction_agent_font_${safeToolCallId}_${document.revision}`,
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: {
+        type: "agent",
+        id: `agent_${request.context.sessionId}`,
+        displayName: "OpenDesign Agent",
+      },
+      label: input.label,
+      commands: [command],
+    } satisfies DesignTransaction;
+    assertCommandsWithinMutationTarget(
+      document,
+      transaction.commands,
+      request.context.mutationTarget,
+    );
+    const preview = runtime.preview(transaction);
+    if (!preview.ok) {
+      throw designTransactionToolError(preview.error, transaction.commands);
+    }
+    return await executeSemanticDesignTransaction({
+      request,
+      runtime,
+      transaction,
+      preview,
+      execution: options,
+      createFailure: designTransactionToolError,
+    });
   }
 
   if (
@@ -1584,6 +1645,8 @@ function commandDirectlyTargetsNode(
     case "move_element":
     case "delete_element":
       return command.nodeId === nodeId;
+    case "reflow_text":
+      return command.nodeIds.includes(nodeId);
     case "replace_subtree":
       return command.nodes.some((node) => node.id === nodeId);
     default:
@@ -1610,6 +1673,7 @@ function createScopedInspection(
   document: DesignDocument,
   mutationTarget: DesignMutationTarget,
   selectionContext: SelectionScope,
+  runtime: EditorRuntime,
 ) {
   const nodeIds = mutationTargetNodeIds(document, mutationTarget);
   const pageIds =
@@ -1639,6 +1703,47 @@ function createScopedInspection(
       return node ? [[nodeId, structuredClone(node)]] : [];
     }),
   );
+  const fontRequests = new Map<
+    string,
+    { fontFamily: string; fontWeight: number; nodeIds: string[] }
+  >();
+  for (const node of Object.values(nodesById)) {
+    if (node.kind !== "text") continue;
+    const key = JSON.stringify([
+      node.properties.fontFamily,
+      node.properties.fontWeight,
+    ]);
+    const existing = fontRequests.get(key);
+    if (existing) {
+      existing.nodeIds.push(node.id);
+    } else {
+      fontRequests.set(key, {
+        fontFamily: node.properties.fontFamily,
+        fontWeight: node.properties.fontWeight,
+        nodeIds: [node.id],
+      });
+    }
+  }
+  const sortedFontRequests = [...fontRequests.values()].sort(
+    (left, right) =>
+      left.fontFamily.localeCompare(right.fontFamily) ||
+      left.fontWeight - right.fontWeight,
+  );
+  const fontAvailability = sortedFontRequests
+    .slice(0, MAX_INSPECTED_FONT_REQUESTS)
+    .map((font) => {
+      const nodeIds = font.nodeIds.sort((left, right) =>
+        left.localeCompare(right),
+      );
+      return {
+        fontFamily: font.fontFamily,
+        fontWeight: font.fontWeight,
+        nodeCount: nodeIds.length,
+        nodeIds: nodeIds.slice(0, MAX_INSPECTED_FONT_NODE_IDS),
+        nodeIdsTruncated: nodeIds.length > MAX_INSPECTED_FONT_NODE_IDS,
+        ...runtime.inspectTextFont(font),
+      };
+    });
   const assetIds = new Set<string>();
   for (const node of Object.values(nodesById)) {
     if (node.kind === "image") assetIds.add(node.properties.assetId);
@@ -1709,6 +1814,12 @@ function createScopedInspection(
       instancesById,
       ...variableInspection,
       ...styleInspection,
+      fontAvailability,
+      fontAvailabilitySummary: {
+        requestCount: sortedFontRequests.length,
+        returnedRequestCount: fontAvailability.length,
+        truncated: sortedFontRequests.length > fontAvailability.length,
+      },
       designSystemIds: {
         components: Object.keys(document.componentsById),
         variantSets: Object.keys(document.variantSetsById),
@@ -1855,6 +1966,19 @@ function assertComponentInputPage(
   }
 }
 
+function assertFontInputPage(
+  document: DesignDocument,
+  input: DesignFontToolInput,
+): void {
+  const ids = pageNodeIds(document, input.pageId);
+  const outsideNodeId = input.nodeIds.find((nodeId) => !ids.has(nodeId));
+  if (outsideNodeId) {
+    throw new Error(
+      `Font operation target ${outsideNodeId} is outside Page ${input.pageId}`,
+    );
+  }
+}
+
 function assertCommandsWithinMutationTarget(
   document: DesignDocument,
   commands: readonly DesignOperation[],
@@ -1959,6 +2083,12 @@ function assertCommandsWithinMutationTarget(
     if (command.type === "move_element") {
       assertNode(command.nodeId, command.commandId);
       assertTarget(command.pageId, command.parentId, command.commandId);
+      continue;
+    }
+    if (command.type === "reflow_text") {
+      command.nodeIds.forEach((nodeId) =>
+        assertNode(nodeId, command.commandId),
+      );
       continue;
     }
     const nodeId =

@@ -74,9 +74,10 @@ function normalizeModelDesignOperation(
     return undefined;
   }
   if (command.type === "replace_subtree" && Array.isArray(command.nodes)) {
+    const rawNodes = command.nodes as unknown[];
     const normalized = {
       ...command,
-      nodes: command.nodes.map((node) =>
+      nodes: rawNodes.map((node) =>
         isRecord(node) ? { exportSettings: [], ...node } : node,
       ),
     };
@@ -243,6 +244,7 @@ function isPermittedApplyOperation(
   internal: boolean,
 ): boolean {
   return (
+    command.type !== "reflow_text" &&
     command.type !== "insert_page" &&
     command.type !== "update_page" &&
     command.type !== "move_page" &&

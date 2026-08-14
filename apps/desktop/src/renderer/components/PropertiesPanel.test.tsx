@@ -26,6 +26,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import type { ComponentInspectorContext } from "./properties/ComponentSection";
 import type { SvgInterchangeFeedback } from "../features/import-export/types";
 import type { UpdatePropertiesPatch } from "../features/editor/types";
+import type { FontInspectorContext } from "./properties/TypographySection";
 
 function renderPanel(
   options: {
@@ -98,6 +99,7 @@ function renderPanel(
       layoutGuides: readonly LayoutGuide[],
     ) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
+    fontContext?: FontInspectorContext;
   } = {},
 ) {
   const onCancelSvgOperation = vi.fn();
@@ -122,6 +124,7 @@ function renderPanel(
           layoutMode={options.layoutMode ?? null}
           componentContext={options.componentContext}
           document={createWelcomeDocument()}
+          fontContext={options.fontContext}
           node={options.node}
           onArrange={onArrange}
           onAddToVariantSet={options.onAddToVariantSet ?? vi.fn()}
@@ -1659,6 +1662,91 @@ describe("PropertiesPanel regular-shape workflow", () => {
 });
 
 describe("PropertiesPanel text layout workflow", () => {
+  it("distinguishes available and unknown fonts and disables meaningless reflow", () => {
+    const context = {
+      matchingNodeCount: 1,
+      reflowableNodeCount: 0,
+      onReflow: vi.fn(),
+      onReplace: vi.fn(),
+    };
+    renderPanel({
+      node: textNode,
+      selectionCount: 1,
+      fontContext: {
+        ...context,
+        availability: {
+          status: "available",
+          provider: "test-font-provider",
+          providerVersion: "3",
+          message: "Inter is loaded",
+        },
+      },
+    });
+
+    expect(screen.getByText("Font available")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reflow" })).toBeDisabled();
+    expect(
+      screen.queryByLabelText("Replacement font family"),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    renderPanel({
+      node: textNode,
+      selectionCount: 1,
+      fontContext: {
+        ...context,
+        availability: {
+          status: "unknown",
+          provider: "test-font-provider",
+          providerVersion: "3",
+          message: "System font enumeration is unavailable",
+        },
+      },
+    });
+    expect(screen.getByText("Font availability unknown")).toBeVisible();
+    expect(screen.getByLabelText("Replacement font family")).toBeVisible();
+  });
+
+  it("shows trusted missing-font state and submits explicit reflow or file-wide replacement", async () => {
+    const user = userEvent.setup();
+    const onReflow = vi.fn();
+    const onReplace = vi.fn();
+    renderPanel({
+      node: textNode,
+      selectionCount: 1,
+      fontContext: {
+        availability: {
+          status: "missing",
+          provider: "test-font-provider",
+          providerVersion: "3",
+          message: "Inter is not loaded",
+        },
+        matchingNodeCount: 3,
+        reflowableNodeCount: 2,
+        onReflow,
+        onReplace,
+      },
+    });
+
+    expect(screen.getByText("Font missing — fallback rendered")).toBeVisible();
+    expect(
+      screen.getByText("3 matching text layers in this file"),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Reflow" }));
+    expect(onReflow).toHaveBeenCalledTimes(1);
+
+    const replacement = screen.getByLabelText("Replacement font family");
+    await user.type(replacement, "IBM Plex Sans");
+    await user.tab();
+    await user.click(
+      screen.getByRole("button", { name: "Replace 3 matching layers" }),
+    );
+    expect(onReplace).toHaveBeenCalledWith({
+      fontFamily: "IBM Plex Sans",
+      fontWeight: 500,
+    });
+  });
+
   it("edits Typography Core fields through one text section", async () => {
     const user = userEvent.setup();
     const { onUpdate } = renderPanel({ node: textNode, selectionCount: 1 });

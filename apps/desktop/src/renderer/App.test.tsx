@@ -78,6 +78,17 @@ const leaferHarness = vi.hoisted(() => ({
     },
     warnings: [],
   })),
+  inspectFont: vi.fn(
+    (descriptor: { fontFamily: string; fontWeight: number }) => ({
+      status:
+        descriptor.fontFamily === "Inter"
+          ? ("missing" as const)
+          : ("available" as const),
+      provider: "test-text-layout",
+      providerVersion: "1",
+      message: `${descriptor.fontFamily} availability`,
+    }),
+  ),
 }));
 
 vi.mock("@opendesign/leafer-engine", () => ({
@@ -97,6 +108,7 @@ vi.mock("@opendesign/leafer-engine", () => ({
         textLayoutProvider: {
           id: "test-text-layout",
           version: "1",
+          inspectFont: leaferHarness.inspectFont,
           measure: leaferHarness.measureText,
         },
         sync: (input: LeaferEngineSyncInput) => {
@@ -147,6 +159,7 @@ beforeEach(() => {
   leaferHarness.retryBooleanGeometry.mockClear();
   leaferHarness.setVectorPointMode.mockClear();
   leaferHarness.measureText.mockClear();
+  leaferHarness.inspectFont.mockClear();
   svgHarness.runImport.mockReset();
   svgHarness.runExport.mockReset();
   captureHarness.capture.mockReset();
@@ -560,6 +573,48 @@ function globalTask(
 }
 
 describe("App", () => {
+  it("replaces every exact file-font match in one undoable transaction", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    act(() => runtime().setSelection(["title_welcome"], "title_welcome"));
+    await user.click(screen.getByRole("tab", { name: "Properties" }));
+
+    expect(
+      await screen.findByText("Font missing — fallback rendered"),
+    ).toBeVisible();
+    await user.type(
+      screen.getByLabelText("Replacement font family"),
+      "IBM Plex Sans",
+    );
+    await user.tab();
+    await user.click(
+      screen.getByRole("button", { name: "Replace 2 matching layers" }),
+    );
+
+    await waitFor(() =>
+      expect(runtime().getSnapshot().document.revision).toBe(1),
+    );
+    expect(
+      runtime().getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      properties: { fontFamily: "IBM Plex Sans", fontWeight: 600 },
+    });
+    expect(
+      runtime().getSnapshot().document.nodesById.subtitle_welcome,
+    ).toMatchObject({
+      properties: { fontFamily: "IBM Plex Sans", fontWeight: 600 },
+    });
+    expect(runtime().getSnapshot().state.history.undo).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({ properties: { fontFamily: "Inter", fontWeight: 600 } });
+    expect(
+      runtime().getSnapshot().document.nodesById.subtitle_welcome,
+    ).toMatchObject({ properties: { fontFamily: "Inter", fontWeight: 600 } });
+  });
+
   it("opens Settings without rebuilding the editor runtime", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -4689,23 +4744,30 @@ describe("App", () => {
     expect(request?.type).toBe("run.start");
     if (!request || request.type !== "run.start") return;
 
-    emitAgentEvent?.({
-      type: "run.started",
-      runId: request.runId,
-      startedAt: "2026-08-07T10:42:08.000Z",
-    });
-    emitAgentEvent?.({
-      type: "message.delta",
-      runId: request.runId,
-      messageId: "message_1",
-      blockId: "block_1",
-      delta: "Prepared a structured edit plan.",
-    });
-    emitAgentEvent?.({
-      type: "run.completed",
-      runId: request.runId,
-      finishedAt: "2026-08-07T10:42:11.000Z",
-      stopReason: "complete",
+    act(() => {
+      emitAgentEvent?.({
+        type: "run.started",
+        runId: request.runId,
+        startedAt: "2026-08-07T10:42:08.000Z",
+      });
+      emitAgentEvent?.({
+        type: "message.completed",
+        runId: request.runId,
+        messageId: "message_1",
+        blocks: [
+          {
+            blockId: "block_1",
+            type: "text",
+            text: "Prepared a structured edit plan.",
+          },
+        ],
+      });
+      emitAgentEvent?.({
+        type: "run.completed",
+        runId: request.runId,
+        finishedAt: "2026-08-07T10:42:11.000Z",
+        stopReason: "complete",
+      });
     });
 
     expect(
@@ -4922,7 +4984,7 @@ describe("App", () => {
         delta: "Partial design response",
       });
     });
-    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(0);
     act(() => {
       emitAgentEvent?.({
         type: "agent.error",
@@ -4987,14 +5049,11 @@ describe("App", () => {
         delta: "Retry response",
       });
     });
-    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(0);
     expect(
-      screen.getByText("Partial design response").closest("li"),
-    ).toHaveAttribute("data-state", "done");
-    expect(screen.getByText("Retry response").closest("li")).toHaveAttribute(
-      "data-state",
-      "active",
-    );
+      screen.queryByText("Partial design response"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Retry response")).not.toBeInTheDocument();
   });
 
   it("unlocks every active Conversation when the Agent process exits", async () => {
@@ -5021,7 +5080,7 @@ describe("App", () => {
         delta: "Interrupted by process exit",
       });
     });
-    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(0);
     act(() => {
       emitAgentEvent?.({
         type: "agent.error",

@@ -3,7 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 import { AgentContinuationSchemas } from "./continuation.js";
 export type { AgentRunContinuation } from "./continuation.js";
 
-export const AGENT_PROTOCOL_VERSION = "3.10.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.11.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
 export const MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS = 60_000;
 export const MAX_AGENT_ATTACHMENTS = 6;

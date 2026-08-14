@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   memoizeTextLayoutProvider,
+  validateTextFontAvailabilityResult,
+  validateTextFontDescriptor,
   validateTextLayoutRequest,
   validateTextLayoutResult,
   type TextLayoutProvider,
@@ -26,6 +28,34 @@ const autoHeight: TextLayoutRequest = {
 };
 
 describe("text layout service contract", () => {
+  it("validates bounded font descriptors and availability facts", () => {
+    expect(
+      validateTextFontDescriptor({ fontFamily: "Inter", fontWeight: 500 }),
+    ).toBeNull();
+    expect(
+      validateTextFontDescriptor({ fontFamily: "", fontWeight: 500 }),
+    ).toContain("font family");
+    expect(
+      validateTextFontDescriptor({ fontFamily: "Inter", fontWeight: 1_001 }),
+    ).toContain("1 to 1000");
+    expect(
+      validateTextFontAvailabilityResult({
+        status: "missing",
+        provider: "test-provider",
+        providerVersion: "1",
+        message: "The requested face is not loaded",
+      }),
+    ).toBeNull();
+    expect(
+      validateTextFontAvailabilityResult({
+        status: "maybe",
+        provider: "test-provider",
+        providerVersion: "1",
+        message: "Unknown state",
+      }),
+    ).toContain("invalid result");
+  });
+
   it("accepts canonical Auto Width and Auto Height requests", () => {
     expect(validateTextLayoutRequest(autoHeight)).toBeNull();
     expect(
@@ -101,6 +131,37 @@ describe("text layout service contract", () => {
 
     expect(provider.measure(autoHeight)).toEqual(provider.measure(autoHeight));
     expect(measure).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards uncached font availability inspection", () => {
+    const inspectFont = vi.fn<NonNullable<TextLayoutProvider["inspectFont"]>>(
+      () => ({
+        status: "available",
+        provider: "test-provider",
+        providerVersion: "1.0.0",
+        message: "The requested face is loaded",
+      }),
+    );
+    const provider = memoizeTextLayoutProvider({
+      id: "test-provider",
+      version: "1.0.0",
+      inspectFont,
+      measure: () => ({
+        ok: true,
+        provider: "test-provider",
+        providerVersion: "1.0.0",
+        size: { width: 240, height: 64 },
+        warnings: [],
+      }),
+    });
+
+    expect(
+      provider.inspectFont?.({ fontFamily: "Inter", fontWeight: 500 }),
+    ).toMatchObject({ status: "available" });
+    expect(
+      provider.inspectFont?.({ fontFamily: "Inter", fontWeight: 500 }),
+    ).toMatchObject({ status: "available" });
+    expect(inspectFont).toHaveBeenCalledTimes(2);
   });
 
   it("uses real LRU recency instead of FIFO eviction", () => {

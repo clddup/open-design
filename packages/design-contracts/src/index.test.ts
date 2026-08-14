@@ -322,6 +322,36 @@ describe("design contract schemas", () => {
     ).toBe(false);
   });
 
+  it("validates bounded explicit text reflow without admitting duplicate targets", () => {
+    const reflow = {
+      commandId: "reflow_inter",
+      type: "reflow_text",
+      nodeIds: ["title", "subtitle"],
+      expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+      replacementFont: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+    };
+
+    expect(Value.Check(DesignOperationSchema, reflow)).toBe(true);
+    expect(
+      Value.Check(DesignOperationSchema, {
+        ...reflow,
+        nodeIds: ["title", "title"],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignOperationSchema, {
+        ...reflow,
+        expectedFont: { fontFamily: "Inter", fontWeight: 0 },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignOperationSchema, {
+        ...reflow,
+        fontPath: "/Library/Fonts/Inter.ttf",
+      }),
+    ).toBe(false);
+  });
+
   it("rejects cyclic JSON values without throwing", () => {
     const extensions: Record<string, unknown> = {};
     extensions.self = extensions;

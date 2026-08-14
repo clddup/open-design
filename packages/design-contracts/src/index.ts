@@ -950,6 +950,29 @@ export const ReplaceSubtreeCommandSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const TextFontDescriptorSchema = Type.Object(
+  {
+    fontFamily: Type.String({ minLength: 1, maxLength: 4_096 }),
+    fontWeight: Type.Integer({ minimum: 1, maximum: 1_000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const ReflowTextCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("reflow_text"),
+    nodeIds: Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {
+      minItems: 1,
+      maxItems: 1_000,
+      uniqueItems: true,
+    }),
+    expectedFont: TextFontDescriptorSchema,
+    replacementFont: Type.Optional(TextFontDescriptorSchema),
+  },
+  { additionalProperties: false },
+);
+
 export const PutAssetCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1029,6 +1052,7 @@ export const NodeDesignOperationSchema: TUnion<
     typeof MoveElementCommandSchema,
     typeof DeleteElementCommandSchema,
     typeof ReplaceSubtreeCommandSchema,
+    typeof ReflowTextCommandSchema,
   ]
 > = Type.Union([
   InsertElementCommandSchema,
@@ -1036,6 +1060,7 @@ export const NodeDesignOperationSchema: TUnion<
   MoveElementCommandSchema,
   DeleteElementCommandSchema,
   ReplaceSubtreeCommandSchema,
+  ReflowTextCommandSchema,
 ]);
 
 export const DesignOperationSchema: TUnion<
@@ -1482,6 +1507,7 @@ export const DesignCapabilitiesSchema = Type.Object(
         Type.Literal("move_element"),
         Type.Literal("delete_element"),
         Type.Literal("replace_subtree"),
+        Type.Literal("reflow_text"),
         Type.Literal("put_asset"),
         Type.Literal("delete_asset"),
       ]),
@@ -1615,6 +1641,8 @@ export type UpdatePropertiesCommand = Static<
 export type MoveElementCommand = Static<typeof MoveElementCommandSchema>;
 export type DeleteElementCommand = Static<typeof DeleteElementCommandSchema>;
 export type ReplaceSubtreeCommand = Static<typeof ReplaceSubtreeCommandSchema>;
+export type TextFontDescriptor = Static<typeof TextFontDescriptorSchema>;
+export type ReflowTextCommand = Static<typeof ReflowTextCommandSchema>;
 export type PutAssetCommand = Static<typeof PutAssetCommandSchema>;
 export type DeleteAssetCommand = Static<typeof DeleteAssetCommandSchema>;
 export type PutComponentCommand = Static<typeof PutComponentCommandSchema>;

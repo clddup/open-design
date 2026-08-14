@@ -12,6 +12,37 @@ import { createWelcomeDocument } from "./document.js";
 import { EditorRuntime } from "./runtime.js";
 
 describe("EditorRuntime text Auto Size", () => {
+  it("projects provider-owned font availability without persisting environment state", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const runtime = new EditorRuntime(document, {
+      textLayoutProvider: {
+        id: "test-text-layout",
+        version: "3",
+        inspectFont: (font) => ({
+          status: font.fontFamily === "Inter" ? "available" : "missing",
+          provider: "test-text-layout",
+          providerVersion: "3",
+          message: `${font.fontFamily} availability`,
+        }),
+        measure: () => ({
+          ok: true,
+          provider: "test-text-layout",
+          providerVersion: "3",
+          size: { width: 120, height: 32 },
+          warnings: [],
+        }),
+      },
+    });
+
+    expect(
+      runtime.inspectTextFont({ fontFamily: "Inter", fontWeight: 600 }),
+    ).toMatchObject({ status: "available" });
+    expect(
+      runtime.inspectTextFont({ fontFamily: "Missing Sans", fontWeight: 400 }),
+    ).toMatchObject({ status: "missing" });
+    expect(runtime.getSnapshot().document).toEqual(document);
+  });
+
   it("measures Auto Width identically for preview/apply and persists undoable concrete bounds", () => {
     const measure = vi.fn<TextLayoutProvider["measure"]>((request) => ({
       ok: true,
@@ -310,6 +341,181 @@ describe("EditorRuntime text Auto Size", () => {
       size: { width: 196, height: 40 },
       properties: { textResize: "auto-width" },
     });
+  });
+
+  it("replaces matching fonts atomically, reflows Auto Size text, and preserves Fixed bounds", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const subtitle = document.nodesById.subtitle_welcome;
+    if (!subtitle || subtitle.kind !== "text")
+      throw new Error("Missing subtitle");
+    subtitle.properties.textResize = "auto-height";
+    subtitle.properties.textWrap = "word";
+    subtitle.properties.textOverflow = "visible";
+    const originalTitleSize = structuredClone(
+      document.nodesById.title_welcome?.size,
+    );
+    const runtime = new EditorRuntime(document, {
+      textLayoutProvider: {
+        id: "test-text-layout",
+        version: "3",
+        inspectFont: (font) => ({
+          status: font.fontFamily === "IBM Plex Sans" ? "available" : "missing",
+          provider: "test-text-layout",
+          providerVersion: "3",
+          message: `${font.fontFamily} availability`,
+        }),
+        measure: (request) => ({
+          ok: true,
+          provider: "test-text-layout",
+          providerVersion: "3",
+          size: { width: request.width ?? 300, height: 88 },
+          warnings: [],
+        }),
+      },
+    });
+
+    const result = apply(runtime, "replace_font", {
+      commandId: "replace_inter",
+      type: "reflow_text",
+      nodeIds: ["title_welcome", "subtitle_welcome"],
+      expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+      replacementFont: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+    });
+
+    expect(result).toMatchObject({ ok: true, warnings: [] });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      size: originalTitleSize,
+      properties: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.subtitle_welcome,
+    ).toMatchObject({
+      size: { width: subtitle.size.width, height: 88 },
+      properties: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+    });
+    expect(runtime.undo()).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      properties: { fontFamily: "Inter", fontWeight: 600 },
+    });
+    expect(runtime.redo()).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      properties: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+    });
+  });
+
+  it("fails reflow atomically for stale, locked, missing, unavailable, and no-op requests", () => {
+    const provider: TextLayoutProvider = {
+      id: "test-text-layout",
+      version: "3",
+      inspectFont: (font) => ({
+        status: font.fontFamily === "Missing Sans" ? "missing" : "available",
+        provider: "test-text-layout",
+        providerVersion: "3",
+        message: `${font.fontFamily} availability`,
+      }),
+      measure: (request) => ({
+        ok: true,
+        provider: "test-text-layout",
+        providerVersion: "3",
+        size: { width: request.width ?? 720, height: 72 },
+        warnings: [],
+      }),
+    };
+    const assertUnchanged = (
+      runtime: EditorRuntime,
+      id: string,
+      command: DesignTransaction["commands"][number],
+      expected: object,
+    ) => {
+      const revision = runtime.getSnapshot().document.revision;
+      expect(apply(runtime, id, command)).toMatchObject(expected);
+      expect(runtime.getSnapshot().document.revision).toBe(revision);
+    };
+
+    const stale = new EditorRuntime(createWelcomeDocument(), {
+      textLayoutProvider: provider,
+    });
+    assertUnchanged(
+      stale,
+      "stale_font",
+      {
+        commandId: "stale_font_command",
+        type: "reflow_text",
+        nodeIds: ["title_welcome"],
+        expectedFont: { fontFamily: "Other", fontWeight: 600 },
+        replacementFont: { fontFamily: "Available Sans", fontWeight: 400 },
+      },
+      { ok: false, error: { code: "conflict", retryable: true } },
+    );
+
+    const lockedDocument = structuredClone(createWelcomeDocument());
+    lockedDocument.nodesById.frame_welcome!.locked = true;
+    const locked = new EditorRuntime(lockedDocument, {
+      textLayoutProvider: provider,
+    });
+    assertUnchanged(
+      locked,
+      "locked_font",
+      {
+        commandId: "locked_font_command",
+        type: "reflow_text",
+        nodeIds: ["title_welcome"],
+        expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+        replacementFont: { fontFamily: "Available Sans", fontWeight: 400 },
+      },
+      { ok: false, error: { code: "permission-denied" } },
+    );
+
+    const missing = new EditorRuntime(createWelcomeDocument(), {
+      textLayoutProvider: provider,
+    });
+    assertUnchanged(
+      missing,
+      "missing_font",
+      {
+        commandId: "missing_font_command",
+        type: "reflow_text",
+        nodeIds: ["title_welcome"],
+        expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+        replacementFont: { fontFamily: "Missing Sans", fontWeight: 400 },
+      },
+      { ok: false, error: { details: { code: "font-missing" } } },
+    );
+
+    const unavailable = new EditorRuntime(createWelcomeDocument());
+    assertUnchanged(
+      unavailable,
+      "unavailable_font",
+      {
+        commandId: "unavailable_font_command",
+        type: "reflow_text",
+        nodeIds: ["title_welcome"],
+        expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+        replacementFont: { fontFamily: "Available Sans", fontWeight: 400 },
+      },
+      { ok: false, error: { code: "engine-failure", retryable: true } },
+    );
+
+    const noOp = new EditorRuntime(createWelcomeDocument(), {
+      textLayoutProvider: provider,
+    });
+    assertUnchanged(
+      noOp,
+      "no_op_font",
+      {
+        commandId: "no_op_font_command",
+        type: "reflow_text",
+        nodeIds: ["title_welcome"],
+        expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+      },
+      { ok: false, error: { details: { code: "no-op" } } },
+    );
   });
 });
 

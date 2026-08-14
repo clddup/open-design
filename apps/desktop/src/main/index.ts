@@ -103,6 +103,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -117,6 +118,7 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   normalizeDesignApplyToolInput,
   isDesignComponentToolInput,
+  isDesignFontToolInput,
   normalizeDesignPageToolInput,
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
@@ -1582,6 +1584,25 @@ void app.whenReady().then(async () => {
           context.runId,
           resolvedInput,
           authorization,
+          result.designRevision?.revision,
+        );
+        return withDesignDelivery(result, context.runId);
+      }
+      if (call.toolName === DESIGN_FONT_TOOL_NAME) {
+        if (!isDesignFontToolInput(call.input)) {
+          throw new TypeError("Invalid font tool input");
+        }
+        globalTaskCoordinator.assertDocumentInspected(context);
+        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        const targetIds =
+          globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
+            context,
+            call.input.nodeIds,
+          );
+        const result = await executeRendererTool(call);
+        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+          context.runId,
+          targetIds,
           result.designRevision?.revision,
         );
         return withDesignDelivery(result, context.runId);

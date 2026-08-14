@@ -679,7 +679,7 @@
         "en": "Create, render, transform, and edit fixed, Auto Width, or Auto Height text with one shared font style, alignment, explicit wrapping, and fixed-box overflow controls.",
         "zh-CN": "创建、渲染、变换和编辑固定、自动宽度或自动高度文字，使用单一共享字体样式、对齐、明确换行以及固定框溢出控制。"
       },
-      "provider": "DesignDocument 1.29.0 + Text Layout Service v2 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v4",
+      "provider": "DesignDocument 1.29.0 + Text Layout Service v3 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v4",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -691,8 +691,8 @@
       },
       "limitations": [
         {
-          "en": "Font assets/replacement, explicit reflow after font availability changes, exact cross-platform shaping, and macOS/Windows visual acceptance remain unavailable.",
-          "zh-CN": "字体资源与替换、字体可用性改变后的显式重排、精确跨平台 shaping，以及 macOS/Windows 视觉验收仍未完成。"
+          "en": "Runtime font availability, exact file-wide replacement, and explicit Auto Size reflow are available through one revision/undo. Font binary assets, style-specific FontName identity, exact cross-platform shaping, and macOS/Windows visual acceptance remain unavailable.",
+          "zh-CN": "运行时字体可用性、全文件精确替换与显式 Auto Size 重排已通过单次 revision/undo 可用；字体二进制资源、包含 style 的完整 FontName 身份、精确跨平台 shaping 及 macOS/Windows 视觉验收仍未完成。"
         }
       ],
       "evidence": {
@@ -729,7 +729,7 @@
         "en": "Apply document-wide Typography Core properties and reusable Text Styles while preserving explicit limits for rich runs, lists, OpenType, and font assets.",
         "zh-CN": "应用文档级 Typography Core 属性和可复用 Text Style，并明确保留富文本 run、列表、OpenType 与字体资源限制。"
       },
-      "provider": "@opendesign/text-service v2 + leafer-editor 2.2.9",
+      "provider": "@opendesign/text-service v3 + leafer-editor 2.2.9",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "degraded",
@@ -741,8 +741,8 @@
       },
       "limitations": [
         {
-          "en": "Core v2 supports paragraph indent/spacing, case, decoration, ending truncation/max-lines, and reusable single-style Text Styles; per-range rich text, lists, OpenType features, variable-font axes, font assets/replacement, text-on-path, and deterministic cross-platform shaping remain unavailable.",
-          "zh-CN": "Core v2 已支持段落缩进/间距、大小写、装饰、末尾截断/最大行数和可复用单样式 Text Style；逐段富文本、列表、OpenType 特性、可变字体轴、字体资源/替换、路径文字和确定性跨平台 shaping 仍不可用。"
+          "en": "Core v2 plus Text Service v3 supports paragraph indent/spacing, case, decoration, ending truncation/max-lines, reusable single-style Text Styles, runtime font availability, file-wide replacement, and explicit reflow; per-range rich text, lists, OpenType features, variable-font axes, font binary assets, text-on-path, and deterministic cross-platform shaping remain unavailable.",
+          "zh-CN": "Core v2 与 Text Service v3 已支持段落缩进/间距、大小写、装饰、末尾截断/最大行数、可复用单样式 Text Style、运行时字体可用性、全文件替换和显式重排；逐段富文本、列表、OpenType 特性、可变字体轴、字体二进制资源、路径文字和确定性跨平台 shaping 仍不可用。"
         }
       ],
       "evidence": {

@@ -7,6 +7,10 @@ import type {
 } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
 import type {
+  TextFontDescriptor,
+  TextLayoutProvider,
+} from "@opendesign/text-service";
+import type {
   ComponentOverridePatch,
   DesignDocument,
 } from "@opendesign/design-contracts";
@@ -154,6 +158,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     null,
   );
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [textLayoutProviderEpoch, setTextLayoutProviderEpoch] = useState(0);
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
   );
@@ -194,6 +199,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           autosaveCallbacks.current.onSaved(target, saved),
       }),
     [],
+  );
+  const handleTextLayoutProviderReady = useCallback(
+    (provider: TextLayoutProvider) => {
+      workspace.setTextLayoutProvider(provider);
+      setTextLayoutProviderEpoch((current) => current + 1);
+    },
+    [workspace],
   );
   useProfessionalFixtureSmoke({
     activatePage,
@@ -624,6 +636,59 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       transactionCounter,
     });
   const { applyCommands, resizeFrame, updateNode } = editorCommands;
+  const fontInspectorContext = useMemo(() => {
+    if (!selectedNode || selectedNode.kind !== "text") return undefined;
+    const expectedFont: TextFontDescriptor = {
+      fontFamily: selectedNode.properties.fontFamily,
+      fontWeight: selectedNode.properties.fontWeight,
+    };
+    const matching = Object.values(designDocument.nodesById).filter(
+      (node) =>
+        node.kind === "text" &&
+        node.properties.fontFamily === expectedFont.fontFamily &&
+        node.properties.fontWeight === expectedFont.fontWeight,
+    );
+    const reflowable = matching.filter(
+      (node) => node.kind === "text" && node.properties.textResize !== "fixed",
+    );
+    const applyFont = (
+      nodeIds: readonly string[],
+      replacementFont?: TextFontDescriptor,
+    ) => {
+      if (nodeIds.length === 0) return;
+      applyCommands(
+        t(replacementFont ? "history.replaceFont" : "history.reflowFont"),
+        [
+          {
+            commandId: `font_reflow_${Date.now()}_${++transactionCounter.current}`,
+            type: "reflow_text",
+            nodeIds: [...nodeIds],
+            expectedFont,
+            ...(replacementFont ? { replacementFont } : {}),
+          },
+        ],
+      );
+    };
+    return {
+      availability: runtime.inspectTextFont(expectedFont),
+      matchingNodeCount: matching.length,
+      reflowableNodeCount: reflowable.length,
+      onReflow: () => applyFont(reflowable.map((node) => node.id)),
+      onReplace: (replacementFont: TextFontDescriptor) =>
+        applyFont(
+          matching.map((node) => node.id),
+          replacementFont,
+        ),
+    };
+  }, [
+    applyCommands,
+    designDocument.nodesById,
+    runtime,
+    selectedNode,
+    t,
+    textLayoutProviderEpoch,
+    transactionCounter,
+  ]);
 
   const {
     applyBooleanOperation,
@@ -1824,7 +1889,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               generationActivity={generationActivity}
               onTransactionError={setEditorError}
               onAssetDrop={placeImageAssetAtPoint}
-              onTextLayoutProviderReady={workspace.setTextLayoutProvider}
+              onTextLayoutProviderReady={handleTextLayoutProviderReady}
               onResizeFrame={resizeFrame}
               runtime={runtime}
               snapshot={snapshot}
@@ -1951,6 +2016,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onRasterExportSettingsChange={
                   importExport.setRasterExportSettings
                 }
+                fontContext={fontInspectorContext}
                 exportFormat={importExport.exportFormat}
                 rasterExportSettings={importExport.rasterExportSettings}
                 rasterFeedback={importExport.rasterFeedback}

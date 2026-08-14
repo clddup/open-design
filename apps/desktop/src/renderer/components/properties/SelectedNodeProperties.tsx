@@ -33,6 +33,7 @@ import {
 import { ImageSection } from "./ImageSection";
 import { LayoutGuidesSection } from "./LayoutGuidesSection";
 import { TypographySection } from "./TypographySection";
+import type { FontInspectorContext } from "./TypographySection";
 import { VariableSection } from "./VariableSection";
 import { StyleReferencesSection } from "./StyleReferencesSection";
 import { Field, Section, commitNumber, formatNumber } from "./controls";
@@ -147,6 +148,7 @@ export function SelectedNodeProperties({
   onSetVariableBinding,
   onSetVariableMode,
   styleActions,
+  fontContext,
 }: {
   node: DesignNode;
   activePageId: string;
@@ -241,6 +243,7 @@ export function SelectedNodeProperties({
   ) => void;
   onSetVariableMode: (collectionId: string, modeId: string | null) => void;
   styleActions?: StyleActions;
+  fontContext?: FontInspectorContext;
 }) {
   const { t } = useI18n();
   const flowPositioned =
@@ -781,7 +784,11 @@ export function SelectedNodeProperties({
         />
       )}
       {node.kind === "text" && (
-        <TypographySection node={node} onUpdate={onUpdate} />
+        <TypographySection
+          fontContext={fontContext}
+          node={node}
+          onUpdate={onUpdate}
+        />
       )}
       <PaintAndEffectsSections
         appearanceControlled={booleanOperandParent !== undefined}

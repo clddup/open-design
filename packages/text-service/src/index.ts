@@ -1,4 +1,4 @@
-export const TEXT_LAYOUT_SERVICE_CONTRACT_VERSION = 2 as const;
+export const TEXT_LAYOUT_SERVICE_CONTRACT_VERSION = 3 as const;
 export const MAX_TEXT_LAYOUT_CHARACTERS = 1_000_000;
 export const MAX_TEXT_LAYOUT_CACHE_KEY_CHARACTERS = 4_000_000;
 export const MAX_TEXT_LAYOUT_DIMENSION = 1_000_000;
@@ -13,6 +13,20 @@ export type TextLayoutCase =
   "original" | "uppercase" | "lowercase" | "title-case" | "small-caps";
 export type TextLayoutDecoration = "none" | "underline" | "strikethrough";
 export type TextLayoutTruncation = "disabled" | "ending";
+
+export interface TextFontDescriptor {
+  fontFamily: string;
+  fontWeight: number;
+}
+
+export type TextFontAvailabilityStatus = "available" | "missing" | "unknown";
+
+export interface TextFontAvailabilityResult {
+  status: TextFontAvailabilityStatus;
+  provider: string;
+  providerVersion: string;
+  message: string;
+}
 
 export interface TextLayoutRequest {
   content: string;
@@ -59,7 +73,51 @@ export type TextLayoutResult =
 export interface TextLayoutProvider {
   readonly id: string;
   readonly version: string;
+  inspectFont?(descriptor: TextFontDescriptor): TextFontAvailabilityResult;
   measure(request: TextLayoutRequest): TextLayoutResult;
+}
+
+export function validateTextFontDescriptor(
+  descriptor: TextFontDescriptor,
+): string | null {
+  if (
+    typeof descriptor.fontFamily !== "string" ||
+    descriptor.fontFamily.trim().length === 0 ||
+    descriptor.fontFamily.length > MAX_TEXT_LAYOUT_FONT_FAMILY_CHARACTERS
+  ) {
+    return "Font inspection requires a bounded non-empty font family";
+  }
+  if (
+    !Number.isInteger(descriptor.fontWeight) ||
+    descriptor.fontWeight < 1 ||
+    descriptor.fontWeight > 1_000
+  ) {
+    return "Font inspection weight must be an integer from 1 to 1000";
+  }
+  return null;
+}
+
+export function validateTextFontAvailabilityResult(
+  value: unknown,
+): string | null {
+  if (
+    !isRecord(value) ||
+    (value.status !== "available" &&
+      value.status !== "missing" &&
+      value.status !== "unknown") ||
+    typeof value.provider !== "string" ||
+    value.provider.length === 0 ||
+    value.provider.length > MAX_TEXT_LAYOUT_PROVIDER_ID_CHARACTERS ||
+    typeof value.providerVersion !== "string" ||
+    value.providerVersion.length === 0 ||
+    value.providerVersion.length > MAX_TEXT_LAYOUT_PROVIDER_ID_CHARACTERS ||
+    typeof value.message !== "string" ||
+    value.message.length === 0 ||
+    value.message.length > MAX_TEXT_LAYOUT_MESSAGE_CHARACTERS
+  ) {
+    return "Font availability provider returned an invalid result";
+  }
+  return null;
 }
 
 export function validateTextLayoutRequest(
@@ -230,6 +288,13 @@ export function memoizeTextLayoutProvider(
   return {
     id: provider.id,
     version: provider.version,
+    ...(provider.inspectFont
+      ? {
+          inspectFont(descriptor: TextFontDescriptor) {
+            return structuredClone(provider.inspectFont!(descriptor));
+          },
+        }
+      : {}),
     measure(request) {
       const key = JSON.stringify(request);
       const cached = results.get(key);

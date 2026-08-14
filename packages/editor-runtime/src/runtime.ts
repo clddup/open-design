@@ -24,7 +24,10 @@ import {
   type ViewportState,
 } from "@opendesign/design-contracts";
 import {
+  validateTextFontAvailabilityResult,
   validateTextLayoutResult,
+  type TextFontAvailabilityResult,
+  type TextFontDescriptor,
   type TextLayoutProvider,
   type TextLayoutRequest,
 } from "@opendesign/text-service";
@@ -41,6 +44,7 @@ import {
   normalizeTextResizeProperties,
   textLayoutAffected,
 } from "./text-layout-operations.js";
+import { isEffectivelyLocked } from "./layer-operations.js";
 import { synchronizeComponentPropertyDefaults } from "./component-property-defaults.js";
 import { applySlotStretchOnInsert } from "./component-slot-operations.js";
 import { OperationError } from "./operation-error.js";
@@ -167,6 +171,42 @@ export class EditorRuntime {
 
   setTextLayoutProvider(provider: TextLayoutProvider): void {
     this.#textLayoutProvider = provider;
+  }
+
+  inspectTextFont(descriptor: TextFontDescriptor): TextFontAvailabilityResult {
+    const provider = this.#textLayoutProvider;
+    if (!provider?.inspectFont) {
+      return {
+        status: "unknown",
+        provider: provider?.id ?? "editor-runtime",
+        providerVersion: provider?.version ?? "unavailable",
+        message:
+          "Font availability is unavailable until the canvas provider is ready",
+      };
+    }
+    try {
+      const result = provider.inspectFont(descriptor);
+      if (
+        validateTextFontAvailabilityResult(result) ||
+        result.provider !== provider.id ||
+        result.providerVersion !== provider.version
+      ) {
+        return {
+          status: "unknown",
+          provider: provider.id,
+          providerVersion: provider.version,
+          message: "Font availability provider returned an inconsistent result",
+        };
+      }
+      return structuredClone(result);
+    } catch {
+      return {
+        status: "unknown",
+        provider: provider.id,
+        providerVersion: provider.version,
+        message: "Font availability provider could not inspect this font",
+      };
+    }
   }
 
   subscribe(listener: EditorRuntimeListener): () => void {
@@ -801,6 +841,9 @@ function applyOperation(
     case "replace_subtree":
       replaceSubtree(document, command, context);
       return;
+    case "reflow_text":
+      reflowText(document, command, context);
+      return;
     case "put_asset":
       putAsset(document, command);
       return;
@@ -1133,6 +1176,164 @@ function updateProperties(
       },
     );
   }
+}
+
+function reflowText(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "reflow_text" }>,
+  context: OperationContext,
+): void {
+  const font = command.replacementFont ?? command.expectedFont;
+  const fontAvailability = inspectReflowFont(context, font, command.commandId);
+  let changed = false;
+  for (const nodeId of command.nodeIds) {
+    const node = document.nodesById[nodeId];
+    if (!node) throw notFound(command.commandId, nodeId);
+    if (node.kind !== "text") {
+      throw new OperationError(
+        command.commandId,
+        `Node ${nodeId} is not a Text layer`,
+        "invalid",
+        { path: `/nodesById/${escapeJsonPointer(nodeId)}` },
+      );
+    }
+    if (isEffectivelyLocked(document, nodeId)) {
+      throw new OperationError(
+        command.commandId,
+        `Text layer ${nodeId} is locked`,
+        "permission-denied",
+        { path: `/nodesById/${escapeJsonPointer(nodeId)}/locked` },
+      );
+    }
+    if (
+      node.properties.fontFamily !== command.expectedFont.fontFamily ||
+      node.properties.fontWeight !== command.expectedFont.fontWeight
+    ) {
+      throw new OperationError(
+        command.commandId,
+        `Text layer ${nodeId} no longer uses the expected font`,
+        "conflict",
+        {
+          path: `/nodesById/${escapeJsonPointer(nodeId)}/properties/fontFamily`,
+          retryable: true,
+          details: {
+            nodeId,
+            expectedFont: command.expectedFont,
+            currentFont: {
+              fontFamily: node.properties.fontFamily,
+              fontWeight: node.properties.fontWeight,
+            },
+          },
+        },
+      );
+    }
+    const before = {
+      fontFamily: node.properties.fontFamily,
+      fontWeight: node.properties.fontWeight,
+      size: structuredClone(node.size),
+    };
+    if (command.replacementFont) {
+      node.properties.fontFamily = command.replacementFont.fontFamily;
+      node.properties.fontWeight = command.replacementFont.fontWeight;
+    }
+    if (fontAvailability.status === "unknown") {
+      context.warnings.push({
+        nodeId,
+        feature: "text-layout.font-availability-unknown",
+        fallback:
+          "Applied the requested font and retained provider-measured bounds",
+        message: fontAvailability.message,
+      });
+    }
+    resolveTextAutoSize(node, command.commandId, context);
+    changed ||=
+      before.fontFamily !== node.properties.fontFamily ||
+      before.fontWeight !== node.properties.fontWeight ||
+      before.size.width !== node.size.width ||
+      before.size.height !== node.size.height;
+  }
+  if (!changed) {
+    throw new OperationError(
+      command.commandId,
+      "Text layout is already up to date",
+      "invalid",
+      { details: { code: "no-op", nodeIds: command.nodeIds } },
+    );
+  }
+}
+
+function inspectReflowFont(
+  context: OperationContext,
+  descriptor: TextFontDescriptor,
+  commandId: string,
+): TextFontAvailabilityResult {
+  const provider = context.textLayoutProvider;
+  if (!provider?.inspectFont) {
+    throw new OperationError(
+      commandId,
+      "Font availability is still initializing; retry after the canvas is ready",
+      "engine-failure",
+      {
+        retryable: true,
+        details: {
+          feature: "text-font-availability",
+          recovery: "retry-after-canvas-ready",
+        },
+      },
+    );
+  }
+  let result: TextFontAvailabilityResult;
+  try {
+    result = provider.inspectFont(descriptor);
+  } catch (error) {
+    throw new OperationError(
+      commandId,
+      error instanceof Error && error.message
+        ? `Font availability provider failed: ${error.message}`
+        : "Font availability provider failed",
+      "engine-failure",
+      { retryable: true, details: { provider: provider.id } },
+    );
+  }
+  const issue = validateTextFontAvailabilityResult(result);
+  if (
+    issue ||
+    result.provider !== provider.id ||
+    result.providerVersion !== provider.version
+  ) {
+    throw new OperationError(
+      commandId,
+      issue ?? "Font availability provider returned inconsistent identity",
+      "engine-failure",
+      {
+        retryable: true,
+        details: {
+          provider: provider.id,
+          providerVersion: provider.version,
+          resultProvider: result.provider,
+          resultProviderVersion: result.providerVersion,
+        },
+      },
+    );
+  }
+  if (result.status === "missing") {
+    throw new OperationError(
+      commandId,
+      `Font ${descriptor.fontFamily} is not available to the current canvas`,
+      "invalid",
+      {
+        details: {
+          code: "font-missing",
+          font: {
+            fontFamily: descriptor.fontFamily,
+            fontWeight: descriptor.fontWeight,
+          },
+          provider: provider.id,
+        },
+      },
+    );
+  }
+  return result;
 }
 
 function moveElement(

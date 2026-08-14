@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_FONT_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_VARIABLE_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
@@ -109,6 +110,156 @@ function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
 }
 
 describe("Renderer design tool scope", () => {
+  it("applies scoped Agent font replacement through the shared reflow transaction", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument(), {
+      textLayoutProvider: {
+        id: "test-text-layout",
+        version: "3",
+        inspectFont: () => ({
+          status: "available",
+          provider: "test-text-layout",
+          providerVersion: "3",
+          message: "The requested font is loaded",
+        }),
+        measure: (request) => ({
+          ok: true,
+          provider: "test-text-layout",
+          providerVersion: "3",
+          size: { width: request.width ?? 320, height: 64 },
+          warnings: [],
+        }),
+      },
+    });
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "replace_font",
+        call: {
+          toolCallId: "tool_replace_font",
+          toolName: DESIGN_FONT_TOOL_NAME,
+          input: {
+            action: "replace",
+            label: "Replace missing font",
+            pageId: "page_welcome",
+            nodeIds: ["title_welcome", "subtitle_welcome"],
+            expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+            replacementFont: {
+              fontFamily: "IBM Plex Sans",
+              fontWeight: 500,
+            },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          label: "Replace missing font",
+          revision: 1,
+          stages: 1,
+          warnings: [],
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({
+      properties: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+    });
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.getSnapshot().state.history.canUndo).toBe(true);
+  });
+
+  it("rejects stale and out-of-scope font writes without changing the document", async () => {
+    const createRuntime = () =>
+      new EditorRuntime(createWelcomeDocument(), {
+        textLayoutProvider: {
+          id: "test-text-layout",
+          version: "3",
+          inspectFont: () => ({
+            status: "available",
+            provider: "test-text-layout",
+            providerVersion: "3",
+            message: "The requested font is loaded",
+          }),
+          measure: (request) => ({
+            ok: true,
+            provider: "test-text-layout",
+            providerVersion: "3",
+            size: { width: request.width ?? 320, height: 64 },
+            warnings: [],
+          }),
+        },
+      });
+    const input = {
+      action: "replace" as const,
+      label: "Replace Inter",
+      pageId: "page_welcome",
+      nodeIds: ["title_welcome"],
+      expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+      replacementFont: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+    };
+    const staleRuntime = createRuntime();
+    expect(
+      staleRuntime.apply({
+        transactionId: "user_edit_before_font",
+        documentId: "document_welcome",
+        baseRevision: 0,
+        actor: { type: "user", id: "local-user" },
+        commands: [
+          {
+            commandId: "rename_before_font",
+            type: "update_properties",
+            nodeId: "feature_one",
+            name: "Changed by user",
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "stale_font",
+          call: {
+            toolCallId: "tool_stale_font",
+            toolName: DESIGN_FONT_TOOL_NAME,
+            input,
+          },
+          context: pageContext,
+        },
+        staleRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("expected 0, current 1");
+    expect(staleRuntime.getSnapshot().document.revision).toBe(1);
+
+    const scopedRuntime = createRuntime();
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "scoped_font",
+          call: {
+            toolCallId: "tool_scoped_font",
+            toolName: DESIGN_FONT_TOOL_NAME,
+            input,
+          },
+          context: {
+            ...pageContext,
+            mutationTarget: { kind: "page", pageId: "page_other" },
+          },
+        },
+        scopedRuntime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("outside the registered page mutation target");
+    expect(scopedRuntime.getSnapshot().document.revision).toBe(0);
+  });
+
   it("authors and binds Variables through the dedicated typed tool and inspection", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const execute = (input: Record<string, unknown>) =>
@@ -265,11 +416,17 @@ describe("Renderer design tool scope", () => {
                     fontWeight: 700,
                     lineHeight: 36,
                     letterSpacing: 0,
+                    paragraphIndent: 0,
+                    paragraphSpacing: 0,
+                    textCase: "original",
+                    textDecoration: "none",
                     textAlignHorizontal: "left",
                     textAlignVertical: "top",
                     textResize: "fixed",
                     textWrap: "word",
                     textOverflow: "visible",
+                    textTruncation: "disabled",
+                    maxLines: null,
                     fills: [{ type: "solid", color: "#151515", opacity: 1 }],
                     strokes: [],
                     strokeWidth: 0,
@@ -1279,11 +1436,17 @@ describe("Renderer design tool scope", () => {
                     fontWeight: 700,
                     lineHeight: 36,
                     letterSpacing: 0,
+                    paragraphIndent: 0,
+                    paragraphSpacing: 0,
+                    textCase: "original",
+                    textDecoration: "none",
                     textAlignHorizontal: "left",
                     textAlignVertical: "top",
                     textResize: "auto-width",
                     textWrap: "none",
                     textOverflow: "visible",
+                    textTruncation: "disabled",
+                    maxLines: null,
                     fills: [{ type: "solid", color: "#151515", opacity: 1 }],
                     strokes: [],
                     strokeWidth: 0,
@@ -1560,6 +1723,23 @@ describe("Renderer design tool scope", () => {
     expect(serialized).toContain('"feature_two"');
     expect(response.result.content).toMatchObject({
       mutationTarget: { kind: "page", pageId: "page_welcome" },
+      document: {
+        fontAvailability: [
+          {
+            fontFamily: "Inter",
+            fontWeight: 600,
+            nodeCount: 2,
+            nodeIds: ["subtitle_welcome", "title_welcome"],
+            nodeIdsTruncated: false,
+            status: "unknown",
+          },
+        ],
+        fontAvailabilitySummary: {
+          requestCount: 1,
+          returnedRequestCount: 1,
+          truncated: false,
+        },
+      },
       diagnostics: {
         version: 1,
         pageIds: ["page_welcome"],

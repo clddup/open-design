@@ -6,6 +6,7 @@ import {
   DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -1159,6 +1160,61 @@ describe("design Agent tool contract", () => {
         (tool) => tool.name === DESIGN_COMPONENT_TOOL_NAME,
       )?.modelDisclosure,
     ).toMatchObject({ bootstrap: "deferred" });
+    expect(
+      DESIGN_AGENT_TOOL_SPECS.find(
+        (tool) => tool.name === DESIGN_FONT_TOOL_NAME,
+      )?.modelDisclosure,
+    ).toMatchObject({ bootstrap: "deferred", role: "material-write" });
+    expect(bootstrap).not.toContain('"reflow_text"');
+    expect(complete).not.toContain('"reflow_text"');
+  });
+
+  it("validates explicit scoped font reflow and replacement separately from generic apply", () => {
+    const reflow = {
+      action: "reflow",
+      label: "Reflow Inter",
+      pageId: "page_1",
+      nodeIds: ["title", "subtitle"],
+      expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+    };
+    const replace = {
+      ...reflow,
+      action: "replace",
+      label: "Replace Inter",
+      replacementFont: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+    };
+
+    expect(validateDesignAgentToolInput(DESIGN_FONT_TOOL_NAME, reflow)).toBe(
+      true,
+    );
+    expect(validateDesignAgentToolInput(DESIGN_FONT_TOOL_NAME, replace)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_FONT_TOOL_NAME, {
+        ...replace,
+        nodeIds: ["title", "title"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_FONT_TOOL_NAME, {
+        ...reflow,
+        replacementFont: replace.replacementFont,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, {
+        label: "Bypass font tool",
+        commands: [
+          {
+            commandId: "reflow",
+            type: "reflow_text",
+            nodeIds: ["title"],
+            expectedFont: reflow.expectedFont,
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 
   it("exposes Typography Core v2 through the complete text transaction", () => {

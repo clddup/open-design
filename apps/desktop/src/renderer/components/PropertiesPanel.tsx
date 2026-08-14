@@ -42,6 +42,7 @@ import {
   SvgOperationNotice,
 } from "./properties/ExportSection";
 import { SelectedNodeProperties } from "./properties/SelectedNodeProperties";
+import type { FontInspectorContext } from "./properties/TypographySection";
 import { ExportSettingsEditor } from "./properties/ExportSettingsEditor";
 import { Field, formatNumber } from "./properties/controls";
 import styles from "./PropertiesPanel.module.scss";
@@ -119,6 +120,7 @@ export function PropertiesPanel({
   svgOperation,
   onSvgExportSettingsChange,
   onRasterExportSettingsChange,
+  fontContext,
 }: {
   node: DesignNode | undefined;
   activePageId: string;
@@ -229,6 +231,7 @@ export function PropertiesPanel({
   svgOperation: SvgOperationStatus | null;
   onSvgExportSettingsChange: (settings: SvgWorkerExportSettings) => void;
   onRasterExportSettingsChange: (settings: RasterExportSettings) => void;
+  fontContext?: FontInspectorContext;
 }) {
   const { t } = useI18n();
   return (
@@ -358,6 +361,7 @@ export function PropertiesPanel({
             onSetVariableBinding={onSetVariableBinding}
             onSetVariableMode={onSetVariableMode}
             styleActions={styleActions}
+            fontContext={fontContext}
           />
         ) : selectionCount > 1 ? (
           <div className={styles.multiProperties}>

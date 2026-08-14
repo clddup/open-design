@@ -1,4 +1,10 @@
 import type { DesignNode } from "@opendesign/design-contracts";
+import type {
+  TextFontAvailabilityResult,
+  TextFontDescriptor,
+} from "@opendesign/text-service";
+import { Button } from "@opendesign/ui";
+import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
 import type { UpdatePropertiesPatch } from "../../features/editor/types";
 import styles from "../PropertiesPanel.module.scss";
@@ -13,14 +19,38 @@ import {
 
 type TextNode = Extract<DesignNode, { kind: "text" }>;
 
+export type FontInspectorContext = {
+  availability: TextFontAvailabilityResult;
+  matchingNodeCount: number;
+  reflowableNodeCount: number;
+  onReflow: () => void;
+  onReplace: (font: TextFontDescriptor) => void;
+};
+
 export function TypographySection({
   node,
   onUpdate,
+  fontContext,
 }: {
   node: TextNode;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
+  fontContext?: FontInspectorContext;
 }) {
   const { t } = useI18n();
+  const [replacementFamily, setReplacementFamily] = useState("");
+  const [replacementWeight, setReplacementWeight] = useState(
+    String(node.properties.fontWeight),
+  );
+  useEffect(() => {
+    setReplacementFamily("");
+    setReplacementWeight(String(node.properties.fontWeight));
+  }, [node.id, node.properties.fontFamily, node.properties.fontWeight]);
+  const replacementWeightNumber = Number(replacementWeight);
+  const replacementValid =
+    replacementFamily.trim().length > 0 &&
+    Number.isInteger(replacementWeightNumber) &&
+    replacementWeightNumber >= 1 &&
+    replacementWeightNumber <= 1_000;
   return (
     <Section title={t("properties.typography")}>
       <div className={styles.stack}>
@@ -80,6 +110,89 @@ export function TypographySection({
             }
             value={formatNumber(node.properties.fontWeight)}
           />
+          {fontContext && (
+            <div className={styles.fontAvailability} role="status">
+              <span
+                className={cx(
+                  styles.fontAvailabilityMark,
+                  fontContext.availability.status === "available"
+                    ? styles.fontAvailable
+                    : fontContext.availability.status === "missing"
+                      ? styles.fontMissing
+                      : styles.fontUnknown,
+                )}
+              />
+              <span>
+                <strong>
+                  {t(
+                    fontContext.availability.status === "available"
+                      ? "properties.fontAvailable"
+                      : fontContext.availability.status === "missing"
+                        ? "properties.fontMissing"
+                        : "properties.fontUnknown",
+                  )}
+                </strong>
+                <small>
+                  {t("properties.fontMatches", {
+                    count: fontContext.matchingNodeCount,
+                  })}
+                </small>
+              </span>
+              <Button
+                disabled={fontContext.reflowableNodeCount === 0}
+                onClick={fontContext.onReflow}
+                tone="quiet"
+              >
+                {t("properties.reflowFont")}
+              </Button>
+            </div>
+          )}
+          {fontContext && fontContext.availability.status !== "available" && (
+            <div className={styles.fontReplacement}>
+              <Field
+                accessibleLabel={t("properties.replacementFontFamily")}
+                label="Replace"
+                onCommit={(value) => {
+                  const next = value.trim();
+                  setReplacementFamily(next);
+                  return next;
+                }}
+                placeholder={t("properties.replacementFontFamily")}
+                type="text"
+                value={replacementFamily}
+              />
+              <Field
+                accessibleLabel={t("properties.replacementFontWeight")}
+                label="Weight"
+                max={1_000}
+                min={1}
+                onCommit={(value) => {
+                  const parsed = Number(value);
+                  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 1_000)
+                    return null;
+                  const next = String(parsed);
+                  setReplacementWeight(next);
+                  return next;
+                }}
+                value={replacementWeight}
+              />
+              <Button
+                disabled={!replacementValid}
+                onClick={() => {
+                  if (!replacementValid) return;
+                  fontContext.onReplace({
+                    fontFamily: replacementFamily.trim(),
+                    fontWeight: replacementWeightNumber,
+                  });
+                }}
+                tone="quiet"
+              >
+                {t("properties.replaceFontInFile", {
+                  count: fontContext.matchingNodeCount,
+                })}
+              </Button>
+            </div>
+          )}
           <Field
             accessibleLabel={t("properties.lineHeight")}
             label="Line"
