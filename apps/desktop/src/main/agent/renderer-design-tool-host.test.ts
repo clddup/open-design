@@ -405,7 +405,7 @@ describe("RendererDesignToolHost", () => {
     }
   });
 
-  it("clears consecutive stalls after any successful Renderer response", async () => {
+  it("does not let a successful inspection hide repeated capture stalls", async () => {
     vi.useFakeTimers();
     try {
       const send = vi.fn();
@@ -450,11 +450,16 @@ describe("RendererDesignToolHost", () => {
         progress: 0.4,
       });
       const secondRejection = expect(second.result).rejects.toMatchObject({
-        cause: { code: "renderer_idle_timeout", retryable: true },
+        cause: {
+          code: "renderer_circuit_open",
+          retryable: false,
+          runTerminal: true,
+        },
       });
       await vi.advanceTimersByTimeAsync(31);
       await secondRejection;
 
+      host.forgetRun("run_reset");
       const third = startRequest(host, send, "run_reset", "apply_1");
       host.progress({
         requestId: third.requestId,
@@ -486,6 +491,115 @@ describe("RendererDesignToolHost", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("opens the circuit after two bounded capture export timeouts", async () => {
+    const send = vi.fn();
+    const host = new RendererDesignToolHost(send);
+
+    const first = startRequest(host, send, "run_capture_timeout", "capture_1");
+    host.resolve({
+      requestId: first.requestId,
+      ok: false,
+      error: {
+        code: "renderer_capture_timeout",
+        message: "design_capture.export_timeout",
+        retryable: false,
+        recoverable: true,
+      },
+    });
+    await expect(first.result).rejects.toMatchObject({
+      cause: { code: "renderer_capture_timeout" },
+    });
+
+    const inspect = startRequest(
+      host,
+      send,
+      "run_capture_timeout",
+      "inspect_1",
+      "opendesign_inspect_document",
+    );
+    host.resolve({
+      requestId: inspect.requestId,
+      ok: true,
+      result: { content: { revision: 425 }, observedRevision: 425 },
+    });
+    await expect(inspect.result).resolves.toMatchObject({
+      observedRevision: 425,
+    });
+
+    const second = startRequest(host, send, "run_capture_timeout", "capture_2");
+    host.resolve({
+      requestId: second.requestId,
+      ok: false,
+      error: {
+        code: "renderer_capture_timeout",
+        message: "design_capture.export_timeout",
+        retryable: false,
+        recoverable: true,
+      },
+    });
+    await expect(second.result).rejects.toMatchObject({
+      cause: {
+        code: "renderer_circuit_open",
+        retryable: false,
+        runTerminal: true,
+      },
+    });
+  });
+
+  it("clears a previous stall after a successful material canvas tool", async () => {
+    const send = vi.fn();
+    const host = new RendererDesignToolHost(send);
+
+    const first = startRequest(host, send, "run_recovered", "capture_1");
+    host.resolve({
+      requestId: first.requestId,
+      ok: false,
+      error: {
+        code: "renderer_capture_timeout",
+        message: "design_capture.export_timeout",
+        retryable: false,
+        recoverable: true,
+      },
+    });
+    await expect(first.result).rejects.toMatchObject({
+      cause: { code: "renderer_capture_timeout" },
+    });
+
+    const apply = startRequest(
+      host,
+      send,
+      "run_recovered",
+      "apply_1",
+      "opendesign_apply_transaction",
+    );
+    host.resolve({
+      requestId: apply.requestId,
+      ok: true,
+      result: { content: { revision: 426 }, designRevision: 426 },
+    });
+    await expect(apply.result).resolves.toMatchObject({ designRevision: 426 });
+
+    const afterRecovery = startRequest(
+      host,
+      send,
+      "run_recovered",
+      "capture_2",
+    );
+    host.resolve({
+      requestId: afterRecovery.requestId,
+      ok: false,
+      error: {
+        code: "renderer_capture_timeout",
+        message: "design_capture.export_timeout",
+        retryable: false,
+        recoverable: true,
+      },
+    });
+    await expect(afterRecovery.result).rejects.toMatchObject({
+      cause: { code: "renderer_capture_timeout" },
+    });
   });
 });
 

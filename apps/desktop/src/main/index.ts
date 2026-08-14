@@ -1562,7 +1562,7 @@ void app.whenReady().then(async () => {
           context,
           normalizedPageInput,
         );
-        globalTaskCoordinator.assertDocumentInspected(context);
+        globalTaskCoordinator.assertPageLifecycleInspected(context);
         const result = await executeRendererTool({
           ...call,
           input: normalizedPageInput,

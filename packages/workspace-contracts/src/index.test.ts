@@ -345,6 +345,19 @@ describe("workspace contract schemas", () => {
     expect(Value.Check(ProjectManifestSchema, projectManifest())).toBe(true);
     expect(isDesignTarget(primaryMismatch)).toBe(false);
     expect(
+      isDesignTarget(
+        designTarget({
+          pageId: "agent_page_call_1|fc_provider_1_page",
+          frameId: "frame/provider:result",
+          selectedNodeIds: ["node|legacy"],
+          primaryNodeId: "node|legacy",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isDesignTarget(designTarget({ selectedNodeIds: ["node\ncontrol"] })),
+    ).toBe(false);
+    expect(
       isDesignTarget({
         ...designTarget(),
         selectedNodeIds: Array.from(
@@ -517,6 +530,19 @@ describe("workspace contract schemas", () => {
       activeTargetId: "target_home",
     };
     expect(isDesignDeliveryLedger(delivery)).toBe(true);
+    expect(
+      isDesignDeliveryLedger({
+        ...delivery,
+        targets: [
+          {
+            ...delivery.targets[0],
+            pageId: "agent_page_call_1|fc_provider_1_page",
+            rootNodeId: "frame|legacy",
+          },
+          delivery.targets[1],
+        ],
+      }),
+    ).toBe(true);
     expect(isGlobalTaskProjection({ ...projection, delivery })).toBe(true);
     expect(
       isDesignDeliveryLedger({ ...delivery, activeTargetId: "target_missing" }),

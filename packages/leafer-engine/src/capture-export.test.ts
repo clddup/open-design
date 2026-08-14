@@ -7,10 +7,14 @@ import {
 describe("Leafer review capture export", () => {
   it("does not queue a healthy capture behind a stalled surface", async () => {
     const stalled = captureElement(() => undefined);
-    const pending = exportLeaferCapture(stalled, {
-      height: 960,
-      width: 1_280,
-    });
+    const pending = exportLeaferCapture(
+      stalled,
+      {
+        height: 960,
+        width: 1_280,
+      },
+      { viewCompletionTimeoutMs: 5 },
+    );
     const healthy = captureElement((callback) => callback());
 
     await expect(
@@ -23,7 +27,34 @@ describe("Leafer review capture export", () => {
     });
     expect(stalled.syncExport.mock.calls).toHaveLength(0);
     expect(healthy.syncExport.mock.calls).toHaveLength(1);
-    void pending;
+    await expect(pending).resolves.toMatchObject({
+      bytes: new Uint8Array([1, 2, 3]),
+      height: 320,
+      mimeType: "image/jpeg",
+      width: 640,
+    });
+    expect(stalled.syncExport.mock.calls).toHaveLength(1);
+  });
+
+  it("exports after bounded readiness when a hidden surface never completes", async () => {
+    vi.useFakeTimers();
+    try {
+      const leaf = captureElement(() => undefined);
+      const capture = exportLeaferCapture(
+        leaf,
+        { height: 960, width: 1_280 },
+        { viewCompletionTimeoutMs: 2_000 },
+      );
+
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(leaf.syncExport).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+
+      await expect(capture).resolves.toMatchObject({ width: 640, height: 320 });
+      expect(leaf.syncExport).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects invalid synchronous JPEG output", async () => {

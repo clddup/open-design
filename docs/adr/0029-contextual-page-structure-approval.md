@@ -65,7 +65,9 @@ runId + toolCallId + approvalId
 - Capability 只覆盖同一个 Run 和 Design File，不扩展到其他文件、Project、目录、MCP 或 shell；
 - Renderer、Agent Runtime 和模型都不能自行签发或扩大该记录。
 
-授权时必须删除该 Run 旧的 document inspection。模型随后重新调用 `opendesign_inspect_document`，Main 才接受跨 Page plan、Page lifecycle 或其他 Page 的 typed design transaction。这样旧的 Page-only 检查不能在扩大范围后冒充全文件事实。
+授权时必须删除该 Run 旧的 document inspection。模型随后重新调用 `opendesign_inspect_document`，Main 才接受第一笔跨 Page plan、Page lifecycle 或其他 Page 的 typed design transaction。完成这次 post-approval inspection 后，连续 Page rename/create/duplicate/reorder/delete 由当前 Renderer revision 和 Page planner 校验，不要求每一笔 Page 生命周期事务后再做一次重复 inspection；后续跨 Page plan 和节点写入仍要求 exact-current inspection。这样旧的 Page-only 检查不能在扩大范围后冒充全文件事实，也不会让一组 Page 操作退化成 `inspect → write → inspect → write`。
+
+Renderer 生成 Page/复制节点 ID 时必须先把 Provider tool-call ID 规范为 workspace-safe 字符并限制总长度。任务投影中的 Page/Frame/node ID 是来自 `DesignDocument` 的不透明实体 ID；为兼容修复前已经落盘、可能含 `|` 等 provider separator 的 ID，workspace contract 只对这些实体 ID实施有界、无控制字符校验，Project/Run/Capability 等 workspace-owned ID 仍使用严格 `StableId`。
 
 ### 生命周期与失败恢复
 
@@ -91,7 +93,8 @@ Run 完成、取消、错误、进程退出或发送批准失败时回收临时�
 - 工具 contract 覆盖动作枚举、重复/未知动作、理由预算、required approval 和自定义审批文案。
 - Pi adapter 覆盖自定义审批文案、拒绝工具结果和后续模型回合。
 - utilityProcess 与 Main 覆盖精确 `runId/toolCallId/approvalId`、未知或重复决定、取消、发送回滚和进程清理。
-- Coordinator 覆盖默认 Page 拒绝、绑定 Page rename、批准后 document execution context、旧 inspection 失效、重新检查后的跨 Page plan、Run 终态回收。
+- Coordinator 覆盖默认 Page 拒绝、绑定 Page rename、批准后 document execution context、旧 inspection 失效、一次重新检查后的连续 Page 生命周期、exact-current inspection 的跨 Page plan、Run 终态回收。
+- Renderer 覆盖含 `|`、`/` 的 Provider tool-call ID 只能生成 workspace-safe Page ID；workspace contract 覆盖旧文档实体 ID 可进入 Run/delivery 投影但控制字符仍拒绝。
 - Renderer 覆盖无常驻 scope 下拉、默认 Page `run.start`、允许/拒绝决定、发送中禁用、resolved 收口、旧 Run 不可操作、长资源名称和窄面板不溢出。
 - 完整 `pnpm verify` 继续作为合并门禁；本变更不以启动 Electron 或操作用户当前窗口代替自动化证据。
 
@@ -107,7 +110,7 @@ Run 完成、取消、错误、进程退出或发送批准失败时回收临时�
 ### 代价与风险
 
 - Main 需要同时维护原始 binding 和短生命周期 effective execution context，所有新增工具必须明确使用哪一层。
-- 批准后强制重新 inspect 增加一次工具调用，但避免用过期 Page-only 数据修改全文件。
+- 批准后强制重新 inspect 增加一次工具调用，但避免用过期 Page-only 数据修改全文件；同一批连续 Page 生命周期操作不重复支付该往返成本。
 - 当前批准覆盖同一 Design File 内全部 Page 结构/跨 Page 操作；更细动作粒度需要新的 capability selector 与 UI，不应通过模型理由字符串假装实现。
 
 ## 复审条件

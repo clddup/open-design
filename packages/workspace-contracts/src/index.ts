@@ -16,6 +16,16 @@ export const StableIdSchema = Type.String({
   pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
 });
 
+// DesignDocument entity IDs predate the workspace contract and may contain
+// provider-generated separators such as `|`. They remain opaque map keys, not
+// paths or capability IDs, so task projections preserve them within a strict
+// bounded/control-free envelope while all workspace-owned IDs stay StableId.
+export const DesignEntityIdSchema = Type.String({
+  minLength: 1,
+  maxLength: 512,
+  pattern: "^[^\\u0000-\\u001F\\u007F]+$",
+});
+
 export const TimestampSchema = Type.String({
   minLength: 20,
   maxLength: 32,
@@ -90,8 +100,8 @@ export const DesignDeliveryTargetSchema = Type.Object(
   {
     targetId: StableIdSchema,
     label: NameSchema,
-    pageId: StableIdSchema,
-    rootNodeId: StableIdSchema,
+    pageId: DesignEntityIdSchema,
+    rootNodeId: DesignEntityIdSchema,
     status: DesignDeliveryStatusSchema,
     allocatedRevision: Type.Optional(Type.Integer({ minimum: 0 })),
     draftRevision: Type.Optional(Type.Integer({ minimum: 0 })),
@@ -307,13 +317,13 @@ export const DesignTargetSchema = Type.Object(
     projectId: StableIdSchema,
     designFileId: StableIdSchema,
     documentId: StableIdSchema,
-    pageId: StableIdSchema,
-    frameId: Type.Optional(StableIdSchema),
-    selectedNodeIds: Type.Array(StableIdSchema, {
+    pageId: DesignEntityIdSchema,
+    frameId: Type.Optional(DesignEntityIdSchema),
+    selectedNodeIds: Type.Array(DesignEntityIdSchema, {
       maxItems: MAX_SELECTED_NODE_IDS,
       uniqueItems: true,
     }),
-    primaryNodeId: Type.Optional(StableIdSchema),
+    primaryNodeId: Type.Optional(DesignEntityIdSchema),
     baseRevision: Type.Integer({ minimum: 0 }),
   },
   { additionalProperties: false },

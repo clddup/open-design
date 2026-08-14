@@ -522,6 +522,15 @@ export class GlobalTaskCoordinator {
     this.#requireDocumentInspection(context);
   }
 
+  assertPageLifecycleInspected(context: TrustedToolContext): void {
+    this.assertDesignToolContext(context);
+    if (!this.#inspectionsByRunId.has(context.runId)) {
+      throw new Error(
+        "design_workflow.inspection_required: Inspect the bound design document before modifying Page structure",
+      );
+    }
+  }
+
   recordCanvasCapture(
     context: TrustedToolContext,
     observedRevision = context.revision,

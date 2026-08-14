@@ -555,6 +555,7 @@ describe("Renderer design tool scope", () => {
     if (!created.ok || typeof created.result.content !== "object") return;
     const createdPageId = (created.result.content as { pageId: string }).pageId;
     expect(createdPageId).toContain("tool_page_create");
+    expect(createdPageId).toMatch(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
     expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
       "title_welcome",
     ]);
@@ -582,6 +583,37 @@ describe("Renderer design tool scope", () => {
       result: { content: { action: "rename", name: "Homepage", revision: 2 } },
     });
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
+  });
+
+  it("sanitizes provider tool-call separators before persisting host Page IDs", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const created = await executeDesignToolRequest(
+      {
+        requestId: "page_create_provider_id",
+        call: {
+          toolCallId: "call_page|fc_provider/id",
+          toolName: DESIGN_PAGE_TOOL_NAME,
+          input: {
+            action: "create",
+            label: "Create design system Page",
+            name: "Design System",
+          },
+        },
+        context: {
+          ...pageContext,
+          mutationTarget: { kind: "document" as const },
+        },
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(created).toMatchObject({ ok: true });
+    if (!created.ok || typeof created.result.content !== "object") return;
+    const pageId = (created.result.content as { pageId: string }).pageId;
+    expect(pageId).toMatch(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
+    expect(pageId).not.toContain("|");
+    expect(pageId).not.toContain("/");
   });
 
   it("rejects document-level Page changes from a Current Page Run", async () => {

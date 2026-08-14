@@ -1927,6 +1927,58 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("allows sequential Page lifecycle writes after one post-approval inspection", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_page_sequence",
+      sessionId: "conversation_mobile",
+      prompt: "Rename the current Page and create another Page",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const initialContext = {
+      runId: "run_page_sequence",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+
+    expect(() =>
+      coordinator.assertPageLifecycleInspected(initialContext),
+    ).toThrow("design_workflow.inspection_required");
+    coordinator.recordDocumentInspection(
+      initialContext,
+      inspectionResult(opened.document, pageId),
+    );
+    coordinator.handleAgentEvent({
+      type: "tool.completed",
+      runId: initialContext.runId,
+      toolCallId: "rename_page",
+      result: { ok: true },
+      revision: 1,
+      transactionId: "transaction_rename_page",
+    });
+
+    expect(() =>
+      coordinator.assertPageLifecycleInspected({
+        ...initialContext,
+        revision: 1,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDocumentInspected({ ...initialContext, revision: 1 }),
+    ).toThrow("design_workflow.inspection_stale");
+
+    store.close();
+  });
+
   it("continues an allocated target after translation but rejects structural drift", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

@@ -214,7 +214,7 @@ export function structuredToolFailureDetail(
 
 export function isRecoverableDesignWorkflowFailure(message: string): boolean {
   return (
-    /^design_workflow\.(?:material_write_required|capture_required|capture_revision_invalid|delivery_verification_required|delivery_structure_incomplete|plan_amendment_invalid):/i.test(
+    /^design_workflow\.(?:inspection_required|inspection_stale|material_write_required|capture_required|capture_revision_invalid|delivery_verification_required|delivery_structure_incomplete|plan_amendment_invalid):/i.test(
       message,
     ) ||
     /^Design command .+ targets content outside every declared delivery artboard/im.test(

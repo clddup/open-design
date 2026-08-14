@@ -27,9 +27,16 @@ export interface LeaferCaptureElement {
   updateLayout(): void;
 }
 
+const DEFAULT_VIEW_COMPLETION_TIMEOUT_MS = 2_000;
+
+type LeaferCaptureExportOptions = {
+  viewCompletionTimeoutMs?: number;
+};
+
 export async function exportLeaferCapture(
   leaf: LeaferCaptureElement,
   maximum: { height: number; width: number },
+  options: LeaferCaptureExportOptions = {},
 ): Promise<LeaferCaptureResult> {
   const bounds = leaf.getBounds("render", "local");
   if (
@@ -48,7 +55,10 @@ export async function exportLeaferCapture(
   const leafer = leaf.leafer;
   if (!leafer) throw new Error("Leafer capture surface is unavailable");
   leaf.updateLayout();
-  await new Promise<void>((resolve) => leafer.waitViewCompleted(resolve));
+  await waitForViewCompletion(
+    leafer,
+    options.viewCompletionTimeoutMs ?? DEFAULT_VIEW_COMPLETION_TIMEOUT_MS,
+  );
   const exported = leaf.syncExport("jpg", {
     pixelRatio: 1,
     quality: 0.88,
@@ -71,6 +81,24 @@ export async function exportLeaferCapture(
     mimeType: "image/jpeg",
     width,
   };
+}
+
+function waitForViewCompletion(
+  leafer: NonNullable<LeaferCaptureElement["leafer"]>,
+  timeoutMs: number,
+): Promise<void> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(finish, timeoutMs);
+    leafer.waitViewCompleted(finish);
+  });
 }
 
 function decodeJpegDataUrl(value: unknown): Uint8Array {

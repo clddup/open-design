@@ -221,15 +221,19 @@ export class RendererDesignToolHost {
     if (!pending) return false;
     clearPendingTimeouts(pending);
     this.#pending.delete(response.requestId);
+    const captureTimedOut =
+      !response.ok && response.error.code === "renderer_capture_timeout";
+    const circuitOpened = captureTimedOut && this.#recordTimeout(pending);
     this.#recordPerformance(
       pending,
-      response.ok ? "completed" : "failed",
+      response.ok ? "completed" : captureTimedOut ? "timeout" : "failed",
       response.performance,
     );
-    if (response.ok) {
+    if (response.ok && isCanvasLivenessTool(pending.toolName)) {
       this.#circuitsByRunId.delete(pending.context.runId);
     }
     if (response.ok) pending.resolve(response.result);
+    else if (circuitOpened) pending.reject(rendererCircuitOpen());
     else
       pending.reject(
         new Error(response.error.message, { cause: response.error }),
@@ -292,6 +296,10 @@ export class RendererDesignToolHost {
       // Performance observation must never change tool execution semantics.
     }
   }
+}
+
+function isCanvasLivenessTool(toolName: string): boolean {
+  return toolName !== "opendesign_inspect_document";
 }
 
 function finishCurrentPhase(pending: PendingRequest, finishedAt: number): void {

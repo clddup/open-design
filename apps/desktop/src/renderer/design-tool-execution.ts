@@ -310,11 +310,11 @@ async function executeDesignToolRequestUnsafe(
     const input = request.call.input;
     assertPageToolMutationTarget(input, request.context.mutationTarget);
     throwIfAgentGenerationAborted(options.signal);
+    const safeToolCallId =
+      request.call.toolCallId.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 96) ||
+      "tool";
     const operationId =
-      `agent_page_${request.call.toolCallId}_${document.revision}`.slice(
-        0,
-        220,
-      );
+      `agent_page_${safeToolCallId}_${document.revision}`.slice(0, 120);
     const plan =
       input.action === "create"
         ? planCreatePage(document, {

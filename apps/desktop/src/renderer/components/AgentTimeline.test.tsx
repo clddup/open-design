@@ -1394,6 +1394,44 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("capture_canvas once");
   });
 
+  it("keeps recoverable stale-inspection corrections out of the visible timeline", () => {
+    const message =
+      "design_workflow.inspection_stale: Inspect the current document revision before continuing; inspected 417, current 418";
+    const { container } = render(
+      <AgentTimeline
+        activeRunId="run_inspection_retry"
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={null}
+        events={[
+          {
+            type: "tool.requested",
+            runId: "run_inspection_retry",
+            toolCallId: "page_after_rename",
+            toolName: "opendesign_manage_pages",
+            input: {},
+            risk: "design_write",
+          },
+          {
+            type: "tool.failed",
+            runId: "run_inspection_retry",
+            toolCallId: "page_after_rename",
+            code: "tool_error",
+            message,
+            recoverable: true,
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(container).not.toHaveTextContent("Design change failed");
+    expect(container).not.toHaveTextContent("inspection_stale");
+    expect(container).not.toHaveTextContent("inspected 417");
+  });
+
   it("keeps recoverable pre-execution corrections out of the visible timeline", () => {
     const { container } = render(
       <AgentTimeline
