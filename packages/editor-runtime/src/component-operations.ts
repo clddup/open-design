@@ -81,6 +81,7 @@ export function planCreateComponent(
           name,
           rootNodeId: node.id,
           componentPropertyDefinitions: {},
+          variantProperties: {},
           extensions: {},
         },
       },
@@ -167,6 +168,12 @@ export function planRemoveComponent(
     return failure(
       "missing-component",
       `Component ${input.componentId} does not exist`,
+    );
+  }
+  if (component.variantSetId) {
+    return failure(
+      "invalid",
+      `Component ${input.componentId} belongs to set ${component.variantSetId}; remove or dissolve the Component Set as one operation`,
     );
   }
   const referencingInstance = Object.values(document.nodesById).find(

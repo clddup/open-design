@@ -118,6 +118,11 @@ export {
   type ComponentPropertyReferenceField,
 } from "./component-property-operations.js";
 export {
+  planCombineComponentsAsVariants,
+  type VariantSetOperationFailureCode,
+  type VariantSetOperationPlan,
+} from "./variant-set-operations.js";
+export {
   nodeReferencesAsset,
   planDeleteImageAsset,
   planImageNodeUpdate,

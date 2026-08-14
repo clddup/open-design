@@ -10,6 +10,32 @@ export function createComponentInspectorContext(
   document: DesignDocument,
   selectedNode: DesignNode | undefined,
 ): ComponentInspectorContext | undefined {
+  const selectedVariantSet = selectedNode
+    ? Object.values(document.variantSetsById).find(
+        (candidate) => candidate.rootNodeId === selectedNode.id,
+      )
+    : undefined;
+  if (selectedVariantSet) {
+    return {
+      availableComponents: componentOptions(document),
+      componentName: selectedVariantSet.name,
+      componentProperties: [],
+      componentPropertyDefinitions: [],
+      isMain: false,
+      overrideCount: 0,
+      sourceNodes: [],
+      variantSet: {
+        id: selectedVariantSet.id,
+        isDefault: false,
+        isRoot: true,
+        name: selectedVariantSet.name,
+        properties: {},
+        variantCount: Object.values(document.componentsById).filter(
+          (candidate) => candidate.variantSetId === selectedVariantSet.id,
+        ).length,
+      },
+    };
+  }
   const component = selectedNode
     ? selectedNode.kind === "instance"
       ? document.componentsById[selectedNode.properties.componentId]
@@ -22,6 +48,17 @@ export function createComponentInspectorContext(
     selectedNode?.kind === "instance"
       ? resolveComponentInstance(document, selectedNode.id)
       : null;
+  const effectiveComponent =
+    instanceResolution?.ok === true
+      ? document.componentsById[instanceResolution.componentId]
+      : component;
+  const variantSet = effectiveComponent?.variantSetId
+    ? document.variantSetsById[effectiveComponent.variantSetId]
+    : undefined;
+  const effectivePropertyDefinitions = {
+    ...(variantSet?.componentPropertyDefinitions ?? {}),
+    ...(effectiveComponent?.componentPropertyDefinitions ?? {}),
+  };
   const sourceNodes =
     selectedNode?.kind === "instance"
       ? resolvedInstanceSourceNodes(document, selectedNode.id)
@@ -34,7 +71,7 @@ export function createComponentInspectorContext(
               : [];
           });
   return {
-    componentName: component.name,
+    componentName: variantSet?.name ?? component.name,
     isMain: selectedNode?.kind !== "instance",
     overrideCount:
       selectedNode?.kind === "instance"
@@ -56,7 +93,7 @@ export function createComponentInspectorContext(
     })),
     componentProperties:
       selectedNode?.kind === "instance" && instanceResolution?.ok
-        ? Object.entries(component.componentPropertyDefinitions).map(
+        ? Object.entries(effectivePropertyDefinitions).map(
             ([propertyName, definition]) => ({
               propertyName,
               definition,
@@ -70,10 +107,29 @@ export function createComponentInspectorContext(
             }),
           )
         : [],
-    availableComponents: Object.values(document.componentsById).map(
-      (candidate) => ({ id: candidate.id, name: candidate.name }),
-    ),
+    availableComponents: componentOptions(document),
+    ...(variantSet && effectiveComponent
+      ? {
+          variantSet: {
+            id: variantSet.id,
+            isDefault: variantSet.defaultComponentId === effectiveComponent.id,
+            isRoot: false,
+            name: variantSet.name,
+            properties: structuredClone(effectiveComponent.variantProperties),
+            variantCount: Object.values(document.componentsById).filter(
+              (candidate) => candidate.variantSetId === variantSet.id,
+            ).length,
+          },
+        }
+      : {}),
   };
+}
+
+function componentOptions(document: DesignDocument) {
+  return Object.values(document.componentsById).map((candidate) => ({
+    id: candidate.id,
+    name: candidate.name,
+  }));
 }
 
 function resolvedInstanceSourceNodes(

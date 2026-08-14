@@ -27,6 +27,75 @@ function pageActionProps() {
 }
 
 describe("LeftSidebar layer tree", () => {
+  it("presents one Component Set asset and places its default Variant", async () => {
+    const user = userEvent.setup();
+    const document = structuredClone(createWelcomeDocument());
+    document.componentsById = {
+      button_default: {
+        id: "button_default",
+        name: "State=Default",
+        rootNodeId: "feature_group",
+        componentPropertyDefinitions: {},
+        variantSetId: "button_set",
+        variantProperties: { State: "Default" },
+        extensions: {},
+      },
+      button_hover: {
+        id: "button_hover",
+        name: "State=Hover",
+        rootNodeId: "feature_two",
+        componentPropertyDefinitions: {},
+        variantSetId: "button_set",
+        variantProperties: { State: "Hover" },
+        extensions: {},
+      },
+    };
+    document.variantSetsById.button_set = {
+      id: "button_set",
+      name: "Button",
+      rootNodeId: "frame_welcome",
+      defaultComponentId: "button_default",
+      componentPropertyDefinitions: {
+        State: {
+          type: "VARIANT",
+          defaultValue: "Default",
+          variantOptions: ["Default", "Hover"],
+        },
+      },
+      extensions: {},
+    };
+    const onPlaceComponent = vi.fn(
+      () => ({ ok: true, message: "Placed" }) as const,
+    );
+    render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          {...pageActionProps()}
+          activePageId="page_welcome"
+          document={document}
+          onDelete={vi.fn()}
+          onPageChange={vi.fn()}
+          onPlaceComponent={onPlaceComponent}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={vi.fn()}
+          onTabChange={vi.fn()}
+          onToggleLock={vi.fn()}
+          onToggleVisibility={vi.fn()}
+          selectedNodeIds={[]}
+          tab="assets"
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("2 variants · 0 instances")).toBeVisible();
+    expect(screen.queryByText("State=Default")).toBeNull();
+    expect(screen.queryByText("State=Hover")).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Place Button instance" }),
+    );
+    expect(onPlaceComponent).toHaveBeenCalledWith("button_default");
+  });
+
   it("supports Page naming by double-click, F2, Enter, Escape, and visible validation", async () => {
     const user = userEvent.setup();
     const document = createWelcomeDocument();

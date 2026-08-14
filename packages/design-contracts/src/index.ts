@@ -20,6 +20,14 @@ import {
   migrateFigmaComponentProperties,
 } from "./component-properties.js";
 import {
+  DeleteVariantSetCommandSchema,
+  PutVariantSetCommandSchema,
+  VariantPropertiesSchema,
+  VariantSetChangeSchema,
+  VariantSetDefinitionSchema,
+  migrateVariantSets,
+} from "./variant-sets.js";
+import {
   JsonObjectSchema,
   JsonValueSchema,
   NormalizedPointSchema,
@@ -31,6 +39,7 @@ import {
   type Size,
 } from "./primitives.js";
 export * from "./component-properties.js";
+export * from "./variant-sets.js";
 export * from "./primitives.js";
 export * from "./versions.js";
 export * from "./layout.js";
@@ -650,6 +659,8 @@ export const ComponentDefinitionSchema = Type.Object(
     rootNodeId: Type.String({ minLength: 1 }),
     description: Type.Optional(Type.String({ maxLength: 2_000 })),
     componentPropertyDefinitions: ComponentPropertyDefinitionsSchema,
+    variantSetId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+    variantProperties: VariantPropertiesSchema,
     extensions: JsonObjectSchema,
   },
   { additionalProperties: false },
@@ -864,7 +875,7 @@ export const DesignDocumentSchema = Type.Object(
     pagesById: Type.Record(Type.String(), DesignPageSchema),
     nodesById: Type.Record(Type.String(), DesignNodeSchema),
     componentsById: Type.Record(Type.String(), ComponentDefinitionSchema),
-    variantSetsById: Type.Record(Type.String(), JsonValueSchema),
+    variantSetsById: Type.Record(Type.String(), VariantSetDefinitionSchema),
     tokenCollectionsById: Type.Record(Type.String(), JsonValueSchema),
     tokensById: Type.Record(Type.String(), JsonValueSchema),
     interactionsById: Type.Record(Type.String(), JsonValueSchema),
@@ -982,7 +993,6 @@ export const PutComponentCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
 export const DeleteComponentCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -991,7 +1001,6 @@ export const DeleteComponentCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
 export const InsertPageCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1004,7 +1013,6 @@ export const InsertPageCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
 export const UpdatePageCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1014,7 +1022,6 @@ export const UpdatePageCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
 export const MovePageCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1024,7 +1031,6 @@ export const MovePageCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
 export const DeletePageCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1033,7 +1039,6 @@ export const DeletePageCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
 export const NodeDesignOperationSchema = Type.Union([
   InsertElementCommandSchema,
   UpdatePropertiesCommandSchema,
@@ -1049,6 +1054,8 @@ export const DesignOperationSchema: TUnion<
     typeof DeleteAssetCommandSchema,
     typeof PutComponentCommandSchema,
     typeof DeleteComponentCommandSchema,
+    typeof PutVariantSetCommandSchema,
+    typeof DeleteVariantSetCommandSchema,
     typeof InsertPageCommandSchema,
     typeof UpdatePageCommandSchema,
     typeof MovePageCommandSchema,
@@ -1060,6 +1067,8 @@ export const DesignOperationSchema: TUnion<
   DeleteAssetCommandSchema,
   PutComponentCommandSchema,
   DeleteComponentCommandSchema,
+  PutVariantSetCommandSchema,
+  DeleteVariantSetCommandSchema,
   InsertPageCommandSchema,
   UpdatePageCommandSchema,
   MovePageCommandSchema,
@@ -1226,8 +1235,18 @@ export const DesignChangeSetSchema = Type.Object(
     removedComponentIds: Type.Optional(
       Type.Array(Type.String(), { uniqueItems: true }),
     ),
+    addedVariantSetIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    changedVariantSetIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    removedVariantSetIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
     pageChanges: Type.Optional(Type.Array(PageChangeSchema)),
     componentChanges: Type.Optional(Type.Array(ComponentChangeSchema)),
+    variantSetChanges: Type.Optional(Type.Array(VariantSetChangeSchema)),
     changes: Type.Array(NodeChangeSchema),
   },
   { additionalProperties: false },
@@ -1760,6 +1779,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     migrateImageNodes(migrated, String(schemaVersion));
     migrateTextNodes(migrated);
     migrateFigmaComponentProperties(migrated);
+    migrateVariantSets(migrated);
     return isDesignDocument(migrated) ? migrated : null;
   } catch {
     return null;

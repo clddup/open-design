@@ -44,7 +44,7 @@ export interface ResolvedComponentOverrideTarget {
 }
 
 export interface ResolvedComponentProperty {
-  type: ComponentPropertyDefinition["type"];
+  type: ComponentPropertyDefinition["type"] | "VARIANT";
   value: ComponentPropertyAssignment;
   preferredValues?: readonly {
     type: "COMPONENT" | "COMPONENT_SET";
@@ -210,6 +210,7 @@ function resolveInstance(
     Record<string, ResolvedComponentProperty>
   > = {};
   const sourcePaths = new Set<string>();
+  let rootResolvedComponentId = instance.properties.componentId;
   const overrides = new Map(
     instance.properties.overrides.map((override) => [
       componentSourcePathKey(override.sourcePath),
@@ -226,16 +227,6 @@ function resolveInstance(
     componentStack: readonly string[],
     root: boolean,
   ): void => {
-    const definition = document.componentsById[componentId];
-    if (!definition) {
-      issues.push({
-        code: "missing-component",
-        instanceId: instance.id,
-        message: `Component ${componentId} does not exist`,
-        sourcePath: namespace,
-      });
-      return;
-    }
     const effectiveProperties = effectiveComponentProperties(
       document,
       componentId,
@@ -246,12 +237,18 @@ function resolveInstance(
       issues.push(...effectiveProperties.issues);
       return;
     }
-    if (root) rootComponentProperties = effectiveProperties.properties;
-    if (componentStack.includes(componentId)) {
+    const resolvedComponentId = effectiveProperties.componentId;
+    const definition = document.componentsById[resolvedComponentId];
+    if (!definition) return;
+    if (root) {
+      rootComponentProperties = effectiveProperties.properties;
+      rootResolvedComponentId = resolvedComponentId;
+    }
+    if (componentStack.includes(resolvedComponentId)) {
       issues.push({
         code: "component-cycle",
         instanceId: instance.id,
-        message: `Component reference cycle: ${[...componentStack, componentId].join(" -> ")}`,
+        message: `Component reference cycle: ${[...componentStack, resolvedComponentId].join(" -> ")}`,
         sourcePath: namespace,
       });
       return;
@@ -315,7 +312,7 @@ function resolveInstance(
           [...namespace, source.id],
           [...namespace, source.id],
           parentId,
-          [...componentStack, componentId],
+          [...componentStack, resolvedComponentId],
           nodeRoot,
         );
         return;
@@ -405,13 +402,13 @@ function resolveInstance(
   return issues.length > 0
     ? {
         ok: false,
-        componentId: instance.properties.componentId,
+        componentId: rootResolvedComponentId,
         instanceId: instance.id,
         issues,
       }
     : {
         ok: true,
-        componentId: instance.properties.componentId,
+        componentId: rootResolvedComponentId,
         componentProperties: rootComponentProperties,
         instanceId: instance.id,
         nodes,
@@ -428,11 +425,12 @@ function effectiveComponentProperties(
 ):
   | {
       ok: true;
+      componentId: string;
       properties: Readonly<Record<string, ResolvedComponentProperty>>;
     }
   | { ok: false; issues: ComponentResolutionIssue[] } {
-  const definition = document.componentsById[componentId];
-  if (!definition) {
+  const requestedDefinition = document.componentsById[componentId];
+  if (!requestedDefinition) {
     return {
       ok: false,
       issues: [
@@ -446,8 +444,71 @@ function effectiveComponentProperties(
   }
   const issues: ComponentResolutionIssue[] = [];
   const properties: Record<string, ResolvedComponentProperty> = {};
+  let resolvedComponentId = componentId;
+  const variantSet = requestedDefinition.variantSetId
+    ? document.variantSetsById[requestedDefinition.variantSetId]
+    : undefined;
+  if (requestedDefinition.variantSetId && !variantSet) {
+    issues.push({
+      code: "missing-component",
+      instanceId,
+      message: `Variant set ${requestedDefinition.variantSetId} does not exist`,
+    });
+  }
+  if (variantSet) {
+    const requestedVariantProperties: Record<string, string> = {};
+    for (const [propertyName, propertyDefinition] of Object.entries(
+      variantSet.componentPropertyDefinitions,
+    )) {
+      const value =
+        assignments[propertyName] ??
+        requestedDefinition.variantProperties[propertyName];
+      if (
+        typeof value !== "string" ||
+        !propertyDefinition.variantOptions.includes(value)
+      ) {
+        issues.push({
+          code: "invalid-component-property",
+          instanceId,
+          message: `Component property ${propertyName} requires one of ${propertyDefinition.variantOptions.join(", ")}`,
+        });
+        continue;
+      }
+      requestedVariantProperties[propertyName] = value;
+      properties[propertyName] = { type: "VARIANT", value };
+    }
+    const selected = Object.values(document.componentsById).find(
+      (candidate) =>
+        candidate.variantSetId === variantSet.id &&
+        Object.entries(requestedVariantProperties).every(
+          ([propertyName, value]) =>
+            candidate.variantProperties[propertyName] === value,
+        ),
+    );
+    if (!selected) {
+      issues.push({
+        code: "invalid-component-property",
+        instanceId,
+        message: `Variant set ${variantSet.id} has no Component matching ${Object.entries(
+          requestedVariantProperties,
+        )
+          .map(([name, value]) => `${name}=${value}`)
+          .join(", ")}`,
+      });
+    } else {
+      resolvedComponentId = selected.id;
+    }
+  }
+  const definition = document.componentsById[resolvedComponentId];
+  if (!definition) {
+    return { ok: false, issues };
+  }
+  const knownPropertyNames = new Set([
+    ...Object.keys(variantSet?.componentPropertyDefinitions ?? {}),
+    ...Object.keys(definition.componentPropertyDefinitions),
+  ]);
   for (const propertyName of Object.keys(assignments)) {
-    if (!definition.componentPropertyDefinitions[propertyName]) {
+    if (!knownPropertyNames.has(propertyName)) {
       issues.push({
         code: "invalid-component-property",
         instanceId,
@@ -492,7 +553,9 @@ function effectiveComponentProperties(
         : {}),
     };
   }
-  return issues.length > 0 ? { ok: false, issues } : { ok: true, properties };
+  return issues.length > 0
+    ? { ok: false, issues }
+    : { ok: true, componentId: resolvedComponentId, properties };
 }
 
 function componentPropertyValueMatches(

@@ -4,10 +4,6 @@ import type {
   SelectionScope,
 } from "@opendesign/agent-contracts";
 import type { TrustedToolFailure } from "@opendesign/agent-runtime";
-import {
-  componentSourcePathKey,
-  resolveComponentInstance,
-} from "@opendesign/component-service";
 import type {
   DesignDocument,
   DesignError,
@@ -76,6 +72,7 @@ import { throwIfAgentGenerationAborted } from "./agent-generation-timing";
 import { executeSemanticDesignTransaction } from "./design-transaction-steps";
 import { planDesignArrangeTool } from "./design-arrange-tool-plan";
 import { planDesignComponentTool } from "./design-component-tool-plan";
+import { createScopedComponentInspection } from "./design-component-inspection";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -1674,69 +1671,8 @@ function createScopedInspection(
     }),
   );
   const diagnostics = diagnoseDesignPages(document, pageIds);
-  const scopedComponentIds = collectScopedComponentIds(document, nodeIds);
-  const componentsById = Object.fromEntries(
-    [...scopedComponentIds].flatMap((componentId) => {
-      const component = document.componentsById[componentId];
-      if (!component) return [];
-      return [
-        [
-          component.id,
-          {
-            id: component.id,
-            name: component.name,
-            rootNodeId: component.rootNodeId,
-            componentPropertyDefinitions: structuredClone(
-              component.componentPropertyDefinitions,
-            ),
-            sourceNodeIds: [
-              ...componentSourceNodeIdsForInspection(
-                document,
-                component.rootNodeId,
-              ),
-            ],
-          },
-        ],
-      ] as const;
-    }),
-  );
-  const instancesById: Record<string, unknown> = {};
-  for (const node of Object.values(nodesById)) {
-    if (node.kind !== "instance") continue;
-    const resolution = resolveComponentInstance(document, node.id);
-    instancesById[node.id] = !resolution.ok
-      ? {
-          componentId: node.properties.componentId,
-          propertyAssignments: structuredClone(
-            node.properties.componentProperties,
-          ),
-          issues: resolution.issues,
-        }
-      : {
-          componentId: node.properties.componentId,
-          componentProperties: structuredClone(resolution.componentProperties),
-          propertyAssignments: structuredClone(
-            node.properties.componentProperties,
-          ),
-          overrides: structuredClone(node.properties.overrides),
-          sourceNodes: resolution.overrideTargets.map((resolved) => ({
-            sourcePath: [...resolved.sourcePath],
-            sourceNodeId: resolved.sourceNodeId,
-            kind: resolved.node.kind,
-            name: resolved.node.name,
-            componentPropertyReferences: structuredClone(
-              document.nodesById[resolved.sourceNodeId]
-                ?.componentPropertyReferences ?? {},
-            ),
-            projectionId:
-              resolution.nodes.find(
-                (candidate) =>
-                  componentSourcePathKey(candidate.sourcePath) ===
-                  componentSourcePathKey(resolved.sourcePath),
-              )?.projectionId ?? null,
-          })),
-        };
-  }
+  const { componentsById, instancesById, variantSetsById } =
+    createScopedComponentInspection(document, nodeIds, nodesById);
 
   return {
     document: {
@@ -1747,6 +1683,7 @@ function createScopedInspection(
       nodesById,
       assetsById,
       componentsById,
+      variantSetsById,
       instancesById,
       designSystemIds: {
         components: Object.keys(document.componentsById),
@@ -1772,50 +1709,6 @@ function createScopedInspection(
   };
 }
 
-function componentSourceNodeIdsForInspection(
-  document: DesignDocument,
-  rootNodeId: string,
-): Set<string> {
-  const result = new Set<string>();
-  const visit = (nodeId: string) => {
-    if (result.has(nodeId)) return;
-    const node = document.nodesById[nodeId];
-    if (!node) return;
-    result.add(nodeId);
-    node.childIds.forEach(visit);
-  };
-  visit(rootNodeId);
-  return result;
-}
-
-function collectScopedComponentIds(
-  document: DesignDocument,
-  nodeIds: ReadonlySet<string>,
-): Set<string> {
-  const componentIds = new Set<string>();
-  const pending = Object.values(document.componentsById)
-    .filter((component) => nodeIds.has(component.rootNodeId))
-    .map((component) => component.id);
-  for (const nodeId of nodeIds) {
-    const node = document.nodesById[nodeId];
-    if (node?.kind === "instance") pending.push(node.properties.componentId);
-  }
-  while (pending.length > 0) {
-    const componentId = pending.pop();
-    if (!componentId || componentIds.has(componentId)) continue;
-    componentIds.add(componentId);
-    for (const sourceNodeId of componentSourceNodeIdsForInspection(
-      document,
-      document.componentsById[componentId]?.rootNodeId ?? "",
-    )) {
-      const source = document.nodesById[sourceNodeId];
-      if (source?.kind === "instance")
-        pending.push(source.properties.componentId);
-    }
-  }
-  return componentIds;
-}
-
 function assertComponentInputPage(
   document: DesignDocument,
   input: DesignComponentToolInput,
@@ -1828,6 +1721,17 @@ function assertComponentInputPage(
     if (!ids.has(input.nodeId)) {
       throw new Error(
         `Component source ${input.nodeId} is outside Page ${input.pageId}`,
+      );
+    }
+    return;
+  }
+  if (input.action === "combine-as-variants") {
+    const outsideRoot = input.componentRootNodeIds.find(
+      (rootNodeId) => !ids.has(rootNodeId),
+    );
+    if (outsideRoot) {
+      throw new Error(
+        `Component source ${outsideRoot} is outside Page ${input.pageId}`,
       );
     }
     return;
@@ -1924,7 +1828,9 @@ function assertCommandsWithinMutationTarget(
     }
     if (
       command.type === "put_component" ||
-      command.type === "delete_component"
+      command.type === "delete_component" ||
+      command.type === "put_variant_set" ||
+      command.type === "delete_variant_set"
     ) {
       continue;
     }

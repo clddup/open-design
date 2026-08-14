@@ -513,6 +513,205 @@ describe("Renderer design tool scope", () => {
     );
   });
 
+  it("combines inspected Component roots into one atomic Variant Set", async () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    const source = document.nodesById.feature_one;
+    if (frame?.kind !== "frame" || !source) {
+      throw new Error("Welcome Component fixture is unavailable");
+    }
+    frame.childIds.push("feature_hover_group");
+    document.nodesById.feature_hover_group = {
+      id: "feature_hover_group",
+      kind: "group",
+      name: "Feature hover",
+      parentId: frame.id,
+      childIds: ["feature_hover_shape"],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 64, 620],
+      size: { width: 304, height: 220 },
+      opacity: 1,
+      properties: {},
+      extensions: {},
+    };
+    document.nodesById.feature_hover_shape = {
+      ...structuredClone(source),
+      id: "feature_hover_shape",
+      name: "Feature hover surface",
+      parentId: "feature_hover_group",
+      transform: [1, 0, 0, 1, 0, 0],
+    };
+    const runtime = new EditorRuntime(document);
+
+    for (const [revision, componentId, nodeId, name] of [
+      [0, "feature_default", "feature_group", "Feature default"],
+      [1, "feature_hover", "feature_hover_group", "Feature hover"],
+    ] as const) {
+      const response = await executeDesignToolRequest(
+        {
+          requestId: `create_${componentId}`,
+          call: {
+            toolCallId: `tool_create_${componentId}`,
+            toolName: DESIGN_COMPONENT_TOOL_NAME,
+            input: {
+              action: "create-component",
+              label: `Create ${name}`,
+              pageId: "page_welcome",
+              nodeId,
+              componentId,
+              name,
+            },
+          },
+          context: { ...pageContext, revision },
+        },
+        runtime,
+        "page_welcome",
+      );
+      expect(response.ok).toBe(true);
+    }
+
+    const combined = await executeDesignToolRequest(
+      {
+        requestId: "combine_feature_variants",
+        call: {
+          toolCallId: "tool_combine_feature_variants",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "combine-as-variants",
+            label: "Combine feature variants",
+            pageId: "page_welcome",
+            componentIds: ["feature_default", "feature_hover"],
+            componentRootNodeIds: ["feature_group", "feature_hover_group"],
+            variantSetId: "feature_set",
+            rootNodeId: "feature_set_root",
+            name: "Feature",
+            variantPropertiesByComponentId: {
+              feature_default: { State: "Default" },
+              feature_hover: { State: "Hover" },
+            },
+          },
+        },
+        context: { ...pageContext, revision: 2 },
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(combined).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "combine-as-variants",
+          componentId: "feature_default",
+          mainNodeId: "feature_group",
+          revision: 3,
+          atomic: true,
+        },
+        designRevision: { previousRevision: 2, revision: 3 },
+      },
+    });
+    const snapshot = runtime.getSnapshot().document;
+    expect(snapshot.variantSetsById.feature_set).toMatchObject({
+      rootNodeId: "feature_set_root",
+      defaultComponentId: "feature_default",
+      componentPropertyDefinitions: {
+        State: {
+          type: "VARIANT",
+          defaultValue: "Default",
+          variantOptions: ["Default", "Hover"],
+        },
+      },
+    });
+    expect(snapshot.nodesById.feature_set_root?.childIds).toEqual([
+      "feature_group",
+      "feature_hover_group",
+    ]);
+
+    const instance = await executeDesignToolRequest(
+      {
+        requestId: "place_feature_variant_instance",
+        call: {
+          toolCallId: "tool_place_feature_variant_instance",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "create-instance",
+            label: "Place feature instance",
+            pageId: "page_welcome",
+            componentId: "feature_default",
+            instanceId: "feature_variant_instance",
+            parentId: "frame_welcome",
+            index: snapshot.nodesById.frame_welcome?.childIds.length ?? 0,
+            x: 520,
+            y: 620,
+          },
+        },
+        context: { ...pageContext, revision: 3 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(instance.ok).toBe(true);
+    const switched = await executeDesignToolRequest(
+      {
+        requestId: "switch_feature_variant",
+        call: {
+          toolCallId: "tool_switch_feature_variant",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "set-property",
+            label: "Use hover feature variant",
+            pageId: "page_welcome",
+            instanceId: "feature_variant_instance",
+            propertyName: "State",
+            value: "Hover",
+          },
+        },
+        context: { ...pageContext, revision: 4 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(switched.ok).toBe(true);
+    const inspection = await executeDesignToolRequest(
+      {
+        requestId: "inspect_feature_variants",
+        call: {
+          toolCallId: "tool_inspect_feature_variants",
+          toolName: "opendesign_inspect_document",
+          input: {},
+        },
+        context: { ...pageContext, revision: 5 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(inspection).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          document: {
+            variantSetsById: {
+              feature_set: {
+                componentIds: ["feature_default", "feature_hover"],
+                defaultComponentId: "feature_default",
+              },
+            },
+            instancesById: {
+              feature_variant_instance: {
+                componentId: "feature_default",
+                resolvedComponentId: "feature_hover",
+                componentProperties: {
+                  State: { type: "VARIANT", value: "Hover" },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it("applies host-ID Page lifecycle operations only within their explicit mutation scope", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     runtime.setSelection(["title_welcome"], "title_welcome");

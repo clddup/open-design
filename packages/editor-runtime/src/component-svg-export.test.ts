@@ -24,7 +24,115 @@ describe("component SVG export", () => {
     expect(exported.svg).toContain("Continue");
     expect(exported.exportedNodeIds).toContain("instance");
   });
+
+  it("exports the selected Variant artwork without the authoring Component Set", () => {
+    const document = variantFixture();
+    const plan = planSvgExportRequest(document, {
+      pageId: "instances",
+      rootNodeIds: ["instance"],
+      baseRevision: 1,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    const exported = exportSvg(plan.request);
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.svg).toContain("#db2777");
+    expect(exported.svg).toContain("Hover");
+    expect(exported.svg).not.toContain("#2563eb");
+    expect(exported.svg).not.toContain("button_set_root");
+  });
 });
+
+function variantFixture(): DesignDocument {
+  const document = fixture();
+  const main = document.nodesById.main;
+  const background = document.nodesById.bg;
+  const label = document.nodesById.label;
+  const instance = document.nodesById.instance;
+  if (
+    main?.kind !== "frame" ||
+    background?.kind !== "rectangle" ||
+    label?.kind !== "text" ||
+    instance?.kind !== "instance"
+  ) {
+    throw new Error("Variant SVG fixture is unavailable");
+  }
+  document.nodesById.set_root = {
+    ...structuredClone(main),
+    id: "set_root",
+    name: "Button",
+    parentId: null,
+    childIds: ["main", "hover_main"],
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 280, height: 84 },
+    properties: {
+      ...structuredClone(main.properties),
+      fills: [],
+      strokes: [],
+      clipsContent: false,
+    },
+    extensions: { semanticRole: "component-set" },
+  };
+  main.parentId = "set_root";
+  document.nodesById.hover_main = {
+    ...structuredClone(main),
+    id: "hover_main",
+    name: "State=Hover",
+    childIds: ["hover_bg", "hover_label"],
+    transform: [1, 0, 0, 1, 140, 0],
+  };
+  document.nodesById.hover_bg = {
+    ...structuredClone(background),
+    id: "hover_bg",
+    parentId: "hover_main",
+    properties: {
+      ...structuredClone(background.properties),
+      fills: [{ type: "solid", color: "#db2777", opacity: 1 }],
+    },
+  };
+  document.nodesById.hover_label = {
+    ...structuredClone(label),
+    id: "hover_label",
+    parentId: "hover_main",
+    properties: { ...structuredClone(label.properties), content: "Hover" },
+  };
+  document.pagesById["main-page"]!.rootNodeIds = ["set_root"];
+  document.componentsById = {
+    button_default: {
+      ...structuredClone(document.componentsById.button!),
+      id: "button_default",
+      name: "State=Default",
+      variantSetId: "button_set",
+      variantProperties: { State: "Default" },
+    },
+    button_hover: {
+      ...structuredClone(document.componentsById.button!),
+      id: "button_hover",
+      name: "State=Hover",
+      rootNodeId: "hover_main",
+      variantSetId: "button_set",
+      variantProperties: { State: "Hover" },
+    },
+  };
+  document.variantSetsById.button_set = {
+    id: "button_set",
+    name: "Button",
+    rootNodeId: "set_root",
+    defaultComponentId: "button_default",
+    componentPropertyDefinitions: {
+      State: {
+        type: "VARIANT",
+        defaultValue: "Default",
+        variantOptions: ["Default", "Hover"],
+      },
+    },
+    extensions: {},
+  };
+  instance.properties.componentId = "button_default";
+  instance.properties.componentProperties = { State: "Hover" };
+  return document;
+}
 
 function fixture(): DesignDocument {
   const main: Extract<DesignNode, { kind: "frame" }> = {
@@ -140,6 +248,7 @@ function fixture(): DesignDocument {
         name: "Button",
         rootNodeId: "main",
         componentPropertyDefinitions: {},
+        variantProperties: {},
         extensions: {},
       },
     },

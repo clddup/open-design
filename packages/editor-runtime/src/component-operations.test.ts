@@ -197,6 +197,7 @@ describe("component operations", () => {
       name: "Icon",
       rootNodeId: "icon_main",
       componentPropertyDefinitions: {},
+      variantProperties: {},
       extensions: {},
     };
     document.nodesById.icon_main = frame("icon_main", null, ["icon_dot"]);
@@ -226,6 +227,7 @@ describe("component operations", () => {
       name: "Alternate icon",
       rootNodeId: "icon_alt_main",
       componentPropertyDefinitions: {},
+      variantProperties: {},
       extensions: {},
     };
     document.nodesById.icon_alt_main = frame("icon_alt_main", null, [
@@ -397,6 +399,7 @@ function componentFixture(withInstance = false): DesignDocument {
       name: "Primary button",
       rootNodeId: "button_main",
       componentPropertyDefinitions: {},
+      variantProperties: {},
       extensions: {},
     };
     document.pagesById.page_instance.rootNodeIds = ["button_instance"];

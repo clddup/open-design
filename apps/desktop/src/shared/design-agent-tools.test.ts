@@ -336,6 +336,37 @@ describe("design Agent tool contract", () => {
   });
 
   it("validates dedicated component actions and rejects component definition bypasses", () => {
+    const combineVariants = {
+      action: "combine-as-variants",
+      label: "Combine button states",
+      pageId: "page_home",
+      componentIds: ["button_default", "button_hover"],
+      componentRootNodeIds: ["button_default_root", "button_hover_root"],
+      variantSetId: "button_set",
+      rootNodeId: "button_set_root",
+      name: "Button",
+      variantPropertiesByComponentId: {
+        button_default: { State: "Default" },
+        button_hover: { State: "Hover" },
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, combineVariants),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        ...combineVariants,
+        componentRootNodeIds: ["button_default_root"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        ...combineVariants,
+        variantPropertiesByComponentId: {
+          button_default: { State: "Default" },
+        },
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
         action: "set-override",

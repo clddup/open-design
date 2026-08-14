@@ -45,21 +45,60 @@ export function AssetsPanel({
     () => filterDesignImageAssets(entries, query),
     [entries, query],
   );
-  const components = useMemo(
-    () =>
-      Object.values(document.componentsById)
-        .filter((component) =>
-          component.name
-            .toLocaleLowerCase()
-            .includes(query.trim().toLocaleLowerCase()),
-        )
-        .sort(
-          (left, right) =>
-            left.name.localeCompare(right.name) ||
-            left.id.localeCompare(right.id),
-        ),
-    [document, query],
-  );
+  const componentAssets = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const variantsBySet = new Map<string, string[]>();
+    const ordinary = Object.values(document.componentsById).flatMap(
+      (component) => {
+        if (!component.variantSetId) {
+          return [
+            {
+              componentId: component.id,
+              componentIds: [component.id],
+              name: component.name,
+              variantCount: 0,
+            },
+          ];
+        }
+        const members = variantsBySet.get(component.variantSetId) ?? [];
+        members.push(component.id);
+        variantsBySet.set(component.variantSetId, members);
+        return [];
+      },
+    );
+    const sets = Object.values(document.variantSetsById).flatMap(
+      (variantSet) => {
+        const componentIds = variantsBySet.get(variantSet.id) ?? [];
+        return componentIds.includes(variantSet.defaultComponentId)
+          ? [
+              {
+                componentId: variantSet.defaultComponentId,
+                componentIds,
+                name: variantSet.name,
+                variantCount: componentIds.length,
+              },
+            ]
+          : [];
+      },
+    );
+    return [...ordinary, ...sets]
+      .filter((entry) => {
+        if (!normalizedQuery) return true;
+        return (
+          entry.name.toLocaleLowerCase().includes(normalizedQuery) ||
+          entry.componentIds.some((componentId) =>
+            document.componentsById[componentId]?.name
+              .toLocaleLowerCase()
+              .includes(normalizedQuery),
+          )
+        );
+      })
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) ||
+          left.componentId.localeCompare(right.componentId),
+      );
+  }, [document, query]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const nextReferenceByAsset = useRef(new Map<string, number>());
@@ -122,7 +161,7 @@ export function AssetsPanel({
           <Glyph name="component" size={17} />
           <span>{t("sidebar.noComponentsHint")}</span>
         </div>
-      ) : components.length === 0 ? (
+      ) : componentAssets.length === 0 ? (
         <div className={styles.compactEmpty}>
           <Glyph name="search" size={15} />
           <span>{t("sidebar.noMatchingComponents")}</span>
@@ -132,25 +171,35 @@ export function AssetsPanel({
           aria-label={t("sidebar.components")}
           className={styles.componentItems}
         >
-          {components.map((component) => {
+          {componentAssets.map((component) => {
+            const componentIds = new Set(component.componentIds);
             const count = Object.values(document.nodesById).filter(
               (node) =>
                 node.kind === "instance" &&
-                node.properties.componentId === component.id,
+                componentIds.has(node.properties.componentId),
             ).length;
             return (
-              <div className={styles.componentItem} key={component.id}>
+              <div className={styles.componentItem} key={component.componentId}>
                 <button
                   aria-label={t("sidebar.placeComponent", {
                     name: component.name,
                   })}
-                  onClick={() => report(onPlaceComponent(component.id))}
+                  onClick={() =>
+                    report(onPlaceComponent(component.componentId))
+                  }
                   type="button"
                 >
                   <Glyph name="component" size={16} />
                   <span>
                     <strong title={component.name}>{component.name}</strong>
-                    <small>{t("sidebar.componentInstances", { count })}</small>
+                    <small>
+                      {component.variantCount > 0
+                        ? t("sidebar.componentSetSummary", {
+                            count,
+                            variants: component.variantCount,
+                          })
+                        : t("sidebar.componentInstances", { count })}
+                    </small>
                   </span>
                 </button>
                 <IconButton
@@ -158,7 +207,7 @@ export function AssetsPanel({
                   label={t("sidebar.locateComponentMain", {
                     name: component.name,
                   })}
-                  onClick={() => onLocateComponent(component.id)}
+                  onClick={() => onLocateComponent(component.componentId)}
                 />
               </div>
             );

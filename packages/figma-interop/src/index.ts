@@ -4,6 +4,7 @@ import type {
   ComponentPropertyReferences as OpenDesignComponentPropertyReferences,
   DesignDocument,
   DesignNode,
+  VariantSetDefinition,
 } from "@opendesign/design-contracts";
 
 export const FIGMA_PLUGIN_TYPINGS_VERSION = "1.133.0" as const;
@@ -14,6 +15,20 @@ export function toFigmaComponentPropertyDefinitions(
   component: ComponentDefinition,
 ): ComponentPropertyDefinitions {
   return structuredClone(component.componentPropertyDefinitions);
+}
+
+export function toFigmaVariantSetPropertyDefinitions(
+  variantSet: VariantSetDefinition,
+): ComponentPropertyDefinitions {
+  return structuredClone(variantSet.componentPropertyDefinitions);
+}
+
+export function toFigmaVariantProperties(
+  component: ComponentDefinition,
+): NonNullable<ComponentNode["variantProperties"]> | null {
+  return component.variantSetId
+    ? structuredClone(component.variantProperties)
+    : null;
 }
 
 export function toFigmaComponentProperties(

@@ -34,6 +34,17 @@ export type DesignComponentToolInput =
       componentId: string;
     }
   | {
+      action: "combine-as-variants";
+      label: string;
+      pageId: string;
+      componentIds: string[];
+      componentRootNodeIds: string[];
+      variantSetId: string;
+      rootNodeId: string;
+      name: string;
+      variantPropertiesByComponentId: Record<string, Record<string, string>>;
+    }
+  | {
       action: "add-property";
       label: string;
       pageId: string;
@@ -160,6 +171,31 @@ export function isDesignComponentToolInput(
       return (
         id(input.componentId) &&
         exactKeys(input, ["action", "label", "pageId", "componentId"])
+      );
+    case "combine-as-variants":
+      return (
+        idArray(input.componentIds, 2, 128) &&
+        idArray(input.componentRootNodeIds, 2, 128) &&
+        input.componentIds.length === input.componentRootNodeIds.length &&
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        boundedString(input.name, 256) &&
+        input.name.trim().length > 0 &&
+        variantPropertyMatrix(
+          input.variantPropertiesByComponentId,
+          input.componentIds,
+        ) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "componentIds",
+          "componentRootNodeIds",
+          "variantSetId",
+          "rootNodeId",
+          "name",
+          "variantPropertiesByComponentId",
+        ])
       );
     case "add-property":
       return (
@@ -319,6 +355,50 @@ function sourcePath(value: unknown): value is string[] {
     value.length <= 64 &&
     value.every(id)
   );
+}
+
+function idArray(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length >= minimum &&
+    value.length <= maximum &&
+    new Set(value).size === value.length &&
+    value.every(id)
+  );
+}
+
+function variantPropertyMatrix(
+  value: unknown,
+  componentIds: readonly string[],
+): value is Record<string, Record<string, string>> {
+  if (!isRecord(value)) return false;
+  const expected = [...componentIds].sort();
+  const actual = Object.keys(value).sort();
+  if (
+    actual.length !== expected.length ||
+    actual.some((componentId, index) => componentId !== expected[index])
+  ) {
+    return false;
+  }
+  return actual.every((componentId) => {
+    const properties = value[componentId];
+    return (
+      isRecord(properties) &&
+      Object.keys(properties).length > 0 &&
+      Object.keys(properties).length <= 128 &&
+      Object.entries(properties).every(
+        ([name, propertyValue]) =>
+          name.length > 0 &&
+          name.length <= 256 &&
+          boundedString(propertyValue, 256) &&
+          propertyValue.length > 0,
+      )
+    );
+  });
 }
 
 function componentPropertyType(value: unknown): value is ComponentPropertyType {

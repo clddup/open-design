@@ -42,6 +42,9 @@ import {
   textLayoutAffected,
 } from "./text-layout-operations.js";
 import { synchronizeComponentPropertyDefaults } from "./component-property-defaults.js";
+import { OperationError } from "./operation-error.js";
+import { diffVariantSets } from "./variant-set-diff.js";
+import { deleteVariantSet, putVariantSet } from "./variant-set-runtime.js";
 
 export interface EditorSnapshot {
   document: DesignDocument;
@@ -771,32 +774,6 @@ export class EditorRuntime {
   }
 }
 
-class OperationError extends Error {
-  readonly commandId: string;
-  readonly code: DesignError["code"];
-  readonly path: string | undefined;
-  readonly details: DesignError["details"] | undefined;
-  readonly retryable: boolean;
-
-  constructor(
-    commandId: string,
-    message: string,
-    code: DesignError["code"] = "invalid",
-    options: {
-      path?: string;
-      details?: DesignError["details"];
-      retryable?: boolean;
-    } = {},
-  ) {
-    super(message);
-    this.commandId = commandId;
-    this.code = code;
-    this.path = options.path;
-    this.details = options.details;
-    this.retryable = options.retryable ?? false;
-  }
-}
-
 function applyOperation(
   document: DesignDocument,
   command: DesignOperation,
@@ -829,6 +806,12 @@ function applyOperation(
       return;
     case "delete_component":
       deleteComponent(document, command);
+      return;
+    case "put_variant_set":
+      putVariantSet(document, command);
+      return;
+    case "delete_variant_set":
+      deleteVariantSet(document, command);
       return;
     case "insert_page":
       insertPage(document, command);
@@ -1652,6 +1635,9 @@ function diffDocuments(
       "name",
       "rootNodeId",
       "description",
+      "componentPropertyDefinitions",
+      "variantSetId",
+      "variantProperties",
       "extensions",
     ].filter(
       (field) =>
@@ -1687,6 +1673,7 @@ function diffDocuments(
     changedComponentIds,
     removedComponentIds,
     componentChanges,
+    ...diffVariantSets(before, after),
     changes,
   });
 }

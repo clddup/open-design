@@ -66,7 +66,124 @@ describe("component projection", () => {
       componentProjectionId("button_instance", ["button_label"]),
     );
   });
+
+  it("projects the selected Variant subtree without projecting the Component Set container", () => {
+    const document = variantFixture();
+    const projection = projectDesignPage(document, "instances");
+    const hoverBackgroundId = componentProjectionId("button_instance", [
+      "button_hover_bg",
+    ]);
+
+    expect(projection.rootIds).toEqual(["button_instance"]);
+    expect(projection.elementsById.has("button_set_root")).toBe(false);
+    expect(
+      projection.elementsById.get(hoverBackgroundId)?.data.data,
+    ).toMatchObject({
+      opendesignNodeId: "button_instance",
+      opendesignSourceNodeId: "button_hover_bg",
+    });
+    expect(
+      projection.elementsById.has(
+        componentProjectionId("button_instance", ["button_bg"]),
+      ),
+    ).toBe(false);
+    expect(projection.warnings).toEqual([]);
+  });
 });
+
+function variantFixture(): DesignDocument {
+  const document = fixture();
+  const defaultRoot = document.nodesById.button_main;
+  const defaultBackground = document.nodesById.button_bg;
+  const defaultLabel = document.nodesById.button_label;
+  const instance = document.nodesById.button_instance;
+  if (
+    defaultRoot?.kind !== "frame" ||
+    defaultBackground?.kind !== "rectangle" ||
+    defaultLabel?.kind !== "text" ||
+    instance?.kind !== "instance"
+  ) {
+    throw new Error("Variant projection fixture is unavailable");
+  }
+  document.nodesById.button_set_root = {
+    ...structuredClone(defaultRoot),
+    id: "button_set_root",
+    name: "Button",
+    parentId: null,
+    childIds: ["button_main", "button_hover_main"],
+    transform: [1, 0, 0, 1, 20, 20],
+    size: { width: 260, height: 80 },
+    properties: {
+      ...structuredClone(defaultRoot.properties),
+      fills: [],
+      strokes: [],
+      clipsContent: false,
+    },
+    extensions: { semanticRole: "component-set" },
+  };
+  defaultRoot.parentId = "button_set_root";
+  defaultRoot.transform = [1, 0, 0, 1, 0, 0];
+  document.nodesById.button_hover_main = {
+    ...structuredClone(defaultRoot),
+    id: "button_hover_main",
+    name: "State=Hover",
+    childIds: ["button_hover_bg", "button_hover_label"],
+    transform: [1, 0, 0, 1, 140, 0],
+  };
+  document.nodesById.button_hover_bg = {
+    ...structuredClone(defaultBackground),
+    id: "button_hover_bg",
+    parentId: "button_hover_main",
+    properties: {
+      ...structuredClone(defaultBackground.properties),
+      fills: [{ type: "solid", color: "#db2777", opacity: 1 }],
+    },
+  };
+  document.nodesById.button_hover_label = {
+    ...structuredClone(defaultLabel),
+    id: "button_hover_label",
+    parentId: "button_hover_main",
+    properties: {
+      ...structuredClone(defaultLabel.properties),
+      content: "Hover",
+    },
+  };
+  document.pagesById.main!.rootNodeIds = ["button_set_root"];
+  document.componentsById = {
+    button_default: {
+      ...structuredClone(document.componentsById.button!),
+      id: "button_default",
+      name: "State=Default",
+      variantSetId: "button_set",
+      variantProperties: { State: "Default" },
+    },
+    button_hover: {
+      ...structuredClone(document.componentsById.button!),
+      id: "button_hover",
+      name: "State=Hover",
+      rootNodeId: "button_hover_main",
+      variantSetId: "button_set",
+      variantProperties: { State: "Hover" },
+    },
+  };
+  document.variantSetsById.button_set = {
+    id: "button_set",
+    name: "Button",
+    rootNodeId: "button_set_root",
+    defaultComponentId: "button_default",
+    componentPropertyDefinitions: {
+      State: {
+        type: "VARIANT",
+        defaultValue: "Default",
+        variantOptions: ["Default", "Hover"],
+      },
+    },
+    extensions: {},
+  };
+  instance.properties.componentId = "button_default";
+  instance.properties.componentProperties = { State: "Hover" };
+  return document;
+}
 
 function fixture(): DesignDocument {
   const frame: Extract<DesignNode, { kind: "frame" }> = {
@@ -187,6 +304,7 @@ function fixture(): DesignDocument {
         name: "Button",
         rootNodeId: "button_main",
         componentPropertyDefinitions: {},
+        variantProperties: {},
         extensions: {},
       },
     },

@@ -27,6 +27,8 @@ function renderPanel(
     exportFormat?: "svg" | "png" | "jpeg" | "webp";
     selectionCount?: number;
     componentContext?: ComponentInspectorContext;
+    canCombineVariants?: boolean;
+    onCombineVariants?: () => void;
     onAddComponentProperty?: (input: {
       name: string;
       sourceNodeId: string;
@@ -67,6 +69,7 @@ function renderPanel(
         <PropertiesPanel
           arrangement={options.arrangement ?? null}
           booleanOperationEditable={false}
+          canCombineVariants={options.canCombineVariants ?? false}
           canDelete
           layoutMode={options.layoutMode ?? null}
           componentContext={options.componentContext}
@@ -77,6 +80,7 @@ function renderPanel(
           onCancelSvgOperation={onCancelSvgOperation}
           onCreateComponent={vi.fn()}
           onCreateComponentInstance={vi.fn()}
+          onCombineVariants={options.onCombineVariants ?? vi.fn()}
           onDelete={vi.fn()}
           onDetachComponentInstance={vi.fn()}
           onDismissRasterFeedback={vi.fn()}
@@ -1052,6 +1056,52 @@ describe("PropertiesPanel line workflow", () => {
     );
   });
 
+  it("switches and resets a VARIANT property from the Instance inspector", async () => {
+    const user = userEvent.setup();
+    const onResetComponentProperty = vi.fn();
+    const onSetComponentProperty = vi.fn();
+    renderPanel({
+      componentContext: {
+        availableComponents: [],
+        componentName: "Button",
+        componentProperties: [
+          {
+            assigned: true,
+            definition: {
+              type: "VARIANT",
+              defaultValue: "Default",
+              variantOptions: ["Default", "Hover"],
+            },
+            propertyName: "State",
+            value: "Hover",
+          },
+        ],
+        componentPropertyDefinitions: [],
+        isMain: false,
+        overrideCount: 0,
+        sourceNodes: [],
+        variantSet: {
+          id: "button_set",
+          isDefault: false,
+          isRoot: false,
+          name: "Button",
+          properties: { State: "Hover" },
+          variantCount: 2,
+        },
+      },
+      node: lineNode,
+      onResetComponentProperty,
+      onSetComponentProperty,
+      selectionCount: 1,
+    });
+
+    await user.selectOptions(screen.getByLabelText("State"), "Default");
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+
+    expect(onSetComponentProperty).toHaveBeenCalledWith("State", "Default");
+    expect(onResetComponentProperty).toHaveBeenCalledWith("State");
+  });
+
   it("removes component identity from the selected main through the component section", async () => {
     const user = userEvent.setup();
     const onRemoveComponent = vi.fn();
@@ -1072,6 +1122,21 @@ describe("PropertiesPanel line workflow", () => {
 
     await user.click(screen.getByRole("button", { name: "Remove component" }));
     expect(onRemoveComponent).toHaveBeenCalledOnce();
+  });
+
+  it("offers one explicit combine action only for eligible multi-Component selection", async () => {
+    const user = userEvent.setup();
+    const onCombineVariants = vi.fn();
+    renderPanel({
+      canCombineVariants: true,
+      onCombineVariants,
+      selectionCount: 2,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Combine as variants" }),
+    );
+    expect(onCombineVariants).toHaveBeenCalledOnce();
   });
 
   it("configures and starts a single-target professional raster export", async () => {

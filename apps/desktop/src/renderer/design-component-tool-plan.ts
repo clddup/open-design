@@ -3,6 +3,7 @@ import {
   planAddComponentProperty,
   planCreateComponent,
   planCreateInstance,
+  planCombineComponentsAsVariants,
   planDetachComponentInstance,
   planRemoveComponent,
   planRemoveComponentProperty,
@@ -49,6 +50,32 @@ export function planDesignComponentTool(
         componentId: input.componentId,
         commandPrefix,
       });
+    case "combine-as-variants": {
+      const staleRoot = input.componentIds.find(
+        (componentId, index) =>
+          document.componentsById[componentId]?.rootNodeId !==
+          input.componentRootNodeIds[index],
+      );
+      if (staleRoot) {
+        return {
+          ok: false,
+          code: "invalid",
+          message: `Component ${staleRoot} no longer matches its inspected root`,
+        };
+      }
+      const plan = planCombineComponentsAsVariants(document, {
+        pageId: input.pageId,
+        componentIds: input.componentIds,
+        variantSetId: input.variantSetId,
+        rootNodeId: input.rootNodeId,
+        name: input.name,
+        variantPropertiesByComponentId: input.variantPropertiesByComponentId,
+        commandPrefix,
+      });
+      return plan.ok
+        ? plan
+        : { ok: false, code: "invalid", message: plan.message };
+    }
     case "add-property":
       return planAddComponentProperty(document, {
         componentId: input.componentId,

@@ -10,6 +10,7 @@ import {
   planAddComponentProperty,
   planCreateComponent,
   planCreateInstance,
+  planCombineComponentsAsVariants,
   planDetachComponentInstance,
   planResetComponentOverrides,
   planRemoveComponent,
@@ -93,6 +94,60 @@ export function useComponentActions({
     });
     applyInstancePlan(plan);
   }, [activePageId, runtime, transactionCounter]);
+
+  const combineSelectedComponentsAsVariants = useCallback(() => {
+    const current = runtime.getSnapshot();
+    const componentsByRoot = new Map(
+      Object.values(current.document.componentsById).map((component) => [
+        component.rootNodeId,
+        component,
+      ]),
+    );
+    const components = current.state.selection.nodeIds.flatMap((nodeId) => {
+      const component = componentsByRoot.get(nodeId);
+      return component ? [component] : [];
+    });
+    if (
+      components.length < 2 ||
+      components.length !== current.state.selection.nodeIds.length ||
+      components.some((component) => component.variantSetId)
+    ) {
+      return;
+    }
+    const operationId = `variant_set_${Date.now()}_${++transactionCounter.current}`;
+    const inferred = inferVariantFacts(
+      components,
+      t("properties.componentSet"),
+    );
+    const plan = planCombineComponentsAsVariants(current.document, {
+      pageId: activePageId,
+      componentIds: components.map((component) => component.id),
+      variantSetId: operationId,
+      rootNodeId: `${operationId}_root`,
+      name: inferred.setName,
+      variantPropertiesByComponentId: Object.fromEntries(
+        components.map((component, index) => [
+          component.id,
+          { [inferred.propertyName]: inferred.values[index] },
+        ]),
+      ),
+      commandPrefix: operationId,
+    });
+    if (!plan.ok) {
+      setEditorError(plan.message);
+      return;
+    }
+    if (applyCommands(t("history.combineAsVariants"), plan.commands)) {
+      runtime.setSelection(plan.selectionNodeIds, plan.rootNodeId);
+    }
+  }, [
+    activePageId,
+    applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  ]);
 
   const removeSelectedComponent = useCallback(() => {
     const current = runtime.getSnapshot();
@@ -365,6 +420,7 @@ export function useComponentActions({
 
   return {
     addSelectedComponentProperty,
+    combineSelectedComponentsAsVariants,
     createComponentFromSelection,
     createSelectedComponentInstance,
     detachSelectedInstance,
@@ -379,6 +435,54 @@ export function useComponentActions({
     resetSelectedInstanceComponentProperty,
     setSelectedInstanceComponentProperty,
     updateSelectedInstanceSource,
+  };
+}
+
+function inferVariantFacts(
+  components: readonly DesignDocument["componentsById"][string][],
+  fallbackSetName: string,
+): { propertyName: string; setName: string; values: string[] } {
+  const names = components.map((component) => component.name.trim());
+  const equals = names.map((name) => {
+    const marker = name.indexOf("=");
+    return marker > 0
+      ? {
+          left: name.slice(0, marker).trim(),
+          right: name.slice(marker + 1).trim(),
+        }
+      : null;
+  });
+  const sameEqualsProperty =
+    equals.every((part) => part?.left && part.right) &&
+    equals.every((part) => part?.left === equals[0]?.left);
+  const slashes = names.map((name) => {
+    const marker = name.lastIndexOf("/");
+    return marker > 0
+      ? {
+          left: name.slice(0, marker).trim(),
+          right: name.slice(marker + 1).trim(),
+        }
+      : null;
+  });
+  const sameSlashSet =
+    slashes.every((part) => part?.left && part.right) &&
+    slashes.every((part) => part?.left === slashes[0]?.left);
+  const rawValues = sameEqualsProperty
+    ? equals.map((part) => part!.right)
+    : sameSlashSet
+      ? slashes.map((part) => part!.right)
+      : names;
+  const used = new Set<string>();
+  const values = rawValues.map((raw, index) => {
+    const candidate = raw || `Variant ${index + 1}`;
+    const value = used.has(candidate) ? `Variant ${index + 1}` : candidate;
+    used.add(value);
+    return value;
+  });
+  return {
+    propertyName: sameEqualsProperty ? equals[0]!.left : "State",
+    setName: sameSlashSet ? slashes[0]!.left : fallbackSetName,
+    values,
   };
 }
 

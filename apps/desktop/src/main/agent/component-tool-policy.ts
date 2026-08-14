@@ -12,6 +12,11 @@ export function materialTargetRefsForComponentTool(
       return { nodeIds: [input.nodeId], createdNodeIds: [] };
     case "remove-component":
       return { nodeIds: [], createdNodeIds: [] };
+    case "combine-as-variants":
+      return {
+        nodeIds: [...input.componentRootNodeIds],
+        createdNodeIds: [input.rootNodeId],
+      };
     case "add-property":
       return { nodeIds: [input.sourceNodeId], createdNodeIds: [] };
     case "rename-property":
@@ -37,6 +42,7 @@ export function componentToolIsMaterialWrite(
   input: DesignComponentToolInput,
 ): boolean {
   if (
+    input.action === "combine-as-variants" ||
     input.action === "create-instance" ||
     input.action === "reset-overrides" ||
     input.action === "set-property" ||

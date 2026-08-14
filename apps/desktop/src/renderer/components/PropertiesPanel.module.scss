@@ -102,6 +102,32 @@
   }
 }
 
+.variantFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+
+  > span {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    gap: 4px;
+    padding: 3px 5px;
+    border: 1px solid var(--ui-border);
+    border-radius: 3px;
+    background: var(--ui-bg);
+    font-size: 9px;
+
+    small {
+      color: var(--ui-text-faint);
+    }
+
+    strong {
+      color: var(--ui-text);
+      font-weight: 550;
+    }
+  }
+}
+
 .componentOverrideEditor {
   display: grid;
   grid-column: 1 / -1;

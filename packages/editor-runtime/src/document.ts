@@ -22,6 +22,7 @@ import {
   validateNodeLayoutInvariants,
   type DocumentInvariantIssue,
 } from "./layout-document-invariants.js";
+import { validateVariantSetInvariants } from "./variant-set-invariants.js";
 
 export type { DocumentInvariantIssue } from "./layout-document-invariants.js";
 
@@ -158,6 +159,8 @@ export function validateDocumentInvariants(
       }
     }
   }
+
+  issues.push(...validateVariantSetInvariants(document));
 
   const sourceOwner = new Map<string, string>();
   for (const componentId of Object.keys(document.componentsById)) {

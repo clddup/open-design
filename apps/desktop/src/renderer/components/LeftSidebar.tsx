@@ -267,11 +267,11 @@ export function LeftSidebar({
   const revealedSelectionKey = useRef<string | null>(null);
   const layers = flattenPageTree(document, activePageId, collapsedNodeIds);
   const selectedIds = new Set(selectedNodeIds);
-  const componentMainNodeIds = new Set(
-    Object.values(document.componentsById).map(
-      (component) => component.rootNodeId,
-    ),
-  );
+  const componentIdentityNodeIds = new Set<string>();
+  for (const component of Object.values(document.componentsById))
+    componentIdentityNodeIds.add(component.rootNodeId);
+  for (const variantSet of Object.values(document.variantSetsById))
+    componentIdentityNodeIds.add(variantSet.rootNodeId);
   const booleanEditScope = resolveBooleanEditScope(
     document,
     activePageId,
@@ -815,7 +815,7 @@ export function LeftSidebar({
                   >
                     <Glyph
                       name={
-                        componentMainNodeIds.has(node.id)
+                        componentIdentityNodeIds.has(node.id)
                           ? "component"
                           : nodeIcons[node.kind]
                       }

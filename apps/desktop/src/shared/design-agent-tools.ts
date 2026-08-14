@@ -1193,13 +1193,14 @@ const MODEL_HIERARCHY_SCHEMA = {
 const MODEL_COMPONENT_SCHEMA = {
   type: "object",
   description:
-    "Create and place linked components, author Figma-compatible Boolean/Text/Instance-swap properties on explicit Main sublayers, set/reset typed instance property values, use advanced sourcePath overrides, detach an instance, or locate its Main. Component property keys are stable Label#suffix names returned by inspection.",
+    "Create and place linked components, combine inspected sibling Component Mains into a Figma-compatible Component Set with explicit unique VARIANT values, author Boolean/Text/Instance-swap properties on explicit Main sublayers, set/reset typed instance and VARIANT property values, use advanced sourcePath overrides, detach an instance, or locate its Main. Component, set, root, and property IDs must come from inspection.",
   properties: {
     action: {
       enum: [
         "create-component",
         "create-instance",
         "remove-component",
+        "combine-as-variants",
         "add-property",
         "rename-property",
         "remove-property",
@@ -1215,6 +1216,37 @@ const MODEL_COMPONENT_SCHEMA = {
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     nodeId: { type: "string", minLength: 1, maxLength: 256 },
     componentId: { type: "string", minLength: 1, maxLength: 256 },
+    componentIds: {
+      type: "array",
+      minItems: 2,
+      maxItems: 128,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 256 },
+    },
+    componentRootNodeIds: {
+      type: "array",
+      minItems: 2,
+      maxItems: 128,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 256 },
+    },
+    variantSetId: { type: "string", minLength: 1, maxLength: 256 },
+    rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
+    variantPropertiesByComponentId: {
+      type: "object",
+      minProperties: 2,
+      maxProperties: 128,
+      additionalProperties: {
+        type: "object",
+        minProperties: 1,
+        maxProperties: 128,
+        additionalProperties: {
+          type: "string",
+          minLength: 1,
+          maxLength: 256,
+        },
+      },
+    },
     instanceId: { type: "string", minLength: 1, maxLength: 256 },
     name: { type: "string", minLength: 1, maxLength: 256 },
     propertyId: { type: "string", minLength: 1, maxLength: 256 },
@@ -1958,7 +1990,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_COMPONENT_TOOL_NAME,
     description:
-      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main; create-instance places a linked instance; add/rename/remove-property author Figma-compatible Boolean, Text, or Instance-swap properties on explicit Main sublayers; set/reset-property changes consolidated instance values by the stable propertyName returned by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. remove-component, detach-instance, and go-to-main retain their structural meanings. Main edits synchronize property defaults, instance structure cannot be directly mutated, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
+      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main; combine-as-variants takes two or more inspected sibling Component Mains, their exact root IDs, a new set/root ID, and a complete unique property map, then creates one real Component Set Frame in one undoable transaction; create-instance places a linked instance. add/rename/remove-property author Figma-compatible Boolean, Text, or Instance-swap properties on explicit Main sublayers; set/reset-property also selects VARIANT values exposed by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. remove-component, detach-instance, and go-to-main retain their structural meanings. Main edits synchronize property defaults, instance structure cannot be directly mutated, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
     inputSchema: MODEL_COMPONENT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,

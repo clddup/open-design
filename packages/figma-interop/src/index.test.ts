@@ -8,6 +8,8 @@ import {
   toFigmaComponentProperties,
   toFigmaComponentPropertyDefinitions,
   toFigmaComponentPropertyReferences,
+  toFigmaVariantProperties,
+  toFigmaVariantSetPropertyDefinitions,
 } from "./index.js";
 
 describe("Figma component property compatibility", () => {
@@ -19,6 +21,7 @@ describe("Figma component property compatibility", () => {
       componentPropertyDefinitions: {
         "Label#button:1": { type: "TEXT", defaultValue: "Continue" },
       },
+      variantProperties: {},
       extensions: {},
     };
     const instance: InstanceNode = {
@@ -41,7 +44,7 @@ describe("Figma component property compatibility", () => {
     };
     const document = {
       format: "dev.opendesign.document",
-      schemaVersion: "1.21.0",
+      schemaVersion: "1.22.0",
       documentId: "figma-compatibility",
       revision: 1,
       pageOrder: ["page"],
@@ -126,5 +129,40 @@ describe("Figma component property compatibility", () => {
     expect(toFigmaComponentProperties(document, instance.id)).toEqual({
       "Label#button:1": { type: "TEXT", value: "Submit" },
     });
+  });
+
+  it("projects Component Set VARIANT definitions and member values to official Plugin API shapes", () => {
+    const variantSet = {
+      id: "button_set",
+      name: "Button",
+      rootNodeId: "button_set_root",
+      defaultComponentId: "button_default",
+      componentPropertyDefinitions: {
+        State: {
+          type: "VARIANT" as const,
+          defaultValue: "Default",
+          variantOptions: ["Default", "Hover"],
+        },
+      },
+      extensions: {},
+    };
+    const component: ComponentDefinition = {
+      id: "button_hover",
+      name: "State=Hover",
+      rootNodeId: "button_hover_root",
+      componentPropertyDefinitions: {},
+      variantSetId: variantSet.id,
+      variantProperties: { State: "Hover" },
+      extensions: {},
+    };
+
+    expect(toFigmaVariantSetPropertyDefinitions(variantSet)).toEqual({
+      State: {
+        type: "VARIANT",
+        defaultValue: "Default",
+        variantOptions: ["Default", "Hover"],
+      },
+    });
+    expect(toFigmaVariantProperties(component)).toEqual({ State: "Hover" });
   });
 });

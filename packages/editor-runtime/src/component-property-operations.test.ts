@@ -399,6 +399,7 @@ function component(id: string, rootNodeId: string) {
     name: id,
     rootNodeId,
     componentPropertyDefinitions: {},
+    variantProperties: {},
     extensions: {},
   };
 }

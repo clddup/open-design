@@ -7,10 +7,12 @@ import type {
   ComponentPropertyDefinition,
   ComponentPropertyReferences,
   ComponentPropertyType,
+  ComponentDefinition,
   DesignDocument,
   DesignNode,
   DesignOperation,
   InstanceSwapPreferredValue,
+  VariantPropertyDefinition,
 } from "@opendesign/design-contracts";
 import type { ComponentOperationPlan } from "./component-operations.js";
 
@@ -273,8 +275,9 @@ export function planSetComponentPropertyValue(
     );
   }
   const component = document.componentsById[instance.properties.componentId];
-  const definition =
-    component?.componentPropertyDefinitions[input.propertyName];
+  const definition = component
+    ? effectivePropertyDefinition(document, component, input.propertyName)
+    : undefined;
   if (!component || !definition) {
     return failure(
       "missing-component",
@@ -288,6 +291,16 @@ export function planSetComponentPropertyValue(
     );
   }
   if (
+    definition.type === "VARIANT" &&
+    (typeof input.value !== "string" ||
+      !definition.variantOptions.includes(input.value))
+  ) {
+    return failure(
+      "invalid",
+      `Variant property ${input.propertyName} requires one of: ${definition.variantOptions.join(", ")}`,
+    );
+  }
+  if (
     definition.type === "INSTANCE_SWAP" &&
     typeof input.value === "string" &&
     !document.componentsById[input.value]
@@ -298,7 +311,12 @@ export function planSetComponentPropertyValue(
     );
   }
   const next = { ...instance.properties.componentProperties };
-  if (input.value === definition.defaultValue) delete next[input.propertyName];
+  const implicitValue =
+    definition.type === "VARIANT"
+      ? (component.variantProperties[input.propertyName] ??
+        definition.defaultValue)
+      : definition.defaultValue;
+  if (input.value === implicitValue) delete next[input.propertyName];
   else next[input.propertyName] = input.value;
   if (
     JSON.stringify(next) ===
@@ -361,7 +379,7 @@ export function planResetComponentPropertyValue(
     );
   const next = { ...instance.properties.componentProperties };
   if (input.propertyName) {
-    if (!component.componentPropertyDefinitions[input.propertyName]) {
+    if (!effectivePropertyDefinition(document, component, input.propertyName)) {
       return failure(
         "missing-component",
         `Component property ${input.propertyName} does not exist`,
@@ -505,12 +523,24 @@ function directComponentInstances(
 }
 
 function valueMatchesDefinition(
-  definition: ComponentPropertyDefinition,
+  definition: ComponentPropertyDefinition | VariantPropertyDefinition,
   value: ComponentPropertyAssignment,
 ): boolean {
   return definition.type === "BOOLEAN"
     ? typeof value === "boolean"
     : typeof value === "string";
+}
+
+function effectivePropertyDefinition(
+  document: DesignDocument,
+  component: ComponentDefinition,
+  propertyName: string,
+): ComponentPropertyDefinition | VariantPropertyDefinition | undefined {
+  const ordinary = component.componentPropertyDefinitions[propertyName];
+  if (ordinary) return ordinary;
+  if (!component.variantSetId) return undefined;
+  return document.variantSetsById[component.variantSetId]
+    ?.componentPropertyDefinitions[propertyName];
 }
 
 function success(

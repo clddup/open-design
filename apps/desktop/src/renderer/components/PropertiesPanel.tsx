@@ -47,12 +47,14 @@ export function PropertiesPanel({
   arrangement,
   booleanOperationEditable,
   booleanOperandParent,
+  canCombineVariants,
   canDelete,
   layoutMode,
   onArrange,
   onBooleanOperationChange,
   onCreateComponent,
   onCreateComponentInstance,
+  onCombineVariants,
   onDelete,
   onDetachComponentInstance,
   onDuplicate,
@@ -93,12 +95,14 @@ export function PropertiesPanel({
   arrangement: ArrangementSelectionMetrics | null;
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
+  canCombineVariants: boolean;
   canDelete: boolean;
   layoutMode: "constraints" | "sizing" | "wrap-sizing" | "absolute" | null;
   onArrange: (operation: ArrangeOperation) => void;
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
+  onCombineVariants: () => void;
   onDelete: () => void;
   onDetachComponentInstance: () => void;
   onDuplicate: () => void;
@@ -406,6 +410,12 @@ export function PropertiesPanel({
               </div>
             </div>
             <div className={styles.multiActions}>
+              {canCombineVariants && (
+                <button onClick={onCombineVariants} type="button">
+                  <Glyph name="component" size={13} />
+                  {t("properties.combineAsVariants")}
+                </button>
+              )}
               <button onClick={onDuplicate} type="button">
                 <Glyph name="duplicate" size={13} />
                 {t("properties.duplicateLayers")}

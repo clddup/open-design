@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
+  COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION,
   FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
@@ -31,8 +32,9 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION).toBe("1.19.0");
   expect(LAYOUT_GUIDE_COLUMNS_ROWS_DESIGN_SCHEMA_VERSION).toBe("1.20.0");
   expect(FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION).toBe("1.21.0");
+  expect(COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION).toBe("1.22.0");
   expect(DESIGN_SCHEMA_VERSION).toBe(
-    FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
+    COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION,
   );
 });
 
@@ -1248,12 +1250,42 @@ describe("design contract schemas", () => {
     expect(
       migrated?.componentsById.component_text?.componentPropertyDefinitions,
     ).toEqual({});
+    expect(migrated?.componentsById.component_text?.variantProperties).toEqual(
+      {},
+    );
     const instance = migrated?.nodesById.instance_text;
     expect(
       instance?.kind === "instance"
         ? instance.properties.componentProperties
         : undefined,
     ).toEqual({});
+  });
+
+  it("migrates 1.21 Components without guessing Variant Set membership", () => {
+    const source = textDocumentFixture() as unknown as {
+      schemaVersion: string;
+      componentsById: Record<string, Record<string, unknown>>;
+    };
+    source.schemaVersion = "1.21.0";
+    source.componentsById.component_text = {
+      id: "component_text",
+      name: "Text component",
+      rootNodeId: "text_1",
+      componentPropertyDefinitions: {},
+      extensions: {},
+    };
+
+    const migrated = migrateDesignDocument(source);
+
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.componentsById.component_text).toMatchObject({
+      componentPropertyDefinitions: {},
+      variantProperties: {},
+    });
+    expect(
+      migrated?.componentsById.component_text?.variantSetId,
+    ).toBeUndefined();
+    expect(migrated?.variantSetsById).toEqual({});
   });
 
   it("validates strict uniform layout guides on Frames", () => {

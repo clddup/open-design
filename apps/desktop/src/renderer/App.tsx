@@ -259,6 +259,16 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     designDocument,
     selectedNode,
   );
+  const selectedComponents = state.selection.nodeIds.flatMap((nodeId) => {
+    const component = Object.values(designDocument.componentsById).find(
+      (candidate) => candidate.rootNodeId === nodeId,
+    );
+    return component ? [component] : [];
+  });
+  const canCombineVariants =
+    selectedComponents.length >= 2 &&
+    selectedComponents.length === state.selection.nodeIds.length &&
+    selectedComponents.every((component) => !component.variantSetId);
   const projectConversations = activeProject
     ? (conversationsByProjectId[activeProject.projectId] ?? [])
     : [];
@@ -657,6 +667,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
 
   const {
     addSelectedComponentProperty,
+    combineSelectedComponentsAsVariants,
     createComponentFromSelection,
     createSelectedComponentInstance,
     detachSelectedInstance,
@@ -1869,6 +1880,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                     : undefined
                 }
                 canDelete={canDeleteSelection}
+                canCombineVariants={canCombineVariants}
                 layoutMode={layoutInspectorMode(designDocument, selectedNode)}
                 node={selectedNode}
                 onArrange={arrangeSelection}
@@ -1876,6 +1888,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onCancelSvgOperation={importExport.cancelOperation}
                 onCreateComponent={createComponentFromSelection}
                 onCreateComponentInstance={createSelectedComponentInstance}
+                onCombineVariants={combineSelectedComponentsAsVariants}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
                 onDetachComponentInstance={detachSelectedInstance}
                 onDismissRasterFeedback={importExport.dismissRasterFeedback}

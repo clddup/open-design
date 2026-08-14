@@ -7,6 +7,7 @@ import type {
   DesignNode,
   Effect,
   MaskMode,
+  VariantPropertyDefinition,
 } from "@opendesign/design-contracts";
 import { Button, Glyph } from "@opendesign/ui";
 import { useEffect, useState } from "react";
@@ -30,6 +31,10 @@ import {
   isStrokeNode,
   maskModes,
 } from "./PaintEffectEditors";
+import {
+  ComponentIdentitySummary,
+  type ComponentInspectorVariantSet,
+} from "./ComponentIdentitySummary";
 
 export interface ComponentInspectorSource {
   node: DesignNode;
@@ -50,7 +55,7 @@ export interface ComponentInspectorPropertyDefinition {
 
 export interface ComponentInspectorPropertyValue {
   assigned: boolean;
-  definition: ComponentPropertyDefinition;
+  definition: ComponentPropertyDefinition | VariantPropertyDefinition;
   propertyName: string;
   value: ComponentPropertyAssignment;
 }
@@ -576,7 +581,24 @@ function ComponentPropertyValues({
                 {t("properties.resetProperty")}
               </button>
             </div>
-            {property.definition.type === "BOOLEAN" ? (
+            {property.definition.type === "VARIANT" ? (
+              <label className={styles.select}>
+                <span>{t("properties.variant")}</span>
+                <select
+                  aria-label={propertyLabel(property.propertyName)}
+                  onChange={(event) =>
+                    onSet(property.propertyName, event.target.value)
+                  }
+                  value={String(property.value)}
+                >
+                  {property.definition.variantOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : property.definition.type === "BOOLEAN" ? (
               <label className={styles.componentPropertyToggle}>
                 <input
                   checked={property.value === true}
@@ -626,6 +648,7 @@ export type ComponentInspectorContext = {
   isMain: boolean;
   overrideCount: number;
   sourceNodes: readonly ComponentInspectorSource[];
+  variantSet?: ComponentInspectorVariantSet;
 };
 
 export function ComponentSection({
@@ -679,31 +702,24 @@ export function ComponentSection({
     <Section title={t("properties.component")}>
       {componentContext ? (
         <div className={styles.componentCard}>
-          <span>
-            <Glyph
-              name={componentContext.isMain ? "component" : "instance"}
-              size={15}
-            />
-            <span>
-              <strong>{componentContext.componentName}</strong>
-              <small>
-                {componentContext.isMain
-                  ? t("properties.mainComponent")
-                  : t("properties.instanceOverrideCount", {
-                      count: componentContext.overrideCount,
-                    })}
-              </small>
-            </span>
-          </span>
-          {componentContext.isMain ? (
+          <ComponentIdentitySummary
+            componentName={componentContext.componentName}
+            isMain={componentContext.isMain}
+            overrideCount={componentContext.overrideCount}
+            variantSet={componentContext.variantSet}
+          />
+          {componentContext.variantSet
+            ?.isRoot ? null : componentContext.isMain ? (
             <>
               <div className={styles.componentActions}>
                 <Button onClick={onCreateComponentInstance} tone="quiet">
                   {t("properties.createInstance")}
                 </Button>
-                <Button onClick={onRemoveComponent} tone="quiet">
-                  {t("properties.removeComponent")}
-                </Button>
+                {!componentContext.variantSet && (
+                  <Button onClick={onRemoveComponent} tone="quiet">
+                    {t("properties.removeComponent")}
+                  </Button>
+                )}
               </div>
               <ComponentPropertyAuthoring
                 definitions={componentContext.componentPropertyDefinitions}

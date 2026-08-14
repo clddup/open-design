@@ -57,7 +57,7 @@ v2/v3 计划继续用于历史 journal、恢复和旧 fixture，不被追溯强�
 - 组件化从提示词偏好变成“LLM 决策 → 稳定计划 → typed component tool → exact-revision 结构验收”的可信闭环。
 - 规则适用于 UI、Logo、品牌、海报、演示图形和后续设计类型，不绑定对象类别。
 - 当前门禁验证已声明候选，不声称已经能确定性发现模型故意遗漏的重复结构；结构相似度诊断与 design critic 仍是后续质量轨。
-- Boolean/Text/Instance-swap Component Properties 已由 [ADR-0063](0063-figma-compatible-component-properties.md) 通过独立文档/Runtime/Inspector/Agent 切片完成，不塞入 Plan v4；Variant/Slot、Component Set、跨文件 Library 与 Token/Variable 继续按 roadmap 独立演进。
+- Boolean/Text/Instance-swap Component Properties 已由 [ADR-0063](0063-figma-compatible-component-properties.md) 完成，Component Set/VARIANT 已由 [ADR-0064](0064-figma-compatible-component-sets-and-variants.md) 完成，均不塞入 Plan v4；Slot、Set add/remove/dissolve、跨文件 Library 与 Token/Variable 继续按 roadmap 独立演进。
 
 ## 验证
 
