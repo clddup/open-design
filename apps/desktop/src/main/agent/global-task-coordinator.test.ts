@@ -1861,6 +1861,180 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("tracks replacement subtree IDs immediately and reconciles them from inspection", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const document = withExistingArtboard(opened.document, pageId);
+    const nested = document.nodesById.existing_nested_frame;
+    if (!nested || nested.kind !== "frame") {
+      throw new Error("Existing nested Frame fixture is missing");
+    }
+    nested.childIds = ["old_mark"];
+    document.nodesById.old_mark = {
+      id: "old_mark",
+      kind: "rectangle",
+      name: "Old mark",
+      parentId: nested.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 16, 16],
+      size: { width: 40, height: 40 },
+      opacity: 1,
+      properties: {
+        fills: [{ type: "solid", color: "#111827", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 8,
+      },
+      extensions: {},
+    };
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_replace_descendants",
+      sessionId: "conversation_mobile",
+      prompt: "Replace the existing nested design",
+      documentId: file.documentId,
+      revision: document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_replace_descendants",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(document, pageId),
+    );
+    coordinator.registerDesignPlan(context, {
+      ...designPlan,
+      pageId,
+      artboard: {
+        mode: "existing",
+        frameId: "existing_artboard",
+        x: 80,
+        y: 64,
+        width: 1120,
+        height: 720,
+      },
+    });
+    const replacement: DesignApplyToolInput = {
+      label: "Replace nested design",
+      commands: [
+        {
+          commandId: "replace_nested_design",
+          type: "replace_subtree",
+          rootNodeId: "existing_nested_frame",
+          nodes: [
+            {
+              ...structuredClone(nested),
+              childIds: ["replacement_mark"],
+            },
+            {
+              id: "replacement_mark",
+              kind: "rectangle",
+              name: "Replacement mark",
+              parentId: "existing_nested_frame",
+              childIds: [],
+              visible: true,
+              locked: false,
+              transform: [1, 0, 0, 1, 24, 24],
+              size: { width: 56, height: 56 },
+              opacity: 1,
+              properties: {
+                fills: [{ type: "solid", color: "#756DFF", opacity: 1 }],
+                strokes: [],
+                strokeWidth: 0,
+                cornerRadius: 12,
+              },
+              extensions: {},
+            },
+          ],
+        },
+      ],
+    };
+    const authorization = coordinator.assertDesignPlanForApply(
+      context,
+      replacement,
+    );
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      replacement,
+      authorization,
+      1,
+    );
+    coordinator.handleAgentEvent({
+      type: "tool.completed",
+      runId: context.runId,
+      toolCallId: "replace_nested_design",
+      result: { ok: true },
+      revision: 1,
+    });
+    const contextAtRevision1 = { ...context, revision: 1 };
+    const updateReplacement: DesignApplyToolInput = {
+      label: "Update replacement",
+      commands: [
+        {
+          commandId: "solid_mark",
+          type: "update_properties",
+          nodeId: "replacement_mark",
+          opacity: 0.9,
+        },
+      ],
+    };
+    expect(() =>
+      coordinator.assertDesignPlanForApply(
+        contextAtRevision1,
+        updateReplacement,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignPlanForApply(contextAtRevision1, {
+        label: "Update stale replacement",
+        commands: [
+          {
+            commandId: "stale_mark",
+            type: "update_properties",
+            nodeId: "old_mark",
+            opacity: 0.9,
+          },
+        ],
+      }),
+    ).toThrow("outside every declared delivery artboard");
+
+    const replacedDocument = structuredClone(document);
+    replacedDocument.revision = 1;
+    const replacementCommand = replacement.commands[0];
+    if (!replacementCommand || replacementCommand.type !== "replace_subtree") {
+      throw new Error("Replacement command fixture is invalid");
+    }
+    replacedDocument.nodesById.existing_nested_frame = structuredClone(
+      replacementCommand.nodes[0],
+    );
+    delete replacedDocument.nodesById.old_mark;
+    replacedDocument.nodesById.replacement_mark = structuredClone(
+      replacementCommand.nodes[1],
+    );
+    coordinator.recordDocumentInspection(
+      contextAtRevision1,
+      inspectionResult(replacedDocument, pageId),
+    );
+    expect(() =>
+      coordinator.assertDesignPlanForApply(
+        contextAtRevision1,
+        updateReplacement,
+      ),
+    ).not.toThrow();
+
+    store.close();
+  });
+
   it("requires a current inspection revision and recovers after re-inspection", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const document = withExistingArtboard(opened.document, pageId);

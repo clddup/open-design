@@ -577,9 +577,18 @@ describe("RendererDesignToolHost", () => {
     host.resolve({
       requestId: apply.requestId,
       ok: true,
-      result: { content: { revision: 426 }, designRevision: 426 },
+      result: {
+        content: { revision: 426 },
+        designRevision: {
+          previousRevision: 425,
+          revision: 426,
+          transactionId: "transaction_apply_1",
+        },
+      },
     });
-    await expect(apply.result).resolves.toMatchObject({ designRevision: 426 });
+    await expect(apply.result).resolves.toMatchObject({
+      designRevision: { revision: 426 },
+    });
 
     const afterRecovery = startRequest(
       host,

@@ -47,11 +47,11 @@ describe("Leafer review capture export", () => {
       );
 
       await vi.advanceTimersByTimeAsync(1_999);
-      expect(leaf.syncExport).not.toHaveBeenCalled();
+      expect(leaf.syncExport.mock.calls).toHaveLength(0);
       await vi.advanceTimersByTimeAsync(1);
 
       await expect(capture).resolves.toMatchObject({ width: 640, height: 320 });
-      expect(leaf.syncExport).toHaveBeenCalledTimes(1);
+      expect(leaf.syncExport.mock.calls).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }

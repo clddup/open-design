@@ -39,6 +39,8 @@ import {
 import type { RendererDesignCaptureTarget } from "../../shared/design-tool-bridge.js";
 import {
   registerDesignWorkflowPlan,
+  reconcileEstablishedArtboardDescendants,
+  inspectedSubtreeIds,
   type DesignDeliveryTargetState,
   type DesignPlanRegistration,
   type DesignWorkflowState,
@@ -512,10 +514,10 @@ export class GlobalTaskCoordinator {
     result: TrustedToolResult,
   ): void {
     this.assertDesignToolContext(context);
-    this.#inspectionsByRunId.set(
-      context.runId,
-      parseInspectedHierarchy(context, result),
-    );
+    const inspection = parseInspectedHierarchy(context, result);
+    this.#inspectionsByRunId.set(context.runId, inspection);
+    const state = this.#designPlansByRunId.get(context.runId);
+    if (state) reconcileEstablishedArtboardDescendants(state, inspection);
   }
 
   assertDocumentInspected(context: TrustedToolContext): void {
@@ -873,6 +875,7 @@ export class GlobalTaskCoordinator {
     for (const targetId of authorization.targetIds) {
       const target = state.targetsById.get(targetId);
       if (!target) continue;
+      const inspection = this.#inspectionsByRunId.get(runId);
       if (
         input.commands.some(
           (command) =>
@@ -890,6 +893,35 @@ export class GlobalTaskCoordinator {
           commandBelongsToTarget(command, target, input)
         ) {
           target.artboardDescendantIds.add(command.node.id);
+        }
+        if (
+          command.type === "replace_subtree" &&
+          commandBelongsToTarget(command, target, input)
+        ) {
+          for (const nodeId of inspectedSubtreeIds(
+            inspection,
+            command.rootNodeId,
+          )) {
+            if (nodeId !== command.rootNodeId) {
+              target.artboardDescendantIds.delete(nodeId);
+            }
+          }
+          for (const node of command.nodes) {
+            if (node.id !== target.planned.artboard.frameId) {
+              target.artboardDescendantIds.add(node.id);
+            }
+          }
+        }
+        if (
+          command.type === "delete_element" &&
+          commandBelongsToTarget(command, target, input)
+        ) {
+          for (const nodeId of inspectedSubtreeIds(
+            inspection,
+            command.nodeId,
+          )) {
+            target.artboardDescendantIds.delete(nodeId);
+          }
         }
       });
     }

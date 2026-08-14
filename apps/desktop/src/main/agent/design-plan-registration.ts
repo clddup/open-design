@@ -345,7 +345,7 @@ function assertUniquePlannedNodeIds(
   }
 }
 
-function resolveExistingArtboardDescendants(
+export function resolveExistingArtboardDescendants(
   inspection: InspectedHierarchy,
   target: DesignPlanTarget,
 ): Set<string> {
@@ -371,6 +371,40 @@ function resolveExistingArtboardDescendants(
     }
   }
   return descendants;
+}
+
+export function reconcileEstablishedArtboardDescendants(
+  state: DesignWorkflowState,
+  inspection: InspectedHierarchy,
+): void {
+  for (const target of state.targetsById.values()) {
+    if (
+      !target.artboardEstablished ||
+      !inspection.nodesById.has(target.planned.artboard.frameId)
+    ) {
+      continue;
+    }
+    target.artboardDescendantIds = resolveExistingArtboardDescendants(
+      inspection,
+      target.planned,
+    );
+  }
+}
+
+export function inspectedSubtreeIds(
+  inspection: InspectedHierarchy | undefined,
+  rootNodeId: string,
+): Set<string> {
+  if (!inspection?.nodesById.has(rootNodeId)) return new Set();
+  const result = new Set<string>();
+  const pending = [rootNodeId];
+  while (pending.length > 0) {
+    const nodeId = pending.pop();
+    if (!nodeId || result.has(nodeId)) continue;
+    result.add(nodeId);
+    pending.push(...(inspection.nodesById.get(nodeId)?.childIds ?? []));
+  }
+  return result;
 }
 
 export function inspectedNodeBelongsToPage(
