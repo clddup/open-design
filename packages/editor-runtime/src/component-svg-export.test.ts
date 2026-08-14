@@ -107,7 +107,11 @@ function fixture(): DesignDocument {
     opacity: 1,
     extensions: {},
     kind: "instance",
-    properties: { componentId: "button", overrides: [] },
+    properties: {
+      componentId: "button",
+      componentProperties: {},
+      overrides: [],
+    },
   };
   return {
     format: "dev.opendesign.document",
@@ -135,6 +139,7 @@ function fixture(): DesignDocument {
         id: "button",
         name: "Button",
         rootNodeId: "main",
+        componentPropertyDefinitions: {},
         extensions: {},
       },
     },

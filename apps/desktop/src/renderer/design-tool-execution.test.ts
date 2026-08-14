@@ -222,6 +222,38 @@ describe("Renderer design tool scope", () => {
       },
     });
 
+    const sourceNodeId =
+      runtime.getSnapshot().document.nodesById.feature_group?.childIds[0];
+    if (!sourceNodeId) throw new Error("Feature component has no source layer");
+    const addProperty = await executeDesignToolRequest(
+      {
+        requestId: "component_add_property",
+        call: {
+          toolCallId: "tool_component_add_property",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "add-property",
+            label: "Expose feature visibility",
+            pageId: "page_welcome",
+            componentId: "component_feature",
+            propertyId: "feature:visible",
+            name: "Show feature",
+            type: "BOOLEAN",
+            sourceNodeId,
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(addProperty).toMatchObject({
+      ok: true,
+      result: {
+        content: { action: "add-property", revision: 2 },
+      },
+    });
+
     const createInstance = await executeDesignToolRequest(
       {
         requestId: "component_instance",
@@ -240,19 +272,41 @@ describe("Renderer design tool scope", () => {
             y: 560,
           },
         },
-        context: { ...pageContext, revision: 1 },
+        context: { ...pageContext, revision: 2 },
       },
       runtime,
       "page_welcome",
     );
     expect(createInstance).toMatchObject({
       ok: true,
-      result: { content: { instanceId: "feature_instance", revision: 2 } },
+      result: { content: { instanceId: "feature_instance", revision: 3 } },
     });
 
-    const sourceNodeId =
-      runtime.getSnapshot().document.nodesById.feature_group?.childIds[0];
-    if (!sourceNodeId) throw new Error("Feature component has no source layer");
+    const setProperty = await executeDesignToolRequest(
+      {
+        requestId: "component_set_property",
+        call: {
+          toolCallId: "tool_component_set_property",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "set-property",
+            label: "Hide feature through component property",
+            pageId: "page_welcome",
+            instanceId: "feature_instance",
+            propertyName: "Show feature#feature:visible",
+            value: false,
+          },
+        },
+        context: { ...pageContext, revision: 3 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(setProperty).toMatchObject({
+      ok: true,
+      result: { content: { action: "set-property", revision: 4 } },
+    });
+
     const override = await executeDesignToolRequest(
       {
         requestId: "component_override",
@@ -268,7 +322,7 @@ describe("Renderer design tool scope", () => {
             patch: { visible: false },
           },
         },
-        context: { ...pageContext, revision: 2 },
+        context: { ...pageContext, revision: 4 },
       },
       runtime,
       "page_welcome",
@@ -283,7 +337,7 @@ describe("Renderer design tool scope", () => {
           toolName: "opendesign_inspect_document",
           input: {},
         },
-        context: { ...pageContext, revision: 3 },
+        context: { ...pageContext, revision: 5 },
       },
       runtime,
       "page_welcome",
@@ -294,17 +348,110 @@ describe("Renderer design tool scope", () => {
         content: {
           document: {
             componentsById: {
-              component_feature: { rootNodeId: "feature_group" },
+              component_feature: {
+                rootNodeId: "feature_group",
+                componentPropertyDefinitions: {
+                  "Show feature#feature:visible": {
+                    type: "BOOLEAN",
+                    defaultValue: true,
+                  },
+                },
+              },
             },
             instancesById: {
               feature_instance: {
                 componentId: "component_feature",
+                componentProperties: {
+                  "Show feature#feature:visible": {
+                    type: "BOOLEAN",
+                    value: false,
+                  },
+                },
+                propertyAssignments: {
+                  "Show feature#feature:visible": false,
+                },
                 overrides: [{ sourcePath: [sourceNodeId] }],
               },
             },
           },
         },
       },
+    });
+    expect(JSON.stringify(inspection)).toContain(
+      `"sourceNodeId":"${sourceNodeId}","kind":"rectangle","name":"Structured editing","componentPropertyReferences":{"visible":"Show feature#feature:visible"}`,
+    );
+
+    const renamedProperty = await executeDesignToolRequest(
+      {
+        requestId: "component_rename_property",
+        call: {
+          toolCallId: "tool_component_rename_property",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "rename-property",
+            label: "Rename feature property",
+            pageId: "page_welcome",
+            componentId: "component_feature",
+            propertyName: "Show feature#feature:visible",
+            name: "Feature visible",
+          },
+        },
+        context: { ...pageContext, revision: 5 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(renamedProperty).toMatchObject({
+      ok: true,
+      result: { content: { action: "rename-property", revision: 6 } },
+    });
+
+    const resetProperty = await executeDesignToolRequest(
+      {
+        requestId: "component_reset_property",
+        call: {
+          toolCallId: "tool_component_reset_property",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "reset-property",
+            label: "Reset feature property",
+            pageId: "page_welcome",
+            instanceId: "feature_instance",
+            propertyName: "Feature visible#feature:visible",
+          },
+        },
+        context: { ...pageContext, revision: 6 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(resetProperty).toMatchObject({
+      ok: true,
+      result: { content: { action: "reset-property", revision: 7 } },
+    });
+
+    const removedProperty = await executeDesignToolRequest(
+      {
+        requestId: "component_remove_property",
+        call: {
+          toolCallId: "tool_component_remove_property",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "remove-property",
+            label: "Remove feature property",
+            pageId: "page_welcome",
+            componentId: "component_feature",
+            propertyName: "Feature visible#feature:visible",
+          },
+        },
+        context: { ...pageContext, revision: 7 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(removedProperty).toMatchObject({
+      ok: true,
+      result: { content: { action: "remove-property", revision: 8 } },
     });
 
     const detached = await executeDesignToolRequest(
@@ -320,7 +467,7 @@ describe("Renderer design tool scope", () => {
             instanceId: "feature_instance",
           },
         },
-        context: { ...pageContext, revision: 3 },
+        context: { ...pageContext, revision: 8 },
       },
       runtime,
       "page_welcome",
@@ -343,18 +490,18 @@ describe("Renderer design tool scope", () => {
             componentId: "component_feature",
           },
         },
-        context: { ...pageContext, revision: 4 },
+        context: { ...pageContext, revision: 9 },
       },
       runtime,
       "page_welcome",
     );
-    expect(removed).toMatchObject({
+    expect(removed, JSON.stringify(removed)).toMatchObject({
       ok: true,
       result: {
         content: {
           action: "remove-component",
           componentId: "component_feature",
-          revision: 5,
+          revision: 10,
         },
       },
     });

@@ -9,6 +9,7 @@ const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
+const documentSchemaVersion = "1.21.0";
 
 const fixtureSources = [
   {
@@ -93,7 +94,7 @@ for (const source of fixtureSources) {
 const manifest = {
   version: 1,
   generatedBy: generatorPath,
-  documentSchemaVersion: "1.20.0",
+  documentSchemaVersion,
   engineBaseline: "leafer-editor@2.2.9",
   sourceAssets: [
     {
@@ -1353,7 +1354,7 @@ function document({
 }) {
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.20.0",
+    schemaVersion: documentSchemaVersion,
     documentId,
     revision: 0,
     pageOrder: [pageId],

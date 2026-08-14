@@ -1,5 +1,7 @@
 import type {
   BooleanOperation,
+  ComponentPropertyAssignment,
+  ComponentPropertyType,
   ComponentOverridePatch,
   DesignNode,
   LayoutConstraints,
@@ -63,7 +65,11 @@ export function PropertiesPanel({
   onExportFormatChange,
   onReplaceImage,
   onRemoveComponent,
+  onAddComponentProperty,
+  onRemoveComponentProperty,
+  onRenameComponentProperty,
   onResetComponentInstance,
+  onResetComponentProperty,
   onResetComponentSourceOverride,
   onSelectBooleanParent,
   onSetConstraints,
@@ -71,6 +77,7 @@ export function PropertiesPanel({
   onSetFrameLayoutGuides,
   onUpdate,
   onUpdateComponentOverride,
+  onSetComponentProperty,
   selectionCount,
   exportFormat,
   rasterExportSettings,
@@ -104,7 +111,15 @@ export function PropertiesPanel({
   onExportFormatChange: (format: ExportFormat) => void;
   onReplaceImage: () => void;
   onRemoveComponent: () => void;
+  onAddComponentProperty: (input: {
+    name: string;
+    sourceNodeId: string;
+    type: ComponentPropertyType;
+  }) => void;
+  onRemoveComponentProperty: (propertyName: string) => void;
+  onRenameComponentProperty: (propertyName: string, name: string) => void;
   onResetComponentInstance: () => void;
+  onResetComponentProperty: (propertyName: string) => void;
   onResetComponentSourceOverride: (sourcePath: readonly string[]) => void;
   onSelectBooleanParent: (nodeId: string) => void;
   onSetConstraints: (nodeId: string, constraints: LayoutConstraints) => void;
@@ -121,6 +136,10 @@ export function PropertiesPanel({
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
     patch: ComponentOverridePatch,
+  ) => void;
+  onSetComponentProperty: (
+    propertyName: string,
+    value: ComponentPropertyAssignment,
   ) => void;
   selectionCount: number;
   exportFormat: ExportFormat;
@@ -227,7 +246,11 @@ export function PropertiesPanel({
             onGoToComponentMain={onGoToComponentMain}
             onReplaceImage={onReplaceImage}
             onRemoveComponent={onRemoveComponent}
+            onAddComponentProperty={onAddComponentProperty}
+            onRemoveComponentProperty={onRemoveComponentProperty}
+            onRenameComponentProperty={onRenameComponentProperty}
             onResetComponentInstance={onResetComponentInstance}
+            onResetComponentProperty={onResetComponentProperty}
             onResetComponentSourceOverride={onResetComponentSourceOverride}
             onSelectBooleanParent={onSelectBooleanParent}
             onSetConstraints={onSetConstraints}
@@ -235,6 +258,7 @@ export function PropertiesPanel({
             onSetFrameLayoutGuides={onSetFrameLayoutGuides}
             onUpdate={onUpdate}
             onUpdateComponentOverride={onUpdateComponentOverride}
+            onSetComponentProperty={onSetComponentProperty}
           />
         ) : selectionCount > 1 ? (
           <div className={styles.multiProperties}>

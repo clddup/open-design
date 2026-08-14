@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-14 · 文档协议：`1.20.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-14 · 文档协议：`1.21.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 18 项，不可用 3 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -238,11 +238,12 @@
 创建主组件、实例、嵌套实例、override、组件属性与 Variant Set。
 
 - ID：`components.instances-variants`
-- 实现方：@opendesign/component-service contract v1
+- 实现方：DesignDocument 1.21.0 + @opendesign/component-service contract v2 + isolated @opendesign/figma-interop
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
-- 证据：自动化 10 项；实机 0 项
-- 限制：已实现同一 Design File 内的主组件、链接/嵌套实例、稳定 sourcePath override、嵌套实例交换、reset/detach、Assets/Inspector 人工 UI、Agent typed tool、Canvas 投影、SVG/位图导出、持久化、autosave 与 history。Variant Set、正式 Component Properties、跨文件 Library、破坏性源节点修改后的 orphan 迁移、画布直接选择内部 override 目标，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 证据：自动化 12 项；实机 0 项
+- 限制：已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义的 Boolean/Text/Instance-swap Component Properties、稳定 sourcePath 高级 override、reset/detach、Assets/Inspector、Agent typed actions 与 inspection、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Variant/Slot 属性、Component Set、跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、画布内部 override 直选和 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/5579474826519-Explore-component-properties)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants)
 
 ### Variables、Collections 与 Modes — 不可用

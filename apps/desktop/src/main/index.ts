@@ -127,10 +127,13 @@ import {
   READ_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
   type DesignArrangeToolInput,
-  type DesignComponentToolInput,
   type DesignHierarchyToolInput,
   type DesignVectorToolInput,
 } from "../shared/design-agent-tools";
+import {
+  componentToolIsMaterialWrite,
+  materialTargetRefsForComponentTool,
+} from "./agent/component-tool-policy";
 
 const applicationLifecycle = new ApplicationLifecycle();
 const designGenerationPerformance = new DesignGenerationPerformanceTracker();
@@ -1810,44 +1813,6 @@ function materialTargetRefsForStructuredTool(
   }
   if ("groupId" in input) return { nodeIds: [input.groupId] };
   return { nodeIds: [input.booleanId] };
-}
-
-function materialTargetRefsForComponentTool(input: DesignComponentToolInput): {
-  nodeIds: string[];
-  parentId?: string | null;
-  createdNodeIds: string[];
-} {
-  switch (input.action) {
-    case "create-component":
-      return { nodeIds: [input.nodeId], createdNodeIds: [] };
-    case "remove-component":
-      return { nodeIds: [], createdNodeIds: [] };
-    case "create-instance":
-      return {
-        nodeIds: [],
-        parentId: input.parentId,
-        createdNodeIds: [input.instanceId],
-      };
-    case "set-override":
-    case "reset-overrides":
-    case "detach-instance":
-      return { nodeIds: [input.instanceId], createdNodeIds: [] };
-    case "go-to-main":
-      return { nodeIds: [input.instanceId], createdNodeIds: [] };
-  }
-}
-
-function componentToolIsMaterialWrite(
-  input: DesignComponentToolInput,
-): boolean {
-  if (
-    input.action === "create-instance" ||
-    input.action === "reset-overrides"
-  ) {
-    return true;
-  }
-  if (input.action !== "set-override") return false;
-  return Object.keys(input.patch).some((key) => key !== "name");
 }
 
 function createdNodeIdsForStructuredTool(

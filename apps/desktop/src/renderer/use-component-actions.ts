@@ -1,16 +1,24 @@
 import type {
+  ComponentPropertyAssignment,
+  ComponentPropertyType,
   ComponentOverridePatch,
   DesignDocument,
   DesignOperation,
 } from "@opendesign/design-contracts";
 import {
   componentMainNodeId,
+  planAddComponentProperty,
   planCreateComponent,
   planCreateInstance,
   planDetachComponentInstance,
   planResetComponentOverrides,
   planRemoveComponent,
+  planRemoveComponentProperty,
+  planRenameComponentProperty,
+  planResetComponentPropertyValue,
   planSetComponentOverride,
+  planSetComponentPropertyValue,
+  type ComponentOperationPlan,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
 import { useCallback } from "react";
@@ -104,6 +112,91 @@ export function useComponentActions({
     }
     applyCommands(t("history.removeComponent"), plan.commands);
   }, [applyCommands, runtime, setEditorError, t, transactionCounter]);
+
+  const applyPropertyPlan = useCallback(
+    (label: string, plan: ComponentOperationPlan) => {
+      if (!plan.ok) {
+        setEditorError(plan.code === "no-op" ? null : plan.message);
+        return;
+      }
+      applyCommands(label, plan.commands);
+    },
+    [applyCommands, setEditorError],
+  );
+
+  const addSelectedComponentProperty = useCallback(
+    (input: {
+      name: string;
+      sourceNodeId: string;
+      type: ComponentPropertyType;
+      preferredComponentIds?: readonly string[];
+    }) => {
+      const current = runtime.getSnapshot();
+      const nodeId = singleSelection(current.state.selection.nodeIds);
+      const component = Object.values(current.document.componentsById).find(
+        (candidate) => candidate.rootNodeId === nodeId,
+      );
+      if (!component) return;
+      const operationId = `component_property_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planAddComponentProperty(current.document, {
+        componentId: component.id,
+        propertyId: `${component.id}:${transactionCounter.current}`,
+        name: input.name,
+        type: input.type,
+        sourceNodeId: input.sourceNodeId,
+        ...(input.preferredComponentIds?.length
+          ? {
+              preferredValues: input.preferredComponentIds.map((key) => ({
+                type: "COMPONENT" as const,
+                key,
+              })),
+            }
+          : {}),
+        commandPrefix: operationId,
+      });
+      applyPropertyPlan(t("history.addComponentProperty"), plan);
+    },
+    [applyPropertyPlan, runtime, t, transactionCounter],
+  );
+
+  const renameSelectedComponentProperty = useCallback(
+    (propertyName: string, name: string) => {
+      const current = runtime.getSnapshot();
+      const nodeId = singleSelection(current.state.selection.nodeIds);
+      const component = Object.values(current.document.componentsById).find(
+        (candidate) => candidate.rootNodeId === nodeId,
+      );
+      if (!component) return;
+      const operationId = `component_property_rename_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planRenameComponentProperty(current.document, {
+        componentId: component.id,
+        propertyName,
+        name,
+        commandPrefix: operationId,
+      });
+      applyPropertyPlan(t("history.renameComponentProperty"), plan);
+    },
+    [applyPropertyPlan, runtime, t, transactionCounter],
+  );
+
+  const removeSelectedComponentProperty = useCallback(
+    (propertyName: string) => {
+      const current = runtime.getSnapshot();
+      const nodeId = singleSelection(current.state.selection.nodeIds);
+      const component = Object.values(current.document.componentsById).find(
+        (candidate) => candidate.rootNodeId === nodeId,
+      );
+      if (!component) return;
+      const operationId = `component_property_remove_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planRemoveComponentProperty(current.document, {
+        componentId: component.id,
+        propertyName,
+        commandPrefix: operationId,
+      });
+      applyPropertyPlan(t("history.removeComponentProperty"), plan);
+    },
+    [applyPropertyPlan, runtime, t, transactionCounter],
+  );
 
   const placeComponentFromAssets = useCallback(
     (componentId: string): AssetActionResult => {
@@ -199,6 +292,37 @@ export function useComponentActions({
     [applyCommands, runtime, setEditorError, t, transactionCounter],
   );
 
+  const setSelectedInstanceComponentProperty = useCallback(
+    (propertyName: string, value: ComponentPropertyAssignment) => {
+      const current = runtime.getSnapshot();
+      const instanceId = singleSelection(current.state.selection.nodeIds);
+      if (!instanceId) return;
+      const plan = planSetComponentPropertyValue(current.document, {
+        instanceId,
+        propertyName,
+        value,
+        commandPrefix: `component_property_value_${Date.now()}_${++transactionCounter.current}`,
+      });
+      applyPropertyPlan(t("history.setComponentProperty"), plan);
+    },
+    [applyPropertyPlan, runtime, t, transactionCounter],
+  );
+
+  const resetSelectedInstanceComponentProperty = useCallback(
+    (propertyName: string) => {
+      const current = runtime.getSnapshot();
+      const instanceId = singleSelection(current.state.selection.nodeIds);
+      if (!instanceId) return;
+      const plan = planResetComponentPropertyValue(current.document, {
+        instanceId,
+        propertyName,
+        commandPrefix: `component_property_reset_${Date.now()}_${++transactionCounter.current}`,
+      });
+      applyPropertyPlan(t("history.resetComponentProperty"), plan);
+    },
+    [applyPropertyPlan, runtime, t, transactionCounter],
+  );
+
   const detachSelectedInstance = useCallback(() => {
     const current = runtime.getSnapshot();
     const instanceId = singleSelection(current.state.selection.nodeIds);
@@ -240,6 +364,7 @@ export function useComponentActions({
   };
 
   return {
+    addSelectedComponentProperty,
     createComponentFromSelection,
     createSelectedComponentInstance,
     detachSelectedInstance,
@@ -247,8 +372,12 @@ export function useComponentActions({
     locateComponentMain,
     placeComponentFromAssets,
     removeSelectedComponent,
+    removeSelectedComponentProperty,
+    renameSelectedComponentProperty,
     resetSelectedInstance,
     resetSelectedInstanceSource,
+    resetSelectedInstanceComponentProperty,
+    setSelectedInstanceComponentProperty,
     updateSelectedInstanceSource,
   };
 }

@@ -1,17 +1,21 @@
 import {
   DesignNodeSchema,
   schemaValidationIssues,
+  type ComponentPropertyAssignment,
+  type ComponentPropertyDefinition,
+  type ComponentPropertyDefinitions,
   type ComponentOverridePatch,
   type DesignDocument,
   type DesignNode,
   type InstanceNode,
 } from "@opendesign/design-contracts";
 
-export const COMPONENT_SERVICE_VERSION = 1 as const;
+export const COMPONENT_SERVICE_VERSION = 2 as const;
 export const COMPONENT_PROJECTION_PREFIX = "__opendesign_instance__:";
 
 export type ComponentResolutionIssueCode =
   | "component-cycle"
+  | "invalid-component-property"
   | "invalid-override"
   | "missing-component"
   | "missing-source-node";
@@ -39,10 +43,20 @@ export interface ResolvedComponentOverrideTarget {
   sourcePath: readonly string[];
 }
 
+export interface ResolvedComponentProperty {
+  type: ComponentPropertyDefinition["type"];
+  value: ComponentPropertyAssignment;
+  preferredValues?: readonly {
+    type: "COMPONENT" | "COMPONENT_SET";
+    key: string;
+  }[];
+}
+
 export type ComponentInstanceResolution =
   | {
       ok: true;
       componentId: string;
+      componentProperties: Readonly<Record<string, ResolvedComponentProperty>>;
       instanceId: string;
       nodes: readonly ResolvedComponentNode[];
       overrideTargets: readonly ResolvedComponentOverrideTarget[];
@@ -122,15 +136,20 @@ export function resolveComponentInstance(
 export function materializeComponentInstances(
   document: DesignDocument,
 ): DesignDocument {
+  const projectedDocument = materializeComponentMainProperties(document);
   if (
-    !Object.values(document.nodesById).some((node) => node.kind === "instance")
+    !Object.values(projectedDocument.nodesById).some(
+      (node) => node.kind === "instance",
+    )
   ) {
-    return document;
+    return projectedDocument;
   }
-  const nodesById: DesignDocument["nodesById"] = { ...document.nodesById };
-  for (const node of Object.values(document.nodesById)) {
+  const nodesById: DesignDocument["nodesById"] = {
+    ...projectedDocument.nodesById,
+  };
+  for (const node of Object.values(projectedDocument.nodesById)) {
     if (node.kind !== "instance") continue;
-    const resolution = resolveComponentInstance(document, node.id);
+    const resolution = resolveComponentInstance(projectedDocument, node.id);
     if (!resolution.ok) {
       throw new Error(
         resolution.issues[0]?.message ??
@@ -140,6 +159,41 @@ export function materializeComponentInstances(
     delete nodesById[node.id];
     for (const resolved of resolution.nodes) {
       nodesById[resolved.projectionId] = structuredClone(resolved.node);
+    }
+  }
+  return { ...projectedDocument, nodesById };
+}
+
+export function materializeComponentMainProperties(
+  document: DesignDocument,
+): DesignDocument {
+  const hasReferences = Object.values(document.nodesById).some(
+    (node) => node.componentPropertyReferences !== undefined,
+  );
+  if (!hasReferences) return document;
+  const nodesById = { ...document.nodesById };
+  for (const component of Object.values(document.componentsById)) {
+    const properties = effectiveComponentProperties(
+      document,
+      component.id,
+      {},
+      "component-main",
+    );
+    if (!properties.ok) {
+      throw new Error(
+        properties.issues[0]?.message ?? "Invalid component property",
+      );
+    }
+    for (const sourceNodeId of componentSourceNodeIds(document, component.id)) {
+      const source = document.nodesById[sourceNodeId];
+      if (!source?.componentPropertyReferences) continue;
+      const applied = applyComponentPropertyReferences(
+        source,
+        component.componentPropertyDefinitions,
+        properties.properties,
+      );
+      if (!applied.ok) throw new Error(applied.message);
+      nodesById[sourceNodeId] = applied.node;
     }
   }
   return { ...document, nodesById };
@@ -152,6 +206,9 @@ function resolveInstance(
   const issues: ComponentResolutionIssue[] = [];
   const nodes: ResolvedComponentNode[] = [];
   const overrideTargets: ResolvedComponentOverrideTarget[] = [];
+  let rootComponentProperties: Readonly<
+    Record<string, ResolvedComponentProperty>
+  > = {};
   const sourcePaths = new Set<string>();
   const overrides = new Map(
     instance.properties.overrides.map((override) => [
@@ -179,6 +236,17 @@ function resolveInstance(
       });
       return;
     }
+    const effectiveProperties = effectiveComponentProperties(
+      document,
+      componentId,
+      shell.properties.componentProperties,
+      instance.id,
+    );
+    if (!effectiveProperties.ok) {
+      issues.push(...effectiveProperties.issues);
+      return;
+    }
+    if (root) rootComponentProperties = effectiveProperties.properties;
     if (componentStack.includes(componentId)) {
       issues.push({
         code: "component-cycle",
@@ -207,7 +275,21 @@ function resolveInstance(
       }
       if (source.kind === "instance") {
         const patch = overrides.get(componentSourcePathKey(sourcePath));
-        const nestedShell = applyOverride(source, patch);
+        const propertyApplied = applyComponentPropertyReferences(
+          source,
+          definition.componentPropertyDefinitions,
+          effectiveProperties.properties,
+        );
+        if (!propertyApplied.ok) {
+          issues.push({
+            code: "invalid-component-property",
+            instanceId: instance.id,
+            message: propertyApplied.message,
+            sourcePath,
+          });
+          return;
+        }
+        const nestedShell = applyOverride(propertyApplied.node, patch);
         const schemaIssues = schemaValidationIssues(
           DesignNodeSchema,
           nestedShell,
@@ -245,7 +327,21 @@ function resolveInstance(
           : componentProjectionId(instance.id, rootProjectionPath)
         : componentProjectionId(instance.id, sourcePath);
       const patch = overrides.get(componentSourcePathKey(sourcePath));
-      const clone = applyOverride(source, patch);
+      const propertyApplied = applyComponentPropertyReferences(
+        source,
+        definition.componentPropertyDefinitions,
+        effectiveProperties.properties,
+      );
+      if (!propertyApplied.ok) {
+        issues.push({
+          code: "invalid-component-property",
+          instanceId: instance.id,
+          message: propertyApplied.message,
+          sourcePath,
+        });
+        return;
+      }
+      const clone = applyOverride(propertyApplied.node, patch);
       overrideTargets.push({
         node: structuredClone(clone),
         sourceNodeId,
@@ -316,11 +412,156 @@ function resolveInstance(
     : {
         ok: true,
         componentId: instance.properties.componentId,
+        componentProperties: rootComponentProperties,
         instanceId: instance.id,
         nodes,
         overrideTargets,
         sourcePaths,
       };
+}
+
+function effectiveComponentProperties(
+  document: DesignDocument,
+  componentId: string,
+  assignments: Readonly<Record<string, ComponentPropertyAssignment>>,
+  instanceId: string,
+):
+  | {
+      ok: true;
+      properties: Readonly<Record<string, ResolvedComponentProperty>>;
+    }
+  | { ok: false; issues: ComponentResolutionIssue[] } {
+  const definition = document.componentsById[componentId];
+  if (!definition) {
+    return {
+      ok: false,
+      issues: [
+        {
+          code: "missing-component",
+          instanceId,
+          message: `Component ${componentId} does not exist`,
+        },
+      ],
+    };
+  }
+  const issues: ComponentResolutionIssue[] = [];
+  const properties: Record<string, ResolvedComponentProperty> = {};
+  for (const propertyName of Object.keys(assignments)) {
+    if (!definition.componentPropertyDefinitions[propertyName]) {
+      issues.push({
+        code: "invalid-component-property",
+        instanceId,
+        message: `Component property ${propertyName} does not exist on ${componentId}`,
+      });
+    }
+  }
+  for (const [propertyName, propertyDefinition] of Object.entries(
+    definition.componentPropertyDefinitions,
+  )) {
+    const value = assignments[propertyName] ?? propertyDefinition.defaultValue;
+    if (!componentPropertyValueMatches(propertyDefinition, value)) {
+      issues.push({
+        code: "invalid-component-property",
+        instanceId,
+        message: `Component property ${propertyName} requires ${propertyDefinition.type}`,
+      });
+      continue;
+    }
+    if (
+      propertyDefinition.type === "INSTANCE_SWAP" &&
+      typeof value === "string" &&
+      !document.componentsById[value]
+    ) {
+      issues.push({
+        code: "missing-component",
+        instanceId,
+        message: `Component property ${propertyName} references missing component ${value}`,
+      });
+      continue;
+    }
+    properties[propertyName] = {
+      type: propertyDefinition.type,
+      value,
+      ...(propertyDefinition.type === "INSTANCE_SWAP" &&
+      propertyDefinition.preferredValues
+        ? {
+            preferredValues: structuredClone(
+              propertyDefinition.preferredValues,
+            ),
+          }
+        : {}),
+    };
+  }
+  return issues.length > 0 ? { ok: false, issues } : { ok: true, properties };
+}
+
+function componentPropertyValueMatches(
+  definition: ComponentPropertyDefinition,
+  value: ComponentPropertyAssignment,
+): boolean {
+  return definition.type === "BOOLEAN"
+    ? typeof value === "boolean"
+    : typeof value === "string";
+}
+
+function applyComponentPropertyReferences(
+  source: DesignNode,
+  definitions: ComponentPropertyDefinitions,
+  properties: Readonly<Record<string, ResolvedComponentProperty>>,
+): { ok: true; node: DesignNode } | { ok: false; message: string } {
+  const references = source.componentPropertyReferences;
+  if (!references) return { ok: true, node: structuredClone(source) };
+  const clone = structuredClone(source);
+  for (const [field, propertyName] of Object.entries(references)) {
+    const definition = definitions[propertyName];
+    const property = properties[propertyName];
+    if (!definition || !property) {
+      return {
+        ok: false,
+        message: `Component property reference ${propertyName} on ${source.id} does not exist`,
+      };
+    }
+    if (field === "visible") {
+      if (
+        definition.type !== "BOOLEAN" ||
+        typeof property.value !== "boolean"
+      ) {
+        return {
+          ok: false,
+          message: `Component property ${propertyName} must be BOOLEAN for visible`,
+        };
+      }
+      clone.visible = property.value;
+      continue;
+    }
+    if (field === "characters") {
+      if (
+        clone.kind !== "text" ||
+        definition.type !== "TEXT" ||
+        typeof property.value !== "string"
+      ) {
+        return {
+          ok: false,
+          message: `Component property ${propertyName} must be TEXT on a Text layer`,
+        };
+      }
+      clone.properties.content = property.value;
+      continue;
+    }
+    if (
+      field !== "mainComponent" ||
+      clone.kind !== "instance" ||
+      definition.type !== "INSTANCE_SWAP" ||
+      typeof property.value !== "string"
+    ) {
+      return {
+        ok: false,
+        message: `Component property ${propertyName} must be INSTANCE_SWAP on an Instance`,
+      };
+    }
+    clone.properties.componentId = property.value;
+  }
+  return { ok: true, node: clone };
 }
 
 function applyInstanceShell(node: DesignNode, shell: InstanceNode): void {

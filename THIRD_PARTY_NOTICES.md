@@ -26,6 +26,8 @@ The authoritative development dependency graph is pinned by `pnpm-lock.yaml`, wh
 
 `@opendesign/import-export-service` directly uses `transformation-matrix` 3.1.0 from [transformation-matrix](https://github.com/chrvadala/transformation-matrix). It is distributed under the MIT License, Copyright (c) 2017 https://github.com/chrvadala. OpenDesign uses it to parse SVG transform attributes and compose plain affine transforms behind the SVG adapter; third-party matrix objects do not cross the service boundary.
 
+`@opendesign/figma-interop` uses `@figma/plugin-typings` 1.133.0 from [Figma Plugin API typings](https://github.com/figma/plugin-typings/tree/83bfe81d9616ab759702f657eb18ef153f83e8ae) as a development-only compile-time compatibility contract. It is distributed under the MIT License, Copyright (c) 2012-2026 Figma, Inc. The typings are isolated from OpenDesign's document/runtime packages and are not a Figma file codec, credential path, network client, or second writable document state.
+
 `@opendesign/desktop` directly uses `unpdf` 1.8.0 from [unjs/unpdf](https://github.com/unjs/unpdf). It is distributed under the MIT License, Copyright (c) 2023-PRESENT Johann Schopplich. OpenDesign uses its PDF.js-backed text extraction for user-selected Agent document attachments; the optional `@napi-rs/canvas` rendering peer is not installed or used.
 
 `@opendesign/desktop` directly uses `mammoth` 1.12.0 from [mwilliamson/mammoth.js](https://github.com/mwilliamson/mammoth.js). It is distributed under the BSD 2-Clause License, Copyright (c) 2013 Michael Williamson. OpenDesign uses `extractRawText` for user-selected DOCX Agent attachments after host-side archive validation.

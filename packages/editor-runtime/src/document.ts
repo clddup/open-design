@@ -120,6 +120,43 @@ export function validateDocumentInvariants(
       });
     }
     componentRoots.set(component.rootNodeId, componentId);
+    for (const [propertyName, definition] of Object.entries(
+      component.componentPropertyDefinitions,
+    )) {
+      const markerIndex = propertyName.lastIndexOf("#");
+      if (markerIndex <= 0 || markerIndex === propertyName.length - 1) {
+        issues.push({
+          path: `/componentsById/${componentId}/componentPropertyDefinitions/${propertyName}`,
+          message:
+            "Figma-compatible component property names require a label and stable # suffix",
+        });
+      }
+      if (
+        definition.type === "INSTANCE_SWAP" &&
+        !ownValue(document.componentsById, definition.defaultValue)
+      ) {
+        issues.push({
+          path: `/componentsById/${componentId}/componentPropertyDefinitions/${propertyName}/defaultValue`,
+          message: `component ${definition.defaultValue} does not exist`,
+        });
+      }
+      if (definition.type === "INSTANCE_SWAP") {
+        for (const [index, preferred] of (
+          definition.preferredValues ?? []
+        ).entries()) {
+          const exists =
+            preferred.type === "COMPONENT"
+              ? ownValue(document.componentsById, preferred.key)
+              : ownValue(document.variantSetsById, preferred.key);
+          if (!exists) {
+            issues.push({
+              path: `/componentsById/${componentId}/componentPropertyDefinitions/${propertyName}/preferredValues/${index}/key`,
+              message: `preferred ${preferred.type} ${preferred.key} does not exist`,
+            });
+          }
+        }
+      }
+    }
   }
 
   const sourceOwner = new Map<string, string>();
@@ -150,6 +187,50 @@ export function validateDocumentInvariants(
       });
     }
     issues.push(...validateNodeLayoutInvariants(document, nodeId, node));
+    if (node.componentPropertyReferences) {
+      const componentId = sourceOwner.get(nodeId);
+      const component = componentId
+        ? ownValue(document.componentsById, componentId)
+        : undefined;
+      if (!component) {
+        issues.push({
+          path: `/nodesById/${nodeId}/componentPropertyReferences`,
+          message: "component property references require a component sublayer",
+        });
+      } else {
+        for (const [field, propertyName] of Object.entries(
+          node.componentPropertyReferences,
+        )) {
+          const definition =
+            component.componentPropertyDefinitions[propertyName];
+          if (!definition) {
+            issues.push({
+              path: `/nodesById/${nodeId}/componentPropertyReferences/${field}`,
+              message: `component property ${propertyName} does not exist on ${component.id}`,
+            });
+            continue;
+          }
+          const valid =
+            (field === "visible" &&
+              definition.type === "BOOLEAN" &&
+              node.visible === definition.defaultValue) ||
+            (field === "characters" &&
+              node.kind === "text" &&
+              definition.type === "TEXT" &&
+              node.properties.content === definition.defaultValue) ||
+            (field === "mainComponent" &&
+              node.kind === "instance" &&
+              definition.type === "INSTANCE_SWAP" &&
+              node.properties.componentId === definition.defaultValue);
+          if (!valid) {
+            issues.push({
+              path: `/nodesById/${nodeId}/componentPropertyReferences/${field}`,
+              message: `component property ${propertyName} does not match ${field} or its default value`,
+            });
+          }
+        }
+      }
+    }
     if (node.kind === "boolean") {
       if (node.childIds.length < 2) {
         issues.push({

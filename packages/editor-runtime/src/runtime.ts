@@ -41,6 +41,7 @@ import {
   normalizeTextResizeProperties,
   textLayoutAffected,
 } from "./text-layout-operations.js";
+import { synchronizeComponentPropertyDefaults } from "./component-property-defaults.js";
 
 export interface EditorSnapshot {
   document: DesignDocument;
@@ -1073,6 +1074,7 @@ function updateProperties(
     "layoutPositioning",
     "layoutSizing",
     "layoutLimits",
+    "componentPropertyReferences",
     "blendMode",
     "effects",
     "maskMode",
@@ -1092,7 +1094,8 @@ function updateProperties(
       (field === "constraints" ||
         field === "layoutPositioning" ||
         field === "layoutSizing" ||
-        field === "layoutLimits") &&
+        field === "layoutLimits" ||
+        field === "componentPropertyReferences") &&
       value === null
     ) {
       delete node[field];
@@ -1104,6 +1107,7 @@ function updateProperties(
       Object.assign(node, { [field]: structuredClone(value) });
     }
   }
+  synchronizeComponentPropertyDefaults(document, node, command);
   if (node.kind === "text") {
     const requestedResize = command.properties?.textResize;
     if (command.size !== undefined && requestedResize === undefined) {

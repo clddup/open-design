@@ -11,10 +11,6 @@ import type {
   DesignDocument,
 } from "@opendesign/design-contracts";
 import {
-  componentSourcePathKey,
-  resolveComponentInstance,
-} from "@opendesign/component-service";
-import {
   getNodeBounds,
   getSelectionBounds,
   planImageNodeUpdate,
@@ -59,6 +55,7 @@ import {
   useEditorSnapshot,
 } from "./editor-runtime";
 import { useI18n } from "./i18n";
+import { createComponentInspectorContext } from "./component-inspector-context";
 import {
   ProjectAutosaveCoordinator,
   type ProjectAutosaveTarget,
@@ -258,30 +255,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const selectedBooleanParent = selectedNode?.parentId
     ? designDocument.nodesById[selectedNode.parentId]
     : undefined;
-  const selectedComponent = selectedNode
-    ? selectedNode.kind === "instance"
-      ? designDocument.componentsById[selectedNode.properties.componentId]
-      : Object.values(designDocument.componentsById).find(
-          (component) => component.rootNodeId === selectedNode.id,
-        )
-    : undefined;
-  const selectedComponentContext = selectedComponent
-    ? {
-        componentName: selectedComponent.name,
-        isMain: selectedNode?.kind !== "instance",
-        overrideCount:
-          selectedNode?.kind === "instance"
-            ? selectedNode.properties.overrides.length
-            : 0,
-        sourceNodes:
-          selectedNode?.kind === "instance"
-            ? resolvedInstanceSourceNodes(designDocument, selectedNode.id)
-            : [],
-        availableComponents: Object.values(designDocument.componentsById).map(
-          (component) => ({ id: component.id, name: component.name }),
-        ),
-      }
-    : undefined;
+  const selectedComponentContext = createComponentInspectorContext(
+    designDocument,
+    selectedNode,
+  );
   const projectConversations = activeProject
     ? (conversationsByProjectId[activeProject.projectId] ?? [])
     : [];
@@ -679,6 +656,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   });
 
   const {
+    addSelectedComponentProperty,
     createComponentFromSelection,
     createSelectedComponentInstance,
     detachSelectedInstance,
@@ -686,8 +664,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     locateComponentMain,
     placeComponentFromAssets,
     removeSelectedComponent,
+    removeSelectedComponentProperty,
+    renameSelectedComponentProperty,
     resetSelectedInstance,
     resetSelectedInstanceSource,
+    resetSelectedInstanceComponentProperty,
+    setSelectedInstanceComponentProperty,
     updateSelectedInstanceSource,
   } = useComponentActions({
     activePageId,
@@ -1905,8 +1887,15 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onExportSvg={() => void importExport.exportSvg()}
                 onReplaceImage={() => void replaceSelectedImage()}
                 onRemoveComponent={removeSelectedComponent}
+                onAddComponentProperty={addSelectedComponentProperty}
+                onRemoveComponentProperty={removeSelectedComponentProperty}
+                onRenameComponentProperty={renameSelectedComponentProperty}
                 onResetComponentInstance={resetSelectedInstance}
+                onResetComponentProperty={
+                  resetSelectedInstanceComponentProperty
+                }
                 onResetComponentSourceOverride={resetSelectedInstanceSource}
+                onSetComponentProperty={setSelectedInstanceComponentProperty}
                 onSelectBooleanParent={(nodeId) =>
                   runtime.setSelection([nodeId], nodeId)
                 }
@@ -2181,26 +2170,6 @@ function isDurableAgentCheckpoint(event: AgentEvent): boolean {
     event.type === "approval.requested" ||
     event.type === "approval.resolved"
   );
-}
-
-function resolvedInstanceSourceNodes(
-  document: DesignDocument,
-  instanceId: string,
-) {
-  const instance = document.nodesById[instanceId];
-  if (!instance || instance.kind !== "instance") return [];
-  const resolution = resolveComponentInstance(document, instanceId);
-  if (!resolution.ok) return [];
-  const overrideKeys = new Set(
-    instance.properties.overrides.map((override) =>
-      componentSourcePathKey(override.sourcePath),
-    ),
-  );
-  return resolution.overrideTargets.map((resolved) => ({
-    node: resolved.node,
-    overridden: overrideKeys.has(componentSourcePathKey(resolved.sourcePath)),
-    sourcePath: [...resolved.sourcePath],
-  }));
 }
 
 function agentEventActivityAt(event: AgentEvent): string | null {

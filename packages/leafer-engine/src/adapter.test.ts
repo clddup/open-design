@@ -3708,7 +3708,11 @@ function componentInput(): LeaferEngineSyncInput {
     opacity: 1,
     extensions: {},
     kind: "instance",
-    properties: { componentId: "button", overrides: [] },
+    properties: {
+      componentId: "button",
+      componentProperties: {},
+      overrides: [],
+    },
   };
   const document: DesignDocument = {
     format: "dev.opendesign.document",
@@ -3741,6 +3745,7 @@ function componentInput(): LeaferEngineSyncInput {
         id: "button",
         name: "Button",
         rootNodeId: "button_main",
+        componentPropertyDefinitions: {},
         extensions: {},
       },
     },

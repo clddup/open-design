@@ -348,6 +348,60 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "add-property",
+        label: "Expose button label",
+        pageId: "page_home",
+        componentId: "component_button",
+        propertyId: "button:text",
+        name: "Label",
+        type: "TEXT",
+        sourceNodeId: "button_label",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "set-property",
+        label: "Set button label",
+        pageId: "page_home",
+        instanceId: "button_instance",
+        propertyName: "Label#button:text",
+        value: "Buy now",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "reset-property",
+        label: "Reset button label",
+        pageId: "page_home",
+        instanceId: "button_instance",
+        propertyName: "Label#button:text",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "add-property",
+        label: "Invalid preferred values",
+        pageId: "page_home",
+        componentId: "component_button",
+        propertyId: "button:text",
+        name: "Label",
+        type: "TEXT",
+        sourceNodeId: "button_label",
+        preferredValues: [{ type: "COMPONENT", key: "component_secondary" }],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "set-property",
+        label: "Invalid property value",
+        pageId: "page_home",
+        instanceId: "button_instance",
+        propertyName: "Label#button:text",
+        value: { content: "Buy now" },
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
         action: "set-override",
         label: "Invalid override",
         pageId: "page_home",

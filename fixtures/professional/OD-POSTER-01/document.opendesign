@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.20.0",
+  "schemaVersion": "1.21.0",
   "documentId": "document_od_poster_01",
   "revision": 1,
   "pageOrder": ["page_poster_01"],

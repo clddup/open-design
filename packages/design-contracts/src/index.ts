@@ -13,21 +13,29 @@ import {
 } from "./layout-limits-validation.js";
 import * as limits from "./limits.js";
 import * as versions from "./versions.js";
+import {
+  ComponentPropertyAssignmentsSchema,
+  ComponentPropertyDefinitionsSchema,
+  ComponentPropertyReferencesSchema,
+  migrateFigmaComponentProperties,
+} from "./component-properties.js";
+import {
+  JsonObjectSchema,
+  JsonValueSchema,
+  NormalizedPointSchema,
+  PointSchema,
+  SizeSchema,
+  TransformSchema,
+  type NormalizedPoint,
+  type Point,
+  type Size,
+} from "./primitives.js";
+export * from "./component-properties.js";
+export * from "./primitives.js";
 export * from "./versions.js";
 export * from "./layout.js";
 export * from "./limits.js";
 export const DESIGN_FORMAT = "dev.opendesign.document" as const;
-export const JsonValueSchema = Type.Recursive((Self) =>
-  Type.Union([
-    Type.String(),
-    Type.Number(),
-    Type.Boolean(),
-    Type.Null(),
-    Type.Array(Self),
-    Type.Record(Type.String(), Self),
-  ]),
-);
-export const JsonObjectSchema = Type.Record(Type.String(), JsonValueSchema);
 export const NodeKindSchema = Type.Union([
   Type.Literal("frame"),
   Type.Literal("group"),
@@ -43,37 +51,6 @@ export const NodeKindSchema = Type.Union([
   Type.Literal("path"),
   Type.Literal("instance"),
 ]);
-export const TransformSchema = Type.Tuple([
-  Type.Number(),
-  Type.Number(),
-  Type.Number(),
-  Type.Number(),
-  Type.Number(),
-  Type.Number(),
-]);
-export const SizeSchema = Type.Object(
-  {
-    width: Type.Number({ minimum: 0 }),
-    height: Type.Number({ minimum: 0 }),
-  },
-  { additionalProperties: false },
-);
-
-export const PointSchema = Type.Object(
-  {
-    x: Type.Number(),
-    y: Type.Number(),
-  },
-  { additionalProperties: false },
-);
-
-export const NormalizedPointSchema = Type.Object(
-  {
-    x: Type.Number({ minimum: 0, maximum: 1 }),
-    y: Type.Number({ minimum: 0, maximum: 1 }),
-  },
-  { additionalProperties: false },
-);
 
 export const RectSchema = Type.Object(
   {
@@ -660,6 +637,7 @@ export const ComponentOverrideSchema = Type.Object(
 export const InstancePropertiesSchema = Type.Object(
   {
     componentId: Type.String({ minLength: 1 }),
+    componentProperties: ComponentPropertyAssignmentsSchema,
     overrides: Type.Array(ComponentOverrideSchema, { maxItems: 4_096 }),
   },
   { additionalProperties: false },
@@ -671,6 +649,7 @@ export const ComponentDefinitionSchema = Type.Object(
     name: Type.String({ minLength: 1, maxLength: 256 }),
     rootNodeId: Type.String({ minLength: 1 }),
     description: Type.Optional(Type.String({ maxLength: 2_000 })),
+    componentPropertyDefinitions: ComponentPropertyDefinitionsSchema,
     extensions: JsonObjectSchema,
   },
   { additionalProperties: false },
@@ -690,6 +669,9 @@ const NodeBaseProperties = {
   layoutPositioning: Type.Optional(layout.LayoutPositioningSchema),
   layoutSizing: Type.Optional(layout.LayoutSizingSchema),
   layoutLimits: Type.Optional(layout.LayoutLimitsSchema),
+  componentPropertyReferences: Type.Optional(
+    Type.Union([ComponentPropertyReferencesSchema, Type.Null()]),
+  ),
   blendMode: Type.Optional(BlendModeSchema),
   effects: Type.Optional(Type.Array(EffectSchema)),
   maskMode: Type.Optional(MaskModeSchema),
@@ -930,6 +912,9 @@ export const UpdatePropertiesCommandSchema = Type.Object(
     ),
     layoutLimits: Type.Optional(
       Type.Union([layout.LayoutLimitsSchema, Type.Null()]),
+    ),
+    componentPropertyReferences: Type.Optional(
+      Type.Union([ComponentPropertyReferencesSchema, Type.Null()]),
     ),
     blendMode: Type.Optional(BlendModeSchema),
     effects: Type.Optional(Type.Array(EffectSchema)),
@@ -1495,13 +1480,7 @@ export const DesignCommandSchema: typeof DesignOperationSchema =
 export const RunAtomicDesignBatchCommandSchema: typeof DesignTransactionSchema =
   DesignTransactionSchema;
 
-export type JsonValue = Static<typeof JsonValueSchema>;
-export type JsonObject = Static<typeof JsonObjectSchema>;
 export type NodeKind = Static<typeof NodeKindSchema>;
-export type Transform = Static<typeof TransformSchema>;
-export type Size = Static<typeof SizeSchema>;
-export type Point = Static<typeof PointSchema>;
-export type NormalizedPoint = Static<typeof NormalizedPointSchema>;
 export type Rect = Static<typeof RectSchema>;
 export type BlendMode = Static<typeof BlendModeSchema>;
 export type SolidPaint = Static<typeof SolidPaintSchema>;
@@ -1780,6 +1759,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     }
     migrateImageNodes(migrated, String(schemaVersion));
     migrateTextNodes(migrated);
+    migrateFigmaComponentProperties(migrated);
     return isDesignDocument(migrated) ? migrated : null;
   } catch {
     return null;

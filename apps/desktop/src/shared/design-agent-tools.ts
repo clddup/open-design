@@ -1,8 +1,6 @@
 import {
-  ComponentOverridePatchSchema,
   isDesignAsset,
   isImagePlacement,
-  schemaValidationIssues,
   type BooleanOperation,
   type DesignAsset,
   type ImagePlacement,
@@ -40,6 +38,7 @@ import {
   isDesignPlanComponentStrategy,
   type DesignPlanComponentStrategy,
 } from "./design-plan-component-strategy";
+import { isDesignComponentToolInput } from "./design-component-tool";
 export {
   isDesignApplyToolInput,
   isInternalDesignApplyToolInput,
@@ -57,6 +56,8 @@ export {
   componentStrategyOccurrencesForTarget,
   isDesignPlanComponentStrategy,
 } from "./design-plan-component-strategy";
+export { isDesignComponentToolInput } from "./design-component-tool";
+export type { DesignComponentToolInput } from "./design-component-tool";
 export type {
   DesignPlanComponentCandidate,
   DesignPlanComponentStrategy,
@@ -350,60 +351,6 @@ export type DesignPageToolInput =
       action: "delete";
       label: string;
       pageId: string;
-    };
-
-export type DesignComponentToolInput =
-  | {
-      action: "create-component";
-      label: string;
-      pageId: string;
-      nodeId: string;
-      componentId: string;
-      name: string;
-    }
-  | {
-      action: "create-instance";
-      label: string;
-      pageId: string;
-      componentId: string;
-      instanceId: string;
-      parentId: string | null;
-      index: number;
-      x: number;
-      y: number;
-      name?: string;
-    }
-  | {
-      action: "remove-component";
-      label: string;
-      pageId: string;
-      componentId: string;
-    }
-  | {
-      action: "set-override";
-      label: string;
-      pageId: string;
-      instanceId: string;
-      sourcePath: string[];
-      patch: Record<string, unknown>;
-    }
-  | {
-      action: "reset-overrides";
-      label: string;
-      pageId: string;
-      instanceId: string;
-      sourcePath?: string[];
-    }
-  | {
-      action: "detach-instance";
-      label: string;
-      pageId: string;
-      instanceId: string;
-    }
-  | {
-      action: "go-to-main";
-      pageId: string;
-      instanceId: string;
     };
 
 export type PageStructureAccessAction =
@@ -1246,13 +1193,18 @@ const MODEL_HIERARCHY_SCHEMA = {
 const MODEL_COMPONENT_SCHEMA = {
   type: "object",
   description:
-    "Create a main component from an existing Frame/Group, remove component identity when no instances remain, place an instance, set/reset an instance override by stable sourcePath, detach an instance, or locate its main component. The host resolves source paths and never exposes or persists derived instance children.",
+    "Create and place linked components, author Figma-compatible Boolean/Text/Instance-swap properties on explicit Main sublayers, set/reset typed instance property values, use advanced sourcePath overrides, detach an instance, or locate its Main. Component property keys are stable Label#suffix names returned by inspection.",
   properties: {
     action: {
       enum: [
         "create-component",
         "create-instance",
         "remove-component",
+        "add-property",
+        "rename-property",
+        "remove-property",
+        "set-property",
+        "reset-property",
         "set-override",
         "reset-overrides",
         "detach-instance",
@@ -1265,6 +1217,26 @@ const MODEL_COMPONENT_SCHEMA = {
     componentId: { type: "string", minLength: 1, maxLength: 256 },
     instanceId: { type: "string", minLength: 1, maxLength: 256 },
     name: { type: "string", minLength: 1, maxLength: 256 },
+    propertyId: { type: "string", minLength: 1, maxLength: 256 },
+    propertyName: { type: "string", minLength: 1, maxLength: 512 },
+    type: { enum: ["BOOLEAN", "TEXT", "INSTANCE_SWAP"] },
+    sourceNodeId: { type: "string", minLength: 1, maxLength: 256 },
+    preferredValues: {
+      type: "array",
+      maxItems: 256,
+      items: {
+        type: "object",
+        properties: {
+          type: { enum: ["COMPONENT", "COMPONENT_SET"] },
+          key: { type: "string", minLength: 1, maxLength: 256 },
+        },
+        required: ["type", "key"],
+        additionalProperties: false,
+      },
+    },
+    value: {
+      anyOf: [{ type: "boolean" }, { type: "string", maxLength: 100_000 }],
+    },
     parentId: {
       anyOf: [
         { type: "string", minLength: 1, maxLength: 256 },
@@ -1986,7 +1958,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_COMPONENT_TOOL_NAME,
     description:
-      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the main component; remove-component keeps its layers but removes component identity after all instances are detached or deleted; create-instance places a linked instance on an explicit Page; set-override changes supported text, appearance, visibility, effects, or nested componentId using a stable sourcePath returned by inspection; reset-overrides restores main values; detach-instance converts the resolved instance to ordinary editable layers; go-to-main returns the source Page and main layer without writing. Main updates propagate to every instance while supported overrides remain. Instance structure cannot be directly inserted, deleted, moved, or reordered. Cross-Page actions require the same one-time Page structure access as other cross-Page writes. All writes are previewed and applied as one undoable transaction.",
+      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main; create-instance places a linked instance; add/rename/remove-property author Figma-compatible Boolean, Text, or Instance-swap properties on explicit Main sublayers; set/reset-property changes consolidated instance values by the stable propertyName returned by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. remove-component, detach-instance, and go-to-main retain their structural meanings. Main edits synchronize property defaults, instance structure cannot be directly mutated, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
     inputSchema: MODEL_COMPONENT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2930,131 +2902,6 @@ export function isDesignVisualReviewToolInput(
       "refinements",
     ])
   );
-}
-
-export function isDesignComponentToolInput(
-  input: unknown,
-): input is DesignComponentToolInput {
-  if (
-    !isRecord(input) ||
-    typeof input.action !== "string" ||
-    typeof input.pageId !== "string" ||
-    input.pageId.length === 0
-  ) {
-    return false;
-  }
-  const label =
-    input.action === "go-to-main" ||
-    (typeof input.label === "string" &&
-      input.label.length > 0 &&
-      input.label.length <= 256);
-  if (!label) return false;
-  const id = (value: unknown) =>
-    typeof value === "string" && value.length > 0 && value.length <= 256;
-  const sourcePath = (value: unknown) =>
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.length <= 64 &&
-    value.every(id);
-  switch (input.action) {
-    case "create-component":
-      return (
-        id(input.nodeId) &&
-        id(input.componentId) &&
-        id(input.name) &&
-        exactKeys(input, [
-          "action",
-          "label",
-          "pageId",
-          "nodeId",
-          "componentId",
-          "name",
-        ])
-      );
-    case "create-instance":
-      return (
-        id(input.componentId) &&
-        id(input.instanceId) &&
-        (input.parentId === null || id(input.parentId)) &&
-        Number.isInteger(input.index) &&
-        (input.index as number) >= 0 &&
-        typeof input.x === "number" &&
-        Number.isFinite(input.x) &&
-        typeof input.y === "number" &&
-        Number.isFinite(input.y) &&
-        (input.name === undefined || id(input.name)) &&
-        exactKeys(
-          input,
-          input.name === undefined
-            ? [
-                "action",
-                "label",
-                "pageId",
-                "componentId",
-                "instanceId",
-                "parentId",
-                "index",
-                "x",
-                "y",
-              ]
-            : [
-                "action",
-                "label",
-                "pageId",
-                "componentId",
-                "instanceId",
-                "parentId",
-                "index",
-                "x",
-                "y",
-                "name",
-              ],
-        )
-      );
-    case "remove-component":
-      return (
-        id(input.componentId) &&
-        exactKeys(input, ["action", "label", "pageId", "componentId"])
-      );
-    case "set-override":
-      return (
-        id(input.instanceId) &&
-        sourcePath(input.sourcePath) &&
-        schemaValidationIssues(ComponentOverridePatchSchema, input.patch)
-          .length === 0 &&
-        exactKeys(input, [
-          "action",
-          "label",
-          "pageId",
-          "instanceId",
-          "sourcePath",
-          "patch",
-        ])
-      );
-    case "reset-overrides":
-      return (
-        id(input.instanceId) &&
-        (input.sourcePath === undefined || sourcePath(input.sourcePath)) &&
-        exactKeys(
-          input,
-          input.sourcePath === undefined
-            ? ["action", "label", "pageId", "instanceId"]
-            : ["action", "label", "pageId", "instanceId", "sourcePath"],
-        )
-      );
-    case "detach-instance":
-      return (
-        id(input.instanceId) &&
-        exactKeys(input, ["action", "label", "pageId", "instanceId"])
-      );
-    case "go-to-main":
-      return (
-        id(input.instanceId) &&
-        exactKeys(input, ["action", "pageId", "instanceId"])
-      );
-    default:
-      return false;
-  }
 }
 
 export function designApplyRequiresPlan(input: DesignApplyToolInput): boolean {

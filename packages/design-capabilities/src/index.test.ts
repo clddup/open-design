@@ -75,8 +75,9 @@ describe("design capability manifest", () => {
       id: "components.instances-variants",
       status: "degraded",
       name: "Components, instances, and variants",
-      provider: "@opendesign/component-service contract v1",
-      evidence: { automated: 10, manual: 0 },
+      provider:
+        "DesignDocument 1.21.0 + @opendesign/component-service contract v2 + isolated @opendesign/figma-interop",
+      evidence: { automated: 12, manual: 0 },
     });
   });
 

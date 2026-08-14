@@ -196,6 +196,7 @@ describe("component operations", () => {
       id: "component_icon",
       name: "Icon",
       rootNodeId: "icon_main",
+      componentPropertyDefinitions: {},
       extensions: {},
     };
     document.nodesById.icon_main = frame("icon_main", null, ["icon_dot"]);
@@ -213,13 +214,18 @@ describe("component operations", () => {
       opacity: 1,
       extensions: {},
       kind: "instance",
-      properties: { componentId: "component_icon", overrides: [] },
+      properties: {
+        componentId: "component_icon",
+        componentProperties: {},
+        overrides: [],
+      },
     };
     document.nodesById.button_main!.childIds.push("nested_icon");
     document.componentsById.component_icon_alt = {
       id: "component_icon_alt",
       name: "Alternate icon",
       rootNodeId: "icon_alt_main",
+      componentPropertyDefinitions: {},
       extensions: {},
     };
     document.nodesById.icon_alt_main = frame("icon_alt_main", null, [
@@ -390,6 +396,7 @@ function componentFixture(withInstance = false): DesignDocument {
       id: "component_button",
       name: "Primary button",
       rootNodeId: "button_main",
+      componentPropertyDefinitions: {},
       extensions: {},
     };
     document.pagesById.page_instance.rootNodeIds = ["button_instance"];
@@ -405,7 +412,11 @@ function componentFixture(withInstance = false): DesignDocument {
       opacity: 1,
       extensions: {},
       kind: "instance",
-      properties: { componentId: "component_button", overrides: [] },
+      properties: {
+        componentId: "component_button",
+        componentProperties: {},
+        overrides: [],
+      },
     };
   }
   return document;

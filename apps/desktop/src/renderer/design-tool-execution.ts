@@ -20,9 +20,6 @@ import {
   diagnoseDesignPages,
   planCreatePage,
   planCreateBooleanGroup,
-  planCreateComponent,
-  planCreateInstance,
-  planDetachComponentInstance,
   planDeletePage,
   planDuplicatePage,
   planGroupNodes,
@@ -31,11 +28,8 @@ import {
   planReorderNodes,
   planRenamePage,
   planReorderPage,
-  planResetComponentOverrides,
-  planRemoveComponent,
   planSvgImport,
   planSetBooleanOperation,
-  planSetComponentOverride,
   planUngroupBooleanGroup,
   planUngroupNode,
   planVectorLayersLineCut,
@@ -81,6 +75,7 @@ import { normalizeAgentTextContent } from "./agent-text-normalization";
 import { throwIfAgentGenerationAborted } from "./agent-generation-timing";
 import { executeSemanticDesignTransaction } from "./design-transaction-steps";
 import { planDesignArrangeTool } from "./design-arrange-tool-plan";
+import { planDesignComponentTool } from "./design-component-tool-plan";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -243,49 +238,7 @@ async function executeDesignToolRequestUnsafe(
         },
       };
     }
-    const plan =
-      input.action === "create-component"
-        ? planCreateComponent(document, {
-            componentId: input.componentId,
-            nodeId: input.nodeId,
-            name: input.name,
-            commandPrefix: operationId,
-          })
-        : input.action === "create-instance"
-          ? planCreateInstance(document, {
-              componentId: input.componentId,
-              instanceId: input.instanceId,
-              pageId: input.pageId,
-              parentId: input.parentId,
-              index: input.index,
-              transform: [1, 0, 0, 1, input.x, input.y],
-              ...(input.name === undefined ? {} : { name: input.name }),
-              commandPrefix: operationId,
-            })
-          : input.action === "remove-component"
-            ? planRemoveComponent(document, {
-                componentId: input.componentId,
-                commandPrefix: operationId,
-              })
-            : input.action === "set-override"
-              ? planSetComponentOverride(document, {
-                  instanceId: input.instanceId,
-                  sourcePath: input.sourcePath,
-                  patch: input.patch,
-                  commandPrefix: operationId,
-                })
-              : input.action === "reset-overrides"
-                ? planResetComponentOverrides(document, {
-                    instanceId: input.instanceId,
-                    ...(input.sourcePath === undefined
-                      ? {}
-                      : { sourcePath: input.sourcePath }),
-                    commandPrefix: operationId,
-                  })
-                : planDetachComponentInstance(document, {
-                    instanceId: input.instanceId,
-                    commandPrefix: operationId,
-                  });
+    const plan = planDesignComponentTool(document, input, operationId);
     if (!plan.ok) {
       throw new Error(`component-operation.${plan.code}: ${plan.message}`);
     }
@@ -1733,6 +1686,9 @@ function createScopedInspection(
             id: component.id,
             name: component.name,
             rootNodeId: component.rootNodeId,
+            componentPropertyDefinitions: structuredClone(
+              component.componentPropertyDefinitions,
+            ),
             sourceNodeIds: [
               ...componentSourceNodeIdsForInspection(
                 document,
@@ -1751,16 +1707,27 @@ function createScopedInspection(
     instancesById[node.id] = !resolution.ok
       ? {
           componentId: node.properties.componentId,
+          propertyAssignments: structuredClone(
+            node.properties.componentProperties,
+          ),
           issues: resolution.issues,
         }
       : {
           componentId: node.properties.componentId,
+          componentProperties: structuredClone(resolution.componentProperties),
+          propertyAssignments: structuredClone(
+            node.properties.componentProperties,
+          ),
           overrides: structuredClone(node.properties.overrides),
           sourceNodes: resolution.overrideTargets.map((resolved) => ({
             sourcePath: [...resolved.sourcePath],
             sourceNodeId: resolved.sourceNodeId,
             kind: resolved.node.kind,
             name: resolved.node.name,
+            componentPropertyReferences: structuredClone(
+              document.nodesById[resolved.sourceNodeId]
+                ?.componentPropertyReferences ?? {},
+            ),
             projectionId:
               resolution.nodes.find(
                 (candidate) =>
@@ -1865,11 +1832,24 @@ function assertComponentInputPage(
     }
     return;
   }
-  if (input.action === "remove-component") {
+  if (
+    input.action === "remove-component" ||
+    input.action === "rename-property" ||
+    input.action === "remove-property"
+  ) {
     const mainNodeId = document.componentsById[input.componentId]?.rootNodeId;
     if (!mainNodeId || !ids.has(mainNodeId)) {
       throw new Error(
         `Component ${input.componentId} main is outside Page ${input.pageId}`,
+      );
+    }
+    return;
+  }
+  if (input.action === "add-property") {
+    const mainNodeId = document.componentsById[input.componentId]?.rootNodeId;
+    if (!mainNodeId || !ids.has(mainNodeId) || !ids.has(input.sourceNodeId)) {
+      throw new Error(
+        `Component property source ${input.sourceNodeId} is outside Page ${input.pageId}`,
       );
     }
     return;

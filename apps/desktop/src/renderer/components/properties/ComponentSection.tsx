@@ -1,5 +1,8 @@
 import type {
   BlendMode,
+  ComponentPropertyAssignment,
+  ComponentPropertyDefinition,
+  ComponentPropertyType,
   ComponentOverridePatch,
   DesignNode,
   Effect,
@@ -37,6 +40,19 @@ export interface ComponentInspectorSource {
 export interface ComponentInspectorOption {
   id: string;
   name: string;
+}
+
+export interface ComponentInspectorPropertyDefinition {
+  definition: ComponentPropertyDefinition;
+  propertyName: string;
+  sourceNodeIds: readonly string[];
+}
+
+export interface ComponentInspectorPropertyValue {
+  assigned: boolean;
+  definition: ComponentPropertyDefinition;
+  propertyName: string;
+  value: ComponentPropertyAssignment;
 }
 
 const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
@@ -345,9 +361,268 @@ function ComponentOverrideEditor({
   );
 }
 
+function propertyLabel(propertyName: string): string {
+  const marker = propertyName.lastIndexOf("#");
+  return marker > 0 ? propertyName.slice(0, marker) : propertyName;
+}
+
+function propertyTypeLabel(
+  type: ComponentPropertyType,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (type === "BOOLEAN") return t("properties.booleanProperty");
+  if (type === "TEXT") return t("properties.textProperty");
+  return t("properties.instanceSwapProperty");
+}
+
+function propertySourceCandidates(
+  sources: readonly ComponentInspectorSource[],
+  type: ComponentPropertyType,
+): readonly ComponentInspectorSource[] {
+  const field =
+    type === "BOOLEAN"
+      ? "visible"
+      : type === "TEXT"
+        ? "characters"
+        : "mainComponent";
+  return sources.filter(
+    (source) =>
+      (type === "BOOLEAN" ||
+        (type === "TEXT" && source.node.kind === "text") ||
+        (type === "INSTANCE_SWAP" && source.node.kind === "instance")) &&
+      !source.node.componentPropertyReferences?.[field],
+  );
+}
+
+function ComponentPropertyAuthoring({
+  definitions,
+  onAdd,
+  onRemove,
+  onRename,
+  sources,
+}: {
+  definitions: readonly ComponentInspectorPropertyDefinition[];
+  onAdd: (input: {
+    name: string;
+    sourceNodeId: string;
+    type: ComponentPropertyType;
+  }) => void;
+  onRemove: (propertyName: string) => void;
+  onRename: (propertyName: string, name: string) => void;
+  sources: readonly ComponentInspectorSource[];
+}) {
+  const { t } = useI18n();
+  const [type, setType] = useState<ComponentPropertyType>("BOOLEAN");
+  const candidates = propertySourceCandidates(sources, type);
+  const [sourceNodeId, setSourceNodeId] = useState(
+    () => candidates[0]?.node.id ?? "",
+  );
+  const source =
+    candidates.find((candidate) => candidate.node.id === sourceNodeId) ??
+    candidates[0];
+  const [name, setName] = useState(() => source?.node.name ?? "");
+
+  useEffect(() => {
+    const selected = candidates.find(
+      (candidate) => candidate.node.id === sourceNodeId,
+    );
+    if (selected) return;
+    const first = candidates[0];
+    setSourceNodeId(first?.node.id ?? "");
+    setName(first?.node.name ?? "");
+  }, [candidates, sourceNodeId]);
+
+  return (
+    <div className={styles.componentPropertySection}>
+      <div className={styles.componentPropertyHeading}>
+        <span>{t("properties.componentProperties")}</span>
+        <small>{definitions.length}</small>
+      </div>
+      {definitions.length === 0 ? (
+        <p className={styles.componentPropertyEmpty}>
+          {t("properties.noComponentProperties")}
+        </p>
+      ) : (
+        <div className={styles.componentPropertyList}>
+          {definitions.map((property) => (
+            <div
+              className={styles.componentPropertyDefinition}
+              key={property.propertyName}
+            >
+              <Field
+                accessibleLabel={t("properties.propertyName")}
+                label="P"
+                onCommit={(draft) => {
+                  const next = draft.trim();
+                  if (!next) return null;
+                  if (next !== propertyLabel(property.propertyName)) {
+                    onRename(property.propertyName, next);
+                  }
+                  return next;
+                }}
+                type="text"
+                value={propertyLabel(property.propertyName)}
+              />
+              <span>{propertyTypeLabel(property.definition.type, t)}</span>
+              <button
+                aria-label={`${t("properties.removeProperty")} ${propertyLabel(property.propertyName)}`}
+                onClick={() => onRemove(property.propertyName)}
+                type="button"
+              >
+                <Glyph name="close" size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className={styles.componentPropertyComposer}>
+        <label className={styles.select}>
+          <span>{t("properties.propertyType")}</span>
+          <select
+            aria-label={t("properties.propertyType")}
+            onChange={(event) => {
+              const next = event.target.value as ComponentPropertyType;
+              const first = propertySourceCandidates(sources, next)[0];
+              setType(next);
+              setSourceNodeId(first?.node.id ?? "");
+              setName(first?.node.name ?? "");
+            }}
+            value={type}
+          >
+            <option value="BOOLEAN">{t("properties.booleanProperty")}</option>
+            <option value="TEXT">{t("properties.textProperty")}</option>
+            <option value="INSTANCE_SWAP">
+              {t("properties.instanceSwapProperty")}
+            </option>
+          </select>
+        </label>
+        <label className={styles.select}>
+          <span>{t("properties.sourceLayer")}</span>
+          <select
+            aria-label={t("properties.sourceLayer")}
+            disabled={candidates.length === 0}
+            onChange={(event) => {
+              const next = candidates.find(
+                (candidate) => candidate.node.id === event.target.value,
+              );
+              setSourceNodeId(event.target.value);
+              setName(next?.node.name ?? "");
+            }}
+            value={source?.node.id ?? ""}
+          >
+            {candidates.map((candidate) => (
+              <option key={candidate.node.id} value={candidate.node.id}>
+                {candidate.node.name || t(nodeKindKeys[candidate.node.kind])}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Field
+          accessibleLabel={t("properties.propertyName")}
+          label="P"
+          onCommit={(draft) => {
+            setName(draft);
+            return draft;
+          }}
+          type="text"
+          value={name}
+        />
+        <Button
+          disabled={!source || !name.trim()}
+          onClick={() => {
+            if (!source || !name.trim()) return;
+            onAdd({ name: name.trim(), sourceNodeId: source.node.id, type });
+          }}
+          tone="quiet"
+        >
+          {t("properties.addComponentProperty")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ComponentPropertyValues({
+  availableComponents,
+  onReset,
+  onSet,
+  properties,
+}: {
+  availableComponents: readonly ComponentInspectorOption[];
+  onReset: (propertyName: string) => void;
+  onSet: (propertyName: string, value: ComponentPropertyAssignment) => void;
+  properties: readonly ComponentInspectorPropertyValue[];
+}) {
+  const { t } = useI18n();
+  if (properties.length === 0) return null;
+  return (
+    <div className={styles.componentPropertySection}>
+      <div className={styles.componentPropertyHeading}>
+        <span>{t("properties.componentProperties")}</span>
+      </div>
+      <div className={styles.componentPropertyList}>
+        {properties.map((property) => (
+          <div
+            className={styles.componentPropertyValue}
+            key={property.propertyName}
+          >
+            <div>
+              <strong>{propertyLabel(property.propertyName)}</strong>
+              <button
+                disabled={!property.assigned}
+                onClick={() => onReset(property.propertyName)}
+                type="button"
+              >
+                {t("properties.resetProperty")}
+              </button>
+            </div>
+            {property.definition.type === "BOOLEAN" ? (
+              <label className={styles.componentPropertyToggle}>
+                <input
+                  checked={property.value === true}
+                  onChange={(event) =>
+                    onSet(property.propertyName, event.target.checked)
+                  }
+                  type="checkbox"
+                />
+                {t("properties.visible")}
+              </label>
+            ) : property.definition.type === "TEXT" ? (
+              <TextAreaField
+                label={propertyLabel(property.propertyName)}
+                onCommit={(value) => onSet(property.propertyName, value)}
+                value={String(property.value)}
+              />
+            ) : (
+              <label className={styles.select}>
+                <span>{t("properties.instanceSwap")}</span>
+                <select
+                  aria-label={propertyLabel(property.propertyName)}
+                  onChange={(event) =>
+                    onSet(property.propertyName, event.target.value)
+                  }
+                  value={String(property.value)}
+                >
+                  {availableComponents.map((component) => (
+                    <option key={component.id} value={component.id}>
+                      {component.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export type ComponentInspectorContext = {
   availableComponents: readonly ComponentInspectorOption[];
   componentName: string;
+  componentProperties: readonly ComponentInspectorPropertyValue[];
+  componentPropertyDefinitions: readonly ComponentInspectorPropertyDefinition[];
   isMain: boolean;
   overrideCount: number;
   sourceNodes: readonly ComponentInspectorSource[];
@@ -361,8 +636,13 @@ export function ComponentSection({
   onDetachComponentInstance,
   onGoToComponentMain,
   onRemoveComponent,
+  onAddComponentProperty,
+  onRemoveComponentProperty,
+  onRenameComponentProperty,
   onResetComponentInstance,
   onResetComponentSourceOverride,
+  onResetComponentProperty,
+  onSetComponentProperty,
   onUpdateComponentOverride,
 }: {
   componentContext?: ComponentInspectorContext;
@@ -372,8 +652,20 @@ export function ComponentSection({
   onDetachComponentInstance: () => void;
   onGoToComponentMain: () => void;
   onRemoveComponent: () => void;
+  onAddComponentProperty: (input: {
+    name: string;
+    sourceNodeId: string;
+    type: ComponentPropertyType;
+  }) => void;
+  onRemoveComponentProperty: (propertyName: string) => void;
+  onRenameComponentProperty: (propertyName: string, name: string) => void;
   onResetComponentInstance: () => void;
   onResetComponentSourceOverride: (sourcePath: readonly string[]) => void;
+  onResetComponentProperty: (propertyName: string) => void;
+  onSetComponentProperty: (
+    propertyName: string,
+    value: ComponentPropertyAssignment,
+  ) => void;
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
     patch: ComponentOverridePatch,
@@ -404,36 +696,56 @@ export function ComponentSection({
             </span>
           </span>
           {componentContext.isMain ? (
-            <div className={styles.componentActions}>
-              <Button onClick={onCreateComponentInstance} tone="quiet">
-                {t("properties.createInstance")}
-              </Button>
-              <Button onClick={onRemoveComponent} tone="quiet">
-                {t("properties.removeComponent")}
-              </Button>
-            </div>
-          ) : (
-            <div className={styles.componentActions}>
-              <Button onClick={onGoToComponentMain} tone="quiet">
-                {t("properties.goToMain")}
-              </Button>
-              <Button
-                disabled={componentContext.overrideCount === 0}
-                onClick={onResetComponentInstance}
-                tone="quiet"
-              >
-                {t("properties.resetOverrides")}
-              </Button>
-              <Button onClick={onDetachComponentInstance} tone="quiet">
-                {t("properties.detachInstance")}
-              </Button>
-              <ComponentOverrideEditor
-                availableComponents={componentContext.availableComponents}
-                onReset={onResetComponentSourceOverride}
-                onUpdate={onUpdateComponentOverride}
+            <>
+              <div className={styles.componentActions}>
+                <Button onClick={onCreateComponentInstance} tone="quiet">
+                  {t("properties.createInstance")}
+                </Button>
+                <Button onClick={onRemoveComponent} tone="quiet">
+                  {t("properties.removeComponent")}
+                </Button>
+              </div>
+              <ComponentPropertyAuthoring
+                definitions={componentContext.componentPropertyDefinitions}
+                onAdd={onAddComponentProperty}
+                onRemove={onRemoveComponentProperty}
+                onRename={onRenameComponentProperty}
                 sources={componentContext.sourceNodes}
               />
-            </div>
+            </>
+          ) : (
+            <>
+              <ComponentPropertyValues
+                availableComponents={componentContext.availableComponents}
+                onReset={onResetComponentProperty}
+                onSet={onSetComponentProperty}
+                properties={componentContext.componentProperties}
+              />
+              <div className={styles.componentActions}>
+                <Button onClick={onGoToComponentMain} tone="quiet">
+                  {t("properties.goToMain")}
+                </Button>
+                <Button onClick={onDetachComponentInstance} tone="quiet">
+                  {t("properties.detachInstance")}
+                </Button>
+              </div>
+              <details className={styles.componentAdvancedOverrides}>
+                <summary>{t("properties.advancedOverrides")}</summary>
+                <Button
+                  disabled={componentContext.overrideCount === 0}
+                  onClick={onResetComponentInstance}
+                  tone="quiet"
+                >
+                  {t("properties.resetOverrides")}
+                </Button>
+                <ComponentOverrideEditor
+                  availableComponents={componentContext.availableComponents}
+                  onReset={onResetComponentSourceOverride}
+                  onUpdate={onUpdateComponentOverride}
+                  sources={componentContext.sourceNodes}
+                />
+              </details>
+            </>
           )}
         </div>
       ) : (

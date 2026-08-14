@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
+  FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
   DesignOperationSchema,
@@ -29,8 +30,9 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(AUTO_LAYOUT_DESIGN_SCHEMA_VERSION).toBe("1.18.0");
   expect(LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION).toBe("1.19.0");
   expect(LAYOUT_GUIDE_COLUMNS_ROWS_DESIGN_SCHEMA_VERSION).toBe("1.20.0");
+  expect(FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION).toBe("1.21.0");
   expect(DESIGN_SCHEMA_VERSION).toBe(
-    LAYOUT_GUIDE_COLUMNS_ROWS_DESIGN_SCHEMA_VERSION,
+    FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
   );
 });
 
@@ -1208,6 +1210,50 @@ describe("design contract schemas", () => {
     const migrated = migrateDesignDocument(source);
     expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
     expect(migrated?.nodesById.text_1?.kind).toBe("text");
+  });
+
+  it("migrates 1.20 components and instances with empty Figma property maps", () => {
+    const source = textDocumentFixture() as unknown as {
+      schemaVersion: string;
+      componentsById: Record<string, Record<string, unknown>>;
+      nodesById: Record<string, Record<string, unknown>>;
+      pagesById: Record<string, { rootNodeIds: string[] }>;
+    };
+    source.schemaVersion = "1.20.0";
+    source.componentsById.component_text = {
+      id: "component_text",
+      name: "Text component",
+      rootNodeId: "text_1",
+      extensions: {},
+    };
+    source.nodesById.instance_text = {
+      id: "instance_text",
+      name: "Text instance",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 280, 0],
+      size: { width: 240, height: 64 },
+      opacity: 1,
+      extensions: {},
+      kind: "instance",
+      properties: { componentId: "component_text", overrides: [] },
+    };
+    source.pagesById.page_1!.rootNodeIds.push("instance_text");
+
+    const migrated = migrateDesignDocument(source);
+
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(
+      migrated?.componentsById.component_text?.componentPropertyDefinitions,
+    ).toEqual({});
+    const instance = migrated?.nodesById.instance_text;
+    expect(
+      instance?.kind === "instance"
+        ? instance.properties.componentProperties
+        : undefined,
+    ).toEqual({});
   });
 
   it("validates strict uniform layout guides on Frames", () => {

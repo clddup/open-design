@@ -1,5 +1,7 @@
 import type {
   BooleanOperation,
+  ComponentPropertyAssignment,
+  ComponentPropertyType,
   ComponentOverridePatch,
   DesignNode,
   LayoutConstraints,
@@ -101,7 +103,11 @@ export function SelectedNodeProperties({
   onGoToComponentMain,
   onReplaceImage,
   onRemoveComponent,
+  onAddComponentProperty,
+  onRemoveComponentProperty,
+  onRenameComponentProperty,
   onResetComponentInstance,
+  onResetComponentProperty,
   onResetComponentSourceOverride,
   onSelectBooleanParent,
   onSetConstraints,
@@ -109,6 +115,7 @@ export function SelectedNodeProperties({
   onSetFrameLayoutGuides,
   onUpdate,
   onUpdateComponentOverride,
+  onSetComponentProperty,
 }: {
   node: DesignNode;
   componentContext?: ComponentInspectorContext;
@@ -131,7 +138,15 @@ export function SelectedNodeProperties({
   onGoToComponentMain: () => void;
   onReplaceImage: () => void;
   onRemoveComponent: () => void;
+  onAddComponentProperty: (input: {
+    name: string;
+    sourceNodeId: string;
+    type: ComponentPropertyType;
+  }) => void;
+  onRemoveComponentProperty: (propertyName: string) => void;
+  onRenameComponentProperty: (propertyName: string, name: string) => void;
   onResetComponentInstance: () => void;
+  onResetComponentProperty: (propertyName: string) => void;
   onResetComponentSourceOverride: (sourcePath: readonly string[]) => void;
   onSelectBooleanParent: (nodeId: string) => void;
   onSetConstraints: (nodeId: string, constraints: LayoutConstraints) => void;
@@ -148,6 +163,10 @@ export function SelectedNodeProperties({
   onUpdateComponentOverride: (
     sourcePath: readonly string[],
     patch: ComponentOverridePatch,
+  ) => void;
+  onSetComponentProperty: (
+    propertyName: string,
+    value: ComponentPropertyAssignment,
   ) => void;
 }) {
   const { t } = useI18n();
@@ -258,9 +277,14 @@ export function SelectedNodeProperties({
         onDetachComponentInstance={onDetachComponentInstance}
         onGoToComponentMain={onGoToComponentMain}
         onRemoveComponent={onRemoveComponent}
+        onAddComponentProperty={onAddComponentProperty}
+        onRemoveComponentProperty={onRemoveComponentProperty}
+        onRenameComponentProperty={onRenameComponentProperty}
         onResetComponentInstance={onResetComponentInstance}
+        onResetComponentProperty={onResetComponentProperty}
         onResetComponentSourceOverride={onResetComponentSourceOverride}
         onUpdateComponentOverride={onUpdateComponentOverride}
+        onSetComponentProperty={onSetComponentProperty}
       />
       <Section title={t("properties.layer")}>
         <div className={styles.stack}>

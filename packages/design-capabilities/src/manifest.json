@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-14",
-  "documentSchemaVersion": "1.20.0",
+  "documentSchemaVersion": "1.21.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -856,7 +856,7 @@
         "en": "Create main components, instances, nested instances, overrides, component properties, and variant sets.",
         "zh-CN": "创建主组件、实例、嵌套实例、override、组件属性与 Variant Set。"
       },
-      "provider": "@opendesign/component-service contract v1",
+      "provider": "DesignDocument 1.21.0 + @opendesign/component-service contract v2 + isolated @opendesign/figma-interop",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -868,14 +868,16 @@
       },
       "limitations": [
         {
-          "en": "Same-file main components, linked and nested instances, stable source-path overrides, nested instance swap, reset/detach, Assets/Inspector UI, typed Agent operations, Canvas projection, SVG/raster export, persistence, autosave, and history are implemented. Variant sets, formal component properties, cross-file libraries, orphan migration after destructive source edits, direct on-canvas inner override selection, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "已实现同一 Design File 内的主组件、链接/嵌套实例、稳定 sourcePath override、嵌套实例交换、reset/detach、Assets/Inspector 人工 UI、Agent typed tool、Canvas 投影、SVG/位图导出、持久化、autosave 与 history。Variant Set、正式 Component Properties、跨文件 Library、破坏性源节点修改后的 orphan 迁移、画布直接选择内部 override 目标，以及 macOS/Windows 打包 GUI 实机证据仍未完成。"
+          "en": "Same-file Main components, linked/nested instances, Figma-compatible Boolean/Text/Instance-swap Component Properties, stable source-path advanced overrides, reset/detach, Assets/Inspector UI, typed Agent actions and inspection, Canvas/SVG/raster projection, migration, persistence, autosave, and history are implemented. Variant and Slot properties, component sets, cross-file libraries, private .fig decoding, Plugin/REST import-export, direct on-canvas inner override selection, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义的 Boolean/Text/Instance-swap Component Properties、稳定 sourcePath 高级 override、reset/detach、Assets/Inspector、Agent typed actions 与 inspection、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Variant/Slot 属性、Component Set、跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、画布内部 override 直选和 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/editor-runtime/src/component-operations.test.ts",
+          "packages/editor-runtime/src/component-property-operations.test.ts",
+          "packages/figma-interop/src/index.test.ts",
           "packages/editor-runtime/src/component-svg-export.test.ts",
           "packages/leafer-engine/src/component-projection.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
@@ -889,6 +891,7 @@
       },
       "references": [
         "https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma",
+        "https://help.figma.com/hc/en-us/articles/5579474826519-Explore-component-properties",
         "https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants"
       ]
     },

@@ -1,5 +1,5 @@
 import { TooltipProvider } from "@opendesign/ui";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   DesignNode,
@@ -13,6 +13,7 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
 import { PropertiesPanel } from "./PropertiesPanel";
+import type { ComponentInspectorContext } from "./properties/ComponentSection";
 import type { SvgInterchangeFeedback } from "../features/import-export/types";
 import type { UpdatePropertiesPatch } from "../features/editor/types";
 
@@ -25,13 +26,17 @@ function renderPanel(
     operation?: { kind: "import" | "export"; name: string } | null;
     exportFormat?: "svg" | "png" | "jpeg" | "webp";
     selectionCount?: number;
-    componentContext?: {
-      availableComponents: readonly { id: string; name: string }[];
-      componentName: string;
-      isMain: boolean;
-      overrideCount: number;
-      sourceNodes: readonly [];
-    };
+    componentContext?: ComponentInspectorContext;
+    onAddComponentProperty?: (input: {
+      name: string;
+      sourceNodeId: string;
+      type: "BOOLEAN" | "TEXT" | "INSTANCE_SWAP";
+    }) => void;
+    onResetComponentProperty?: (propertyName: string) => void;
+    onSetComponentProperty?: (
+      propertyName: string,
+      value: string | boolean,
+    ) => void;
     onRemoveComponent?: () => void;
     layoutMode?: "constraints" | "sizing" | "wrap-sizing" | "absolute" | null;
     onSetConstraints?: (nodeId: string, constraints: LayoutConstraints) => void;
@@ -67,6 +72,7 @@ function renderPanel(
           componentContext={options.componentContext}
           node={options.node}
           onArrange={onArrange}
+          onAddComponentProperty={options.onAddComponentProperty ?? vi.fn()}
           onBooleanOperationChange={vi.fn()}
           onCancelSvgOperation={onCancelSvgOperation}
           onCreateComponent={vi.fn()}
@@ -82,13 +88,17 @@ function renderPanel(
           onExportSvg={onExportSvg}
           onReplaceImage={vi.fn()}
           onRemoveComponent={options.onRemoveComponent ?? vi.fn()}
+          onRemoveComponentProperty={vi.fn()}
+          onRenameComponentProperty={vi.fn()}
           onResetComponentInstance={vi.fn()}
           onResetComponentSourceOverride={vi.fn()}
+          onResetComponentProperty={options.onResetComponentProperty ?? vi.fn()}
           onSelectBooleanParent={vi.fn()}
           onSetConstraints={options.onSetConstraints ?? vi.fn()}
           onSetLayoutPositioning={options.onSetLayoutPositioning ?? vi.fn()}
           onSetFrameLayoutGuides={options.onSetFrameLayoutGuides ?? vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
+          onSetComponentProperty={options.onSetComponentProperty ?? vi.fn()}
           onRasterExportSettingsChange={onRasterExportSettingsChange}
           exportFormat={options.exportFormat ?? "svg"}
           rasterExportSettings={{
@@ -961,6 +971,87 @@ describe("PropertiesPanel SVG workflow", () => {
 });
 
 describe("PropertiesPanel line workflow", () => {
+  it("authors a typed component property from an explicit Main sublayer", async () => {
+    const user = userEvent.setup();
+    const onAddComponentProperty = vi.fn();
+    renderPanel({
+      componentContext: {
+        availableComponents: [],
+        componentName: "Primary button",
+        componentProperties: [],
+        componentPropertyDefinitions: [],
+        isMain: true,
+        overrideCount: 0,
+        sourceNodes: [
+          {
+            node: textNode,
+            overridden: false,
+            sourcePath: [textNode.id],
+          },
+        ],
+      },
+      node: lineNode,
+      onAddComponentProperty,
+      selectionCount: 1,
+    });
+
+    await user.selectOptions(screen.getByLabelText("Property type"), "TEXT");
+    const name = screen.getByLabelText("Property name");
+    await user.clear(name);
+    await user.type(name, "CTA label");
+    await user.tab();
+    await user.click(screen.getByRole("button", { name: "Add property" }));
+
+    expect(onAddComponentProperty).toHaveBeenCalledWith({
+      name: "CTA label",
+      sourceNodeId: textNode.id,
+      type: "TEXT",
+    });
+  });
+
+  it("edits and resets a consolidated instance property before advanced overrides", async () => {
+    const user = userEvent.setup();
+    const onResetComponentProperty = vi.fn();
+    const onSetComponentProperty = vi.fn();
+    renderPanel({
+      componentContext: {
+        availableComponents: [],
+        componentName: "Primary button",
+        componentProperties: [
+          {
+            assigned: true,
+            definition: { type: "BOOLEAN", defaultValue: true },
+            propertyName: "Show label#button:visible",
+            value: false,
+          },
+        ],
+        componentPropertyDefinitions: [],
+        isMain: false,
+        overrideCount: 0,
+        sourceNodes: [],
+      },
+      node: lineNode,
+      onResetComponentProperty,
+      onSetComponentProperty,
+      selectionCount: 1,
+    });
+
+    const property = screen
+      .getByText("Show label")
+      .closest("div")?.parentElement;
+    if (!property) throw new Error("Missing component property row");
+    await user.click(within(property).getByRole("checkbox"));
+    await user.click(within(property).getByRole("button", { name: "Reset" }));
+
+    expect(onSetComponentProperty).toHaveBeenCalledWith(
+      "Show label#button:visible",
+      true,
+    );
+    expect(onResetComponentProperty).toHaveBeenCalledWith(
+      "Show label#button:visible",
+    );
+  });
+
   it("removes component identity from the selected main through the component section", async () => {
     const user = userEvent.setup();
     const onRemoveComponent = vi.fn();
@@ -968,6 +1059,8 @@ describe("PropertiesPanel line workflow", () => {
       componentContext: {
         availableComponents: [],
         componentName: "Directed connector",
+        componentProperties: [],
+        componentPropertyDefinitions: [],
         isMain: true,
         overrideCount: 0,
         sourceNodes: [],

@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.20.0`
+- 文档协议：`DesignDocument 1.21.0`
 - Agent 协议：`3.9.0`
 - Geometry Service：`contract v10`
 - Layout Service：`contract v6`
@@ -41,8 +41,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   56 files / 550 tests
-└── desktop tests   75 files / 617 tests
+├── package tests   58 files / 557 tests
+└── desktop tests   78 files / 626 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main

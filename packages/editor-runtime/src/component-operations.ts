@@ -80,6 +80,7 @@ export function planCreateComponent(
           id: input.componentId,
           name,
           rootNodeId: node.id,
+          componentPropertyDefinitions: {},
           extensions: {},
         },
       },
@@ -132,7 +133,11 @@ export function planCreateInstance(
     opacity: 1,
     extensions: {},
     kind: "instance",
-    properties: { componentId: component.id, overrides: [] },
+    properties: {
+      componentId: component.id,
+      componentProperties: {},
+      overrides: [],
+    },
   };
   return {
     ok: true,
@@ -175,15 +180,25 @@ export function planRemoveComponent(
       `Detach or delete instance ${referencingInstance.id} before removing component ${input.componentId}`,
     );
   }
+  const commands: DesignOperation[] = [];
+  for (const sourceNodeId of componentSourceNodeIds(document, component.id)) {
+    const source = document.nodesById[sourceNodeId];
+    if (!source?.componentPropertyReferences) continue;
+    commands.push({
+      commandId: `${input.commandPrefix}_unbind_property_${commands.length}`,
+      type: "update_properties",
+      nodeId: source.id,
+      componentPropertyReferences: null,
+    });
+  }
+  commands.push({
+    commandId: `${input.commandPrefix}_delete_component`,
+    type: "delete_component",
+    componentId: component.id,
+  });
   return {
     ok: true,
-    commands: [
-      {
-        commandId: `${input.commandPrefix}_delete_component`,
-        type: "delete_component",
-        componentId: component.id,
-      },
-    ],
+    commands,
     componentId: component.id,
     mainNodeId: component.rootNodeId,
     selectionNodeIds: [component.rootNodeId],
@@ -333,6 +348,7 @@ export function planDetachComponentInstance(
   );
   const nodes = resolution.nodes.map((resolved) => {
     const clone = structuredClone(resolved.node);
+    delete clone.componentPropertyReferences;
     clone.id = idByProjection.get(resolved.projectionId)!;
     clone.parentId = resolved.parentProjectionId
       ? (idByProjection.get(resolved.parentProjectionId) ?? instance.parentId)

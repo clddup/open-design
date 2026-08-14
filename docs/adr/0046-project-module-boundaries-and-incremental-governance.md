@@ -1,6 +1,6 @@
 # ADR-0046：项目级模块边界与增量治理
 
-- 状态：已接受（Phase 1–4 已实施；后续阶段持续执行）
+- 状态：已接受（Phase 1–5 已实施；后续阶段持续执行）
 - 日期：2026-08-12
 - 关联：ADR-0001、ADR-0002、ADR-0003、ADR-0005、ADR-0006、ADR-0009、ADR-0033
 
@@ -65,12 +65,14 @@ Phase 3 把人工编辑命令拆成三个层次：`use-editor-command-controller
 
 Phase 4 把 Inspector 拆为 Appearance、Paint/Effect、Typography、Image、Component、Export 与 selected-node composition。section 只接收当前权威 `DesignNode`、受控 workflow 设置和语义 callback；`Field`/`TextAreaField` 只保存尚未提交的输入 draft，Component override 只保存当前检查行 key，均不保存 document/node 镜像。属性提交继续由 App 注入的 editor command controller 写入唯一 Runtime；Export operation/settings 继续由 Phase 1 的 import/export workflow 独占。共享控件与 Paint/Effect editor 是无文档所有权的 view primitives，不得反向取得 Runtime。`PropertiesPanel.tsx` 从 2973 行降至 374 行，8 个新生产模块均低于 800 行默认门禁，因此移除其历史超大模块预算。
 
+Phase 5 随 Figma-compatible Component Properties 垂直切片增加 `@opendesign/figma-interop`。该包只能依赖 Component Service 与 Design Contracts，并只使用固定官方 typings 做编译期公共 API 形状验证；EditorRuntime、Renderer、Leafer 和核心 Contracts 不反向依赖它。新增属性 schema/迁移、Runtime default 同步、Renderer context/plan 和 Main policy 分别进入低于 800 行的职责模块，`design-agent-tools` 只保留聚合 schema，未提高任何历史大文件预算。
+
 ### 自动边界和增长门禁
 
 `pnpm architecture:check` 是根 `pnpm verify` 的必经步骤，并校验：
 
 - Renderer、Shared、Main、Preload 与 Agent 的禁止跨层导入和 builtin 边界；
-- 20 个 workspace 包的生产依赖基线与循环；
+- 22 个 workspace 包的生产依赖基线与循环；
 - 新生产 TypeScript 模块默认不超过 800 行；
 - 当前 28 个历史超大生产模块使用逐文件预算，只能保持或缩小，不能增长。
 
@@ -95,7 +97,7 @@ Phase 4 把 Inspector 拆为 Appearance、Paint/Effect、Typography、Image、Co
 
 - 聚合入口会按真实业务所有权逐步收缩，而不是一次性重写。
 - 新代码不能建立跨进程后门、包循环或新的巨型模块。
-- 历史大模块仍然存在，Phase 1–4 不能描述为全项目治理完成；预算只阻止继续恶化，后续阶段必须实际拆除职责。
+- 历史大模块仍然存在，Phase 1–5 不能描述为全项目治理完成；预算只阻止继续恶化，后续阶段必须实际拆除职责。
 - 导入/导出现在具有独立取消和反馈生命周期，并继续从唯一 Runtime snapshot 生成事务或产物。
 - Page 与 Layer view 不再直接拥有 planner/transaction 编排；新增人工编辑命令应进入对应 controller 或新的完整业务 controller，不应重新堆回 `App.tsx`。
 - Inspector section 不拥有 Runtime 或文档副本；新增 property family 应进入对应 section，通过现有语义 callback 提交，不能重新堆回顶层 `PropertiesPanel.tsx`。

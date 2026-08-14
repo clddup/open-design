@@ -109,6 +109,15 @@ export {
   type ComponentOperationPlan,
 } from "./component-operations.js";
 export {
+  figmaComponentPropertyName,
+  planAddComponentProperty,
+  planRemoveComponentProperty,
+  planRenameComponentProperty,
+  planResetComponentPropertyValue,
+  planSetComponentPropertyValue,
+  type ComponentPropertyReferenceField,
+} from "./component-property-operations.js";
+export {
   nodeReferencesAsset,
   planDeleteImageAsset,
   planImageNodeUpdate,

@@ -50,7 +50,7 @@ Agent 使用专用 `opendesign_manage_components`，不能通过通用 apply 写
 
 ## 当前限制
 
-能力标记为 `degraded`：Variant Set、正式 Boolean/Text/Instance-swap Component Properties、跨 Design File Library 发布/更新、破坏性源编辑后的 orphan 迁移、画布直接选择内部 override 目标，以及 macOS/Windows 打包 GUI 实机证据尚未完成。Token/Variable 是后续独立协议，不塞进本切片。
+能力标记为 `degraded`。本文原始切片未实现的 Boolean/Text/Instance-swap Component Properties 已由 [ADR-0063](0063-figma-compatible-component-properties.md) 完成；Variant/Slot、Component Set、跨 Design File Library 发布/更新、破坏性源编辑后的 orphan 迁移、画布直接选择内部 override 目标，以及 macOS/Windows 打包 GUI 实机证据仍未完成。Token/Variable 是后续独立协议。
 
 ## 后果
 

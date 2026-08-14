@@ -311,7 +311,11 @@ describe("linear Auto Layout Runtime", () => {
     document.nodesById.instance = {
       ...rectangle("instance", "frame", 0, 0, 40, 40),
       kind: "instance",
-      properties: { componentId: "component", overrides: [] },
+      properties: {
+        componentId: "component",
+        componentProperties: {},
+        overrides: [],
+      },
     };
     document.nodesById.copy = autoHeightText("copy", "frame", 120);
     frame.childIds.push("group", "boolean", "instance", "copy");
