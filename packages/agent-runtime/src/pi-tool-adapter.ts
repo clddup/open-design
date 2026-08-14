@@ -241,9 +241,14 @@ export class OpenDesignPiToolAdapter {
     }
     if (active.duplicate) return undefined;
     if (event.isError) {
+      const definition = this.#definitions.get(active.toolName);
       const failure =
         this.#failures.get(event.toolCallId) ??
-        inferPiToolFailure(active, event.result);
+        (definition &&
+        definition.explainInvalidInput &&
+        !definition.validateInput(active.input)
+          ? invalidInputFailure(definition, active.input)
+          : inferPiToolFailure(active, event.result));
       return {
         status: "failed",
         toolCallId: event.toolCallId,
@@ -341,11 +346,7 @@ export class OpenDesignPiToolAdapter {
       );
     }
     if (!definition.validateInput(context.args)) {
-      const schemaFailure = failure(
-        "invalid_tool_input",
-        `The ${active.toolName} arguments do not match its schema. Review the tool parameters and submit a corrected call.`,
-        true,
-      );
+      const schemaFailure = invalidInputFailure(definition, context.args);
       this.#failures.set(active.toolCallId, schemaFailure);
       return { block: true, reason: modelFailureText(schemaFailure) };
     }
@@ -500,11 +501,7 @@ export class OpenDesignPiToolAdapter {
     try {
       if (!definition.validateInput(parameters)) {
         throw new TrustedToolExecutionError(
-          failure(
-            "invalid_tool_input",
-            `The ${definition.name} arguments do not match its schema. Review the tool parameters and submit a corrected call.`,
-            true,
-          ),
+          invalidInputFailure(definition, parameters),
         );
       }
       if (this.#toolExecutor === undefined) {
@@ -728,6 +725,20 @@ function failure(
   recoverable: boolean,
 ): TrustedToolFailure {
   return { code, message, retryable: false, recoverable };
+}
+
+function invalidInputFailure(
+  definition: AgentToolDefinition,
+  input: unknown,
+): TrustedToolFailure {
+  const explanation = definition.explainInvalidInput?.(input)?.trim();
+  return failure(
+    "invalid_tool_input",
+    explanation && explanation.length <= 20_000
+      ? explanation
+      : `The ${definition.name} arguments do not match its schema. Review the tool parameters and submit a corrected call.`,
+    true,
+  );
 }
 
 function toolResultErrorText(value: unknown): string {

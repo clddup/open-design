@@ -100,6 +100,71 @@ describe("Agent continuation timeline projection", () => {
     ).toEqual([]);
   });
 
+  it("hides intermediate model narration and routine component repair failures", () => {
+    const runId = "run_component_repair";
+    const events: AgentEvent[] = [
+      {
+        type: "message.completed",
+        runId,
+        messageId: "claim",
+        blocks: [
+          {
+            blockId: "claim_text",
+            type: "text",
+            text: "组件已补齐，正在重新捕获。",
+          },
+        ],
+      },
+      {
+        type: "tool.requested",
+        runId,
+        toolCallId: "capture",
+        toolName: "opendesign_capture_canvas",
+        input: {},
+        risk: "read",
+      },
+      {
+        type: "tool.failed",
+        runId,
+        toolCallId: "capture",
+        code: "design_component_strategy_incomplete",
+        message:
+          "design_workflow.component_strategy_incomplete: Declared Component Main is missing",
+        retryable: false,
+        recoverable: true,
+      },
+      {
+        type: "message.completed",
+        runId,
+        messageId: "final",
+        blocks: [
+          {
+            blockId: "final_text",
+            type: "text",
+            text: "任务需要继续修复组件绑定。",
+          },
+        ],
+      },
+    ];
+
+    const items = projectAgentTimeline({
+      activeRunId: runId,
+      events,
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline: [],
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items.some((item) => item.detail?.includes("组件已补齐"))).toBe(
+      false,
+    );
+    expect(items.some((item) => item.title === "设计更改失败")).toBe(false);
+    expect(items).toContainEqual(
+      expect.objectContaining({ detail: "任务需要继续修复组件绑定。" }),
+    );
+  });
+
   it("shows each committed semantic design revision once across durable and live state", () => {
     const now = "2026-08-13T01:00:00.000Z";
     const timeline: SessionTimelineItem[] = [

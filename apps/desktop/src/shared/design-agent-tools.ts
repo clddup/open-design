@@ -38,7 +38,10 @@ import {
   isDesignPlanComponentStrategy,
   type DesignPlanComponentStrategy,
 } from "./design-plan-component-strategy";
-import { isDesignComponentToolInput } from "./design-component-tool";
+import {
+  explainInvalidDesignComponentToolInput,
+  isDesignComponentToolInput,
+} from "./design-component-tool";
 import { isDesignVariableToolInput } from "./design-variable-tool";
 import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema";
 import { isDesignStyleToolInput } from "./design-style-tool";
@@ -60,7 +63,10 @@ export {
   componentStrategyOccurrencesForTarget,
   isDesignPlanComponentStrategy,
 } from "./design-plan-component-strategy";
-export { isDesignComponentToolInput } from "./design-component-tool";
+export {
+  explainInvalidDesignComponentToolInput,
+  isDesignComponentToolInput,
+} from "./design-component-tool";
 export type { DesignComponentToolInput } from "./design-component-tool";
 export { isDesignVariableToolInput } from "./design-variable-tool";
 export type { DesignVariableToolInput } from "./design-variable-tool";
@@ -1230,6 +1236,8 @@ const MODEL_COMPONENT_SCHEMA = {
     "Create and place linked components, combine inspected sibling Component Mains into a Figma-compatible Component Set with explicit unique VARIANT values, author and reorder Boolean/Text/Instance-swap/Slot properties on explicit Main sublayers, edit/reset/clear Slot contents and guidance settings, set/reset typed instance and VARIANT property values, use advanced sourcePath overrides, detach an instance, or locate its Main. Component, set, root, property IDs, and existing property order must come from inspection.",
   properties: {
     action: {
+      description:
+        "Choose one action. create-component requires exactly action, label, pageId, rootNodeId, componentId, and name; rootNodeId is the existing inspected Frame/Group promoted as the Main.",
       enum: [
         "create-component",
         "create-instance",
@@ -1264,7 +1272,6 @@ const MODEL_COMPONENT_SCHEMA = {
     },
     label: { type: "string", minLength: 1, maxLength: 256 },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
-    nodeId: { type: "string", minLength: 1, maxLength: 256 },
     componentId: { type: "string", minLength: 1, maxLength: 256 },
     componentIds: {
       type: "array",
@@ -1284,7 +1291,13 @@ const MODEL_COMPONENT_SCHEMA = {
     sourceComponentId: { type: "string", minLength: 1, maxLength: 256 },
     sourceRootNodeId: { type: "string", minLength: 1, maxLength: 256 },
     variantSetId: { type: "string", minLength: 1, maxLength: 256 },
-    rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
+    rootNodeId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description:
+        "Existing inspected root for create-component and Component Set actions. Never substitute nodeId or componentRootNodeId for create-component.",
+    },
     variantPropertiesByComponentId: {
       type: "object",
       minProperties: 2,
@@ -2098,10 +2111,11 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_COMPONENT_TOOL_NAME,
     description:
-      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main; combine-as-variants creates one real Component Set Frame from inspected sibling Mains. add-component-to-variant-set, duplicate-variant, remove-variant, and dissolve-variant-set manage Set membership. add/rename/reorder/remove-variant-property, rename/reorder-variant-value, and set-variant-properties edit the Figma-compatible two-dimensional Variant matrix using explicit inspected Set/member roots; the host preserves complete unique combinations, property/value order, top-left defaults, current Instance resolution, one revision, and one undo. create-instance places a linked instance. add/rename/remove-property author Boolean, Text, Instance-swap, or Slot properties on explicit Main sublayers. create-slot-override, clear-slot, reset-slot, and set-slot-settings manage bounded instance Slot contents and guidance without detaching the Instance; arbitrary content is inserted only under the real override Slot root returned by a fresh inspection. set/reset-property also selects VARIANT values exposed by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. Main edits synchronize property defaults, ordinary Instance structure remains read-only, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
+      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main and requires exactly action, label, pageId, rootNodeId, componentId, and name. combine-as-variants creates one real Component Set Frame from inspected sibling Mains. add-component-to-variant-set, duplicate-variant, remove-variant, and dissolve-variant-set manage Set membership. add/rename/reorder/remove-variant-property, rename/reorder-variant-value, and set-variant-properties edit the Figma-compatible two-dimensional Variant matrix using explicit inspected Set/member roots; the host preserves complete unique combinations, property/value order, top-left defaults, current Instance resolution, one revision, and one undo. create-instance places a linked instance. add/rename/remove-property author Boolean, Text, Instance-swap, or Slot properties on explicit Main sublayers. create-slot-override, clear-slot, reset-slot, and set-slot-settings manage bounded instance Slot contents and guidance without detaching the Instance; arbitrary content is inserted only under the real override Slot root returned by a fresh inspection. set/reset-property also selects VARIANT values exposed by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. Main edits synchronize property defaults, ordinary Instance structure remains read-only, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
     inputSchema: MODEL_COMPONENT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
+    explainInvalidInput: explainInvalidDesignComponentToolInput,
   },
   {
     name: DESIGN_VARIABLE_TOOL_NAME,

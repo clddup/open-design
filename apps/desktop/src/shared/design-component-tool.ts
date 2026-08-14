@@ -10,6 +10,60 @@ import {
 import type { DesignComponentToolInput } from "./design-component-tool-contract";
 export type { DesignComponentToolInput } from "./design-component-tool-contract";
 
+export function explainInvalidDesignComponentToolInput(
+  input: unknown,
+): string | undefined {
+  if (isDesignComponentToolInput(input)) return undefined;
+  if (!isRecord(input)) {
+    return "Invalid opendesign_manage_components input: expected one action object.";
+  }
+  const action = typeof input.action === "string" ? input.action : "<missing>";
+  const receivedKeys = Object.keys(input).sort();
+  if (action === "create-component") {
+    const required = [
+      "action",
+      "label",
+      "pageId",
+      "rootNodeId",
+      "componentId",
+      "name",
+    ];
+    const missing = required.filter(
+      (key) => !(key in input) || input[key] === "" || input[key] === undefined,
+    );
+    const unexpected = receivedKeys.filter((key) => !required.includes(key));
+    const problems = [
+      missing.length > 0 ? `Missing fields: ${missing.join(", ")}.` : "",
+      unexpected.length > 0
+        ? `Unexpected fields: ${unexpected.join(", ")}.`
+        : "",
+    ].filter(Boolean);
+    return [
+      "Invalid opendesign_manage_components create-component input.",
+      ...problems,
+      'Expected exact shape: {"action":"create-component","label":"Promote <name> Main","pageId":"<inspected-page-id>","rootNodeId":"<existing-frame-or-group-id>","componentId":"<planned-component-id>","name":"<component-name>"}.',
+      `Received keys: ${receivedKeys.join(", ") || "none"}.`,
+      "Correct this component call without amending or replacing the current design Plan.",
+    ].join(" ");
+  }
+  const commonProblems = [
+    typeof input.action !== "string" ? "action" : null,
+    !id(input.pageId) ? "pageId" : null,
+    action !== "go-to-main" &&
+    (!boundedString(input.label, 256) || input.label.length === 0)
+      ? "label"
+      : null,
+  ].filter((value): value is string => value !== null);
+  return [
+    `Invalid opendesign_manage_components input for action ${action}.`,
+    commonProblems.length > 0
+      ? `Missing or invalid common fields: ${commonProblems.join(", ")}.`
+      : "The action-specific field combination is invalid.",
+    `Received keys: ${receivedKeys.join(", ") || "none"}.`,
+    "Use only the fields declared for this action in the tool schema; do not amend the design Plan to work around an input error.",
+  ].join(" ");
+}
+
 export function isDesignComponentToolInput(
   input: unknown,
 ): input is DesignComponentToolInput {
@@ -29,7 +83,7 @@ export function isDesignComponentToolInput(
   switch (input.action) {
     case "create-component":
       return (
-        id(input.nodeId) &&
+        id(input.rootNodeId) &&
         id(input.componentId) &&
         boundedString(input.name, 256) &&
         input.name.length > 0 &&
@@ -37,7 +91,7 @@ export function isDesignComponentToolInput(
           "action",
           "label",
           "pageId",
-          "nodeId",
+          "rootNodeId",
           "componentId",
           "name",
         ])

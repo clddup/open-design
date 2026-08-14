@@ -52,6 +52,7 @@ export interface AgentToolDefinition extends CanonicalTool {
     summary: string;
   };
   validateInput(input: unknown): boolean;
+  explainInvalidInput?(input: unknown): string | undefined;
 }
 
 export interface ToolCatalogPort {

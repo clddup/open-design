@@ -753,6 +753,12 @@ export const enMessages = {
     "The Agent is applying the planned draft before visual review.",
   "agent.workflowCapturingCanvas":
     "The Agent is capturing the latest design revision before visual review.",
+  "agent.workflowRepairingComponents":
+    "The Agent is repairing the declared component bindings. This is structural work and may not change pixels.",
+  "agent.workflowRepairingPlan":
+    "The Agent must preserve the current delivery targets while correcting the plan.",
+  "agent.workflowRepairingLayout":
+    "The Agent is correcting measured layout errors before delivery.",
   "agent.readingCanvas": "Reading the canvas",
   "agent.canvasRead": "Canvas read",
   "agent.buildingCanvas": "Building on the canvas",
@@ -764,6 +770,7 @@ export const enMessages = {
   "agent.organizingLayers": "Organizing layers",
   "agent.hierarchyUpdated": "Layer structure updated",
   "agent.updatingComponents": "Building reusable components",
+  "agent.componentsUpdated": "Component definitions updated",
   "agent.arrangingLayers": "Arranging layers",
   "agent.arrangementUpdated": "Layer arrangement updated",
   "agent.updatingPages": "Updating Pages",
@@ -1650,6 +1657,11 @@ const zhCNMessages = {
     "Agent 正在先应用计划中的设计，再进行视觉审查。",
   "agent.workflowCapturingCanvas":
     "Agent 正在先截图当前设计 revision，再进行视觉审查。",
+  "agent.workflowRepairingComponents":
+    "Agent 正在修复计划声明的组件绑定；这是结构工作，画面像素可能不会变化。",
+  "agent.workflowRepairingPlan": "Agent 需要保留当前交付目标，并修正计划内容。",
+  "agent.workflowRepairingLayout":
+    "Agent 正在修正确认过的布局错误，再继续交付。",
   "agent.readingCanvas": "正在读取画布",
   "agent.canvasRead": "已读取画布",
   "agent.buildingCanvas": "正在构建设计",
@@ -1661,6 +1673,7 @@ const zhCNMessages = {
   "agent.organizingLayers": "正在整理图层",
   "agent.hierarchyUpdated": "图层结构已更新",
   "agent.updatingComponents": "正在构建可复用组件",
+  "agent.componentsUpdated": "组件定义已更新",
   "agent.arrangingLayers": "正在排列图层",
   "agent.arrangementUpdated": "图层排列已更新",
   "agent.updatingPages": "正在更新页面",

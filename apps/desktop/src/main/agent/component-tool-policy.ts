@@ -9,7 +9,7 @@ export function materialTargetRefsForComponentTool(
 } {
   switch (input.action) {
     case "create-component":
-      return { nodeIds: [input.nodeId], createdNodeIds: [] };
+      return { nodeIds: [input.rootNodeId], createdNodeIds: [] };
     case "remove-component":
       return { nodeIds: [], createdNodeIds: [] };
     case "combine-as-variants":

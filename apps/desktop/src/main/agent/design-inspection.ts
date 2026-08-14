@@ -234,7 +234,7 @@ function assertDeclaredComponentStrategy(
           occurrence.nodeId
       ) {
         throw new Error(
-          `design_workflow.component_strategy_incomplete: Declared Component Main ${occurrence.componentId} must bind Frame/Group ${occurrence.nodeId}; create it with opendesign_manage_components, inspect the current document, and capture again`,
+          `design_workflow.component_strategy_incomplete: Declared Component Main ${occurrence.componentId} must bind Frame/Group ${occurrence.nodeId} on Page ${target.planned.pageId}; call opendesign_manage_components action=create-component with rootNodeId=${occurrence.nodeId}, preserve the current Plan, inspect the current document, and capture again`,
         );
       }
       continue;

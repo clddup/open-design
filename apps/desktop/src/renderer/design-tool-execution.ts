@@ -1742,9 +1742,9 @@ function assertComponentInputPage(
   }
   const ids = pageNodeIds(document, input.pageId);
   if (input.action === "create-component") {
-    if (!ids.has(input.nodeId)) {
+    if (!ids.has(input.rootNodeId)) {
       throw new Error(
-        `Component source ${input.nodeId} is outside Page ${input.pageId}`,
+        `Component source ${input.rootNodeId} is outside Page ${input.pageId}`,
       );
     }
     return;

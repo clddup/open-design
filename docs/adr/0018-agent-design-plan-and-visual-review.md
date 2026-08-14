@@ -60,6 +60,10 @@ Renderer 只在收到 Main 对同一 tool call 的 `accepted` 结果后，才把
 
 Review 前置条件失败使用稳定 `design_workflow.material_write_required / capture_required / capture_revision_invalid / delivery_verification_required / delivery_structure_incomplete` 恢复指令。模型不得原样重试同一 review。普通可恢复门禁反馈进入 journal/日志但默认不堆叠为右侧红色失败卡；Run 最终无法恢复时，终态和诊断继续对用户可见。
 
+Renderer 与 Main 共同消费一个 workflow failure classifier；同一错误的恢复阶段、是否为普通可恢复反馈和 Timeline 呈现不得再由多套正则分别判断。`component_strategy_incomplete` 明确进入 component repair：保留现有 Plan 和稳定 ID，重新 inspection 后只修复对应 Main/Instance/ordinary binding，不得误走 Plan amendment。组件工具的 `create-component` 统一使用 `rootNodeId` 表示被提升的既有 Frame/Group，并要求精确的 `action / label / pageId / rootNodeId / componentId / name`；action-specific 校验失败必须向模型返回缺失字段、意外字段与完整最小调用形状，不能只返回顶层 schema mismatch。
+
+Timeline 把模型文字与可信产品状态分开。一个 Run 中后续仍发生工具调用的中间 assistant prose 视为内部过程，不作为用户可见进度；“真实设计步骤”只来自已提交 semantic step revision。组件定义、Variables 与其他可能不改变像素的文档元数据 revision 使用各自准确标题，不得显示成“画布已更新”；最终模型回复仍可见。
+
 设计事务违反 `EditorRuntime` invariant 时，`AgentEvent 3.6` 的可恢复 `tool.failed` 保留每项 `commandId / nodeId / path / message`、稳定 fingerprint、是否可原样重试，以及固定 `inspect-and-revise` 恢复动作。TypeBox 的 discriminated union 错误必须按节点 `kind` / command `type` 展开到最接近的具体字段，不能只返回顶层 `Expected union value`；`update_properties` 在 Runtime 内先把 patch 合并到真实目标节点，再按完整 `DesignNode` 校验，因此给 `Group` 写 paint、给 Text 写非法 geometry 等错误会在 revision 前绑定到真正负责的 command/node/path。失败事务保持原 revision，不生成部分历史；成功执行当前文档 inspection 后才解除设计写冻结。可信 Run binding、协议或基础设施损坏仍按不可恢复终态处理。
 
 Agent 的单节点 `insert_element` 必须把 `node.childIds` 视为空的派生字段，父子关系只由有序 child command 的 `parentId/index` 建立。为了兼容模型仍预声明未来 child ID 的输入，Renderer 在可信边界验证每个 ID 都对应更晚且 parent 匹配的 insert command，再规范为空；缺少对应命令、顺序错误或 parent 不一致会在 revision 前返回明确可恢复错误。`replace_subtree` 的完整子树仍保留显式 `childIds` 契约。

@@ -16,7 +16,7 @@ describe("Agent component timeline presentation", () => {
       "agent.updatingComponents",
     );
     expect(toolTitle(DESIGN_COMPONENT_TOOL_NAME, "done", t)).toBe(
-      "agent.hierarchyUpdated",
+      "agent.componentsUpdated",
     );
   });
 
@@ -26,6 +26,6 @@ describe("Agent component timeline presentation", () => {
         "design_workflow.component_strategy_incomplete: Instance is missing",
         t,
       ),
-    ).toBe("agent.workflowApplyingDraft");
+    ).toBe("agent.workflowRepairingComponents");
   });
 });

@@ -10,7 +10,7 @@ export type DesignComponentToolInput =
       action: "create-component";
       label: string;
       pageId: string;
-      nodeId: string;
+      rootNodeId: string;
       componentId: string;
       name: string;
     }

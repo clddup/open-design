@@ -47,7 +47,7 @@ export function planDesignComponentTool(
     case "create-component":
       return planCreateComponent(document, {
         componentId: input.componentId,
-        nodeId: input.nodeId,
+        nodeId: input.rootNodeId,
         name: input.name,
         commandPrefix,
       });

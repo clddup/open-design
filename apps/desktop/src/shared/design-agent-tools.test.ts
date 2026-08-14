@@ -20,6 +20,7 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
+  explainInvalidDesignComponentToolInput,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
@@ -27,6 +28,48 @@ import {
   normalizeDesignPageToolInput,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
+
+describe("component tool recovery contract", () => {
+  it("uses one rootNodeId contract for promoting a Component Main", () => {
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "create-component",
+        label: "Promote PanelHeader",
+        pageId: "page_editor",
+        rootNodeId: "cmp-panel-header-main",
+        componentId: "component-panel-header",
+        name: "PanelHeader",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "create-component",
+        label: "Promote PanelHeader",
+        pageId: "page_editor",
+        nodeId: "cmp-panel-header-main",
+        componentId: "component-panel-header",
+        name: "PanelHeader",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns the exact create-component shape instead of a generic schema error", () => {
+    const explanation = explainInvalidDesignComponentToolInput({
+      action: "create-component",
+      label: "Promote PanelHeader",
+      pageId: "page_editor",
+      nodeId: "cmp-panel-header-main",
+      componentId: "component-panel-header",
+    });
+
+    expect(explanation).toContain("Missing fields: rootNodeId, name");
+    expect(explanation).toContain("Unexpected fields: nodeId");
+    expect(explanation).toContain(
+      '"rootNodeId":"<existing-frame-or-group-id>"',
+    );
+    expect(explanation).toContain("without amending");
+  });
+});
 
 describe("design Agent tool contract", () => {
   it("normalizes model insert defaults before the trusted design boundary", () => {

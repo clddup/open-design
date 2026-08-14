@@ -46,6 +46,23 @@ describe("structured design workflow recovery", () => {
     expect(isTrustedToolFailure(failure)).toBe(true);
   });
 
+  it("returns one exact component repair call and forbids Plan amendment", () => {
+    const failure = trustedDesignWorkflowFailure(
+      new Error(
+        "design_workflow.component_strategy_incomplete: Declared Component Main component-panel-header must bind Frame/Group cmp-panel-header-main on Page page_editor; call opendesign_manage_components action=create-component with rootNodeId=cmp-panel-header-main, preserve the current Plan, inspect the current document, and capture again",
+      ),
+    );
+
+    expect(failure).toMatchObject({
+      code: "design_component_strategy_incomplete",
+      recoverable: true,
+    });
+    expect(failure?.message).toContain('"rootNodeId":"cmp-panel-header-main"');
+    expect(failure?.message).toContain('"pageId":"page_editor"');
+    expect(failure?.message).toContain("Do not submit a Plan amendment");
+    expect(isTrustedToolFailure(failure)).toBe(true);
+  });
+
   it("leaves unrelated failures unchanged", () => {
     expect(
       trustedDesignWorkflowFailure(new Error("Provider disconnected")),

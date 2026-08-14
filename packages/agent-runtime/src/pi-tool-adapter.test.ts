@@ -844,6 +844,52 @@ describe("OpenDesign Pi tool adapter", () => {
     );
   });
 
+  it("uses a tool-owned action diagnostic when structural schema validation is too broad", async () => {
+    const actionAwareTool: AgentToolDefinition = {
+      ...moveTool,
+      inputSchema: {
+        type: "object",
+        properties: { dx: {} },
+        required: ["dx"],
+        additionalProperties: false,
+      },
+      explainInvalidInput: () =>
+        'Invalid move action. Expected exact shape: {"dx":<number>}.',
+    };
+    const result = await runPiToolLoop({
+      gateway: new RecordingGateway(
+        new MockModelGateway([
+          {
+            blocks: [
+              {
+                id: "invalid_move",
+                type: "tool_call",
+                toolCallId: "invalid_move_explained",
+                name: actionAwareTool.name,
+                input: { dx: "wrong" },
+              },
+            ],
+            stopReason: "tool_use",
+          },
+          { blocks: [{ id: "recovered", type: "text", text: "Recovered" }] },
+        ]),
+      ),
+      definitions: [actionAwareTool],
+      toolExecutor: neverToolExecutor(),
+    });
+
+    const failure = result.events.find(
+      (event): event is Extract<AgentEvent, { type: "tool.failed" }> =>
+        event.type === "tool.failed" &&
+        event.toolCallId === "invalid_move_explained",
+    );
+    expect(failure).toMatchObject({
+      code: "invalid_tool_input",
+      message: 'Invalid move action. Expected exact shape: {"dx":<number>}.',
+      recoverable: true,
+    });
+  });
+
   it("finalizes a tool requested at cancellation without calling the executor", async () => {
     const cancelled = await runPiToolLoop({
       gateway: new RecordingGateway(

@@ -22,6 +22,8 @@ function isSafeDefinition(definition: AgentToolDefinition): boolean {
     definition.inputSchema.type === "object" &&
     definition.inputSchema.additionalProperties === false &&
     typeof definition.validateInput === "function" &&
+    (definition.explainInvalidInput === undefined ||
+      typeof definition.explainInvalidInput === "function") &&
     (definition.approvalScope === undefined ||
       definition.approvalScope === "call" ||
       definition.approvalScope === "run") &&

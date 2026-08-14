@@ -6,6 +6,7 @@ import type {
 import type { DesignDeliveryStatus } from "@opendesign/workspace-contracts";
 import type { AppLocale } from "../../../shared/i18n/locale";
 import type { MessageKey } from "../../../shared/i18n/messages";
+import { classifyDesignWorkflowFailure } from "../../../shared/design-workflow-failure-classification";
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
@@ -84,19 +85,27 @@ export function approvalDecisionKey(decision: string): MessageKey {
 }
 
 export function friendlyAgentError(message: string, t: Translate): string {
-  if (
-    /^design_workflow\.(?:material_write_required|delivery_structure_incomplete|component_strategy_incomplete):/i.test(
-      message,
-    )
-  ) {
+  const workflowFailure = classifyDesignWorkflowFailure(message);
+  if (workflowFailure) {
+    if (workflowFailure.presentation === "capturing-canvas") {
+      return t("agent.workflowCapturingCanvas");
+    }
+    if (workflowFailure.presentation === "repairing-components") {
+      return t("agent.workflowRepairingComponents");
+    }
+    if (workflowFailure.presentation === "repairing-plan") {
+      return t("agent.workflowRepairingPlan");
+    }
+    if (workflowFailure.presentation === "repairing-layout") {
+      return t("agent.workflowRepairingLayout");
+    }
+    if (workflowFailure.presentation === "canvas-changed") {
+      return t("agent.canvasChanged");
+    }
+    if (workflowFailure.presentation === "scope-conflict") {
+      return t("agent.canvasScopeConflict");
+    }
     return t("agent.workflowApplyingDraft");
-  }
-  if (
-    /^design_workflow\.(?:capture_required|capture_revision_invalid|delivery_verification_required):/i.test(
-      message,
-    )
-  ) {
-    return t("agent.workflowCapturingCanvas");
   }
   if (
     /Model attempt did not complete|attempt mismatch|\b(?:run|attempt)_[A-Za-z0-9_-]+/i.test(
@@ -110,16 +119,6 @@ export function friendlyAgentError(message: string, t: Translate): string {
   }
   if (/cancelled|canceled|aborted/i.test(message)) {
     return t("agent.requestCancelled");
-  }
-  if (/revision conflict|expected revision|stale revision/i.test(message)) {
-    return t("agent.canvasChanged");
-  }
-  if (
-    /targets a parent outside|exceeds the registered .* scope|outside the registered .* scope/i.test(
-      message,
-    )
-  ) {
-    return t("agent.canvasScopeConflict");
   }
   return message;
 }
@@ -217,14 +216,7 @@ export function structuredToolFailureDetail(
 }
 
 export function isRecoverableDesignWorkflowFailure(message: string): boolean {
-  return (
-    /^design_workflow\.(?:inspection_required|inspection_stale|material_write_required|capture_required|capture_revision_invalid|delivery_verification_required|delivery_structure_incomplete|plan_amendment_invalid):/i.test(
-      message,
-    ) ||
-    /^Design command .+ targets content outside every declared delivery artboard/im.test(
-      message,
-    )
-  );
+  return classifyDesignWorkflowFailure(message)?.routineRecoverable === true;
 }
 
 export function isRoutineRecoverableToolFailure(
@@ -299,7 +291,7 @@ export function toolTitle(
   }
   if (toolName === DESIGN_COMPONENT_TOOL_NAME) {
     return state === "done"
-      ? t("agent.hierarchyUpdated")
+      ? t("agent.componentsUpdated")
       : t("agent.updatingComponents");
   }
   if (toolName === DESIGN_VARIABLE_TOOL_NAME) {

@@ -1,4 +1,5 @@
 import type { TrustedToolFailure } from "@opendesign/agent-runtime";
+import { classifyDesignWorkflowFailure } from "../../shared/design-workflow-failure-classification.js";
 
 const INSPECT_AND_REVISE = {
   action: "inspect-and-revise" as const,
@@ -10,18 +11,16 @@ export function trustedDesignWorkflowFailure(
   error: Error,
 ): TrustedToolFailure | undefined {
   const message = error.message;
-  if (message.startsWith("design_workflow.plan_amendment_invalid:")) {
+  const classification = classifyDesignWorkflowFailure(message);
+  if (!classification) return undefined;
+  if (classification.code === "plan_amendment_invalid") {
     return failure(
       "design_plan_amendment_invalid",
       message,
       "Preserve every material targetId, pageId, artboard frameId, and planned region nodeId. Inspect the current document, keep those stable IDs, and amend only the target intent, visual system, labels, implementation steps, validation checks, or unfinished targets. Rebuild content inside the existing stable artboard instead of deleting the target.",
     );
   }
-  if (
-    /^Design command .+ targets content outside every declared delivery artboard$/u.test(
-      message,
-    )
-  ) {
+  if (classification.code === "design_target_stale") {
     const commandId = /^Design command (.+?) targets/u.exec(message)?.[1];
     return failure(
       "design_target_stale",
@@ -30,7 +29,39 @@ export function trustedDesignWorkflowFailure(
       commandId ? { commandId } : undefined,
     );
   }
-  return undefined;
+  if (classification.code === "component_strategy_incomplete") {
+    return failure(
+      "design_component_strategy_incomplete",
+      message,
+      componentStrategyRecovery(message),
+    );
+  }
+  if (classification.code === "layout_quality_failed") {
+    return failure(
+      "design_layout_quality_failed",
+      message,
+      "Inspect the exact captured revision, apply the reported parent-local geometry corrections inside the stable artboard, then inspect and capture that same target again. Preserve all target, Page, artboard, and region IDs.",
+    );
+  }
+  return failure(
+    `design_${classification.code}`,
+    message,
+    classification.requiresInspection
+      ? "Inspect the current document and follow the workflow's stated next action using the current revision and stable target IDs. Do not replace or amend the Plan unless the failure explicitly identifies the Plan itself."
+      : "Follow the workflow's stated next action using the current revision and stable target IDs. Do not replace or amend the Plan to bypass this gate.",
+  );
+}
+
+function componentStrategyRecovery(message: string): string {
+  const main =
+    /Declared Component Main (\S+) must bind Frame\/Group (\S+) on Page (\S+);/u.exec(
+      message,
+    );
+  if (main) {
+    const [, componentId, rootNodeId, pageId] = main;
+    return `Inspect the current document, then call opendesign_manage_components with exactly {"action":"create-component","label":"Promote ${rootNodeId} Main","pageId":"${pageId}","rootNodeId":"${rootNodeId}","componentId":"${componentId}","name":"${componentId}"}. Keep the current Plan and all stable IDs unchanged. After the component write succeeds, inspect and capture the same target again. Do not submit a Plan amendment.`;
+  }
+  return "Inspect the current document, repair only the declared component Main/Instance/ordinary binding with opendesign_manage_components or the existing hierarchy, then inspect and capture the same stable target again. Do not submit a Plan amendment.";
 }
 
 function failure(

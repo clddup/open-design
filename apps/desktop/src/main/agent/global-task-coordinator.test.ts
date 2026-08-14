@@ -2341,7 +2341,7 @@ describe("GlobalTaskCoordinator", () => {
         action: "create-component",
         label: "Create component",
         pageId,
-        nodeId: "feature_group",
+        rootNodeId: "feature_group",
         componentId: "component_feature",
         name: "Feature",
       }),
