@@ -275,7 +275,9 @@ async function executeDesignToolRequestUnsafe(
           version: 1,
           action: input.action,
           componentId: plan.componentId,
-          ...(plan.instanceId ? { instanceId: plan.instanceId } : {}),
+          ...("instanceId" in plan && plan.instanceId
+            ? { instanceId: plan.instanceId }
+            : {}),
           mainNodeId: plan.mainNodeId,
           revision: result.revision.revision,
           atomic: true,
@@ -1734,6 +1736,32 @@ function assertComponentInputPage(
         `Component source ${outsideRoot} is outside Page ${input.pageId}`,
       );
     }
+    return;
+  }
+  if (input.action === "add-component-to-variant-set") {
+    if (!ids.has(input.rootNodeId) || !ids.has(input.componentRootNodeId))
+      throw new Error(
+        `Component Set membership target is outside Page ${input.pageId}`,
+      );
+    return;
+  }
+  if (input.action === "duplicate-variant") {
+    if (!ids.has(input.rootNodeId) || !ids.has(input.sourceRootNodeId))
+      throw new Error(
+        `Variant duplication source is outside Page ${input.pageId}`,
+      );
+    return;
+  }
+  if (input.action === "remove-variant") {
+    if (!ids.has(input.rootNodeId) || !ids.has(input.componentRootNodeId))
+      throw new Error(`Variant removal target is outside Page ${input.pageId}`);
+    return;
+  }
+  if (input.action === "dissolve-variant-set") {
+    if (!ids.has(input.rootNodeId))
+      throw new Error(
+        `Component Set ${input.variantSetId} is outside Page ${input.pageId}`,
+      );
     return;
   }
   if (

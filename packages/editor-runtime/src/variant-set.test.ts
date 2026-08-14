@@ -19,6 +19,12 @@ import {
 } from "./component-property-operations.js";
 import { planRemoveComponent } from "./component-operations.js";
 import { planCombineComponentsAsVariants } from "./variant-set-operations.js";
+import {
+  planAddComponentToVariantSet,
+  planDissolveVariantSet,
+  planDuplicateVariant,
+  planRemoveVariantFromSet,
+} from "./variant-set-membership-operations.js";
 
 describe("Figma-compatible Component Set variants", () => {
   it("combines sibling Components in one undoable transaction without moving their world geometry", () => {
@@ -248,6 +254,129 @@ describe("Figma-compatible Component Set variants", () => {
     if (plan.ok) return;
     expect(plan.code).toBe("invalid");
     expect(plan.message).toContain("remove or dissolve the Component Set");
+  });
+
+  it("adds and duplicates variants while keeping one valid Set transaction", () => {
+    const document = variantFixture();
+    const pressedRoot = frame(
+      "button_pressed_root",
+      null,
+      ["pressed_label"],
+      -200,
+    );
+    document.nodesById[pressedRoot.id] = pressedRoot;
+    document.nodesById.pressed_label = text(
+      "pressed_label",
+      pressedRoot.id,
+      "Pressed",
+    );
+    document.pagesById.page!.rootNodeIds.push(pressedRoot.id);
+    document.componentsById.button_pressed = {
+      id: "button_pressed",
+      name: "Button / Pressed",
+      rootNodeId: pressedRoot.id,
+      componentPropertyDefinitions: {},
+      variantProperties: {},
+      extensions: {},
+    };
+    const beforeWorld = getWorldTransform(document, pressedRoot.id);
+    const runtime = new EditorRuntime(document);
+    const add = planAddComponentToVariantSet(runtime.getSnapshot().document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      componentId: "button_pressed",
+      variantProperties: { State: "Pressed" },
+      commandPrefix: "add-pressed",
+    });
+    expect(add.ok).toBe(true);
+    if (!add.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, add.commands, "add-pressed")),
+    ).toMatchObject({ ok: true });
+    expect(
+      getWorldTransform(runtime.getSnapshot().document, pressedRoot.id),
+    ).toEqual(beforeWorld);
+    expect(
+      runtime.getSnapshot().document.variantSetsById.button_set
+        ?.componentPropertyDefinitions.State?.variantOptions,
+    ).toEqual(["Pressed", "Default", "Hover"]);
+
+    const duplicate = planDuplicateVariant(runtime.getSnapshot().document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      sourceComponentId: "button_default",
+      componentId: "button_focus",
+      rootNodeId: "button_focus_root",
+      variantProperties: { State: "Focus" },
+      commandPrefix: "duplicate-focus",
+    });
+    expect(duplicate.ok).toBe(true);
+    if (!duplicate.ok) return;
+    expect(
+      runtime.apply(
+        transaction(runtime, duplicate.commands, "duplicate-focus"),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.componentsById.button_focus,
+    ).toMatchObject({
+      variantSetId: "button_set",
+      rootNodeId: "button_focus_root",
+    });
+    expect(runtime.undo()).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.componentsById.button_focus,
+    ).toBeUndefined();
+  });
+
+  it("removes a selected Variant without breaking instances and dissolves the Set", () => {
+    const document = variantFixture();
+    const runtime = new EditorRuntime(document);
+    const remove = planRemoveVariantFromSet(runtime.getSnapshot().document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      componentId: "button_hover",
+      commandPrefix: "remove-hover",
+    });
+    expect(remove.ok).toBe(true);
+    if (!remove.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, remove.commands, "remove-hover")),
+    ).toMatchObject({ ok: true });
+    const removedDocument = runtime.getSnapshot().document;
+    expect(
+      removedDocument.componentsById.button_hover?.variantSetId,
+    ).toBeUndefined();
+    expect(removedDocument.nodesById.button_instance).toMatchObject({
+      properties: { componentId: "button_hover", componentProperties: {} },
+    });
+    expect(
+      resolveComponentInstance(removedDocument, "button_instance"),
+    ).toMatchObject({ ok: true, componentId: "button_hover" });
+
+    const dissolve = planDissolveVariantSet(removedDocument, {
+      pageId: "page",
+      variantSetId: "button_set",
+      commandPrefix: "dissolve-set",
+    });
+    expect(dissolve.ok).toBe(true);
+    if (!dissolve.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, dissolve.commands, "dissolve-set")),
+    ).toMatchObject({ ok: true });
+    const dissolved = runtime.getSnapshot().document;
+    expect(dissolved.variantSetsById.button_set).toBeUndefined();
+    expect(dissolved.nodesById.button_set_root).toBeUndefined();
+    expect(
+      dissolved.componentsById.button_default?.variantSetId,
+    ).toBeUndefined();
+    expect(
+      resolveComponentInstance(dissolved, "button_instance"),
+    ).toMatchObject({ ok: true, componentId: "button_hover" });
+    expect(runtime.undo()).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.variantSetsById.button_set,
+    ).toBeDefined();
   });
 });
 

@@ -48,6 +48,7 @@ export function PropertiesPanel({
   booleanOperationEditable,
   booleanOperandParent,
   canCombineVariants,
+  canAddToVariantSet,
   canDelete,
   layoutMode,
   onArrange,
@@ -55,8 +56,11 @@ export function PropertiesPanel({
   onCreateComponent,
   onCreateComponentInstance,
   onCombineVariants,
+  onAddToVariantSet,
   onDelete,
   onDetachComponentInstance,
+  onDissolveVariantSet,
+  onDuplicateVariant,
   onDuplicate,
   onGoToComponentMain,
   onCancelSvgOperation,
@@ -67,6 +71,7 @@ export function PropertiesPanel({
   onExportFormatChange,
   onReplaceImage,
   onRemoveComponent,
+  onRemoveVariant,
   onAddComponentProperty,
   onRemoveComponentProperty,
   onRenameComponentProperty,
@@ -96,6 +101,7 @@ export function PropertiesPanel({
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
   canCombineVariants: boolean;
+  canAddToVariantSet: boolean;
   canDelete: boolean;
   layoutMode: "constraints" | "sizing" | "wrap-sizing" | "absolute" | null;
   onArrange: (operation: ArrangeOperation) => void;
@@ -103,8 +109,11 @@ export function PropertiesPanel({
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
   onCombineVariants: () => void;
+  onAddToVariantSet: () => void;
   onDelete: () => void;
   onDetachComponentInstance: () => void;
+  onDissolveVariantSet: () => void;
+  onDuplicateVariant: () => void;
   onDuplicate: () => void;
   onGoToComponentMain: () => void;
   onCancelSvgOperation: () => void;
@@ -115,6 +124,7 @@ export function PropertiesPanel({
   onExportFormatChange: (format: ExportFormat) => void;
   onReplaceImage: () => void;
   onRemoveComponent: () => void;
+  onRemoveVariant: () => void;
   onAddComponentProperty: (input: {
     name: string;
     sourceNodeId: string;
@@ -244,12 +254,15 @@ export function PropertiesPanel({
             onBooleanOperationChange={onBooleanOperationChange}
             onCreateComponent={onCreateComponent}
             onCreateComponentInstance={onCreateComponentInstance}
+            onDuplicateVariant={onDuplicateVariant}
+            onDissolveVariantSet={onDissolveVariantSet}
             onDelete={onDelete}
             onDetachComponentInstance={onDetachComponentInstance}
             onDuplicate={onDuplicate}
             onGoToComponentMain={onGoToComponentMain}
             onReplaceImage={onReplaceImage}
             onRemoveComponent={onRemoveComponent}
+            onRemoveVariant={onRemoveVariant}
             onAddComponentProperty={onAddComponentProperty}
             onRemoveComponentProperty={onRemoveComponentProperty}
             onRenameComponentProperty={onRenameComponentProperty}
@@ -414,6 +427,12 @@ export function PropertiesPanel({
                 <button onClick={onCombineVariants} type="button">
                   <Glyph name="component" size={13} />
                   {t("properties.combineAsVariants")}
+                </button>
+              )}
+              {canAddToVariantSet && (
+                <button onClick={onAddToVariantSet} type="button">
+                  <Glyph name="component" size={13} />
+                  {t("properties.addToVariantSet")}
                 </button>
               )}
               <button onClick={onDuplicate} type="button">

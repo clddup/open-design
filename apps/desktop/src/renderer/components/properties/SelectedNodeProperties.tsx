@@ -97,12 +97,15 @@ export function SelectedNodeProperties({
   onBooleanOperationChange,
   onCreateComponent,
   onCreateComponentInstance,
+  onDuplicateVariant,
+  onDissolveVariantSet,
   onDelete,
   onDetachComponentInstance,
   onDuplicate,
   onGoToComponentMain,
   onReplaceImage,
   onRemoveComponent,
+  onRemoveVariant,
   onAddComponentProperty,
   onRemoveComponentProperty,
   onRenameComponentProperty,
@@ -132,12 +135,15 @@ export function SelectedNodeProperties({
   onBooleanOperationChange: (operation: BooleanOperation) => void;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
+  onDuplicateVariant: () => void;
+  onDissolveVariantSet: () => void;
   onDelete: () => void;
   onDetachComponentInstance: () => void;
   onDuplicate: () => void;
   onGoToComponentMain: () => void;
   onReplaceImage: () => void;
   onRemoveComponent: () => void;
+  onRemoveVariant: () => void;
   onAddComponentProperty: (input: {
     name: string;
     sourceNodeId: string;
@@ -274,9 +280,12 @@ export function SelectedNodeProperties({
         node={node}
         onCreateComponent={onCreateComponent}
         onCreateComponentInstance={onCreateComponentInstance}
+        onDuplicateVariant={onDuplicateVariant}
+        onDissolveVariantSet={onDissolveVariantSet}
         onDetachComponentInstance={onDetachComponentInstance}
         onGoToComponentMain={onGoToComponentMain}
         onRemoveComponent={onRemoveComponent}
+        onRemoveVariant={onRemoveVariant}
         onAddComponentProperty={onAddComponentProperty}
         onRemoveComponentProperty={onRemoveComponentProperty}
         onRenameComponentProperty={onRenameComponentProperty}

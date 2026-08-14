@@ -28,7 +28,12 @@ function renderPanel(
     selectionCount?: number;
     componentContext?: ComponentInspectorContext;
     canCombineVariants?: boolean;
+    canAddToVariantSet?: boolean;
     onCombineVariants?: () => void;
+    onAddToVariantSet?: () => void;
+    onDissolveVariantSet?: () => void;
+    onDuplicateVariant?: () => void;
+    onRemoveVariant?: () => void;
     onAddComponentProperty?: (input: {
       name: string;
       sourceNodeId: string;
@@ -69,12 +74,14 @@ function renderPanel(
         <PropertiesPanel
           arrangement={options.arrangement ?? null}
           booleanOperationEditable={false}
+          canAddToVariantSet={options.canAddToVariantSet ?? false}
           canCombineVariants={options.canCombineVariants ?? false}
           canDelete
           layoutMode={options.layoutMode ?? null}
           componentContext={options.componentContext}
           node={options.node}
           onArrange={onArrange}
+          onAddToVariantSet={options.onAddToVariantSet ?? vi.fn()}
           onAddComponentProperty={options.onAddComponentProperty ?? vi.fn()}
           onBooleanOperationChange={vi.fn()}
           onCancelSvgOperation={onCancelSvgOperation}
@@ -83,15 +90,18 @@ function renderPanel(
           onCombineVariants={options.onCombineVariants ?? vi.fn()}
           onDelete={vi.fn()}
           onDetachComponentInstance={vi.fn()}
+          onDissolveVariantSet={options.onDissolveVariantSet ?? vi.fn()}
           onDismissRasterFeedback={vi.fn()}
           onDismissSvgFeedback={onDismissSvgFeedback}
           onDuplicate={vi.fn()}
+          onDuplicateVariant={options.onDuplicateVariant ?? vi.fn()}
           onGoToComponentMain={vi.fn()}
           onExportFormatChange={vi.fn()}
           onExportRaster={onExportRaster}
           onExportSvg={onExportSvg}
           onReplaceImage={vi.fn()}
           onRemoveComponent={options.onRemoveComponent ?? vi.fn()}
+          onRemoveVariant={options.onRemoveVariant ?? vi.fn()}
           onRemoveComponentProperty={vi.fn()}
           onRenameComponentProperty={vi.fn()}
           onResetComponentInstance={vi.fn()}
@@ -1137,6 +1147,54 @@ describe("PropertiesPanel line workflow", () => {
       screen.getByRole("button", { name: "Combine as variants" }),
     );
     expect(onCombineVariants).toHaveBeenCalledOnce();
+  });
+
+  it("offers Set membership lifecycle actions from the real Set root", async () => {
+    const user = userEvent.setup();
+    const onDuplicateVariant = vi.fn();
+    const onDissolveVariantSet = vi.fn();
+    renderPanel({
+      componentContext: {
+        availableComponents: [],
+        componentName: "Button",
+        componentProperties: [],
+        componentPropertyDefinitions: [],
+        isMain: false,
+        overrideCount: 0,
+        sourceNodes: [],
+        variantSet: {
+          id: "button_set",
+          isDefault: false,
+          isRoot: true,
+          name: "Button",
+          properties: {},
+          variantCount: 2,
+        },
+      },
+      node: lineNode,
+      onDuplicateVariant,
+      onDissolveVariantSet,
+      selectionCount: 1,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add variant" }));
+    await user.click(screen.getByRole("button", { name: "Dissolve set" }));
+    expect(onDuplicateVariant).toHaveBeenCalledOnce();
+    expect(onDissolveVariantSet).toHaveBeenCalledOnce();
+  });
+
+  it("adds one ordinary Component to one selected Set", async () => {
+    const user = userEvent.setup();
+    const onAddToVariantSet = vi.fn();
+    renderPanel({
+      canAddToVariantSet: true,
+      onAddToVariantSet,
+      selectionCount: 2,
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Add to component set" }),
+    );
+    expect(onAddToVariantSet).toHaveBeenCalledOnce();
   });
 
   it("configures and starts a single-target professional raster export", async () => {

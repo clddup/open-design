@@ -656,9 +656,12 @@ export function ComponentSection({
   node,
   onCreateComponent,
   onCreateComponentInstance,
+  onDuplicateVariant,
+  onDissolveVariantSet,
   onDetachComponentInstance,
   onGoToComponentMain,
   onRemoveComponent,
+  onRemoveVariant,
   onAddComponentProperty,
   onRemoveComponentProperty,
   onRenameComponentProperty,
@@ -672,9 +675,12 @@ export function ComponentSection({
   node: DesignNode;
   onCreateComponent: () => void;
   onCreateComponentInstance: () => void;
+  onDuplicateVariant: () => void;
+  onDissolveVariantSet: () => void;
   onDetachComponentInstance: () => void;
   onGoToComponentMain: () => void;
   onRemoveComponent: () => void;
+  onRemoveVariant: () => void;
   onAddComponentProperty: (input: {
     name: string;
     sourceNodeId: string;
@@ -708,8 +714,16 @@ export function ComponentSection({
             overrideCount={componentContext.overrideCount}
             variantSet={componentContext.variantSet}
           />
-          {componentContext.variantSet
-            ?.isRoot ? null : componentContext.isMain ? (
+          {componentContext.variantSet?.isRoot ? (
+            <div className={styles.componentActions}>
+              <Button onClick={onDuplicateVariant} tone="quiet">
+                {t("properties.addVariant")}
+              </Button>
+              <Button onClick={onDissolveVariantSet} tone="quiet">
+                {t("properties.dissolveVariantSet")}
+              </Button>
+            </div>
+          ) : componentContext.isMain ? (
             <>
               <div className={styles.componentActions}>
                 <Button onClick={onCreateComponentInstance} tone="quiet">
@@ -719,6 +733,16 @@ export function ComponentSection({
                   <Button onClick={onRemoveComponent} tone="quiet">
                     {t("properties.removeComponent")}
                   </Button>
+                )}
+                {componentContext.variantSet && (
+                  <>
+                    <Button onClick={onDuplicateVariant} tone="quiet">
+                      {t("properties.duplicateVariant")}
+                    </Button>
+                    <Button onClick={onRemoveVariant} tone="quiet">
+                      {t("properties.removeVariant")}
+                    </Button>
+                  </>
                 )}
               </div>
               <ComponentPropertyAuthoring

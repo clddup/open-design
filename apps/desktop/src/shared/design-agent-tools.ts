@@ -1201,6 +1201,10 @@ const MODEL_COMPONENT_SCHEMA = {
         "create-instance",
         "remove-component",
         "combine-as-variants",
+        "add-component-to-variant-set",
+        "duplicate-variant",
+        "remove-variant",
+        "dissolve-variant-set",
         "add-property",
         "rename-property",
         "remove-property",
@@ -1230,6 +1234,9 @@ const MODEL_COMPONENT_SCHEMA = {
       uniqueItems: true,
       items: { type: "string", minLength: 1, maxLength: 256 },
     },
+    componentRootNodeId: { type: "string", minLength: 1, maxLength: 256 },
+    sourceComponentId: { type: "string", minLength: 1, maxLength: 256 },
+    sourceRootNodeId: { type: "string", minLength: 1, maxLength: 256 },
     variantSetId: { type: "string", minLength: 1, maxLength: 256 },
     rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
     variantPropertiesByComponentId: {
@@ -1246,6 +1253,12 @@ const MODEL_COMPONENT_SCHEMA = {
           maxLength: 256,
         },
       },
+    },
+    variantProperties: {
+      type: "object",
+      minProperties: 1,
+      maxProperties: 128,
+      additionalProperties: { type: "string", minLength: 1, maxLength: 256 },
     },
     instanceId: { type: "string", minLength: 1, maxLength: 256 },
     name: { type: "string", minLength: 1, maxLength: 256 },
@@ -1990,7 +2003,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_COMPONENT_TOOL_NAME,
     description:
-      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main; combine-as-variants takes two or more inspected sibling Component Mains, their exact root IDs, a new set/root ID, and a complete unique property map, then creates one real Component Set Frame in one undoable transaction; create-instance places a linked instance. add/rename/remove-property author Figma-compatible Boolean, Text, or Instance-swap properties on explicit Main sublayers; set/reset-property also selects VARIANT values exposed by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. remove-component, detach-instance, and go-to-main retain their structural meanings. Main edits synchronize property defaults, instance structure cannot be directly mutated, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
+      "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main; combine-as-variants creates one real Component Set Frame from inspected sibling Mains. add-component-to-variant-set, duplicate-variant, remove-variant, and dissolve-variant-set manage the complete Set membership lifecycle with explicit inspected roots and complete unique VARIANT values; the host preserves geometry, valid defaults, instance resolution, one revision, and one undo. create-instance places a linked instance. add/rename/remove-property author Figma-compatible Boolean, Text, or Instance-swap properties on explicit Main sublayers; set/reset-property also selects VARIANT values exposed by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. Main edits synchronize property defaults, instance structure cannot be directly mutated, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
     inputSchema: MODEL_COMPONENT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,

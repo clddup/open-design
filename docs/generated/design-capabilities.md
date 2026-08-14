@@ -241,7 +241,7 @@
 - 实现方：DesignDocument 1.22.0 + @opendesign/component-service contract v2 + isolated @opendesign/figma-interop
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
 - 证据：自动化 13 项；实机 0 项
-- 限制：已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义的 Boolean/Text/Instance-swap 属性、真实 Component Set Frame、唯一 VARIANT 组合与解析、稳定 sourcePath 高级 override、reset/detach、Inspector 与多选 Combine、Agent typed actions 与 inspection、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Slot 属性、Set add/remove/dissolve 与矩阵编辑、跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、画布内部 override 直选和 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 限制：已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义的 Boolean/Text/Instance-swap 属性、真实 Component Set Frame、唯一 VARIANT 组合与解析、Set add/duplicate/remove/dissolve 与 Instance 迁移、稳定 sourcePath 高级 override、reset/detach、Inspector 与多选 Combine/Add、Agent typed actions 与 inspection、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Slot 属性、Set 二维矩阵编辑、跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、画布内部 override 直选和 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/5579474826519-Explore-component-properties)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants)

@@ -125,6 +125,22 @@ export function createComponentInspectorContext(
   };
 }
 
+export function canAddSelectionToVariantSet(
+  document: DesignDocument,
+  nodeIds: readonly string[],
+): boolean {
+  if (nodeIds.length !== 2) return false;
+  const selected = new Set(nodeIds);
+  const setCount = Object.values(document.variantSetsById).filter((set) =>
+    selected.has(set.rootNodeId),
+  ).length;
+  const ordinaryComponentCount = Object.values(document.componentsById).filter(
+    (component) =>
+      !component.variantSetId && selected.has(component.rootNodeId),
+  ).length;
+  return setCount === 1 && ordinaryComponentCount === 1;
+}
+
 function componentOptions(document: DesignDocument) {
   return Object.values(document.componentsById).map((candidate) => ({
     id: candidate.id,

@@ -55,7 +55,10 @@ import {
   useEditorSnapshot,
 } from "./editor-runtime";
 import { useI18n } from "./i18n";
-import { createComponentInspectorContext } from "./component-inspector-context";
+import {
+  canAddSelectionToVariantSet,
+  createComponentInspectorContext,
+} from "./component-inspector-context";
 import {
   ProjectAutosaveCoordinator,
   type ProjectAutosaveTarget,
@@ -269,6 +272,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     selectedComponents.length >= 2 &&
     selectedComponents.length === state.selection.nodeIds.length &&
     selectedComponents.every((component) => !component.variantSetId);
+  const canAddToVariantSet = canAddSelectionToVariantSet(
+    designDocument,
+    state.selection.nodeIds,
+  );
   const projectConversations = activeProject
     ? (conversationsByProjectId[activeProject.projectId] ?? [])
     : [];
@@ -667,14 +674,18 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
 
   const {
     addSelectedComponentProperty,
+    addSelectedComponentToVariantSet,
     combineSelectedComponentsAsVariants,
     createComponentFromSelection,
     createSelectedComponentInstance,
     detachSelectedInstance,
+    dissolveSelectedVariantSet,
+    duplicateSelectedVariant,
     goToSelectedInstanceMain,
     locateComponentMain,
     placeComponentFromAssets,
     removeSelectedComponent,
+    removeSelectedVariantFromSet,
     removeSelectedComponentProperty,
     renameSelectedComponentProperty,
     resetSelectedInstance,
@@ -691,6 +702,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     t,
     transactionCounter,
   });
+  const duplicateSelectionAction =
+    selectedComponentContext?.variantSet &&
+    (selectedComponentContext.isMain ||
+      selectedComponentContext.variantSet.isRoot)
+      ? duplicateSelectedVariant
+      : duplicateSelection;
 
   const replaceSelectedImage = useCallback(async () => {
     const selected = runtime.getSnapshot().state.selection.nodeIds;
@@ -805,7 +822,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       }
       if (modifier && event.key.toLowerCase() === "d") {
         event.preventDefault();
-        duplicateSelection();
+        duplicateSelectionAction();
         return;
       }
       if (modifier && event.key.toLowerCase() === "g") {
@@ -909,7 +926,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     changeZoom,
     applyBooleanOperation,
     deleteNodes,
-    duplicateSelection,
+    duplicateSelectionAction,
     fitCanvas,
     groupSelection,
     platform,
@@ -1750,7 +1767,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           }
           onBooleanOperation={applyBooleanOperation}
           onDelete={() => deleteNodes(state.selection.nodeIds)}
-          onDuplicate={duplicateSelection}
+          onDuplicate={duplicateSelectionAction}
           onGroup={groupSelection}
           onReorder={reorderSelection}
           onRedo={() => runtime.redo()}
@@ -1880,6 +1897,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                     : undefined
                 }
                 canDelete={canDeleteSelection}
+                canAddToVariantSet={canAddToVariantSet}
                 canCombineVariants={canCombineVariants}
                 layoutMode={layoutInspectorMode(designDocument, selectedNode)}
                 node={selectedNode}
@@ -1889,17 +1907,21 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onCreateComponent={createComponentFromSelection}
                 onCreateComponentInstance={createSelectedComponentInstance}
                 onCombineVariants={combineSelectedComponentsAsVariants}
+                onAddToVariantSet={addSelectedComponentToVariantSet}
                 onDelete={() => deleteNodes(state.selection.nodeIds)}
                 onDetachComponentInstance={detachSelectedInstance}
+                onDissolveVariantSet={dissolveSelectedVariantSet}
+                onDuplicateVariant={duplicateSelectedVariant}
                 onDismissRasterFeedback={importExport.dismissRasterFeedback}
                 onDismissSvgFeedback={importExport.dismissSvgFeedback}
-                onDuplicate={duplicateSelection}
+                onDuplicate={duplicateSelectionAction}
                 onGoToComponentMain={goToSelectedInstanceMain}
                 onExportFormatChange={importExport.setExportFormat}
                 onExportRaster={() => void importExport.exportRaster()}
                 onExportSvg={() => void importExport.exportSvg()}
                 onReplaceImage={() => void replaceSelectedImage()}
                 onRemoveComponent={removeSelectedComponent}
+                onRemoveVariant={removeSelectedVariantFromSet}
                 onAddComponentProperty={addSelectedComponentProperty}
                 onRemoveComponentProperty={removeSelectedComponentProperty}
                 onRenameComponentProperty={renameSelectedComponentProperty}

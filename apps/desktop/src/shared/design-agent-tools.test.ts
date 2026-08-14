@@ -361,6 +361,29 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "duplicate-variant",
+        label: "Add pressed state",
+        pageId: "page_home",
+        variantSetId: "button_set",
+        rootNodeId: "button_set_root",
+        sourceComponentId: "button_default",
+        sourceRootNodeId: "button_default_root",
+        componentId: "button_pressed",
+        componentRootNodeId: "button_pressed_root",
+        variantProperties: { State: "Pressed" },
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "dissolve-variant-set",
+        label: "Dissolve button variants",
+        pageId: "page_home",
+        variantSetId: "button_set",
+        rootNodeId: "button_set_root",
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
         ...combineVariants,
         variantPropertiesByComponentId: {
           button_default: { State: "Default" },

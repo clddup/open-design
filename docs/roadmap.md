@@ -149,7 +149,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 ## P1：专业能力契约
 
 - 把 P0-C 的初始 capability manifest 提升为版本化公共契约，并为 Renderer、Agent、MCP 和发布说明提供同一只读查询入口。未知能力必须拒绝，降级能力必须返回结构化限制和 fidelity warning。
-- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.22.0` 已在响应式布局、Layout Guide 和 Component Properties 基础上增加 Figma-compatible Component Set/VARIANT，后续仍需分支网络、Slice、Auto Layout Grid、Text/Font rich typography、图片 adjustments、Slot、Set add/remove/dissolve 与矩阵编辑、跨文件 Library、style/token binding 和 export settings。
+- 继续按垂直切片迁移专业基础文档版本；`DesignDocument 1.22.0` 已在响应式布局、Layout Guide 和 Component Properties 基础上增加 Figma-compatible Component Set/VARIANT 及 add/duplicate/remove/dissolve 成员生命周期，后续仍需分支网络、Slice、Auto Layout Grid、Text/Font rich typography、图片 adjustments、Slot、Set 二维矩阵编辑、跨文件 Library、style/token binding 和 export settings。
 - 为 Geometry、Layout、Text/Font、Image 和 Import/Export service 建立窄、版本化的输入输出接口。服务只能返回纯结果、诊断或候选 `DesignOperation[]`，不能保存第二份文档或直接修改 Leafer 场景。
 - 提供确定性迁移、未知版本拒绝、保存重开、preview、undo/redo、Agent schema、provider 映射和 fidelity warning 测试；不得把长期语义藏进 `extensions`。
 
@@ -166,7 +166,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 人工 UI 提供 Create component、Create instance、Go to main、Inspector source-layer override、Reset 与 Detach；Assets/Layers/Inspector 区分 Main/Instance/override。Agent 使用专用 `opendesign_manage_components`，通用 apply 不能写 component definition；同 Page 与跨 Page 权限分别校验。
 - [x] Canvas 投影、hit testing、选择去重、Main/Instance direct manipulation、保存重开、undo/redo、复制/跨 Page、SVG/位图导出和 autosave 消费同一解析结果；循环、missing main/source、out-of-scope 与 revision conflict 原子失败。Instance 首版本可移动/旋转/倾斜但不可直接 resize/内部文字编辑；画布直接选择内部 override target 和双平台 GUI 实机证据仍待完成。
 
-完成条件：自动化已验证同一 Design File 跨 Page Main/Instance、三类 typed property、Component Set/VARIANT、嵌套交换、Main 同步、文字/可见性/外观 override、人工与 Agent 操作、保存重开、autosave、undo/redo 和 SVG/位图导出一致。能力状态仍为 `degraded`，因为 Slot、Set add/remove/dissolve 与矩阵编辑、跨文件 Library、画布内部 override 直选和 macOS/Windows 打包 GUI smoke 尚未完成；Token/Variable 继续按后续 P3-B 独立推进。
+完成条件：自动化已验证同一 Design File 跨 Page Main/Instance、三类 typed property、Component Set/VARIANT、Set add/duplicate/remove/dissolve、嵌套交换、Main 同步、文字/可见性/外观 override、人工与 Agent 操作、保存重开、autosave、undo/redo 和 SVG/位图导出一致。能力状态仍为 `degraded`，因为 Slot、Set 二维矩阵编辑、跨文件 Library、画布内部 override 直选和 macOS/Windows 打包 GUI smoke 尚未完成；Token/Variable 继续按后续 P3-B 独立推进。
 
 ## P2：精确图层、变换与矢量
 
@@ -220,7 +220,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成 Layout Guide / Uniform Grid v1：`DesignDocument 1.19.0` 在 Frame properties 持久化最多八个稳定 uniform guide 的 size/color/opacity；它们不改变 child 几何或 Auto Layout，只在选中 Frame 时由 Leafer editor sky 投影为不可命中辅助线，pan/zoom/resize 时重算，capture/export 不包含。Inspector 与 Agent `set-layout-guides` 共用 Runtime planner、单 revision/undo/save/reopen；generic apply/insert/replace 旁路失败，重复 ID 和每 guide 4096 线预算关闭。Columns/Rows、margin/gutter/offset、吸附、共享 style、baseline 与 Auto Layout Grid 仍待后续。见 ADR-0060。
 - [x] 完成 Layout Guide / Columns / Rows v2：`DesignDocument 1.20.0` 在同一 Frame guide 集合增加 fixed start/center/end 与 stretch columns/rows，支持 count、sectionSize、gutter、offset/margin；Leafer editor sky 显示裁剪在 Frame 内的不可命中色带，不改变 child/Auto Layout，不进入 capture/export。Inspector 加号菜单、类型/对齐字段、Agent strict schema、迁移、save/reopen、undo/redo、pan/zoom/resize 与 generic 旁路门禁共用同一 planner。Auto Layout Grid 的 track/cell/span/reflow、吸附、共享 style、baseline 与手工参考线仍后续实现。见 ADR-0061。
 - 建立 OpenDesign-owned constraints、horizontal/vertical auto layout、wrap、padding/gap、对齐、hug/fill/fixed、min/max、absolute child、layout grid 与响应式求解语义。Layout service 输出确定性布局或候选事务，不保存第二份布局状态。
-- 在 P1-C 已完成 Boolean/Text/Instance-swap properties 与 Component Set/VARIANT v1 的基础上继续建立 Slot、Set add/remove/dissolve 与二维属性矩阵、共享样式与 Library 发布/消费，并扩展 Figma Plugin/REST import-export、跨文件更新、循环依赖和失效引用诊断。
+- 在 P1-C 已完成 Boolean/Text/Instance-swap properties、Component Set/VARIANT v1 与成员生命周期 v2 的基础上继续建立 Slot、Set 二维属性矩阵、共享样式与 Library 发布/消费，并扩展 Figma Plugin/REST import-export、跨文件更新、循环依赖和失效引用诊断。
 - 建立 Design File/Library 级 Design Token/Variable 系统，而不是应用设置：支持 Color/Number/String/Boolean 等 typed value、Collection/Group、Mode、同类型 alias、属性 scope/binding，以及 primitive → semantic → component 分层。人工 UI 与 Agent 必须共用同一版本化命令；主题/模式切换、alias 继承、循环/失效引用、Library 发布与消费都产生确定性结果。DTCG JSON 导入导出通过独立 service 返回保真报告，不把 token 占位字段描述成已可用。
 - 人工 UI 和 Agent 使用同一组创建组件、生成实例、修改 override、切换 Variant、绑定 Token 和调整布局命令。属性检查器必须区分源组件、实例值、override 与继承值。
 

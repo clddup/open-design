@@ -8,13 +8,17 @@ import type {
 import {
   componentMainNodeId,
   planAddComponentProperty,
+  planAddComponentToVariantSet,
   planCreateComponent,
   planCreateInstance,
   planCombineComponentsAsVariants,
+  planDissolveVariantSet,
+  planDuplicateVariant,
   planDetachComponentInstance,
   planResetComponentOverrides,
   planRemoveComponent,
   planRemoveComponentProperty,
+  planRemoveVariantFromSet,
   planRenameComponentProperty,
   planResetComponentPropertyValue,
   planSetComponentOverride,
@@ -140,6 +144,137 @@ export function useComponentActions({
     if (applyCommands(t("history.combineAsVariants"), plan.commands)) {
       runtime.setSelection(plan.selectionNodeIds, plan.rootNodeId);
     }
+  }, [
+    activePageId,
+    applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  ]);
+
+  const addSelectedComponentToVariantSet = useCallback(() => {
+    const current = runtime.getSnapshot();
+    const set = Object.values(current.document.variantSetsById).find(
+      (candidate) =>
+        current.state.selection.nodeIds.includes(candidate.rootNodeId),
+    );
+    const component = Object.values(current.document.componentsById).find(
+      (candidate) =>
+        !candidate.variantSetId &&
+        current.state.selection.nodeIds.includes(candidate.rootNodeId),
+    );
+    if (!set || !component || current.state.selection.nodeIds.length !== 2)
+      return;
+    const operationId = `variant_add_${Date.now()}_${++transactionCounter.current}`;
+    const plan = planAddComponentToVariantSet(current.document, {
+      pageId: activePageId,
+      variantSetId: set.id,
+      componentId: component.id,
+      variantProperties: nextVariantProperties(
+        current.document,
+        set.id,
+        component.name,
+      ),
+      commandPrefix: operationId,
+    });
+    if (!plan.ok) return setEditorError(plan.message);
+    if (applyCommands(t("history.addVariant"), plan.commands))
+      runtime.setSelection([component.rootNodeId], component.rootNodeId);
+  }, [
+    activePageId,
+    applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  ]);
+
+  const duplicateSelectedVariant = useCallback(() => {
+    const current = runtime.getSnapshot();
+    const nodeId = singleSelection(current.state.selection.nodeIds);
+    const selectedSet = Object.values(current.document.variantSetsById).find(
+      (candidate) => candidate.rootNodeId === nodeId,
+    );
+    const source = selectedSet
+      ? current.document.componentsById[selectedSet.defaultComponentId]
+      : Object.values(current.document.componentsById).find(
+          (candidate) =>
+            candidate.rootNodeId === nodeId && candidate.variantSetId,
+        );
+    const set = source?.variantSetId
+      ? current.document.variantSetsById[source.variantSetId]
+      : selectedSet;
+    if (!source || !set) return;
+    const operationId = `variant_duplicate_${Date.now()}_${++transactionCounter.current}`;
+    const rootNodeId = `${operationId}_root`;
+    const plan = planDuplicateVariant(current.document, {
+      pageId: activePageId,
+      variantSetId: set.id,
+      sourceComponentId: source.id,
+      componentId: operationId,
+      rootNodeId,
+      variantProperties: nextVariantProperties(
+        current.document,
+        set.id,
+        source.name,
+      ),
+      commandPrefix: operationId,
+    });
+    if (!plan.ok) return setEditorError(plan.message);
+    if (applyCommands(t("history.duplicateVariant"), plan.commands))
+      runtime.setSelection([rootNodeId], rootNodeId);
+  }, [
+    activePageId,
+    applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  ]);
+
+  const removeSelectedVariantFromSet = useCallback(() => {
+    const current = runtime.getSnapshot();
+    const nodeId = singleSelection(current.state.selection.nodeIds);
+    const component = Object.values(current.document.componentsById).find(
+      (candidate) => candidate.rootNodeId === nodeId && candidate.variantSetId,
+    );
+    if (!component?.variantSetId) return;
+    const operationId = `variant_remove_${Date.now()}_${++transactionCounter.current}`;
+    const plan = planRemoveVariantFromSet(current.document, {
+      pageId: activePageId,
+      variantSetId: component.variantSetId,
+      componentId: component.id,
+      commandPrefix: operationId,
+    });
+    if (!plan.ok) return setEditorError(plan.message);
+    if (applyCommands(t("history.removeVariant"), plan.commands))
+      runtime.setSelection(plan.selectionNodeIds, plan.selectionNodeIds.at(-1));
+  }, [
+    activePageId,
+    applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  ]);
+
+  const dissolveSelectedVariantSet = useCallback(() => {
+    const current = runtime.getSnapshot();
+    const nodeId = singleSelection(current.state.selection.nodeIds);
+    const set = Object.values(current.document.variantSetsById).find(
+      (candidate) => candidate.rootNodeId === nodeId,
+    );
+    if (!set) return;
+    const operationId = `variant_dissolve_${Date.now()}_${++transactionCounter.current}`;
+    const plan = planDissolveVariantSet(current.document, {
+      pageId: activePageId,
+      variantSetId: set.id,
+      commandPrefix: operationId,
+    });
+    if (!plan.ok) return setEditorError(plan.message);
+    if (applyCommands(t("history.dissolveVariantSet"), plan.commands))
+      runtime.setSelection(plan.selectionNodeIds, plan.selectionNodeIds.at(-1));
   }, [
     activePageId,
     applyCommands,
@@ -420,14 +555,18 @@ export function useComponentActions({
 
   return {
     addSelectedComponentProperty,
+    addSelectedComponentToVariantSet,
     combineSelectedComponentsAsVariants,
     createComponentFromSelection,
     createSelectedComponentInstance,
     detachSelectedInstance,
+    dissolveSelectedVariantSet,
+    duplicateSelectedVariant,
     goToSelectedInstanceMain,
     locateComponentMain,
     placeComponentFromAssets,
     removeSelectedComponent,
+    removeSelectedVariantFromSet,
     removeSelectedComponentProperty,
     renameSelectedComponentProperty,
     resetSelectedInstance,
@@ -484,6 +623,41 @@ function inferVariantFacts(
     setName: sameSlashSet ? slashes[0]!.left : fallbackSetName,
     values,
   };
+}
+
+function nextVariantProperties(
+  document: DesignDocument,
+  variantSetId: string,
+  preferredValue: string,
+): Record<string, string> {
+  const set = document.variantSetsById[variantSetId];
+  if (!set) return {};
+  const names = Object.keys(set.componentPropertyDefinitions);
+  const members = Object.values(document.componentsById).filter(
+    (component) => component.variantSetId === variantSetId,
+  );
+  const result = Object.fromEntries(
+    names.map((name) => [
+      name,
+      set.componentPropertyDefinitions[name].defaultValue,
+    ]),
+  );
+  const primary = names[0];
+  if (!primary) return result;
+  const base = preferredValue.trim() || "Variant";
+  let candidate = base;
+  let suffix = 2;
+  const combinationExists = () =>
+    members.some((member) =>
+      names.every((name) =>
+        name === primary
+          ? member.variantProperties[name] === candidate
+          : member.variantProperties[name] === result[name],
+      ),
+    );
+  while (combinationExists()) candidate = `${base} ${suffix++}`;
+  result[primary] = candidate;
+  return result;
 }
 
 function singleSelection(nodeIds: readonly string[]): string | undefined {

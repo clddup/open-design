@@ -45,6 +45,45 @@ export type DesignComponentToolInput =
       variantPropertiesByComponentId: Record<string, Record<string, string>>;
     }
   | {
+      action: "add-component-to-variant-set";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      componentId: string;
+      componentRootNodeId: string;
+      variantProperties: Record<string, string>;
+    }
+  | {
+      action: "duplicate-variant";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      sourceComponentId: string;
+      sourceRootNodeId: string;
+      componentId: string;
+      componentRootNodeId: string;
+      name?: string;
+      variantProperties: Record<string, string>;
+    }
+  | {
+      action: "remove-variant";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      componentId: string;
+      componentRootNodeId: string;
+    }
+  | {
+      action: "dissolve-variant-set";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+    }
+  | {
       action: "add-property";
       label: string;
       pageId: string;
@@ -195,6 +234,76 @@ export function isDesignComponentToolInput(
           "rootNodeId",
           "name",
           "variantPropertiesByComponentId",
+        ])
+      );
+    case "add-component-to-variant-set":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        id(input.componentId) &&
+        id(input.componentRootNodeId) &&
+        variantProperties(input.variantProperties) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "componentId",
+          "componentRootNodeId",
+          "variantProperties",
+        ])
+      );
+    case "duplicate-variant":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        id(input.sourceComponentId) &&
+        id(input.sourceRootNodeId) &&
+        id(input.componentId) &&
+        id(input.componentRootNodeId) &&
+        (input.name === undefined || boundedString(input.name, 256)) &&
+        variantProperties(input.variantProperties) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "sourceComponentId",
+          "sourceRootNodeId",
+          "componentId",
+          "componentRootNodeId",
+          ...(input.name === undefined ? [] : ["name"]),
+          "variantProperties",
+        ])
+      );
+    case "remove-variant":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        id(input.componentId) &&
+        id(input.componentRootNodeId) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "componentId",
+          "componentRootNodeId",
+        ])
+      );
+    case "dissolve-variant-set":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
         ])
       );
     case "add-property":
@@ -399,6 +508,21 @@ function variantPropertyMatrix(
       )
     );
   });
+}
+
+function variantProperties(value: unknown): value is Record<string, string> {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length > 0 &&
+    Object.keys(value).length <= 128 &&
+    Object.entries(value).every(
+      ([name, propertyValue]) =>
+        name.length > 0 &&
+        name.length <= 256 &&
+        boundedString(propertyValue, 256) &&
+        propertyValue.length > 0,
+    )
+  );
 }
 
 function componentPropertyType(value: unknown): value is ComponentPropertyType {

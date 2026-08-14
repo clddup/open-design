@@ -1,18 +1,23 @@
 import type { DesignDocument } from "@opendesign/design-contracts";
 import {
   planAddComponentProperty,
+  planAddComponentToVariantSet,
   planCreateComponent,
   planCreateInstance,
   planCombineComponentsAsVariants,
+  planDissolveVariantSet,
+  planDuplicateVariant,
   planDetachComponentInstance,
   planRemoveComponent,
   planRemoveComponentProperty,
+  planRemoveVariantFromSet,
   planRenameComponentProperty,
   planResetComponentOverrides,
   planResetComponentPropertyValue,
   planSetComponentOverride,
   planSetComponentPropertyValue,
   type ComponentOperationPlan,
+  type VariantSetOperationPlan,
 } from "@opendesign/editor-runtime";
 import type { DesignComponentToolInput } from "../shared/design-agent-tools";
 
@@ -25,7 +30,7 @@ export function planDesignComponentTool(
   document: DesignDocument,
   input: WritableComponentToolInput,
   commandPrefix: string,
-): ComponentOperationPlan {
+): ComponentOperationPlan | VariantSetOperationPlan {
   switch (input.action) {
     case "create-component":
       return planCreateComponent(document, {
@@ -76,6 +81,83 @@ export function planDesignComponentTool(
         ? plan
         : { ok: false, code: "invalid", message: plan.message };
     }
+    case "add-component-to-variant-set":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+          input.rootNodeId ||
+        document.componentsById[input.componentId]?.rootNodeId !==
+          input.componentRootNodeId
+      )
+        return {
+          ok: false,
+          code: "invalid",
+          message:
+            "Component Set or Component no longer matches its inspected root",
+        };
+      return planAddComponentToVariantSet(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        componentId: input.componentId,
+        variantProperties: input.variantProperties,
+        commandPrefix,
+      });
+    case "duplicate-variant":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+          input.rootNodeId ||
+        document.componentsById[input.sourceComponentId]?.rootNodeId !==
+          input.sourceRootNodeId
+      )
+        return {
+          ok: false,
+          code: "invalid",
+          message:
+            "Component Set or source Variant no longer matches its inspected root",
+        };
+      return planDuplicateVariant(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        sourceComponentId: input.sourceComponentId,
+        componentId: input.componentId,
+        rootNodeId: input.componentRootNodeId,
+        ...(input.name === undefined ? {} : { name: input.name }),
+        variantProperties: input.variantProperties,
+        commandPrefix,
+      });
+    case "remove-variant":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+          input.rootNodeId ||
+        document.componentsById[input.componentId]?.rootNodeId !==
+          input.componentRootNodeId
+      )
+        return {
+          ok: false,
+          code: "invalid",
+          message:
+            "Component Set or Variant no longer matches its inspected root",
+        };
+      return planRemoveVariantFromSet(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        componentId: input.componentId,
+        commandPrefix,
+      });
+    case "dissolve-variant-set":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+        input.rootNodeId
+      )
+        return {
+          ok: false,
+          code: "invalid",
+          message: "Component Set no longer matches its inspected root",
+        };
+      return planDissolveVariantSet(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        commandPrefix,
+      });
     case "add-property":
       return planAddComponentProperty(document, {
         componentId: input.componentId,

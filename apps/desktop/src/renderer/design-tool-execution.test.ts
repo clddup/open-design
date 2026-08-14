@@ -710,6 +710,77 @@ describe("Renderer design tool scope", () => {
         },
       },
     });
+
+    const duplicated = await executeDesignToolRequest(
+      {
+        requestId: "duplicate_feature_variant",
+        call: {
+          toolCallId: "tool_duplicate_feature_variant",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "duplicate-variant",
+            label: "Add pressed feature variant",
+            pageId: "page_welcome",
+            variantSetId: "feature_set",
+            rootNodeId: "feature_set_root",
+            sourceComponentId: "feature_hover",
+            sourceRootNodeId: "feature_hover_group",
+            componentId: "feature_pressed",
+            componentRootNodeId: "feature_pressed_group",
+            variantProperties: { State: "Pressed" },
+          },
+        },
+        context: { ...pageContext, revision: 5 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(duplicated).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "duplicate-variant",
+          revision: 6,
+          atomic: true,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.componentsById.feature_pressed,
+    ).toMatchObject({
+      variantSetId: "feature_set",
+      variantProperties: { State: "Pressed" },
+    });
+
+    const removed = await executeDesignToolRequest(
+      {
+        requestId: "remove_feature_variant",
+        call: {
+          toolCallId: "tool_remove_feature_variant",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "remove-variant",
+            label: "Remove pressed feature variant",
+            pageId: "page_welcome",
+            variantSetId: "feature_set",
+            rootNodeId: "feature_set_root",
+            componentId: "feature_pressed",
+            componentRootNodeId: "feature_pressed_group",
+          },
+        },
+        context: { ...pageContext, revision: 6 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(removed).toMatchObject({
+      ok: true,
+      result: { content: { action: "remove-variant", revision: 7 } },
+    });
+    expect(
+      runtime.getSnapshot().document.componentsById.feature_pressed
+        ?.variantSetId,
+    ).toBeUndefined();
   });
 
   it("applies host-ID Page lifecycle operations only within their explicit mutation scope", async () => {

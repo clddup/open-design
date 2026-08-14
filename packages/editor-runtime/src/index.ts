@@ -123,6 +123,12 @@ export {
   type VariantSetOperationPlan,
 } from "./variant-set-operations.js";
 export {
+  planAddComponentToVariantSet,
+  planDissolveVariantSet,
+  planDuplicateVariant,
+  planRemoveVariantFromSet,
+} from "./variant-set-membership-operations.js";
+export {
   nodeReferencesAsset,
   planDeleteImageAsset,
   planImageNodeUpdate,

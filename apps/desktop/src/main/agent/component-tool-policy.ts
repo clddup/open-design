@@ -17,6 +17,23 @@ export function materialTargetRefsForComponentTool(
         nodeIds: [...input.componentRootNodeIds],
         createdNodeIds: [input.rootNodeId],
       };
+    case "add-component-to-variant-set":
+      return {
+        nodeIds: [input.rootNodeId, input.componentRootNodeId],
+        createdNodeIds: [],
+      };
+    case "duplicate-variant":
+      return {
+        nodeIds: [input.rootNodeId, input.sourceRootNodeId],
+        createdNodeIds: [input.componentRootNodeId],
+      };
+    case "remove-variant":
+      return {
+        nodeIds: [input.rootNodeId, input.componentRootNodeId],
+        createdNodeIds: [],
+      };
+    case "dissolve-variant-set":
+      return { nodeIds: [input.rootNodeId], createdNodeIds: [] };
     case "add-property":
       return { nodeIds: [input.sourceNodeId], createdNodeIds: [] };
     case "rename-property":
@@ -43,6 +60,10 @@ export function componentToolIsMaterialWrite(
 ): boolean {
   if (
     input.action === "combine-as-variants" ||
+    input.action === "add-component-to-variant-set" ||
+    input.action === "duplicate-variant" ||
+    input.action === "remove-variant" ||
+    input.action === "dissolve-variant-set" ||
     input.action === "create-instance" ||
     input.action === "reset-overrides" ||
     input.action === "set-property" ||
