@@ -3,12 +3,14 @@ import type {
   ComponentPropertyAssignment,
   ComponentPropertyType,
   ComponentOverridePatch,
+  DesignDocument,
   DesignNode,
   InstanceSwapPreferredValue,
   LayoutConstraints,
   LayoutGuide,
   LayoutPositioning,
   SlotSettings,
+  VariableBindingTarget,
 } from "@opendesign/design-contracts";
 import {
   MAX_ARRANGEMENT_SPACING,
@@ -45,6 +47,8 @@ export type { ComponentInspectorOption, ComponentInspectorSource };
 
 export function PropertiesPanel({
   node,
+  activePageId,
+  document,
   componentContext,
   arrangement,
   booleanOperationEditable,
@@ -99,6 +103,8 @@ export function PropertiesPanel({
   onResetComponentSlot,
   onSetComponentSlotSettings,
   onSetVariantProperties,
+  onSetVariableBinding,
+  onSetVariableMode,
   selectionCount,
   exportFormat,
   rasterExportSettings,
@@ -110,6 +116,8 @@ export function PropertiesPanel({
   onRasterExportSettingsChange,
 }: {
   node: DesignNode | undefined;
+  activePageId: string;
+  document: DesignDocument;
   componentContext?: ComponentInspectorContext;
   arrangement: ArrangementSelectionMetrics | null;
   booleanOperationEditable: boolean;
@@ -200,6 +208,11 @@ export function PropertiesPanel({
     componentId: string,
     properties: Readonly<Record<string, string>>,
   ) => void;
+  onSetVariableBinding: (
+    target: VariableBindingTarget,
+    variableId: string | null,
+  ) => void;
+  onSetVariableMode: (collectionId: string, modeId: string | null) => void;
   selectionCount: number;
   exportFormat: ExportFormat;
   rasterExportSettings: RasterExportSettings;
@@ -265,6 +278,8 @@ export function PropertiesPanel({
         )}
         {node ? (
           <SelectedNodeProperties
+            activePageId={activePageId}
+            document={document}
             key={node.id}
             node={node}
             componentContext={componentContext}
@@ -333,6 +348,8 @@ export function PropertiesPanel({
             onResetComponentSlot={onResetComponentSlot}
             onSetComponentSlotSettings={onSetComponentSlotSettings}
             onSetVariantProperties={onSetVariantProperties}
+            onSetVariableBinding={onSetVariableBinding}
+            onSetVariableMode={onSetVariableMode}
           />
         ) : selectionCount > 1 ? (
           <div className={styles.multiProperties}>

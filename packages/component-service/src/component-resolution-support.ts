@@ -294,6 +294,18 @@ export function applyInstanceShell(
   node.effects = [...(node.effects ?? []), ...(shell.effects ?? [])];
   if (shell.maskMode !== undefined) node.maskMode = shell.maskMode;
   if (shell.blendMode !== undefined) node.blendMode = shell.blendMode;
+  node.explicitVariableModes = {
+    ...(node.explicitVariableModes ?? {}),
+    ...(shell.explicitVariableModes ?? {}),
+  };
+  if (Object.keys(node.explicitVariableModes).length === 0) {
+    delete node.explicitVariableModes;
+  }
+  node.boundVariables = {
+    ...(node.boundVariables ?? {}),
+    ...(shell.boundVariables ?? {}),
+  };
+  if (Object.keys(node.boundVariables).length === 0) delete node.boundVariables;
   node.extensions = { ...node.extensions, ...shell.extensions };
 }
 

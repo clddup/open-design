@@ -8,6 +8,7 @@ import {
   COMPONENT_PROPERTY_ORDER_DESIGN_SCHEMA_VERSION,
   VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION,
   FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
+  FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
   DesignOperationSchema,
@@ -40,9 +41,26 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION).toBe("1.23.0");
   expect(COMPONENT_SLOT_DESIGN_SCHEMA_VERSION).toBe("1.24.0");
   expect(COMPONENT_PROPERTY_ORDER_DESIGN_SCHEMA_VERSION).toBe("1.25.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(
-    COMPONENT_PROPERTY_ORDER_DESIGN_SCHEMA_VERSION,
-  );
+  expect(FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION).toBe("1.26.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION);
+});
+
+it("migrates empty 1.25 token placeholders and refuses unknown non-empty token data", () => {
+  const legacy = textDocumentFixture() as Record<string, unknown>;
+  legacy.schemaVersion = COMPONENT_PROPERTY_ORDER_DESIGN_SCHEMA_VERSION;
+  delete legacy.variableCollectionOrder;
+  delete legacy.variableCollectionsById;
+  delete legacy.variablesById;
+  legacy.tokenCollectionsById = {};
+  legacy.tokensById = {};
+  expect(migrateDesignDocument(legacy)).toMatchObject({
+    schemaVersion: FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION,
+    variableCollectionOrder: [],
+    variableCollectionsById: {},
+    variablesById: {},
+  });
+  legacy.tokensById = { unknown: { value: 4 } };
+  expect(migrateDesignDocument(legacy)).toBeNull();
 });
 
 function textDocumentFixture() {
@@ -93,8 +111,9 @@ function textDocumentFixture() {
     },
     componentsById: {},
     variantSetsById: {},
-    tokenCollectionsById: {},
-    tokensById: {},
+    variableCollectionOrder: [],
+    variableCollectionsById: {},
+    variablesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: {},
@@ -663,8 +682,9 @@ describe("design contract schemas", () => {
       nodesById: {},
       componentsById: {},
       variantSetsById: {},
-      tokenCollectionsById: {},
-      tokensById: {},
+      variableCollectionOrder: [],
+      variableCollectionsById: {},
+      variablesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: {},
@@ -714,8 +734,9 @@ describe("design contract schemas", () => {
       },
       componentsById: {},
       variantSetsById: {},
-      tokenCollectionsById: {},
-      tokensById: {},
+      variableCollectionOrder: [],
+      variableCollectionsById: {},
+      variablesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: {},
@@ -781,8 +802,9 @@ describe("design contract schemas", () => {
       },
       componentsById: {},
       variantSetsById: {},
-      tokenCollectionsById: {},
-      tokensById: {},
+      variableCollectionOrder: [],
+      variableCollectionsById: {},
+      variablesById: {},
       interactionsById: {},
       assetsById: {
         asset_1: {
@@ -827,8 +849,9 @@ describe("design contract schemas", () => {
       nodesById: {},
       componentsById: {},
       variantSetsById: {},
-      tokenCollectionsById: {},
-      tokensById: {},
+      variableCollectionOrder: [],
+      variableCollectionsById: {},
+      variablesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: { source: "1.3-fixture" },
@@ -858,8 +881,9 @@ describe("design contract schemas", () => {
       nodesById: {},
       componentsById: {},
       variantSetsById: {},
-      tokenCollectionsById: {},
-      tokensById: {},
+      variableCollectionOrder: [],
+      variableCollectionsById: {},
+      variablesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: { source: "1.4-fixture" },
@@ -889,8 +913,9 @@ describe("design contract schemas", () => {
       nodesById: {},
       componentsById: {},
       variantSetsById: {},
-      tokenCollectionsById: {},
-      tokensById: {},
+      variableCollectionOrder: [],
+      variableCollectionsById: {},
+      variablesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: { source: "1.5-fixture" },
@@ -940,8 +965,9 @@ describe("design contract schemas", () => {
       },
       componentsById: {},
       variantSetsById: {},
-      tokenCollectionsById: {},
-      tokensById: {},
+      variableCollectionOrder: [],
+      variableCollectionsById: {},
+      variablesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: { source: "1.6-fixture" },
@@ -1017,8 +1043,9 @@ describe("design contract schemas", () => {
       },
       componentsById: {},
       variantSetsById: {},
-      tokenCollectionsById: {},
-      tokensById: {},
+      variableCollectionOrder: [],
+      variableCollectionsById: {},
+      variablesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: {},
@@ -1080,8 +1107,9 @@ describe("design contract schemas", () => {
       },
       componentsById: {},
       variantSetsById: {},
-      tokenCollectionsById: {},
-      tokensById: {},
+      variableCollectionOrder: [],
+      variableCollectionsById: {},
+      variablesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: {},

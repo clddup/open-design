@@ -16,6 +16,7 @@
     "@opendesign/image-service": "workspace:*",
     "@opendesign/import-export-service": "workspace:*",
     "@opendesign/text-service": "workspace:*",
+    "@opendesign/variable-service": "workspace:*",
     "leafer-editor": "2.2.9"
   },
   "devDependencies": {

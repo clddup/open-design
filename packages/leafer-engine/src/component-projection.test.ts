@@ -150,6 +150,65 @@ describe("component projection", () => {
       projection.elementsById.get("button_slot_override")?.childIds,
     ).toEqual(["button_slot_custom"]);
   });
+
+  it("lets an Instance shell mode override the Page mode for bound Main descendants", () => {
+    const document = fixture();
+    const background = document.nodesById.button_bg;
+    const instance = document.nodesById.button_instance;
+    if (background?.kind !== "rectangle" || instance?.kind !== "instance") {
+      throw new Error("Component variable fixture is unavailable");
+    }
+    document.variableCollectionOrder = ["theme"];
+    document.variableCollectionsById.theme = {
+      id: "theme",
+      key: "theme-key",
+      name: "Theme",
+      hiddenFromPublishing: false,
+      modes: [
+        { modeId: "dark", name: "Dark" },
+        { modeId: "light", name: "Light" },
+      ],
+      variableIds: ["surface"],
+      defaultModeId: "light",
+      extensions: {},
+    };
+    document.variablesById.surface = {
+      id: "surface",
+      key: "surface-key",
+      name: "Surface",
+      description: "",
+      hiddenFromPublishing: false,
+      variableCollectionId: "theme",
+      resolvedType: "COLOR",
+      valuesByMode: {
+        dark: { r: 0.1, g: 0.2, b: 0.3 },
+        light: { r: 0.9, g: 0.9, b: 0.9 },
+      },
+      scopes: ["SHAPE_FILL"],
+      codeSyntax: {},
+      extensions: {},
+    };
+    const fill = background.properties.fills[0];
+    if (fill?.type !== "solid") throw new Error("Background fill is missing");
+    fill.boundVariables = {
+      color: { type: "VARIABLE_ALIAS", id: "surface" },
+    };
+    document.pagesById.instances!.explicitVariableModes = { theme: "light" };
+    instance.explicitVariableModes = { theme: "dark" };
+
+    const projection = projectDesignPage(document, "instances");
+    const backgroundId = componentProjectionId("button_instance", [
+      "button_bg",
+    ]);
+    expect(projection.elementsById.get(backgroundId)?.data.fill).toEqual([
+      {
+        type: "solid",
+        color: "#1a334d",
+        opacity: 1,
+        visible: true,
+      },
+    ]);
+  });
 });
 
 function variantFixture(): DesignDocument {
@@ -372,8 +431,9 @@ function fixture(): DesignDocument {
       },
     },
     variantSetsById: {},
-    tokenCollectionsById: {},
-    tokensById: {},
+    variableCollectionOrder: [],
+    variableCollectionsById: {},
+    variablesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: {},

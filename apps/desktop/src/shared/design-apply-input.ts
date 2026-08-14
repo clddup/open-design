@@ -191,6 +191,13 @@ function isPermittedApplyOperation(
     command.type !== "delete_page" &&
     command.type !== "put_component" &&
     command.type !== "delete_component" &&
+    command.type !== "put_variable_collection" &&
+    command.type !== "delete_variable_collection" &&
+    command.type !== "move_variable_collection" &&
+    command.type !== "put_variable" &&
+    command.type !== "delete_variable" &&
+    command.type !== "set_explicit_variable_modes" &&
+    command.type !== "set_variable_binding" &&
     !operationWritesInstanceDirectly(command) &&
     (internal ||
       (command.type !== "put_asset" && command.type !== "delete_asset"))

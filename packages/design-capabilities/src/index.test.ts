@@ -33,8 +33,8 @@ describe("design capability manifest", () => {
   it("does not mark evidence-free professional workflows available", () => {
     expect(summarizeCapabilityStatuses()).toEqual({
       available: 0,
-      degraded: 18,
-      unavailable: 3,
+      degraded: 19,
+      unavailable: 2,
     });
     expect(getDesignCapability("appearance.paints-effects-masks")?.status).toBe(
       "degraded",
@@ -78,6 +78,19 @@ describe("design capability manifest", () => {
       provider:
         "DesignDocument 1.25.0 + @opendesign/component-service contract v4 + isolated @opendesign/figma-interop",
       evidence: { automated: 14, manual: 0 },
+    });
+    const variables: unknown = capabilityValues.find(
+      (value: unknown) =>
+        typeof value === "object" &&
+        value !== null &&
+        "id" in value &&
+        value.id === "variables.collections-modes",
+    );
+    expect(variables).toMatchObject({
+      status: "degraded",
+      provider:
+        "DesignDocument 1.26.0 + @opendesign/variable-service contract v1 + isolated @opendesign/figma-interop",
+      evidence: { automated: 11, manual: 0 },
     });
   });
 

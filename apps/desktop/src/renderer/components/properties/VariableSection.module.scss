@@ -1,0 +1,52 @@
+.modeRows,
+.bindingRows {
+  display: grid;
+  gap: 5px;
+}
+
+.row,
+.bindingRow {
+  display: grid;
+  grid-template-columns: minmax(70px, 0.8fr) minmax(88px, 1.2fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.row > span,
+.bindingRow > span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row select,
+.bindingRow select {
+  min-width: 0;
+  height: 27px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--surface-control);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.bindingRow small {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subheading {
+  margin: 10px 0 6px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}

@@ -35,10 +35,12 @@ import {
   SizeSchema,
   TransformSchema,
 } from "./primitives.js";
+import * as variables from "./variables.js";
 export * from "./component-properties.js";
 export * from "./variant-sets.js";
 export * from "./primitives.js";
 export * from "./versions.js";
+export * from "./variables.js";
 export {
   normalizeLineEndpoints,
   resolveLineEndpointPoint,
@@ -105,6 +107,7 @@ export const SolidPaintSchema = Type.Object(
   {
     type: Type.Literal("solid"),
     color: Type.String({ minLength: 1 }),
+    boundVariables: Type.Optional(variables.PaintBoundVariablesSchema),
     ...PaintBaseProperties,
   },
   { additionalProperties: false },
@@ -694,6 +697,8 @@ const NodeBaseProperties = {
   blendMode: Type.Optional(BlendModeSchema),
   effects: Type.Optional(Type.Array(EffectSchema)),
   maskMode: Type.Optional(MaskModeSchema),
+  explicitVariableModes: Type.Optional(variables.ExplicitVariableModesSchema),
+  boundVariables: Type.Optional(variables.NodeBoundVariablesSchema),
   extensions: JsonObjectSchema,
 };
 
@@ -865,6 +870,7 @@ export const DesignPageSchema = Type.Object(
     rootNodeIds: Type.Array(Type.String({ minLength: 1 }), {
       uniqueItems: true,
     }),
+    explicitVariableModes: Type.Optional(variables.ExplicitVariableModesSchema),
     extensions: JsonObjectSchema,
   },
   { additionalProperties: false },
@@ -911,8 +917,7 @@ export const DesignDocumentSchema = Type.Object(
     nodesById: Type.Record(Type.String(), DesignNodeSchema),
     componentsById: Type.Record(Type.String(), ComponentDefinitionSchema),
     variantSetsById: Type.Record(Type.String(), VariantSetDefinitionSchema),
-    tokenCollectionsById: Type.Record(Type.String(), JsonValueSchema),
-    tokensById: Type.Record(Type.String(), JsonValueSchema),
+    ...variables.VariableDocumentProperties,
     interactionsById: Type.Record(Type.String(), JsonValueSchema),
     assetsById: Type.Record(Type.String(), DesignAssetSchema),
     extensions: JsonObjectSchema,
@@ -1089,6 +1094,13 @@ export const DesignOperationSchema: TUnion<
     typeof DeleteAssetCommandSchema,
     typeof PutComponentCommandSchema,
     typeof DeleteComponentCommandSchema,
+    typeof variables.PutVariableCollectionCommandSchema,
+    typeof variables.DeleteVariableCollectionCommandSchema,
+    typeof variables.MoveVariableCollectionCommandSchema,
+    typeof variables.PutVariableCommandSchema,
+    typeof variables.DeleteVariableCommandSchema,
+    typeof variables.SetExplicitVariableModesCommandSchema,
+    typeof variables.SetVariableBindingCommandSchema,
     typeof PutVariantSetCommandSchema,
     typeof DeleteVariantSetCommandSchema,
     typeof InsertPageCommandSchema,
@@ -1102,6 +1114,13 @@ export const DesignOperationSchema: TUnion<
   DeleteAssetCommandSchema,
   PutComponentCommandSchema,
   DeleteComponentCommandSchema,
+  variables.PutVariableCollectionCommandSchema,
+  variables.DeleteVariableCollectionCommandSchema,
+  variables.MoveVariableCollectionCommandSchema,
+  variables.PutVariableCommandSchema,
+  variables.DeleteVariableCommandSchema,
+  variables.SetExplicitVariableModesCommandSchema,
+  variables.SetVariableBindingCommandSchema,
   PutVariantSetCommandSchema,
   DeleteVariantSetCommandSchema,
   InsertPageCommandSchema,
@@ -1282,6 +1301,7 @@ export const DesignChangeSetSchema = Type.Object(
     pageChanges: Type.Optional(Type.Array(PageChangeSchema)),
     componentChanges: Type.Optional(Type.Array(ComponentChangeSchema)),
     variantSetChanges: Type.Optional(Type.Array(VariantSetChangeSchema)),
+    ...variables.VariableChangeSetProperties,
     changes: Type.Array(NodeChangeSchema),
   },
   { additionalProperties: false },
@@ -1331,7 +1351,13 @@ export const DesignTransactionFailureSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const DesignTransactionResultSchema = Type.Union([
+type DesignTransactionResultValue =
+  | Static<typeof DesignTransactionSuccessSchema>
+  | Static<typeof DesignTransactionFailureSchema>;
+
+export const DesignTransactionResultSchema: TSchema & {
+  static: DesignTransactionResultValue;
+} = Type.Union([
   DesignTransactionSuccessSchema,
   DesignTransactionFailureSchema,
 ]);
@@ -1822,6 +1848,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     migrateTextNodes(migrated);
     migrateFigmaComponentProperties(migrated);
     migrateVariantSets(migrated);
+    if (!variables.migrateFigmaVariables(migrated)) return null;
     return isDesignDocument(migrated) ? migrated : null;
   } catch {
     return null;

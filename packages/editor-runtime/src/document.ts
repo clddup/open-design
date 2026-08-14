@@ -18,6 +18,7 @@ import {
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import { validateVectorNetwork } from "@opendesign/geometry-service/editable-vector";
+import { validateVariableDocument } from "@opendesign/variable-service";
 import {
   validateNodeLayoutInvariants,
   type DocumentInvariantIssue,
@@ -190,6 +191,7 @@ export function validateDocumentInvariants(
   }
 
   issues.push(...validateVariantSetInvariants(document));
+  issues.push(...validateVariableDocument(document));
 
   const sourceOwner = new Map<string, string>();
   for (const componentId of Object.keys(document.componentsById)) {
@@ -550,8 +552,9 @@ export function createEmptyDesignDocument(
     nodesById: {},
     componentsById: {},
     variantSetsById: {},
-    tokenCollectionsById: {},
-    tokensById: {},
+    variableCollectionOrder: [],
+    variableCollectionsById: {},
+    variablesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: {},
@@ -669,8 +672,9 @@ export function createWelcomeDocument(): DesignDocument {
     ),
     componentsById: {},
     variantSetsById: {},
-    tokenCollectionsById: {},
-    tokensById: {},
+    variableCollectionOrder: [],
+    variableCollectionsById: {},
+    variablesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: { template: "welcome" },

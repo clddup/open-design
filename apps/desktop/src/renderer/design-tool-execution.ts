@@ -36,6 +36,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_VARIABLE_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
@@ -49,6 +50,7 @@ import {
   isDesignArrangeToolInput,
   isDesignApplyToolInput,
   isDesignComponentToolInput,
+  isDesignVariableToolInput,
   isDesignHierarchyToolInput,
   isDesignPageToolInput,
   isDesignVectorToolInput,
@@ -73,6 +75,8 @@ import { executeSemanticDesignTransaction } from "./design-transaction-steps";
 import { planDesignArrangeTool } from "./design-arrange-tool-plan";
 import { planDesignComponentTool } from "./design-component-tool-plan";
 import { createScopedComponentInspection } from "./design-component-inspection";
+import { createScopedVariableInspection } from "./design-variable-inspection";
+import { executeDesignVariableTool } from "./design-variable-tool-execution";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -289,6 +293,34 @@ async function executeDesignToolRequestUnsafe(
         },
       },
     };
+  }
+
+  if (
+    request.call.toolName === DESIGN_VARIABLE_TOOL_NAME &&
+    isDesignVariableToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    if (document.revision !== request.context.revision) {
+      throw new Error(
+        `Variable operation revision conflict: expected ${request.context.revision}, current ${document.revision}`,
+      );
+    }
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "Variable operation",
+    );
+    return executeDesignVariableTool({
+      document,
+      input,
+      requestId: request.requestId,
+      runtime,
+      sessionId: request.context.sessionId,
+      throwTransactionFailure: (error, commands) => {
+        throw designTransactionToolError(error, commands);
+      },
+      toolCallId: request.call.toolCallId,
+    });
   }
 
   if (document.revision !== request.context.revision) {
@@ -1613,6 +1645,9 @@ function createScopedInspection(
           id: page.id,
           name: page.name,
           rootNodeIds: page.rootNodeIds.filter((nodeId) => nodeIds.has(nodeId)),
+          explicitVariableModes: structuredClone(
+            page.explicitVariableModes ?? {},
+          ),
         },
       ];
     }),
@@ -1675,6 +1710,8 @@ function createScopedInspection(
   const diagnostics = diagnoseDesignPages(document, pageIds);
   const { componentsById, instancesById, variantSetsById } =
     createScopedComponentInspection(document, nodeIds, nodesById);
+  const { designSystemIds: variableDesignSystemIds, ...variableInspection } =
+    createScopedVariableInspection(document, pageIds, nodesById);
 
   return {
     document: {
@@ -1687,11 +1724,11 @@ function createScopedInspection(
       componentsById,
       variantSetsById,
       instancesById,
+      ...variableInspection,
       designSystemIds: {
         components: Object.keys(document.componentsById),
         variantSets: Object.keys(document.variantSetsById),
-        tokenCollections: Object.keys(document.tokenCollectionsById),
-        tokens: Object.keys(document.tokensById),
+        ...variableDesignSystemIds,
       },
     },
     activePageId: inspectionPageId(document, mutationTarget, selectionContext),
@@ -1893,6 +1930,19 @@ function assertCommandsWithinMutationTarget(
       command.type === "delete_variant_set"
     ) {
       continue;
+    }
+    if (
+      command.type === "put_variable_collection" ||
+      command.type === "delete_variable_collection" ||
+      command.type === "move_variable_collection" ||
+      command.type === "put_variable" ||
+      command.type === "delete_variable" ||
+      command.type === "set_explicit_variable_modes" ||
+      command.type === "set_variable_binding"
+    ) {
+      throw new Error(
+        "Agent Variable changes require the dedicated Variables tool",
+      );
     }
     if (
       command.type === "insert_page" ||

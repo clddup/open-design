@@ -2,9 +2,9 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-14 · 文档协议：`1.25.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.26.0` · 画布基线：`leafer-editor@2.2.9`
 
-当前状态：可用 0 项，降级可用 18 项，不可用 3 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
+当前状态：可用 0 项，降级可用 19 项，不可用 2 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
 ## 基础工作流
 
@@ -248,16 +248,18 @@
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/38231200344599-Use-slots-to-build-flexible-components-in-Figma)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/SlotNode/)
 
-### Variables、Collections 与 Modes — 不可用
+### Variables、Collections 与 Modes — 降级可用
 
 定义类型化 variable、collection、mode、alias、scope、binding 和确定性模式切换。
 
 - ID：`variables.collections-modes`
-- 实现方：Not implemented
-- 表面：contract=unavailable；runtime=unavailable；human=unavailable；agent=unavailable；render=unavailable；export=unavailable
-- 证据：自动化 0 项；实机 0 项
-- 限制：Token collection 字段仍是无类型占位，不能绑定到设计属性。
+- 实现方：DesignDocument 1.26.0 + @opendesign/variable-service contract v1 + isolated @opendesign/figma-interop
+- 表面：contract=available；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=degraded
+- 证据：自动化 11 项；实机 0 项
+- 限制：Variables v1 已支持 BOOLEAN 可见性、FLOAT 不透明度、STRING 文本内容和 COLOR SolidPaint 颜色绑定。Timing/Easing 绑定、更多节点与 Paint 字段、样式、渐变/效果、组件属性绑定、原型变量、扩展集合、跨文件 Library、DTCG/REST/Plugin 导入导出及 macOS/Windows 打包 GUI 证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/14506821864087-Overview-of-variables-collections-and-modes)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/15343816063383-Modes-for-variables)
+- 专业参照：[官方说明](https://developers.figma.com/docs/rest-api/variables/)
 
 ## 交付
 

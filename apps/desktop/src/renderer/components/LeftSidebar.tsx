@@ -27,6 +27,7 @@ import type {
 import { useI18n } from "../i18n";
 import type { SidebarTab } from "../state/editor";
 import { AssetsPanel } from "./AssetsPanel";
+import { VariablesPanel, type VariablesPanelActions } from "./VariablesPanel";
 import {
   layerNodeIcons as nodeIcons,
   layerNodeKindKeys as nodeKindKeys,
@@ -190,6 +191,7 @@ export function LeftSidebar({
   onReparent,
   onToggleLock,
   onToggleVisibility,
+  variableActions,
 }: {
   document: DesignDocument;
   activePageId: string;
@@ -214,6 +216,7 @@ export function LeftSidebar({
   onReparent: (request: LayerReparentRequest) => LayerReparentResult;
   onToggleLock: (nodeId: string) => void;
   onToggleVisibility: (nodeId: string) => void;
+  variableActions: VariablesPanelActions;
 }) {
   const { t } = useI18n();
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<ReadonlySet<string>>(
@@ -488,6 +491,17 @@ export function LeftSidebar({
         >
           <Glyph name="assets" />
           {t("sidebar.assets")}
+        </button>
+        <button
+          aria-controls="sidebar-variables"
+          aria-selected={tab === "variables"}
+          id="sidebar-variables-tab"
+          onClick={() => onTabChange("variables")}
+          role="tab"
+          type="button"
+        >
+          <Glyph name="component" />
+          {t("variables.title")}
         </button>
       </div>
       <div className={styles.search}>
@@ -849,7 +863,7 @@ export function LeftSidebar({
             </span>
           </div>
         </div>
-      ) : (
+      ) : tab === "assets" ? (
         <AssetsPanel
           document={document}
           onDelete={onDeleteAsset}
@@ -860,6 +874,12 @@ export function LeftSidebar({
           onPlaceComponent={onPlaceComponent}
           onReplace={onReplaceAsset}
           query={assetQuery}
+        />
+      ) : (
+        <VariablesPanel
+          actions={variableActions}
+          activePageId={activePageId}
+          document={document}
         />
       )}
     </aside>

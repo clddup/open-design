@@ -12,6 +12,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_VARIABLE_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
@@ -106,6 +108,110 @@ function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
 }
 
 describe("Renderer design tool scope", () => {
+  it("authors and binds Variables through the dedicated typed tool and inspection", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const execute = (input: Record<string, unknown>) =>
+      executeDesignToolRequest(
+        {
+          requestId: `variables_${runtime.getSnapshot().document.revision}`,
+          call: {
+            toolCallId: `tool_variables_${runtime.getSnapshot().document.revision}`,
+            toolName: DESIGN_VARIABLE_TOOL_NAME,
+            input,
+          },
+          context: {
+            ...pageContext,
+            revision: runtime.getSnapshot().document.revision,
+          },
+        },
+        runtime,
+        "page_welcome",
+      );
+    expect(
+      await execute({
+        action: "create-collection",
+        label: "Create theme variables",
+        pageId: "page_welcome",
+        collectionId: "theme",
+        key: "theme-key",
+        name: "Theme",
+        defaultModeId: "default",
+        defaultModeName: "Default",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await execute({
+        action: "create-variable",
+        label: "Create title copy variable",
+        pageId: "page_welcome",
+        variableId: "title-copy",
+        key: "title-copy-key",
+        collectionId: "theme",
+        name: "Content/Title",
+        resolvedType: "STRING",
+        valuesByMode: { default: "Typed Agent title" },
+        scopes: ["TEXT_CONTENT"],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await execute({
+        action: "set-binding",
+        label: "Bind title content",
+        pageId: "page_welcome",
+        target: {
+          kind: "node",
+          nodeId: "title_welcome",
+          field: "characters",
+        },
+        variableId: "title-copy",
+      }),
+    ).toMatchObject({
+      ok: true,
+      result: { content: { action: "set-binding", atomic: true } },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.boundVariables,
+    ).toEqual({
+      characters: { type: "VARIABLE_ALIAS", id: "title-copy" },
+    });
+
+    const inspection = await executeDesignToolRequest(
+      {
+        requestId: "inspect_variables",
+        call: {
+          toolCallId: "tool_inspect_variables",
+          toolName: DESIGN_INSPECT_TOOL_NAME,
+          input: {},
+        },
+        context: {
+          ...pageContext,
+          revision: runtime.getSnapshot().document.revision,
+        },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(inspection).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          document: {
+            variableCollectionsById: { theme: { defaultModeId: "default" } },
+            variablesById: { "title-copy": { resolvedType: "STRING" } },
+            variableResolutionsByNodeId: {
+              title_welcome: {
+                characters: {
+                  ok: true,
+                  resolved: { value: "Typed Agent title" },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it("decodes model-escaped line breaks only in Agent text content", async () => {
     expect(decodeAgentTextLineBreaks("Line one\\nLine two")).toBe(
       "Line one\nLine two",

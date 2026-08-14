@@ -33,6 +33,7 @@
     "@opendesign/model-gateway": "workspace:*",
     "@opendesign/session-store": "workspace:*",
     "@opendesign/text-service": "workspace:*",
+    "@opendesign/variable-service": "workspace:*",
     "@opendesign/ui": "workspace:*",
     "@opendesign/workspace-contracts": "workspace:*",
     "mammoth": "1.12.0",

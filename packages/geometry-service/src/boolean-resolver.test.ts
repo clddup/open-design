@@ -396,8 +396,9 @@ function designDocument(
     },
     revision: 0,
     schemaVersion: DESIGN_SCHEMA_VERSION,
-    tokenCollectionsById: {},
-    tokensById: {},
+    variableCollectionOrder: [],
+    variableCollectionsById: {},
+    variablesById: {},
     variantSetsById: {},
   };
 }

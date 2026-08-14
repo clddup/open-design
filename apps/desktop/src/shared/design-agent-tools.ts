@@ -39,6 +39,8 @@ import {
   type DesignPlanComponentStrategy,
 } from "./design-plan-component-strategy";
 import { isDesignComponentToolInput } from "./design-component-tool";
+import { isDesignVariableToolInput } from "./design-variable-tool";
+import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema";
 export {
   isDesignApplyToolInput,
   isInternalDesignApplyToolInput,
@@ -58,6 +60,8 @@ export {
 } from "./design-plan-component-strategy";
 export { isDesignComponentToolInput } from "./design-component-tool";
 export type { DesignComponentToolInput } from "./design-component-tool";
+export { isDesignVariableToolInput } from "./design-variable-tool";
+export type { DesignVariableToolInput } from "./design-variable-tool";
 export type {
   DesignPlanComponentCandidate,
   DesignPlanComponentStrategy,
@@ -74,6 +78,7 @@ export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
 export const DESIGN_VECTOR_TOOL_NAME = "opendesign_edit_vector";
 export const DESIGN_PAGE_TOOL_NAME = "opendesign_manage_pages";
 export const DESIGN_COMPONENT_TOOL_NAME = "opendesign_manage_components";
+export const DESIGN_VARIABLE_TOOL_NAME = "opendesign_manage_variables";
 export const PAGE_STRUCTURE_ACCESS_TOOL_NAME =
   "opendesign_request_page_structure_access";
 export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
@@ -2070,6 +2075,14 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_VARIABLE_TOOL_NAME,
+    description:
+      "Manage Figma-compatible Variables through the versioned Variable Service. Collections, modes, values, aliases, scopes, code syntax, Page/node mode overrides, and supported node/Paint bindings are validated, previewed, and applied as one atomic undoable transaction. Use stable IDs and current definitions from opendesign_inspect_document. BOOLEAN binds visibility, FLOAT binds opacity in 0..1, STRING binds Text content, and COLOR RGB/RGBA binds SolidPaint color. Scope only ranks picker recommendations and never replaces type validation. TIMING/EASING remain authorable but are not bindable before Motion support.",
+    inputSchema: DESIGN_VARIABLE_TOOL_INPUT_SCHEMA,
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
     description:
       "Request one user-approved, Run-scoped capability to modify Page structure or design across Pages in the currently bound Design File. Call this only when the user's request actually requires creating, duplicating, reordering, deleting, or editing another Page. The default Run remains bound to the current Page until the user approves. Approval expires when this Run ends and never grants access to another Design File, Project, directory, or future Run. After approval, inspect the Design File again before calling opendesign_manage_pages or planning work on another Page. Do not call this for renaming the already bound Page or for ordinary edits inside the current Page.",
@@ -2245,6 +2258,9 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === DESIGN_COMPONENT_TOOL_NAME) {
     return isDesignComponentToolInput(input);
+  }
+  if (toolName === DESIGN_VARIABLE_TOOL_NAME) {
+    return isDesignVariableToolInput(input);
   }
   if (toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
     return isPageStructureAccessToolInput(input);

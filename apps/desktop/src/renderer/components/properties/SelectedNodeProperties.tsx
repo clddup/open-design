@@ -3,6 +3,7 @@ import type {
   ComponentPropertyAssignment,
   ComponentPropertyType,
   ComponentOverridePatch,
+  DesignDocument,
   DesignNode,
   InstanceSwapPreferredValue,
   LayoutConstraints,
@@ -12,6 +13,7 @@ import type {
   LayoutSizing,
   LineEndpoint,
   SlotSettings,
+  VariableBindingTarget,
 } from "@opendesign/design-contracts";
 import { Button, Glyph, IconButton, type GlyphName } from "@opendesign/ui";
 import type { MessageKey } from "../../../shared/i18n/messages";
@@ -30,6 +32,7 @@ import {
 import { ImageSection } from "./ImageSection";
 import { LayoutGuidesSection } from "./LayoutGuidesSection";
 import { TypographySection } from "./TypographySection";
+import { VariableSection } from "./VariableSection";
 import { Field, Section, commitNumber, formatNumber } from "./controls";
 
 const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
@@ -87,6 +90,8 @@ function lineEndpointKey(endpoint: LineEndpoint): MessageKey {
 
 export function SelectedNodeProperties({
   node,
+  activePageId,
+  document,
   componentContext,
   booleanOperationEditable,
   booleanOperandParent,
@@ -135,8 +140,12 @@ export function SelectedNodeProperties({
   onResetComponentSlot,
   onSetComponentSlotSettings,
   onSetVariantProperties,
+  onSetVariableBinding,
+  onSetVariableMode,
 }: {
   node: DesignNode;
+  activePageId: string;
+  document: DesignDocument;
   componentContext?: ComponentInspectorContext;
   booleanOperationEditable: boolean;
   booleanOperandParent?: { id: string; name: string };
@@ -221,6 +230,11 @@ export function SelectedNodeProperties({
     componentId: string,
     properties: Readonly<Record<string, string>>,
   ) => void;
+  onSetVariableBinding: (
+    target: VariableBindingTarget,
+    variableId: string | null,
+  ) => void;
+  onSetVariableMode: (collectionId: string, modeId: string | null) => void;
 }) {
   const { t } = useI18n();
   const flowPositioned =
@@ -353,6 +367,13 @@ export function SelectedNodeProperties({
         onResetComponentSlot={onResetComponentSlot}
         onSetComponentSlotSettings={onSetComponentSlotSettings}
         onSetVariantProperties={onSetVariantProperties}
+      />
+      <VariableSection
+        activePageId={activePageId}
+        document={document}
+        node={node}
+        onSetBinding={onSetVariableBinding}
+        onSetExplicitMode={onSetVariableMode}
       />
       <Section title={t("properties.layer")}>
         <div className={styles.stack}>

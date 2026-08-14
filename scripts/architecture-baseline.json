@@ -46,7 +46,8 @@
       "@opendesign/geometry-service",
       "@opendesign/import-export-service",
       "@opendesign/layout-service",
-      "@opendesign/text-service"
+      "@opendesign/text-service",
+      "@opendesign/variable-service"
     ],
     "@opendesign/figma-interop": [
       "@opendesign/component-service",
@@ -65,7 +66,8 @@
       "@opendesign/geometry-service",
       "@opendesign/image-service",
       "@opendesign/import-export-service",
-      "@opendesign/text-service"
+      "@opendesign/text-service",
+      "@opendesign/variable-service"
     ],
     "@opendesign/mcp-host": [],
     "@opendesign/mcp-server": ["@opendesign/design-engine"],
@@ -74,6 +76,7 @@
     "@opendesign/text-service": [],
     "@opendesign/tool-runtime": [],
     "@opendesign/ui": [],
+    "@opendesign/variable-service": ["@opendesign/design-contracts"],
     "@opendesign/workspace-contracts": []
   },
   "productionModuleLineBudgets": {

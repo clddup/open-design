@@ -18,6 +18,7 @@ import type {
   ArrangeOperation,
   ArrangementSelectionMetrics,
 } from "@opendesign/editor-runtime";
+import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -111,6 +112,7 @@ function renderPanel(
     <TooltipProvider delayDuration={0}>
       <I18nProvider initialLocale="en">
         <PropertiesPanel
+          activePageId="page_welcome"
           arrangement={options.arrangement ?? null}
           booleanOperationEditable={false}
           canAddToVariantSet={options.canAddToVariantSet ?? false}
@@ -118,6 +120,7 @@ function renderPanel(
           canDelete
           layoutMode={options.layoutMode ?? null}
           componentContext={options.componentContext}
+          document={createWelcomeDocument()}
           node={options.node}
           onArrange={onArrange}
           onAddToVariantSet={options.onAddToVariantSet ?? vi.fn()}
@@ -172,6 +175,8 @@ function renderPanel(
             options.onSetComponentSlotSettings ?? vi.fn()
           }
           onSetVariantProperties={options.onSetVariantProperties ?? vi.fn()}
+          onSetVariableBinding={vi.fn()}
+          onSetVariableMode={vi.fn()}
           onRasterExportSettingsChange={onRasterExportSettingsChange}
           exportFormat={options.exportFormat ?? "svg"}
           rasterExportSettings={{

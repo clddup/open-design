@@ -119,6 +119,21 @@ export {
 } from "./component-property-operations.js";
 export { planReorderComponentProperties } from "./component-property-order-operations.js";
 export {
+  planAddVariableMode,
+  planCreateVariable,
+  planCreateVariableCollection,
+  planDeleteVariable,
+  planDeleteVariableCollection,
+  planMoveVariableCollection,
+  planRemoveVariableMode,
+  planSetExplicitVariableMode,
+  planSetVariableBinding,
+  planUpdateVariable,
+  planUpdateVariableCollection,
+  type VariableOperationFailureCode,
+  type VariableOperationPlan,
+} from "./variable-operations.js";
+export {
   planClearComponentSlot,
   planCreateComponentSlotOverride,
   planResetComponentSlot,

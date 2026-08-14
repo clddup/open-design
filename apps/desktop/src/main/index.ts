@@ -97,6 +97,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_VARIABLE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -111,6 +112,7 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   normalizeDesignApplyToolInput,
   isDesignComponentToolInput,
+  isDesignVariableToolInput,
   normalizeDesignPageToolInput,
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
@@ -1600,6 +1602,37 @@ void app.whenReady().then(async () => {
           result.designRevision?.revision,
           targetRefs.createdNodeIds,
         );
+        return withDesignDelivery(result, context.runId);
+      }
+      if (call.toolName === DESIGN_VARIABLE_TOOL_NAME) {
+        if (!isDesignVariableToolInput(call.input)) {
+          throw new TypeError("Invalid Variables tool input");
+        }
+        globalTaskCoordinator.assertDocumentInspected(context);
+        const materialNodeIds =
+          call.input.action === "set-binding"
+            ? [call.input.target.nodeId]
+            : call.input.action === "set-mode" &&
+                call.input.target.kind === "node"
+              ? [call.input.target.id]
+              : [];
+        if (materialNodeIds.length > 0) {
+          globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        }
+        const result = await executeRendererTool(call);
+        if (materialNodeIds.length > 0) {
+          const targetIds =
+            globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
+              context,
+              materialNodeIds,
+            );
+          globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+            context.runId,
+            targetIds,
+            result.designRevision?.revision,
+            [],
+          );
+        }
         return withDesignDelivery(result, context.runId);
       }
       if (

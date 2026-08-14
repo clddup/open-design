@@ -7,6 +7,7 @@ import {
   type Transform,
 } from "@opendesign/design-contracts";
 import { materializeComponentInstances } from "@opendesign/component-service";
+import { materializeVariableBindings } from "@opendesign/variable-service";
 import {
   BOOLEAN_GEOMETRY_RESOLVER_VERSION,
   type BooleanGeometryResolution,
@@ -128,7 +129,9 @@ export function planSvgExportRequest(
   );
   let exportDocument: DesignDocument;
   try {
-    exportDocument = materializeComponentInstances(document);
+    exportDocument = materializeVariableBindings(
+      materializeComponentInstances(document),
+    ).document;
   } catch (error) {
     return failure(
       "invalid-geometry",

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-14",
-  "documentSchemaVersion": "1.25.0",
+  "updatedAt": "2026-08-15",
+  "documentSchemaVersion": "1.26.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -902,7 +902,7 @@
     {
       "id": "variables.collections-modes",
       "category": "design-system",
-      "status": "unavailable",
+      "status": "degraded",
       "label": {
         "en": "Variables, collections, and modes",
         "zh-CN": "Variables、Collections 与 Modes"
@@ -911,25 +911,49 @@
         "en": "Define typed variables, collections, modes, aliases, scopes, bindings, and deterministic mode switching.",
         "zh-CN": "定义类型化 variable、collection、mode、alias、scope、binding 和确定性模式切换。"
       },
-      "provider": "Not implemented",
-      "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
+      "provider": "DesignDocument 1.26.0 + @opendesign/variable-service contract v1 + isolated @opendesign/figma-interop",
+      "requiredSurfaces": [
+        "contract",
+        "runtime",
+        "human",
+        "agent",
+        "render",
+        "export"
+      ],
       "surfaces": {
-        "contract": "unavailable",
-        "runtime": "unavailable",
-        "human": "unavailable",
-        "agent": "unavailable",
-        "render": "unavailable",
-        "export": "unavailable"
+        "contract": "available",
+        "runtime": "degraded",
+        "human": "degraded",
+        "agent": "degraded",
+        "render": "degraded",
+        "export": "degraded"
       },
       "limitations": [
         {
-          "en": "Token collection fields are untyped placeholders and cannot be bound to design properties.",
-          "zh-CN": "Token collection 字段仍是无类型占位，不能绑定到设计属性。"
+          "en": "Variables v1 binds BOOLEAN visibility, FLOAT opacity, STRING Text content, and COLOR SolidPaint color. Timing/Easing bindings, broader node/Paint fields, styles, gradients/effects, component-property bindings, prototype variables, extended collections, cross-file Libraries, DTCG/REST/Plugin import-export, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "Variables v1 已支持 BOOLEAN 可见性、FLOAT 不透明度、STRING 文本内容和 COLOR SolidPaint 颜色绑定。Timing/Easing 绑定、更多节点与 Paint 字段、样式、渐变/效果、组件属性绑定、原型变量、扩展集合、跨文件 Library、DTCG/REST/Plugin 导入导出及 macOS/Windows 打包 GUI 证据仍未完成。"
         }
       ],
-      "evidence": { "automated": [], "manual": [] },
+      "evidence": {
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/variable-service/src/index.test.ts",
+          "packages/editor-runtime/src/variable-operations.test.ts",
+          "packages/figma-interop/src/index.test.ts",
+          "packages/leafer-engine/src/variable-projection.test.ts",
+          "packages/leafer-engine/src/component-projection.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
+          "apps/desktop/src/shared/design-variable-tool.test.ts",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/components/VariablesPanel.test.tsx",
+          "apps/desktop/src/renderer/components/properties/VariableSection.test.tsx"
+        ],
+        "manual": []
+      },
       "references": [
-        "https://help.figma.com/hc/en-us/articles/14506821864087-Overview-of-variables-collections-and-modes"
+        "https://help.figma.com/hc/en-us/articles/14506821864087-Overview-of-variables-collections-and-modes",
+        "https://help.figma.com/hc/en-us/articles/15343816063383-Modes-for-variables",
+        "https://developers.figma.com/docs/rest-api/variables/"
       ]
     },
     {

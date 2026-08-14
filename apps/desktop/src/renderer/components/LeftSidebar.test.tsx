@@ -7,6 +7,19 @@ import { LeftSidebar } from "./LeftSidebar";
 
 function pageActionProps() {
   return {
+    variableActions: {
+      createCollection: vi.fn(() => true),
+      updateCollection: vi.fn(() => true),
+      moveCollection: vi.fn(() => true),
+      deleteCollection: vi.fn(() => true),
+      addMode: vi.fn(() => true),
+      removeMode: vi.fn(() => true),
+      createVariable: vi.fn(() => true),
+      updateVariable: vi.fn(() => true),
+      deleteVariable: vi.fn(() => true),
+      setBinding: vi.fn(() => true),
+      setExplicitMode: vi.fn(() => true),
+    },
     onDeleteAsset: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
     onImportAsset: vi.fn(() => Promise.resolve({ ok: true } as const)),
     onLocateAsset: vi.fn(),

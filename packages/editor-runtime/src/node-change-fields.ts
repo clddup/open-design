@@ -20,6 +20,8 @@ export function nodeChangedFields(
     "blendMode",
     "effects",
     "maskMode",
+    "explicitVariableModes",
+    "boundVariables",
     "properties",
     "extensions",
   ] as const;

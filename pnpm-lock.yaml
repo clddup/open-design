@@ -83,6 +83,9 @@ importers:
       '@opendesign/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@opendesign/variable-service':
+        specifier: workspace:*
+        version: link:../../packages/variable-service
       '@opendesign/workspace-contracts':
         specifier: workspace:*
         version: link:../../packages/workspace-contracts
@@ -255,6 +258,9 @@ importers:
       '@opendesign/text-service':
         specifier: workspace:*
         version: link:../text-service
+      '@opendesign/variable-service':
+        specifier: workspace:*
+        version: link:../variable-service
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -365,6 +371,9 @@ importers:
       '@opendesign/text-service':
         specifier: workspace:*
         version: link:../text-service
+      '@opendesign/variable-service':
+        specifier: workspace:*
+        version: link:../variable-service
       leafer-editor:
         specifier: 2.2.9
         version: 2.2.9(@leafer-ui/interface@2.2.9)(@leafer/interface@2.2.9)
@@ -473,6 +482,19 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+
+  packages/variable-service:
+    dependencies:
+      '@opendesign/design-contracts':
+        specifier: workspace:*
+        version: link:../design-contracts
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(happy-dom@20.11.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.102.0)(tsx@4.23.11)(yaml@2.9.0))
 
   packages/workspace-contracts:
     dependencies:

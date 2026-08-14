@@ -45,6 +45,8 @@ import { synchronizeComponentPropertyDefaults } from "./component-property-defau
 import { applySlotStretchOnInsert } from "./component-slot-operations.js";
 import { OperationError } from "./operation-error.js";
 import { diffVariantSets } from "./variant-set-diff.js";
+import { diffVariables } from "./variable-diff.js";
+import { applyVariableOperation } from "./variable-runtime.js";
 import { deleteVariantSet, putVariantSet } from "./variant-set-runtime.js";
 
 export interface EditorSnapshot {
@@ -813,6 +815,15 @@ function applyOperation(
       return;
     case "delete_variant_set":
       deleteVariantSet(document, command);
+      return;
+    case "put_variable_collection":
+    case "delete_variable_collection":
+    case "move_variable_collection":
+    case "put_variable":
+    case "delete_variable":
+    case "set_explicit_variable_modes":
+    case "set_variable_binding":
+      applyVariableOperation(document, command);
       return;
     case "insert_page":
       insertPage(document, command);
@@ -1681,6 +1692,7 @@ function diffDocuments(
     removedComponentIds,
     componentChanges,
     ...diffVariantSets(before, after),
+    ...diffVariables(before, after),
     changes,
   });
 }
@@ -1697,7 +1709,12 @@ function pageChangedFields(
   before: DesignDocument["pagesById"][string],
   after: DesignDocument["pagesById"][string],
 ): string[] {
-  const fields = ["name", "rootNodeIds", "extensions"] as const;
+  const fields = [
+    "name",
+    "rootNodeIds",
+    "explicitVariableModes",
+    "extensions",
+  ] as const;
   return fields.filter(
     (field) => JSON.stringify(before[field]) !== JSON.stringify(after[field]),
   );

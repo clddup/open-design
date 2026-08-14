@@ -74,10 +74,9 @@ import { isTool, type SidebarTab, type Tool } from "./state/editor";
 import { useDesignAssetActions } from "./use-design-asset-actions";
 import { useComponentActions } from "./use-component-actions";
 import { useImportExportWorkflow } from "./features/import-export/use-import-export-workflow";
-import { useEditorCommandController } from "./features/editor/use-editor-command-controller";
 import { layoutInspectorMode } from "./features/editor/auto-layout-shortcut";
+import { useDocumentCommandControllers } from "./use-document-command-controllers";
 import { useLayerCommandController } from "./features/editor/use-layer-command-controller";
-import { usePageCommandController } from "./features/editor/use-page-command-controller";
 import {
   projectAgentActiveRunId,
   projectAgentRunFileBinding,
@@ -616,21 +615,15 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     });
   }, [requestConversationHistory, scheduleConversationHistory, workspace]);
 
-  const editorCommands = useEditorCommandController({
-    runtime,
-    setEditorError,
-    t,
-    transactionCounter,
-  });
-  const { applyCommands, resizeFrame, updateNode } = editorCommands;
-  const { createPage, deletePage, duplicatePage, renamePage, reorderPage } =
-    usePageCommandController({
-      applyCommands,
+  const { editorCommands, pageActions, variableActions } =
+    useDocumentCommandControllers({
       runtime,
+      selectedNodeId: selectedNode?.id,
       setEditorError,
       t,
       transactionCounter,
     });
+  const { applyCommands, resizeFrame, updateNode } = editorCommands;
 
   const {
     applyBooleanOperation,
@@ -1781,17 +1774,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             activePageId={activePageId}
             document={designDocument}
             onDeleteAsset={deleteImageAsset}
-            onCreatePage={createPage}
-            onDeletePage={deletePage}
-            onDuplicatePage={duplicatePage}
+            onCreatePage={pageActions.createPage}
+            onDeletePage={pageActions.deletePage}
+            onDuplicatePage={pageActions.duplicatePage}
             onImportAsset={importImageAsset}
             onLocateAsset={locateImageAsset}
             onLocateComponent={locateComponentMain}
             onPageChange={activatePage}
             onPlaceAsset={placeImageAsset}
             onPlaceComponent={placeComponentFromAssets}
-            onRenamePage={renamePage}
-            onReorderPage={reorderPage}
+            onRenamePage={pageActions.renamePage}
+            onReorderPage={pageActions.reorderPage}
             onReplaceAsset={replaceImageAsset}
             onDelete={(nodeId) => deleteNodes([nodeId])}
             onReparent={reparentLayers}
@@ -1807,6 +1800,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             }}
             selectedNodeIds={state.selection.nodeIds}
             tab={sidebarTab}
+            variableActions={variableActions}
           />
           <ResizeHandle
             label={t("resize.documentSidebar")}
@@ -1884,6 +1878,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             onTabChange={setUtilityTab}
             properties={
               <PropertiesPanel
+                activePageId={activePageId}
                 arrangement={arrangementMetrics}
                 componentContext={selectedComponentContext}
                 booleanOperationEditable={canChangeSelectedBoolean}
@@ -1899,6 +1894,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 canAddToVariantSet={canAddToVariantSet}
                 canCombineVariants={canCombineVariants}
                 layoutMode={layoutInspectorMode(designDocument, selectedNode)}
+                document={designDocument}
                 node={selectedNode}
                 onArrange={arrangeSelection}
                 onBooleanOperationChange={applyBooleanOperation}
@@ -1944,6 +1940,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                   sourcePath: readonly string[],
                   patch: ComponentOverridePatch,
                 ) => updateSelectedInstanceSource(sourcePath, patch)}
+                onSetVariableBinding={variableActions.setBinding}
+                onSetVariableMode={variableActions.setSelectedNodeMode}
                 onSvgExportSettingsChange={importExport.setSvgExportSettings}
                 onRasterExportSettingsChange={
                   importExport.setRasterExportSettings

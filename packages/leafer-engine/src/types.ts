@@ -238,6 +238,7 @@ export interface LeaferFidelityWarning {
     | "component-resolution-failed"
     | "invalid-path"
     | "missing-image"
+    | "variable-resolution-failed"
     | "unsupported-color-alpha"
     | "unsupported-node";
   message: string;

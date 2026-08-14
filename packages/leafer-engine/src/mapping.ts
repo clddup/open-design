@@ -5,7 +5,6 @@ import type {
   Effect,
   ImageNode,
   Paint,
-  Transform,
 } from "@opendesign/design-contracts";
 import { resolveLineEndpointPoint } from "@opendesign/design-contracts";
 import {
@@ -13,57 +12,33 @@ import {
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import { resolveImagePlacement } from "@opendesign/image-service";
+import { materializeVariableBindings } from "@opendesign/variable-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
 import {
   resolvePathPropertiesData,
   vectorNetworkHasFillRegion,
 } from "@opendesign/geometry-service/editable-vector";
+import type {
+  BooleanEditProjectionOptions,
+  BooleanProjectionOptions,
+  LeaferElementSpec,
+  LeaferElementTag,
+  LeaferSceneProjection,
+} from "./projection-types.js";
 import type { LeaferBooleanEditScope, LeaferFidelityWarning } from "./types.js";
+import { pageUsesVariables } from "./variable-projection-support.js";
+
+export type {
+  BooleanEditProjectionOptions,
+  BooleanProjectionOptions,
+  LeaferElementSpec,
+  LeaferElementTag,
+  LeaferSceneProjection,
+} from "./projection-types.js";
 
 export const BOOLEAN_RESULT_ELEMENT_PREFIX =
   "__opendesign_boolean_result__:" as const;
 export const LEAFER_EDITOR_SELECTION_COLOR = "#4f7fff" as const;
-export type LeaferElementTag =
-  | "Arrow"
-  | "Ellipse"
-  | "Frame"
-  | "Group"
-  | "Image"
-  | "Path"
-  | "Polygon"
-  | "Rect"
-  | "Star"
-  | "Text";
-
-export interface LeaferElementSpec {
-  childIds: string[];
-  data: Record<string, unknown>;
-  id: string;
-  kind: DesignNode["kind"];
-  parentId: string | null;
-  tag: LeaferElementTag;
-  transform: Transform;
-}
-
-export interface LeaferSceneProjection {
-  affectedNodeIds?: ReadonlySet<string>;
-  elementsById: ReadonlyMap<string, LeaferElementSpec>;
-  pageId: string;
-  revision: number;
-  rootIds: string[];
-  warnings: LeaferFidelityWarning[];
-}
-
-export interface BooleanProjectionOptions {
-  affectedBooleanNodeIds?: ReadonlySet<string>;
-  removedBooleanNodeIds?: ReadonlySet<string>;
-}
-
-export interface BooleanEditProjectionOptions {
-  affectedBooleanNodeIds?: ReadonlySet<string>;
-  forceAffected?: boolean;
-}
-
 export function projectDesignPage(
   document: DesignDocument,
   pageId: string,
@@ -86,7 +61,18 @@ export function projectDesignPage(
       projectedNodesById[resolved.projectionId] = resolved.node;
     }
   }
-  const projectionDocument = { ...document, nodesById: projectedNodesById };
+  const variableProjection = materializeVariableBindings({
+    ...document,
+    nodesById: projectedNodesById,
+  });
+  const projectionDocument = variableProjection.document;
+  warnings.push(
+    ...variableProjection.issues.map((issue) => ({
+      code: "variable-resolution-failed" as const,
+      message: issue.message,
+      nodeId: issue.path.match(/^\/nodesById\/([^/]+)/)?.[1] ?? "document",
+    })),
+  );
 
   const visit = (nodeId: string) => {
     if (visited.has(nodeId)) return;
@@ -110,7 +96,7 @@ export function projectDesignPage(
       for (const resolved of resolution.nodes) {
         const spec = toElementSpec(
           projectionDocument,
-          resolved.node,
+          projectionDocument.nodesById[resolved.projectionId] ?? resolved.node,
           warnings,
           {
             nodeId: resolved.editableNodeId ?? node.id,
@@ -122,7 +108,11 @@ export function projectDesignPage(
       }
       return;
     }
-    const spec = toElementSpec(projectionDocument, node, warnings);
+    const spec = toElementSpec(
+      projectionDocument,
+      projectionDocument.nodesById[node.id] ?? node,
+      warnings,
+    );
     elementsById.set(node.id, spec);
     node.childIds.forEach(visit);
   };
@@ -160,7 +150,8 @@ export function projectDesignPageIncrementally(
     ) ||
     [...collectPageNodeIds(document, page.rootNodeIds)].some(
       (nodeId) => document.nodesById[nodeId]?.kind === "instance",
-    )
+    ) ||
+    pageUsesVariables(document, page.rootNodeIds)
   ) {
     return diffProjectedScene(previous, projectDesignPage(document, pageId));
   }

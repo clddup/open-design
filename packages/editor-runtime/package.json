@@ -15,7 +15,8 @@
     "@opendesign/geometry-service": "workspace:*",
     "@opendesign/import-export-service": "workspace:*",
     "@opendesign/layout-service": "workspace:*",
-    "@opendesign/text-service": "workspace:*"
+    "@opendesign/text-service": "workspace:*",
+    "@opendesign/variable-service": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",

@@ -1,10 +1,12 @@
 import type { AppLocale } from "./locale";
 import { componentMessages } from "./component-messages";
 import { layoutMessages } from "./layout-messages";
+import { variableMessages } from "./variable-messages";
 
 export const enMessages = {
   ...layoutMessages.en,
   ...componentMessages.en,
+  ...variableMessages.en,
   "common.cancel": "Cancel",
   "common.create": "Create",
   "common.creating": "Creating",
@@ -912,6 +914,7 @@ export type MessageParameters = Readonly<Record<string, string | number>>;
 const zhCNMessages = {
   ...layoutMessages["zh-CN"],
   ...componentMessages["zh-CN"],
+  ...variableMessages["zh-CN"],
   "common.cancel": "取消",
   "common.create": "创建",
   "common.creating": "正在创建",
