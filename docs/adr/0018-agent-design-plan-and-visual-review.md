@@ -60,7 +60,7 @@ Renderer 只在收到 Main 对同一 tool call 的 `accepted` 结果后，才把
 
 Review 前置条件失败使用稳定 `design_workflow.material_write_required / capture_required / capture_revision_invalid / delivery_verification_required / delivery_structure_incomplete` 恢复指令。模型不得原样重试同一 review。普通可恢复门禁反馈进入 journal/日志但默认不堆叠为右侧红色失败卡；Run 最终无法恢复时，终态和诊断继续对用户可见。
 
-Renderer 与 Main 共同消费一个 workflow failure classifier；同一错误的恢复阶段、是否为普通可恢复反馈和 Timeline 呈现不得再由多套正则分别判断。`component_strategy_incomplete` 明确进入 component repair：保留现有 Plan 和稳定 ID，重新 inspection 后只修复对应 Main/Instance/ordinary binding，不得误走 Plan amendment。组件工具的 `create-component` 统一使用 `rootNodeId` 表示被提升的既有 Frame/Group，并要求精确的 `action / label / pageId / rootNodeId / componentId / name`；action-specific 校验失败必须向模型返回缺失字段、意外字段与完整最小调用形状，不能只返回顶层 schema mismatch。
+Renderer 与 Main 共同消费一个 workflow failure classifier；同一错误的恢复阶段、是否为普通可恢复反馈和 Timeline 呈现不得再由多套正则分别判断。历史 `component_strategy_incomplete` 仍可从 journal 读取并显示正确恢复阶段，但 ADR-0072 已停止在新最终 capture 中逐节点抛出该错误；当前检查一次返回 `blocking:false` 组件质量报告。组件工具的 `create-component` 统一使用 `rootNodeId` 表示被提升的既有 Frame/Group，并要求精确的 `action / label / pageId / rootNodeId / componentId / name`；action-specific 校验失败必须向模型返回缺失字段、意外字段与完整最小调用形状，不能只返回顶层 schema mismatch。
 
 Timeline 把模型文字与可信产品状态分开。一个 Run 中后续仍发生工具调用的中间 assistant prose 视为内部过程，不作为用户可见进度；“真实设计步骤”只来自已提交 semantic step revision。组件定义、Variables 与其他可能不改变像素的文档元数据 revision 使用各自准确标题，不得显示成“画布已更新”；最终模型回复仍可见。
 

@@ -21,6 +21,7 @@ import type {
   TrustedToolResult,
 } from "./index.js";
 import { PiDesignFailureRecovery } from "./pi-design-failure-recovery.js";
+import { PiToolProgressCircuit } from "./pi-tool-progress-circuit.js";
 import {
   createTrustedToolContext,
   projectToolResultForModel,
@@ -116,6 +117,7 @@ export class OpenDesignPiToolAdapter {
   readonly #approvalPort: ApprovalPort | undefined;
   readonly #definitions = new Map<string, AgentToolDefinition>();
   readonly #designFailureRecovery = new PiDesignFailureRecovery();
+  readonly #progressCircuit = new PiToolProgressCircuit();
   readonly #failures = new Map<string, TrustedToolFailure>();
   readonly #lifecycle: PiToolLifecyclePort;
   readonly #maxToolCalls: number;
@@ -244,11 +246,14 @@ export class OpenDesignPiToolAdapter {
       const definition = this.#definitions.get(active.toolName);
       const failure =
         this.#failures.get(event.toolCallId) ??
-        (definition &&
-        definition.explainInvalidInput &&
-        !definition.validateInput(active.input)
-          ? invalidInputFailure(definition, active.input)
-          : inferPiToolFailure(active, event.result));
+        this.#recordProgressFailure(
+          active.toolName,
+          definition &&
+            definition.explainInvalidInput &&
+            !definition.validateInput(active.input)
+            ? invalidInputFailure(definition, active.input)
+            : inferPiToolFailure(active, event.result),
+        );
       return {
         status: "failed",
         toolCallId: event.toolCallId,
@@ -346,9 +351,16 @@ export class OpenDesignPiToolAdapter {
       );
     }
     if (!definition.validateInput(context.args)) {
-      const schemaFailure = invalidInputFailure(definition, context.args);
+      const schemaFailure = this.#recordProgressFailure(
+        active.toolName,
+        invalidInputFailure(definition, context.args),
+      );
       this.#failures.set(active.toolCallId, schemaFailure);
-      return { block: true, reason: modelFailureText(schemaFailure) };
+      return {
+        block: true,
+        reason: modelFailureText(schemaFailure),
+        ...(schemaFailure.runTerminal ? { terminate: true } : {}),
+      };
     }
     if (
       this.#designFailureRecovery.inspectionRequiredFailure &&
@@ -356,7 +368,7 @@ export class OpenDesignPiToolAdapter {
       active.toolName !== "opendesign_inspect_document"
     ) {
       const prior = this.#designFailureRecovery.inspectionRequiredFailure;
-      const failure: TrustedToolFailure = {
+      const failure = this.#recordProgressFailure(active.toolName, {
         ...prior,
         code: "design_inspection_required",
         message:
@@ -368,16 +380,20 @@ export class OpenDesignPiToolAdapter {
               details: { ...prior.details, retrySuppressed: true },
             }
           : {}),
-      };
+      });
       this.#failures.set(active.toolCallId, failure);
-      return { block: true, reason: modelFailureText(failure) };
+      return {
+        block: true,
+        reason: modelFailureText(failure),
+        ...(failure.runTerminal ? { terminate: true } : {}),
+      };
     }
     const blockedFailure = this.#designFailureRecovery.blockedFailure(
       active.toolName,
       context.args,
     );
     if (blockedFailure) {
-      const failure: TrustedToolFailure = {
+      const failure = this.#recordProgressFailure(active.toolName, {
         ...blockedFailure,
         code: "repeated_tool_failure",
         message:
@@ -392,9 +408,13 @@ export class OpenDesignPiToolAdapter {
               },
             }
           : {}),
-      };
+      });
       this.#failures.set(active.toolCallId, failure);
-      return { block: true, reason: modelFailureText(failure) };
+      return {
+        block: true,
+        reason: modelFailureText(failure),
+        ...(failure.runTerminal ? { terminate: true } : {}),
+      };
     }
     if (this.#toolExecutor === undefined) {
       return this.#block(
@@ -566,6 +586,10 @@ export class OpenDesignPiToolAdapter {
       }
       const nextRevision = revision?.revision ?? observedRevision;
       if (nextRevision !== undefined) this.#currentRevision = nextRevision;
+      this.#progressCircuit.recordSuccess(
+        definition.name,
+        revision !== undefined,
+      );
       if (definition.name === "opendesign_inspect_document") {
         this.#designFailureRecovery.recordInspection();
       } else if (definition.risk === "design_write" && revision !== undefined) {
@@ -611,13 +635,17 @@ export class OpenDesignPiToolAdapter {
               retryable: false,
               recoverable: true,
             };
-      const failure = this.#designFailureRecovery.recordFailure({
+      const recoveredFailure = this.#designFailureRecovery.recordFailure({
         toolCallId,
         toolName: definition.name,
         input: parameters,
         failure: baseFailure,
         designWrite: definition.risk === "design_write",
       });
+      const failure = this.#recordProgressFailure(
+        definition.name,
+        recoveredFailure,
+      );
       if (failure.runTerminal) {
         this.#forcedStopReason = "error";
         this.#forcedError = failure;
@@ -644,6 +672,18 @@ export class OpenDesignPiToolAdapter {
       reason: message,
       ...(terminate ? { terminate } : {}),
     };
+  }
+
+  #recordProgressFailure(
+    toolName: string,
+    failure: TrustedToolFailure,
+  ): TrustedToolFailure {
+    const bounded = this.#progressCircuit.recordFailure(toolName, failure);
+    if (bounded.runTerminal) {
+      this.#forcedStopReason = "error";
+      this.#forcedError = bounded;
+    }
+    return bounded;
   }
 
   #requireActive(toolCallId: string): ActiveToolCall {

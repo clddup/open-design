@@ -787,6 +787,12 @@ export const enMessages = {
   "agent.canvasToolLimitReached": "Canvas operation reached its time limit",
   "agent.canvasToolTotalTimeoutDetail":
     "The canvas operation reached its total execution limit. Retry it as smaller design steps.",
+  "agent.toolProtocolNoProgress": "Model cannot execute this design tool",
+  "agent.toolProtocolNoProgressDetail":
+    "The model repeatedly produced invalid parameters for the same tool without changing the canvas. OpenDesign stopped the retry loop; committed design changes were preserved.",
+  "agent.designRecoveryNoProgress": "Design stopped making progress",
+  "agent.designRecoveryNoProgressDetail":
+    "Several recovery attempts completed without a new design revision. OpenDesign stopped the invisible loop; committed design changes were preserved.",
   "agent.timeoutFirstResponse": "Model did not start responding",
   "agent.timeoutFirstResponseDetail":
     "No Provider response arrived within {{duration}}.",
@@ -1690,6 +1696,12 @@ const zhCNMessages = {
   "agent.canvasToolLimitReached": "画布操作达到总时限",
   "agent.canvasToolTotalTimeoutDetail":
     "画布操作达到总执行时限，请拆成更小的设计步骤后重试。",
+  "agent.toolProtocolNoProgress": "当前模型无法执行这个设计工具",
+  "agent.toolProtocolNoProgressDetail":
+    "模型连续生成了不合法的工具参数，画布没有变化。OpenDesign 已停止重试循环，之前提交的设计仍然保留。",
+  "agent.designRecoveryNoProgress": "设计已停止推进",
+  "agent.designRecoveryNoProgressDetail":
+    "多次恢复操作后仍未产生新的设计 revision。OpenDesign 已停止不可见循环，之前提交的设计仍然保留。",
   "agent.timeoutFirstResponse": "等待模型首个响应超时",
   "agent.timeoutFirstResponseDetail":
     "在 {{duration}} 内没有收到 Provider 的首个响应。",

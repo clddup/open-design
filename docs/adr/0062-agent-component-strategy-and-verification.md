@@ -1,6 +1,7 @@
 # ADR-0062：Agent 通用组件决策声明与权威结构验证
 
 - 状态：已接受
+- 更新：2026-08-15；最终组件策略偏差的阻塞语义已由 ADR-0072 取代，组件判断与实际 Component/Instance 能力继续有效
 - 日期：2026-08-14
 - 文档协议：不变（`DesignDocument 1.20.0`）
 - Component Service：不变（v1）
@@ -37,14 +38,14 @@ LLM 从当前设计意图判断候选，依据是同一或跨 target 的复用�
 
 每个 decision、Component、Main、Instance 和 ordinary occurrence 使用稳定 ID。Main 必须不晚于其 Instances 所在 target；同一节点不能同时承担两个候选身份，target artboard 自身不能冒充语义对象。
 
-### 宿主验证模型自己的声明
+### 宿主检查模型自己的声明
 
 Main 不凭节点名称或像素相似度猜测组件。最终 refined capture 仍要求 exact-revision inspection，并按当前 target 验证：
 
 - Component Main 节点位于交付 artboard 内，是 Frame/Group，且 `componentsById[componentId].rootNodeId` 精确绑定该节点；
 - Instance 节点位于交付 artboard 内，kind 为 Instance，并继续引用声明的 componentId；复制出来的普通 Group/Frame 不能通过；
 - ordinary 语义对象位于交付 artboard 内，并有独立 Frame/Group 根；不要求或制造 Component；
-- 任一声明缺失、脱链、扁平化或越出 target 返回 `design_workflow.component_strategy_incomplete`，不得推进 verified ledger。
+- 声明缺失、脱链、扁平化或越出 target 时一次返回有界 `componentStrategy` 质量报告；按 ADR-0072，该报告为 `blocking:false`，不再阻塞已经通过 Frame/region/material/layout/revision 与视觉审查的交付。
 
 Inspection parser 只消费 Renderer 已按工作集裁剪的 `componentsById` 和 Instance `componentId`，不扩大 Page/Design File 读写作用域。所有组件写仍必须走 `opendesign_manage_components`、现有权限和唯一 EditorRuntime 事务入口。
 
@@ -54,7 +55,7 @@ v2/v3 计划继续用于历史 journal、恢复和旧 fixture，不被追溯强�
 
 ## 结果与限制
 
-- 组件化从提示词偏好变成“LLM 决策 → 稳定计划 → typed component tool → exact-revision 结构验收”的可信闭环。
+- 组件化从提示词偏好变成“LLM 决策 → 稳定计划 → typed component tool → exact-revision 结构报告”的可信质量链；是否实际存在 Main/Instance 始终来自文档事实，不从模型文字推断。
 - 规则适用于 UI、Logo、品牌、海报、演示图形和后续设计类型，不绑定对象类别。
 - 当前门禁验证已声明候选，不声称已经能确定性发现模型故意遗漏的重复结构；结构相似度诊断与 design critic 仍是后续质量轨。
 - Boolean/Text/Instance-swap Component Properties 已由 [ADR-0063](0063-figma-compatible-component-properties.md) 完成，Component Set/VARIANT 已由 [ADR-0064](0064-figma-compatible-component-sets-and-variants.md) 完成，Slot 已由 [ADR-0067](0067-figma-compatible-component-slots.md) 完成，Variables Core 已由 [ADR-0069](0069-figma-compatible-variables-core.md) 完成，均不塞入 Plan v4；更多 binding 与跨文件 Library 继续按 roadmap 独立演进。
@@ -62,6 +63,6 @@ v2/v3 计划继续用于历史 journal、恢复和旧 fixture，不被追溯强�
 ## 验证
 
 - Tool schema：v4 component/ordinary 正例、重复 occurrence、Instance 早于 Main、artboard 冒充对象和 single-raster 反例；v2/v3 历史输入继续读取。
-- Inspection：解析受限 Component/Instance 身份；有效 Main、linked Instance、ordinary Group 通过；复制 Group、未绑定 Main、扁平 ordinary 节点失败。
+- Inspection：解析受限 Component/Instance 身份；有效 Main、linked Instance、ordinary Group 返回零 issue；复制 Group、未绑定 Main、扁平 ordinary 节点在同一非阻塞报告中全部列出。
 - Amendment：ordinary 保留节点升级 Component 后 affected target 回到 drafted；删除材料语义节点或替换已声明 componentId 被拒绝。
 - 既有 Component Service 的 Main 同步、override、nested swap、Detach、save/reopen、undo/redo、Canvas 和导出回归继续作为底层证据。

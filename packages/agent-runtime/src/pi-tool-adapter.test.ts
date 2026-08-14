@@ -233,6 +233,63 @@ describe("OpenDesign Pi tool adapter", () => {
     );
   });
 
+  it("executes ordered tool calls from one assistant turn against advancing revisions", async () => {
+    const revisions: number[] = [];
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        {
+          blocks: [
+            {
+              id: "plan_like_call",
+              type: "tool_call",
+              toolCallId: "plan_like_call_1",
+              name: moveTool.name,
+              input: { dx: 1 },
+            },
+            {
+              id: "draft_like_call",
+              type: "tool_call",
+              toolCallId: "draft_like_call_1",
+              name: moveTool.name,
+              input: { dx: 2 },
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        { blocks: [{ id: "done", type: "text", text: "Done" }] },
+      ]),
+    );
+    const result = await runPiToolLoop({
+      gateway,
+      definitions: [moveTool],
+      toolExecutor: {
+        async *execute(_call, context): AsyncIterable<ToolExecutionEvent> {
+          revisions.push(context.revision);
+          await Promise.resolve();
+          yield {
+            type: "completed",
+            result: {
+              content: { ok: true },
+              designRevision: {
+                previousRevision: context.revision,
+                revision: context.revision + 1,
+                transactionId: `transaction_${context.revision + 1}`,
+              },
+            },
+          };
+        },
+      },
+    });
+
+    expect(gateway.requests).toHaveLength(2);
+    expect(revisions).toEqual([12, 13]);
+    expect(
+      result.events
+        .filter((event) => event.type === "tool.completed")
+        .map((event) => event.revision),
+    ).toEqual([13, 14]);
+  });
+
   it("returns custom validation failures to the model without executing", async () => {
     let executions = 0;
     const result = await runPiToolLoop({
@@ -887,6 +944,87 @@ describe("OpenDesign Pi tool adapter", () => {
       code: "invalid_tool_input",
       message: 'Invalid move action. Expected exact shape: {"dx":<number>}.',
       recoverable: true,
+    });
+  });
+
+  it("terminates different malformed calls to one tool after four attempts without a revision", async () => {
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        {
+          blocks: [
+            {
+              id: "invalid_move_1",
+              type: "tool_call",
+              toolCallId: "invalid_move_call_1",
+              name: moveTool.name,
+              input: { dx: "one" },
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        {
+          blocks: [
+            {
+              id: "invalid_move_2",
+              type: "tool_call",
+              toolCallId: "invalid_move_call_2",
+              name: moveTool.name,
+              input: { dx: "two" },
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        {
+          blocks: [
+            {
+              id: "invalid_move_3",
+              type: "tool_call",
+              toolCallId: "invalid_move_call_3",
+              name: moveTool.name,
+              input: { dx: "three" },
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        {
+          blocks: [
+            {
+              id: "invalid_move_4",
+              type: "tool_call",
+              toolCallId: "invalid_move_call_4",
+              name: moveTool.name,
+              input: { dx: "four" },
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        { blocks: [{ id: "false_done", type: "text", text: "Done" }] },
+      ]),
+    );
+    const result = await runPiToolLoop({
+      gateway,
+      definitions: [moveTool],
+      toolExecutor: neverToolExecutor(),
+    });
+
+    expect(gateway.requests).toHaveLength(4);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "tool.failed",
+        toolCallId: "invalid_move_call_4",
+        code: "tool_protocol_no_progress",
+        recoverable: false,
+      }),
+    );
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "agent.error",
+        code: "tool_protocol_no_progress",
+      }),
+    );
+    expect(result.events.at(-1)).toMatchObject({
+      type: "run.completed",
+      stopReason: "error",
     });
   });
 

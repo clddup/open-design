@@ -145,10 +145,14 @@ export function runFailurePresentation(
     : failure.code === "context_budget_exceeded" ||
         failure.code === "model_context_incompatible"
       ? t("agent.contextLimit")
-      : failure.code === "provider_error" ||
-          failure.code === "provider_request_failed"
-        ? t("agent.providerConnectionInterrupted")
-        : t("agent.taskFailed");
+      : failure.code === "tool_protocol_no_progress"
+        ? t("agent.toolProtocolNoProgress")
+        : failure.code === "design_recovery_no_progress"
+          ? t("agent.designRecoveryNoProgress")
+          : failure.code === "provider_error" ||
+              failure.code === "provider_request_failed"
+            ? t("agent.providerConnectionInterrupted")
+            : t("agent.taskFailed");
   const primary = timeout
     ? timeout.phase === "first-response"
       ? t("agent.timeoutFirstResponseDetail", {
@@ -161,7 +165,11 @@ export function runFailurePresentation(
         : t("agent.timeoutTotalDetail", {
             duration: formatTimeoutThreshold(timeout.thresholdMs, locale),
           })
-    : friendlyAgentError(failure.message || fallback, t);
+    : failure.code === "tool_protocol_no_progress"
+      ? t("agent.toolProtocolNoProgressDetail")
+      : failure.code === "design_recovery_no_progress"
+        ? t("agent.designRecoveryNoProgressDetail")
+        : friendlyAgentError(failure.message || fallback, t);
   const correlation = [
     failure.modelRequestId
       ? t("agent.modelRequestId", { id: failure.modelRequestId })
@@ -193,15 +201,19 @@ export function structuredToolFailureDetail(
   const friendly =
     code === "renderer_circuit_open"
       ? t("agent.canvasCircuitOpenDetail")
-      : code === "renderer_first_response_timeout"
-        ? t("agent.canvasToolFirstResponseTimeoutDetail")
-        : code === "renderer_idle_timeout"
-          ? t("agent.canvasToolIdleTimeoutDetail")
-          : code === "renderer_capture_timeout"
-            ? t("agent.canvasToolIdleTimeoutDetail")
-            : code === "renderer_total_timeout"
-              ? t("agent.canvasToolTotalTimeoutDetail")
-              : friendlyAgentError(message, t);
+      : code === "tool_protocol_no_progress"
+        ? t("agent.toolProtocolNoProgressDetail")
+        : code === "design_recovery_no_progress"
+          ? t("agent.designRecoveryNoProgressDetail")
+          : code === "renderer_first_response_timeout"
+            ? t("agent.canvasToolFirstResponseTimeoutDetail")
+            : code === "renderer_idle_timeout"
+              ? t("agent.canvasToolIdleTimeoutDetail")
+              : code === "renderer_capture_timeout"
+                ? t("agent.canvasToolIdleTimeoutDetail")
+                : code === "renderer_total_timeout"
+                  ? t("agent.canvasToolTotalTimeoutDetail")
+                  : friendlyAgentError(message, t);
   const issue = details?.issues[0];
   if (!issue) return friendly;
   const target = [
@@ -233,6 +245,12 @@ export function isRoutineRecoverableToolFailure(
 }
 
 export function toolFailureTitle(code: string, t: Translate): string {
+  if (code === "tool_protocol_no_progress") {
+    return t("agent.toolProtocolNoProgress");
+  }
+  if (code === "design_recovery_no_progress") {
+    return t("agent.designRecoveryNoProgress");
+  }
   if (code === "renderer_circuit_open") {
     return t("agent.canvasCircuitOpen");
   }

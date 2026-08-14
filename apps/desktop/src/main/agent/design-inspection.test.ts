@@ -123,54 +123,62 @@ describe("Agent design inspection component strategy", () => {
     );
   });
 
-  it("verifies declared Main, Instance, and ordinary semantic roots", () => {
+  it("reports no component-strategy issues for declared Main, Instance, and ordinary semantic roots", () => {
     const inspection = completeInspection();
 
-    expect(() =>
+    expect(
       assertDeliveryTargetStructure(inspection, targetState(homeTarget), plan),
-    ).not.toThrow();
-    expect(() =>
+    ).toMatchObject({ issueCount: 0, blocking: false });
+    expect(
       assertDeliveryTargetStructure(
         inspection,
         targetState(profileTarget),
         plan,
       ),
-    ).not.toThrow();
+    ).toMatchObject({ issueCount: 0, blocking: false });
   });
 
-  it("rejects copied layers and unbound groups that contradict the declared strategy", () => {
+  it("reports every copied layer and unbound group in one non-blocking quality result", () => {
     const copiedInstance = completeInspection();
     copiedInstance.nodesById.set("navigation_profile_instance", {
       ...requiredNode(copiedInstance, "navigation_profile_instance"),
       kind: "group",
       componentId: null,
     });
-    expect(() =>
+    expect(
       assertDeliveryTargetStructure(
         copiedInstance,
         targetState(profileTarget),
         plan,
       ),
-    ).toThrow(/component_strategy_incomplete.*must remain linked/i);
+    ).toMatchObject({
+      issueCount: 1,
+      issues: [
+        {
+          code: "component-instance-unlinked",
+          nodeId: "navigation_profile_instance",
+        },
+      ],
+      blocking: false,
+    });
 
     const unboundMain = completeInspection();
     unboundMain.componentsById.clear();
-    expect(() =>
-      assertDeliveryTargetStructure(unboundMain, targetState(homeTarget), plan),
-    ).toThrow(/component_strategy_incomplete.*Component Main/i);
-
-    const flatOrdinary = completeInspection();
-    flatOrdinary.nodesById.set("home_hero_group", {
-      ...requiredNode(flatOrdinary, "home_hero_group"),
+    unboundMain.nodesById.set("home_hero_group", {
+      ...requiredNode(unboundMain, "home_hero_group"),
       kind: "rectangle",
     });
-    expect(() =>
-      assertDeliveryTargetStructure(
-        flatOrdinary,
-        targetState(homeTarget),
-        plan,
-      ),
-    ).toThrow(/component_strategy_incomplete.*named Frame or Group/i);
+    expect(
+      assertDeliveryTargetStructure(unboundMain, targetState(homeTarget), plan),
+    ).toMatchObject({
+      checkedOccurrenceCount: 2,
+      issueCount: 2,
+      issues: [
+        { code: "component-main-unbound", nodeId: "navigation_main" },
+        { code: "ordinary-root-invalid", nodeId: "home_hero_group" },
+      ],
+      blocking: false,
+    });
   });
 });
 

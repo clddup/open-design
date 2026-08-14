@@ -60,6 +60,12 @@ describe("OpenDesign Agent system prompt", () => {
       "does not unlock opendesign_record_visual_review",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "one assistant turn may emit opendesign_define_design_plan followed by the first opendesign_apply_transaction",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "smallest meaningful visible region or vertical slice",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "Default to outputMode editable-composition",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

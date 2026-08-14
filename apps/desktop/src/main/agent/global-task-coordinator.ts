@@ -581,6 +581,8 @@ export class GlobalTaskCoordinator {
       layoutQuality,
     );
     const captureSequence = target.captureCount + 1;
+    let componentStrategy:
+      ReturnType<typeof assertDeliveryTargetStructure> | undefined;
     if (target.delivery.status === "refined") {
       const inspection = this.#inspectionsByRunId.get(context.runId);
       if (!inspection || inspection.revision !== observedRevision) {
@@ -588,7 +590,11 @@ export class GlobalTaskCoordinator {
           "design_workflow.delivery_verification_required: Final delivery verification requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
         );
       }
-      assertDeliveryTargetStructure(inspection, target, state.plan);
+      componentStrategy = assertDeliveryTargetStructure(
+        inspection,
+        target,
+        state.plan,
+      );
       if (layoutQuality.errorCount > 0) {
         const failures = layoutQuality.issues
           .filter((issue) => issue.severity === "error")
@@ -618,6 +624,10 @@ export class GlobalTaskCoordinator {
           : "complete-delivery",
         reviewEligible: false,
         verified: true,
+        ...(componentStrategy === undefined ||
+        componentStrategy.issueCount === 0
+          ? {}
+          : { componentStrategy }),
       };
     }
     if (target.delivery.status === "reviewed") {

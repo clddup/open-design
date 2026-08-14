@@ -153,7 +153,7 @@ export function assertDeliveryTargetStructure(
   inspection: InspectedHierarchy,
   target: DesignDeliveryTargetState,
   plan: DesignPlanToolInput,
-): void {
+): DesignComponentStrategyReport {
   const artboardId = target.planned.artboard.frameId;
   const artboard = inspection.nodesById.get(artboardId);
   if (
@@ -171,8 +171,7 @@ export function assertDeliveryTargetStructure(
         `design_workflow.delivery_structure_incomplete: Existing delivery artboard ${artboardId} has no real editable content; add or refine material layers inside the artboard before capturing again`,
       );
     }
-    assertDeclaredComponentStrategy(inspection, target, plan);
-    return;
+    return inspectDeclaredComponentStrategy(inspection, target, plan);
   }
   for (const region of target.planned.composition.regions) {
     const regionNode = inspection.nodesById.get(region.nodeId);
@@ -191,20 +190,43 @@ export function assertDeliveryTargetStructure(
       );
     }
   }
-  assertDeclaredComponentStrategy(inspection, target, plan);
+  return inspectDeclaredComponentStrategy(inspection, target, plan);
 }
 
-function assertDeclaredComponentStrategy(
+export type DesignComponentStrategyIssue = {
+  code:
+    | "semantic-root-missing"
+    | "ordinary-root-invalid"
+    | "component-main-unbound"
+    | "component-instance-unlinked";
+  decisionId: string;
+  nodeId: string;
+  componentId?: string;
+  message: string;
+};
+
+export type DesignComponentStrategyReport = {
+  version: 1;
+  checkedOccurrenceCount: number;
+  issueCount: number;
+  issues: DesignComponentStrategyIssue[];
+  blocking: false;
+};
+
+const MAX_COMPONENT_STRATEGY_ISSUES = 64;
+
+export function inspectDeclaredComponentStrategy(
   inspection: InspectedHierarchy,
   target: DesignDeliveryTargetState,
   plan: DesignPlanToolInput,
-): void {
+): DesignComponentStrategyReport {
   const strategy = designPlanComponentStrategy(plan);
-  if (!strategy) return;
+  if (!strategy) return componentStrategyReport(0, []);
   const occurrences = componentStrategyOccurrencesForTarget(
     strategy,
     target.delivery.targetId,
   );
+  const issues: DesignComponentStrategyIssue[] = [];
   for (const occurrence of occurrences) {
     const node = inspection.nodesById.get(occurrence.nodeId);
     if (
@@ -215,15 +237,25 @@ function assertDeclaredComponentStrategy(
         target.planned.artboard.frameId,
       )
     ) {
-      throw new Error(
-        `design_workflow.component_strategy_incomplete: Declared semantic object ${occurrence.decisionId} requires node ${occurrence.nodeId} inside delivery artboard ${target.planned.artboard.frameId}; inspect the live hierarchy and implement the declared component decision before capturing again`,
-      );
+      issues.push({
+        code: "semantic-root-missing",
+        decisionId: occurrence.decisionId,
+        nodeId: occurrence.nodeId,
+        ...(occurrence.decision === "ordinary"
+          ? {}
+          : { componentId: occurrence.componentId }),
+        message: `Declared semantic object ${occurrence.decisionId} requires node ${occurrence.nodeId} inside delivery artboard ${target.planned.artboard.frameId}.`,
+      });
+      continue;
     }
     if (occurrence.decision === "ordinary") {
       if (node.kind !== "frame" && node.kind !== "group") {
-        throw new Error(
-          `design_workflow.component_strategy_incomplete: Ordinary semantic object ${occurrence.decisionId} must use a named Frame or Group root at ${occurrence.nodeId}; group its meaningful layers without manufacturing a Component, then inspect and capture again`,
-        );
+        issues.push({
+          code: "ordinary-root-invalid",
+          decisionId: occurrence.decisionId,
+          nodeId: occurrence.nodeId,
+          message: `Ordinary semantic object ${occurrence.decisionId} should use a named Frame or Group root at ${occurrence.nodeId}.`,
+        });
       }
       continue;
     }
@@ -233,9 +265,13 @@ function assertDeclaredComponentStrategy(
         inspection.componentsById.get(occurrence.componentId)?.rootNodeId !==
           occurrence.nodeId
       ) {
-        throw new Error(
-          `design_workflow.component_strategy_incomplete: Declared Component Main ${occurrence.componentId} must bind Frame/Group ${occurrence.nodeId} on Page ${target.planned.pageId}; call opendesign_manage_components action=create-component with rootNodeId=${occurrence.nodeId}, preserve the current Plan, inspect the current document, and capture again`,
-        );
+        issues.push({
+          code: "component-main-unbound",
+          decisionId: occurrence.decisionId,
+          nodeId: occurrence.nodeId,
+          componentId: occurrence.componentId,
+          message: `Declared Component Main ${occurrence.componentId} should bind Frame/Group ${occurrence.nodeId} on Page ${target.planned.pageId}.`,
+        });
       }
       continue;
     }
@@ -244,11 +280,29 @@ function assertDeclaredComponentStrategy(
       node.componentId !== occurrence.componentId ||
       !inspection.componentsById.has(occurrence.componentId)
     ) {
-      throw new Error(
-        `design_workflow.component_strategy_incomplete: Declared instance ${occurrence.nodeId} must remain linked to Component ${occurrence.componentId}; place the planned Instance with opendesign_manage_components instead of copying primitive layers, then inspect and capture again`,
-      );
+      issues.push({
+        code: "component-instance-unlinked",
+        decisionId: occurrence.decisionId,
+        nodeId: occurrence.nodeId,
+        componentId: occurrence.componentId,
+        message: `Declared instance ${occurrence.nodeId} should remain linked to Component ${occurrence.componentId}.`,
+      });
     }
   }
+  return componentStrategyReport(occurrences.length, issues);
+}
+
+function componentStrategyReport(
+  checkedOccurrenceCount: number,
+  issues: DesignComponentStrategyIssue[],
+): DesignComponentStrategyReport {
+  return {
+    version: 1,
+    checkedOccurrenceCount,
+    issueCount: issues.length,
+    issues: issues.slice(0, MAX_COMPONENT_STRATEGY_ISSUES),
+    blocking: false,
+  };
 }
 
 function inspectedParentChainReaches(
