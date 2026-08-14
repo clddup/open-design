@@ -276,6 +276,7 @@ export function planCombineComponentsAsVariants(
       name,
       rootNodeId: setRoot.id,
       defaultComponentId: defaultComponent.id,
+      propertyOrder: properties.propertyNames,
       componentPropertyDefinitions: definitions,
       extensions: {},
     },

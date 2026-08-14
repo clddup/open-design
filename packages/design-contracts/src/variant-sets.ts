@@ -32,6 +32,11 @@ export const VariantSetDefinitionSchema = Type.Object(
     name: Type.String({ minLength: 1, maxLength: 256 }),
     rootNodeId: Type.String({ minLength: 1, maxLength: 256 }),
     defaultComponentId: Type.String({ minLength: 1, maxLength: 256 }),
+    propertyOrder: Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {
+      minItems: 1,
+      maxItems: 128,
+      uniqueItems: true,
+    }),
     componentPropertyDefinitions: VariantPropertyDefinitionsSchema,
     description: Type.Optional(Type.String({ maxLength: 2_000 })),
     extensions: JsonObjectSchema,
@@ -98,5 +103,25 @@ export function migrateVariantSets(document: Record<string, unknown>): void {
   for (const value of Object.values(components)) {
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     (value as Record<string, unknown>).variantProperties ??= {};
+  }
+  const variantSets = document.variantSetsById;
+  if (
+    !variantSets ||
+    typeof variantSets !== "object" ||
+    Array.isArray(variantSets)
+  ) {
+    return;
+  }
+  for (const value of Object.values(variantSets)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const set = value as Record<string, unknown>;
+    if (set.propertyOrder !== undefined) continue;
+    const definitions = set.componentPropertyDefinitions;
+    set.propertyOrder =
+      definitions &&
+      typeof definitions === "object" &&
+      !Array.isArray(definitions)
+        ? Object.keys(definitions)
+        : [];
   }
 }

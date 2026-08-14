@@ -5,7 +5,9 @@ import {
 } from "@opendesign/design-contracts";
 import { exportSvg } from "@opendesign/import-export-service";
 import { describe, expect, it } from "vitest";
+import { EditorRuntime } from "./runtime.js";
 import { planSvgExportRequest } from "./svg-export-operations.js";
+import { planSetVariantProperties } from "./variant-set-property-operations.js";
 
 describe("component SVG export", () => {
   it("exports resolved instance artwork instead of an empty structural group", () => {
@@ -41,6 +43,43 @@ describe("component SVG export", () => {
     expect(exported.svg).toContain("Hover");
     expect(exported.svg).not.toContain("#2563eb");
     expect(exported.svg).not.toContain("button_set_root");
+  });
+
+  it("exports the same resolved member after a Variant matrix edit", () => {
+    const runtime = new EditorRuntime(variantFixture());
+    const edit = planSetVariantProperties(runtime.getSnapshot().document, {
+      pageId: "main-page",
+      variantSetId: "button_set",
+      componentId: "button_hover",
+      variantProperties: { State: "Hovered" },
+      commandPrefix: "rename-hover",
+    });
+    expect(edit.ok).toBe(true);
+    if (!edit.ok) return;
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "rename-hover",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        label: "Rename hover variant",
+        commands: edit.commands,
+      }),
+    ).toMatchObject({ ok: true });
+    const document = runtime.getSnapshot().document;
+    const plan = planSvgExportRequest(document, {
+      pageId: "instances",
+      rootNodeIds: ["instance"],
+      baseRevision: document.revision,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    const exported = exportSvg(plan.request);
+    expect(exported).toMatchObject({ ok: true });
+    if (!exported.ok) return;
+    expect(exported.svg).toContain("#db2777");
+    expect(exported.svg).toContain("Hover");
   });
 });
 
@@ -120,6 +159,7 @@ function variantFixture(): DesignDocument {
     name: "Button",
     rootNodeId: "set_root",
     defaultComponentId: "button_default",
+    propertyOrder: ["State"],
     componentPropertyDefinitions: {
       State: {
         type: "VARIANT",

@@ -692,6 +692,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     resetSelectedInstanceSource,
     resetSelectedInstanceComponentProperty,
     setSelectedInstanceComponentProperty,
+    variantMatrixActions,
     updateSelectedInstanceSource,
   } = useComponentActions({
     activePageId,
@@ -703,9 +704,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     transactionCounter,
   });
   const duplicateSelectionAction =
-    selectedComponentContext?.variantSet &&
-    (selectedComponentContext.isMain ||
-      selectedComponentContext.variantSet.isRoot)
+    selectedComponentContext?.variantSet && selectedNode?.kind !== "instance"
       ? duplicateSelectedVariant
       : duplicateSelection;
 
@@ -1931,6 +1930,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 }
                 onResetComponentSourceOverride={resetSelectedInstanceSource}
                 onSetComponentProperty={setSelectedInstanceComponentProperty}
+                {...variantMatrixActions}
                 onSelectBooleanParent={(nodeId) =>
                   runtime.setSelection([nodeId], nodeId)
                 }

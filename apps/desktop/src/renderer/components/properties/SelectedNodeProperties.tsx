@@ -107,8 +107,14 @@ export function SelectedNodeProperties({
   onRemoveComponent,
   onRemoveVariant,
   onAddComponentProperty,
+  onAddVariantProperty,
   onRemoveComponentProperty,
+  onRemoveVariantProperty,
   onRenameComponentProperty,
+  onRenameVariantProperty,
+  onRenameVariantValue,
+  onReorderVariantProperties,
+  onReorderVariantValues,
   onResetComponentInstance,
   onResetComponentProperty,
   onResetComponentSourceOverride,
@@ -119,6 +125,7 @@ export function SelectedNodeProperties({
   onUpdate,
   onUpdateComponentOverride,
   onSetComponentProperty,
+  onSetVariantProperties,
 }: {
   node: DesignNode;
   componentContext?: ComponentInspectorContext;
@@ -149,8 +156,21 @@ export function SelectedNodeProperties({
     sourceNodeId: string;
     type: ComponentPropertyType;
   }) => void;
+  onAddVariantProperty: (name: string) => void;
   onRemoveComponentProperty: (propertyName: string) => void;
+  onRemoveVariantProperty: (propertyName: string) => void;
   onRenameComponentProperty: (propertyName: string, name: string) => void;
+  onRenameVariantProperty: (propertyName: string, name: string) => void;
+  onRenameVariantValue: (
+    propertyName: string,
+    value: string,
+    name: string,
+  ) => void;
+  onReorderVariantProperties: (propertyOrder: readonly string[]) => void;
+  onReorderVariantValues: (
+    propertyName: string,
+    values: readonly string[],
+  ) => void;
   onResetComponentInstance: () => void;
   onResetComponentProperty: (propertyName: string) => void;
   onResetComponentSourceOverride: (sourcePath: readonly string[]) => void;
@@ -173,6 +193,10 @@ export function SelectedNodeProperties({
   onSetComponentProperty: (
     propertyName: string,
     value: ComponentPropertyAssignment,
+  ) => void;
+  onSetVariantProperties: (
+    componentId: string,
+    properties: Readonly<Record<string, string>>,
   ) => void;
 }) {
   const { t } = useI18n();
@@ -287,13 +311,20 @@ export function SelectedNodeProperties({
         onRemoveComponent={onRemoveComponent}
         onRemoveVariant={onRemoveVariant}
         onAddComponentProperty={onAddComponentProperty}
+        onAddVariantProperty={onAddVariantProperty}
         onRemoveComponentProperty={onRemoveComponentProperty}
+        onRemoveVariantProperty={onRemoveVariantProperty}
         onRenameComponentProperty={onRenameComponentProperty}
+        onRenameVariantProperty={onRenameVariantProperty}
+        onRenameVariantValue={onRenameVariantValue}
+        onReorderVariantProperties={onReorderVariantProperties}
+        onReorderVariantValues={onReorderVariantValues}
         onResetComponentInstance={onResetComponentInstance}
         onResetComponentProperty={onResetComponentProperty}
         onResetComponentSourceOverride={onResetComponentSourceOverride}
         onUpdateComponentOverride={onUpdateComponentOverride}
         onSetComponentProperty={onSetComponentProperty}
+        onSetVariantProperties={onSetVariantProperties}
       />
       <Section title={t("properties.layer")}>
         <div className={styles.stack}>

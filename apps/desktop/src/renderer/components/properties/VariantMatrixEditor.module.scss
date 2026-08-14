@@ -1,0 +1,106 @@
+.variantMatrix {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.variantPropertyList,
+.variantValues,
+.variantMemberMatrix {
+  display: grid;
+  gap: 5px;
+}
+
+.variantProperty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 22px;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: var(--ui-bg);
+}
+
+.variantValues {
+  grid-column: 1 / -1;
+  padding-left: 8px;
+}
+
+.variantValue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.variantOrderButtons {
+  display: flex;
+
+  button {
+    width: 20px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    color: var(--ui-text-faint);
+    background: transparent;
+    font-size: 10px;
+
+    &:hover:not(:disabled),
+    &:focus-visible {
+      color: var(--ui-text);
+      background: var(--ui-surface-raised);
+    }
+
+    &:disabled {
+      opacity: 0.25;
+    }
+  }
+}
+
+.variantRemove {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  color: var(--ui-text-faint);
+  background: transparent;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--ui-text);
+    background: var(--ui-surface-raised);
+  }
+}
+
+.variantPropertyComposer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+}
+
+.variantMemberMatrix {
+  padding-top: 7px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.variantMember {
+  display: grid;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 4px;
+  background: var(--ui-bg);
+
+  strong {
+    overflow: hidden;
+    color: var(--ui-text);
+    font-size: 9px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

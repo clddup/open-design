@@ -4,6 +4,7 @@ import {
   DESIGN_FORMAT,
   DESIGN_SCHEMA_VERSION,
   COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION,
+  VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION,
   FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
@@ -18,6 +19,7 @@ import {
   PaintSchema,
   isDesignTransaction,
   migrateDesignDocument,
+  migrateVariantSets,
   normalizeLineEndpoints,
   resolveRegularPolygonPoints,
   resolveLineEndpointPoint,
@@ -33,8 +35,9 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(LAYOUT_GUIDE_COLUMNS_ROWS_DESIGN_SCHEMA_VERSION).toBe("1.20.0");
   expect(FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION).toBe("1.21.0");
   expect(COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION).toBe("1.22.0");
+  expect(VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION).toBe("1.23.0");
   expect(DESIGN_SCHEMA_VERSION).toBe(
-    COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION,
+    VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION,
   );
 });
 
@@ -1286,6 +1289,34 @@ describe("design contract schemas", () => {
       migrated?.componentsById.component_text?.variantSetId,
     ).toBeUndefined();
     expect(migrated?.variantSetsById).toEqual({});
+  });
+
+  it("migrates 1.22 Variant Sets with deterministic property order", () => {
+    const source = {
+      componentsById: {},
+      variantSetsById: {
+        button_set: {
+          componentPropertyDefinitions: {
+            Size: {
+              type: "VARIANT",
+              defaultValue: "Small",
+              variantOptions: ["Small", "Large"],
+            },
+            State: {
+              type: "VARIANT",
+              defaultValue: "Default",
+              variantOptions: ["Default", "Hover"],
+            },
+          },
+        },
+      },
+    };
+
+    migrateVariantSets(source);
+
+    expect(source.variantSetsById.button_set).toMatchObject({
+      propertyOrder: ["Size", "State"],
+    });
   });
 
   it("validates strict uniform layout guides on Frames", () => {

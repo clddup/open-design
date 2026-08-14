@@ -33,6 +33,22 @@ export function createComponentInspectorContext(
         variantCount: Object.values(document.componentsById).filter(
           (candidate) => candidate.variantSetId === selectedVariantSet.id,
         ).length,
+        propertyOrder: [...selectedVariantSet.propertyOrder],
+        propertyDefinitions: structuredClone(
+          selectedVariantSet.componentPropertyDefinitions,
+        ),
+        members: selectedVariantSet.propertyOrder.length
+          ? Object.values(document.componentsById)
+              .filter(
+                (candidate) => candidate.variantSetId === selectedVariantSet.id,
+              )
+              .map((candidate) => ({
+                componentId: candidate.id,
+                name: candidate.name,
+                rootNodeId: candidate.rootNodeId,
+                properties: structuredClone(candidate.variantProperties),
+              }))
+          : [],
       },
     };
   }
@@ -59,6 +75,10 @@ export function createComponentInspectorContext(
     ...(variantSet?.componentPropertyDefinitions ?? {}),
     ...(effectiveComponent?.componentPropertyDefinitions ?? {}),
   };
+  const effectivePropertyNames = [
+    ...(variantSet?.propertyOrder ?? []),
+    ...Object.keys(effectiveComponent?.componentPropertyDefinitions ?? {}),
+  ];
   const sourceNodes =
     selectedNode?.kind === "instance"
       ? resolvedInstanceSourceNodes(document, selectedNode.id)
@@ -93,8 +113,9 @@ export function createComponentInspectorContext(
     })),
     componentProperties:
       selectedNode?.kind === "instance" && instanceResolution?.ok
-        ? Object.entries(effectivePropertyDefinitions).map(
-            ([propertyName, definition]) => ({
+        ? effectivePropertyNames.map((propertyName) => {
+            const definition = effectivePropertyDefinitions[propertyName];
+            return {
               propertyName,
               definition,
               value:
@@ -104,8 +125,8 @@ export function createComponentInspectorContext(
                 selectedNode.properties.componentProperties,
                 propertyName,
               ),
-            }),
-          )
+            };
+          })
         : [],
     availableComponents: componentOptions(document),
     ...(variantSet && effectiveComponent
@@ -119,6 +140,11 @@ export function createComponentInspectorContext(
             variantCount: Object.values(document.componentsById).filter(
               (candidate) => candidate.variantSetId === variantSet.id,
             ).length,
+            propertyOrder: [...variantSet.propertyOrder],
+            propertyDefinitions: structuredClone(
+              variantSet.componentPropertyDefinitions,
+            ),
+            members: [],
           },
         }
       : {}),

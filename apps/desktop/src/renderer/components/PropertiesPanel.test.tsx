@@ -39,6 +39,23 @@ function renderPanel(
       sourceNodeId: string;
       type: "BOOLEAN" | "TEXT" | "INSTANCE_SWAP";
     }) => void;
+    onAddVariantProperty?: (name: string) => void;
+    onRemoveVariantProperty?: (propertyName: string) => void;
+    onRenameVariantProperty?: (propertyName: string, name: string) => void;
+    onRenameVariantValue?: (
+      propertyName: string,
+      value: string,
+      name: string,
+    ) => void;
+    onReorderVariantProperties?: (propertyOrder: readonly string[]) => void;
+    onReorderVariantValues?: (
+      propertyName: string,
+      values: readonly string[],
+    ) => void;
+    onSetVariantProperties?: (
+      componentId: string,
+      properties: Readonly<Record<string, string>>,
+    ) => void;
     onResetComponentProperty?: (propertyName: string) => void;
     onSetComponentProperty?: (
       propertyName: string,
@@ -83,6 +100,7 @@ function renderPanel(
           onArrange={onArrange}
           onAddToVariantSet={options.onAddToVariantSet ?? vi.fn()}
           onAddComponentProperty={options.onAddComponentProperty ?? vi.fn()}
+          onAddVariantProperty={options.onAddVariantProperty ?? vi.fn()}
           onBooleanOperationChange={vi.fn()}
           onCancelSvgOperation={onCancelSvgOperation}
           onCreateComponent={vi.fn()}
@@ -103,7 +121,14 @@ function renderPanel(
           onRemoveComponent={options.onRemoveComponent ?? vi.fn()}
           onRemoveVariant={options.onRemoveVariant ?? vi.fn()}
           onRemoveComponentProperty={vi.fn()}
+          onRemoveVariantProperty={options.onRemoveVariantProperty ?? vi.fn()}
           onRenameComponentProperty={vi.fn()}
+          onRenameVariantProperty={options.onRenameVariantProperty ?? vi.fn()}
+          onRenameVariantValue={options.onRenameVariantValue ?? vi.fn()}
+          onReorderVariantProperties={
+            options.onReorderVariantProperties ?? vi.fn()
+          }
+          onReorderVariantValues={options.onReorderVariantValues ?? vi.fn()}
           onResetComponentInstance={vi.fn()}
           onResetComponentSourceOverride={vi.fn()}
           onResetComponentProperty={options.onResetComponentProperty ?? vi.fn()}
@@ -113,6 +138,7 @@ function renderPanel(
           onSetFrameLayoutGuides={options.onSetFrameLayoutGuides ?? vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onSetComponentProperty={options.onSetComponentProperty ?? vi.fn()}
+          onSetVariantProperties={options.onSetVariantProperties ?? vi.fn()}
           onRasterExportSettingsChange={onRasterExportSettingsChange}
           exportFormat={options.exportFormat ?? "svg"}
           rasterExportSettings={{
@@ -1097,6 +1123,14 @@ describe("PropertiesPanel line workflow", () => {
           name: "Button",
           properties: { State: "Hover" },
           variantCount: 2,
+          propertyOrder: ["State"],
+          propertyDefinitions: {
+            State: {
+              defaultValue: "Default",
+              variantOptions: ["Default", "Hover"],
+            },
+          },
+          members: [],
         },
       },
       node: lineNode,
@@ -1153,6 +1187,10 @@ describe("PropertiesPanel line workflow", () => {
     const user = userEvent.setup();
     const onDuplicateVariant = vi.fn();
     const onDissolveVariantSet = vi.fn();
+    const onAddVariantProperty = vi.fn();
+    const onRenameVariantProperty = vi.fn();
+    const onReorderVariantValues = vi.fn();
+    const onSetVariantProperties = vi.fn();
     renderPanel({
       componentContext: {
         availableComponents: [],
@@ -1169,11 +1207,36 @@ describe("PropertiesPanel line workflow", () => {
           name: "Button",
           properties: {},
           variantCount: 2,
+          propertyOrder: ["State"],
+          propertyDefinitions: {
+            State: {
+              defaultValue: "Default",
+              variantOptions: ["Default", "Hover"],
+            },
+          },
+          members: [
+            {
+              componentId: "button_default",
+              name: "Button / Default",
+              rootNodeId: "button_default_root",
+              properties: { State: "Default" },
+            },
+            {
+              componentId: "button_hover",
+              name: "Button / Hover",
+              rootNodeId: "button_hover_root",
+              properties: { State: "Hover" },
+            },
+          ],
         },
       },
       node: lineNode,
       onDuplicateVariant,
       onDissolveVariantSet,
+      onAddVariantProperty,
+      onRenameVariantProperty,
+      onReorderVariantValues,
+      onSetVariantProperties,
       selectionCount: 1,
     });
 
@@ -1181,6 +1244,28 @@ describe("PropertiesPanel line workflow", () => {
     await user.click(screen.getByRole("button", { name: "Dissolve set" }));
     expect(onDuplicateVariant).toHaveBeenCalledOnce();
     expect(onDissolveVariantSet).toHaveBeenCalledOnce();
+
+    const property = screen.getByLabelText("Property State");
+    await user.clear(property);
+    await user.type(property, "Mode{Enter}");
+    expect(onRenameVariantProperty).toHaveBeenCalledWith("State", "Mode");
+
+    await user.click(screen.getByRole("button", { name: "Move Hover up" }));
+    expect(onReorderVariantValues).toHaveBeenCalledWith("State", [
+      "Hover",
+      "Default",
+    ]);
+
+    const memberValue = screen.getByLabelText("Button / Hover · State");
+    await user.clear(memberValue);
+    await user.type(memberValue, "Pressed{Enter}");
+    expect(onSetVariantProperties).toHaveBeenCalledWith("button_hover", {
+      State: "Pressed",
+    });
+
+    await user.type(screen.getByLabelText("New property"), "Size{Enter}");
+    await user.click(screen.getByRole("button", { name: "Add property" }));
+    expect(onAddVariantProperty).toHaveBeenCalledWith("Size");
   });
 
   it("adds one ordinary Component to one selected Set", async () => {

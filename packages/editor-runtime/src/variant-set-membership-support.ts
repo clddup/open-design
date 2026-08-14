@@ -69,7 +69,7 @@ export function normalizeMemberProperties(
 ):
   | { ok: true; value: VariantProperties }
   | Extract<VariantSetOperationPlan, { ok: false }> {
-  const names = Object.keys(set.componentPropertyDefinitions).sort();
+  const names = [...set.propertyOrder];
   if (Object.keys(input).sort().join("\u0000") !== names.join("\u0000"))
     return failure(
       "invalid",
@@ -197,7 +197,7 @@ export function updateSetDefinition(
   const propertiesFor = (component: ComponentDefinition) =>
     overrides.get(component.id) ?? component.variantProperties;
   const definitions: VariantPropertyDefinitions = Object.fromEntries(
-    Object.keys(set.componentPropertyDefinitions).map((name) => {
+    set.propertyOrder.map((name) => {
       const values = spatial
         .map((component) => propertiesFor(component)[name]!)
         .filter((value, index, all) => all.indexOf(value) === index);

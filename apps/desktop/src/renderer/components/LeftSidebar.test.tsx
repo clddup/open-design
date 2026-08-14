@@ -55,6 +55,7 @@ describe("LeftSidebar layer tree", () => {
       name: "Button",
       rootNodeId: "frame_welcome",
       defaultComponentId: "button_default",
+      propertyOrder: ["State"],
       componentPropertyDefinitions: {
         State: {
           type: "VARIANT",

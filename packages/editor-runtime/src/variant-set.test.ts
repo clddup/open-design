@@ -25,8 +25,33 @@ import {
   planDuplicateVariant,
   planRemoveVariantFromSet,
 } from "./variant-set-membership-operations.js";
+import {
+  planAddVariantProperty,
+  planRemoveVariantProperty,
+  planRenameVariantProperty,
+  planRenameVariantValue,
+  planReorderVariantProperties,
+  planReorderVariantValues,
+  planSetVariantProperties,
+} from "./variant-set-property-operations.js";
 
 describe("Figma-compatible Component Set variants", () => {
+  it("migrates 1.22 Variant Sets to explicit property order", () => {
+    const legacy = structuredClone(variantFixture()) as unknown as {
+      schemaVersion: string;
+      variantSetsById: Record<string, { propertyOrder?: string[] }>;
+    };
+    legacy.schemaVersion = "1.22.0";
+    delete legacy.variantSetsById.button_set?.propertyOrder;
+
+    const migrated = normalizeDesignDocument(legacy);
+
+    expect(migrated.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated.variantSetsById.button_set?.propertyOrder).toEqual([
+      "State",
+    ]);
+  });
+
   it("combines sibling Components in one undoable transaction without moving their world geometry", () => {
     const runtime = new EditorRuntime(combinableVariantFixture());
     const before = runtime.getSnapshot().document;
@@ -106,6 +131,7 @@ describe("Figma-compatible Component Set variants", () => {
     ).toMatchObject({
       defaultComponentId: "button_default",
       rootNodeId: "button_set_root",
+      propertyOrder: ["State"],
     });
     expect(
       resolveComponentInstance(
@@ -226,6 +252,16 @@ describe("Figma-compatible Component Set variants", () => {
       expect.arrayContaining([
         expect.objectContaining({
           message: "the top-left Component must be the default variant",
+        }),
+      ]),
+    );
+
+    const invalidOrder = variantFixture();
+    invalidOrder.variantSetsById.button_set!.propertyOrder = ["Missing"];
+    expect(validateDocumentInvariants(invalidOrder)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "/variantSetsById/button_set/propertyOrder",
         }),
       ]),
     );
@@ -378,6 +414,221 @@ describe("Figma-compatible Component Set variants", () => {
       runtime.getSnapshot().document.variantSetsById.button_set,
     ).toBeDefined();
   });
+
+  it("authors and reorders a two-dimensional Variant property matrix", () => {
+    const runtime = new EditorRuntime(variantFixture());
+    const add = planAddVariantProperty(runtime.getSnapshot().document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      propertyName: "Size",
+      valuesByComponentId: {
+        button_default: "Small",
+        button_hover: "Large",
+      },
+      index: 0,
+      commandPrefix: "add-size",
+    });
+    expect(add.ok).toBe(true);
+    if (!add.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, add.commands, "add-size")),
+    ).toMatchObject({ ok: true });
+    let document = runtime.getSnapshot().document;
+    expect(document.variantSetsById.button_set?.propertyOrder).toEqual([
+      "Size",
+      "State",
+    ]);
+    expect(document.nodesById.button_instance).toMatchObject({
+      properties: {
+        componentProperties: { State: "Hover", Size: "Large" },
+      },
+    });
+    expect(resolveComponentInstance(document, "button_instance")).toMatchObject(
+      { ok: true, componentId: "button_hover" },
+    );
+
+    const rename = planRenameVariantProperty(document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      propertyName: "Size",
+      name: "Scale",
+      commandPrefix: "rename-size",
+    });
+    expect(rename.ok).toBe(true);
+    if (!rename.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, rename.commands, "rename-size")),
+    ).toMatchObject({ ok: true });
+    document = runtime.getSnapshot().document;
+    expect(document.variantSetsById.button_set?.propertyOrder).toEqual([
+      "Scale",
+      "State",
+    ]);
+    expect(document.nodesById.button_instance).toMatchObject({
+      properties: { componentProperties: { State: "Hover", Scale: "Large" } },
+    });
+
+    const reorder = planReorderVariantProperties(document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      propertyOrder: ["State", "Scale"],
+      commandPrefix: "reorder-properties",
+    });
+    expect(reorder.ok).toBe(true);
+    if (!reorder.ok) return;
+    expect(
+      runtime.apply(
+        transaction(runtime, reorder.commands, "reorder-properties"),
+      ),
+    ).toMatchObject({
+      ok: true,
+      changes: {
+        variantSetChanges: [
+          expect.objectContaining({ changedFields: ["propertyOrder"] }),
+        ],
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.variantSetsById.button_set?.propertyOrder,
+    ).toEqual(["State", "Scale"]);
+    expect(
+      runtime.getSnapshot().document.componentsById.button_hover?.name,
+    ).toBe("State=Hover, Scale=Large");
+    expect(
+      runtime.getSnapshot().document.nodesById.button_hover_root?.name,
+    ).toBe("State=Hover, Scale=Large");
+    expect(runtime.undo()).toMatchObject({ ok: true });
+  });
+
+  it("renames, reorders, and edits Variant values without changing the resolved member", () => {
+    const runtime = new EditorRuntime(variantFixture());
+    const rename = planRenameVariantValue(runtime.getSnapshot().document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      propertyName: "State",
+      value: "Hover",
+      name: "Hovered",
+      commandPrefix: "rename-hover",
+    });
+    expect(rename.ok).toBe(true);
+    if (!rename.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, rename.commands, "rename-hover")),
+    ).toMatchObject({ ok: true });
+    let document = runtime.getSnapshot().document;
+    expect(
+      document.variantSetsById.button_set?.componentPropertyDefinitions.State
+        ?.variantOptions,
+    ).toEqual(["Default", "Hovered"]);
+    expect(resolveComponentInstance(document, "button_instance")).toMatchObject(
+      { ok: true, componentId: "button_hover" },
+    );
+
+    const reorder = planReorderVariantValues(document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      propertyName: "State",
+      values: ["Hovered", "Default"],
+      commandPrefix: "reorder-state",
+    });
+    expect(reorder.ok).toBe(true);
+    if (!reorder.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, reorder.commands, "reorder-state")),
+    ).toMatchObject({ ok: true });
+    document = runtime.getSnapshot().document;
+    expect(
+      document.variantSetsById.button_set?.componentPropertyDefinitions.State
+        ?.variantOptions,
+    ).toEqual(["Hovered", "Default"]);
+
+    const edit = planSetVariantProperties(document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      componentId: "button_hover",
+      variantProperties: { State: "Pressed" },
+      commandPrefix: "edit-hover",
+    });
+    expect(edit.ok).toBe(true);
+    if (!edit.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, edit.commands, "edit-hover")),
+    ).toMatchObject({ ok: true });
+    document = runtime.getSnapshot().document;
+    expect(document.componentsById.button_hover?.variantProperties).toEqual({
+      State: "Pressed",
+    });
+    expect(document.nodesById.button_instance).toMatchObject({
+      properties: { componentProperties: { State: "Pressed" } },
+    });
+    expect(resolveComponentInstance(document, "button_instance")).toMatchObject(
+      { ok: true, componentId: "button_hover" },
+    );
+  });
+
+  it("removes a Variant property and dissolves the Set when the last property is removed", () => {
+    const runtime = new EditorRuntime(variantFixture());
+    const add = planAddVariantProperty(runtime.getSnapshot().document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      propertyName: "Tone",
+      valuesByComponentId: {
+        button_default: "Neutral",
+        button_hover: "Neutral",
+      },
+      commandPrefix: "add-tone",
+    });
+    expect(add.ok).toBe(true);
+    if (!add.ok) return;
+    runtime.apply(transaction(runtime, add.commands, "add-tone"));
+    const conflicting = planRemoveVariantProperty(
+      runtime.getSnapshot().document,
+      {
+        pageId: "page",
+        variantSetId: "button_set",
+        propertyName: "State",
+        commandPrefix: "remove-state",
+      },
+    );
+    expect(conflicting).toMatchObject({ ok: false, code: "duplicate" });
+    const remove = planRemoveVariantProperty(runtime.getSnapshot().document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      propertyName: "Tone",
+      commandPrefix: "remove-tone",
+    });
+    expect(remove.ok).toBe(true);
+    if (!remove.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, remove.commands, "remove-tone")),
+    ).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.variantSetsById.button_set?.propertyOrder,
+    ).toEqual(["State"]);
+
+    const dissolve = planRemoveVariantProperty(runtime.getSnapshot().document, {
+      pageId: "page",
+      variantSetId: "button_set",
+      propertyName: "State",
+      commandPrefix: "remove-last-property",
+    });
+    expect(dissolve.ok).toBe(true);
+    if (!dissolve.ok) return;
+    expect(
+      runtime.apply(
+        transaction(runtime, dissolve.commands, "remove-last-property"),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      runtime.getSnapshot().document.variantSetsById.button_set,
+    ).toBeUndefined();
+    expect(
+      resolveComponentInstance(
+        runtime.getSnapshot().document,
+        "button_instance",
+      ),
+    ).toMatchObject({ ok: true, componentId: "button_hover" });
+  });
 });
 
 function combinableVariantFixture(): DesignDocument {
@@ -510,6 +761,7 @@ function variantFixture(): DesignDocument {
         name: "Button",
         rootNodeId: setRoot.id,
         defaultComponentId: "button_default",
+        propertyOrder: ["State"],
         componentPropertyDefinitions: {
           State: {
             type: "VARIANT",

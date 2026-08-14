@@ -57,6 +57,7 @@ export function createScopedComponentInspection(
             name: variantSet.name,
             rootNodeId: variantSet.rootNodeId,
             defaultComponentId: variantSet.defaultComponentId,
+            propertyOrder: [...variantSet.propertyOrder],
             componentPropertyDefinitions: structuredClone(
               variantSet.componentPropertyDefinitions,
             ),

@@ -9,6 +9,16 @@ export type ComponentInspectorVariantSet = {
   name: string;
   properties: Readonly<Record<string, string>>;
   variantCount: number;
+  propertyOrder: readonly string[];
+  propertyDefinitions: Readonly<
+    Record<string, { defaultValue: string; variantOptions: readonly string[] }>
+  >;
+  members: readonly {
+    componentId: string;
+    name: string;
+    rootNodeId: string;
+    properties: Readonly<Record<string, string>>;
+  }[];
 };
 
 export function ComponentIdentitySummary({

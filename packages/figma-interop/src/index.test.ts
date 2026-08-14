@@ -44,7 +44,7 @@ describe("Figma component property compatibility", () => {
     };
     const document = {
       format: "dev.opendesign.document",
-      schemaVersion: "1.22.0",
+      schemaVersion: "1.23.0",
       documentId: "figma-compatibility",
       revision: 1,
       pageOrder: ["page"],
@@ -137,6 +137,7 @@ describe("Figma component property compatibility", () => {
       name: "Button",
       rootNodeId: "button_set_root",
       defaultComponentId: "button_default",
+      propertyOrder: ["State"],
       componentPropertyDefinitions: {
         State: {
           type: "VARIANT" as const,

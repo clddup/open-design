@@ -1765,6 +1765,25 @@ function assertComponentInputPage(
     return;
   }
   if (
+    input.action === "add-variant-property" ||
+    input.action === "rename-variant-property" ||
+    input.action === "reorder-variant-properties" ||
+    input.action === "remove-variant-property" ||
+    input.action === "rename-variant-value" ||
+    input.action === "reorder-variant-values"
+  ) {
+    if (!ids.has(input.rootNodeId))
+      throw new Error(
+        `Component Set ${input.variantSetId} is outside Page ${input.pageId}`,
+      );
+    return;
+  }
+  if (input.action === "set-variant-properties") {
+    if (!ids.has(input.rootNodeId) || !ids.has(input.componentRootNodeId))
+      throw new Error(`Variant matrix target is outside Page ${input.pageId}`);
+    return;
+  }
+  if (
     input.action === "remove-component" ||
     input.action === "rename-property" ||
     input.action === "remove-property"

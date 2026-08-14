@@ -171,6 +171,7 @@ function variantFixture(): DesignDocument {
     name: "Button",
     rootNodeId: "button_set_root",
     defaultComponentId: "button_default",
+    propertyOrder: ["State"],
     componentPropertyDefinitions: {
       State: {
         type: "VARIANT",

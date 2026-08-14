@@ -83,6 +83,19 @@ export function validateVariantSetInvariants(
     const propertyNames = Object.keys(
       variantSet.componentPropertyDefinitions,
     ).sort();
+    const orderedPropertyNames = [...variantSet.propertyOrder].sort();
+    if (
+      orderedPropertyNames.length !== propertyNames.length ||
+      orderedPropertyNames.some(
+        (propertyName, index) => propertyName !== propertyNames[index],
+      )
+    ) {
+      issues.push({
+        path: `${setPath}/propertyOrder`,
+        message:
+          "property order must contain every Variant property exactly once",
+      });
+    }
     for (const [propertyName, definition] of Object.entries(
       variantSet.componentPropertyDefinitions,
     )) {

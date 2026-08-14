@@ -2,6 +2,7 @@ import type { DesignDocument } from "@opendesign/design-contracts";
 import {
   planAddComponentProperty,
   planAddComponentToVariantSet,
+  planAddVariantProperty,
   planCreateComponent,
   planCreateInstance,
   planCombineComponentsAsVariants,
@@ -11,11 +12,17 @@ import {
   planRemoveComponent,
   planRemoveComponentProperty,
   planRemoveVariantFromSet,
+  planRemoveVariantProperty,
   planRenameComponentProperty,
+  planRenameVariantProperty,
+  planRenameVariantValue,
+  planReorderVariantProperties,
+  planReorderVariantValues,
   planResetComponentOverrides,
   planResetComponentPropertyValue,
   planSetComponentOverride,
   planSetComponentPropertyValue,
+  planSetVariantProperties,
   type ComponentOperationPlan,
   type VariantSetOperationPlan,
 } from "@opendesign/editor-runtime";
@@ -158,6 +165,99 @@ export function planDesignComponentTool(
         variantSetId: input.variantSetId,
         commandPrefix,
       });
+    case "add-variant-property":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+        input.rootNodeId
+      )
+        return staleSet();
+      return planAddVariantProperty(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        propertyName: input.propertyName,
+        valuesByComponentId: input.valuesByComponentId,
+        ...(input.index === undefined ? {} : { index: input.index }),
+        commandPrefix,
+      });
+    case "rename-variant-property":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+        input.rootNodeId
+      )
+        return staleSet();
+      return planRenameVariantProperty(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        propertyName: input.propertyName,
+        name: input.name,
+        commandPrefix,
+      });
+    case "reorder-variant-properties":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+        input.rootNodeId
+      )
+        return staleSet();
+      return planReorderVariantProperties(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        propertyOrder: input.propertyOrder,
+        commandPrefix,
+      });
+    case "remove-variant-property":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+        input.rootNodeId
+      )
+        return staleSet();
+      return planRemoveVariantProperty(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        propertyName: input.propertyName,
+        commandPrefix,
+      });
+    case "rename-variant-value":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+        input.rootNodeId
+      )
+        return staleSet();
+      return planRenameVariantValue(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        propertyName: input.propertyName,
+        value: input.value,
+        name: input.name,
+        commandPrefix,
+      });
+    case "reorder-variant-values":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+        input.rootNodeId
+      )
+        return staleSet();
+      return planReorderVariantValues(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        propertyName: input.propertyName,
+        values: input.values,
+        commandPrefix,
+      });
+    case "set-variant-properties":
+      if (
+        document.variantSetsById[input.variantSetId]?.rootNodeId !==
+          input.rootNodeId ||
+        document.componentsById[input.componentId]?.rootNodeId !==
+          input.componentRootNodeId
+      )
+        return staleSet();
+      return planSetVariantProperties(document, {
+        pageId: input.pageId,
+        variantSetId: input.variantSetId,
+        componentId: input.componentId,
+        variantProperties: input.variantProperties,
+        commandPrefix,
+      });
     case "add-property":
       return planAddComponentProperty(document, {
         componentId: input.componentId,
@@ -217,4 +317,12 @@ export function planDesignComponentTool(
         commandPrefix,
       });
   }
+}
+
+function staleSet(): ComponentOperationPlan {
+  return {
+    ok: false,
+    code: "invalid",
+    message: "Component Set no longer matches its inspected root",
+  };
 }

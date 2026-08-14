@@ -50,6 +50,7 @@ export function diffVariantSets(
       "name",
       "rootNodeId",
       "defaultComponentId",
+      "propertyOrder",
       "componentPropertyDefinitions",
       "description",
       "extensions",

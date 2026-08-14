@@ -9,7 +9,7 @@ const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
-const documentSchemaVersion = "1.22.0";
+const documentSchemaVersion = "1.23.0";
 
 const fixtureSources = [
   {

@@ -84,6 +84,70 @@ export type DesignComponentToolInput =
       rootNodeId: string;
     }
   | {
+      action: "add-variant-property";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      propertyName: string;
+      valuesByComponentId: Record<string, string>;
+      index?: number;
+    }
+  | {
+      action: "rename-variant-property";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      propertyName: string;
+      name: string;
+    }
+  | {
+      action: "reorder-variant-properties";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      propertyOrder: string[];
+    }
+  | {
+      action: "remove-variant-property";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      propertyName: string;
+    }
+  | {
+      action: "rename-variant-value";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      propertyName: string;
+      value: string;
+      name: string;
+    }
+  | {
+      action: "reorder-variant-values";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      propertyName: string;
+      values: string[];
+    }
+  | {
+      action: "set-variant-properties";
+      label: string;
+      pageId: string;
+      variantSetId: string;
+      rootNodeId: string;
+      componentId: string;
+      componentRootNodeId: string;
+      variantProperties: Record<string, string>;
+    }
+  | {
       action: "add-property";
       label: string;
       pageId: string;
@@ -304,6 +368,124 @@ export function isDesignComponentToolInput(
           "pageId",
           "variantSetId",
           "rootNodeId",
+        ])
+      );
+    case "add-variant-property":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        propertyName(input.propertyName) &&
+        variantProperties(input.valuesByComponentId) &&
+        (input.index === undefined ||
+          (Number.isInteger(input.index) && (input.index as number) >= 0)) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "propertyName",
+          "valuesByComponentId",
+          ...(input.index === undefined ? [] : ["index"]),
+        ])
+      );
+    case "rename-variant-property":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        propertyName(input.propertyName) &&
+        boundedString(input.name, 256) &&
+        input.name.trim().length > 0 &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "propertyName",
+          "name",
+        ])
+      );
+    case "reorder-variant-properties":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        idArray(input.propertyOrder, 1, 128) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "propertyOrder",
+        ])
+      );
+    case "remove-variant-property":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        propertyName(input.propertyName) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "propertyName",
+        ])
+      );
+    case "rename-variant-value":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        propertyName(input.propertyName) &&
+        boundedString(input.value, 256) &&
+        input.value.length > 0 &&
+        boundedString(input.name, 256) &&
+        input.name.trim().length > 0 &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "propertyName",
+          "value",
+          "name",
+        ])
+      );
+    case "reorder-variant-values":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        propertyName(input.propertyName) &&
+        idArray(input.values, 1, 1_024) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "propertyName",
+          "values",
+        ])
+      );
+    case "set-variant-properties":
+      return (
+        id(input.variantSetId) &&
+        id(input.rootNodeId) &&
+        id(input.componentId) &&
+        id(input.componentRootNodeId) &&
+        variantProperties(input.variantProperties) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "variantSetId",
+          "rootNodeId",
+          "componentId",
+          "componentRootNodeId",
+          "variantProperties",
         ])
       );
     case "add-property":

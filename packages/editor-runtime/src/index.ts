@@ -129,6 +129,15 @@ export {
   planRemoveVariantFromSet,
 } from "./variant-set-membership-operations.js";
 export {
+  planAddVariantProperty,
+  planRemoveVariantProperty,
+  planRenameVariantProperty,
+  planRenameVariantValue,
+  planReorderVariantProperties,
+  planReorderVariantValues,
+  planSetVariantProperties,
+} from "./variant-set-property-operations.js";
+export {
   nodeReferencesAsset,
   planDeleteImageAsset,
   planImageNodeUpdate,

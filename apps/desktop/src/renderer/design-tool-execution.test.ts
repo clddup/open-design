@@ -1,4 +1,5 @@
 import type { DesignNode } from "@opendesign/design-contracts";
+import { resolveComponentInstance } from "@opendesign/component-service";
 import {
   createWelcomeDocument,
   EditorRuntime,
@@ -781,6 +782,72 @@ describe("Renderer design tool scope", () => {
       runtime.getSnapshot().document.componentsById.feature_pressed
         ?.variantSetId,
     ).toBeUndefined();
+
+    const matrix = await executeDesignToolRequest(
+      {
+        requestId: "add_feature_size_matrix",
+        call: {
+          toolCallId: "tool_add_feature_size_matrix",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "add-variant-property",
+            label: "Add feature size property",
+            pageId: "page_welcome",
+            variantSetId: "feature_set",
+            rootNodeId: "feature_set_root",
+            propertyName: "Size",
+            valuesByComponentId: {
+              feature_default: "Small",
+              feature_hover: "Large",
+            },
+            index: 0,
+          },
+        },
+        context: { ...pageContext, revision: 7 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(matrix).toMatchObject({
+      ok: true,
+      result: { content: { action: "add-variant-property", revision: 8 } },
+    });
+
+    const edited = await executeDesignToolRequest(
+      {
+        requestId: "edit_feature_hover_matrix",
+        call: {
+          toolCallId: "tool_edit_feature_hover_matrix",
+          toolName: DESIGN_COMPONENT_TOOL_NAME,
+          input: {
+            action: "set-variant-properties",
+            label: "Rename hover feature combination",
+            pageId: "page_welcome",
+            variantSetId: "feature_set",
+            rootNodeId: "feature_set_root",
+            componentId: "feature_hover",
+            componentRootNodeId: "feature_hover_group",
+            variantProperties: { Size: "Large", State: "Hovered" },
+          },
+        },
+        context: { ...pageContext, revision: 8 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(edited).toMatchObject({
+      ok: true,
+      result: { content: { action: "set-variant-properties", revision: 9 } },
+    });
+    expect(
+      runtime.getSnapshot().document.variantSetsById.feature_set,
+    ).toMatchObject({ propertyOrder: ["Size", "State"] });
+    expect(
+      resolveComponentInstance(
+        runtime.getSnapshot().document,
+        "feature_variant_instance",
+      ),
+    ).toMatchObject({ ok: true, componentId: "feature_hover" });
   });
 
   it("applies host-ID Page lifecycle operations only within their explicit mutation scope", async () => {

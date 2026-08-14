@@ -29,6 +29,7 @@ import {
 import { useCallback } from "react";
 import type { MessageKey, MessageParameters } from "../shared/i18n/messages";
 import type { AssetActionResult } from "./design-assets";
+import { useVariantMatrixActions } from "./use-variant-matrix-actions";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 
@@ -283,6 +284,15 @@ export function useComponentActions({
     t,
     transactionCounter,
   ]);
+
+  const variantMatrixActions = useVariantMatrixActions({
+    activePageId,
+    applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  });
 
   const removeSelectedComponent = useCallback(() => {
     const current = runtime.getSnapshot();
@@ -573,6 +583,7 @@ export function useComponentActions({
     resetSelectedInstanceSource,
     resetSelectedInstanceComponentProperty,
     setSelectedInstanceComponentProperty,
+    variantMatrixActions,
     updateSelectedInstanceSource,
   };
 }

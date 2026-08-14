@@ -375,6 +375,33 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "add-variant-property",
+        label: "Add button size matrix",
+        pageId: "page_home",
+        variantSetId: "button_set",
+        rootNodeId: "button_set_root",
+        propertyName: "Size",
+        valuesByComponentId: {
+          button_default: "Small",
+          button_hover: "Large",
+        },
+        index: 0,
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        action: "set-variant-properties",
+        label: "Change hover combination",
+        pageId: "page_home",
+        variantSetId: "button_set",
+        rootNodeId: "button_set_root",
+        componentId: "button_hover",
+        componentRootNodeId: "button_hover_root",
+        variantProperties: { State: "Hovered", Size: "Large" },
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
         action: "dissolve-variant-set",
         label: "Dissolve button variants",
         pageId: "page_home",
