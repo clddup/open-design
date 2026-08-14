@@ -29,11 +29,15 @@ import {
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_PLAN_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
+  GENERATE_IMAGE_TOOL_NAME,
+  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
+  READ_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "../shared/design-agent-tools";
 import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt";
@@ -50,6 +54,96 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("production Agent context budget", () => {
+  it("starts a host-inspected Run on a plan-only surface", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "opendesign-host-inspected-context-"),
+    );
+    try {
+      const gateway = new RecordingGateway(
+        new MockModelGateway("Plan surface accepted"),
+      );
+      const sessionStore = new JsonlSessionStore(
+        join(directory, "events.jsonl"),
+      );
+      const runtime = new OpenDesignPiRuntime({
+        modelGateway: gateway,
+        sessionStore,
+        systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
+        toolCatalog: {
+          listTools: () =>
+            DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
+              ...tool,
+              inputSchema: tool.inputSchema as unknown as Record<
+                string,
+                unknown
+              >,
+              validateInput: (input: unknown) =>
+                validateDesignAgentToolInput(tool.name, input),
+            })),
+        },
+      });
+
+      const events: AgentEvent[] = [];
+      for await (const event of runtime.run({
+        runId: "run_host_inspected_context",
+        sessionId: "conversation_host_inspected_context",
+        prompt: "Create a real dashboard",
+        documentId: "document_1",
+        revision: 3,
+        scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId: "page_1" },
+        modelSelection: { providerId: "configured", modelId: "design-model" },
+        modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
+        initialDesignInspection: {
+          version: 1,
+          observedRevision: 3,
+          content: '{"pageId":"page_1","revision":3}',
+        },
+      })) {
+        events.push(event);
+      }
+
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: "agent.error" }),
+      );
+      expect(gateway.requests).toHaveLength(1);
+      expect(gateway.requests[0]?.tools.map((tool) => tool.name)).toEqual([
+        DESIGN_INSPECT_TOOL_NAME,
+        DESIGN_PLAN_TOOL_NAME,
+        READ_IMAGE_TOOL_NAME,
+        PAGE_STRUCTURE_ACCESS_TOOL_NAME,
+        DESIGN_PAGE_TOOL_NAME,
+      ]);
+      expect(gateway.requests[0]?.tools).not.toContainEqual(
+        expect.objectContaining({ name: DESIGN_APPLY_TOOL_NAME }),
+      );
+      expect(gateway.requests[0]?.tools).not.toContainEqual(
+        expect.objectContaining({ name: GENERATE_IMAGE_TOOL_NAME }),
+      );
+      const initialUserMessage = gateway.requests[0]?.messages.find(
+        (message) => message.role === "user",
+      );
+      if (
+        !initialUserMessage ||
+        typeof initialUserMessage.content !== "string"
+      ) {
+        throw new Error("Missing host-inspected user projection");
+      }
+      expect(initialUserMessage.content).toContain('"pageId":"page_1"');
+      const durableUser = (
+        await sessionStore.read("conversation_host_inspected_context")
+      ).find((event) => event.type === "message.user");
+      expect(durableUser?.payload).toMatchObject({
+        content: "Create a real dashboard",
+      });
+      expect(JSON.stringify(durableUser)).not.toContain(
+        "OpenDesign trusted host context",
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("reaches the provider with the compact production bootstrap surface", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-context-"));
     try {

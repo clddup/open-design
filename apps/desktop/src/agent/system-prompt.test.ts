@@ -19,7 +19,10 @@ describe("OpenDesign Agent system prompt", () => {
       "one persistent Conversation",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "first call opendesign_inspect_document",
+      "use the exact-revision initial design inspection supplied by the trusted host",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "If no host inspection is present, first call opendesign_inspect_document",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "Resolve every error-level finding",
@@ -60,7 +63,7 @@ describe("OpenDesign Agent system prompt", () => {
       "does not unlock opendesign_record_visual_review",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "one assistant turn may emit opendesign_define_design_plan followed by the first opendesign_apply_transaction",
+      "A host-inspected Run intentionally defines its Plan first",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "smallest meaningful visible region or vertical slice",

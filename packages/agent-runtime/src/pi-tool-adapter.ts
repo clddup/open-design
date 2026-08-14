@@ -64,6 +64,7 @@ export interface OpenDesignPiToolAdapterOptions {
   lifecycle: PiToolLifecyclePort;
   maxToolCalls: number;
   priorToolCallIds?: readonly string[];
+  initialInspection?: boolean;
   now?: () => Date;
 }
 export interface PiToolStartProjection {
@@ -124,8 +125,10 @@ export class OpenDesignPiToolAdapter {
   readonly #designFailureRecovery = new PiDesignFailureRecovery();
   readonly #progressCircuit = new PiToolProgressCircuit();
   readonly #failures = new Map<string, TrustedToolFailure>();
+  readonly #hostInspectedTools: AgentTool[];
   readonly #lifecycle: PiToolLifecyclePort;
   readonly #inspectedTools: AgentTool[];
+  readonly #initialInspection: boolean;
   readonly #maxToolCalls: number;
   readonly #now: () => Date;
   readonly #records: AgentToolCallRecord[] = [];
@@ -151,6 +154,7 @@ export class OpenDesignPiToolAdapter {
     this.#approvalPort = options.approvalPort;
     this.#lifecycle = options.lifecycle;
     this.#maxToolCalls = options.maxToolCalls;
+    this.#initialInspection = options.initialInspection ?? false;
     this.#now = options.now ?? (() => new Date());
     for (const toolCallId of options.priorToolCallIds ?? []) {
       if (typeof toolCallId !== "string" || toolCallId.length === 0) {
@@ -175,6 +179,18 @@ export class OpenDesignPiToolAdapter {
       if (executionDefinition === undefined) {
         throw new Error(
           `Bootstrap tool ${modelDefinition.name} is missing its trusted definition`,
+        );
+      }
+      return this.#createTool(executionDefinition, modelDefinition);
+    });
+    this.#hostInspectedTools = disclosedToolDefinitions(
+      safeDefinitions,
+      "host-inspected",
+    ).map((modelDefinition) => {
+      const executionDefinition = this.#definitions.get(modelDefinition.name);
+      if (executionDefinition === undefined) {
+        throw new Error(
+          `Host-inspected tool ${modelDefinition.name} is missing its trusted definition`,
         );
       }
       return this.#createTool(executionDefinition, modelDefinition);
@@ -213,8 +229,10 @@ export class OpenDesignPiToolAdapter {
     const phase = resolveModelToolDisclosurePhase(
       this.#safeDefinitions,
       this.#records,
+      { initialInspection: this.#initialInspection },
     );
     if (phase === "bootstrap") return this.#bootstrapTools;
+    if (phase === "host-inspected") return this.#hostInspectedTools;
     if (phase === "inspected") return this.#inspectedTools;
     return this.tools;
   }

@@ -1,4 +1,8 @@
-import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
+import type {
+  AgentEvent,
+  AgentInitialDesignInspection,
+  AgentRequest,
+} from "@opendesign/agent-contracts";
 import type { ModelProviderHost } from "../model/model-provider-host.js";
 import type { AgentContinuationScheduler } from "./agent-continuation-scheduler.js";
 import type { AgentHost } from "./agent-host.js";
@@ -6,6 +10,7 @@ import type { AgentReferenceHost } from "./agent-reference-host.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
+const initialInspectionControllers = new Map<string, AbortController>();
 
 export interface AgentRunStarterDependencies {
   agentHost: AgentHost;
@@ -13,6 +18,10 @@ export interface AgentRunStarterDependencies {
   conversationIdByRunId: Map<string, string>;
   globalTaskCoordinator: GlobalTaskCoordinator;
   modelProviderHost: ModelProviderHost;
+  prepareInitialDesignInspection?: (
+    request: RunStartRequest,
+    signal: AbortSignal,
+  ) => Promise<AgentInitialDesignInspection | undefined>;
   referenceHost: AgentReferenceHost;
 }
 
@@ -26,6 +35,9 @@ export async function handleAgentRunControlRequest(
     if (request.modelContext !== undefined) {
       throw new TypeError("Renderer cannot supply model context metadata");
     }
+    if (request.initialDesignInspection !== undefined) {
+      throw new TypeError("Renderer cannot supply initial design inspection");
+    }
     const started = await startAgentRun(request, dependencies);
     if (!started) dependencies.publish(cancelledRun(request.runId));
     return true;
@@ -34,6 +46,13 @@ export async function handleAgentRunControlRequest(
   // to the latest scheduled child so Stop terminates the recovery chain.
   const cancellationTarget =
     dependencies.continuationScheduler.requestCancellation(request.runId);
+  const initialInspection = cancellationTarget
+    ? initialInspectionControllers.get(cancellationTarget)
+    : undefined;
+  if (initialInspection) {
+    initialInspection.abort();
+    return true;
+  }
   if (cancellationTarget && cancellationTarget !== request.runId) {
     dependencies.agentHost.send({ ...request, runId: cancellationTarget });
     return true;
@@ -61,10 +80,38 @@ export async function startAgentRun(
       continuationScheduler.forgetRun(request.runId);
       return false;
     }
+    let initialDesignInspection: AgentInitialDesignInspection | undefined;
+    if (dependencies.prepareInitialDesignInspection) {
+      const controller = new AbortController();
+      initialInspectionControllers.set(request.runId, controller);
+      try {
+        if (continuationScheduler.isCancellationRequested(request.runId)) {
+          controller.abort();
+        } else {
+          initialDesignInspection =
+            await dependencies.prepareInitialDesignInspection(
+              request,
+              controller.signal,
+            );
+        }
+      } finally {
+        if (initialInspectionControllers.get(request.runId) === controller) {
+          initialInspectionControllers.delete(request.runId);
+        }
+      }
+    }
+    if (continuationScheduler.isCancellationRequested(request.runId)) {
+      globalTaskCoordinator.handleAgentEvent(cancelledRun(request.runId));
+      continuationScheduler.forgetRun(request.runId);
+      return false;
+    }
     referenceHost.registerRun(request);
     conversationIdByRunId.set(request.runId, request.sessionId);
     agentHost.send({
       ...request,
+      ...(initialDesignInspection === undefined
+        ? {}
+        : { initialDesignInspection }),
       modelContext: modelProviderHost.resolveModelContext(
         request.modelSelection,
       ),

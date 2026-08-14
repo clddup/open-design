@@ -1,4 +1,8 @@
-import { isAgentRequest, type AgentEvent } from "@opendesign/agent-contracts";
+import {
+  isAgentRequest,
+  type AgentEvent,
+  type AgentRequest,
+} from "@opendesign/agent-contracts";
 import type {
   ToolCallRequest,
   TrustedToolResult,
@@ -42,6 +46,7 @@ import { handleAgentApprovalRequest } from "./agent/agent-approval-handler";
 import { AgentContinuationScheduler } from "./agent/agent-continuation-scheduler";
 import { prepareAgentContinuation } from "./agent/agent-continuation-host";
 import { handleAgentRunControlRequest } from "./agent/agent-run-starter";
+import { prepareInitialDesignInspection } from "./agent/agent-initial-design-inspection";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
 import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
 import { createApplicationMenuTemplate } from "./application-menu";
@@ -248,6 +253,30 @@ function requireAgentReferenceHost(): AgentReferenceHost {
     throw new Error("Agent reference services are not initialized");
   }
   return agentReferenceHost;
+}
+
+async function prepareInitialInspectionForRun(
+  request: Extract<AgentRequest, { type: "run.start" }>,
+  signal: AbortSignal,
+) {
+  const coordinator = globalTaskCoordinator;
+  if (!coordinator) return undefined;
+  try {
+    return await prepareInitialDesignInspection(
+      request,
+      { coordinator, renderer: rendererDesignToolHost },
+      signal,
+    );
+  } catch (error) {
+    if (signal.aborted) {
+      designGenerationPerformance.forgetRun(request.runId);
+      return undefined;
+    }
+    console.warn(
+      `Initial design inspection unavailable; falling back to the public tool: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
 }
 
 function requireAgentSvgExportHost(): AgentSvgExportHost {
@@ -959,6 +988,7 @@ function registerIpc() {
         conversationIdByRunId,
         globalTaskCoordinator,
         modelProviderHost: requireModelProviderHost(),
+        prepareInitialDesignInspection: prepareInitialInspectionForRun,
         referenceHost: requireAgentReferenceHost(),
         publish: (agentEvent) =>
           mainWindow?.webContents.send(channels.agentEvent, agentEvent),
@@ -1028,6 +1058,7 @@ function registerIpc() {
               conversationIdByRunId,
               globalTaskCoordinator,
               modelProviderHost,
+              prepareInitialDesignInspection: prepareInitialInspectionForRun,
               referenceHost: agentReferenceHost,
             }
           : null,

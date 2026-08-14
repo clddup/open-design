@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentEventSchema,
   AgentRequestSchema,
+  MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
   MAX_SELECTED_NODE_IDS,
   SelectionScopeSchema,
   isAgentEvent,
@@ -111,6 +112,44 @@ describe("Agent contracts", () => {
           contextWindow: 200_000,
           maxOutputTokens: 16_384,
           apiKey: "forged",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only an exact-revision bounded Main inspection snapshot", () => {
+    const initialDesignInspection = {
+      version: 1,
+      observedRevision: validStart.revision,
+      content: '{"pageId":"page_1","revision":4}',
+    } as const;
+    expect(isAgentRequest({ ...validStart, initialDesignInspection })).toBe(
+      true,
+    );
+    expect(
+      isAgentRequest({
+        ...validStart,
+        initialDesignInspection: {
+          ...initialDesignInspection,
+          observedRevision: validStart.revision + 1,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isAgentRequest({
+        ...validStart,
+        initialDesignInspection: {
+          ...initialDesignInspection,
+          content: "x".repeat(MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS + 1),
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isAgentRequest({
+        ...validStart,
+        initialDesignInspection: {
+          ...initialDesignInspection,
+          sourcePath: "/private/document.opendesign",
         },
       }),
     ).toBe(false);

@@ -124,11 +124,21 @@ export class DesignGenerationPerformanceTracker {
 
   constructor(private readonly now: () => number = Date.now) {}
 
+  forgetRun(runId: string): void {
+    this.#runs.delete(runId);
+  }
+
   recordAgentEvent(
     event: AgentEvent,
   ): DesignGenerationPerformanceSummary | null {
     if (event.type === "run.started") {
-      this.#startRun(event.runId, timestampMs(event.startedAt, this.now()));
+      const startedAtMs = timestampMs(event.startedAt, this.now());
+      const existing = this.#runs.get(event.runId);
+      if (existing) {
+        existing.startedAtMs = Math.min(existing.startedAtMs, startedAtMs);
+      } else {
+        this.#startRun(event.runId, startedAtMs);
+      }
       return null;
     }
     const runId = "runId" in event ? event.runId : undefined;
@@ -213,7 +223,11 @@ export class DesignGenerationPerformanceTracker {
   }
 
   recordRendererTool(sample: RendererDesignToolPerformanceSample): void {
-    const state = this.#runs.get(sample.runId);
+    let state = this.#runs.get(sample.runId);
+    if (!state) {
+      this.#startRun(sample.runId, this.now() - sample.totalMs);
+      state = this.#runs.get(sample.runId);
+    }
     if (!state) return;
     if (sample.status === "completed") state.renderer.completed += 1;
     else state.renderer.failed += 1;

@@ -15,6 +15,7 @@ import type { SessionStore } from "@opendesign/session-store";
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
 import {
   canonicalUserMessage,
+  projectAgentRunPrompt,
   type AgentRunRequest,
   type AgentToolCallRecord,
   type AgentToolDefinition,
@@ -155,6 +156,7 @@ export class PiRunEventAdapter {
           ? {}
           : { approvalPort: options.approvalPort }),
         maxToolCalls: options.maxToolCalls ?? 32,
+        initialInspection: this.#request.initialDesignInspection !== undefined,
         ...(options.priorToolCallIds === undefined
           ? {}
           : { priorToolCallIds: options.priorToolCallIds }),
@@ -803,7 +805,7 @@ function snapshotRequest(request: AgentRunRequest): AgentRunRequest {
 
 function projectedInitialUserText(request: AgentRunRequest): string {
   const message = canonicalUserMessage(
-    request.prompt,
+    projectAgentRunPrompt(request),
     request.attachments ?? [],
   );
   if (typeof message.content === "string") return message.content;

@@ -3,8 +3,9 @@ import { Value } from "@sinclair/typebox/value";
 import { AgentContinuationSchemas } from "./continuation.js";
 export type { AgentRunContinuation } from "./continuation.js";
 
-export const AGENT_PROTOCOL_VERSION = "3.9.0" as const;
+export const AGENT_PROTOCOL_VERSION = "3.10.0" as const;
 export const MAX_SELECTED_NODE_IDS = 512;
+export const MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS = 60_000;
 export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
 export const MAX_AGENT_IMAGE_ATTACHMENTS = MAX_AGENT_ATTACHMENTS;
@@ -175,6 +176,18 @@ export const AgentModelContextSchema = Type.Object(
   {
     contextWindow: Type.Integer({ minimum: 1_024, maximum: 10_000_000 }),
     maxOutputTokens: Type.Integer({ minimum: 1, maximum: 2_000_000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentInitialDesignInspectionSchema = Type.Object(
+  {
+    version: Type.Literal(1),
+    observedRevision: RevisionSchema,
+    content: Type.String({
+      minLength: 2,
+      maxLength: MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
+    }),
   },
   { additionalProperties: false },
 );
@@ -673,6 +686,9 @@ export const AgentRequestSchema = Type.Union([
       mutationTarget: DesignMutationTargetSchema,
       modelSelection: ModelSelectionSchema,
       modelContext: Type.Optional(AgentModelContextSchema),
+      initialDesignInspection: Type.Optional(
+        AgentInitialDesignInspectionSchema,
+      ),
       continuation: Type.Optional(AgentContinuationSchemas.run),
     },
     { additionalProperties: false },
@@ -875,6 +891,9 @@ export type AgentRequest = Static<typeof AgentRequestSchema>;
 export type AgentEvent = Static<typeof AgentEventSchema>;
 export type AgentModelSelection = Static<typeof ModelSelectionSchema>;
 export type AgentModelContext = Static<typeof AgentModelContextSchema>;
+export type AgentInitialDesignInspection = Static<
+  typeof AgentInitialDesignInspectionSchema
+>;
 export type AgentToolFailureIssue = Static<typeof AgentToolFailureIssueSchema>;
 export type AgentToolFailureDetails = Static<
   typeof AgentToolFailureDetailsSchema
@@ -926,7 +945,9 @@ export function isAgentRequest(value: unknown): value is AgentRequest {
   return (
     Value.Check(AgentRequestSchema, value) &&
     (value.type !== "run.start" ||
-      (isSelectionScope(value.scope) &&
+      ((value.initialDesignInspection === undefined ||
+        value.initialDesignInspection.observedRevision === value.revision) &&
+        isSelectionScope(value.scope) &&
         isDesignMutationTarget(value.mutationTarget) &&
         (value.mutationTarget.kind !== "page" ||
           value.scope.pageId === undefined ||

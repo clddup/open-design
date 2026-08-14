@@ -157,6 +157,59 @@ describe("DesignGenerationPerformanceTracker", () => {
       }),
     ).toBeNull();
   });
+
+  it("includes a host inspection that completes before run.started in T_plan", () => {
+    let now = baseTime + 100;
+    const tracker = new DesignGenerationPerformanceTracker(() => now);
+    const runId = "run_host_inspected";
+    tracker.recordRendererTool({
+      runId,
+      toolCallId: "host_inspect",
+      toolName: "opendesign_inspect_document",
+      status: "completed",
+      canvasWaitCount: null,
+      canvasWaitMs: null,
+      configuredStageDelayMs: null,
+      totalMs: 100,
+      firstResponseMs: 10,
+      phaseDurationMs: {
+        accepted: 10,
+        applying: 0,
+        capturing: 0,
+        persisting: 90,
+      },
+      phaseProgressEvents: {
+        accepted: 1,
+        applying: 0,
+        capturing: 0,
+        persisting: 1,
+      },
+    });
+    now = baseTime + 110;
+    tracker.recordAgentEvent({
+      type: "run.started",
+      runId,
+      startedAt: new Date(now).toISOString(),
+    });
+    now = baseTime + 210;
+    requested(tracker, runId, "plan", DESIGN_PLAN_TOOL_NAME);
+    completed(tracker, runId, "plan", ledger(1, 0, "allocated"), 1);
+    now = baseTime + 220;
+    const summary = tracker.recordAgentEvent({
+      type: "run.completed",
+      runId,
+      finishedAt: new Date(now).toISOString(),
+      stopReason: "budget",
+    });
+
+    expect(summary).toMatchObject({
+      milestonesMs: { T_plan: 210 },
+      renderer: {
+        completed: 1,
+        totalMs: { count: 1, totalMs: 100 },
+      },
+    });
+  });
 });
 
 function requested(

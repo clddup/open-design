@@ -1863,7 +1863,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: GENERATE_IMAGE_TOOL_NAME,
-    modelDisclosure: { bootstrap: "available" as const },
+    modelDisclosure: {
+      bootstrap: "available" as const,
+      beforePlan: "deferred" as const,
+    },
     description:
       "Generate one original raster image with OpenDesign's globally configured image-generation model. A successful opendesign_define_design_plan call must already declare the exact role as reference, background, hero, supporting-content, or final-single-image. This selection is application-wide and independent of the current conversation model. The result is a content-addressed image attachment; call opendesign_place_image only for a declared placeable role. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
     inputSchema: {
@@ -2324,6 +2327,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: DESIGN_APPLY_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "available" as const,
+      beforePlan: "deferred" as const,
       role: "material-write" as const,
       bootstrapDescription:
         "Create the first small but meaningful editable visual slice inside the planned artboard, or perform a basic inspected edit. This compact phase supports Frame, Group, Rectangle, Ellipse, and Text with solid paints plus insert, basic property update, move, and delete commands. Every Text insert must include the complete Typography Core fields shown by the schema, including paragraphIndent, paragraphSpacing, textCase, textDecoration, textTruncation, and maxLines; disabled truncation uses maxLines null, while ending truncation on Auto Size needs a positive maxLines. Prefer one region such as navigation, hero, primary mark, or core content instead of waiting to emit an entire page. Ordered steps must represent real semantic units and cover every command exactly once. The trusted host still validates and applies these commands through the same OpenDesign transaction, revision, history, scope, and recovery boundary. After a successful material revision, the complete apply schema and advanced professional tools become available automatically.",

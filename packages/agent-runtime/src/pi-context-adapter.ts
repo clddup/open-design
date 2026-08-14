@@ -25,6 +25,7 @@ import {
   modelContextCompatibilityMessage,
   modelContextFits,
   planContextCompaction,
+  projectAgentRunPrompt,
   restoreModelMessages,
   toCanonicalTool,
   type AgentRunRequest,
@@ -80,7 +81,7 @@ export async function prepareOpenDesignPiContext(
   const request = snapshotRequest(options.request);
   const tools = options.toolDefinitions.map(toCanonicalTool);
   const currentMessage = canonicalUserMessage(
-    request.prompt,
+    projectAgentRunPrompt(request),
     request.attachments ?? [],
   );
   const budget = createContextBudget(

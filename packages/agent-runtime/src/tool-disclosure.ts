@@ -1,6 +1,7 @@
 import type { AgentToolCallRecord, AgentToolDefinition } from "./index.js";
 
-export type ModelToolDisclosurePhase = "bootstrap" | "inspected" | "expanded";
+export type ModelToolDisclosurePhase =
+  "bootstrap" | "host-inspected" | "inspected" | "expanded";
 
 /**
  * Returns the exact model-facing definition view for one disclosure phase.
@@ -15,6 +16,13 @@ export function disclosedToolDefinitions(
   return definitions.flatMap((definition) => {
     const disclosure = definition.modelDisclosure;
     if (disclosure === undefined) return [definition];
+    if (
+      phase === "host-inspected" &&
+      (disclosure.bootstrap !== "available" ||
+        disclosure.beforePlan === "deferred")
+    ) {
+      return [];
+    }
     if (
       disclosure.bootstrap === "deferred" &&
       !(phase === "inspected" && disclosure.afterInspection === "available")
@@ -40,6 +48,7 @@ export function disclosedToolDefinitions(
 export function resolveModelToolDisclosurePhase(
   definitions: readonly AgentToolDefinition[],
   records: readonly AgentToolCallRecord[],
+  options: { initialInspection?: boolean } = {},
 ): ModelToolDisclosurePhase {
   const roles = new Map(
     definitions.flatMap((definition) => {
@@ -49,7 +58,9 @@ export function resolveModelToolDisclosurePhase(
   );
   if (roles.size === 0) return "expanded";
 
-  let inspected = false;
+  let inspected = options.initialInspection ?? false;
+  let modelInspected = false;
+  let planned = false;
   for (const record of records) {
     const role = roles.get(record.toolName);
     if (role === "material-write" && record.revision !== undefined) {
@@ -58,7 +69,14 @@ export function resolveModelToolDisclosurePhase(
     if (role === "plan" && planTargetsExistingArtboard(record.input)) {
       return "expanded";
     }
-    if (role === "inspection") inspected = true;
+    if (role === "plan") planned = true;
+    if (role === "inspection") {
+      inspected = true;
+      modelInspected = true;
+    }
+  }
+  if (options.initialInspection && !planned && !modelInspected) {
+    return "host-inspected";
   }
   return inspected ? "inspected" : "bootstrap";
 }
@@ -93,12 +111,20 @@ export function isSafeModelDisclosure(
     !Object.keys(disclosure).every((key) =>
       [
         "bootstrap",
+        "beforePlan",
         "afterInspection",
         "role",
         "bootstrapDescription",
         "bootstrapInputSchema",
       ].includes(key),
     )
+  ) {
+    return false;
+  }
+  if (
+    disclosure.beforePlan !== undefined &&
+    disclosure.beforePlan !== "available" &&
+    disclosure.beforePlan !== "deferred"
   ) {
     return false;
   }

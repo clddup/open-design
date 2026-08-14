@@ -2,7 +2,10 @@ import type { AgentEvent, AgentRequest } from "@opendesign/agent-contracts";
 import type { DesignDeliveryLedger } from "@opendesign/workspace-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { AgentContinuationScheduler } from "./agent-continuation-scheduler";
-import { startAgentRun } from "./agent-run-starter";
+import {
+  handleAgentRunControlRequest,
+  startAgentRun,
+} from "./agent-run-starter";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -35,6 +38,110 @@ const incomplete: DesignDeliveryLedger = {
 };
 
 describe("Agent Run starter", () => {
+  it("injects a Main-prepared inspection before sending the Run to Agent", async () => {
+    const scheduler = new AgentContinuationScheduler(() => 1000);
+    const send = vi.fn();
+    const initialDesignInspection = {
+      version: 1 as const,
+      observedRevision: source.revision,
+      content: '{"pageId":"page_1","revision":4}',
+    };
+    const started = await startAgentRun(source, {
+      agentHost: { send } as never,
+      continuationScheduler: scheduler,
+      conversationIdByRunId: new Map(),
+      globalTaskCoordinator: {
+        registerRun: vi.fn().mockResolvedValue({}),
+      } as never,
+      modelProviderHost: {
+        resolveModelContext: vi.fn().mockReturnValue({
+          contextWindow: 200_000,
+          maxOutputTokens: 16_384,
+        }),
+      } as never,
+      prepareInitialDesignInspection: vi
+        .fn()
+        .mockResolvedValue(initialDesignInspection),
+      referenceHost: {
+        registerRun: vi.fn(),
+        releaseRun: vi.fn(),
+      } as never,
+    });
+
+    expect(started).toBe(true);
+    expect(send).toHaveBeenCalledWith({
+      ...source,
+      initialDesignInspection,
+      modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
+    });
+  });
+
+  it("rejects a Renderer-forged initial inspection", async () => {
+    await expect(
+      handleAgentRunControlRequest(
+        {
+          ...source,
+          initialDesignInspection: {
+            version: 1,
+            observedRevision: source.revision,
+            content: '{"forged":true}',
+          },
+        },
+        {
+          agentHost: {} as never,
+          continuationScheduler: {} as never,
+          conversationIdByRunId: new Map(),
+          globalTaskCoordinator: {} as never,
+          modelProviderHost: {} as never,
+          referenceHost: {} as never,
+          publish: vi.fn(),
+        },
+      ),
+    ).rejects.toThrow("Renderer cannot supply initial design inspection");
+  });
+
+  it("cancels the host inspection before the Agent Run is sent", async () => {
+    const scheduler = new AgentContinuationScheduler(() => 1000);
+    const send = vi.fn();
+    const publish = vi.fn();
+    const prepareInitialDesignInspection = vi.fn(
+      (_request: RunStartRequest, signal: AbortSignal) =>
+        new Promise<undefined>((resolve) => {
+          signal.addEventListener("abort", () => resolve(undefined), {
+            once: true,
+          });
+        }),
+    );
+    const dependencies = {
+      agentHost: { send } as never,
+      continuationScheduler: scheduler,
+      conversationIdByRunId: new Map<string, string>(),
+      globalTaskCoordinator: {
+        registerRun: vi.fn().mockResolvedValue({}),
+        handleAgentEvent: vi.fn(),
+      } as never,
+      modelProviderHost: { resolveModelContext: vi.fn() } as never,
+      prepareInitialDesignInspection,
+      referenceHost: {
+        registerRun: vi.fn(),
+        releaseRun: vi.fn(),
+      } as never,
+    };
+    const started = startAgentRun(source, dependencies);
+    await vi.waitFor(() => {
+      expect(prepareInitialDesignInspection).toHaveBeenCalledTimes(1);
+    });
+
+    expect(
+      await handleAgentRunControlRequest(
+        { type: "run.cancel", runId: source.runId },
+        { ...dependencies, publish },
+      ),
+    ).toBe(true);
+    expect(await started).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("does not send a scheduled continuation after the user cancels it", async () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     scheduler.registerRun(source);

@@ -123,9 +123,11 @@ export class OpenDesignPiRuntime {
         request.sessionId,
       );
       const toolDefinitions = await this.#loadSafeTools();
-      const bootstrapToolDefinitions = disclosedToolDefinitions(
+      const initialToolDefinitions = disclosedToolDefinitions(
         toolDefinitions,
-        "bootstrap",
+        request.initialDesignInspection === undefined
+          ? "bootstrap"
+          : "host-inspected",
       );
       const systemPrompt =
         this.options.systemPrompt ??
@@ -135,7 +137,7 @@ export class OpenDesignPiRuntime {
         request,
         sessionStore: this.options.sessionStore,
         systemPrompt,
-        toolDefinitions: bootstrapToolDefinitions,
+        toolDefinitions: initialToolDefinitions,
         model,
         maxContextCharacters: this.#limits.maxContextCharacters,
         now: this.#now,

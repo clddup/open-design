@@ -125,6 +125,29 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("OpenDesign Pi context adapter", () => {
+  it("prepends a bounded trusted host inspection without changing the durable user prompt", async () => {
+    const prepared = await prepareOpenDesignPiContext({
+      request: {
+        ...request,
+        initialDesignInspection: {
+          version: 1,
+          observedRevision: request.revision,
+          content: '{"pageId":"page_1","nodes":["frame_1"]}',
+        },
+      },
+      sessionStore: new MemorySessionStore(),
+      systemPrompt: "OpenDesign host-inspected planning",
+      toolDefinitions: [],
+      model,
+    });
+
+    expect(JSON.stringify(prepared.promptMessage)).toContain(
+      "The host already inspected the exact bound document revision 12",
+    );
+    expect(JSON.stringify(prepared.promptMessage)).toContain("frame_1");
+    expect(JSON.stringify(prepared.promptMessage)).toContain(request.prompt);
+  });
+
   it("restores from the journal and persists cumulative checkpoints without creating a Pi session", async () => {
     const store = new MemorySessionStore();
     const priorPrompt = "PRIOR_DESIGN_REQUEST ".repeat(240);
