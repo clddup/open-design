@@ -1291,6 +1291,7 @@ function layoutDocument(): DesignDocument {
     locked: false,
     transform: [1, 0, 0, 1, 0, 0],
     size: { width: 300, height: 100 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       fills: [],
@@ -1328,6 +1329,7 @@ function rectangle(
     locked: false,
     transform: [1, 0, 0, 1, x, y],
     size: { width, height },
+    exportSettings: [],
     opacity: 1,
     properties: {
       fills: [],
@@ -1354,6 +1356,7 @@ function autoHeightText(
     locked: false,
     transform: [1, 0, 0, 1, 0, 0],
     size: { width, height: 24 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       content: "Responsive copy",

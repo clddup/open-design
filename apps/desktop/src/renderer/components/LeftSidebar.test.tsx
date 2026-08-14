@@ -309,6 +309,7 @@ describe("LeftSidebar layer tree", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 640, height: 220 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         operation: "union",
@@ -656,6 +657,7 @@ describe("LeftSidebar image assets", () => {
       locked: false,
       transform: [1, 0, 0, 1, 20, 20],
       size: { width: 300, height: 200 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         assetId: "asset_photo",

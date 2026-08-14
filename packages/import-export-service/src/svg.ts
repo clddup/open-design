@@ -209,6 +209,7 @@ type ImportedNodeBase = Pick<
   | "blendMode"
   | "childIds"
   | "effects"
+  | "exportSettings"
   | "extensions"
   | "id"
   | "locked"
@@ -504,6 +505,7 @@ export function importSvg(
       height: sourceViewport.height,
     },
     opacity: readOpacity(root.getAttribute("opacity"), 1),
+    exportSettings: [],
     ...(rootEffects.effects.length === 0
       ? {}
       : { effects: [...rootEffects.effects] }),
@@ -939,6 +941,7 @@ function svgMaskVisualPadding(
       node.kind !== "group" &&
       node.kind !== "image" &&
       node.kind !== "instance" &&
+      node.kind !== "slice" &&
       node.properties.strokes.length > 0
     ) {
       const strokeFactor =
@@ -1401,6 +1404,7 @@ function importMaskedElement(
     transform: [1, 0, 0, 1, bounds.x, bounds.y],
     size: { width: bounds.width, height: bounds.height },
     opacity: 1,
+    exportSettings: [],
     properties: {},
     extensions: {
       svgImport: {
@@ -1544,6 +1548,7 @@ function importMaskDefinitionSource(
       ),
       size: { width: bounds.width, height: bounds.height },
       opacity: 1,
+      exportSettings: [],
       maskMode: reference.mode,
       properties: {},
       extensions: {
@@ -1677,6 +1682,7 @@ function importElement(
       element.getAttribute("visibility") !== "hidden",
     locked: false,
     opacity: readOpacity(element.getAttribute("opacity"), 1),
+    exportSettings: [],
     ...(filterEffects.effects.length === 0
       ? {}
       : { effects: [...filterEffects.effects] }),

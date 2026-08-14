@@ -597,6 +597,7 @@ export function createWelcomeDocument(): DesignDocument {
     transform: [1, 0, 0, 1, 64, 340],
     size: { width: 992, height: 252 },
     opacity: 1,
+    exportSettings: [],
     properties: {},
     extensions: {},
   };
@@ -753,6 +754,7 @@ function nodeBase(options: BaseNodeOptions) {
     transform: options.transform,
     size: options.size,
     opacity: 1,
+    exportSettings: [],
     extensions: {},
   };
 }

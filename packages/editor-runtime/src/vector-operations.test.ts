@@ -163,6 +163,7 @@ function documentWithVector(): DesignDocument {
     locked: false,
     transform: [0, 1, -1, 0, 100, 200],
     size: { width: 100, height: 100 },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
     kind: "vector",

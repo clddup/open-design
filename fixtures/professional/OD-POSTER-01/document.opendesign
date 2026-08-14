@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.27.0",
+  "schemaVersion": "1.28.0",
   "documentId": "document_od_poster_01",
   "revision": 1,
   "pageOrder": ["page_poster_01"],
@@ -29,6 +29,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 0, 0],
       "size": { "width": 1440, "height": 1024 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -84,6 +85,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 0, 0],
       "size": { "width": 1440, "height": 1024 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {}
@@ -98,6 +100,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 820, -160],
       "size": { "width": 560, "height": 560 },
+      "exportSettings": [],
       "opacity": 1,
       "blendMode": "screen",
       "effects": [{ "type": "layer-blur", "radius": 46 }],
@@ -128,6 +131,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, -130, 650],
       "size": { "width": 500, "height": 500 },
+      "exportSettings": [],
       "opacity": 1,
       "blendMode": "screen",
       "effects": [{ "type": "layer-blur", "radius": 54 }],
@@ -158,6 +162,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 748, 118],
       "size": { "width": 610, "height": 730 },
+      "exportSettings": [],
       "opacity": 1,
       "blendMode": "screen",
       "maskMode": "luminance",
@@ -188,6 +193,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 52, 650],
       "size": { "width": 1336, "height": 220 },
+      "exportSettings": [],
       "opacity": 1,
       "blendMode": "screen",
       "effects": [
@@ -231,6 +237,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 84, 88],
       "size": { "width": 3, "height": 838 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -261,6 +268,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 1238, 74],
       "size": { "width": 104, "height": 104 },
+      "exportSettings": [],
       "opacity": 0.34,
       "blendMode": "screen",
       "effects": [
@@ -296,6 +304,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 0, 0],
       "size": { "width": 760, "height": 760 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {}
@@ -310,6 +319,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 122, 106],
       "size": { "width": 580, "height": 32 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -339,6 +349,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 112, 172],
       "size": { "width": 650, "height": 276 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -396,6 +407,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 122, 492],
       "size": { "width": 570, "height": 92 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -425,6 +437,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 122, 632],
       "size": { "width": 580, "height": 70 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -454,6 +467,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 122, 770],
       "size": { "width": 560, "height": 28 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -502,6 +516,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 835, 176],
       "size": { "width": 420, "height": 570 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {}
@@ -516,6 +531,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 18, 26],
       "size": { "width": 384, "height": 520 },
+      "exportSettings": [],
       "opacity": 1,
       "blendMode": "screen",
       "effects": [{ "type": "layer-blur", "radius": 14 }],
@@ -546,6 +562,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 76, 474],
       "size": { "width": 126, "height": 62 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -587,6 +604,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 218, 474],
       "size": { "width": 126, "height": 62 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -628,6 +646,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 276, 278],
       "size": { "width": 124, "height": 186 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -669,6 +688,7 @@
       "locked": false,
       "transform": [0.99, -0.08, 0.08, 0.99, 4, 174],
       "size": { "width": 122, "height": 246 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -710,6 +730,7 @@
       "locked": false,
       "transform": [0.99, 0.08, -0.08, 0.99, 304, 174],
       "size": { "width": 122, "height": 246 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -751,6 +772,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 50, 42],
       "size": { "width": 320, "height": 446 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -819,6 +841,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 92, 178],
       "size": { "width": 236, "height": 266 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -859,6 +882,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 80, 82],
       "size": { "width": 260, "height": 160 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -899,6 +923,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 126, 116],
       "size": { "width": 56, "height": 64 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -917,6 +942,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 238, 116],
       "size": { "width": 56, "height": 64 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -935,6 +961,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 144, 132],
       "size": { "width": 28, "height": 36 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -971,6 +998,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 248, 132],
       "size": { "width": 28, "height": 36 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -1007,6 +1035,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 150, 136],
       "size": { "width": 9, "height": 11 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -1025,6 +1054,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 254, 136],
       "size": { "width": 9, "height": 11 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -1043,6 +1073,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 178, 176],
       "size": { "width": 64, "height": 54 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -1083,6 +1114,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 66, 244],
       "size": { "width": 290, "height": 82 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -1131,6 +1163,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 270, 248],
       "size": { "width": 82, "height": 86 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -1170,6 +1203,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 0, 0],
       "size": { "width": 1440, "height": 1024 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {}
@@ -1184,6 +1218,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 122, 900],
       "size": { "width": 1196, "height": 1 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -1203,6 +1238,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 122, 926],
       "size": { "width": 1196, "height": 28 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {

@@ -326,6 +326,7 @@ function autoWidthNode(
     locked: false,
     transform: [1, 0, 0, 1, 64, 64],
     size: { width: 1, height: 1 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       content: "Auto width",

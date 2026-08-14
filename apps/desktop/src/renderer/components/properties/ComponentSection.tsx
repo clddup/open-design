@@ -90,6 +90,7 @@ const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   vector: "node.vector",
   path: "node.path",
   instance: "node.instance",
+  slice: "node.slice",
 };
 
 function ComponentOverrideEditor({

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { DesignDocument } from "@opendesign/design-contracts";
+import {
+  DESIGN_SCHEMA_VERSION,
+  type DesignDocument,
+} from "@opendesign/design-contracts";
 import {
   materializeSharedStyles,
   styleConsumers,
@@ -69,7 +72,7 @@ describe("Style Service v1", () => {
 function fixture(): DesignDocument {
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.27.0",
+    schemaVersion: DESIGN_SCHEMA_VERSION,
     documentId: "styles",
     revision: 0,
     pageOrder: ["page"],
@@ -92,6 +95,7 @@ function fixture(): DesignDocument {
         locked: false,
         transform: [1, 0, 0, 1, 0, 0],
         size: { width: 400, height: 400 },
+        exportSettings: [],
         opacity: 1,
         gridStyleId: "grid",
         properties: {
@@ -113,6 +117,7 @@ function fixture(): DesignDocument {
         locked: false,
         transform: [1, 0, 0, 1, 20, 20],
         size: { width: 200, height: 40 },
+        exportSettings: [],
         opacity: 1,
         fillStyleId: "paint",
         textStyleId: "text",

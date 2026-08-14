@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.27.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.28.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 20 项，不可用 2 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -298,11 +298,11 @@
 按倍率和透明背景设置，把选中图层、Frame 或 Slice 导出为 PNG、JPEG、WebP、SVG 或 PDF。
 
 - ID：`export.static-formats`
-- 实现方：OpenDesign Raster Export v1 + leafer-editor 2.2.9 + Main RasterFileService; SVG v1 interchange service
+- 实现方：DesignDocument 1.28.0 Slice/Export Settings + OpenDesign Raster Export v1 + leafer-editor 2.2.9 + Main RasterFileService; SVG v1 interchange service
 - 表面：contract=degraded；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=degraded
-- 证据：自动化 12 项；实机 0 项
-- 限制：Raster Export v1 可把一个明确图层、Group 或 Frame 按倍率/固定边长、背景、质量和重采样设置导出为 PNG、JPEG 或 WebP；画布截图仍是独立诊断预览。
-- 限制：批量导出、Slice、整页、持久多配置、PDF、Display P3/ICC 和导出后缀尚未实现。
+- 证据：自动化 14 项；实机 0 项
+- 限制：节点可持久保存带后缀的有序 Figma-shaped 导出配置。人工与 Agent 事务可创建真实 Slice 并设置配置；Slice 位图交付通过同一 Leafer 导出器裁切周围场景内容。画布截图和 Slice 虚线 overlay 仍是非交付投影。
+- 限制：批量目录导出、整页导出、PDF、Display P3/ICC、Slice SVG 裁切、SVG 文字转轮廓及绝对/重叠内容边界均明确不支持；WEBP 是 OpenDesign 扩展，不冒充 Figma 标准格式。
 - 限制：macOS/Windows 共享路径自动化已完成；两平台打包产品的保存、覆盖、取消、透明与尺寸实测仍待完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040028114-Export-static-designs-from-Figma)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/13402894554519-Export-formats-and-settings)

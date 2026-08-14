@@ -1073,6 +1073,7 @@ function updateProperties(
     "blendMode",
     "effects",
     "maskMode",
+    "exportSettings",
     "properties",
     "extensions",
   ] as const;

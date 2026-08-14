@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.27.0`
+- 文档协议：`DesignDocument 1.28.0`
 - Agent 协议：`3.9.0`
 - Geometry Service：`contract v10`
 - Layout Service：`contract v6`

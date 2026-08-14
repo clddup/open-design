@@ -298,6 +298,7 @@ function baseNode<Kind extends DesignNode["kind"]>(
       number,
     ],
     size: { width: 40, height: 40 },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
   };

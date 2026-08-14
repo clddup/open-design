@@ -49,6 +49,7 @@ function imageNode(id: string, assetId = oldAsset.id): ImageNode {
     locked: false,
     transform: [1, 0, 0, 1, 32, 32],
     size: { width: 320, height: 240 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       assetId,
@@ -119,6 +120,7 @@ describe("image update planner", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         path: "M0 0 H100 V100 H0 Z",
@@ -279,6 +281,7 @@ describe("file image asset planners", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         path: "M0 0 H100 V100 H0 Z",

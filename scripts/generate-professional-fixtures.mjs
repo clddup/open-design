@@ -9,7 +9,7 @@ const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
-const documentSchemaVersion = "1.27.0";
+const documentSchemaVersion = "1.28.0";
 
 const fixtureSources = [
   {
@@ -1451,6 +1451,7 @@ function nodeBase({
     locked: false,
     transform,
     size,
+    exportSettings: [],
     opacity,
     ...(blendMode === undefined ? {} : { blendMode }),
     ...(effects === undefined ? {} : { effects }),

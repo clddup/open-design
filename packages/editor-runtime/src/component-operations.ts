@@ -133,6 +133,7 @@ export function planCreateInstance(
     transform: [...input.transform],
     size: { ...root.size },
     opacity: 1,
+    exportSettings: [],
     extensions: {},
     kind: "instance",
     properties: {

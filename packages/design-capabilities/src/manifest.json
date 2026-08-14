@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-15",
-  "documentSchemaVersion": "1.27.0",
+  "documentSchemaVersion": "1.28.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -1091,7 +1091,7 @@
         "en": "Export selected layers, Frames, or Slices to PNG, JPEG, WebP, SVG, or PDF with scale and transparency settings.",
         "zh-CN": "按倍率和透明背景设置，把选中图层、Frame 或 Slice 导出为 PNG、JPEG、WebP、SVG 或 PDF。"
       },
-      "provider": "OpenDesign Raster Export v1 + leafer-editor 2.2.9 + Main RasterFileService; SVG v1 interchange service",
+      "provider": "DesignDocument 1.28.0 Slice/Export Settings + OpenDesign Raster Export v1 + leafer-editor 2.2.9 + Main RasterFileService; SVG v1 interchange service",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "export"],
       "surfaces": {
         "contract": "degraded",
@@ -1103,12 +1103,12 @@
       },
       "limitations": [
         {
-          "en": "Raster Export v1 delivers one explicit layer, Group, or Frame as PNG, JPEG, or WebP with scale/fixed-edge, background, quality, and resampling settings. Canvas screenshots remain separate diagnostic previews.",
-          "zh-CN": "Raster Export v1 可把一个明确图层、Group 或 Frame 按倍率/固定边长、背景、质量和重采样设置导出为 PNG、JPEG 或 WebP；画布截图仍是独立诊断预览。"
+          "en": "Nodes persist ordered Figma-shaped export settings with suffixes. Human and Agent transactions can create real Slice nodes and set configurations; Slice raster delivery crops surrounding scene content through the same Leafer exporter. Canvas screenshots and dashed Slice overlays remain non-delivery projections.",
+          "zh-CN": "节点可持久保存带后缀的有序 Figma-shaped 导出配置。人工与 Agent 事务可创建真实 Slice 并设置配置；Slice 位图交付通过同一 Leafer 导出器裁切周围场景内容。画布截图和 Slice 虚线 overlay 仍是非交付投影。"
         },
         {
-          "en": "Batch export, Slice, Page export, persistent multi-configuration, PDF, Display P3/ICC, and export suffixes are not implemented.",
-          "zh-CN": "批量导出、Slice、整页、持久多配置、PDF、Display P3/ICC 和导出后缀尚未实现。"
+          "en": "Batch directory export, Page export, PDF, Display P3/ICC, Slice SVG crop, SVG text outlining and absolute/overlapping-content bounds are explicitly unsupported; WEBP is an OpenDesign extension rather than a Figma standard format.",
+          "zh-CN": "批量目录导出、整页导出、PDF、Display P3/ICC、Slice SVG 裁切、SVG 文字转轮廓及绝对/重叠内容边界均明确不支持；WEBP 是 OpenDesign 扩展，不冒充 Figma 标准格式。"
         },
         {
           "en": "Shared macOS/Windows path tests are complete; packaged-product save, overwrite, cancellation, transparency, and size smoke remain pending on both platforms.",
@@ -1118,6 +1118,8 @@
       "evidence": {
         "automated": [
           "packages/import-export-service/src/raster.test.ts",
+          "packages/import-export-service/src/stored-export.test.ts",
+          "packages/leafer-engine/src/slice-overlay.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/renderer/raster-export.test.ts",
           "apps/desktop/src/main/raster/raster-file-service.test.ts",

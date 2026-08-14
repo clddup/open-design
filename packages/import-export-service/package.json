@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./limits": "./src/limits.ts",
     "./raster": "./src/raster.ts",
+    "./stored-export": "./src/stored-export.ts",
     "./svg-issues": "./src/svg-issues.ts",
     "./svg": "./src/svg.ts"
   },

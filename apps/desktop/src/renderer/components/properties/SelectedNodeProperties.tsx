@@ -52,6 +52,7 @@ const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
   vector: "pen",
   path: "pen",
   instance: "instance",
+  slice: "frame",
 };
 
 const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
@@ -69,6 +70,7 @@ const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   vector: "node.vector",
   path: "node.path",
   instance: "node.instance",
+  slice: "node.slice",
 };
 
 const lineEndpoints: readonly LineEndpoint[] = [

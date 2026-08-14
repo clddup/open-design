@@ -10,6 +10,7 @@ import {
   FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
   FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION,
   FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
+  FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
   DesignOperationSchema,
@@ -47,7 +48,73 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(COMPONENT_PROPERTY_ORDER_DESIGN_SCHEMA_VERSION).toBe("1.25.0");
   expect(FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION).toBe("1.26.0");
   expect(FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION).toBe("1.27.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION);
+  expect(FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION).toBe("1.28.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(
+    FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
+  );
+});
+
+it("migrates 1.27 nodes to empty export settings and keeps 1.28 strict", () => {
+  const legacy = textDocumentFixture() as unknown as Record<string, unknown>;
+  legacy.schemaVersion = FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION;
+  const nodes = legacy.nodesById as Record<string, Record<string, unknown>>;
+  for (const node of Object.values(nodes)) delete node.exportSettings;
+  const migrated = migrateDesignDocument(legacy);
+  expect(migrated?.schemaVersion).toBe(
+    FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
+  );
+  expect(migrated?.nodesById.text_1?.exportSettings).toEqual([]);
+
+  const malformedCurrent = textDocumentFixture() as unknown as Record<
+    string,
+    unknown
+  >;
+  const currentNodes = malformedCurrent.nodesById as Record<
+    string,
+    Record<string, unknown>
+  >;
+  delete currentNodes.text_1?.exportSettings;
+  expect(migrateDesignDocument(malformedCurrent)).toBeNull();
+});
+
+it("validates Slice and ordered Figma-shaped export settings", () => {
+  const base = textDocumentFixture().nodesById.text_1!;
+  expect(
+    Value.Check(DesignNodeSchema, {
+      ...base,
+      kind: "slice",
+      childIds: [],
+      properties: {},
+      exportSettings: [
+        {
+          format: "PNG",
+          suffix: "@2x",
+          contentsOnly: true,
+          useAbsoluteBounds: false,
+          colorProfile: "DOCUMENT",
+          constraint: { type: "SCALE", value: 2 },
+        },
+        {
+          format: "SVG",
+          suffix: "-vector",
+          contentsOnly: true,
+          useAbsoluteBounds: false,
+          colorProfile: "SRGB",
+          svgOutlineText: false,
+          svgIdAttribute: true,
+          svgSimplifyStroke: true,
+        },
+      ],
+    }),
+  ).toBe(true);
+  expect(
+    Value.Check(DesignNodeSchema, {
+      ...base,
+      kind: "slice",
+      childIds: ["illegal-child"],
+      properties: {},
+    }),
+  ).toBe(false);
 });
 
 it("migrates 1.26 documents to an empty shared-style registry and keeps 1.27 strict", () => {
@@ -56,7 +123,7 @@ it("migrates 1.26 documents to an empty shared-style registry and keeps 1.27 str
   delete legacy.styleOrderByType;
   delete legacy.stylesById;
   expect(migrateDesignDocument(legacy)).toMatchObject({
-    schemaVersion: FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
+    schemaVersion: DESIGN_SCHEMA_VERSION,
     styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
     stylesById: {},
   });
@@ -135,7 +202,7 @@ it("migrates empty 1.25 token placeholders and refuses unknown non-empty token d
   legacy.tokenCollectionsById = {};
   legacy.tokensById = {};
   expect(migrateDesignDocument(legacy)).toMatchObject({
-    schemaVersion: FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
+    schemaVersion: DESIGN_SCHEMA_VERSION,
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
@@ -171,6 +238,7 @@ function textDocumentFixture() {
         locked: false,
         transform: [1, 0, 0, 1, 0, 0] as const,
         size: { width: 240, height: 64 },
+        exportSettings: [],
         opacity: 1,
         extensions: {},
         kind: "text" as const,
@@ -278,6 +346,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "frame",
@@ -360,6 +429,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 640, height: 360 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "image",
@@ -437,6 +507,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 160, height: 220 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "path",
@@ -472,6 +543,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 20, 30],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "vector",
@@ -583,6 +655,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 40, 32],
       size: { width: 240, height: 120 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "line",
@@ -649,6 +722,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 40, 32],
       size: { width: 200, height: 160 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
     };
@@ -718,6 +792,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 160, height: 160 },
+      exportSettings: [],
       opacity: 1,
       effects: [
         {
@@ -813,6 +888,7 @@ describe("design contract schemas", () => {
           locked: false,
           transform: [1, 0, 0, 1, 0, 0],
           size: { width: 100, height: 100 },
+          exportSettings: [],
           opacity: 1,
           extensions: {},
           kind: "path",
@@ -878,6 +954,7 @@ describe("design contract schemas", () => {
           locked: false,
           transform: [1, 0, 0, 1, 0, 0],
           size: { width: 320, height: 240 },
+          exportSettings: [],
           opacity: 1,
           extensions: {},
           kind: "image",
@@ -1049,6 +1126,7 @@ describe("design contract schemas", () => {
           locked: false,
           transform: [1, 0, 0, 1, 0, 0],
           size: { width: 100, height: 100 },
+          exportSettings: [],
           opacity: 1,
           extensions: {},
           kind: "path",
@@ -1109,6 +1187,7 @@ describe("design contract schemas", () => {
           locked: false,
           transform: [1, 0, 0, 1, 0, 0],
           size: { width: 100, height: 0 },
+          exportSettings: [],
           opacity: 1,
           extensions: {},
           kind: "vector",
@@ -1188,6 +1267,7 @@ describe("design contract schemas", () => {
           locked: false,
           transform: [1, 0, 0, 1, 20, 24],
           size: { width: 240, height: 64 },
+          exportSettings: [],
           opacity: 1,
           extensions: {},
           kind: "text",
@@ -1275,6 +1355,7 @@ describe("design contract schemas", () => {
         locked: false,
         transform: [1, 0, 0, 1, 0, 0],
         size: { width: 100, height: 40 },
+        exportSettings: [],
         opacity: 1,
         properties: {},
         extensions: {},
@@ -1375,6 +1456,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 280, 0],
       size: { width: 240, height: 64 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "instance",
@@ -1500,6 +1582,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 320, height: 180 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "frame" as const,
@@ -1613,6 +1696,7 @@ describe("design contract schemas", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 320, height: 120 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "frame",

@@ -709,6 +709,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       throw new Error("Leafer raster export target changed during rendering");
     }
     const leaf = this.#exportElement(request.rootNodeId);
+    const sourceNode = input.document.nodesById[request.rootNodeId];
     const bounds = leaf.getBounds("render", "local");
     const plan = planRasterExportDimensions(bounds, request.size);
     if (!plan.ok) throw new RangeError(`${plan.code}: ${plan.message}`);
@@ -718,6 +719,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         blob: true,
         pixelRatio: 1,
         scale: plan.dimensions.scale,
+        ...(sourceNode?.kind === "slice" ? { slice: true } : {}),
         smooth: request.resampling === "smooth",
         ...(request.quality === undefined ? {} : { quality: request.quality }),
         ...(request.background.mode === "color"
@@ -2706,7 +2708,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       fill: [{ type: "solid", color: "#4f7fff", opacity: 0.12 }],
       stroke: "#4f7fff",
       strokeWidth: 1,
-      ...(tool === "frame" ? { dashPattern: [5, 4] } : {}),
+      ...(tool === "frame" || tool === "slice" ? { dashPattern: [5, 4] } : {}),
     };
     return tool === "ellipse"
       ? new this.#leafer.Ellipse(data)

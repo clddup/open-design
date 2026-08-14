@@ -70,7 +70,32 @@ export function isInternalDesignApplyToolInput(
 function normalizeModelDesignOperation(
   command: unknown,
 ): DesignOperation | undefined {
-  if (!isRecord(command) || command.type !== "insert_element") {
+  if (!isRecord(command)) {
+    return undefined;
+  }
+  if (command.type === "replace_subtree" && Array.isArray(command.nodes)) {
+    const normalized = {
+      ...command,
+      nodes: command.nodes.map((node) =>
+        isRecord(node) ? { exportSettings: [], ...node } : node,
+      ),
+    };
+    return isDesignOperation(normalized) ? normalized : undefined;
+  }
+  if (
+    command.type === "update_properties" &&
+    Array.isArray(command.exportSettings)
+  ) {
+    const exportSettings = command.exportSettings.map(
+      normalizeModelExportSetting,
+    );
+    if (exportSettings.some((setting) => setting === undefined)) {
+      return undefined;
+    }
+    const normalized = { ...command, exportSettings };
+    return isDesignOperation(normalized) ? normalized : undefined;
+  }
+  if (command.type !== "insert_element") {
     return isDesignOperation(command) ? command : undefined;
   }
   if (!isRecord(command.node)) return undefined;
@@ -80,6 +105,7 @@ function normalizeModelDesignOperation(
       visible: true,
       locked: false,
       opacity: 1,
+      exportSettings: [],
       extensions: {},
       ...command.node,
       parentId: command.parentId,
@@ -87,6 +113,38 @@ function normalizeModelDesignOperation(
     },
   };
   return isDesignOperation(normalized) ? normalized : undefined;
+}
+
+function normalizeModelExportSetting(value: unknown): unknown {
+  if (!isRecord(value) || typeof value.suffix !== "string") return undefined;
+  const common = {
+    suffix: value.suffix,
+    contentsOnly: true,
+    useAbsoluteBounds: false,
+    colorProfile: "DOCUMENT",
+  } as const;
+  if (value.format === "SVG" && typeof value.svgIdAttribute === "boolean") {
+    return {
+      ...common,
+      format: "SVG",
+      svgOutlineText: false,
+      svgIdAttribute: value.svgIdAttribute,
+      svgSimplifyStroke: true,
+    };
+  }
+  if (
+    (value.format === "PNG" ||
+      value.format === "JPG" ||
+      value.format === "WEBP") &&
+    isRecord(value.constraint)
+  ) {
+    return {
+      ...common,
+      format: value.format,
+      constraint: value.constraint,
+    };
+  }
+  return undefined;
 }
 
 function isNormalizedDesignApplyToolInput(

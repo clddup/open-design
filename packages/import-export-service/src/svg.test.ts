@@ -231,6 +231,7 @@ describe("versioned SVG interchange", () => {
       locked: false,
       transform: [1, 0, 0, 1, 24, 18],
       size: { width: 240, height: 80 },
+      exportSettings: [],
       opacity: 0.92,
       properties: {
         content: "OpenDesign\n未来 & <设计>",
@@ -304,6 +305,7 @@ describe("versioned SVG interchange", () => {
       name: text.name,
       transform: text.transform,
       size: text.size,
+      exportSettings: [],
       opacity: text.opacity,
       properties: text.properties,
     });
@@ -439,6 +441,7 @@ describe("versioned SVG interchange", () => {
       locked: false,
       transform: [1, 0, 0, 1, 12, 12],
       size: { width: 168.5, height: 32 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         content: "Auto Width",
@@ -525,6 +528,7 @@ describe("versioned SVG interchange", () => {
       locked: false,
       transform: [1, 0, 0, 1, 8, 12],
       size: { width: 260, height: 48 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         content: "Gradient",
@@ -625,6 +629,7 @@ describe("versioned SVG interchange", () => {
           locked: false,
           transform: [1, 0, 0, 1, 12, 16],
           size: { width: 100, height: 100 },
+          exportSettings: [],
           opacity: 1,
           extensions: {},
           kind: "vector",
@@ -1088,6 +1093,7 @@ describe("versioned SVG interchange", () => {
         width: retained.bounds.width,
         height: retained.bounds.height,
       },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "vector",
@@ -1304,6 +1310,7 @@ describe("versioned SVG interchange", () => {
       locked: false,
       transform: [1, 0, 0, 1, 30, 24],
       size: { width: 180, height: 90 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [],
@@ -1404,6 +1411,7 @@ describe("versioned SVG interchange", () => {
       locked: false,
       transform: [1, 0, 0, 1, 20, 24],
       size: { width: 160, height: 120 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         pointCount: 6,
@@ -1426,6 +1434,7 @@ describe("versioned SVG interchange", () => {
       locked: false,
       transform: [1, 0, 0, 1, 210, 24],
       size: { width: 140, height: 140 },
+      exportSettings: [],
       opacity: 0.9,
       properties: {
         pointCount: 7,
@@ -1515,6 +1524,7 @@ describe("versioned SVG interchange", () => {
       locked: false,
       transform: [1, 0, 0, 1, 10, 10],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         pointCount: 5,
@@ -2416,6 +2426,7 @@ function frameDocument(): DesignDocument {
       locked: false,
       transform: [1, 0, 0, 1, 20, 20],
       size: { width: 180, height: 120 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [{ type: "solid", color: "#111827", opacity: 1 }],
@@ -2467,6 +2478,7 @@ function maskDocument(): DesignDocument {
       locked: false,
       transform: [1, 0, 0, 1, 10, 10],
       size: { width: 400, height: 150 },
+      exportSettings: [],
       opacity: 1,
       properties: {},
       extensions: {},
@@ -2560,6 +2572,7 @@ function simpleRectangle(
     locked: false,
     transform,
     size,
+    exportSettings: [],
     opacity,
     ...(maskMode ? { maskMode } : {}),
     properties: {
@@ -2586,6 +2599,7 @@ function simpleLine(
     locked: false,
     transform: [1, 0, 0, 1, 16, 20],
     size: { width: 120, height: 24 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       fills: [],
@@ -2787,6 +2801,7 @@ function editableVectorNode(
       width: normalized.bounds.width,
       height: normalized.bounds.height,
     },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
     kind: "vector",
@@ -2835,6 +2850,7 @@ function shapeDocument(): DesignDocument {
       locked: false,
       transform: [1, 0, 0, 1, 10, 20],
       size: { width: 200, height: 150 },
+      exportSettings: [],
       opacity: 1,
       properties: {},
       extensions: {},
@@ -2849,6 +2865,7 @@ function shapeDocument(): DesignDocument {
       locked: false,
       transform: [1, 0, 0, 1, 4, 8],
       size: { width: 90, height: 60 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [gradient],
@@ -2868,6 +2885,7 @@ function shapeDocument(): DesignDocument {
       locked: false,
       transform: [0.96, 0.18, -0.18, 0.96, 112, 12],
       size: { width: 58, height: 58 },
+      exportSettings: [],
       opacity: 0.9,
       properties: {
         fills: [{ type: "solid", color: "#ff5b91", opacity: 0.8 }],
@@ -2889,6 +2907,7 @@ function shapeDocument(): DesignDocument {
       locked: false,
       transform: [1, 0, 0, 1, 12, 96],
       size: { width: 84, height: 36 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         path: "M0 28 C18 -4 58 2 84 30 L72 36 C48 16 22 12 8 34 Z",
@@ -2909,6 +2928,7 @@ function shapeDocument(): DesignDocument {
       locked: false,
       transform: [1, 0, 0, 1, 116, 100],
       size: { width: 62, height: 32 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         path: "M0 16 C18 0 42 0 62 16 C42 32 18 32 0 16 Z",

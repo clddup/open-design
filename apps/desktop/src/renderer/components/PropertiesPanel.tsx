@@ -5,6 +5,7 @@ import type {
   ComponentOverridePatch,
   DesignDocument,
   DesignNode,
+  ExportSetting,
   InstanceSwapPreferredValue,
   LayoutConstraints,
   LayoutGuide,
@@ -41,6 +42,7 @@ import {
   SvgOperationNotice,
 } from "./properties/ExportSection";
 import { SelectedNodeProperties } from "./properties/SelectedNodeProperties";
+import { ExportSettingsEditor } from "./properties/ExportSettingsEditor";
 import { Field, formatNumber } from "./properties/controls";
 import styles from "./PropertiesPanel.module.scss";
 
@@ -75,6 +77,7 @@ export function PropertiesPanel({
   onDismissSvgFeedback,
   onExportSvg,
   onExportRaster,
+  onExportStoredSetting,
   onExportFormatChange,
   onReplaceImage,
   onRemoveComponent,
@@ -145,6 +148,7 @@ export function PropertiesPanel({
   onDismissSvgFeedback: () => void;
   onExportSvg: () => void;
   onExportRaster: () => void;
+  onExportStoredSetting: (setting: ExportSetting) => void;
   onExportFormatChange: (format: ExportFormat) => void;
   onReplaceImage: () => void;
   onRemoveComponent: () => void;
@@ -529,6 +533,16 @@ export function PropertiesPanel({
             <strong>{t("properties.noSelection")}</strong>
             <span>{t("properties.selectLayer")}</span>
           </div>
+        )}
+        {selectionCount > 0 && node && (
+          <ExportSettingsEditor
+            busy={svgOperation !== null}
+            node={node}
+            onChange={(exportSettings) =>
+              onUpdate({ exportSettings: [...exportSettings] })
+            }
+            onExport={onExportStoredSetting}
+          />
         )}
         {selectionCount > 0 && (
           <ExportSection

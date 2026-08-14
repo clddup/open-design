@@ -15,6 +15,7 @@ const nodeKindKeys: Record<NodeKind, MessageKey> = {
   path: "node.path",
   polygon: "node.polygon",
   rectangle: "node.rectangle",
+  slice: "node.slice",
   star: "node.star",
   text: "node.text",
   vector: "node.vector",

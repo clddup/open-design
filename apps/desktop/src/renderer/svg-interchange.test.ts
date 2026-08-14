@@ -51,6 +51,7 @@ function importedResult(): SuccessfulSvgImportResult {
     locked: false,
     transform: [1, 0, 0, 1, 0, 0],
     size: { width: 120, height: 80 },
+    exportSettings: [],
     opacity: 1,
     properties: {},
     extensions: {},
@@ -65,6 +66,7 @@ function importedResult(): SuccessfulSvgImportResult {
     locked: false,
     transform: [1, 0, 0, 1, 0, 0],
     size: { width: 120, height: 80 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       cornerRadius: 0,

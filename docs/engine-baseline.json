@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 30,
+  "schemaVersion": 31,
   "recordedAt": "2026-08-15",
   "policy": {
     "allowFloatingRefs": false,
@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.27.0",
+    "documentSchemaVersion": "1.28.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.10.0",
     "geometryServiceContractVersion": 10,
@@ -62,7 +62,7 @@
       "version": "1.133.0",
       "sourceCommit": "83bfe81d9616ab759702f657eb18ef153f83e8ae",
       "license": "MIT",
-      "productionStatus": "compile-time-component-property-variant-slot-variable-and-shared-style-shape-verification-only"
+      "productionStatus": "compile-time-component-property-variant-slot-variable-shared-style-slice-and-export-setting-shape-verification-only"
     },
     "vectorGeometry": {
       "role": "vector-path-geometry-provider",

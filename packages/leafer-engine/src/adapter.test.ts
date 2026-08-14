@@ -888,6 +888,48 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("exports a Slice by cropping the surrounding scene to its bounds", async () => {
+    const input = createInput();
+    input.document = structuredClone(input.document);
+    input.document.nodesById.slice_1 = {
+      id: "slice_1",
+      kind: "slice",
+      name: "Slice",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 40, 40],
+      size: { width: 320, height: 180 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {},
+      extensions: {},
+    };
+    input.document.pagesById.page_welcome!.rootNodeIds.push("slice_1");
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    adapter.sync(input);
+    await adapter.exportRaster({
+      version: 1,
+      pageId: "page_welcome",
+      rootNodeId: "slice_1",
+      format: "png",
+      size: { mode: "scale", value: 1 },
+      background: { mode: "transparent" },
+      resampling: "smooth",
+    });
+    const app = leaferHarness.app;
+    const slice = app && findElement(app.tree, "slice_1");
+    expect(slice?.export).toHaveBeenCalledWith(
+      "png",
+      expect.objectContaining({ slice: true }),
+    );
+    adapter.dispose();
+  });
+
   it("exports resolved component pixels and deduplicates internal instance selection", async () => {
     const onSelectionChange = vi.fn();
     const adapter = await createLeaferEngineAdapter(createHost(), {
@@ -1518,6 +1560,7 @@ describe("Leafer engine selection bounds synchronization", () => {
             locked: false,
             transform: [1, 0, 0, 1, 760, 80],
             size: { width: 180, height: 120 },
+            exportSettings: [],
             opacity: 0.8,
             properties: {
               fills: [{ type: "solid", color: "#6574ff", opacity: 1 }],
@@ -1616,6 +1659,7 @@ describe("Leafer engine selection bounds synchronization", () => {
             locked: false,
             transform: [1, 0, 0, 1, 760, 80],
             size: { width: 180, height: 120 },
+            exportSettings: [],
             opacity: 1,
             properties: {
               fills: [{ type: "solid", color: "#6574ff", opacity: 1 }],
@@ -2148,6 +2192,7 @@ describe("Leafer engine selection bounds synchronization", () => {
       locked: false,
       transform: [1, 0, 0, 1, 24, 32],
       size: { width: 160, height: 220 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "path",
@@ -3738,6 +3783,7 @@ function componentInput(): LeaferEngineSyncInput {
     locked: false,
     transform: [1, 0, 0, 1, 0, 0],
     size: { width: 120, height: 44 },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
     kind: "frame",
@@ -3758,6 +3804,7 @@ function componentInput(): LeaferEngineSyncInput {
     locked: false,
     transform: [1, 0, 0, 1, 0, 0],
     size: { width: 120, height: 44 },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
     kind: "rectangle",
@@ -3777,6 +3824,7 @@ function componentInput(): LeaferEngineSyncInput {
     locked: false,
     transform: [1, 0, 0, 1, 20, 10],
     size: { width: 80, height: 24 },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
     kind: "text",
@@ -3806,6 +3854,7 @@ function componentInput(): LeaferEngineSyncInput {
     locked: false,
     transform: [1, 0, 0, 1, 80, 60],
     size: { width: 120, height: 44 },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
     kind: "instance",
@@ -3885,6 +3934,7 @@ function withBooleanFixture(
     kind: "boolean",
     locked: false,
     name: "Boolean mark",
+    exportSettings: [],
     opacity: 1,
     parentId: frame.id,
     properties: {
@@ -3904,6 +3954,7 @@ function withBooleanFixture(
     kind: "path",
     locked: false,
     name: "Base",
+    exportSettings: [],
     opacity: 1,
     parentId: "boolean_mark",
     properties: {
@@ -3923,6 +3974,7 @@ function withBooleanFixture(
     kind: "path",
     locked: false,
     name: "Cutout",
+    exportSettings: [],
     opacity: 1,
     parentId: "boolean_mark",
     properties: {
@@ -3956,6 +4008,7 @@ function withLineFixture(input: LeaferEngineSyncInput): LeaferEngineSyncInput {
     locked: false,
     transform: [1, 0, 0, 1, 20, 30],
     size: { width: 100, height: 0 },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
     kind: "line",
@@ -3998,6 +4051,7 @@ function withVectorEditFixture(
     locked: false,
     transform: [1, 0, 0, 1, 40, 60],
     size: { width: 120, height: 30 },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
     kind: "vector",

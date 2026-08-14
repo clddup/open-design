@@ -127,6 +127,7 @@ export function planCreateBooleanGroup(
     transform: booleanTransform,
     size: { width: bounds.width, height: bounds.height },
     opacity: appearanceSource.opacity,
+    exportSettings: [],
     ...(appearanceSource.blendMode === undefined
       ? {}
       : { blendMode: appearanceSource.blendMode }),

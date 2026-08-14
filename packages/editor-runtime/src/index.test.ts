@@ -28,6 +28,7 @@ function rectangle(id: string, parentId: string | null = null): RectangleNode {
     locked: false,
     transform: [1, 0, 0, 1, 16, 20],
     size: { width: 100, height: 80 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       fills: [{ type: "solid", color: "#ff0000", opacity: 1 }],
@@ -50,6 +51,7 @@ function pathNode(id: string, parentId: string | null = null): PathNode {
     locked: false,
     transform: [1, 0, 0, 1, 24, 32],
     size: { width: 160, height: 220 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       path: "M 80 4 C 126 4 154 46 148 108 C 143 171 118 214 80 216 C 42 214 17 171 12 108 C 6 46 34 4 80 4 Z",
@@ -78,6 +80,7 @@ function editableVectorNode(
     locked: false,
     transform: [1, 0, 0, 1, 24, 32],
     size: { width: 160, height: 220 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       network: {
@@ -960,6 +963,7 @@ describe("EditorRuntime transactions", () => {
             locked: false,
             transform: [1, 0, 0, 1, 400, 260],
             size: { width: 320, height: 240 },
+            exportSettings: [],
             opacity: 1,
             properties: {
               assetId: "asset_photo",

@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.27.0",
+  "schemaVersion": "1.28.0",
   "documentId": "document_od_penguin_01",
   "revision": 0,
   "pageOrder": ["page_penguin_01"],
@@ -27,6 +27,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 0, 0],
       "size": { "width": 760, "height": 760 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -74,6 +75,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 90, 80],
       "size": { "width": 580, "height": 580 },
+      "exportSettings": [],
       "opacity": 1,
       "blendMode": "screen",
       "effects": [{ "type": "layer-blur", "radius": 18 }],
@@ -125,6 +127,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 170, 64],
       "size": { "width": 420, "height": 570 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {},
@@ -140,6 +143,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 18, 26],
       "size": { "width": 384, "height": 520 },
+      "exportSettings": [],
       "opacity": 1,
       "blendMode": "screen",
       "effects": [{ "type": "layer-blur", "radius": 14 }],
@@ -170,6 +174,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 76, 474],
       "size": { "width": 126, "height": 62 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -211,6 +216,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 218, 474],
       "size": { "width": 126, "height": 62 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -252,6 +258,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 276, 278],
       "size": { "width": 124, "height": 186 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -293,6 +300,7 @@
       "locked": false,
       "transform": [0.99, -0.08, 0.08, 0.99, 4, 174],
       "size": { "width": 122, "height": 246 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -334,6 +342,7 @@
       "locked": false,
       "transform": [0.99, 0.08, -0.08, 0.99, 304, 174],
       "size": { "width": 122, "height": 246 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -375,6 +384,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 50, 42],
       "size": { "width": 320, "height": 446 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -443,6 +453,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 92, 178],
       "size": { "width": 236, "height": 266 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -483,6 +494,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 80, 82],
       "size": { "width": 260, "height": 160 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -523,6 +535,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 126, 116],
       "size": { "width": 56, "height": 64 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -541,6 +554,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 238, 116],
       "size": { "width": 56, "height": 64 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -559,6 +573,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 144, 132],
       "size": { "width": 28, "height": 36 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -595,6 +610,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 248, 132],
       "size": { "width": 28, "height": 36 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -631,6 +647,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 150, 136],
       "size": { "width": 9, "height": 11 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -649,6 +666,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 254, 136],
       "size": { "width": 9, "height": 11 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {
@@ -667,6 +685,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 178, 176],
       "size": { "width": 64, "height": 54 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -707,6 +726,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 66, 244],
       "size": { "width": 290, "height": 82 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -755,6 +775,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 270, 248],
       "size": { "width": 82, "height": 86 },
+      "exportSettings": [],
       "opacity": 1,
       "effects": [
         {
@@ -794,6 +815,7 @@
       "locked": false,
       "transform": [1, 0, 0, 1, 170, 684],
       "size": { "width": 420, "height": 36 },
+      "exportSettings": [],
       "opacity": 1,
       "extensions": {},
       "properties": {

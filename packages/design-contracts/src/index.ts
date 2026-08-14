@@ -37,6 +37,7 @@ import {
 } from "./primitives.js";
 import * as variables from "./variables.js";
 import * as styles from "./styles.js";
+import * as exportSettings from "./export-settings.js";
 import { BlendModeSchema, EffectSchema, PaintSchema } from "./appearance.js";
 import type {
   AngularGradientPaintSchema,
@@ -53,6 +54,7 @@ export * from "./versions.js";
 export * from "./variables.js";
 export * from "./styles.js";
 export * from "./appearance.js";
+export * from "./export-settings.js";
 export {
   normalizeLineEndpoints,
   resolveLineEndpointPoint,
@@ -77,6 +79,7 @@ export const NodeKindSchema = Type.Union([
   Type.Literal("vector"),
   Type.Literal("path"),
   Type.Literal("instance"),
+  Type.Literal("slice"),
 ]);
 
 export const RectSchema = Type.Object(
@@ -542,6 +545,7 @@ const NodeBaseProperties = {
   explicitVariableModes: Type.Optional(variables.ExplicitVariableModesSchema),
   boundVariables: Type.Optional(variables.NodeBoundVariablesSchema),
   ...styles.NodeStyleReferenceProperties,
+  exportSettings: exportSettings.ExportSettingsSchema,
   extensions: JsonObjectSchema,
 };
 
@@ -689,7 +693,40 @@ export const InstanceNodeSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const DesignNodeSchema = Type.Union([
+export const SlicePropertiesSchema = Type.Object(
+  {},
+  { additionalProperties: false },
+);
+
+export const SliceNodeSchema = Type.Object(
+  {
+    ...NodeBaseProperties,
+    childIds: Type.Array(Type.String({ minLength: 1 }), { maxItems: 0 }),
+    kind: Type.Literal("slice"),
+    properties: SlicePropertiesSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const DesignNodeSchema: TUnion<
+  [
+    typeof FrameNodeSchema,
+    typeof SlotNodeSchema,
+    typeof GroupNodeSchema,
+    typeof BooleanNodeSchema,
+    typeof RectangleNodeSchema,
+    typeof EllipseNodeSchema,
+    typeof LineNodeSchema,
+    typeof PolygonNodeSchema,
+    typeof StarNodeSchema,
+    typeof TextNodeSchema,
+    typeof ImageNodeSchema,
+    typeof VectorNodeSchema,
+    typeof PathNodeSchema,
+    typeof InstanceNodeSchema,
+    typeof SliceNodeSchema,
+  ]
+> = Type.Union([
   FrameNodeSchema,
   SlotNodeSchema,
   GroupNodeSchema,
@@ -704,6 +741,7 @@ export const DesignNodeSchema = Type.Union([
   VectorNodeSchema,
   PathNodeSchema,
   InstanceNodeSchema,
+  SliceNodeSchema,
 ]);
 
 export const DesignPageSchema = Type.Object(
@@ -815,6 +853,7 @@ export const UpdatePropertiesCommandSchema = Type.Object(
     blendMode: Type.Optional(BlendModeSchema),
     effects: Type.Optional(Type.Array(EffectSchema)),
     maskMode: Type.Optional(MaskModeSchema),
+    exportSettings: Type.Optional(exportSettings.ExportSettingsSchema),
     properties: Type.Optional(JsonObjectSchema),
     extensions: Type.Optional(JsonObjectSchema),
   },
@@ -924,7 +963,15 @@ export const DeletePageCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export const NodeDesignOperationSchema = Type.Union([
+export const NodeDesignOperationSchema: TUnion<
+  [
+    typeof InsertElementCommandSchema,
+    typeof UpdatePropertiesCommandSchema,
+    typeof MoveElementCommandSchema,
+    typeof DeleteElementCommandSchema,
+    typeof ReplaceSubtreeCommandSchema,
+  ]
+> = Type.Union([
   InsertElementCommandSchema,
   UpdatePropertiesCommandSchema,
   MoveElementCommandSchema,
@@ -1060,21 +1107,30 @@ export const RevisionSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const NodeChangeSchema = Type.Object(
-  {
-    type: Type.Union([
-      Type.Literal("added"),
-      Type.Literal("updated"),
-      Type.Literal("moved"),
-      Type.Literal("removed"),
-    ]),
-    nodeId: Type.String({ minLength: 1 }),
-    before: Type.Optional(DesignNodeSchema),
-    after: Type.Optional(DesignNodeSchema),
-    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
-  },
-  { additionalProperties: false },
-);
+type NodeChangeValue = {
+  type: "added" | "updated" | "moved" | "removed";
+  nodeId: string;
+  before?: Static<typeof DesignNodeSchema>;
+  after?: Static<typeof DesignNodeSchema>;
+  changedFields: string[];
+};
+
+export const NodeChangeSchema: TSchema & { static: NodeChangeValue } =
+  Type.Object(
+    {
+      type: Type.Union([
+        Type.Literal("added"),
+        Type.Literal("updated"),
+        Type.Literal("moved"),
+        Type.Literal("removed"),
+      ]),
+      nodeId: Type.String({ minLength: 1 }),
+      before: Type.Optional(DesignNodeSchema),
+      after: Type.Optional(DesignNodeSchema),
+      changedFields: Type.Array(Type.String(), { uniqueItems: true }),
+    },
+    { additionalProperties: false },
+  );
 
 export const PageChangeSchema = Type.Object(
   {
@@ -1464,6 +1520,7 @@ export type VectorNetworkProperties = Static<
   typeof VectorNetworkPropertiesSchema
 >;
 export type FrameNode = Static<typeof FrameNodeSchema>;
+export type SliceNode = Static<typeof SliceNodeSchema>;
 export type SlotNode = Static<typeof SlotNodeSchema>;
 export type GroupNode = Static<typeof GroupNodeSchema>;
 export type BooleanNode = Static<typeof BooleanNodeSchema>;
@@ -1725,6 +1782,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     migrateVariantSets(migrated);
     if (!variables.migrateFigmaVariables(migrated)) return null;
     styles.migrateSharedStyles(migrated);
+    exportSettings.migrateExportSettings(migrated);
     return isDesignDocument(migrated) ? migrated : null;
   } catch {
     return null;

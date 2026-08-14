@@ -1,5 +1,9 @@
 import { RASTER_EXPORT_VERSION } from "@opendesign/import-export-service/raster";
-import type { DesignOperation } from "@opendesign/design-contracts";
+import type {
+  DesignOperation,
+  ExportSetting,
+} from "@opendesign/design-contracts";
+import { planStoredExportSetting } from "@opendesign/import-export-service/stored-export";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -48,6 +52,7 @@ export interface ImportExportWorkflow {
   dismissSvgFeedback: () => void;
   exportFormat: ExportFormat;
   exportRaster: () => Promise<void>;
+  exportStoredSetting: (setting: ExportSetting) => Promise<void>;
   exportSelection: () => Promise<void>;
   exportSvg: () => Promise<void>;
   importSvg: () => Promise<void>;
@@ -217,157 +222,220 @@ export function useImportExportWorkflow({
     }
   }, [beginOperation, finishOperation]);
 
-  const exportSvg = useCallback(async () => {
-    const current = latest.current;
-    const desktop = window.desktop;
-    if (!desktop || !current.editorActive || operationController.current)
-      return;
-    const frozen = current.runtime.getSnapshot();
-    if (frozen.state.selection.nodeIds.length === 0) {
-      current.showProperties();
-      current.setEditorError(current.t("error.exportSvgSelection"));
-      return;
-    }
-    let rootNodeIds: string[];
-    let suggestedName: string;
-    try {
-      rootNodeIds = normalizeSvgExportRoots(
-        frozen.document,
-        frozen.state.selection.nodeIds,
-      );
-      suggestedName = suggestSvgExportName(
-        frozen.document,
-        current.activePageId,
-        rootNodeIds,
-      );
-    } catch (error) {
-      current.setEditorError(
-        reportWorkflowError(
-          "svg_export_target_invalid",
-          error,
-          current.t("error.exportSvg"),
-          current,
-        ),
-      );
-      return;
-    }
-    const controller = beginOperation({
-      kind: "export",
-      name: suggestedName,
-    });
-    if (!controller) return;
-    try {
-      const result = await runSvgExportInWorker(
-        {
-          document: frozen.document,
-          pageId: current.activePageId,
+  const exportSvg = useCallback(
+    async (stored?: { includeLayerIds: boolean; suffix: string }) => {
+      const current = latest.current;
+      const desktop = window.desktop;
+      if (!desktop || !current.editorActive || operationController.current)
+        return;
+      const frozen = current.runtime.getSnapshot();
+      if (frozen.state.selection.nodeIds.length === 0) {
+        current.showProperties();
+        current.setEditorError(current.t("error.exportSvgSelection"));
+        return;
+      }
+      let rootNodeIds: string[];
+      let suggestedName: string;
+      try {
+        rootNodeIds = normalizeSvgExportRoots(
+          frozen.document,
+          frozen.state.selection.nodeIds,
+        );
+        suggestedName = suggestSvgExportName(
+          frozen.document,
+          current.activePageId,
           rootNodeIds,
-          settings: { ...current.svgExportSettings },
-        },
-        controller.signal,
-      );
-      if (controller.signal.aborted) return;
-      const saved = await desktop.saveSvgFile({
-        suggestedName,
-        contents: result.svg,
-      });
-      if (!saved || controller.signal.aborted) return;
-      setSvgFeedback({
-        kind: "export",
-        name: saved.name,
-        issues: result.issues.map((issue) => ({ ...issue })),
-      });
-    } catch (error) {
-      if (!isAbortError(error)) {
+        );
+        if (stored?.suffix) {
+          suggestedName = suggestRasterExportName(
+            `${suggestedName}${stored.suffix}`,
+          );
+        }
+      } catch (error) {
         current.setEditorError(
           reportWorkflowError(
-            "svg_export_failed",
+            "svg_export_target_invalid",
             error,
             current.t("error.exportSvg"),
             current,
           ),
         );
+        return;
       }
-    } finally {
-      finishOperation(controller);
-    }
-  }, [beginOperation, finishOperation]);
-
-  const exportRaster = useCallback(async () => {
-    const current = latest.current;
-    const desktop = window.desktop;
-    if (!desktop || !current.editorActive || operationController.current)
-      return;
-    const frozen = current.runtime.getSnapshot();
-    if (frozen.state.selection.nodeIds.length !== 1) {
-      current.showProperties();
-      current.setEditorError(current.t("error.exportRasterSelection"));
-      return;
-    }
-    const rootNodeId = frozen.state.selection.nodeIds[0];
-    const node = rootNodeId ? frozen.document.nodesById[rootNodeId] : undefined;
-    if (!rootNodeId || !node) {
-      current.setEditorError(current.t("error.exportRasterSelection"));
-      return;
-    }
-    const settings = current.rasterExportSettings;
-    const background =
-      settings.format === "jpeg" && settings.background.mode === "transparent"
-        ? ({ mode: "color", color: "#ffffff" } as const)
-        : settings.background;
-    const suggestedName = suggestRasterExportName(node.name);
-    const controller = beginOperation({
-      kind: "raster-export",
-      name: suggestedName,
-    });
-    if (!controller) return;
-    try {
-      const result = await exportDesignRaster(
-        frozen.document,
-        {
-          version: RASTER_EXPORT_VERSION,
-          pageId: current.activePageId,
-          rootNodeId,
-          format: settings.format,
-          size: settings.size,
-          background,
-          ...(settings.format === "png" ? {} : { quality: settings.quality }),
-          resampling: settings.resampling,
-        },
-        controller.signal,
-      );
-      if (controller.signal.aborted) return;
-      const saved = await desktop.saveRasterFile({
-        suggestedName,
-        format: settings.format,
-        mimeType: result.mimeType,
-        bytes: result.bytes,
-        width: result.width,
-        height: result.height,
+      const controller = beginOperation({
+        kind: "export",
+        name: suggestedName,
       });
-      if (!saved || controller.signal.aborted) return;
-      setRasterFeedback({
-        name: saved.name,
-        format: settings.format,
-        width: result.width,
-        height: result.height,
-        byteSize: saved.byteSize,
-      });
-    } catch (error) {
-      if (!isAbortError(error)) {
-        current.setEditorError(
-          reportWorkflowError(
-            "raster_export_failed",
-            error,
-            current.t("error.exportRaster"),
-            current,
-          ),
+      if (!controller) return;
+      try {
+        const result = await runSvgExportInWorker(
+          {
+            document: frozen.document,
+            pageId: current.activePageId,
+            rootNodeIds,
+            settings: stored
+              ? { includeLayerIds: stored.includeLayerIds, padding: 0 }
+              : { ...current.svgExportSettings },
+          },
+          controller.signal,
         );
+        if (controller.signal.aborted) return;
+        const saved = await desktop.saveSvgFile({
+          suggestedName,
+          contents: result.svg,
+        });
+        if (!saved || controller.signal.aborted) return;
+        setSvgFeedback({
+          kind: "export",
+          name: saved.name,
+          issues: result.issues.map((issue) => ({ ...issue })),
+        });
+      } catch (error) {
+        if (!isAbortError(error)) {
+          current.setEditorError(
+            reportWorkflowError(
+              "svg_export_failed",
+              error,
+              current.t("error.exportSvg"),
+              current,
+            ),
+          );
+        }
+      } finally {
+        finishOperation(controller);
       }
-    } finally {
-      finishOperation(controller);
-    }
-  }, [beginOperation, finishOperation]);
+    },
+    [beginOperation, finishOperation],
+  );
+
+  const exportRaster = useCallback(
+    async (stored?: {
+      format: RasterExportSettings["format"];
+      size: RasterExportSettings["size"];
+      suffix: string;
+    }) => {
+      const current = latest.current;
+      const desktop = window.desktop;
+      if (!desktop || !current.editorActive || operationController.current)
+        return;
+      const frozen = current.runtime.getSnapshot();
+      if (frozen.state.selection.nodeIds.length !== 1) {
+        current.showProperties();
+        current.setEditorError(current.t("error.exportRasterSelection"));
+        return;
+      }
+      const rootNodeId = frozen.state.selection.nodeIds[0];
+      const node = rootNodeId
+        ? frozen.document.nodesById[rootNodeId]
+        : undefined;
+      if (!rootNodeId || !node) {
+        current.setEditorError(current.t("error.exportRasterSelection"));
+        return;
+      }
+      const settings = stored
+        ? {
+            format: stored.format,
+            size: stored.size,
+            background:
+              stored.format === "jpeg"
+                ? ({ mode: "color", color: "#ffffff" } as const)
+                : ({ mode: "transparent" } as const),
+            quality: 0.9,
+            resampling: "smooth" as const,
+          }
+        : current.rasterExportSettings;
+      const background =
+        settings.format === "jpeg" && settings.background.mode === "transparent"
+          ? ({ mode: "color", color: "#ffffff" } as const)
+          : settings.background;
+      const suggestedName = suggestRasterExportName(
+        `${node.name}${stored?.suffix ?? ""}`,
+      );
+      const controller = beginOperation({
+        kind: "raster-export",
+        name: suggestedName,
+      });
+      if (!controller) return;
+      try {
+        const result = await exportDesignRaster(
+          frozen.document,
+          {
+            version: RASTER_EXPORT_VERSION,
+            pageId: current.activePageId,
+            rootNodeId,
+            format: settings.format,
+            size: settings.size,
+            background,
+            ...(settings.format === "png" ? {} : { quality: settings.quality }),
+            resampling: settings.resampling,
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        const saved = await desktop.saveRasterFile({
+          suggestedName,
+          format: settings.format,
+          mimeType: result.mimeType,
+          bytes: result.bytes,
+          width: result.width,
+          height: result.height,
+        });
+        if (!saved || controller.signal.aborted) return;
+        setRasterFeedback({
+          name: saved.name,
+          format: settings.format,
+          width: result.width,
+          height: result.height,
+          byteSize: saved.byteSize,
+        });
+      } catch (error) {
+        if (!isAbortError(error)) {
+          current.setEditorError(
+            reportWorkflowError(
+              "raster_export_failed",
+              error,
+              current.t("error.exportRaster"),
+              current,
+            ),
+          );
+        }
+      } finally {
+        finishOperation(controller);
+      }
+    },
+    [beginOperation, finishOperation],
+  );
+
+  const exportStoredSetting = useCallback(
+    async (setting: ExportSetting) => {
+      const current = latest.current;
+      const frozen = current.runtime.getSnapshot();
+      const nodeId = frozen.state.selection.nodeIds[0];
+      const node = nodeId ? frozen.document.nodesById[nodeId] : undefined;
+      if (frozen.state.selection.nodeIds.length !== 1 || !node) {
+        current.setEditorError(current.t("error.exportRasterSelection"));
+        return;
+      }
+      const plan = planStoredExportSetting(node, setting);
+      if (!plan.ok) {
+        current.setEditorError(plan.message);
+        return;
+      }
+      if (plan.kind === "raster") {
+        await exportRaster({
+          format: plan.format,
+          size: plan.size,
+          suffix: plan.suffix,
+        });
+        return;
+      }
+      await exportSvg({
+        includeLayerIds: plan.includeLayerIds,
+        suffix: plan.suffix,
+      });
+    },
+    [exportRaster, exportSvg],
+  );
 
   const exportSelection = useCallback(async () => {
     if (latest.current.exportFormat === "svg") return await exportSvg();
@@ -418,6 +486,7 @@ export function useImportExportWorkflow({
     dismissSvgFeedback: () => setSvgFeedback(null),
     exportFormat,
     exportRaster,
+    exportStoredSetting,
     exportSelection,
     exportSvg,
     importSvg,

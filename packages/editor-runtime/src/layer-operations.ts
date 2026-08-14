@@ -80,6 +80,7 @@ export function planGroupNodes(
     transform: groupTransform,
     size: { width: bounds.width, height: bounds.height },
     opacity: 1,
+    exportSettings: [],
     properties: {},
     extensions: {},
   };

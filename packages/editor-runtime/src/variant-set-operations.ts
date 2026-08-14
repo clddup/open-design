@@ -186,6 +186,7 @@ export function planCombineComponentsAsVariants(
       height: bounds.height + padding * 2,
     },
     opacity: 1,
+    exportSettings: [],
     kind: "frame",
     properties: {
       fills: [],

@@ -90,6 +90,7 @@ function plannedInsertRequest(nodeId: string): RendererDesignToolRequest {
               locked: false,
               transform: [1, 0, 0, 1, 720, 620],
               size: { width: 240, height: 64 },
+              exportSettings: [],
               opacity: 1,
               properties: {
                 fills: [{ type: "solid", color: "#7c6ee6", opacity: 1 }],
@@ -255,6 +256,7 @@ describe("Renderer design tool scope", () => {
                   locked: false,
                   transform: [1, 0, 0, 1, 64, 620],
                   size: { width: 480, height: 96 },
+                  exportSettings: [],
                   opacity: 1,
                   properties: {
                     content: "Line one\\nLine two",
@@ -740,6 +742,7 @@ describe("Renderer design tool scope", () => {
       locked: false,
       transform: [1, 0, 0, 1, 64, 620],
       size: { width: 304, height: 220 },
+      exportSettings: [],
       opacity: 1,
       properties: {},
       extensions: {},
@@ -1267,6 +1270,7 @@ describe("Renderer design tool scope", () => {
                   locked: false,
                   transform: [1, 0, 0, 1, 64, 620],
                   size: { width: 1, height: 1 },
+                  exportSettings: [],
                   opacity: 1,
                   properties: {
                     content,
@@ -1500,6 +1504,7 @@ describe("Renderer design tool scope", () => {
               locked: false,
               transform: [1, 0, 0, 1, 20, 20],
               size: { width: 1_400, height: 1_000 },
+              exportSettings: [],
               opacity: 1,
               properties: {
                 fills: [],
@@ -1781,6 +1786,7 @@ describe("Renderer design tool scope", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 120, height: 80 },
+      exportSettings: [],
       opacity: 1,
       properties: {},
       extensions: {},
@@ -1795,6 +1801,7 @@ describe("Renderer design tool scope", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 120, height: 80 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         path: "M0 0H120V80H0Z",
@@ -2008,6 +2015,7 @@ describe("Renderer design tool scope", () => {
                   locked: false,
                   transform: [1, 0, 0, 1, 900, 80],
                   size: { width: 280, height: 320 },
+                  exportSettings: [],
                   opacity: 1,
                   extensions: {},
                   properties: {
@@ -2035,6 +2043,7 @@ describe("Renderer design tool scope", () => {
                   locked: false,
                   transform: [1, 0, 0, 1, 40, 30],
                   size: { width: 200, height: 260 },
+                  exportSettings: [],
                   opacity: 1,
                   extensions: {},
                   properties: {
@@ -2091,6 +2100,7 @@ describe("Renderer design tool scope", () => {
                   locked: false,
                   transform: [1, 0, 0, 1, 0, 0],
                   size: { width: 100, height: 100 },
+                  exportSettings: [],
                   opacity: 1,
                   properties: {},
                   extensions: {},
@@ -2158,6 +2168,7 @@ describe("Renderer design tool scope", () => {
                     locked: false,
                     transform: [1, 0, 0, 1, 0, 0],
                     size: { width: 20, height: 20 },
+                    exportSettings: [],
                     opacity: 1,
                     extensions: {},
                     properties: { fills: [], strokes: [], strokeWidth: 0 },
@@ -2238,6 +2249,7 @@ describe("Renderer design tool scope", () => {
           locked: false,
           transform: [1, 0, 0, 1, 120, 160] as const,
           size: { width: 320, height: 240 },
+          exportSettings: [],
           opacity: 1,
           properties: {
             assetId: "asset_reference",
@@ -2352,6 +2364,7 @@ describe("Renderer design tool scope", () => {
             locked: false,
             transform: [1, 0, 0, 1, 32, 32],
             size: { width: 320, height: 240 },
+            exportSettings: [],
             opacity: 1,
             properties: {
               assetId: oldAssetId,
@@ -2496,6 +2509,7 @@ describe("Renderer design tool scope", () => {
             locked: false,
             transform: [1, 0, 0, 1, 120, 160],
             size: { width: 320, height: 240 },
+            exportSettings: [],
             opacity: 1,
             properties: {
               assetId: "asset_large_image",
@@ -2700,6 +2714,7 @@ describe("Renderer design tool scope", () => {
                 locked: false,
                 transform: [1, 0, 0, 1, target.x, target.y] as const,
                 size: { width: 390, height: 844 },
+                exportSettings: [],
                 opacity: 1,
                 properties: {
                   fills: [
@@ -4960,6 +4975,7 @@ function createEditableVectorRuntime(): EditorRuntime {
     locked: false,
     transform: [1, 0, 0, 1, 40, 40],
     size: { width: 120, height: 80 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       network: {

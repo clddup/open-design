@@ -148,6 +148,7 @@ describe("deterministic delivery layout quality", () => {
       locked: false,
       transform: [1, 0, 0, 1, 250, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       properties: {},
       extensions: {},
@@ -218,6 +219,7 @@ function layoutDocument(clipsContent = true): DesignDocument {
     locked: false,
     transform: [1, 0, 0, 1, 100, 80],
     size: { width: 300, height: 200 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
@@ -256,6 +258,7 @@ function rectangle(
     locked: false,
     transform,
     size: { width, height },
+    exportSettings: [],
     opacity: 1,
     properties: {
       fills: [{ type: "solid", color: "#2563eb", opacity: 1 }],

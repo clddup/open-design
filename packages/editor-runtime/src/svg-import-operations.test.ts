@@ -115,6 +115,7 @@ function groupNode(
     locked: false,
     transform: [1, 0, 0, 1, 0, 0],
     size: { width: 100, height: 100 },
+    exportSettings: [],
     opacity: 1,
     properties: {},
     extensions: {},
@@ -132,6 +133,7 @@ function rectangleNode(id: string, parentId: string | null): RectangleNode {
     locked: false,
     transform: [1, 0, 0, 1, 0, 0],
     size: { width: 10, height: 10 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       fills: [{ type: "solid", color: "#000000", opacity: 1 }],
@@ -402,6 +404,7 @@ describe("SVG import transaction planner", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         assetId: "untrusted_asset",

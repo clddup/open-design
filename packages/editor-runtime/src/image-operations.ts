@@ -261,6 +261,7 @@ export function planPlaceImageAsset(
     ],
     size,
     opacity: 1,
+    exportSettings: [],
     properties: {
       assetId: asset.id,
       placement: { mode: "fit" },
@@ -448,9 +449,15 @@ function replacementProperties(
 
 function hasPaints(
   node: DesignNode,
-): node is Exclude<DesignNode, { kind: "group" | "image" | "instance" }> {
+): node is Exclude<
+  DesignNode,
+  { kind: "group" | "image" | "instance" | "slice" }
+> {
   return (
-    node.kind !== "group" && node.kind !== "image" && node.kind !== "instance"
+    node.kind !== "group" &&
+    node.kind !== "image" &&
+    node.kind !== "instance" &&
+    node.kind !== "slice"
   );
 }
 

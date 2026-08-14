@@ -1914,6 +1914,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onGoToComponentMain={goToSelectedInstanceMain}
                 onExportFormatChange={importExport.setExportFormat}
                 onExportRaster={() => void importExport.exportRaster()}
+                onExportStoredSetting={(setting) =>
+                  void importExport.exportStoredSetting(setting)
+                }
                 onExportSvg={() => void importExport.exportSvg()}
                 onReplaceImage={() => void replaceSelectedImage()}
                 onRemoveComponent={removeSelectedComponent}

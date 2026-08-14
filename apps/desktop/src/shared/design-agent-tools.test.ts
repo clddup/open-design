@@ -67,6 +67,7 @@ describe("design Agent tool contract", () => {
             childIds: [],
             visible: true,
             locked: false,
+            exportSettings: [],
             opacity: 1,
             extensions: {},
           },
@@ -79,6 +80,43 @@ describe("design Agent tool contract", () => {
         compactInput,
       ),
     ).toBe(false);
+  });
+
+  it("normalizes compact Agent export settings to the full document contract", () => {
+    const input = {
+      label: "Configure exports",
+      commands: [
+        {
+          commandId: "set_exports",
+          type: "update_properties",
+          nodeId: "hero_slice",
+          exportSettings: [
+            {
+              format: "PNG",
+              suffix: "@2x",
+              constraint: { type: "SCALE", value: 2 },
+            },
+            { format: "SVG", suffix: "-vector", svgIdAttribute: true },
+          ],
+        },
+      ],
+    };
+    expect(normalizeDesignApplyToolInput(input)?.commands[0]).toMatchObject({
+      exportSettings: [
+        {
+          format: "PNG",
+          contentsOnly: true,
+          useAbsoluteBounds: false,
+          colorProfile: "DOCUMENT",
+        },
+        {
+          format: "SVG",
+          svgOutlineText: false,
+          svgIdAttribute: true,
+          svgSimplifyStroke: true,
+        },
+      ],
+    });
   });
 
   it("requires semantic steps to cover commands exactly once in order", () => {
@@ -607,6 +645,7 @@ describe("design Agent tool contract", () => {
               locked: false,
               transform: [1, 0, 0, 1, 0, 0],
               size: { width: 120, height: 40 },
+              exportSettings: [],
               opacity: 1,
               properties: {
                 componentId: "component_button",
@@ -1065,6 +1104,7 @@ describe("design Agent tool contract", () => {
             locked: false,
             transform: [1, 0, 0, 1, 24, 24],
             size: { width: 240, height: 64 },
+            exportSettings: [],
             opacity: 1,
             extensions: {},
             kind: "text",
@@ -1313,6 +1353,7 @@ describe("design Agent tool contract", () => {
             locked: false,
             transform: [1, 0, 0, 1, 0, 0],
             size: { width: 120, height: 160 },
+            exportSettings: [],
             opacity: 1,
             extensions: {},
             kind: "path",
@@ -1368,6 +1409,7 @@ describe("design Agent tool contract", () => {
             locked: false,
             transform: [1, 0, 0, 1, 0, 0],
             size: { width: 120, height: 160 },
+            exportSettings: [],
             opacity: 1,
             extensions: {},
             kind: "vector",
@@ -1457,6 +1499,7 @@ describe("design Agent tool contract", () => {
       locked: false,
       transform: [1, 0, 0, 1, 120, 80],
       size: { width: 240, height: 120 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "line",
@@ -1537,6 +1580,7 @@ describe("design Agent tool contract", () => {
       locked: false,
       transform: [1, 0, 0, 1, 120, 80],
       size: { width: 180, height: 180 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "star",

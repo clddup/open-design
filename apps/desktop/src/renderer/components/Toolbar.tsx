@@ -23,6 +23,7 @@ type ToolbarItem = {
 const tools: ToolbarItem[] = [
   { id: "select", label: "toolbar.select", icon: "select", shortcut: "V" },
   { id: "frame", label: "toolbar.frame", icon: "frame", shortcut: "F" },
+  { id: "slice", label: "toolbar.slice", icon: "frame", shortcut: "S" },
   {
     id: "rectangle",
     label: "toolbar.rectangle",

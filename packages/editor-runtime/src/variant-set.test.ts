@@ -737,6 +737,7 @@ function variantFixture(): DesignDocument {
         locked: false,
         transform: [1, 0, 0, 1, 0, 200],
         size: { width: 120, height: 44 },
+        exportSettings: [],
         opacity: 1,
         kind: "instance",
         properties: {
@@ -816,6 +817,7 @@ function frame(
     locked: false,
     transform: [1, 0, 0, 1, x, 0],
     size: { width: id === "button_set_root" ? 320 : 120, height: 44 },
+    exportSettings: [],
     opacity: 1,
     kind: "frame",
     properties: {
@@ -839,6 +841,7 @@ function text(id: string, parentId: string, content: string): TextNode {
     locked: false,
     transform: [1, 0, 0, 1, 20, 12],
     size: { width: 80, height: 20 },
+    exportSettings: [],
     opacity: 1,
     kind: "text",
     properties: {

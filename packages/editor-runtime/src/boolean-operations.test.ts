@@ -54,6 +54,7 @@ function pathNode(
     locked: false,
     transform,
     size: { width: 100, height: 100 },
+    exportSettings: [],
     opacity,
     effects: [
       {
@@ -98,6 +99,7 @@ function booleanDocument(): DesignDocument {
     locked: false,
     transform: [1, 0, 0, 1, 260, 20],
     size: { width: 80, height: 80 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       fills: [{ type: "solid", color: "#22c55e", opacity: 1 }],
@@ -194,6 +196,7 @@ describe("non-destructive Boolean operations", () => {
       name: "union mark",
       parentId: null,
       childIds: ["path_bottom", "path_top"],
+      exportSettings: [],
       opacity: 0.6,
       properties: {
         operation: "union",
@@ -243,6 +246,7 @@ describe("non-destructive Boolean operations", () => {
     if (insert?.type !== "insert_element") return;
     expect(insert.node).toMatchObject({
       kind: "boolean",
+      exportSettings: [],
       opacity: 0.8,
       properties: {
         operation: "subtract",
@@ -426,6 +430,7 @@ describe("non-destructive Boolean operations", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         operation: "union",
@@ -460,6 +465,7 @@ describe("non-destructive Boolean operations", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 0 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [],
@@ -486,6 +492,7 @@ describe("non-destructive Boolean operations", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         operation: "union",
@@ -518,6 +525,7 @@ describe("non-destructive Boolean operations", () => {
       locked: false,
       transform: [1, 0, 0, 1, 140, 30],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         pointCount: 5,

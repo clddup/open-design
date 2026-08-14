@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import {
+  DESIGN_SCHEMA_VERSION,
+  type DesignDocument,
+  type DesignNode,
+} from "@opendesign/design-contracts";
 import {
   materializeVariableBindings,
   resolveVariableForConsumer,
@@ -90,6 +94,7 @@ function fixture(): DesignDocument {
     locked: false,
     transform: [1, 0, 0, 1, 0, 0],
     size: { width: 120, height: 40 },
+    exportSettings: [],
     opacity: 1,
     boundVariables: {
       visible: { type: "VARIABLE_ALIAS", id: "enabled" },
@@ -127,7 +132,7 @@ function fixture(): DesignDocument {
   };
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.27.0",
+    schemaVersion: DESIGN_SCHEMA_VERSION,
     documentId: "variables",
     revision: 0,
     pageOrder: ["page"],
@@ -150,6 +155,7 @@ function fixture(): DesignDocument {
         locked: false,
         transform: [1, 0, 0, 1, 0, 0],
         size: { width: 400, height: 400 },
+        exportSettings: [],
         opacity: 1,
         explicitVariableModes: { "primitive-col": "light" },
         properties: {

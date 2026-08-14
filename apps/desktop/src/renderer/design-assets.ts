@@ -129,7 +129,8 @@ function assetIdsForNode(node: DesignNode): string[] {
   if (
     node.kind !== "group" &&
     node.kind !== "image" &&
-    node.kind !== "instance"
+    node.kind !== "instance" &&
+    node.kind !== "slice"
   ) {
     for (const paint of [
       ...node.properties.fills,

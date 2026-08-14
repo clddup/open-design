@@ -460,6 +460,7 @@ export class GlobalTaskCoordinator {
               locked: false,
               transform: [1, 0, 0, 1, artboard.x, artboard.y] as Transform,
               size: { width: artboard.width, height: artboard.height },
+              exportSettings: [],
               opacity: 1,
               properties: {
                 fills: [
@@ -1550,6 +1551,7 @@ function isVisibleMaterialDraftNode(
   if (
     node.kind === "group" ||
     node.kind === "frame" ||
+    node.kind === "slice" ||
     !node.visible ||
     node.opacity <= 0 ||
     node.size.width <= 0 ||

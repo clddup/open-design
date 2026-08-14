@@ -14,6 +14,37 @@ import {
 } from "./mapping.js";
 
 describe("Leafer scene projection", () => {
+  it("projects Slice as an invisible hittable export region", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.nodesById.slice_1 = {
+      id: "slice_1",
+      kind: "slice",
+      name: "Slice",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 10, 20],
+      size: { width: 320, height: 180 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {},
+      extensions: {},
+    };
+    document.pagesById.page_welcome!.rootNodeIds.push("slice_1");
+    expect(
+      projectDesignPage(document, "page_welcome").elementsById.get("slice_1"),
+    ).toMatchObject({
+      tag: "Rect",
+      data: {
+        fill: "rgba(0, 0, 0, 0)",
+        hitFill: "all",
+        width: 320,
+        height: 180,
+      },
+    });
+  });
+
   it("projects the authoritative page tree with stable ids and local transforms", () => {
     const document = createWelcomeDocument();
     const projection = projectDesignPage(document, "page_welcome");
@@ -120,6 +151,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 80, 80],
       size: { width: 160, height: 120 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         pointCount: 6,
@@ -140,6 +172,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 280, 80],
       size: { width: 140, height: 140 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         pointCount: 7,
@@ -190,6 +223,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 840, 72],
       size: { width: 120, height: 120 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         operation: "subtract",
@@ -209,6 +243,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 120, height: 120 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         path: "M0 0H120V120H0Z",
@@ -228,6 +263,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 30, 30],
       size: { width: 60, height: 60 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         path: "M0 0H60V60H0Z",
@@ -508,6 +544,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 80 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       properties: {
@@ -585,6 +622,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       properties: {
@@ -688,6 +726,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 40, 40],
       size: { width: 160, height: 220 },
+      exportSettings: [],
       opacity: 1,
       effects: [
         {
@@ -784,6 +823,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 40, 60],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "vector",
@@ -962,6 +1002,7 @@ describe("Leafer scene projection", () => {
       locked: false,
       transform: [1, 0, 0, 1, 70, 90],
       size: { width: 240, height: 120 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "line",

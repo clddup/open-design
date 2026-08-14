@@ -553,6 +553,17 @@ function toElementSpec(
         nodeId: node.id,
       });
       break;
+    case "slice":
+      tag = "Rect";
+      data = {
+        ...base,
+        fill: "rgba(0, 0, 0, 0)",
+        height: node.size.height,
+        hitFill: "all",
+        stroke: null,
+        width: node.size.width,
+      };
+      break;
   }
 
   return {

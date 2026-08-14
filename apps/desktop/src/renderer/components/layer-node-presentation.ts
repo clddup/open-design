@@ -17,6 +17,7 @@ export const layerNodeIcons: Record<NodeKind, GlyphName> = {
   vector: "pen",
   path: "pen",
   instance: "instance",
+  slice: "frame",
 };
 
 export const layerNodeKindKeys: Record<NodeKind, MessageKey> = {
@@ -34,4 +35,5 @@ export const layerNodeKindKeys: Record<NodeKind, MessageKey> = {
   vector: "node.vector",
   path: "node.path",
   instance: "node.instance",
+  slice: "node.slice",
 };

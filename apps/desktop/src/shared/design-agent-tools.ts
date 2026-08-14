@@ -929,10 +929,32 @@ const MODEL_NODE_PROPERTY_PATCH_SCHEMA = {
     "A partial property patch. It must contain only fields supported by the inspected target node kind; the host validates the merged node before any revision is written.",
 } as const;
 
+const MODEL_EXPORT_SETTINGS_SCHEMA = {
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      format: { enum: ["PNG", "JPG", "WEBP", "SVG"] },
+      suffix: { type: "string" },
+      constraint: {
+        type: "object",
+        properties: {
+          type: { enum: ["SCALE", "WIDTH", "HEIGHT"] },
+          value: { type: "number", exclusiveMinimum: 0, maximum: 16_384 },
+        },
+        required: ["type", "value"],
+        additionalProperties: false,
+      },
+      svgIdAttribute: { type: "boolean" },
+    },
+    required: ["format", "suffix"],
+    additionalProperties: false,
+  },
+} as const;
+
 const MODEL_NODE_SCHEMA = {
   type: "object",
-  description:
-    "A complete OpenDesign node. All common fields are required. For insert_element, childIds must be empty; create hierarchy with later child insert_element commands using parentId and index. replace_subtree keeps its explicit full subtree contract.",
+  description: "OpenDesign node. Set exportSettings with update_properties.",
   properties: {
     id: { type: "string", minLength: 1, maxLength: 256 },
     name: { type: "string" },
@@ -946,7 +968,7 @@ const MODEL_NODE_SCHEMA = {
       type: "array",
       uniqueItems: true,
       description:
-        "Use an empty array for insert_element. The host derives children from later insert_element parentId/index commands.",
+        "Use [] on insert; hierarchy comes from child parentId/index.",
       items: { type: "string", minLength: 1, maxLength: 512 },
     },
     visible: { type: "boolean" },
@@ -974,6 +996,7 @@ const MODEL_NODE_SCHEMA = {
         "vector",
         "path",
         "instance",
+        "slice",
       ],
     },
     properties: MODEL_NODE_KIND_PROPERTIES_SCHEMA,
@@ -998,7 +1021,7 @@ const MODEL_NODE_SCHEMA = {
 const MODEL_INSERT_NODE_SCHEMA = {
   ...MODEL_NODE_SCHEMA,
   description:
-    "An OpenDesign node to insert. The trusted host derives parentId from the command and defaults childIds to [], visible to true, locked to false, opacity to 1, and extensions to {}. Do not repeat those structural defaults unless they are intentionally non-default.",
+    "Insert node; the host defaults structural fields and exportSettings.",
   required: ["id", "name", "transform", "size", "kind", "properties"],
 } as const;
 
@@ -1033,6 +1056,7 @@ const MODEL_NODE_OPERATION_SCHEMA = {
         locked: { type: "boolean" },
         transform: MODEL_TRANSFORM_SCHEMA,
         size: MODEL_SIZE_SCHEMA,
+        exportSettings: MODEL_EXPORT_SETTINGS_SCHEMA,
         opacity: { type: "number", minimum: 0, maximum: 1 },
         blendMode: { enum: MODEL_BLEND_MODES },
         effects: { type: "array", items: MODEL_EFFECT_SCHEMA },

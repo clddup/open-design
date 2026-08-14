@@ -195,6 +195,7 @@ function draftTargets(
             width: target.artboard.width,
             height: target.artboard.height,
           },
+          exportSettings: [],
           opacity: 1,
           properties: {
             fills: [{ type: "solid" as const, color: "#ffffff", opacity: 1 }],
@@ -229,6 +230,7 @@ function draftTargets(
             number,
           ],
           size: { width: 342, height: 700 },
+          exportSettings: [],
           opacity: 1,
           properties: {},
           extensions: {},
@@ -257,6 +259,7 @@ function draftTargets(
             number,
           ],
           size: { width: 280, height: 160 },
+          exportSettings: [],
           opacity: 1,
           properties: {
             fills: [{ type: "solid" as const, color: "#f1f5f9", opacity: 1 }],
@@ -296,6 +299,7 @@ function withDraftedTargets(
       locked: false,
       transform: [1, 0, 0, 1, target.artboard.x, target.artboard.y],
       size: { width: target.artboard.width, height: target.artboard.height },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
@@ -316,6 +320,7 @@ function withDraftedTargets(
       locked: false,
       transform: [1, 0, 0, 1, region.x, region.y],
       size: { width: region.width, height: region.height },
+      exportSettings: [],
       opacity: 1,
       properties: {},
       extensions: {},
@@ -333,6 +338,7 @@ function withDraftedTargets(
         width: Math.max(1, region.width),
         height: Math.max(1, region.height),
       },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [{ type: "solid", color: "#f1f5f9", opacity: 1 }],
@@ -366,6 +372,7 @@ function withAllocatedTargets(
       locked: false,
       transform: [1, 0, 0, 1, target.artboard.x, target.artboard.y],
       size: { width: target.artboard.width, height: target.artboard.height },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
@@ -487,6 +494,7 @@ function insertExistingChild(
           locked: false,
           transform: [1, 0, 0, 1, 24, 24],
           size: { width: 120, height: 80 },
+          exportSettings: [],
           opacity: 1,
           properties: {
             fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
@@ -518,6 +526,7 @@ function withExistingArtboard(
       locked: true,
       transform: [1, 0, 0, 1, 80, 64],
       size: { width: 1120, height: 720 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [{ type: "solid", color: "#f8fafc", opacity: 1 }],
@@ -538,6 +547,7 @@ function withExistingArtboard(
       locked: true,
       transform: [1, 0, 0, 1, 24, 24],
       size: { width: 480, height: 320 },
+      exportSettings: [],
       opacity: 1,
       properties: {},
       extensions: {},
@@ -552,6 +562,7 @@ function withExistingArtboard(
       locked: true,
       transform: [1, 0, 0, 1, 24, 24],
       size: { width: 240, height: 160 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
@@ -665,6 +676,7 @@ describe("GlobalTaskCoordinator", () => {
             locked: false,
             transform: [1, 0, 0, 1, 0, 0],
             size: { width: 200, height: 120 },
+            exportSettings: [],
             opacity: 1,
             properties: {
               fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
@@ -700,6 +712,7 @@ describe("GlobalTaskCoordinator", () => {
             locked: false,
             transform: [1, 0, 0, 1, 120, 80],
             size: { width: 1440, height: 1024 },
+            exportSettings: [],
             opacity: 1,
             properties: {
               fills: [{ type: "solid", color: "#f8fafc", opacity: 1 }],
@@ -727,6 +740,7 @@ describe("GlobalTaskCoordinator", () => {
             locked: false,
             transform: [1, 0, 0, 1, 48, 40],
             size: { width: 520, height: 48 },
+            exportSettings: [],
             opacity: 1,
             properties: {
               content: "Analytics workspace",
@@ -858,6 +872,7 @@ describe("GlobalTaskCoordinator", () => {
             locked: false,
             transform: [1, 0, 0, 1, 32, 32],
             size: { width: 1376, height: 72 },
+            exportSettings: [],
             opacity: 1,
             properties: {},
             extensions: {},
@@ -879,6 +894,7 @@ describe("GlobalTaskCoordinator", () => {
             locked: false,
             transform: [1, 0, 0, 1, 16, 16],
             size: { width: 240, height: 32 },
+            exportSettings: [],
             opacity: 1,
             properties: {
               content: "Workspace navigation",
@@ -1879,6 +1895,7 @@ describe("GlobalTaskCoordinator", () => {
       locked: false,
       transform: [1, 0, 0, 1, 16, 16],
       size: { width: 40, height: 40 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [{ type: "solid", color: "#111827", opacity: 1 }],
@@ -1946,6 +1963,7 @@ describe("GlobalTaskCoordinator", () => {
               locked: false,
               transform: [1, 0, 0, 1, 24, 24],
               size: { width: 56, height: 56 },
+              exportSettings: [],
               opacity: 1,
               properties: {
                 fills: [{ type: "solid", color: "#756DFF", opacity: 1 }],

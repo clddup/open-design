@@ -141,6 +141,7 @@ function renderPanel(
           onGoToComponentMain={vi.fn()}
           onExportFormatChange={vi.fn()}
           onExportRaster={onExportRaster}
+          onExportStoredSetting={vi.fn()}
           onExportSvg={onExportSvg}
           onReplaceImage={vi.fn()}
           onRemoveComponent={options.onRemoveComponent ?? vi.fn()}
@@ -221,6 +222,7 @@ const lineNode: DesignNode = {
   locked: false,
   transform: [1, 0, 0, 1, 120, 80],
   size: { width: 240, height: 120 },
+  exportSettings: [],
   opacity: 1,
   extensions: {},
   kind: "line",
@@ -248,6 +250,7 @@ const starNode: DesignNode = {
   locked: false,
   transform: [1, 0, 0, 1, 120, 80],
   size: { width: 180, height: 180 },
+  exportSettings: [],
   opacity: 1,
   extensions: {},
   kind: "star",
@@ -270,6 +273,7 @@ const textNode: DesignNode = {
   locked: false,
   transform: [1, 0, 0, 1, 120, 80],
   size: { width: 320, height: 96 },
+  exportSettings: [],
   opacity: 1,
   extensions: {},
   kind: "text",
@@ -387,6 +391,7 @@ describe("PropertiesPanel SVG workflow", () => {
         locked: false,
         transform: [1, 0, 0, 1, 0, 0],
         size: { width: 320, height: 80 },
+        exportSettings: [],
         opacity: 1,
         properties: {
           fills: [],
@@ -429,6 +434,7 @@ describe("PropertiesPanel SVG workflow", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 320, height: 180 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [],
@@ -518,6 +524,7 @@ describe("PropertiesPanel SVG workflow", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 1440, height: 1024 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [],
@@ -621,6 +628,7 @@ describe("PropertiesPanel SVG workflow", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 320, height: 180 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [],
@@ -719,6 +727,7 @@ describe("PropertiesPanel SVG workflow", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 320, height: 80 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [],
@@ -771,6 +780,7 @@ describe("PropertiesPanel SVG workflow", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 320, height: 80 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [],
@@ -844,6 +854,7 @@ describe("PropertiesPanel SVG workflow", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 320, height: 160 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [],
@@ -901,6 +912,7 @@ describe("PropertiesPanel SVG workflow", () => {
         locked: false,
         transform: [1, 0, 0, 1, 0, 0],
         size: { width: 320, height: 160 },
+        exportSettings: [],
         opacity: 1,
         properties: {
           fills: [],
@@ -945,6 +957,7 @@ describe("PropertiesPanel SVG workflow", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 320, height: 160 },
+      exportSettings: [],
       opacity: 1,
       properties: {
         fills: [],
@@ -1138,6 +1151,7 @@ describe("PropertiesPanel line workflow", () => {
       locked: false,
       transform: [1, 0, 0, 1, 16, 16],
       size: { width: 240, height: 120 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "frame",

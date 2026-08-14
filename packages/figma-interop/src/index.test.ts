@@ -11,6 +11,8 @@ import {
   toFigmaComponentPropertyDefinitions,
   toFigmaComponentPropertyReferences,
   toFigmaExplicitVariableModes,
+  toFigmaExportSettings,
+  toFigmaNodeType,
   toFigmaNodeBoundVariables,
   toFigmaNodeStyleReferences,
   toFigmaSharedStyleMetadata,
@@ -63,6 +65,7 @@ describe("Figma Shared Style compatibility", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       fillStyleId: "brand-primary",
       effectStyleId: "effect-soft",
@@ -96,6 +99,60 @@ describe("Figma Shared Style compatibility", () => {
     expect(result).toMatchObject({
       ok: false,
       issues: [expect.stringContaining("dedicated asset or gradient adapter")],
+    });
+  });
+});
+
+describe("Figma Slice and export settings compatibility", () => {
+  it("projects Slice identity and public export settings without private format data", () => {
+    const node: DesignNode = {
+      id: "slice",
+      kind: "slice",
+      name: "Hero",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 320, height: 180 },
+      exportSettings: [
+        {
+          format: "PNG",
+          suffix: "@2x",
+          contentsOnly: true,
+          useAbsoluteBounds: false,
+          colorProfile: "DOCUMENT",
+          constraint: { type: "SCALE", value: 2 },
+        },
+      ],
+      opacity: 1,
+      properties: {},
+      extensions: {},
+    };
+    expect(toFigmaNodeType(node)).toBe("SLICE");
+    expect(toFigmaExportSettings(node)).toEqual({
+      ok: true,
+      settings: [
+        expect.objectContaining({
+          format: "PNG",
+          suffix: "@2x",
+          constraint: { type: "SCALE", value: 2 },
+        }),
+      ],
+    });
+    node.exportSettings = [
+      {
+        format: "WEBP",
+        suffix: "",
+        contentsOnly: true,
+        useAbsoluteBounds: false,
+        colorProfile: "DOCUMENT",
+        constraint: { type: "SCALE", value: 1 },
+      },
+    ];
+    expect(toFigmaExportSettings(node)).toMatchObject({
+      ok: false,
+      issues: [expect.stringContaining("OpenDesign WEBP extension")],
     });
   });
 });
@@ -156,6 +213,7 @@ describe("Figma Variables compatibility", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 100, height: 100 },
+      exportSettings: [],
       opacity: 1,
       explicitVariableModes: { theme: "dark" },
       boundVariables: {
@@ -193,6 +251,7 @@ describe("Figma component property compatibility", () => {
       locked: false,
       transform: [1, 0, 0, 1, 0, 0],
       size: { width: 120, height: 44 },
+      exportSettings: [],
       opacity: 1,
       extensions: {},
       kind: "instance",
@@ -226,6 +285,7 @@ describe("Figma component property compatibility", () => {
           locked: false,
           transform: [1, 0, 0, 1, 0, 0],
           size: { width: 120, height: 44 },
+          exportSettings: [],
           opacity: 1,
           extensions: {},
           kind: "frame",
@@ -246,6 +306,7 @@ describe("Figma component property compatibility", () => {
           locked: false,
           transform: [1, 0, 0, 1, 0, 0],
           size: { width: 80, height: 20 },
+          exportSettings: [],
           opacity: 1,
           componentPropertyReferences: { characters: "Label#button:1" },
           extensions: {},

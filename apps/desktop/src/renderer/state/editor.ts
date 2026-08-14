@@ -1,6 +1,7 @@
 export type Tool =
   | "select"
   | "frame"
+  | "slice"
   | "rectangle"
   | "ellipse"
   | "line"
@@ -16,6 +17,7 @@ export function isTool(value: unknown): value is Tool {
   return (
     value === "select" ||
     value === "frame" ||
+    value === "slice" ||
     value === "rectangle" ||
     value === "ellipse" ||
     value === "line" ||

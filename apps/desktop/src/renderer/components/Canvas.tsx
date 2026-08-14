@@ -7,6 +7,7 @@ import {
   type LineNode,
   type PolygonNode,
   type RectangleNode,
+  type SliceNode,
   type StarNode,
   type TextNode,
   type VectorNode,
@@ -615,6 +616,7 @@ export function Canvas({
         locked: false,
         transform: [1, 0, 0, 1, request.x, request.y],
         size: { width: request.width, height: request.height },
+        exportSettings: [],
         opacity: 1,
         extensions: {},
         kind: "vector",
@@ -1185,6 +1187,7 @@ function createDesignNode(
   t: (key: MessageKey, parameters?: MessageParameters) => string,
 ):
   | FrameNode
+  | SliceNode
   | RectangleNode
   | EllipseNode
   | LineNode
@@ -1199,6 +1202,7 @@ function createDesignNode(
     visible: true,
     locked: false,
     transform: [1, 0, 0, 1, point.x, point.y] as DesignNode["transform"],
+    exportSettings: [],
     opacity: 1,
     extensions: {},
   };
@@ -1213,6 +1217,14 @@ function createDesignNode(
       kind: "frame",
       size: drawnSize ?? { width: 320, height: 240 },
       properties: { ...shape, cornerRadius: 12, clipsContent: true },
+    };
+  }
+  if (tool === "slice") {
+    return {
+      ...base,
+      kind: "slice",
+      size: drawnSize ?? { width: 320, height: 240 },
+      properties: {},
     };
   }
   if (tool === "ellipse") {

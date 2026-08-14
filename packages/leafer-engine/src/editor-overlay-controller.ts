@@ -15,6 +15,10 @@ import {
   layoutGuideDocumentTransform,
   reconcileLayoutGuideElements,
 } from "./layout-guide-overlay.js";
+import {
+  createSliceOverlayPlan,
+  type SliceOverlaySpec,
+} from "./slice-overlay.js";
 
 type LeaferModule = typeof LeaferEditorModule;
 type LeaferElement = InstanceType<LeaferModule["UI"]>;
@@ -23,6 +27,7 @@ type LeaferGroup = InstanceType<LeaferModule["Group"]>;
 const MATRIX_EPSILON = 0.000_001;
 const LAYOUT_GUIDE_DEFAULT_COLOR = "#ff5a5f";
 const SLOT_INDICATOR_COLOR = "#d946ef";
+const SLICE_INDICATOR_COLOR = "#7c3aed";
 
 export class EditorOverlayController {
   #document: DesignDocument | null = null;
@@ -37,6 +42,10 @@ export class EditorOverlayController {
   #slotFingerprint: string | null = null;
   readonly #slotLayer: LeaferGroup;
   readonly #slotSpecs = new Map<string, ComponentSlotOverlaySpec>();
+  readonly #sliceElements = new Map<string, LeaferElement>();
+  #sliceFingerprint: string | null = null;
+  readonly #sliceLayer: LeaferGroup;
+  readonly #sliceSpecs = new Map<string, SliceOverlaySpec>();
   readonly #viewportRoot: LeaferGroup;
 
   constructor(options: {
@@ -49,21 +58,30 @@ export class EditorOverlayController {
     this.#viewportRoot = options.viewportRoot;
     this.#guideLayer = this.#createLayer(1);
     this.#slotLayer = this.#createLayer(2);
+    this.#sliceLayer = this.#createLayer(3);
   }
 
   get active(): boolean {
-    return this.#guideElements.size > 0 || this.#slotElements.size > 0;
+    return (
+      this.#guideElements.size > 0 ||
+      this.#slotElements.size > 0 ||
+      this.#sliceElements.size > 0
+    );
   }
 
   dispose(): void {
     this.#destroyElements(this.#guideElements);
     this.#destroyElements(this.#slotElements);
+    this.#destroyElements(this.#sliceElements);
     this.#guideAreaIds.clear();
     this.#slotSpecs.clear();
+    this.#sliceSpecs.clear();
     this.#guideLayer.remove();
     this.#guideLayer.destroy();
     this.#slotLayer.remove();
     this.#slotLayer.destroy();
+    this.#sliceLayer.remove();
+    this.#sliceLayer.destroy();
   }
 
   sync(input: {
@@ -75,12 +93,14 @@ export class EditorOverlayController {
     this.#guideFrameId = input.layoutGuideFrameId;
     this.#syncGuides(input.document, input.layoutGuideFrameId);
     this.#syncSlots(input.document, input.pageId);
+    this.#syncSlices(input.document, input.pageId);
     this.syncViewport();
   }
 
   syncViewport(): void {
     this.#syncGuideViewport();
     this.#syncSlotViewport();
+    this.#syncSliceViewport();
   }
 
   #createLayer(index: number): LeaferGroup {
@@ -153,6 +173,38 @@ export class EditorOverlayController {
     this.#slotLayer.visible = expected.size > 0;
   }
 
+  #syncSlices(document: DesignDocument, pageId: string): void {
+    const plan = createSliceOverlayPlan(document, pageId);
+    if (plan.fingerprint === this.#sliceFingerprint) return;
+    const expected = new Set<string>();
+    this.#sliceSpecs.clear();
+    for (const spec of plan.specs) {
+      expected.add(spec.id);
+      this.#sliceSpecs.set(spec.id, spec);
+      let element = this.#sliceElements.get(spec.id);
+      if (!element) {
+        element = new this.#leafer.Path({
+          editable: false,
+          fill: "rgba(0, 0, 0, 0)",
+          hittable: false,
+          stroke: SLICE_INDICATOR_COLOR,
+          strokeAlign: "inside",
+        });
+        this.#sliceElements.set(spec.id, element);
+        this.#sliceLayer.add(element);
+      }
+      element.set({ path: rectanglePath(spec.width, spec.height) });
+    }
+    for (const [id, element] of this.#sliceElements) {
+      if (expected.has(id)) continue;
+      element.remove();
+      element.destroy();
+      this.#sliceElements.delete(id);
+    }
+    this.#sliceFingerprint = plan.fingerprint;
+    this.#sliceLayer.visible = expected.size > 0;
+  }
+
   #syncGuideViewport(): void {
     if (this.#guideElements.size === 0) return;
     const document = this.#document;
@@ -210,6 +262,38 @@ export class EditorOverlayController {
       });
     }
     this.#slotLayer.visible = visible;
+  }
+
+  #syncSliceViewport(): void {
+    if (this.#sliceElements.size === 0) return;
+    const viewport = this.#viewportRoot.localTransform;
+    const zoom = this.#zoom;
+    let visible = false;
+    for (const [id, element] of this.#sliceElements) {
+      const spec = this.#sliceSpecs.get(id);
+      const desired = spec
+        ? multiplyAffine(viewport, transformToAffine(spec.transform))
+        : undefined;
+      const relative = desired
+        ? matrixRelativeToParent(
+            this.#presentationRoot.localTransform,
+            desired,
+            MATRIX_EPSILON,
+          )
+        : undefined;
+      if (!relative) {
+        element.visible = false;
+        continue;
+      }
+      visible = true;
+      element.visible = true;
+      setTransform(element, relative);
+      element.set({
+        dashPattern: [6 / zoom, 4 / zoom],
+        strokeWidth: 1.25 / zoom,
+      });
+    }
+    this.#sliceLayer.visible = visible;
   }
 
   get #zoom(): number {

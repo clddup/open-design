@@ -20,6 +20,7 @@ import type { TextLayoutProvider } from "@opendesign/text-service";
 export type LeaferCanvasTool =
   | "select"
   | "frame"
+  | "slice"
   | "rectangle"
   | "ellipse"
   | "line"

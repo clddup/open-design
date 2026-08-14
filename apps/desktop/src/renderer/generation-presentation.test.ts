@@ -849,6 +849,7 @@ function frameNode(): FrameNode {
     locked: false,
     transform: [1, 0, 0, 1, 1_240, 80],
     size: { width: 800, height: 1_000 },
+    exportSettings: [],
     opacity: 1,
     properties: {
       fills: [{ type: "solid", color: "#f4f0e8", opacity: 1 }],
@@ -884,6 +885,7 @@ function node(
     locked: false,
     transform: [1, 0, 0, 1, 24, 24],
     size: { width: 160, height: 96 },
+    exportSettings: [],
     opacity: 1,
     extensions: {},
   };

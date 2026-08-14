@@ -418,6 +418,7 @@ function booleanNode(
     kind: "boolean",
     locked: false,
     name: id,
+    exportSettings: [],
     opacity: 1,
     parentId,
     properties: {
@@ -446,6 +447,7 @@ function rectangle(
     kind: "rectangle",
     locked: false,
     name: id,
+    exportSettings: [],
     opacity: 1,
     parentId,
     properties: {
@@ -474,6 +476,7 @@ function ellipse(
     kind: "ellipse",
     locked: false,
     name: id,
+    exportSettings: [],
     opacity: 1,
     parentId,
     properties: {
@@ -501,6 +504,7 @@ function polygon(
     kind: "polygon",
     locked: false,
     name: id,
+    exportSettings: [],
     opacity: 1,
     parentId,
     properties: {
@@ -531,6 +535,7 @@ function star(
     kind: "star",
     locked: false,
     name: id,
+    exportSettings: [],
     opacity: 1,
     parentId,
     properties: {
@@ -561,6 +566,7 @@ function pathNode(
     kind: "path",
     locked: false,
     name: id,
+    exportSettings: [],
     opacity: 1,
     parentId,
     properties: {
@@ -584,6 +590,7 @@ function vectorNode(id: string, parentId: string | null): VectorNode {
     kind: "vector",
     locked: false,
     name: id,
+    exportSettings: [],
     opacity: 1,
     parentId,
     properties: {

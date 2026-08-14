@@ -1418,6 +1418,7 @@ void app.whenReady().then(async () => {
                   locked: false,
                   transform: [1, 0, 0, 1, call.input.x, call.input.y],
                   size: { width, height },
+                  exportSettings: [],
                   opacity: 1,
                   properties: {
                     assetId,

@@ -8,7 +8,7 @@ export type RasterExportMimeType = "image/png" | "image/jpeg" | "image/webp";
 export type RasterExportResampling = "smooth" | "pixelated";
 
 export type RasterExportSize =
-  | { mode: "scale"; value: 1 | 2 | 3 }
+  | { mode: "scale"; value: number }
   | { mode: "width"; value: number }
   | { mode: "height"; value: number };
 
@@ -125,7 +125,7 @@ export function rasterExportExtension(format: RasterExportFormat): string {
 function isRasterExportSize(value: unknown): value is RasterExportSize {
   if (!record(value) || !exactKeys(value, ["mode", "value"])) return false;
   if (value.mode === "scale") {
-    return value.value === 1 || value.value === 2 || value.value === 3;
+    return finite(value.value) && value.value > 0 && value.value <= 64;
   }
   return (
     (value.mode === "width" || value.mode === "height") &&
