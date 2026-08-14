@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.24.0`
+- 文档协议：`DesignDocument 1.25.0`
 - Agent 协议：`3.9.0`
 - Geometry Service：`contract v10`
 - Layout Service：`contract v6`
@@ -41,8 +41,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   60 files / 585 tests
-└── desktop tests   78 files / 641 tests
+├── package tests   60 files / 588 tests
+└── desktop tests   78 files / 643 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main
@@ -114,7 +114,7 @@ Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试
 
 ## 专业设计就绪度审计
 
-当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、18 项降级可用和 3 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.24.0`、EditorRuntime、Geometry/Image/Text/Layout/Component service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Instance/Component Properties/Component Set/VARIANT Matrix/Slot、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Component 专项证据覆盖真实 Set Frame、唯一 variant resolution、Set 生命周期、二维矩阵与 Instance 迁移、正式 Slot source/override、settings、preferred values、limit warnings、Clear/Reset/delete/detach、Variant Slot migration、Frame-like 直接编辑、空 Slot editor overlay、Canvas/SVG/位图、Agent inspection、单 revision/undo 与保存重开。真实字体栅格、连接/分支 network、Auto Layout Grid、nested Slot、画布矩阵重排、跨文件 Library、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。三个固定专业 fixture 继续证明企鹅、海报和 Boolean 品牌主件；它们不替代真实 Electron、Agent 重放和双平台打包保存实测。
+当前 `DesignCapabilityManifest v1` 记录 0 项完整可用、18 项降级可用和 3 项不可用能力；没有实机证据的能力不会标记为完整可用。`DesignDocument 1.25.0`、EditorRuntime、Geometry/Image/Text/Layout/Component service、Leafer adapter、Inspector 和 Agent tools 已打通正式矢量、文字、外观、图片、响应式布局、Component/Instance/Component Properties/Component Set/VARIANT Matrix/Slot、视觉复核和单目标 PNG/JPEG/WebP 导出基础路径。Component 专项证据覆盖普通属性显式顺序、Variant-before-ordinary 合并顺序、真实 Set Frame、唯一 variant resolution、Set 生命周期、二维矩阵与 Instance 迁移、正式 Slot source/override、settings、preferred values、limit warnings、Clear/Reset/delete/detach、Variant Slot migration、Frame-like 直接编辑、空 Slot editor overlay、Canvas/SVG/位图、Agent inspection、单 revision/undo 与保存重开。真实字体栅格、连接/分支 network、Auto Layout Grid、nested Slot、画布矩阵重排、跨文件 Library、像素基线和双平台 GUI 仍未验收，因此相关能力保持 `degraded`。三个固定专业 fixture 继续证明企鹅、海报和 Boolean 品牌主件；它们不替代真实 Electron、Agent 重放和双平台打包保存实测。
 
 仓库当前已有独立 `@opendesign/geometry-service` contract v10：确定性排列已进入产品链，隔离的 Skia PathKit provider 已建立路径布尔、simplify、transform、dash 和 outline stroke 的底层计算边界；editable-vector 子入口提供稳定 ID 拓扑校验、确定性 cubic 序列化、分支检测与 tight bounds，vector-edit 子入口提供互不连接非分支多 contour 的节点/手柄、路径拓扑、点击 Cut，以及开放/闭合 contour、compound holes、穿孔 boundary stitching 与闭合凹形多交点的有限线拖拽 Cut 纯几何操作。EditorRuntime 在其上提供 document-space 多目标编排、逐层 transform inverse、稳定 sibling 插入与原子多层 Cut。`DesignDocument 1.10.0` 与 EditorRuntime 建立非破坏 Boolean Group、正式 LineNode、PolygonNode、StarNode、Vector Network、持久 point mode 和 Text Auto Size/wrapping/overflow 的独立节点语义、迁移、持久化、planner 和 undo/redo；`path` 与 `network` 严格互斥。独立 `@opendesign/text-service` contract v1 由固定 Leafer provider 提供 Auto Width/Auto Height 测量、具体 size 与 font fallback warning，WorkspaceRuntime 把 provider 同步给活动、后台和后打开文件；max-lines、字体资源/替换、显式 reflow 和精确 shaping 仍未实现。递归 Boolean resolver 处理 Rectangle/Ellipse/尖角 Polygon/Star/两种 Path/Vector/嵌套 Boolean，Leafer synthetic result 不持久化 provider 派生 path。人工 Pen/Vector 与 Agent typed vector tool 消费同一种 editable network；flatten 和 outline stroke 产品命令仍未完成。独立 `@opendesign/import-export-service` 安全 SVG v1 继续由 EditorRuntime planner、Main 文件桥、人工入口和 Agent handle 复用；editable network 通过有界 metadata v2 往返 point mode、点击/拖拽 Cut 拓扑，并同时校验 schema、拓扑和标准 `d`；闭合拖拽结果以标准 `Z` paths 往返，开放结果以无 `Z`、无 region paths 往返，compound sibling 以有效反向 hole subpath 往返，穿孔 sibling 各自使用连续单 loop，凹形 extracted sibling 可包含多个 closed paths/regions，多层 Cut 只是一次事务组合多组标准节点。Text 通过标准 `<text>/<tspan>` 和受控 metadata v3 往返 resize mode、具体 size、换行与溢出，v2/v1 继续迁移读取。没有 metadata 的外部 SVG path 保持精确 path-data，不猜测 network；普通第三方 Text 继续拒绝。图片、复杂 effects/combined mask graph、angular gradient、多 paint、outline text/stroke 保真与双平台打包 smoke 仍未完成，因此 SVG capability 保持 `degraded`。仓库已有独立 `@opendesign/layout-service` contract v6；仍没有完整 Text/Font typography service；Component Set/VARIANT/Slot 已进入正式文档与事务；nested Slot、跨文件 Library 和 Token/Variable 仍未实现。`@opendesign/image-service` 当前提供非破坏 placement/crop 几何，人工 UI 与 Agent 已可替换来源；AI 局部重绘、扩图、背景替换、重打光、风格统一和派生 asset 来源关系仍明确标记为不可用。
 

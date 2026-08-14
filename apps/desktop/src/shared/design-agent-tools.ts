@@ -937,7 +937,7 @@ const MODEL_NODE_SCHEMA = {
       uniqueItems: true,
       description:
         "Use an empty array for insert_element. The host derives children from later insert_element parentId/index commands.",
-      items: { type: "string", minLength: 1, maxLength: 256 },
+      items: { type: "string", minLength: 1, maxLength: 512 },
     },
     visible: { type: "boolean" },
     locked: { type: "boolean" },
@@ -1193,7 +1193,7 @@ const MODEL_HIERARCHY_SCHEMA = {
 const MODEL_COMPONENT_SCHEMA = {
   type: "object",
   description:
-    "Create and place linked components, combine inspected sibling Component Mains into a Figma-compatible Component Set with explicit unique VARIANT values, author Boolean/Text/Instance-swap/Slot properties on explicit Main sublayers, edit/reset/clear Slot contents and guidance settings, set/reset typed instance and VARIANT property values, use advanced sourcePath overrides, detach an instance, or locate its Main. Component, set, root, and property IDs must come from inspection.",
+    "Create and place linked components, combine inspected sibling Component Mains into a Figma-compatible Component Set with explicit unique VARIANT values, author and reorder Boolean/Text/Instance-swap/Slot properties on explicit Main sublayers, edit/reset/clear Slot contents and guidance settings, set/reset typed instance and VARIANT property values, use advanced sourcePath overrides, detach an instance, or locate its Main. Component, set, root, property IDs, and existing property order must come from inspection.",
   properties: {
     action: {
       enum: [
@@ -1214,6 +1214,7 @@ const MODEL_COMPONENT_SCHEMA = {
         "set-variant-properties",
         "add-property",
         "rename-property",
+        "reorder-properties",
         "remove-property",
         "set-property",
         "reset-property",
@@ -1283,6 +1284,13 @@ const MODEL_COMPONENT_SCHEMA = {
       maxItems: 128,
       uniqueItems: true,
       items: { type: "string", minLength: 1, maxLength: 256 },
+    },
+    componentPropertyOrder: {
+      type: "array",
+      minItems: 1,
+      maxItems: 4096,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 512 },
     },
     values: {
       type: "array",

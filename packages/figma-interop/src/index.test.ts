@@ -19,6 +19,7 @@ describe("Figma component property compatibility", () => {
       id: "button",
       name: "Button",
       rootNodeId: "main",
+      componentPropertyOrder: ["Label#button:1"],
       componentPropertyDefinitions: {
         "Label#button:1": { type: "TEXT", defaultValue: "Continue" },
       },
@@ -152,6 +153,7 @@ describe("Figma component property compatibility", () => {
       id: "button_hover",
       name: "State=Hover",
       rootNodeId: "button_hover_root",
+      componentPropertyOrder: [],
       componentPropertyDefinitions: {},
       variantSetId: variantSet.id,
       variantProperties: { State: "Hover" },
@@ -173,6 +175,7 @@ describe("Figma component property compatibility", () => {
       id: "card",
       name: "Card",
       rootNodeId: "card_main",
+      componentPropertyOrder: ["Content#card:content"],
       componentPropertyDefinitions: {
         "Content#card:content": {
           type: "SLOT",

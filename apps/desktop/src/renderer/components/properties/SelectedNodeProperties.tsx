@@ -4,12 +4,14 @@ import type {
   ComponentPropertyType,
   ComponentOverridePatch,
   DesignNode,
+  InstanceSwapPreferredValue,
   LayoutConstraints,
   LayoutGuide,
   LayoutLimits,
   LayoutPositioning,
   LayoutSizing,
   LineEndpoint,
+  SlotSettings,
 } from "@opendesign/design-contracts";
 import { Button, Glyph, IconButton, type GlyphName } from "@opendesign/ui";
 import type { MessageKey } from "../../../shared/i18n/messages";
@@ -113,6 +115,7 @@ export function SelectedNodeProperties({
   onRemoveComponentProperty,
   onRemoveVariantProperty,
   onRenameComponentProperty,
+  onReorderComponentProperties,
   onRenameVariantProperty,
   onRenameVariantValue,
   onReorderVariantProperties,
@@ -166,6 +169,9 @@ export function SelectedNodeProperties({
   onRemoveComponentProperty: (propertyName: string) => void;
   onRemoveVariantProperty: (propertyName: string) => void;
   onRenameComponentProperty: (propertyName: string, name: string) => void;
+  onReorderComponentProperties: (
+    componentPropertyOrder: readonly string[],
+  ) => void;
   onRenameVariantProperty: (propertyName: string, name: string) => void;
   onRenameVariantValue: (
     propertyName: string,
@@ -207,8 +213,8 @@ export function SelectedNodeProperties({
     propertyName: string,
     input: {
       description?: string;
-      preferredValues: readonly import("@opendesign/design-contracts").InstanceSwapPreferredValue[];
-      settings: import("@opendesign/design-contracts").SlotSettings;
+      preferredValues: readonly InstanceSwapPreferredValue[];
+      settings: SlotSettings;
     },
   ) => void;
   onSetVariantProperties: (
@@ -332,6 +338,7 @@ export function SelectedNodeProperties({
         onRemoveComponentProperty={onRemoveComponentProperty}
         onRemoveVariantProperty={onRemoveVariantProperty}
         onRenameComponentProperty={onRenameComponentProperty}
+        onReorderComponentProperties={onReorderComponentProperties}
         onRenameVariantProperty={onRenameVariantProperty}
         onRenameVariantValue={onRenameVariantValue}
         onReorderVariantProperties={onReorderVariantProperties}

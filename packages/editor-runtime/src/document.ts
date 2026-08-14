@@ -22,6 +22,7 @@ import {
   validateNodeLayoutInvariants,
   type DocumentInvariantIssue,
 } from "./layout-document-invariants.js";
+import { validateComponentPropertyOrder } from "./component-property-order.js";
 import { isBooleanOperandNode, isContainerNode } from "./node-semantics.js";
 import { validateVariantSetInvariants } from "./variant-set-invariants.js";
 
@@ -122,6 +123,7 @@ export function validateDocumentInvariants(
       });
     }
     componentRoots.set(component.rootNodeId, componentId);
+    issues.push(...validateComponentPropertyOrder(componentId, component));
     for (const [propertyName, definition] of Object.entries(
       component.componentPropertyDefinitions,
     )) {

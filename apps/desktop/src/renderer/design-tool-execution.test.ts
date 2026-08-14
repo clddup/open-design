@@ -351,6 +351,7 @@ describe("Renderer design tool scope", () => {
             componentsById: {
               component_feature: {
                 rootNodeId: "feature_group",
+                componentPropertyOrder: ["Show feature#feature:visible"],
                 componentPropertyDefinitions: {
                   "Show feature#feature:visible": {
                     type: "BOOLEAN",
@@ -511,6 +512,107 @@ describe("Renderer design tool scope", () => {
     ).toBeUndefined();
     expect(runtime.getSnapshot().document.nodesById.feature_group?.kind).toBe(
       "group",
+    );
+  });
+
+  it("reorders inspected ordinary Component properties through one typed action", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const execute = (input: Record<string, unknown>, revision: number) =>
+      executeDesignToolRequest(
+        {
+          requestId: `component_order_${revision}`,
+          call: {
+            toolCallId: `tool_component_order_${revision}`,
+            toolName: DESIGN_COMPONENT_TOOL_NAME,
+            input,
+          },
+          context: { ...pageContext, revision },
+        },
+        runtime,
+        "page_welcome",
+      );
+    expect(
+      await execute(
+        {
+          action: "create-component",
+          label: "Create feature component",
+          pageId: "page_welcome",
+          nodeId: "feature_group",
+          componentId: "component_feature",
+          name: "Feature",
+        },
+        0,
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      await execute(
+        {
+          action: "add-property",
+          label: "Expose first card",
+          pageId: "page_welcome",
+          componentId: "component_feature",
+          propertyId: "feature:first",
+          name: "First card",
+          type: "BOOLEAN",
+          sourceNodeId: "feature_one",
+        },
+        1,
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      await execute(
+        {
+          action: "add-property",
+          label: "Expose second card",
+          pageId: "page_welcome",
+          componentId: "component_feature",
+          propertyId: "feature:second",
+          name: "Second card",
+          type: "BOOLEAN",
+          sourceNodeId: "feature_two",
+        },
+        2,
+      ),
+    ).toMatchObject({ ok: true });
+    const reordered = await execute(
+      {
+        action: "reorder-properties",
+        label: "Prioritize second card",
+        pageId: "page_welcome",
+        componentId: "component_feature",
+        componentRootNodeId: "feature_group",
+        componentPropertyOrder: [
+          "Second card#feature:second",
+          "First card#feature:first",
+        ],
+      },
+      3,
+    );
+    expect(reordered).toMatchObject({
+      ok: true,
+      result: { content: { action: "reorder-properties", revision: 4 } },
+    });
+    expect(
+      runtime.getSnapshot().document.componentsById.component_feature
+        ?.componentPropertyOrder,
+    ).toEqual(["Second card#feature:second", "First card#feature:first"]);
+    await expect(
+      execute(
+        {
+          action: "reorder-properties",
+          label: "Use stale Component root",
+          pageId: "page_welcome",
+          componentId: "component_feature",
+          componentRootNodeId: "removed_feature_root",
+          componentPropertyOrder: [
+            "First card#feature:first",
+            "Second card#feature:second",
+          ],
+        },
+        4,
+      ),
+    ).rejects.toThrow(
+      "Component component_feature main is outside Page page_welcome",
     );
   });
 

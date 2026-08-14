@@ -71,6 +71,7 @@ export function replaceSlotContainerKindCommand(
     if (node.id === root.id) {
       if (kind === "slot" && node.kind === "frame") {
         const { layoutGuides: _layoutGuides, ...properties } = node.properties;
+        void _layoutGuides;
         nodes.push({
           ...structuredClone(node),
           kind: "slot",
@@ -78,6 +79,7 @@ export function replaceSlotContainerKindCommand(
         });
       } else if (kind === "frame" && node.kind === "slot") {
         const { sourceSlotId: _sourceSlotId, ...properties } = node.properties;
+        void _sourceSlotId;
         nodes.push({
           ...structuredClone(node),
           kind: "frame",
@@ -440,7 +442,7 @@ function pageContainingNode(
   if (!current) return null;
   return (
     document.pageOrder.find((pageId) =>
-      document.pagesById[pageId]?.rootNodeIds.includes(current!.id),
+      document.pagesById[pageId]?.rootNodeIds.includes(current.id),
     ) ?? null
   );
 }

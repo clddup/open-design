@@ -127,7 +127,17 @@ export function migrateFigmaComponentProperties(
   ) {
     for (const value of Object.values(components)) {
       if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-      (value as Record<string, unknown>).componentPropertyDefinitions ??= {};
+      const component = value as Record<string, unknown>;
+      component.componentPropertyDefinitions ??= {};
+      if (component.componentPropertyOrder === undefined) {
+        const definitions = component.componentPropertyDefinitions;
+        component.componentPropertyOrder =
+          definitions &&
+          typeof definitions === "object" &&
+          !Array.isArray(definitions)
+            ? Object.keys(definitions)
+            : [];
+      }
     }
   }
   const nodes = document.nodesById;

@@ -9,8 +9,10 @@ import {
 import userEvent from "@testing-library/user-event";
 import type {
   DesignNode,
+  InstanceSwapPreferredValue,
   LayoutConstraints,
   LayoutGuide,
+  SlotSettings,
 } from "@opendesign/design-contracts";
 import type {
   ArrangeOperation,
@@ -54,6 +56,9 @@ function renderPanel(
       name: string,
     ) => void;
     onReorderVariantProperties?: (propertyOrder: readonly string[]) => void;
+    onReorderComponentProperties?: (
+      componentPropertyOrder: readonly string[],
+    ) => void;
     onReorderVariantValues?: (
       propertyName: string,
       values: readonly string[],
@@ -74,8 +79,8 @@ function renderPanel(
       propertyName: string,
       input: {
         description?: string;
-        preferredValues: readonly import("@opendesign/design-contracts").InstanceSwapPreferredValue[];
-        settings: import("@opendesign/design-contracts").SlotSettings;
+        preferredValues: readonly InstanceSwapPreferredValue[];
+        settings: SlotSettings;
       },
     ) => void;
     onRemoveComponent?: () => void;
@@ -140,6 +145,9 @@ function renderPanel(
           onRemoveComponentProperty={vi.fn()}
           onRemoveVariantProperty={options.onRemoveVariantProperty ?? vi.fn()}
           onRenameComponentProperty={vi.fn()}
+          onReorderComponentProperties={
+            options.onReorderComponentProperties ?? vi.fn()
+          }
           onRenameVariantProperty={options.onRenameVariantProperty ?? vi.fn()}
           onRenameVariantValue={options.onRenameVariantValue ?? vi.fn()}
           onReorderVariantProperties={
@@ -1075,6 +1083,44 @@ describe("PropertiesPanel line workflow", () => {
     });
   });
 
+  it("reorders ordinary Component properties with accessible controls", async () => {
+    const user = userEvent.setup();
+    const onReorderComponentProperties = vi.fn();
+    renderPanel({
+      componentContext: {
+        availableComponents: [],
+        availableSlotPreferredValues: [],
+        componentName: "Primary button",
+        componentProperties: [],
+        componentPropertyDefinitions: [
+          {
+            definition: { type: "TEXT", defaultValue: "Continue" },
+            propertyName: "Label#button:text",
+            sourceNodeIds: [textNode.id],
+          },
+          {
+            definition: { type: "BOOLEAN", defaultValue: true },
+            propertyName: "Visible#button:visible",
+            sourceNodeIds: [textNode.id],
+          },
+        ],
+        isMain: true,
+        overrideCount: 0,
+        sourceNodes: [],
+      },
+      node: lineNode,
+      onReorderComponentProperties,
+      selectionCount: 1,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Move Label down" }));
+
+    expect(onReorderComponentProperties).toHaveBeenCalledWith([
+      "Visible#button:visible",
+      "Label#button:text",
+    ]);
+  });
+
   it("authors a Slot only from an eligible Frame sublayer", async () => {
     const user = userEvent.setup();
     const onAddComponentProperty = vi.fn();
@@ -1164,9 +1210,9 @@ describe("PropertiesPanel line workflow", () => {
     });
 
     await user.click(screen.getByText("Slot settings"));
-    const preferred = screen.getByLabelText(
+    const preferred = screen.getByLabelText<HTMLSelectElement>(
       "Preferred instances",
-    ) as HTMLSelectElement;
+    );
     for (const option of preferred.options) option.selected = true;
     fireEvent.change(preferred);
 

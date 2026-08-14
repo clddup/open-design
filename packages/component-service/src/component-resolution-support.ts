@@ -53,9 +53,17 @@ export function effectiveComponentProperties(
   }
   if (variantSet) {
     const requestedVariantProperties: Record<string, string> = {};
-    for (const [propertyName, propertyDefinition] of Object.entries(
-      variantSet.componentPropertyDefinitions,
-    )) {
+    for (const propertyName of variantSet.propertyOrder) {
+      const propertyDefinition =
+        variantSet.componentPropertyDefinitions[propertyName];
+      if (!propertyDefinition) {
+        issues.push({
+          code: "invalid-component-property",
+          instanceId,
+          message: `Variant property order references missing property ${propertyName}`,
+        });
+        continue;
+      }
       const value =
         assignments[propertyName] ??
         requestedDefinition.variantProperties[propertyName];
@@ -112,9 +120,17 @@ export function effectiveComponentProperties(
       });
     }
   }
-  for (const [propertyName, propertyDefinition] of Object.entries(
-    definition.componentPropertyDefinitions,
-  )) {
+  for (const propertyName of definition.componentPropertyOrder) {
+    const propertyDefinition =
+      definition.componentPropertyDefinitions[propertyName];
+    if (!propertyDefinition) {
+      issues.push({
+        code: "invalid-component-property",
+        instanceId,
+        message: `Component property order references missing property ${propertyName}`,
+      });
+      continue;
+    }
     if (
       propertyDefinition.type === "SLOT" &&
       Object.hasOwn(assignments, propertyName)

@@ -1641,6 +1641,7 @@ function diffDocuments(
       "name",
       "rootNodeId",
       "description",
+      "componentPropertyOrder",
       "componentPropertyDefinitions",
       "variantSetId",
       "variantProperties",

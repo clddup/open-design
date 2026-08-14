@@ -35,6 +35,7 @@ import {
 import { useCallback } from "react";
 import type { MessageKey, MessageParameters } from "../shared/i18n/messages";
 import type { AssetActionResult } from "./design-assets";
+import { useComponentPropertyOrderAction } from "./use-component-property-order-action";
 import { useVariantMatrixActions } from "./use-variant-matrix-actions";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
@@ -404,6 +405,13 @@ export function useComponentActions({
     [applyPropertyPlan, runtime, t, transactionCounter],
   );
 
+  const reorderSelectedComponentProperties = useComponentPropertyOrderAction({
+    applyPlan: applyPropertyPlan,
+    label: t("history.reorderComponentProperties"),
+    runtime,
+    transactionCounter,
+  });
+
   const setSelectedComponentSlotSettings = useCallback(
     (
       propertyName: string,
@@ -651,6 +659,7 @@ export function useComponentActions({
     combineSelectedComponentsAsVariants,
     componentPropertyActions: {
       ...variantMatrixActions,
+      onReorderComponentProperties: reorderSelectedComponentProperties,
       onClearComponentSlot: clearSelectedInstanceSlot,
       onCreateComponentSlotOverride: createSelectedInstanceSlotOverride,
       onResetComponentSlot: resetSelectedInstanceSlot,

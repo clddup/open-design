@@ -287,6 +287,7 @@ function fixture(): DesignDocument {
         id: "button",
         name: "Button",
         rootNodeId: "main",
+        componentPropertyOrder: [],
         componentPropertyDefinitions: {},
         variantProperties: {},
         extensions: {},

@@ -1783,6 +1783,18 @@ function assertComponentInputPage(
       throw new Error(`Variant matrix target is outside Page ${input.pageId}`);
     return;
   }
+  if (input.action === "reorder-properties") {
+    const mainNodeId = document.componentsById[input.componentId]?.rootNodeId;
+    if (
+      mainNodeId !== input.componentRootNodeId ||
+      !ids.has(input.componentRootNodeId)
+    ) {
+      throw new Error(
+        `Component ${input.componentId} main is outside Page ${input.pageId}`,
+      );
+    }
+    return;
+  }
   if (
     input.action === "remove-component" ||
     input.action === "rename-property" ||

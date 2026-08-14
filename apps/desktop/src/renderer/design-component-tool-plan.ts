@@ -16,6 +16,7 @@ import {
   planRemoveVariantFromSet,
   planRemoveVariantProperty,
   planRenameComponentProperty,
+  planReorderComponentProperties,
   planRenameVariantProperty,
   planRenameVariantValue,
   planReorderVariantProperties,
@@ -279,6 +280,22 @@ export function planDesignComponentTool(
         componentId: input.componentId,
         propertyName: input.propertyName,
         name: input.name,
+        commandPrefix,
+      });
+    case "reorder-properties":
+      if (
+        document.componentsById[input.componentId]?.rootNodeId !==
+        input.componentRootNodeId
+      ) {
+        return {
+          ok: false,
+          code: "invalid",
+          message: "Component no longer matches its inspected root",
+        };
+      }
+      return planReorderComponentProperties(document, {
+        componentId: input.componentId,
+        componentPropertyOrder: input.componentPropertyOrder,
         commandPrefix,
       });
     case "remove-property":

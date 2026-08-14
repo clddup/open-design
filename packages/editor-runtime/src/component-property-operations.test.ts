@@ -16,7 +16,11 @@ import {
   planResetComponentPropertyValue,
   planSetComponentPropertyValue,
 } from "./component-property-operations.js";
-import { createEmptyDesignDocument } from "./document.js";
+import { planReorderComponentProperties } from "./component-property-order-operations.js";
+import {
+  createEmptyDesignDocument,
+  validateDocumentInvariants,
+} from "./document.js";
 import { EditorRuntime } from "./runtime.js";
 
 describe("Figma-compatible component property operations", () => {
@@ -57,6 +61,13 @@ describe("Figma-compatible component property operations", () => {
         preferredValues: [{ type: "COMPONENT", key: "component_icon_alt" }],
       },
     });
+    expect(
+      authored.componentsById.component_button?.componentPropertyOrder,
+    ).toEqual([
+      "Show label#button:visible",
+      "Label#button:text",
+      "Icon#button:icon",
+    ]);
     expect(
       authored.nodesById.button_label?.componentPropertyReferences,
     ).toEqual({
@@ -169,6 +180,10 @@ describe("Figma-compatible component property operations", () => {
     const reopened = new EditorRuntime(
       JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
     );
+    expect(
+      reopened.getSnapshot().document.componentsById.component_button
+        ?.componentPropertyOrder,
+    ).toEqual(["Label#button:text"]);
     expect(instanceAssignments(reopened)).toEqual({
       "Label#button:text": "Saved label",
     });
@@ -216,6 +231,10 @@ describe("Figma-compatible component property operations", () => {
       runtime.getSnapshot().document.nodesById.button_label
         ?.componentPropertyReferences,
     ).toEqual({ characters: "Button label#button:text" });
+    expect(
+      runtime.getSnapshot().document.componentsById.component_button
+        ?.componentPropertyOrder,
+    ).toEqual(["Button label#button:text"]);
 
     const removed = planRemoveComponentProperty(
       runtime.getSnapshot().document,
@@ -236,9 +255,72 @@ describe("Figma-compatible component property operations", () => {
       runtime.getSnapshot().document.componentsById.component_button
         ?.componentPropertyDefinitions,
     ).toEqual({});
+    expect(
+      runtime.getSnapshot().document.componentsById.component_button
+        ?.componentPropertyOrder,
+    ).toEqual([]);
     expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
     expect(instanceAssignments(runtime)).toEqual({
       "Button label#button:text": "Checkout",
+    });
+  });
+
+  it("reorders ordinary properties as one revision and restores the order through undo", () => {
+    const runtime = new EditorRuntime(componentPropertyFixture());
+    addProperty(runtime, {
+      propertyId: "button:visible",
+      name: "Show label",
+      sourceNodeId: "button_label",
+      type: "BOOLEAN",
+    });
+    addProperty(runtime, {
+      propertyId: "button:text",
+      name: "Label",
+      sourceNodeId: "button_label",
+      type: "TEXT",
+    });
+    const beforeRevision = runtime.getSnapshot().document.revision;
+    const reordered = planReorderComponentProperties(
+      runtime.getSnapshot().document,
+      {
+        componentId: "component_button",
+        componentPropertyOrder: [
+          "Label#button:text",
+          "Show label#button:visible",
+        ],
+        commandPrefix: "reorder",
+      },
+    );
+    expect(reordered.ok).toBe(true);
+    apply(runtime, reordered.ok ? reordered.commands : [], "reorder");
+    expect(runtime.getSnapshot().document.revision).toBe(beforeRevision + 1);
+    expect(
+      runtime.getSnapshot().document.componentsById.component_button
+        ?.componentPropertyOrder,
+    ).toEqual(["Label#button:text", "Show label#button:visible"]);
+    const resolution = resolveComponentInstance(
+      runtime.getSnapshot().document,
+      "button_instance",
+    );
+    expect(
+      resolution.ok && Object.keys(resolution.componentProperties),
+    ).toEqual(["Label#button:text", "Show label#button:visible"]);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.componentsById.component_button
+        ?.componentPropertyOrder,
+    ).toEqual(["Show label#button:visible", "Label#button:text"]);
+  });
+
+  it("rejects Component property orders that do not exactly cover definitions", () => {
+    const document = componentPropertyFixture();
+    document.componentsById.component_button!.componentPropertyDefinitions = {
+      "Label#button:text": { type: "TEXT", defaultValue: "Continue" },
+    };
+    expect(validateDocumentInvariants(document)).toContainEqual({
+      path: "/componentsById/component_button/componentPropertyOrder",
+      message:
+        "component property order must contain every ordinary component property exactly once",
     });
   });
 
@@ -398,6 +480,7 @@ function component(id: string, rootNodeId: string) {
     id,
     name: id,
     rootNodeId,
+    componentPropertyOrder: [],
     componentPropertyDefinitions: {},
     variantProperties: {},
     extensions: {},

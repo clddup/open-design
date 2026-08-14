@@ -8,6 +8,7 @@ import type {
   Effect,
   InstanceSwapPreferredValue,
   MaskMode,
+  SlotSettings,
   VariantPropertyDefinition,
 } from "@opendesign/design-contracts";
 import type { ResolvedComponentSlot } from "@opendesign/component-service";
@@ -414,6 +415,7 @@ export function ComponentSection({
   onAddComponentProperty,
   onRemoveComponentProperty,
   onRenameComponentProperty,
+  onReorderComponentProperties,
   onResetComponentInstance,
   onResetComponentSourceOverride,
   onResetComponentProperty,
@@ -458,6 +460,9 @@ export function ComponentSection({
   }) => void;
   onRemoveComponentProperty: (propertyName: string) => void;
   onRenameComponentProperty: (propertyName: string, name: string) => void;
+  onReorderComponentProperties: (
+    componentPropertyOrder: readonly string[],
+  ) => void;
   onResetComponentInstance: () => void;
   onResetComponentSourceOverride: (sourcePath: readonly string[]) => void;
   onResetComponentProperty: (propertyName: string) => void;
@@ -473,7 +478,7 @@ export function ComponentSection({
     input: {
       description?: string;
       preferredValues: readonly InstanceSwapPreferredValue[];
-      settings: import("@opendesign/design-contracts").SlotSettings;
+      settings: SlotSettings;
     },
   ) => void;
   onUpdateComponentOverride: (
@@ -539,7 +544,6 @@ export function ComponentSection({
                 )}
               </div>
               <ComponentPropertyAuthoring
-                availableComponents={componentContext.availableComponents}
                 availableSlotPreferredValues={
                   componentContext.availableSlotPreferredValues
                 }
@@ -547,6 +551,7 @@ export function ComponentSection({
                 onAdd={onAddComponentProperty}
                 onRemove={onRemoveComponentProperty}
                 onRename={onRenameComponentProperty}
+                onReorder={onReorderComponentProperties}
                 onUpdateSlot={onSetComponentSlotSettings}
                 sources={componentContext.sourceNodes}
               />

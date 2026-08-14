@@ -166,6 +166,14 @@ export type DesignComponentToolInput =
       name: string;
     }
   | {
+      action: "reorder-properties";
+      label: string;
+      pageId: string;
+      componentId: string;
+      componentRootNodeId: string;
+      componentPropertyOrder: string[];
+    }
+  | {
       action: "remove-property";
       label: string;
       pageId: string;

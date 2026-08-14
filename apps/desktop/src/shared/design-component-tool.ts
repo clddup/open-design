@@ -324,6 +324,20 @@ export function isDesignComponentToolInput(
           "name",
         ])
       );
+    case "reorder-properties":
+      return (
+        id(input.componentId) &&
+        id(input.componentRootNodeId) &&
+        propertyNameArray(input.componentPropertyOrder, 1, 4_096) &&
+        exactKeys(input, [
+          "action",
+          "label",
+          "pageId",
+          "componentId",
+          "componentRootNodeId",
+          "componentPropertyOrder",
+        ])
+      );
     case "remove-property":
       return (
         id(input.componentId) &&
@@ -489,6 +503,20 @@ function idArray(
     value.length <= maximum &&
     new Set(value).size === value.length &&
     value.every(id)
+  );
+}
+
+function propertyNameArray(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length >= minimum &&
+    value.length <= maximum &&
+    new Set(value).size === value.length &&
+    value.every(propertyName)
   );
 }
 

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 27,
+  "schemaVersion": 28,
   "recordedAt": "2026-08-14",
   "policy": {
     "allowFloatingRefs": false,
@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.24.0",
+    "documentSchemaVersion": "1.25.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.9.0",
     "geometryServiceContractVersion": 10,
@@ -37,8 +37,8 @@
       "role": "component-instance-resolution-service",
       "package": "@opendesign/component-service",
       "path": "packages/component-service",
-      "contractVersion": 3,
-      "productionStatus": "same-file-main-instance-component-properties-variant-sets-matrix-and-slots-available-native-gate-pending"
+      "contractVersion": 4,
+      "productionStatus": "same-file-main-instance-ordered-component-properties-variant-sets-matrix-and-slots-available-native-gate-pending"
     },
     "figmaInterop": {
       "role": "isolated-figma-public-api-compatibility-adapter",

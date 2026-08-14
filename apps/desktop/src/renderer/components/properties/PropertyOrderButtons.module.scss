@@ -1,0 +1,23 @@
+.orderButtons {
+  display: flex;
+
+  button {
+    width: 20px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    color: var(--ui-text-faint);
+    background: transparent;
+    font-size: 10px;
+
+    &:hover:not(:disabled),
+    &:focus-visible {
+      color: var(--ui-text);
+      background: var(--ui-surface-raised);
+    }
+
+    &:disabled {
+      opacity: 0.25;
+    }
+  }
+}

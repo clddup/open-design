@@ -78,7 +78,7 @@ export function createComponentInspectorContext(
   };
   const effectivePropertyNames = [
     ...(variantSet?.propertyOrder ?? []),
-    ...Object.keys(effectiveComponent?.componentPropertyDefinitions ?? {}),
+    ...(effectiveComponent?.componentPropertyOrder ?? []),
   ];
   const sourceNodes =
     selectedNode?.kind === "instance"
@@ -99,19 +99,19 @@ export function createComponentInspectorContext(
         ? selectedNode.properties.overrides.length
         : 0,
     sourceNodes,
-    componentPropertyDefinitions: Object.entries(
-      component.componentPropertyDefinitions,
-    ).map(([propertyName, definition]) => ({
-      propertyName,
-      definition,
-      sourceNodeIds: sourceNodes
-        .filter((source) =>
-          Object.values(source.node.componentPropertyReferences ?? {}).includes(
-            propertyName,
-          ),
-        )
-        .map((source) => source.node.id),
-    })),
+    componentPropertyDefinitions: component.componentPropertyOrder.map(
+      (propertyName) => ({
+        propertyName,
+        definition: component.componentPropertyDefinitions[propertyName],
+        sourceNodeIds: sourceNodes
+          .filter((source) =>
+            Object.values(
+              source.node.componentPropertyReferences ?? {},
+            ).includes(propertyName),
+          )
+          .map((source) => source.node.id),
+      }),
+    ),
     componentProperties:
       selectedNode?.kind === "instance" && instanceResolution?.ok
         ? effectivePropertyNames.map((propertyName) => {

@@ -556,6 +556,7 @@ function component(id: string, rootNodeId: string) {
     id,
     name: id,
     rootNodeId,
+    componentPropertyOrder: [],
     componentPropertyDefinitions: {},
     variantProperties: {},
     extensions: {},

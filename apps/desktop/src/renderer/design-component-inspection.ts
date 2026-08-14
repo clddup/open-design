@@ -21,6 +21,7 @@ export function createScopedComponentInspection(
             id: component.id,
             name: component.name,
             rootNodeId: component.rootNodeId,
+            componentPropertyOrder: [...component.componentPropertyOrder],
             componentPropertyDefinitions: structuredClone(
               component.componentPropertyDefinitions,
             ),

@@ -3,6 +3,7 @@ import {
   type DesignDocument,
   type DesignNode,
   type Effect,
+  type FrameLikeNode,
   type Paint,
   type Rect,
 } from "@opendesign/design-contracts";
@@ -382,7 +383,7 @@ function isFiniteRect(rect: Rect): boolean {
 function nearestClippingContainer(
   document: DesignDocument,
   node: DesignNode,
-): import("@opendesign/design-contracts").FrameLikeNode | undefined {
+): FrameLikeNode | undefined {
   const seen = new Set<string>();
   let parentId = node.parentId;
   while (parentId && !seen.has(parentId)) {

@@ -662,6 +662,10 @@ export const ComponentDefinitionSchema = Type.Object(
     name: Type.String({ minLength: 1, maxLength: 256 }),
     rootNodeId: Type.String({ minLength: 1 }),
     description: Type.Optional(Type.String({ maxLength: 2_000 })),
+    componentPropertyOrder: Type.Array(
+      Type.String({ minLength: 1, maxLength: 512 }),
+      { maxItems: 4_096, uniqueItems: true },
+    ),
     componentPropertyDefinitions: ComponentPropertyDefinitionsSchema,
     variantSetId: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
     variantProperties: VariantPropertiesSchema,

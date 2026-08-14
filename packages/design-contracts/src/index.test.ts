@@ -5,6 +5,7 @@ import {
   DESIGN_SCHEMA_VERSION,
   COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION,
   COMPONENT_SLOT_DESIGN_SCHEMA_VERSION,
+  COMPONENT_PROPERTY_ORDER_DESIGN_SCHEMA_VERSION,
   VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION,
   FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
@@ -38,7 +39,10 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(COMPONENT_SET_VARIANT_DESIGN_SCHEMA_VERSION).toBe("1.22.0");
   expect(VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION).toBe("1.23.0");
   expect(COMPONENT_SLOT_DESIGN_SCHEMA_VERSION).toBe("1.24.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(COMPONENT_SLOT_DESIGN_SCHEMA_VERSION);
+  expect(COMPONENT_PROPERTY_ORDER_DESIGN_SCHEMA_VERSION).toBe("1.25.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(
+    COMPONENT_PROPERTY_ORDER_DESIGN_SCHEMA_VERSION,
+  );
 });
 
 function textDocumentFixture() {
@@ -1328,6 +1332,31 @@ describe("design contract schemas", () => {
     expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
     expect(migrated?.nodesById.text_1?.kind).toBe("text");
     expect(migrated?.componentsById).toEqual({});
+  });
+
+  it("migrates 1.24 ordinary Component properties with deterministic order", () => {
+    const source = textDocumentFixture() as unknown as {
+      schemaVersion: string;
+      componentsById: Record<string, Record<string, unknown>>;
+    };
+    source.schemaVersion = "1.24.0";
+    source.componentsById.component_text = {
+      id: "component_text",
+      name: "Text component",
+      rootNodeId: "text_1",
+      componentPropertyDefinitions: {
+        "Label#text:label": { type: "TEXT", defaultValue: "Text" },
+        "Visible#text:visible": { type: "BOOLEAN", defaultValue: true },
+      },
+      variantProperties: {},
+      extensions: {},
+    };
+
+    const migrated = migrateDesignDocument(source);
+
+    expect(
+      migrated?.componentsById.component_text?.componentPropertyOrder,
+    ).toEqual(["Label#text:label", "Visible#text:visible"]);
   });
 
   it("validates strict uniform layout guides on Frames", () => {

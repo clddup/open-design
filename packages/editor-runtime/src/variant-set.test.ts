@@ -154,6 +154,10 @@ describe("Figma-compatible Component Set variants", () => {
       },
     });
     if (!resolution.ok) return;
+    expect(Object.keys(resolution.componentProperties)).toEqual([
+      "State",
+      "Show label#button:visible",
+    ]);
     expect(resolution.nodes.find((node) => node.root)?.sourceNodeId).toBe(
       "button_hover_root",
     );
@@ -311,6 +315,7 @@ describe("Figma-compatible Component Set variants", () => {
       id: "button_pressed",
       name: "Button / Pressed",
       rootNodeId: pressedRoot.id,
+      componentPropertyOrder: [],
       componentPropertyDefinitions: {},
       variantProperties: {},
       extensions: {},
@@ -678,6 +683,7 @@ function transaction(
 }
 
 function variantFixture(): DesignDocument {
+  const ordinaryPropertyName = "Show label#button:visible";
   const setRoot = frame("button_set_root", null, [
     "button_default_root",
     "button_hover_root",
@@ -696,6 +702,12 @@ function variantFixture(): DesignDocument {
   );
   const defaultLabel = text("default_label", defaultRoot.id, "Default");
   const hoverLabel = text("hover_label", hoverRoot.id, "Hover");
+  defaultLabel.componentPropertyReferences = {
+    visible: ordinaryPropertyName,
+  };
+  hoverLabel.componentPropertyReferences = {
+    visible: ordinaryPropertyName,
+  };
   return {
     format: "dev.opendesign.document",
     schemaVersion: DESIGN_SCHEMA_VERSION,
@@ -740,7 +752,10 @@ function variantFixture(): DesignDocument {
         id: "button_default",
         name: "State=Default",
         rootNodeId: defaultRoot.id,
-        componentPropertyDefinitions: {},
+        componentPropertyOrder: [ordinaryPropertyName],
+        componentPropertyDefinitions: {
+          [ordinaryPropertyName]: { type: "BOOLEAN", defaultValue: true },
+        },
         variantSetId: "button_set",
         variantProperties: { State: "Default" },
         extensions: {},
@@ -749,7 +764,10 @@ function variantFixture(): DesignDocument {
         id: "button_hover",
         name: "State=Hover",
         rootNodeId: hoverRoot.id,
-        componentPropertyDefinitions: {},
+        componentPropertyOrder: [ordinaryPropertyName],
+        componentPropertyDefinitions: {
+          [ordinaryPropertyName]: { type: "BOOLEAN", defaultValue: true },
+        },
         variantSetId: "button_set",
         variantProperties: { State: "Hover" },
         extensions: {},

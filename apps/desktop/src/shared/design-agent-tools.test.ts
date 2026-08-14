@@ -386,6 +386,29 @@ describe("design Agent tool contract", () => {
         preferredValues: [{ type: "COMPONENT", key: "component_list_item" }],
       }),
     ).toBe(true);
+    const reorderProperties = {
+      action: "reorder-properties",
+      label: "Prioritize card content",
+      pageId: "page_home",
+      componentId: "component_card",
+      componentRootNodeId: "card_main",
+      componentPropertyOrder: ["Content#card:content", "Title#card:title"],
+    };
+    expect(
+      validateDesignAgentToolInput(
+        DESIGN_COMPONENT_TOOL_NAME,
+        reorderProperties,
+      ),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
+        ...reorderProperties,
+        componentPropertyOrder: [
+          "Content#card:content",
+          "Content#card:content",
+        ],
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_COMPONENT_TOOL_NAME, {
         action: "set-slot-settings",

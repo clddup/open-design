@@ -117,6 +117,7 @@ export {
   planSetComponentPropertyValue,
   type ComponentPropertyReferenceField,
 } from "./component-property-operations.js";
+export { planReorderComponentProperties } from "./component-property-order-operations.js";
 export {
   planClearComponentSlot,
   planCreateComponentSlotOverride,

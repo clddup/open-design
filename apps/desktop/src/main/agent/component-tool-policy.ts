@@ -48,6 +48,8 @@ export function materialTargetRefsForComponentTool(
       };
     case "add-property":
       return { nodeIds: [input.sourceNodeId], createdNodeIds: [] };
+    case "reorder-properties":
+      return { nodeIds: [input.componentRootNodeId], createdNodeIds: [] };
     case "rename-property":
     case "remove-property":
     case "set-slot-settings":
@@ -92,6 +94,7 @@ export function componentToolIsMaterialWrite(
     input.action === "set-property" ||
     input.action === "reset-property" ||
     input.action === "remove-property" ||
+    input.action === "reorder-properties" ||
     input.action === "set-slot-settings" ||
     input.action === "create-slot-override" ||
     input.action === "clear-slot" ||

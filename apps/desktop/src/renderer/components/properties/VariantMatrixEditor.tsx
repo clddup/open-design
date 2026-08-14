@@ -5,6 +5,7 @@ import panelStyles from "../PropertiesPanel.module.scss";
 import styles from "./VariantMatrixEditor.module.scss";
 import type { ComponentInspectorVariantSet } from "./ComponentIdentitySummary";
 import { Field } from "./controls";
+import { moveOrderedItem, PropertyOrderButtons } from "./PropertyOrderButtons";
 
 export function VariantMatrixEditor({
   onAddProperty,
@@ -53,20 +54,21 @@ export function VariantMatrixEditor({
               type="text"
               value={name}
             />
-            <OrderButtons
+            <PropertyOrderButtons
+              downLabel={t("properties.moveVariantDown", { name })}
               downDisabled={index === variantSet.propertyOrder.length - 1}
-              label={name}
               onDown={() =>
                 onReorderProperties(
-                  moveItem(variantSet.propertyOrder, index, 1),
+                  moveOrderedItem(variantSet.propertyOrder, index, 1),
                 )
               }
               onUp={() =>
                 onReorderProperties(
-                  moveItem(variantSet.propertyOrder, index, -1),
+                  moveOrderedItem(variantSet.propertyOrder, index, -1),
                 )
               }
               upDisabled={index === 0}
+              upLabel={t("properties.moveVariantUp", { name })}
             />
             <button
               aria-label={t("properties.removeVariantProperty", { name })}
@@ -94,16 +96,25 @@ export function VariantMatrixEditor({
                       type="text"
                       value={value}
                     />
-                    <OrderButtons
+                    <PropertyOrderButtons
+                      downLabel={t("properties.moveVariantDown", {
+                        name: value,
+                      })}
                       downDisabled={valueIndex === values.length - 1}
-                      label={value}
                       onDown={() =>
-                        onReorderValues(name, moveItem(values, valueIndex, 1))
+                        onReorderValues(
+                          name,
+                          moveOrderedItem(values, valueIndex, 1),
+                        )
                       }
                       onUp={() =>
-                        onReorderValues(name, moveItem(values, valueIndex, -1))
+                        onReorderValues(
+                          name,
+                          moveOrderedItem(values, valueIndex, -1),
+                        )
                       }
                       upDisabled={valueIndex === 0}
+                      upLabel={t("properties.moveVariantUp", { name: value })}
                     />
                   </div>
                 ),
@@ -173,49 +184,4 @@ export function VariantMatrixEditor({
       </div>
     </div>
   );
-}
-
-function OrderButtons({
-  downDisabled,
-  label,
-  onDown,
-  onUp,
-  upDisabled,
-}: {
-  downDisabled: boolean;
-  label: string;
-  onDown: () => void;
-  onUp: () => void;
-  upDisabled: boolean;
-}) {
-  const { t } = useI18n();
-  return (
-    <span className={styles.variantOrderButtons}>
-      <button
-        aria-label={t("properties.moveVariantUp", { name: label })}
-        disabled={upDisabled}
-        onClick={onUp}
-        type="button"
-      >
-        ↑
-      </button>
-      <button
-        aria-label={t("properties.moveVariantDown", { name: label })}
-        disabled={downDisabled}
-        onClick={onDown}
-        type="button"
-      >
-        ↓
-      </button>
-    </span>
-  );
-}
-
-function moveItem<T>(values: readonly T[], index: number, delta: -1 | 1): T[] {
-  const next = [...values];
-  const target = index + delta;
-  if (target < 0 || target >= next.length) return next;
-  const [value] = next.splice(index, 1);
-  if (value !== undefined) next.splice(target, 0, value);
-  return next;
 }

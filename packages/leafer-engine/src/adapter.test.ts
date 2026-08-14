@@ -3846,6 +3846,7 @@ function componentInput(): LeaferEngineSyncInput {
         id: "button",
         name: "Button",
         rootNodeId: "button_main",
+        componentPropertyOrder: [],
         componentPropertyDefinitions: {},
         variantProperties: {},
         extensions: {},

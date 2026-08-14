@@ -80,6 +80,7 @@ export function planCreateComponent(
           id: input.componentId,
           name,
           rootNodeId: node.id,
+          componentPropertyOrder: [],
           componentPropertyDefinitions: {},
           variantProperties: {},
           extensions: {},
@@ -206,6 +207,7 @@ export function planRemoveComponent(
       if (source.id === slot.id && source.kind === "slot") {
         const { sourceSlotId: _sourceSlotId, ...properties } =
           source.properties;
+        void _sourceSlotId;
         nodes.push({
           ...structuredClone(source),
           kind: "frame",
@@ -403,6 +405,7 @@ export function planDetachComponentInstance(
     let clone = structuredClone(resolved.node);
     if (clone.kind === "slot") {
       const { sourceSlotId: _sourceSlotId, ...properties } = clone.properties;
+      void _sourceSlotId;
       clone = {
         ...clone,
         kind: "frame",

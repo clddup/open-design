@@ -19,6 +19,7 @@ import type {
 } from "./ComponentSection";
 import { Field, TextAreaField } from "./controls";
 import { SlotPropertyEditor } from "./SlotPropertyEditor";
+import { moveOrderedItem, PropertyOrderButtons } from "./PropertyOrderButtons";
 
 const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
   frame: "node.frame",
@@ -79,16 +80,15 @@ function propertySourceCandidates(
 }
 
 export function ComponentPropertyAuthoring({
-  availableComponents,
   availableSlotPreferredValues,
   definitions,
   onAdd,
   onRemove,
   onRename,
+  onReorder,
   onUpdateSlot,
   sources,
 }: {
-  availableComponents: readonly ComponentInspectorOption[];
   availableSlotPreferredValues: readonly ComponentInspectorPreferredValueOption[];
   definitions: readonly ComponentInspectorPropertyDefinition[];
   onAdd: (input: {
@@ -98,6 +98,7 @@ export function ComponentPropertyAuthoring({
   }) => void;
   onRemove: (propertyName: string) => void;
   onRename: (propertyName: string, name: string) => void;
+  onReorder: (componentPropertyOrder: readonly string[]) => void;
   onUpdateSlot: (
     propertyName: string,
     input: {
@@ -141,7 +142,7 @@ export function ComponentPropertyAuthoring({
         </p>
       ) : (
         <div className={styles.componentPropertyList}>
-          {definitions.map((property) => {
+          {definitions.map((property, index) => {
             const slotDefinition =
               property.definition.type === "SLOT" ? property.definition : null;
             return (
@@ -162,6 +163,34 @@ export function ComponentPropertyAuthoring({
                     value={propertyLabel(property.propertyName)}
                   />
                   <span>{propertyTypeLabel(property.definition.type, t)}</span>
+                  <PropertyOrderButtons
+                    downDisabled={index === definitions.length - 1}
+                    downLabel={t("properties.movePropertyDown", {
+                      name: propertyLabel(property.propertyName),
+                    })}
+                    onDown={() =>
+                      onReorder(
+                        moveOrderedItem(
+                          definitions.map((item) => item.propertyName),
+                          index,
+                          1,
+                        ),
+                      )
+                    }
+                    onUp={() =>
+                      onReorder(
+                        moveOrderedItem(
+                          definitions.map((item) => item.propertyName),
+                          index,
+                          -1,
+                        ),
+                      )
+                    }
+                    upDisabled={index === 0}
+                    upLabel={t("properties.movePropertyUp", {
+                      name: propertyLabel(property.propertyName),
+                    })}
+                  />
                   <button
                     aria-label={`${t("properties.removeProperty")} ${propertyLabel(property.propertyName)}`}
                     onClick={() => onRemove(property.propertyName)}

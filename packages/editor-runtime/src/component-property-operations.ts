@@ -140,6 +140,7 @@ export function planAddComponentProperty(
             : { type: "SLOT", defaultValue: "" };
   const nextComponent = structuredClone(component);
   nextComponent.componentPropertyDefinitions[propertyName] = definition;
+  nextComponent.componentPropertyOrder.push(propertyName);
   const commands: DesignOperation[] = [];
   if (input.type === "SLOT" && source.kind === "frame") {
     commands.push(
@@ -222,6 +223,10 @@ export function planRenameComponentProperty(
   const nextComponent = structuredClone(component);
   delete nextComponent.componentPropertyDefinitions[input.propertyName];
   nextComponent.componentPropertyDefinitions[nextPropertyName] = definition;
+  nextComponent.componentPropertyOrder =
+    nextComponent.componentPropertyOrder.map((name) =>
+      name === input.propertyName ? nextPropertyName : name,
+    );
   commands.push({
     commandId: `${input.commandPrefix}_rename_property_definition`,
     type: "put_component",
@@ -322,6 +327,10 @@ export function planRemoveComponentProperty(
   }
   const nextComponent = structuredClone(component);
   delete nextComponent.componentPropertyDefinitions[input.propertyName];
+  nextComponent.componentPropertyOrder =
+    nextComponent.componentPropertyOrder.filter(
+      (name) => name !== input.propertyName,
+    );
   commands.push({
     commandId: `${input.commandPrefix}_delete_property_definition`,
     type: "put_component",
