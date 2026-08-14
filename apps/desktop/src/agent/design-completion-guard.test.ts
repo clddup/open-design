@@ -90,7 +90,10 @@ const finalCapture: AgentToolCallRecord = {
   revision: 6,
 };
 
-function context(toolCalls: AgentToolCallRecord[]): AgentCompletionContext {
+function context(
+  toolCalls: AgentToolCallRecord[],
+  unresolvedDesignWriteFailure?: AgentCompletionContext["unresolvedDesignWriteFailure"],
+): AgentCompletionContext {
   return {
     request: {
       runId: "run_1",
@@ -110,6 +113,9 @@ function context(toolCalls: AgentToolCallRecord[]): AgentCompletionContext {
     turn: 4,
     rejectionCount: 0,
     toolCalls,
+    ...(unresolvedDesignWriteFailure === undefined
+      ? {}
+      : { unresolvedDesignWriteFailure }),
   };
 }
 
@@ -187,6 +193,39 @@ describe("design completion guard", () => {
         },
       ],
       "1/2 verified",
+    );
+  });
+
+  it("rejects completion after inspection until the failed design write is corrected", () => {
+    const result = reviewDesignCompletion(
+      context(
+        [
+          inspection,
+          designPlan,
+          materialWrite,
+          firstCapture,
+          visualReview,
+          refinementWrite,
+          {
+            ...finalCapture,
+            result: deliveryResult("verified"),
+          },
+        ],
+        {
+          toolCallId: "duplicate_write",
+          toolName: DESIGN_APPLY_TOOL_NAME,
+          code: "design.duplicate",
+          message: "Node login-brand-cover-v3 already exists",
+          inspectionCompleted: true,
+        },
+      ),
+    );
+
+    expect(result.allow).toBe(false);
+    if (result.allow) throw new Error("Expected completion to be blocked");
+    expect(result.message).toContain("design.duplicate");
+    expect(result.message).toContain(
+      "no corrected revision-advancing design write",
     );
   });
 

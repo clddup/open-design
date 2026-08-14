@@ -20,6 +20,7 @@ import type {
   TrustedToolFailure,
   TrustedToolResult,
 } from "./index.js";
+import { PiDesignFailureRecovery } from "./pi-design-failure-recovery.js";
 import {
   createTrustedToolContext,
   projectToolResultForModel,
@@ -114,9 +115,8 @@ export class OpenDesignPiToolAdapter {
   readonly #active = new Map<string, ActiveToolCall>();
   readonly #approvalPort: ApprovalPort | undefined;
   readonly #definitions = new Map<string, AgentToolDefinition>();
+  readonly #designFailureRecovery = new PiDesignFailureRecovery();
   readonly #failures = new Map<string, TrustedToolFailure>();
-  readonly #failureAttempts = new Map<string, number>();
-  readonly #blockedInputs = new Map<string, TrustedToolFailure>();
   readonly #lifecycle: PiToolLifecyclePort;
   readonly #maxToolCalls: number;
   readonly #now: () => Date;
@@ -129,7 +129,6 @@ export class OpenDesignPiToolAdapter {
   #currentRevision: number;
   #forcedError: TrustedToolFailure | undefined;
   #forcedStopReason: RunStopReason | undefined;
-  #inspectionRequiredFailure: TrustedToolFailure | undefined;
   #toolCallCount = 0;
   #toolSequence = 0;
 
@@ -174,6 +173,10 @@ export class OpenDesignPiToolAdapter {
 
   get toolCallRecords(): readonly AgentToolCallRecord[] {
     return this.#records;
+  }
+
+  get unresolvedDesignWriteFailure() {
+    return this.#designFailureRecovery.unresolvedFailure;
   }
 
   get hasPendingTools(): boolean {
@@ -347,11 +350,11 @@ export class OpenDesignPiToolAdapter {
       return { block: true, reason: modelFailureText(schemaFailure) };
     }
     if (
-      this.#inspectionRequiredFailure &&
+      this.#designFailureRecovery.inspectionRequiredFailure &&
       definition.risk === "design_write" &&
       active.toolName !== "opendesign_inspect_document"
     ) {
-      const prior = this.#inspectionRequiredFailure;
+      const prior = this.#designFailureRecovery.inspectionRequiredFailure;
       const failure: TrustedToolFailure = {
         ...prior,
         code: "design_inspection_required",
@@ -368,8 +371,9 @@ export class OpenDesignPiToolAdapter {
       this.#failures.set(active.toolCallId, failure);
       return { block: true, reason: modelFailureText(failure) };
     }
-    const blockedFailure = this.#blockedInputs.get(
-      toolInputFingerprint(active.toolName, context.args),
+    const blockedFailure = this.#designFailureRecovery.blockedFailure(
+      active.toolName,
+      context.args,
     );
     if (blockedFailure) {
       const failure: TrustedToolFailure = {
@@ -566,9 +570,9 @@ export class OpenDesignPiToolAdapter {
       const nextRevision = revision?.revision ?? observedRevision;
       if (nextRevision !== undefined) this.#currentRevision = nextRevision;
       if (definition.name === "opendesign_inspect_document") {
-        this.#failureAttempts.clear();
-        this.#blockedInputs.clear();
-        this.#inspectionRequiredFailure = undefined;
+        this.#designFailureRecovery.recordInspection();
+      } else if (definition.risk === "design_write" && revision !== undefined) {
+        this.#designFailureRecovery.recordRevisionWrite();
       }
       this.#records.push({
         toolCallId,
@@ -610,11 +614,13 @@ export class OpenDesignPiToolAdapter {
               retryable: false,
               recoverable: true,
             };
-      const failure = this.#recordFailure(
-        definition.name,
-        parameters,
-        baseFailure,
-      );
+      const failure = this.#designFailureRecovery.recordFailure({
+        toolCallId,
+        toolName: definition.name,
+        input: parameters,
+        failure: baseFailure,
+        designWrite: definition.risk === "design_write",
+      });
       if (failure.runTerminal) {
         this.#forcedStopReason = "error";
         this.#forcedError = failure;
@@ -622,35 +628,6 @@ export class OpenDesignPiToolAdapter {
       this.#failures.set(toolCallId, failure);
       throw new Error(modelFailureText(failure));
     }
-  }
-
-  #recordFailure(
-    toolName: string,
-    input: unknown,
-    failure: TrustedToolFailure,
-  ): TrustedToolFailure {
-    const details = failure.details;
-    const fingerprint = details?.fingerprint;
-    if (!details || !fingerprint || !failure.recoverable) return failure;
-    const attempt = (this.#failureAttempts.get(fingerprint) ?? 0) + 1;
-    this.#failureAttempts.set(fingerprint, attempt);
-    const maxAttempts = 2;
-    const enriched: TrustedToolFailure = {
-      ...failure,
-      details: {
-        ...details,
-        attempt,
-        maxAttempts,
-        ...(attempt >= maxAttempts ? { retrySuppressed: true } : {}),
-      },
-    };
-    if (attempt >= maxAttempts) {
-      this.#blockedInputs.set(toolInputFingerprint(toolName, input), enriched);
-    }
-    if (details.recovery.required) {
-      this.#inspectionRequiredFailure = enriched;
-    }
-    return enriched;
   }
 
   #block(
@@ -778,32 +755,6 @@ function modelResultText(value: unknown): string {
 
 function modelFailureText(failure: TrustedToolFailure): string {
   return JSON.stringify({ ok: false, error: failure });
-}
-
-function toolInputFingerprint(toolName: string, input: unknown): string {
-  return `${toolName}:${hashText(stableJson(input))}`;
-}
-
-function stableJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value) ?? String(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJson).join(",")}]`;
-  }
-  return `{${Object.entries(value)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`)
-    .join(",")}}`;
-}
-
-function hashText(value: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function errorMessage(error: unknown): string {

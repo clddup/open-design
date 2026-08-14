@@ -406,7 +406,7 @@ describe("OpenDesign Pi tool adapter", () => {
     ).toBe(true);
   });
 
-  it("requires inspection after a structured failure and suppresses blind retries", async () => {
+  it("requires inspection after a structured failure and keeps repeated failures bounded", async () => {
     let moveExecutions = 0;
     let inspectExecutions = 0;
     const gateway = new RecordingGateway(
@@ -497,13 +497,112 @@ describe("OpenDesign Pi tool adapter", () => {
     expect(failures[2]).toMatchObject({
       code: "design.invalid",
       recoverable: true,
-      details: { attempt: 1, maxAttempts: 2 },
+      details: { attempt: 2, maxAttempts: 2, retrySuppressed: true },
+    });
+    expect(result.adapter.unresolvedDesignWriteFailure).toMatchObject({
+      toolCallId: "invalid_design_call_3",
+      toolName: moveTool.name,
+      code: "design.invalid",
+      inspectionCompleted: false,
+      details: { attempt: 2, maxAttempts: 2, retrySuppressed: true },
     });
     expect(JSON.stringify(gateway.requests[1]?.messages)).toContain(
       "node_tool",
     );
     expect(JSON.stringify(gateway.requests[1]?.messages)).toContain(
       "inspect-and-revise",
+    );
+  });
+
+  it("clears an inspected design failure only after a corrected design write succeeds", async () => {
+    let moveExecutions = 0;
+    const result = await runPiToolLoop({
+      gateway: new RecordingGateway(
+        new MockModelGateway([
+          toolTurn("invalid_design", "invalid_design_call", 18),
+          {
+            blocks: [
+              {
+                id: "inspect_after_failure",
+                type: "tool_call",
+                toolCallId: "inspect_after_failure_call",
+                name: inspectTool.name,
+                input: {},
+              },
+            ],
+            stopReason: "tool_use",
+          },
+          toolTurn("corrected_design", "corrected_design_call", 24),
+          { blocks: [{ id: "done", type: "text", text: "Done" }] },
+        ]),
+      ),
+      definitions: [moveTool, inspectTool],
+      toolExecutor: {
+        async *execute(call): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          if (call.toolName === inspectTool.name) {
+            yield {
+              type: "completed",
+              result: {
+                content: { documentId: request.documentId, revision: 12 },
+                observedRevision: 12,
+              },
+            };
+            return;
+          }
+          moveExecutions += 1;
+          if (moveExecutions === 1) {
+            yield {
+              type: "failed",
+              error: {
+                code: "design.duplicate",
+                message: "Node node_tool already exists",
+                retryable: false,
+                recoverable: true,
+                details: {
+                  kind: "design-transaction",
+                  fingerprint: "design_duplicate_node_tool",
+                  issues: [
+                    {
+                      commandId: "insert_node_tool",
+                      nodeId: "node_tool",
+                      path: "",
+                      message: "Node node_tool already exists",
+                    },
+                  ],
+                  recovery: {
+                    action: "inspect-and-revise",
+                    toolName: "opendesign_inspect_document",
+                    required: true,
+                  },
+                },
+              },
+            };
+            return;
+          }
+          yield {
+            type: "completed",
+            result: {
+              content: { ok: true },
+              designRevision: {
+                previousRevision: 12,
+                revision: 13,
+                transactionId: "transaction_corrected_design",
+              },
+            },
+          };
+        },
+      },
+    });
+
+    expect(moveExecutions).toBe(2);
+    expect(result.adapter.unresolvedDesignWriteFailure).toBeUndefined();
+    expect(result.events).toContainEqual(
+      expect.objectContaining({
+        type: "tool.completed",
+        toolCallId: "corrected_design_call",
+        revision: 13,
+      }),
     );
   });
 

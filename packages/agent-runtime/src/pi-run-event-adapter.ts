@@ -174,6 +174,9 @@ export class PiRunEventAdapter {
   get toolCallRecords(): readonly AgentToolCallRecord[] {
     return this.#toolAdapter?.toolCallRecords ?? [];
   }
+  get unresolvedDesignWriteFailure() {
+    return this.#toolAdapter?.unresolvedDesignWriteFailure;
+  }
   readonly beforeToolCall = (
     context: BeforeToolCallContext,
     signal?: AbortSignal,
@@ -559,6 +562,12 @@ export class PiRunEventAdapter {
         turn: this.#turn,
         rejectionCount: this.#guardRejections,
         toolCalls: this.#toolAdapter?.toolCallRecords ?? [],
+        ...(this.#toolAdapter?.unresolvedDesignWriteFailure === undefined
+          ? {}
+          : {
+              unresolvedDesignWriteFailure:
+                this.#toolAdapter.unresolvedDesignWriteFailure,
+            }),
       });
     } catch (error) {
       await this.#publishProvisionalClear(pending.active.messageId);

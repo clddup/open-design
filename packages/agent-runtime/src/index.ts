@@ -18,10 +18,18 @@ import {
   type ResolvedModelIdentity,
 } from "@opendesign/model-gateway";
 import type { JournalEvent, SessionStore } from "@opendesign/session-store";
+import type { CompletionGuardPort } from "./completion-guard.js";
 import {
   projectToolResultForModel,
   toolResultAttachments,
 } from "./tool-execution-semantics.js";
+export type {
+  AgentCompletionContext,
+  AgentCompletionDecision,
+  AgentToolCallRecord,
+  AgentUnresolvedDesignWriteFailure,
+  CompletionGuardPort,
+} from "./completion-guard.js";
 export interface AgentRunRequest {
   runId: string;
   sessionId: string;
@@ -127,32 +135,6 @@ export interface AgentRuntimeLimits {
   maxGeneratedTokens: number;
   maxCompletionGuardRejections: number;
   maxContextCharacters: number;
-}
-
-export interface AgentToolCallRecord {
-  toolCallId: string;
-  toolName: string;
-  input: unknown;
-  status: "completed";
-  result?: unknown;
-  revision?: number;
-}
-
-export interface AgentCompletionContext {
-  request: Readonly<AgentRunRequest>;
-  currentRevision: number;
-  turn: number;
-  rejectionCount: number;
-  toolCalls: readonly AgentToolCallRecord[];
-}
-
-export type AgentCompletionDecision =
-  { allow: true } | { allow: false; message: string };
-
-export interface CompletionGuardPort {
-  review(
-    context: AgentCompletionContext,
-  ): AgentCompletionDecision | Promise<AgentCompletionDecision>;
 }
 
 export interface AgentRuntimeOptions {

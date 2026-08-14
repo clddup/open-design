@@ -247,9 +247,11 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 专业设计质量不能只依赖 system prompt。以下工作与 P0-P5 并行，并由 Runtime、service 和固定样张共同验收：
 
 - 增加结构诊断，识别复合对象散落 Page 根层、文字溢出、空 Path、不可见节点、资源缺失、非有限 bounds、完全越界、异常遮挡和无意义碎片层。
+- [ ] 高优先级建立语义对象与复用意图门禁：Plan 明确复合对象、子对象和跨 target 复用候选；Logo mark 等多 primitive 图形必须先形成独立命名容器，lockup 再把 mark、wordmark、标签作为同级语义对象组合；同一稳定视觉元素跨两个及以上 target 时，首个完成对象提升为 Component Main，后续使用 Instance，而不是复制一套散层。结构诊断与 completion guard 消费该声明，但不得凭节点名称猜测用户语义；用多页面品牌标记固定样张验收 Layers、Assets、save/reopen、undo 和主组件更新传播。
 - 增加渲染诊断与可读性检查，覆盖主体比例、层级、留白、对比度、文字可读性和关键内容裁切。启发式诊断必须标注置信度，不能把审美模型输出伪装成确定性错误。
 - 为对齐、布局、布尔、裁剪、组件、变量、导入和导出提供语义化 typed tools，避免模型通过大量低层坐标和节点重建完成专业操作。
 - 低优先级开放用户级与 Project 级设计 Skill/风格规范：记录来源、版本、内容哈希和权限，只影响设计方法、风格与评审标准，不能覆盖系统策略、扩展 Mutation Target 或替代底层设计能力。当前 `@opendesign/discovery` 只有隔离发现/优先级解析，尚未接入生产 Agent、管理 UI 或权限审计链，因此不得宣称已支持自定义 Skill/提示词。
+- [ ] 中优先级调研并内置受信任的专业 Design Skill 方法包：按 UI、Logo/品牌、海报等 deliverable 类型选择有界的构图、网格、字阶、层级、组件化和评审清单，只向模型返回命中的步骤摘要与版本/内容哈希，不在每轮重复注入完整资料。候选内容必须固定来源与许可，并通过同 prompt/模型/工具预算的盲评样张证明首个可用画面时间、成功率或视觉评分有净收益；Skill 只影响设计方法，不能获得工具、路径、网络、凭据或额外 Mutation Target。
 - 保留“写入 → `capture_canvas` → refinement → `capture_canvas`”可信完成门禁，并加入结构诊断结果、渲染失败和导出失败的阻断条件。截图次数本身不能证明设计质量。
 - [x] Layout Quality Report v2 为 Frame overflow 返回 exact-revision world bounds、当前 parent-local position、最小 parent-local recovery delta/position 与 resize 必要性；完成门禁和 Agent 恢复指令直接消费这些可信几何，禁止把 world 坐标误写为 local transform 后反复试错。
 - 使用固定 prompt、参考资源、模型配置、工具轨迹、最终文档和视觉评分运行回归。任何提示词、模型 adapter、工具 schema 或渲染后端变更都必须重放受影响样张。

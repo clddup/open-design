@@ -27,6 +27,16 @@ import {
 export function reviewDesignCompletion(
   context: AgentCompletionContext,
 ): AgentCompletionDecision {
+  const unresolvedFailure = context.unresolvedDesignWriteFailure;
+  if (unresolvedFailure) {
+    const recovery = unresolvedFailure.inspectionCompleted
+      ? "The document was inspected, but no corrected revision-advancing design write has succeeded yet. Submit a materially revised transaction based on the live structure, then capture and verify the affected target."
+      : "Inspect the live document, then submit a materially revised transaction before attempting completion.";
+    return {
+      allow: false,
+      message: `The latest design write is still unresolved (${unresolvedFailure.code}: ${unresolvedFailure.message}). ${recovery}`,
+    };
+  }
   const delivery = latestDeliveryLedger(context.toolCalls);
   if (delivery) {
     const incomplete = delivery.targets.find(

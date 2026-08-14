@@ -70,6 +70,12 @@ describe("OpenDesign Agent system prompt", () => {
       "Build every new composite object",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "A logo mark built from multiple paths or shapes must have its own named Frame or Group",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "create one main component from the first finished Frame/Group",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "editable network of vertices and cubic segment tangents",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
