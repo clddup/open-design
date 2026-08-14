@@ -229,6 +229,20 @@ const TextSharedProperties = {
   fontWeight: Type.Integer({ minimum: 1, maximum: 1000 }),
   lineHeight: Type.Number({ exclusiveMinimum: 0 }),
   letterSpacing: Type.Number(),
+  paragraphIndent: Type.Number({ minimum: 0 }),
+  paragraphSpacing: Type.Number({ minimum: 0 }),
+  textCase: Type.Union([
+    Type.Literal("original"),
+    Type.Literal("uppercase"),
+    Type.Literal("lowercase"),
+    Type.Literal("title-case"),
+    Type.Literal("small-caps"),
+  ]),
+  textDecoration: Type.Union([
+    Type.Literal("none"),
+    Type.Literal("underline"),
+    Type.Literal("strikethrough"),
+  ]),
   textAlignHorizontal: Type.Union([
     Type.Literal("left"),
     Type.Literal("center"),
@@ -249,7 +263,7 @@ const TextSharedProperties = {
   dashPattern: ShapeProperties.dashPattern,
 } as const;
 
-const FixedTextPropertiesSchema = Type.Object(
+const FixedTextTruncationDisabledPropertiesSchema = Type.Object(
   {
     ...TextSharedProperties,
     textResize: Type.Literal("fixed"),
@@ -258,39 +272,84 @@ const FixedTextPropertiesSchema = Type.Object(
       Type.Literal("word"),
       Type.Literal("character"),
     ]),
-    textOverflow: Type.Union([
-      Type.Literal("visible"),
-      Type.Literal("clip"),
-      Type.Literal("ellipsis"),
-    ]),
+    textOverflow: Type.Union([Type.Literal("visible"), Type.Literal("clip")]),
+    textTruncation: Type.Literal("disabled"),
+    maxLines: Type.Null(),
   },
   { additionalProperties: false },
 );
 
-const AutoWidthTextPropertiesSchema = Type.Object(
+const FixedTextTruncationEndingPropertiesSchema = Type.Object(
+  {
+    ...TextSharedProperties,
+    textResize: Type.Literal("fixed"),
+    textWrap: Type.Union([
+      Type.Literal("none"),
+      Type.Literal("word"),
+      Type.Literal("character"),
+    ]),
+    textOverflow: Type.Literal("clip"),
+    textTruncation: Type.Literal("ending"),
+    maxLines: Type.Union([Type.Null(), Type.Integer({ minimum: 1 })]),
+  },
+  { additionalProperties: false },
+);
+
+const AutoWidthTextTruncationDisabledPropertiesSchema = Type.Object(
   {
     ...TextSharedProperties,
     textResize: Type.Literal("auto-width"),
     textWrap: Type.Literal("none"),
     textOverflow: Type.Literal("visible"),
+    textTruncation: Type.Literal("disabled"),
+    maxLines: Type.Null(),
   },
   { additionalProperties: false },
 );
 
-const AutoHeightTextPropertiesSchema = Type.Object(
+const AutoWidthTextTruncationEndingPropertiesSchema = Type.Object(
+  {
+    ...TextSharedProperties,
+    textResize: Type.Literal("auto-width"),
+    textWrap: Type.Literal("none"),
+    textOverflow: Type.Literal("visible"),
+    textTruncation: Type.Literal("ending"),
+    maxLines: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+const AutoHeightTextTruncationDisabledPropertiesSchema = Type.Object(
   {
     ...TextSharedProperties,
     textResize: Type.Literal("auto-height"),
     textWrap: Type.Union([Type.Literal("word"), Type.Literal("character")]),
     textOverflow: Type.Literal("visible"),
+    textTruncation: Type.Literal("disabled"),
+    maxLines: Type.Null(),
+  },
+  { additionalProperties: false },
+);
+
+const AutoHeightTextTruncationEndingPropertiesSchema = Type.Object(
+  {
+    ...TextSharedProperties,
+    textResize: Type.Literal("auto-height"),
+    textWrap: Type.Union([Type.Literal("word"), Type.Literal("character")]),
+    textOverflow: Type.Literal("visible"),
+    textTruncation: Type.Literal("ending"),
+    maxLines: Type.Integer({ minimum: 1 }),
   },
   { additionalProperties: false },
 );
 
 export const TextPropertiesSchema = Type.Union([
-  FixedTextPropertiesSchema,
-  AutoWidthTextPropertiesSchema,
-  AutoHeightTextPropertiesSchema,
+  FixedTextTruncationDisabledPropertiesSchema,
+  FixedTextTruncationEndingPropertiesSchema,
+  AutoWidthTextTruncationDisabledPropertiesSchema,
+  AutoWidthTextTruncationEndingPropertiesSchema,
+  AutoHeightTextTruncationDisabledPropertiesSchema,
+  AutoHeightTextTruncationEndingPropertiesSchema,
 ]);
 
 export const ImagePlacementSchema = Type.Union([
@@ -1818,8 +1877,19 @@ function migrateTextNodes(document: Record<string, unknown>): void {
     }
     const textProperties = properties as Record<string, unknown>;
     textProperties.textWrap ??= "character";
-    textProperties.textOverflow ??= "visible";
+    if (textProperties.textOverflow === "ellipsis") {
+      textProperties.textOverflow = "clip";
+      textProperties.textTruncation = "ending";
+    } else {
+      textProperties.textOverflow ??= "visible";
+      textProperties.textTruncation ??= "disabled";
+    }
+    textProperties.maxLines ??= null;
     textProperties.textResize ??= "fixed";
+    textProperties.paragraphIndent ??= 0;
+    textProperties.paragraphSpacing ??= 0;
+    textProperties.textCase ??= "original";
+    textProperties.textDecoration ??= "none";
   }
 }
 

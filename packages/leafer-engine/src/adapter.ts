@@ -73,6 +73,7 @@ import {
   type GenerationTweenPlan,
 } from "./generation-tween.js";
 import { createLeaferTextLayoutProvider } from "./text-layout.js";
+import { materializeLeaferTextData } from "./text-truncation.js";
 import { exportLeaferCapture } from "./capture-export.js";
 import {
   generationActivityBadgeWidth,
@@ -891,12 +892,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#editor.on(InnerEditorEvent.BEFORE_OPEN, () => {
       const element = this.#editor.list[0];
       const nodeId = element && this.#nodeId(element as LeaferElement);
-      if (nodeId && this.#input?.document.nodesById[nodeId]?.kind === "text") {
+      const node = nodeId ? this.#input?.document.nodesById[nodeId] : undefined;
+      if (nodeId && node?.kind === "text") {
         this.#finishGenerationRevealNode(nodeId);
         this.#finishGenerationTweenNode(nodeId, true);
+        (element as LeaferElement & { text: string }).text =
+          node.properties.content;
         this.#textBefore = {
           nodeId,
-          text: readElementText(element as LeaferElement),
+          text: node.properties.content,
         };
         this.#cancelTextEdit = false;
       }
@@ -1012,6 +1016,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const dataChanged =
         reapplyAll ||
         created ||
+        previousSpec?.textMaxLines !== spec.textMaxLines ||
         !sameProjectionValue(previousSpec?.data, spec.data);
       const transformChanged =
         reapplyAll ||
@@ -1022,7 +1027,17 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         !previousSpec || previousSpec.parentId !== spec.parentId;
       const childrenChanged =
         !previousSpec || !sameStringList(previousSpec.childIds, spec.childIds);
-      if (dataChanged) element.set(spec.data);
+      if (dataChanged) {
+        element.set(
+          spec.tag === "Text"
+            ? materializeLeaferTextData(
+                this.#leafer,
+                spec.data,
+                spec.textMaxLines,
+              )
+            : spec.data,
+        );
+      }
       if (transformChanged)
         element.setTransform(transformToAffine(spec.transform));
       if (dataChanged || transformChanged || parentChanged || replaced) {
@@ -1625,11 +1640,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!element || !node || node.kind !== "text" || isLockedSpec(spec)) return;
     const content = readElementText(element);
     if (this.#cancelTextEdit) {
-      (element as LeaferElement & { text: string }).text = before.text;
       this.#cancelTextEdit = false;
+      this.#restoreProjection();
       return;
     }
-    if (content === before.text) return;
+    if (content === before.text) {
+      this.#restoreProjection();
+      return;
+    }
     const accepted = this.#callbacks.onOperations({
       kind: "text",
       operations: [

@@ -1277,6 +1277,12 @@ function resolveTextAutoSize(
     fontWeight: node.properties.fontWeight,
     letterSpacing: node.properties.letterSpacing,
     lineHeight: node.properties.lineHeight,
+    paragraphIndent: node.properties.paragraphIndent,
+    paragraphSpacing: node.properties.paragraphSpacing,
+    textCase: node.properties.textCase,
+    textDecoration: node.properties.textDecoration,
+    textTruncation: node.properties.textTruncation,
+    maxLines: node.properties.maxLines,
     mode: node.properties.textResize,
     textWrap: node.properties.textWrap,
     ...(node.properties.textResize === "auto-height"

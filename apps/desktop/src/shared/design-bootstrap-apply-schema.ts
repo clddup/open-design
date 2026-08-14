@@ -60,11 +60,21 @@ const BOOTSTRAP_NODE_PROPERTIES_SCHEMA = {
     fontWeight: { type: "integer", minimum: 1, maximum: 1_000 },
     lineHeight: { type: "number", exclusiveMinimum: 0 },
     letterSpacing: { type: "number" },
+    paragraphIndent: { type: "number", minimum: 0 },
+    paragraphSpacing: { type: "number", minimum: 0 },
+    textCase: {
+      enum: ["original", "uppercase", "lowercase", "title-case", "small-caps"],
+    },
+    textDecoration: { enum: ["none", "underline", "strikethrough"] },
     textAlignHorizontal: { enum: ["left", "center", "right", "justify"] },
     textAlignVertical: { enum: ["top", "center", "bottom"] },
     textResize: { enum: ["auto-width", "auto-height", "fixed"] },
     textWrap: { enum: ["none", "word", "character"] },
-    textOverflow: { enum: ["visible", "clip", "ellipsis"] },
+    textOverflow: { enum: ["visible", "clip"] },
+    textTruncation: { enum: ["disabled", "ending"] },
+    maxLines: {
+      anyOf: [{ type: "integer", minimum: 1 }, { type: "null" }],
+    },
   },
   additionalProperties: false,
 } as const;

@@ -225,6 +225,10 @@ export function planCreateStyleFromNode(
         fontWeight: resolved.properties.fontWeight,
         lineHeight: resolved.properties.lineHeight,
         letterSpacing: resolved.properties.letterSpacing,
+        paragraphIndent: resolved.properties.paragraphIndent,
+        paragraphSpacing: resolved.properties.paragraphSpacing,
+        textCase: resolved.properties.textCase,
+        textDecoration: resolved.properties.textDecoration,
       },
     };
   } else if (styleType === "GRID" && resolved.kind === "frame") {

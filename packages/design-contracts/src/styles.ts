@@ -15,6 +15,20 @@ export const TextStylePropertiesSchema = Type.Object(
     fontWeight: Type.Integer({ minimum: 1, maximum: 1000 }),
     lineHeight: Type.Number({ exclusiveMinimum: 0 }),
     letterSpacing: Type.Number(),
+    paragraphIndent: Type.Number({ minimum: 0 }),
+    paragraphSpacing: Type.Number({ minimum: 0 }),
+    textCase: Type.Union([
+      Type.Literal("original"),
+      Type.Literal("uppercase"),
+      Type.Literal("lowercase"),
+      Type.Literal("title-case"),
+      Type.Literal("small-caps"),
+    ]),
+    textDecoration: Type.Union([
+      Type.Literal("none"),
+      Type.Literal("underline"),
+      Type.Literal("strikethrough"),
+    ]),
   },
   { additionalProperties: false },
 );
@@ -194,4 +208,25 @@ export function migrateSharedStyles(document: Record<string, unknown>): void {
     GRID: [],
   };
   document.stylesById ??= {};
+  const stylesById = document.stylesById;
+  if (
+    !stylesById ||
+    typeof stylesById !== "object" ||
+    Array.isArray(stylesById)
+  ) {
+    return;
+  }
+  for (const value of Object.values(stylesById)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const style = value as Record<string, unknown>;
+    if (style.styleType !== "TEXT") continue;
+    const textStyle = style.textStyle;
+    if (!textStyle || typeof textStyle !== "object" || Array.isArray(textStyle))
+      continue;
+    const properties = textStyle as Record<string, unknown>;
+    properties.paragraphIndent ??= 0;
+    properties.paragraphSpacing ??= 0;
+    properties.textCase ??= "original";
+    properties.textDecoration ??= "none";
+  }
 }

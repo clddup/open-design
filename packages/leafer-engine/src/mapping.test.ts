@@ -75,17 +75,28 @@ describe("Leafer scene projection", () => {
   });
 
   it.each([
-    ["none", "visible", "none", "show"],
-    ["word", "clip", "normal", "hide"],
-    ["character", "ellipsis", "break", "ellipsis"],
+    ["none", "visible", "disabled", null, "none", "show"],
+    ["word", "clip", "disabled", null, "normal", "hide"],
+    ["character", "clip", "ending", 3, "break", "ellipsis"],
   ] as const)(
     "projects %s wrapping and %s overflow to Leafer Text",
-    (textWrap, textOverflow, expectedWrap, expectedOverflow) => {
+    (
+      textWrap,
+      textOverflow,
+      textTruncation,
+      maxLines,
+      expectedWrap,
+      expectedOverflow,
+    ) => {
       const document = structuredClone(createWelcomeDocument());
       const text = document.nodesById.title_welcome;
       if (!text || text.kind !== "text") throw new Error("Missing text");
-      text.properties.textWrap = textWrap;
-      text.properties.textOverflow = textOverflow;
+      Object.assign(text.properties, {
+        textWrap,
+        textOverflow,
+        textTruncation,
+        maxLines,
+      });
 
       expect(
         projectDesignPage(document, "page_welcome").elementsById.get(text.id),
@@ -98,6 +109,32 @@ describe("Leafer scene projection", () => {
       });
     },
   );
+
+  it("keeps fixed text bounds authoritative when max-lines is projected", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const text = document.nodesById.title_welcome;
+    if (!text || text.kind !== "text") throw new Error("Missing text");
+    text.size = { width: 160, height: 80 };
+    Object.assign(text.properties, {
+      maxLines: 2,
+      textOverflow: "clip",
+      textResize: "fixed",
+      textTruncation: "ending",
+      textWrap: "word",
+    });
+
+    expect(
+      projectDesignPage(document, "page_welcome").elementsById.get(text.id),
+    ).toMatchObject({
+      data: {
+        height: 80,
+        textOverflow: "ellipsis",
+        width: 160,
+      },
+      textMaxLines: 2,
+    });
+    expect(text.size).toEqual({ width: 160, height: 80 });
+  });
 
   it("projects Auto Width and Auto Height through Leafer native auto bounds", () => {
     const autoWidthDocument = structuredClone(createWelcomeDocument());

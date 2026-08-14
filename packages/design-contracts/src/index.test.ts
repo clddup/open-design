@@ -11,6 +11,7 @@ import {
   FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION,
   FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
   FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
+  TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
   DesignOperationSchema,
@@ -49,20 +50,17 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION).toBe("1.26.0");
   expect(FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION).toBe("1.27.0");
   expect(FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION).toBe("1.28.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(
-    FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
-  );
+  expect(TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION).toBe("1.29.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION);
 });
 
-it("migrates 1.27 nodes to empty export settings and keeps 1.28 strict", () => {
+it("migrates 1.27 nodes to empty export settings and keeps current documents strict", () => {
   const legacy = textDocumentFixture() as unknown as Record<string, unknown>;
   legacy.schemaVersion = FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION;
   const nodes = legacy.nodesById as Record<string, Record<string, unknown>>;
   for (const node of Object.values(nodes)) delete node.exportSettings;
   const migrated = migrateDesignDocument(legacy);
-  expect(migrated?.schemaVersion).toBe(
-    FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
-  );
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
   expect(migrated?.nodesById.text_1?.exportSettings).toEqual([]);
 
   const malformedCurrent = textDocumentFixture() as unknown as Record<
@@ -78,7 +76,7 @@ it("migrates 1.27 nodes to empty export settings and keeps 1.28 strict", () => {
 });
 
 it("validates Slice and ordered Figma-shaped export settings", () => {
-  const base = textDocumentFixture().nodesById.text_1!;
+  const base = textDocumentFixture().nodesById.text_1;
   expect(
     Value.Check(DesignNodeSchema, {
       ...base,
@@ -157,6 +155,10 @@ it("defines strict Paint, Text, Effect and Grid shared-style payloads", () => {
         fontWeight: 600,
         lineHeight: 24,
         letterSpacing: 0,
+        paragraphIndent: 0,
+        paragraphSpacing: 8,
+        textCase: "original",
+        textDecoration: "none",
       },
     },
     {
@@ -249,11 +251,17 @@ function textDocumentFixture() {
           fontWeight: 500,
           lineHeight: 28,
           letterSpacing: 0,
+          paragraphIndent: 0,
+          paragraphSpacing: 0,
+          textCase: "original" as const,
+          textDecoration: "none" as const,
           textAlignHorizontal: "left" as const,
           textAlignVertical: "top" as const,
           textResize: "fixed" as const,
           textWrap: "word" as const,
           textOverflow: "clip" as const,
+          textTruncation: "disabled" as const,
+          maxLines: null,
           fills: [{ type: "solid" as const, color: "#111827", opacity: 1 }],
           strokes: [],
           strokeWidth: 0,
@@ -1307,6 +1315,12 @@ describe("design contract schemas", () => {
       textResize: "fixed",
       textWrap: "character",
       textOverflow: "visible",
+      textTruncation: "disabled",
+      maxLines: null,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      textCase: "original",
+      textDecoration: "none",
     });
     expect(Value.Check(DesignNodeSchema, text)).toBe(true);
     expect(
@@ -1333,6 +1347,71 @@ describe("design contract schemas", () => {
       kind: "text",
       size: text.size,
       properties: { textResize: "fixed" },
+    });
+  });
+
+  it("migrates 1.28 ellipsis text and Text Styles to Typography Core v2", () => {
+    const source = textDocumentFixture() as unknown as Record<string, unknown>;
+    source.schemaVersion = FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION;
+    const nodes = source.nodesById as Record<
+      string,
+      { properties: Record<string, unknown> }
+    >;
+    const properties = nodes.text_1!.properties;
+    properties.textOverflow = "ellipsis";
+    delete properties.textTruncation;
+    delete properties.maxLines;
+    delete properties.paragraphIndent;
+    delete properties.paragraphSpacing;
+    delete properties.textCase;
+    delete properties.textDecoration;
+    source.styleOrderByType = {
+      PAINT: [],
+      TEXT: ["text-style"],
+      EFFECT: [],
+      GRID: [],
+    };
+    source.stylesById = {
+      "text-style": {
+        id: "text-style",
+        key: "text-style-key",
+        name: "Body",
+        description: "",
+        hiddenFromPublishing: false,
+        extensions: {},
+        styleType: "TEXT",
+        textStyle: {
+          fontFamily: "Inter",
+          fontSize: 16,
+          fontWeight: 400,
+          lineHeight: 24,
+          letterSpacing: 0,
+        },
+      },
+    };
+
+    const migrated = migrateDesignDocument(source);
+    expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+    expect(migrated?.nodesById.text_1).toMatchObject({
+      kind: "text",
+      properties: {
+        textOverflow: "clip",
+        textTruncation: "ending",
+        maxLines: null,
+        paragraphIndent: 0,
+        paragraphSpacing: 0,
+        textCase: "original",
+        textDecoration: "none",
+      },
+    });
+    expect(migrated?.stylesById["text-style"]).toMatchObject({
+      styleType: "TEXT",
+      textStyle: {
+        paragraphIndent: 0,
+        paragraphSpacing: 0,
+        textCase: "original",
+        textDecoration: "none",
+      },
     });
   });
 
@@ -1975,6 +2054,8 @@ describe("design contract schemas", () => {
           textResize: "auto-width",
           textWrap: "none",
           textOverflow: "visible",
+          textTruncation: "disabled",
+          maxLines: null,
         },
       }),
     ).toBe(true);
@@ -1989,7 +2070,7 @@ describe("design contract schemas", () => {
     };
     expect(Value.Check(DesignNodeSchema, invalidAutoWidth)).toBe(false);
     const issues = schemaValidationIssues(DesignNodeSchema, invalidAutoWidth);
-    expect(issues.some((issue) => issue.path === "/properties/textWrap")).toBe(
+    expect(issues.some((issue) => issue.path.startsWith("/properties"))).toBe(
       true,
     );
     expect(
@@ -2003,6 +2084,34 @@ describe("design contract schemas", () => {
           textResize: "auto-height",
           textWrap: "word",
           textOverflow: "clip",
+          textTruncation: "disabled",
+          maxLines: null,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        properties: {
+          ...text.properties,
+          textResize: "auto-height",
+          textWrap: "word",
+          textOverflow: "visible",
+          textTruncation: "ending",
+          maxLines: 3,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(DesignNodeSchema, {
+        ...text,
+        properties: {
+          ...text.properties,
+          textResize: "auto-height",
+          textWrap: "word",
+          textOverflow: "visible",
+          textTruncation: "ending",
+          maxLines: null,
         },
       }),
     ).toBe(false);

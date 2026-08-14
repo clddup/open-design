@@ -106,6 +106,82 @@ export function TypographySection({
             }
             value={formatNumber(node.properties.letterSpacing)}
           />
+          <Field
+            accessibleLabel={t("properties.paragraphIndent")}
+            label="Indent"
+            min={0}
+            onCommit={(draft) =>
+              commitNumber(
+                draft,
+                node.properties.paragraphIndent,
+                (paragraphIndent) =>
+                  onUpdate({ properties: { paragraphIndent } }),
+                { min: 0 },
+              )
+            }
+            value={formatNumber(node.properties.paragraphIndent)}
+          />
+          <Field
+            accessibleLabel={t("properties.paragraphSpacing")}
+            label="Para"
+            min={0}
+            onCommit={(draft) =>
+              commitNumber(
+                draft,
+                node.properties.paragraphSpacing,
+                (paragraphSpacing) =>
+                  onUpdate({ properties: { paragraphSpacing } }),
+                { min: 0 },
+              )
+            }
+            value={formatNumber(node.properties.paragraphSpacing)}
+          />
+          <label className={styles.select}>
+            <span>{t("properties.textCase")}</span>
+            <select
+              aria-label={t("properties.textCase")}
+              onChange={(event) =>
+                onUpdate({
+                  properties: {
+                    textCase: event.target
+                      .value as TextNode["properties"]["textCase"],
+                  },
+                })
+              }
+              value={node.properties.textCase}
+            >
+              <option value="original">{t("properties.caseOriginal")}</option>
+              <option value="uppercase">{t("properties.caseUppercase")}</option>
+              <option value="lowercase">{t("properties.caseLowercase")}</option>
+              <option value="title-case">{t("properties.caseTitle")}</option>
+              <option value="small-caps">
+                {t("properties.caseSmallCaps")}
+              </option>
+            </select>
+          </label>
+          <label className={styles.select}>
+            <span>{t("properties.textDecoration")}</span>
+            <select
+              aria-label={t("properties.textDecoration")}
+              onChange={(event) =>
+                onUpdate({
+                  properties: {
+                    textDecoration: event.target
+                      .value as TextNode["properties"]["textDecoration"],
+                  },
+                })
+              }
+              value={node.properties.textDecoration}
+            >
+              <option value="none">{t("properties.decorationNone")}</option>
+              <option value="underline">
+                {t("properties.decorationUnderline")}
+              </option>
+              <option value="strikethrough">
+                {t("properties.decorationStrikethrough")}
+              </option>
+            </select>
+          </label>
           <label className={styles.select}>
             <span>{t("properties.textAlign")}</span>
             <select
@@ -149,14 +225,36 @@ export function TypographySection({
             <span>{t("properties.textResize")}</span>
             <select
               aria-label={t("properties.textResize")}
-              onChange={(event) =>
+              onChange={(event) => {
+                const textResize = event.target.value as
+                  "auto-width" | "auto-height" | "fixed";
                 onUpdate({
                   properties: {
-                    textResize: event.target.value as
-                      "auto-width" | "auto-height" | "fixed",
+                    textResize,
+                    ...(textResize === "auto-width"
+                      ? {
+                          textWrap: "none" as const,
+                          textOverflow: "visible" as const,
+                        }
+                      : textResize === "auto-height"
+                        ? {
+                            textWrap:
+                              node.properties.textWrap === "none"
+                                ? ("word" as const)
+                                : node.properties.textWrap,
+                            textOverflow: "visible" as const,
+                          }
+                        : node.properties.textTruncation === "ending"
+                          ? { textOverflow: "clip" as const }
+                          : {}),
+                    ...(textResize !== "fixed" &&
+                    node.properties.textTruncation === "ending" &&
+                    node.properties.maxLines === null
+                      ? { maxLines: 3 }
+                      : {}),
                   },
-                })
-              }
+                });
+              }}
               value={node.properties.textResize}
             >
               <option value="auto-width">
@@ -197,12 +295,14 @@ export function TypographySection({
             <span>{t("properties.textOverflow")}</span>
             <select
               aria-label={t("properties.textOverflow")}
-              disabled={node.properties.textResize !== "fixed"}
+              disabled={
+                node.properties.textResize !== "fixed" ||
+                node.properties.textTruncation === "ending"
+              }
               onChange={(event) =>
                 onUpdate({
                   properties: {
-                    textOverflow: event.target.value as
-                      "visible" | "clip" | "ellipsis",
+                    textOverflow: event.target.value as "visible" | "clip",
                   },
                 })
               }
@@ -210,11 +310,68 @@ export function TypographySection({
             >
               <option value="visible">{t("properties.overflowVisible")}</option>
               <option value="clip">{t("properties.overflowClip")}</option>
-              <option value="ellipsis">
-                {t("properties.overflowEllipsis")}
-              </option>
             </select>
           </label>
+          <label className={styles.select}>
+            <span>{t("properties.textTruncation")}</span>
+            <select
+              aria-label={t("properties.textTruncation")}
+              onChange={(event) => {
+                const textTruncation = event.target.value as
+                  "disabled" | "ending";
+                onUpdate({
+                  properties: {
+                    textTruncation,
+                    ...(textTruncation === "disabled"
+                      ? { maxLines: null }
+                      : {
+                          ...(node.properties.textResize === "fixed"
+                            ? { textOverflow: "clip" as const }
+                            : { textOverflow: "visible" as const }),
+                          maxLines:
+                            node.properties.textResize === "fixed"
+                              ? node.properties.maxLines
+                              : (node.properties.maxLines ?? 3),
+                        }),
+                  },
+                });
+              }}
+              value={node.properties.textTruncation}
+            >
+              <option value="disabled">
+                {t("properties.truncationDisabled")}
+              </option>
+              <option value="ending">{t("properties.truncationEnding")}</option>
+            </select>
+          </label>
+          <Field
+            accessibleLabel={t("properties.maxLines")}
+            disabled={node.properties.textTruncation === "disabled"}
+            label="Lines"
+            min={1}
+            onCommit={(draft) => {
+              const normalized = draft.trim();
+              if (!normalized && node.properties.textResize === "fixed") {
+                if (node.properties.maxLines !== null) {
+                  onUpdate({ properties: { maxLines: null } });
+                }
+                return "";
+              }
+              return commitNumber(
+                normalized,
+                node.properties.maxLines ?? 1,
+                (maxLines) =>
+                  onUpdate({ properties: { maxLines: Math.round(maxLines) } }),
+                { min: 1, integer: true },
+              );
+            }}
+            placeholder={t("properties.maxLinesByBox")}
+            value={
+              node.properties.maxLines === null
+                ? ""
+                : formatNumber(node.properties.maxLines)
+            }
+          />
         </div>
       </div>
     </Section>

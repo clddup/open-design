@@ -219,6 +219,30 @@ class FakeText extends FakeElement {
     };
   }
 
+  get __() {
+    const charactersPerRow =
+      typeof this.width === "number" && this.width > 0
+        ? Math.max(1, Math.floor(this.width / 12))
+        : Math.max(1, this.text.length);
+    const rows = this.text.split("\n").flatMap((paragraph) => {
+      const characters = Array.from(paragraph);
+      const chunks = Array.from(
+        {
+          length: Math.max(1, Math.ceil(characters.length / charactersPerRow)),
+        },
+        (_, index) =>
+          characters
+            .slice(index * charactersPerRow, (index + 1) * charactersPerRow)
+            .join(""),
+      );
+      return chunks.map((text, index) => ({
+        paraEnd: index === chunks.length - 1,
+        text,
+      }));
+    });
+    return { __textDrawData: { rows } };
+  }
+
   override getBounds(
     boundsType?: string,
     coordinateType?: string,
@@ -442,6 +466,67 @@ describe("Leafer engine selection bounds synchronization", () => {
       },
       wheel: { zoomSpeed: 0.16 },
       zoom: { min: 0.1, max: 8 },
+    });
+    adapter.dispose();
+  });
+
+  it("restores full text while editing and reprojects ending truncation after close", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const callbacks = { ...createCallbacks(), onOperations };
+    const adapter = await createLeaferEngineAdapter(createHost(), callbacks);
+    const input = createInput();
+    const document = structuredClone(input.document);
+    const title = document.nodesById.title_welcome;
+    if (!title || title.kind !== "text") throw new Error("Missing title");
+    title.size = { width: 72, height: 64 };
+    Object.assign(title.properties, {
+      content: "Alpha beta gamma delta",
+      maxLines: 1,
+      textOverflow: "clip",
+      textResize: "fixed",
+      textTruncation: "ending",
+      textWrap: "word",
+    });
+    adapter.sync({
+      ...input,
+      document,
+      selection: { nodeIds: [title.id], anchorNodeId: title.id },
+    });
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, title.id) as FakeText | undefined;
+    if (!element) throw new Error("Missing projected title");
+    expect(element.text).not.toBe(title.properties.content);
+    expect(element.text).toMatch(/\.\.\.$/);
+    expect({ width: element.width, height: element.height }).toEqual(
+      title.size,
+    );
+
+    app.editor.target = [element];
+    app.editor.emit("inner.before-open");
+    expect(element.text).toBe(title.properties.content);
+    app.editor.emit("inner.close");
+    expect(element.text).not.toBe(title.properties.content);
+    expect(element.text).toMatch(/\.\.\.$/);
+
+    app.editor.emit("inner.before-open");
+    element.text = "Updated complete authored text";
+    app.editor.emit("inner.close");
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    const request = onOperations.mock.calls[0]?.[0];
+    expect(request?.kind).toBe("text");
+    const operation = request?.operations[0];
+    expect(operation).toMatchObject({ nodeId: title.id });
+    if (!operation || operation.type !== "update_properties") {
+      throw new Error("Expected a text property update");
+    }
+    expect(operation.properties).toMatchObject({
+      content: "Updated complete authored text",
+      maxLines: 1,
+      textTruncation: "ending",
     });
     adapter.dispose();
   });
@@ -3835,11 +3920,17 @@ function componentInput(): LeaferEngineSyncInput {
       fontWeight: 500,
       lineHeight: 20,
       letterSpacing: 0,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      textCase: "original",
+      textDecoration: "none",
       textAlignHorizontal: "center",
       textAlignVertical: "center",
       textResize: "fixed",
       textWrap: "word",
       textOverflow: "visible",
+      textTruncation: "disabled",
+      maxLines: null,
       fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
       strokes: [],
       strokeWidth: 0,

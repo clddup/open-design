@@ -1144,6 +1144,12 @@ describe("design Agent tool contract", () => {
     );
     expect(bootstrap).toContain('"const":"insert_element"');
     expect(bootstrap).toContain('"const":"update_properties"');
+    expect(bootstrap).toContain('"paragraphIndent"');
+    expect(bootstrap).toContain('"textCase"');
+    expect(bootstrap).toContain('"textDecoration"');
+    expect(bootstrap).toContain('"textTruncation"');
+    expect(bootstrap).toContain('"maxLines"');
+    expect(bootstrap).not.toContain('"ellipsis"');
     expect(bootstrap).not.toContain('"network"');
     expect(bootstrap).not.toContain('"path"');
     expect(bootstrap).not.toContain('"assetId"');
@@ -1155,7 +1161,7 @@ describe("design Agent tool contract", () => {
     ).toMatchObject({ bootstrap: "deferred" });
   });
 
-  it("exposes bounded text wrapping and overflow without claiming auto sizing", () => {
+  it("exposes Typography Core v2 through the complete text transaction", () => {
     const apply = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
     );
@@ -1189,11 +1195,17 @@ describe("design Agent tool contract", () => {
               fontWeight: 500,
               lineHeight: 26,
               letterSpacing: 0,
+              paragraphIndent: 0,
+              paragraphSpacing: 0,
+              textCase: "uppercase",
+              textDecoration: "underline",
               textAlignHorizontal: "left",
               textAlignVertical: "top",
               textResize: "fixed",
               textWrap: "word",
-              textOverflow: "ellipsis",
+              textOverflow: "clip",
+              textTruncation: "ending",
+              maxLines: 2,
               fills: [{ type: "solid", color: "#151515", opacity: 1 }],
               strokes: [],
               strokeWidth: 0,
@@ -1206,8 +1218,14 @@ describe("design Agent tool contract", () => {
     expect(schema).toContain('"textResize"');
     expect(schema).toContain('"textWrap"');
     expect(schema).toContain('"textOverflow"');
+    expect(schema).toContain('"paragraphIndent"');
+    expect(schema).toContain('"textCase"');
+    expect(schema).toContain('"textDecoration"');
+    expect(schema).toContain('"textTruncation"');
+    expect(schema).toContain('"maxLines"');
+    expect(schema).not.toContain('"ellipsis"');
     expect(apply?.description).toContain(
-      "measures Auto Size with the versioned Leafer Text provider",
+      "measures Auto Size and derived ending ellipsis",
     );
     expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
       true,

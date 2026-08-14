@@ -240,11 +240,17 @@ describe("versioned SVG interchange", () => {
         fontWeight: 650,
         lineHeight: 28,
         letterSpacing: -0.4,
+        paragraphIndent: 6,
+        paragraphSpacing: 4,
+        textCase: "uppercase",
+        textDecoration: "underline",
         textAlignHorizontal: "center",
         textAlignVertical: "center",
         textResize: "fixed",
         textWrap: "word",
-        textOverflow: "ellipsis",
+        textOverflow: "clip",
+        textTruncation: "ending",
+        maxLines: null,
         fills: [{ type: "solid", color: "#153eaa", opacity: 1 }],
         strokes: [{ type: "solid", color: "#ffffff", opacity: 0.5 }],
         strokeWidth: 1,
@@ -280,17 +286,19 @@ describe("versioned SVG interchange", () => {
       { code: "text-layout-fidelity", severity: "warning" },
     ]);
     expect(first.svg).toContain("<text");
-    expect(first.svg).toContain('data-opendesign-text-version="3"');
+    expect(first.svg).toContain('data-opendesign-text-version="4"');
     expect(first.svg).toContain('font-family="Inter"');
     expect(first.svg).toContain('font-size="24"');
     expect(first.svg).toContain('font-weight="650"');
     expect(first.svg).toContain('letter-spacing="-0.4"');
+    expect(first.svg).toContain('text-decoration="underline"');
+    expect(first.svg).toContain('text-transform="uppercase"');
     expect(first.svg).toContain('text-anchor="middle"');
     expect(first.svg).toContain('dominant-baseline="text-before-edge"');
     expect(first.svg).toContain('xml:space="preserve"');
-    expect(first.svg).toContain('<tspan x="120" y="12">OpenDesign</tspan>');
+    expect(first.svg).toContain('<tspan x="126" y="10">OpenDesign</tspan>');
     expect(first.svg).toContain(
-      '<tspan x="120" y="40">未来 &amp; &lt;设计&gt;</tspan>',
+      '<tspan x="126" y="42">未来 &amp; &lt;设计&gt;</tspan>',
     );
 
     const imported = importSvg(
@@ -315,12 +323,22 @@ describe("versioned SVG interchange", () => {
 
     const legacySvg = first.svg
       .replace(
-        'data-opendesign-text-version="3"',
+        'data-opendesign-text-version="4"',
         'data-opendesign-text-version="1"',
       )
       .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "")
       .replace("&quot;textWrap&quot;:&quot;word&quot;,", "")
-      .replace("&quot;textOverflow&quot;:&quot;ellipsis&quot;,", "");
+      .replace("&quot;textOverflow&quot;:&quot;clip&quot;,", "")
+      .replace("&quot;textTruncation&quot;:&quot;ending&quot;,", "")
+      .replace("&quot;maxLines&quot;:null,", "")
+      .replace("&quot;paragraphIndent&quot;:6,", "")
+      .replace("&quot;paragraphSpacing&quot;:4,", "")
+      .replace("&quot;textCase&quot;:&quot;uppercase&quot;,", "")
+      .replace("&quot;textDecoration&quot;:&quot;underline&quot;,", "")
+      .replace('text-decoration="underline"', 'text-decoration="none"')
+      .replace('text-transform="uppercase"', 'text-transform="none"')
+      .replace('<tspan x="126" y="10">', '<tspan x="120" y="12">')
+      .replace('<tspan x="126" y="42">', '<tspan x="120" y="40">');
     const legacyImported = importSvg(
       { svg: legacySvg, idPrefix: "text_legacy_metadata" },
       geometry,
@@ -336,12 +354,58 @@ describe("versioned SVG interchange", () => {
         },
       });
     }
+    const typographyV1Svg = first.svg
+      .replace(
+        'data-opendesign-text-version="4"',
+        'data-opendesign-text-version="3"',
+      )
+      .replace("&quot;textTruncation&quot;:&quot;ending&quot;,", "")
+      .replace("&quot;maxLines&quot;:null,", "")
+      .replace("&quot;paragraphIndent&quot;:6,", "")
+      .replace("&quot;paragraphSpacing&quot;:4,", "")
+      .replace("&quot;textCase&quot;:&quot;uppercase&quot;,", "")
+      .replace("&quot;textDecoration&quot;:&quot;underline&quot;,", "")
+      .replace('text-decoration="underline"', 'text-decoration="none"')
+      .replace('text-transform="uppercase"', 'text-transform="none"')
+      .replace('<tspan x="126" y="10">', '<tspan x="120" y="12">')
+      .replace('<tspan x="126" y="42">', '<tspan x="120" y="40">');
+    const typographyV1Imported = importSvg(
+      { svg: typographyV1Svg, idPrefix: "text_v3_metadata" },
+      geometry,
+    );
+    expect(typographyV1Imported.ok).toBe(true);
+    if (typographyV1Imported.ok) {
+      expect(
+        findImportedSource(typographyV1Imported.nodes, text.id),
+      ).toMatchObject({
+        kind: "text",
+        properties: {
+          maxLines: null,
+          paragraphIndent: 0,
+          paragraphSpacing: 0,
+          textCase: "original",
+          textDecoration: "none",
+          textOverflow: "clip",
+          textTruncation: "disabled",
+        },
+      });
+    }
     const fixedLayoutSvg = first.svg
       .replace(
-        'data-opendesign-text-version="3"',
+        'data-opendesign-text-version="4"',
         'data-opendesign-text-version="2"',
       )
-      .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "");
+      .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "")
+      .replace("&quot;textTruncation&quot;:&quot;ending&quot;,", "")
+      .replace("&quot;maxLines&quot;:null,", "")
+      .replace("&quot;paragraphIndent&quot;:6,", "")
+      .replace("&quot;paragraphSpacing&quot;:4,", "")
+      .replace("&quot;textCase&quot;:&quot;uppercase&quot;,", "")
+      .replace("&quot;textDecoration&quot;:&quot;underline&quot;,", "")
+      .replace('text-decoration="underline"', 'text-decoration="none"')
+      .replace('text-transform="uppercase"', 'text-transform="none"')
+      .replace('<tspan x="126" y="10">', '<tspan x="120" y="12">')
+      .replace('<tspan x="126" y="42">', '<tspan x="120" y="40">');
     const fixedLayoutImported = importSvg(
       { svg: fixedLayoutSvg, idPrefix: "text_fixed_layout_metadata" },
       geometry,
@@ -358,7 +422,7 @@ describe("versioned SVG interchange", () => {
     const ambiguousLegacy = importSvg(
       {
         svg: first.svg.replace(
-          'data-opendesign-text-version="3"',
+          'data-opendesign-text-version="4"',
           'data-opendesign-text-version="1"',
         ),
         idPrefix: "text_ambiguous_legacy_metadata",
@@ -430,7 +494,7 @@ describe("versioned SVG interchange", () => {
     }
   });
 
-  it("round-trips Auto Width and Auto Height semantics through text metadata v3", () => {
+  it("round-trips Auto Width and Auto Height semantics through text metadata v4", () => {
     const autoWidth: DesignNode = {
       id: "auto_width_text",
       kind: "text",
@@ -450,11 +514,17 @@ describe("versioned SVG interchange", () => {
         fontWeight: 600,
         lineHeight: 32,
         letterSpacing: 0,
+        paragraphIndent: 0,
+        paragraphSpacing: 0,
+        textCase: "original",
+        textDecoration: "none",
         textAlignHorizontal: "left",
         textAlignVertical: "top",
         textResize: "auto-width",
         textWrap: "none",
         textOverflow: "visible",
+        textTruncation: "disabled",
+        maxLines: null,
         fills: [{ type: "solid", color: "#111827", opacity: 1 }],
         strokes: [],
         strokeWidth: 0,
@@ -473,6 +543,8 @@ describe("versioned SVG interchange", () => {
         textResize: "auto-height",
         textWrap: "word",
         textOverflow: "visible",
+        textTruncation: "disabled",
+        maxLines: null,
       },
     };
     const document = documentFromNodes(
@@ -490,7 +562,7 @@ describe("versioned SVG interchange", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) return;
     expect(
-      exported.svg.match(/data-opendesign-text-version="3"/g),
+      exported.svg.match(/data-opendesign-text-version="4"/g),
     ).toHaveLength(2);
 
     const imported = importSvg(
@@ -537,11 +609,17 @@ describe("versioned SVG interchange", () => {
         fontWeight: 700,
         lineHeight: 40,
         letterSpacing: 0,
+        paragraphIndent: 0,
+        paragraphSpacing: 0,
+        textCase: "original",
+        textDecoration: "none",
         textAlignHorizontal: "left",
         textAlignVertical: "top",
         textResize: "fixed",
         textWrap: "none",
         textOverflow: "visible",
+        textTruncation: "disabled",
+        maxLines: null,
         fills: [
           {
             type: "solid",

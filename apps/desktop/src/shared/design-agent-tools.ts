@@ -576,8 +576,6 @@ const MODEL_GRADIENT_PROPERTIES = {
 } as const;
 
 const MODEL_PAINT_SCHEMA = {
-  description:
-    "A solid, linear-gradient, radial-gradient, angular-gradient, or image paint. solid requires color; gradients require stops and may use from/to/rotation/stretch; image requires assetId and fit. opacity is always required.",
   anyOf: [
     {
       type: "object",
@@ -618,8 +616,6 @@ const MODEL_PAINT_SCHEMA = {
 } as const;
 
 const MODEL_EFFECT_SCHEMA = {
-  description:
-    "An OpenDesign effect. Shadows require color, opacity, offset, blur, and spread; glows require color, opacity, radius, and spread; blur requires radius; grayscale requires amount.",
   anyOf: [
     ...(["drop-shadow", "inner-shadow"] as const).map((type) => ({
       type: "object" as const,
@@ -880,11 +876,21 @@ const MODEL_TEXT_PROPERTIES = {
   fontWeight: { type: "integer", minimum: 1, maximum: 1_000 },
   lineHeight: { type: "number", exclusiveMinimum: 0 },
   letterSpacing: { type: "number" },
+  paragraphIndent: { type: "number", minimum: 0 },
+  paragraphSpacing: { type: "number", minimum: 0 },
+  textCase: {
+    enum: ["original", "uppercase", "lowercase", "title-case", "small-caps"],
+  },
+  textDecoration: { enum: ["none", "underline", "strikethrough"] },
   textAlignHorizontal: { enum: ["left", "center", "right", "justify"] },
   textAlignVertical: { enum: ["top", "center", "bottom"] },
   textResize: { enum: ["auto-width", "auto-height", "fixed"] },
   textWrap: { enum: ["none", "word", "character"] },
-  textOverflow: { enum: ["visible", "clip", "ellipsis"] },
+  textOverflow: { enum: ["visible", "clip"] },
+  textTruncation: { enum: ["disabled", "ending"] },
+  maxLines: {
+    anyOf: [{ type: "integer", minimum: 1 }, { type: "null" }],
+  },
   ...MODEL_SHAPE_PROPERTIES,
 } as const;
 
@@ -910,11 +916,17 @@ const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
     fontWeight: MODEL_TEXT_PROPERTIES.fontWeight,
     lineHeight: MODEL_TEXT_PROPERTIES.lineHeight,
     letterSpacing: MODEL_TEXT_PROPERTIES.letterSpacing,
+    paragraphIndent: MODEL_TEXT_PROPERTIES.paragraphIndent,
+    paragraphSpacing: MODEL_TEXT_PROPERTIES.paragraphSpacing,
+    textCase: MODEL_TEXT_PROPERTIES.textCase,
+    textDecoration: MODEL_TEXT_PROPERTIES.textDecoration,
     textAlignHorizontal: MODEL_TEXT_PROPERTIES.textAlignHorizontal,
     textAlignVertical: MODEL_TEXT_PROPERTIES.textAlignVertical,
     textResize: MODEL_TEXT_PROPERTIES.textResize,
     textWrap: MODEL_TEXT_PROPERTIES.textWrap,
     textOverflow: MODEL_TEXT_PROPERTIES.textOverflow,
+    textTruncation: MODEL_TEXT_PROPERTIES.textTruncation,
+    maxLines: MODEL_TEXT_PROPERTIES.maxLines,
     assetId: { type: "string", minLength: 1 },
     placement: MODEL_IMAGE_PLACEMENT_SCHEMA,
     altText: { type: "string" },
@@ -2314,11 +2326,11 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       bootstrap: "available" as const,
       role: "material-write" as const,
       bootstrapDescription:
-        "Create the first small but meaningful editable visual slice inside the planned artboard, or perform a basic inspected edit. This compact phase supports Frame, Group, Rectangle, Ellipse, and Text with solid paints plus insert, basic property update, move, and delete commands. Prefer one region such as navigation, hero, primary mark, or core content instead of waiting to emit an entire page. Ordered steps must represent real semantic units and cover every command exactly once. The trusted host still validates and applies these commands through the same OpenDesign transaction, revision, history, scope, and recovery boundary. After a successful material revision, the complete apply schema and advanced professional tools become available automatically.",
+        "Create the first small but meaningful editable visual slice inside the planned artboard, or perform a basic inspected edit. This compact phase supports Frame, Group, Rectangle, Ellipse, and Text with solid paints plus insert, basic property update, move, and delete commands. Every Text insert must include the complete Typography Core fields shown by the schema, including paragraphIndent, paragraphSpacing, textCase, textDecoration, textTruncation, and maxLines; disabled truncation uses maxLines null, while ending truncation on Auto Size needs a positive maxLines. Prefer one region such as navigation, hero, primary mark, or core content instead of waiting to emit an entire page. Ordered steps must represent real semantic units and cover every command exactly once. The trusted host still validates and applies these commands through the same OpenDesign transaction, revision, history, scope, and recovery boundary. After a successful material revision, the complete apply schema and advanced professional tools become available automatically.",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
     },
     description:
-      "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. When one target needs several meaningful visible stages, provide ordered steps whose commandIds cover every command exactly once and in command order; use semantic units such as navigation, hero, content, and footer, never arbitrary 1–3 command batches. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap and textOverflow choices. The trusted host measures Auto Size with the versioned Leafer Text provider and persists concrete authoritative size, so do not estimate glyph bounds. A size update without an explicit non-fixed textResize switches that text layer to Fixed. max-lines are not available. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside the active Frame and do not recreate it. For planned region IDs, provide the declared Group/Frame kind and real content; the trusted host compiles canonical parent-local bounds. Every inserted planned region must include real editable content in the same transaction. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
+      "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. When one target needs several meaningful visible stages, provide ordered steps whose commandIds cover every command exactly once and in command order; use semantic units such as navigation, hero, content, and footer, never arbitrary 1–3 command batches. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed plus paragraphIndent, paragraphSpacing, textCase, textDecoration, textTruncation, and maxLines. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap choices and visible/clip overflow. textTruncation disabled requires maxLines null. Ending truncation requires clip overflow on Fixed text; maxLines may be null there to use the fixed text-box height. Ending truncation on Auto Size requires a positive maxLines. The trusted host measures Auto Size and derived ending ellipsis with the versioned Leafer Text provider while preserving the complete authored content and concrete authoritative size, so do not estimate glyph bounds or replace content with a literal ellipsis. A size update without an explicit non-fixed textResize switches that text layer to Fixed. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside the active Frame and do not recreate it. For planned region IDs, provide the declared Group/Frame kind and real content; the trusted host compiles canonical parent-local bounds. Every inserted planned region must include real editable content in the same transaction. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
     inputSchema: {
       ...MODEL_APPLY_TRANSACTION_SCHEMA,
     },

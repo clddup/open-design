@@ -1,4 +1,4 @@
-export const TEXT_LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
+export const TEXT_LAYOUT_SERVICE_CONTRACT_VERSION = 2 as const;
 export const MAX_TEXT_LAYOUT_CHARACTERS = 1_000_000;
 export const MAX_TEXT_LAYOUT_CACHE_KEY_CHARACTERS = 4_000_000;
 export const MAX_TEXT_LAYOUT_DIMENSION = 1_000_000;
@@ -9,6 +9,10 @@ export const MAX_TEXT_LAYOUT_WARNINGS = 8;
 
 export type TextResizeMode = "auto-width" | "auto-height" | "fixed";
 export type TextLayoutWrap = "none" | "word" | "character";
+export type TextLayoutCase =
+  "original" | "uppercase" | "lowercase" | "title-case" | "small-caps";
+export type TextLayoutDecoration = "none" | "underline" | "strikethrough";
+export type TextLayoutTruncation = "disabled" | "ending";
 
 export interface TextLayoutRequest {
   content: string;
@@ -17,6 +21,12 @@ export interface TextLayoutRequest {
   fontWeight: number;
   letterSpacing: number;
   lineHeight: number;
+  paragraphIndent: number;
+  paragraphSpacing: number;
+  textCase: TextLayoutCase;
+  textDecoration: TextLayoutDecoration;
+  textTruncation: TextLayoutTruncation;
+  maxLines: number | null;
   mode: Exclude<TextResizeMode, "fixed">;
   textWrap: TextLayoutWrap;
   width?: number;
@@ -86,6 +96,46 @@ export function validateTextLayoutRequest(
     Math.abs(request.letterSpacing) > MAX_TEXT_LAYOUT_DIMENSION
   ) {
     return "Text layout letter spacing is outside supported finite limits";
+  }
+  if (!nonNegativeBounded(request.paragraphIndent)) {
+    return "Text layout paragraph indent is outside supported finite limits";
+  }
+  if (!nonNegativeBounded(request.paragraphSpacing)) {
+    return "Text layout paragraph spacing is outside supported finite limits";
+  }
+  if (
+    ![
+      "original",
+      "uppercase",
+      "lowercase",
+      "title-case",
+      "small-caps",
+    ].includes(request.textCase)
+  ) {
+    return "Text layout case transform is unsupported";
+  }
+  if (
+    !["none", "underline", "strikethrough"].includes(request.textDecoration)
+  ) {
+    return "Text layout decoration is unsupported";
+  }
+  if (
+    request.textTruncation !== "disabled" &&
+    request.textTruncation !== "ending"
+  ) {
+    return "Text layout truncation mode is unsupported";
+  }
+  if (
+    request.maxLines !== null &&
+    (!Number.isSafeInteger(request.maxLines) || request.maxLines < 1)
+  ) {
+    return "Text layout max lines must be null or a positive integer";
+  }
+  if (request.textTruncation === "disabled" && request.maxLines !== null) {
+    return "Text layout max lines require ending truncation";
+  }
+  if (request.textTruncation === "ending" && request.maxLines === null) {
+    return "Auto Size ending truncation requires max lines";
   }
   if (request.mode === "auto-width") {
     if (request.width !== undefined) {

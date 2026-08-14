@@ -27,6 +27,46 @@ class FakeText {
   }
 }
 
+class WrappingText {
+  static readonly inputs: Record<string, unknown>[] = [];
+  readonly destroy = vi.fn();
+  readonly input: Record<string, unknown>;
+
+  constructor(input: Record<string, unknown>) {
+    this.input = input;
+    WrappingText.inputs.push(input);
+  }
+
+  get rows() {
+    const content = Array.from(
+      typeof this.input.text === "string" ? this.input.text : "",
+    );
+    const width = Number(this.input.width ?? 1_000);
+    const charactersPerRow = Math.max(1, Math.floor(width / 10));
+    return Array.from(
+      { length: Math.max(1, Math.ceil(content.length / charactersPerRow)) },
+      (_, index) => ({
+        text: content
+          .slice(index * charactersPerRow, (index + 1) * charactersPerRow)
+          .join(""),
+      }),
+    );
+  }
+
+  get __() {
+    return { __textDrawData: { rows: this.rows } };
+  }
+
+  get boxBounds() {
+    return {
+      x: 0,
+      y: 0,
+      width: Number(this.input.width ?? String(this.input.text).length * 10),
+      height: this.rows.length * 20,
+    };
+  }
+}
+
 const leafer = {
   Text: FakeText,
 } as unknown as Pick<typeof LeaferEditorModule, "Text">;
@@ -43,6 +83,12 @@ describe("Leafer text layout provider", () => {
       fontWeight: 600,
       letterSpacing: 0,
       lineHeight: 32,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      textCase: "original" as const,
+      textDecoration: "none" as const,
+      textTruncation: "disabled" as const,
+      maxLines: null,
       mode: "auto-width" as const,
       textWrap: "none" as const,
     };
@@ -68,6 +114,12 @@ describe("Leafer text layout provider", () => {
       fontWeight: 400,
       letterSpacing: 0,
       lineHeight: 26,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      textCase: "original",
+      textDecoration: "none",
+      textTruncation: "disabled",
+      maxLines: null,
       mode: "auto-height",
       textWrap: "word",
       width: 240,
@@ -80,6 +132,39 @@ describe("Leafer text layout provider", () => {
     expect(result.warnings[0]?.message).toContain("Missing Sans");
   });
 
+  it("measures Auto Height from the same derived max-lines text used by the canvas", () => {
+    WrappingText.inputs.length = 0;
+    const provider = createLeaferTextLayoutProvider({
+      Text: WrappingText,
+    } as unknown as Pick<typeof LeaferEditorModule, "Text">);
+    const result = provider.measure({
+      content: "012345678901234567890123456789",
+      fontFamily: "Inter",
+      fontSize: 18,
+      fontWeight: 400,
+      letterSpacing: 0,
+      lineHeight: 20,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      textCase: "original",
+      textDecoration: "none",
+      textTruncation: "ending",
+      maxLines: 2,
+      mode: "auto-height",
+      textWrap: "word",
+      width: 50,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      size: { width: 50, height: 40 },
+    });
+    expect(WrappingText.inputs.at(-1)?.text).toMatch(/\.\.\.$/);
+    expect(WrappingText.inputs.at(-1)?.text).not.toBe(
+      "012345678901234567890123456789",
+    );
+  });
+
   it("rejects non-canonical requests before constructing Leafer Text", () => {
     const provider = createLeaferTextLayoutProvider(leafer);
     expect(
@@ -90,6 +175,12 @@ describe("Leafer text layout provider", () => {
         fontWeight: 600,
         letterSpacing: 0,
         lineHeight: 32,
+        paragraphIndent: 0,
+        paragraphSpacing: 0,
+        textCase: "original",
+        textDecoration: "none",
+        textTruncation: "disabled",
+        maxLines: null,
         mode: "auto-width",
         textWrap: "word",
       }),

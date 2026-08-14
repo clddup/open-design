@@ -2,8 +2,10 @@ import type { DesignNode, DesignOperation } from "@opendesign/design-contracts";
 
 type TextProperties = Extract<DesignNode, { kind: "text" }>["properties"];
 type MutableTextLayoutProperties = {
-  textOverflow: "visible" | "clip" | "ellipsis";
+  maxLines: number | null;
+  textOverflow: "visible" | "clip";
   textResize: "auto-width" | "auto-height" | "fixed";
+  textTruncation: "disabled" | "ending";
   textWrap: "none" | "word" | "character";
 };
 
@@ -20,6 +22,7 @@ export function normalizeTextResizeProperties(
     if (layout.textWrap === "none") layout.textWrap = "word";
     layout.textOverflow = "visible";
   }
+  if (layout.textTruncation === "disabled") layout.maxLines = null;
 }
 
 export function textLayoutAffected(
@@ -36,6 +39,11 @@ export function textLayoutAffected(
     "fontWeight",
     "lineHeight",
     "letterSpacing",
+    "paragraphIndent",
+    "paragraphSpacing",
+    "textCase",
+    "textTruncation",
+    "maxLines",
     "textWrap",
   ].some((field) => Object.hasOwn(properties, field));
 }

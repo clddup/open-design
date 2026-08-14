@@ -458,6 +458,24 @@ function toElementSpec(
         fontWeight: node.properties.fontWeight,
         lineHeight: { type: "px", value: node.properties.lineHeight },
         letterSpacing: { type: "px", value: node.properties.letterSpacing },
+        paraIndent: node.properties.paragraphIndent,
+        paraSpacing: node.properties.paragraphSpacing,
+        textCase:
+          node.properties.textCase === "original"
+            ? "none"
+            : node.properties.textCase === "uppercase"
+              ? "upper"
+              : node.properties.textCase === "lowercase"
+                ? "lower"
+                : node.properties.textCase === "title-case"
+                  ? "title"
+                  : "small-caps",
+        textDecoration:
+          node.properties.textDecoration === "underline"
+            ? "under"
+            : node.properties.textDecoration === "strikethrough"
+              ? "delete"
+              : "none",
         textAlign: node.properties.textAlignHorizontal,
         verticalAlign:
           node.properties.textAlignVertical === "center"
@@ -470,10 +488,10 @@ function toElementSpec(
               ? "break"
               : "none",
         textOverflow:
-          node.properties.textOverflow === "visible"
-            ? "show"
-            : node.properties.textOverflow === "ellipsis"
-              ? "ellipsis"
+          node.properties.textTruncation === "ending"
+            ? "ellipsis"
+            : node.properties.textOverflow === "visible"
+              ? "show"
               : "hide",
       };
       break;
@@ -573,6 +591,11 @@ function toElementSpec(
     kind: identity?.kind ?? node.kind,
     parentId: node.parentId,
     tag,
+    ...(node.kind === "text" &&
+    node.properties.textTruncation === "ending" &&
+    node.properties.maxLines !== null
+      ? { textMaxLines: node.properties.maxLines }
+      : {}),
     transform: [...node.transform],
   };
 }

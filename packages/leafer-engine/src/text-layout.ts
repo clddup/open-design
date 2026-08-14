@@ -7,6 +7,7 @@ import {
   type TextLayoutResult,
 } from "@opendesign/text-service";
 import type * as LeaferEditorModule from "leafer-editor";
+import { materializeLeaferTextData } from "./text-truncation.js";
 
 export const LEAFER_TEXT_LAYOUT_PROVIDER_ID = "leafer-text" as const;
 export const LEAFER_TEXT_LAYOUT_PROVIDER_VERSION = "2.2.9" as const;
@@ -30,17 +31,29 @@ export function createLeaferTextLayoutProvider(
       if (inputIssue) return failure("invalid-input", inputIssue, false);
       let text: InstanceType<LeaferModule["Text"]> | undefined;
       try {
-        text = new leafer.Text({
+        const data = {
           text: request.content,
           fontFamily: request.fontFamily,
           fontSize: request.fontSize,
           fontWeight: request.fontWeight,
           lineHeight: { type: "px", value: request.lineHeight },
           letterSpacing: { type: "px", value: request.letterSpacing },
+          paraIndent: request.paragraphIndent,
+          paraSpacing: request.paragraphSpacing,
+          textCase: mapTextCase(request.textCase),
+          textDecoration: mapTextDecoration(request.textDecoration),
           textWrap: mapTextWrap(request.textWrap),
-          textOverflow: "show",
+          textOverflow:
+            request.textTruncation === "ending" ? "ellipsis" : "show",
           ...(request.mode === "auto-height" ? { width: request.width } : {}),
-        });
+        };
+        text = new leafer.Text(
+          materializeLeaferTextData(
+            leafer,
+            data,
+            request.maxLines ?? undefined,
+          ),
+        );
         const bounds = text.boxBounds;
         const result: TextLayoutResult = {
           ok: true,
@@ -102,6 +115,20 @@ function fontDescriptor(request: TextLayoutRequest): string {
 function mapTextWrap(wrap: TextLayoutRequest["textWrap"]): string {
   if (wrap === "word") return "normal";
   if (wrap === "character") return "break";
+  return "none";
+}
+
+function mapTextCase(value: TextLayoutRequest["textCase"]): string {
+  if (value === "uppercase") return "upper";
+  if (value === "lowercase") return "lower";
+  if (value === "title-case") return "title";
+  if (value === "small-caps") return "small-caps";
+  return "none";
+}
+
+function mapTextDecoration(value: TextLayoutRequest["textDecoration"]): string {
+  if (value === "underline") return "under";
+  if (value === "strikethrough") return "delete";
   return "none";
 }
 

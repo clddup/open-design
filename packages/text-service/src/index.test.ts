@@ -14,6 +14,12 @@ const autoHeight: TextLayoutRequest = {
   fontWeight: 600,
   letterSpacing: 0,
   lineHeight: 32,
+  paragraphIndent: 0,
+  paragraphSpacing: 0,
+  textCase: "original",
+  textDecoration: "none",
+  textTruncation: "disabled",
+  maxLines: null,
   mode: "auto-height",
   textWrap: "word",
   width: 240,
@@ -30,6 +36,12 @@ describe("text layout service contract", () => {
         fontWeight: autoHeight.fontWeight,
         letterSpacing: autoHeight.letterSpacing,
         lineHeight: autoHeight.lineHeight,
+        paragraphIndent: autoHeight.paragraphIndent,
+        paragraphSpacing: autoHeight.paragraphSpacing,
+        textCase: autoHeight.textCase,
+        textDecoration: autoHeight.textDecoration,
+        textTruncation: autoHeight.textTruncation,
+        maxLines: autoHeight.maxLines,
         mode: "auto-width",
         textWrap: "none",
       }),
@@ -48,6 +60,20 @@ describe("text layout service contract", () => {
     expect(
       validateTextLayoutRequest({ ...autoHeight, width: Number.NaN }),
     ).toContain("finite positive width");
+    expect(
+      validateTextLayoutRequest({
+        ...autoHeight,
+        textTruncation: "ending",
+        maxLines: null,
+      }),
+    ).toContain("requires max lines");
+    expect(
+      validateTextLayoutRequest({
+        ...autoHeight,
+        textTruncation: "ending",
+        maxLines: 3,
+      }),
+    ).toBeNull();
     expect(
       validateTextLayoutResult({
         ok: true,

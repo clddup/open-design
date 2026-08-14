@@ -13,6 +13,7 @@ import type {
   LayoutConstraints,
   LayoutGuide,
   SlotSettings,
+  TextNode,
 } from "@opendesign/design-contracts";
 import type {
   ArrangeOperation,
@@ -264,7 +265,7 @@ const starNode: DesignNode = {
   },
 };
 
-const textNode: DesignNode = {
+const textNode: TextNode = {
   id: "text_1",
   name: "Editorial summary",
   parentId: null,
@@ -284,11 +285,17 @@ const textNode: DesignNode = {
     fontWeight: 500,
     lineHeight: 26,
     letterSpacing: 0,
+    paragraphIndent: 0,
+    paragraphSpacing: 0,
+    textCase: "original",
+    textDecoration: "none",
     textAlignHorizontal: "left",
     textAlignVertical: "top",
     textResize: "fixed",
     textWrap: "word",
     textOverflow: "clip",
+    textTruncation: "disabled",
+    maxLines: null,
     fills: [{ type: "solid", color: "#151515", opacity: 1 }],
     strokes: [],
     strokeWidth: 0,
@@ -1652,7 +1659,7 @@ describe("PropertiesPanel regular-shape workflow", () => {
 });
 
 describe("PropertiesPanel text layout workflow", () => {
-  it("edits resizing, wrapping, and overflow through one text section", async () => {
+  it("edits Typography Core fields through one text section", async () => {
     const user = userEvent.setup();
     const { onUpdate } = renderPanel({ node: textNode, selectionCount: 1 });
 
@@ -1660,13 +1667,37 @@ describe("PropertiesPanel text layout workflow", () => {
     expect(screen.getByLabelText("Wrapping")).toHaveValue("word");
     expect(screen.getByLabelText("Overflow")).toHaveValue("clip");
     expect(screen.getByLabelText("Vertical alignment")).toHaveValue("top");
+    expect(screen.getByLabelText("Truncation")).toHaveValue("disabled");
+    expect(screen.getByLabelText("Maximum lines")).toBeDisabled();
+
+    const paragraphIndent = screen.getByLabelText("Paragraph indent");
+    await user.clear(paragraphIndent);
+    await user.type(paragraphIndent, "12");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { paragraphIndent: 12 },
+    });
+
+    await user.selectOptions(screen.getByLabelText("Letter case"), "uppercase");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { textCase: "uppercase" },
+    });
+
+    await user.selectOptions(screen.getByLabelText("Decoration"), "underline");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { textDecoration: "underline" },
+    });
 
     await user.selectOptions(
       screen.getByLabelText("Text resizing"),
       "auto-height",
     );
     expect(onUpdate).toHaveBeenCalledWith({
-      properties: { textResize: "auto-height" },
+      properties: {
+        textOverflow: "visible",
+        textResize: "auto-height",
+        textWrap: "word",
+      },
     });
 
     await user.selectOptions(
@@ -1682,14 +1713,19 @@ describe("PropertiesPanel text layout workflow", () => {
       properties: { textWrap: "character" },
     });
 
-    await user.selectOptions(screen.getByLabelText("Overflow"), "ellipsis");
+    await user.selectOptions(screen.getByLabelText("Truncation"), "ending");
     expect(onUpdate).toHaveBeenCalledWith({
-      properties: { textOverflow: "ellipsis" },
+      properties: {
+        maxLines: null,
+        textOverflow: "clip",
+        textTruncation: "ending",
+      },
     });
     expect(textNode.size).toEqual({ width: 320, height: 96 });
   });
 
-  it("disables incompatible wrapping and overflow choices in Auto Size modes", () => {
+  it("enforces Auto Size wrapping, overflow, and ending-truncation defaults", async () => {
+    const user = userEvent.setup();
     const autoWidthText = {
       ...textNode,
       properties: {
@@ -1697,6 +1733,8 @@ describe("PropertiesPanel text layout workflow", () => {
         textResize: "auto-width" as const,
         textWrap: "none" as const,
         textOverflow: "visible" as const,
+        textTruncation: "disabled" as const,
+        maxLines: null,
       },
     };
     renderPanel({
@@ -1714,11 +1752,45 @@ describe("PropertiesPanel text layout workflow", () => {
         textResize: "auto-height" as const,
         textWrap: "word" as const,
         textOverflow: "visible" as const,
+        textTruncation: "disabled" as const,
+        maxLines: null,
       },
     };
-    renderPanel({ node: autoHeightText, selectionCount: 1 });
+    const { onUpdate } = renderPanel({
+      node: autoHeightText,
+      selectionCount: 1,
+    });
     expect(screen.getByLabelText("Wrapping")).toBeEnabled();
     expect(screen.getByRole("option", { name: "No wrap" })).toBeDisabled();
     expect(screen.getByLabelText("Overflow")).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText("Truncation"), "ending");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: {
+        maxLines: 3,
+        textOverflow: "visible",
+        textTruncation: "ending",
+      },
+    });
+  });
+
+  it("allows fixed ending truncation to use a positive line cap or box height", async () => {
+    const user = userEvent.setup();
+    const endingText: TextNode = {
+      ...textNode,
+      properties: {
+        ...textNode.properties,
+        textResize: "fixed",
+        maxLines: null,
+        textOverflow: "clip",
+        textTruncation: "ending",
+      },
+    };
+    const { onUpdate } = renderPanel({ node: endingText, selectionCount: 1 });
+    const maxLines = screen.getByLabelText("Maximum lines");
+    expect(maxLines).toBeEnabled();
+    expect(maxLines).toHaveValue(null);
+    await user.type(maxLines, "4");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({ properties: { maxLines: 4 } });
   });
 });

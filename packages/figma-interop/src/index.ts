@@ -88,41 +88,43 @@ export function toFigmaExportSettings(
   node: DesignNode,
 ): FigmaExportSettingsResult {
   const issues: string[] = [];
-  const settings = node.exportSettings.flatMap((setting, index) => {
-    if (setting.format === "WEBP") {
-      issues.push(
-        `Export setting ${index} uses OpenDesign WEBP extension, which has no Figma Plugin API equivalent`,
-      );
-      return [];
-    }
-    const shared = {
-      suffix: setting.suffix,
-      contentsOnly: setting.contentsOnly,
-      useAbsoluteBounds: setting.useAbsoluteBounds,
-      colorProfile: setting.colorProfile,
-    };
-    if (setting.format === "PNG" || setting.format === "JPG") {
-      return [
-        {
-          ...shared,
-          format: setting.format,
-          constraint: structuredClone(setting.constraint),
-        } as ExportSettings,
-      ];
-    }
-    if (setting.format === "SVG") {
-      return [
-        {
-          ...shared,
-          format: "SVG",
-          svgOutlineText: setting.svgOutlineText,
-          svgIdAttribute: setting.svgIdAttribute,
-          svgSimplifyStroke: setting.svgSimplifyStroke,
-        } as ExportSettings,
-      ];
-    }
-    return [{ ...shared, format: "PDF" } as ExportSettings];
-  });
+  const settings = node.exportSettings.flatMap<ExportSettings>(
+    (setting, index) => {
+      if (setting.format === "WEBP") {
+        issues.push(
+          `Export setting ${index} uses OpenDesign WEBP extension, which has no Figma Plugin API equivalent`,
+        );
+        return [];
+      }
+      const shared = {
+        suffix: setting.suffix,
+        contentsOnly: setting.contentsOnly,
+        useAbsoluteBounds: setting.useAbsoluteBounds,
+        colorProfile: setting.colorProfile,
+      };
+      if (setting.format === "PNG" || setting.format === "JPG") {
+        return [
+          {
+            ...shared,
+            format: setting.format,
+            constraint: structuredClone(setting.constraint),
+          },
+        ];
+      }
+      if (setting.format === "SVG") {
+        return [
+          {
+            ...shared,
+            format: "SVG",
+            svgOutlineText: setting.svgOutlineText,
+            svgIdAttribute: setting.svgIdAttribute,
+            svgSimplifyStroke: setting.svgSimplifyStroke,
+          },
+        ];
+      }
+      return [{ ...shared, format: "PDF" }];
+    },
+  );
   return issues.length > 0 ? { ok: false, issues } : { ok: true, settings };
 }
 
@@ -187,10 +189,10 @@ export function toFigmaSharedStylePayload(
           fontSize: value.fontSize,
           lineHeight: { unit: "PIXELS", value: value.lineHeight },
           letterSpacing: { unit: "PIXELS", value: value.letterSpacing },
-          textDecoration: "NONE",
-          textCase: "ORIGINAL",
-          paragraphIndent: 0,
-          paragraphSpacing: 0,
+          textDecoration: figmaTextDecoration(value.textDecoration),
+          textCase: figmaTextCase(value.textCase),
+          paragraphIndent: value.paragraphIndent,
+          paragraphSpacing: value.paragraphSpacing,
         },
       },
     };
@@ -268,6 +270,30 @@ export function toFigmaSharedStylePayload(
     } as LayoutGrid;
   });
   return { ok: true, payload: { type: "GRID", layoutGrids } };
+}
+
+function figmaTextDecoration(
+  value: Extract<
+    SharedStyleDefinition,
+    { styleType: "TEXT" }
+  >["textStyle"]["textDecoration"],
+): TextDecoration {
+  if (value === "underline") return "UNDERLINE";
+  if (value === "strikethrough") return "STRIKETHROUGH";
+  return "NONE";
+}
+
+function figmaTextCase(
+  value: Extract<
+    SharedStyleDefinition,
+    { styleType: "TEXT" }
+  >["textStyle"]["textCase"],
+): TextCase {
+  if (value === "uppercase") return "UPPER";
+  if (value === "lowercase") return "LOWER";
+  if (value === "title-case") return "TITLE";
+  if (value === "small-caps") return "SMALL_CAPS";
+  return "ORIGINAL";
 }
 
 function parseColor(

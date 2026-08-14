@@ -20,6 +20,7 @@ export interface LeaferElementSpec {
   kind: DesignNode["kind"];
   parentId: string | null;
   tag: LeaferElementTag;
+  textMaxLines?: number;
   transform: Transform;
 }
 

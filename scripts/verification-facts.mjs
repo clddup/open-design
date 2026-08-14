@@ -24,6 +24,7 @@ const designContractVersions = await text(
   "packages/design-contracts/src/versions.ts",
 );
 const geometryService = await text("packages/geometry-service/src/index.ts");
+const textService = await text("packages/text-service/src/index.ts");
 const layoutService = await text("packages/layout-service/src/index.ts");
 const requireFromDesktop = createRequire(join(desktopRoot, "package.json"));
 const vitestPath = join(
@@ -60,6 +61,13 @@ const geometryServiceContractVersion = Number(
     "Geometry service contract version",
   ),
 );
+const textServiceContractVersion = Number(
+  capture(
+    textService,
+    /TEXT_LAYOUT_SERVICE_CONTRACT_VERSION\s*=\s*([0-9]+)/,
+    "Text Layout service contract version",
+  ),
+);
 const layoutServiceContractVersion = Number(
   capture(
     layoutService,
@@ -72,6 +80,11 @@ const agentCoreVersion = baseline.components.agentCore.version;
 const agentCoreStatus = baseline.components.agentCore.productionStatus;
 
 assertEqual(
+  baseline.contracts.agentProtocolVersion,
+  agentProtocol,
+  "engine baseline Agent protocol",
+);
+assertEqual(
   baseline.contracts.documentSchemaVersion,
   documentSchemaVersion,
   "engine baseline document schema",
@@ -80,6 +93,11 @@ assertEqual(
   baseline.contracts.geometryServiceContractVersion,
   geometryServiceContractVersion,
   "engine baseline geometry service contract",
+);
+assertEqual(
+  baseline.contracts.textLayoutServiceContractVersion,
+  textServiceContractVersion,
+  "engine baseline Text Layout service contract",
 );
 assertEqual(
   baseline.contracts.layoutServiceContractVersion,
@@ -124,6 +142,7 @@ const blocks = {
     `- 文档协议：\`DesignDocument ${documentSchemaVersion}\``,
     `- Agent 协议：\`${agentProtocol}\``,
     `- Geometry Service：\`contract v${geometryServiceContractVersion}\``,
+    `- Text Service：\`contract v${textServiceContractVersion}\``,
     `- Layout Service：\`contract v${layoutServiceContractVersion}\``,
     `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（${agentCoreStatus}）`,
     `- 生产画布：\`${baseline.components.leafer.dependency} ${engineVersion}\``,

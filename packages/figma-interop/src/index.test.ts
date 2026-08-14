@@ -101,6 +101,46 @@ describe("Figma Shared Style compatibility", () => {
       issues: [expect.stringContaining("dedicated asset or gradient adapter")],
     });
   });
+
+  it("maps non-default Typography Core Text Style fields to Figma", () => {
+    const style = {
+      id: "display-accent",
+      key: "display-accent-key",
+      name: "Display/Accent",
+      description: "Uppercase underlined display style",
+      hiddenFromPublishing: false,
+      styleType: "TEXT",
+      textStyle: {
+        fontFamily: "IBM Plex Sans",
+        fontSize: 32,
+        fontWeight: 700,
+        lineHeight: 40,
+        letterSpacing: 1.5,
+        paragraphIndent: 12,
+        paragraphSpacing: 18,
+        textCase: "small-caps",
+        textDecoration: "underline",
+      },
+      extensions: {},
+    } satisfies DesignDocument["stylesById"][string];
+
+    expect(toFigmaSharedStylePayload(style)).toEqual({
+      ok: true,
+      payload: {
+        type: "TEXT",
+        text: {
+          fontName: { family: "IBM Plex Sans", style: "Bold" },
+          fontSize: 32,
+          lineHeight: { unit: "PIXELS", value: 40 },
+          letterSpacing: { unit: "PIXELS", value: 1.5 },
+          textDecoration: "UNDERLINE",
+          textCase: "SMALL_CAPS",
+          paragraphIndent: 12,
+          paragraphSpacing: 18,
+        },
+      },
+    });
+  });
 });
 
 describe("Figma Slice and export settings compatibility", () => {
@@ -318,10 +358,16 @@ describe("Figma component property compatibility", () => {
             fontWeight: 500,
             lineHeight: 20,
             letterSpacing: 0,
+            paragraphIndent: 0,
+            paragraphSpacing: 0,
+            textCase: "original",
+            textDecoration: "none",
             textAlignHorizontal: "center",
             textAlignVertical: "center",
             textWrap: "word",
             textOverflow: "visible",
+            textTruncation: "disabled",
+            maxLines: null,
             textResize: "fixed",
             fills: [],
             strokes: [],

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-15",
-  "documentSchemaVersion": "1.28.0",
+  "documentSchemaVersion": "1.29.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -679,7 +679,7 @@
         "en": "Create, render, transform, and edit fixed, Auto Width, or Auto Height text with one shared font style, alignment, explicit wrapping, and fixed-box overflow controls.",
         "zh-CN": "创建、渲染、变换和编辑固定、自动宽度或自动高度文字，使用单一共享字体样式、对齐、明确换行以及固定框溢出控制。"
       },
-      "provider": "DesignDocument 1.10.0 + Text Layout Service v1 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v3",
+      "provider": "DesignDocument 1.29.0 + Text Layout Service v2 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v4",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -691,14 +691,15 @@
       },
       "limitations": [
         {
-          "en": "Max-lines, font assets/replacement, explicit reflow after font availability changes, exact cross-platform shaping, and macOS/Windows visual acceptance remain unavailable.",
-          "zh-CN": "最大行数、字体资源与替换、字体可用性改变后的显式重排、精确跨平台 shaping，以及 macOS/Windows 视觉验收仍未完成。"
+          "en": "Font assets/replacement, explicit reflow after font availability changes, exact cross-platform shaping, and macOS/Windows visual acceptance remain unavailable.",
+          "zh-CN": "字体资源与替换、字体可用性改变后的显式重排、精确跨平台 shaping，以及 macOS/Windows 视觉验收仍未完成。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/leafer-engine/src/adapter.test.ts",
           "packages/leafer-engine/src/text-layout.test.ts",
+          "packages/leafer-engine/src/text-truncation.test.ts",
           "packages/leafer-engine/src/professional-fixtures.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
@@ -722,30 +723,47 @@
     {
       "id": "text.rich-typography",
       "category": "text",
-      "status": "unavailable",
+      "status": "degraded",
       "label": { "en": "Rich typography", "zh-CN": "专业富文本排版" },
       "description": {
-        "en": "Style text runs and paragraphs with lists, indentation, decoration, OpenType, variable fonts, and reusable text styles.",
-        "zh-CN": "按文字 run 与段落设置列表、缩进、装饰、OpenType、可变字体和共享文字样式。"
+        "en": "Apply document-wide Typography Core properties and reusable Text Styles while preserving explicit limits for rich runs, lists, OpenType, and font assets.",
+        "zh-CN": "应用文档级 Typography Core 属性和可复用 Text Style，并明确保留富文本 run、列表、OpenType 与字体资源限制。"
       },
-      "provider": "Not implemented",
+      "provider": "@opendesign/text-service v2 + leafer-editor 2.2.9",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
-        "contract": "unavailable",
-        "runtime": "unavailable",
-        "human": "unavailable",
-        "agent": "unavailable",
+        "contract": "degraded",
+        "runtime": "degraded",
+        "human": "degraded",
+        "agent": "degraded",
         "render": "degraded",
-        "export": "unavailable"
+        "export": "degraded"
       },
       "limitations": [
         {
-          "en": "A Text/Font service and formal rich-text schema are required before this can be exposed.",
-          "zh-CN": "需要 Text/Font service 和正式富文本 schema 后才能开放。"
+          "en": "Core v2 supports paragraph indent/spacing, case, decoration, ending truncation/max-lines, and reusable single-style Text Styles; per-range rich text, lists, OpenType features, variable-font axes, font assets/replacement, text-on-path, and deterministic cross-platform shaping remain unavailable.",
+          "zh-CN": "Core v2 已支持段落缩进/间距、大小写、装饰、末尾截断/最大行数和可复用单样式 Text Style；逐段富文本、列表、OpenType 特性、可变字体轴、字体资源/替换、路径文字和确定性跨平台 shaping 仍不可用。"
         }
       ],
-      "evidence": { "automated": [], "manual": [] },
-      "references": []
+      "evidence": {
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/text-service/src/index.test.ts",
+          "packages/editor-runtime/src/text-layout.test.ts",
+          "packages/leafer-engine/src/text-layout.test.ts",
+          "packages/leafer-engine/src/text-truncation.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
+          "packages/import-export-service/src/svg.test.ts",
+          "packages/figma-interop/src/index.test.ts",
+          "apps/desktop/src/shared/design-agent-tools.test.ts",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
+        ],
+        "manual": []
+      },
+      "references": [
+        "https://developers.figma.com/docs/plugins/api/TextNode/",
+        "https://developers.figma.com/docs/plugins/api/TextStyle/"
+      ]
     },
     {
       "id": "layout.constraints",

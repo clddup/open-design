@@ -5,7 +5,8 @@ import {
   type Paint,
 } from "@opendesign/design-contracts";
 
-const TEXT_METADATA_VERSION = "3";
+const TEXT_METADATA_VERSION = "4";
+const TYPOGRAPHY_V1_TEXT_METADATA_VERSION = "3";
 const FIXED_LAYOUT_TEXT_METADATA_VERSION = "2";
 const LEGACY_TEXT_METADATA_VERSION = "1";
 const VERSION_ATTRIBUTE = "data-opendesign-text-version";
@@ -52,6 +53,12 @@ export function writeSvgText(
   element.setAttribute("font-family", properties.fontFamily);
   element.setAttribute("font-size", formatNumber(properties.fontSize));
   element.setAttribute("font-weight", String(properties.fontWeight));
+  element.setAttribute("text-decoration", svgTextDecoration(properties));
+  element.setAttribute("text-transform", svgTextTransform(properties));
+  element.setAttribute(
+    "font-variant",
+    properties.textCase === "small-caps" ? "small-caps" : "normal",
+  );
   element.setAttribute(
     "letter-spacing",
     formatNumber(properties.letterSpacing),
@@ -61,7 +68,7 @@ export function writeSvgText(
   element.setAttributeNS(XML_NAMESPACE, "xml:space", "preserve");
 
   const lines = textLines(properties.content);
-  const x = lineX(node.size.width, properties);
+  const x = lineX(node.size.width, properties) + properties.paragraphIndent;
   const y = firstLineY(node.size.height, lines.length, properties);
   for (let index = 0; index < lines.length; index += 1) {
     const tspan = element.ownerDocument.createElementNS(
@@ -69,7 +76,12 @@ export function writeSvgText(
       "tspan",
     );
     tspan.setAttribute("x", formatNumber(x));
-    tspan.setAttribute("y", formatNumber(y + index * properties.lineHeight));
+    tspan.setAttribute(
+      "y",
+      formatNumber(
+        y + index * properties.lineHeight + index * properties.paragraphSpacing,
+      ),
+    );
     tspan.appendChild(element.ownerDocument.createTextNode(lines[index]!));
     element.appendChild(tspan);
   }
@@ -106,6 +118,7 @@ export function readSvgText(element: Element): SvgTextReadResult {
   const metadataVersion = element.getAttribute(VERSION_ATTRIBUTE);
   if (
     metadataVersion !== TEXT_METADATA_VERSION &&
+    metadataVersion !== TYPOGRAPHY_V1_TEXT_METADATA_VERSION &&
     metadataVersion !== FIXED_LAYOUT_TEXT_METADATA_VERSION &&
     metadataVersion !== LEGACY_TEXT_METADATA_VERSION
   ) {
@@ -178,18 +191,31 @@ export function readSvgText(element: Element): SvgTextReadResult {
 
 function migrateTextProperties(version: string, value: unknown): unknown {
   if (!isRecord(value)) return value;
+  let migrated = { ...value };
   if (version === LEGACY_TEXT_METADATA_VERSION) {
-    return {
-      ...value,
+    migrated = {
+      ...migrated,
       textResize: "fixed",
       textWrap: "character",
       textOverflow: "visible",
     };
+  } else if (version === FIXED_LAYOUT_TEXT_METADATA_VERSION) {
+    migrated.textResize = "fixed";
   }
-  if (version === FIXED_LAYOUT_TEXT_METADATA_VERSION) {
-    return { ...value, textResize: "fixed" };
+  if (version !== TEXT_METADATA_VERSION) {
+    if (migrated.textOverflow === "ellipsis") {
+      migrated.textOverflow = "clip";
+      migrated.textTruncation = "ending";
+    } else {
+      migrated.textTruncation = "disabled";
+    }
+    migrated.maxLines = null;
+    migrated.paragraphIndent = 0;
+    migrated.paragraphSpacing = 0;
+    migrated.textCase = "original";
+    migrated.textDecoration = "none";
   }
-  return value;
+  return migrated;
 }
 
 export function svgTextShapeMatches(
@@ -310,6 +336,14 @@ function renderedTextMismatch(
     return "OpenDesign text metadata does not match the rendered font weight";
   }
   if (
+    element.getAttribute("text-decoration") !== svgTextDecoration(properties) ||
+    element.getAttribute("text-transform") !== svgTextTransform(properties) ||
+    element.getAttribute("font-variant") !==
+      (properties.textCase === "small-caps" ? "small-caps" : "normal")
+  ) {
+    return "OpenDesign text metadata does not match the rendered case or decoration";
+  }
+  if (
     element.getAttribute("dominant-baseline") !== "text-before-edge" ||
     element.getAttribute("text-anchor") !== textAnchor(properties) ||
     element.getAttributeNS(XML_NAMESPACE, "space") !== "preserve"
@@ -325,7 +359,7 @@ function renderedTextMismatch(
   ) {
     return "OpenDesign text metadata does not match the rendered line structure";
   }
-  const expectedX = lineX(value.width, properties);
+  const expectedX = lineX(value.width, properties) + properties.paragraphIndent;
   const expectedY = firstLineY(value.height, lines.length, properties);
   for (let index = 0; index < children.length; index += 1) {
     const child = children[index]!;
@@ -335,7 +369,9 @@ function renderedTextMismatch(
       !sameAttributeNumber(
         child,
         "y",
-        expectedY + index * properties.lineHeight,
+        expectedY +
+          index * properties.lineHeight +
+          index * properties.paragraphSpacing,
       )
     ) {
       return "OpenDesign text metadata does not match the rendered line content or position";
@@ -355,7 +391,9 @@ function firstLineY(
   lineCount: number,
   properties: TextProperties,
 ): number {
-  const contentHeight = lineCount * properties.lineHeight;
+  const contentHeight =
+    lineCount * properties.lineHeight +
+    Math.max(0, lineCount - 1) * properties.paragraphSpacing;
   if (properties.textAlignVertical === "center") {
     return (height - contentHeight) / 2;
   }
@@ -369,6 +407,19 @@ function textAnchor(properties: TextProperties): "end" | "middle" | "start" {
   if (properties.textAlignHorizontal === "center") return "middle";
   if (properties.textAlignHorizontal === "right") return "end";
   return "start";
+}
+
+function svgTextDecoration(properties: TextProperties): string {
+  if (properties.textDecoration === "underline") return "underline";
+  if (properties.textDecoration === "strikethrough") return "line-through";
+  return "none";
+}
+
+function svgTextTransform(properties: TextProperties): string {
+  if (properties.textCase === "uppercase") return "uppercase";
+  if (properties.textCase === "lowercase") return "lowercase";
+  if (properties.textCase === "title-case") return "capitalize";
+  return "none";
 }
 
 function textLines(content: string): string[] {

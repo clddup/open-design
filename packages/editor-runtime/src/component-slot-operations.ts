@@ -50,11 +50,21 @@ export function applySlotStretchOnInsert(
       (inserted.properties.textResize === "auto-height" &&
         inserted.layoutSizing.vertical === "fill"))
   ) {
-    inserted.properties = {
-      ...inserted.properties,
-      textResize: "fixed",
-      textWrap: "word",
-    };
+    inserted.properties =
+      inserted.properties.textTruncation === "ending"
+        ? {
+            ...inserted.properties,
+            textResize: "fixed",
+            textWrap: "word",
+            textOverflow: "clip",
+          }
+        : {
+            ...inserted.properties,
+            textResize: "fixed",
+            textWrap: "word",
+            textTruncation: "disabled",
+            maxLines: null,
+          };
   }
 }
 
