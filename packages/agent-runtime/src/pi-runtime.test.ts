@@ -534,7 +534,243 @@ describe("OpenDesign Pi production runtime", () => {
       stopReason: "complete",
     });
   });
+
+  it("keeps Plan allocation compact and expands tools only after a material revision", async () => {
+    const store = new MemorySessionStore();
+    const definitions = disclosureProbeTools();
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        toolResponse("plan_call", "opendesign_plan_probe", {}),
+        toolResponse("material_call", "opendesign_material_probe", {
+          basic: "hero",
+        }),
+        textResponse("First material design is visible."),
+      ]),
+    );
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      toolCatalog: { listTools: () => definitions },
+      toolExecutor: {
+        async *execute(call, context): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield {
+            type: "completed",
+            result: {
+              content: { ok: true },
+              designRevision: {
+                previousRevision: context.revision,
+                revision: context.revision + 1,
+                transactionId: `transaction_${call.toolCallId}`,
+              },
+            },
+          };
+        },
+      },
+    });
+
+    await collect(runtime, {
+      ...request,
+      runId: "run_pi_progressive_disclosure",
+    });
+
+    expect(gateway.requests).toHaveLength(3);
+    expect(
+      gateway.requests[0]?.tools.map((candidate) => candidate.name),
+    ).toEqual([
+      "opendesign_inspect_probe",
+      "opendesign_plan_probe",
+      "opendesign_material_probe",
+    ]);
+    expect(
+      gateway.requests[1]?.tools.map((candidate) => candidate.name),
+    ).toEqual([
+      "opendesign_inspect_probe",
+      "opendesign_plan_probe",
+      "opendesign_material_probe",
+    ]);
+    expect(
+      JSON.stringify(
+        gateway.requests[1]?.tools.find(
+          (candidate) => candidate.name === "opendesign_material_probe",
+        )?.inputSchema,
+      ),
+    ).toContain('"basic"');
+    expect(
+      gateway.requests[2]?.tools.map((candidate) => candidate.name),
+    ).toEqual(definitions.map((definition) => definition.name));
+    expect(
+      JSON.stringify(
+        gateway.requests[2]?.tools.find(
+          (candidate) => candidate.name === "opendesign_material_probe",
+        )?.inputSchema,
+      ),
+    ).toContain('"advanced"');
+  });
+
+  it("keeps inspection compact and expands after an existing-artboard Plan", async () => {
+    const store = new MemorySessionStore();
+    const definitions = disclosureProbeTools();
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        toolResponse("inspect_call", "opendesign_inspect_probe", {}),
+        toolResponse("existing_plan_call", "opendesign_plan_probe", {
+          targets: [{ artboard: { mode: "existing" } }],
+        }),
+        toolResponse("advanced_call", "opendesign_advanced_probe", {}),
+        textResponse("Existing design updated."),
+      ]),
+    );
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      toolCatalog: { listTools: () => definitions },
+      toolExecutor: {
+        async *execute(call, context): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield {
+            type: "completed",
+            result:
+              call.toolName === "opendesign_inspect_probe"
+                ? {
+                    content: { revision: context.revision },
+                    observedRevision: context.revision,
+                  }
+                : {
+                    content: { ok: true },
+                    designRevision: {
+                      previousRevision: context.revision,
+                      revision: context.revision + 1,
+                      transactionId: `transaction_${call.toolCallId}`,
+                    },
+                  },
+          };
+        },
+      },
+    });
+
+    await collect(runtime, {
+      ...request,
+      runId: "run_pi_existing_edit_disclosure",
+    });
+
+    expect(gateway.requests[0]?.tools).toHaveLength(3);
+    expect(gateway.requests[1]?.tools).toHaveLength(3);
+    expect(
+      gateway.requests[2]?.tools.map((candidate) => candidate.name),
+    ).toEqual(definitions.map((definition) => definition.name));
+  });
 });
+
+class RecordingGateway implements ModelGateway {
+  readonly requests: ModelRequest[] = [];
+
+  constructor(private readonly delegate: ModelGateway) {}
+
+  stream(modelRequest: ModelRequest) {
+    this.requests.push(modelRequest);
+    return this.delegate.stream(modelRequest);
+  }
+}
+
+function disclosureProbeTools(): AgentToolDefinition[] {
+  const emptySchema = {
+    type: "object",
+    properties: {},
+    additionalProperties: false,
+  } as const;
+  return [
+    {
+      ...tool,
+      name: "opendesign_inspect_probe",
+      modelDisclosure: {
+        bootstrap: "available",
+        role: "inspection",
+      },
+    },
+    {
+      ...tool,
+      name: "opendesign_plan_probe",
+      risk: "design_write",
+      inputSchema: {
+        type: "object",
+        properties: {
+          targets: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                artboard: {
+                  type: "object",
+                  properties: { mode: { enum: ["create", "existing"] } },
+                  required: ["mode"],
+                  additionalProperties: false,
+                },
+              },
+              required: ["artboard"],
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+      modelDisclosure: { bootstrap: "available", role: "plan" },
+    },
+    {
+      ...tool,
+      name: "opendesign_material_probe",
+      risk: "design_write",
+      inputSchema: {
+        type: "object",
+        properties: { advanced: { type: "string" } },
+        additionalProperties: false,
+      },
+      modelDisclosure: {
+        bootstrap: "available",
+        role: "material-write",
+        bootstrapInputSchema: {
+          type: "object",
+          properties: { basic: { type: "string" } },
+          additionalProperties: false,
+        },
+      },
+      validateInput: (input) =>
+        typeof input === "object" && input !== null && !Array.isArray(input),
+    },
+    {
+      ...tool,
+      name: "opendesign_advanced_probe",
+      inputSchema: emptySchema,
+      modelDisclosure: { bootstrap: "deferred" },
+    },
+  ];
+}
+
+function toolResponse(
+  toolCallId: string,
+  name: string,
+  input: Record<string, unknown>,
+) {
+  return {
+    blocks: [
+      {
+        id: `${toolCallId}_block`,
+        type: "tool_call" as const,
+        toolCallId,
+        name,
+        input,
+      },
+    ],
+    stopReason: "tool_use" as const,
+  };
+}
+
+function textResponse(text: string) {
+  return {
+    blocks: [{ id: "completion_text", type: "text" as const, text }],
+    stopReason: "complete" as const,
+  };
+}
 
 class AbortableGateway implements ModelGateway {
   readonly started: Promise<void>;

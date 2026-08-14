@@ -3,6 +3,7 @@ import {
   DESIGN_AGENT_TOOL_SPECS,
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
+  DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
@@ -1122,6 +1123,36 @@ describe("design Agent tool contract", () => {
     expect(schema.length).toBeLessThan(64_000);
     expect(schema).not.toContain('"$ref"');
     expect(schema).not.toContain('"$defs"');
+  });
+
+  it("keeps the first visible design transaction compact and basic", () => {
+    const apply = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+    );
+    const bootstrap = JSON.stringify(DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA);
+    const complete = JSON.stringify(apply?.inputSchema);
+
+    expect(apply?.modelDisclosure).toMatchObject({
+      bootstrap: "available",
+      role: "material-write",
+      bootstrapInputSchema: DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
+    });
+    expect(bootstrap.length).toBeLessThan(12_000);
+    expect(bootstrap.length * 4).toBeLessThan(complete.length);
+    expect(bootstrap).toContain(
+      '"enum":["frame","group","rectangle","ellipse","text"]',
+    );
+    expect(bootstrap).toContain('"const":"insert_element"');
+    expect(bootstrap).toContain('"const":"update_properties"');
+    expect(bootstrap).not.toContain('"network"');
+    expect(bootstrap).not.toContain('"path"');
+    expect(bootstrap).not.toContain('"assetId"');
+    expect(bootstrap).not.toContain('"effects"');
+    expect(
+      DESIGN_AGENT_TOOL_SPECS.find(
+        (tool) => tool.name === DESIGN_COMPONENT_TOOL_NAME,
+      )?.modelDisclosure,
+    ).toMatchObject({ bootstrap: "deferred" });
   });
 
   it("exposes bounded text wrapping and overflow without claiming auto sizing", () => {

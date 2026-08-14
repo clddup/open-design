@@ -46,6 +46,21 @@ export interface AgentRunRequest {
 export interface AgentToolDefinition extends CanonicalTool {
   risk: ToolRisk;
   approval: "never" | "required";
+  /**
+   * Optional model-facing progressive disclosure metadata.
+   *
+   * This changes only which validated host tools and schemas are sent to the
+   * Provider. It never grants execution authority or creates another tool
+   * implementation: every disclosed view still executes the original trusted
+   * definition and validateInput boundary.
+   */
+  modelDisclosure?: {
+    bootstrap: "available" | "deferred";
+    afterInspection?: "available";
+    role?: "inspection" | "plan" | "material-write";
+    bootstrapDescription?: string;
+    bootstrapInputSchema?: Record<string, unknown>;
+  };
   approvalScope?: "call" | "run";
   approvalPrompt?: {
     title: string;

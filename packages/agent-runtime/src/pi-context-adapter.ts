@@ -116,6 +116,7 @@ export async function prepareOpenDesignPiContext(
   const priorToolCallIds = collectPriorToolCallIds(priorEvents);
   const context = new OpenDesignPiContextAdapter({
     budget,
+    maxContextCharacters,
     model: options.model,
     system: options.systemPrompt,
     tools,
@@ -161,6 +162,7 @@ export async function prepareOpenDesignPiContext(
 
 interface OpenDesignPiContextAdapterOptions {
   budget: ContextBudget;
+  maxContextCharacters: number;
   model: Model<Api>;
   system: string;
   tools: readonly CanonicalTool[];
@@ -175,10 +177,11 @@ export class OpenDesignPiContextAdapter
   implements PiModelContextProjectionPort, PiContextFailurePort
 {
   readonly #attachments = new WeakMap<object, readonly AgentAttachment[]>();
-  readonly #budget: ContextBudget;
+  #budget: ContextBudget;
+  readonly #maxContextCharacters: number;
   readonly #model: Model<Api>;
   readonly #system: string;
-  readonly #tools: readonly CanonicalTool[];
+  #tools: readonly CanonicalTool[];
   #currentPrompt: UserMessage | undefined;
   #pendingFailure: PiContextFailure | undefined;
   #reportedFailure: PiContextFailure | undefined;
@@ -186,9 +189,10 @@ export class OpenDesignPiContextAdapter
 
   constructor(options: OpenDesignPiContextAdapterOptions) {
     this.#budget = options.budget;
+    this.#maxContextCharacters = options.maxContextCharacters;
     this.#model = options.model;
     this.#system = options.system;
-    this.#tools = options.tools;
+    this.#tools = [...options.tools];
   }
 
   readonly transformContext = (
@@ -204,6 +208,13 @@ export class OpenDesignPiContextAdapter
     if (signal?.aborted || this.#pendingFailure !== undefined) return messages;
     this.#providerTurn += 1;
     try {
+      if (!this.#budget.fixedProtocolFits) {
+        this.fail(
+          "model_context_incompatible",
+          modelContextCompatibilityMessage(this.#budget),
+        );
+        return messages;
+      }
       const llmMessages = requirePiMessages(messages);
       for (const message of llmMessages) this.#captureToolAttachments(message);
       const projected: CanonicalMessage[] = [];
@@ -290,6 +301,16 @@ export class OpenDesignPiContextAdapter
 
   setCurrentPrompt(message: UserMessage): void {
     this.#currentPrompt = message;
+  }
+
+  setTools(tools: readonly CanonicalTool[]): void {
+    this.#tools = tools.map((tool) => structuredClone(tool));
+    this.#budget = createContextBudget(
+      this.#budget.modelContext,
+      this.#system,
+      this.#tools,
+      this.#maxContextCharacters,
+    );
   }
 
   projectCanonicalUserMessage(message: CanonicalMessage): UserMessage {

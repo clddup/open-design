@@ -23,6 +23,7 @@ import {
   type RasterExportSize,
 } from "@opendesign/import-export-service/raster";
 import { isPortableFileName } from "./portable-file-name";
+import { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 import {
   isInternalDesignApplyToolInput,
   normalizeDesignApplyToolInput,
@@ -51,6 +52,7 @@ export {
   isInternalDesignApplyToolInput,
   normalizeDesignApplyToolInput,
 } from "./design-apply-input";
+export { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 export type {
   DesignApplyToolInput,
   InternalDesignApplyToolInput,
@@ -1767,6 +1769,10 @@ const MODEL_VISUAL_REVIEW_SCHEMA = {
 export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_CAPABILITIES_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      afterInspection: "available" as const,
+    },
     description:
       "Read the trusted, versioned OpenDesign professional design capability manifest. It reports available, degraded, and unavailable workflows across contract, runtime, human UI, Agent, render, and export surfaces, including providers, limitations, and evidence counts. Call this before planning work that may require Pen editing, boolean operations, Auto Layout, components, variables, rich typography, image crop, AI image editing, or export.",
     inputSchema: {
@@ -1779,6 +1785,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_INSPECT_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "available" as const,
+      role: "inspection" as const,
+    },
     description:
       "Read the currently bound OpenDesign Design File, active Page, node tree, referenced asset metadata, selection, revision, and bounded structural/render diagnostics before planning a design change. Diagnostics identify empty paths/text, invisible nodes, missing assets, non-finite or clipped-out bounds, root-layer fragmentation, and actual Path/gradient/glow/blur/blend/mask/image/text usage. Asset source bytes and URIs are intentionally omitted; use opendesign_capture_canvas for bounded visual inspection. This does not inspect project files, source code, directories, or other Design Files. Call this instead of guessing canvas structure.",
     inputSchema: {
@@ -1791,6 +1801,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_CAPTURE_TOOL_NAME,
+    modelDisclosure: { bootstrap: "deferred" as const },
     description:
       "Capture the Main-selected target in the Run-bound OpenDesign document as a bounded image and return it as multimodal content together with captureTarget, the observed document revision, and reviewWorkflow. After the planned artboard exists, captureTarget is that exact Frame; otherwise it is the bound Page. Frame captures also return layoutQuality, a trusted exact-revision geometry report with node-specific clipping and artboard-overflow errors or warnings. Overflow issues include world-space node/artboard bounds plus geometry.currentLocalPosition, recommendedLocalDelta, and recommendedLocalPosition in the node parent's local coordinate space; use the recommended local x/y directly while preserving the node's inspected transform linear terms, and resize only when requiresResize is true. Use it in the visual review and correct every error before final verification; the host rejects a refined target whose final report still has errors. Final verification may include a bounded non-blocking componentStrategy report when actual Component/Instance bindings differ from the model-authored plan; it is maintainability guidance and does not invalidate an otherwise useful visual delivery. The capture uses an isolated Leafer projection of the captured revision, so user pan, zoom, selection, window size, or switching to another open Design File cannot change its pixels or mutation target. Call record_visual_review only when reviewWorkflow.reviewEligible is true; otherwise perform reviewWorkflow.nextAction first. Use this after a successful material design write to evaluate the rendered composition, hierarchy, spacing, proportions, and effects before recording the required visual review. A baseline capture before a write may inform planning but does not unlock review. This does not capture other applications, windows, files, or screens.",
     inputSchema: {
@@ -1803,6 +1814,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_PLAN_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "available" as const,
+      role: "plan" as const,
+    },
     description:
       "Define version 4 of the executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. componentStrategy must identify plausible reusable semantic objects, decide component versus ordinary hierarchy from reuse, stable identity, centralized updates, structural consistency, and intended instance differences, and bind every declared occurrence to a stable target/node ID. The host verifies declared Component Mains, Instances, and ordinary semantic containers from the live captured document; an empty candidate list is valid only when the summary explains why no semantic object merits component consideration. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
     inputSchema: MODEL_DESIGN_PLAN_SCHEMA,
@@ -1811,6 +1826,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_REVIEW_TOOL_NAME,
+    modelDisclosure: { bootstrap: "deferred" as const },
     description:
       "Record a structured critique of the newest unreviewed opendesign_capture_canvas result after a successful material design write in this Run. Evaluate the rendered composition, hierarchy, typography, asset integration, form/surface, and effects, then name at least two concrete refinements. Do not submit generic praise. The host rejects baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision with a design_workflow.* recovery instruction; follow that instruction instead of retrying the same review. This records Run review state and does not mutate the canvas.",
     inputSchema: MODEL_VISUAL_REVIEW_SCHEMA,
@@ -1819,6 +1835,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: READ_IMAGE_TOOL_NAME,
+    modelDisclosure: { bootstrap: "available" as const },
     description:
       "Read an image that the user explicitly referenced in the current prompt or attached to the current run. source must be the exact attachment ID, absolute local path, file URL, or HTTP(S) image URL written by the user. The host resolves it as a bounded, content-addressed image attachment and returns multimodal content. This tool cannot enumerate directories, discover neighboring files, use browser cookies, or read an unmentioned source.",
     inputSchema: {
@@ -1834,6 +1851,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: GENERATE_IMAGE_TOOL_NAME,
+    modelDisclosure: { bootstrap: "available" as const },
     description:
       "Generate one original raster image with OpenDesign's globally configured image-generation model. A successful opendesign_define_design_plan call must already declare the exact role as reference, background, hero, supporting-content, or final-single-image. This selection is application-wide and independent of the current conversation model. The result is a content-addressed image attachment; call opendesign_place_image only for a declared placeable role. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
     inputSchema: {
@@ -1866,6 +1884,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: PLACE_IMAGE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
     description:
       "Place an image attachment returned by opendesign_read_image, opendesign_generate_image, or explicitly attached by the user into the currently bound Design File. A successful design plan must declare the image role. Editable posters must first create their planned artboard Frame with meaningful editable shape/text content, then place the image inside that existing Frame or one of its inspected/current descendants; parentId may never be null for this flow. Do not copy attachmentId into an insert_element image assetId. Editable posters cannot use final-single-image. The host imports the approved attachment as a durable project image asset and inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
     inputSchema: {
@@ -1917,6 +1939,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: UPDATE_IMAGE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
     description:
       "Update one existing Image node through OpenDesign's non-destructive image workflow. set-placement switches Stretch/Fit/Fill/Crop or changes normalized focal point, crop zoom, rotation, and flips without modifying the source asset. replace-source consumes an image attachment already authorized for this run, creates a new durable content-addressed asset, preserves the existing placement unless a replacement placement is supplied, and atomically updates the node. Targets are explicit Page and node IDs returned by inspection, never the live selection. This tool does not perform pixel generation, inpainting, background removal, or destructive file edits.",
     inputSchema: {
@@ -1949,6 +1975,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: IMPORT_SVG_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
     description:
       "Import one SVG attachment explicitly authorized for the current Run as an editable OpenDesign vector tree of supported layers. The supported subset preserves Frame/Group hierarchy, basic vectors, gradients, rounded Frame clipping, ordered sibling masks, and bounded filter effects; unsupported semantics return explicit fidelity issues. attachmentId must be a run-scoped svg_<sha256> handle shown in the user's attachment metadata; SVG XML and local paths are never accepted. pageId, parentId, and index must be stable targets returned by opendesign_inspect_document. x and y place the imported SVG's top-left corner in the local coordinate system of that Page root, Frame, or Group. The tool never reads the live user selection or viewport. Main materializes the authorized SVG only after validation, Renderer parses it in the same cancellable SVG worker as manual import, and the host previews and applies one atomic undoable EditorRuntime transaction, selects the imported root, and reports explicit fidelity issues.",
     inputSchema: {
@@ -1977,6 +2007,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: EXPORT_SVG_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      afterInspection: "available" as const,
+    },
     description:
       "Export explicit existing layers from the currently bound Design File as one SVG through OpenDesign's versioned interchange service. The supported subset preserves Frame/Group hierarchy, basic vectors, gradients, rounded Frame clipping, ordered sibling masks, and bounded filter effects. pageId and rootNodeIds must be stable IDs returned by opendesign_inspect_document; the tool never reads the live user selection. It freezes the current revision, resolves Boolean geometry in a cancellable Renderer worker, reports fidelity limitations, and opens the native save dialog owned by Main. Call this only when the user explicitly asks to export or deliver SVG. The user chooses or cancels the destination; the model never receives a local path. Only implemented includeLayerIds and padding settings are exposed. Text, images, unsupported effects or combined mask graphs, angular gradients, multiple paints, inside/outside strokes, and Boolean source operands may be rejected, omitted, or flattened with explicit fidelity notes.",
     inputSchema: {
@@ -2008,6 +2042,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: EXPORT_RASTER_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      afterInspection: "available" as const,
+    },
     description:
       "Export one explicit existing layer or Frame from the currently bound Design File as a delivery-quality PNG, JPEG, or WebP. pageId and rootNodeId must be stable IDs returned by opendesign_inspect_document; this tool never reads the live user selection or viewport. It freezes the current revision, renders an isolated Leafer projection with explicit 1x/2x/3x or fixed width/height, background, quality, and resampling settings, then opens Main's native save dialog. The user chooses or cancels the destination; the model never receives bytes or a local path. Call only when the user explicitly asks to export or deliver a raster image. opendesign_capture_canvas is a bounded review preview and must not be presented as the exported artifact.",
     inputSchema: {
@@ -2086,6 +2124,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_HIERARCHY_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
     description:
       "Edit existing layer hierarchy and non-destructive Boolean groups in the currently bound Design File without asking the model to calculate low-level move commands, transforms, or derived paths. It can group siblings, ungroup one Group, create union/subtract/intersect/exclude from explicit supported siblings, change a Boolean operation, ungroup one Boolean, reorder siblings, or reparent layers to an explicit Page-root, Frame, or Group insertion index. Source Boolean operands remain editable and the provider-derived result is never model-authored or persisted. Reparenting preserves world transforms and dynamically recomputes affected Group bounds; Frame sizes remain fixed. Targets are explicit stable node IDs on an explicit existing Page, never the send-time or live user selection. The host previews the complete change and applies it as one atomic undoable OpenDesign transaction. It rejects locked layers, mixed parents, stale revisions, out-of-scope nodes, duplicate IDs, unsupported or masked Boolean operands, cycles, empty source Groups, non-invertible targets, no-op changes, and visually lossy ungrouping; inherited clipping or appearance changes return a visual-review warning.",
     inputSchema: MODEL_HIERARCHY_SCHEMA,
@@ -2094,6 +2136,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_ARRANGE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
     description:
       "Precisely arrange explicit existing layers in the currently bound Design File using host-computed geometry. It aligns selection bounds, distributes or sets exact spacing, performs deterministic one- or two-dimensional Tidy up, assigns Constraints v1 to an ordinary Frame child, resizes a Frame while resolving constraints, configures Frame-owned Auto Layout, direct flow-child sizing, bounded min/max width and height, an absolute child that ignores Auto Layout flow, or non-exported Frame Layout Guides with action=set-layout-guides. Uniform, Columns, and Rows guides are visual editing aids only: they never change child geometry, participate in Auto Layout, or appear in capture/export. Columns/Rows accept count/gutter and either stretch + margin or fixed start/center/end + sectionSize with edge offset. Auto Layout supports per-axis Frame Fixed/Hug, child Fixed/Fill, fixed or Auto gap, min/max clamping, bounded Fill redistribution, padding minimums, hidden-child exclusion, nested convergence, and horizontal Fill + Auto Height text remeasurement. Set primaryAlignment=space-between for Auto gap; it never becomes negative and starts a single child at the leading padding. Horizontal Wrap resolves Auto gap independently per row while preserving the explicit counter gap; it requires Fixed Frame width and rejects visible Fill children. Child geometry is always host-derived. The host previews the complete change and applies one atomic undoable transaction. Targets are stable Page and layer IDs returned by inspection, never the send-time or live user selection. It rejects locked, missing, stale, out-of-scope, non-invertible, ambiguous, lossy, no-op, inverted limits, and over-limit operations. Snapping, Auto Layout Grid, vertical wrap, Wrap+Fill, auto track gap, baseline, Smart Selection canvas handles, and reflow handles remain separate capabilities.",
     inputSchema: DESIGN_ARRANGE_TOOL_INPUT_SCHEMA,
@@ -2102,6 +2148,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_VECTOR_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
     description:
       "Edit one or more existing non-branching editable Vector Networks without asking the model to rewrite vertices, segments, path runs, regions, bounds, transforms, or result layer IDs. set-closed opens or closes one explicit contour; reverse-path reverses one contour while preserving effective closed-region winding; cut-path creates a true break at an inspected vertex or at parameter t on an inspected line/cubic segment; cut-with-line divides supported open or closed contours using node-local coordinates; cut-layers-with-line applies one document-space line across explicit Vector layer IDs and atomically divides every crossed target into host-created editable sibling layers. Closed boundaries may cross the line two or more transverse times: the host stitches boundary arcs with same-side cut connectors, keeps the component containing the source start under the stable source path/region ID, and collects the other closed components into one sibling network. If a line crosses both the unambiguous outer loop and one or more hole loops, crossed-hole boundaries become continuous closed result loops rather than retaining invalid holes. Uncut holes move unchanged with the sibling component that contains them, preserving stable path IDs and effective nonzero winding. Open contours split at every transverse crossing into alternating retained/extracted path runs without connectors, regions, or implicit fill. Targets are stable Page, node, path, vertex, and segment IDs returned by inspection, never the send-time or live selection. The host resolves each layer's world transform, computes geometry through the same versioned vector-edit service as the human canvas, previews the complete change, and applies one atomic undoable EditorRuntime transaction. Uncrossed targets are unchanged; missing, locked, stale, out-of-scope, non-invertible, invalid, branching, tangent, overlapping, direct hole-only cuts, ambiguous outer loops, and shared compound loops are rejected. Connect/disconnect, branches, flatten, and outline stroke remain separate capabilities and must not be simulated with this tool.",
     inputSchema: MODEL_VECTOR_EDIT_SCHEMA,
@@ -2110,6 +2160,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_COMPONENT_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
     description:
       "Manage reusable components through OpenDesign's typed component runtime. create-component promotes one existing Frame/Group as the Main and requires exactly action, label, pageId, rootNodeId, componentId, and name. combine-as-variants creates one real Component Set Frame from inspected sibling Mains. add-component-to-variant-set, duplicate-variant, remove-variant, and dissolve-variant-set manage Set membership. add/rename/reorder/remove-variant-property, rename/reorder-variant-value, and set-variant-properties edit the Figma-compatible two-dimensional Variant matrix using explicit inspected Set/member roots; the host preserves complete unique combinations, property/value order, top-left defaults, current Instance resolution, one revision, and one undo. create-instance places a linked instance. add/rename/remove-property author Boolean, Text, Instance-swap, or Slot properties on explicit Main sublayers. create-slot-override, clear-slot, reset-slot, and set-slot-settings manage bounded instance Slot contents and guidance without detaching the Instance; arbitrary content is inserted only under the real override Slot root returned by a fresh inspection. set/reset-property also selects VARIANT values exposed by inspection. set/reset-overrides remains the advanced sourcePath layer and wins after typed properties. Main edits synchronize property defaults, ordinary Instance structure remains read-only, every write is previewed and atomic, and cross-Page work requires the same one-time Page structure access as other writes.",
     inputSchema: MODEL_COMPONENT_SCHEMA,
@@ -2119,6 +2173,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_VARIABLE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
     description:
       "Manage Figma-compatible Variables through the versioned Variable Service. Collections, modes, values, aliases, scopes, code syntax, Page/node mode overrides, and supported node/Paint bindings are validated, previewed, and applied as one atomic undoable transaction. Use stable IDs and current definitions from opendesign_inspect_document. BOOLEAN binds visibility, FLOAT binds opacity in 0..1, STRING binds Text content, and COLOR RGB/RGBA binds SolidPaint color. Scope only ranks picker recommendations and never replaces type validation. TIMING/EASING remain authorable but are not bindable before Motion support.",
     inputSchema: DESIGN_VARIABLE_TOOL_INPUT_SCHEMA,
@@ -2127,6 +2185,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_STYLE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
     description:
       "Manage Figma-compatible local Paint, Text, Effect, and Grid styles through the versioned Style Service. Create or update a Style from an explicit inspected node property, edit metadata/order, apply or detach stable style references, and delete while preserving every consumer's resolved appearance. Every write is validated, previewed, atomic, undoable, and scoped to the current Design File and Page node IDs returned by inspection. Remote Libraries and arbitrary Figma private data are not accepted.",
     inputSchema: DESIGN_STYLE_TOOL_INPUT_SCHEMA,
@@ -2135,6 +2197,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
+    modelDisclosure: { bootstrap: "available" as const },
     description:
       "Request one user-approved, Run-scoped capability to modify Page structure or design across Pages in the currently bound Design File. Call this only when the user's request actually requires creating, duplicating, reordering, deleting, or editing another Page. The default Run remains bound to the current Page until the user approves. Approval expires when this Run ends and never grants access to another Design File, Project, directory, or future Run. After approval, inspect the Design File again before calling opendesign_manage_pages or planning work on another Page. Do not call this for renaming the already bound Page or for ordinary edits inside the current Page.",
     inputSchema: {
@@ -2171,6 +2234,10 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_PAGE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "available" as const,
+      role: "material-write" as const,
+    },
     description:
       "Create, rename, duplicate, reorder, or delete Pages in the currently bound OpenDesign Design File through one validated, undoable transaction. Use exactly the fields declared for the selected action: create has name and optional index but no pageId; rename has pageId and name but no index. Names may be duplicated and are trimmed to 1–256 non-control characters. create makes an empty Page; duplicate clones the complete Page node tree with host-generated stable IDs while sharing document-level assets; reorder uses a zero-based final index; delete removes that Page tree but never the final Page. rename is allowed for the Run-bound Page without expanding scope. create, duplicate, reorder, delete, and operations targeting another Page require a successful opendesign_request_page_structure_access approval in this Run. Page IDs and node IDs for new copies are generated by the host and returned in the result; never invent them. Page lifecycle changes do not require a visual design plan or canvas review.",
     inputSchema: {
@@ -2243,6 +2310,13 @@ export const DESIGN_AGENT_TOOL_SPECS = [
   },
   {
     name: DESIGN_APPLY_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "available" as const,
+      role: "material-write" as const,
+      bootstrapDescription:
+        "Create the first small but meaningful editable visual slice inside the planned artboard, or perform a basic inspected edit. This compact phase supports Frame, Group, Rectangle, Ellipse, and Text with solid paints plus insert, basic property update, move, and delete commands. Prefer one region such as navigation, hero, primary mark, or core content instead of waiting to emit an entire page. Ordered steps must represent real semantic units and cover every command exactly once. The trusted host still validates and applies these commands through the same OpenDesign transaction, revision, history, scope, and recovery boundary. After a successful material revision, the complete apply schema and advanced professional tools become available automatically.",
+      bootstrapInputSchema: DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
+    },
     description:
       "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. When one target needs several meaningful visible stages, provide ordered steps whose commandIds cover every command exactly once and in command order; use semantic units such as navigation, hero, content, and footer, never arbitrary 1–3 command batches. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap and textOverflow choices. The trusted host measures Auto Size with the versioned Leafer Text provider and persists concrete authoritative size, so do not estimate glyph bounds. A size update without an explicit non-fixed textResize switches that text layer to Fixed. max-lines are not available. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside the active Frame and do not recreate it. For planned region IDs, provide the declared Group/Frame kind and real content; the trusted host compiles canonical parent-local bounds. Every inserted planned region must include real editable content in the same transaction. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
     inputSchema: {

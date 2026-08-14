@@ -1,4 +1,5 @@
 import type { AgentToolDefinition } from "./index.js";
+import { isSafeModelDisclosure } from "./tool-disclosure.js";
 
 export function selectSafeDefinitions(
   definitions: readonly AgentToolDefinition[],
@@ -21,6 +22,7 @@ function isSafeDefinition(definition: AgentToolDefinition): boolean {
     definition.description.length > 0 &&
     definition.inputSchema.type === "object" &&
     definition.inputSchema.additionalProperties === false &&
+    isSafeModelDisclosure(definition.modelDisclosure) &&
     typeof definition.validateInput === "function" &&
     (definition.explainInvalidInput === undefined ||
       typeof definition.explainInvalidInput === "function") &&

@@ -171,6 +171,9 @@ export class PiRunEventAdapter {
   get tools(): readonly AgentTool[] {
     return this.#toolAdapter?.tools ?? [];
   }
+  get modelTools(): readonly AgentTool[] {
+    return this.#toolAdapter?.modelTools ?? [];
+  }
   get toolCallRecords(): readonly AgentToolCallRecord[] {
     return this.#toolAdapter?.toolCallRecords ?? [];
   }

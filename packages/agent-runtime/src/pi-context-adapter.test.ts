@@ -223,6 +223,48 @@ describe("OpenDesign Pi context adapter", () => {
     );
   });
 
+  it("recalculates the fixed protocol budget when the disclosed tools expand", async () => {
+    const store = new MemorySessionStore();
+    const compactRequest = {
+      ...request,
+      runId: "run_pi_context_tool_expansion",
+      modelContext: { contextWindow: 12_000, maxOutputTokens: 2_000 },
+    };
+    const compactModel = {
+      ...model,
+      contextWindow: 12_000,
+      maxTokens: 2_000,
+    };
+    const prepared = await prepareOpenDesignPiContext({
+      request: compactRequest,
+      sessionStore: store,
+      systemPrompt: "OpenDesign progressive tool disclosure",
+      toolDefinitions: [],
+      model: compactModel,
+    });
+
+    prepared.context.setTools([
+      {
+        name: "opendesign_expanded_probe",
+        description: "Expanded professional tool",
+        inputSchema: {
+          type: "object",
+          description: "x".repeat(80_000),
+          properties: {},
+          additionalProperties: false,
+        },
+      },
+    ]);
+    await prepared.context.transformContext([
+      ...prepared.initialMessages,
+      prepared.promptMessage,
+    ]);
+
+    expect(prepared.context.beforeProviderTurn()).toMatchObject({
+      code: "model_context_incompatible",
+    });
+  });
+
   it("projects user and tool images as Main-resolved references without inline bytes", async () => {
     const store = new MemorySessionStore();
     const promptAttachment = {

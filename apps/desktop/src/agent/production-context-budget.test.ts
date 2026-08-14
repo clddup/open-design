@@ -24,7 +24,16 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DESIGN_AGENT_TOOL_SPECS,
+  DESIGN_APPLY_TOOL_NAME,
+  DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
+  DESIGN_CAPABILITIES_TOOL_NAME,
+  DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PAGE_TOOL_NAME,
+  DESIGN_REVIEW_TOOL_NAME,
+  EXPORT_RASTER_TOOL_NAME,
+  EXPORT_SVG_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "../shared/design-agent-tools";
 import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt";
@@ -41,7 +50,7 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("production Agent context budget", () => {
-  it("reaches the provider with the complete production prompt and twenty-one tools", async () => {
+  it("reaches the provider with the compact production bootstrap surface", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-context-"));
     try {
       const gateway = new RecordingGateway(
@@ -89,10 +98,23 @@ describe("production Agent context budget", () => {
 
       expect(gateway.requests).toHaveLength(1);
       expect(gateway.requests[0]?.system).toBe(OPENDESIGN_AGENT_SYSTEM_PROMPT);
-      expect(gateway.requests[0]?.tools).toHaveLength(21);
-      expect(gateway.requests[0]?.tools).toContainEqual(
+      expect(gateway.requests[0]?.tools).toHaveLength(7);
+      expect(gateway.requests[0]?.tools).not.toContainEqual(
         expect.objectContaining({ name: DESIGN_COMPONENT_TOOL_NAME }),
       );
+      const completeModelTools = DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      }));
+      expect(JSON.stringify(gateway.requests[0]?.tools).length).toBeLessThan(
+        JSON.stringify(completeModelTools).length / 5,
+      );
+      expect(
+        gateway.requests[0]?.tools.find(
+          (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+        )?.inputSchema,
+      ).toEqual(DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA);
       expect(events).not.toContainEqual(
         expect.objectContaining({ type: "agent.error" }),
       );
@@ -101,12 +123,135 @@ describe("production Agent context budget", () => {
     }
   });
 
+  it("adds only inspection-dependent read and export tools before material work", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "opendesign-inspected-tools-"),
+    );
+    try {
+      const gateway = new RecordingGateway(
+        new MockModelGateway([
+          {
+            blocks: [
+              {
+                id: "inspect_for_export",
+                type: "tool_call",
+                toolCallId: "inspect_for_export_call",
+                name: DESIGN_INSPECT_TOOL_NAME,
+                input: {},
+              },
+            ],
+            stopReason: "tool_use",
+          },
+          {
+            blocks: [
+              {
+                id: "inspection_complete",
+                type: "text",
+                text: "Inspection complete.",
+              },
+            ],
+            stopReason: "complete",
+          },
+        ]),
+      );
+      const runtime = new OpenDesignPiRuntime({
+        modelGateway: gateway,
+        sessionStore: new JsonlSessionStore(join(directory, "events.jsonl")),
+        systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
+        toolCatalog: {
+          listTools: () =>
+            DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
+              ...tool,
+              inputSchema: tool.inputSchema as unknown as Record<
+                string,
+                unknown
+              >,
+              validateInput: (input: unknown) =>
+                validateDesignAgentToolInput(tool.name, input),
+            })),
+        },
+        toolExecutor: {
+          async *execute(): AsyncIterable<ToolExecutionEvent> {
+            await Promise.resolve();
+            yield {
+              type: "completed",
+              result: {
+                content: { ok: true, inspectedRevision: 0 },
+                observedRevision: 0,
+              },
+            };
+          },
+        },
+      });
+
+      const events: AgentEvent[] = [];
+      for await (const event of runtime.run({
+        runId: "run_inspected_tool_disclosure",
+        sessionId: "conversation_inspected_tool_disclosure",
+        prompt: "Inspect the current Page and export it as SVG.",
+        documentId: "document_1",
+        revision: 0,
+        scope: { kind: "document", selectedNodeIds: [] },
+        mutationTarget: { kind: "document" },
+        modelSelection: {
+          providerId: "configured",
+          modelId: "design-model",
+        },
+        modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
+      })) {
+        events.push(event);
+      }
+
+      expect(gateway.requests[0]?.tools).toHaveLength(7);
+      expect(gateway.requests[1]?.tools).toHaveLength(10);
+      const inspectedNames = gateway.requests[1]?.tools.map(
+        (tool) => tool.name,
+      );
+      expect(inspectedNames).toEqual(
+        expect.arrayContaining([
+          DESIGN_CAPABILITIES_TOOL_NAME,
+          EXPORT_SVG_TOOL_NAME,
+          EXPORT_RASTER_TOOL_NAME,
+        ]),
+      );
+      expect(inspectedNames).not.toEqual(
+        expect.arrayContaining([
+          DESIGN_CAPTURE_TOOL_NAME,
+          DESIGN_REVIEW_TOOL_NAME,
+          DESIGN_COMPONENT_TOOL_NAME,
+        ]),
+      );
+      expect(events.at(-1)).toMatchObject({
+        type: "run.completed",
+        stopReason: "complete",
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("compacts an eight-turn production tool loop without discarding its journal", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opendesign-context-loop-"));
     try {
-      const responses: MockModelResponse[] = Array.from(
-        { length: 7 },
-        (_, index) => ({
+      const responses: MockModelResponse[] = [
+        {
+          blocks: [
+            {
+              id: "page_write_before_capture_loop",
+              type: "tool_call" as const,
+              toolCallId: "page_write_before_capture_loop_call",
+              name: DESIGN_PAGE_TOOL_NAME,
+              input: {
+                action: "rename",
+                label: "Rename current Page",
+                pageId: "page_1",
+                name: "Current Page",
+              },
+            },
+          ],
+          stopReason: "tool_use" as const,
+        },
+        ...Array.from({ length: 6 }, (_, index) => ({
           blocks: [
             {
               id: `capture_block_${index + 1}`,
@@ -117,8 +262,8 @@ describe("production Agent context budget", () => {
             },
           ],
           stopReason: "tool_use" as const,
-        }),
-      );
+        })),
+      ];
       responses.push({
         blocks: [
           {
@@ -163,9 +308,22 @@ describe("production Agent context budget", () => {
             })),
         },
         toolExecutor: {
-          async *execute(): AsyncIterable<ToolExecutionEvent> {
+          async *execute(call): AsyncIterable<ToolExecutionEvent> {
             await Promise.resolve();
-            yield { type: "completed", result: { content: captureResult } };
+            yield {
+              type: "completed",
+              result:
+                call.toolName === DESIGN_PAGE_TOOL_NAME
+                  ? {
+                      content: { ok: true, pageId: "page_1" },
+                      designRevision: {
+                        previousRevision: 147,
+                        revision: 148,
+                        transactionId: "transaction_page_rename",
+                      },
+                    }
+                  : { content: captureResult },
+            };
           },
         },
       });
@@ -193,12 +351,15 @@ describe("production Agent context budget", () => {
       }
 
       expect(gateway.requests).toHaveLength(8);
+      expect(gateway.requests[0]?.tools).toHaveLength(7);
       expect(
-        gateway.requests.every(
-          (request) =>
-            request.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-            request.tools.length === 21,
-        ),
+        gateway.requests
+          .slice(1)
+          .every(
+            (request) =>
+              request.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
+              request.tools.length === 21,
+          ),
       ).toBe(true);
       expect(
         gateway.requests.some((request) =>

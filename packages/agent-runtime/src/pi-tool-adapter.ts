@@ -30,6 +30,10 @@ import {
   validateObservedRevision,
 } from "./tool-execution-semantics.js";
 import { selectSafeDefinitions } from "./tool-definition-safety.js";
+import {
+  disclosedToolDefinitions,
+  resolveModelToolDisclosurePhase,
+} from "./tool-disclosure.js";
 
 const TOOL_RESULT_KIND = "opendesign.tool-result";
 const TOOL_PROGRESS_KIND = "opendesign.tool-progress";
@@ -115,16 +119,19 @@ interface PiToolProgressDetails {
 export class OpenDesignPiToolAdapter {
   readonly #active = new Map<string, ActiveToolCall>();
   readonly #approvalPort: ApprovalPort | undefined;
+  readonly #bootstrapTools: AgentTool[];
   readonly #definitions = new Map<string, AgentToolDefinition>();
   readonly #designFailureRecovery = new PiDesignFailureRecovery();
   readonly #progressCircuit = new PiToolProgressCircuit();
   readonly #failures = new Map<string, TrustedToolFailure>();
   readonly #lifecycle: PiToolLifecyclePort;
+  readonly #inspectedTools: AgentTool[];
   readonly #maxToolCalls: number;
   readonly #now: () => Date;
   readonly #records: AgentToolCallRecord[] = [];
   readonly #runApprovals = new Set<string>();
   readonly #request: AgentRunRequest;
+  readonly #safeDefinitions: readonly AgentToolDefinition[];
   readonly #seen = new Set<string>();
   readonly #toolExecutor: ToolExecutorPort | undefined;
   readonly tools: AgentTool[];
@@ -153,12 +160,37 @@ export class OpenDesignPiToolAdapter {
     }
 
     const safeDefinitions = selectSafeDefinitions(options.definitions);
+    this.#safeDefinitions = safeDefinitions;
     for (const definition of safeDefinitions) {
       this.#definitions.set(definition.name, definition);
     }
     this.tools = safeDefinitions.map((definition) =>
       this.#createTool(definition),
     );
+    this.#bootstrapTools = disclosedToolDefinitions(
+      safeDefinitions,
+      "bootstrap",
+    ).map((modelDefinition) => {
+      const executionDefinition = this.#definitions.get(modelDefinition.name);
+      if (executionDefinition === undefined) {
+        throw new Error(
+          `Bootstrap tool ${modelDefinition.name} is missing its trusted definition`,
+        );
+      }
+      return this.#createTool(executionDefinition, modelDefinition);
+    });
+    this.#inspectedTools = disclosedToolDefinitions(
+      safeDefinitions,
+      "inspected",
+    ).map((modelDefinition) => {
+      const executionDefinition = this.#definitions.get(modelDefinition.name);
+      if (executionDefinition === undefined) {
+        throw new Error(
+          `Inspected tool ${modelDefinition.name} is missing its trusted definition`,
+        );
+      }
+      return this.#createTool(executionDefinition, modelDefinition);
+    });
   }
 
   get currentRevision(): number {
@@ -175,6 +207,16 @@ export class OpenDesignPiToolAdapter {
 
   get toolCallRecords(): readonly AgentToolCallRecord[] {
     return this.#records;
+  }
+
+  get modelTools(): readonly AgentTool[] {
+    const phase = resolveModelToolDisclosurePhase(
+      this.#safeDefinitions,
+      this.#records,
+    );
+    if (phase === "bootstrap") return this.#bootstrapTools;
+    if (phase === "inspected") return this.#inspectedTools;
+    return this.tools;
   }
 
   get unresolvedDesignWriteFailure() {
@@ -493,12 +535,15 @@ export class OpenDesignPiToolAdapter {
     return undefined;
   };
 
-  #createTool(definition: AgentToolDefinition): AgentTool {
+  #createTool(
+    definition: AgentToolDefinition,
+    modelDefinition: AgentToolDefinition = definition,
+  ): AgentTool {
     return {
-      name: definition.name,
-      label: definition.name,
-      description: definition.description,
-      parameters: definition.inputSchema,
+      name: modelDefinition.name,
+      label: modelDefinition.name,
+      description: modelDefinition.description,
+      parameters: modelDefinition.inputSchema,
       executionMode: "sequential",
       execute: (toolCallId, parameters, signal, onUpdate) =>
         this.#executeTool(

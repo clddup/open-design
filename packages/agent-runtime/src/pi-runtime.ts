@@ -18,6 +18,10 @@ import {
   createPiModelGatewayStreamFn,
 } from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
+import {
+  disclosedToolDefinitions,
+  isSafeModelDisclosure,
+} from "./tool-disclosure.js";
 
 const DEFAULT_LIMITS: AgentRuntimeLimits = {
   // A requested design suite may require an independent capture/review/
@@ -119,6 +123,10 @@ export class OpenDesignPiRuntime {
         request.sessionId,
       );
       const toolDefinitions = await this.#loadSafeTools();
+      const bootstrapToolDefinitions = disclosedToolDefinitions(
+        toolDefinitions,
+        "bootstrap",
+      );
       const systemPrompt =
         this.options.systemPrompt ??
         "You are the OpenDesign design agent. Use only the provided tools and respect the host-bound modification scope.";
@@ -127,7 +135,7 @@ export class OpenDesignPiRuntime {
         request,
         sessionStore: this.options.sessionStore,
         systemPrompt,
-        toolDefinitions,
+        toolDefinitions: bootstrapToolDefinitions,
         model,
         maxContextCharacters: this.#limits.maxContextCharacters,
         now: this.#now,
@@ -169,7 +177,7 @@ export class OpenDesignPiRuntime {
           model,
           systemPrompt: prepared.systemPrompt,
           thinkingLevel: request.modelSelection.reasoningEffort ?? "off",
-          tools: [...adapter.tools],
+          tools: [...adapter.modelTools],
         },
         sessionId: request.sessionId,
         streamFn: createPiModelGatewayStreamFn({
@@ -203,6 +211,19 @@ export class OpenDesignPiRuntime {
         }),
         transformContext: prepared.context.transformContext,
         beforeToolCall: adapter.beforeToolCall,
+        prepareNextTurnWithContext: (context) => {
+          const tools = [...adapter.modelTools];
+          prepared.context.setTools(
+            tools.map((tool) => ({
+              name: tool.name,
+              description: tool.description,
+              inputSchema: tool.parameters as Record<string, unknown>,
+            })),
+          );
+          return {
+            context: { ...context.context, tools },
+          };
+        },
         shouldStopAfterTurn: adapter.shouldStopAfterTurn,
       });
       active.agent = agent;
@@ -258,6 +279,7 @@ function isSafeToolDefinition(tool: AgentToolDefinition): boolean {
     tool.description.length > 0 &&
     tool.inputSchema.type === "object" &&
     tool.inputSchema.additionalProperties === false &&
+    isSafeModelDisclosure(tool.modelDisclosure) &&
     (tool.approvalScope === undefined ||
       tool.approvalScope === "call" ||
       tool.approvalScope === "run") &&
