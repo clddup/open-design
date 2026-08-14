@@ -793,6 +793,8 @@ function variantFixture(): DesignDocument {
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: {},

@@ -29,10 +29,15 @@ import type { SidebarTab } from "../state/editor";
 import { AssetsPanel } from "./AssetsPanel";
 import { VariablesPanel, type VariablesPanelActions } from "./VariablesPanel";
 import {
+  LocalStylesPanel,
+  type LocalStylesPanelActions,
+} from "./LocalStylesPanel";
+import {
   layerNodeIcons as nodeIcons,
   layerNodeKindKeys as nodeKindKeys,
 } from "./layer-node-presentation";
 import styles from "./LeftSidebar.module.scss";
+import { SidebarViewTabs } from "./SidebarViewTabs";
 
 type TreeEntry = {
   node: DesignNode;
@@ -192,6 +197,7 @@ export function LeftSidebar({
   onToggleLock,
   onToggleVisibility,
   variableActions,
+  styleActions,
 }: {
   document: DesignDocument;
   activePageId: string;
@@ -217,6 +223,7 @@ export function LeftSidebar({
   onToggleLock: (nodeId: string) => void;
   onToggleVisibility: (nodeId: string) => void;
   variableActions: VariablesPanelActions;
+  styleActions?: LocalStylesPanelActions;
 }) {
   const { t } = useI18n();
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<ReadonlySet<string>>(
@@ -465,45 +472,7 @@ export function LeftSidebar({
 
   return (
     <aside aria-label={t("sidebar.navigation")} className={styles.root}>
-      <div
-        className={styles.tabs}
-        role="tablist"
-        aria-label={t("sidebar.views")}
-      >
-        <button
-          aria-controls="sidebar-layers"
-          aria-selected={tab === "layers"}
-          id="sidebar-layers-tab"
-          onClick={() => onTabChange("layers")}
-          role="tab"
-          type="button"
-        >
-          <Glyph name="layers" />
-          {t("sidebar.layers")}
-        </button>
-        <button
-          aria-controls="sidebar-assets"
-          aria-selected={tab === "assets"}
-          id="sidebar-assets-tab"
-          onClick={() => onTabChange("assets")}
-          role="tab"
-          type="button"
-        >
-          <Glyph name="assets" />
-          {t("sidebar.assets")}
-        </button>
-        <button
-          aria-controls="sidebar-variables"
-          aria-selected={tab === "variables"}
-          id="sidebar-variables-tab"
-          onClick={() => onTabChange("variables")}
-          role="tab"
-          type="button"
-        >
-          <Glyph name="component" />
-          {t("variables.title")}
-        </button>
-      </div>
+      <SidebarViewTabs onChange={onTabChange} value={tab} />
       <div className={styles.search}>
         <Glyph name="search" />
         <input
@@ -875,13 +844,19 @@ export function LeftSidebar({
           onReplace={onReplaceAsset}
           query={assetQuery}
         />
-      ) : (
+      ) : tab === "variables" ? (
         <VariablesPanel
           actions={variableActions}
           activePageId={activePageId}
           document={document}
         />
-      )}
+      ) : styleActions ? (
+        <LocalStylesPanel
+          actions={styleActions}
+          document={document}
+          selectedNodeIds={selectedNodeIds}
+        />
+      ) : null}
     </aside>
   );
 }

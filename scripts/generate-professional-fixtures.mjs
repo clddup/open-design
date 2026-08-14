@@ -9,7 +9,7 @@ const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
-const documentSchemaVersion = "1.26.0";
+const documentSchemaVersion = "1.27.0";
 
 const fixtureSources = [
   {
@@ -1367,6 +1367,8 @@ function document({
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
     interactionsById: {},
     assetsById: Object.fromEntries(assets.map((asset) => [asset.id, asset])),
     extensions,

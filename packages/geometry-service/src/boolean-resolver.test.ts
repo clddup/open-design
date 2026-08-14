@@ -399,6 +399,8 @@ function designDocument(
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
     variantSetsById: {},
   };
 }

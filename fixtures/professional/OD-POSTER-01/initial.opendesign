@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.26.0",
+  "schemaVersion": "1.27.0",
   "documentId": "document_od_poster_01",
   "revision": 0,
   "pageOrder": ["page_poster_01"],
@@ -1228,6 +1228,8 @@
   "variableCollectionOrder": [],
   "variableCollectionsById": {},
   "variablesById": {},
+  "styleOrderByType": { "PAINT": [], "TEXT": [], "EFFECT": [], "GRID": [] },
+  "stylesById": {},
   "interactionsById": {},
   "assetsById": {
     "asset_poster_signal": {

@@ -12,7 +12,6 @@ import {
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import { resolveImagePlacement } from "@opendesign/image-service";
-import { materializeVariableBindings } from "@opendesign/variable-service";
 import type { BooleanGeometryResolution } from "@opendesign/geometry-service/boolean-resolver";
 import {
   resolvePathPropertiesData,
@@ -26,7 +25,11 @@ import type {
   LeaferSceneProjection,
 } from "./projection-types.js";
 import type { LeaferBooleanEditScope, LeaferFidelityWarning } from "./types.js";
-import { pageUsesVariables } from "./variable-projection-support.js";
+import {
+  designSystemChangesRequireProjection,
+  materializeDesignSystems,
+  pageUsesDesignSystems,
+} from "./design-system-projection.js";
 
 export type {
   BooleanEditProjectionOptions,
@@ -61,18 +64,9 @@ export function projectDesignPage(
       projectedNodesById[resolved.projectionId] = resolved.node;
     }
   }
-  const variableProjection = materializeVariableBindings({
-    ...document,
-    nodesById: projectedNodesById,
-  });
-  const projectionDocument = variableProjection.document;
-  warnings.push(
-    ...variableProjection.issues.map((issue) => ({
-      code: "variable-resolution-failed" as const,
-      message: issue.message,
-      nodeId: issue.path.match(/^\/nodesById\/([^/]+)/)?.[1] ?? "document",
-    })),
-  );
+  const designSystems = materializeDesignSystems(document, projectedNodesById);
+  const projectionDocument = designSystems.document;
+  warnings.push(...designSystems.warnings);
 
   const visit = (nodeId: string) => {
     if (visited.has(nodeId)) return;
@@ -151,7 +145,8 @@ export function projectDesignPageIncrementally(
     [...collectPageNodeIds(document, page.rootNodeIds)].some(
       (nodeId) => document.nodesById[nodeId]?.kind === "instance",
     ) ||
-    pageUsesVariables(document, page.rootNodeIds)
+    pageUsesDesignSystems(document, page.rootNodeIds) ||
+    designSystemChangesRequireProjection(changes)
   ) {
     return diffProjectedScene(previous, projectDesignPage(document, pageId));
   }

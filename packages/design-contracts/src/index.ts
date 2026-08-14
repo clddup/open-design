@@ -36,11 +36,23 @@ import {
   TransformSchema,
 } from "./primitives.js";
 import * as variables from "./variables.js";
+import * as styles from "./styles.js";
+import { BlendModeSchema, EffectSchema, PaintSchema } from "./appearance.js";
+import type {
+  AngularGradientPaintSchema,
+  GradientStopSchema,
+  ImagePaintSchema,
+  LinearGradientPaintSchema,
+  RadialGradientPaintSchema,
+  SolidPaintSchema,
+} from "./appearance.js";
 export * from "./component-properties.js";
 export * from "./variant-sets.js";
 export * from "./primitives.js";
 export * from "./versions.js";
 export * from "./variables.js";
+export * from "./styles.js";
+export * from "./appearance.js";
 export {
   normalizeLineEndpoints,
   resolveLineEndpointPoint,
@@ -77,194 +89,24 @@ export const RectSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const BlendModeSchema = Type.Union([
-  Type.Literal("pass-through"),
-  Type.Literal("normal"),
-  Type.Literal("multiply"),
-  Type.Literal("screen"),
-  Type.Literal("overlay"),
-  Type.Literal("darken"),
-  Type.Literal("lighten"),
-  Type.Literal("color-dodge"),
-  Type.Literal("color-burn"),
-  Type.Literal("hard-light"),
-  Type.Literal("soft-light"),
-  Type.Literal("difference"),
-  Type.Literal("exclusion"),
-  Type.Literal("hue"),
-  Type.Literal("saturation"),
-  Type.Literal("color"),
-  Type.Literal("luminosity"),
-]);
-
-const PaintBaseProperties = {
-  opacity: Type.Number({ minimum: 0, maximum: 1 }),
-  visible: Type.Optional(Type.Boolean()),
-  blendMode: Type.Optional(BlendModeSchema),
-};
-
-export const SolidPaintSchema = Type.Object(
-  {
-    type: Type.Literal("solid"),
-    color: Type.String({ minLength: 1 }),
-    boundVariables: Type.Optional(variables.PaintBoundVariablesSchema),
-    ...PaintBaseProperties,
-  },
-  { additionalProperties: false },
-);
-
-export const GradientStopSchema = Type.Object(
-  {
-    offset: Type.Number({ minimum: 0, maximum: 1 }),
-    color: Type.String({ minLength: 1 }),
-    opacity: Type.Number({ minimum: 0, maximum: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-const GradientPaintProperties = {
-  ...PaintBaseProperties,
-  stops: Type.Array(GradientStopSchema, { minItems: 2 }),
-  from: Type.Optional(PointSchema),
-  to: Type.Optional(PointSchema),
-  rotation: Type.Optional(Type.Number()),
-  stretch: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
-};
-
-export const LinearGradientPaintSchema = Type.Object(
-  {
-    type: Type.Literal("linear-gradient"),
-    ...GradientPaintProperties,
-  },
-  { additionalProperties: false },
-);
-
-export const RadialGradientPaintSchema = Type.Object(
-  {
-    type: Type.Literal("radial-gradient"),
-    ...GradientPaintProperties,
-  },
-  { additionalProperties: false },
-);
-
-export const AngularGradientPaintSchema = Type.Object(
-  {
-    type: Type.Literal("angular-gradient"),
-    ...GradientPaintProperties,
-  },
-  { additionalProperties: false },
-);
-
-export const ImagePaintSchema = Type.Object(
-  {
-    type: Type.Literal("image"),
-    assetId: Type.String({ minLength: 1 }),
-    fit: Type.Union([
-      Type.Literal("fill"),
-      Type.Literal("contain"),
-      Type.Literal("cover"),
-      Type.Literal("tile"),
-    ]),
-    ...PaintBaseProperties,
-    rotation: Type.Optional(Type.Number()),
-    scale: Type.Optional(PointSchema),
-    offset: Type.Optional(PointSchema),
-  },
-  { additionalProperties: false },
-);
-
-export const PaintSchema = Type.Union([
-  SolidPaintSchema,
-  LinearGradientPaintSchema,
-  RadialGradientPaintSchema,
-  AngularGradientPaintSchema,
-  ImagePaintSchema,
-]);
-
-const ShadowEffectProperties = {
-  color: Type.String({ minLength: 1 }),
-  opacity: Type.Number({ minimum: 0, maximum: 1 }),
-  offset: PointSchema,
-  blur: Type.Number({ minimum: 0 }),
-  spread: Type.Number(),
-  visible: Type.Optional(Type.Boolean()),
-  blendMode: Type.Optional(BlendModeSchema),
-};
-
-export const DropShadowEffectSchema = Type.Object(
-  {
-    type: Type.Literal("drop-shadow"),
-    ...ShadowEffectProperties,
-  },
-  { additionalProperties: false },
-);
-
-export const InnerShadowEffectSchema = Type.Object(
-  {
-    type: Type.Literal("inner-shadow"),
-    ...ShadowEffectProperties,
-  },
-  { additionalProperties: false },
-);
-
-const GlowEffectProperties = {
-  color: Type.String({ minLength: 1 }),
-  opacity: Type.Number({ minimum: 0, maximum: 1 }),
-  radius: Type.Number({ minimum: 0 }),
-  spread: Type.Number(),
-  visible: Type.Optional(Type.Boolean()),
-  blendMode: Type.Optional(BlendModeSchema),
-};
-
-export const OuterGlowEffectSchema = Type.Object(
-  {
-    type: Type.Literal("outer-glow"),
-    ...GlowEffectProperties,
-  },
-  { additionalProperties: false },
-);
-
-export const InnerGlowEffectSchema = Type.Object(
-  {
-    type: Type.Literal("inner-glow"),
-    ...GlowEffectProperties,
-  },
-  { additionalProperties: false },
-);
-
-const BlurEffectProperties = {
-  radius: Type.Number({ minimum: 0 }),
-  visible: Type.Optional(Type.Boolean()),
-};
-
-export const LayerBlurEffectSchema = Type.Object(
-  { type: Type.Literal("layer-blur"), ...BlurEffectProperties },
-  { additionalProperties: false },
-);
-
-export const BackgroundBlurEffectSchema = Type.Object(
-  { type: Type.Literal("background-blur"), ...BlurEffectProperties },
-  { additionalProperties: false },
-);
-
-export const GrayscaleEffectSchema = Type.Object(
-  {
-    type: Type.Literal("grayscale"),
-    amount: Type.Number({ minimum: 0, maximum: 1 }),
-    visible: Type.Optional(Type.Boolean()),
-  },
-  { additionalProperties: false },
-);
-
-export const EffectSchema = Type.Union([
-  DropShadowEffectSchema,
-  InnerShadowEffectSchema,
-  OuterGlowEffectSchema,
-  InnerGlowEffectSchema,
-  LayerBlurEffectSchema,
-  BackgroundBlurEffectSchema,
-  GrayscaleEffectSchema,
-]);
+export const {
+  PaintStyleDefinitionSchema,
+  TextStyleDefinitionSchema,
+  EffectStyleDefinitionSchema,
+  GridStyleDefinitionSchema,
+  SharedStyleDefinitionSchema,
+  StyleOrderByTypeSchema,
+  StyleReferenceTargetSchema,
+  PutStyleCommandSchema,
+  DeleteStyleCommandSchema,
+  MoveStyleCommandSchema,
+  SetStyleReferenceCommandSchema,
+  SharedStyleChangeSchema,
+} = styles.createSharedStyleSchemas({
+  paintSchema: PaintSchema,
+  effectSchema: EffectSchema,
+  layoutGuideSchema: layout.LayoutGuideSchema,
+});
 
 export const MaskModeSchema = Type.Union([
   Type.Literal("none"),
@@ -699,6 +541,7 @@ const NodeBaseProperties = {
   maskMode: Type.Optional(MaskModeSchema),
   explicitVariableModes: Type.Optional(variables.ExplicitVariableModesSchema),
   boundVariables: Type.Optional(variables.NodeBoundVariablesSchema),
+  ...styles.NodeStyleReferenceProperties,
   extensions: JsonObjectSchema,
 };
 
@@ -918,6 +761,8 @@ export const DesignDocumentSchema = Type.Object(
     componentsById: Type.Record(Type.String(), ComponentDefinitionSchema),
     variantSetsById: Type.Record(Type.String(), VariantSetDefinitionSchema),
     ...variables.VariableDocumentProperties,
+    styleOrderByType: StyleOrderByTypeSchema,
+    stylesById: Type.Record(Type.String(), SharedStyleDefinitionSchema),
     interactionsById: Type.Record(Type.String(), JsonValueSchema),
     assetsById: Type.Record(Type.String(), DesignAssetSchema),
     extensions: JsonObjectSchema,
@@ -1101,6 +946,10 @@ export const DesignOperationSchema: TUnion<
     typeof variables.DeleteVariableCommandSchema,
     typeof variables.SetExplicitVariableModesCommandSchema,
     typeof variables.SetVariableBindingCommandSchema,
+    typeof PutStyleCommandSchema,
+    typeof DeleteStyleCommandSchema,
+    typeof MoveStyleCommandSchema,
+    typeof SetStyleReferenceCommandSchema,
     typeof PutVariantSetCommandSchema,
     typeof DeleteVariantSetCommandSchema,
     typeof InsertPageCommandSchema,
@@ -1121,6 +970,10 @@ export const DesignOperationSchema: TUnion<
   variables.DeleteVariableCommandSchema,
   variables.SetExplicitVariableModesCommandSchema,
   variables.SetVariableBindingCommandSchema,
+  PutStyleCommandSchema,
+  DeleteStyleCommandSchema,
+  MoveStyleCommandSchema,
+  SetStyleReferenceCommandSchema,
   PutVariantSetCommandSchema,
   DeleteVariantSetCommandSchema,
   InsertPageCommandSchema,
@@ -1302,6 +1155,16 @@ export const DesignChangeSetSchema = Type.Object(
     componentChanges: Type.Optional(Type.Array(ComponentChangeSchema)),
     variantSetChanges: Type.Optional(Type.Array(VariantSetChangeSchema)),
     ...variables.VariableChangeSetProperties,
+    addedStyleIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    changedStyleIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    removedStyleIds: Type.Optional(
+      Type.Array(Type.String(), { uniqueItems: true }),
+    ),
+    styleChanges: Type.Optional(Type.Array(SharedStyleChangeSchema)),
     changes: Type.Array(NodeChangeSchema),
   },
   { additionalProperties: false },
@@ -1572,6 +1435,18 @@ export type ImagePaint = Static<typeof ImagePaintSchema>;
 export type ImagePlacement = Static<typeof ImagePlacementSchema>;
 export type Paint = Static<typeof PaintSchema>;
 export type Effect = Static<typeof EffectSchema>;
+export type SharedStyleType = Static<typeof styles.SharedStyleTypeSchema>;
+export type TextStyleProperties = Static<
+  typeof styles.TextStylePropertiesSchema
+>;
+export type PaintStyleDefinition = Static<typeof PaintStyleDefinitionSchema>;
+export type TextStyleDefinition = Static<typeof TextStyleDefinitionSchema>;
+export type EffectStyleDefinition = Static<typeof EffectStyleDefinitionSchema>;
+export type GridStyleDefinition = Static<typeof GridStyleDefinitionSchema>;
+export type SharedStyleDefinition = Static<typeof SharedStyleDefinitionSchema>;
+export type StyleOrderByType = Static<typeof StyleOrderByTypeSchema>;
+export type StyleReferenceTarget = Static<typeof StyleReferenceTargetSchema>;
+export type SharedStyleChange = Static<typeof SharedStyleChangeSchema>;
 export type MaskMode = Static<typeof MaskModeSchema>;
 export type LineEndpoint = Static<typeof LineEndpointSchema>;
 export type BooleanOperation = Static<typeof BooleanOperationSchema>;
@@ -1849,6 +1724,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     migrateFigmaComponentProperties(migrated);
     migrateVariantSets(migrated);
     if (!variables.migrateFigmaVariables(migrated)) return null;
+    styles.migrateSharedStyles(migrated);
     return isDesignDocument(migrated) ? migrated : null;
   } catch {
     return null;

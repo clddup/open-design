@@ -45,8 +45,11 @@ import { synchronizeComponentPropertyDefaults } from "./component-property-defau
 import { applySlotStretchOnInsert } from "./component-slot-operations.js";
 import { OperationError } from "./operation-error.js";
 import { diffVariantSets } from "./variant-set-diff.js";
-import { diffVariables } from "./variable-diff.js";
-import { applyVariableOperation } from "./variable-runtime.js";
+import { detachStyleReferencesForUpdate } from "./style-runtime.js";
+import {
+  applyDesignSystemOperation,
+  diffDesignSystems,
+} from "./design-system-runtime.js";
 import { deleteVariantSet, putVariantSet } from "./variant-set-runtime.js";
 
 export interface EditorSnapshot {
@@ -816,15 +819,6 @@ function applyOperation(
     case "delete_variant_set":
       deleteVariantSet(document, command);
       return;
-    case "put_variable_collection":
-    case "delete_variable_collection":
-    case "move_variable_collection":
-    case "put_variable":
-    case "delete_variable":
-    case "set_explicit_variable_modes":
-    case "set_variable_binding":
-      applyVariableOperation(document, command);
-      return;
     case "insert_page":
       insertPage(document, command);
       return;
@@ -837,6 +831,8 @@ function applyOperation(
     case "delete_page":
       deletePage(document, command);
       return;
+    default:
+      if (applyDesignSystemOperation(document, command)) return;
   }
 }
 
@@ -1052,6 +1048,7 @@ function updateProperties(
 ): void {
   const node = document.nodesById[command.nodeId];
   if (!node) throw notFound(command.commandId, command.nodeId);
+  detachStyleReferencesForUpdate(document, node, command);
   if (node.kind === "instance" && command.size !== undefined) {
     throw new OperationError(
       command.commandId,
@@ -1692,7 +1689,7 @@ function diffDocuments(
     removedComponentIds,
     componentChanges,
     ...diffVariantSets(before, after),
-    ...diffVariables(before, after),
+    ...diffDesignSystems(before, after),
     changes,
   });
 }

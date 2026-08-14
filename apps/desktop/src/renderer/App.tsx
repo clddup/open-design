@@ -615,7 +615,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     });
   }, [requestConversationHistory, scheduleConversationHistory, workspace]);
 
-  const { editorCommands, pageActions, variableActions } =
+  const { editorCommands, pageActions, styleActions, variableActions } =
     useDocumentCommandControllers({
       runtime,
       selectedNodeId: selectedNode?.id,
@@ -1800,6 +1800,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             }}
             selectedNodeIds={state.selection.nodeIds}
             tab={sidebarTab}
+            styleActions={styleActions}
             variableActions={variableActions}
           />
           <ResizeHandle
@@ -1942,6 +1943,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 ) => updateSelectedInstanceSource(sourcePath, patch)}
                 onSetVariableBinding={variableActions.setBinding}
                 onSetVariableMode={variableActions.setSelectedNodeMode}
+                styleActions={styleActions}
                 onSvgExportSettingsChange={importExport.setSvgExportSettings}
                 onRasterExportSettingsChange={
                   importExport.setRasterExportSettings

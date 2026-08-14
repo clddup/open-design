@@ -46,6 +46,7 @@
       "@opendesign/geometry-service",
       "@opendesign/import-export-service",
       "@opendesign/layout-service",
+      "@opendesign/style-service",
       "@opendesign/text-service",
       "@opendesign/variable-service"
     ],
@@ -66,6 +67,7 @@
       "@opendesign/geometry-service",
       "@opendesign/image-service",
       "@opendesign/import-export-service",
+      "@opendesign/style-service",
       "@opendesign/text-service",
       "@opendesign/variable-service"
     ],
@@ -73,6 +75,7 @@
     "@opendesign/mcp-server": ["@opendesign/design-engine"],
     "@opendesign/model-gateway": [],
     "@opendesign/session-store": [],
+    "@opendesign/style-service": ["@opendesign/design-contracts"],
     "@opendesign/text-service": [],
     "@opendesign/tool-runtime": [],
     "@opendesign/ui": [],

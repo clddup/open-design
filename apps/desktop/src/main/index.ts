@@ -91,13 +91,13 @@ import type {
   DiagnosticInput,
 } from "../shared/diagnostics";
 import { DEFAULT_APP_LOCALE, type AppLocale } from "../shared/i18n/locale";
+import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
 import { translate } from "../shared/i18n/messages";
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
-  DESIGN_VARIABLE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -112,7 +112,6 @@ import {
   GENERATE_IMAGE_TOOL_NAME,
   normalizeDesignApplyToolInput,
   isDesignComponentToolInput,
-  isDesignVariableToolInput,
   normalizeDesignPageToolInput,
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
@@ -1604,37 +1603,14 @@ void app.whenReady().then(async () => {
         );
         return withDesignDelivery(result, context.runId);
       }
-      if (call.toolName === DESIGN_VARIABLE_TOOL_NAME) {
-        if (!isDesignVariableToolInput(call.input)) {
-          throw new TypeError("Invalid Variables tool input");
-        }
-        globalTaskCoordinator.assertDocumentInspected(context);
-        const materialNodeIds =
-          call.input.action === "set-binding"
-            ? [call.input.target.nodeId]
-            : call.input.action === "set-mode" &&
-                call.input.target.kind === "node"
-              ? [call.input.target.id]
-              : [];
-        if (materialNodeIds.length > 0) {
-          globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-        }
-        const result = await executeRendererTool(call);
-        if (materialNodeIds.length > 0) {
-          const targetIds =
-            globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(
-              context,
-              materialNodeIds,
-            );
-          globalTaskCoordinator.recordMaterialDesignWriteCompleted(
-            context.runId,
-            targetIds,
-            result.designRevision?.revision,
-            [],
-          );
-        }
-        return withDesignDelivery(result, context.runId);
-      }
+      const designSystemResult = await handleDesignSystemTool({
+        call,
+        context,
+        coordinator: globalTaskCoordinator,
+        execute: executeRendererTool,
+        withDelivery: withDesignDelivery,
+      });
+      if (designSystemResult) return designSystemResult;
       if (
         call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
         call.toolName === DESIGN_ARRANGE_TOOL_NAME ||

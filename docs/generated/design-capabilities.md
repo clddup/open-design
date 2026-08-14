@@ -2,9 +2,9 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.26.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.27.0` · 画布基线：`leafer-editor@2.2.9`
 
-当前状态：可用 0 项，降级可用 19 项，不可用 2 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
+当前状态：可用 0 项，降级可用 20 项，不可用 2 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
 ## 基础工作流
 
@@ -256,10 +256,23 @@
 - 实现方：DesignDocument 1.26.0 + @opendesign/variable-service contract v1 + isolated @opendesign/figma-interop
 - 表面：contract=available；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=degraded
 - 证据：自动化 11 项；实机 0 项
-- 限制：Variables v1 已支持 BOOLEAN 可见性、FLOAT 不透明度、STRING 文本内容和 COLOR SolidPaint 颜色绑定。Timing/Easing 绑定、更多节点与 Paint 字段、样式、渐变/效果、组件属性绑定、原型变量、扩展集合、跨文件 Library、DTCG/REST/Plugin 导入导出及 macOS/Windows 打包 GUI 证据仍未完成。
+- 限制：Variables v1 已支持 BOOLEAN 可见性、FLOAT 不透明度、STRING 文本内容和 COLOR SolidPaint 颜色绑定，并可在 Shared Style 投影后应用节点 paint binding。Timing/Easing 绑定、更多节点/Paint/Style 字段、渐变/效果、组件属性绑定、原型变量、扩展集合、跨文件 Library、DTCG/REST/Plugin 导入导出及 macOS/Windows 打包 GUI 证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/14506821864087-Overview-of-variables-collections-and-modes)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/15343816063383-Modes-for-variables)
 - 专业参照：[官方说明](https://developers.figma.com/docs/rest-api/variables/)
+
+### 本地共享样式 — 降级可用
+
+创建、应用、更新、排序、解绑和删除可复用的 Paint、Text、Effect 与 Grid 样式。
+
+- ID：`styles.shared-local`
+- 实现方：DesignDocument 1.27.0 + @opendesign/style-service contract v1 + isolated @opendesign/figma-interop
+- 表面：contract=available；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=degraded
+- 证据：自动化 10 项；实机 0 项
+- 限制：Shared Styles v1 已支持同一 Design File 内的 Paint、Text、Effect、Grid registry、按类型稳定顺序、Figma-shaped 节点引用、解绑/删除/直接编辑时 fallback 保真、Component → Style → Variable 投影、Local Styles UI、Inspector picker、Agent typed 操作、Leafer/SVG/位图、持久化、history 与有界的 Figma 公共 interop。远程 Library、发布/导入权限、Style suggestions、完整 Figma Text/Effect/Paint/Grid payload、私有 .fig 解码、Plugin/REST 双向导入导出及 macOS/Windows 打包 GUI 证据仍未完成。
+- 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/BaseStyle/)
+- 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/properties/nodes-fillstyleid/)
+- 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360038746534-Create-color-text-effect-and-layout-guide-styles)
 
 ## 交付
 

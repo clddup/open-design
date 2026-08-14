@@ -3,6 +3,7 @@ import type { MessageKey, MessageParameters } from "../shared/i18n/messages";
 import { useEditorCommandController } from "./features/editor/use-editor-command-controller";
 import { usePageCommandController } from "./features/editor/use-page-command-controller";
 import { useVariableActions } from "./use-variable-actions";
+import { useStyleActions } from "./use-style-actions";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 
@@ -40,5 +41,12 @@ export function useDocumentCommandControllers({
     t,
     transactionCounter,
   });
-  return { editorCommands, pageActions, variableActions };
+  const styleActions = useStyleActions({
+    applyCommands: editorCommands.applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  });
+  return { editorCommands, pageActions, styleActions, variableActions };
 }

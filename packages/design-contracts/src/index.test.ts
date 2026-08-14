@@ -9,6 +9,7 @@ import {
   VARIANT_PROPERTY_MATRIX_DESIGN_SCHEMA_VERSION,
   FIGMA_COMPONENT_PROPERTIES_DESIGN_SCHEMA_VERSION,
   FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION,
+  FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
   DesignOperationSchema,
@@ -20,6 +21,8 @@ import {
   LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION,
   LayoutGuideSchema,
   PaintSchema,
+  SharedStyleDefinitionSchema,
+  isDesignDocument,
   isDesignTransaction,
   migrateDesignDocument,
   migrateVariantSets,
@@ -28,6 +31,7 @@ import {
   resolveLineEndpointPoint,
   resolveStarPoints,
   schemaValidationIssues,
+  type DesignDocument,
 } from "./index.js";
 
 const actor = { type: "user" as const, id: "user_1" };
@@ -42,7 +46,84 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(COMPONENT_SLOT_DESIGN_SCHEMA_VERSION).toBe("1.24.0");
   expect(COMPONENT_PROPERTY_ORDER_DESIGN_SCHEMA_VERSION).toBe("1.25.0");
   expect(FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION).toBe("1.26.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION);
+  expect(FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION).toBe("1.27.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION);
+});
+
+it("migrates 1.26 documents to an empty shared-style registry and keeps 1.27 strict", () => {
+  const legacy = textDocumentFixture() as Record<string, unknown>;
+  legacy.schemaVersion = FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION;
+  delete legacy.styleOrderByType;
+  delete legacy.stylesById;
+  expect(migrateDesignDocument(legacy)).toMatchObject({
+    schemaVersion: FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
+  });
+
+  const malformedCurrent = textDocumentFixture() as Record<string, unknown>;
+  delete malformedCurrent.stylesById;
+  expect(migrateDesignDocument(malformedCurrent)).toBeNull();
+});
+
+it("defines strict Paint, Text, Effect and Grid shared-style payloads", () => {
+  const base = {
+    id: "style_1",
+    key: "style_key_1",
+    name: "Brand/Primary",
+    description: "Primary brand style",
+    hiddenFromPublishing: false,
+    extensions: {},
+  };
+  const styles = [
+    {
+      ...base,
+      styleType: "PAINT",
+      paints: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+    },
+    {
+      ...base,
+      styleType: "TEXT",
+      textStyle: {
+        fontFamily: "Inter",
+        fontSize: 16,
+        fontWeight: 600,
+        lineHeight: 24,
+        letterSpacing: 0,
+      },
+    },
+    {
+      ...base,
+      styleType: "EFFECT",
+      effects: [{ type: "layer-blur", radius: 8 }],
+    },
+    {
+      ...base,
+      styleType: "GRID",
+      layoutGuides: [
+        {
+          id: "guide_1",
+          type: "grid",
+          size: 8,
+          color: "#2563eb",
+          opacity: 0.2,
+        },
+      ],
+    },
+  ];
+  for (const style of styles) {
+    expect(Value.Check(SharedStyleDefinitionSchema, style)).toBe(true);
+  }
+  expect(
+    Value.Check(SharedStyleDefinitionSchema, {
+      ...styles[0],
+      unexpected: true,
+    }),
+  ).toBe(false);
+
+  const duplicateOrder = textDocumentFixture() as unknown as DesignDocument;
+  duplicateOrder.styleOrderByType.PAINT = ["style_1", "style_1"];
+  expect(isDesignDocument(duplicateOrder)).toBe(false);
 });
 
 it("migrates empty 1.25 token placeholders and refuses unknown non-empty token data", () => {
@@ -54,10 +135,12 @@ it("migrates empty 1.25 token placeholders and refuses unknown non-empty token d
   legacy.tokenCollectionsById = {};
   legacy.tokensById = {};
   expect(migrateDesignDocument(legacy)).toMatchObject({
-    schemaVersion: FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION,
+    schemaVersion: FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
   });
   legacy.tokensById = { unknown: { value: 4 } };
   expect(migrateDesignDocument(legacy)).toBeNull();
@@ -114,6 +197,8 @@ function textDocumentFixture() {
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: {},
@@ -685,6 +770,8 @@ describe("design contract schemas", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: {},
@@ -737,6 +824,8 @@ describe("design contract schemas", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: {},
@@ -805,6 +894,8 @@ describe("design contract schemas", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {
         asset_1: {
@@ -852,6 +943,8 @@ describe("design contract schemas", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: { source: "1.3-fixture" },
@@ -884,6 +977,8 @@ describe("design contract schemas", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: { source: "1.4-fixture" },
@@ -916,6 +1011,8 @@ describe("design contract schemas", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: { source: "1.5-fixture" },
@@ -968,6 +1065,8 @@ describe("design contract schemas", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: { source: "1.6-fixture" },
@@ -1046,6 +1145,8 @@ describe("design contract schemas", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: {},
@@ -1110,6 +1211,8 @@ describe("design contract schemas", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: {},

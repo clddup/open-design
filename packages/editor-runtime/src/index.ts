@@ -134,6 +134,17 @@ export {
   type VariableOperationPlan,
 } from "./variable-operations.js";
 export {
+  planCreateStyle,
+  planCreateStyleFromNode,
+  planDeleteStyle,
+  planMoveStyle,
+  planSetStyleReference,
+  planUpdateStyle,
+  planUpdateStyleFromNode,
+  type StyleOperationFailureCode,
+  type StyleOperationPlan,
+} from "./style-operations.js";
+export {
   planClearComponentSlot,
   planCreateComponentSlotOverride,
   planResetComponentSlot,

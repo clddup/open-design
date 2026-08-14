@@ -10,7 +10,7 @@ export type Tool =
   | "pen"
   | "text";
 
-export type SidebarTab = "layers" | "assets" | "variables";
+export type SidebarTab = "layers" | "assets" | "styles" | "variables";
 
 export function isTool(value: unknown): value is Tool {
   return (

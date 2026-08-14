@@ -11,6 +11,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_VARIABLE_TOOL_NAME,
+  DESIGN_STYLE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
@@ -71,6 +72,7 @@ export function isNativeDesignTool(toolName: string | undefined): boolean {
     toolName === DESIGN_HIERARCHY_TOOL_NAME ||
     toolName === DESIGN_COMPONENT_TOOL_NAME ||
     toolName === DESIGN_VARIABLE_TOOL_NAME ||
+    toolName === DESIGN_STYLE_TOOL_NAME ||
     toolName === DESIGN_PAGE_TOOL_NAME
   );
 }
@@ -304,6 +306,11 @@ export function toolTitle(
     return state === "done"
       ? t("agent.variablesUpdated")
       : t("agent.updatingVariables");
+  }
+  if (toolName === DESIGN_STYLE_TOOL_NAME) {
+    return state === "done"
+      ? t("agent.stylesUpdated")
+      : t("agent.updatingStyles");
   }
   if (toolName === DESIGN_ARRANGE_TOOL_NAME) {
     return state === "done"

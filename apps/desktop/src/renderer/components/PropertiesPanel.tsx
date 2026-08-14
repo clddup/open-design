@@ -20,6 +20,7 @@ import {
 import { Glyph } from "@opendesign/ui";
 import { useI18n } from "../i18n";
 import type { UpdatePropertiesPatch } from "../features/editor/types";
+import type { StyleActions } from "../use-style-actions";
 import type {
   ExportFormat,
   RasterExportFeedback,
@@ -105,6 +106,7 @@ export function PropertiesPanel({
   onSetVariantProperties,
   onSetVariableBinding,
   onSetVariableMode,
+  styleActions,
   selectionCount,
   exportFormat,
   rasterExportSettings,
@@ -213,6 +215,7 @@ export function PropertiesPanel({
     variableId: string | null,
   ) => void;
   onSetVariableMode: (collectionId: string, modeId: string | null) => void;
+  styleActions?: StyleActions;
   selectionCount: number;
   exportFormat: ExportFormat;
   rasterExportSettings: RasterExportSettings;
@@ -350,6 +353,7 @@ export function PropertiesPanel({
             onSetVariantProperties={onSetVariantProperties}
             onSetVariableBinding={onSetVariableBinding}
             onSetVariableMode={onSetVariableMode}
+            styleActions={styleActions}
           />
         ) : selectionCount > 1 ? (
           <div className={styles.multiProperties}>

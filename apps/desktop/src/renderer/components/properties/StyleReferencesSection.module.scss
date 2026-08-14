@@ -1,0 +1,26 @@
+.stack {
+  display: grid;
+  gap: 5px;
+}
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px 26px;
+  align-items: end;
+  gap: 4px;
+}
+.update {
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--surface-control);
+  color: var(--text-secondary);
+}
+.update:disabled {
+  opacity: 0.45;
+}
+.update:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}

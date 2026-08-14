@@ -19,6 +19,7 @@ import {
 } from "@opendesign/component-service";
 import { validateVectorNetwork } from "@opendesign/geometry-service/editable-vector";
 import { validateVariableDocument } from "@opendesign/variable-service";
+import { validateStyleDocument } from "@opendesign/style-service";
 import {
   validateNodeLayoutInvariants,
   type DocumentInvariantIssue,
@@ -26,6 +27,9 @@ import {
 import { validateComponentPropertyOrder } from "./component-property-order.js";
 import { isBooleanOperandNode, isContainerNode } from "./node-semantics.js";
 import { validateVariantSetInvariants } from "./variant-set-invariants.js";
+import { canonicalJsonStringify } from "./document-fingerprint.js";
+
+export { canonicalJsonStringify } from "./document-fingerprint.js";
 
 export type { DocumentInvariantIssue } from "./layout-document-invariants.js";
 
@@ -192,6 +196,7 @@ export function validateDocumentInvariants(
 
   issues.push(...validateVariantSetInvariants(document));
   issues.push(...validateVariableDocument(document));
+  issues.push(...validateStyleDocument(document));
 
   const sourceOwner = new Map<string, string>();
   for (const componentId of Object.keys(document.componentsById)) {
@@ -489,42 +494,6 @@ export function deepFreeze<T>(value: T): T {
   return value;
 }
 
-export function canonicalJsonStringify(value: unknown): string {
-  const ancestors = new Set<object>();
-
-  const stringify = (current: unknown): string => {
-    if (current === null) return "null";
-    if (typeof current === "string") return JSON.stringify(current);
-    if (typeof current === "boolean") return current ? "true" : "false";
-    if (typeof current === "number") {
-      return Number.isFinite(current) ? String(current) : "null";
-    }
-    if (typeof current !== "object") {
-      throw new TypeError("Value is not JSON serializable");
-    }
-    if (ancestors.has(current)) {
-      throw new TypeError("Value contains a cyclic structure");
-    }
-
-    ancestors.add(current);
-    try {
-      if (Array.isArray(current)) {
-        return `[${current.map((item) => stringify(item)).join(",")}]`;
-      }
-      const record = current as Record<string, unknown>;
-      const entries = Object.keys(record)
-        .sort()
-        .filter((key) => record[key] !== undefined)
-        .map((key) => `${JSON.stringify(key)}:${stringify(record[key])}`);
-      return `{${entries.join(",")}}`;
-    } finally {
-      ancestors.delete(current);
-    }
-  };
-
-  return stringify(value);
-}
-
 export function documentContentFingerprint(document: DesignDocument): string {
   const clone = structuredClone(document);
   clone.revision = 0;
@@ -555,6 +524,8 @@ export function createEmptyDesignDocument(
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: {},
@@ -675,6 +646,8 @@ export function createWelcomeDocument(): DesignDocument {
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: { template: "welcome" },

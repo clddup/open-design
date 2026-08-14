@@ -127,7 +127,7 @@ function fixture(): DesignDocument {
   };
   return {
     format: "dev.opendesign.document",
-    schemaVersion: "1.26.0",
+    schemaVersion: "1.27.0",
     documentId: "variables",
     revision: 0,
     pageOrder: ["page"],
@@ -216,6 +216,8 @@ function fixture(): DesignDocument {
         light: "Variable copy",
       }),
     },
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: {},

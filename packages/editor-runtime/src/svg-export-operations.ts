@@ -8,6 +8,7 @@ import {
 } from "@opendesign/design-contracts";
 import { materializeComponentInstances } from "@opendesign/component-service";
 import { materializeVariableBindings } from "@opendesign/variable-service";
+import { materializeSharedStyles } from "@opendesign/style-service";
 import {
   BOOLEAN_GEOMETRY_RESOLVER_VERSION,
   type BooleanGeometryResolution,
@@ -130,7 +131,7 @@ export function planSvgExportRequest(
   let exportDocument: DesignDocument;
   try {
     exportDocument = materializeVariableBindings(
-      materializeComponentInstances(document),
+      materializeSharedStyles(materializeComponentInstances(document)).document,
     ).document;
   } catch (error) {
     return failure(

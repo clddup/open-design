@@ -36,7 +36,6 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
-  DESIGN_VARIABLE_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   DESIGN_APPLY_TOOL_NAME,
@@ -50,7 +49,6 @@ import {
   isDesignArrangeToolInput,
   isDesignApplyToolInput,
   isDesignComponentToolInput,
-  isDesignVariableToolInput,
   isDesignHierarchyToolInput,
   isDesignPageToolInput,
   isDesignVectorToolInput,
@@ -76,7 +74,8 @@ import { planDesignArrangeTool } from "./design-arrange-tool-plan";
 import { planDesignComponentTool } from "./design-component-tool-plan";
 import { createScopedComponentInspection } from "./design-component-inspection";
 import { createScopedVariableInspection } from "./design-variable-inspection";
-import { executeDesignVariableTool } from "./design-variable-tool-execution";
+import { createScopedStyleInspection } from "./design-style-inspection";
+import { executeDesignSystemToolRequest } from "./design-system-tool-execution";
 
 type ExecuteDesignToolOptions = {
   captureCanvas?: (document: DesignDocument) => Promise<{
@@ -295,33 +294,15 @@ async function executeDesignToolRequestUnsafe(
     };
   }
 
-  if (
-    request.call.toolName === DESIGN_VARIABLE_TOOL_NAME &&
-    isDesignVariableToolInput(request.call.input)
-  ) {
-    const input = request.call.input;
-    if (document.revision !== request.context.revision) {
-      throw new Error(
-        `Variable operation revision conflict: expected ${request.context.revision}, current ${document.revision}`,
-      );
-    }
-    assertPageWithinMutationTarget(
-      input.pageId,
-      request.context.mutationTarget,
-      "Variable operation",
-    );
-    return executeDesignVariableTool({
-      document,
-      input,
-      requestId: request.requestId,
-      runtime,
-      sessionId: request.context.sessionId,
-      throwTransactionFailure: (error, commands) => {
-        throw designTransactionToolError(error, commands);
-      },
-      toolCallId: request.call.toolCallId,
-    });
-  }
+  const designSystemResponse = executeDesignSystemToolRequest({
+    document,
+    request,
+    runtime,
+    throwTransactionFailure: (error, commands) => {
+      throw designTransactionToolError(error, commands);
+    },
+  });
+  if (designSystemResponse) return designSystemResponse;
 
   if (document.revision !== request.context.revision) {
     if (
@@ -1712,6 +1693,8 @@ function createScopedInspection(
     createScopedComponentInspection(document, nodeIds, nodesById);
   const { designSystemIds: variableDesignSystemIds, ...variableInspection } =
     createScopedVariableInspection(document, pageIds, nodesById);
+  const { designSystemIds: styleDesignSystemIds, ...styleInspection } =
+    createScopedStyleInspection(document, nodeIds);
 
   return {
     document: {
@@ -1725,10 +1708,12 @@ function createScopedInspection(
       variantSetsById,
       instancesById,
       ...variableInspection,
+      ...styleInspection,
       designSystemIds: {
         components: Object.keys(document.componentsById),
         variantSets: Object.keys(document.variantSetsById),
         ...variableDesignSystemIds,
+        ...styleDesignSystemIds,
       },
     },
     activePageId: inspectionPageId(document, mutationTarget, selectionContext),
@@ -1942,6 +1927,16 @@ function assertCommandsWithinMutationTarget(
     ) {
       throw new Error(
         "Agent Variable changes require the dedicated Variables tool",
+      );
+    }
+    if (
+      command.type === "put_style" ||
+      command.type === "delete_style" ||
+      command.type === "move_style" ||
+      command.type === "set_style_reference"
+    ) {
+      throw new Error(
+        "Agent Shared Style changes require the dedicated Styles tool",
       );
     }
     if (

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-15",
-  "documentSchemaVersion": "1.26.0",
+  "documentSchemaVersion": "1.27.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -930,8 +930,8 @@
       },
       "limitations": [
         {
-          "en": "Variables v1 binds BOOLEAN visibility, FLOAT opacity, STRING Text content, and COLOR SolidPaint color. Timing/Easing bindings, broader node/Paint fields, styles, gradients/effects, component-property bindings, prototype variables, extended collections, cross-file Libraries, DTCG/REST/Plugin import-export, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "Variables v1 已支持 BOOLEAN 可见性、FLOAT 不透明度、STRING 文本内容和 COLOR SolidPaint 颜色绑定。Timing/Easing 绑定、更多节点与 Paint 字段、样式、渐变/效果、组件属性绑定、原型变量、扩展集合、跨文件 Library、DTCG/REST/Plugin 导入导出及 macOS/Windows 打包 GUI 证据仍未完成。"
+          "en": "Variables v1 binds BOOLEAN visibility, FLOAT opacity, STRING Text content, and COLOR SolidPaint color, including node paint bindings applied after Shared Style projection. Timing/Easing bindings, broader node/Paint and Style fields, gradients/effects, component-property bindings, prototype variables, extended collections, cross-file Libraries, DTCG/REST/Plugin import-export, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "Variables v1 已支持 BOOLEAN 可见性、FLOAT 不透明度、STRING 文本内容和 COLOR SolidPaint 颜色绑定，并可在 Shared Style 投影后应用节点 paint binding。Timing/Easing 绑定、更多节点/Paint/Style 字段、渐变/效果、组件属性绑定、原型变量、扩展集合、跨文件 Library、DTCG/REST/Plugin 导入导出及 macOS/Windows 打包 GUI 证据仍未完成。"
         }
       ],
       "evidence": {
@@ -954,6 +954,62 @@
         "https://help.figma.com/hc/en-us/articles/14506821864087-Overview-of-variables-collections-and-modes",
         "https://help.figma.com/hc/en-us/articles/15343816063383-Modes-for-variables",
         "https://developers.figma.com/docs/rest-api/variables/"
+      ]
+    },
+    {
+      "id": "styles.shared-local",
+      "category": "design-system",
+      "status": "degraded",
+      "label": {
+        "en": "Local shared styles",
+        "zh-CN": "本地共享样式"
+      },
+      "description": {
+        "en": "Create, apply, update, order, detach, and delete reusable Paint, Text, Effect, and Grid styles.",
+        "zh-CN": "创建、应用、更新、排序、解绑和删除可复用的 Paint、Text、Effect 与 Grid 样式。"
+      },
+      "provider": "DesignDocument 1.27.0 + @opendesign/style-service contract v1 + isolated @opendesign/figma-interop",
+      "requiredSurfaces": [
+        "contract",
+        "runtime",
+        "human",
+        "agent",
+        "render",
+        "export"
+      ],
+      "surfaces": {
+        "contract": "available",
+        "runtime": "degraded",
+        "human": "degraded",
+        "agent": "degraded",
+        "render": "degraded",
+        "export": "degraded"
+      },
+      "limitations": [
+        {
+          "en": "Shared Styles v1 supports same-file Paint, Text, Effect, and Grid registries, stable per-type order, Figma-shaped node references, fallback-preserving detach/delete/direct edits, Component → Style → Variable projection, Local Styles UI, Inspector pickers, typed Agent operations, Leafer/SVG/raster, persistence, history, and bounded public Figma interop. Remote Libraries, publishing/import permissions, Style suggestions, complete Figma Text/Effect/Paint/Grid payloads, private .fig decoding, bidirectional Plugin/REST import-export, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "Shared Styles v1 已支持同一 Design File 内的 Paint、Text、Effect、Grid registry、按类型稳定顺序、Figma-shaped 节点引用、解绑/删除/直接编辑时 fallback 保真、Component → Style → Variable 投影、Local Styles UI、Inspector picker、Agent typed 操作、Leafer/SVG/位图、持久化、history 与有界的 Figma 公共 interop。远程 Library、发布/导入权限、Style suggestions、完整 Figma Text/Effect/Paint/Grid payload、私有 .fig 解码、Plugin/REST 双向导入导出及 macOS/Windows 打包 GUI 证据仍未完成。"
+        }
+      ],
+      "evidence": {
+        "automated": [
+          "packages/design-contracts/src/index.test.ts",
+          "packages/style-service/src/index.test.ts",
+          "packages/editor-runtime/src/style-operations.test.ts",
+          "packages/figma-interop/src/index.test.ts",
+          "packages/leafer-engine/src/style-projection.test.ts",
+          "packages/leafer-engine/src/component-projection.test.ts",
+          "apps/desktop/src/shared/design-style-tool.test.ts",
+          "apps/desktop/src/renderer/design-style-tool-execution.test.ts",
+          "apps/desktop/src/renderer/components/LocalStylesPanel.test.tsx",
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
+        ],
+        "manual": []
+      },
+      "references": [
+        "https://developers.figma.com/docs/plugins/api/BaseStyle/",
+        "https://developers.figma.com/docs/plugins/api/properties/nodes-fillstyleid/",
+        "https://help.figma.com/hc/en-us/articles/360038746534-Create-color-text-effect-and-layout-guide-styles"
       ]
     },
     {

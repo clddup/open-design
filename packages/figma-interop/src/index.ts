@@ -4,15 +4,250 @@ import type {
   ComponentPropertyReferences as OpenDesignComponentPropertyReferences,
   DesignDocument,
   DesignNode,
+  SharedStyleDefinition,
   VariableAlias as OpenDesignVariableAlias,
   VariableCollectionDefinition,
   VariableDefinition,
   VariantSetDefinition,
 } from "@opendesign/design-contracts";
 
+export type FigmaSharedStyleMetadata = Pick<
+  BaseStyle,
+  "id" | "key" | "name" | "description" | "type"
+>;
+
+export type FigmaStyleReferenceField = Extract<
+  InheritedStyleField,
+  | "fillStyleId"
+  | "strokeStyleId"
+  | "textStyleId"
+  | "effectStyleId"
+  | "gridStyleId"
+>;
+
+export type FigmaSharedStylePayload =
+  | { type: "PAINT"; paints: ReadonlyArray<Paint> }
+  | {
+      type: "TEXT";
+      text: Pick<
+        TextStyle,
+        | "fontName"
+        | "fontSize"
+        | "letterSpacing"
+        | "lineHeight"
+        | "textDecoration"
+        | "textCase"
+        | "paragraphIndent"
+        | "paragraphSpacing"
+      >;
+    }
+  | { type: "EFFECT"; effects: ReadonlyArray<Effect> }
+  | { type: "GRID"; layoutGrids: ReadonlyArray<LayoutGrid> };
+
+export type FigmaStylePayloadResult =
+  | { ok: true; payload: FigmaSharedStylePayload }
+  | { ok: false; issues: readonly string[] };
+
 export const FIGMA_PLUGIN_TYPINGS_VERSION = "1.133.0" as const;
 export const FIGMA_PLUGIN_TYPINGS_COMMIT =
   "83bfe81d9616ab759702f657eb18ef153f83e8ae" as const;
+
+export function toFigmaSharedStyleMetadata(
+  style: SharedStyleDefinition,
+): FigmaSharedStyleMetadata {
+  return {
+    id: style.id,
+    key: style.key,
+    name: style.name,
+    description: style.description,
+    type: style.styleType,
+  };
+}
+
+export function toFigmaNodeStyleReferences(
+  node: DesignNode,
+): Partial<Record<FigmaStyleReferenceField, string>> {
+  return Object.fromEntries(
+    (
+      [
+        "fillStyleId",
+        "strokeStyleId",
+        "textStyleId",
+        "effectStyleId",
+        "gridStyleId",
+      ] as const
+    ).flatMap((field) => (node[field] ? [[field, node[field]]] : [])),
+  );
+}
+
+export function toFigmaSharedStylePayload(
+  style: SharedStyleDefinition,
+): FigmaStylePayloadResult {
+  if (style.styleType === "PAINT") {
+    const issues: string[] = [];
+    const paints = style.paints.flatMap((paint, index) => {
+      if (paint.type !== "solid") {
+        issues.push(
+          `Paint ${index} type ${String(paint.type)} requires a dedicated asset or gradient adapter`,
+        );
+        return [];
+      }
+      const color = parseColor(paint.color);
+      if (!color) {
+        issues.push(
+          `Paint ${index} color ${paint.color} is not a supported hex color`,
+        );
+        return [];
+      }
+      return [
+        {
+          type: "SOLID",
+          color: { r: color.r, g: color.g, b: color.b },
+          opacity: paint.opacity * color.a,
+          visible: paint.visible ?? true,
+          blendMode: figmaBlendMode(paint.blendMode),
+        } satisfies SolidPaint,
+      ];
+    });
+    return issues.length > 0
+      ? { ok: false, issues }
+      : { ok: true, payload: { type: "PAINT", paints } };
+  }
+  if (style.styleType === "TEXT") {
+    const value = style.textStyle;
+    return {
+      ok: true,
+      payload: {
+        type: "TEXT",
+        text: {
+          fontName: {
+            family: value.fontFamily,
+            style: fontWeightName(value.fontWeight),
+          },
+          fontSize: value.fontSize,
+          lineHeight: { unit: "PIXELS", value: value.lineHeight },
+          letterSpacing: { unit: "PIXELS", value: value.letterSpacing },
+          textDecoration: "NONE",
+          textCase: "ORIGINAL",
+          paragraphIndent: 0,
+          paragraphSpacing: 0,
+        },
+      },
+    };
+  }
+  if (style.styleType === "EFFECT") {
+    const issues: string[] = [];
+    const effects: Effect[] = [];
+    style.effects.forEach((effect, index) => {
+      if (effect.type === "layer-blur" || effect.type === "background-blur") {
+        effects.push({
+          type: effect.type === "layer-blur" ? "LAYER_BLUR" : "BACKGROUND_BLUR",
+          blurType: "NORMAL",
+          radius: effect.radius,
+          visible: effect.visible ?? true,
+        } satisfies BlurEffect);
+        return;
+      }
+      if (effect.type === "drop-shadow" || effect.type === "inner-shadow") {
+        const color = parseColor(effect.color);
+        if (!color) {
+          issues.push(
+            `Effect ${index} color ${effect.color} is not a supported hex color`,
+          );
+          return;
+        }
+        effects.push({
+          type: effect.type === "drop-shadow" ? "DROP_SHADOW" : "INNER_SHADOW",
+          color: {
+            r: color.r,
+            g: color.g,
+            b: color.b,
+            a: color.a * effect.opacity,
+          },
+          offset: effect.offset,
+          radius: effect.blur,
+          spread: effect.spread,
+          visible: effect.visible ?? true,
+          blendMode: figmaBlendMode(effect.blendMode),
+        } satisfies DropShadowEffect | InnerShadowEffect);
+        return;
+      }
+      issues.push(
+        `Effect ${index} type ${String(effect.type)} has no Figma Plugin API equivalent`,
+      );
+    });
+    return issues.length > 0
+      ? { ok: false, issues }
+      : { ok: true, payload: { type: "EFFECT", effects } };
+  }
+  const layoutGrids: LayoutGrid[] = style.layoutGuides.map((guide) => {
+    const color = parseColor(guide.color) ?? { r: 0, g: 0, b: 0, a: 1 };
+    const shared = {
+      visible: true,
+      color: { ...color, a: color.a * guide.opacity },
+    };
+    if (guide.type === "grid") {
+      return { pattern: "GRID", sectionSize: guide.size, ...shared };
+    }
+    return {
+      pattern: guide.type === "columns" ? "COLUMNS" : "ROWS",
+      alignment:
+        guide.alignment === "start"
+          ? "MIN"
+          : guide.alignment === "end"
+            ? "MAX"
+            : guide.alignment.toUpperCase(),
+      count: guide.count,
+      gutterSize: guide.gutter,
+      ...(guide.alignment === "stretch"
+        ? { offset: guide.margin }
+        : guide.alignment === "center"
+          ? { sectionSize: guide.sectionSize }
+          : { sectionSize: guide.sectionSize, offset: guide.offset }),
+      ...shared,
+    } as LayoutGrid;
+  });
+  return { ok: true, payload: { type: "GRID", layoutGrids } };
+}
+
+function parseColor(
+  value: string,
+): { r: number; g: number; b: number; a: number } | null {
+  const compact = value
+    .trim()
+    .match(/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
+  if (!compact) return null;
+  const expanded =
+    compact.length <= 4
+      ? [...compact].map((character) => character.repeat(2)).join("")
+      : compact;
+  return {
+    r: Number.parseInt(expanded.slice(0, 2), 16) / 255,
+    g: Number.parseInt(expanded.slice(2, 4), 16) / 255,
+    b: Number.parseInt(expanded.slice(4, 6), 16) / 255,
+    a:
+      expanded.length === 8
+        ? Number.parseInt(expanded.slice(6, 8), 16) / 255
+        : 1,
+  };
+}
+
+function figmaBlendMode(value: string | undefined): BlendMode {
+  if (!value || value === "pass-through") return "NORMAL";
+  return value.replaceAll("-", "_").toUpperCase() as BlendMode;
+}
+
+function fontWeightName(weight: number): string {
+  if (weight <= 100) return "Thin";
+  if (weight <= 200) return "Extra Light";
+  if (weight <= 300) return "Light";
+  if (weight <= 400) return "Regular";
+  if (weight <= 500) return "Medium";
+  if (weight <= 600) return "Semi Bold";
+  if (weight <= 700) return "Bold";
+  if (weight <= 800) return "Extra Bold";
+  return "Black";
+}
 
 export function toFigmaComponentPropertyDefinitions(
   component: ComponentDefinition,

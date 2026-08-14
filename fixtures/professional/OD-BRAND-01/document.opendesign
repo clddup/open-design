@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.26.0",
+  "schemaVersion": "1.27.0",
   "documentId": "document_od_brand_01",
   "revision": 1,
   "pageOrder": ["page_brand_01"],
@@ -364,6 +364,8 @@
   "variableCollectionOrder": [],
   "variableCollectionsById": {},
   "variablesById": {},
+  "styleOrderByType": { "PAINT": [], "TEXT": [], "EFFECT": [], "GRID": [] },
+  "stylesById": {},
   "interactionsById": {},
   "assetsById": {},
   "extensions": {

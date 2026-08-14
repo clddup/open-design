@@ -32,6 +32,7 @@
     "@opendesign/leafer-engine": "workspace:*",
     "@opendesign/model-gateway": "workspace:*",
     "@opendesign/session-store": "workspace:*",
+    "@opendesign/style-service": "workspace:*",
     "@opendesign/text-service": "workspace:*",
     "@opendesign/variable-service": "workspace:*",
     "@opendesign/ui": "workspace:*",

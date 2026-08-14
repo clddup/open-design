@@ -19,6 +19,7 @@ import { Button, Glyph, IconButton, type GlyphName } from "@opendesign/ui";
 import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
 import type { UpdatePropertiesPatch } from "../../features/editor/types";
+import type { StyleActions } from "../../use-style-actions";
 import styles from "../PropertiesPanel.module.scss";
 import {
   AppearanceBasicsSection,
@@ -33,6 +34,7 @@ import { ImageSection } from "./ImageSection";
 import { LayoutGuidesSection } from "./LayoutGuidesSection";
 import { TypographySection } from "./TypographySection";
 import { VariableSection } from "./VariableSection";
+import { StyleReferencesSection } from "./StyleReferencesSection";
 import { Field, Section, commitNumber, formatNumber } from "./controls";
 
 const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
@@ -142,6 +144,7 @@ export function SelectedNodeProperties({
   onSetVariantProperties,
   onSetVariableBinding,
   onSetVariableMode,
+  styleActions,
 }: {
   node: DesignNode;
   activePageId: string;
@@ -235,6 +238,7 @@ export function SelectedNodeProperties({
     variableId: string | null,
   ) => void;
   onSetVariableMode: (collectionId: string, modeId: string | null) => void;
+  styleActions?: StyleActions;
 }) {
   const { t } = useI18n();
   const flowPositioned =
@@ -755,6 +759,13 @@ export function SelectedNodeProperties({
           </div>
         )}
       </Section>
+      {styleActions && (
+        <StyleReferencesSection
+          actions={styleActions}
+          document={document}
+          node={node}
+        />
+      )}
       <AppearanceBasicsSection
         appearanceControlled={booleanOperandParent !== undefined}
         node={node}

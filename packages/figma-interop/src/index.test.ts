@@ -12,11 +12,93 @@ import {
   toFigmaComponentPropertyReferences,
   toFigmaExplicitVariableModes,
   toFigmaNodeBoundVariables,
+  toFigmaNodeStyleReferences,
+  toFigmaSharedStyleMetadata,
+  toFigmaSharedStylePayload,
   toFigmaVariable,
   toFigmaVariableCollection,
   toFigmaVariantProperties,
   toFigmaVariantSetPropertyDefinitions,
 } from "./index.js";
+
+describe("Figma Shared Style compatibility", () => {
+  it("preserves stable metadata, folder names, node references and supported payloads", () => {
+    const style = {
+      id: "brand-primary",
+      key: "brand-primary-key",
+      name: "Brand/Primary",
+      description: "Primary brand fill",
+      hiddenFromPublishing: false,
+      styleType: "PAINT",
+      paints: [{ type: "solid", color: "#3366cc80", opacity: 0.5 }],
+      extensions: {},
+    } satisfies DesignDocument["stylesById"][string];
+    expect(toFigmaSharedStyleMetadata(style)).toEqual({
+      id: "brand-primary",
+      key: "brand-primary-key",
+      name: "Brand/Primary",
+      description: "Primary brand fill",
+      type: "PAINT",
+    });
+    expect(toFigmaSharedStylePayload(style)).toEqual({
+      ok: true,
+      payload: {
+        type: "PAINT",
+        paints: [
+          expect.objectContaining({
+            type: "SOLID",
+            color: { r: 0.2, g: 0.4, b: 0.8 },
+            opacity: 0.25098039215686274,
+          }),
+        ],
+      },
+    });
+    const node: DesignNode = {
+      id: "styled",
+      kind: "group",
+      name: "Styled",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 100, height: 100 },
+      opacity: 1,
+      fillStyleId: "brand-primary",
+      effectStyleId: "effect-soft",
+      properties: {},
+      extensions: {},
+    };
+    expect(toFigmaNodeStyleReferences(node)).toEqual({
+      fillStyleId: "brand-primary",
+      effectStyleId: "effect-soft",
+    });
+  });
+
+  it("reports unsupported payloads instead of silently degrading them", () => {
+    const result = toFigmaSharedStylePayload({
+      id: "image-style",
+      key: "image-style-key",
+      name: "Media/Hero",
+      description: "",
+      hiddenFromPublishing: false,
+      styleType: "PAINT",
+      paints: [
+        {
+          type: "image",
+          assetId: "hero",
+          fit: "cover",
+          opacity: 1,
+        },
+      ],
+      extensions: {},
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      issues: [expect.stringContaining("dedicated asset or gradient adapter")],
+    });
+  });
+});
 
 describe("Figma Variables compatibility", () => {
   it("preserves public collection, variable, mode, alias, and binding shapes", () => {
@@ -192,6 +274,8 @@ describe("Figma component property compatibility", () => {
       variableCollectionOrder: [],
       variableCollectionsById: {},
       variablesById: {},
+      styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+      stylesById: {},
       interactionsById: {},
       assetsById: {},
       extensions: {},

@@ -209,6 +209,34 @@ describe("component projection", () => {
       },
     ]);
   });
+
+  it("projects Main shared styles through every Instance", () => {
+    const document = fixture();
+    const background = document.nodesById.button_bg;
+    if (background?.kind !== "rectangle") {
+      throw new Error("Component style fixture is unavailable");
+    }
+    document.styleOrderByType.PAINT = ["button-surface"];
+    document.stylesById["button-surface"] = {
+      id: "button-surface",
+      key: "button-surface-key",
+      name: "Button/Surface",
+      description: "",
+      hiddenFromPublishing: false,
+      styleType: "PAINT",
+      paints: [{ type: "solid", color: "#7c3aed", opacity: 1 }],
+      extensions: {},
+    };
+    background.fillStyleId = "button-surface";
+
+    const projection = projectDesignPage(document, "instances");
+    const backgroundId = componentProjectionId("button_instance", [
+      "button_bg",
+    ]);
+    expect(projection.elementsById.get(backgroundId)?.data.fill).toEqual([
+      expect.objectContaining({ color: "#7c3aed" }),
+    ]);
+  });
 });
 
 function variantFixture(): DesignDocument {
@@ -434,6 +462,8 @@ function fixture(): DesignDocument {
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
+    styleOrderByType: { PAINT: [], TEXT: [], EFFECT: [], GRID: [] },
+    stylesById: {},
     interactionsById: {},
     assetsById: {},
     extensions: {},

@@ -41,6 +41,8 @@ import {
 import { isDesignComponentToolInput } from "./design-component-tool";
 import { isDesignVariableToolInput } from "./design-variable-tool";
 import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema";
+import { isDesignStyleToolInput } from "./design-style-tool";
+import { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
 export {
   isDesignApplyToolInput,
   isInternalDesignApplyToolInput,
@@ -62,6 +64,8 @@ export { isDesignComponentToolInput } from "./design-component-tool";
 export type { DesignComponentToolInput } from "./design-component-tool";
 export { isDesignVariableToolInput } from "./design-variable-tool";
 export type { DesignVariableToolInput } from "./design-variable-tool";
+export { isDesignStyleToolInput } from "./design-style-tool";
+export type { DesignStyleToolInput } from "./design-style-tool";
 export type {
   DesignPlanComponentCandidate,
   DesignPlanComponentStrategy,
@@ -79,6 +83,7 @@ export const DESIGN_VECTOR_TOOL_NAME = "opendesign_edit_vector";
 export const DESIGN_PAGE_TOOL_NAME = "opendesign_manage_pages";
 export const DESIGN_COMPONENT_TOOL_NAME = "opendesign_manage_components";
 export const DESIGN_VARIABLE_TOOL_NAME = "opendesign_manage_variables";
+export const DESIGN_STYLE_TOOL_NAME = "opendesign_manage_styles";
 export const PAGE_STRUCTURE_ACCESS_TOOL_NAME =
   "opendesign_request_page_structure_access";
 export const READ_IMAGE_TOOL_NAME = "opendesign_read_image";
@@ -2083,6 +2088,14 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_STYLE_TOOL_NAME,
+    description:
+      "Manage Figma-compatible local Paint, Text, Effect, and Grid styles through the versioned Style Service. Create or update a Style from an explicit inspected node property, edit metadata/order, apply or detach stable style references, and delete while preserving every consumer's resolved appearance. Every write is validated, previewed, atomic, undoable, and scoped to the current Design File and Page node IDs returned by inspection. Remote Libraries and arbitrary Figma private data are not accepted.",
+    inputSchema: DESIGN_STYLE_TOOL_INPUT_SCHEMA,
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: PAGE_STRUCTURE_ACCESS_TOOL_NAME,
     description:
       "Request one user-approved, Run-scoped capability to modify Page structure or design across Pages in the currently bound Design File. Call this only when the user's request actually requires creating, duplicating, reordering, deleting, or editing another Page. The default Run remains bound to the current Page until the user approves. Approval expires when this Run ends and never grants access to another Design File, Project, directory, or future Run. After approval, inspect the Design File again before calling opendesign_manage_pages or planning work on another Page. Do not call this for renaming the already bound Page or for ordinary edits inside the current Page.",
@@ -2261,6 +2274,9 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === DESIGN_VARIABLE_TOOL_NAME) {
     return isDesignVariableToolInput(input);
+  }
+  if (toolName === DESIGN_STYLE_TOOL_NAME) {
+    return isDesignStyleToolInput(input);
   }
   if (toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
     return isPageStructureAccessToolInput(input);
