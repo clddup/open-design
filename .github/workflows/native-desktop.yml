@@ -58,6 +58,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run shared verification
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: pnpm verify
 
       - name: Build native protected package
