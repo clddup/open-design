@@ -27,13 +27,12 @@ class RowText {
     const rows = content.split("\n").flatMap((paragraph) => {
       const characters = Array.from(paragraph);
       const chunks = Array.from(
-        { length: Math.max(1, Math.ceil(characters.length / charactersPerRow)) },
+        {
+          length: Math.max(1, Math.ceil(characters.length / charactersPerRow)),
+        },
         (_, index) =>
           characters
-            .slice(
-              index * charactersPerRow,
-              (index + 1) * charactersPerRow,
-            )
+            .slice(index * charactersPerRow, (index + 1) * charactersPerRow)
             .join(""),
       );
       return chunks.map((text, index) => ({
@@ -76,13 +75,8 @@ describe("Leafer max-lines materialization", () => {
   });
 
   it("returns complete content when Leafer reports no excess rows", () => {
-    expect(
-      truncateLeaferText(
-        leafer,
-        { width: 200 },
-        "Short\ncopy",
-        3,
-      ),
-    ).toBe("Short\ncopy");
+    expect(truncateLeaferText(leafer, { width: 200 }, "Short\ncopy", 3)).toBe(
+      "Short\ncopy",
+    );
   });
 });
