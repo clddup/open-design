@@ -13,6 +13,8 @@ import {
   toFigmaExplicitVariableModes,
   toFigmaExportSettings,
   toFigmaFontName,
+  toFigmaTextRangeSegments,
+  fromFigmaTextRangeSegments,
   toFigmaNodeType,
   toFigmaNodeBoundVariables,
   toFigmaNodeStyleReferences,
@@ -175,6 +177,113 @@ describe("Figma Shared Style compatibility", () => {
     });
   });
 });
+
+describe("Figma rich text range compatibility", () => {
+  it("round-trips exact UTF-16 segments without guessing face names", () => {
+    const node = richTextNode();
+    const exported = toFigmaTextRangeSegments(node);
+    expect(exported).toMatchObject({
+      ok: true,
+      segments: [
+        expect.objectContaining({
+          start: 0,
+          end: 2,
+          fontName: { family: "Inter", style: "Regular" },
+        }),
+        expect.objectContaining({
+          start: 2,
+          end: 4,
+          fontName: { family: "IBM Plex Sans", style: "Semi Bold" },
+          fontWeight: 600,
+        }),
+      ],
+    });
+    if (!exported.ok) throw new Error(exported.issues.join("; "));
+    expect(
+      fromFigmaTextRangeSegments(node.properties.content, exported.segments),
+    ).toEqual({
+      ok: true,
+      runs: node.properties.runs,
+    });
+  });
+
+  it("rejects non-contiguous and half-surrogate Figma segments", () => {
+    const node = richTextNode();
+    const exported = toFigmaTextRangeSegments(node);
+    if (!exported.ok) throw new Error(exported.issues.join("; "));
+    expect(
+      fromFigmaTextRangeSegments("A😀B", [
+        { ...exported.segments[0]!, start: 0, end: 2 },
+        { ...exported.segments[1]!, start: 2, end: 4 },
+      ]),
+    ).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([expect.stringContaining("UTF-16")]),
+    });
+  });
+});
+
+function richTextNode(): Extract<DesignNode, { kind: "text" }> {
+  const base = {
+    fontFamily: "Inter",
+    fontStyleName: "Regular",
+    fontSize: 16,
+    fontWeight: 400,
+    fontSlant: "normal" as const,
+    lineHeight: 24,
+    letterSpacing: 0,
+    textCase: "original" as const,
+    textDecoration: "none" as const,
+    fills: [{ type: "solid" as const, color: "#111111", opacity: 1 }],
+  };
+  return {
+    id: "rich",
+    kind: "text",
+    name: "Rich",
+    parentId: null,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 200, height: 40 },
+    exportSettings: [],
+    opacity: 1,
+    properties: {
+      content: "ABCD",
+      ...base,
+      runs: [
+        { start: 0, end: 2, style: base },
+        {
+          start: 2,
+          end: 4,
+          style: {
+            ...base,
+            fontFamily: "IBM Plex Sans",
+            fontStyleName: "Semi Bold",
+            fontWeight: 600,
+            fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
+          },
+        },
+      ],
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textResize: "fixed",
+      textWrap: "character",
+      textOverflow: "visible",
+      textTruncation: "disabled",
+      maxLines: null,
+      strokes: [],
+      strokeWidth: 0,
+      strokeAlign: "center",
+      strokeCap: "none",
+      strokeJoin: "miter",
+      dashPattern: [],
+    },
+    extensions: {},
+  };
+}
 
 describe("Figma Slice and export settings compatibility", () => {
   it("projects Slice identity and public export settings without private format data", () => {

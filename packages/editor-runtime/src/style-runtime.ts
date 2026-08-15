@@ -49,8 +49,15 @@ export function applyStyleOperation(
     case "delete_style": {
       const style = document.stylesById[command.styleId];
       if (!style) throw notFound(command.commandId, command.styleId);
-      const consumer = Object.values(document.nodesById).find((node) =>
-        styleFields.some((field) => node[field] === command.styleId),
+      const consumer = Object.values(document.nodesById).find(
+        (node) =>
+          styleFields.some((field) => node[field] === command.styleId) ||
+          (node.kind === "text" &&
+            (node.properties.runs ?? []).some(
+              (run) =>
+                run.style.textStyleId === command.styleId ||
+                run.style.fillStyleId === command.styleId,
+            )),
       );
       if (consumer) {
         throw new OperationError(

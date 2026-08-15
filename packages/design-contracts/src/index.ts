@@ -224,6 +224,46 @@ export const StarPropertiesSchema = Type.Object(
 
 const TextSharedProperties = {
   content: Type.String(),
+  runs: Type.Optional(
+    Type.Array(
+      Type.Object(
+        {
+          start: Type.Integer({ minimum: 0 }),
+          end: Type.Integer({ minimum: 1 }),
+          style: Type.Object(
+            {
+              ...styles.FontFaceIdentityProperties,
+              fontSize: Type.Number({ exclusiveMinimum: 0 }),
+              letterSpacing: Type.Number(),
+              lineHeight: Type.Number({ exclusiveMinimum: 0 }),
+              textCase: Type.Union([
+                Type.Literal("original"),
+                Type.Literal("uppercase"),
+                Type.Literal("lowercase"),
+                Type.Literal("title-case"),
+                Type.Literal("small-caps"),
+              ]),
+              textDecoration: Type.Union([
+                Type.Literal("none"),
+                Type.Literal("underline"),
+                Type.Literal("strikethrough"),
+              ]),
+              fills: Type.Array(PaintSchema, { maxItems: 64 }),
+              textStyleId: Type.Optional(
+                Type.String({ minLength: 1, maxLength: 512 }),
+              ),
+              fillStyleId: Type.Optional(
+                Type.String({ minLength: 1, maxLength: 512 }),
+              ),
+            },
+            { additionalProperties: false },
+          ),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 16_384 },
+    ),
+  ),
   ...styles.FontFaceIdentityProperties,
   fontSize: Type.Number({ exclusiveMinimum: 0 }),
   lineHeight: Type.Number({ exclusiveMinimum: 0 }),
@@ -539,7 +579,7 @@ export const ComponentOverridePatchSchema = Type.Object(
     maskMode: Type.Optional(MaskModeSchema),
     properties: Type.Optional(JsonObjectSchema),
   },
-  { additionalProperties: false, minProperties: 1 },
+  { additionalProperties: false },
 );
 
 export const ComponentOverrideSchema = Type.Object(
@@ -969,6 +1009,67 @@ export const ReflowTextCommandSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const UpdateTextRangeStyleCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("update_text_range_style"),
+    nodeId: Type.String({ minLength: 1, maxLength: 256 }),
+    start: Type.Integer({ minimum: 0 }),
+    end: Type.Integer({ minimum: 1 }),
+    style: Type.Object(
+      {
+        fontFamily: Type.Optional(
+          Type.String({ minLength: 1, maxLength: 4_096 }),
+        ),
+        fontStyleName: Type.Optional(
+          Type.Union([
+            Type.String({ minLength: 1, maxLength: 512 }),
+            Type.Null(),
+          ]),
+        ),
+        fontSize: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+        fontWeight: Type.Optional(Type.Integer({ minimum: 1, maximum: 1_000 })),
+        fontSlant: Type.Optional(
+          Type.Union([Type.Literal("normal"), Type.Literal("italic")]),
+        ),
+        letterSpacing: Type.Optional(Type.Number()),
+        lineHeight: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+        textCase: Type.Optional(
+          Type.Union([
+            Type.Literal("original"),
+            Type.Literal("uppercase"),
+            Type.Literal("lowercase"),
+            Type.Literal("title-case"),
+            Type.Literal("small-caps"),
+          ]),
+        ),
+        textDecoration: Type.Optional(
+          Type.Union([
+            Type.Literal("none"),
+            Type.Literal("underline"),
+            Type.Literal("strikethrough"),
+          ]),
+        ),
+        fills: Type.Optional(Type.Array(PaintSchema, { maxItems: 64 })),
+        textStyleId: Type.Optional(
+          Type.Union([
+            Type.String({ minLength: 1, maxLength: 512 }),
+            Type.Null(),
+          ]),
+        ),
+        fillStyleId: Type.Optional(
+          Type.Union([
+            Type.String({ minLength: 1, maxLength: 512 }),
+            Type.Null(),
+          ]),
+        ),
+      },
+      { additionalProperties: false, minProperties: 1 },
+    ),
+  },
+  { additionalProperties: false },
+);
+
 export const PutAssetCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1049,6 +1150,7 @@ export const NodeDesignOperationSchema: TUnion<
     typeof DeleteElementCommandSchema,
     typeof ReplaceSubtreeCommandSchema,
     typeof ReflowTextCommandSchema,
+    typeof UpdateTextRangeStyleCommandSchema,
   ]
 > = Type.Union([
   InsertElementCommandSchema,
@@ -1057,6 +1159,7 @@ export const NodeDesignOperationSchema: TUnion<
   DeleteElementCommandSchema,
   ReplaceSubtreeCommandSchema,
   ReflowTextCommandSchema,
+  UpdateTextRangeStyleCommandSchema,
 ]);
 
 export const DesignOperationSchema: TUnion<
@@ -1504,6 +1607,7 @@ export const DesignCapabilitiesSchema = Type.Object(
         Type.Literal("delete_element"),
         Type.Literal("replace_subtree"),
         Type.Literal("reflow_text"),
+        Type.Literal("update_text_range_style"),
         Type.Literal("put_asset"),
         Type.Literal("delete_asset"),
       ]),
@@ -1611,6 +1715,8 @@ export type LineNode = Static<typeof LineNodeSchema>;
 export type PolygonNode = Static<typeof PolygonNodeSchema>;
 export type StarNode = Static<typeof StarNodeSchema>;
 export type TextNode = Static<typeof TextNodeSchema>;
+export type TextRun = NonNullable<TextNode["properties"]["runs"]>[number];
+export type TextRunStyle = TextRun["style"];
 export type ImageNode = Static<typeof ImageNodeSchema>;
 export type VectorNode = Static<typeof VectorNodeSchema>;
 export type PathNode = Static<typeof PathNodeSchema>;
@@ -1818,7 +1924,8 @@ function compareSchemaErrorBranches(
 export function isDesignDocument(value: unknown): value is DesignDocument {
   return (
     checkSchema(DesignDocumentSchema, value) &&
-    designDocumentHasValidLayoutLimits(value as DesignDocument)
+    designDocumentHasValidLayoutLimits(value as DesignDocument) &&
+    designDocumentHasValidTextRuns(value as DesignDocument)
   );
 }
 
@@ -1830,8 +1937,11 @@ export function isImagePlacement(value: unknown): value is ImagePlacement {
   return checkSchema(ImagePlacementSchema, value);
 }
 export function migrateDesignDocument(value: unknown): DesignDocument | null {
-  if (checkSchema(DesignDocumentSchema, value))
-    return structuredClone(value as DesignDocument);
+  if (checkSchema(DesignDocumentSchema, value)) {
+    const normalized = structuredClone(value) as Record<string, unknown>;
+    migrateTextNodes(normalized);
+    return isDesignDocument(normalized) ? normalized : null;
+  }
   const schemaVersion =
     typeof value === "object" && value !== null && !Array.isArray(value)
       ? (value as { schemaVersion?: unknown }).schemaVersion
@@ -1916,7 +2026,78 @@ function migrateTextNodes(document: Record<string, unknown>): void {
     textProperties.paragraphSpacing ??= 0;
     textProperties.textCase ??= "original";
     textProperties.textDecoration ??= "none";
+    textProperties.runs ??= [];
+    if (Array.isArray(textProperties.runs)) {
+      const merged: unknown[] = [];
+      for (const value of textProperties.runs) {
+        const run = isRecordValue(value) ? value : null;
+        const previous = merged.at(-1);
+        if (
+          run &&
+          isRecordValue(previous) &&
+          previous.end === run.start &&
+          JSON.stringify(previous.style) === JSON.stringify(run.style)
+        ) {
+          previous.end = run.end;
+        } else {
+          merged.push(value);
+        }
+      }
+      textProperties.runs = merged;
+    }
   }
+}
+
+function designDocumentHasValidTextRuns(document: DesignDocument): boolean {
+  for (const node of Object.values(document.nodesById)) {
+    if (node.kind !== "text") continue;
+    const runs = node.properties.runs;
+    if (!runs) return false;
+    if (node.properties.content.length === 0) {
+      if (runs.length !== 0) return false;
+      continue;
+    }
+    if (runs.length === 0) continue;
+    let expectedStart = 0;
+    let previousStyle: string | undefined;
+    for (const run of runs) {
+      const style = JSON.stringify(run.style);
+      if (
+        run.start !== expectedStart ||
+        run.end <= run.start ||
+        run.end > node.properties.content.length ||
+        !isUtf16Boundary(node.properties.content, run.start) ||
+        !isUtf16Boundary(node.properties.content, run.end) ||
+        style === previousStyle ||
+        (run.style.textStyleId !== undefined &&
+          document.stylesById[run.style.textStyleId]?.styleType !== "TEXT") ||
+        (run.style.fillStyleId !== undefined &&
+          document.stylesById[run.style.fillStyleId]?.styleType !== "PAINT")
+      ) {
+        return false;
+      }
+      expectedStart = run.end;
+      previousStyle = style;
+    }
+    if (expectedStart !== node.properties.content.length) return false;
+  }
+  return true;
+}
+
+function isUtf16Boundary(content: string, index: number): boolean {
+  if (index === 0 || index === content.length) return true;
+  const before = content.charCodeAt(index - 1);
+  const after = content.charCodeAt(index);
+  return !(
+    before >= 0xd800 &&
+    before <= 0xdbff &&
+    after >= 0xdc00 &&
+    after <= 0xdfff
+  );
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function migrateImageNodes(

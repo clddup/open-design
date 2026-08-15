@@ -19,6 +19,7 @@ import {
   EXPORT_SVG_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
@@ -280,6 +281,148 @@ describe("Renderer design tool scope", () => {
       ),
     ).rejects.toThrow("outside the registered page mutation target");
     expect(scopedRuntime.getSnapshot().document.revision).toBe(0);
+  });
+
+  it("styles one inspected text range as one material revision without resetting selection", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const response = await executeDesignToolRequest(
+      {
+        requestId: "style_title_range",
+        call: {
+          toolCallId: "tool_style_title_range",
+          toolName: DESIGN_TEXT_RANGE_TOOL_NAME,
+          input: {
+            label: "Emphasize title prefix",
+            pageId: "page_welcome",
+            nodeId: "title_welcome",
+            start: 0,
+            end: 6,
+            style: {
+              fontWeight: 700,
+              fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
+            },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          label: "Emphasize title prefix",
+          revision: 1,
+          stages: 1,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    const title = runtime.getSnapshot().document.nodesById.title_welcome;
+    expect(title).toMatchObject({
+      kind: "text",
+      properties: {
+        runs: [
+          {
+            start: 0,
+            end: 6,
+            style: expect.objectContaining({
+              fontWeight: 700,
+              fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
+            }),
+          },
+          expect.objectContaining({ start: 6 }),
+        ],
+      },
+    });
+    expect(runtime.getSnapshot().state.selection).toEqual({
+      nodeIds: ["title_welcome"],
+      anchorNodeId: "title_welcome",
+    });
+    expect(runtime.getSnapshot().state.history.canUndo).toBe(true);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({ properties: { runs: [] } });
+  });
+
+  it("rejects cross-Page, locked, and half-surrogate range writes atomically", async () => {
+    const execute = (
+      runtime: EditorRuntime,
+      input: Record<string, unknown>,
+      context = pageContext,
+    ) =>
+      executeDesignToolRequest(
+        {
+          requestId: "invalid_text_range",
+          call: {
+            toolCallId: "tool_invalid_text_range",
+            toolName: DESIGN_TEXT_RANGE_TOOL_NAME,
+            input,
+          },
+          context,
+        },
+        runtime,
+        "page_welcome",
+      );
+    const baseInput = {
+      label: "Style range",
+      pageId: "page_welcome",
+      nodeId: "title_welcome",
+      start: 0,
+      end: 1,
+      style: { fontWeight: 700 },
+    };
+
+    const crossPageDocument = structuredClone(createWelcomeDocument());
+    crossPageDocument.pageOrder.push("page_other");
+    crossPageDocument.pagesById.page_other = {
+      id: "page_other",
+      name: "Other",
+      rootNodeIds: [],
+      extensions: {},
+    };
+    const crossPageRuntime = new EditorRuntime(crossPageDocument);
+    await expect(
+      execute(
+        crossPageRuntime,
+        { ...baseInput, pageId: "page_other" },
+        {
+          ...pageContext,
+          mutationTarget: { kind: "page", pageId: "page_other" },
+        },
+      ),
+    ).rejects.toThrow("outside Page page_other");
+    expect(crossPageRuntime.getSnapshot().document.revision).toBe(0);
+
+    const lockedDocument = structuredClone(createWelcomeDocument());
+    lockedDocument.nodesById.title_welcome!.locked = true;
+    const lockedRuntime = new EditorRuntime(lockedDocument);
+    expect(await execute(lockedRuntime, baseInput)).toMatchObject({
+      ok: false,
+      error: { code: "design.permission-denied" },
+    });
+    expect(lockedRuntime.getSnapshot().document.revision).toBe(0);
+
+    const surrogateDocument = structuredClone(createWelcomeDocument());
+    const surrogateTitle = surrogateDocument.nodesById.title_welcome;
+    if (!surrogateTitle || surrogateTitle.kind !== "text") {
+      throw new Error("Missing title fixture");
+    }
+    surrogateTitle.properties.content = "A😀B";
+    surrogateTitle.properties.runs = [];
+    const surrogateRuntime = new EditorRuntime(surrogateDocument);
+    expect(
+      await execute(surrogateRuntime, {
+        ...baseInput,
+        start: 1,
+        end: 2,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "design.invalid" } });
+    expect(surrogateRuntime.getSnapshot().document.revision).toBe(0);
   });
 
   it("authors and binds Variables through the dedicated typed tool and inspection", async () => {

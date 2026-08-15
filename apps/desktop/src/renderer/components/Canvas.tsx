@@ -27,6 +27,7 @@ import {
 import { Glyph } from "@opendesign/ui";
 import {
   createLeaferEngineAdapter,
+  resolveDesignTextRuns,
   type LeaferCreateRequest,
   type LeaferCreateVectorRequest,
   type LeaferEngineAdapter,
@@ -35,6 +36,8 @@ import {
   type LeaferGenerationActivity,
   type LeaferOperationKind,
   type LeaferOperationRequest,
+  type LeaferTextRangeSelection,
+  type LeaferTextRunStyle,
   type LeaferVectorEditRequest,
   type LeaferVectorCutRequest,
   type LeaferVectorCutResponse,
@@ -42,7 +45,10 @@ import {
   type LeaferVectorLineCutRequest,
   type LeaferVectorLineCutResponse,
 } from "@opendesign/leafer-engine";
-import type { TextLayoutProvider } from "@opendesign/text-service";
+import type {
+  TextLayoutProvider,
+  TextRunLayoutProvider,
+} from "@opendesign/text-service";
 import {
   useCallback,
   useEffect,
@@ -60,22 +66,26 @@ import { commitCanvasOperation } from "../features/editor/canvas-operation-commi
 import type { ResizeFrameHandler } from "../features/editor/canvas-responsive-resize";
 import { isTool } from "../state/editor";
 import { DESIGN_ASSET_DRAG_MIME } from "../design-assets";
+import { composeTextRunLayoutProviders } from "../text-run-provider-fallback";
 import styles from "./Canvas.module.scss";
 
 export function Canvas({
   activeAgentRunId,
   activePageId,
   generationActivity,
+  harfBuzzTextRunLayoutProvider,
   runtime,
   snapshot,
   onTransactionError,
   onAssetDrop,
   onTextLayoutProviderReady,
+  onTextRangeSelectionChange,
   onResizeFrame,
 }: {
   activeAgentRunId: string | null;
   activePageId: string;
   generationActivity?: LeaferGenerationActivity;
+  harfBuzzTextRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
   runtime: EditorRuntime;
   snapshot: EditorSnapshot;
   onTransactionError: (message: string | null) => void;
@@ -84,6 +94,9 @@ export function Canvas({
     documentPoint: { x: number; y: number },
   ) => { ok: boolean };
   onTextLayoutProviderReady: (provider: TextLayoutProvider) => void;
+  onTextRangeSelectionChange: (
+    selection: LeaferTextRangeSelection | null,
+  ) => void;
   onResizeFrame: ResizeFrameHandler;
 }) {
   const { t } = useI18n();
@@ -100,6 +113,9 @@ export function Canvas({
   const [fidelityWarnings, setFidelityWarnings] = useState<
     readonly LeaferFidelityWarning[]
   >([]);
+  const [textRunLayoutProvider, setTextRunLayoutProvider] = useState<
+    TextRunLayoutProvider<LeaferTextRunStyle> | undefined
+  >();
   const [vectorEditState, setVectorEditState] = useState<{
     activeNodeId: string;
     nodeIds: readonly string[];
@@ -109,6 +125,27 @@ export function Canvas({
   const vectorEditStateRef = useRef(vectorEditState);
   vectorEditStateRef.current = vectorEditState;
   const tool = isTool(snapshot.state.tool) ? snapshot.state.tool : "select";
+  const activeTextRunLayoutProvider = useMemo(() => {
+    if (!textRunLayoutProvider) return undefined;
+    return composeTextRunLayoutProviders(
+      textRunLayoutProvider,
+      harfBuzzTextRunLayoutProvider,
+    );
+  }, [harfBuzzTextRunLayoutProvider, textRunLayoutProvider]);
+  const richTextResolution = useMemo(() => {
+    if (!activeTextRunLayoutProvider) return undefined;
+    return resolveDesignTextRuns(
+      snapshot.document,
+      activePageId,
+      activeTextRunLayoutProvider,
+    );
+  }, [activePageId, activeTextRunLayoutProvider, snapshot.document]);
+
+  useEffect(() => {
+    if (activeTextRunLayoutProvider) {
+      runtime.setTextRunLayoutProvider(activeTextRunLayoutProvider);
+    }
+  }, [activeTextRunLayoutProvider, runtime]);
   const booleanEditScope = useMemo(
     () =>
       resolveBooleanEditScope(
@@ -713,6 +750,7 @@ export function Canvas({
       onSelectionChange: (nodeIds, anchorNodeId) => {
         runtime.setSelection(nodeIds, anchorNodeId);
       },
+      onTextRangeSelectionChange,
       onVectorCut: applyVectorCut,
       onVectorEdit: applyVectorEdit,
       onVectorEditActiveNodeChange: (nodeId) => {
@@ -755,6 +793,8 @@ export function Canvas({
         }
         adapter.current = engine;
         onTextLayoutProviderReady(engine.textLayoutProvider);
+        runtime.setTextRunLayoutProvider(engine.textRunLayoutProvider);
+        setTextRunLayoutProvider(() => engine.textRunLayoutProvider);
         if (latestInput.current) engine.sync(latestInput.current);
       })
       .catch((error: unknown) => {
@@ -769,6 +809,8 @@ export function Canvas({
       disposed = true;
       adapter.current?.dispose();
       adapter.current = null;
+      setTextRunLayoutProvider(undefined);
+      onTextRangeSelectionChange(null);
     };
   }, [
     applyOperations,
@@ -780,6 +822,7 @@ export function Canvas({
     createVectorNode,
     exitVectorEdit,
     onTextLayoutProviderReady,
+    onTextRangeSelectionChange,
     runtime,
     t,
     updateViewport,
@@ -811,6 +854,9 @@ export function Canvas({
         ? { layoutGuideFrameId: snapshot.state.selection.nodeIds[0] }
         : {}),
       reducedMotion,
+      ...(richTextResolution
+        ? { textRunProjection: richTextResolution.projection }
+        : {}),
       selection: snapshot.state.selection,
       tool,
       ...(vectorEditCollectionScope
@@ -836,6 +882,7 @@ export function Canvas({
     generationActivity,
     snapshot.document,
     reducedMotion,
+    richTextResolution,
     snapshot.state.selection,
     snapshot.state.viewport,
     tool,
@@ -848,6 +895,11 @@ export function Canvas({
       warning.code === "boolean-geometry-failed" ||
       warning.code === "boolean-geometry-provider-failed" ||
       warning.code === "boolean-geometry-unsupported",
+  );
+  const selectedRichTextWarning = richTextResolution?.warnings.find(
+    (warning) =>
+      warning.nodeId === snapshot.state.selection.anchorNodeId &&
+      warning.code === "rich-text-layout-failed",
   );
   const selectedBooleanId =
     booleanEditScope?.booleanId ??
@@ -919,8 +971,23 @@ export function Canvas({
           <small>{renderError}</small>
         </div>
       )}
-      {(vectorEditScope || booleanEditScope || activeWarning) && (
+      {(vectorEditScope ||
+        booleanEditScope ||
+        activeWarning ||
+        selectedRichTextWarning) && (
         <div className={styles.contextStack}>
+          {selectedRichTextWarning && (
+            <div
+              className={`${styles.editScope} ${styles.fidelityWarning}`}
+              role="alert"
+            >
+              <span className={styles.warningMark} />
+              <span>
+                <strong>{t("canvas.richTextFallback")}</strong>
+                <small>{selectedRichTextWarning.message}</small>
+              </span>
+            </div>
+          )}
           {vectorEditScope &&
             editScopeVector &&
             (editScopeVector.kind === "path" ||

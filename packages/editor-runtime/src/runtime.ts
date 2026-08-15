@@ -26,10 +26,13 @@ import {
 import {
   validateTextFontAvailabilityResult,
   validateTextLayoutResult,
+  validateTextRunLayoutResult,
   type TextFontAvailabilityResult,
   type TextFontDescriptor,
   type TextLayoutProvider,
   type TextLayoutRequest,
+  type TextRunLayoutProvider,
+  type TextRunLayoutStyle,
 } from "@opendesign/text-service";
 import {
   canonicalJsonStringify,
@@ -55,6 +58,12 @@ import {
   diffDesignSystems,
 } from "./design-system-runtime.js";
 import { deleteVariantSet, putVariantSet } from "./variant-set-runtime.js";
+import {
+  normalizeTextNodeRuns,
+  prepareTextPropertiesUpdate,
+  textRunBaseStyle,
+  updateTextRangeStyle,
+} from "./rich-text-operations.js";
 
 export interface EditorSnapshot {
   document: DesignDocument;
@@ -73,10 +82,14 @@ export interface EditorRuntimeOptions {
   initialTool?: string;
   initialViewport?: Partial<ViewportState>;
   textLayoutProvider?: TextLayoutProvider;
+  textRunLayoutProvider?: TextRunLayoutProvider<RuntimeTextRunStyle>;
 }
+
+type RuntimeTextRunStyle = TextRunLayoutStyle & { fill: unknown };
 
 interface OperationContext {
   textLayoutProvider?: TextLayoutProvider;
+  textRunLayoutProvider?: TextRunLayoutProvider<RuntimeTextRunStyle>;
   warnings: FidelityWarning[];
 }
 
@@ -141,6 +154,8 @@ export class EditorRuntime {
   readonly #createId: (prefix: string) => string;
   readonly #onListenerError: (error: unknown, event: EditorEvent) => void;
   #textLayoutProvider: TextLayoutProvider | undefined;
+  #textRunLayoutProvider:
+    TextRunLayoutProvider<RuntimeTextRunStyle> | undefined;
 
   constructor(document: unknown, options: EditorRuntimeOptions = {}) {
     this.#now = options.now ?? (() => new Date().toISOString());
@@ -149,6 +164,7 @@ export class EditorRuntime {
       ((prefix) => `${prefix}_${Date.now()}_${++this.#idSequence}`);
     this.#onListenerError = options.onListenerError ?? (() => undefined);
     this.#textLayoutProvider = options.textLayoutProvider;
+    this.#textRunLayoutProvider = options.textRunLayoutProvider;
     this.#document = normalizeDesignDocument(document);
     this.#tool = options.initialTool ?? "select";
     this.#viewport = validateViewport({
@@ -171,6 +187,12 @@ export class EditorRuntime {
 
   setTextLayoutProvider(provider: TextLayoutProvider): void {
     this.#textLayoutProvider = provider;
+  }
+
+  setTextRunLayoutProvider(
+    provider: TextRunLayoutProvider<RuntimeTextRunStyle>,
+  ): void {
+    this.#textRunLayoutProvider = provider;
   }
 
   inspectTextFont(descriptor: TextFontDescriptor): TextFontAvailabilityResult {
@@ -566,6 +588,9 @@ export class EditorRuntime {
       ...(this.#textLayoutProvider
         ? { textLayoutProvider: this.#textLayoutProvider }
         : {}),
+      ...(this.#textRunLayoutProvider
+        ? { textRunLayoutProvider: this.#textRunLayoutProvider }
+        : {}),
       warnings: [],
     };
     try {
@@ -844,6 +869,9 @@ function applyOperation(
     case "reflow_text":
       reflowText(document, command, context);
       return;
+    case "update_text_range_style":
+      applyTextRangeStyleOperation(document, command, context);
+      return;
     case "put_asset":
       putAsset(document, command);
       return;
@@ -1078,6 +1106,7 @@ function insertElement(
     applySlotStretchOnInsert(document, command.parentId, inserted);
   }
   if (inserted?.kind === "text") {
+    normalizeTextNodeRuns(inserted, command.commandId);
     normalizeTextResizeProperties(inserted.properties);
     resolveTextAutoSize(inserted, command.commandId, context);
   }
@@ -1101,6 +1130,17 @@ function updateProperties(
     );
   }
   assertBooleanOperandUpdateAllowed(document, node, command);
+  if (node.kind === "text") {
+    if (command.properties && Object.hasOwn(command.properties, "runs")) {
+      throw new OperationError(
+        command.commandId,
+        "Text runs cannot be replaced through update_properties; use update_text_range_style or replace the complete Text node",
+        "invalid",
+        { path: `/nodesById/${escapeJsonPointer(node.id)}/properties/runs` },
+      );
+    }
+    prepareTextPropertiesUpdate(node, command.properties, command.commandId);
+  }
   const fields = [
     "name",
     "visible",
@@ -1237,12 +1277,24 @@ function reflowText(
       fontWeight: node.properties.fontWeight,
       fontSlant: node.properties.fontSlant,
       size: structuredClone(node.size),
+      runs: JSON.stringify(node.properties.runs ?? []),
     };
     if (command.replacementFont) {
       node.properties.fontFamily = command.replacementFont.fontFamily;
       node.properties.fontStyleName = command.replacementFont.fontStyleName;
       node.properties.fontWeight = command.replacementFont.fontWeight;
       node.properties.fontSlant = command.replacementFont.fontSlant;
+      node.properties.runs = (node.properties.runs ?? []).map((run) =>
+        run.style.fontFamily === command.expectedFont.fontFamily &&
+        run.style.fontStyleName === command.expectedFont.fontStyleName &&
+        run.style.fontWeight === command.expectedFont.fontWeight &&
+        run.style.fontSlant === command.expectedFont.fontSlant
+          ? {
+              ...run,
+              style: { ...run.style, ...command.replacementFont },
+            }
+          : run,
+      );
     }
     if (fontAvailability.status === "unknown") {
       context.warnings.push({
@@ -1259,6 +1311,7 @@ function reflowText(
       before.fontStyleName !== node.properties.fontStyleName ||
       before.fontWeight !== node.properties.fontWeight ||
       before.fontSlant !== node.properties.fontSlant ||
+      before.runs !== JSON.stringify(node.properties.runs ?? []) ||
       before.size.width !== node.size.width ||
       before.size.height !== node.size.height;
   }
@@ -1270,6 +1323,71 @@ function reflowText(
       { details: { code: "no-op", nodeIds: command.nodeIds } },
     );
   }
+}
+
+function applyTextRangeStyleOperation(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "update_text_range_style" }>,
+  context: OperationContext,
+): void {
+  const node = document.nodesById[command.nodeId];
+  if (!node) throw notFound(command.commandId, command.nodeId);
+  if (node.kind !== "text") {
+    throw new OperationError(
+      command.commandId,
+      `Node ${node.id} is not a Text layer`,
+      "invalid",
+      { path: `/nodesById/${escapeJsonPointer(node.id)}` },
+    );
+  }
+  if (isEffectivelyLocked(document, node.id)) {
+    throw new OperationError(
+      command.commandId,
+      `Text layer ${node.id} is locked`,
+      "permission-denied",
+      { path: `/nodesById/${escapeJsonPointer(node.id)}/locked` },
+    );
+  }
+  let style = command.style;
+  if (typeof command.style.textStyleId === "string") {
+    const reference = document.stylesById[command.style.textStyleId];
+    if (!reference)
+      throw notFound(command.commandId, command.style.textStyleId);
+    if (reference.styleType !== "TEXT") {
+      throw new OperationError(
+        command.commandId,
+        `Style ${reference.id} is not a Text Style`,
+        "invalid",
+      );
+    }
+    style = {
+      ...style,
+      fontFamily: reference.textStyle.fontFamily,
+      fontStyleName: reference.textStyle.fontStyleName,
+      fontSize: reference.textStyle.fontSize,
+      fontWeight: reference.textStyle.fontWeight,
+      fontSlant: reference.textStyle.fontSlant,
+      letterSpacing: reference.textStyle.letterSpacing,
+      lineHeight: reference.textStyle.lineHeight,
+      textCase: reference.textStyle.textCase,
+      textDecoration: reference.textStyle.textDecoration,
+    };
+  }
+  if (typeof command.style.fillStyleId === "string") {
+    const reference = document.stylesById[command.style.fillStyleId];
+    if (!reference)
+      throw notFound(command.commandId, command.style.fillStyleId);
+    if (reference.styleType !== "PAINT") {
+      throw new OperationError(
+        command.commandId,
+        `Style ${reference.id} is not a Paint Style`,
+        "invalid",
+      );
+    }
+    style = { ...style, fills: structuredClone(reference.paints) };
+  }
+  updateTextRangeStyle(node, { ...command, style });
+  resolveTextAutoSize(node, command.commandId, context);
 }
 
 function inspectReflowFont(
@@ -1453,6 +1571,7 @@ function replaceSubtree(
   for (const node of command.nodes) {
     const replacementNode = document.nodesById[node.id];
     if (replacementNode?.kind !== "text") continue;
+    normalizeTextNodeRuns(replacementNode, command.commandId);
     normalizeTextResizeProperties(replacementNode.properties);
     resolveTextAutoSize(replacementNode, command.commandId, context);
   }
@@ -1466,6 +1585,10 @@ function resolveTextAutoSize(
   context: OperationContext,
 ): void {
   if (node.properties.textResize === "fixed") return;
+  if ((node.properties.runs?.length ?? 0) > 0) {
+    resolveRichTextAutoSize(node, commandId, context);
+    return;
+  }
   const provider = context.textLayoutProvider;
   if (!provider) {
     throw new OperationError(
@@ -1584,6 +1707,127 @@ function resolveTextAutoSize(
       message: warning.message,
     })),
   );
+}
+
+function resolveRichTextAutoSize(
+  node: TextNode,
+  commandId: string,
+  context: OperationContext,
+): void {
+  const provider = context.textRunLayoutProvider;
+  const path = `/nodesById/${escapeJsonPointer(node.id)}/size`;
+  if (!provider) {
+    throw new OperationError(
+      commandId,
+      "Rich Text Auto Size is still initializing; retry after the canvas is ready",
+      "engine-failure",
+      {
+        path,
+        retryable: true,
+        details: {
+          nodeId: node.id,
+          feature: "rich-text-auto-size",
+          recovery: "retry-after-canvas-ready",
+        },
+      },
+    );
+  }
+  if (node.properties.textAlignHorizontal === "justify") {
+    throw new OperationError(
+      commandId,
+      "Rich Text Auto Size does not support justified alignment yet",
+      "unsupported",
+      {
+        path: `/nodesById/${escapeJsonPointer(node.id)}/properties/textAlignHorizontal`,
+      },
+    );
+  }
+  if (node.properties.textTruncation !== "disabled") {
+    throw new OperationError(
+      commandId,
+      "Rich Text Auto Size does not support ending truncation yet",
+      "unsupported",
+      {
+        path: `/nodesById/${escapeJsonPointer(node.id)}/properties/textTruncation`,
+      },
+    );
+  }
+  const request = {
+    baseStyle: runtimeTextRunStyle(textRunBaseStyle(node)),
+    content: node.properties.content,
+    mode: node.properties.textResize,
+    paragraphIndent: node.properties.paragraphIndent,
+    paragraphSpacing: node.properties.paragraphSpacing,
+    runs: (node.properties.runs ?? []).map((run) => ({
+      ...run,
+      style: runtimeTextRunStyle(run.style),
+    })),
+    textAlignHorizontal: node.properties.textAlignHorizontal,
+    textAlignVertical: node.properties.textAlignVertical,
+    textWrap: node.properties.textWrap,
+    ...(node.properties.textResize === "auto-height"
+      ? { width: node.size.width }
+      : {}),
+  } as const;
+  let result: ReturnType<typeof provider.layout>;
+  try {
+    result = provider.layout(request);
+  } catch (error) {
+    throw new OperationError(
+      commandId,
+      error instanceof Error && error.message
+        ? `Rich text layout provider failed: ${error.message}`
+        : "Rich text layout provider failed",
+      "engine-failure",
+      { path, retryable: true, details: { provider: provider.id } },
+    );
+  }
+  const issue = validateTextRunLayoutResult(result, request);
+  if (issue) {
+    throw new OperationError(commandId, issue, "engine-failure", {
+      path,
+      retryable: true,
+      details: { provider: provider.id, providerVersion: provider.version },
+    });
+  }
+  if (!result.ok) {
+    throw new OperationError(
+      commandId,
+      result.message,
+      result.code === "unsupported" ? "unsupported" : "engine-failure",
+      {
+        path,
+        retryable: result.retryable,
+        details: { provider: provider.id, providerVersion: provider.version },
+      },
+    );
+  }
+  if (
+    result.provider !== provider.id ||
+    result.providerVersion !== provider.version
+  ) {
+    throw new OperationError(
+      commandId,
+      "Rich text layout provider returned inconsistent identity",
+      "engine-failure",
+      { path, retryable: true },
+    );
+  }
+  node.size = structuredClone(result.size);
+  for (const warning of result.warnings) {
+    context.warnings.push({
+      nodeId: node.id,
+      feature: `text-layout.${warning.code}`,
+      fallback: warning.fallback,
+      message: warning.message,
+    });
+  }
+}
+
+function runtimeTextRunStyle(
+  style: import("@opendesign/design-contracts").TextRunStyle,
+): RuntimeTextRunStyle {
+  return { ...style, fill: structuredClone(style.fills) };
 }
 
 function targetChildren(

@@ -1,4 +1,8 @@
-import type { DesignNode } from "@opendesign/design-contracts";
+import type {
+  DesignNode,
+  DesignOperation,
+  TextRunStyle,
+} from "@opendesign/design-contracts";
 import type {
   TextFontAvailabilityResult,
   TextFontDescriptor,
@@ -28,6 +32,19 @@ export type FontInspectorContext = {
   onImport: () => Promise<void>;
   onReflow: () => void;
   onReplace: (font: TextFontDescriptor) => void;
+  range?: {
+    start: number;
+    end: number;
+    text: string;
+    style: TextRunStyle;
+    mixedFields: readonly (keyof TextRunStyle)[];
+    onUpdate: (
+      style: Extract<
+        DesignOperation,
+        { type: "update_text_range_style" }
+      >["style"],
+    ) => void;
+  };
 };
 
 export function TypographySection({
@@ -66,6 +83,18 @@ export function TypographySection({
     Number.isInteger(replacementWeightNumber) &&
     replacementWeightNumber >= 1 &&
     replacementWeightNumber <= 1_000;
+  const range = fontContext?.range;
+  const activeStyle = range?.style ?? node.properties;
+  const isMixed = (field: keyof TextRunStyle) =>
+    range?.mixedFields.includes(field) ?? false;
+  const updateTextStyle = (
+    style: Parameters<
+      NonNullable<FontInspectorContext["range"]>["onUpdate"]
+    >[0],
+  ) => {
+    if (range) range.onUpdate(style);
+    else onUpdate({ properties: style });
+  };
   return (
     <Section title={t("properties.typography")}>
       <div className={styles.stack}>
@@ -74,6 +103,18 @@ export function TypographySection({
           onCommit={(content) => onUpdate({ properties: { content } })}
           value={node.properties.content}
         />
+        {range && (
+          <div className={styles.textRangeStatus} role="status">
+            <strong>
+              {t("properties.textRange", {
+                start: range.start,
+                end: range.end,
+              })}
+            </strong>
+            <span title={range.text}>{range.text}</span>
+            <small>{t("properties.textRangeHint")}</small>
+          </div>
+        )}
         <div
           aria-label={t("properties.typography")}
           className={cx(styles.grid, styles.typographyGrid)}
@@ -85,13 +126,16 @@ export function TypographySection({
             onCommit={(fontFamily) => {
               const next = fontFamily.trim();
               if (!next) return null;
-              if (next !== node.properties.fontFamily) {
-                onUpdate({ properties: { fontFamily: next } });
+              if (next !== activeStyle.fontFamily || isMixed("fontFamily")) {
+                updateTextStyle({ fontFamily: next });
               }
               return next;
             }}
+            placeholder={
+              isMixed("fontFamily") ? t("properties.mixed") : undefined
+            }
             type="text"
-            value={node.properties.fontFamily}
+            value={isMixed("fontFamily") ? "" : activeStyle.fontFamily}
           />
           <Field
             accessibleLabel={t("properties.fontSize")}
@@ -100,26 +144,40 @@ export function TypographySection({
             onCommit={(draft) =>
               commitNumber(
                 draft,
-                node.properties.fontSize,
-                (fontSize) => onUpdate({ properties: { fontSize } }),
+                activeStyle.fontSize,
+                (fontSize) => updateTextStyle({ fontSize }),
                 { min: 1 },
               )
             }
-            value={formatNumber(node.properties.fontSize)}
+            placeholder={
+              isMixed("fontSize") ? t("properties.mixed") : undefined
+            }
+            value={
+              isMixed("fontSize") ? "" : formatNumber(activeStyle.fontSize)
+            }
           />
           <Field
             accessibleLabel={t("properties.fontStyleName")}
             label="Style"
             onCommit={(value) => {
               const fontStyleName = value.trim() || null;
-              if (fontStyleName !== node.properties.fontStyleName) {
-                onUpdate({ properties: { fontStyleName } });
+              if (
+                fontStyleName !== activeStyle.fontStyleName ||
+                isMixed("fontStyleName")
+              ) {
+                updateTextStyle({ fontStyleName });
               }
               return fontStyleName ?? "";
             }}
-            placeholder={t("properties.fontStyleUnresolved")}
+            placeholder={
+              isMixed("fontStyleName")
+                ? t("properties.mixed")
+                : t("properties.fontStyleUnresolved")
+            }
             type="text"
-            value={node.properties.fontStyleName ?? ""}
+            value={
+              isMixed("fontStyleName") ? "" : (activeStyle.fontStyleName ?? "")
+            }
           />
           <Field
             accessibleLabel={t("properties.fontWeight")}
@@ -129,30 +187,34 @@ export function TypographySection({
             onCommit={(draft) =>
               commitNumber(
                 draft,
-                node.properties.fontWeight,
+                activeStyle.fontWeight,
                 (fontWeight) =>
-                  onUpdate({
-                    properties: { fontWeight: Math.round(fontWeight) },
-                  }),
+                  updateTextStyle({ fontWeight: Math.round(fontWeight) }),
                 { min: 1, max: 1000 },
               )
             }
-            value={formatNumber(node.properties.fontWeight)}
+            placeholder={
+              isMixed("fontWeight") ? t("properties.mixed") : undefined
+            }
+            value={
+              isMixed("fontWeight") ? "" : formatNumber(activeStyle.fontWeight)
+            }
           />
           <label className={styles.select}>
             <span>{t("properties.fontSlant")}</span>
             <select
               aria-label={t("properties.fontSlant")}
               onChange={(event) =>
-                onUpdate({
-                  properties: {
-                    fontSlant: event.target
-                      .value as TextFontDescriptor["fontSlant"],
-                  },
+                updateTextStyle({
+                  fontSlant: event.target
+                    .value as TextFontDescriptor["fontSlant"],
                 })
               }
-              value={node.properties.fontSlant}
+              value={isMixed("fontSlant") ? "" : activeStyle.fontSlant}
             >
+              {isMixed("fontSlant") && (
+                <option value="">{t("properties.mixed")}</option>
+              )}
               <option value="normal">{t("properties.fontSlantNormal")}</option>
               <option value="italic">{t("properties.fontSlantItalic")}</option>
             </select>
@@ -311,24 +373,34 @@ export function TypographySection({
             onCommit={(draft) =>
               commitNumber(
                 draft,
-                node.properties.lineHeight,
-                (lineHeight) => onUpdate({ properties: { lineHeight } }),
+                activeStyle.lineHeight,
+                (lineHeight) => updateTextStyle({ lineHeight }),
                 { min: 1 },
               )
             }
-            value={formatNumber(node.properties.lineHeight)}
+            placeholder={
+              isMixed("lineHeight") ? t("properties.mixed") : undefined
+            }
+            value={
+              isMixed("lineHeight") ? "" : formatNumber(activeStyle.lineHeight)
+            }
           />
           <Field
             accessibleLabel={t("properties.letterSpacing")}
             label="Track"
             onCommit={(draft) =>
-              commitNumber(
-                draft,
-                node.properties.letterSpacing,
-                (letterSpacing) => onUpdate({ properties: { letterSpacing } }),
+              commitNumber(draft, activeStyle.letterSpacing, (letterSpacing) =>
+                updateTextStyle({ letterSpacing }),
               )
             }
-            value={formatNumber(node.properties.letterSpacing)}
+            placeholder={
+              isMixed("letterSpacing") ? t("properties.mixed") : undefined
+            }
+            value={
+              isMixed("letterSpacing")
+                ? ""
+                : formatNumber(activeStyle.letterSpacing)
+            }
           />
           <Field
             accessibleLabel={t("properties.paragraphIndent")}
@@ -365,15 +437,16 @@ export function TypographySection({
             <select
               aria-label={t("properties.textCase")}
               onChange={(event) =>
-                onUpdate({
-                  properties: {
-                    textCase: event.target
-                      .value as TextNode["properties"]["textCase"],
-                  },
+                updateTextStyle({
+                  textCase: event.target
+                    .value as TextNode["properties"]["textCase"],
                 })
               }
-              value={node.properties.textCase}
+              value={isMixed("textCase") ? "" : activeStyle.textCase}
             >
+              {isMixed("textCase") && (
+                <option value="">{t("properties.mixed")}</option>
+              )}
               <option value="original">{t("properties.caseOriginal")}</option>
               <option value="uppercase">{t("properties.caseUppercase")}</option>
               <option value="lowercase">{t("properties.caseLowercase")}</option>
@@ -388,15 +461,18 @@ export function TypographySection({
             <select
               aria-label={t("properties.textDecoration")}
               onChange={(event) =>
-                onUpdate({
-                  properties: {
-                    textDecoration: event.target
-                      .value as TextNode["properties"]["textDecoration"],
-                  },
+                updateTextStyle({
+                  textDecoration: event.target
+                    .value as TextNode["properties"]["textDecoration"],
                 })
               }
-              value={node.properties.textDecoration}
+              value={
+                isMixed("textDecoration") ? "" : activeStyle.textDecoration
+              }
             >
+              {isMixed("textDecoration") && (
+                <option value="">{t("properties.mixed")}</option>
+              )}
               <option value="none">{t("properties.decorationNone")}</option>
               <option value="underline">
                 {t("properties.decorationUnderline")}

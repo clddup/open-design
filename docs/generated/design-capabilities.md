@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.30.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.31.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 21 项，不可用 1 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -186,7 +186,7 @@
 创建、渲染、变换和编辑固定、自动宽度或自动高度文字，使用单一共享字体样式、对齐、明确换行以及固定框溢出控制。
 
 - ID：`text.single-style`
-- 实现方：DesignDocument 1.30.0 + Text Layout Service v4 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v5
+- 实现方：DesignDocument 1.31.0 + Text Layout Service v4 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v6
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 15 项；实机 0 项
 - 限制：family/style-name/weight/slant 精确身份、运行时字体可用性、全文件精确替换、显式 Auto Size 重排及 unresolved Figma 导出失败已通过单次 revision/undo 可用；字体二进制资源、可变字体轴、精确跨平台 shaping 及 macOS/Windows 视觉验收仍未完成。
@@ -195,13 +195,13 @@
 
 ### 专业富文本排版 — 降级可用
 
-应用文档级 Typography Core 属性和可复用 Text Style，并明确保留富文本 run、列表、OpenType 与字体资源限制。
+通过唯一版本化 Runtime、真实范围 Inspector、Agent 工具、native/HarfBuzz 投影及 Figma/SVG/位图结构往返创建 Figma-compatible UTF-16 富文本 runs。
 
 - ID：`text.rich-typography`
 - 实现方：@opendesign/text-service v4 / Text Run Layout v2 + leafer-editor 2.2.9 + harfbuzzjs 1.4.0
-- 表面：contract=degraded；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=degraded
-- 证据：自动化 14 项；实机 0 项
-- 限制：Core v2 与 Text Service v4 已支持段落属性、可复用单样式 Text Style、精确 face identity、显式重排，以及用户批准的内容寻址 TTF/OTF/TTC 导入。pre-schema Text Run Layout v2 已用 HarfBuzz outline 与 Unicode Bidi 13 处理复杂脚本 cluster，但逐段作者态/schema、列表、OpenType 控件、可变字体轴、字体随文件打包/授权迁移、路径文字、更新 bidi 数据和 macOS/Windows 打包视觉证据仍不可用。
+- 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
+- 证据：自动化 17 项；实机 0 项
+- 限制：富文本 runs 已覆盖精确 face、字号、字距、行高、大小写、装饰、fills 与可选 Text/Paint Style ID。列表、逐段 paragraph 控件、高级 decoration 几何、OpenType 控件、可变字体轴、本地 Style 修改向绑定 range 的实时传播、字体随文件打包/授权迁移、路径文字、更新 bidi 数据和 macOS/Windows 打包视觉证据仍不可用。
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/TextNode/)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/TextStyle/)
 

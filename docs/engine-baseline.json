@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 39,
+  "schemaVersion": 40,
   "recordedAt": "2026-08-15",
   "policy": {
     "allowFloatingRefs": false,
@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.30.0",
+    "documentSchemaVersion": "1.31.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.11.0",
     "geometryServiceContractVersion": 10,
@@ -64,7 +64,7 @@
       "version": "1.133.0",
       "sourceCommit": "83bfe81d9616ab759702f657eb18ef153f83e8ae",
       "license": "MIT",
-      "productionStatus": "compile-time-component-property-variant-slot-variable-shared-style-slice-export-setting-and-exact-font-name-verification-with-unresolved-face-failure-only"
+      "productionStatus": "compile-time-component-property-variant-slot-variable-shared-style-slice-export-setting-exact-font-name-and-rich-text-styled-segment-roundtrip-verification"
     },
     "vectorGeometry": {
       "role": "vector-path-geometry-provider",
@@ -96,10 +96,10 @@
       "adapterPackage": "@opendesign/leafer-engine",
       "provider": "leafer-editor",
       "version": "2.2.9",
-      "productionStatus": "typography-core-v2-exact-face-identity-auto-size-and-ending-max-lines-available-rich-runs-font-assets-variable-axes-and-native-gate-pending"
+      "productionStatus": "typography-core-v2-exact-face-identity-rich-runs-range-edit-auto-size-and-ending-max-lines-available-font-packaging-variable-axes-and-native-gate-pending"
     },
     "textRunLayout": {
-      "role": "pre-schema-native-rich-text-and-complex-script-layout-provider",
+      "role": "authoritative-rich-text-run-and-complex-script-layout-provider",
       "contractPackage": "@opendesign/text-service",
       "contractVersion": 2,
       "adapterPackage": "@opendesign/leafer-engine",
@@ -111,7 +111,7 @@
       "simpleRunProvider": "leafer-editor 2.2.9",
       "fontBinaryFormats": ["ttf", "otf", "ttc"],
       "fontBinaryLimitBytes": 33554432,
-      "productionStatus": "explicit-content-addressed-font-import-harfbuzz-cluster-outline-and-bidi-path-projection-available-document-range-schema-structured-interchange-font-packaging-newer-bidi-and-native-gate-pending"
+      "productionStatus": "document-range-schema-runtime-inspector-agent-figma-svg-and-exact-revision-native-harfbuzz-projection-available-lists-opentype-axes-font-packaging-newer-bidi-and-native-gate-pending"
     },
     "layout": {
       "role": "versioned-frame-constraints-and-auto-layout-provider",

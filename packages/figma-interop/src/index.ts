@@ -4,7 +4,10 @@ import type {
   ComponentPropertyReferences as OpenDesignComponentPropertyReferences,
   DesignDocument,
   DesignNode,
+  Paint as OpenDesignPaint,
   SharedStyleDefinition,
+  TextRun,
+  TextRunStyle,
   VariableAlias as OpenDesignVariableAlias,
   VariableCollectionDefinition,
   VariableDefinition,
@@ -50,6 +53,29 @@ export type FigmaStylePayloadResult =
 
 export type FigmaExportSettingsResult =
   | { ok: true; settings: readonly ExportSettings[] }
+  | { ok: false; issues: readonly string[] };
+
+export interface FigmaTextRangeSegment {
+  end: number;
+  fillStyleId?: string;
+  fills: readonly Paint[];
+  fontName: FontName;
+  fontSize: number;
+  fontWeight: number;
+  letterSpacing: LetterSpacing;
+  lineHeight: LineHeight;
+  start: number;
+  textCase: TextCase;
+  textDecoration: TextDecoration;
+  textStyleId?: string;
+}
+
+export type FigmaTextRangeResult =
+  | { ok: true; segments: readonly FigmaTextRangeSegment[] }
+  | { ok: false; issues: readonly string[] };
+
+export type OpenDesignTextRangeResult =
+  | { ok: true; runs: readonly TextRun[] }
   | { ok: false; issues: readonly string[] };
 
 export const FIGMA_PLUGIN_TYPINGS_VERSION = "1.133.0" as const;
@@ -289,6 +315,113 @@ export function toFigmaFontName(value: {
   };
 }
 
+export function toFigmaTextRangeSegments(
+  node: Extract<DesignNode, { kind: "text" }>,
+): FigmaTextRangeResult {
+  if (node.properties.content.length === 0) return { ok: true, segments: [] };
+  const base = textNodeBaseStyle(node);
+  const runs =
+    node.properties.runs && node.properties.runs.length > 0
+      ? node.properties.runs
+      : [{ start: 0, end: node.properties.content.length, style: base }];
+  const issues: string[] = [];
+  const segments = runs.flatMap<FigmaTextRangeSegment>((run, index) => {
+    const fontName = toFigmaFontName(run.style);
+    if (!fontName) {
+      issues.push(`Text range ${index} has an unresolved font face style name`);
+      return [];
+    }
+    const fills = toFigmaRangePaints(run.style.fills, index, issues);
+    if (!fills) return [];
+    return [
+      {
+        start: run.start,
+        end: run.end,
+        fontName,
+        fontSize: run.style.fontSize,
+        fontWeight: run.style.fontWeight,
+        letterSpacing: { unit: "PIXELS", value: run.style.letterSpacing },
+        lineHeight: { unit: "PIXELS", value: run.style.lineHeight },
+        textCase: figmaTextCase(run.style.textCase),
+        textDecoration: figmaTextDecoration(run.style.textDecoration),
+        fills,
+        ...(run.style.textStyleId
+          ? { textStyleId: run.style.textStyleId }
+          : {}),
+        ...(run.style.fillStyleId
+          ? { fillStyleId: run.style.fillStyleId }
+          : {}),
+      },
+    ];
+  });
+  return issues.length > 0 ? { ok: false, issues } : { ok: true, segments };
+}
+
+export function fromFigmaTextRangeSegments(
+  content: string,
+  segments: readonly FigmaTextRangeSegment[],
+): OpenDesignTextRangeResult {
+  if (content.length === 0) {
+    return segments.length === 0
+      ? { ok: true, runs: [] }
+      : { ok: false, issues: ["Empty text cannot contain Figma segments"] };
+  }
+  const issues: string[] = [];
+  let expectedStart = 0;
+  const runs = segments.flatMap<TextRun>((segment, index) => {
+    if (
+      segment.start !== expectedStart ||
+      segment.end <= segment.start ||
+      segment.end > content.length ||
+      !utf16Boundary(content, segment.start) ||
+      !utf16Boundary(content, segment.end)
+    ) {
+      issues.push(
+        `Figma text segment ${index} is not a contiguous UTF-16 range`,
+      );
+      return [];
+    }
+    expectedStart = segment.end;
+    if (
+      segment.letterSpacing.unit !== "PIXELS" ||
+      segment.lineHeight.unit !== "PIXELS"
+    ) {
+      issues.push(
+        `Figma text segment ${index} requires pixel spacing and line height`,
+      );
+      return [];
+    }
+    const fills = fromFigmaRangePaints(segment.fills, index, issues);
+    if (!fills) return [];
+    return [
+      {
+        start: segment.start,
+        end: segment.end,
+        style: {
+          fontFamily: segment.fontName.family,
+          fontStyleName: segment.fontName.style,
+          fontSize: segment.fontSize,
+          fontWeight: segment.fontWeight,
+          fontSlant: /italic|oblique/i.test(segment.fontName.style)
+            ? "italic"
+            : "normal",
+          letterSpacing: segment.letterSpacing.value,
+          lineHeight: segment.lineHeight.value,
+          textCase: openDesignTextCase(segment.textCase),
+          textDecoration: openDesignTextDecoration(segment.textDecoration),
+          fills,
+          ...(segment.textStyleId ? { textStyleId: segment.textStyleId } : {}),
+          ...(segment.fillStyleId ? { fillStyleId: segment.fillStyleId } : {}),
+        },
+      },
+    ];
+  });
+  if (expectedStart !== content.length) {
+    issues.push("Figma text segments must cover the complete content");
+  }
+  return issues.length > 0 ? { ok: false, issues } : { ok: true, runs };
+}
+
 function figmaTextDecoration(
   value: Extract<
     SharedStyleDefinition,
@@ -311,6 +444,127 @@ function figmaTextCase(
   if (value === "title-case") return "TITLE";
   if (value === "small-caps") return "SMALL_CAPS";
   return "ORIGINAL";
+}
+
+function textNodeBaseStyle(
+  node: Extract<DesignNode, { kind: "text" }>,
+): TextRunStyle {
+  return {
+    fontFamily: node.properties.fontFamily,
+    fontStyleName: node.properties.fontStyleName,
+    fontSize: node.properties.fontSize,
+    fontWeight: node.properties.fontWeight,
+    fontSlant: node.properties.fontSlant,
+    letterSpacing: node.properties.letterSpacing,
+    lineHeight: node.properties.lineHeight,
+    textCase: node.properties.textCase,
+    textDecoration: node.properties.textDecoration,
+    fills: node.properties.fills,
+    ...(node.textStyleId ? { textStyleId: node.textStyleId } : {}),
+    ...(node.fillStyleId ? { fillStyleId: node.fillStyleId } : {}),
+  };
+}
+
+function toFigmaRangePaints(
+  paints: readonly OpenDesignPaint[],
+  rangeIndex: number,
+  issues: string[],
+): Paint[] | null {
+  const result: Paint[] = [];
+  for (const paint of paints) {
+    if (paint.type !== "solid") {
+      issues.push(
+        `Text range ${rangeIndex} paint ${paint.type} requires a dedicated Figma adapter`,
+      );
+      return null;
+    }
+    const color = parseColor(paint.color);
+    if (!color) {
+      issues.push(`Text range ${rangeIndex} has an unsupported solid color`);
+      return null;
+    }
+    result.push({
+      type: "SOLID",
+      color: { r: color.r, g: color.g, b: color.b },
+      opacity: paint.opacity * color.a,
+      visible: paint.visible ?? true,
+      blendMode: figmaBlendMode(paint.blendMode),
+    });
+  }
+  return result;
+}
+
+function fromFigmaRangePaints(
+  paints: readonly Paint[],
+  rangeIndex: number,
+  issues: string[],
+): OpenDesignPaint[] | null {
+  const result: OpenDesignPaint[] = [];
+  for (const paint of paints) {
+    if (paint.type !== "SOLID") {
+      issues.push(
+        `Figma text segment ${rangeIndex} paint ${paint.type} is not supported`,
+      );
+      return null;
+    }
+    const blendMode = openDesignBlendMode(paint.blendMode);
+    result.push({
+      type: "solid",
+      color: rgbHex(paint.color),
+      opacity: paint.opacity ?? 1,
+      ...(paint.visible === false ? { visible: false } : {}),
+      ...(blendMode === "normal" ? {} : { blendMode }),
+    });
+  }
+  return result;
+}
+
+function openDesignTextCase(value: TextCase): TextRunStyle["textCase"] {
+  if (value === "UPPER") return "uppercase";
+  if (value === "LOWER") return "lowercase";
+  if (value === "TITLE") return "title-case";
+  if (value === "SMALL_CAPS" || value === "SMALL_CAPS_FORCED") {
+    return "small-caps";
+  }
+  return "original";
+}
+
+function openDesignTextDecoration(
+  value: TextDecoration,
+): TextRunStyle["textDecoration"] {
+  if (value === "UNDERLINE") return "underline";
+  if (value === "STRIKETHROUGH") return "strikethrough";
+  return "none";
+}
+
+function openDesignBlendMode(value: BlendMode | undefined) {
+  if (!value || value === "NORMAL") return "normal" as const;
+  return value.toLowerCase().replaceAll("_", "-") as Exclude<
+    NonNullable<OpenDesignPaint["blendMode"]>,
+    "pass-through"
+  >;
+}
+
+function rgbHex(color: RGB): string {
+  return `#${[color.r, color.g, color.b]
+    .map((value) =>
+      Math.round(Math.min(1, Math.max(0, value)) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+function utf16Boundary(content: string, index: number): boolean {
+  if (index === 0 || index === content.length) return true;
+  const before = content.charCodeAt(index - 1);
+  const after = content.charCodeAt(index);
+  return !(
+    before >= 0xd800 &&
+    before <= 0xdbff &&
+    after >= 0xdc00 &&
+    after <= 0xdfff
+  );
 }
 
 function parseColor(

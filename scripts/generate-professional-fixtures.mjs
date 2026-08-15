@@ -9,7 +9,7 @@ const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
-const documentSchemaVersion = "1.30.0";
+const documentSchemaVersion = "1.31.0";
 
 const fixtureSources = [
   {
@@ -1614,6 +1614,7 @@ function text({
     ...nodeBase({ ...base, kind: "text" }),
     properties: shapeProperties({
       content,
+      runs: [],
       fontFamily: "Arial",
       fontStyleName: null,
       fontSize,

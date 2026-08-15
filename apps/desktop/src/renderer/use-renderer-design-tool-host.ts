@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import type { LeaferTextRunStyle } from "@opendesign/leafer-engine";
+import type { TextRunLayoutProvider } from "@opendesign/text-service";
 import type { ProjectAutosaveCoordinator } from "./project-autosave";
 import type { WorkspaceRuntime } from "./workspace-runtime";
 import { executeDesignToolRequest } from "./design-tool-execution";
@@ -11,6 +13,7 @@ import { reportRendererError } from "./diagnostics";
 export function useRendererDesignToolHost(
   workspace: WorkspaceRuntime,
   projectAutosave: ProjectAutosaveCoordinator,
+  textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>,
 ): void {
   const controllers = useRef(new Map<string, AbortController>());
   useEffect(() => {
@@ -68,6 +71,7 @@ export function useRendererDesignToolHost(
                   request.captureTarget,
                   controller.signal,
                   {
+                    ...(textRunLayoutProvider ? { textRunLayoutProvider } : {}),
                     onStage: (stage) => {
                       const progress = {
                         "surface-created": 0.22,
@@ -189,5 +193,5 @@ export function useRendererDesignToolHost(
       for (const controller of controllers.current.values()) controller.abort();
       controllers.current.clear();
     };
-  }, [projectAutosave, workspace]);
+  }, [projectAutosave, textRunLayoutProvider, workspace]);
 }

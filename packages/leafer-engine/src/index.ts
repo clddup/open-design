@@ -21,6 +21,7 @@ export type {
   LeaferOperationKind,
   LeaferOperationRequest,
   LeaferRasterExportResult,
+  LeaferTextRangeSelection,
   LeaferVectorEditRequest,
   LeaferVectorEditScope,
   LeaferVectorEditTool,
@@ -53,3 +54,7 @@ export {
   type LeaferTextRunLayoutProviderOptions,
   type LeaferTextRunStyle,
 } from "./text-run-layout.js";
+export {
+  resolveDesignTextRuns,
+  type DesignTextRunResolution,
+} from "./text-run-resolution.js";

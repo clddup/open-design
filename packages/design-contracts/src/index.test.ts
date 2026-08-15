@@ -12,6 +12,7 @@ import {
   FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
   FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
+  RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION,
   TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
@@ -53,7 +54,22 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION).toBe("1.28.0");
   expect(TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION).toBe("1.29.0");
   expect(FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION).toBe("1.30.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION);
+  expect(RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION).toBe("1.31.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION);
+});
+
+it("migrates 1.30 text nodes to canonical empty rich-text runs", () => {
+  const source = textDocumentFixture() as unknown as Record<string, unknown>;
+  source.schemaVersion = FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION;
+  const nodes = source.nodesById as Record<
+    string,
+    { properties: Record<string, unknown> }
+  >;
+  delete nodes.text_1!.properties.runs;
+  expect(migrateDesignDocument(source)).toMatchObject({
+    schemaVersion: DESIGN_SCHEMA_VERSION,
+    nodesById: { text_1: { properties: { runs: [] } } },
+  });
 });
 
 it("migrates 1.29 font requests without inventing a face style name", () => {
@@ -314,6 +330,7 @@ function textDocumentFixture() {
         kind: "text" as const,
         properties: {
           content: "Text",
+          runs: [],
           fontFamily: "Inter",
           fontStyleName: null,
           fontSize: 20,

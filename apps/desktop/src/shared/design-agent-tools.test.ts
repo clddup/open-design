@@ -8,6 +8,7 @@ import {
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
+  DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
@@ -1168,6 +1169,50 @@ describe("design Agent tool contract", () => {
     ).toMatchObject({ bootstrap: "deferred", role: "material-write" });
     expect(bootstrap).not.toContain('"reflow_text"');
     expect(complete).not.toContain('"reflow_text"');
+    expect(complete).not.toContain('"const":"update_text_range_style"');
+    expect(complete.length).toBeLessThan(64_000);
+    const textRange = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_TEXT_RANGE_TOOL_NAME,
+    );
+    expect(textRange?.modelDisclosure).toMatchObject({
+      bootstrap: "deferred",
+      role: "material-write",
+    });
+    expect(JSON.stringify(textRange?.inputSchema)).toContain('"fills"');
+  });
+
+  it("routes bounded rich-text range styling through its dedicated deferred tool", () => {
+    const input = {
+      label: "Emphasize selected word",
+      pageId: "page_1",
+      nodeId: "title",
+      start: 4,
+      end: 10,
+      style: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: "Semi Bold",
+        fontWeight: 600,
+        fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(DESIGN_TEXT_RANGE_TOOL_NAME, input),
+    ).toBe(true);
+    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
+      false,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_TEXT_RANGE_TOOL_NAME, {
+        ...input,
+        style: {},
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_TEXT_RANGE_TOOL_NAME, {
+        ...input,
+        end: input.start,
+      }),
+    ).toBe(false);
   });
 
   it("validates explicit scoped font reflow and replacement separately from generic apply", () => {

@@ -2,6 +2,12 @@ export const fontMessages = {
   en: {
     "history.reflowFont": "Reflow matching text",
     "history.replaceFont": "Replace font in file",
+    "history.updateTextRange": "Update text range style",
+    "properties.textRange": "Selected text {{start}}–{{end}}",
+    "properties.textRangeHint":
+      "Typography changes apply only to this text range.",
+    "properties.mixed": "Mixed",
+    "canvas.richTextFallback": "Rich text fallback",
     "properties.fontFamily": "Font family",
     "properties.fontStyleName": "Font face style",
     "properties.fontStyleUnresolved": "Unresolved face style",
@@ -28,6 +34,11 @@ export const fontMessages = {
   "zh-CN": {
     "history.reflowFont": "重排匹配文字",
     "history.replaceFont": "替换文件字体",
+    "history.updateTextRange": "更新文字范围样式",
+    "properties.textRange": "已选文字 {{start}}–{{end}}",
+    "properties.textRangeHint": "排版更改仅应用于当前文字范围。",
+    "properties.mixed": "混合",
+    "canvas.richTextFallback": "富文本回退",
     "properties.fontFamily": "字体",
     "properties.fontStyleName": "字体样式名称",
     "properties.fontStyleUnresolved": "未确认字体样式",

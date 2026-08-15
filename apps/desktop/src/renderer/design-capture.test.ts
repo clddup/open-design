@@ -3,6 +3,12 @@ import type { LeaferEngineAdapter } from "@opendesign/leafer-engine";
 import { describe, expect, it, vi } from "vitest";
 import { captureDesignTarget } from "./design-capture";
 
+const textRunLayoutProvider = {
+  id: "test-text-runs",
+  version: "1",
+  layout: vi.fn(),
+};
+
 describe("deterministic design target capture", () => {
   it("projects an immutable document into an offscreen Leafer target", async () => {
     const documentSnapshot = createWelcomeDocument();
@@ -27,6 +33,7 @@ describe("deterministic design target capture", () => {
         version: "1",
         measure: vi.fn(),
       },
+      textRunLayoutProvider,
     } satisfies LeaferEngineAdapter;
     const createAdapter = vi.fn().mockResolvedValue(adapter);
     const textRunProjection = {
@@ -100,6 +107,7 @@ describe("deterministic design target capture", () => {
         version: "1",
         measure: vi.fn(),
       },
+      textRunLayoutProvider,
     } satisfies LeaferEngineAdapter;
 
     await expect(
@@ -141,6 +149,7 @@ describe("deterministic design target capture", () => {
         version: "1",
         measure: vi.fn(),
       },
+      textRunLayoutProvider,
     } satisfies LeaferEngineAdapter;
 
     await captureDesignTarget(

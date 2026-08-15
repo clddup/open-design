@@ -2,11 +2,15 @@ import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
 import type { RasterExportRequest } from "@opendesign/import-export-service/raster";
 import {
   createLeaferEngineAdapter,
+  resolveDesignTextRuns,
   type LeaferEngineAdapter,
   type LeaferEngineCallbacks,
   type LeaferRasterExportResult,
   type LeaferTextRunProjectionResolution,
+  type LeaferTextRunStyle,
 } from "@opendesign/leafer-engine";
+import type { TextRunLayoutProvider } from "@opendesign/text-service";
+import { composeTextRunLayoutProviders } from "./text-run-provider-fallback";
 
 const EXPORT_SURFACE_WIDTH = 1_280;
 const EXPORT_SURFACE_HEIGHT = 960;
@@ -25,6 +29,7 @@ export async function exportDesignRaster(
       callbacks: LeaferEngineCallbacks,
     ) => Promise<LeaferEngineAdapter>;
     textRunProjection?: LeaferTextRunProjectionResolution;
+    textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
   } = {},
 ): Promise<LeaferRasterExportResult> {
   const createAdapter = options.createAdapter ?? createLeaferEngineAdapter;
@@ -62,14 +67,22 @@ export async function exportDesignRaster(
       signal,
     );
     throwIfAborted(signal);
+    const textRunProjection =
+      options.textRunProjection ??
+      resolveDesignTextRuns(
+        designDocument,
+        request.pageId,
+        composeTextRunLayoutProviders(
+          adapter.textRunLayoutProvider,
+          options.textRunLayoutProvider,
+        ),
+      ).projection;
     adapter.sync({
       document: designDocument,
       pageId: request.pageId,
       reducedMotion: true,
       selection: { nodeIds: [] },
-      ...(options.textRunProjection
-        ? { textRunProjection: options.textRunProjection }
-        : {}),
+      textRunProjection,
       tool: "select",
       viewport: {
         panX: 0,

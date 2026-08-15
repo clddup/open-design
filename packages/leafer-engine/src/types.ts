@@ -15,7 +15,11 @@ import type {
   RasterExportMimeType,
   RasterExportRequest,
 } from "@opendesign/import-export-service/raster";
-import type { TextLayoutProvider } from "@opendesign/text-service";
+import type {
+  TextLayoutProvider,
+  TextRunLayoutProvider,
+} from "@opendesign/text-service";
+import type { LeaferTextRunStyle } from "./text-run-layout.js";
 import type { LeaferTextRunProjectionResolution } from "./text-run-projection.js";
 
 export type LeaferCanvasTool =
@@ -105,6 +109,7 @@ export interface LeaferEngineCallbacks {
   onError(error: Error): void;
   onOperations(request: LeaferOperationRequest): boolean;
   onSelectionChange(nodeIds: string[], anchorNodeId?: string): void;
+  onTextRangeSelectionChange?(selection: LeaferTextRangeSelection | null): void;
   onVectorCut?(request: LeaferVectorCutRequest): LeaferVectorCutResponse;
   onVectorLineCut?(
     request: LeaferVectorLineCutRequest,
@@ -123,6 +128,14 @@ export interface LeaferEngineCallbacks {
   onViewportChange(viewport: ViewportState): void;
   onWarning?(warning: LeaferFidelityWarning): void;
   onWarningsChange?(warnings: readonly LeaferFidelityWarning[]): void;
+}
+
+export interface LeaferTextRangeSelection {
+  documentId: string;
+  nodeId: string;
+  revision: number;
+  start: number;
+  end: number;
 }
 
 export interface LeaferBooleanEditScope {
@@ -241,6 +254,7 @@ export interface LeaferFidelityWarning {
     | "component-resolution-failed"
     | "invalid-path"
     | "missing-image"
+    | "rich-text-layout-failed"
     | "style-resolution-failed"
     | "variable-resolution-failed"
     | "unsupported-color-alpha"
@@ -262,4 +276,5 @@ export interface LeaferEngineAdapter {
   setVectorPointMode(mode: VectorPointMode): boolean;
   sync(input: LeaferEngineSyncInput): void;
   readonly textLayoutProvider: TextLayoutProvider;
+  readonly textRunLayoutProvider: TextRunLayoutProvider<LeaferTextRunStyle>;
 }

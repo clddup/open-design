@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.30.0",
+  "schemaVersion": "1.31.0",
   "documentId": "document_od_penguin_01",
   "revision": 1,
   "pageOrder": ["page_penguin_01"],
@@ -827,6 +827,7 @@
       "extensions": {},
       "properties": {
         "content": "ORBIT PENGUIN  /  VECTOR STUDY 01",
+        "runs": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 14,

@@ -44,6 +44,7 @@ import {
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   INTERNAL_IMPORT_SVG_TOOL_NAME,
@@ -54,6 +55,7 @@ import {
   isDesignFontToolInput,
   isDesignHierarchyToolInput,
   isDesignPageToolInput,
+  isDesignTextRangeToolInput,
   isDesignVectorToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
@@ -63,6 +65,7 @@ import {
   type DesignComponentToolInput,
   type DesignFontToolInput,
   type DesignPageToolInput,
+  type DesignTextRangeToolInput,
 } from "../shared/design-agent-tools";
 import type {
   RendererDesignToolProgressPhase,
@@ -348,6 +351,62 @@ async function executeDesignToolRequestUnsafe(
     };
     const transaction = {
       transactionId: `transaction_agent_font_${safeToolCallId}_${document.revision}`,
+      documentId: document.documentId,
+      baseRevision: document.revision,
+      actor: {
+        type: "agent",
+        id: `agent_${request.context.sessionId}`,
+        displayName: "OpenDesign Agent",
+      },
+      label: input.label,
+      commands: [command],
+    } satisfies DesignTransaction;
+    assertCommandsWithinMutationTarget(
+      document,
+      transaction.commands,
+      request.context.mutationTarget,
+    );
+    const preview = runtime.preview(transaction);
+    if (!preview.ok) {
+      throw designTransactionToolError(preview.error, transaction.commands);
+    }
+    return await executeSemanticDesignTransaction({
+      request,
+      runtime,
+      transaction,
+      preview,
+      execution: options,
+      createFailure: designTransactionToolError,
+    });
+  }
+
+  if (
+    request.call.toolName === DESIGN_TEXT_RANGE_TOOL_NAME &&
+    isDesignTextRangeToolInput(request.call.input)
+  ) {
+    const input = request.call.input;
+    assertPageWithinMutationTarget(
+      input.pageId,
+      request.context.mutationTarget,
+      "Text range",
+    );
+    assertTextRangeInputPage(document, input);
+    const safeToolCallId =
+      request.call.toolCallId.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 96) ||
+      "tool";
+    const command: Extract<
+      DesignOperation,
+      { type: "update_text_range_style" }
+    > = {
+      commandId: `text_range_${safeToolCallId}`.slice(0, 256),
+      type: "update_text_range_style",
+      nodeId: input.nodeId,
+      start: input.start,
+      end: input.end,
+      style: structuredClone(input.style),
+    };
+    const transaction = {
+      transactionId: `transaction_agent_text_range_${safeToolCallId}_${document.revision}`,
       documentId: document.documentId,
       baseRevision: document.revision,
       actor: {
@@ -1643,6 +1702,7 @@ function commandDirectlyTargetsNode(
     case "insert_element":
       return command.node.id === nodeId;
     case "update_properties":
+    case "update_text_range_style":
     case "move_element":
     case "delete_element":
       return command.nodeId === nodeId;
@@ -1710,23 +1770,32 @@ function createScopedInspection(
   >();
   for (const node of Object.values(nodesById)) {
     if (node.kind !== "text") continue;
-    const key = JSON.stringify([
-      node.properties.fontFamily,
-      node.properties.fontStyleName,
-      node.properties.fontWeight,
-      node.properties.fontSlant,
-    ]);
-    const existing = fontRequests.get(key);
-    if (existing) {
-      existing.nodeIds.push(node.id);
-    } else {
-      fontRequests.set(key, {
+    for (const font of [
+      {
         fontFamily: node.properties.fontFamily,
         fontStyleName: node.properties.fontStyleName,
         fontWeight: node.properties.fontWeight,
         fontSlant: node.properties.fontSlant,
-        nodeIds: [node.id],
-      });
+      },
+      ...(node.properties.runs ?? []).map((run) => ({
+        fontFamily: run.style.fontFamily,
+        fontStyleName: run.style.fontStyleName,
+        fontWeight: run.style.fontWeight,
+        fontSlant: run.style.fontSlant,
+      })),
+    ]) {
+      const key = JSON.stringify([
+        font.fontFamily,
+        font.fontStyleName,
+        font.fontWeight,
+        font.fontSlant,
+      ]);
+      const existing = fontRequests.get(key);
+      if (existing) {
+        if (!existing.nodeIds.includes(node.id)) existing.nodeIds.push(node.id);
+      } else {
+        fontRequests.set(key, { ...font, nodeIds: [node.id] });
+      }
     }
   }
   const sortedFontRequests = [...fontRequests.values()].sort(
@@ -1771,6 +1840,9 @@ function createScopedInspection(
       for (const paint of [
         ...node.properties.fills,
         ...node.properties.strokes,
+        ...(node.kind === "text"
+          ? (node.properties.runs ?? []).flatMap((run) => run.style.fills)
+          : []),
       ]) {
         if (paint.type === "image") assetIds.add(paint.assetId);
       }
@@ -1984,6 +2056,17 @@ function assertFontInputPage(
   if (outsideNodeId) {
     throw new Error(
       `Font operation target ${outsideNodeId} is outside Page ${input.pageId}`,
+    );
+  }
+}
+
+function assertTextRangeInputPage(
+  document: DesignDocument,
+  input: DesignTextRangeToolInput,
+): void {
+  if (!pageNodeIds(document, input.pageId).has(input.nodeId)) {
+    throw new Error(
+      `Text range operation target ${input.nodeId} is outside Page ${input.pageId}`,
     );
   }
 }

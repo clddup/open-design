@@ -35,7 +35,10 @@ import {
   isRasterExportRequest,
   type RasterExportRequest,
 } from "@opendesign/import-export-service/raster";
-import type { TextLayoutProvider } from "@opendesign/text-service";
+import type {
+  TextLayoutProvider,
+  TextRunLayoutProvider,
+} from "@opendesign/text-service";
 import type * as LeaferEditorModule from "leafer-editor";
 import {
   LEAFER_EDITOR_SELECTION_COLOR,
@@ -71,6 +74,10 @@ import {
   type GenerationTweenPlan,
 } from "./generation-tween.js";
 import { createLeaferTextLayoutProvider } from "./text-layout.js";
+import {
+  createLeaferTextRunLayoutProvider,
+  type LeaferTextRunStyle,
+} from "./text-run-layout.js";
 import { TextRunEditController } from "./text-run-edit-controller.js";
 import {
   projectionNodeId,
@@ -281,6 +288,7 @@ export async function createLeaferEngineAdapter(
 
 class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly textLayoutProvider: TextLayoutProvider;
+  readonly textRunLayoutProvider: TextRunLayoutProvider<LeaferTextRunStyle>;
   readonly #app: LeaferApp;
   readonly #callbacks: LeaferEngineCallbacks;
   readonly #host: HTMLElement;
@@ -317,6 +325,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     VectorEditControl
   >();
   #viewportFrame: number | null = null;
+  readonly #onDocumentSelectionChange = () => {
+    this.#emitTextRangeSelection();
+  };
   #editorFrame: number | null = null;
   #editorRefreshNeedsTreeBounds = false;
   readonly #editorRefreshNodeBounds = new Set<string>();
@@ -358,6 +369,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#callbacks = callbacks;
     this.#leafer = leafer;
     this.textLayoutProvider = createLeaferTextLayoutProvider(leafer);
+    this.textRunLayoutProvider = createLeaferTextRunLayoutProvider(leafer);
     this.#loadVectorGeometryProvider =
       options.loadVectorGeometryProvider ?? loadBrowserVectorGeometryProvider;
     this.#app = new leafer.App({
@@ -817,6 +829,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationRevealStroker.remove();
     this.#generationRevealStroker.destroy();
     window.removeEventListener("keydown", this.#onWindowKeyDown, true);
+    document.removeEventListener(
+      "selectionchange",
+      this.#onDocumentSelectionChange,
+    );
     this.#host.removeEventListener("contextlost", this.#onContextLost, true);
     this.#app.destroy();
     this.#elements.clear();
@@ -934,6 +950,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       }
     });
     this.#editor.on(InnerEditorEvent.CLOSE, () => this.#finishTextEdit());
+    document.addEventListener(
+      "selectionchange",
+      this.#onDocumentSelectionChange,
+    );
 
     this.#app.on(DragEvent.START, (event: unknown) => {
       this.#startBoxSelect(event);
@@ -1690,6 +1710,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       disposed: this.#disposed,
       synchronizing: this.#synchronizing,
     });
+    this.#callbacks.onTextRangeSelectionChange?.(null);
     if (result.kind === "none") return;
     if (result.kind === "restore") {
       this.#restoreProjection();
@@ -1702,7 +1723,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           commandId: `leafer_text_${result.before.nodeId}`,
           type: "update_properties",
           nodeId: result.before.nodeId,
-          properties: { ...result.node.properties, content: result.content },
+          properties: { content: result.content },
         },
       ],
       selectionNodeIds: [result.before.nodeId],
@@ -1711,6 +1732,41 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!accepted) {
       this.#restoreProjection();
     }
+  }
+
+  #emitTextRangeSelection(): void {
+    const nodeId = this.#textRunEditor.activeNodeId;
+    const input = this.#input;
+    const innerEditor = this.#editor.innerEditor as
+      { editDom?: HTMLDivElement } | undefined;
+    const root = innerEditor?.editDom;
+    const selection = window.getSelection();
+    if (
+      !nodeId ||
+      !input ||
+      !root ||
+      !selection ||
+      selection.rangeCount === 0
+    ) {
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (
+      !root.contains(range.startContainer) ||
+      !root.contains(range.endContainer)
+    ) {
+      return;
+    }
+    const first = textDomOffset(root, range.startContainer, range.startOffset);
+    const second = textDomOffset(root, range.endContainer, range.endOffset);
+    if (first === null || second === null) return;
+    this.#callbacks.onTextRangeSelectionChange?.({
+      documentId: input.document.documentId,
+      nodeId,
+      revision: input.document.revision,
+      start: Math.min(first, second),
+      end: Math.max(first, second),
+    });
   }
 
   #startBoxSelect(event: unknown): void {
@@ -3819,6 +3875,55 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       error instanceof Error ? error : new Error("Leafer rendering failed"),
     );
   }
+}
+
+function textDomOffset(
+  root: HTMLElement,
+  target: Node,
+  targetOffset: number,
+): number | null {
+  let total = 0;
+  let resolved: number | null = null;
+  const visit = (node: Node): void => {
+    if (resolved !== null) return;
+    if (node === target) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const length = node.textContent?.length ?? 0;
+        resolved = total + Math.min(Math.max(targetOffset, 0), length);
+      } else {
+        const children = [...node.childNodes];
+        for (
+          let index = 0;
+          index < Math.min(targetOffset, children.length);
+          index += 1
+        ) {
+          total += textDomLength(children[index]!);
+        }
+        resolved = total;
+      }
+      return;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      total += node.textContent?.length ?? 0;
+      return;
+    }
+    if (node instanceof HTMLBRElement) {
+      total += 1;
+      return;
+    }
+    node.childNodes.forEach(visit);
+  };
+  visit(root);
+  return resolved;
+}
+
+function textDomLength(node: Node): number {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
+  if (node instanceof HTMLBRElement) return 1;
+  return [...node.childNodes].reduce(
+    (sum, child) => sum + textDomLength(child),
+    0,
+  );
 }
 
 async function loadBrowserVectorGeometryProvider(): Promise<VectorGeometryProvider> {

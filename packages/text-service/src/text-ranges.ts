@@ -28,6 +28,53 @@ export interface TextContentEditResult<Style> {
   runs: TextStyleRun<Style>[];
 }
 
+export function applyTextRangeStyle<Style>(
+  content: string,
+  runs: readonly TextStyleRun<Style>[],
+  baseStyle: Style,
+  range: { start: number; end: number },
+  update: (style: Style) => Style,
+  equal: (left: Style, right: Style) => boolean = Object.is,
+): TextStyleRun<Style>[] {
+  const issue = validateTextStyleRuns(content, runs);
+  if (issue) throw new TypeError(issue);
+  if (
+    range.end <= range.start ||
+    range.start < 0 ||
+    range.end > content.length ||
+    !isUtf16CodePointBoundary(content, range.start) ||
+    !isUtf16CodePointBoundary(content, range.end)
+  ) {
+    throw new RangeError(
+      "Text style update must use a non-empty bounded UTF-16 [start, end) range",
+    );
+  }
+  const next: TextStyleRun<Style>[] = [];
+  for (const run of canonicalizeTextStyleRuns(
+    content,
+    runs,
+    baseStyle,
+    equal,
+  )) {
+    if (run.end <= range.start || run.start >= range.end) {
+      next.push(run);
+      continue;
+    }
+    if (run.start < range.start) {
+      next.push({ start: run.start, end: range.start, style: run.style });
+    }
+    next.push({
+      start: Math.max(run.start, range.start),
+      end: Math.min(run.end, range.end),
+      style: update(structuredClone(run.style)),
+    });
+    if (run.end > range.end) {
+      next.push({ start: range.end, end: run.end, style: run.style });
+    }
+  }
+  return mergeAdjacentTextStyleRuns(next, equal);
+}
+
 export function validateTextStyleRuns<Style>(
   content: string,
   runs: readonly TextStyleRun<Style>[],

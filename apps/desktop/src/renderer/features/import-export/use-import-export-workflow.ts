@@ -5,6 +5,8 @@ import type {
 } from "@opendesign/design-contracts";
 import { planStoredExportSetting } from "@opendesign/import-export-service/stored-export";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
+import type { LeaferTextRunStyle } from "@opendesign/leafer-engine";
+import type { TextRunLayoutProvider } from "@opendesign/text-service";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   MessageKey,
@@ -44,6 +46,7 @@ export interface ImportExportWorkflowContext {
   setEditorError: (message: string | null) => void;
   showProperties: () => void;
   t: Translate;
+  textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
 }
 
 export interface ImportExportWorkflow {
@@ -89,6 +92,7 @@ export function useImportExportWorkflow({
   setEditorError,
   showProperties,
   t,
+  textRunLayoutProvider,
 }: ImportExportWorkflowContext): ImportExportWorkflow {
   const [svgExportSettings, setSvgExportSettings] =
     useState<SvgWorkerExportSettings>(INITIAL_SVG_EXPORT_SETTINGS);
@@ -115,6 +119,7 @@ export function useImportExportWorkflow({
     showProperties,
     svgExportSettings,
     t,
+    textRunLayoutProvider,
   });
   latest.current = {
     activeDesignFileId,
@@ -129,6 +134,7 @@ export function useImportExportWorkflow({
     showProperties,
     svgExportSettings,
     t,
+    textRunLayoutProvider,
   };
 
   const beginOperation = useCallback((status: SvgOperationStatus) => {
@@ -370,6 +376,9 @@ export function useImportExportWorkflow({
             resampling: settings.resampling,
           },
           controller.signal,
+          current.textRunLayoutProvider
+            ? { textRunLayoutProvider: current.textRunLayoutProvider }
+            : undefined,
         );
         if (controller.signal.aborted) return;
         const saved = await desktop.saveRasterFile({

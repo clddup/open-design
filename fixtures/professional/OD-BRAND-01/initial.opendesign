@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.30.0",
+  "schemaVersion": "1.31.0",
   "documentId": "document_od_brand_01",
   "revision": 0,
   "pageOrder": ["page_brand_01"],
@@ -240,6 +240,7 @@
       "extensions": {},
       "properties": {
         "content": "OPEN\nDESIGN",
+        "runs": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 56,
@@ -289,6 +290,7 @@
       "extensions": {},
       "properties": {
         "content": "AI-NATIVE CREATIVE SYSTEM",
+        "runs": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 13,
@@ -370,6 +372,7 @@
       "extensions": {},
       "properties": {
         "content": "OD-BRAND-01   /   NON-DESTRUCTIVE BOOLEAN MASTER",
+        "runs": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 11,

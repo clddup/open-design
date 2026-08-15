@@ -1,8 +1,10 @@
 import {
   isDesignAsset,
+  isDesignOperation,
   isImagePlacement,
   type BooleanOperation,
   type DesignAsset,
+  type DesignOperation,
   type ImagePlacement,
   type Point,
   type TextFontDescriptor,
@@ -104,6 +106,7 @@ export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
 export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
 export const DESIGN_VECTOR_TOOL_NAME = "opendesign_edit_vector";
 export const DESIGN_FONT_TOOL_NAME = "opendesign_manage_fonts";
+export const DESIGN_TEXT_RANGE_TOOL_NAME = "opendesign_style_text_range";
 export const DESIGN_PAGE_TOOL_NAME = "opendesign_manage_pages";
 export const DESIGN_COMPONENT_TOOL_NAME = "opendesign_manage_components";
 export const DESIGN_VARIABLE_TOOL_NAME = "opendesign_manage_variables";
@@ -415,6 +418,15 @@ export type DesignFontToolInput =
       expectedFont: TextFontDescriptor;
       replacementFont: TextFontDescriptor;
     };
+
+export type DesignTextRangeToolInput = {
+  label: string;
+  pageId: string;
+  nodeId: string;
+  start: number;
+  end: number;
+  style: Extract<DesignOperation, { type: "update_text_range_style" }>["style"];
+};
 
 export type DesignHierarchyToolInput =
   | {
@@ -1186,6 +1198,50 @@ const MODEL_FONT_DESCRIPTOR_SCHEMA = {
     fontSlant: { enum: ["normal", "italic"] },
   },
   required: ["fontFamily", "fontStyleName", "fontWeight", "fontSlant"],
+  additionalProperties: false,
+} as const;
+
+const MODEL_TEXT_RANGE_STYLE_SCHEMA = {
+  type: "object",
+  minProperties: 1,
+  properties: {
+    fontFamily: MODEL_TEXT_PROPERTIES.fontFamily,
+    fontStyleName: MODEL_TEXT_PROPERTIES.fontStyleName,
+    fontSize: MODEL_TEXT_PROPERTIES.fontSize,
+    fontWeight: MODEL_TEXT_PROPERTIES.fontWeight,
+    fontSlant: MODEL_TEXT_PROPERTIES.fontSlant,
+    lineHeight: MODEL_TEXT_PROPERTIES.lineHeight,
+    letterSpacing: MODEL_TEXT_PROPERTIES.letterSpacing,
+    textCase: MODEL_TEXT_PROPERTIES.textCase,
+    textDecoration: MODEL_TEXT_PROPERTIES.textDecoration,
+    fills: { type: "array", maxItems: 64, items: MODEL_PAINT_SCHEMA },
+    textStyleId: {
+      anyOf: [
+        { type: "string", minLength: 1, maxLength: 512 },
+        { type: "null" },
+      ],
+    },
+    fillStyleId: {
+      anyOf: [
+        { type: "string", minLength: 1, maxLength: 512 },
+        { type: "null" },
+      ],
+    },
+  },
+  additionalProperties: false,
+} as const;
+
+const MODEL_TEXT_RANGE_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    label: { type: "string", minLength: 1, maxLength: 256 },
+    pageId: { type: "string", minLength: 1, maxLength: 256 },
+    nodeId: { type: "string", minLength: 1, maxLength: 256 },
+    start: { type: "integer", minimum: 0 },
+    end: { type: "integer", minimum: 1 },
+    style: MODEL_TEXT_RANGE_STYLE_SCHEMA,
+  },
+  required: ["label", "pageId", "nodeId", "start", "end", "style"],
   additionalProperties: false,
 } as const;
 
@@ -2397,6 +2453,18 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     approval: "never" as const,
   },
   {
+    name: DESIGN_TEXT_RANGE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "deferred" as const,
+      role: "material-write" as const,
+    },
+    description:
+      "Style one inspected, non-empty UTF-16 [start,end) range on a stable Text node inside the active Page. The host rejects stale revisions, locked/non-Text/cross-Page targets, empty or out-of-bounds ranges, surrogate splits, wrong Style types, and no-op patches. Exact Text/Paint Style IDs resolve through the current local style registry; direct typography or Fill edits detach the corresponding range reference. This writes one update_text_range_style transaction through the same Runtime, Auto Size, Auto Layout, revision, undo, save, projection, capture, and export path. Inspect the current content and runs first; never guess offsets from an earlier revision.",
+    inputSchema: MODEL_TEXT_RANGE_TOOL_SCHEMA,
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: DESIGN_FONT_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "deferred" as const,
@@ -2480,7 +2548,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       bootstrapInputSchema: DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
     },
     description:
-      "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. Use opendesign_manage_fonts for explicit file-font reflow or replacement so the general node schema stays compact. When one target needs several meaningful visible stages, provide ordered steps whose commandIds cover every command exactly once and in command order; use semantic units such as navigation, hero, content, and footer, never arbitrary 1–3 command batches. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed plus paragraphIndent, paragraphSpacing, textCase, textDecoration, textTruncation, and maxLines. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap choices and visible/clip overflow. textTruncation disabled requires maxLines null. Ending truncation requires clip overflow on Fixed text; maxLines may be null there to use the fixed text-box height. Ending truncation on Auto Size requires a positive maxLines. The trusted host measures Auto Size and derived ending ellipsis with the versioned Leafer Text provider while preserving the complete authored content and concrete authoritative size, so do not estimate glyph bounds or replace content with a literal ellipsis. A size update without an explicit non-fixed textResize switches that text layer to Fixed. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network: stable vertices, persistent corner/smooth/mirrored/independent handle modes, cubic segment tangents, ordered path runs, and closed fill regions. One non-branching path run is fully editable by the human point editor; a closed run needs one matching region, while an open run must have no fill. Branch authoring and multiple contours are not yet available. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Both geometry forms support the same fills, strokes, gradients, effects, and advanced stroke fields. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside the active Frame and do not recreate it. For planned region IDs, provide the declared Group/Frame kind and real content; the trusted host compiles canonical parent-local bounds. Every inserted planned region must include real editable content in the same transaction. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
+      "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. Use opendesign_style_text_range for an inspected non-empty rich-text range and opendesign_manage_fonts for explicit file-font reflow or replacement, keeping the general node schema compact. When one target needs several meaningful visible stages, provide ordered steps whose commandIds cover every command exactly once and in command order; use semantic units such as navigation, hero, content, and footer, never arbitrary 1–3 command batches. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed plus paragraphIndent, paragraphSpacing, textCase, textDecoration, textTruncation, and maxLines. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap choices and visible/clip overflow. The trusted host measures Auto Size and derived ending ellipsis with the versioned Text providers while preserving complete authored content and concrete authoritative size. A size update without an explicit non-fixed textResize switches that text layer to Fixed. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside the active Frame and do not recreate it. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
     inputSchema: {
       ...MODEL_APPLY_TRANSACTION_SCHEMA,
     },
@@ -2545,6 +2613,9 @@ export function validateDesignAgentToolInput(
   }
   if (toolName === DESIGN_FONT_TOOL_NAME) {
     return isDesignFontToolInput(input);
+  }
+  if (toolName === DESIGN_TEXT_RANGE_TOOL_NAME) {
+    return isDesignTextRangeToolInput(input);
   }
   if (toolName === DESIGN_PAGE_TOOL_NAME) {
     return normalizeDesignPageToolInput(input) !== undefined;
@@ -3366,6 +3437,32 @@ export function isDesignFontToolInput(
       "replacementFont",
     ])
   );
+}
+
+export function isDesignTextRangeToolInput(
+  input: unknown,
+): input is DesignTextRangeToolInput {
+  if (
+    !isRecord(input) ||
+    !safeLabel(input.label) ||
+    !safeId(input.pageId) ||
+    !safeId(input.nodeId) ||
+    !Number.isSafeInteger(input.start) ||
+    !Number.isSafeInteger(input.end) ||
+    Number(input.start) < 0 ||
+    Number(input.end) <= Number(input.start) ||
+    !exactKeys(input, ["label", "pageId", "nodeId", "start", "end", "style"])
+  ) {
+    return false;
+  }
+  return isDesignOperation({
+    commandId: "validate_text_range",
+    type: "update_text_range_style",
+    nodeId: input.nodeId,
+    start: input.start,
+    end: input.end,
+    style: input.style,
+  });
 }
 
 function isTextFontDescriptor(value: unknown): value is TextFontDescriptor {

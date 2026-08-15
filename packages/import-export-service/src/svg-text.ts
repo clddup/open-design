@@ -3,9 +3,11 @@ import {
   schemaValidationIssues,
   type DesignNode,
   type Paint,
+  type TextRunStyle,
 } from "@opendesign/design-contracts";
 
-const TEXT_METADATA_VERSION = "5";
+const TEXT_METADATA_VERSION = "6";
+const FONT_FACE_TEXT_METADATA_VERSION = "5";
 const TYPOGRAPHY_V2_TEXT_METADATA_VERSION = "4";
 const TYPOGRAPHY_V1_TEXT_METADATA_VERSION = "3";
 const FIXED_LAYOUT_TEXT_METADATA_VERSION = "2";
@@ -69,29 +71,16 @@ export function writeSvgText(
   element.setAttribute("text-anchor", textAnchor(properties));
   element.setAttributeNS(XML_NAMESPACE, "xml:space", "preserve");
 
-  const lines = textLines(properties.content);
-  const x = lineX(node.size.width, properties) + properties.paragraphIndent;
-  const y = firstLineY(node.size.height, lines.length, properties);
-  for (let index = 0; index < lines.length; index += 1) {
-    const tspan = element.ownerDocument.createElementNS(
-      element.namespaceURI,
-      "tspan",
-    );
-    tspan.setAttribute("x", formatNumber(x));
-    tspan.setAttribute(
-      "y",
-      formatNumber(
-        y + index * properties.lineHeight + index * properties.paragraphSpacing,
-      ),
-    );
-    tspan.appendChild(element.ownerDocument.createTextNode(lines[index]!));
-    element.appendChild(tspan);
+  if ((properties.runs?.length ?? 0) > 0) {
+    writeRichTextSpans(element, node);
+  } else {
+    writeUniformTextSpans(element, node);
   }
 
   const serialized = JSON.stringify({
     width: node.size.width,
     height: node.size.height,
-    properties,
+    properties: { ...properties, runs: properties.runs ?? [] },
   } satisfies SerializedText);
   if (serialized.length > MAX_TEXT_METADATA_CHARACTERS) {
     return { ok: true, metadataWritten: false };
@@ -120,6 +109,7 @@ export function readSvgText(element: Element): SvgTextReadResult {
   const metadataVersion = element.getAttribute(VERSION_ATTRIBUTE);
   if (
     metadataVersion !== TEXT_METADATA_VERSION &&
+    metadataVersion !== FONT_FACE_TEXT_METADATA_VERSION &&
     metadataVersion !== TYPOGRAPHY_V2_TEXT_METADATA_VERSION &&
     metadataVersion !== TYPOGRAPHY_V1_TEXT_METADATA_VERSION &&
     metadataVersion !== FIXED_LAYOUT_TEXT_METADATA_VERSION &&
@@ -205,10 +195,14 @@ function migrateTextProperties(version: string, value: unknown): unknown {
   } else if (version === FIXED_LAYOUT_TEXT_METADATA_VERSION) {
     migrated.textResize = "fixed";
   }
-  if (version !== TEXT_METADATA_VERSION) {
+  if (
+    version !== TEXT_METADATA_VERSION &&
+    version !== FONT_FACE_TEXT_METADATA_VERSION
+  ) {
     migrated.fontStyleName = null;
     migrated.fontSlant = "normal";
   }
+  if (version !== TEXT_METADATA_VERSION) migrated.runs = [];
   if (
     version !== TEXT_METADATA_VERSION &&
     version !== TYPOGRAPHY_V2_TEXT_METADATA_VERSION
@@ -328,6 +322,126 @@ function sameJson(left: unknown, right: unknown): boolean {
   );
 }
 
+function writeUniformTextSpans(element: Element, node: TextNode): void {
+  const { properties } = node;
+  const lines = textLines(properties.content);
+  const x = lineX(node.size.width, properties) + properties.paragraphIndent;
+  const y = firstLineY(node.size.height, lines.length, properties);
+  for (let index = 0; index < lines.length; index += 1) {
+    const tspan = element.ownerDocument.createElementNS(
+      element.namespaceURI,
+      "tspan",
+    );
+    tspan.setAttribute("x", formatNumber(x));
+    tspan.setAttribute(
+      "y",
+      formatNumber(
+        y + index * properties.lineHeight + index * properties.paragraphSpacing,
+      ),
+    );
+    tspan.appendChild(element.ownerDocument.createTextNode(lines[index]!));
+    element.appendChild(tspan);
+  }
+}
+
+function writeRichTextSpans(element: Element, node: TextNode): void {
+  const runs = node.properties.runs ?? [];
+  const x =
+    lineX(node.size.width, node.properties) + node.properties.paragraphIndent;
+  const y = firstLineY(
+    node.size.height,
+    textLines(node.properties.content).length,
+    node.properties,
+  );
+  runs.forEach((run, index) => {
+    const tspan = element.ownerDocument.createElementNS(
+      element.namespaceURI,
+      "tspan",
+    );
+    tspan.setAttribute("data-opendesign-range-start", String(run.start));
+    tspan.setAttribute("data-opendesign-range-end", String(run.end));
+    if (index === 0) {
+      tspan.setAttribute("x", formatNumber(x));
+      tspan.setAttribute("y", formatNumber(y));
+    }
+    writeRunStyleAttributes(tspan, run.style);
+    tspan.appendChild(
+      element.ownerDocument.createTextNode(
+        node.properties.content.slice(run.start, run.end),
+      ),
+    );
+    element.appendChild(tspan);
+  });
+}
+
+function writeRunStyleAttributes(element: Element, style: TextRunStyle): void {
+  element.setAttribute("font-family", style.fontFamily);
+  element.setAttribute("font-size", formatNumber(style.fontSize));
+  element.setAttribute("font-weight", String(style.fontWeight));
+  element.setAttribute("font-style", style.fontSlant);
+  element.setAttribute("letter-spacing", formatNumber(style.letterSpacing));
+  element.setAttribute(
+    "text-decoration",
+    style.textDecoration === "underline"
+      ? "underline"
+      : style.textDecoration === "strikethrough"
+        ? "line-through"
+        : "none",
+  );
+  element.setAttribute(
+    "text-transform",
+    style.textCase === "uppercase"
+      ? "uppercase"
+      : style.textCase === "lowercase"
+        ? "lowercase"
+        : style.textCase === "title-case"
+          ? "capitalize"
+          : "none",
+  );
+  element.setAttribute(
+    "font-variant",
+    style.textCase === "small-caps" ? "small-caps" : "normal",
+  );
+  const solid = style.fills.find(
+    (paint) => paint.visible !== false && paint.type === "solid",
+  );
+  if (solid?.type === "solid") {
+    element.setAttribute("fill", solid.color);
+    element.setAttribute("fill-opacity", formatNumber(solid.opacity));
+  }
+}
+
+function renderedRichTextMismatch(
+  element: Element,
+  properties: TextProperties,
+): string | null {
+  const runs = properties.runs ?? [];
+  const children = elementChildren(element);
+  if (
+    children.length !== runs.length ||
+    children.some((child) => child.localName.toLowerCase() !== "tspan")
+  ) {
+    return "OpenDesign rich text metadata does not match the rendered run structure";
+  }
+  for (let index = 0; index < runs.length; index += 1) {
+    const run = runs[index]!;
+    const child = children[index]!;
+    if (
+      child.getAttribute("data-opendesign-range-start") !== String(run.start) ||
+      child.getAttribute("data-opendesign-range-end") !== String(run.end) ||
+      child.textContent !== properties.content.slice(run.start, run.end) ||
+      child.getAttribute("font-family") !== run.style.fontFamily ||
+      child.getAttribute("font-style") !== run.style.fontSlant ||
+      child.getAttribute("font-weight") !== String(run.style.fontWeight) ||
+      !sameAttributeNumber(child, "font-size", run.style.fontSize) ||
+      !sameAttributeNumber(child, "letter-spacing", run.style.letterSpacing)
+    ) {
+      return "OpenDesign rich text metadata does not match the rendered run content or style";
+    }
+  }
+  return null;
+}
+
 function renderedTextMismatch(
   element: Element,
   value: SerializedText,
@@ -347,7 +461,8 @@ function renderedTextMismatch(
     return "OpenDesign text metadata does not match the rendered font weight";
   }
   if (
-    metadataVersion === TEXT_METADATA_VERSION &&
+    (metadataVersion === TEXT_METADATA_VERSION ||
+      metadataVersion === FONT_FACE_TEXT_METADATA_VERSION) &&
     element.getAttribute("font-style") !== properties.fontSlant
   ) {
     return "OpenDesign text metadata does not match the rendered font slant";
@@ -368,6 +483,12 @@ function renderedTextMismatch(
     return "OpenDesign text metadata does not match the rendered alignment";
   }
 
+  if (
+    metadataVersion === TEXT_METADATA_VERSION &&
+    (properties.runs?.length ?? 0) > 0
+  ) {
+    return renderedRichTextMismatch(element, properties);
+  }
   const lines = textLines(properties.content);
   const children = elementChildren(element);
   if (

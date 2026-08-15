@@ -92,6 +92,18 @@ const leaferHarness = vi.hoisted(() => ({
 }));
 
 vi.mock("@opendesign/leafer-engine", () => ({
+  resolveDesignTextRuns: (
+    document: { documentId: string; revision: number },
+    pageId: string,
+  ) => ({
+    projection: {
+      documentId: document.documentId,
+      pageId,
+      revision: document.revision,
+      resultsByNodeId: new Map(),
+    },
+    warnings: [],
+  }),
   createLeaferEngineAdapter: vi.fn(
     (host: HTMLElement, callbacks: LeaferEngineCallbacks) => {
       leaferHarness.callbacks = callbacks;
@@ -110,6 +122,11 @@ vi.mock("@opendesign/leafer-engine", () => ({
           version: "1",
           inspectFont: leaferHarness.inspectFont,
           measure: leaferHarness.measureText,
+        },
+        textRunLayoutProvider: {
+          id: "test-text-runs",
+          version: "1",
+          layout: vi.fn(),
         },
         sync: (input: LeaferEngineSyncInput) => {
           leaferHarness.input = input;

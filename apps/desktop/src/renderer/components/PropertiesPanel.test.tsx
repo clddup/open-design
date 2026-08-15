@@ -1962,4 +1962,53 @@ describe("PropertiesPanel text layout workflow", () => {
     await user.tab();
     expect(onUpdate).toHaveBeenCalledWith({ properties: { maxLines: 4 } });
   });
+
+  it("routes typography edits to the exact live text range", async () => {
+    const user = userEvent.setup();
+    const onRangeUpdate = vi.fn();
+    const { onUpdate } = renderPanel({
+      node: textNode,
+      selectionCount: 1,
+      fontContext: {
+        availability: {
+          status: "available",
+          provider: "test-font-provider",
+          providerVersion: "3",
+          message: "Inter is loaded",
+        },
+        importState: { status: "idle" },
+        matchingNodeCount: 1,
+        reflowableNodeCount: 0,
+        onImport: vi.fn().mockResolvedValue(undefined),
+        onReflow: vi.fn(),
+        onReplace: vi.fn(),
+        range: {
+          start: 0,
+          end: 4,
+          text: "Open",
+          style: {
+            fontFamily: textNode.properties.fontFamily,
+            fontStyleName: textNode.properties.fontStyleName,
+            fontSize: textNode.properties.fontSize,
+            fontWeight: textNode.properties.fontWeight,
+            fontSlant: textNode.properties.fontSlant,
+            lineHeight: textNode.properties.lineHeight,
+            letterSpacing: textNode.properties.letterSpacing,
+            textCase: textNode.properties.textCase,
+            textDecoration: textNode.properties.textDecoration,
+            fills: textNode.properties.fills,
+          },
+          mixedFields: [],
+          onUpdate: onRangeUpdate,
+        },
+      },
+    });
+    expect(screen.getByText("Selected text 0–4")).toBeVisible();
+    const size = screen.getByLabelText("Font size");
+    await user.clear(size);
+    await user.type(size, "28");
+    await user.tab();
+    expect(onRangeUpdate).toHaveBeenCalledWith({ fontSize: 28 });
+    expect(onUpdate).not.toHaveBeenCalledWith({ properties: { fontSize: 28 } });
+  });
 });

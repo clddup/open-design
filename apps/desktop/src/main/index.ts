@@ -110,6 +110,7 @@ import {
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
+  DESIGN_TEXT_RANGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
@@ -122,6 +123,7 @@ import {
   normalizeDesignApplyToolInput,
   isDesignComponentToolInput,
   isDesignFontToolInput,
+  isDesignTextRangeToolInput,
   normalizeDesignPageToolInput,
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
@@ -1617,6 +1619,24 @@ void app.whenReady().then(async () => {
             context,
             call.input.nodeIds,
           );
+        const result = await executeRendererTool(call);
+        globalTaskCoordinator.recordMaterialDesignWriteCompleted(
+          context.runId,
+          targetIds,
+          result.designRevision?.revision,
+        );
+        return withDesignDelivery(result, context.runId);
+      }
+      if (call.toolName === DESIGN_TEXT_RANGE_TOOL_NAME) {
+        if (!isDesignTextRangeToolInput(call.input)) {
+          throw new TypeError("Invalid text range tool input");
+        }
+        globalTaskCoordinator.assertDocumentInspected(context);
+        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
+        const targetIds =
+          globalTaskCoordinator.resolveMaterialTargetIdsIfPlanned(context, [
+            call.input.nodeId,
+          ]);
         const result = await executeRendererTool(call);
         globalTaskCoordinator.recordMaterialDesignWriteCompleted(
           context.runId,

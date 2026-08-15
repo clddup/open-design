@@ -2,6 +2,8 @@ import {
   createHarfBuzzTextRunLayoutRuntime,
   type HarfBuzzFontFaceDescriptor,
   type HarfBuzzTextRunLayoutRuntime,
+  type TextRunLayoutProvider,
+  type TextRunLayoutStyle,
 } from "@opendesign/text-service";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FontBinaryDescriptor } from "../shared/desktop-api";
@@ -12,15 +14,29 @@ export type FontBinaryImportState =
   | { count: number; status: "success" }
   | { message: string; status: "error" };
 
+export type RendererTextRunStyle = TextRunLayoutStyle & { fill: unknown };
+export type FontBinaryRuntime = ReturnType<typeof useFontBinaryRuntime>;
+
 export function useFontBinaryRuntime() {
-  const runtime = useRef<Promise<HarfBuzzTextRunLayoutRuntime> | null>(null);
+  const runtime = useRef<Promise<
+    HarfBuzzTextRunLayoutRuntime<RendererTextRunStyle>
+  > | null>(null);
   const hydratedFontIds = useRef(new Set<string>());
   const loadedBrowserFaces = useRef(new Set<string>());
   const [epoch, setEpoch] = useState(0);
   const [state, setState] = useState<FontBinaryImportState>({ status: "idle" });
+  const [provider, setProvider] = useState<
+    TextRunLayoutProvider<RendererTextRunStyle> | undefined
+  >();
 
   const requireRuntime = useCallback(() => {
-    runtime.current ??= createHarfBuzzTextRunLayoutRuntime();
+    runtime.current ??=
+      createHarfBuzzTextRunLayoutRuntime<RendererTextRunStyle>().then(
+        (value) => {
+          setProvider(() => value.provider);
+          return value;
+        },
+      );
     return runtime.current;
   }, []);
 
@@ -109,7 +125,7 @@ export function useFontBinaryRuntime() {
     };
   }, [hydrate]);
 
-  return { epoch, importFonts, state };
+  return { epoch, importFonts, provider, state };
 }
 
 async function loadBrowserFace(

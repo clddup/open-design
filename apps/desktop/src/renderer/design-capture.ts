@@ -1,12 +1,16 @@
 import type { DesignDocument } from "@opendesign/design-contracts";
 import {
   createLeaferEngineAdapter,
+  resolveDesignTextRuns,
   type LeaferCaptureResult,
   type LeaferCaptureTarget,
   type LeaferEngineAdapter,
   type LeaferEngineCallbacks,
   type LeaferTextRunProjectionResolution,
+  type LeaferTextRunStyle,
 } from "@opendesign/leafer-engine";
+import type { TextRunLayoutProvider } from "@opendesign/text-service";
+import { composeTextRunLayoutProviders } from "./text-run-provider-fallback";
 
 const CAPTURE_WIDTH = 1_280;
 const CAPTURE_HEIGHT = 960;
@@ -35,6 +39,7 @@ type CaptureDesignTargetOptions = {
   ) => Promise<LeaferEngineAdapter>;
   onStage?: (stage: DesignCaptureStage) => void;
   textRunProjection?: LeaferTextRunProjectionResolution;
+  textRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
   timeoutMs?: number;
 };
 
@@ -77,14 +82,22 @@ export async function captureDesignTarget(
     );
     options.onStage?.("adapter-created");
     throwIfAborted(signal);
+    const textRunProjection =
+      options.textRunProjection ??
+      resolveDesignTextRuns(
+        designDocument,
+        target.pageId,
+        composeTextRunLayoutProviders(
+          adapter.textRunLayoutProvider,
+          options.textRunLayoutProvider,
+        ),
+      ).projection;
     adapter.sync({
       document: designDocument,
       pageId: target.pageId,
       reducedMotion: true,
       selection: { nodeIds: [] },
-      ...(options.textRunProjection
-        ? { textRunProjection: options.textRunProjection }
-        : {}),
+      textRunProjection,
       tool: "select",
       viewport: {
         panX: 0,

@@ -629,6 +629,32 @@
   }
 }
 
+.textRangeStatus {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 7px;
+  padding: 6px 7px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 4px;
+  background: var(--ui-accent-soft);
+  color: var(--ui-text);
+  font-size: 9px;
+
+  span {
+    overflow: hidden;
+    color: var(--ui-text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  small {
+    grid-column: 1 / -1;
+    color: var(--ui-text-faint);
+    line-height: 1.35;
+  }
+}
+
 .fontAvailability {
   display: grid;
   min-width: 0;

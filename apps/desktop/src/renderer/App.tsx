@@ -6,6 +6,7 @@ import type {
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
+import type { LeaferTextRangeSelection } from "@opendesign/leafer-engine";
 import type { TextLayoutProvider } from "@opendesign/text-service";
 import type {
   ComponentOverridePatch,
@@ -86,6 +87,7 @@ import { reportRendererError } from "./diagnostics";
 import { useRendererDesignToolHost } from "./use-renderer-design-tool-host";
 import { useProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
 import { useFontInspectorContext } from "./use-font-inspector-context";
+import { useFontBinaryRuntime } from "./use-font-binary-runtime";
 const HISTORY_SYNC_DEBOUNCE_MS = 80;
 type AppView = "workspace" | "project" | "editor" | "settings";
 
@@ -156,6 +158,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     null,
   );
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [textRangeSelection, setTextRangeSelection] =
+    useState<LeaferTextRangeSelection | null>(null);
   const [textLayoutProviderEpoch, setTextLayoutProviderEpoch] = useState(0);
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
@@ -212,7 +216,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     setFileName,
     setView: () => setView("editor"),
   });
-  useRendererDesignToolHost(workspace, projectAutosave);
+  const fontBinaryRuntime = useFontBinaryRuntime();
+  useRendererDesignToolHost(
+    workspace,
+    projectAutosave,
+    fontBinaryRuntime.provider,
+  );
   const { document: designDocument, state } = snapshot;
   autosaveCallbacks.current = {
     onError: (target, error) => {
@@ -637,10 +646,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const fontInspectorContext = useFontInspectorContext({
     applyCommands,
     document: designDocument,
+    fontBinaryRuntime,
     runtime,
     selectedNode,
     t,
     textLayoutProviderEpoch,
+    textRangeSelection,
     transactionCounter,
   });
 
@@ -682,6 +693,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     setEditorError,
     showProperties: () => setUtilityTab("properties"),
     t,
+    textRunLayoutProvider: fontBinaryRuntime.provider,
   });
 
   const {
@@ -1844,6 +1856,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               onTransactionError={setEditorError}
               onAssetDrop={placeImageAssetAtPoint}
               onTextLayoutProviderReady={handleTextLayoutProviderReady}
+              onTextRangeSelectionChange={setTextRangeSelection}
+              harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onResizeFrame={resizeFrame}
               runtime={runtime}
               snapshot={snapshot}

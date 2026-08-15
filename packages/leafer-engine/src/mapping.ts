@@ -972,6 +972,15 @@ function mapPaints(
   return mapped;
 }
 
+export function mapTextRunPaints(
+  document: DesignDocument,
+  nodeId: string,
+  paints: readonly Paint[],
+  warnings: LeaferFidelityWarning[],
+): unknown {
+  return mapPaints(document, nodeId, paints, warnings);
+}
+
 function mapShapeProperties(
   document: DesignDocument,
   nodeId: string,
