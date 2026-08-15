@@ -25,14 +25,22 @@ import {
 } from "./index.js";
 
 describe("Figma Shared Style compatibility", () => {
-  it("maps the supported family and numeric-weight subset to Figma FontName", () => {
+  it("maps exact face style identity to Figma FontName without guessing from weight", () => {
     expect(
-      toFigmaFontName({ fontFamily: "IBM Plex Sans", fontWeight: 600 }),
-    ).toEqual({ family: "IBM Plex Sans", style: "Semi Bold" });
-    expect(toFigmaFontName({ fontFamily: "Inter", fontWeight: 900 })).toEqual({
+      toFigmaFontName({
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: "Semi Bold Italic",
+      }),
+    ).toEqual({ family: "IBM Plex Sans", style: "Semi Bold Italic" });
+    expect(
+      toFigmaFontName({ fontFamily: "Inter", fontStyleName: "Black" }),
+    ).toEqual({
       family: "Inter",
       style: "Black",
     });
+    expect(
+      toFigmaFontName({ fontFamily: "Legacy Sans", fontStyleName: null }),
+    ).toBeNull();
   });
 
   it("preserves stable metadata, folder names, node references and supported payloads", () => {
@@ -123,8 +131,10 @@ describe("Figma Shared Style compatibility", () => {
       styleType: "TEXT",
       textStyle: {
         fontFamily: "IBM Plex Sans",
+        fontStyleName: "Bold Italic",
         fontSize: 32,
         fontWeight: 700,
+        fontSlant: "italic",
         lineHeight: 40,
         letterSpacing: 1.5,
         paragraphIndent: 12,
@@ -140,7 +150,7 @@ describe("Figma Shared Style compatibility", () => {
       payload: {
         type: "TEXT",
         text: {
-          fontName: { family: "IBM Plex Sans", style: "Bold" },
+          fontName: { family: "IBM Plex Sans", style: "Bold Italic" },
           fontSize: 32,
           lineHeight: { unit: "PIXELS", value: 40 },
           letterSpacing: { unit: "PIXELS", value: 1.5 },
@@ -150,6 +160,18 @@ describe("Figma Shared Style compatibility", () => {
           paragraphSpacing: 18,
         },
       },
+    });
+
+    expect(
+      toFigmaSharedStylePayload({
+        ...style,
+        id: "legacy-display-accent",
+        key: "legacy-display-accent-key",
+        textStyle: { ...style.textStyle, fontStyleName: null },
+      }),
+    ).toEqual({
+      ok: false,
+      issues: [expect.stringContaining("unresolved font face style name")],
     });
   });
 });
@@ -365,8 +387,10 @@ describe("Figma component property compatibility", () => {
           properties: {
             content: "Continue",
             fontFamily: "Inter",
+            fontStyleName: "Medium",
             fontSize: 16,
             fontWeight: 500,
+            fontSlant: "normal",
             lineHeight: 20,
             letterSpacing: 0,
             paragraphIndent: 0,

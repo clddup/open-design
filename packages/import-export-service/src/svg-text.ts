@@ -5,7 +5,8 @@ import {
   type Paint,
 } from "@opendesign/design-contracts";
 
-const TEXT_METADATA_VERSION = "4";
+const TEXT_METADATA_VERSION = "5";
+const TYPOGRAPHY_V2_TEXT_METADATA_VERSION = "4";
 const TYPOGRAPHY_V1_TEXT_METADATA_VERSION = "3";
 const FIXED_LAYOUT_TEXT_METADATA_VERSION = "2";
 const LEGACY_TEXT_METADATA_VERSION = "1";
@@ -53,6 +54,7 @@ export function writeSvgText(
   element.setAttribute("font-family", properties.fontFamily);
   element.setAttribute("font-size", formatNumber(properties.fontSize));
   element.setAttribute("font-weight", String(properties.fontWeight));
+  element.setAttribute("font-style", properties.fontSlant);
   element.setAttribute("text-decoration", svgTextDecoration(properties));
   element.setAttribute("text-transform", svgTextTransform(properties));
   element.setAttribute(
@@ -118,6 +120,7 @@ export function readSvgText(element: Element): SvgTextReadResult {
   const metadataVersion = element.getAttribute(VERSION_ATTRIBUTE);
   if (
     metadataVersion !== TEXT_METADATA_VERSION &&
+    metadataVersion !== TYPOGRAPHY_V2_TEXT_METADATA_VERSION &&
     metadataVersion !== TYPOGRAPHY_V1_TEXT_METADATA_VERSION &&
     metadataVersion !== FIXED_LAYOUT_TEXT_METADATA_VERSION &&
     metadataVersion !== LEGACY_TEXT_METADATA_VERSION
@@ -185,7 +188,7 @@ export function readSvgText(element: Element): SvgTextReadResult {
     height: parsed.height,
     properties: migratedProperties as TextProperties,
   };
-  const mismatch = renderedTextMismatch(element, value);
+  const mismatch = renderedTextMismatch(element, value, metadataVersion);
   return mismatch ? invalid(mismatch) : { status: "valid", value };
 }
 
@@ -203,6 +206,13 @@ function migrateTextProperties(version: string, value: unknown): unknown {
     migrated.textResize = "fixed";
   }
   if (version !== TEXT_METADATA_VERSION) {
+    migrated.fontStyleName = null;
+    migrated.fontSlant = "normal";
+  }
+  if (
+    version !== TEXT_METADATA_VERSION &&
+    version !== TYPOGRAPHY_V2_TEXT_METADATA_VERSION
+  ) {
     if (migrated.textOverflow === "ellipsis") {
       migrated.textOverflow = "clip";
       migrated.textTruncation = "ending";
@@ -321,6 +331,7 @@ function sameJson(left: unknown, right: unknown): boolean {
 function renderedTextMismatch(
   element: Element,
   value: SerializedText,
+  metadataVersion: string,
 ): string | null {
   const { properties } = value;
   if (element.getAttribute("font-family") !== properties.fontFamily) {
@@ -334,6 +345,12 @@ function renderedTextMismatch(
   }
   if (element.getAttribute("font-weight") !== String(properties.fontWeight)) {
     return "OpenDesign text metadata does not match the rendered font weight";
+  }
+  if (
+    metadataVersion === TEXT_METADATA_VERSION &&
+    element.getAttribute("font-style") !== properties.fontSlant
+  ) {
+    return "OpenDesign text metadata does not match the rendered font slant";
   }
   if (
     element.getAttribute("text-decoration") !== svgTextDecoration(properties) ||

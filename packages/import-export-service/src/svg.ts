@@ -731,7 +731,7 @@ function exportNode(
         svgIssue(
           "text-font-not-embedded",
           "warning",
-          `Text ${node.id} references ${node.properties.fontFamily}; the font is not embedded in this SVG`,
+          `Text ${node.id} references ${node.properties.fontFamily} ${node.properties.fontStyleName ?? "(unresolved face)"}; the font is not embedded in this SVG`,
           { nodeId: node.id },
         ),
         svgIssue(

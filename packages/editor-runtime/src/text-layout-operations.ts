@@ -35,8 +35,10 @@ export function textLayoutAffected(
   return [
     "content",
     "fontFamily",
+    "fontStyleName",
     "fontSize",
     "fontWeight",
+    "fontSlant",
     "lineHeight",
     "letterSpacing",
     "paragraphIndent",

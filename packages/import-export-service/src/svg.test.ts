@@ -236,8 +236,10 @@ describe("versioned SVG interchange", () => {
       properties: {
         content: "OpenDesign\n未来 & <设计>",
         fontFamily: "Inter",
+        fontStyleName: "Semi Bold Italic",
         fontSize: 24,
         fontWeight: 650,
+        fontSlant: "italic",
         lineHeight: 28,
         letterSpacing: -0.4,
         paragraphIndent: 6,
@@ -286,10 +288,11 @@ describe("versioned SVG interchange", () => {
       { code: "text-layout-fidelity", severity: "warning" },
     ]);
     expect(first.svg).toContain("<text");
-    expect(first.svg).toContain('data-opendesign-text-version="4"');
+    expect(first.svg).toContain('data-opendesign-text-version="5"');
     expect(first.svg).toContain('font-family="Inter"');
     expect(first.svg).toContain('font-size="24"');
     expect(first.svg).toContain('font-weight="650"');
+    expect(first.svg).toContain('font-style="italic"');
     expect(first.svg).toContain('letter-spacing="-0.4"');
     expect(first.svg).toContain('text-decoration="underline"');
     expect(first.svg).toContain('text-transform="uppercase"');
@@ -321,9 +324,31 @@ describe("versioned SVG interchange", () => {
       isDesignDocument,
     );
 
+    const typographyV2Svg = first.svg
+      .replace(
+        'data-opendesign-text-version="5"',
+        'data-opendesign-text-version="4"',
+      )
+      .replace("&quot;fontStyleName&quot;:&quot;Semi Bold Italic&quot;,", "")
+      .replace("&quot;fontSlant&quot;:&quot;italic&quot;,", "")
+      .replace(' font-style="italic"', "");
+    const typographyV2Imported = importSvg(
+      { svg: typographyV2Svg, idPrefix: "text_v4_metadata" },
+      geometry,
+    );
+    expect(typographyV2Imported.ok).toBe(true);
+    if (typographyV2Imported.ok) {
+      expect(
+        findImportedSource(typographyV2Imported.nodes, text.id),
+      ).toMatchObject({
+        kind: "text",
+        properties: { fontStyleName: null, fontSlant: "normal" },
+      });
+    }
+
     const legacySvg = first.svg
       .replace(
-        'data-opendesign-text-version="4"',
+        'data-opendesign-text-version="5"',
         'data-opendesign-text-version="1"',
       )
       .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "")
@@ -356,7 +381,7 @@ describe("versioned SVG interchange", () => {
     }
     const typographyV1Svg = first.svg
       .replace(
-        'data-opendesign-text-version="4"',
+        'data-opendesign-text-version="5"',
         'data-opendesign-text-version="3"',
       )
       .replace("&quot;textTruncation&quot;:&quot;ending&quot;,", "")
@@ -392,7 +417,7 @@ describe("versioned SVG interchange", () => {
     }
     const fixedLayoutSvg = first.svg
       .replace(
-        'data-opendesign-text-version="4"',
+        'data-opendesign-text-version="5"',
         'data-opendesign-text-version="2"',
       )
       .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "")
@@ -422,7 +447,7 @@ describe("versioned SVG interchange", () => {
     const ambiguousLegacy = importSvg(
       {
         svg: first.svg.replace(
-          'data-opendesign-text-version="4"',
+          'data-opendesign-text-version="5"',
           'data-opendesign-text-version="1"',
         ),
         idPrefix: "text_ambiguous_legacy_metadata",
@@ -449,6 +474,23 @@ describe("versioned SVG interchange", () => {
     expect(tamperedContent.ok).toBe(false);
     if (!tamperedContent.ok) {
       expect(tamperedContent.issues).toContainEqual(
+        expect.objectContaining({
+          code: "text-fidelity-unsupported",
+          severity: "error",
+        }),
+      );
+    }
+
+    const tamperedSlant = importSvg(
+      {
+        svg: first.svg.replace('font-style="italic"', 'font-style="normal"'),
+        idPrefix: "text_tampered_slant",
+      },
+      geometry,
+    );
+    expect(tamperedSlant.ok).toBe(false);
+    if (!tamperedSlant.ok) {
+      expect(tamperedSlant.issues).toContainEqual(
         expect.objectContaining({
           code: "text-fidelity-unsupported",
           severity: "error",
@@ -494,7 +536,7 @@ describe("versioned SVG interchange", () => {
     }
   });
 
-  it("round-trips Auto Width and Auto Height semantics through text metadata v4", () => {
+  it("round-trips Auto Width and Auto Height semantics through text metadata v5", () => {
     const autoWidth: DesignNode = {
       id: "auto_width_text",
       kind: "text",
@@ -510,8 +552,10 @@ describe("versioned SVG interchange", () => {
       properties: {
         content: "Auto Width",
         fontFamily: "Inter",
+        fontStyleName: "Semi Bold",
         fontSize: 24,
         fontWeight: 600,
+        fontSlant: "normal",
         lineHeight: 32,
         letterSpacing: 0,
         paragraphIndent: 0,
@@ -562,7 +606,7 @@ describe("versioned SVG interchange", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) return;
     expect(
-      exported.svg.match(/data-opendesign-text-version="4"/g),
+      exported.svg.match(/data-opendesign-text-version="5"/g),
     ).toHaveLength(2);
 
     const imported = importSvg(
@@ -605,8 +649,10 @@ describe("versioned SVG interchange", () => {
       properties: {
         content: "Gradient",
         fontFamily: "Inter",
+        fontStyleName: "Bold",
         fontSize: 32,
         fontWeight: 700,
+        fontSlant: "normal",
         lineHeight: 40,
         letterSpacing: 0,
         paragraphIndent: 0,

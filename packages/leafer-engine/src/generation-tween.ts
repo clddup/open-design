@@ -14,6 +14,7 @@ const TWEEN_DATA_KEYS = [
   "height",
   "innerRadius",
   "innerShadow",
+  "italic",
   "letterSpacing",
   "lineHeight",
   "opacity",

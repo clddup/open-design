@@ -8,11 +8,32 @@ export const SharedStyleTypeSchema = Type.Union([
   Type.Literal("GRID"),
 ]);
 
+export const FontSlantSchema = Type.Union([
+  Type.Literal("normal"),
+  Type.Literal("italic"),
+]);
+
+export const FontFaceIdentityProperties = {
+  fontFamily: Type.String({ minLength: 1, maxLength: 4_096 }),
+  fontStyleName: Type.Union([
+    Type.String({ minLength: 1, maxLength: 512 }),
+    Type.Null(),
+  ]),
+  fontWeight: Type.Integer({ minimum: 1, maximum: 1_000 }),
+  fontSlant: FontSlantSchema,
+};
+
+export const FontFaceIdentitySchema = Type.Object(FontFaceIdentityProperties, {
+  additionalProperties: false,
+});
+
+export type FontSlant = Static<typeof FontSlantSchema>;
+export type FontFaceIdentity = Static<typeof FontFaceIdentitySchema>;
+
 export const TextStylePropertiesSchema = Type.Object(
   {
-    fontFamily: Type.String({ minLength: 1, maxLength: 512 }),
+    ...FontFaceIdentityProperties,
     fontSize: Type.Number({ exclusiveMinimum: 0 }),
-    fontWeight: Type.Integer({ minimum: 1, maximum: 1000 }),
     lineHeight: Type.Number({ exclusiveMinimum: 0 }),
     letterSpacing: Type.Number(),
     paragraphIndent: Type.Number({ minimum: 0 }),
@@ -224,6 +245,8 @@ export function migrateSharedStyles(document: Record<string, unknown>): void {
     if (!textStyle || typeof textStyle !== "object" || Array.isArray(textStyle))
       continue;
     const properties = textStyle as Record<string, unknown>;
+    properties.fontStyleName ??= null;
+    properties.fontSlant ??= "normal";
     properties.paragraphIndent ??= 0;
     properties.paragraphSpacing ??= 0;
     properties.textCase ??= "original";

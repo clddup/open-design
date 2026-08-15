@@ -1299,8 +1299,10 @@ function createDesignNode(
       properties: {
         content: t("canvas.newText"),
         fontFamily: "Inter",
+        fontStyleName: "Semi Bold",
         fontSize: 24,
         fontWeight: 600,
+        fontSlant: "normal",
         lineHeight: 32,
         letterSpacing: 0,
         paragraphIndent: 0,

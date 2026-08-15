@@ -177,12 +177,21 @@ export function toFigmaSharedStylePayload(
   }
   if (style.styleType === "TEXT") {
     const value = style.textStyle;
+    const fontName = toFigmaFontName(value);
+    if (!fontName) {
+      return {
+        ok: false,
+        issues: [
+          `Text Style ${style.id} has an unresolved font face style name; choose an exact face before Figma export`,
+        ],
+      };
+    }
     return {
       ok: true,
       payload: {
         type: "TEXT",
         text: {
-          fontName: toFigmaFontName(value),
+          fontName,
           fontSize: value.fontSize,
           lineHeight: { unit: "PIXELS", value: value.lineHeight },
           letterSpacing: { unit: "PIXELS", value: value.letterSpacing },
@@ -271,11 +280,12 @@ export function toFigmaSharedStylePayload(
 
 export function toFigmaFontName(value: {
   fontFamily: string;
-  fontWeight: number;
-}): FontName {
+  fontStyleName: string | null;
+}): FontName | null {
+  if (value.fontStyleName === null) return null;
   return {
     family: value.fontFamily,
-    style: fontWeightName(value.fontWeight),
+    style: value.fontStyleName,
   };
 }
 
@@ -328,18 +338,6 @@ function parseColor(
 function figmaBlendMode(value: string | undefined): BlendMode {
   if (!value || value === "pass-through") return "NORMAL";
   return value.replaceAll("-", "_").toUpperCase() as BlendMode;
-}
-
-function fontWeightName(weight: number): string {
-  if (weight <= 100) return "Thin";
-  if (weight <= 200) return "Extra Light";
-  if (weight <= 300) return "Light";
-  if (weight <= 400) return "Regular";
-  if (weight <= 500) return "Medium";
-  if (weight <= 600) return "Semi Bold";
-  if (weight <= 700) return "Bold";
-  if (weight <= 800) return "Extra Bold";
-  return "Black";
 }
 
 export function toFigmaComponentPropertyDefinitions(

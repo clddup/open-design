@@ -1175,13 +1175,23 @@ describe("design Agent tool contract", () => {
       label: "Reflow Inter",
       pageId: "page_1",
       nodeIds: ["title", "subtitle"],
-      expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+      expectedFont: {
+        fontFamily: "Inter",
+        fontStyleName: null,
+        fontWeight: 600,
+        fontSlant: "normal",
+      },
     };
     const replace = {
       ...reflow,
       action: "replace",
       label: "Replace Inter",
-      replacementFont: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+      replacementFont: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: null,
+        fontWeight: 500,
+        fontSlant: "normal",
+      },
     };
 
     expect(validateDesignAgentToolInput(DESIGN_FONT_TOOL_NAME, reflow)).toBe(
@@ -1247,8 +1257,10 @@ describe("design Agent tool contract", () => {
             properties: {
               content: "A long fixed caption",
               fontFamily: "Inter",
+              fontStyleName: null,
               fontSize: 18,
               fontWeight: 500,
+              fontSlant: "normal",
               lineHeight: 26,
               letterSpacing: 0,
               paragraphIndent: 0,

@@ -9,7 +9,7 @@ const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
-const documentSchemaVersion = "1.28.0";
+const documentSchemaVersion = "1.30.0";
 
 const fixtureSources = [
   {
@@ -1615,15 +1615,23 @@ function text({
     properties: shapeProperties({
       content,
       fontFamily: "Arial",
+      fontStyleName: null,
       fontSize,
       fontWeight,
+      fontSlant: "normal",
       lineHeight,
       letterSpacing,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      textCase: "original",
+      textDecoration: "none",
       textAlignHorizontal,
       textAlignVertical,
       textResize,
       textWrap,
       textOverflow,
+      textTruncation: "disabled",
+      maxLines: null,
       fills,
       strokes,
       strokeWidth,

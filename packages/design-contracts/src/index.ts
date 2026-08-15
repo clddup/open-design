@@ -224,9 +224,8 @@ export const StarPropertiesSchema = Type.Object(
 
 const TextSharedProperties = {
   content: Type.String(),
-  fontFamily: Type.String({ minLength: 1 }),
+  ...styles.FontFaceIdentityProperties,
   fontSize: Type.Number({ exclusiveMinimum: 0 }),
-  fontWeight: Type.Integer({ minimum: 1, maximum: 1000 }),
   lineHeight: Type.Number({ exclusiveMinimum: 0 }),
   letterSpacing: Type.Number(),
   paragraphIndent: Type.Number({ minimum: 0 }),
@@ -951,10 +950,7 @@ export const ReplaceSubtreeCommandSchema = Type.Object(
 );
 
 export const TextFontDescriptorSchema = Type.Object(
-  {
-    fontFamily: Type.String({ minLength: 1, maxLength: 4_096 }),
-    fontWeight: Type.Integer({ minimum: 1, maximum: 1_000 }),
-  },
+  styles.FontFaceIdentityProperties,
   { additionalProperties: false },
 );
 
@@ -1904,6 +1900,8 @@ function migrateTextNodes(document: Record<string, unknown>): void {
       continue;
     }
     const textProperties = properties as Record<string, unknown>;
+    textProperties.fontStyleName ??= null;
+    textProperties.fontSlant ??= "normal";
     textProperties.textWrap ??= "character";
     if (textProperties.textOverflow === "ellipsis") {
       textProperties.textOverflow = "clip";

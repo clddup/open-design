@@ -141,10 +141,17 @@ describe("Renderer design tool scope", () => {
             label: "Replace missing font",
             pageId: "page_welcome",
             nodeIds: ["title_welcome", "subtitle_welcome"],
-            expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+            expectedFont: {
+              fontFamily: "Inter",
+              fontStyleName: "Semi Bold",
+              fontWeight: 600,
+              fontSlant: "normal",
+            },
             replacementFont: {
               fontFamily: "IBM Plex Sans",
+              fontStyleName: null,
               fontWeight: 500,
+              fontSlant: "normal",
             },
           },
         },
@@ -169,7 +176,12 @@ describe("Renderer design tool scope", () => {
     expect(
       runtime.getSnapshot().document.nodesById.title_welcome,
     ).toMatchObject({
-      properties: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+      properties: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: null,
+        fontWeight: 500,
+        fontSlant: "normal",
+      },
     });
     expect(runtime.getSnapshot().document.revision).toBe(1);
     expect(runtime.getSnapshot().state.history.canUndo).toBe(true);
@@ -201,8 +213,18 @@ describe("Renderer design tool scope", () => {
       label: "Replace Inter",
       pageId: "page_welcome",
       nodeIds: ["title_welcome"],
-      expectedFont: { fontFamily: "Inter", fontWeight: 600 },
-      replacementFont: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+      expectedFont: {
+        fontFamily: "Inter",
+        fontStyleName: "Semi Bold",
+        fontWeight: 600,
+        fontSlant: "normal",
+      },
+      replacementFont: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: null,
+        fontWeight: 500,
+        fontSlant: "normal",
+      },
     };
     const staleRuntime = createRuntime();
     expect(
@@ -412,8 +434,10 @@ describe("Renderer design tool scope", () => {
                   properties: {
                     content: "Line one\\nLine two",
                     fontFamily: "Inter, sans-serif",
+                    fontStyleName: null,
                     fontSize: 28,
                     fontWeight: 700,
+                    fontSlant: "normal",
                     lineHeight: 36,
                     letterSpacing: 0,
                     paragraphIndent: 0,
@@ -1432,8 +1456,10 @@ describe("Renderer design tool scope", () => {
                   properties: {
                     content,
                     fontFamily: "Inter, sans-serif",
+                    fontStyleName: null,
                     fontSize: 28,
                     fontWeight: 700,
+                    fontSlant: "normal",
                     lineHeight: 36,
                     letterSpacing: 0,
                     paragraphIndent: 0,
@@ -1727,7 +1753,9 @@ describe("Renderer design tool scope", () => {
         fontAvailability: [
           {
             fontFamily: "Inter",
+            fontStyleName: "Semi Bold",
             fontWeight: 600,
+            fontSlant: "normal",
             nodeCount: 2,
             nodeIds: ["subtitle_welcome", "title_welcome"],
             nodeIdsTruncated: false,

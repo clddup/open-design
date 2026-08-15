@@ -728,8 +728,10 @@ function textNode(
     properties: {
       content: options.content,
       fontFamily: "Inter",
+      fontStyleName: "Semi Bold",
       fontSize: options.fontSize,
       fontWeight: 600,
+      fontSlant: "normal",
       lineHeight: options.lineHeight,
       letterSpacing: -0.5,
       paragraphIndent: 0,

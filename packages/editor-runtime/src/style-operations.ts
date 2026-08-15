@@ -221,8 +221,10 @@ export function planCreateStyleFromNode(
       styleType,
       textStyle: {
         fontFamily: resolved.properties.fontFamily,
+        fontStyleName: resolved.properties.fontStyleName,
         fontSize: resolved.properties.fontSize,
         fontWeight: resolved.properties.fontWeight,
+        fontSlant: resolved.properties.fontSlant,
         lineHeight: resolved.properties.lineHeight,
         letterSpacing: resolved.properties.letterSpacing,
         paragraphIndent: resolved.properties.paragraphIndent,

@@ -12,8 +12,10 @@ import {
 const autoHeight: TextLayoutRequest = {
   content: "A professional text layout",
   fontFamily: "Inter, sans-serif",
+  fontStyleName: "Semi Bold Italic",
   fontSize: 24,
   fontWeight: 600,
+  fontSlant: "italic",
   letterSpacing: 0,
   lineHeight: 32,
   paragraphIndent: 0,
@@ -30,14 +32,45 @@ const autoHeight: TextLayoutRequest = {
 describe("text layout service contract", () => {
   it("validates bounded font descriptors and availability facts", () => {
     expect(
-      validateTextFontDescriptor({ fontFamily: "Inter", fontWeight: 500 }),
+      validateTextFontDescriptor({
+        fontFamily: "Inter",
+        fontStyleName: "Medium",
+        fontWeight: 500,
+        fontSlant: "normal",
+      }),
     ).toBeNull();
     expect(
-      validateTextFontDescriptor({ fontFamily: "", fontWeight: 500 }),
+      validateTextFontDescriptor({
+        fontFamily: "",
+        fontStyleName: "Medium",
+        fontWeight: 500,
+        fontSlant: "normal",
+      }),
     ).toContain("font family");
     expect(
-      validateTextFontDescriptor({ fontFamily: "Inter", fontWeight: 1_001 }),
+      validateTextFontDescriptor({
+        fontFamily: "Inter",
+        fontStyleName: null,
+        fontWeight: 1_001,
+        fontSlant: "normal",
+      }),
     ).toContain("1 to 1000");
+    expect(
+      validateTextFontDescriptor({
+        fontFamily: "Inter",
+        fontStyleName: "",
+        fontWeight: 500,
+        fontSlant: "normal",
+      }),
+    ).toContain("style name");
+    expect(
+      validateTextFontDescriptor({
+        fontFamily: "Inter",
+        fontStyleName: "Medium",
+        fontWeight: 500,
+        fontSlant: "oblique" as "italic",
+      }),
+    ).toContain("slant");
     expect(
       validateTextFontAvailabilityResult({
         status: "missing",
@@ -62,8 +95,10 @@ describe("text layout service contract", () => {
       validateTextLayoutRequest({
         content: autoHeight.content,
         fontFamily: autoHeight.fontFamily,
+        fontStyleName: autoHeight.fontStyleName,
         fontSize: autoHeight.fontSize,
         fontWeight: autoHeight.fontWeight,
+        fontSlant: autoHeight.fontSlant,
         letterSpacing: autoHeight.letterSpacing,
         lineHeight: autoHeight.lineHeight,
         paragraphIndent: autoHeight.paragraphIndent,
@@ -130,7 +165,12 @@ describe("text layout service contract", () => {
     });
 
     expect(provider.measure(autoHeight)).toEqual(provider.measure(autoHeight));
-    expect(measure).toHaveBeenCalledTimes(1);
+    provider.measure({
+      ...autoHeight,
+      fontStyleName: "Semi Bold",
+      fontSlant: "normal",
+    });
+    expect(measure).toHaveBeenCalledTimes(2);
   });
 
   it("forwards uncached font availability inspection", () => {
@@ -156,10 +196,20 @@ describe("text layout service contract", () => {
     });
 
     expect(
-      provider.inspectFont?.({ fontFamily: "Inter", fontWeight: 500 }),
+      provider.inspectFont?.({
+        fontFamily: "Inter",
+        fontStyleName: "Medium",
+        fontWeight: 500,
+        fontSlant: "normal",
+      }),
     ).toMatchObject({ status: "available" });
     expect(
-      provider.inspectFont?.({ fontFamily: "Inter", fontWeight: 500 }),
+      provider.inspectFont?.({
+        fontFamily: "Inter",
+        fontStyleName: "Medium",
+        fontWeight: 500,
+        fontSlant: "normal",
+      }),
     ).toMatchObject({ status: "available" });
     expect(inspectFont).toHaveBeenCalledTimes(2);
   });

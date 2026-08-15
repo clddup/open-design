@@ -121,8 +121,10 @@ export function detachStyleReferencesForUpdate(
     if ("layoutGuides" in properties) fields.add("gridStyleId");
     if (
       "fontFamily" in properties ||
+      "fontStyleName" in properties ||
       "fontSize" in properties ||
       "fontWeight" in properties ||
+      "fontSlant" in properties ||
       "lineHeight" in properties ||
       "letterSpacing" in properties
     ) {
@@ -153,8 +155,10 @@ function materializeReference(
   ) {
     Object.assign(node.properties, {
       fontFamily: resolved.properties.fontFamily,
+      fontStyleName: resolved.properties.fontStyleName,
       fontSize: resolved.properties.fontSize,
       fontWeight: resolved.properties.fontWeight,
+      fontSlant: resolved.properties.fontSlant,
       lineHeight: resolved.properties.lineHeight,
       letterSpacing: resolved.properties.letterSpacing,
     });

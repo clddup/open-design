@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.29.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.30.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 21 项，不可用 1 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -186,10 +186,10 @@
 创建、渲染、变换和编辑固定、自动宽度或自动高度文字，使用单一共享字体样式、对齐、明确换行以及固定框溢出控制。
 
 - ID：`text.single-style`
-- 实现方：DesignDocument 1.29.0 + Text Layout Service v3 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v4
+- 实现方：DesignDocument 1.30.0 + Text Layout Service v4 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v5
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 15 项；实机 0 项
-- 限制：运行时字体可用性、全文件精确替换与显式 Auto Size 重排已通过单次 revision/undo 可用；字体二进制资源、包含 style 的完整 FontName 身份、精确跨平台 shaping 及 macOS/Windows 视觉验收仍未完成。
+- 限制：family/style-name/weight/slant 精确身份、运行时字体可用性、全文件精确替换、显式 Auto Size 重排及 unresolved Figma 导出失败已通过单次 revision/undo 可用；字体二进制资源、可变字体轴、精确跨平台 shaping 及 macOS/Windows 视觉验收仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/27378154668951-Adjust-text-dimensions-and-resizing)
 - 专业参照：[官方说明](https://www.leaferjs.com/ui/guide/display/Text.html)
 
@@ -198,10 +198,10 @@
 应用文档级 Typography Core 属性和可复用 Text Style，并明确保留富文本 run、列表、OpenType 与字体资源限制。
 
 - ID：`text.rich-typography`
-- 实现方：@opendesign/text-service v3 + leafer-editor 2.2.9
+- 实现方：@opendesign/text-service v4 + leafer-editor 2.2.9
 - 表面：contract=degraded；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=degraded
 - 证据：自动化 10 项；实机 0 项
-- 限制：Core v2 与 Text Service v3 已支持段落缩进/间距、大小写、装饰、末尾截断/最大行数、可复用单样式 Text Style、运行时字体可用性、全文件替换和显式重排；逐段富文本、列表、OpenType 特性、可变字体轴、字体二进制资源、路径文字和确定性跨平台 shaping 仍不可用。
+- 限制：Core v2 与 Text Service v4 已支持段落缩进/间距、大小写、装饰、末尾截断/最大行数、可复用单样式 Text Style、精确 face identity、运行时字体可用性、全文件替换和显式重排；逐段富文本、列表、OpenType 特性、可变字体轴、字体二进制资源、路径文字和确定性跨平台 shaping 仍不可用。
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/TextNode/)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/TextStyle/)
 

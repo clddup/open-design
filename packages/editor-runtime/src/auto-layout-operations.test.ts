@@ -1361,8 +1361,10 @@ function autoHeightText(
     properties: {
       content: "Responsive copy",
       fontFamily: "Inter",
+      fontStyleName: null,
       fontSize: 16,
       fontWeight: 400,
+      fontSlant: "normal",
       lineHeight: 24,
       letterSpacing: 0,
       paragraphIndent: 0,

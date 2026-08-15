@@ -847,8 +847,10 @@ function text(id: string, parentId: string, content: string): TextNode {
     properties: {
       content,
       fontFamily: "Inter",
+      fontStyleName: null,
       fontSize: 14,
       fontWeight: 500,
+      fontSlant: "normal",
       lineHeight: 20,
       letterSpacing: 0,
       paragraphIndent: 0,

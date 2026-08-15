@@ -891,8 +891,14 @@ const MODEL_LINE_PROPERTIES = {
 const MODEL_TEXT_PROPERTIES = {
   content: { type: "string" },
   fontFamily: { type: "string", minLength: 1 },
+  fontStyleName: {
+    anyOf: [{ type: "string", minLength: 1, maxLength: 512 }, { type: "null" }],
+    description:
+      "Exact font face style name when known (for example Semi Bold Italic); null only when the source format cannot identify the face.",
+  },
   fontSize: { type: "number", exclusiveMinimum: 0 },
   fontWeight: { type: "integer", minimum: 1, maximum: 1_000 },
+  fontSlant: { enum: ["normal", "italic"] },
   lineHeight: { type: "number", exclusiveMinimum: 0 },
   letterSpacing: { type: "number" },
   paragraphIndent: { type: "number", minimum: 0 },
@@ -931,8 +937,10 @@ const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
     clipsContent: { type: "boolean" },
     content: MODEL_TEXT_PROPERTIES.content,
     fontFamily: MODEL_TEXT_PROPERTIES.fontFamily,
+    fontStyleName: MODEL_TEXT_PROPERTIES.fontStyleName,
     fontSize: MODEL_TEXT_PROPERTIES.fontSize,
     fontWeight: MODEL_TEXT_PROPERTIES.fontWeight,
+    fontSlant: MODEL_TEXT_PROPERTIES.fontSlant,
     lineHeight: MODEL_TEXT_PROPERTIES.lineHeight,
     letterSpacing: MODEL_TEXT_PROPERTIES.letterSpacing,
     paragraphIndent: MODEL_TEXT_PROPERTIES.paragraphIndent,
@@ -1154,9 +1162,16 @@ const MODEL_FONT_DESCRIPTOR_SCHEMA = {
   type: "object",
   properties: {
     fontFamily: { type: "string", minLength: 1, maxLength: 4_096 },
+    fontStyleName: {
+      anyOf: [
+        { type: "string", minLength: 1, maxLength: 512 },
+        { type: "null" },
+      ],
+    },
     fontWeight: { type: "integer", minimum: 1, maximum: 1_000 },
+    fontSlant: { enum: ["normal", "italic"] },
   },
-  required: ["fontFamily", "fontWeight"],
+  required: ["fontFamily", "fontStyleName", "fontWeight", "fontSlant"],
   additionalProperties: false,
 } as const;
 
@@ -2359,7 +2374,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "material-write" as const,
     },
     description:
-      "Inspect the current design first, then explicitly reflow or replace one exact font request on stable Text node IDs inside the active Page. expectedFont must exactly match every target at execution time. reflow keeps the requested font and remeasures Auto Width/Auto Height text; replace atomically changes every target to replacementFont. The host rejects stale, locked, non-Text, cross-Page, or known-missing replacement faces, preserves Fixed text-box size, and runs Auto Size plus Auto Layout through the trusted Text Service. Use the inspection fontAvailability summary; do not guess installed fonts or font paths.",
+      "Inspect the current design first, then explicitly reflow or replace one exact font face request on stable Text node IDs inside the active Page. A face identity contains fontFamily, exact fontStyleName (null only for an unresolved legacy/external source), numeric fontWeight, and normal/italic fontSlant; never infer a style name from weight. expectedFont must exactly match every target at execution time. reflow keeps the requested face and remeasures Auto Width/Auto Height text; replace atomically changes every target to replacementFont. The host rejects stale, locked, non-Text, cross-Page, or known-missing replacement faces, preserves Fixed text-box size, and runs Auto Size plus Auto Layout through the trusted Text Service. Use the inspection fontAvailability summary; do not guess installed fonts or font paths.",
     inputSchema: {
       type: "object",
       properties: {
@@ -3327,10 +3342,15 @@ function isTextFontDescriptor(value: unknown): value is TextFontDescriptor {
     typeof value.fontFamily === "string" &&
     value.fontFamily.trim().length > 0 &&
     value.fontFamily.length <= 4_096 &&
+    (value.fontStyleName === null ||
+      (typeof value.fontStyleName === "string" &&
+        value.fontStyleName.trim().length > 0 &&
+        value.fontStyleName.length <= 512)) &&
     Number.isInteger(value.fontWeight) &&
     Number(value.fontWeight) >= 1 &&
     Number(value.fontWeight) <= 1_000 &&
-    exactKeys(value, ["fontFamily", "fontWeight"])
+    (value.fontSlant === "normal" || value.fontSlant === "italic") &&
+    exactKeys(value, ["fontFamily", "fontStyleName", "fontWeight", "fontSlant"])
   );
 }
 

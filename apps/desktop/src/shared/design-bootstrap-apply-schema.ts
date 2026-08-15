@@ -56,8 +56,15 @@ const BOOTSTRAP_NODE_PROPERTIES_SCHEMA = {
     clipsContent: { type: "boolean" },
     content: { type: "string" },
     fontFamily: { type: "string", minLength: 1 },
+    fontStyleName: {
+      anyOf: [
+        { type: "string", minLength: 1, maxLength: 512 },
+        { type: "null" },
+      ],
+    },
     fontSize: { type: "number", exclusiveMinimum: 0 },
     fontWeight: { type: "integer", minimum: 1, maximum: 1_000 },
+    fontSlant: { enum: ["normal", "italic"] },
     lineHeight: { type: "number", exclusiveMinimum: 0 },
     letterSpacing: { type: "number" },
     paragraphIndent: { type: "number", minimum: 0 },

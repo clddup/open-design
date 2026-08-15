@@ -17,17 +17,17 @@ describe("EditorRuntime text Auto Size", () => {
     const runtime = new EditorRuntime(document, {
       textLayoutProvider: {
         id: "test-text-layout",
-        version: "3",
+        version: "4",
         inspectFont: (font) => ({
           status: font.fontFamily === "Inter" ? "available" : "missing",
           provider: "test-text-layout",
-          providerVersion: "3",
+          providerVersion: "4",
           message: `${font.fontFamily} availability`,
         }),
         measure: () => ({
           ok: true,
           provider: "test-text-layout",
-          providerVersion: "3",
+          providerVersion: "4",
           size: { width: 120, height: 32 },
           warnings: [],
         }),
@@ -35,10 +35,20 @@ describe("EditorRuntime text Auto Size", () => {
     });
 
     expect(
-      runtime.inspectTextFont({ fontFamily: "Inter", fontWeight: 600 }),
+      runtime.inspectTextFont({
+        fontFamily: "Inter",
+        fontStyleName: null,
+        fontWeight: 600,
+        fontSlant: "normal",
+      }),
     ).toMatchObject({ status: "available" });
     expect(
-      runtime.inspectTextFont({ fontFamily: "Missing Sans", fontWeight: 400 }),
+      runtime.inspectTextFont({
+        fontFamily: "Missing Sans",
+        fontStyleName: null,
+        fontWeight: 400,
+        fontSlant: "normal",
+      }),
     ).toMatchObject({ status: "missing" });
     expect(runtime.getSnapshot().document).toEqual(document);
   });
@@ -378,8 +388,18 @@ describe("EditorRuntime text Auto Size", () => {
       commandId: "replace_inter",
       type: "reflow_text",
       nodeIds: ["title_welcome", "subtitle_welcome"],
-      expectedFont: { fontFamily: "Inter", fontWeight: 600 },
-      replacementFont: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+      expectedFont: {
+        fontFamily: "Inter",
+        fontStyleName: "Semi Bold",
+        fontWeight: 600,
+        fontSlant: "normal",
+      },
+      replacementFont: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: "Medium Italic",
+        fontWeight: 500,
+        fontSlant: "italic",
+      },
     });
 
     expect(result).toMatchObject({ ok: true, warnings: [] });
@@ -387,42 +407,62 @@ describe("EditorRuntime text Auto Size", () => {
       runtime.getSnapshot().document.nodesById.title_welcome,
     ).toMatchObject({
       size: originalTitleSize,
-      properties: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+      properties: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: "Medium Italic",
+        fontWeight: 500,
+        fontSlant: "italic",
+      },
     });
     expect(
       runtime.getSnapshot().document.nodesById.subtitle_welcome,
     ).toMatchObject({
       size: { width: subtitle.size.width, height: 88 },
-      properties: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+      properties: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: "Medium Italic",
+        fontWeight: 500,
+        fontSlant: "italic",
+      },
     });
     expect(runtime.undo()).toMatchObject({ ok: true });
     expect(
       runtime.getSnapshot().document.nodesById.title_welcome,
     ).toMatchObject({
-      properties: { fontFamily: "Inter", fontWeight: 600 },
+      properties: {
+        fontFamily: "Inter",
+        fontStyleName: "Semi Bold",
+        fontWeight: 600,
+        fontSlant: "normal",
+      },
     });
     expect(runtime.redo()).toMatchObject({ ok: true });
     expect(
       runtime.getSnapshot().document.nodesById.title_welcome,
     ).toMatchObject({
-      properties: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+      properties: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: "Medium Italic",
+        fontWeight: 500,
+        fontSlant: "italic",
+      },
     });
   });
 
   it("fails reflow atomically for stale, locked, missing, unavailable, and no-op requests", () => {
     const provider: TextLayoutProvider = {
       id: "test-text-layout",
-      version: "3",
+      version: "4",
       inspectFont: (font) => ({
         status: font.fontFamily === "Missing Sans" ? "missing" : "available",
         provider: "test-text-layout",
-        providerVersion: "3",
+        providerVersion: "4",
         message: `${font.fontFamily} availability`,
       }),
       measure: (request) => ({
         ok: true,
         provider: "test-text-layout",
-        providerVersion: "3",
+        providerVersion: "4",
         size: { width: request.width ?? 720, height: 72 },
         warnings: [],
       }),
@@ -448,8 +488,18 @@ describe("EditorRuntime text Auto Size", () => {
         commandId: "stale_font_command",
         type: "reflow_text",
         nodeIds: ["title_welcome"],
-        expectedFont: { fontFamily: "Other", fontWeight: 600 },
-        replacementFont: { fontFamily: "Available Sans", fontWeight: 400 },
+        expectedFont: {
+          fontFamily: "Other",
+          fontStyleName: null,
+          fontWeight: 600,
+          fontSlant: "normal",
+        },
+        replacementFont: {
+          fontFamily: "Available Sans",
+          fontStyleName: null,
+          fontWeight: 400,
+          fontSlant: "normal",
+        },
       },
       { ok: false, error: { code: "conflict", retryable: true } },
     );
@@ -466,8 +516,18 @@ describe("EditorRuntime text Auto Size", () => {
         commandId: "locked_font_command",
         type: "reflow_text",
         nodeIds: ["title_welcome"],
-        expectedFont: { fontFamily: "Inter", fontWeight: 600 },
-        replacementFont: { fontFamily: "Available Sans", fontWeight: 400 },
+        expectedFont: {
+          fontFamily: "Inter",
+          fontStyleName: "Semi Bold",
+          fontWeight: 600,
+          fontSlant: "normal",
+        },
+        replacementFont: {
+          fontFamily: "Available Sans",
+          fontStyleName: null,
+          fontWeight: 400,
+          fontSlant: "normal",
+        },
       },
       { ok: false, error: { code: "permission-denied" } },
     );
@@ -482,8 +542,18 @@ describe("EditorRuntime text Auto Size", () => {
         commandId: "missing_font_command",
         type: "reflow_text",
         nodeIds: ["title_welcome"],
-        expectedFont: { fontFamily: "Inter", fontWeight: 600 },
-        replacementFont: { fontFamily: "Missing Sans", fontWeight: 400 },
+        expectedFont: {
+          fontFamily: "Inter",
+          fontStyleName: "Semi Bold",
+          fontWeight: 600,
+          fontSlant: "normal",
+        },
+        replacementFont: {
+          fontFamily: "Missing Sans",
+          fontStyleName: null,
+          fontWeight: 400,
+          fontSlant: "normal",
+        },
       },
       { ok: false, error: { details: { code: "font-missing" } } },
     );
@@ -496,8 +566,18 @@ describe("EditorRuntime text Auto Size", () => {
         commandId: "unavailable_font_command",
         type: "reflow_text",
         nodeIds: ["title_welcome"],
-        expectedFont: { fontFamily: "Inter", fontWeight: 600 },
-        replacementFont: { fontFamily: "Available Sans", fontWeight: 400 },
+        expectedFont: {
+          fontFamily: "Inter",
+          fontStyleName: "Semi Bold",
+          fontWeight: 600,
+          fontSlant: "normal",
+        },
+        replacementFont: {
+          fontFamily: "Available Sans",
+          fontStyleName: null,
+          fontWeight: 400,
+          fontSlant: "normal",
+        },
       },
       { ok: false, error: { code: "engine-failure", retryable: true } },
     );
@@ -512,7 +592,12 @@ describe("EditorRuntime text Auto Size", () => {
         commandId: "no_op_font_command",
         type: "reflow_text",
         nodeIds: ["title_welcome"],
-        expectedFont: { fontFamily: "Inter", fontWeight: 600 },
+        expectedFont: {
+          fontFamily: "Inter",
+          fontStyleName: "Semi Bold",
+          fontWeight: 600,
+          fontSlant: "normal",
+        },
       },
       { ok: false, error: { details: { code: "no-op" } } },
     );
@@ -537,8 +622,10 @@ function autoWidthNode(
     properties: {
       content: "Auto width",
       fontFamily: "Inter, sans-serif",
+      fontStyleName: null,
       fontSize: 24,
       fontWeight: 600,
+      fontSlant: "normal",
       lineHeight: 32,
       letterSpacing: 0,
       paragraphIndent: 0,

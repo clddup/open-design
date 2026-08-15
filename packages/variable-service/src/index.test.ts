@@ -104,8 +104,10 @@ function fixture(): DesignDocument {
     properties: {
       content: "Fallback",
       fontFamily: "Inter",
+      fontStyleName: null,
       fontSize: 16,
       fontWeight: 400,
+      fontSlant: "normal",
       lineHeight: 20,
       letterSpacing: 0,
       textAlignHorizontal: "left",

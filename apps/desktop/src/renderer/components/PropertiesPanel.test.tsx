@@ -284,8 +284,10 @@ const textNode: TextNode = {
   properties: {
     content: "A deliberately long summary for a constrained text box.",
     fontFamily: "Inter",
+    fontStyleName: null,
     fontSize: 18,
     fontWeight: 500,
+    fontSlant: "normal",
     lineHeight: 26,
     letterSpacing: 0,
     paragraphIndent: 0,
@@ -1738,12 +1740,23 @@ describe("PropertiesPanel text layout workflow", () => {
     const replacement = screen.getByLabelText("Replacement font family");
     await user.type(replacement, "IBM Plex Sans");
     await user.tab();
+    await user.type(
+      screen.getByLabelText("Replacement face style"),
+      "Medium Italic",
+    );
+    await user.tab();
+    await user.selectOptions(
+      screen.getByLabelText("Replacement font slant"),
+      "italic",
+    );
     await user.click(
       screen.getByRole("button", { name: "Replace 3 matching layers" }),
     );
     expect(onReplace).toHaveBeenCalledWith({
       fontFamily: "IBM Plex Sans",
+      fontStyleName: "Medium Italic",
       fontWeight: 500,
+      fontSlant: "italic",
     });
   });
 
@@ -1757,6 +1770,18 @@ describe("PropertiesPanel text layout workflow", () => {
     expect(screen.getByLabelText("Vertical alignment")).toHaveValue("top");
     expect(screen.getByLabelText("Truncation")).toHaveValue("disabled");
     expect(screen.getByLabelText("Maximum lines")).toBeDisabled();
+
+    const fontStyleName = screen.getByLabelText("Font face style");
+    await user.type(fontStyleName, "Medium Italic");
+    await user.tab();
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { fontStyleName: "Medium Italic" },
+    });
+
+    await user.selectOptions(screen.getByLabelText("Font slant"), "italic");
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { fontSlant: "italic" },
+    });
 
     const paragraphIndent = screen.getByLabelText("Paragraph indent");
     await user.clear(paragraphIndent);

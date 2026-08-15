@@ -94,8 +94,10 @@ describe("Frame constraints planner", () => {
       properties: {
         content: "Auto",
         fontFamily: "Inter",
+        fontStyleName: null,
         fontSize: 16,
         fontWeight: 400,
+        fontSlant: "normal",
         lineHeight: 24,
         letterSpacing: 0,
         paragraphIndent: 0,

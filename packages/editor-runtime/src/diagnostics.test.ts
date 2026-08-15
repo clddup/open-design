@@ -220,8 +220,10 @@ function brokenDocument(): DesignDocument {
       properties: {
         content: "  ",
         fontFamily: "Inter",
+        fontStyleName: null,
         fontSize: 16,
         fontWeight: 400,
+        fontSlant: "normal",
         lineHeight: 20,
         letterSpacing: 0,
         paragraphIndent: 0,

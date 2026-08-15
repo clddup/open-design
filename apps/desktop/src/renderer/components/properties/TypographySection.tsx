@@ -38,13 +38,25 @@ export function TypographySection({
 }) {
   const { t } = useI18n();
   const [replacementFamily, setReplacementFamily] = useState("");
+  const [replacementStyleName, setReplacementStyleName] = useState("");
   const [replacementWeight, setReplacementWeight] = useState(
     String(node.properties.fontWeight),
   );
+  const [replacementSlant, setReplacementSlant] = useState<
+    TextFontDescriptor["fontSlant"]
+  >(node.properties.fontSlant);
   useEffect(() => {
     setReplacementFamily("");
+    setReplacementStyleName("");
     setReplacementWeight(String(node.properties.fontWeight));
-  }, [node.id, node.properties.fontFamily, node.properties.fontWeight]);
+    setReplacementSlant(node.properties.fontSlant);
+  }, [
+    node.id,
+    node.properties.fontFamily,
+    node.properties.fontStyleName,
+    node.properties.fontWeight,
+    node.properties.fontSlant,
+  ]);
   const replacementWeightNumber = Number(replacementWeight);
   const replacementValid =
     replacementFamily.trim().length > 0 &&
@@ -93,6 +105,20 @@ export function TypographySection({
             value={formatNumber(node.properties.fontSize)}
           />
           <Field
+            accessibleLabel={t("properties.fontStyleName")}
+            label="Style"
+            onCommit={(value) => {
+              const fontStyleName = value.trim() || null;
+              if (fontStyleName !== node.properties.fontStyleName) {
+                onUpdate({ properties: { fontStyleName } });
+              }
+              return fontStyleName ?? "";
+            }}
+            placeholder={t("properties.fontStyleUnresolved")}
+            type="text"
+            value={node.properties.fontStyleName ?? ""}
+          />
+          <Field
             accessibleLabel={t("properties.fontWeight")}
             label="Weight"
             max={1000}
@@ -110,6 +136,24 @@ export function TypographySection({
             }
             value={formatNumber(node.properties.fontWeight)}
           />
+          <label className={styles.select}>
+            <span>{t("properties.fontSlant")}</span>
+            <select
+              aria-label={t("properties.fontSlant")}
+              onChange={(event) =>
+                onUpdate({
+                  properties: {
+                    fontSlant: event.target
+                      .value as TextFontDescriptor["fontSlant"],
+                  },
+                })
+              }
+              value={node.properties.fontSlant}
+            >
+              <option value="normal">{t("properties.fontSlantNormal")}</option>
+              <option value="italic">{t("properties.fontSlantItalic")}</option>
+            </select>
+          </label>
           {fontContext && (
             <div className={styles.fontAvailability} role="status">
               <span
@@ -176,13 +220,46 @@ export function TypographySection({
                 }}
                 value={replacementWeight}
               />
+              <Field
+                accessibleLabel={t("properties.replacementFontStyleName")}
+                label="Style"
+                onCommit={(value) => {
+                  const next = value.trim();
+                  setReplacementStyleName(next);
+                  return next;
+                }}
+                placeholder={t("properties.fontStyleUnresolved")}
+                type="text"
+                value={replacementStyleName}
+              />
+              <label className={styles.select}>
+                <span>{t("properties.fontSlant")}</span>
+                <select
+                  aria-label={t("properties.replacementFontSlant")}
+                  onChange={(event) =>
+                    setReplacementSlant(
+                      event.target.value as TextFontDescriptor["fontSlant"],
+                    )
+                  }
+                  value={replacementSlant}
+                >
+                  <option value="normal">
+                    {t("properties.fontSlantNormal")}
+                  </option>
+                  <option value="italic">
+                    {t("properties.fontSlantItalic")}
+                  </option>
+                </select>
+              </label>
               <Button
                 disabled={!replacementValid}
                 onClick={() => {
                   if (!replacementValid) return;
                   fontContext.onReplace({
                     fontFamily: replacementFamily.trim(),
+                    fontStyleName: replacementStyleName.trim() || null,
                     fontWeight: replacementWeightNumber,
+                    fontSlant: replacementSlant,
                   });
                 }}
                 tone="quiet"

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 34,
+  "schemaVersion": 35,
   "recordedAt": "2026-08-15",
   "policy": {
     "allowFloatingRefs": false,
@@ -7,11 +7,11 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.29.0",
+    "documentSchemaVersion": "1.30.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.11.0",
     "geometryServiceContractVersion": 10,
-    "textLayoutServiceContractVersion": 3,
+    "textLayoutServiceContractVersion": 4,
     "layoutServiceContractVersion": 6
   },
   "components": {
@@ -62,7 +62,7 @@
       "version": "1.133.0",
       "sourceCommit": "83bfe81d9616ab759702f657eb18ef153f83e8ae",
       "license": "MIT",
-      "productionStatus": "compile-time-component-property-variant-slot-variable-shared-style-slice-export-setting-and-font-name-shape-verification-only"
+      "productionStatus": "compile-time-component-property-variant-slot-variable-shared-style-slice-export-setting-and-exact-font-name-verification-with-unresolved-face-failure-only"
     },
     "vectorGeometry": {
       "role": "vector-path-geometry-provider",
@@ -94,7 +94,7 @@
       "adapterPackage": "@opendesign/leafer-engine",
       "provider": "leafer-editor",
       "version": "2.2.9",
-      "productionStatus": "typography-core-v2-auto-size-and-ending-max-lines-available-rich-runs-font-assets-and-native-gate-pending"
+      "productionStatus": "typography-core-v2-exact-face-identity-auto-size-and-ending-max-lines-available-rich-runs-font-assets-variable-axes-and-native-gate-pending"
     },
     "layout": {
       "role": "versioned-frame-constraints-and-auto-layout-provider",

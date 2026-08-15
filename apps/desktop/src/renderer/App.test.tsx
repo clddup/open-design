@@ -597,22 +597,46 @@ describe("App", () => {
     expect(
       runtime().getSnapshot().document.nodesById.title_welcome,
     ).toMatchObject({
-      properties: { fontFamily: "IBM Plex Sans", fontWeight: 600 },
+      properties: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: null,
+        fontWeight: 600,
+        fontSlant: "normal",
+      },
     });
     expect(
       runtime().getSnapshot().document.nodesById.subtitle_welcome,
     ).toMatchObject({
-      properties: { fontFamily: "IBM Plex Sans", fontWeight: 600 },
+      properties: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: null,
+        fontWeight: 600,
+        fontSlant: "normal",
+      },
     });
     expect(runtime().getSnapshot().state.history.undo).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: "Undo" }));
     expect(
       runtime().getSnapshot().document.nodesById.title_welcome,
-    ).toMatchObject({ properties: { fontFamily: "Inter", fontWeight: 600 } });
+    ).toMatchObject({
+      properties: {
+        fontFamily: "Inter",
+        fontStyleName: "Semi Bold",
+        fontWeight: 600,
+        fontSlant: "normal",
+      },
+    });
     expect(
       runtime().getSnapshot().document.nodesById.subtitle_welcome,
-    ).toMatchObject({ properties: { fontFamily: "Inter", fontWeight: 600 } });
+    ).toMatchObject({
+      properties: {
+        fontFamily: "Inter",
+        fontStyleName: "Semi Bold",
+        fontWeight: 600,
+        fontSlant: "normal",
+      },
+    });
   });
 
   it("opens Settings without rebuilding the editor runtime", async () => {

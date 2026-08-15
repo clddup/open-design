@@ -1207,7 +1207,9 @@ function reflowText(
     }
     if (
       node.properties.fontFamily !== command.expectedFont.fontFamily ||
-      node.properties.fontWeight !== command.expectedFont.fontWeight
+      node.properties.fontStyleName !== command.expectedFont.fontStyleName ||
+      node.properties.fontWeight !== command.expectedFont.fontWeight ||
+      node.properties.fontSlant !== command.expectedFont.fontSlant
     ) {
       throw new OperationError(
         command.commandId,
@@ -1221,7 +1223,9 @@ function reflowText(
             expectedFont: command.expectedFont,
             currentFont: {
               fontFamily: node.properties.fontFamily,
+              fontStyleName: node.properties.fontStyleName,
               fontWeight: node.properties.fontWeight,
+              fontSlant: node.properties.fontSlant,
             },
           },
         },
@@ -1229,12 +1233,16 @@ function reflowText(
     }
     const before = {
       fontFamily: node.properties.fontFamily,
+      fontStyleName: node.properties.fontStyleName,
       fontWeight: node.properties.fontWeight,
+      fontSlant: node.properties.fontSlant,
       size: structuredClone(node.size),
     };
     if (command.replacementFont) {
       node.properties.fontFamily = command.replacementFont.fontFamily;
+      node.properties.fontStyleName = command.replacementFont.fontStyleName;
       node.properties.fontWeight = command.replacementFont.fontWeight;
+      node.properties.fontSlant = command.replacementFont.fontSlant;
     }
     if (fontAvailability.status === "unknown") {
       context.warnings.push({
@@ -1248,7 +1256,9 @@ function reflowText(
     resolveTextAutoSize(node, command.commandId, context);
     changed ||=
       before.fontFamily !== node.properties.fontFamily ||
+      before.fontStyleName !== node.properties.fontStyleName ||
       before.fontWeight !== node.properties.fontWeight ||
+      before.fontSlant !== node.properties.fontSlant ||
       before.size.width !== node.size.width ||
       before.size.height !== node.size.height;
   }
@@ -1326,7 +1336,9 @@ function inspectReflowFont(
           code: "font-missing",
           font: {
             fontFamily: descriptor.fontFamily,
+            fontStyleName: descriptor.fontStyleName,
             fontWeight: descriptor.fontWeight,
+            fontSlant: descriptor.fontSlant,
           },
           provider: provider.id,
         },
@@ -1474,8 +1486,10 @@ function resolveTextAutoSize(
   const request: TextLayoutRequest = {
     content: node.properties.content,
     fontFamily: node.properties.fontFamily,
+    fontStyleName: node.properties.fontStyleName,
     fontSize: node.properties.fontSize,
     fontWeight: node.properties.fontWeight,
+    fontSlant: node.properties.fontSlant,
     letterSpacing: node.properties.letterSpacing,
     lineHeight: node.properties.lineHeight,
     paragraphIndent: node.properties.paragraphIndent,

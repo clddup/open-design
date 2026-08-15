@@ -745,8 +745,10 @@ describe("GlobalTaskCoordinator", () => {
             properties: {
               content: "Analytics workspace",
               fontFamily: "Inter",
+              fontStyleName: null,
               fontSize: 32,
               fontWeight: 650,
+              fontSlant: "normal",
               lineHeight: 40,
               letterSpacing: -0.5,
               paragraphIndent: 0,
@@ -905,8 +907,10 @@ describe("GlobalTaskCoordinator", () => {
             properties: {
               content: "Workspace navigation",
               fontFamily: "Inter",
+              fontStyleName: null,
               fontSize: 16,
               fontWeight: 600,
+              fontSlant: "normal",
               lineHeight: 24,
               letterSpacing: 0,
               paragraphIndent: 0,

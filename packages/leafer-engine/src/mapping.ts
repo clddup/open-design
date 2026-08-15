@@ -456,6 +456,7 @@ function toElementSpec(
         fontFamily: node.properties.fontFamily,
         fontSize: node.properties.fontSize,
         fontWeight: node.properties.fontWeight,
+        italic: node.properties.fontSlant === "italic",
         lineHeight: { type: "px", value: node.properties.lineHeight },
         letterSpacing: { type: "px", value: node.properties.letterSpacing },
         paraIndent: node.properties.paragraphIndent,

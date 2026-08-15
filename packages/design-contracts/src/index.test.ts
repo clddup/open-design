@@ -11,6 +11,7 @@ import {
   FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION,
   FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
   FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
+  FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
   DesignNodeSchema,
@@ -51,7 +52,72 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION).toBe("1.27.0");
   expect(FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION).toBe("1.28.0");
   expect(TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION).toBe("1.29.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION);
+  expect(FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION).toBe("1.30.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION);
+});
+
+it("migrates 1.29 font requests without inventing a face style name", () => {
+  const source = textDocumentFixture() as unknown as Record<string, unknown>;
+  source.schemaVersion = TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION;
+  const nodes = source.nodesById as Record<
+    string,
+    { properties: Record<string, unknown> }
+  >;
+  delete nodes.text_1!.properties.fontStyleName;
+  delete nodes.text_1!.properties.fontSlant;
+  source.styleOrderByType = {
+    PAINT: [],
+    TEXT: ["legacy-text-style"],
+    EFFECT: [],
+    GRID: [],
+  };
+  source.stylesById = {
+    "legacy-text-style": {
+      id: "legacy-text-style",
+      key: "legacy-text-style-key",
+      name: "Legacy/Body",
+      description: "",
+      hiddenFromPublishing: false,
+      extensions: {},
+      styleType: "TEXT",
+      textStyle: {
+        fontFamily: "Legacy Sans",
+        fontSize: 16,
+        fontWeight: 600,
+        lineHeight: 24,
+        letterSpacing: 0,
+        paragraphIndent: 0,
+        paragraphSpacing: 0,
+        textCase: "original",
+        textDecoration: "none",
+      },
+    },
+  };
+
+  expect(migrateDesignDocument(source)).toMatchObject({
+    schemaVersion: DESIGN_SCHEMA_VERSION,
+    nodesById: {
+      text_1: {
+        properties: { fontStyleName: null, fontSlant: "normal" },
+      },
+    },
+    stylesById: {
+      "legacy-text-style": {
+        textStyle: { fontStyleName: null, fontSlant: "normal" },
+      },
+    },
+  });
+
+  const malformedCurrent = textDocumentFixture() as unknown as Record<
+    string,
+    unknown
+  >;
+  const currentNodes = malformedCurrent.nodesById as Record<
+    string,
+    { properties: Record<string, unknown> }
+  >;
+  delete currentNodes.text_1!.properties.fontSlant;
+  expect(migrateDesignDocument(malformedCurrent)).toBeNull();
 });
 
 it("migrates 1.27 nodes to empty export settings and keeps current documents strict", () => {
@@ -151,8 +217,10 @@ it("defines strict Paint, Text, Effect and Grid shared-style payloads", () => {
       styleType: "TEXT",
       textStyle: {
         fontFamily: "Inter",
+        fontStyleName: null,
         fontSize: 16,
         fontWeight: 600,
+        fontSlant: "normal",
         lineHeight: 24,
         letterSpacing: 0,
         paragraphIndent: 0,
@@ -247,8 +315,10 @@ function textDocumentFixture() {
         properties: {
           content: "Text",
           fontFamily: "Inter",
+          fontStyleName: null,
           fontSize: 20,
           fontWeight: 500,
+          fontSlant: "normal",
           lineHeight: 28,
           letterSpacing: 0,
           paragraphIndent: 0,
@@ -327,8 +397,18 @@ describe("design contract schemas", () => {
       commandId: "reflow_inter",
       type: "reflow_text",
       nodeIds: ["title", "subtitle"],
-      expectedFont: { fontFamily: "Inter", fontWeight: 600 },
-      replacementFont: { fontFamily: "IBM Plex Sans", fontWeight: 500 },
+      expectedFont: {
+        fontFamily: "Inter",
+        fontStyleName: null,
+        fontWeight: 600,
+        fontSlant: "normal",
+      },
+      replacementFont: {
+        fontFamily: "IBM Plex Sans",
+        fontStyleName: null,
+        fontWeight: 500,
+        fontSlant: "normal",
+      },
     };
 
     expect(Value.Check(DesignOperationSchema, reflow)).toBe(true);
@@ -341,7 +421,12 @@ describe("design contract schemas", () => {
     expect(
       Value.Check(DesignOperationSchema, {
         ...reflow,
-        expectedFont: { fontFamily: "Inter", fontWeight: 0 },
+        expectedFont: {
+          fontFamily: "Inter",
+          fontStyleName: null,
+          fontWeight: 0,
+          fontSlant: "normal",
+        },
       }),
     ).toBe(false);
     expect(
@@ -1312,8 +1397,10 @@ describe("design contract schemas", () => {
           properties: {
             content: "A long line from an older document",
             fontFamily: "Inter",
+            fontStyleName: null,
             fontSize: 20,
             fontWeight: 500,
+            fontSlant: "normal",
             lineHeight: 28,
             letterSpacing: 0,
             textAlignHorizontal: "left",
@@ -1412,8 +1499,10 @@ describe("design contract schemas", () => {
         styleType: "TEXT",
         textStyle: {
           fontFamily: "Inter",
+          fontStyleName: null,
           fontSize: 16,
           fontWeight: 400,
+          fontSlant: "normal",
           lineHeight: 24,
           letterSpacing: 0,
         },

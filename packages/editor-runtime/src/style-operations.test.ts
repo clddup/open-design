@@ -103,8 +103,10 @@ describe("Shared Styles EditorRuntime v1", () => {
         styleType: "TEXT",
         textStyle: {
           fontFamily: "Inter",
+          fontStyleName: null,
           fontSize: 18,
           fontWeight: 600,
+          fontSlant: "normal",
           lineHeight: 26,
           letterSpacing: 0,
           paragraphIndent: 0,

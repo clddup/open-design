@@ -31,8 +31,10 @@ describe("Style Service v1", () => {
       properties: {
         fills: [{ type: "solid", color: "#2563eb", opacity: 1 }],
         fontFamily: "Inter",
+        fontStyleName: null,
         fontSize: 18,
         fontWeight: 600,
+        fontSlant: "normal",
         lineHeight: 26,
       },
     });
@@ -125,8 +127,10 @@ function fixture(): DesignDocument {
         properties: {
           content: "Fallback",
           fontFamily: "Arial",
+          fontStyleName: null,
           fontSize: 14,
           fontWeight: 400,
+          fontSlant: "normal",
           lineHeight: 20,
           letterSpacing: 0,
           paragraphIndent: 0,
@@ -178,8 +182,10 @@ function fixture(): DesignDocument {
         styleType: "TEXT",
         textStyle: {
           fontFamily: "Inter",
+          fontStyleName: null,
           fontSize: 18,
           fontWeight: 600,
+          fontSlant: "normal",
           lineHeight: 26,
           letterSpacing: 0,
           paragraphIndent: 0,

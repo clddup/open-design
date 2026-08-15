@@ -9,6 +9,7 @@ import type {
   DesignError,
   DesignOperation,
   DesignTransaction,
+  TextFontDescriptor,
 } from "@opendesign/design-contracts";
 import {
   componentMainNodeId,
@@ -1705,13 +1706,15 @@ function createScopedInspection(
   );
   const fontRequests = new Map<
     string,
-    { fontFamily: string; fontWeight: number; nodeIds: string[] }
+    TextFontDescriptor & { nodeIds: string[] }
   >();
   for (const node of Object.values(nodesById)) {
     if (node.kind !== "text") continue;
     const key = JSON.stringify([
       node.properties.fontFamily,
+      node.properties.fontStyleName,
       node.properties.fontWeight,
+      node.properties.fontSlant,
     ]);
     const existing = fontRequests.get(key);
     if (existing) {
@@ -1719,7 +1722,9 @@ function createScopedInspection(
     } else {
       fontRequests.set(key, {
         fontFamily: node.properties.fontFamily,
+        fontStyleName: node.properties.fontStyleName,
         fontWeight: node.properties.fontWeight,
+        fontSlant: node.properties.fontSlant,
         nodeIds: [node.id],
       });
     }
@@ -1727,7 +1732,9 @@ function createScopedInspection(
   const sortedFontRequests = [...fontRequests.values()].sort(
     (left, right) =>
       left.fontFamily.localeCompare(right.fontFamily) ||
-      left.fontWeight - right.fontWeight,
+      (left.fontStyleName ?? "").localeCompare(right.fontStyleName ?? "") ||
+      left.fontWeight - right.fontWeight ||
+      left.fontSlant.localeCompare(right.fontSlant),
   );
   const fontAvailability = sortedFontRequests
     .slice(0, MAX_INSPECTED_FONT_REQUESTS)
@@ -1737,7 +1744,9 @@ function createScopedInspection(
       );
       return {
         fontFamily: font.fontFamily,
+        fontStyleName: font.fontStyleName,
         fontWeight: font.fontWeight,
+        fontSlant: font.fontSlant,
         nodeCount: nodeIds.length,
         nodeIds: nodeIds.slice(0, MAX_INSPECTED_FONT_NODE_IDS),
         nodeIdsTruncated: nodeIds.length > MAX_INSPECTED_FONT_NODE_IDS,

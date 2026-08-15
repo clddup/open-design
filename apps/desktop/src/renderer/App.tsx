@@ -640,13 +640,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     if (!selectedNode || selectedNode.kind !== "text") return undefined;
     const expectedFont: TextFontDescriptor = {
       fontFamily: selectedNode.properties.fontFamily,
+      fontStyleName: selectedNode.properties.fontStyleName,
       fontWeight: selectedNode.properties.fontWeight,
+      fontSlant: selectedNode.properties.fontSlant,
     };
     const matching = Object.values(designDocument.nodesById).filter(
       (node) =>
         node.kind === "text" &&
         node.properties.fontFamily === expectedFont.fontFamily &&
-        node.properties.fontWeight === expectedFont.fontWeight,
+        node.properties.fontStyleName === expectedFont.fontStyleName &&
+        node.properties.fontWeight === expectedFont.fontWeight &&
+        node.properties.fontSlant === expectedFont.fontSlant,
     );
     const reflowable = matching.filter(
       (node) => node.kind === "text" && node.properties.textResize !== "fixed",

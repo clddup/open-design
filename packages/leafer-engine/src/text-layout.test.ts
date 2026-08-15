@@ -1,4 +1,5 @@
 import type * as LeaferEditorModule from "leafer-editor";
+import type { TextLayoutRequest } from "@opendesign/text-service";
 import { describe, expect, it, vi } from "vitest";
 import {
   createLeaferTextLayoutProvider,
@@ -7,11 +8,13 @@ import {
 } from "./text-layout.js";
 
 class FakeText {
+  static readonly inputs: Record<string, unknown>[] = [];
   readonly input: Record<string, unknown>;
   readonly destroy = vi.fn();
 
   constructor(input: Record<string, unknown>) {
     this.input = input;
+    FakeText.inputs.push(input);
   }
 
   get boxBounds() {
@@ -83,14 +86,26 @@ describe("Leafer text layout provider", () => {
     expect(
       available.inspectFont?.({
         fontFamily: "Inter, sans-serif",
+        fontStyleName: null,
         fontWeight: 600,
+        fontSlant: "normal",
       }),
     ).toMatchObject({ status: "available" });
     expect(
-      available.inspectFont?.({ fontFamily: "Missing Sans", fontWeight: 400 }),
+      available.inspectFont?.({
+        fontFamily: "Missing Sans",
+        fontStyleName: null,
+        fontWeight: 400,
+        fontSlant: "normal",
+      }),
     ).toMatchObject({ status: "missing" });
     expect(
-      unknown.inspectFont?.({ fontFamily: "Unknown Sans", fontWeight: 400 }),
+      unknown.inspectFont?.({
+        fontFamily: "Unknown Sans",
+        fontStyleName: null,
+        fontWeight: 400,
+        fontSlant: "normal",
+      }),
     ).toMatchObject({ status: "unknown" });
   });
 
@@ -98,25 +113,35 @@ describe("Leafer text layout provider", () => {
     const provider = createLeaferTextLayoutProvider(leafer);
 
     expect(
-      provider.inspectFont?.({ fontFamily: "sans-serif", fontWeight: 400 }),
+      provider.inspectFont?.({
+        fontFamily: "sans-serif",
+        fontStyleName: null,
+        fontWeight: 400,
+        fontSlant: "normal",
+      }),
     ).toMatchObject({ status: "available" });
     expect(
       provider.inspectFont?.({
         fontFamily: "Unverified Sans",
+        fontStyleName: null,
         fontWeight: 400,
+        fontSlant: "normal",
       }),
     ).toMatchObject({ status: "unknown" });
   });
 
   it("measures Auto Width without fixed bounds and caches the result", () => {
+    FakeText.inputs.length = 0;
     const provider = createLeaferTextLayoutProvider(leafer, {
       fontAvailable: () => true,
     });
-    const request = {
+    const request: TextLayoutRequest = {
       content: "OpenDesign",
       fontFamily: "Inter, sans-serif",
+      fontStyleName: "Semi Bold Italic",
       fontSize: 24,
       fontWeight: 600,
+      fontSlant: "italic",
       letterSpacing: 0,
       lineHeight: 32,
       paragraphIndent: 0,
@@ -136,6 +161,7 @@ describe("Leafer text layout provider", () => {
       size: { width: 122.5, height: 32.25 },
       warnings: [],
     });
+    expect(FakeText.inputs.at(-1)).toMatchObject({ italic: true });
     expect(provider.measure(request)).toEqual(provider.measure(request));
   });
 
@@ -146,8 +172,10 @@ describe("Leafer text layout provider", () => {
     const result = provider.measure({
       content: "A wrapped paragraph",
       fontFamily: "Missing Sans",
+      fontStyleName: null,
       fontSize: 18,
       fontWeight: 400,
+      fontSlant: "normal",
       letterSpacing: 0,
       lineHeight: 26,
       paragraphIndent: 0,
@@ -176,8 +204,10 @@ describe("Leafer text layout provider", () => {
     const result = provider.measure({
       content: "012345678901234567890123456789",
       fontFamily: "Inter",
+      fontStyleName: null,
       fontSize: 18,
       fontWeight: 400,
+      fontSlant: "normal",
       letterSpacing: 0,
       lineHeight: 20,
       paragraphIndent: 0,
@@ -207,8 +237,10 @@ describe("Leafer text layout provider", () => {
       provider.measure({
         content: "Invalid",
         fontFamily: "Inter",
+        fontStyleName: null,
         fontSize: 24,
         fontWeight: 600,
+        fontSlant: "normal",
         letterSpacing: 0,
         lineHeight: 32,
         paragraphIndent: 0,

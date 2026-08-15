@@ -392,8 +392,10 @@ function fixture(): DesignDocument {
     properties: {
       content: "Continue",
       fontFamily: "Inter",
+      fontStyleName: null,
       fontSize: 14,
       fontWeight: 500,
+      fontSlant: "normal",
       lineHeight: 20,
       letterSpacing: 0,
       paragraphIndent: 0,

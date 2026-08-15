@@ -1,8 +1,9 @@
-export const TEXT_LAYOUT_SERVICE_CONTRACT_VERSION = 3 as const;
+export const TEXT_LAYOUT_SERVICE_CONTRACT_VERSION = 4 as const;
 export const MAX_TEXT_LAYOUT_CHARACTERS = 1_000_000;
 export const MAX_TEXT_LAYOUT_CACHE_KEY_CHARACTERS = 4_000_000;
 export const MAX_TEXT_LAYOUT_DIMENSION = 1_000_000;
 export const MAX_TEXT_LAYOUT_FONT_FAMILY_CHARACTERS = 4_096;
+export const MAX_TEXT_LAYOUT_FONT_STYLE_NAME_CHARACTERS = 512;
 export const MAX_TEXT_LAYOUT_MESSAGE_CHARACTERS = 8_192;
 export const MAX_TEXT_LAYOUT_PROVIDER_ID_CHARACTERS = 256;
 export const MAX_TEXT_LAYOUT_WARNINGS = 8;
@@ -16,7 +17,9 @@ export type TextLayoutTruncation = "disabled" | "ending";
 
 export interface TextFontDescriptor {
   fontFamily: string;
+  fontStyleName: string | null;
   fontWeight: number;
+  fontSlant: "normal" | "italic";
 }
 
 export type TextFontAvailabilityStatus = "available" | "missing" | "unknown";
@@ -31,8 +34,10 @@ export interface TextFontAvailabilityResult {
 export interface TextLayoutRequest {
   content: string;
   fontFamily: string;
+  fontStyleName: string | null;
   fontSize: number;
   fontWeight: number;
+  fontSlant: "normal" | "italic";
   letterSpacing: number;
   lineHeight: number;
   paragraphIndent: number;
@@ -88,11 +93,23 @@ export function validateTextFontDescriptor(
     return "Font inspection requires a bounded non-empty font family";
   }
   if (
+    descriptor.fontStyleName !== null &&
+    (typeof descriptor.fontStyleName !== "string" ||
+      descriptor.fontStyleName.trim().length === 0 ||
+      descriptor.fontStyleName.length >
+        MAX_TEXT_LAYOUT_FONT_STYLE_NAME_CHARACTERS)
+  ) {
+    return "Font inspection style name must be null or a bounded non-empty string";
+  }
+  if (
     !Number.isInteger(descriptor.fontWeight) ||
     descriptor.fontWeight < 1 ||
     descriptor.fontWeight > 1_000
   ) {
     return "Font inspection weight must be an integer from 1 to 1000";
+  }
+  if (descriptor.fontSlant !== "normal" && descriptor.fontSlant !== "italic") {
+    return "Font inspection slant must be normal or italic";
   }
   return null;
 }
@@ -136,6 +153,14 @@ export function validateTextLayoutRequest(
   ) {
     return "Text layout requires a bounded non-empty font family";
   }
+  if (
+    request.fontStyleName !== null &&
+    (typeof request.fontStyleName !== "string" ||
+      request.fontStyleName.trim().length === 0 ||
+      request.fontStyleName.length > MAX_TEXT_LAYOUT_FONT_STYLE_NAME_CHARACTERS)
+  ) {
+    return "Text layout style name must be null or a bounded non-empty string";
+  }
   if (!positiveBounded(request.fontSize)) {
     return "Text layout font size is outside supported finite limits";
   }
@@ -148,6 +173,9 @@ export function validateTextLayoutRequest(
     request.fontWeight > 1_000
   ) {
     return "Text layout font weight must be an integer from 1 to 1000";
+  }
+  if (request.fontSlant !== "normal" && request.fontSlant !== "italic") {
+    return "Text layout font slant must be normal or italic";
   }
   if (
     !Number.isFinite(request.letterSpacing) ||

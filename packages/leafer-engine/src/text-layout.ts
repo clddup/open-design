@@ -58,6 +58,7 @@ export function createLeaferTextLayoutProvider(
           fontFamily: request.fontFamily,
           fontSize: request.fontSize,
           fontWeight: request.fontWeight,
+          italic: request.fontSlant === "italic",
           lineHeight: { type: "px", value: request.lineHeight },
           letterSpacing: { type: "px", value: request.letterSpacing },
           paraIndent: request.paragraphIndent,
@@ -168,10 +169,11 @@ function browserFontAvailable(
     if (!context) return undefined;
     const family = cssPrimaryFontFamily(descriptor.fontFamily);
     const sample = "mmmmmmmmmmlliWW@#0123456789汉字かなカナ한글";
+    const prefix = descriptor.fontSlant === "italic" ? "italic " : "";
     for (const fallback of ["monospace", "serif", "sans-serif"]) {
-      context.font = `${descriptor.fontWeight} 72px ${fallback}`;
+      context.font = `${prefix}${descriptor.fontWeight} 72px ${fallback}`;
       const fallbackWidth = context.measureText(sample).width;
-      context.font = `${descriptor.fontWeight} 72px ${family}, ${fallback}`;
+      context.font = `${prefix}${descriptor.fontWeight} 72px ${family}, ${fallback}`;
       const requestedWidth = context.measureText(sample).width;
       if (Math.abs(requestedWidth - fallbackWidth) > 0.01) return true;
     }
@@ -182,7 +184,7 @@ function browserFontAvailable(
 }
 
 function fontDescriptor(descriptor: TextFontDescriptor): string {
-  return `${descriptor.fontWeight} 16px ${cssPrimaryFontFamily(descriptor.fontFamily)}`;
+  return `${descriptor.fontSlant === "italic" ? "italic " : ""}${descriptor.fontWeight} 16px ${cssPrimaryFontFamily(descriptor.fontFamily)}`;
 }
 
 function cssPrimaryFontFamily(value: string): string {
