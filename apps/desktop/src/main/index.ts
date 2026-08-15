@@ -48,6 +48,7 @@ import { prepareAgentContinuation } from "./agent/agent-continuation-host";
 import { handleAgentRunControlRequest } from "./agent/agent-run-starter";
 import { prepareInitialDesignInspection } from "./agent/agent-initial-design-inspection";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
+import { handleDesignFirstSliceTool } from "./agent/design-first-slice-tool-handler";
 import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
@@ -106,6 +107,7 @@ import {
   DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_VECTOR_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
@@ -1243,6 +1245,17 @@ void app.whenReady().then(async () => {
             actions: call.input.actions,
           },
         };
+      }
+      if (call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
+        return await handleDesignFirstSliceTool(
+          globalTaskCoordinator,
+          rendererDesignToolHost,
+          call,
+          context,
+          executionContext,
+          signal,
+          reportProgress,
+        );
       }
       if (call.toolName === DESIGN_PLAN_TOOL_NAME) {
         return await handleDesignPlanTool(

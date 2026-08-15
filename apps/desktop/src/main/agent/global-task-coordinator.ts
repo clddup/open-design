@@ -846,6 +846,52 @@ export class GlobalTaskCoordinator {
     };
   }
 
+  assertDesignPlanForAllocatedApply(
+    context: TrustedToolContext,
+    input: DesignApplyToolInput,
+    allocationTargetIds: readonly string[],
+  ): DesignPlanApplyAuthorization {
+    const state = this.#requireDesignPlan(context);
+    const assumedAllocatedTargetIds = new Set(allocationTargetIds);
+    if (assumedAllocatedTargetIds.size !== allocationTargetIds.length) {
+      throw new Error(
+        "design_workflow.allocation_state_invalid: Compact allocation target IDs must be unique",
+      );
+    }
+    for (const targetId of assumedAllocatedTargetIds) {
+      const target = state.targetsById.get(targetId);
+      if (
+        !target ||
+        target.delivery.status !== "pending" ||
+        target.artboardEstablished ||
+        target.planned.artboard.mode !== "create"
+      ) {
+        throw new Error(
+          `design_workflow.allocation_state_invalid: Delivery target ${targetId} is not pending creation`,
+        );
+      }
+    }
+    const resolvedInput = resolvePlannedStructureGeometry(input, state);
+    const targetIds = [
+      ...assertPlannedTargetWrites(
+        resolvedInput,
+        state,
+        assumedAllocatedTargetIds,
+      ),
+    ];
+    if (targetIds.length === 0) {
+      throw new Error(
+        "design_workflow.material_write_required: Compact first-slice input must create real editable content inside the first allocated target",
+      );
+    }
+    assertActiveMaterialTargets(state, targetIds);
+    return {
+      input: resolvedInput,
+      plan: state.plan,
+      targetIds,
+    };
+  }
+
   assertDesignApplyResult(
     context: TrustedToolContext,
     authorization: DesignPlanApplyAuthorization | undefined,
@@ -1328,6 +1374,7 @@ function registerPlannedNode<T>(
 function assertPlannedTargetWrites(
   input: DesignApplyToolInput,
   state: DesignWorkflowState,
+  assumedAllocatedTargetIds: ReadonlySet<string> = new Set(),
 ): Set<string> {
   const targetIds = new Set<string>();
   const insertedParents = new Map(
@@ -1353,7 +1400,9 @@ function assertPlannedTargetWrites(
       if (
         command.type === "insert_element" &&
         [...state.targetsById.values()].some(
-          (candidate) => candidate.artboardEstablished,
+          (candidate) =>
+            candidate.artboardEstablished ||
+            assumedAllocatedTargetIds.has(candidate.delivery.targetId),
         )
       ) {
         throw new Error(
@@ -1374,7 +1423,11 @@ function assertPlannedTargetWrites(
   for (const targetId of targetIds) {
     const target = state.targetsById.get(targetId);
     if (!target) continue;
-    assertPlannedArtboardWrite(input, target);
+    assertPlannedArtboardWrite(
+      input,
+      target,
+      assumedAllocatedTargetIds.has(targetId),
+    );
   }
   return targetIds;
 }
@@ -1382,6 +1435,7 @@ function assertPlannedTargetWrites(
 function assertPlannedArtboardWrite(
   input: DesignApplyToolInput,
   state: DesignDeliveryTargetState,
+  assumeAllocated = false,
 ): void {
   const inserts = input.commands.filter(
     (
@@ -1397,6 +1451,7 @@ function assertPlannedArtboardWrite(
   if (inserts.length === 0) {
     if (
       !state.artboardEstablished &&
+      !assumeAllocated &&
       input.commands.some(
         (command) =>
           command.type === "replace_subtree" &&
@@ -1409,7 +1464,7 @@ function assertPlannedArtboardWrite(
     }
     return;
   }
-  if (!state.artboardEstablished) {
+  if (!state.artboardEstablished && !assumeAllocated) {
     const artboardInsert = inserts.find(
       (command) => command.node.id === artboard.frameId,
     );

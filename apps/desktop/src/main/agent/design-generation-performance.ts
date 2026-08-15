@@ -5,6 +5,7 @@ import {
 } from "@opendesign/workspace-contracts";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
@@ -390,7 +391,11 @@ function createRunState(startedAtMs: number): RunState {
 }
 
 function classifyTool(toolName: string): ToolKind {
-  if (toolName === DESIGN_PLAN_TOOL_NAME) return "plan";
+  if (
+    toolName === DESIGN_PLAN_TOOL_NAME ||
+    toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+  )
+    return "plan";
   if (toolName === DESIGN_CAPTURE_TOOL_NAME) return "capture";
   if (toolName === DESIGN_REVIEW_TOOL_NAME) return "review";
   if (toolName === DESIGN_INSPECT_TOOL_NAME) return "inspect";

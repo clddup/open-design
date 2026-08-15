@@ -17,6 +17,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
@@ -27,6 +28,8 @@ import {
   INTERNAL_IMPORT_SVG_TOOL_NAME,
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   designPlanTargets,
+  compileDesignFirstSliceToolInput,
+  isDesignFirstSliceToolInput,
   isDesignPlanToolInput,
   PLACE_IMAGE_TOOL_NAME,
   READ_IMAGE_TOOL_NAME,
@@ -109,16 +112,45 @@ export function projectGenerationPlanPresentationEvent(
   }
   if (
     event.type === "tool.requested" &&
-    event.toolName === DESIGN_PLAN_TOOL_NAME
+    (event.toolName === DESIGN_PLAN_TOOL_NAME ||
+      event.toolName === DESIGN_FIRST_SLICE_TOOL_NAME)
   ) {
-    if (!isDesignPlanToolInput(event.input)) return state;
+    const plan =
+      event.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+        ? isDesignFirstSliceToolInput(event.input)
+          ? compileDesignFirstSliceToolInput(event.input).plan
+          : undefined
+        : isDesignPlanToolInput(event.input)
+          ? event.input
+          : undefined;
+    if (!plan) return state;
     const callId = generationPlanCallId(event.runId, event.toolCallId);
     return {
       ...state,
+      ...(event.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+        ? {
+            activityByRunId: {
+              ...state.activityByRunId,
+              [event.runId]: {
+                id: `${callId}:requested`,
+                phase: "building" as const,
+                runId: event.runId,
+                toolCallId: event.toolCallId,
+              },
+            },
+            requestedToolByCallId: {
+              ...state.requestedToolByCallId,
+              [callId]: {
+                runId: event.runId,
+                toolName: event.toolName,
+              },
+            },
+          }
+        : {}),
       requestedByCallId: {
         ...state.requestedByCallId,
         [callId]: {
-          plan: structuredClone(event.input),
+          plan: structuredClone(plan),
           runId: event.runId,
           toolCallId: event.toolCallId,
         },
@@ -157,12 +189,14 @@ export function projectGenerationPlanPresentationEvent(
   const requestedPlan = state.requestedByCallId[callId];
   if (requestedPlan) {
     const requestedByCallId = { ...state.requestedByCallId };
+    const requestedToolByCallId = { ...state.requestedToolByCallId };
     delete requestedByCallId[callId];
+    delete requestedToolByCallId[callId];
     if (
       event.type === "tool.failed" ||
       !acceptedGenerationPlan(event.result, requestedPlan.plan)
     ) {
-      return { ...state, requestedByCallId };
+      return { ...state, requestedByCallId, requestedToolByCallId };
     }
     const reviewedByRunId = { ...state.reviewedByRunId };
     delete reviewedByRunId[event.runId];
@@ -190,6 +224,7 @@ export function projectGenerationPlanPresentationEvent(
         },
       },
       requestedByCallId,
+      requestedToolByCallId,
       reviewedByRunId,
     };
   }
@@ -520,6 +555,7 @@ function generationPhaseForTool(
   }
   if (
     toolName === DESIGN_APPLY_TOOL_NAME ||
+    toolName === DESIGN_FIRST_SLICE_TOOL_NAME ||
     toolName === INTERNAL_DESIGN_APPLY_TOOL_NAME ||
     toolName === DESIGN_HIERARCHY_TOOL_NAME ||
     toolName === DESIGN_ARRANGE_TOOL_NAME ||

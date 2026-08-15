@@ -1057,6 +1057,30 @@ describe("GlobalTaskCoordinator", () => {
     const allocation = coordinator.createDesignPlanAllocation(context.runId);
     expect(allocation?.targetIds).toEqual(["target_home", "target_profile"]);
     expect(allocation?.input.commands).toHaveLength(2);
+    const homeTarget = plan.targets[0];
+    const profileTarget = plan.targets[1];
+    if (!homeTarget || !profileTarget) {
+      throw new Error("Multi-target fixture is incomplete");
+    }
+    const compactHomeDraft = draftTargets(pageId, [homeTarget]);
+    compactHomeDraft.commands = compactHomeDraft.commands.filter(
+      (command) =>
+        command.type !== "insert_element" ||
+        command.node.id !== homeTarget.artboard.frameId,
+    );
+    expect(
+      coordinator.assertDesignPlanForAllocatedApply(
+        context,
+        compactHomeDraft,
+        allocation?.targetIds ?? [],
+      ),
+    ).toMatchObject({ targetIds: ["target_home"] });
+    expect(coordinator.getDeliveryLedger(context.runId)?.targets).toMatchObject(
+      [
+        { targetId: "target_home", status: "pending" },
+        { targetId: "target_profile", status: "pending" },
+      ],
+    );
     coordinator.recordDesignPlanAllocated(
       context.runId,
       allocation?.targetIds ?? [],
@@ -1086,11 +1110,6 @@ describe("GlobalTaskCoordinator", () => {
     expect(() => coordinator.assertDesignPlanForApply(context, draft)).toThrow(
       "design_workflow.active_target_required",
     );
-    const homeTarget = plan.targets[0];
-    const profileTarget = plan.targets[1];
-    if (!homeTarget || !profileTarget) {
-      throw new Error("Multi-target fixture is incomplete");
-    }
     const homeDraft = draftTargets(pageId, [homeTarget]);
     const draftAuthorization = coordinator.assertDesignPlanForApply(
       context,

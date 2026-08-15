@@ -14,6 +14,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
@@ -49,10 +50,7 @@ export function reviewDesignCompletion(
   );
   const materialWriteIndex = findMaterialWriteIndex(context.toolCalls);
   if (materialWriteIndex < 0) {
-    if (
-      generationIndex < 0 &&
-      !context.toolCalls.some((call) => call.toolName === DESIGN_PLAN_TOOL_NAME)
-    ) {
+    if (generationIndex < 0 && !context.toolCalls.some(isPlanBearingCall)) {
       return { allow: true };
     }
     if (generationIndex < 0) {
@@ -70,8 +68,7 @@ export function reviewDesignCompletion(
   }
 
   const planIndex = context.toolCalls.findIndex(
-    (call, index) =>
-      index < materialWriteIndex && call.toolName === DESIGN_PLAN_TOOL_NAME,
+    (call, index) => index <= materialWriteIndex && isPlanBearingCall(call),
   );
   if (planIndex < 0) {
     return {
@@ -85,7 +82,10 @@ export function reviewDesignCompletion(
     (call, index) =>
       index < planIndex && call.toolName === DESIGN_INSPECT_TOOL_NAME,
   );
-  if (inspectionIndex < 0) {
+  const usedTrustedInitialInspection =
+    context.toolCalls[planIndex]?.toolName === DESIGN_FIRST_SLICE_TOOL_NAME &&
+    context.request.initialDesignInspection !== undefined;
+  if (inspectionIndex < 0 && !usedTrustedInitialInspection) {
     return {
       allow: false,
       message:
@@ -93,7 +93,12 @@ export function reviewDesignCompletion(
     };
   }
 
-  const plan = context.toolCalls[planIndex]?.input;
+  const planCall = context.toolCalls[planIndex];
+  const plan =
+    planCall?.toolName === DESIGN_FIRST_SLICE_TOOL_NAME &&
+    isRecord(planCall.result)
+      ? planCall.result.plan
+      : planCall?.input;
   if (
     hasPlacedRaster(context.toolCalls) &&
     isEditableCreatedArtboardPlan(plan) &&
@@ -218,6 +223,10 @@ function editableInsertedLayerCount(
       : undefined;
   let count = 0;
   for (const call of toolCalls) {
+    if (call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
+      count += compactFirstSliceMaterialCount(call.input);
+      continue;
+    }
     if (call.toolName !== DESIGN_APPLY_TOOL_NAME) continue;
     for (const command of readCommands(call.input)) {
       if (command.type !== "insert_element" || !isRecord(command.node)) {
@@ -244,6 +253,12 @@ function findMaterialWriteIndex(
     const call = toolCalls[index];
     if (!call) continue;
     if (call.toolName === PLACE_IMAGE_TOOL_NAME) return index;
+    if (
+      call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME &&
+      compactFirstSliceMaterialCount(call.input) > 0
+    ) {
+      return index;
+    }
     if (call.toolName !== DESIGN_APPLY_TOOL_NAME) continue;
     const commands = readCommands(call.input);
     if (commands.length === 0) continue;
@@ -268,11 +283,39 @@ function isSuccessfulDesignWrite(call: AgentToolCallRecord): boolean {
     call.toolName === UPDATE_IMAGE_TOOL_NAME ||
     call.toolName === DESIGN_ARRANGE_TOOL_NAME ||
     call.toolName === DESIGN_HIERARCHY_TOOL_NAME ||
+    call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME ||
     (call.toolName === DESIGN_COMPONENT_TOOL_NAME &&
       isMaterialComponentWrite(call.input)) ||
     (call.toolName === DESIGN_APPLY_TOOL_NAME &&
       readCommands(call.input).length > 0)
   );
+}
+
+function isPlanBearingCall(call: AgentToolCallRecord): boolean {
+  return (
+    call.toolName === DESIGN_PLAN_TOOL_NAME ||
+    call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+  );
+}
+
+function compactFirstSliceMaterialCount(input: unknown): number {
+  if (!isRecord(input) || !isRecord(input.firstSlice)) return 0;
+  const stages = input.firstSlice.stages;
+  if (!Array.isArray(stages)) return 0;
+  let count = 0;
+  for (const stage of stages as unknown[]) {
+    if (!isRecord(stage) || !Array.isArray(stage.elements)) continue;
+    for (const element of stage.elements as unknown[]) {
+      if (
+        isRecord(element) &&
+        element.kind !== "group" &&
+        element.kind !== "frame"
+      ) {
+        count += 1;
+      }
+    }
+  }
+  return count;
 }
 
 function isMaterialComponentWrite(input: unknown): boolean {

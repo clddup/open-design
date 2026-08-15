@@ -7,6 +7,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
@@ -93,6 +94,7 @@ const finalCapture: AgentToolCallRecord = {
 function context(
   toolCalls: AgentToolCallRecord[],
   unresolvedDesignWriteFailure?: AgentCompletionContext["unresolvedDesignWriteFailure"],
+  requestOverrides: Partial<AgentCompletionContext["request"]> = {},
 ): AgentCompletionContext {
   return {
     request: {
@@ -108,6 +110,7 @@ function context(
         modelId: "design",
         reasoningEffort: "medium",
       },
+      ...requestOverrides,
     },
     currentRevision: toolCalls.at(-1)?.revision ?? 4,
     turn: 4,
@@ -268,6 +271,52 @@ describe("design completion guard", () => {
         ]),
       ),
     ).toEqual({ allow: true });
+  });
+
+  it("accepts trusted host inspection plus the combined plan and first-slice write", () => {
+    const compact: AgentToolCallRecord = {
+      toolCallId: "slice_1",
+      toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+      input: {
+        firstSlice: {
+          stages: [
+            {
+              elements: [
+                { kind: "frame" },
+                { kind: "rectangle" },
+                { kind: "text" },
+              ],
+            },
+          ],
+        },
+      },
+      status: "completed",
+      revision: 5,
+      result: {
+        plan: {
+          version: 4,
+          outputMode: "editable-composition",
+          targets: [
+            {
+              artboard: { mode: "create", frameId: "frame_home" },
+            },
+          ],
+        },
+      },
+    };
+    const compactContext = context(
+      [compact, firstCapture, visualReview, refinementWrite, finalCapture],
+      undefined,
+      {
+        initialDesignInspection: {
+          version: 1,
+          observedRevision: 4,
+          content: "{}",
+        },
+      },
+    );
+
+    expect(reviewDesignCompletion(compactContext)).toEqual({ allow: true });
   });
 
   it("refuses to finish while any required delivery target is incomplete", () => {

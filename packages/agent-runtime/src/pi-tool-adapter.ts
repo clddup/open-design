@@ -14,6 +14,7 @@ import type {
   AgentRunRequest,
   AgentToolCallRecord,
   AgentToolDefinition,
+  ModelToolSurface,
   ApprovalPort,
   ApprovalRequest,
   ToolExecutorPort,
@@ -65,6 +66,7 @@ export interface OpenDesignPiToolAdapterOptions {
   maxToolCalls: number;
   priorToolCallIds?: readonly string[];
   initialInspection?: boolean;
+  initialModelToolSurface?: ModelToolSurface;
   now?: () => Date;
 }
 export interface PiToolStartProjection {
@@ -125,10 +127,12 @@ export class OpenDesignPiToolAdapter {
   readonly #designFailureRecovery = new PiDesignFailureRecovery();
   readonly #progressCircuit = new PiToolProgressCircuit();
   readonly #failures = new Map<string, TrustedToolFailure>();
+  readonly #expandedTools: AgentTool[];
   readonly #hostInspectedTools: AgentTool[];
   readonly #lifecycle: PiToolLifecyclePort;
   readonly #inspectedTools: AgentTool[];
   readonly #initialInspection: boolean;
+  readonly #initialModelToolSurface: ModelToolSurface;
   readonly #maxToolCalls: number;
   readonly #now: () => Date;
   readonly #records: AgentToolCallRecord[] = [];
@@ -155,6 +159,8 @@ export class OpenDesignPiToolAdapter {
     this.#lifecycle = options.lifecycle;
     this.#maxToolCalls = options.maxToolCalls;
     this.#initialInspection = options.initialInspection ?? false;
+    this.#initialModelToolSurface =
+      options.initialModelToolSurface ?? "general";
     this.#now = options.now ?? (() => new Date());
     for (const toolCallId of options.priorToolCallIds ?? []) {
       if (typeof toolCallId !== "string" || toolCallId.length === 0) {
@@ -171,9 +177,23 @@ export class OpenDesignPiToolAdapter {
     this.tools = safeDefinitions.map((definition) =>
       this.#createTool(definition),
     );
+    this.#expandedTools = disclosedToolDefinitions(
+      safeDefinitions,
+      "expanded",
+      { surface: "general" },
+    ).map((modelDefinition) => {
+      const executionDefinition = this.#definitions.get(modelDefinition.name);
+      if (executionDefinition === undefined) {
+        throw new Error(
+          `Expanded tool ${modelDefinition.name} is missing its trusted definition`,
+        );
+      }
+      return this.#createTool(executionDefinition, modelDefinition);
+    });
     this.#bootstrapTools = disclosedToolDefinitions(
       safeDefinitions,
       "bootstrap",
+      { surface: this.#initialModelToolSurface },
     ).map((modelDefinition) => {
       const executionDefinition = this.#definitions.get(modelDefinition.name);
       if (executionDefinition === undefined) {
@@ -186,6 +206,7 @@ export class OpenDesignPiToolAdapter {
     this.#hostInspectedTools = disclosedToolDefinitions(
       safeDefinitions,
       "host-inspected",
+      { surface: this.#initialModelToolSurface },
     ).map((modelDefinition) => {
       const executionDefinition = this.#definitions.get(modelDefinition.name);
       if (executionDefinition === undefined) {
@@ -198,6 +219,7 @@ export class OpenDesignPiToolAdapter {
     this.#inspectedTools = disclosedToolDefinitions(
       safeDefinitions,
       "inspected",
+      { surface: this.#initialModelToolSurface },
     ).map((modelDefinition) => {
       const executionDefinition = this.#definitions.get(modelDefinition.name);
       if (executionDefinition === undefined) {
@@ -234,7 +256,7 @@ export class OpenDesignPiToolAdapter {
     if (phase === "bootstrap") return this.#bootstrapTools;
     if (phase === "host-inspected") return this.#hostInspectedTools;
     if (phase === "inspected") return this.#inspectedTools;
-    return this.tools;
+    return this.#expandedTools;
   }
 
   get unresolvedDesignWriteFailure() {

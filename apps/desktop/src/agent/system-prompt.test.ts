@@ -1,7 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt";
+import {
+  OPENDESIGN_AGENT_SYSTEM_PROMPT,
+  OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
+} from "./system-prompt";
 
 describe("OpenDesign Agent system prompt", () => {
+  it("keeps the blank-canvas first-slice kernel compact and truthful", () => {
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "opendesign_generate_first_slice",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "allocate all stable Frame roots now",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "stages are real semantic commits",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "Do not claim completion after the first slice",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length).toBeLessThan(10_000);
+  });
+
   it("fixes the product role to visual design instead of coding or files", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "built-in visual design agent",

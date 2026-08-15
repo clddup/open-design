@@ -19,6 +19,7 @@ import {
   type AgentRunRequest,
   type AgentToolCallRecord,
   type AgentToolDefinition,
+  type ModelToolSurface,
   type ApprovalPort,
   type CompletionGuardPort,
   type ToolExecutorPort,
@@ -59,6 +60,7 @@ export interface PiRunEventAdapterOptions {
   maxGeneratedTokens?: number;
   maxCompletionGuardRejections?: number;
   priorToolCallIds?: readonly string[];
+  initialModelToolSurface?: ModelToolSurface;
   now?: () => Date;
 }
 
@@ -157,6 +159,9 @@ export class PiRunEventAdapter {
           : { approvalPort: options.approvalPort }),
         maxToolCalls: options.maxToolCalls ?? 32,
         initialInspection: this.#request.initialDesignInspection !== undefined,
+        ...(options.initialModelToolSurface === undefined
+          ? {}
+          : { initialModelToolSurface: options.initialModelToolSurface }),
         ...(options.priorToolCallIds === undefined
           ? {}
           : { priorToolCallIds: options.priorToolCallIds }),

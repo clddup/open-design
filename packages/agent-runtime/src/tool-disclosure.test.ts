@@ -65,6 +65,55 @@ describe("model tool disclosure", () => {
     ).toEqual([definition.name, exportDefinition.name]);
   });
 
+  it("isolates the compact new-design surface and returns to general tools after material revision", () => {
+    const compact = {
+      ...definition,
+      name: "opendesign_generate_first_slice",
+      modelDisclosure: {
+        bootstrap: "available" as const,
+        role: "material-write" as const,
+        surfaces: ["new-design"] as const,
+      },
+    };
+    const inspection = {
+      ...definition,
+      name: "opendesign_inspect_document",
+      modelDisclosure: {
+        bootstrap: "available" as const,
+        role: "inspection" as const,
+        surfaces: ["general", "new-design"] as const,
+      },
+    };
+
+    expect(
+      disclosedToolDefinitions(
+        [definition, compact, inspection],
+        "host-inspected",
+        { surface: "new-design" },
+      ).map((tool) => tool.name),
+    ).toEqual([compact.name, inspection.name]);
+    expect(
+      disclosedToolDefinitions([definition, compact, inspection], "expanded", {
+        surface: "new-design",
+      }).map((tool) => tool.name),
+    ).toEqual([definition.name, inspection.name]);
+    expect(
+      resolveModelToolDisclosurePhase(
+        [definition, compact, inspection],
+        [
+          {
+            toolCallId: "slice_1",
+            toolName: compact.name,
+            input: {},
+            status: "completed",
+            revision: 4,
+          },
+        ],
+        { initialInspection: true },
+      ),
+    ).toBe("expanded");
+  });
+
   it("allows a compact first material slice beside Plan on the host-inspected surface", () => {
     const inspection = {
       ...definition,

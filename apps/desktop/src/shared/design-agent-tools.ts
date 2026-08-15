@@ -26,6 +26,10 @@ import {
 import { isPortableFileName } from "./portable-file-name";
 import { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 import {
+  DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+  isDesignFirstSliceToolInput,
+} from "./design-first-slice-tool";
+import {
   isInternalDesignApplyToolInput,
   normalizeDesignApplyToolInput,
   type DesignApplyToolInput,
@@ -54,6 +58,15 @@ export {
   normalizeDesignApplyToolInput,
 } from "./design-apply-input";
 export { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
+export {
+  compileDesignFirstSliceToolInput,
+  DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+  isDesignFirstSliceToolInput,
+} from "./design-first-slice-tool";
+export type {
+  DesignFirstSliceElement,
+  DesignFirstSliceToolInput,
+} from "./design-first-slice-tool";
 export type {
   DesignApplyToolInput,
   InternalDesignApplyToolInput,
@@ -84,6 +97,7 @@ export const DESIGN_CAPABILITIES_TOOL_NAME = "opendesign_get_capabilities";
 export const DESIGN_INSPECT_TOOL_NAME = "opendesign_inspect_document";
 export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
 export const DESIGN_PLAN_TOOL_NAME = "opendesign_define_design_plan";
+export const DESIGN_FIRST_SLICE_TOOL_NAME = "opendesign_generate_first_slice";
 export const DESIGN_REVIEW_TOOL_NAME = "opendesign_record_visual_review";
 export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
 export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
@@ -1824,6 +1838,20 @@ const MODEL_VISUAL_REVIEW_SCHEMA = {
 
 export const DESIGN_AGENT_TOOL_SPECS = [
   {
+    name: DESIGN_FIRST_SLICE_TOOL_NAME,
+    modelDisclosure: {
+      bootstrap: "available" as const,
+      beforePlan: "available" as const,
+      role: "material-write" as const,
+      surfaces: ["new-design" as const],
+    },
+    description:
+      "Create a new editable design through one compact, rollback-safe first-delivery call. Declare every requested artboard root and one meaningful first slice for the first target. Main expands the compact input into DesignPlan v4, allocates all real Frames, validates the first target, and commits allocation plus semantic stages through the existing EditorRuntime and one history group. Use inspected Page IDs, stable unique IDs, parent-local coordinates, real region content, and explicit font face identity. This tool is available only for a high-confidence blank-canvas new-design run; after success the complete professional tools replace it automatically.",
+    inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+    risk: "design_write" as const,
+    approval: "never" as const,
+  },
+  {
     name: DESIGN_CAPABILITIES_TOOL_NAME,
     modelDisclosure: {
       bootstrap: "deferred" as const,
@@ -1844,6 +1872,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     modelDisclosure: {
       bootstrap: "available" as const,
       role: "inspection" as const,
+      surfaces: ["general" as const, "new-design" as const],
     },
     description:
       "Read the currently bound OpenDesign Design File, active Page, node tree, referenced asset metadata, selection, revision, and bounded structural/render diagnostics before planning a design change. Diagnostics identify empty paths/text, invisible nodes, missing assets, non-finite or clipped-out bounds, root-layer fragmentation, and actual Path/gradient/glow/blur/blend/mask/image/text usage. Asset source bytes and URIs are intentionally omitted; use opendesign_capture_canvas for bounded visual inspection. This does not inspect project files, source code, directories, or other Design Files. Call this instead of guessing canvas structure.",
@@ -2464,6 +2493,9 @@ export function validateDesignAgentToolInput(
   toolName: string,
   input: unknown,
 ): boolean {
+  if (toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
+    return isDesignFirstSliceToolInput(input);
+  }
   if (toolName === DESIGN_CAPABILITIES_TOOL_NAME) {
     return isRecord(input) && Object.keys(input).length === 0;
   }

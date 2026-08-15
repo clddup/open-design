@@ -29,18 +29,19 @@ import {
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
-  DESIGN_PLAN_TOOL_NAME,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
   DESIGN_PAGE_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   EXPORT_RASTER_TOOL_NAME,
   EXPORT_SVG_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
-  PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-  READ_IMAGE_TOOL_NAME,
   validateDesignAgentToolInput,
 } from "../shared/design-agent-tools";
-import { OPENDESIGN_AGENT_SYSTEM_PROMPT } from "./system-prompt";
+import {
+  OPENDESIGN_AGENT_SYSTEM_PROMPT,
+  OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
+} from "./system-prompt";
 
 class RecordingGateway implements ModelGateway {
   readonly requests: ModelRequest[] = [];
@@ -54,7 +55,7 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("production Agent context budget", () => {
-  it("starts a host-inspected Run with Plan and compact first-slice apply", async () => {
+  it("starts a blank host-inspected Run with only the compact first-slice kernel and recovery inspection", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "opendesign-host-inspected-context-"),
     );
@@ -69,6 +70,7 @@ describe("production Agent context budget", () => {
         modelGateway: gateway,
         sessionStore,
         systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
+        newDesignSystemPrompt: OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
         toolCatalog: {
           listTools: () =>
             DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
@@ -92,12 +94,25 @@ describe("production Agent context budget", () => {
         revision: 3,
         scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
         mutationTarget: { kind: "page", pageId: "page_1" },
-        modelSelection: { providerId: "configured", modelId: "design-model" },
+        modelSelection: {
+          providerId: "configured",
+          modelId: "design-model",
+          reasoningEffort: "medium",
+        },
         modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
         initialDesignInspection: {
           version: 1,
           observedRevision: 3,
-          content: '{"pageId":"page_1","revision":3}',
+          content: JSON.stringify({
+            document: {
+              documentId: "document_1",
+              revision: 3,
+              pagesById: {
+                page_1: { id: "page_1", rootNodeIds: [] },
+              },
+              nodesById: {},
+            },
+          }),
         },
       })) {
         events.push(event);
@@ -107,21 +122,27 @@ describe("production Agent context budget", () => {
         expect.objectContaining({ type: "agent.error" }),
       );
       expect(gateway.requests).toHaveLength(1);
+      expect(gateway.requests[0]?.system).toBe(
+        OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
+      );
+      expect(
+        gateway.requests[0]?.modelSelection.reasoningEffort,
+      ).toBeUndefined();
       expect(gateway.requests[0]?.tools.map((tool) => tool.name)).toEqual([
+        DESIGN_FIRST_SLICE_TOOL_NAME,
         DESIGN_INSPECT_TOOL_NAME,
-        DESIGN_PLAN_TOOL_NAME,
-        READ_IMAGE_TOOL_NAME,
-        PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-        DESIGN_PAGE_TOOL_NAME,
-        DESIGN_APPLY_TOOL_NAME,
       ]);
       expect(
         JSON.stringify(
           gateway.requests[0]?.tools.find(
-            (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+            (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
           )?.inputSchema,
         ),
-      ).toContain('"enum":["frame","group","rectangle","ellipse","text"]');
+      ).toContain('"firstSlice"');
+      expect(
+        OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length +
+          JSON.stringify(gateway.requests[0]?.tools).length,
+      ).toBeLessThan(20_000);
       expect(gateway.requests[0]?.tools).not.toContainEqual(
         expect.objectContaining({ name: GENERATE_IMAGE_TOOL_NAME }),
       );
@@ -134,7 +155,7 @@ describe("production Agent context budget", () => {
       ) {
         throw new Error("Missing host-inspected user projection");
       }
-      expect(initialUserMessage.content).toContain('"pageId":"page_1"');
+      expect(initialUserMessage.content).toContain('"page_1"');
       const durableUser = (
         await sessionStore.read("conversation_host_inspected_context")
       ).find((event) => event.type === "message.user");
@@ -633,7 +654,7 @@ describe("production Agent context budget", () => {
         gateway.requests.every(
           (providerRequest) =>
             providerRequest.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-            providerRequest.tools.length === 22,
+            providerRequest.tools.length === 23,
         ),
       ).toBe(true);
       expect(

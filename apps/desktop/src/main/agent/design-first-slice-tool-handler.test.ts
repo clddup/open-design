@@ -1,0 +1,289 @@
+import type { ToolCallRequest } from "@opendesign/agent-runtime";
+import { describe, expect, it, vi } from "vitest";
+import {
+  compileDesignFirstSliceToolInput,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
+  INTERNAL_DESIGN_APPLY_TOOL_NAME,
+  type DesignFirstSliceToolInput,
+} from "../../shared/design-agent-tools.js";
+import { handleDesignFirstSliceTool } from "./design-first-slice-tool-handler.js";
+
+const context = {
+  runId: "run_slice",
+  sessionId: "conversation_1",
+  documentId: "document_1",
+  revision: 3,
+  scope: { kind: "page" as const, pageId: "page_1", selectedNodeIds: [] },
+  mutationTarget: { kind: "page" as const, pageId: "page_1" },
+};
+
+describe("handleDesignFirstSliceTool", () => {
+  it("commits allocation and the first real slice through one semantic history group", async () => {
+    const input = firstSliceInput();
+    const compiled = compileDesignFirstSliceToolInput(input);
+    const delivery = {
+      version: 2 as const,
+      targets: [
+        {
+          targetId: "home",
+          label: "Home",
+          pageId: "page_1",
+          rootNodeId: "frame_home",
+          status: "drafted" as const,
+          allocatedRevision: 4,
+          draftRevision: 5,
+        },
+      ],
+      activeTargetId: "home",
+    };
+    const coordinator = {
+      registerDesignPlan: vi.fn().mockReturnValue({
+        status: "accepted",
+        planRevision: 1,
+        changedTargetIds: ["home"],
+        plan: compiled.plan,
+      }),
+      createDesignPlanAllocation: vi.fn().mockReturnValue({
+        targetIds: ["home"],
+        input: {
+          label: "Allocate Home artboard",
+          commands: [
+            {
+              commandId: "allocate_home",
+              type: "insert_element",
+              pageId: "page_1",
+              parentId: null,
+              index: 0,
+              node: { id: "frame_home", kind: "frame" },
+            },
+          ],
+        },
+      }),
+      assertVisualReviewBeforeWrite: vi.fn(),
+      assertDesignPlanForAllocatedApply: vi.fn().mockReturnValue({
+        input: compiled.apply,
+        plan: compiled.plan,
+        targetIds: ["home"],
+      }),
+      assertDesignApplyResult: vi.fn(),
+      recordDesignPlanAllocated: vi.fn(),
+      recordDesignApplyCompleted: vi.fn(),
+      getDeliveryLedger: vi.fn().mockReturnValue(delivery),
+    };
+    let rendererCall: ToolCallRequest | undefined;
+    const rendererHost = {
+      execute: vi.fn((call: ToolCallRequest) => {
+        rendererCall = call;
+        return Promise.resolve({
+          content: {
+            ok: true,
+            committedSteps: [
+              {
+                stepIds: ["allocate_artboards"],
+                label: "Create real artboard",
+                revision: 4,
+              },
+              {
+                stepIds: ["hero"],
+                label: "Build hero",
+                revision: 5,
+              },
+            ],
+          },
+          designRevision: {
+            previousRevision: 3,
+            revision: 5,
+            transactionId: "transaction_slice",
+          },
+        });
+      }),
+    };
+    const call = {
+      toolCallId: "slice_1",
+      toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+      input,
+    };
+
+    const result = await handleDesignFirstSliceTool(
+      coordinator as never,
+      rendererHost as never,
+      call,
+      context,
+      context,
+      new AbortController().signal,
+    );
+
+    expect(rendererCall).toMatchObject({
+      toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+      input: {
+        steps: [
+          {
+            stepId: "allocate_artboards",
+            commandIds: ["allocate_home"],
+          },
+          { stepId: "hero" },
+        ],
+        commands: [
+          { commandId: "allocate_home" },
+          { commandId: "first_slice_1" },
+          { commandId: "first_slice_2" },
+        ],
+      },
+    });
+    expect(coordinator.recordDesignPlanAllocated).toHaveBeenCalledWith(
+      "run_slice",
+      ["home"],
+      4,
+    );
+    expect(coordinator.recordDesignApplyCompleted).toHaveBeenCalledWith(
+      "run_slice",
+      compiled.apply,
+      expect.objectContaining({ targetIds: ["home"] }),
+      5,
+    );
+    expect(result).toMatchObject({
+      content: {
+        allocation: { targetIds: ["home"], revision: 4 },
+        firstSlice: { targetId: "home", revision: 5 },
+        delivery,
+      },
+      designRevision: { previousRevision: 3, revision: 5 },
+    });
+  });
+
+  it("does not advance allocation or delivery state when the combined renderer transaction fails", async () => {
+    const input = firstSliceInput();
+    const compiled = compileDesignFirstSliceToolInput(input);
+    const coordinator = {
+      registerDesignPlan: vi.fn().mockReturnValue({
+        status: "accepted",
+        planRevision: 1,
+        changedTargetIds: ["home"],
+        plan: compiled.plan,
+      }),
+      createDesignPlanAllocation: vi.fn().mockReturnValue({
+        targetIds: ["home"],
+        input: {
+          label: "Allocate Home artboard",
+          commands: [{ commandId: "allocate_home" }],
+        },
+      }),
+      assertVisualReviewBeforeWrite: vi.fn(),
+      assertDesignPlanForAllocatedApply: vi.fn().mockReturnValue({
+        input: compiled.apply,
+        plan: compiled.plan,
+        targetIds: ["home"],
+      }),
+      assertDesignApplyResult: vi.fn(),
+      recordDesignPlanAllocated: vi.fn(),
+      recordDesignApplyCompleted: vi.fn(),
+    };
+    const rendererHost = {
+      execute: vi.fn().mockRejectedValue(new Error("stage rejected")),
+    };
+
+    await expect(
+      handleDesignFirstSliceTool(
+        coordinator as never,
+        rendererHost as never,
+        {
+          toolCallId: "slice_failed",
+          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+          input,
+        },
+        context,
+        context,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("stage rejected");
+    expect(coordinator.recordDesignPlanAllocated).not.toHaveBeenCalled();
+    expect(coordinator.recordDesignApplyCompleted).not.toHaveBeenCalled();
+  });
+});
+
+function firstSliceInput(): DesignFirstSliceToolInput {
+  return {
+    version: 1,
+    deliverable: "ui",
+    objective: "Create a focused home screen",
+    targets: [
+      {
+        targetId: "home",
+        label: "Home",
+        pageId: "page_1",
+        objective: "Show the product value immediately",
+        frame: {
+          frameId: "frame_home",
+          x: 80,
+          y: 40,
+          width: 390,
+          height: 844,
+        },
+        layout: "Vertical mobile composition",
+        spacing: "8px base with 24px sections",
+        regions: [
+          {
+            nodeId: "home_hero",
+            name: "Hero",
+            role: "content",
+            x: 24,
+            y: 80,
+            width: 342,
+            height: 240,
+          },
+        ],
+      },
+    ],
+    visualSystem: {
+      formLanguage: "Calm editorial geometry",
+      palette: ["#0F172A", "#F8FAFC", "#7C3AED"],
+      surfaceAndDepth: "Flat with one elevated focal surface",
+      typography: ["Inter Bold 32/38", "Inter Regular 16/24"],
+    },
+    rasterAssetRoles: [],
+    firstSlice: {
+      targetId: "home",
+      label: "Create Home hero",
+      stages: [
+        {
+          stageId: "hero",
+          label: "Build hero",
+          elements: [
+            {
+              id: "home_hero",
+              kind: "frame",
+              name: "Hero",
+              parentId: "frame_home",
+              x: 24,
+              y: 80,
+              width: 342,
+              height: 240,
+              fill: { color: "#F8FAFC" },
+            },
+            {
+              id: "hero_title",
+              kind: "text",
+              name: "Hero Title",
+              parentId: "home_hero",
+              x: 24,
+              y: 24,
+              width: 294,
+              height: 84,
+              text: {
+                content: "Design with momentum",
+                fontFamily: "Inter",
+                fontStyleName: "Bold",
+                fontWeight: 700,
+                fontSlant: "normal",
+                fontSize: 32,
+                lineHeight: 38,
+                color: "#0F172A",
+                textResize: "auto-height",
+              },
+            },
+          ],
+        },
+      ],
+    },
+  };
+}

@@ -47,6 +47,8 @@ export interface AgentRunRequest {
   continuation?: AgentRunContinuation;
 }
 
+export type ModelToolSurface = "general" | "new-design";
+
 export function projectAgentRunPrompt(request: AgentRunRequest): string {
   const inspection = request.initialDesignInspection;
   if (inspection === undefined) return request.prompt;
@@ -58,6 +60,7 @@ export function projectAgentRunPrompt(request: AgentRunRequest): string {
     request.prompt,
   ].join("\n\n");
 }
+export { resolveInitialModelToolSurface } from "./model-tool-surface.js";
 export interface AgentToolDefinition extends CanonicalTool {
   risk: ToolRisk;
   approval: "never" | "required";
@@ -74,6 +77,12 @@ export interface AgentToolDefinition extends CanonicalTool {
     beforePlan?: "available" | "deferred";
     afterInspection?: "available";
     role?: "inspection" | "plan" | "material-write";
+    /**
+     * Provider surfaces that may see this definition before the first
+     * material revision. Omitted definitions belong to the general surface.
+     * Execution registration and host authority are unaffected.
+     */
+    surfaces?: readonly ModelToolSurface[];
     bootstrapDescription?: string;
     bootstrapInputSchema?: Record<string, unknown>;
   };
@@ -178,6 +187,7 @@ export interface AgentRuntimeOptions {
   completionGuard?: CompletionGuardPort;
   limits?: Partial<AgentRuntimeLimits>;
   systemPrompt?: string;
+  newDesignSystemPrompt?: string;
   now?: () => Date;
 }
 

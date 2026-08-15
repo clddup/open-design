@@ -1,4 +1,8 @@
-import type { AgentToolCallRecord, AgentToolDefinition } from "./index.js";
+import type {
+  AgentToolCallRecord,
+  AgentToolDefinition,
+  ModelToolSurface,
+} from "./index.js";
 
 export type ModelToolDisclosurePhase =
   "bootstrap" | "host-inspected" | "inspected" | "expanded";
@@ -11,9 +15,16 @@ export type ModelToolDisclosurePhase =
 export function disclosedToolDefinitions(
   definitions: readonly AgentToolDefinition[],
   phase: ModelToolDisclosurePhase,
+  options: { surface?: ModelToolSurface } = {},
 ): AgentToolDefinition[] {
-  if (phase === "expanded") return [...definitions];
-  return definitions.flatMap((definition) => {
+  const surface =
+    phase === "expanded" ? "general" : (options.surface ?? "general");
+  const visibleDefinitions = definitions.filter((definition) => {
+    const surfaces = definition.modelDisclosure?.surfaces ?? ["general"];
+    return surfaces.includes(surface);
+  });
+  if (phase === "expanded") return visibleDefinitions;
+  return visibleDefinitions.flatMap((definition) => {
     const disclosure = definition.modelDisclosure;
     if (disclosure === undefined) return [definition];
     if (
@@ -114,10 +125,23 @@ export function isSafeModelDisclosure(
         "beforePlan",
         "afterInspection",
         "role",
+        "surfaces",
         "bootstrapDescription",
         "bootstrapInputSchema",
       ].includes(key),
     )
+  ) {
+    return false;
+  }
+  if (
+    disclosure.surfaces !== undefined &&
+    (!Array.isArray(disclosure.surfaces) ||
+      disclosure.surfaces.length < 1 ||
+      disclosure.surfaces.length > 2 ||
+      new Set(disclosure.surfaces).size !== disclosure.surfaces.length ||
+      !disclosure.surfaces.every(
+        (surface) => surface === "general" || surface === "new-design",
+      ))
   ) {
     return false;
   }

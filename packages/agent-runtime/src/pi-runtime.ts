@@ -11,6 +11,7 @@ import {
   type AgentToolDefinition,
   type ToolCatalogPort,
 } from "./index.js";
+import { resolveInitialModelToolSurface } from "./model-tool-surface.js";
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import { prepareOpenDesignPiContext } from "./pi-context-adapter.js";
 import {
@@ -123,13 +124,18 @@ export class OpenDesignPiRuntime {
         request.sessionId,
       );
       const toolDefinitions = await this.#loadSafeTools();
+      const initialModelToolSurface = resolveInitialModelToolSurface(request);
       const initialToolDefinitions = disclosedToolDefinitions(
         toolDefinitions,
         request.initialDesignInspection === undefined
           ? "bootstrap"
           : "host-inspected",
+        { surface: initialModelToolSurface },
       );
       const systemPrompt =
+        (initialModelToolSurface === "new-design"
+          ? this.options.newDesignSystemPrompt
+          : this.options.systemPrompt) ??
         this.options.systemPrompt ??
         "You are the OpenDesign design agent. Use only the provided tools and respect the host-bound modification scope.";
       const model = createPiModel(request);
@@ -170,6 +176,7 @@ export class OpenDesignPiRuntime {
         maxGeneratedTokens: this.#limits.maxGeneratedTokens,
         maxCompletionGuardRejections: this.#limits.maxCompletionGuardRejections,
         priorToolCallIds: prepared.priorToolCallIds,
+        initialModelToolSurface,
         now: this.#now,
       });
       let attempt = 0;
@@ -178,7 +185,10 @@ export class OpenDesignPiRuntime {
           messages: prepared.initialMessages,
           model,
           systemPrompt: prepared.systemPrompt,
-          thinkingLevel: request.modelSelection.reasoningEffort ?? "off",
+          thinkingLevel:
+            initialModelToolSurface === "new-design"
+              ? "off"
+              : (request.modelSelection.reasoningEffort ?? "off"),
           tools: [...adapter.modelTools],
         },
         sessionId: request.sessionId,

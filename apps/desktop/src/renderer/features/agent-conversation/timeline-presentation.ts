@@ -11,6 +11,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_VARIABLE_TOOL_NAME,
   DESIGN_STYLE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
@@ -67,6 +68,7 @@ export function isNativeDesignTool(toolName: string | undefined): boolean {
   return (
     toolName === DESIGN_INSPECT_TOOL_NAME ||
     toolName === DESIGN_APPLY_TOOL_NAME ||
+    toolName === DESIGN_FIRST_SLICE_TOOL_NAME ||
     toolName === DESIGN_PLAN_TOOL_NAME ||
     toolName === DESIGN_REVIEW_TOOL_NAME ||
     toolName === DESIGN_ARRANGE_TOOL_NAME ||
@@ -287,7 +289,10 @@ export function toolTitle(
   if (toolName === DESIGN_INSPECT_TOOL_NAME) {
     return state === "done" ? t("agent.canvasRead") : t("agent.readingCanvas");
   }
-  if (toolName === DESIGN_APPLY_TOOL_NAME) {
+  if (
+    toolName === DESIGN_APPLY_TOOL_NAME ||
+    toolName === DESIGN_FIRST_SLICE_TOOL_NAME
+  ) {
     return state === "done"
       ? t("agent.canvasUpdated")
       : t("agent.buildingCanvas");
