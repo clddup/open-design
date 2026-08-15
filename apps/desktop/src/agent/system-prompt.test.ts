@@ -63,7 +63,10 @@ describe("OpenDesign Agent system prompt", () => {
       "does not unlock opendesign_record_visual_review",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "A host-inspected Run intentionally defines its Plan first",
+      "A host-inspected Run exposes Plan and compact apply_transaction together",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "emit opendesign_define_design_plan followed by the first opendesign_apply_transaction",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "smallest meaningful visible region or vertical slice",

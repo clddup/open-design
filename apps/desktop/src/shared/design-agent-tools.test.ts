@@ -1135,6 +1135,7 @@ describe("design Agent tool contract", () => {
 
     expect(apply?.modelDisclosure).toMatchObject({
       bootstrap: "available",
+      beforePlan: "available",
       role: "material-write",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
     });

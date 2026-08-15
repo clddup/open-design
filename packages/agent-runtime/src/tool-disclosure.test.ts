@@ -65,7 +65,7 @@ describe("model tool disclosure", () => {
     ).toEqual([definition.name, exportDefinition.name]);
   });
 
-  it("uses a plan-only host-inspected surface before enabling material tools", () => {
+  it("allows a compact first material slice beside Plan on the host-inspected surface", () => {
     const inspection = {
       ...definition,
       name: "opendesign_inspect_document",
@@ -87,7 +87,7 @@ describe("model tool disclosure", () => {
       name: "opendesign_apply_transaction",
       modelDisclosure: {
         bootstrap: "available" as const,
-        beforePlan: "deferred" as const,
+        beforePlan: "available" as const,
         role: "material-write" as const,
       },
     };
@@ -97,7 +97,7 @@ describe("model tool disclosure", () => {
       disclosedToolDefinitions(definitions, "host-inspected").map(
         (tool) => tool.name,
       ),
-    ).toEqual([inspection.name, plan.name]);
+    ).toEqual([inspection.name, plan.name, material.name]);
     expect(
       resolveModelToolDisclosurePhase(definitions, [], {
         initialInspection: true,

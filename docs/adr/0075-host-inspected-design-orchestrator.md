@@ -4,6 +4,7 @@
 - 日期：2026-08-15
 - Agent 协议：`3.10.0`
 - 文档协议：不变（`DesignDocument 1.29.0`）
+- 部分取代：ADR-0078 已让 host-inspected 首轮同时披露 compact apply；本 ADR 的预检与有界上下文决策继续有效
 - 关联：ADR-0016、ADR-0029、ADR-0050、ADR-0072、ADR-0073
 - 参考：OpenPencil compact plan、真实 scaffold 与 segmented design workflow
 

@@ -608,6 +608,87 @@ describe("OpenDesign Pi production runtime", () => {
     ).toContain('"advanced"');
   });
 
+  it("executes host-inspected Plan and the first material slice sequentially in one Provider turn", async () => {
+    const store = new MemorySessionStore();
+    const definitions = disclosureProbeTools();
+    const gateway = new RecordingGateway(
+      new MockModelGateway([
+        {
+          blocks: [
+            {
+              id: "same_turn_plan_block",
+              type: "tool_call",
+              toolCallId: "same_turn_plan",
+              name: "opendesign_plan_probe",
+              input: { targets: [{ artboard: { mode: "create" } }] },
+            },
+            {
+              id: "same_turn_material_block",
+              type: "tool_call",
+              toolCallId: "same_turn_material",
+              name: "opendesign_material_probe",
+              input: { basic: "hero" },
+            },
+          ],
+          stopReason: "tool_use",
+        },
+        textResponse("The first real section is visible."),
+      ]),
+    );
+    const executions: Array<{ toolName: string; revision: number }> = [];
+    const runtime = new OpenDesignPiRuntime({
+      modelGateway: gateway,
+      sessionStore: store,
+      toolCatalog: { listTools: () => definitions },
+      toolExecutor: {
+        async *execute(call, context): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          executions.push({
+            toolName: call.toolName,
+            revision: context.revision,
+          });
+          yield {
+            type: "completed",
+            result: {
+              content: { ok: true },
+              designRevision: {
+                previousRevision: context.revision,
+                revision: context.revision + 1,
+                transactionId: `transaction_${call.toolCallId}`,
+              },
+            },
+          };
+        },
+      },
+    });
+
+    await collect(runtime, {
+      ...request,
+      runId: "run_pi_host_inspected_same_turn",
+      initialDesignInspection: {
+        version: 1,
+        observedRevision: request.revision,
+        content: '{"pageId":"page_1","revision":7}',
+      },
+    });
+
+    expect(gateway.requests).toHaveLength(2);
+    expect(
+      gateway.requests[0]?.tools.map((candidate) => candidate.name),
+    ).toEqual([
+      "opendesign_inspect_probe",
+      "opendesign_plan_probe",
+      "opendesign_material_probe",
+    ]);
+    expect(executions).toEqual([
+      { toolName: "opendesign_plan_probe", revision: 7 },
+      { toolName: "opendesign_material_probe", revision: 8 },
+    ]);
+    expect(
+      gateway.requests[1]?.tools.map((candidate) => candidate.name),
+    ).toEqual(definitions.map((definition) => definition.name));
+  });
+
   it("keeps inspection compact and expands after an existing-artboard Plan", async () => {
     const store = new MemorySessionStore();
     const definitions = disclosureProbeTools();

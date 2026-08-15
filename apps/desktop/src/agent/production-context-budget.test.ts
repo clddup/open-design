@@ -54,7 +54,7 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("production Agent context budget", () => {
-  it("starts a host-inspected Run on a plan-only surface", async () => {
+  it("starts a host-inspected Run with Plan and compact first-slice apply", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "opendesign-host-inspected-context-"),
     );
@@ -113,10 +113,15 @@ describe("production Agent context budget", () => {
         READ_IMAGE_TOOL_NAME,
         PAGE_STRUCTURE_ACCESS_TOOL_NAME,
         DESIGN_PAGE_TOOL_NAME,
+        DESIGN_APPLY_TOOL_NAME,
       ]);
-      expect(gateway.requests[0]?.tools).not.toContainEqual(
-        expect.objectContaining({ name: DESIGN_APPLY_TOOL_NAME }),
-      );
+      expect(
+        JSON.stringify(
+          gateway.requests[0]?.tools.find(
+            (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+          )?.inputSchema,
+        ),
+      ).toContain('"enum":["frame","group","rectangle","ellipse","text"]');
       expect(gateway.requests[0]?.tools).not.toContainEqual(
         expect.objectContaining({ name: GENERATE_IMAGE_TOOL_NAME }),
       );
