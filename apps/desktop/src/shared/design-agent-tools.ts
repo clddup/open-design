@@ -1212,6 +1212,8 @@ const MODEL_TEXT_RANGE_STYLE_SCHEMA = {
     fontSlant: MODEL_TEXT_PROPERTIES.fontSlant,
     lineHeight: MODEL_TEXT_PROPERTIES.lineHeight,
     letterSpacing: MODEL_TEXT_PROPERTIES.letterSpacing,
+    paragraphIndent: MODEL_TEXT_PROPERTIES.paragraphIndent,
+    paragraphSpacing: MODEL_TEXT_PROPERTIES.paragraphSpacing,
     textCase: MODEL_TEXT_PROPERTIES.textCase,
     textDecoration: MODEL_TEXT_PROPERTIES.textDecoration,
     fills: { type: "array", maxItems: 64, items: MODEL_PAINT_SCHEMA },
@@ -2459,7 +2461,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "material-write" as const,
     },
     description:
-      "Style one inspected, non-empty UTF-16 [start,end) range on a stable Text node inside the active Page. The host rejects stale revisions, locked/non-Text/cross-Page targets, empty or out-of-bounds ranges, surrogate splits, wrong Style types, and no-op patches. Exact Text/Paint Style IDs resolve through the current local style registry; direct typography or Fill edits detach the corresponding range reference. This writes one update_text_range_style transaction through the same Runtime, Auto Size, Auto Layout, revision, undo, save, projection, capture, and export path. Inspect the current content and runs first; never guess offsets from an earlier revision.",
+      "Style one inspected, non-empty UTF-16 [start,end) range on a stable Text node inside the active Page. Character fields apply to that exact range; paragraphIndent and paragraphSpacing expand to every complete paragraph touched by the range, matching Figma paragraph semantics. The host rejects stale revisions, locked/non-Text/cross-Page targets, empty or out-of-bounds ranges, surrogate splits, wrong Style types, and no-op patches. Exact Text/Paint Style IDs resolve through the current local style registry; direct typography or Fill edits detach the corresponding range reference. This writes one update_text_range_style transaction through the same Runtime, Auto Size, Auto Layout, revision, undo, save, projection, capture, and export path. Inspect current content, runs, and paragraphRuns first; never guess offsets from an earlier revision.",
     inputSchema: MODEL_TEXT_RANGE_TOOL_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,

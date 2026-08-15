@@ -17,6 +17,7 @@
   "dependencies": {
     "@opendesign/design-contracts": "workspace:*",
     "@opendesign/geometry-service": "workspace:*",
+    "@opendesign/text-service": "workspace:*",
     "@xmldom/xmldom": "0.8.13",
     "transformation-matrix": "3.1.0"
   },

@@ -178,6 +178,37 @@ describe("HarfBuzz text run layout", () => {
     expect(result.lines.every((line) => line.end >= line.start)).toBe(true);
   });
 
+  it("applies paragraph-local indent and spacing without changing authored content", async () => {
+    const runtime = await createHarfBuzzTextRunLayoutRuntime();
+    const face = await register(runtime, fontUrls.latin);
+    const content = "Alpha\nBeta";
+    const result = runtime.provider.layout(
+      request(content, style(face), {
+        paragraphRuns: [
+          {
+            start: 0,
+            end: 6,
+            style: { paragraphIndent: 12, paragraphSpacing: 18 },
+          },
+          {
+            start: 6,
+            end: 10,
+            style: { paragraphIndent: 28, paragraphSpacing: 0 },
+          },
+        ],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.fragments.map((fragment) => fragment.text).join("")).toBe(
+      content,
+    );
+    expect(result.lines).toHaveLength(2);
+    expect(result.lines[0]?.x).toBe(12);
+    expect(result.lines[1]?.x).toBe(28);
+    expect(result.lines[1]!.y - result.lines[0]!.y).toBeGreaterThan(44);
+  });
+
   it("produces visual bidi positions for mixed Latin and Hebrew", async () => {
     const runtime = await createHarfBuzzTextRunLayoutRuntime();
     const hebrew = await register(runtime, fontUrls.hebrew);

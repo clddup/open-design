@@ -224,6 +224,25 @@ export const StarPropertiesSchema = Type.Object(
 
 const TextSharedProperties = {
   content: Type.String(),
+  paragraphRuns: Type.Optional(
+    Type.Array(
+      Type.Object(
+        {
+          start: Type.Integer({ minimum: 0 }),
+          end: Type.Integer({ minimum: 1 }),
+          style: Type.Object(
+            {
+              paragraphIndent: Type.Number({ minimum: 0 }),
+              paragraphSpacing: Type.Number({ minimum: 0 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 16_384 },
+    ),
+  ),
   runs: Type.Optional(
     Type.Array(
       Type.Object(
@@ -1050,6 +1069,8 @@ export const UpdateTextRangeStyleCommandSchema = Type.Object(
             Type.Literal("strikethrough"),
           ]),
         ),
+        paragraphIndent: Type.Optional(Type.Number({ minimum: 0 })),
+        paragraphSpacing: Type.Optional(Type.Number({ minimum: 0 })),
         fills: Type.Optional(Type.Array(PaintSchema, { maxItems: 64 })),
         textStyleId: Type.Optional(
           Type.Union([
@@ -1717,6 +1738,10 @@ export type StarNode = Static<typeof StarNodeSchema>;
 export type TextNode = Static<typeof TextNodeSchema>;
 export type TextRun = NonNullable<TextNode["properties"]["runs"]>[number];
 export type TextRunStyle = TextRun["style"];
+export type TextParagraphRun = NonNullable<
+  TextNode["properties"]["paragraphRuns"]
+>[number];
+export type TextParagraphStyle = TextParagraphRun["style"];
 export type ImageNode = Static<typeof ImageNodeSchema>;
 export type VectorNode = Static<typeof VectorNodeSchema>;
 export type PathNode = Static<typeof PathNodeSchema>;
@@ -1925,7 +1950,8 @@ export function isDesignDocument(value: unknown): value is DesignDocument {
   return (
     checkSchema(DesignDocumentSchema, value) &&
     designDocumentHasValidLayoutLimits(value as DesignDocument) &&
-    designDocumentHasValidTextRuns(value as DesignDocument)
+    designDocumentHasValidTextRuns(value as DesignDocument) &&
+    designDocumentHasValidParagraphRuns(value as DesignDocument)
   );
 }
 
@@ -2027,6 +2053,7 @@ function migrateTextNodes(document: Record<string, unknown>): void {
     textProperties.textCase ??= "original";
     textProperties.textDecoration ??= "none";
     textProperties.runs ??= [];
+    textProperties.paragraphRuns ??= [];
     if (Array.isArray(textProperties.runs)) {
       const merged: unknown[] = [];
       for (const value of textProperties.runs) {
@@ -2045,7 +2072,73 @@ function migrateTextNodes(document: Record<string, unknown>): void {
       }
       textProperties.runs = merged;
     }
+    if (Array.isArray(textProperties.paragraphRuns)) {
+      const merged: unknown[] = [];
+      for (const value of textProperties.paragraphRuns) {
+        const run = isRecordValue(value) ? value : null;
+        const previous = merged.at(-1);
+        if (
+          run &&
+          isRecordValue(previous) &&
+          previous.end === run.start &&
+          JSON.stringify(previous.style) === JSON.stringify(run.style)
+        ) {
+          previous.end = run.end;
+        } else {
+          merged.push(value);
+        }
+      }
+      textProperties.paragraphRuns = merged;
+    }
   }
+}
+
+function designDocumentHasValidParagraphRuns(
+  document: DesignDocument,
+): boolean {
+  for (const node of Object.values(document.nodesById)) {
+    if (node.kind !== "text") continue;
+    const runs = node.properties.paragraphRuns;
+    if (!runs) return false;
+    if (node.properties.content.length === 0) {
+      if (runs.length !== 0) return false;
+      continue;
+    }
+    if (runs.length === 0) continue;
+    let expectedStart = 0;
+    let previousStyle: string | undefined;
+    for (const run of runs) {
+      const style = JSON.stringify(run.style);
+      if (
+        run.start !== expectedStart ||
+        run.end <= run.start ||
+        run.end > node.properties.content.length ||
+        !isParagraphStart(node.properties.content, run.start) ||
+        !isParagraphEnd(node.properties.content, run.end) ||
+        style === previousStyle
+      ) {
+        return false;
+      }
+      expectedStart = run.end;
+      previousStyle = style;
+    }
+    if (expectedStart !== node.properties.content.length) return false;
+  }
+  return true;
+}
+
+function isParagraphStart(content: string, index: number): boolean {
+  if (index === 0) return true;
+  const previous = content.charCodeAt(index - 1);
+  if (previous === 0x0a) return true;
+  return previous === 0x0d && content.charCodeAt(index) !== 0x0a;
+}
+
+function isParagraphEnd(content: string, index: number): boolean {
+  if (index === content.length) return true;
+  const previous = content.charCodeAt(index - 1);
+  if (previous === 0x0a) return true;
+  return previous === 0x0d && content.charCodeAt(index) !== 0x0a;
 }
 
 function designDocumentHasValidTextRuns(document: DesignDocument): boolean {

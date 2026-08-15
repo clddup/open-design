@@ -7,6 +7,10 @@ import {
 } from "./harfbuzz-font-registry.js";
 import { canonicalizeTextStyleRuns, type TextStyleRun } from "./text-ranges.js";
 import {
+  canonicalizeTextParagraphRuns,
+  type TextParagraphStyle,
+} from "./text-paragraphs.js";
+import {
   validateTextRunLayoutRequest,
   validateTextRunLayoutResult,
   type TextRunLayoutFragment,
@@ -205,6 +209,21 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
   runs: readonly TextStyleRun<Style>[],
   resolved: ReadonlyMap<string, RegisteredHarfBuzzFace>,
 ): TextRunLayoutResult<Style> {
+  const paragraphRuns = canonicalizeTextParagraphRuns(
+    request.content,
+    request.paragraphRuns ?? [],
+    {
+      paragraphIndent: request.paragraphIndent,
+      paragraphSpacing: request.paragraphSpacing,
+    },
+    equalParagraphStyle,
+  );
+  const paragraphStyleAt = (offset: number): TextParagraphStyle =>
+    paragraphRuns.find((run) => run.start <= offset && offset < run.end)
+      ?.style ?? {
+      paragraphIndent: request.paragraphIndent,
+      paragraphSpacing: request.paragraphSpacing,
+    };
   const embedding = bidi.getEmbeddingLevels(request.content);
   const clusters: ShapedCluster<Style>[] = [];
   for (const shapingRun of metricDirectionalRuns(runs, embedding)) {
@@ -216,7 +235,7 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
   }
   clusters.sort((left, right) => left.start - right.start);
   assignBreakOpportunities(clusters);
-  const broken = breakLines(clusters, request);
+  const broken = breakLines(clusters, request, paragraphStyleAt);
   if (request.content.length === 0) {
     broken.push({ clusters: [], end: 0, paragraphStart: true, start: 0 });
   } else if (/\r\n$|[\r\n]$/.test(request.content)) {
@@ -230,12 +249,13 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
 
   const fallbackMetrics = fontMetrics(request.baseStyle, resolved);
   const measured = broken.map((line) => measureLine(line, fallbackMetrics));
+  const paragraphStyles = broken.map((line) => paragraphStyleAt(line.start));
   const contentHeight = measured.reduce(
     (sum, line, index) =>
       sum +
       line.height +
       (index > 0 && broken[index]!.paragraphStart
-        ? request.paragraphSpacing
+        ? paragraphStyles[index - 1]!.paragraphSpacing
         : 0),
     0,
   );
@@ -244,7 +264,9 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
       Math.max(
         maximum,
         line.width +
-          (broken[index]!.paragraphStart ? request.paragraphIndent : 0),
+          (broken[index]!.paragraphStart
+            ? paragraphStyles[index]!.paragraphIndent
+            : 0),
       ),
     0,
   );
@@ -268,9 +290,11 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
     const sourceLine = broken[lineIndex]!;
     const metrics = measured[lineIndex]!;
     if (lineIndex > 0 && sourceLine.paragraphStart) {
-      lineY += request.paragraphSpacing;
+      lineY += paragraphStyles[lineIndex - 1]!.paragraphSpacing;
     }
-    const indent = sourceLine.paragraphStart ? request.paragraphIndent : 0;
+    const indent = sourceLine.paragraphStart
+      ? paragraphStyles[lineIndex]!.paragraphIndent
+      : 0;
     const usableWidth = Math.max(0, width - indent);
     const lineX =
       indent +
@@ -481,6 +505,7 @@ function assignBreakOpportunities<Style extends TextRunLayoutStyle>(
 function breakLines<Style extends TextRunLayoutStyle>(
   clusters: readonly ShapedCluster<Style>[],
   request: TextRunLayoutRequest<Style>,
+  paragraphStyleAt: (offset: number) => TextParagraphStyle,
 ): BrokenLine<Style>[] {
   const lines: BrokenLine<Style>[] = [];
   let index = 0;
@@ -493,7 +518,10 @@ function breakLines<Style extends TextRunLayoutStyle>(
         ? Number.POSITIVE_INFINITY
         : Math.max(
             0,
-            request.width! - (paragraphStart ? request.paragraphIndent : 0),
+            request.width! -
+              (paragraphStart
+                ? paragraphStyleAt(lineStart).paragraphIndent
+                : 0),
           );
     let width = 0;
     let lastWordBreak = -1;
@@ -530,6 +558,16 @@ function breakLines<Style extends TextRunLayoutStyle>(
     paragraphStart = last.hardBreak;
   }
   return lines;
+}
+
+function equalParagraphStyle(
+  left: TextParagraphStyle,
+  right: TextParagraphStyle,
+): boolean {
+  return (
+    left.paragraphIndent === right.paragraphIndent &&
+    left.paragraphSpacing === right.paragraphSpacing
+  );
 }
 
 function measureLine<Style extends TextRunLayoutStyle>(

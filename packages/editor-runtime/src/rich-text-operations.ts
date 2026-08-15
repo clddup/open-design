@@ -1,12 +1,18 @@
 import type {
   DesignNode,
   DesignOperation,
+  TextParagraphRun,
+  TextParagraphStyle,
   TextRun,
   TextRunStyle,
 } from "@opendesign/design-contracts";
 import {
+  applyTextParagraphRangeStyle,
   applyTextRangeStyle,
+  remapTextParagraphRunsAfterContentChange,
   remapTextStyleRunsAfterContentChange,
+  textParagraphRanges,
+  validateTextParagraphRuns,
   validateTextStyleRuns,
 } from "@opendesign/text-service";
 import { OperationError } from "./operation-error.js";
@@ -30,13 +36,24 @@ const RUN_STYLE_FIELDS = [
   "fills",
 ] as const;
 
+const PARAGRAPH_STYLE_FIELDS = ["paragraphIndent", "paragraphSpacing"] as const;
+const PARAGRAPH_STYLE_FIELD_SET = new Set<string>(PARAGRAPH_STYLE_FIELDS);
+
 export function normalizeTextNodeRuns(node: TextNode, commandId: string): void {
   node.properties.runs ??= [];
+  node.properties.paragraphRuns ??= [];
   const issue = validateTextStyleRuns(
     node.properties.content,
     node.properties.runs,
   );
   if (issue) throw invalidRuns(node.id, commandId, issue);
+  const paragraphIssue = validateTextParagraphRuns(
+    node.properties.content,
+    node.properties.paragraphRuns,
+  );
+  if (paragraphIssue) {
+    throw invalidParagraphRuns(node.id, commandId, paragraphIssue);
+  }
 }
 
 export function prepareTextPropertiesUpdate(
@@ -52,6 +69,7 @@ export function prepareTextPropertiesUpdate(
       ? properties.content
       : previousContent;
   let runs = node.properties.runs ?? [];
+  let paragraphRuns = node.properties.paragraphRuns ?? [];
   if (nextContent !== previousContent) {
     try {
       runs = remapTextStyleRunsAfterContentChange(
@@ -69,9 +87,30 @@ export function prepareTextPropertiesUpdate(
         error instanceof Error ? error.message : "Text run remap failed",
       );
     }
+    try {
+      paragraphRuns = remapTextParagraphRunsAfterContentChange(
+        previousContent,
+        nextContent,
+        paragraphRuns,
+        textParagraphBaseStyle(node),
+        "before",
+        sameParagraphStyle,
+      );
+    } catch (error) {
+      throw invalidParagraphRuns(
+        node.id,
+        commandId,
+        error instanceof Error ? error.message : "Text paragraph remap failed",
+      );
+    }
   }
   const patch = Object.fromEntries(
     RUN_STYLE_FIELDS.flatMap((field) =>
+      Object.hasOwn(properties, field) ? [[field, properties[field]]] : [],
+    ),
+  );
+  const paragraphPatch = Object.fromEntries(
+    PARAGRAPH_STYLE_FIELDS.flatMap((field) =>
       Object.hasOwn(properties, field) ? [[field, properties[field]]] : [],
     ),
   );
@@ -85,6 +124,16 @@ export function prepareTextPropertiesUpdate(
     ...textRunBaseStyle(node),
     ...patch,
   } as TextRunStyle);
+  if (Object.keys(paragraphPatch).length > 0 && paragraphRuns.length > 0) {
+    paragraphRuns = paragraphRuns.map((run) => ({
+      ...run,
+      style: { ...run.style, ...paragraphPatch } as TextParagraphStyle,
+    }));
+  }
+  node.properties.paragraphRuns = compactParagraphRuns(paragraphRuns, {
+    ...textParagraphBaseStyle(node),
+    ...paragraphPatch,
+  } as TextParagraphStyle);
 }
 
 export function updateTextRangeStyle(
@@ -100,26 +149,78 @@ export function updateTextRangeStyle(
       { path: `/nodesById/${escapePointer(node.id)}/properties/runs` },
     );
   }
-  let next: TextRun[];
+  const runPatch = Object.fromEntries(
+    Object.entries(command.style).filter(
+      ([field]) => !PARAGRAPH_STYLE_FIELD_SET.has(field),
+    ),
+  );
+  const paragraphPatch = Object.fromEntries(
+    Object.entries(command.style).filter(([field]) =>
+      PARAGRAPH_STYLE_FIELD_SET.has(field),
+    ),
+  );
+  let next = node.properties.runs ?? [];
+  let nextParagraphs = node.properties.paragraphRuns ?? [];
   try {
-    next = applyTextRangeStyle(
-      node.properties.content,
-      node.properties.runs ?? [],
-      textRunBaseStyle(node),
-      { start: command.start, end: command.end },
-      (style) => patchRunStyle(style, command.style),
-      sameRunStyle,
-    );
+    if (Object.keys(runPatch).length > 0) {
+      next = applyTextRangeStyle(
+        node.properties.content,
+        next,
+        textRunBaseStyle(node),
+        { start: command.start, end: command.end },
+        (style) => patchRunStyle(style, runPatch),
+        sameRunStyle,
+      );
+    }
+    if (Object.keys(paragraphPatch).length > 0) {
+      if (!Object.hasOwn(command.style, "textStyleId")) {
+        const touched = textParagraphRanges(node.properties.content).filter(
+          (paragraph) =>
+            paragraph.end > command.start && paragraph.start < command.end,
+        );
+        const first = touched[0];
+        const last = touched.at(-1);
+        if (first && last) {
+          next = applyTextRangeStyle(
+            node.properties.content,
+            next,
+            textRunBaseStyle(node),
+            { start: first.start, end: last.end },
+            detachTextStyleReference,
+            sameRunStyle,
+          );
+        }
+      }
+      nextParagraphs = applyTextParagraphRangeStyle(
+        node.properties.content,
+        nextParagraphs,
+        textParagraphBaseStyle(node),
+        { start: command.start, end: command.end },
+        (style) => ({ ...style, ...paragraphPatch }) as TextParagraphStyle,
+        sameParagraphStyle,
+      );
+    }
   } catch (error) {
     throw new OperationError(
       command.commandId,
       error instanceof Error ? error.message : "Text range update failed",
       "invalid",
-      { path: `/nodesById/${escapePointer(node.id)}/properties/runs` },
+      {
+        path: `/nodesById/${escapePointer(node.id)}/properties/${
+          Object.keys(runPatch).length > 0 ? "runs" : "paragraphRuns"
+        }`,
+      },
     );
   }
   next = compactRuns(next, textRunBaseStyle(node));
-  if (sameRuns(next, node.properties.runs ?? [])) {
+  nextParagraphs = compactParagraphRuns(
+    nextParagraphs,
+    textParagraphBaseStyle(node),
+  );
+  if (
+    sameRuns(next, node.properties.runs ?? []) &&
+    sameParagraphRuns(nextParagraphs, node.properties.paragraphRuns ?? [])
+  ) {
     throw new OperationError(
       command.commandId,
       "Text range already uses the requested style",
@@ -128,6 +229,7 @@ export function updateTextRangeStyle(
     );
   }
   node.properties.runs = next;
+  node.properties.paragraphRuns = nextParagraphs;
 }
 
 export function textRunBaseStyle(node: TextNode): TextRunStyle {
@@ -145,6 +247,20 @@ export function textRunBaseStyle(node: TextNode): TextRunStyle {
     ...(node.textStyleId ? { textStyleId: node.textStyleId } : {}),
     ...(node.fillStyleId ? { fillStyleId: node.fillStyleId } : {}),
   };
+}
+
+export function textParagraphBaseStyle(node: TextNode): TextParagraphStyle {
+  return {
+    paragraphIndent: node.properties.paragraphIndent,
+    paragraphSpacing: node.properties.paragraphSpacing,
+  };
+}
+
+function detachTextStyleReference(style: TextRunStyle): TextRunStyle {
+  if (style.textStyleId === undefined) return style;
+  const next = structuredClone(style);
+  delete next.textStyleId;
+  return next;
 }
 
 function patchRunStyle(
@@ -211,7 +327,41 @@ function compactRuns(
   return merged;
 }
 
+function compactParagraphRuns(
+  runs: readonly TextParagraphRun[],
+  baseStyle: TextParagraphStyle,
+): TextParagraphRun[] {
+  if (
+    runs.length === 1 &&
+    runs[0]?.start === 0 &&
+    sameParagraphStyle(runs[0].style, baseStyle)
+  ) {
+    return [];
+  }
+  const merged: TextParagraphRun[] = [];
+  for (const run of runs) {
+    const previous = merged.at(-1);
+    if (
+      previous &&
+      previous.end === run.start &&
+      sameParagraphStyle(previous.style, run.style)
+    ) {
+      previous.end = run.end;
+    } else {
+      merged.push(structuredClone(run));
+    }
+  }
+  return merged;
+}
+
 function sameRunStyle(left: TextRunStyle, right: TextRunStyle): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function sameParagraphStyle(
+  left: TextParagraphStyle,
+  right: TextParagraphStyle,
+): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
@@ -222,9 +372,26 @@ function sameRuns(
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function sameParagraphRuns(
+  left: readonly TextParagraphRun[],
+  right: readonly TextParagraphRun[],
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function invalidRuns(nodeId: string, commandId: string, message: string) {
   return new OperationError(commandId, message, "invalid", {
     path: `/nodesById/${escapePointer(nodeId)}/properties/runs`,
+  });
+}
+
+function invalidParagraphRuns(
+  nodeId: string,
+  commandId: string,
+  message: string,
+) {
+  return new OperationError(commandId, message, "invalid", {
+    path: `/nodesById/${escapePointer(nodeId)}/properties/paragraphRuns`,
   });
 }
 

@@ -28,7 +28,11 @@ export function resolveDesignTextRuns(
   const visit = (nodeId: string): void => {
     const node = document.nodesById[nodeId];
     if (!node) return;
-    if (node.kind === "text" && (node.properties.runs?.length ?? 0) > 0) {
+    if (
+      node.kind === "text" &&
+      ((node.properties.runs?.length ?? 0) > 0 ||
+        (node.properties.paragraphRuns?.length ?? 0) > 0)
+    ) {
       try {
         if (node.properties.textAlignHorizontal === "justify") {
           throw new Error("Rich text justified alignment is not supported yet");
@@ -58,6 +62,7 @@ export function resolveDesignTextRuns(
           mode: node.properties.textResize,
           paragraphIndent: node.properties.paragraphIndent,
           paragraphSpacing: node.properties.paragraphSpacing,
+          paragraphRuns: node.properties.paragraphRuns ?? [],
           runs: (node.properties.runs ?? []).map((run) => ({
             start: run.start,
             end: run.end,

@@ -80,6 +80,65 @@ describe("design rich-text projection resolution", () => {
       }),
     ]);
   });
+
+  it("uses the rich projection for paragraph-only styles", () => {
+    const document = richDocument();
+    const node = document.nodesById.title_welcome;
+    if (!node || node.kind !== "text") throw new Error("Missing title");
+    node.properties.runs = [];
+    node.properties.paragraphRuns = [
+      {
+        start: 0,
+        end: node.properties.content.length,
+        style: { paragraphIndent: 24, paragraphSpacing: 10 },
+      },
+    ];
+    const layout = vi.fn<TextRunLayoutProvider<LeaferTextRunStyle>["layout"]>(
+      (request) => ({
+        ok: true,
+        provider: "test-paragraphs",
+        providerVersion: "1",
+        size: { width: 320, height: 64 },
+        contentBounds: { x: 24, y: 0, width: 120, height: 24 },
+        lines: [
+          {
+            start: 0,
+            end: request.content.length,
+            x: 24,
+            y: 0,
+            width: 120,
+            height: 24,
+            baseline: 18,
+          },
+        ],
+        fragments: [
+          {
+            start: 0,
+            end: request.content.length,
+            text: request.content,
+            style: request.baseStyle,
+            x: 24,
+            y: 0,
+            width: 120,
+            height: 24,
+            baseline: 18,
+            lineIndex: 0,
+          },
+        ],
+        warnings: [],
+      }),
+    );
+    const result = resolveDesignTextRuns(document, "page_welcome", {
+      id: "test-paragraphs",
+      version: "1",
+      layout,
+    });
+    expect(result.warnings).toEqual([]);
+    expect(layout.mock.calls[0]?.[0].paragraphRuns).toEqual(
+      node.properties.paragraphRuns,
+    );
+    expect(result.projection.resultsByNodeId.has(node.id)).toBe(true);
+  });
 });
 
 function richDocument() {

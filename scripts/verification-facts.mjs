@@ -26,6 +26,9 @@ const designContractVersions = await text(
 const geometryService = await text("packages/geometry-service/src/index.ts");
 const textService = await text("packages/text-service/src/index.ts");
 const textRangeService = await text("packages/text-service/src/text-ranges.ts");
+const textParagraphService = await text(
+  "packages/text-service/src/text-paragraphs.ts",
+);
 const textRunLayoutService = await text(
   "packages/text-service/src/text-run-layout.ts",
 );
@@ -79,6 +82,13 @@ const textRangeServiceContractVersion = Number(
     "Text Range service contract version",
   ),
 );
+const textParagraphServiceContractVersion = Number(
+  capture(
+    textParagraphService,
+    /TEXT_PARAGRAPH_SERVICE_CONTRACT_VERSION\s*=\s*([0-9]+)/,
+    "Text Paragraph service contract version",
+  ),
+);
 const textRunLayoutServiceContractVersion = Number(
   capture(
     textRunLayoutService,
@@ -121,6 +131,11 @@ assertEqual(
   baseline.contracts.textRangeServiceContractVersion,
   textRangeServiceContractVersion,
   "engine baseline Text Range service contract",
+);
+assertEqual(
+  baseline.contracts.textParagraphServiceContractVersion,
+  textParagraphServiceContractVersion,
+  "engine baseline Text Paragraph service contract",
 );
 assertEqual(
   baseline.contracts.textRunLayoutServiceContractVersion,
@@ -172,6 +187,7 @@ const blocks = {
     `- Geometry Service：\`contract v${geometryServiceContractVersion}\``,
     `- Text Layout Service：\`contract v${textServiceContractVersion}\``,
     `- Text Range Service：\`contract v${textRangeServiceContractVersion}\`（DesignDocument rich-text runs 已接入）`,
+    `- Text Paragraph Service：\`contract v${textParagraphServiceContractVersion}\`（逐段 indent/spacing 已接入）`,
     `- Text Run Layout Service：\`contract v${textRunLayoutServiceContractVersion}\`（native/HarfBuzz 生产投影已接入）`,
     `- Layout Service：\`contract v${layoutServiceContractVersion}\``,
     `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（${agentCoreStatus}）`,

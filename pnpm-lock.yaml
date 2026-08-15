@@ -283,6 +283,9 @@ importers:
       '@opendesign/design-contracts':
         specifier: workspace:*
         version: link:../design-contracts
+      '@opendesign/text-service':
+        specifier: workspace:*
+        version: link:../text-service
     devDependencies:
       '@figma/plugin-typings':
         specifier: 1.133.0
@@ -331,6 +334,9 @@ importers:
       '@opendesign/geometry-service':
         specifier: workspace:*
         version: link:../geometry-service
+      '@opendesign/text-service':
+        specifier: workspace:*
+        version: link:../text-service
       '@xmldom/xmldom':
         specifier: 0.8.13
         version: 0.8.13

@@ -1192,6 +1192,7 @@ describe("design Agent tool contract", () => {
         fontFamily: "IBM Plex Sans",
         fontStyleName: "Semi Bold",
         fontWeight: 600,
+        paragraphSpacing: 12,
         fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
       },
     };

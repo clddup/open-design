@@ -203,7 +203,75 @@ describe("Figma rich text range compatibility", () => {
       fromFigmaTextRangeSegments(node.properties.content, exported.segments),
     ).toEqual({
       ok: true,
+      paragraphRuns: [
+        {
+          start: 0,
+          end: 4,
+          style: { paragraphIndent: 0, paragraphSpacing: 0 },
+        },
+      ],
       runs: node.properties.runs,
+    });
+  });
+
+  it("splits styled segments at paragraph boundaries and preserves paragraph fields", () => {
+    const node = richTextNode();
+    node.properties.content = "One\nTwo";
+    node.properties.runs = [];
+    node.properties.paragraphRuns = [
+      {
+        start: 0,
+        end: 4,
+        style: { paragraphIndent: 8, paragraphSpacing: 12 },
+      },
+      {
+        start: 4,
+        end: 7,
+        style: { paragraphIndent: 20, paragraphSpacing: 4 },
+      },
+    ];
+    const exported = toFigmaTextRangeSegments(node);
+    expect(exported).toMatchObject({
+      ok: true,
+      segments: [
+        expect.objectContaining({
+          start: 0,
+          end: 4,
+          paragraphIndent: 8,
+          paragraphSpacing: 12,
+        }),
+        expect.objectContaining({
+          start: 4,
+          end: 7,
+          paragraphIndent: 20,
+          paragraphSpacing: 4,
+        }),
+      ],
+    });
+    if (!exported.ok) throw new Error(exported.issues.join("; "));
+    expect(
+      fromFigmaTextRangeSegments(node.properties.content, exported.segments),
+    ).toMatchObject({
+      ok: true,
+      paragraphRuns: node.properties.paragraphRuns,
+      runs: [{ start: 0, end: 7 }],
+    });
+    expect(
+      fromFigmaTextRangeSegments(node.properties.content, [
+        { ...exported.segments[0]!, end: 2 },
+        {
+          ...exported.segments[0]!,
+          start: 2,
+          end: 4,
+          paragraphIndent: 99,
+        },
+        exported.segments[1]!,
+      ]),
+    ).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.stringContaining("inconsistent paragraph fields"),
+      ]),
     });
   });
 
@@ -251,6 +319,7 @@ function richTextNode(): Extract<DesignNode, { kind: "text" }> {
     properties: {
       content: "ABCD",
       ...base,
+      paragraphRuns: [],
       runs: [
         { start: 0, end: 2, style: base },
         {

@@ -1131,12 +1131,22 @@ function updateProperties(
   }
   assertBooleanOperandUpdateAllowed(document, node, command);
   if (node.kind === "text") {
-    if (command.properties && Object.hasOwn(command.properties, "runs")) {
+    if (
+      command.properties &&
+      (Object.hasOwn(command.properties, "runs") ||
+        Object.hasOwn(command.properties, "paragraphRuns"))
+    ) {
       throw new OperationError(
         command.commandId,
-        "Text runs cannot be replaced through update_properties; use update_text_range_style or replace the complete Text node",
+        "Text character and paragraph runs cannot be replaced through update_properties; use update_text_range_style or replace the complete Text node",
         "invalid",
-        { path: `/nodesById/${escapeJsonPointer(node.id)}/properties/runs` },
+        {
+          path: `/nodesById/${escapeJsonPointer(node.id)}/properties/${
+            Object.hasOwn(command.properties, "paragraphRuns")
+              ? "paragraphRuns"
+              : "runs"
+          }`,
+        },
       );
     }
     prepareTextPropertiesUpdate(node, command.properties, command.commandId);
@@ -1371,6 +1381,8 @@ function applyTextRangeStyleOperation(
       lineHeight: reference.textStyle.lineHeight,
       textCase: reference.textStyle.textCase,
       textDecoration: reference.textStyle.textDecoration,
+      paragraphIndent: reference.textStyle.paragraphIndent,
+      paragraphSpacing: reference.textStyle.paragraphSpacing,
     };
   }
   if (typeof command.style.fillStyleId === "string") {
@@ -1585,7 +1597,10 @@ function resolveTextAutoSize(
   context: OperationContext,
 ): void {
   if (node.properties.textResize === "fixed") return;
-  if ((node.properties.runs?.length ?? 0) > 0) {
+  if (
+    (node.properties.runs?.length ?? 0) > 0 ||
+    (node.properties.paragraphRuns?.length ?? 0) > 0
+  ) {
     resolveRichTextAutoSize(node, commandId, context);
     return;
   }
@@ -1758,6 +1773,7 @@ function resolveRichTextAutoSize(
     mode: node.properties.textResize,
     paragraphIndent: node.properties.paragraphIndent,
     paragraphSpacing: node.properties.paragraphSpacing,
+    paragraphRuns: node.properties.paragraphRuns ?? [],
     runs: (node.properties.runs ?? []).map((run) => ({
       ...run,
       style: runtimeTextRunStyle(run.style),

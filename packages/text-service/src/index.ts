@@ -1,4 +1,5 @@
 export * from "./text-ranges.js";
+export * from "./text-paragraphs.js";
 export * from "./text-run-layout.js";
 export * from "./text-types.js";
 export * from "./harfbuzz-text-run-layout.js";

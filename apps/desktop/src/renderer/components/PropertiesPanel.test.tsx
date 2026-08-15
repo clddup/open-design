@@ -1994,6 +1994,8 @@ describe("PropertiesPanel text layout workflow", () => {
             fontSlant: textNode.properties.fontSlant,
             lineHeight: textNode.properties.lineHeight,
             letterSpacing: textNode.properties.letterSpacing,
+            paragraphIndent: textNode.properties.paragraphIndent,
+            paragraphSpacing: textNode.properties.paragraphSpacing,
             textCase: textNode.properties.textCase,
             textDecoration: textNode.properties.textDecoration,
             fills: textNode.properties.fills,
@@ -2009,6 +2011,14 @@ describe("PropertiesPanel text layout workflow", () => {
     await user.type(size, "28");
     await user.tab();
     expect(onRangeUpdate).toHaveBeenCalledWith({ fontSize: 28 });
+    const paragraphSpacing = screen.getByLabelText("Paragraph spacing");
+    await user.clear(paragraphSpacing);
+    await user.type(paragraphSpacing, "16");
+    await user.tab();
+    expect(onRangeUpdate).toHaveBeenCalledWith({ paragraphSpacing: 16 });
     expect(onUpdate).not.toHaveBeenCalledWith({ properties: { fontSize: 28 } });
+    expect(onUpdate).not.toHaveBeenCalledWith({
+      properties: { paragraphSpacing: 16 },
+    });
   });
 });

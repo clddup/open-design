@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-15",
-  "documentSchemaVersion": "1.31.0",
+  "documentSchemaVersion": "1.32.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -679,7 +679,7 @@
         "en": "Create, render, transform, and edit fixed, Auto Width, or Auto Height text with one shared font style, alignment, explicit wrapping, and fixed-box overflow controls.",
         "zh-CN": "创建、渲染、变换和编辑固定、自动宽度或自动高度文字，使用单一共享字体样式、对齐、明确换行以及固定框溢出控制。"
       },
-      "provider": "DesignDocument 1.31.0 + Text Layout Service v4 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v6",
+      "provider": "DesignDocument 1.32.0 + Text Layout Service v4 + leafer-editor@2.2.9 Text/TextEditor + controlled SVG text metadata v7",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -726,10 +726,10 @@
       "status": "degraded",
       "label": { "en": "Rich typography", "zh-CN": "专业富文本排版" },
       "description": {
-        "en": "Author Figma-compatible UTF-16 rich-text runs through one revisioned Runtime, live range Inspector, Agent tools, native/HarfBuzz projection, and structured Figma/SVG/raster interchange.",
-        "zh-CN": "通过唯一版本化 Runtime、真实范围 Inspector、Agent 工具、native/HarfBuzz 投影及 Figma/SVG/位图结构往返创建 Figma-compatible UTF-16 富文本 runs。"
+        "en": "Author Figma-compatible UTF-16 character and paragraph runs through one revisioned Runtime, live range Inspector, Agent tools, native/HarfBuzz projection, and structured Figma/SVG/raster interchange.",
+        "zh-CN": "通过唯一版本化 Runtime、真实范围 Inspector、Agent 工具、native/HarfBuzz 投影及 Figma/SVG/位图结构往返创建 Figma-compatible UTF-16 字符与段落 runs。"
       },
-      "provider": "@opendesign/text-service v4 / Text Run Layout v2 + leafer-editor 2.2.9 + harfbuzzjs 1.4.0",
+      "provider": "DesignDocument 1.32.0 + Text Paragraph Service v1 / Text Run Layout v3 + leafer-editor 2.2.9 + harfbuzzjs 1.4.0 + SVG metadata v7",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "available",
@@ -741,14 +741,15 @@
       },
       "limitations": [
         {
-          "en": "Rich runs cover exact face, size, tracking, line height, case, decoration, fills, and optional Text/Paint Style IDs. Lists, per-range paragraph controls, advanced decoration geometry, OpenType controls, variable axes, live propagation of local Style edits into bound ranges, font packaging/authorization transfer, text-on-path, newer bidi data, and packaged macOS/Windows visual evidence remain unavailable.",
-          "zh-CN": "富文本 runs 已覆盖精确 face、字号、字距、行高、大小写、装饰、fills 与可选 Text/Paint Style ID。列表、逐段 paragraph 控件、高级 decoration 几何、OpenType 控件、可变字体轴、本地 Style 修改向绑定 range 的实时传播、字体随文件打包/授权迁移、路径文字、更新 bidi 数据和 macOS/Windows 打包视觉证据仍不可用。"
+          "en": "Rich runs cover exact face, size, tracking, line height, case, decoration, fills, optional Text/Paint Style IDs, and paragraph-local indent/spacing for paragraphs with UTF-16 content. A zero-length trailing paragraph uses base style until content exists. Ordered/unordered lists, indentation levels, hanging-list behavior, caret typing style, advanced decoration geometry, OpenType controls, variable axes, live propagation of local Style edits into bound ranges, font packaging/authorization transfer, text-on-path, newer bidi data, and packaged macOS/Windows visual evidence remain unavailable.",
+          "zh-CN": "富文本 runs 已覆盖精确 face、字号、字距、行高、大小写、装饰、fills、可选 Text/Paint Style ID，以及有 UTF-16 内容段落的逐段 indent/spacing。末尾零长度空段落在写入内容前使用 base style。ordered/unordered list、缩进层级、hanging-list、caret typing style、高级 decoration 几何、OpenType 控件、可变字体轴、本地 Style 修改向绑定 range 的实时传播、字体随文件打包/授权迁移、路径文字、更新 bidi 数据和 macOS/Windows 打包视觉证据仍不可用。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/editor-runtime/src/rich-text-operations.test.ts",
+          "packages/text-service/src/text-paragraphs.test.ts",
           "packages/text-service/src/index.test.ts",
           "packages/text-service/src/harfbuzz-text-run-layout.test.ts",
           "packages/editor-runtime/src/text-layout.test.ts",

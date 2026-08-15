@@ -1,4 +1,5 @@
 import {
+  canonicalizeTextParagraphRuns,
   canonicalizeTextStyleRuns,
   validateTextRunLayoutRequest,
   validateTextRunLayoutResult,
@@ -9,6 +10,7 @@ import {
   type TextRunLayoutRequest,
   type TextRunLayoutResult,
   type TextRunLayoutStyle,
+  type TextParagraphStyle,
   type TextStyleRun,
 } from "@opendesign/text-service";
 import type * as LeaferEditorModule from "leafer-editor";
@@ -148,6 +150,21 @@ function layoutWithLeafer(
   >,
 ): TextRunLayoutResult<LeaferTextRunStyle> {
   const runs = materializedRuns(request);
+  const paragraphRuns = canonicalizeTextParagraphRuns(
+    request.content,
+    request.paragraphRuns ?? [],
+    {
+      paragraphIndent: request.paragraphIndent,
+      paragraphSpacing: request.paragraphSpacing,
+    },
+    equalParagraphStyle,
+  );
+  const paragraphStyleAt = (offset: number): TextParagraphStyle =>
+    paragraphRuns.find((run) => run.start <= offset && offset < run.end)
+      ?.style ?? {
+      paragraphIndent: request.paragraphIndent,
+      paragraphSpacing: request.paragraphSpacing,
+    };
   const styleMetrics = new Map<string, MeasuredStyle>();
   const characterAdvances = new Map<string, number>();
   const warnings = fontWarnings(runs, request.baseStyle, fontAvailable);
@@ -212,7 +229,11 @@ function layoutWithLeafer(
   }
   assignTextRunBreakOpportunities(clusters);
 
-  const broken = breakTextRunLines(clusters, request);
+  const broken = breakTextRunLines(
+    clusters,
+    request,
+    (offset) => paragraphStyleAt(offset).paragraphIndent,
+  );
   if (request.content.length === 0) {
     broken.push({ clusters: [], paragraphStart: true, start: 0, end: 0 });
   } else if (request.content.endsWith("\n") || request.content.endsWith("\r")) {
@@ -228,12 +249,13 @@ function layoutWithLeafer(
   const measuredLines = broken.map((line) =>
     measureLine(line, fallbackMetrics),
   );
+  const paragraphStyles = broken.map((line) => paragraphStyleAt(line.start));
   const contentHeight = measuredLines.reduce(
     (sum, line, index) =>
       sum +
       line.height +
       (index > 0 && broken[index]!.paragraphStart
-        ? request.paragraphSpacing
+        ? paragraphStyles[index - 1]!.paragraphSpacing
         : 0),
     0,
   );
@@ -242,7 +264,9 @@ function layoutWithLeafer(
       Math.max(
         maximum,
         line.width +
-          (broken[index]!.paragraphStart ? request.paragraphIndent : 0),
+          (broken[index]!.paragraphStart
+            ? paragraphStyles[index]!.paragraphIndent
+            : 0),
       ),
     0,
   );
@@ -268,9 +292,11 @@ function layoutWithLeafer(
     const sourceLine = broken[lineIndex]!;
     const measuredLine = measuredLines[lineIndex]!;
     if (lineIndex > 0 && sourceLine.paragraphStart) {
-      lineY += request.paragraphSpacing;
+      lineY += paragraphStyles[lineIndex - 1]!.paragraphSpacing;
     }
-    const indent = sourceLine.paragraphStart ? request.paragraphIndent : 0;
+    const indent = sourceLine.paragraphStart
+      ? paragraphStyles[lineIndex]!.paragraphIndent
+      : 0;
     const usableWidth = Math.max(0, width - indent);
     const alignedX =
       indent +
@@ -321,6 +347,16 @@ function layoutWithLeafer(
     size: { height, width },
     warnings,
   };
+}
+
+function equalParagraphStyle(
+  left: TextParagraphStyle,
+  right: TextParagraphStyle,
+): boolean {
+  return (
+    left.paragraphIndent === right.paragraphIndent &&
+    left.paragraphSpacing === right.paragraphSpacing
+  );
 }
 
 function materializedRuns(

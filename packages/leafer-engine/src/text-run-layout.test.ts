@@ -279,6 +279,38 @@ describe("Leafer native text run layout provider", () => {
       size: { width: 28, height: 54 },
     });
 
+    const mixedParagraphs = provider.layout({
+      baseStyle: base,
+      content: "AB\nC",
+      mode: "auto-width",
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      paragraphRuns: [
+        {
+          start: 0,
+          end: 3,
+          style: { paragraphIndent: 8, paragraphSpacing: 6 },
+        },
+        {
+          start: 3,
+          end: 4,
+          style: { paragraphIndent: 20, paragraphSpacing: 2 },
+        },
+      ],
+      runs: [],
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textWrap: "none",
+    });
+    expect(mixedParagraphs).toMatchObject({
+      ok: true,
+      size: { width: 30, height: 54 },
+      lines: [
+        { x: 8, y: 0 },
+        { x: 20, y: 30 },
+      ],
+    });
+
     const wrapped = provider.layout({
       baseStyle: base,
       content: "ab cd",

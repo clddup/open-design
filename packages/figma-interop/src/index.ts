@@ -1,4 +1,5 @@
 import { resolveComponentInstance } from "@opendesign/component-service";
+import { textParagraphRanges } from "@opendesign/text-service";
 import type {
   ComponentDefinition,
   ComponentPropertyReferences as OpenDesignComponentPropertyReferences,
@@ -6,6 +7,8 @@ import type {
   DesignNode,
   Paint as OpenDesignPaint,
   SharedStyleDefinition,
+  TextParagraphRun,
+  TextParagraphStyle,
   TextRun,
   TextRunStyle,
   VariableAlias as OpenDesignVariableAlias,
@@ -64,6 +67,8 @@ export interface FigmaTextRangeSegment {
   fontWeight: number;
   letterSpacing: LetterSpacing;
   lineHeight: LineHeight;
+  paragraphIndent: number;
+  paragraphSpacing: number;
   start: number;
   textCase: TextCase;
   textDecoration: TextDecoration;
@@ -75,7 +80,11 @@ export type FigmaTextRangeResult =
   | { ok: false; issues: readonly string[] };
 
 export type OpenDesignTextRangeResult =
-  | { ok: true; runs: readonly TextRun[] }
+  | {
+      ok: true;
+      paragraphRuns: readonly TextParagraphRun[];
+      runs: readonly TextRun[];
+    }
   | { ok: false; issues: readonly string[] };
 
 export const FIGMA_PLUGIN_TYPINGS_VERSION = "1.133.0" as const;
@@ -324,36 +333,72 @@ export function toFigmaTextRangeSegments(
     node.properties.runs && node.properties.runs.length > 0
       ? node.properties.runs
       : [{ start: 0, end: node.properties.content.length, style: base }];
+  const paragraphBase = textNodeBaseParagraphStyle(node);
+  const paragraphRuns =
+    node.properties.paragraphRuns && node.properties.paragraphRuns.length > 0
+      ? node.properties.paragraphRuns
+      : [
+          {
+            start: 0,
+            end: node.properties.content.length,
+            style: paragraphBase,
+          },
+        ];
+  const explicitParagraphRanges = textParagraphRanges(node.properties.content);
+  const boundaries = [
+    ...new Set([
+      0,
+      node.properties.content.length,
+      ...runs.flatMap((run) => [run.start, run.end]),
+      ...paragraphRuns.flatMap((run) => [run.start, run.end]),
+      ...explicitParagraphRanges.flatMap((range) => [range.start, range.end]),
+    ]),
+  ].sort((left, right) => left - right);
   const issues: string[] = [];
-  const segments = runs.flatMap<FigmaTextRangeSegment>((run, index) => {
-    const fontName = toFigmaFontName(run.style);
-    if (!fontName) {
-      issues.push(`Text range ${index} has an unresolved font face style name`);
-      return [];
-    }
-    const fills = toFigmaRangePaints(run.style.fills, index, issues);
-    if (!fills) return [];
-    return [
-      {
-        start: run.start,
-        end: run.end,
-        fontName,
-        fontSize: run.style.fontSize,
-        fontWeight: run.style.fontWeight,
-        letterSpacing: { unit: "PIXELS", value: run.style.letterSpacing },
-        lineHeight: { unit: "PIXELS", value: run.style.lineHeight },
-        textCase: figmaTextCase(run.style.textCase),
-        textDecoration: figmaTextDecoration(run.style.textDecoration),
-        fills,
-        ...(run.style.textStyleId
-          ? { textStyleId: run.style.textStyleId }
-          : {}),
-        ...(run.style.fillStyleId
-          ? { fillStyleId: run.style.fillStyleId }
-          : {}),
-      },
-    ];
-  });
+  const segments = boundaries
+    .slice(0, -1)
+    .flatMap<FigmaTextRangeSegment>((start, index) => {
+      const end = boundaries[index + 1]!;
+      const style = runs.find(
+        (run) => run.start <= start && start < run.end,
+      )?.style;
+      const paragraphStyle = paragraphRuns.find(
+        (run) => run.start <= start && start < run.end,
+      )?.style;
+      if (!style || !paragraphStyle) {
+        issues.push(
+          `Text range ${index} has incomplete character or paragraph coverage`,
+        );
+        return [];
+      }
+      const fontName = toFigmaFontName(style);
+      if (!fontName) {
+        issues.push(
+          `Text range ${index} has an unresolved font face style name`,
+        );
+        return [];
+      }
+      const fills = toFigmaRangePaints(style.fills, index, issues);
+      if (!fills) return [];
+      return [
+        {
+          start,
+          end,
+          fontName,
+          fontSize: style.fontSize,
+          fontWeight: style.fontWeight,
+          letterSpacing: { unit: "PIXELS", value: style.letterSpacing },
+          lineHeight: { unit: "PIXELS", value: style.lineHeight },
+          paragraphIndent: paragraphStyle.paragraphIndent,
+          paragraphSpacing: paragraphStyle.paragraphSpacing,
+          textCase: figmaTextCase(style.textCase),
+          textDecoration: figmaTextDecoration(style.textDecoration),
+          fills,
+          ...(style.textStyleId ? { textStyleId: style.textStyleId } : {}),
+          ...(style.fillStyleId ? { fillStyleId: style.fillStyleId } : {}),
+        },
+      ];
+    });
   return issues.length > 0 ? { ok: false, issues } : { ok: true, segments };
 }
 
@@ -363,7 +408,7 @@ export function fromFigmaTextRangeSegments(
 ): OpenDesignTextRangeResult {
   if (content.length === 0) {
     return segments.length === 0
-      ? { ok: true, runs: [] }
+      ? { ok: true, paragraphRuns: [], runs: [] }
       : { ok: false, issues: ["Empty text cannot contain Figma segments"] };
   }
   const issues: string[] = [];
@@ -388,6 +433,17 @@ export function fromFigmaTextRangeSegments(
     ) {
       issues.push(
         `Figma text segment ${index} requires pixel spacing and line height`,
+      );
+      return [];
+    }
+    if (
+      !Number.isFinite(segment.paragraphIndent) ||
+      segment.paragraphIndent < 0 ||
+      !Number.isFinite(segment.paragraphSpacing) ||
+      segment.paragraphSpacing < 0
+    ) {
+      issues.push(
+        `Figma text segment ${index} requires finite non-negative paragraph fields`,
       );
       return [];
     }
@@ -419,7 +475,47 @@ export function fromFigmaTextRangeSegments(
   if (expectedStart !== content.length) {
     issues.push("Figma text segments must cover the complete content");
   }
-  return issues.length > 0 ? { ok: false, issues } : { ok: true, runs };
+  const paragraphRuns = textParagraphRanges(content).flatMap<TextParagraphRun>(
+    (paragraph, paragraphIndex) => {
+      const overlapping = segments.filter(
+        (segment) =>
+          segment.end > paragraph.start && segment.start < paragraph.end,
+      );
+      const first = overlapping[0];
+      if (!first) {
+        issues.push(`Figma paragraph ${paragraphIndex} has no styled segment`);
+        return [];
+      }
+      if (
+        overlapping.some(
+          (segment) =>
+            segment.paragraphIndent !== first.paragraphIndent ||
+            segment.paragraphSpacing !== first.paragraphSpacing,
+        )
+      ) {
+        issues.push(
+          `Figma paragraph ${paragraphIndex} has inconsistent paragraph fields`,
+        );
+        return [];
+      }
+      return [
+        {
+          ...paragraph,
+          style: {
+            paragraphIndent: first.paragraphIndent,
+            paragraphSpacing: first.paragraphSpacing,
+          },
+        },
+      ];
+    },
+  );
+  return issues.length > 0
+    ? { ok: false, issues }
+    : {
+        ok: true,
+        paragraphRuns: mergeAdjacentRuns(paragraphRuns),
+        runs: mergeAdjacentRuns(runs),
+      };
 }
 
 function figmaTextDecoration(
@@ -463,6 +559,34 @@ function textNodeBaseStyle(
     ...(node.textStyleId ? { textStyleId: node.textStyleId } : {}),
     ...(node.fillStyleId ? { fillStyleId: node.fillStyleId } : {}),
   };
+}
+
+function textNodeBaseParagraphStyle(
+  node: Extract<DesignNode, { kind: "text" }>,
+): TextParagraphStyle {
+  return {
+    paragraphIndent: node.properties.paragraphIndent,
+    paragraphSpacing: node.properties.paragraphSpacing,
+  };
+}
+
+function mergeAdjacentRuns<
+  Run extends { start: number; end: number; style: unknown },
+>(runs: readonly Run[]): Run[] {
+  const result: Run[] = [];
+  for (const run of runs) {
+    const previous = result.at(-1);
+    if (
+      previous &&
+      previous.end === run.start &&
+      JSON.stringify(previous.style) === JSON.stringify(run.style)
+    ) {
+      previous.end = run.end;
+    } else {
+      result.push(structuredClone(run));
+    }
+  }
+  return result;
 }
 
 function toFigmaRangePaints(

@@ -3,10 +3,13 @@ import {
   schemaValidationIssues,
   type DesignNode,
   type Paint,
+  type TextParagraphStyle,
   type TextRunStyle,
 } from "@opendesign/design-contracts";
+import { textParagraphRanges } from "@opendesign/text-service";
 
-const TEXT_METADATA_VERSION = "6";
+const TEXT_METADATA_VERSION = "7";
+const RICH_TEXT_TEXT_METADATA_VERSION = "6";
 const FONT_FACE_TEXT_METADATA_VERSION = "5";
 const TYPOGRAPHY_V2_TEXT_METADATA_VERSION = "4";
 const TYPOGRAPHY_V1_TEXT_METADATA_VERSION = "3";
@@ -71,7 +74,10 @@ export function writeSvgText(
   element.setAttribute("text-anchor", textAnchor(properties));
   element.setAttributeNS(XML_NAMESPACE, "xml:space", "preserve");
 
-  if ((properties.runs?.length ?? 0) > 0) {
+  if (
+    (properties.runs?.length ?? 0) > 0 ||
+    (properties.paragraphRuns?.length ?? 0) > 0
+  ) {
     writeRichTextSpans(element, node);
   } else {
     writeUniformTextSpans(element, node);
@@ -80,7 +86,11 @@ export function writeSvgText(
   const serialized = JSON.stringify({
     width: node.size.width,
     height: node.size.height,
-    properties: { ...properties, runs: properties.runs ?? [] },
+    properties: {
+      ...properties,
+      paragraphRuns: properties.paragraphRuns ?? [],
+      runs: properties.runs ?? [],
+    },
   } satisfies SerializedText);
   if (serialized.length > MAX_TEXT_METADATA_CHARACTERS) {
     return { ok: true, metadataWritten: false };
@@ -109,6 +119,7 @@ export function readSvgText(element: Element): SvgTextReadResult {
   const metadataVersion = element.getAttribute(VERSION_ATTRIBUTE);
   if (
     metadataVersion !== TEXT_METADATA_VERSION &&
+    metadataVersion !== RICH_TEXT_TEXT_METADATA_VERSION &&
     metadataVersion !== FONT_FACE_TEXT_METADATA_VERSION &&
     metadataVersion !== TYPOGRAPHY_V2_TEXT_METADATA_VERSION &&
     metadataVersion !== TYPOGRAPHY_V1_TEXT_METADATA_VERSION &&
@@ -197,14 +208,22 @@ function migrateTextProperties(version: string, value: unknown): unknown {
   }
   if (
     version !== TEXT_METADATA_VERSION &&
+    version !== RICH_TEXT_TEXT_METADATA_VERSION &&
     version !== FONT_FACE_TEXT_METADATA_VERSION
   ) {
     migrated.fontStyleName = null;
     migrated.fontSlant = "normal";
   }
-  if (version !== TEXT_METADATA_VERSION) migrated.runs = [];
   if (
     version !== TEXT_METADATA_VERSION &&
+    version !== RICH_TEXT_TEXT_METADATA_VERSION
+  ) {
+    migrated.runs = [];
+  }
+  if (version !== TEXT_METADATA_VERSION) migrated.paragraphRuns = [];
+  if (
+    version !== TEXT_METADATA_VERSION &&
+    version !== RICH_TEXT_TEXT_METADATA_VERSION &&
     version !== TYPOGRAPHY_V2_TEXT_METADATA_VERSION
   ) {
     if (migrated.textOverflow === "ellipsis") {
@@ -345,29 +364,51 @@ function writeUniformTextSpans(element: Element, node: TextNode): void {
 }
 
 function writeRichTextSpans(element: Element, node: TextNode): void {
-  const runs = node.properties.runs ?? [];
-  const x =
-    lineX(node.size.width, node.properties) + node.properties.paragraphIndent;
+  const segments = resolvedTextSegments(node.properties);
+  const baseX = lineX(node.size.width, node.properties);
   const y = firstLineY(
     node.size.height,
     textLines(node.properties.content).length,
     node.properties,
   );
-  runs.forEach((run, index) => {
+  segments.forEach((segment, index) => {
     const tspan = element.ownerDocument.createElementNS(
       element.namespaceURI,
       "tspan",
     );
-    tspan.setAttribute("data-opendesign-range-start", String(run.start));
-    tspan.setAttribute("data-opendesign-range-end", String(run.end));
+    tspan.setAttribute("data-opendesign-range-start", String(segment.start));
+    tspan.setAttribute("data-opendesign-range-end", String(segment.end));
+    tspan.setAttribute(
+      "data-opendesign-paragraph-indent",
+      formatNumber(segment.paragraphStyle.paragraphIndent),
+    );
+    tspan.setAttribute(
+      "data-opendesign-paragraph-spacing",
+      formatNumber(segment.paragraphStyle.paragraphSpacing),
+    );
     if (index === 0) {
-      tspan.setAttribute("x", formatNumber(x));
+      tspan.setAttribute(
+        "x",
+        formatNumber(baseX + segment.paragraphStyle.paragraphIndent),
+      );
       tspan.setAttribute("y", formatNumber(y));
+    } else if (segment.paragraphStart) {
+      const previous = segments[index - 1]!;
+      tspan.setAttribute(
+        "x",
+        formatNumber(baseX + segment.paragraphStyle.paragraphIndent),
+      );
+      tspan.setAttribute(
+        "dy",
+        formatNumber(
+          previous.style.lineHeight + previous.paragraphStyle.paragraphSpacing,
+        ),
+      );
     }
-    writeRunStyleAttributes(tspan, run.style);
+    writeRunStyleAttributes(tspan, segment.style);
     tspan.appendChild(
       element.ownerDocument.createTextNode(
-        node.properties.content.slice(run.start, run.end),
+        node.properties.content.slice(segment.start, segment.end),
       ),
     );
     element.appendChild(tspan);
@@ -414,9 +455,18 @@ function writeRunStyleAttributes(element: Element, style: TextRunStyle): void {
 function renderedRichTextMismatch(
   element: Element,
   properties: TextProperties,
+  width: number,
+  height: number,
+  validateParagraphs: boolean,
 ): string | null {
-  const runs = properties.runs ?? [];
+  const runs = resolvedTextSegments(properties);
   const children = elementChildren(element);
+  const baseX = lineX(width, properties);
+  const firstY = firstLineY(
+    height,
+    textLines(properties.content).length,
+    properties,
+  );
   if (
     children.length !== runs.length ||
     children.some((child) => child.localName.toLowerCase() !== "tspan")
@@ -426,6 +476,31 @@ function renderedRichTextMismatch(
   for (let index = 0; index < runs.length; index += 1) {
     const run = runs[index]!;
     const child = children[index]!;
+    const previous = runs[index - 1];
+    const paragraphPositionMismatch =
+      validateParagraphs &&
+      (index === 0
+        ? !sameAttributeNumber(
+            child,
+            "x",
+            baseX + run.paragraphStyle.paragraphIndent,
+          ) || !sameAttributeNumber(child, "y", firstY)
+        : run.paragraphStart
+          ? !sameAttributeNumber(
+              child,
+              "x",
+              baseX + run.paragraphStyle.paragraphIndent,
+            ) ||
+            !previous ||
+            !sameAttributeNumber(
+              child,
+              "dy",
+              previous.style.lineHeight +
+                previous.paragraphStyle.paragraphSpacing,
+            )
+          : child.hasAttribute("x") ||
+            child.hasAttribute("y") ||
+            child.hasAttribute("dy"));
     if (
       child.getAttribute("data-opendesign-range-start") !== String(run.start) ||
       child.getAttribute("data-opendesign-range-end") !== String(run.end) ||
@@ -434,7 +509,19 @@ function renderedRichTextMismatch(
       child.getAttribute("font-style") !== run.style.fontSlant ||
       child.getAttribute("font-weight") !== String(run.style.fontWeight) ||
       !sameAttributeNumber(child, "font-size", run.style.fontSize) ||
-      !sameAttributeNumber(child, "letter-spacing", run.style.letterSpacing)
+      !sameAttributeNumber(child, "letter-spacing", run.style.letterSpacing) ||
+      (validateParagraphs &&
+        (!sameAttributeNumber(
+          child,
+          "data-opendesign-paragraph-indent",
+          run.paragraphStyle.paragraphIndent,
+        ) ||
+          !sameAttributeNumber(
+            child,
+            "data-opendesign-paragraph-spacing",
+            run.paragraphStyle.paragraphSpacing,
+          ))) ||
+      paragraphPositionMismatch
     ) {
       return "OpenDesign rich text metadata does not match the rendered run content or style";
     }
@@ -484,10 +571,19 @@ function renderedTextMismatch(
   }
 
   if (
-    metadataVersion === TEXT_METADATA_VERSION &&
-    (properties.runs?.length ?? 0) > 0
+    (metadataVersion === TEXT_METADATA_VERSION &&
+      ((properties.runs?.length ?? 0) > 0 ||
+        (properties.paragraphRuns?.length ?? 0) > 0)) ||
+    (metadataVersion === RICH_TEXT_TEXT_METADATA_VERSION &&
+      (properties.runs?.length ?? 0) > 0)
   ) {
-    return renderedRichTextMismatch(element, properties);
+    return renderedRichTextMismatch(
+      element,
+      properties,
+      value.width,
+      value.height,
+      metadataVersion === TEXT_METADATA_VERSION,
+    );
   }
   const lines = textLines(properties.content);
   const children = elementChildren(element);
@@ -518,6 +614,79 @@ function renderedTextMismatch(
   return null;
 }
 
+function resolvedTextSegments(properties: TextProperties): Array<{
+  end: number;
+  paragraphStart: boolean;
+  paragraphStyle: TextParagraphStyle;
+  start: number;
+  style: TextRunStyle;
+}> {
+  if (properties.content.length === 0) return [];
+  const baseStyle: TextRunStyle = {
+    fontFamily: properties.fontFamily,
+    fontStyleName: properties.fontStyleName,
+    fontSize: properties.fontSize,
+    fontWeight: properties.fontWeight,
+    fontSlant: properties.fontSlant,
+    letterSpacing: properties.letterSpacing,
+    lineHeight: properties.lineHeight,
+    textCase: properties.textCase,
+    textDecoration: properties.textDecoration,
+    fills: properties.fills,
+  };
+  const runs =
+    (properties.runs?.length ?? 0) > 0
+      ? properties.runs!
+      : [{ start: 0, end: properties.content.length, style: baseStyle }];
+  const baseParagraphStyle: TextParagraphStyle = {
+    paragraphIndent: properties.paragraphIndent,
+    paragraphSpacing: properties.paragraphSpacing,
+  };
+  const paragraphRuns =
+    (properties.paragraphRuns?.length ?? 0) > 0
+      ? properties.paragraphRuns!
+      : [
+          {
+            start: 0,
+            end: properties.content.length,
+            style: baseParagraphStyle,
+          },
+        ];
+  const explicitParagraphRanges = textParagraphRanges(properties.content);
+  const boundaries = [
+    ...new Set([
+      0,
+      properties.content.length,
+      ...runs.flatMap((run) => [run.start, run.end]),
+      ...paragraphRuns.flatMap((run) => [run.start, run.end]),
+      ...explicitParagraphRanges.flatMap((range) => [range.start, range.end]),
+    ]),
+  ].sort((left, right) => left - right);
+  const paragraphStarts = new Set(
+    explicitParagraphRanges.map((range) => range.start),
+  );
+  return boundaries.slice(0, -1).map((start, index) => {
+    const style = runs.find(
+      (run) => run.start <= start && start < run.end,
+    )?.style;
+    const paragraphStyle = paragraphRuns.find(
+      (run) => run.start <= start && start < run.end,
+    )?.style;
+    if (!style || !paragraphStyle) {
+      throw new Error(
+        `Incomplete rich text coverage at UTF-16 offset ${start}`,
+      );
+    }
+    return {
+      start,
+      end: boundaries[index + 1]!,
+      paragraphStart: paragraphStarts.has(start),
+      style,
+      paragraphStyle,
+    };
+  });
+}
+
 function lineX(width: number, properties: TextProperties): number {
   if (properties.textAlignHorizontal === "center") return width / 2;
   if (properties.textAlignHorizontal === "right") return width;
@@ -530,8 +699,7 @@ function firstLineY(
   properties: TextProperties,
 ): number {
   const contentHeight =
-    lineCount * properties.lineHeight +
-    Math.max(0, lineCount - 1) * properties.paragraphSpacing;
+    lineCount * properties.lineHeight + paragraphSpacingTotal(properties);
   if (properties.textAlignVertical === "center") {
     return (height - contentHeight) / 2;
   }
@@ -539,6 +707,18 @@ function firstLineY(
     return height - contentHeight;
   }
   return 0;
+}
+
+function paragraphSpacingTotal(properties: TextProperties): number {
+  const paragraphs = textParagraphRanges(properties.content);
+  if (paragraphs.length < 2) return 0;
+  const runs = properties.paragraphRuns ?? [];
+  return paragraphs.slice(0, -1).reduce((sum, paragraph) => {
+    const style = runs.find(
+      (run) => run.start <= paragraph.start && paragraph.start < run.end,
+    )?.style;
+    return sum + (style?.paragraphSpacing ?? properties.paragraphSpacing);
+  }, 0);
 }
 
 function textAnchor(properties: TextProperties): "end" | "middle" | "start" {

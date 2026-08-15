@@ -1,6 +1,7 @@
 import type {
   DesignNode,
   DesignOperation,
+  TextParagraphStyle,
   TextRunStyle,
 } from "@opendesign/design-contracts";
 import type {
@@ -23,6 +24,7 @@ import {
 } from "./controls";
 
 type TextNode = Extract<DesignNode, { kind: "text" }>;
+type TextSelectionStyle = TextRunStyle & TextParagraphStyle;
 
 export type FontInspectorContext = {
   availability: TextFontAvailabilityResult;
@@ -36,8 +38,8 @@ export type FontInspectorContext = {
     start: number;
     end: number;
     text: string;
-    style: TextRunStyle;
-    mixedFields: readonly (keyof TextRunStyle)[];
+    style: TextSelectionStyle;
+    mixedFields: readonly (keyof TextSelectionStyle)[];
     onUpdate: (
       style: Extract<
         DesignOperation,
@@ -85,7 +87,7 @@ export function TypographySection({
     replacementWeightNumber <= 1_000;
   const range = fontContext?.range;
   const activeStyle = range?.style ?? node.properties;
-  const isMixed = (field: keyof TextRunStyle) =>
+  const isMixed = (field: keyof TextSelectionStyle) =>
     range?.mixedFields.includes(field) ?? false;
   const updateTextStyle = (
     style: Parameters<
@@ -409,13 +411,19 @@ export function TypographySection({
             onCommit={(draft) =>
               commitNumber(
                 draft,
-                node.properties.paragraphIndent,
-                (paragraphIndent) =>
-                  onUpdate({ properties: { paragraphIndent } }),
+                activeStyle.paragraphIndent,
+                (paragraphIndent) => updateTextStyle({ paragraphIndent }),
                 { min: 0 },
               )
             }
-            value={formatNumber(node.properties.paragraphIndent)}
+            placeholder={
+              isMixed("paragraphIndent") ? t("properties.mixed") : undefined
+            }
+            value={
+              isMixed("paragraphIndent")
+                ? ""
+                : formatNumber(activeStyle.paragraphIndent)
+            }
           />
           <Field
             accessibleLabel={t("properties.paragraphSpacing")}
@@ -424,13 +432,19 @@ export function TypographySection({
             onCommit={(draft) =>
               commitNumber(
                 draft,
-                node.properties.paragraphSpacing,
-                (paragraphSpacing) =>
-                  onUpdate({ properties: { paragraphSpacing } }),
+                activeStyle.paragraphSpacing,
+                (paragraphSpacing) => updateTextStyle({ paragraphSpacing }),
                 { min: 0 },
               )
             }
-            value={formatNumber(node.properties.paragraphSpacing)}
+            placeholder={
+              isMixed("paragraphSpacing") ? t("properties.mixed") : undefined
+            }
+            value={
+              isMixed("paragraphSpacing")
+                ? ""
+                : formatNumber(activeStyle.paragraphSpacing)
+            }
           />
           <label className={styles.select}>
             <span>{t("properties.textCase")}</span>

@@ -120,6 +120,125 @@ describe("EditorRuntime rich text ranges", () => {
       }),
     ]);
   });
+
+  it("expands paragraph fields to complete paragraphs and remaps them through editing", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    apply(runtime, "paragraph_content", {
+      commandId: "paragraph_content",
+      type: "update_properties",
+      nodeId: "title_welcome",
+      properties: { content: "First\nSecond\nThird" },
+    });
+    apply(runtime, "paragraph_style", {
+      commandId: "paragraph_style",
+      type: "update_text_range_style",
+      nodeId: "title_welcome",
+      start: 8,
+      end: 10,
+      style: { paragraphIndent: 28, paragraphSpacing: 12 },
+    });
+    expect(text(runtime).properties.paragraphRuns).toEqual([
+      {
+        start: 0,
+        end: 6,
+        style: { paragraphIndent: 0, paragraphSpacing: 0 },
+      },
+      {
+        start: 6,
+        end: 13,
+        style: { paragraphIndent: 28, paragraphSpacing: 12 },
+      },
+      {
+        start: 13,
+        end: 18,
+        style: { paragraphIndent: 0, paragraphSpacing: 0 },
+      },
+    ]);
+    expect(text(runtime).properties.runs).toEqual([]);
+
+    apply(runtime, "split_paragraph", {
+      commandId: "split_paragraph",
+      type: "update_properties",
+      nodeId: "title_welcome",
+      properties: { content: "First\nSec\nond\nThird" },
+    });
+    expect(text(runtime).properties.paragraphRuns).toEqual([
+      {
+        start: 0,
+        end: 6,
+        style: { paragraphIndent: 0, paragraphSpacing: 0 },
+      },
+      {
+        start: 6,
+        end: 14,
+        style: { paragraphIndent: 28, paragraphSpacing: 12 },
+      },
+      {
+        start: 14,
+        end: 19,
+        style: { paragraphIndent: 0, paragraphSpacing: 0 },
+      },
+    ]);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(text(runtime).properties.paragraphRuns?.[1]).toMatchObject({
+      start: 6,
+      end: 13,
+      style: { paragraphIndent: 28, paragraphSpacing: 12 },
+    });
+  });
+
+  it("detaches a bound Text Style across touched paragraphs after a direct paragraph edit", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const title = document.nodesById.title_welcome;
+    if (!title || title.kind !== "text") throw new Error("Missing title");
+    title.textStyleId = "body-style";
+    document.styleOrderByType.TEXT = ["body-style"];
+    document.stylesById["body-style"] = {
+      id: "body-style",
+      key: "body-style-key",
+      name: "Typography/Body",
+      description: "",
+      hiddenFromPublishing: false,
+      styleType: "TEXT",
+      textStyle: {
+        fontFamily: title.properties.fontFamily,
+        fontStyleName: title.properties.fontStyleName,
+        fontSize: title.properties.fontSize,
+        fontWeight: title.properties.fontWeight,
+        fontSlant: title.properties.fontSlant,
+        letterSpacing: title.properties.letterSpacing,
+        lineHeight: title.properties.lineHeight,
+        paragraphIndent: title.properties.paragraphIndent,
+        paragraphSpacing: title.properties.paragraphSpacing,
+        textCase: title.properties.textCase,
+        textDecoration: title.properties.textDecoration,
+      },
+      extensions: {},
+    };
+    const runtime = new EditorRuntime(document);
+    apply(runtime, "detach_paragraph_style", {
+      commandId: "detach_paragraph_style",
+      type: "update_text_range_style",
+      nodeId: title.id,
+      start: 0,
+      end: 4,
+      style: { paragraphSpacing: 18 },
+    });
+    expect(text(runtime).properties.runs).toEqual([
+      expect.objectContaining({
+        start: 0,
+        end: title.properties.content.length,
+        style: expect.not.objectContaining({ textStyleId: "body-style" }),
+      }),
+    ]);
+    expect(text(runtime).properties.paragraphRuns).toEqual([
+      {
+        start: 0,
+        end: title.properties.content.length,
+        style: { paragraphIndent: 0, paragraphSpacing: 18 },
+      },
+    ]);
+  });
 });
 
 function apply(runtime: EditorRuntime, id: string, command: DesignOperation) {

@@ -25,6 +25,7 @@ export interface BrokenTextRunLine<Style extends TextRunLayoutStyle> {
 export function breakTextRunLines<Style extends TextRunLayoutStyle>(
   clusters: readonly MeasuredTextRunCluster<Style>[],
   request: TextRunLayoutRequest<Style>,
+  paragraphIndentAt: (offset: number) => number,
 ): BrokenTextRunLine<Style>[] {
   const lines: BrokenTextRunLine<Style>[] = [];
   let current: MeasuredTextRunCluster<Style>[] = [];
@@ -55,7 +56,7 @@ export function breakTextRunLines<Style extends TextRunLayoutStyle>(
     while (
       current.length > 1 &&
       textRunLineWidth(current) +
-        (paragraphStart ? request.paragraphIndent : 0) >
+        (paragraphStart ? paragraphIndentAt(nextStart) : 0) >
         request.width
     ) {
       const splitIndex =

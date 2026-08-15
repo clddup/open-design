@@ -1,12 +1,14 @@
 import type {
   DesignDocument,
   DesignNode,
+  TextParagraphStyle,
   TextRunStyle,
 } from "@opendesign/design-contracts";
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import type { LeaferTextRangeSelection } from "@opendesign/leafer-engine";
 import {
   canonicalizeTextStyleRuns,
+  canonicalizeTextParagraphRuns,
   type TextFontDescriptor,
 } from "@opendesign/text-service";
 import { useMemo } from "react";
@@ -155,14 +157,26 @@ function resolveInspectorTextRange(
     ...(node.textStyleId ? { textStyleId: node.textStyleId } : {}),
     ...(node.fillStyleId ? { fillStyleId: node.fillStyleId } : {}),
   };
+  const baseParagraphStyle: TextParagraphStyle = {
+    paragraphIndent: node.properties.paragraphIndent,
+    paragraphSpacing: node.properties.paragraphSpacing,
+  };
   const overlapping = canonicalizeTextStyleRuns(
     node.properties.content,
     node.properties.runs ?? [],
     baseStyle,
     sameStyle,
   ).filter((run) => run.end > selection.start && run.start < selection.end);
-  const style = overlapping[0]?.style ?? baseStyle;
-  const fields = [
+  const overlappingParagraphs = canonicalizeTextParagraphRuns(
+    node.properties.content,
+    node.properties.paragraphRuns ?? [],
+    baseParagraphStyle,
+    sameStyle,
+  ).filter((run) => run.end > selection.start && run.start < selection.end);
+  const characterStyle = overlapping[0]?.style ?? baseStyle;
+  const paragraphStyle = overlappingParagraphs[0]?.style ?? baseParagraphStyle;
+  const style = { ...characterStyle, ...paragraphStyle };
+  const characterFields = [
     "fontFamily",
     "fontStyleName",
     "fontSize",
@@ -174,12 +188,23 @@ function resolveInspectorTextRange(
     "textDecoration",
     "fills",
   ] as const;
-  const mixedFields = fields.filter((field) =>
-    overlapping.some(
-      (run) =>
-        JSON.stringify(run.style[field]) !== JSON.stringify(style[field]),
+  const paragraphFields = ["paragraphIndent", "paragraphSpacing"] as const;
+  const mixedFields = [
+    ...characterFields.filter((field) =>
+      overlapping.some(
+        (run) =>
+          JSON.stringify(run.style[field]) !==
+          JSON.stringify(characterStyle[field]),
+      ),
     ),
-  );
+    ...paragraphFields.filter((field) =>
+      overlappingParagraphs.some(
+        (run) =>
+          JSON.stringify(run.style[field]) !==
+          JSON.stringify(paragraphStyle[field]),
+      ),
+    ),
+  ];
   return {
     start: selection.start,
     end: selection.end,
@@ -189,6 +214,6 @@ function resolveInspectorTextRange(
   };
 }
 
-function sameStyle(left: TextRunStyle, right: TextRunStyle): boolean {
+function sameStyle<Style>(left: Style, right: Style): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }

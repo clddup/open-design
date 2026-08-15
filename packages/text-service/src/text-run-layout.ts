@@ -7,8 +7,12 @@ import type {
   TextResizeMode,
 } from "./text-types.js";
 import { validateTextStyleRuns, type TextStyleRun } from "./text-ranges.js";
+import {
+  validateTextParagraphRuns,
+  type TextParagraphStyle,
+} from "./text-paragraphs.js";
 
-export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 2 as const;
+export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 3 as const;
 export const MAX_TEXT_RUN_LAYOUT_CHARACTERS = 100_000;
 export const MAX_TEXT_RUN_LAYOUT_RUNS = 16_384;
 export const MAX_TEXT_RUN_LAYOUT_FRAGMENTS = 100_000;
@@ -37,6 +41,7 @@ export interface TextRunLayoutRequest<
   mode: TextResizeMode;
   paragraphIndent: number;
   paragraphSpacing: number;
+  paragraphRuns?: readonly TextStyleRun<TextParagraphStyle>[];
   runs: readonly TextStyleRun<Style>[];
   textAlignHorizontal: TextRunLayoutHorizontalAlign;
   textAlignVertical: TextRunLayoutVerticalAlign;
@@ -212,6 +217,11 @@ export function validateTextRunLayoutRequest<Style extends TextRunLayoutStyle>(
   if (!nonNegativeBounded(request.paragraphSpacing)) {
     return "Text run layout paragraph spacing is outside supported finite limits";
   }
+  const paragraphIssue = validateTextParagraphRuns(
+    request.content,
+    request.paragraphRuns ?? [],
+  );
+  if (paragraphIssue) return paragraphIssue;
   if (!["left", "center", "right"].includes(request.textAlignHorizontal)) {
     return "Text run layout horizontal alignment is unsupported";
   }

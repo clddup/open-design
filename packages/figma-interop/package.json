@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@opendesign/component-service": "workspace:*",
-    "@opendesign/design-contracts": "workspace:*"
+    "@opendesign/design-contracts": "workspace:*",
+    "@opendesign/text-service": "workspace:*"
   },
   "devDependencies": {
     "@figma/plugin-typings": "1.133.0",

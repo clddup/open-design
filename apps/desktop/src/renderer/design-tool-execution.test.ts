@@ -300,6 +300,7 @@ describe("Renderer design tool scope", () => {
             end: 6,
             style: {
               fontWeight: 700,
+              paragraphSpacing: 12,
               fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
             },
           },
@@ -325,6 +326,13 @@ describe("Renderer design tool scope", () => {
     expect(title).toMatchObject({
       kind: "text",
       properties: {
+        paragraphRuns: [
+          {
+            start: 0,
+            end: 33,
+            style: { paragraphIndent: 0, paragraphSpacing: 12 },
+          },
+        ],
         runs: [
           {
             start: 0,

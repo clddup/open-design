@@ -12,6 +12,7 @@ import {
   FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
   FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
+  PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION,
   RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION,
   TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION,
   ComponentOverridePatchSchema,
@@ -55,7 +56,24 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION).toBe("1.29.0");
   expect(FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION).toBe("1.30.0");
   expect(RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION).toBe("1.31.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION);
+  expect(PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION).toBe("1.32.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(
+    PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION,
+  );
+});
+
+it("migrates 1.31 text nodes to canonical empty paragraph runs", () => {
+  const source = textDocumentFixture() as unknown as Record<string, unknown>;
+  source.schemaVersion = RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION;
+  const nodes = source.nodesById as Record<
+    string,
+    { properties: Record<string, unknown> }
+  >;
+  delete nodes.text_1!.properties.paragraphRuns;
+  expect(migrateDesignDocument(source)).toMatchObject({
+    schemaVersion: DESIGN_SCHEMA_VERSION,
+    nodesById: { text_1: { properties: { paragraphRuns: [], runs: [] } } },
+  });
 });
 
 it("migrates 1.30 text nodes to canonical empty rich-text runs", () => {
@@ -340,6 +358,7 @@ function textDocumentFixture() {
           letterSpacing: 0,
           paragraphIndent: 0,
           paragraphSpacing: 0,
+          paragraphRuns: [],
           textCase: "original" as const,
           textDecoration: "none" as const,
           textAlignHorizontal: "left" as const,

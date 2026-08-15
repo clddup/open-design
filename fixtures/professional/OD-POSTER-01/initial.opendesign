@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.31.0",
+  "schemaVersion": "1.32.0",
   "documentId": "document_od_poster_01",
   "revision": 0,
   "pageOrder": ["page_poster_01"],
@@ -325,6 +325,7 @@
       "properties": {
         "content": "OPEN DESIGN / NEW CREATIVE ORBIT",
         "runs": [],
+        "paragraphRuns": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 16,
@@ -381,6 +382,7 @@
       "properties": {
         "content": "BEYOND\nTHE ICE",
         "runs": [],
+        "paragraphRuns": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 118,
@@ -431,6 +433,7 @@
       "properties": {
         "content": "A new creative species lands where structured design meets generative intelligence.",
         "runs": [],
+        "paragraphRuns": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 25,
@@ -470,6 +473,7 @@
       "properties": {
         "content": "08.10 — 20:30  /  MAIN STAGE\nSHANGHAI · STREAMING WORLDWIDE",
         "runs": [],
+        "paragraphRuns": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 15,
@@ -509,6 +513,7 @@
       "properties": {
         "content": "CHAPTER 01  /  A NEW CREATIVE SPECIES",
         "runs": [],
+        "paragraphRuns": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 12,
@@ -1289,6 +1294,7 @@
       "properties": {
         "content": "OD / 001     HUMAN DIRECTION × AGENT EXECUTION     1440 × 1024",
         "runs": [],
+        "paragraphRuns": [],
         "fontFamily": "Arial",
         "fontStyleName": null,
         "fontSize": 12,
