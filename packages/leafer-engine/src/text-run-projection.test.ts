@@ -145,4 +145,36 @@ describe("native rich-text projection boundary", () => {
       }),
     ).toThrow("does not cover source text");
   });
+
+  it("rejects equal-length fragments that do not preserve source characters", () => {
+    const base = projectDesignPage(createWelcomeDocument(), "page_welcome");
+    const source = base.elementsById.get("title_welcome");
+    if (!source) throw new Error("Missing title projection");
+    const content = String(source.data.text);
+    expect(() =>
+      projectResolvedTextRuns(base, {
+        pageId: base.pageId,
+        resultsByNodeId: new Map([
+          [
+            source.id,
+            {
+              nodeId: source.id,
+              fragments: [
+                {
+                  start: 0,
+                  end: content.length,
+                  text: "x".repeat(content.length),
+                  x: 0,
+                  y: 0,
+                  width: 100,
+                  height: 40,
+                  data: {},
+                },
+              ],
+            },
+          ],
+        ]),
+      }),
+    ).toThrow("fragments are invalid");
+  });
 });

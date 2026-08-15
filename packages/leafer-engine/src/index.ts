@@ -42,3 +42,11 @@ export {
   type LeaferTextRunProjectionResolution,
   type LeaferTextRunProjectionResult,
 } from "./text-run-projection.js";
+export {
+  createLeaferTextRunLayoutProvider,
+  leaferTextRunLayoutToProjection,
+  LEAFER_TEXT_RUN_LAYOUT_PROVIDER_ID,
+  LEAFER_TEXT_RUN_LAYOUT_PROVIDER_VERSION,
+  type LeaferTextRunLayoutProviderOptions,
+  type LeaferTextRunStyle,
+} from "./text-run-layout.js";

@@ -120,7 +120,7 @@ export function createLeaferTextLayoutProvider(
   });
 }
 
-function inspectLeaferFont(
+export function inspectLeaferFont(
   descriptor: TextFontDescriptor,
   fontAvailable: NonNullable<LeaferTextLayoutProviderOptions["fontAvailable"]>,
 ): TextFontAvailabilityResult {
@@ -155,7 +155,7 @@ function inspectLeaferFont(
     : result;
 }
 
-function browserFontAvailable(
+export function browserFontAvailable(
   font: string,
   descriptor: TextFontDescriptor,
 ): boolean | undefined {

@@ -5,6 +5,7 @@
 - 文档协议：不变（`DesignDocument 1.30.0`）
 - Text Layout Service：contract v4（不变）
 - Text Range Service：contract v1
+- Text Run Layout Service：contract v1
 - 关联：ADR-0036、ADR-0070、ADR-0074、ADR-0076、ADR-0077
 - 基线：Figma Plugin API `TextNode` / `getStyledTextSegments`
 
@@ -26,6 +27,8 @@ Figma 的 `TextNode` 允许整节点或 character range 拥有字体、字号、
 - 合法 range boundary 不得切开一个有效 surrogate pair；
 - 相邻且完整样式相同的 runs 规范化为一个 run；
 - 空 content 不保留 runs；无 runs 表示整段使用节点 base style。
+
+Figma Plugin API 的 `getStyledTextSegments` 在调用者显式把查询边界放进 surrogate pair 时会返回原始半个 code unit。OpenDesign 的持久化与编辑契约不需要复制这一读取容错：范围仍使用相同 UTF-16 坐标，但作者态边界必须落在完整 code point 上，避免保存不可编辑的破碎 Unicode。该严格子集必须在 Figma adapter 中显式报告，不能把“同一索引单位”误写成所有异常切片行为完全相同。
 
 服务保持 style 泛型，不依赖 `DesignDocument` 或 Paint schema。后续文档协议负责定义受支持的完整 `TextRunStyle`，范围算法、直接编辑、导入器和画布投影共同复用这一基础，不各写一套索引逻辑。
 
@@ -51,9 +54,19 @@ Figma 的 `TextNode` 允许整节点或 character range 拥有字体、字号、
 - capability manifest 继续把 per-range rich text 标为 unavailable；
 - 不采用 `HTMLText` fallback、双写或 rasterized rich text 冒充完成。
 
+### mixed run 先经过可替换布局 provider
+
+`@opendesign/text-service` 增加独立 Text Run Layout Service contract v1，但不改变 `DesignDocument`。请求携带完整 UTF-16 runs、base style、Auto Width / Auto Height / Fixed、word/character wrapping、段落缩进/间距与水平/垂直对齐；成功结果必须返回完整覆盖原文的 line/fragment ranges、局部几何、每行 baseline、内容 bounds、具体 size、provider identity 和有界字体 warning。无效范围、尺寸、provider identity、几何或原文不一致都明确失败。
+
+固定 Leafer 2.2.9 provider 在 adapter 内读取其原生 `Text` 的 row width、`__baseLine` 与 `__lineHeight`，按保守 grapheme cluster 测量 advance；同一视觉行取最大 ascent/descent，mixed face/size fragment 通过局部 y offset 共享一条 baseline。word wrapping 对空白、连字符、CJK 与中西文标点采用固定规则；Auto Width 保持显式换行，Auto Height 计算实际高度，Fixed 保留作者尺寸并只计算内容位置。Fill 作为 concrete provider style 跟随 fragment，最终仍投影为原生 Leafer `Text`，不进入文档事实。
+
+该 provider 不用字符数估算或 DOM fallback。范围切开 grapheme、range-local title case，以及 Arabic/Hebrew/Indic/Thai/Khmer 等需要上下文 shaping 而当前 Leafer fragment 测量无法证明的脚本返回 `unsupported`；缺少原生 row/baseline 指标返回可重试 `measurement-failed`。这保留未来 HarfBuzz/CoreText/DirectWrite 等专业 shaping provider 的替换边界，也避免把当前 Latin/CJK spike 冒充完整跨平台排版。
+
 ## 后果与后续门禁
 
-Range Service v1 已提供 Figma-compatible 索引、规范化和直接编辑重映基础。Leafer 结构 spike 也已保留一个稳定原 Text 作为透明可命中的 edit proxy，并把完整覆盖的 provider fragments 投影为同父级原生 Text：局部偏移与原 transform 正确合成，sibling 顺序稳定，synthetic metadata 回映原 Text/range，派生元素不进入文档。用户仍不能创建或查看 rich-text runs；下一切片继续验证 mixed face/size/fill 的 run-aware wrapping/baseline、真实 child hit → original selection、编辑 proxy 打开/关闭与 capture/export，之后才共同升级 `DesignDocument`、EditorRuntime、Inspector、Agent、Figma/SVG 和 capability manifest。
+Range Service v1 已提供 Figma-compatible 索引、规范化和直接编辑重映基础。Text Run Layout Service v1 与固定 Leafer provider 已验证 mixed face/size/fill、跨 run wrapping、grapheme 保守边界、每行 baseline、Auto Width / Auto Height / Fixed、段落几何、原生字体 warning 与失败拒绝。Leafer 结构 spike 保留一个稳定原 Text 作为透明可命中的 edit proxy，并把完整覆盖的 provider fragments 投影为同父级原生 Text：局部偏移与原 transform 正确合成，sibling 顺序稳定，synthetic metadata 回映原 Text/range，派生元素不进入文档。
+
+用户仍不能创建或查看 rich-text runs；下一切片继续完成 synthetic child 实际 hit → original selection、编辑 proxy 打开/关闭与 capture/export，并为当前明确拒绝的复杂脚本接入专业 shaping provider。上述交互和输出边界通过后，才共同升级 `DesignDocument`、EditorRuntime、Inspector、Agent、Figma/SVG 和 capability manifest。
 
 首版 `TextRunStyle` 只应纳入能够真实渲染、编辑和往返的字段。Figma 的列表、OpenType、hyperlink、variables 和段落范围属性继续分阶段实现，不能因为官方 API 存在就提前写入不可执行 schema。
 
@@ -66,4 +79,7 @@ Range Service v1 已提供 Figma-compatible 索引、规范化和直接编辑重
 - 跨多个 run 删除、平移和两侧同样式合并。
 - emoji replacement 的 bounded diff 与后续 styled suffix 保留。
 - 原 Text edit proxy、原生 synthetic Text fragment、transform 合成、parent/root 顺序、原 ID/range metadata 与非法 provider output 拒绝。
+- Text Run Layout contract 的 Auto Width / Auto Height / Fixed 约束、完整 line/fragment coverage、provider identity、结构预算与原文一致性。
+- mixed face/size/fill 的 native row width、同线 baseline、跨 run character/word/CJK wrapping、显式换行、段落间距、缺失字体 warning 与固定尺寸垂直对齐。
+- UTF-16 emoji 与 ZWJ grapheme 不拆分；grapheme 内 style boundary、range-local title case、上下文 shaping 脚本和缺失原生 metrics 明确拒绝。
 - `@opendesign/text-service` 专项测试、typecheck 和 scoped lint；不运行本地全量 verify 或打包。

@@ -150,6 +150,8 @@ function validateFragments(
   if (fragments.length === 0) {
     throw new Error(`Text run projection is empty: ${source.id}`);
   }
+  const sourceText =
+    typeof source.data.text === "string" ? source.data.text : "";
   let expectedStart = 0;
   for (const fragment of fragments) {
     if (
@@ -159,6 +161,7 @@ function validateFragments(
       fragment.end <= fragment.start ||
       typeof fragment.text !== "string" ||
       fragment.text.length !== fragment.end - fragment.start ||
+      fragment.text !== sourceText.slice(fragment.start, fragment.end) ||
       !finite(fragment.x) ||
       !finite(fragment.y) ||
       !finiteNonNegative(fragment.width) ||
@@ -170,8 +173,6 @@ function validateFragments(
     }
     expectedStart = fragment.end;
   }
-  const sourceText =
-    typeof source.data.text === "string" ? source.data.text : "";
   if (expectedStart !== sourceText.length) {
     throw new Error(
       `Text run projection does not cover source text: ${source.id}`,
