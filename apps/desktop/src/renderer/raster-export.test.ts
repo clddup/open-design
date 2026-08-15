@@ -14,6 +14,7 @@ const request = {
 
 describe("exportDesignRaster", () => {
   it("uses an isolated frozen projection and disposes it after delivery", async () => {
+    const documentSnapshot = createWelcomeDocument();
     const sync = vi.fn();
     const dispose = vi.fn();
     const exportRaster = vi.fn().mockResolvedValue({
@@ -22,11 +23,22 @@ describe("exportDesignRaster", () => {
       height: 1440,
       mimeType: "image/png",
     });
+    const textRunProjection = {
+      documentId: documentSnapshot.documentId,
+      pageId: request.pageId,
+      revision: documentSnapshot.revision,
+      resultsByNodeId: new Map(),
+    };
     const result = await exportDesignRaster(
-      createWelcomeDocument(),
+      documentSnapshot,
       request,
       undefined,
-      vi.fn().mockResolvedValue({ sync, dispose, exportRaster }),
+      {
+        createAdapter: vi
+          .fn()
+          .mockResolvedValue({ sync, dispose, exportRaster }),
+        textRunProjection,
+      },
     );
 
     expect(result.mimeType).toBe("image/png");
@@ -35,6 +47,7 @@ describe("exportDesignRaster", () => {
         pageId: "page_welcome",
         selection: { nodeIds: [] },
         reducedMotion: true,
+        textRunProjection,
       }),
     );
     expect(exportRaster).toHaveBeenCalledWith(request);
@@ -49,7 +62,7 @@ describe("exportDesignRaster", () => {
         createWelcomeDocument(),
         { ...request, rootNodeId: "missing" },
         undefined,
-        createAdapter,
+        { createAdapter },
       ),
     ).rejects.toThrow("outside Page");
     expect(createAdapter).not.toHaveBeenCalled();
@@ -57,12 +70,9 @@ describe("exportDesignRaster", () => {
     const controller = new AbortController();
     controller.abort();
     await expect(
-      exportDesignRaster(
-        createWelcomeDocument(),
-        request,
-        controller.signal,
+      exportDesignRaster(createWelcomeDocument(), request, controller.signal, {
         createAdapter,
-      ),
+      }),
     ).rejects.toMatchObject({ name: "AbortError" });
   });
 });

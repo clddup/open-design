@@ -33,8 +33,6 @@ import {
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import {
   isRasterExportRequest,
-  planRasterExportDimensions,
-  rasterExportMimeType,
   type RasterExportRequest,
 } from "@opendesign/import-export-service/raster";
 import type { TextLayoutProvider } from "@opendesign/text-service";
@@ -81,6 +79,11 @@ import {
 } from "./text-run-projection.js";
 import { materializeLeaferTextData } from "./text-truncation.js";
 import { exportLeaferCapture } from "./capture-export.js";
+import {
+  createProjectionExportTarget,
+  type ProjectionExportRequest,
+} from "./projection-export-target.js";
+import { exportLeaferRaster } from "./raster-export.js";
 import {
   generationActivityBadgeWidth,
   generationSkeletonFill,
@@ -725,14 +728,28 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (this.#disposed || this.#input !== input) {
       throw new Error("Leafer capture target changed during rendering");
     }
-    const leaf =
+    const sourceLeaf =
       target.kind === "page"
         ? this.#app.tree
         : this.#captureFrameElement(target.nodeId);
-    return exportLeaferCapture(leaf, {
-      height: MAX_CAPTURE_HEIGHT,
-      width: MAX_CAPTURE_WIDTH,
-    });
+    const derived = this.#projectionExportTarget(
+      target.kind === "page"
+        ? { kind: "page" }
+        : { kind: "node", nodeId: target.nodeId },
+    );
+    const leaf = derived?.element ?? sourceLeaf;
+    try {
+      return await exportLeaferCapture(
+        leaf,
+        {
+          height: MAX_CAPTURE_HEIGHT,
+          width: MAX_CAPTURE_WIDTH,
+        },
+        { viewCompletionSurface: this.#app.tree },
+      );
+    } finally {
+      derived?.dispose();
+    }
   }
 
   async exportRaster(
@@ -752,49 +769,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (this.#disposed || this.#input !== input) {
       throw new Error("Leafer raster export target changed during rendering");
     }
-    const leaf = this.#exportElement(request.rootNodeId);
+    const sourceLeaf = this.#exportElement(request.rootNodeId);
+    const derived = this.#projectionExportTarget({
+      kind: "node",
+      nodeId: request.rootNodeId,
+    });
+    const leaf = derived?.element ?? sourceLeaf;
     const sourceNode = input.document.nodesById[request.rootNodeId];
-    const bounds = leaf.getBounds("render", "local");
-    const plan = planRasterExportDimensions(bounds, request.size);
-    if (!plan.ok) throw new RangeError(`${plan.code}: ${plan.message}`);
-    const exported = await leaf.export(
-      request.format === "jpeg" ? "jpg" : request.format,
-      {
-        blob: true,
-        pixelRatio: 1,
-        scale: plan.dimensions.scale,
-        ...(sourceNode?.kind === "slice" ? { slice: true } : {}),
-        smooth: request.resampling === "smooth",
-        ...(request.quality === undefined ? {} : { quality: request.quality }),
-        ...(request.background.mode === "color"
-          ? { fill: request.background.color }
-          : {}),
-      },
-    );
-    if (exported.error) {
-      throw exported.error instanceof Error
-        ? exported.error
-        : new Error("Leafer raster export failed");
+    try {
+      return await exportLeaferRaster(leaf, request, sourceNode?.kind);
+    } finally {
+      derived?.dispose();
     }
-    if (!isBlobLike(exported.data)) {
-      throw new Error("Leafer raster export did not return image bytes");
-    }
-    const width = finitePositiveInteger(exported.width);
-    const height = finitePositiveInteger(exported.height);
-    if (width === null || height === null) {
-      throw new Error("Leafer raster export returned invalid dimensions");
-    }
-    if (width !== plan.dimensions.width || height !== plan.dimensions.height) {
-      throw new Error(
-        `Leafer raster export returned ${width}x${height}; expected ${plan.dimensions.width}x${plan.dimensions.height}`,
-      );
-    }
-    return {
-      bytes: new Uint8Array(await exported.data.arrayBuffer()),
-      height,
-      mimeType: rasterExportMimeType(request.format),
-      width,
-    };
   }
 
   dispose(): void {
@@ -3707,6 +3693,30 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
   }
 
+  #projectionExportTarget(request: ProjectionExportRequest) {
+    const projection = this.#projection;
+    if (!projection) return null;
+    return createProjectionExportTarget<LeaferElement>(projection, request, {
+      addAt: (parent, child, index) => {
+        const addAt: unknown = Reflect.get(parent, "addAt");
+        if (typeof addAt !== "function") {
+          throw new Error("Projection export parent cannot contain children");
+        }
+        Reflect.apply(addAt, parent, [child, index]);
+      },
+      applyData: (element, spec) => this.#applyElementSpecData(element, spec),
+      create: (tag) => this.#createElement(tag),
+      createWrapper: () =>
+        new this.#leafer.Group({
+          editable: false,
+          hittable: false,
+          visible: true,
+        }),
+      setTransform: (element, transform) =>
+        element.setTransform(transformToAffine(transform)),
+    });
+  }
+
   #captureFrameElement(nodeId: string): LeaferElement {
     const spec = this.#projection?.elementsById.get(nodeId);
     const element = this.#elements.get(nodeId);
@@ -3921,20 +3931,6 @@ function nearlyEqual(left: number, right: number): boolean {
   return Math.abs(left - right) <= MATRIX_EPSILON;
 }
 
-function isBlobLike(value: unknown): value is Blob {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "arrayBuffer" in value &&
-    typeof value.arrayBuffer === "function"
-  );
-}
-
-function finitePositiveInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
-    ? value
-    : null;
-}
 function sameTransform(left: Transform, right: Transform): boolean {
   return left.every((value, index) => nearlyEqual(value, right[index] ?? 0));
 }

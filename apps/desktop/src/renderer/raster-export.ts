@@ -5,6 +5,7 @@ import {
   type LeaferEngineAdapter,
   type LeaferEngineCallbacks,
   type LeaferRasterExportResult,
+  type LeaferTextRunProjectionResolution,
 } from "@opendesign/leafer-engine";
 
 const EXPORT_SURFACE_WIDTH = 1_280;
@@ -18,11 +19,15 @@ export async function exportDesignRaster(
   designDocument: DesignDocument,
   request: RasterExportRequest,
   signal?: AbortSignal,
-  createAdapter: (
-    host: HTMLElement,
-    callbacks: LeaferEngineCallbacks,
-  ) => Promise<LeaferEngineAdapter> = createLeaferEngineAdapter,
+  options: {
+    createAdapter?: (
+      host: HTMLElement,
+      callbacks: LeaferEngineCallbacks,
+    ) => Promise<LeaferEngineAdapter>;
+    textRunProjection?: LeaferTextRunProjectionResolution;
+  } = {},
 ): Promise<LeaferRasterExportResult> {
+  const createAdapter = options.createAdapter ?? createLeaferEngineAdapter;
   throwIfAborted(signal);
   if (!designDocument.pagesById[request.pageId]) {
     throw new Error(`Raster export Page is unavailable: ${request.pageId}`);
@@ -62,6 +67,9 @@ export async function exportDesignRaster(
       pageId: request.pageId,
       reducedMotion: true,
       selection: { nodeIds: [] },
+      ...(options.textRunProjection
+        ? { textRunProjection: options.textRunProjection }
+        : {}),
       tool: "select",
       viewport: {
         panX: 0,

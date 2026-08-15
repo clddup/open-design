@@ -70,11 +70,25 @@ Leafer 2.2.9 的 selector 会跳过 `editable:false` leaf，因此 synthetic fra
 
 双击 fragment 时，Leafer `beforeEditInner` 会拒绝在 synthetic Text 上打开编辑器，并在同一 microtask 把 inner editor 重定向到原 Text proxy。编辑期间 proxy 恢复原生完整 Text 外观和完整 content，全部 fragments 暂时隐藏且不可命中；Escape、无变化、拒绝提交会恢复当前 projection。成功提交仍只产生原 Text 的 `update_properties`，在新权威 revision 到达前暂时保留编辑后的 proxy，随后再恢复新 resolution 的 mixed fragments，避免闪回旧文字。锁定 Text、切页、projection 变化、revision 失效与 dispose 都清理短生命周期编辑状态。
 
+### capture 与 raster export 从精确 projection 重建一次性输出树
+
+Agent 离屏 `capture_canvas` 与 PNG/JPEG/WebP raster export 不能读取正在交互的 live Leafer element：原 Text proxy 在普通投影中透明，进入文字编辑时又会临时显示完整单样式原文；直接导出 live tree 会分别得到缺字或错误的编辑态外观。Desktop 离屏入口因此把精确 `documentId + revision + pageId` 的 Text Run projection 一并交给 Adapter，输出只由冻结的 OpenDesign scene spec 与同 revision fragments 决定。
+
+Adapter 只在目标子树实际包含 rich-text fragments 时创建一次性 derived target，普通 Page/Frame/layer 继续使用原有快速路径：
+
+- Page target 克隆当前 Page 的 projection roots，并保持权威 paint order；
+- Frame 或其他祖先 target 克隆对应 subtree，把导出根的 transform 归一化为目标局部坐标；
+- Text target 创建一次性 wrapper，保留透明原 proxy 并把 fragments 的世界变换转换为 source-local transform；
+- 独立 derived root 等待权威离屏 App 的 view completion 后同步导出，不挂入 live tree，也不读取 TextEditor 展示状态；
+- 不可逆 Text transform 明确失败，成功、导出失败和异常路径都在 `finally` 销毁 derived tree。
+
+这条路径只保证 raster capture/export 与当前原生 projection 一致。SVG 等结构化导出仍必须等待正式 rich-text 文档 schema 和可往返的 range style，不能序列化 synthetic fragments 冒充作者数据。
+
 ## 后果与后续门禁
 
 Range Service v1 已提供 Figma-compatible 索引、规范化和直接编辑重映基础。Text Run Layout Service v1 与固定 Leafer provider 已验证 mixed face/size/fill、跨 run wrapping、grapheme 保守边界、每行 baseline、Auto Width / Auto Height / Fixed、段落几何、原生字体 warning 与失败拒绝。Leafer 结构 spike 保留一个稳定原 Text 作为透明可命中的 edit proxy，并把完整覆盖的 provider fragments 投影为同父级原生 Text：局部偏移与原 transform 正确合成，sibling 顺序稳定，synthetic metadata 回映原 Text/range，派生元素不进入文档。
 
-用户仍不能创建或查看 rich-text runs；synthetic child 实际 hit → original selection 与直接编辑 proxy 开关现已进入真实 Adapter 事件链。下一切片继续完成 capture/export，并为当前明确拒绝的复杂脚本接入专业 shaping provider。上述输出和 shaping 边界通过后，才共同升级 `DesignDocument`、EditorRuntime、Inspector、Agent、Figma/SVG 和 capability manifest。
+用户仍不能创建或查看 rich-text runs；synthetic child 实际 hit → original selection、直接编辑 proxy 开关，以及 interaction-independent raster capture/export 现已进入真实 Adapter/离屏输出链。下一切片为当前明确拒绝的复杂脚本接入专业 shaping provider；该边界通过后，才共同升级 `DesignDocument`、EditorRuntime、Inspector、Agent、Figma/SVG 和 capability manifest。
 
 首版 `TextRunStyle` 只应纳入能够真实渲染、编辑和往返的字段。Figma 的列表、OpenType、hyperlink、variables 和段落范围属性继续分阶段实现，不能因为官方 API 存在就提前写入不可执行 schema。
 
@@ -93,4 +107,7 @@ Range Service v1 已提供 Figma-compatible 索引、规范化和直接编辑重
 - exact document/revision/Page 绑定，full/incremental scene 的 fragment 建立、更新与删除恢复。
 - fragment click 后 `editor.list`、Renderer selection 与 anchor 立即回到原 Text；selection chrome 不停留在 fragment。
 - fragment double-click 重定向原 proxy，编辑态外观切换、成功 revision handoff、Escape 恢复、锁定拒绝与 dispose 清理。
+- Page/Frame capture 与 Text/ancestor raster export 在 rich fragments 存在时使用一次性 derived target；普通目标保持 live fast path。
+- Text composite 的 source-local transform、Page/Frame paint order、编辑中输出独立性、不可逆 transform 拒绝，以及成功/失败后的幂等销毁。
+- Desktop `design-capture` / `raster-export` 离屏入口把精确 Text Run projection 交给独立 Adapter，不依赖活动画布、选择或 TextEditor 状态。
 - `@opendesign/text-service` 专项测试、typecheck 和 scoped lint；不运行本地全量 verify 或打包。

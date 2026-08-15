@@ -5,6 +5,7 @@ import {
   type LeaferCaptureTarget,
   type LeaferEngineAdapter,
   type LeaferEngineCallbacks,
+  type LeaferTextRunProjectionResolution,
 } from "@opendesign/leafer-engine";
 
 const CAPTURE_WIDTH = 1_280;
@@ -33,6 +34,7 @@ type CaptureDesignTargetOptions = {
     callbacks: LeaferEngineCallbacks,
   ) => Promise<LeaferEngineAdapter>;
   onStage?: (stage: DesignCaptureStage) => void;
+  textRunProjection?: LeaferTextRunProjectionResolution;
   timeoutMs?: number;
 };
 
@@ -80,6 +82,9 @@ export async function captureDesignTarget(
       pageId: target.pageId,
       reducedMotion: true,
       selection: { nodeIds: [] },
+      ...(options.textRunProjection
+        ? { textRunProjection: options.textRunProjection }
+        : {}),
       tool: "select",
       viewport: {
         panX: 0,

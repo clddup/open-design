@@ -30,6 +30,8 @@ const leaferHarness = vi.hoisted(() => ({
   app: null as FakeApp | null,
   appConfig: null as Record<string, unknown> | null,
   boxMatches: [] as FakeElement[],
+  elements: [] as FakeElement[],
+  failNextExport: false,
   windowListeners: new Map<string, Set<(event: KeyboardEvent) => void>>(),
   strokers: [] as FakeStroker[],
 }));
@@ -68,6 +70,13 @@ class FakeElement extends FakeEventTarget {
   forceUpdate = vi.fn();
   leafer: FakeTree | undefined;
   export = vi.fn((_format: string, options?: { scale?: number }) => {
+    if (leaferHarness.failNextExport) {
+      leaferHarness.failNextExport = false;
+      return Promise.resolve({
+        data: new Blob(),
+        error: new Error("Synthetic export failure"),
+      });
+    }
     const scale = options?.scale ?? 1;
     const bounds = this.getBounds();
     return Promise.resolve({
@@ -88,9 +97,11 @@ class FakeElement extends FakeEventTarget {
     };
   });
   updateLayout = vi.fn();
+  destroy = vi.fn();
 
   constructor(data?: Record<string, unknown>) {
     super();
+    leaferHarness.elements.push(this);
     if (data) this.set(data);
     if (!data || !Object.hasOwn(data, "width")) {
       this.width = undefined as unknown as number;
@@ -125,8 +136,6 @@ class FakeElement extends FakeEventTarget {
     );
     this.parent = undefined;
   }
-
-  destroy(): void {}
 }
 
 class FakeGroup extends FakeElement {
@@ -455,6 +464,8 @@ describe("Leafer engine selection bounds synchronization", () => {
     leaferHarness.app = null;
     leaferHarness.appConfig = null;
     leaferHarness.boxMatches = [];
+    leaferHarness.elements = [];
+    leaferHarness.failNextExport = false;
     leaferHarness.windowListeners.clear();
     leaferHarness.strokers = [];
     animationFrames.clear();
@@ -665,6 +676,100 @@ describe("Leafer engine selection bounds synchronization", () => {
       findElement(app.tree, textRunFragmentElementId("title_welcome", 0)),
     ).toBeUndefined();
     expect(proxy).not.toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
+    adapter.dispose();
+  });
+
+  it("captures and exports the exact mixed Text projection during direct editing", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const input = createInput();
+    input.selection = {
+      nodeIds: ["title_welcome"],
+      anchorNodeId: "title_welcome",
+    };
+    input.textRunProjection = textRunProjection(input);
+    adapter.sync(input);
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const frame = findElement(app.tree, "frame_welcome");
+    const proxy = findElement(app.tree, "title_welcome") as
+      FakeText | undefined;
+    const fragment = findElement(
+      app.tree,
+      textRunFragmentElementId("title_welcome", 0),
+    ) as FakeText | undefined;
+    if (!frame || !proxy || !fragment) {
+      throw new Error("Missing mixed Text export fixture");
+    }
+
+    app.editor.openInnerEditor(fragment, true);
+    await flushMicrotasks();
+    expect(proxy).not.toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
+    expect(fragment).toMatchObject({ hittable: false, visible: false });
+
+    await expect(
+      adapter.capture({
+        kind: "frame",
+        pageId: input.pageId,
+        nodeId: "frame_welcome",
+      }),
+    ).resolves.toMatchObject({ mimeType: "image/jpeg" });
+    expect(frame.syncExport).not.toHaveBeenCalled();
+    await expect(
+      adapter.capture({ kind: "page", pageId: input.pageId }),
+    ).resolves.toMatchObject({ mimeType: "image/jpeg" });
+    expect(app.tree.syncExport).not.toHaveBeenCalled();
+
+    await expect(
+      adapter.exportRaster({
+        version: 1,
+        pageId: input.pageId,
+        rootNodeId: "title_welcome",
+        format: "png",
+        size: { mode: "scale", value: 1 },
+        background: { mode: "transparent" },
+        resampling: "smooth",
+      }),
+    ).resolves.toMatchObject({ mimeType: "image/png" });
+    expect(proxy.export).not.toHaveBeenCalled();
+    await expect(
+      adapter.exportRaster({
+        version: 1,
+        pageId: input.pageId,
+        rootNodeId: "frame_welcome",
+        format: "png",
+        size: { mode: "scale", value: 1 },
+        background: { mode: "transparent" },
+        resampling: "smooth",
+      }),
+    ).resolves.toMatchObject({ mimeType: "image/png" });
+    expect(frame.export).not.toHaveBeenCalled();
+
+    const createdBeforeFailure = leaferHarness.elements.length;
+    leaferHarness.failNextExport = true;
+    await expect(
+      adapter.exportRaster({
+        version: 1,
+        pageId: input.pageId,
+        rootNodeId: "title_welcome",
+        format: "png",
+        size: { mode: "scale", value: 1 },
+        background: { mode: "transparent" },
+        resampling: "smooth",
+      }),
+    ).rejects.toThrow("Synthetic export failure");
+    expect(
+      leaferHarness.elements[createdBeforeFailure]?.destroy,
+    ).toHaveBeenCalledTimes(1);
+    expect(proxy).not.toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
+    expect(fragment).toMatchObject({ hittable: false, visible: false });
+
+    emitWindowKey("Escape");
+    app.editor.closeInnerEditor();
     adapter.dispose();
   });
 

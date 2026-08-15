@@ -29,6 +29,12 @@ describe("deterministic design target capture", () => {
       },
     } satisfies LeaferEngineAdapter;
     const createAdapter = vi.fn().mockResolvedValue(adapter);
+    const textRunProjection = {
+      documentId: documentSnapshot.documentId,
+      pageId: "page_welcome",
+      revision: documentSnapshot.revision,
+      resultsByNodeId: new Map(),
+    };
     const target = {
       kind: "frame" as const,
       pageId: "page_welcome",
@@ -39,7 +45,7 @@ describe("deterministic design target capture", () => {
       documentSnapshot,
       target,
       undefined,
-      { createAdapter },
+      { createAdapter, textRunProjection },
     );
 
     expect(result.bytes).toEqual(new Uint8Array([4, 5, 6]));
@@ -49,6 +55,7 @@ describe("deterministic design target capture", () => {
       pageId: "page_welcome",
       reducedMotion: true,
       selection: { nodeIds: [] },
+      textRunProjection,
       tool: "select",
       viewport: {
         panX: 0,

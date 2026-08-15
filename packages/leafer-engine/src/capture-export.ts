@@ -30,6 +30,7 @@ export interface LeaferCaptureElement {
 const DEFAULT_VIEW_COMPLETION_TIMEOUT_MS = 2_000;
 
 type LeaferCaptureExportOptions = {
+  viewCompletionSurface?: NonNullable<LeaferCaptureElement["leafer"]>;
   viewCompletionTimeoutMs?: number;
 };
 
@@ -52,7 +53,7 @@ export async function exportLeaferCapture(
     maximum.width / bounds.width,
     maximum.height / bounds.height,
   );
-  const leafer = leaf.leafer;
+  const leafer = options.viewCompletionSurface ?? leaf.leafer;
   if (!leafer) throw new Error("Leafer capture surface is unavailable");
   leaf.updateLayout();
   await waitForViewCompletion(

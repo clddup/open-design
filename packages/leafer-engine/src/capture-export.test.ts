@@ -69,6 +69,30 @@ describe("Leafer review capture export", () => {
       exportLeaferCapture(leaf, { height: 960, width: 1_280 }),
     ).rejects.toThrow("synchronous capture did not return image bytes");
   });
+
+  it("waits on the authoritative view while exporting a standalone clone", async () => {
+    const attached = captureElement((callback) => callback());
+    const standaloneSyncExport = vi.fn<LeaferCaptureElement["syncExport"]>(
+      (format, options) => attached.syncExport(format, options),
+    );
+    const standalone: LeaferCaptureElement = {
+      getBounds: (boundsType, coordinateType) =>
+        attached.getBounds(boundsType, coordinateType),
+      syncExport: standaloneSyncExport,
+      updateLayout: () => attached.updateLayout(),
+    };
+    const waitViewCompleted = vi.fn((callback: () => void) => callback());
+
+    await expect(
+      exportLeaferCapture(
+        standalone,
+        { height: 960, width: 1_280 },
+        { viewCompletionSurface: { waitViewCompleted } },
+      ),
+    ).resolves.toMatchObject({ width: 640, height: 320 });
+    expect(waitViewCompleted).toHaveBeenCalledTimes(1);
+    expect(standaloneSyncExport).toHaveBeenCalledTimes(1);
+  });
 });
 
 function captureElement(
