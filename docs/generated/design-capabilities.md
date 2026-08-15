@@ -198,10 +198,10 @@
 应用文档级 Typography Core 属性和可复用 Text Style，并明确保留富文本 run、列表、OpenType 与字体资源限制。
 
 - ID：`text.rich-typography`
-- 实现方：@opendesign/text-service v4 + leafer-editor 2.2.9
+- 实现方：@opendesign/text-service v4 / Text Run Layout v2 + leafer-editor 2.2.9 + harfbuzzjs 1.4.0
 - 表面：contract=degraded；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=degraded
-- 证据：自动化 10 项；实机 0 项
-- 限制：Core v2 与 Text Service v4 已支持段落缩进/间距、大小写、装饰、末尾截断/最大行数、可复用单样式 Text Style、精确 face identity、运行时字体可用性、全文件替换和显式重排；逐段富文本、列表、OpenType 特性、可变字体轴、字体二进制资源、路径文字和确定性跨平台 shaping 仍不可用。
+- 证据：自动化 14 项；实机 0 项
+- 限制：Core v2 与 Text Service v4 已支持段落属性、可复用单样式 Text Style、精确 face identity、显式重排，以及用户批准的内容寻址 TTF/OTF/TTC 导入。pre-schema Text Run Layout v2 已用 HarfBuzz outline 与 Unicode Bidi 13 处理复杂脚本 cluster，但逐段作者态/schema、列表、OpenType 控件、可变字体轴、字体随文件打包/授权迁移、路径文字、更新 bidi 数据和 macOS/Windows 打包视觉证据仍不可用。
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/TextNode/)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/TextStyle/)
 

@@ -16,6 +16,9 @@ import {
   isAgentAttachmentSelection,
   isAgentAttachmentImport,
   isDesignImageSelection,
+  isFontBinaryDescriptor,
+  isFontBinaryPayload,
+  isFontBinaryReadRequest,
   isDesignFileDescriptorResult,
   isConversationDescriptorResult,
   isCreateConversationRequest,
@@ -51,6 +54,9 @@ import {
   type AgentAttachmentSelection,
   type AgentAttachmentImport,
   type DesignImageSelection,
+  type FontBinaryDescriptor,
+  type FontBinaryPayload,
+  type FontBinaryReadRequest,
   type CreateProjectDesignFileRequest,
   type CreateProjectRequest,
   type DesktopApi,
@@ -361,6 +367,40 @@ const desktopApi: DesktopApi = Object.freeze({
       result,
       isDesignImageSelection,
       "Invalid design image selection response",
+    );
+  },
+  selectFontBinaries: async () => {
+    const result: unknown = await ipcRenderer.invoke(
+      channels.selectFontBinaries,
+    );
+    return validateArray<FontBinaryDescriptor>(
+      result,
+      isFontBinaryDescriptor,
+      "Invalid font binary selection response",
+    );
+  },
+  listFontBinaries: async () => {
+    const result: unknown = await ipcRenderer.invoke(channels.listFontBinaries);
+    return validateArray<FontBinaryDescriptor>(
+      result,
+      isFontBinaryDescriptor,
+      "Invalid font binary list response",
+    );
+  },
+  readFontBinary: async (request: FontBinaryReadRequest) => {
+    validate(
+      request,
+      isFontBinaryReadRequest,
+      "Invalid font binary read request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.readFontBinary,
+      request,
+    );
+    return validate<FontBinaryPayload>(
+      result,
+      isFontBinaryPayload,
+      "Invalid font binary read response",
     );
   },
   onDesignToolRequest: (

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 38,
+  "schemaVersion": 39,
   "recordedAt": "2026-08-15",
   "policy": {
     "allowFloatingRefs": false,
@@ -13,7 +13,7 @@
     "geometryServiceContractVersion": 10,
     "textLayoutServiceContractVersion": 4,
     "textRangeServiceContractVersion": 1,
-    "textRunLayoutServiceContractVersion": 1,
+    "textRunLayoutServiceContractVersion": 2,
     "layoutServiceContractVersion": 6
   },
   "components": {
@@ -99,13 +99,19 @@
       "productionStatus": "typography-core-v2-exact-face-identity-auto-size-and-ending-max-lines-available-rich-runs-font-assets-variable-axes-and-native-gate-pending"
     },
     "textRunLayout": {
-      "role": "pre-schema-native-rich-text-run-layout-provider",
+      "role": "pre-schema-native-rich-text-and-complex-script-layout-provider",
       "contractPackage": "@opendesign/text-service",
-      "contractVersion": 1,
+      "contractVersion": 2,
       "adapterPackage": "@opendesign/leafer-engine",
-      "provider": "leafer-editor",
-      "version": "2.2.9",
-      "productionStatus": "mixed-latin-cjk-run-layout-exact-revision-projection-hit-selection-edit-proxy-and-raster-capture-export-available-document-schema-structured-interchange-complex-shaping-and-native-gate-pending"
+      "provider": "harfbuzzjs",
+      "version": "1.4.0",
+      "bidiProvider": "bidi-js",
+      "bidiVersion": "1.0.3",
+      "bidiUnicodeVersion": "13.0.0",
+      "simpleRunProvider": "leafer-editor 2.2.9",
+      "fontBinaryFormats": ["ttf", "otf", "ttc"],
+      "fontBinaryLimitBytes": 33554432,
+      "productionStatus": "explicit-content-addressed-font-import-harfbuzz-cluster-outline-and-bidi-path-projection-available-document-range-schema-structured-interchange-font-packaging-newer-bidi-and-native-gate-pending"
     },
     "layout": {
       "role": "versioned-frame-constraints-and-auto-layout-provider",
@@ -154,7 +160,7 @@
     "vectorGeometry": "pnpm --filter @opendesign/geometry-service typecheck && pnpm exec vitest run packages/geometry-service/src/arrangement.test.ts packages/geometry-service/src/vector-path.test.ts packages/geometry-service/src/boolean-resolver.test.ts packages/geometry-service/src/editable-vector.test.ts packages/geometry-service/src/vector-edit.test.ts packages/editor-runtime/src/arrange-operations.test.ts packages/editor-runtime/src/vector-operations.test.ts",
     "leafer": "pnpm exec vitest run packages/leafer-engine/src/pen-tool.test.ts packages/leafer-engine/src/adapter.test.ts packages/leafer-engine/src/mapping.test.ts packages/leafer-engine/src/professional-fixtures.test.ts apps/desktop/src/renderer/App.test.tsx",
     "textLayout": "pnpm --filter @opendesign/text-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/import-export-service typecheck && pnpm --filter @opendesign/figma-interop typecheck && pnpm --filter @opendesign/leafer-engine typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/text-service/src/index.test.ts packages/design-contracts/src/index.test.ts packages/editor-runtime/src/text-layout.test.ts packages/leafer-engine/src/text-layout.test.ts packages/leafer-engine/src/text-truncation.test.ts packages/leafer-engine/src/mapping.test.ts packages/leafer-engine/src/adapter.test.ts packages/import-export-service/src/svg.test.ts packages/figma-interop/src/index.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/design-agent-tools.test.ts src/agent/production-context-budget.test.ts src/renderer/components/PropertiesPanel.test.tsx src/renderer/workspace-runtime.test.ts src/renderer/design-tool-execution.test.ts src/renderer/App.test.tsx",
-    "textRunLayout": "pnpm --filter @opendesign/text-service typecheck && pnpm --filter @opendesign/leafer-engine typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/text-service/src/text-ranges.test.ts packages/text-service/src/text-run-layout.test.ts packages/leafer-engine/src/text-layout.test.ts packages/leafer-engine/src/text-run-layout.test.ts packages/leafer-engine/src/text-run-projection.test.ts packages/leafer-engine/src/projection-export-target.test.ts packages/leafer-engine/src/capture-export.test.ts packages/leafer-engine/src/adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/renderer/design-capture.test.ts src/renderer/raster-export.test.ts",
+    "textRunLayout": "pnpm --filter @opendesign/text-service typecheck && pnpm --filter @opendesign/leafer-engine typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/text-service/src/text-ranges.test.ts packages/text-service/src/text-run-layout.test.ts packages/text-service/src/harfbuzz-text-run-layout.test.ts packages/leafer-engine/src/text-layout.test.ts packages/leafer-engine/src/text-run-layout.test.ts packages/leafer-engine/src/text-run-projection.test.ts packages/leafer-engine/src/projection-export-target.test.ts packages/leafer-engine/src/capture-export.test.ts packages/leafer-engine/src/adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/main/font/font-binary-host.test.ts src/main/font/font-binary-ipc.test.ts src/renderer/components/PropertiesPanel.test.tsx src/renderer/design-capture.test.ts src/renderer/raster-export.test.ts",
     "layout": "pnpm --filter @opendesign/layout-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/leafer-engine typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/layout-service/src/index.test.ts packages/design-contracts/src/index.test.ts packages/editor-runtime/src/frame-layout-operations.test.ts packages/editor-runtime/src/auto-layout-operations.test.ts packages/editor-runtime/src/layout-guide-operations.test.ts packages/editor-runtime/src/layer-operations.test.ts packages/leafer-engine/src/adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/design-agent-tools.test.ts src/renderer/design-tool-execution.test.ts src/renderer/features/editor/editor-command-controllers.test.tsx src/renderer/components/PropertiesPanel.test.tsx src/renderer/App.test.tsx",
     "svgInterchange": "pnpm --filter @opendesign/import-export-service typecheck && pnpm --filter @opendesign/editor-runtime typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/import-export-service/src/svg-editable-vector.test.ts packages/import-export-service/src/svg.test.ts packages/editor-runtime/src/svg-import-operations.test.ts packages/editor-runtime/src/svg-export-operations.test.ts packages/agent-contracts/src/index.test.ts packages/session-store/src/index.test.ts packages/agent-runtime/src/pi-context-adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/shared/desktop-api.test.ts src/shared/design-agent-tools.test.ts src/shared/design-tool-bridge.test.ts src/main/svg/svg-file-service.test.ts src/main/svg/svg-file-ipc.test.ts src/renderer/design-tool-execution.test.ts src/renderer/components/AgentTimeline.test.tsx src/main/agent/agent-attachment-host.test.ts src/main/agent/agent-reference-host.test.ts src/main/agent/agent-svg-import-host.test.ts src/main/agent/agent-svg-export-host.test.ts src/main/agent/global-task-coordinator.test.ts src/agent/design-completion-guard.test.ts src/agent/pi-production-tool-adapter.test.ts src/agent/production-context-budget.test.ts",
     "rasterExport": "pnpm --filter @opendesign/import-export-service typecheck && pnpm --filter @opendesign/leafer-engine typecheck && pnpm --filter @opendesign/desktop typecheck && pnpm exec vitest run packages/import-export-service/src/raster.test.ts packages/leafer-engine/src/adapter.test.ts && pnpm --filter @opendesign/desktop exec vitest run src/renderer/raster-export.test.ts src/main/raster/raster-file-service.test.ts src/main/raster/raster-file-ipc.test.ts src/shared/desktop-api.test.ts src/shared/design-agent-tools.test.ts src/shared/design-tool-bridge.test.ts src/renderer/design-tool-execution.test.ts src/main/agent/agent-raster-export-host.test.ts src/renderer/components/PropertiesPanel.test.tsx src/renderer/App.test.tsx"

@@ -1666,8 +1666,10 @@ describe("PropertiesPanel regular-shape workflow", () => {
 describe("PropertiesPanel text layout workflow", () => {
   it("distinguishes available and unknown fonts and disables meaningless reflow", () => {
     const context = {
+      importState: { status: "idle" } as const,
       matchingNodeCount: 1,
       reflowableNodeCount: 0,
+      onImport: vi.fn().mockResolvedValue(undefined),
       onReflow: vi.fn(),
       onReplace: vi.fn(),
     };
@@ -1706,13 +1708,64 @@ describe("PropertiesPanel text layout workflow", () => {
       },
     });
     expect(screen.getByText("Font availability unknown")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Import font…" })).toBeVisible();
     expect(screen.getByLabelText("Replacement font family")).toBeVisible();
+  });
+
+  it("reports font import progress, success, and recovery errors", () => {
+    const baseContext = {
+      availability: {
+        status: "missing" as const,
+        provider: "test-font-provider",
+        providerVersion: "3",
+        message: "Inter is not loaded",
+      },
+      matchingNodeCount: 1,
+      onImport: vi.fn().mockResolvedValue(undefined),
+      onReflow: vi.fn(),
+      onReplace: vi.fn(),
+      reflowableNodeCount: 1,
+    };
+    renderPanel({
+      node: textNode,
+      selectionCount: 1,
+      fontContext: {
+        ...baseContext,
+        importState: { status: "importing" },
+      },
+    });
+    expect(screen.getByRole("button", { name: "Importing…" })).toBeDisabled();
+
+    cleanup();
+    renderPanel({
+      node: textNode,
+      selectionCount: 1,
+      fontContext: {
+        ...baseContext,
+        importState: { count: 2, status: "success" },
+      },
+    });
+    expect(screen.getByText("Imported 2 font face(s)")).toBeVisible();
+
+    cleanup();
+    renderPanel({
+      node: textNode,
+      selectionCount: 1,
+      fontContext: {
+        ...baseContext,
+        importState: { message: "Malformed SFNT", status: "error" },
+      },
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Font import failed: Malformed SFNT",
+    );
   });
 
   it("shows trusted missing-font state and submits explicit reflow or file-wide replacement", async () => {
     const user = userEvent.setup();
     const onReflow = vi.fn();
     const onReplace = vi.fn();
+    const onImport = vi.fn().mockResolvedValue(undefined);
     renderPanel({
       node: textNode,
       selectionCount: 1,
@@ -1725,6 +1778,8 @@ describe("PropertiesPanel text layout workflow", () => {
         },
         matchingNodeCount: 3,
         reflowableNodeCount: 2,
+        importState: { status: "idle" },
+        onImport,
         onReflow,
         onReplace,
       },
@@ -1734,8 +1789,9 @@ describe("PropertiesPanel text layout workflow", () => {
     expect(
       screen.getByText("3 matching text layers in this file"),
     ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Reflow" }));
-    expect(onReflow).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Import font…" }));
+    expect(onImport).toHaveBeenCalledTimes(1);
+    expect(onReflow).not.toHaveBeenCalled();
 
     const replacement = screen.getByLabelText("Replacement font family");
     await user.type(replacement, "IBM Plex Sans");

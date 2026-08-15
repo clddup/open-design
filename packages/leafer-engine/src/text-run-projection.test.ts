@@ -128,6 +128,71 @@ describe("native rich-text projection boundary", () => {
     ]);
   });
 
+  it("projects shaped glyph outlines as disposable native Paths", () => {
+    const base = projectDesignPage(createWelcomeDocument(), "page_welcome");
+    const source = base.elementsById.get("title_welcome");
+    if (!source) throw new Error("Missing title projection");
+    const content = String(source.data.text);
+    const glyphId = textRunFragmentElementId(source.id, 0);
+    const projection = projectResolvedTextRuns(base, {
+      documentId: base.documentId,
+      pageId: base.pageId,
+      revision: base.revision,
+      resultsByNodeId: new Map([
+        [
+          source.id,
+          {
+            nodeId: source.id,
+            fragments: [
+              {
+                baseline: 30,
+                data: { fill: "#7c3aed" },
+                end: content.length,
+                glyphs: [
+                  {
+                    clusterEnd: content.length,
+                    clusterStart: 0,
+                    glyphId: 73,
+                    path: "M0 0L20 0L20 30Z",
+                    x: 4,
+                    xAdvance: 22,
+                    y: 2,
+                    yAdvance: 0,
+                  },
+                ],
+                height: 40,
+                start: 0,
+                text: content,
+                width: 22,
+                x: 10,
+                y: 6,
+              },
+            ],
+          },
+        ],
+      ]),
+    });
+
+    expect(projection.elementsById.get(glyphId)).toMatchObject({
+      id: glyphId,
+      kind: "path",
+      parentId: source.parentId,
+      tag: "Path",
+      data: {
+        fill: "#7c3aed",
+        path: "M0 0L20 0L20 30Z",
+        data: {
+          opendesignGlyphId: 73,
+          opendesignNodeId: source.id,
+          opendesignSynthetic: true,
+          opendesignTextRun: { start: 0, end: content.length },
+        },
+      },
+    });
+    expect(textRunEditProxyElementId(projection, glyphId)).toBe(source.id);
+    expect(textRunFragmentElementIds(projection, source.id)).toEqual([glyphId]);
+  });
+
   it("rejects stale document and revision identities", () => {
     const base = projectDesignPage(createWelcomeDocument(), "page_welcome");
     expect(() =>

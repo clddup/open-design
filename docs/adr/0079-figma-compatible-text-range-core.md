@@ -9,6 +9,8 @@
 - 关联：ADR-0036、ADR-0070、ADR-0074、ADR-0076、ADR-0077
 - 基线：Figma Plugin API `TextNode` / `getStyledTextSegments`
 
+> 取代说明：本 ADR 中 Text Run Layout contract v1 与 Leafer simple-run provider 的历史决策继续有效；“复杂脚本 shaping provider 尚未接入”的后续结论已由 [ADR-0081](0081-harfbuzz-complex-text-shaping.md) 取代。当前 contract 为 v2。
+
 ## 背景
 
 Figma 的 `TextNode` 允许整节点或 character range 拥有字体、字号、Fill、大小写、装饰、字距、行高、Text Style、列表和段落等属性；range 使用 JavaScript 字符串的 `[start, end)` 索引。OpenDesign 当前 `DesignDocument 1.30.0` 只保存单一样式，Leafer 2.2.9 的原生 `Text` 也只接受整段样式。只给文档增加 `runs` 字段会形成“可保存、不可真实显示或编辑”的假能力，因此在升级文档协议前必须先建立范围语义与可行的原生画布投影边界。

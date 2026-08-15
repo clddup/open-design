@@ -119,4 +119,62 @@ describe("text run layout contract", () => {
       "invalid fragments",
     );
   });
+
+  it("validates bounded UTF-16 glyph clusters and outline budgets", () => {
+    const input = request({ content: "ffi", runs: [] });
+    const result: TextRunLayoutResult = {
+      contentBounds: { x: 0, y: 0, width: 20, height: 24 },
+      fragments: [
+        {
+          baseline: 18,
+          end: 3,
+          glyphs: [
+            {
+              clusterEnd: 3,
+              clusterStart: 0,
+              glyphId: 42,
+              path: "M0 0L1 0L1 1Z",
+              x: 0,
+              xAdvance: 20,
+              y: 0,
+              yAdvance: 0,
+            },
+          ],
+          height: 24,
+          lineIndex: 0,
+          start: 0,
+          style: regular,
+          text: "ffi",
+          width: 20,
+          x: 0,
+          y: 0,
+        },
+      ],
+      lines: [
+        {
+          baseline: 18,
+          end: 3,
+          height: 24,
+          start: 0,
+          width: 20,
+          x: 0,
+          y: 0,
+        },
+      ],
+      ok: true,
+      provider: "test",
+      providerVersion: "2",
+      size: { width: 120, height: 24 },
+      warnings: [],
+    };
+    expect(validateTextRunLayoutResult(result, input)).toBeNull();
+    const gap = structuredClone(result);
+    if (!gap.ok || !gap.fragments[0]?.glyphs?.[0]) {
+      throw new Error("Expected glyph fixture");
+    }
+    gap.fragments[0].glyphs[0].clusterStart = 1;
+    expect(validateTextRunLayoutResult(gap, input)).toContain(
+      "clusters do not cover",
+    );
+  });
 });

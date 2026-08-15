@@ -1,0 +1,726 @@
+import type * as HarfBuzz from "harfbuzzjs";
+import {
+  createHarfBuzzFontRegistry,
+  harfBuzzStyleKey,
+  type HarfBuzzFontFaceDescriptor,
+  type RegisteredHarfBuzzFace,
+} from "./harfbuzz-font-registry.js";
+import { canonicalizeTextStyleRuns, type TextStyleRun } from "./text-ranges.js";
+import {
+  validateTextRunLayoutRequest,
+  validateTextRunLayoutResult,
+  type TextRunLayoutFragment,
+  type TextRunLayoutGlyph,
+  type TextRunLayoutLine,
+  type TextRunLayoutProvider,
+  type TextRunLayoutRequest,
+  type TextRunLayoutResult,
+  type TextRunLayoutStyle,
+} from "./text-run-layout.js";
+/*
+ * Keep HarfBuzz behind this async factory. Importing the ordinary text
+ * service must not initialize WASM or block desktop startup.
+ */
+
+export const HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_ID =
+  "harfbuzz-wasm-text-runs" as const;
+export const HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_VERSION =
+  "1.4.0+bidi-13" as const;
+export const HARFBUZZ_BIDI_UNICODE_VERSION = "13.0.0" as const;
+const HARFBUZZ_COORDINATE_SCALE = 64;
+
+type HarfBuzzModule = typeof HarfBuzz;
+
+interface BidiEmbeddingLevels {
+  levels: Uint8Array;
+  paragraphs: readonly { end: number; level: number; start: number }[];
+}
+
+interface BidiApi {
+  getEmbeddingLevels(text: string): BidiEmbeddingLevels;
+  getReorderSegments(
+    text: string,
+    embeddingLevels: BidiEmbeddingLevels,
+    start?: number,
+    end?: number,
+  ): readonly (readonly [number, number])[];
+}
+
+export type { HarfBuzzFontFaceDescriptor } from "./harfbuzz-font-registry.js";
+
+export interface HarfBuzzTextRunLayoutRuntime<
+  Style extends TextRunLayoutStyle = TextRunLayoutStyle,
+> {
+  listFonts(): readonly HarfBuzzFontFaceDescriptor[];
+  provider: TextRunLayoutProvider<Style>;
+  registerFont(
+    fontId: string,
+    bytes: Uint8Array,
+  ): readonly HarfBuzzFontFaceDescriptor[];
+  unregisterFont(fontId: string): void;
+}
+
+export async function createHarfBuzzTextRunLayoutRuntime<
+  Style extends TextRunLayoutStyle = TextRunLayoutStyle,
+>(): Promise<HarfBuzzTextRunLayoutRuntime<Style>> {
+  const [hb, bidi] = await Promise.all([import("harfbuzzjs"), loadBidi()]);
+  const registry = createHarfBuzzFontRegistry(hb);
+
+  const provider: TextRunLayoutProvider<Style> = {
+    id: HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_ID,
+    version: HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_VERSION,
+    layout(request) {
+      const issue = validateTextRunLayoutRequest(request);
+      if (issue) return failure("invalid-input", issue, false);
+      if (request.baseStyle.textCase !== "original") {
+        return failure(
+          "unsupported",
+          "HarfBuzz text run layout currently requires original text case",
+          false,
+        );
+      }
+      if (request.baseStyle.textDecoration !== "none") {
+        return failure(
+          "unsupported",
+          "HarfBuzz glyph outline projection does not yet synthesize text decoration",
+          false,
+        );
+      }
+      const runs = canonicalizeTextStyleRuns(
+        request.content,
+        request.runs,
+        request.baseStyle,
+        equalStyle,
+      );
+      const resolved = new Map<string, RegisteredHarfBuzzFace>();
+      for (const run of runs) {
+        if (run.style.textCase !== "original") {
+          return failure(
+            "unsupported",
+            "HarfBuzz text run layout currently requires original text case",
+            false,
+          );
+        }
+        if (run.style.textDecoration !== "none") {
+          return failure(
+            "unsupported",
+            "HarfBuzz glyph outline projection does not yet synthesize text decoration",
+            false,
+          );
+        }
+        const key = harfBuzzStyleKey(run.style);
+        const face = registry.resolve(run.style);
+        if (!face) {
+          return failure(
+            "provider-unavailable",
+            `Imported font face is unavailable: ${run.style.fontFamily} / ${run.style.fontStyleName ?? "Regular"} / ${run.style.fontWeight} / ${run.style.fontSlant}`,
+            true,
+          );
+        }
+        resolved.set(key, face);
+      }
+      try {
+        const result = layoutWithHarfBuzz(hb, bidi, request, runs, resolved);
+        const resultIssue = validateTextRunLayoutResult(result, request);
+        return resultIssue
+          ? failure("measurement-failed", resultIssue, false)
+          : result;
+      } catch (error) {
+        if (error instanceof UnsupportedShapingError) {
+          return failure("unsupported", error.message, false);
+        }
+        return failure(
+          "measurement-failed",
+          error instanceof Error && error.message
+            ? `HarfBuzz shaping failed: ${error.message}`
+            : "HarfBuzz shaping failed",
+          false,
+        );
+      }
+    },
+  };
+
+  return {
+    listFonts: () => registry.list(),
+    provider,
+    registerFont: (fontId, bytes) => registry.register(fontId, bytes),
+    unregisterFont: (fontId) => registry.unregister(fontId),
+  };
+}
+
+async function loadBidi(): Promise<BidiApi> {
+  // bidi-js 1.0.3 has no published TypeScript declarations. Keep its dynamic
+  // module value unknown until the narrow factory boundary is validated.
+  // @ts-expect-error -- upstream package has no TypeScript declaration
+  const value: unknown = await import("bidi-js");
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("default" in value) ||
+    typeof value.default !== "function"
+  ) {
+    throw new TypeError("bidi-js did not expose its expected factory");
+  }
+  return (value.default as () => BidiApi)();
+}
+
+interface ShapedGlyph {
+  clusterEnd: number;
+  clusterStart: number;
+  glyphId: number;
+  path: string;
+  xAdvance: number;
+  xOffset: number;
+  yAdvance: number;
+  yOffset: number;
+}
+
+class UnsupportedShapingError extends Error {}
+
+interface ShapedCluster<Style extends TextRunLayoutStyle> {
+  advance: number;
+  ascent: number;
+  breakAfter: boolean;
+  descent: number;
+  end: number;
+  glyphs: ShapedGlyph[];
+  hardBreak: boolean;
+  level: number;
+  start: number;
+  style: Style;
+  text: string;
+}
+
+interface BrokenLine<Style extends TextRunLayoutStyle> {
+  clusters: ShapedCluster<Style>[];
+  end: number;
+  paragraphStart: boolean;
+  start: number;
+}
+
+function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
+  hb: HarfBuzzModule,
+  bidi: BidiApi,
+  request: TextRunLayoutRequest<Style>,
+  runs: readonly TextStyleRun<Style>[],
+  resolved: ReadonlyMap<string, RegisteredHarfBuzzFace>,
+): TextRunLayoutResult<Style> {
+  const embedding = bidi.getEmbeddingLevels(request.content);
+  const clusters: ShapedCluster<Style>[] = [];
+  for (const shapingRun of metricDirectionalRuns(runs, embedding)) {
+    const registered = resolved.get(harfBuzzStyleKey(shapingRun.style));
+    if (!registered) throw new Error("Resolved font face disappeared");
+    clusters.push(
+      ...shapeRun(hb, request.content, shapingRun, registered, embedding),
+    );
+  }
+  clusters.sort((left, right) => left.start - right.start);
+  assignBreakOpportunities(clusters);
+  const broken = breakLines(clusters, request);
+  if (request.content.length === 0) {
+    broken.push({ clusters: [], end: 0, paragraphStart: true, start: 0 });
+  } else if (/\r\n$|[\r\n]$/.test(request.content)) {
+    broken.push({
+      clusters: [],
+      end: request.content.length,
+      paragraphStart: true,
+      start: request.content.length,
+    });
+  }
+
+  const fallbackMetrics = fontMetrics(request.baseStyle, resolved);
+  const measured = broken.map((line) => measureLine(line, fallbackMetrics));
+  const contentHeight = measured.reduce(
+    (sum, line, index) =>
+      sum +
+      line.height +
+      (index > 0 && broken[index]!.paragraphStart
+        ? request.paragraphSpacing
+        : 0),
+    0,
+  );
+  const naturalWidth = measured.reduce(
+    (maximum, line, index) =>
+      Math.max(
+        maximum,
+        line.width +
+          (broken[index]!.paragraphStart ? request.paragraphIndent : 0),
+      ),
+    0,
+  );
+  const width =
+    request.mode === "auto-width" ? normalize(naturalWidth) : request.width!;
+  const height =
+    request.mode === "fixed" ? request.height! : normalize(contentHeight);
+  const verticalOffset =
+    request.mode === "fixed" && contentHeight < height
+      ? request.textAlignVertical === "center"
+        ? (height - contentHeight) / 2
+        : request.textAlignVertical === "bottom"
+          ? height - contentHeight
+          : 0
+      : 0;
+
+  const lines: TextRunLayoutLine[] = [];
+  const fragments: TextRunLayoutFragment<Style>[] = [];
+  let lineY = verticalOffset;
+  for (let lineIndex = 0; lineIndex < broken.length; lineIndex += 1) {
+    const sourceLine = broken[lineIndex]!;
+    const metrics = measured[lineIndex]!;
+    if (lineIndex > 0 && sourceLine.paragraphStart) {
+      lineY += request.paragraphSpacing;
+    }
+    const indent = sourceLine.paragraphStart ? request.paragraphIndent : 0;
+    const usableWidth = Math.max(0, width - indent);
+    const lineX =
+      indent +
+      (request.textAlignHorizontal === "center"
+        ? Math.max(0, (usableWidth - metrics.width) / 2)
+        : request.textAlignHorizontal === "right"
+          ? Math.max(0, usableWidth - metrics.width)
+          : 0);
+    lines.push({
+      baseline: normalize(metrics.ascent),
+      end: sourceLine.end,
+      height: normalize(metrics.height),
+      start: sourceLine.start,
+      width: normalize(metrics.width),
+      x: normalize(lineX),
+      y: normalize(lineY),
+    });
+    fragments.push(
+      ...positionLine(
+        bidi,
+        request.content,
+        runs,
+        sourceLine,
+        embedding,
+        lineIndex,
+        lineX,
+        lineY,
+        metrics,
+      ),
+    );
+    lineY += metrics.height;
+  }
+
+  const minX =
+    lines.length === 0 ? 0 : Math.min(...lines.map((line) => line.x));
+  const maxX = lines.reduce(
+    (maximum, line) => Math.max(maximum, line.x + line.width),
+    minX,
+  );
+  return {
+    contentBounds: {
+      height: normalize(contentHeight),
+      width: normalize(maxX - minX),
+      x: normalize(minX),
+      y: normalize(verticalOffset),
+    },
+    fragments,
+    lines,
+    ok: true,
+    provider: HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_ID,
+    providerVersion: HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_VERSION,
+    size: { height: normalize(height), width: normalize(width) },
+    warnings: [],
+  };
+}
+
+function metricDirectionalRuns<Style extends TextRunLayoutStyle>(
+  runs: readonly TextStyleRun<Style>[],
+  embedding: BidiEmbeddingLevels,
+): TextStyleRun<Style>[] {
+  const result: TextStyleRun<Style>[] = [];
+  for (const run of runs) {
+    let start = run.start;
+    while (start < run.end) {
+      const level = embedding.levels[start] ?? 0;
+      let end = start + 1;
+      while (end < run.end && (embedding.levels[end] ?? level) === level) {
+        end += 1;
+      }
+      const previous = result.at(-1);
+      if (
+        previous &&
+        previous.end === start &&
+        (embedding.levels[previous.start] ?? 0) === level &&
+        sameMetrics(previous.style, run.style)
+      ) {
+        previous.end = end;
+      } else {
+        result.push({ end, start, style: run.style });
+      }
+      start = end;
+    }
+  }
+  return result;
+}
+
+function shapeRun<Style extends TextRunLayoutStyle>(
+  hb: HarfBuzzModule,
+  content: string,
+  run: TextStyleRun<Style>,
+  registered: RegisteredHarfBuzzFace,
+  embedding: BidiEmbeddingLevels,
+): ShapedCluster<Style>[] {
+  const font = new hb.Font(registered.face);
+  font.setScale(
+    Math.round(run.style.fontSize * HARFBUZZ_COORDINATE_SCALE),
+    Math.round(run.style.fontSize * HARFBUZZ_COORDINATE_SCALE),
+  );
+  const extents = font.hExtents();
+  const ascent = Math.max(0, extents.ascender / HARFBUZZ_COORDINATE_SCALE);
+  const descent = Math.max(0, -extents.descender / HARFBUZZ_COORDINATE_SCALE);
+  const leading = Math.max(0, run.style.lineHeight - ascent - descent);
+  const effectiveAscent = ascent + leading / 2;
+  const effectiveDescent = descent + leading / 2;
+  const buffer = new hb.Buffer();
+  buffer.addText(content, run.start, run.end - run.start);
+  buffer.setClusterLevel(hb.ClusterLevel.MONOTONE_CHARACTERS);
+  buffer.setDirection(
+    ((embedding.levels[run.start] ?? 0) & 1) === 1
+      ? hb.Direction.RTL
+      : hb.Direction.LTR,
+  );
+  buffer.guessSegmentProperties();
+  hb.shape(font, buffer);
+  const infos = buffer.getGlyphInfos();
+  const positions = buffer.getGlyphPositions();
+  if (infos.length !== positions.length) {
+    throw new Error("HarfBuzz returned mismatched glyph arrays");
+  }
+  const clusterStarts = [...new Set(infos.map((info) => info.cluster))].sort(
+    (left, right) => left - right,
+  );
+  if (clusterStarts.length === 0 && run.start !== run.end) {
+    throw new Error("HarfBuzz returned no clusters for non-empty text");
+  }
+  const clusterEndByStart = new Map<number, number>();
+  clusterStarts.forEach((start, index) => {
+    clusterEndByStart.set(start, clusterStarts[index + 1] ?? run.end);
+  });
+  const clustersByStart = new Map<number, ShapedCluster<Style>>();
+  infos.forEach((info, index) => {
+    const position = positions[index]!;
+    const clusterEnd = clusterEndByStart.get(info.cluster);
+    if (
+      clusterEnd === undefined ||
+      info.cluster < run.start ||
+      clusterEnd > run.end ||
+      clusterEnd <= info.cluster
+    ) {
+      throw new Error("HarfBuzz returned an invalid UTF-16 cluster");
+    }
+    const glyph: ShapedGlyph = {
+      clusterEnd,
+      clusterStart: info.cluster,
+      glyphId: info.codepoint,
+      path: glyphJsonToPath(font.glyphToJson(info.codepoint)),
+      xAdvance: position.xAdvance / HARFBUZZ_COORDINATE_SCALE,
+      xOffset: position.xOffset / HARFBUZZ_COORDINATE_SCALE,
+      yAdvance: position.yAdvance / HARFBUZZ_COORDINATE_SCALE,
+      yOffset: position.yOffset / HARFBUZZ_COORDINATE_SCALE,
+    };
+    const current = clustersByStart.get(info.cluster);
+    if (current) current.glyphs.push(glyph);
+    else {
+      const text = content.slice(info.cluster, clusterEnd);
+      clustersByStart.set(info.cluster, {
+        advance: 0,
+        ascent: effectiveAscent,
+        breakAfter: false,
+        descent: effectiveDescent,
+        end: clusterEnd,
+        glyphs: [glyph],
+        hardBreak: text === "\n" || text === "\r" || text === "\r\n",
+        level: embedding.levels[info.cluster] ?? 0,
+        start: info.cluster,
+        style: run.style,
+        text,
+      });
+    }
+  });
+  for (const cluster of clustersByStart.values()) {
+    cluster.advance = cluster.hardBreak
+      ? 0
+      : Math.abs(
+          cluster.glyphs.reduce((sum, glyph) => sum + glyph.xAdvance, 0),
+        ) + run.style.letterSpacing;
+  }
+  return [...clustersByStart.values()].sort(
+    (left, right) => left.start - right.start,
+  );
+}
+
+function glyphJsonToPath(
+  commands: readonly { type: string; values: readonly number[] }[],
+): string {
+  return commands
+    .map(
+      (command) =>
+        `${command.type}${command.values
+          .map((value) => normalize(value / HARFBUZZ_COORDINATE_SCALE))
+          .join(" ")}`,
+    )
+    .join("");
+}
+
+function assignBreakOpportunities<Style extends TextRunLayoutStyle>(
+  clusters: ShapedCluster<Style>[],
+): void {
+  for (const cluster of clusters) {
+    cluster.breakAfter =
+      cluster.hardBreak ||
+      /^\s+$/u.test(cluster.text) ||
+      /[-‐‑‒–—/]$/u.test(cluster.text) ||
+      /[\u3000-\u30ff\u3400-\u9fff\uf900-\ufaff]$/u.test(cluster.text);
+  }
+}
+
+function breakLines<Style extends TextRunLayoutStyle>(
+  clusters: readonly ShapedCluster<Style>[],
+  request: TextRunLayoutRequest<Style>,
+): BrokenLine<Style>[] {
+  const lines: BrokenLine<Style>[] = [];
+  let index = 0;
+  let paragraphStart = true;
+  while (index < clusters.length) {
+    const startIndex = index;
+    const lineStart = clusters[index]!.start;
+    const limit =
+      request.mode === "auto-width"
+        ? Number.POSITIVE_INFINITY
+        : Math.max(
+            0,
+            request.width! - (paragraphStart ? request.paragraphIndent : 0),
+          );
+    let width = 0;
+    let lastWordBreak = -1;
+    while (index < clusters.length) {
+      const cluster = clusters[index]!;
+      if (cluster.hardBreak) {
+        index += 1;
+        break;
+      }
+      const nextWidth = width + cluster.advance;
+      if (
+        request.mode !== "auto-width" &&
+        index > startIndex &&
+        nextWidth > limit
+      ) {
+        if (request.textWrap === "word" && lastWordBreak >= startIndex) {
+          index = lastWordBreak + 1;
+        }
+        break;
+      }
+      width = nextWidth;
+      if (cluster.breakAfter) lastWordBreak = index;
+      index += 1;
+    }
+    if (index === startIndex) index += 1;
+    const lineClusters = clusters.slice(startIndex, index);
+    const last = lineClusters.at(-1)!;
+    lines.push({
+      clusters: lineClusters,
+      end: last.end,
+      paragraphStart,
+      start: lineStart,
+    });
+    paragraphStart = last.hardBreak;
+  }
+  return lines;
+}
+
+function measureLine<Style extends TextRunLayoutStyle>(
+  line: BrokenLine<Style>,
+  fallback: { ascent: number; descent: number },
+): { ascent: number; descent: number; height: number; width: number } {
+  const visible = line.clusters.filter((cluster) => !cluster.hardBreak);
+  const ascent = visible.reduce(
+    (maximum, cluster) => Math.max(maximum, cluster.ascent),
+    fallback.ascent,
+  );
+  const descent = visible.reduce(
+    (maximum, cluster) => Math.max(maximum, cluster.descent),
+    fallback.descent,
+  );
+  return {
+    ascent,
+    descent,
+    height: ascent + descent,
+    width: visible.reduce((sum, cluster) => sum + cluster.advance, 0),
+  };
+}
+
+function positionLine<Style extends TextRunLayoutStyle>(
+  bidi: BidiApi,
+  content: string,
+  runs: readonly TextStyleRun<Style>[],
+  line: BrokenLine<Style>,
+  embedding: BidiEmbeddingLevels,
+  lineIndex: number,
+  lineX: number,
+  lineY: number,
+  metrics: { ascent: number; height: number; width: number },
+): TextRunLayoutFragment<Style>[] {
+  const visual = [...line.clusters];
+  if (line.start < line.end) {
+    for (const [start, end] of bidi.getReorderSegments(
+      content,
+      embedding,
+      line.start,
+      line.end - 1,
+    )) {
+      const first = visual.findIndex((cluster) => cluster.end > start);
+      let last = visual.length - 1;
+      while (last >= 0 && visual[last]!.start > end) last -= 1;
+      if (first >= 0 && last >= first) {
+        visual.splice(
+          first,
+          last - first + 1,
+          ...visual.slice(first, last + 1).reverse(),
+        );
+      }
+    }
+  }
+  const positionedByStart = new Map<
+    number,
+    { cluster: ShapedCluster<Style>; glyphs: TextRunLayoutGlyph[]; x: number }
+  >();
+  let cursor = lineX;
+  for (const cluster of visual) {
+    let pen = 0;
+    const glyphs = cluster.glyphs.map((glyph): TextRunLayoutGlyph => {
+      const result = {
+        clusterEnd: glyph.clusterEnd,
+        clusterStart: glyph.clusterStart,
+        glyphId: glyph.glyphId,
+        path: glyph.path,
+        x: normalize(cursor + pen + glyph.xOffset),
+        xAdvance: normalize(glyph.xAdvance),
+        y: normalize(glyph.yOffset),
+        yAdvance: normalize(glyph.yAdvance),
+      };
+      pen += glyph.xAdvance;
+      return result;
+    });
+    positionedByStart.set(cluster.start, { cluster, glyphs, x: cursor });
+    cursor += cluster.advance;
+  }
+
+  const fragments: TextRunLayoutFragment<Style>[] = [];
+  let start = line.start;
+  while (start < line.end) {
+    const run = runs.find(
+      (candidate) => start >= candidate.start && start < candidate.end,
+    );
+    if (!run) throw new Error(`Missing style at UTF-16 offset ${start}`);
+    const cluster = line.clusters.find(
+      (candidate) => candidate.start === start,
+    );
+    if (!cluster)
+      throw new Error(`Missing shaped cluster at UTF-16 offset ${start}`);
+    if (cluster.end > run.end) {
+      throw new UnsupportedShapingError(
+        `Style boundary at UTF-16 offset ${run.end} splits shaped cluster ${cluster.start}-${cluster.end}`,
+      );
+    }
+    let end = cluster.end;
+    while (end < Math.min(run.end, line.end)) {
+      const next = line.clusters.find((candidate) => candidate.start === end);
+      if (!next) break;
+      if (next.end > run.end) {
+        throw new UnsupportedShapingError(
+          `Style boundary at UTF-16 offset ${run.end} splits shaped cluster ${next.start}-${next.end}`,
+        );
+      }
+      end = next.end;
+    }
+    const positioned = line.clusters
+      .filter((candidate) => candidate.start >= start && candidate.end <= end)
+      .map((candidate) => positionedByStart.get(candidate.start)!)
+      .filter(Boolean);
+    const absoluteGlyphs = positioned.flatMap((candidate) => candidate.glyphs);
+    const fragmentX = positioned.reduce(
+      (minimum, candidate) => Math.min(minimum, candidate.x),
+      Number.POSITIVE_INFINITY,
+    );
+    const fragmentRight = positioned.reduce(
+      (maximum, candidate) =>
+        Math.max(maximum, candidate.x + candidate.cluster.advance),
+      fragmentX,
+    );
+    fragments.push({
+      baseline: normalize(metrics.ascent),
+      end,
+      glyphs: absoluteGlyphs.map((glyph) => ({
+        ...glyph,
+        x: normalize(glyph.x - fragmentX),
+      })),
+      height: normalize(metrics.height),
+      lineIndex,
+      start,
+      style: run.style,
+      text: content.slice(start, end),
+      width: normalize(fragmentRight - fragmentX),
+      x: normalize(fragmentX),
+      y: normalize(lineY),
+    });
+    start = end;
+  }
+  return fragments;
+}
+
+function fontMetrics<Style extends TextRunLayoutStyle>(
+  style: Style,
+  resolved: ReadonlyMap<string, RegisteredHarfBuzzFace>,
+): { ascent: number; descent: number } {
+  const face = resolved.get(harfBuzzStyleKey(style));
+  if (!face)
+    return { ascent: style.lineHeight * 0.8, descent: style.lineHeight * 0.2 };
+  const ratio = style.lineHeight / style.fontSize;
+  return {
+    ascent: style.fontSize * 0.8 * ratio,
+    descent: style.fontSize * 0.2 * ratio,
+  };
+}
+
+function sameMetrics(
+  left: TextRunLayoutStyle,
+  right: TextRunLayoutStyle,
+): boolean {
+  return (
+    harfBuzzStyleKey(left) === harfBuzzStyleKey(right) &&
+    left.fontSize === right.fontSize &&
+    left.letterSpacing === right.letterSpacing &&
+    left.lineHeight === right.lineHeight &&
+    left.textCase === right.textCase &&
+    left.textDecoration === right.textDecoration
+  );
+}
+
+function equalStyle(
+  left: TextRunLayoutStyle,
+  right: TextRunLayoutStyle,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function normalize(value: number): number {
+  if (!Number.isFinite(value))
+    throw new Error("Shaping produced non-finite geometry");
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function failure(
+  code:
+    | "invalid-input"
+    | "measurement-failed"
+    | "provider-unavailable"
+    | "unsupported",
+  message: string,
+  retryable: boolean,
+): TextRunLayoutResult<never> {
+  return { code, message, ok: false, retryable };
+}

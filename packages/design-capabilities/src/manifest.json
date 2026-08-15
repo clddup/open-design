@@ -729,7 +729,7 @@
         "en": "Apply document-wide Typography Core properties and reusable Text Styles while preserving explicit limits for rich runs, lists, OpenType, and font assets.",
         "zh-CN": "应用文档级 Typography Core 属性和可复用 Text Style，并明确保留富文本 run、列表、OpenType 与字体资源限制。"
       },
-      "provider": "@opendesign/text-service v4 + leafer-editor 2.2.9",
+      "provider": "@opendesign/text-service v4 / Text Run Layout v2 + leafer-editor 2.2.9 + harfbuzzjs 1.4.0",
       "requiredSurfaces": ["contract", "runtime", "human", "agent"],
       "surfaces": {
         "contract": "degraded",
@@ -741,22 +741,26 @@
       },
       "limitations": [
         {
-          "en": "Core v2 plus Text Service v4 supports paragraph indent/spacing, case, decoration, ending truncation/max-lines, reusable single-style Text Styles, exact face identity, runtime font availability, file-wide replacement, and explicit reflow; per-range rich text, lists, OpenType features, variable-font axes, font binary assets, text-on-path, and deterministic cross-platform shaping remain unavailable.",
-          "zh-CN": "Core v2 与 Text Service v4 已支持段落缩进/间距、大小写、装饰、末尾截断/最大行数、可复用单样式 Text Style、精确 face identity、运行时字体可用性、全文件替换和显式重排；逐段富文本、列表、OpenType 特性、可变字体轴、字体二进制资源、路径文字和确定性跨平台 shaping 仍不可用。"
+          "en": "Core v2 plus Text Service v4 supports paragraph properties, reusable single-style Text Styles, exact face identity, explicit reflow, and user-approved content-addressed TTF/OTF/TTC import. Pre-schema Text Run Layout v2 uses HarfBuzz outlines and Unicode Bidi 13 for complex-script clusters, but per-range authoring/schema, lists, OpenType controls, variable axes, font packaging/authorization transfer, text-on-path, newer bidi data, and packaged macOS/Windows visual evidence remain unavailable.",
+          "zh-CN": "Core v2 与 Text Service v4 已支持段落属性、可复用单样式 Text Style、精确 face identity、显式重排，以及用户批准的内容寻址 TTF/OTF/TTC 导入。pre-schema Text Run Layout v2 已用 HarfBuzz outline 与 Unicode Bidi 13 处理复杂脚本 cluster，但逐段作者态/schema、列表、OpenType 控件、可变字体轴、字体随文件打包/授权迁移、路径文字、更新 bidi 数据和 macOS/Windows 打包视觉证据仍不可用。"
         }
       ],
       "evidence": {
         "automated": [
           "packages/design-contracts/src/index.test.ts",
           "packages/text-service/src/index.test.ts",
+          "packages/text-service/src/harfbuzz-text-run-layout.test.ts",
           "packages/editor-runtime/src/text-layout.test.ts",
           "packages/leafer-engine/src/text-layout.test.ts",
           "packages/leafer-engine/src/text-truncation.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
+          "packages/leafer-engine/src/text-run-projection.test.ts",
           "packages/import-export-service/src/svg.test.ts",
           "packages/figma-interop/src/index.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
-          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
+          "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx",
+          "apps/desktop/src/main/font/font-binary-host.test.ts",
+          "apps/desktop/src/main/font/font-binary-ipc.test.ts"
         ],
         "manual": []
       },

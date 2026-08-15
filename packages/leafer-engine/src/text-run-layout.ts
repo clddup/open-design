@@ -128,6 +128,8 @@ export function leaferTextRunLayoutToProjection(
     fragments: result.fragments.map((fragment): LeaferTextRunFragment => ({
       data: leaferTextRunData(fragment.style),
       end: fragment.end,
+      ...(fragment.glyphs === undefined ? {} : { glyphs: fragment.glyphs }),
+      baseline: fragment.baseline,
       height: fragment.height,
       start: fragment.start,
       text: fragment.text,

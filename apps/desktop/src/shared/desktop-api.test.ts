@@ -13,6 +13,9 @@ import {
   isAgentAttachmentPreviewResult,
   isAgentAttachmentSelection,
   isDesignImageSelection,
+  isFontBinaryDescriptor,
+  isFontBinaryPayload,
+  isFontBinaryReadRequest,
   isGlobalImageGenerationSettings,
   isGlobalTaskProjectionResult,
   isListProjectConversationsRequest,
@@ -363,6 +366,33 @@ describe("Design image desktop API guards", () => {
         },
       }),
     ).toBe(false);
+  });
+});
+
+describe("Font binary desktop API guards", () => {
+  const descriptor = {
+    byteSize: 12,
+    fontId: `font_${"a".repeat(64)}`,
+    format: "ttf",
+    name: "NotoSans.ttf",
+  } as const;
+
+  it("accepts path-free descriptors, bounded bytes, and stable read requests", () => {
+    expect(isFontBinaryDescriptor(descriptor)).toBe(true);
+    expect(
+      isFontBinaryPayload({ ...descriptor, bytes: new Uint8Array(12) }),
+    ).toBe(true);
+    expect(isFontBinaryReadRequest({ fontId: descriptor.fontId })).toBe(true);
+  });
+
+  it("rejects paths, size drift, and arbitrary identifiers", () => {
+    expect(
+      isFontBinaryDescriptor({ ...descriptor, path: "/tmp/NotoSans.ttf" }),
+    ).toBe(false);
+    expect(
+      isFontBinaryPayload({ ...descriptor, bytes: new Uint8Array(11) }),
+    ).toBe(false);
+    expect(isFontBinaryReadRequest({ fontId: "../../font.ttf" })).toBe(false);
   });
 });
 

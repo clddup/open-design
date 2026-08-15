@@ -10,7 +10,7 @@
 - Geometry Service：`contract v10`
 - Text Layout Service：`contract v4`
 - Text Range Service：`contract v1`（文档 rich-text 尚未暴露）
-- Text Run Layout Service：`contract v1`（文档 rich-text 尚未暴露）
+- Text Run Layout Service：`contract v2`（文档 rich-text 尚未暴露）
 - Layout Service：`contract v6`
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
@@ -44,8 +44,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   66 files / 610 tests
-└── desktop tests   84 files / 652 tests
+├── package tests   78 files / 691 tests
+└── desktop tests   90 files / 699 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main

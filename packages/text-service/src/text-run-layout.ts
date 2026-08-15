@@ -8,11 +8,14 @@ import type {
 } from "./text-types.js";
 import { validateTextStyleRuns, type TextStyleRun } from "./text-ranges.js";
 
-export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
+export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 2 as const;
 export const MAX_TEXT_RUN_LAYOUT_CHARACTERS = 100_000;
 export const MAX_TEXT_RUN_LAYOUT_RUNS = 16_384;
 export const MAX_TEXT_RUN_LAYOUT_FRAGMENTS = 100_000;
 export const MAX_TEXT_RUN_LAYOUT_LINES = 100_000;
+export const MAX_TEXT_RUN_LAYOUT_GLYPHS = 200_000;
+export const MAX_TEXT_RUN_LAYOUT_GLYPH_PATH_CHARACTERS = 1_000_000;
+export const MAX_TEXT_RUN_LAYOUT_TOTAL_PATH_CHARACTERS = 16_000_000;
 
 export type TextRunLayoutHorizontalAlign = "left" | "center" | "right";
 export type TextRunLayoutVerticalAlign = "top" | "center" | "bottom";
@@ -46,6 +49,7 @@ export interface TextRunLayoutFragment<
 > {
   baseline: number;
   end: number;
+  glyphs?: readonly TextRunLayoutGlyph[];
   height: number;
   lineIndex: number;
   start: number;
@@ -54,6 +58,22 @@ export interface TextRunLayoutFragment<
   width: number;
   x: number;
   y: number;
+}
+
+/**
+ * One provider-derived positioned glyph. Cluster offsets use JavaScript
+ * UTF-16 indices and are always relative to the complete request content.
+ * The outline is disposable render projection data, never document state.
+ */
+export interface TextRunLayoutGlyph {
+  clusterEnd: number;
+  clusterStart: number;
+  glyphId: number;
+  path: string;
+  x: number;
+  xAdvance: number;
+  y: number;
+  yAdvance: number;
 }
 
 export interface TextRunLayoutLine {
@@ -311,6 +331,8 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
   }
 
   let expectedFragmentStart = 0;
+  let glyphCount = 0;
+  let totalPathCharacters = 0;
   for (const fragment of fragments) {
     const line = lines[fragment.lineIndex];
     if (
@@ -337,6 +359,70 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
       validateTextRunLayoutStyle(fragment.style)
     ) {
       return "Text run layout provider returned invalid fragments";
+    }
+    if (fragment.glyphs !== undefined) {
+      if (!Array.isArray(fragment.glyphs)) {
+        return "Text run layout provider returned invalid glyphs";
+      }
+      glyphCount += fragment.glyphs.length;
+      if (glyphCount > MAX_TEXT_RUN_LAYOUT_GLYPHS) {
+        return "Text run layout provider exceeded glyph limits";
+      }
+      const clusterRanges = new Map<number, number>();
+      for (const glyph of fragment.glyphs) {
+        const glyphId = isRecord(glyph) ? glyph.glyphId : undefined;
+        const clusterStart = isRecord(glyph) ? glyph.clusterStart : undefined;
+        const clusterEnd = isRecord(glyph) ? glyph.clusterEnd : undefined;
+        const path = isRecord(glyph) ? glyph.path : undefined;
+        const x = isRecord(glyph) ? glyph.x : undefined;
+        const y = isRecord(glyph) ? glyph.y : undefined;
+        const xAdvance = isRecord(glyph) ? glyph.xAdvance : undefined;
+        const yAdvance = isRecord(glyph) ? glyph.yAdvance : undefined;
+        if (
+          !isRecord(glyph) ||
+          !Number.isSafeInteger(glyphId) ||
+          Number(glyphId) < 0 ||
+          Number(glyphId) > 0xffff_ffff ||
+          !safeRange(clusterStart, clusterEnd, request.content.length) ||
+          Number(clusterStart) < fragment.start ||
+          Number(clusterEnd) > fragment.end ||
+          Number(clusterEnd) <= Number(clusterStart) ||
+          typeof path !== "string" ||
+          path.length > MAX_TEXT_RUN_LAYOUT_GLYPH_PATH_CHARACTERS ||
+          !boundedSigned(x) ||
+          !boundedSigned(y) ||
+          !boundedSigned(xAdvance) ||
+          !boundedSigned(yAdvance)
+        ) {
+          return "Text run layout provider returned invalid glyphs";
+        }
+        const validatedClusterStart = Number(clusterStart);
+        const validatedClusterEnd = Number(clusterEnd);
+        const previousEnd = clusterRanges.get(validatedClusterStart);
+        if (previousEnd !== undefined && previousEnd !== validatedClusterEnd) {
+          return "Text run layout provider returned ambiguous glyph clusters";
+        }
+        clusterRanges.set(validatedClusterStart, validatedClusterEnd);
+        totalPathCharacters += path.length;
+        if (totalPathCharacters > MAX_TEXT_RUN_LAYOUT_TOTAL_PATH_CHARACTERS) {
+          return "Text run layout provider exceeded outline limits";
+        }
+      }
+      let expectedClusterStart = fragment.start;
+      for (const [clusterStart, clusterEnd] of [...clusterRanges].sort(
+        (left, right) => left[0] - right[0],
+      )) {
+        if (clusterStart !== expectedClusterStart) {
+          return "Text run layout glyph clusters do not cover their fragment";
+        }
+        expectedClusterStart = clusterEnd;
+      }
+      if (
+        fragment.start !== fragment.end &&
+        expectedClusterStart !== fragment.end
+      ) {
+        return "Text run layout glyph clusters do not cover their fragment";
+      }
     }
     expectedFragmentStart = fragment.end;
   }
@@ -418,6 +504,10 @@ function nonNegativeBounded(value: unknown): value is number {
 
 function finite(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function boundedSigned(value: unknown): value is number {
+  return finite(value) && Math.abs(value) <= 1_000_000;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -6,10 +6,7 @@ import type {
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
-import type {
-  TextFontDescriptor,
-  TextLayoutProvider,
-} from "@opendesign/text-service";
+import type { TextLayoutProvider } from "@opendesign/text-service";
 import type {
   ComponentOverridePatch,
   DesignDocument,
@@ -88,6 +85,7 @@ import {
 import { reportRendererError } from "./diagnostics";
 import { useRendererDesignToolHost } from "./use-renderer-design-tool-host";
 import { useProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
+import { useFontInspectorContext } from "./use-font-inspector-context";
 const HISTORY_SYNC_DEBOUNCE_MS = 80;
 type AppView = "workspace" | "project" | "editor" | "settings";
 
@@ -636,63 +634,15 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       transactionCounter,
     });
   const { applyCommands, resizeFrame, updateNode } = editorCommands;
-  const fontInspectorContext = useMemo(() => {
-    if (!selectedNode || selectedNode.kind !== "text") return undefined;
-    const expectedFont: TextFontDescriptor = {
-      fontFamily: selectedNode.properties.fontFamily,
-      fontStyleName: selectedNode.properties.fontStyleName,
-      fontWeight: selectedNode.properties.fontWeight,
-      fontSlant: selectedNode.properties.fontSlant,
-    };
-    const matching = Object.values(designDocument.nodesById).filter(
-      (node) =>
-        node.kind === "text" &&
-        node.properties.fontFamily === expectedFont.fontFamily &&
-        node.properties.fontStyleName === expectedFont.fontStyleName &&
-        node.properties.fontWeight === expectedFont.fontWeight &&
-        node.properties.fontSlant === expectedFont.fontSlant,
-    );
-    const reflowable = matching.filter(
-      (node) => node.kind === "text" && node.properties.textResize !== "fixed",
-    );
-    const applyFont = (
-      nodeIds: readonly string[],
-      replacementFont?: TextFontDescriptor,
-    ) => {
-      if (nodeIds.length === 0) return;
-      applyCommands(
-        t(replacementFont ? "history.replaceFont" : "history.reflowFont"),
-        [
-          {
-            commandId: `font_reflow_${Date.now()}_${++transactionCounter.current}`,
-            type: "reflow_text",
-            nodeIds: [...nodeIds],
-            expectedFont,
-            ...(replacementFont ? { replacementFont } : {}),
-          },
-        ],
-      );
-    };
-    return {
-      availability: runtime.inspectTextFont(expectedFont),
-      matchingNodeCount: matching.length,
-      reflowableNodeCount: reflowable.length,
-      onReflow: () => applyFont(reflowable.map((node) => node.id)),
-      onReplace: (replacementFont: TextFontDescriptor) =>
-        applyFont(
-          matching.map((node) => node.id),
-          replacementFont,
-        ),
-    };
-  }, [
+  const fontInspectorContext = useFontInspectorContext({
     applyCommands,
-    designDocument.nodesById,
+    document: designDocument,
     runtime,
     selectedNode,
     t,
     textLayoutProviderEpoch,
     transactionCounter,
-  ]);
+  });
 
   const {
     applyBooleanOperation,

@@ -25,6 +25,10 @@ const designContractVersions = await text(
 );
 const geometryService = await text("packages/geometry-service/src/index.ts");
 const textService = await text("packages/text-service/src/index.ts");
+const textRangeService = await text("packages/text-service/src/text-ranges.ts");
+const textRunLayoutService = await text(
+  "packages/text-service/src/text-run-layout.ts",
+);
 const layoutService = await text("packages/layout-service/src/index.ts");
 const requireFromDesktop = createRequire(join(desktopRoot, "package.json"));
 const vitestPath = join(
@@ -68,6 +72,20 @@ const textServiceContractVersion = Number(
     "Text Layout service contract version",
   ),
 );
+const textRangeServiceContractVersion = Number(
+  capture(
+    textRangeService,
+    /TEXT_RANGE_SERVICE_CONTRACT_VERSION\s*=\s*([0-9]+)/,
+    "Text Range service contract version",
+  ),
+);
+const textRunLayoutServiceContractVersion = Number(
+  capture(
+    textRunLayoutService,
+    /TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION\s*=\s*([0-9]+)/,
+    "Text Run Layout service contract version",
+  ),
+);
 const layoutServiceContractVersion = Number(
   capture(
     layoutService,
@@ -98,6 +116,16 @@ assertEqual(
   baseline.contracts.textLayoutServiceContractVersion,
   textServiceContractVersion,
   "engine baseline Text Layout service contract",
+);
+assertEqual(
+  baseline.contracts.textRangeServiceContractVersion,
+  textRangeServiceContractVersion,
+  "engine baseline Text Range service contract",
+);
+assertEqual(
+  baseline.contracts.textRunLayoutServiceContractVersion,
+  textRunLayoutServiceContractVersion,
+  "engine baseline Text Run Layout service contract",
 );
 assertEqual(
   baseline.contracts.layoutServiceContractVersion,
@@ -142,7 +170,9 @@ const blocks = {
     `- 文档协议：\`DesignDocument ${documentSchemaVersion}\``,
     `- Agent 协议：\`${agentProtocol}\``,
     `- Geometry Service：\`contract v${geometryServiceContractVersion}\``,
-    `- Text Service：\`contract v${textServiceContractVersion}\``,
+    `- Text Layout Service：\`contract v${textServiceContractVersion}\``,
+    `- Text Range Service：\`contract v${textRangeServiceContractVersion}\`（文档 rich-text 尚未暴露）`,
+    `- Text Run Layout Service：\`contract v${textRunLayoutServiceContractVersion}\`（文档 rich-text 尚未暴露）`,
     `- Layout Service：\`contract v${layoutServiceContractVersion}\``,
     `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（${agentCoreStatus}）`,
     `- 生产画布：\`${baseline.components.leafer.dependency} ${engineVersion}\``,

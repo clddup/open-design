@@ -64,6 +64,7 @@ import { registerSvgFileIpc } from "./svg/svg-file-ipc";
 import { SvgFileService } from "./svg/svg-file-service";
 import { registerRasterFileIpc } from "./raster/raster-file-ipc";
 import { RasterFileService } from "./raster/raster-file-service";
+import { FontBinaryMainService } from "./font/font-binary-main";
 import type { RasterExportFormat } from "@opendesign/import-export-service/raster";
 import { ModelProviderHost } from "./model/model-provider-host";
 import { ImageGenerationHost } from "./model/image-generation-host";
@@ -615,7 +616,7 @@ function registerProjectIpc() {
   );
 }
 
-function registerIpc() {
+function registerIpc(fontBinaryService: FontBinaryMainService) {
   svgFileService = new SvgFileService({
     selectOpenFile: selectSvgOpenFile,
     selectSaveFile: selectSvgSaveFile,
@@ -646,6 +647,7 @@ function registerIpc() {
     assertRenderer: assertMainRenderer,
     service: rasterFileService,
   });
+  fontBinaryService.register(ipcMain, assertMainRenderer, () => mainWindow);
   ipcMain.handle(channels.platformInfo, () => ({
     platform: process.platform,
     version: app.getVersion(),
@@ -1168,6 +1170,9 @@ void app.whenReady().then(async () => {
   workspaceStore = new WorkspaceStore(workspaceDatabase);
   agentAttachmentHost = new AgentAttachmentHost(
     fixtureSmoke.path(".opendesign", "attachments"),
+  );
+  const fontBinaryService = new FontBinaryMainService(
+    fixtureSmoke.path(".opendesign", "fonts"),
   );
   agentReferenceHost = new AgentReferenceHost(agentAttachmentHost);
   const persistedLocale = workspaceStore.getPreference("locale");
@@ -1817,7 +1822,7 @@ void app.whenReady().then(async () => {
           : "Agent session recovery failed",
     });
   }
-  registerIpc();
+  registerIpc(fontBinaryService);
   if (!fixtureSmoke.active) agentHost.start();
   createWindow();
   app.on("activate", () => {

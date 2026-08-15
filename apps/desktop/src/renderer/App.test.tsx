@@ -274,6 +274,9 @@ beforeEach(() => {
     importAgentAttachments: vi.fn().mockResolvedValue([]),
     getAgentAttachmentPreview: vi.fn(),
     selectDesignImage: vi.fn().mockResolvedValue(null),
+    selectFontBinaries: vi.fn().mockResolvedValue([]),
+    listFontBinaries: vi.fn().mockResolvedValue([]),
+    readFontBinary: vi.fn(),
     onDesignToolRequest: vi
       .fn()
       .mockImplementation(
@@ -5008,7 +5011,8 @@ describe("App", () => {
         delta: "Partial design response",
       });
     });
-    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
+    expect(screen.getByText("Partial design response")).toBeVisible();
     act(() => {
       emitAgentEvent?.({
         type: "agent.error",
@@ -5073,11 +5077,9 @@ describe("App", () => {
         delta: "Retry response",
       });
     });
-    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(0);
-    expect(
-      screen.queryByText("Partial design response"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("Retry response")).not.toBeInTheDocument();
+    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
+    expect(screen.getByText("Partial design response")).toBeVisible();
+    expect(screen.getByText("Retry response")).toBeVisible();
   });
 
   it("unlocks every active Conversation when the Agent process exits", async () => {
@@ -5104,7 +5106,8 @@ describe("App", () => {
         delta: "Interrupted by process exit",
       });
     });
-    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-agent-caret]")).toHaveLength(1);
+    expect(screen.getByText("Interrupted by process exit")).toBeVisible();
     act(() => {
       emitAgentEvent?.({
         type: "agent.error",

@@ -47,6 +47,19 @@ import type {
 } from "./design-tool-bridge";
 import type { DiagnosticEvent, RendererDiagnosticReport } from "./diagnostics";
 import { isPortableFileName } from "./portable-file-name";
+import type {
+  FontBinaryDescriptor,
+  FontBinaryPayload,
+  FontBinaryReadRequest,
+} from "./font-binary-contract";
+export {
+  isFontBinaryDescriptor,
+  isFontBinaryPayload,
+  isFontBinaryReadRequest,
+  type FontBinaryDescriptor,
+  type FontBinaryPayload,
+  type FontBinaryReadRequest,
+} from "./font-binary-contract";
 export {
   isProviderConnectionResult,
   type ProviderConnectionResult,
@@ -305,6 +318,11 @@ export interface DesktopApi {
     request: AgentAttachmentPreviewRequest,
   ) => Promise<AgentAttachmentPreviewResult>;
   selectDesignImage: () => Promise<DesignImageSelection | null>;
+  selectFontBinaries: () => Promise<FontBinaryDescriptor[]>;
+  listFontBinaries: () => Promise<FontBinaryDescriptor[]>;
+  readFontBinary: (
+    request: FontBinaryReadRequest,
+  ) => Promise<FontBinaryPayload>;
   onDesignToolRequest: (
     listener: (request: RendererDesignToolRequest) => void,
   ) => () => void;
@@ -393,6 +411,9 @@ export const channels = {
   importAgentAttachments: "agent-attachment:import",
   getAgentAttachmentPreview: "agent-attachment:preview",
   selectDesignImage: "design-image:select",
+  selectFontBinaries: "font-binary:select",
+  listFontBinaries: "font-binary:list",
+  readFontBinary: "font-binary:read",
   designToolRequest: "design-tool:request",
   designToolCancel: "design-tool:cancel",
   designToolProgress: "design-tool:progress",

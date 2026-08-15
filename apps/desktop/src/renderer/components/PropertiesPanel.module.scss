@@ -709,6 +709,18 @@
   }
 }
 
+.fontImportFeedback {
+  min-width: 0;
+  grid-column: 1 / -1;
+  color: var(--ui-success);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.fontImportError {
+  color: var(--ui-danger);
+}
+
 .stack {
   display: grid;
   gap: 6px;

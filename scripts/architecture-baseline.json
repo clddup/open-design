@@ -83,7 +83,7 @@
     "@opendesign/workspace-contracts": []
   },
   "productionModuleLineBudgets": {
-    "apps/desktop/src/main/index.ts": 1961,
+    "apps/desktop/src/main/index.ts": 1966,
     "apps/desktop/src/main/agent/global-task-coordinator.ts": 1945,
     "apps/desktop/src/main/model/model-provider-host.ts": 912,
     "apps/desktop/src/main/project/project-host.ts": 1209,
@@ -93,7 +93,7 @@
     "apps/desktop/src/renderer/components/SettingsPage.tsx": 1353,
     "apps/desktop/src/renderer/design-tool-execution.ts": 2196,
     "apps/desktop/src/shared/design-agent-tools.ts": 3897,
-    "apps/desktop/src/shared/desktop-api.ts": 1357,
+    "apps/desktop/src/shared/desktop-api.ts": 1360,
     "apps/desktop/src/shared/i18n/messages.ts": 1924,
     "packages/agent-contracts/src/index.ts": 1003,
     "packages/agent-runtime/src/index.ts": 1134,

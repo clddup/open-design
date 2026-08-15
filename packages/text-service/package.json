@@ -10,7 +10,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@expo-google-fonts/noto-sans": "0.4.2",
+    "@expo-google-fonts/noto-sans-arabic": "0.4.3",
+    "@expo-google-fonts/noto-sans-devanagari": "0.4.1",
+    "@expo-google-fonts/noto-sans-hebrew": "0.4.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "bidi-js": "1.0.3",
+    "harfbuzzjs": "1.4.0"
   }
 }

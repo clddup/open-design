@@ -5,14 +5,27 @@ import type {
 } from "./projection-types.js";
 
 export interface LeaferTextRunFragment {
+  baseline?: number;
   data: Record<string, unknown>;
   end: number;
+  glyphs?: readonly LeaferTextRunGlyph[];
   height: number;
   start: number;
   text: string;
   width: number;
   x: number;
   y: number;
+}
+
+export interface LeaferTextRunGlyph {
+  clusterEnd: number;
+  clusterStart: number;
+  glyphId: number;
+  path: string;
+  x: number;
+  xAdvance: number;
+  y: number;
+  yAdvance: number;
 }
 
 export interface LeaferTextRunProjectionResult {
@@ -85,16 +98,63 @@ export function projectResolvedTextRuns(
       },
     });
 
-    const fragmentIds = result.fragments.map((fragment, index) => {
-      const id = textRunFragmentElementId(nodeId, index);
+    const fragmentIds: string[] = [];
+    let projectionIndex = 0;
+    result.fragments.forEach((fragment, fragmentIndex) => {
       const sourceName =
         typeof source.data.name === "string" ? source.data.name : nodeId;
+      if (fragment.glyphs !== undefined) {
+        fragment.glyphs.forEach((glyph, glyphIndex) => {
+          const id = textRunFragmentElementId(nodeId, projectionIndex++);
+          const spec: LeaferElementSpec = {
+            childIds: [],
+            data: {
+              fill: fragment.data.fill,
+              id,
+              name: `${sourceName} glyph ${glyphIndex + 1}`,
+              editable: "single",
+              hittable: glyph.path.length > 0,
+              opacity: source.data.opacity,
+              path: glyph.path || null,
+              visible: source.data.visible,
+              data: {
+                opendesignGlyphId: glyph.glyphId,
+                opendesignNodeId: nodeId,
+                opendesignNodeKind: "text",
+                opendesignProjectionId: id,
+                opendesignSynthetic: true,
+                opendesignTextRun: {
+                  start: glyph.clusterStart,
+                  end: glyph.clusterEnd,
+                },
+              },
+            },
+            id,
+            kind: "path",
+            parentId: source.parentId,
+            tag: "Path",
+            transform: composeTransform(source.transform, [
+              1,
+              0,
+              0,
+              -1,
+              fragment.x + glyph.x,
+              fragment.y + (fragment.baseline ?? 0) - glyph.y,
+            ]),
+          };
+          elementsById.set(id, spec);
+          affectedNodeIds?.add(id);
+          fragmentIds.push(id);
+        });
+        return;
+      }
+      const id = textRunFragmentElementId(nodeId, projectionIndex++);
       const spec: LeaferElementSpec = {
         childIds: [],
         data: {
           ...fragment.data,
           id,
-          name: `${sourceName} segment ${index + 1}`,
+          name: `${sourceName} segment ${fragmentIndex + 1}`,
           // Leafer 2.2.9's EditSelectHelper.findOne() skips falsy editable
           // leaves. "single" keeps the fragment in the pointer hit path but
           // out of box/multi selection; Adapter selection is then immediately
@@ -125,7 +185,7 @@ export function projectResolvedTextRuns(
       };
       elementsById.set(id, spec);
       affectedNodeIds?.add(id);
-      return id;
+      fragmentIds.push(id);
     });
 
     if (source.parentId === null) {
@@ -222,7 +282,7 @@ export function textRunEditProxyElementId(
   projectionId: string,
 ): string | undefined {
   const selected = projection.elementsById.get(projectionId);
-  if (!selected || selected.kind !== "text") return undefined;
+  if (!selected) return undefined;
   const selectedMetadata = metadata(selected.data.data);
   const sourceId =
     typeof selectedMetadata.opendesignNodeId === "string"
@@ -277,6 +337,61 @@ function validateFragments(
         `Text run projection fragments are invalid: ${source.id}`,
       );
     }
+    if (fragment.glyphs !== undefined) {
+      if (!Array.isArray(fragment.glyphs)) {
+        throw new Error(`Text run projection glyphs are invalid: ${source.id}`);
+      }
+      if (!finite(fragment.baseline)) {
+        throw new Error(
+          `Text run projection glyph baseline is invalid: ${source.id}`,
+        );
+      }
+      const glyphs: readonly LeaferTextRunGlyph[] = fragment.glyphs;
+      const ranges = new Map<number, number>();
+      for (const glyph of glyphs) {
+        if (
+          !Number.isSafeInteger(glyph.glyphId) ||
+          glyph.glyphId < 0 ||
+          !Number.isSafeInteger(glyph.clusterStart) ||
+          !Number.isSafeInteger(glyph.clusterEnd) ||
+          glyph.clusterStart < fragment.start ||
+          glyph.clusterEnd > fragment.end ||
+          glyph.clusterEnd <= glyph.clusterStart ||
+          typeof glyph.path !== "string" ||
+          !finite(glyph.x) ||
+          !finite(glyph.y) ||
+          !finite(glyph.xAdvance) ||
+          !finite(glyph.yAdvance)
+        ) {
+          throw new Error(
+            `Text run projection glyphs are invalid: ${source.id}`,
+          );
+        }
+        const end = ranges.get(glyph.clusterStart);
+        if (end !== undefined && end !== glyph.clusterEnd) {
+          throw new Error(
+            `Text run projection glyph clusters are ambiguous: ${source.id}`,
+          );
+        }
+        ranges.set(glyph.clusterStart, glyph.clusterEnd);
+      }
+      let clusterStart = fragment.start;
+      for (const [start, end] of [...ranges].sort(
+        (left, right) => left[0] - right[0],
+      )) {
+        if (start !== clusterStart) {
+          throw new Error(
+            `Text run projection glyphs do not cover fragment: ${source.id}`,
+          );
+        }
+        clusterStart = end;
+      }
+      if (clusterStart !== fragment.end) {
+        throw new Error(
+          `Text run projection glyphs do not cover fragment: ${source.id}`,
+        );
+      }
+    }
     expectedStart = fragment.end;
   }
   if (expectedStart !== sourceText.length) {
@@ -293,6 +408,19 @@ function translateTransform(
 ): Transform {
   const [a, b, c, d, e, f] = transform;
   return [a, b, c, d, e + a * x + c * y, f + b * x + d * y];
+}
+
+function composeTransform(left: Transform, right: Transform): Transform {
+  const [a, b, c, d, e, f] = left;
+  const [g, h, i, j, k, l] = right;
+  return [
+    a * g + c * h,
+    b * g + d * h,
+    a * i + c * j,
+    b * i + d * j,
+    a * k + c * l + e,
+    b * k + d * l + f,
+  ];
 }
 
 function insertAfterCopy(

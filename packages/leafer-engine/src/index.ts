@@ -41,6 +41,7 @@ export {
   textRunFragmentElementIds,
   textRunFragmentElementId,
   type LeaferTextRunFragment,
+  type LeaferTextRunGlyph,
   type LeaferTextRunProjectionResolution,
   type LeaferTextRunProjectionResult,
 } from "./text-run-projection.js";

@@ -6,6 +6,7 @@ import type {
 import { Button } from "@opendesign/ui";
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
+import type { FontBinaryImportState } from "../../use-font-binary-runtime";
 import type { UpdatePropertiesPatch } from "../../features/editor/types";
 import styles from "../PropertiesPanel.module.scss";
 import {
@@ -21,8 +22,10 @@ type TextNode = Extract<DesignNode, { kind: "text" }>;
 
 export type FontInspectorContext = {
   availability: TextFontAvailabilityResult;
+  importState: FontBinaryImportState;
   matchingNodeCount: number;
   reflowableNodeCount: number;
+  onImport: () => Promise<void>;
   onReflow: () => void;
   onReplace: (font: TextFontDescriptor) => void;
 };
@@ -183,12 +186,43 @@ export function TypographySection({
                 </small>
               </span>
               <Button
-                disabled={fontContext.reflowableNodeCount === 0}
-                onClick={fontContext.onReflow}
+                disabled={
+                  fontContext.availability.status === "available"
+                    ? fontContext.reflowableNodeCount === 0
+                    : fontContext.importState.status === "importing"
+                }
+                onClick={() =>
+                  fontContext.availability.status === "available"
+                    ? fontContext.onReflow()
+                    : void fontContext.onImport()
+                }
                 tone="quiet"
               >
-                {t("properties.reflowFont")}
+                {t(
+                  fontContext.availability.status === "available"
+                    ? "properties.reflowFont"
+                    : fontContext.importState.status === "importing"
+                      ? "properties.importingFont"
+                      : "properties.importFont",
+                )}
               </Button>
+            </div>
+          )}
+          {fontContext?.importState.status === "success" && (
+            <div className={styles.fontImportFeedback} role="status">
+              {t("properties.fontImportSuccess", {
+                count: fontContext.importState.count,
+              })}
+            </div>
+          )}
+          {fontContext?.importState.status === "error" && (
+            <div
+              className={cx(styles.fontImportFeedback, styles.fontImportError)}
+              role="alert"
+            >
+              {t("properties.fontImportFailed", {
+                message: fontContext.importState.message,
+              })}
             </div>
           )}
           {fontContext && fontContext.availability.status !== "available" && (
