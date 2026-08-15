@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 import {
   createWelcomeDocument,
   EditorRuntime,
@@ -325,6 +327,8 @@ class FakeEditor extends FakeEventTarget {
   skewing = false;
   update = vi.fn();
   children: FakeElement[] = [];
+  enableTextDom = false;
+  innerEditor: { editDom: HTMLDivElement } | null = null;
 
   constructor() {
     super();
@@ -362,14 +366,32 @@ class FakeEditor extends FakeEventTarget {
     this.innerEditing = true;
     this.editTarget = target;
     this.emit("inner.before-open", { editTarget: target, name });
+    if (this.enableTextDom) {
+      const editDom = document.createElement("div");
+      editDom.contentEditable = "true";
+      editDom.textContent = target instanceof FakeText ? target.text : "";
+      document.body.appendChild(editDom);
+      this.innerEditor = { editDom };
+      this.emit("inner.open", {
+        editTarget: target,
+        innerEditor: this.innerEditor,
+        name,
+      });
+    }
   }
 
   closeInnerEditor(): void {
     if (!this.innerEditing) return;
     this.innerEditing = false;
     const editTarget = this.editTarget;
+    this.emit("inner.before-close", {
+      editTarget,
+      innerEditor: this.innerEditor,
+    });
     this.editTarget = null;
-    this.emit("inner.close", { editTarget });
+    this.emit("inner.close", { editTarget, innerEditor: this.innerEditor });
+    this.innerEditor?.editDom.remove();
+    this.innerEditor = null;
   }
 
   add(child: FakeElement): void {
@@ -436,7 +458,12 @@ vi.mock("leafer-editor", () => ({
   Frame: FakeFrame,
   Group: FakeGroup,
   Image: FakeImage,
-  InnerEditorEvent: { BEFORE_OPEN: "inner.before-open", CLOSE: "inner.close" },
+  InnerEditorEvent: {
+    BEFORE_OPEN: "inner.before-open",
+    OPEN: "inner.open",
+    BEFORE_CLOSE: "inner.before-close",
+    CLOSE: "inner.close",
+  },
   Leafer: FakeTree,
   MoveEvent: { MOVE: "viewport.move", END: "viewport.move-end" },
   Path: FakePath,
@@ -488,6 +515,7 @@ describe("Leafer engine selection bounds synchronization", () => {
         },
       ),
       cancelAnimationFrame: (id: number) => animationFrames.delete(id),
+      getSelection: () => document.getSelection(),
       removeEventListener: vi.fn(
         (type: string, listener: (event: KeyboardEvent) => void) => {
           leaferHarness.windowListeners.get(type)?.delete(listener);
@@ -602,8 +630,9 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(firstEdit?.operations[0]).toMatchObject({
       commandId: "leafer_text_title_welcome",
       nodeId: "title_welcome",
-      properties: { content: "Updated mixed-style title" },
-      type: "update_properties",
+      content: "Updated mixed-style title",
+      paragraphPatches: [],
+      type: "commit_text_edit",
     });
     expect(proxy).not.toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
     expect(firstFragment).toMatchObject({ hittable: false, visible: false });
@@ -773,6 +802,223 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("authors an automatic list in the real edit root and commits one semantic operation", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    const document = structuredClone(input.document);
+    const title = document.nodesById.title_welcome;
+    if (!title || title.kind !== "text") throw new Error("Missing title");
+    title.properties.content = "";
+    title.properties.runs = [];
+    title.properties.paragraphRuns = [];
+    adapter.sync({
+      ...input,
+      document,
+      selection: { nodeIds: [title.id], anchorNodeId: title.id },
+    });
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, title.id) as FakeText | undefined;
+    if (!element) throw new Error("Missing Text edit target");
+    app.editor.enableTextDom = true;
+    app.editor.openInnerEditor(element, true);
+    const root = app.editor.innerEditor?.editDom;
+    if (!root) throw new Error("Missing Text edit DOM");
+
+    root.textContent = "- ";
+    setDomCaret(root, 2);
+    root.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: " ",
+        inputType: "insertText",
+      }),
+    );
+    expect(root.textContent).toBe("");
+    expect(element.text).toBe("");
+
+    root.textContent = "Alpha";
+    setDomCaret(root, 5);
+    root.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: "a",
+        inputType: "insertText",
+      }),
+    );
+    app.editor.closeInnerEditor();
+
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    expect(onOperations.mock.calls[0]?.[0]).toMatchObject({
+      kind: "text",
+      selectionNodeIds: [title.id],
+      operations: [
+        {
+          type: "commit_text_edit",
+          nodeId: title.id,
+          content: "Alpha",
+          paragraphPatches: [
+            {
+              start: 0,
+              end: 5,
+              style: {
+                listOptions: { type: "unordered" },
+                indentation: 1,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    adapter.dispose();
+  });
+
+  it("routes Tab list indentation through the editing session instead of moving focus", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    const document = structuredClone(input.document);
+    const title = document.nodesById.title_welcome;
+    if (!title || title.kind !== "text") throw new Error("Missing title");
+    title.properties.content = "One\nTwo";
+    title.properties.runs = [];
+    title.properties.paragraphRuns = [
+      {
+        start: 0,
+        end: 7,
+        style: {
+          listOptions: { type: "ordered" },
+          indentation: 1,
+          listSpacing: 0,
+          paragraphIndent: 0,
+          paragraphSpacing: 0,
+        },
+      },
+    ];
+    adapter.sync({
+      ...input,
+      document,
+      selection: { nodeIds: [title.id], anchorNodeId: title.id },
+    });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, title.id) as FakeText | undefined;
+    if (!element) throw new Error("Missing Text edit target");
+    app.editor.enableTextDom = true;
+    app.editor.openInnerEditor(element, true);
+    const root = app.editor.innerEditor?.editDom;
+    if (!root) throw new Error("Missing Text edit DOM");
+    setDomCaret(root, 4);
+
+    const key = emitTextEditWindowKey(root, { code: "Tab", key: "Tab" });
+    expect(key.preventDefault).toHaveBeenCalledTimes(1);
+    expect(key.stopImmediatePropagation).toHaveBeenCalledTimes(1);
+    app.editor.closeInnerEditor();
+    expect(onOperations.mock.calls[0]?.[0]).toMatchObject({
+      operations: [
+        {
+          type: "commit_text_edit",
+          content: "One\nTwo",
+          paragraphPatches: [{ start: 4, end: 7, style: { indentation: 2 } }],
+        },
+      ],
+    });
+    adapter.dispose();
+  });
+
+  it("restores creation characters on immediate Undo and skips auto-list during composition", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    const document = structuredClone(input.document);
+    const title = document.nodesById.title_welcome;
+    if (!title || title.kind !== "text") throw new Error("Missing title");
+    title.properties.content = "";
+    title.properties.runs = [];
+    title.properties.paragraphRuns = [];
+    adapter.sync({ ...input, document });
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, title.id) as FakeText | undefined;
+    if (!element) throw new Error("Missing Text edit target");
+    app.editor.enableTextDom = true;
+    app.editor.openInnerEditor(element, true);
+    let root = app.editor.innerEditor?.editDom;
+    if (!root) throw new Error("Missing Text edit DOM");
+    root.textContent = "- ";
+    setDomCaret(root, 2);
+    root.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: " ",
+        inputType: "insertText",
+      }),
+    );
+    const undo = emitTextEditWindowKey(root, {
+      code: "KeyZ",
+      ctrlKey: true,
+      key: "z",
+    });
+    expect(undo.preventDefault).toHaveBeenCalledTimes(1);
+    expect(root.textContent).toBe("- ");
+    app.editor.closeInnerEditor();
+    expect(onOperations.mock.calls[0]?.[0]).toMatchObject({
+      operations: [
+        {
+          type: "commit_text_edit",
+          content: "- ",
+          paragraphPatches: [],
+        },
+      ],
+    });
+
+    onOperations.mockClear();
+    app.editor.openInnerEditor(element, true);
+    root = app.editor.innerEditor?.editDom;
+    if (!root) throw new Error("Missing reopened Text edit DOM");
+    root.dispatchEvent(new CompositionEvent("compositionstart"));
+    root.textContent = "* ";
+    setDomCaret(root, 2);
+    root.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: " ",
+        inputType: "insertText",
+        isComposing: true,
+      }),
+    );
+    root.dispatchEvent(new CompositionEvent("compositionend"));
+    expect(root.textContent).toBe("* ");
+    app.editor.closeInnerEditor();
+    expect(onOperations.mock.calls[0]?.[0]).toMatchObject({
+      operations: [
+        {
+          type: "commit_text_edit",
+          content: "* ",
+          paragraphPatches: [],
+        },
+      ],
+    });
+    adapter.dispose();
+  });
+
   it("restores mixed Text projection on Escape and blocks inherited-locked editing", async () => {
     const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
       () => true,
@@ -901,6 +1147,58 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(onOperations).not.toHaveBeenCalled();
   });
 
+  it("closes a text session when an unrelated exact revision lands", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const first = createInput();
+    first.selection = { nodeIds: [] };
+    first.textRunProjection = textRunProjection(first);
+    adapter.sync(first);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const fragment = findElement(
+      app.tree,
+      textRunFragmentElementId("title_welcome", 0),
+    );
+    if (!fragment) throw new Error("Missing Text fragment");
+
+    app.editor.openInnerEditor(fragment, true);
+    await flushMicrotasks();
+    const proxy = findElement(app.tree, "title_welcome") as
+      FakeText | undefined;
+    if (!proxy) throw new Error("Missing Text proxy");
+    proxy.text = "Stale local edit";
+
+    const secondDocument = structuredClone(first.document);
+    secondDocument.revision += 1;
+    const sibling = secondDocument.nodesById.feature_two;
+    if (!sibling) throw new Error("Missing sibling fixture");
+    sibling.opacity = 0.5;
+    const second: LeaferEngineSyncInput = {
+      ...first,
+      document: secondDocument,
+      changes: changedNodeSet(first.document, secondDocument, "feature_two"),
+    };
+    second.textRunProjection = textRunProjection(second);
+    adapter.sync(second);
+    expect(app.editor.innerEditing).toBe(false);
+    expect(onOperations).not.toHaveBeenCalled();
+    expect(proxy.text).toBe(
+      (
+        secondDocument.nodesById.title_welcome as Extract<
+          DesignNode,
+          { kind: "text" }
+        >
+      ).properties.content,
+    );
+    adapter.dispose();
+  });
+
   it("restores full text while editing and reprojects ending truncation after close", async () => {
     const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
       () => true,
@@ -951,13 +1249,12 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(request?.kind).toBe("text");
     const operation = request?.operations[0];
     expect(operation).toMatchObject({ nodeId: title.id });
-    if (!operation || operation.type !== "update_properties") {
+    if (!operation || operation.type !== "commit_text_edit") {
       throw new Error("Expected a text property update");
     }
-    expect(operation.properties).toMatchObject({
+    expect(operation).toMatchObject({
       content: "Updated complete authored text",
-      maxLines: 1,
-      textTruncation: "ending",
+      paragraphPatches: [],
     });
     adapter.dispose();
   });
@@ -4858,6 +5155,44 @@ function emitWindowKey(code: string): void {
   leaferHarness.windowListeners
     .get("keydown")
     ?.forEach((listener) => listener(event));
+}
+
+function emitTextEditWindowKey(
+  target: Node,
+  options: {
+    code: string;
+    ctrlKey?: boolean;
+    key: string;
+    metaKey?: boolean;
+    shiftKey?: boolean;
+  },
+) {
+  const event = {
+    altKey: false,
+    code: options.code,
+    ctrlKey: options.ctrlKey ?? false,
+    isComposing: false,
+    key: options.key,
+    metaKey: options.metaKey ?? false,
+    preventDefault: vi.fn(),
+    shiftKey: options.shiftKey ?? false,
+    stopImmediatePropagation: vi.fn(),
+    target,
+  };
+  leaferHarness.windowListeners
+    .get("keydown")
+    ?.forEach((listener) => listener(event as unknown as KeyboardEvent));
+  return event;
+}
+
+function setDomCaret(root: HTMLElement, offset: number): void {
+  const node = root.firstChild ?? root;
+  const range = document.createRange();
+  range.setStart(node, Math.min(offset, node.textContent?.length ?? 0));
+  range.collapse(true);
+  const selection = document.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
 }
 
 function flushAnimationFrames(): void {

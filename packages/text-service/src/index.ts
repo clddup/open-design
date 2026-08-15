@@ -1,6 +1,7 @@
 export * from "./text-ranges.js";
 export * from "./text-paragraphs.js";
 export * from "./text-lists.js";
+export * from "./text-editing-session.js";
 export * from "./text-list-layout.js";
 export * from "./text-run-layout.js";
 export * from "./text-types.js";

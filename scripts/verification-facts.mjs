@@ -30,6 +30,9 @@ const textParagraphService = await text(
   "packages/text-service/src/text-paragraphs.ts",
 );
 const textListService = await text("packages/text-service/src/text-lists.ts");
+const textEditingSessionService = await text(
+  "packages/text-service/src/text-editing-session.ts",
+);
 const textRunLayoutService = await text(
   "packages/text-service/src/text-run-layout.ts",
 );
@@ -97,6 +100,13 @@ const textListServiceContractVersion = Number(
     "Text List service contract version",
   ),
 );
+const textEditingSessionServiceContractVersion = Number(
+  capture(
+    textEditingSessionService,
+    /TEXT_EDITING_SESSION_SERVICE_CONTRACT_VERSION\s*=\s*([0-9]+)/,
+    "Text Editing Session service contract version",
+  ),
+);
 const textRunLayoutServiceContractVersion = Number(
   capture(
     textRunLayoutService,
@@ -151,6 +161,11 @@ assertEqual(
   "engine baseline Text List service contract",
 );
 assertEqual(
+  baseline.contracts.textEditingSessionServiceContractVersion,
+  textEditingSessionServiceContractVersion,
+  "engine baseline Text Editing Session service contract",
+);
+assertEqual(
   baseline.contracts.textRunLayoutServiceContractVersion,
   textRunLayoutServiceContractVersion,
   "engine baseline Text Run Layout service contract",
@@ -202,6 +217,7 @@ const blocks = {
     `- Text Range Service：\`contract v${textRangeServiceContractVersion}\`（DesignDocument rich-text runs 已接入）`,
     `- Text Paragraph Service：\`contract v${textParagraphServiceContractVersion}\`（逐段 indent/spacing/list 已接入）`,
     `- Text List Service：\`contract v${textListServiceContractVersion}\`（ordered/unordered、五级层级与 hanging marker 已接入）`,
+    `- Text Editing Session Service：\`contract v${textEditingSessionServiceContractVersion}\`（自动列表、结构键与单事务提交已接入）`,
     `- Text Run Layout Service：\`contract v${textRunLayoutServiceContractVersion}\`（native/HarfBuzz 列表生产投影已接入）`,
     `- Layout Service：\`contract v${layoutServiceContractVersion}\``,
     `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（${agentCoreStatus}）`,

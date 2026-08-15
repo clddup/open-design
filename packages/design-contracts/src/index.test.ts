@@ -62,6 +62,46 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(DESIGN_SCHEMA_VERSION).toBe(FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION);
 });
 
+it("validates bounded semantic text editing session commits", () => {
+  const valid = {
+    commandId: "commit-list-edit",
+    type: "commit_text_edit" as const,
+    nodeId: "text_1",
+    content: "Alpha\nBeta",
+    paragraphPatches: [
+      {
+        start: 0,
+        end: 6,
+        style: {
+          listOptions: { type: "ordered" as const },
+          indentation: 1,
+        },
+      },
+    ],
+  };
+  expect(Value.Check(DesignOperationSchema, valid)).toBe(true);
+  expect(
+    Value.Check(DesignOperationSchema, {
+      ...valid,
+      paragraphPatches: [
+        { start: 0, end: 0, style: { listOptions: { type: "ordered" } } },
+      ],
+    }),
+  ).toBe(false);
+  expect(
+    Value.Check(DesignOperationSchema, {
+      ...valid,
+      paragraphPatches: [{ start: 0, end: 6, style: { indentation: 6 } }],
+    }),
+  ).toBe(false);
+  expect(
+    Value.Check(DesignOperationSchema, {
+      ...valid,
+      paragraphPatches: [{ start: 0, end: 6, style: {} }],
+    }),
+  ).toBe(false);
+});
+
 it("migrates 1.32 paragraph runs to explicit non-list defaults", () => {
   const source = textDocumentFixture() as unknown as Record<string, unknown>;
   source.schemaVersion = PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION;

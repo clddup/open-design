@@ -1170,6 +1170,7 @@ describe("design Agent tool contract", () => {
     expect(bootstrap).not.toContain('"reflow_text"');
     expect(complete).not.toContain('"reflow_text"');
     expect(complete).not.toContain('"const":"update_text_range_style"');
+    expect(complete).not.toContain('"const":"commit_text_edit"');
     expect(complete.length).toBeLessThan(64_000);
     const textRange = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_TEXT_RANGE_TOOL_NAME,
@@ -1179,6 +1180,35 @@ describe("design Agent tool contract", () => {
       role: "material-write",
     });
     expect(JSON.stringify(textRange?.inputSchema)).toContain('"fills"');
+  });
+
+  it("keeps host text editing sessions out of model apply tools", () => {
+    const input = {
+      label: "Forge a host editing session",
+      commands: [
+        {
+          commandId: "forged_edit",
+          type: "commit_text_edit",
+          nodeId: "title",
+          content: "One\nTwo",
+          paragraphPatches: [
+            {
+              start: 0,
+              end: 7,
+              style: { listOptions: { type: "ordered" }, indentation: 1 },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(normalizeDesignApplyToolInput(input)).toBeUndefined();
+    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
+      false,
+    );
+    expect(
+      validateDesignAgentToolInput(INTERNAL_DESIGN_APPLY_TOOL_NAME, input),
+    ).toBe(false);
   });
 
   it("routes bounded rich-text range styling through its dedicated deferred tool", () => {

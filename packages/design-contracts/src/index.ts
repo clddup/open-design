@@ -1119,6 +1119,48 @@ export const UpdateTextRangeStyleCommandSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const CommitTextEditParagraphPatchSchema = Type.Object(
+  {
+    start: Type.Integer({ minimum: 0 }),
+    end: Type.Integer({ minimum: 1 }),
+    style: Type.Object(
+      {
+        paragraphIndent: Type.Optional(Type.Number({ minimum: 0 })),
+        paragraphSpacing: Type.Optional(Type.Number({ minimum: 0 })),
+        listOptions: Type.Optional(
+          Type.Object(
+            {
+              type: Type.Union([
+                Type.Literal("none"),
+                Type.Literal("ordered"),
+                Type.Literal("unordered"),
+              ]),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+        indentation: Type.Optional(Type.Integer({ minimum: 0, maximum: 5 })),
+        listSpacing: Type.Optional(Type.Number({ minimum: 0 })),
+      },
+      { additionalProperties: false, minProperties: 1 },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const CommitTextEditCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("commit_text_edit"),
+    nodeId: Type.String({ minLength: 1, maxLength: 256 }),
+    content: Type.String(),
+    paragraphPatches: Type.Array(CommitTextEditParagraphPatchSchema, {
+      maxItems: 16_384,
+    }),
+  },
+  { additionalProperties: false },
+);
+
 export const PutAssetCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1200,6 +1242,7 @@ export const NodeDesignOperationSchema: TUnion<
     typeof ReplaceSubtreeCommandSchema,
     typeof ReflowTextCommandSchema,
     typeof UpdateTextRangeStyleCommandSchema,
+    typeof CommitTextEditCommandSchema,
   ]
 > = Type.Union([
   InsertElementCommandSchema,
@@ -1209,6 +1252,7 @@ export const NodeDesignOperationSchema: TUnion<
   ReplaceSubtreeCommandSchema,
   ReflowTextCommandSchema,
   UpdateTextRangeStyleCommandSchema,
+  CommitTextEditCommandSchema,
 ]);
 
 export const DesignOperationSchema: TUnion<
@@ -1798,6 +1842,10 @@ export type DeleteElementCommand = Static<typeof DeleteElementCommandSchema>;
 export type ReplaceSubtreeCommand = Static<typeof ReplaceSubtreeCommandSchema>;
 export type TextFontDescriptor = Static<typeof TextFontDescriptorSchema>;
 export type ReflowTextCommand = Static<typeof ReflowTextCommandSchema>;
+export type CommitTextEditParagraphPatch = Static<
+  typeof CommitTextEditParagraphPatchSchema
+>;
+export type CommitTextEditCommand = Static<typeof CommitTextEditCommandSchema>;
 export type PutAssetCommand = Static<typeof PutAssetCommandSchema>;
 export type DeleteAssetCommand = Static<typeof DeleteAssetCommandSchema>;
 export type PutComponentCommand = Static<typeof PutComponentCommandSchema>;

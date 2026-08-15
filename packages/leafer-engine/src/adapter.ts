@@ -36,6 +36,7 @@ import {
   type RasterExportRequest,
 } from "@opendesign/import-export-service/raster";
 import type {
+  TextEditingListCommand,
   TextLayoutProvider,
   TextRunLayoutProvider,
 } from "@opendesign/text-service";
@@ -328,6 +329,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #onDocumentSelectionChange = () => {
     this.#emitTextRangeSelection();
   };
+  #textEditComposing = false;
+  #textEditDom: HTMLDivElement | null = null;
   #editorFrame: number | null = null;
   #editorRefreshNeedsTreeBounds = false;
   readonly #editorRefreshNodeBounds = new Set<string>();
@@ -804,6 +807,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#booleanResolver = null;
     this.#baseProjection = null;
     this.#booleanNodeIds.clear();
+    this.#detachTextEditDom(false);
     this.#textRunEditor.clear();
     this.#boxSelect = null;
     this.#cancelDraw();
@@ -948,6 +952,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         this.#finishGenerationRevealNode(nodeId);
         this.#finishGenerationTweenNode(nodeId, true);
       }
+    });
+    this.#editor.on(InnerEditorEvent.OPEN, (event: unknown) => {
+      const root = (
+        event as { innerEditor?: { editDom?: HTMLDivElement } } | undefined
+      )?.innerEditor?.editDom;
+      if (root) this.#attachTextEditDom(root);
+    });
+    this.#editor.on(InnerEditorEvent.BEFORE_CLOSE, () => {
+      this.#detachTextEditDom(true);
     });
     this.#editor.on(InnerEditorEvent.CLOSE, () => this.#finishTextEdit());
     document.addEventListener(
@@ -1721,9 +1734,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       operations: [
         {
           commandId: `leafer_text_${result.before.nodeId}`,
-          type: "update_properties",
+          type: "commit_text_edit",
           nodeId: result.before.nodeId,
-          properties: { content: result.content },
+          content: result.content,
+          paragraphPatches: result.paragraphPatches,
         },
       ],
       selectionNodeIds: [result.before.nodeId],
@@ -1731,6 +1745,131 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#textRunEditor.completeCommit(result, accepted);
     if (!accepted) {
       this.#restoreProjection();
+    }
+  }
+
+  #attachTextEditDom(root: HTMLDivElement): void {
+    this.#detachTextEditDom(false);
+    this.#textEditDom = root;
+    this.#textEditComposing = false;
+    root.addEventListener("input", this.#onTextEditInput);
+    root.addEventListener("compositionstart", this.#onTextEditCompositionStart);
+    root.addEventListener("compositionend", this.#onTextEditCompositionEnd);
+  }
+
+  #detachTextEditDom(sync: boolean): void {
+    const root = this.#textEditDom;
+    if (!root) return;
+    if (sync) this.#syncTextEditDom(root, false);
+    root.removeEventListener("input", this.#onTextEditInput);
+    root.removeEventListener(
+      "compositionstart",
+      this.#onTextEditCompositionStart,
+    );
+    root.removeEventListener("compositionend", this.#onTextEditCompositionEnd);
+    this.#textEditDom = null;
+    this.#textEditComposing = false;
+  }
+
+  #onTextEditInput = (event: Event): void => {
+    const input = event as InputEvent;
+    this.#syncTextEditDom(
+      event.currentTarget as HTMLDivElement,
+      !this.#textEditComposing &&
+        input.isComposing !== true &&
+        input.inputType === "insertText" &&
+        input.data === " ",
+    );
+  };
+
+  #onTextEditCompositionStart = (): void => {
+    this.#textEditComposing = true;
+  };
+
+  #onTextEditCompositionEnd = (): void => {
+    this.#textEditComposing = false;
+  };
+
+  #syncTextEditDom(root: HTMLDivElement, automaticList: boolean): void {
+    if (root !== this.#textEditDom || !this.#textRunEditor.activeNodeId) return;
+    try {
+      const snapshot = textEditDomSnapshot(root);
+      const result = this.#textRunEditor.input(
+        snapshot.content,
+        snapshot.selection,
+        automaticList,
+      );
+      if (!result) return;
+      const rewrite =
+        result.rewrite ??
+        (snapshot.rawContent === snapshot.content
+          ? null
+          : { content: snapshot.content, selection: snapshot.selection });
+      if (rewrite) this.#applyTextEditRewrite(root, rewrite);
+      else this.#writeActiveTextEditContent(result.state.content);
+      this.#emitTextRangeSelection();
+    } catch (error) {
+      this.#report(error);
+      this.#textRunEditor.cancel();
+    }
+  }
+
+  #applyTextEditRewrite(
+    root: HTMLDivElement,
+    rewrite: { content: string; selection: { start: number; end: number } },
+  ): void {
+    writeTextEditDom(root, rewrite.content);
+    setTextEditDomSelection(root, rewrite.selection);
+    this.#writeActiveTextEditContent(rewrite.content);
+  }
+
+  #writeActiveTextEditContent(content: string): void {
+    const nodeId = this.#textRunEditor.activeNodeId;
+    const element = nodeId ? this.#elements.get(nodeId) : undefined;
+    if (element) (element as LeaferElement & { text: string }).text = content;
+  }
+
+  #handleTextEditKeyDown(event: KeyboardEvent): boolean {
+    const root = this.#textEditDom;
+    if (
+      !root ||
+      !(event.target instanceof Node) ||
+      !root.contains(event.target) ||
+      this.#textEditComposing ||
+      event.isComposing
+    ) {
+      return false;
+    }
+    try {
+      const snapshot = textEditDomSnapshot(root);
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "z"
+      ) {
+        const undone = this.#textRunEditor.undoAutomaticList();
+        if (!undone?.rewrite) return false;
+        stopTextEditKey(event);
+        this.#applyTextEditRewrite(root, undone.rewrite);
+        this.#emitTextRangeSelection();
+        return true;
+      }
+      const command = textEditingListCommand(event);
+      if (!command) return false;
+      const result = this.#textRunEditor.listCommand(
+        snapshot.selection,
+        command,
+      );
+      if (!result?.handled) return false;
+      stopTextEditKey(event);
+      this.#writeActiveTextEditContent(result.state.content);
+      this.#emitTextRangeSelection();
+      return true;
+    } catch (error) {
+      this.#report(error);
+      this.#textRunEditor.cancel();
+      return false;
     }
   }
 
@@ -1748,6 +1887,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       !selection ||
       selection.rangeCount === 0
     ) {
+      return;
+    }
+    const authoritative = input.document.nodesById[nodeId];
+    if (
+      authoritative?.kind !== "text" ||
+      this.#textRunEditor.activeContent !== authoritative.properties.content
+    ) {
+      this.#callbacks.onTextRangeSelectionChange?.(null);
       return;
     }
     const range = selection.getRangeAt(0);
@@ -3807,6 +3954,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #onWindowKeyDown = (event: KeyboardEvent) => {
+    if (this.#handleTextEditKeyDown(event)) return;
     if (this.#vectorEdits.size > 0 && !isKeyboardInputTarget(event.target)) {
       if (event.code === "Escape" || event.code === "Enter") {
         event.preventDefault();
@@ -3924,6 +4072,153 @@ function textDomLength(node: Node): number {
     (sum, child) => sum + textDomLength(child),
     0,
   );
+}
+
+function textEditDomSnapshot(root: HTMLDivElement): {
+  content: string;
+  rawContent: string;
+  selection: { start: number; end: number };
+} {
+  const rawContent = textEditDomText(root);
+  const content = rawContent.replaceAll("\u200B", "");
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return {
+      content,
+      rawContent,
+      selection: { start: content.length, end: content.length },
+    };
+  }
+  const range = selection.getRangeAt(0);
+  if (
+    !root.contains(range.startContainer) ||
+    !root.contains(range.endContainer)
+  ) {
+    return {
+      content,
+      rawContent,
+      selection: { start: content.length, end: content.length },
+    };
+  }
+  const rawStart = textDomOffset(root, range.startContainer, range.startOffset);
+  const rawEnd = textDomOffset(root, range.endContainer, range.endOffset);
+  if (rawStart === null || rawEnd === null) {
+    throw new Error("Text edit selection is outside the active edit root");
+  }
+  const first = normalizedTextDomOffset(rawContent, rawStart);
+  const second = normalizedTextDomOffset(rawContent, rawEnd);
+  return {
+    content,
+    rawContent,
+    selection: {
+      start: Math.min(first, second),
+      end: Math.max(first, second),
+    },
+  };
+}
+
+function textEditDomText(root: HTMLElement): string {
+  return [...root.childNodes]
+    .map((child) => textEditDomNodeText(child))
+    .join("");
+}
+
+function textEditDomNodeText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  if (node instanceof HTMLBRElement) return "\n";
+  return [...node.childNodes].map(textEditDomNodeText).join("");
+}
+
+function normalizedTextDomOffset(rawContent: string, offset: number): number {
+  return rawContent.slice(0, offset).replaceAll("\u200B", "").length;
+}
+
+function writeTextEditDom(root: HTMLDivElement, content: string): void {
+  const fragment = root.ownerDocument.createDocumentFragment();
+  content.split("\n").forEach((line, index, lines) => {
+    if (index > 0) fragment.appendChild(root.ownerDocument.createElement("br"));
+    if (line.length > 0 || lines.length === 1) {
+      fragment.appendChild(root.ownerDocument.createTextNode(line));
+    }
+  });
+  root.replaceChildren(fragment);
+}
+
+function setTextEditDomSelection(
+  root: HTMLDivElement,
+  selection: { start: number; end: number },
+): void {
+  const start = textEditDomPoint(root, selection.start);
+  const end = textEditDomPoint(root, selection.end);
+  const range = root.ownerDocument.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+  const domSelection = window.getSelection();
+  domSelection?.removeAllRanges();
+  domSelection?.addRange(range);
+}
+
+function textEditDomPoint(
+  root: HTMLDivElement,
+  requestedOffset: number,
+): { node: Node; offset: number } {
+  let remaining = requestedOffset;
+  let result: { node: Node; offset: number } | null = null;
+  const visit = (node: Node): void => {
+    if (result) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const length = node.textContent?.length ?? 0;
+      if (remaining <= length) result = { node, offset: remaining };
+      else remaining -= length;
+      return;
+    }
+    if (node instanceof HTMLBRElement) {
+      const parent = node.parentNode;
+      if (!parent) return;
+      const index = [...parent.childNodes].indexOf(node);
+      if (remaining === 0) result = { node: parent, offset: index };
+      else if (remaining === 1) {
+        result = { node: parent, offset: index + 1 };
+      } else remaining -= 1;
+      return;
+    }
+    node.childNodes.forEach(visit);
+  };
+  visit(root);
+  return result ?? { node: root, offset: root.childNodes.length };
+}
+
+function textEditingListCommand(
+  event: KeyboardEvent,
+): TextEditingListCommand | null {
+  const commandModifier = (event.metaKey || event.ctrlKey) && !event.altKey;
+  if (commandModifier && event.shiftKey && event.code === "Digit7") {
+    return "toggle-ordered";
+  }
+  if (commandModifier && event.shiftKey && event.code === "Digit8") {
+    return "toggle-unordered";
+  }
+  if (commandModifier && !event.shiftKey && event.code === "BracketRight") {
+    return "indent";
+  }
+  if (commandModifier && !event.shiftKey && event.code === "BracketLeft") {
+    return "outdent";
+  }
+  if (event.metaKey || event.ctrlKey || event.altKey) return null;
+  if (event.code === "Tab") return event.shiftKey ? "outdent" : "indent";
+  if (
+    !event.shiftKey &&
+    (event.code === "Backspace" || event.code === "Delete")
+  ) {
+    return "remove-marker";
+  }
+  if (!event.shiftKey && event.code === "Enter") return "exit-empty-item";
+  return null;
+}
+
+function stopTextEditKey(event: KeyboardEvent): void {
+  event.preventDefault();
+  event.stopImmediatePropagation();
 }
 
 async function loadBrowserVectorGeometryProvider(): Promise<VectorGeometryProvider> {

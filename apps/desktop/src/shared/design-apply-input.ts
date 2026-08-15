@@ -246,6 +246,7 @@ function isPermittedApplyOperation(
   return (
     command.type !== "reflow_text" &&
     command.type !== "update_text_range_style" &&
+    command.type !== "commit_text_edit" &&
     command.type !== "insert_page" &&
     command.type !== "update_page" &&
     command.type !== "move_page" &&

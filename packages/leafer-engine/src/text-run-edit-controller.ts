@@ -1,4 +1,16 @@
 import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import {
+  applyTextEditingListCommand,
+  applyTextEditingSessionInput,
+  createTextEditingSession,
+  finalizeTextEditingSession,
+  undoAutomaticTextList,
+  type TextEditingListCommand,
+  type TextEditingSelection,
+  type TextEditingSessionCommandResult,
+  type TextEditingSessionInputResult,
+  type TextEditingSessionState,
+} from "@opendesign/text-service";
 import type {
   LeaferElementSpec,
   LeaferSceneProjection,
@@ -52,6 +64,9 @@ export type TextEditFinishResult =
       content: string;
       kind: "commit";
       node: TextNode;
+      paragraphPatches: ReturnType<
+        typeof finalizeTextEditingSession
+      >["paragraphPatches"];
     };
 
 interface TextRunEditPresentation {
@@ -73,6 +88,7 @@ export class TextRunEditController<Element extends TextRunEditElement> {
   #cancelled = false;
   #pendingProxyId: string | null = null;
   #presentation: TextRunEditPresentation | null = null;
+  #session: TextEditingSessionState | null = null;
 
   constructor(environment: TextRunEditControllerEnvironment<Element>) {
     this.#environment = environment;
@@ -80,6 +96,10 @@ export class TextRunEditController<Element extends TextRunEditElement> {
 
   get activeNodeId(): string | null {
     return this.#before?.nodeId ?? null;
+  }
+
+  get activeContent(): string | null {
+    return this.#session?.content ?? null;
   }
 
   beforeEditInner(projectionId: string | undefined): false | undefined {
@@ -132,8 +152,56 @@ export class TextRunEditController<Element extends TextRunEditElement> {
       revision: current.document.revision,
       text: node.properties.content,
     };
+    this.#session = createTextEditingSession(
+      node.properties.content,
+      node.properties.paragraphRuns ?? [],
+      {
+        listOptions: { type: "none" },
+        indentation: 0,
+        listSpacing: node.properties.listSpacing,
+        paragraphIndent: node.properties.paragraphIndent,
+        paragraphSpacing: node.properties.paragraphSpacing,
+      },
+    );
     this.#cancelled = false;
     return true;
+  }
+
+  input(
+    content: string,
+    selection: TextEditingSelection,
+    automaticList: boolean,
+  ): TextEditingSessionInputResult | null {
+    if (!this.#session) return null;
+    const result = applyTextEditingSessionInput(
+      this.#session,
+      content,
+      selection,
+      { automaticList },
+    );
+    this.#session = result.state;
+    return result;
+  }
+
+  listCommand(
+    selection: TextEditingSelection,
+    command: TextEditingListCommand,
+  ): TextEditingSessionCommandResult | null {
+    if (!this.#session) return null;
+    const result = applyTextEditingListCommand(
+      this.#session,
+      selection,
+      command,
+    );
+    this.#session = result.state;
+    return result;
+  }
+
+  undoAutomaticList(): TextEditingSessionInputResult | null {
+    if (!this.#session) return null;
+    const result = undoAutomaticTextList(this.#session);
+    if (result) this.#session = result.state;
+    return result;
   }
 
   cancel(): void {
@@ -146,10 +214,17 @@ export class TextRunEditController<Element extends TextRunEditElement> {
   }): TextEditFinishResult {
     const before = this.#before;
     this.#before = null;
-    if (!before || options.synchronizing || options.disposed) {
+    if (!before || options.disposed) {
+      this.#session = null;
       this.#cancelled = false;
-      if (options.synchronizing || options.disposed) this.#presentation = null;
+      if (options.disposed) this.#presentation = null;
       return { kind: "none" };
+    }
+    if (options.synchronizing) {
+      this.#session = null;
+      this.#cancelled = false;
+      this.#presentation = null;
+      return { kind: "restore" };
     }
 
     const current = this.#environment.current();
@@ -159,22 +234,45 @@ export class TextRunEditController<Element extends TextRunEditElement> {
     if (
       !current.document ||
       current.document.documentId !== before.documentId ||
+      current.document.revision !== before.revision ||
       !element ||
       !node ||
       node.kind !== "text" ||
       isLockedSpec(spec)
     ) {
+      this.#session = null;
       this.restorePresentation();
       return { kind: "restore" };
     }
     const content = this.#environment.readText(element);
-    if (this.#cancelled || content === before.text) {
+    if (this.#session && content !== this.#session.content) {
+      this.#session = applyTextEditingSessionInput(
+        this.#session,
+        content,
+        { start: content.length, end: content.length },
+        { automaticList: false },
+      ).state;
+    }
+    const commit = this.#session
+      ? finalizeTextEditingSession(this.#session)
+      : { content, paragraphPatches: [] };
+    this.#session = null;
+    if (
+      this.#cancelled ||
+      (commit.content === before.text && commit.paragraphPatches.length === 0)
+    ) {
       this.#cancelled = false;
       this.restorePresentation();
       return { kind: "restore" };
     }
     this.#cancelled = false;
-    return { before, content, kind: "commit", node };
+    return {
+      before,
+      content: commit.content,
+      kind: "commit",
+      node,
+      paragraphPatches: commit.paragraphPatches,
+    };
   }
 
   completeCommit(
@@ -284,6 +382,7 @@ export class TextRunEditController<Element extends TextRunEditElement> {
     this.#cancelled = false;
     this.#pendingProxyId = null;
     this.#presentation = null;
+    this.#session = null;
   }
 
   #beginPresentation(nodeId: string, current: TextRunEditCurrentState): void {

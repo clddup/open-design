@@ -22,6 +22,7 @@ type RangeCommand = Extract<
   DesignOperation,
   { type: "update_text_range_style" }
 >;
+type EditCommand = Extract<DesignOperation, { type: "commit_text_edit" }>;
 
 const RUN_STYLE_FIELDS = [
   "fontFamily",
@@ -129,17 +130,70 @@ export function prepareTextPropertiesUpdate(
   node.properties.runs = compactRuns(runs, {
     ...textRunBaseStyle(node),
     ...patch,
-  } as TextRunStyle);
+  });
   if (Object.keys(paragraphPatch).length > 0 && paragraphRuns.length > 0) {
     paragraphRuns = paragraphRuns.map((run) => ({
       ...run,
-      style: { ...run.style, ...paragraphPatch } as TextParagraphStyle,
+      style: { ...run.style, ...paragraphPatch },
     }));
   }
   node.properties.paragraphRuns = compactParagraphRuns(paragraphRuns, {
     ...textParagraphBaseStyle(node),
     ...paragraphPatch,
-  } as TextParagraphStyle);
+  });
+}
+
+export function commitTextEditingSession(
+  node: TextNode,
+  command: EditCommand,
+): void {
+  normalizeTextNodeRuns(node, command.commandId);
+  const contentChanged = command.content !== node.properties.content;
+  if (!contentChanged && command.paragraphPatches.length === 0) {
+    throw new OperationError(
+      command.commandId,
+      "Text editing session did not change content or paragraph styles",
+      "invalid",
+      { details: { code: "no-op", nodeId: node.id } },
+    );
+  }
+  prepareTextPropertiesUpdate(
+    node,
+    { content: command.content },
+    command.commandId,
+  );
+  node.properties.content = command.content;
+  const paragraphs = textParagraphRanges(command.content);
+  const starts = new Set(paragraphs.map((paragraph) => paragraph.start));
+  const ends = new Set(paragraphs.map((paragraph) => paragraph.end));
+  let previousEnd = -1;
+  for (const [index, patch] of command.paragraphPatches.entries()) {
+    if (
+      patch.start < previousEnd ||
+      !starts.has(patch.start) ||
+      !ends.has(patch.end)
+    ) {
+      throw new OperationError(
+        command.commandId,
+        "Text editing paragraph patches must be ordered, non-overlapping, and aligned to final paragraph boundaries",
+        "invalid",
+        {
+          path: `/paragraphPatches/${index}`,
+          details: { code: "invalid-paragraph-range", nodeId: node.id },
+        },
+      );
+    }
+    updateTextRangeStyle(node, {
+      commandId: `${command.commandId}:paragraph:${index}`,
+      type: "update_text_range_style",
+      nodeId: node.id,
+      start: patch.start,
+      end: patch.end,
+      style: patch.style,
+    });
+    previousEnd = patch.end;
+  }
+  normalizeTextNodeRuns(node, command.commandId);
 }
 
 export function updateTextRangeStyle(
@@ -269,7 +323,7 @@ function patchParagraphStyle(
   style: TextParagraphStyle,
   patch: Readonly<Record<string, unknown>>,
 ): TextParagraphStyle {
-  const next = { ...style, ...patch } as TextParagraphStyle;
+  const next = { ...style, ...patch };
   if (
     Object.hasOwn(patch, "listOptions") &&
     next.listOptions.type !== "none" &&

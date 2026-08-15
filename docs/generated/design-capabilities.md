@@ -198,14 +198,15 @@
 通过唯一版本化 Runtime、真实范围 Inspector、Agent 工具、native/HarfBuzz 投影及 Figma/SVG/位图结构往返创建 Figma-compatible UTF-16 字符与段落 runs。
 
 - ID：`text.rich-typography`
-- 实现方：DesignDocument 1.33.0 + Text Paragraph Service v2 / Text List Service v1 / Text Run Layout v4 + leafer-editor 2.2.9 + harfbuzzjs 1.4.0 + SVG metadata v8
+- 实现方：DesignDocument 1.33.0 + Text Paragraph Service v2 / Text List Service v1 / Text Editing Session Service v1 / Text Run Layout v4 + leafer-editor 2.2.9 + harfbuzzjs 1.4.0 + SVG metadata v8
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
-- 证据：自动化 20 项；实机 0 项
-- 限制：富文本 runs 已覆盖精确 face、字号、字距、行高、大小写、装饰、fills、可选 Text/Paint Style ID、逐段 indent/spacing，以及语义化 ordered/unordered 列表、五级缩进、list spacing、节点级 hanging marker、确定性嵌套计数、换行 hanging indent 与 LTR/RTL logical-start 投影；marker 是可丢弃投影，不污染 Text content。末尾零长度空段落在写入内容前使用 base style。caret/Tab 自动列表、custom marker、高级 decoration 几何、OpenType 控件、可变字体轴、本地 Style 修改向绑定 range 的实时传播、字体随文件打包/授权迁移、路径文字、更新 bidi 数据和 macOS/Windows 打包视觉证据仍不可用。
+- 证据：自动化 21 项；实机 0 项
+- 限制：富文本 runs 已覆盖精确 face、字号、字距、行高、大小写、装饰、fills、可选 Text/Paint Style ID、逐段 indent/spacing，以及语义化 ordered/unordered 列表、五级缩进、list spacing、节点级 hanging marker、确定性嵌套计数、换行 hanging indent 与 LTR/RTL logical-start 投影。真实 edit DOM 已支持输入前缀自动列表、立即撤销转换、ordered/unordered 快捷键、Tab/Shift+Tab 与 bracket 缩进、item-start Backspace/Delete、空 item Enter、composition guard，以及每次编辑 session 一条 commit_text_edit Runtime transaction/reflow/revision；marker 仍是可丢弃投影，不污染 Text content。通用 caret typing style、edit DOM 内的富 marker 投影、custom marker、高级 decoration 几何、OpenType 控件、可变字体轴、本地 Style 修改向绑定 range 的实时传播、字体随文件打包/授权迁移、路径文字、更新 bidi 数据和 macOS/Windows 打包视觉证据仍不可用。
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/TextNode/)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/TextStyle/)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/TextListOptions/)
 - 专业参照：[官方说明](docs/adr/0084-figma-compatible-text-lists.md)
+- 专业参照：[官方说明](docs/adr/0085-figma-compatible-text-list-editing-session.md)
 
 ## 响应式布局
 

@@ -21,6 +21,7 @@ import {
   type HistoryState,
   type Revision,
   type SelectionState,
+  type TextRunStyle,
   type ViewportState,
 } from "@opendesign/design-contracts";
 import {
@@ -59,6 +60,7 @@ import {
 } from "./design-system-runtime.js";
 import { deleteVariantSet, putVariantSet } from "./variant-set-runtime.js";
 import {
+  commitTextEditingSession,
   normalizeTextNodeRuns,
   prepareTextPropertiesUpdate,
   textRunBaseStyle,
@@ -872,6 +874,9 @@ function applyOperation(
     case "update_text_range_style":
       applyTextRangeStyleOperation(document, command, context);
       return;
+    case "commit_text_edit":
+      applyTextEditingSessionOperation(document, command, context);
+      return;
     case "put_asset":
       putAsset(document, command);
       return;
@@ -1403,6 +1408,34 @@ function applyTextRangeStyleOperation(
   resolveTextAutoSize(node, command.commandId, context);
 }
 
+function applyTextEditingSessionOperation(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "commit_text_edit" }>,
+  context: OperationContext,
+): void {
+  const node = document.nodesById[command.nodeId];
+  if (!node) throw notFound(command.commandId, command.nodeId);
+  if (node.kind !== "text") {
+    throw new OperationError(
+      command.commandId,
+      `Node ${node.id} is not a Text layer`,
+      "invalid",
+      { path: `/nodesById/${escapeJsonPointer(node.id)}` },
+    );
+  }
+  if (isEffectivelyLocked(document, node.id)) {
+    throw new OperationError(
+      command.commandId,
+      `Text layer ${node.id} is locked`,
+      "permission-denied",
+      { path: `/nodesById/${escapeJsonPointer(node.id)}/locked` },
+    );
+  }
+  commitTextEditingSession(node, command);
+  normalizeTextResizeProperties(node.properties);
+  resolveTextAutoSize(node, command.commandId, context);
+}
+
 function inspectReflowFont(
   context: OperationContext,
   descriptor: TextFontDescriptor,
@@ -1843,9 +1876,7 @@ function resolveRichTextAutoSize(
   }
 }
 
-function runtimeTextRunStyle(
-  style: import("@opendesign/design-contracts").TextRunStyle,
-): RuntimeTextRunStyle {
+function runtimeTextRunStyle(style: TextRunStyle): RuntimeTextRunStyle {
   return { ...style, fill: structuredClone(style.fills) };
 }
 
