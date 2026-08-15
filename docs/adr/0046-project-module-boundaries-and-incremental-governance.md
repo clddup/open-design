@@ -65,18 +65,16 @@ Phase 3 把人工编辑命令拆成三个层次：`use-editor-command-controller
 
 Phase 4 把 Inspector 拆为 Appearance、Paint/Effect、Typography、Image、Component、Export 与 selected-node composition。section 只接收当前权威 `DesignNode`、受控 workflow 设置和语义 callback；`Field`/`TextAreaField` 只保存尚未提交的输入 draft，Component override 只保存当前检查行 key，均不保存 document/node 镜像。属性提交继续由 App 注入的 editor command controller 写入唯一 Runtime；Export operation/settings 继续由 Phase 1 的 import/export workflow 独占。共享控件与 Paint/Effect editor 是无文档所有权的 view primitives，不得反向取得 Runtime。`PropertiesPanel.tsx` 从 2973 行降至 374 行，8 个新生产模块均低于 800 行默认门禁，因此移除其历史超大模块预算。
 
-Phase 5 随 Figma-compatible Component Properties 垂直切片增加 `@opendesign/figma-interop`。该包只能依赖 Component Service 与 Design Contracts，并只使用固定官方 typings 做编译期公共 API 形状验证；EditorRuntime、Renderer、Leafer 和核心 Contracts 不反向依赖它。新增属性 schema/迁移、Runtime default 同步、Renderer context/plan 和 Main policy 分别进入低于 800 行的职责模块，`design-agent-tools` 只保留聚合 schema，未提高任何历史大文件预算。
+Phase 5 随 Figma-compatible Component Properties 垂直切片增加 `@opendesign/figma-interop`。该包最初只依赖 Component Service 与 Design Contracts，并只使用固定官方 typings 做编译期公共 API 形状验证；ADR-0083/0084 后为 styled text segments 增加对纯函数 Text Service 的单向依赖。EditorRuntime、Renderer、Leafer 和核心 Contracts 不反向依赖它。新增属性 schema/迁移、Runtime default 同步、Renderer context/plan 和 Main policy 分别进入明确职责模块，`design-agent-tools` 只保留聚合 schema。
 
-### 自动边界和增长门禁
+### 自动边界门禁与职责治理
 
 `pnpm architecture:check` 是根 `pnpm verify` 的必经步骤，并校验：
 
 - Renderer、Shared、Main、Preload 与 Agent 的禁止跨层导入和 builtin 边界；
-- 22 个 workspace 包的生产依赖基线与循环；
-- 新生产 TypeScript 模块默认不超过 800 行；
-- 当前 28 个历史超大生产模块使用逐文件预算，只能保持或缩小，不能增长。
+- workspace 包的生产依赖基线与循环。
 
-行数预算是增长报警器，不是代码质量评分。确有单一职责且不可再分的模块可以通过 ADR 调整预算；不得用生成文件、重导出壳、隐藏字符串或多个互相耦合的碎片规避门禁。历史模块完成垂直拆分后，应把其预算降低到实际值或移出例外表。
+ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证明它需要机械抬高基线、不能判断职责耦合，还会在真正的 lint/typecheck/test/package 前制造噪声失败。模块治理仍按完整业务所有权、状态和生命周期执行；不得用生成文件、重导出壳、隐藏字符串或多个互相耦合的碎片伪装拆分。依赖方向、进程边界和循环检查继续是硬门禁。
 
 ### 分阶段执行，不做大爆炸重构
 

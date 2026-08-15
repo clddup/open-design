@@ -31,7 +31,7 @@ export function ExportSettingsEditor({
     const target = index + offset;
     if (target < 0 || target >= node.exportSettings.length) return;
     const next = [...node.exportSettings];
-    [next[index], next[target]] = [next[target]!, next[index]!];
+    [next[index], next[target]] = [next[target], next[index]];
     onChange(next);
   };
   return (
@@ -161,8 +161,7 @@ export function ExportSettingsEditor({
                         replace(index, {
                           ...setting,
                           constraint: {
-                            type: event.target
-                              .value as ExportConstraint["type"],
+                            type: event.target.value,
                             value: setting.constraint.value,
                           } as ExportConstraint,
                         })

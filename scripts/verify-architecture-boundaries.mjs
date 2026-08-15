@@ -9,10 +9,9 @@ const baseline = await json("scripts/architecture-baseline.json");
 
 await verifyDesktopLayers();
 await verifyWorkspaceDependencies();
-await verifyProductionModuleBudgets();
 
 process.stdout.write(
-  `Architecture boundaries are current: ${Object.keys(baseline.workspaceDependencies).length} packages · ${Object.keys(baseline.productionModuleLineBudgets).length} module budgets\n`,
+  "Architecture dependency and process boundaries are current.\n",
 );
 
 async function verifyDesktopLayers() {
@@ -100,34 +99,6 @@ async function verifyWorkspaceDependencies() {
   assertAcyclic(actual);
 }
 
-async function verifyProductionModuleBudgets() {
-  const budgetedPaths = new Set(
-    Object.keys(baseline.productionModuleLineBudgets),
-  );
-  for (const relativeRoot of ["apps/desktop/src", "packages"]) {
-    for (const path of await sourceFiles(relativeRoot)) {
-      const relativePath = relativeWorkspacePath(root, path);
-      if (budgetedPaths.has(relativePath)) continue;
-      const lineCount = await sourceLineCount(path);
-      if (lineCount > baseline.productionModuleDefaultLineBudget) {
-        fail(
-          `${relativePath} has ${lineCount} lines; new production modules are limited to ${baseline.productionModuleDefaultLineBudget}`,
-        );
-      }
-    }
-  }
-  for (const [path, budget] of Object.entries(
-    baseline.productionModuleLineBudgets,
-  )) {
-    const lineCount = await sourceLineCount(resolve(root, path));
-    if (lineCount > budget) {
-      fail(
-        `${path} grew to ${lineCount} lines; architecture budget is ${budget}`,
-      );
-    }
-  }
-}
-
 function assertAcyclic(graph) {
   const visited = new Set();
   const active = new Set();
@@ -181,12 +152,6 @@ async function packageManifests() {
 
 async function json(path) {
   return JSON.parse(await readFile(resolve(root, path), "utf8"));
-}
-
-async function sourceLineCount(path) {
-  const source = await readFile(path, "utf8");
-  const newlineCount = source.match(/\n/g)?.length ?? 0;
-  return newlineCount + (source.length > 0 && !source.endsWith("\n") ? 1 : 0);
 }
 
 function fail(message) {

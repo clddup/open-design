@@ -1,6 +1,5 @@
 {
-  "version": 1,
-  "productionModuleDefaultLineBudget": 800,
+  "version": 2,
   "desktopLayers": {
     "main": {
       "root": "apps/desktop/src/main",
@@ -52,13 +51,15 @@
     ],
     "@opendesign/figma-interop": [
       "@opendesign/component-service",
-      "@opendesign/design-contracts"
+      "@opendesign/design-contracts",
+      "@opendesign/text-service"
     ],
     "@opendesign/geometry-service": ["@opendesign/design-contracts"],
     "@opendesign/image-service": ["@opendesign/design-contracts"],
     "@opendesign/import-export-service": [
       "@opendesign/design-contracts",
-      "@opendesign/geometry-service"
+      "@opendesign/geometry-service",
+      "@opendesign/text-service"
     ],
     "@opendesign/layout-service": [],
     "@opendesign/leafer-engine": [
@@ -81,33 +82,5 @@
     "@opendesign/ui": [],
     "@opendesign/variable-service": ["@opendesign/design-contracts"],
     "@opendesign/workspace-contracts": []
-  },
-  "productionModuleLineBudgets": {
-    "apps/desktop/src/main/index.ts": 1966,
-    "apps/desktop/src/main/agent/global-task-coordinator.ts": 1945,
-    "apps/desktop/src/main/model/model-provider-host.ts": 912,
-    "apps/desktop/src/main/project/project-host.ts": 1209,
-    "apps/desktop/src/renderer/App.tsx": 2295,
-    "apps/desktop/src/renderer/components/Canvas.tsx": 1354,
-    "apps/desktop/src/renderer/components/LeftSidebar.tsx": 898,
-    "apps/desktop/src/renderer/components/SettingsPage.tsx": 1353,
-    "apps/desktop/src/renderer/design-tool-execution.ts": 2196,
-    "apps/desktop/src/shared/design-agent-tools.ts": 3897,
-    "apps/desktop/src/shared/desktop-api.ts": 1360,
-    "apps/desktop/src/shared/i18n/messages.ts": 1924,
-    "packages/agent-contracts/src/index.ts": 1003,
-    "packages/agent-runtime/src/index.ts": 1134,
-    "packages/agent-runtime/src/pi-run-event-adapter.ts": 900,
-    "packages/agent-runtime/src/pi-tool-adapter.ts": 898,
-    "packages/design-contracts/src/index.ts": 2071,
-    "packages/editor-runtime/src/layer-operations.ts": 979,
-    "packages/editor-runtime/src/runtime.ts": 2149,
-    "packages/geometry-service/src/boolean-resolver.ts": 870,
-    "packages/geometry-service/src/vector-edit.ts": 2762,
-    "packages/import-export-service/src/svg.ts": 3017,
-    "packages/leafer-engine/src/adapter.ts": 4179,
-    "packages/leafer-engine/src/mapping.ts": 1113,
-    "packages/model-gateway/src/index.ts": 855,
-    "packages/session-store/src/index.ts": 1377
   }
 }

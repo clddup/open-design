@@ -52,7 +52,7 @@ Typography Inspector 在现有紧凑 grid 中提供 List style、level、list sp
 
 Agent deferred range tool 暴露相同字段，并明确禁止把 marker 写进 content。普通 Text insert 需要 node-level listSpacing/hangingList；列表 type/level 必须在内容存在后通过 range transaction 写入。
 
-Figma adapter 在 character/paragraph 边界交集处双向转换 `TextListOptions`、indentation 和 list spacing；同一段落冲突稳定失败。Text Style payload 增加 listSpacing/hangingList。
+Figma adapter 在 character/paragraph 边界交集处双向转换 `TextListOptions`、indentation 和 list spacing；同一段落冲突稳定失败。Text Style payload 增加 listSpacing/hangingList。为避免复制并逐渐分叉 UTF-16 段落边界算法，隔离的 `@opendesign/figma-interop` 在既有 Component Service 与 Design Contracts 依赖之外，新增对纯函数 `@opendesign/text-service` 的单向生产依赖；核心 Runtime、Renderer、Leafer 和 Contracts 仍不反向依赖 Figma adapter，workspace 依赖继续保持无环。
 
 SVG text metadata 升级为 v8，继续读取 v7/v6/v5/v4/v3/v2/v1。v8 保存完整列表事实，在标准 `<tspan>` 中输出可见 marker、list type/level/spacing、方向和位置证据；导入同时校验 metadata、正文 tspan 与 marker 文本/几何，任何篡改失败。raster capture/export 继续消费 exact-revision 生产 projection。
 

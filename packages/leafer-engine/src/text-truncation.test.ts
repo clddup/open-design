@@ -21,7 +21,7 @@ class RowText {
   }
 
   get __() {
-    const content = String(this.input.text ?? "");
+    const content = typeof this.input.text === "string" ? this.input.text : "";
     const width = Number(this.input.width ?? 80);
     const charactersPerRow = Math.max(1, Math.floor(width / 10));
     const rows = content.split("\n").flatMap((paragraph) => {

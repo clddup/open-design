@@ -259,7 +259,7 @@ export function ExportSection({
                   onRasterSettingsChange({
                     ...rasterSettings,
                     size: {
-                      mode: mode as RasterExportSize["mode"],
+                      mode,
                       value,
                     } as RasterExportSize,
                   });
