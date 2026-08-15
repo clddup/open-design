@@ -197,10 +197,10 @@ describe("OpenDesign Agent system prompt", () => {
     }
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("document.lifecycle");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "The Agent can create, rename, duplicate, reorder, and delete Pages",
+      "The Agent can create, rename, duplicate, reorder, clear, and delete Pages",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "create, rename, duplicate, reorder, or delete Pages",
+      "create, rename, duplicate, reorder, clear, or delete Pages",
     );
   });
 });

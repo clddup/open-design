@@ -147,6 +147,7 @@ function renderPanel(
           onExportRaster={onExportRaster}
           onExportStoredSetting={vi.fn()}
           onExportSvg={onExportSvg}
+          onCropImage={vi.fn(() => true)}
           onReplaceImage={vi.fn()}
           onRemoveComponent={options.onRemoveComponent ?? vi.fn()}
           onRemoveVariant={options.onRemoveVariant ?? vi.fn()}

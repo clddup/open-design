@@ -7,10 +7,12 @@ import { Field, Section, commitNumber, cx, formatNumber } from "./controls";
 export function ImageSection({
   node,
   onChange,
+  onCrop,
   onReplace,
 }: {
   node: ImageNode;
   onChange: (placement: ImagePlacement) => void;
+  onCrop: () => boolean;
   onReplace: () => void;
 }) {
   const { t } = useI18n();
@@ -194,6 +196,14 @@ export function ImageSection({
             </div>
           </>
         )}
+        <button
+          className={cx(styles.addPaint, styles.imageReplaceButton)}
+          onClick={onCrop}
+          type="button"
+        >
+          <Glyph name="select" size={13} />
+          {t("properties.imageEditCrop")}
+        </button>
         <button
           className={cx(styles.addPaint, styles.imageReplaceButton)}
           onClick={onReplace}

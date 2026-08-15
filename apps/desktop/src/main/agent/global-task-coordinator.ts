@@ -306,7 +306,7 @@ export class GlobalTaskCoordinator {
       return;
     }
     if (
-      input.action === "rename" &&
+      (input.action === "rename" || input.action === "clear") &&
       input.pageId === binding.mutationTarget.pageId
     ) {
       return;
@@ -318,6 +318,45 @@ export class GlobalTaskCoordinator {
 
   recordPageToolCompleted(runId: string, action: string): void {
     this.#pageStructureAccessByRunId.get(runId)?.completedActions.add(action);
+  }
+
+  supersedeDesignDeliveryForClearedPage(
+    context: TrustedToolContext,
+    pageId: string,
+  ): void {
+    this.assertDesignToolContext(context);
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (!binding) throw new Error("Page clear requires an active Run");
+    if (
+      binding.mutationTarget.kind === "page" &&
+      binding.mutationTarget.pageId !== pageId
+    ) {
+      throw new Error("Page clear cannot supersede another Page delivery");
+    }
+    this.#designPlansByRunId.delete(context.runId);
+    this.#inspectionsByRunId.delete(context.runId);
+
+    const timestamp = this.now().toISOString();
+    for (const task of this.workspaceStore.listGlobalTasks()) {
+      if (
+        task.conversationId !== context.sessionId ||
+        task.targetSet.primaryTarget.documentId !== context.documentId ||
+        task.delivery === undefined
+      ) {
+        continue;
+      }
+      const { delivery: _delivery, ...withoutDelivery } = task;
+      void _delivery;
+      const updated: GlobalTaskProjection = {
+        ...withoutDelivery,
+        lifecycle: task.runId === context.runId ? task.lifecycle : "cancelled",
+        updatedAt: timestamp,
+      };
+      this.workspaceStore.saveGlobalTask(updated);
+      if (task.runId === context.runId) {
+        this.#tasksByRunId.set(context.runId, updated);
+      }
+    }
   }
 
   assertComponentToolAccess(
@@ -1066,7 +1105,8 @@ export class GlobalTaskCoordinator {
           task.targetSet.primaryTarget.documentId === context.documentId &&
           task.delivery?.activeTargetId !== null &&
           task.delivery !== undefined &&
-          task.lifecycle !== "completed",
+          task.lifecycle !== "completed" &&
+          task.lifecycle !== "cancelled",
       )
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
     return candidate?.delivery

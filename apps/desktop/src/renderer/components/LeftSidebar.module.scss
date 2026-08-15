@@ -8,35 +8,71 @@
 
 .tabs {
   display: flex;
-  align-items: end;
-  padding: 0 10px;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
   border-bottom: 1px solid var(--ui-border);
+}
 
-  button {
-    position: relative;
-    display: flex;
-    height: 100%;
-    align-items: center;
-    gap: 6px;
-    padding: 0 8px;
-    border: 0;
+.primaryTabs,
+.libraryTabs {
+  display: flex;
+  height: 100%;
+  align-items: center;
+}
+
+.primaryTabs {
+  min-width: 0;
+  gap: 2px;
+}
+
+.primaryTab {
+  position: relative;
+  display: flex;
+  height: 100%;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  color: var(--ui-text-muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 550;
+  white-space: nowrap;
+
+  &[aria-selected="true"] {
+    color: var(--ui-text);
+
+    &::after {
+      position: absolute;
+      right: 6px;
+      bottom: -1px;
+      left: 6px;
+      height: 2px;
+      background: var(--ui-text);
+      content: "";
+    }
+  }
+}
+
+.libraryTabs {
+  height: 24px;
+  flex: 0 0 auto;
+  gap: 1px;
+  padding-left: 5px;
+  border-left: 1px solid var(--ui-border);
+
+  :global(.ui-icon-button) {
+    width: 24px;
+    height: 24px;
     color: var(--ui-text-muted);
-    background: transparent;
-    font-size: 11px;
-    font-weight: 550;
+    border-radius: 4px;
 
     &[aria-selected="true"] {
       color: var(--ui-text);
-
-      &::after {
-        position: absolute;
-        right: 6px;
-        bottom: -1px;
-        left: 6px;
-        height: 2px;
-        background: var(--ui-text);
-        content: "";
-      }
+      background: var(--ui-surface-sunken);
     }
   }
 }

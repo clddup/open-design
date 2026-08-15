@@ -380,7 +380,11 @@ export function planResetComponentOverrides(
 
 export function planDetachComponentInstance(
   document: DesignDocument,
-  input: { instanceId: string; commandPrefix: string },
+  input: {
+    instanceId: string;
+    commandPrefix: string;
+    reservedNodeIds?: ReadonlySet<string>;
+  },
 ): ComponentOperationPlan {
   const instance = document.nodesById[input.instanceId];
   if (!instance || instance.kind !== "instance") {
@@ -396,10 +400,27 @@ export function planDetachComponentInstance(
       resolution.issues[0]?.message ?? "Instance cannot be resolved",
     );
   }
+  const replacedNodeIds = collectSubtreeIds(document, instance.id);
+  const allocatedNodeIds = new Set<string>();
+  const allocateNodeId = (preferred: string): string => {
+    let candidate = preferred;
+    let suffix = 2;
+    while (
+      allocatedNodeIds.has(candidate) ||
+      input.reservedNodeIds?.has(candidate) ||
+      (document.nodesById[candidate] && !replacedNodeIds.has(candidate))
+    ) {
+      candidate = `${preferred}_${suffix++}`;
+    }
+    allocatedNodeIds.add(candidate);
+    return candidate;
+  };
   const idByProjection = new Map(
     resolution.nodes.map((resolved, index) => [
       resolved.projectionId,
-      index === 0 ? instance.id : `${instance.id}_detached_${index}`,
+      allocateNodeId(
+        index === 0 ? instance.id : `${instance.id}_detached_${index}`,
+      ),
     ]),
   );
   const nodes = resolution.nodes.map((resolved) => {
@@ -440,6 +461,22 @@ export function planDetachComponentInstance(
       "",
     selectionNodeIds: [instance.id],
   };
+}
+
+function collectSubtreeIds(
+  document: DesignDocument,
+  rootNodeId: string,
+): ReadonlySet<string> {
+  const result = new Set<string>();
+  const visit = (nodeId: string): void => {
+    if (result.has(nodeId)) return;
+    const node = document.nodesById[nodeId];
+    if (!node) return;
+    result.add(nodeId);
+    node.childIds.forEach(visit);
+  };
+  visit(rootNodeId);
+  return result;
 }
 
 export function componentMainNodeId(

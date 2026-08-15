@@ -80,6 +80,7 @@ export function PropertiesPanel({
   onExportRaster,
   onExportStoredSetting,
   onExportFormatChange,
+  onCropImage,
   onReplaceImage,
   onRemoveComponent,
   onRemoveVariant,
@@ -152,6 +153,7 @@ export function PropertiesPanel({
   onExportRaster: () => void;
   onExportStoredSetting: (setting: ExportSetting) => void;
   onExportFormatChange: (format: ExportFormat) => void;
+  onCropImage: () => boolean;
   onReplaceImage: () => void;
   onRemoveComponent: () => void;
   onRemoveVariant: () => void;
@@ -330,6 +332,7 @@ export function PropertiesPanel({
             onDetachComponentInstance={onDetachComponentInstance}
             onDuplicate={onDuplicate}
             onGoToComponentMain={onGoToComponentMain}
+            onCropImage={onCropImage}
             onReplaceImage={onReplaceImage}
             onRemoveComponent={onRemoveComponent}
             onRemoveVariant={onRemoveVariant}

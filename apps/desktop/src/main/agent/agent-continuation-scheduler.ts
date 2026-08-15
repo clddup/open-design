@@ -85,8 +85,12 @@ export class AgentContinuationScheduler {
   record(event: AgentEvent): AgentContinuationDecision | null {
     const runId = "runId" in event ? event.runId : undefined;
     if (!runId) return null;
-    const delivery = deliveryFromEvent(event);
-    if (delivery) this.#deliveryByRunId.set(runId, structuredClone(delivery));
+    if (deliveryWasSuperseded(event)) {
+      this.#deliveryByRunId.delete(runId);
+    } else {
+      const delivery = deliveryFromEvent(event);
+      if (delivery) this.#deliveryByRunId.set(runId, structuredClone(delivery));
+    }
     if (event.type === "agent.error") {
       this.#failureByRunId.set(runId, event.failure);
       return null;
@@ -141,6 +145,14 @@ export class AgentContinuationScheduler {
       },
     };
   }
+}
+
+function deliveryWasSuperseded(event: AgentEvent): boolean {
+  return (
+    event.type === "tool.completed" &&
+    isRecord(event.result) &&
+    event.result.deliveryDisposition === "superseded"
+  );
 }
 
 function deliveryFromEvent(

@@ -2373,6 +2373,12 @@ describe("GlobalTaskCoordinator", () => {
       }),
     ).not.toThrow();
     expect(() =>
+      coordinator.assertPageToolAccess(context, {
+        action: "clear",
+        pageId,
+      }),
+    ).not.toThrow();
+    expect(() =>
       coordinator.assertPageToolAccess(context, { action: "create" }),
     ).toThrow("page_structure_access_required");
     expect(() =>
@@ -2459,6 +2465,13 @@ describe("GlobalTaskCoordinator", () => {
         y: 40,
       }),
     ).not.toThrow();
+
+    coordinator.supersedeDesignDeliveryForClearedPage(context, pageId);
+    expect(coordinator.getDeliveryLedger(context.runId)).toBeUndefined();
+    expect(
+      store.listGlobalTasks().find((task) => task.runId === context.runId)
+        ?.delivery,
+    ).toBeUndefined();
 
     coordinator.handleAgentEvent({
       type: "run.completed",

@@ -59,8 +59,8 @@
       },
       "limitations": [
         {
-          "en": "The Agent can create, rename, duplicate, reorder, and delete Pages through an explicit Page or Design File mutation target, but it cannot manage Projects or Design Files.",
-          "zh-CN": "Agent 可通过显式 Page 或 Design File 写入目标创建、重命名、复制、排序和删除 Page，但尚不能管理 Project 或 Design File。"
+          "en": "The Agent can create, rename, duplicate, reorder, clear, and delete Pages through an explicit Page or Design File mutation target, but it cannot manage Projects or Design Files.",
+          "zh-CN": "Agent 可通过显式 Page 或 Design File 写入目标创建、重命名、复制、排序、清空和删除 Page，但尚不能管理 Project 或 Design File。"
         }
       ],
       "evidence": {
@@ -608,7 +608,7 @@
         "en": "Crop non-destructively, choose focal placement, replace sources, and apply image adjustments or filters.",
         "zh-CN": "非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。"
       },
-      "provider": "DesignDocument 1.10.0 + OpenDesign Image service crop geometry + Leafer projection",
+      "provider": "DesignDocument 1.10.0 + OpenDesign Image Service v2 + Leafer projection",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "degraded",
@@ -620,8 +620,8 @@
       },
       "limitations": [
         {
-          "en": "The inspector and dedicated Agent tool now share non-destructive placement and source replacement semantics, but direct canvas crop controls, adjustment filters, export fidelity, and native macOS/Windows interaction evidence remain incomplete.",
-          "zh-CN": "检查器与专用 Agent 工具已共用非破坏 placement 和来源替换语义，但画布直接裁剪控件、调整滤镜、导出保真及 macOS/Windows 原生交互证据仍未完成。"
+          "en": "The inspector and dedicated Agent tool share non-destructive placement and source replacement semantics. Direct canvas crop supports drag, zoom, reset, Enter commit, Escape cancel, and stale-session recovery; adjustment filters, complete export fidelity, and native macOS/Windows interaction evidence remain incomplete.",
+          "zh-CN": "检查器与专用 Agent 工具共用非破坏 placement 和来源替换语义。画布直接裁剪已支持拖动、缩放、重置、Enter 提交、Escape 取消和 stale session 恢复；调整滤镜、完整导出保真及 macOS/Windows 原生交互证据仍未完成。"
         }
       ],
       "evidence": {
@@ -630,6 +630,7 @@
           "packages/image-service/src/index.test.ts",
           "packages/editor-runtime/src/image-operations.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
+          "packages/leafer-engine/src/adapter.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "apps/desktop/src/renderer/design-tool-execution.test.ts",
           "apps/desktop/src/renderer/App.test.tsx"
@@ -637,6 +638,7 @@
         "manual": []
       },
       "references": [
+        "docs/adr/0089-direct-image-crop-session.md",
         "https://help.figma.com/hc/en-us/articles/360040675194-Crop-an-image"
       ]
     },

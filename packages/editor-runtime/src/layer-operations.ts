@@ -754,12 +754,22 @@ export function canDeleteNodes(
   }
   const roots = topLevelSelection(document, uniqueNodeIds);
   if (roots.length === 0) return false;
-  const componentMainIds = new Set(
-    Object.values(document.componentsById).map(
-      (component) => component.rootNodeId,
-    ),
-  );
-  if (roots.some((nodeId) => componentMainIds.has(nodeId))) return false;
+  const removedNodeIds = new Set<string>();
+  const collect = (nodeId: string): void => {
+    if (removedNodeIds.has(nodeId)) return;
+    const node = document.nodesById[nodeId];
+    if (!node) return;
+    removedNodeIds.add(nodeId);
+    node.childIds.forEach(collect);
+  };
+  roots.forEach(collect);
+  for (const component of Object.values(document.componentsById)) {
+    if (!removedNodeIds.has(component.rootNodeId) || !component.variantSetId) {
+      continue;
+    }
+    const set = document.variantSetsById[component.variantSetId];
+    if (!set || !removedNodeIds.has(set.rootNodeId)) return false;
+  }
   const selected = new Set(roots);
   if (
     roots.some(

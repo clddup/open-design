@@ -2,6 +2,7 @@ import type {
   DesignChangeSet,
   DesignDocument,
   DesignOperation,
+  ImagePlacement,
   Point,
   SelectionState,
   TextParagraphStyle,
@@ -40,7 +41,14 @@ export type LeaferCanvasTool =
 export type LeaferBoxCreateTool = Exclude<LeaferCanvasTool, "select" | "pen">;
 
 export type LeaferOperationKind =
-  "move" | "resize" | "rotate" | "skew" | "transform" | "text" | "vector";
+  | "move"
+  | "resize"
+  | "rotate"
+  | "skew"
+  | "transform"
+  | "text"
+  | "vector"
+  | "image";
 
 export interface LeaferOperationRequest {
   kind: LeaferOperationKind;
@@ -78,6 +86,16 @@ export type LeaferVectorEditRequest =
 
 export type LeaferVectorEditTool = "move" | "cut";
 
+export interface LeaferImageCropCommitRequest {
+  nodeId: string;
+  placement: Extract<ImagePlacement, { mode: "crop" }>;
+}
+
+export interface LeaferImageCropState {
+  nodeId: string;
+  placement: Extract<ImagePlacement, { mode: "crop" }>;
+}
+
 export interface LeaferVectorCutRequest {
   at: VectorCutLocation;
   nodeId: string;
@@ -109,6 +127,8 @@ export interface LeaferEngineCallbacks {
   onCreate(request: LeaferCreateRequest): boolean;
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
+  onImageCropCommit?(request: LeaferImageCropCommitRequest): boolean;
+  onImageCropStateChange?(state: LeaferImageCropState | null): void;
   onOperations(request: LeaferOperationRequest): boolean;
   onSelectionChange(nodeIds: string[], anchorNodeId?: string): void;
   onTextRangeSelectionChange?(selection: LeaferTextRangeSelection | null): void;
@@ -282,13 +302,18 @@ export interface LeaferEngineOptions {
 }
 
 export interface LeaferEngineAdapter {
+  cancelImageCrop(): boolean;
   capture(target: LeaferCaptureTarget): Promise<LeaferCaptureResult>;
   dispose(): void;
   exportRaster(request: RasterExportRequest): Promise<LeaferRasterExportResult>;
   finishGenerationPresentation(): void;
+  finishImageCrop(): boolean;
+  resetImageCrop(): boolean;
   retryBooleanGeometry(): boolean;
   setVectorPointMode(mode: VectorPointMode): boolean;
+  startImageCrop(nodeId: string): boolean;
   sync(input: LeaferEngineSyncInput): void;
+  updateImageCropZoom(zoom: number): boolean;
   updateTextEditingStyle(style: LeaferTextStyleUpdate): boolean;
   readonly textLayoutProvider: TextLayoutProvider;
   readonly textRunLayoutProvider: TextRunLayoutProvider<LeaferTextRunStyle>;

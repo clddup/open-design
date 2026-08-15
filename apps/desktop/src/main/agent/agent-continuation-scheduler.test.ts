@@ -197,6 +197,22 @@ describe("AgentContinuationScheduler", () => {
     expect(scheduler.record(completed(verified.runId, "budget"))).toBeNull();
   });
 
+  it("does not continue a delivery superseded by an explicit Page clear", () => {
+    const scheduler = new AgentContinuationScheduler();
+    const active = request();
+    scheduler.registerRun(active);
+    recordDelivery(scheduler, active.runId);
+    scheduler.record({
+      type: "tool.completed",
+      runId: active.runId,
+      toolCallId: "clear_page",
+      revision: 5,
+      result: { deliveryDisposition: "superseded" },
+    });
+
+    expect(scheduler.record(completed(active.runId, "complete"))).toBeNull();
+  });
+
   it("honors user cancellation intent even if the Run reports another terminal reason", () => {
     const scheduler = new AgentContinuationScheduler();
     const active = request();

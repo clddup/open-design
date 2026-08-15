@@ -4,9 +4,16 @@ import type {
   DesignOperation,
   DesignPage,
 } from "@opendesign/design-contracts";
+import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
+import { planPageDeletionReferenceCleanup } from "./deletion-operations.js";
 
 export type PageOperationFailureCode =
-  "not-found" | "duplicate" | "invalid" | "no-op" | "last-page";
+  | "not-found"
+  | "duplicate"
+  | "invalid"
+  | "no-op"
+  | "last-page"
+  | "operation-limit";
 
 export type PageOperationPlan =
   | {
@@ -49,6 +56,11 @@ export interface ReorderPageInput {
 }
 
 export interface DeletePageInput {
+  pageId: string;
+  commandPrefix: string;
+}
+
+export interface ClearPageInput {
   pageId: string;
   commandPrefix: string;
 }
@@ -216,10 +228,25 @@ export function planDeletePage(
   if (document.pageOrder.length <= 1) {
     return failure("last-page", "A Design File must contain at least one Page");
   }
+  const cleanup = planPageDeletionReferenceCleanup(
+    document,
+    page.id,
+    input.commandPrefix,
+  );
+  if (!cleanup.ok) {
+    return failure("invalid", cleanup.message);
+  }
+  if (cleanup.commands.length + 1 > MAX_TRANSACTION_COMMANDS) {
+    return failure(
+      "operation-limit",
+      `Deleting Page ${page.id} requires ${cleanup.commands.length + 1} commands, exceeding the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+    );
+  }
   return {
     ok: true,
     pageId: page.id,
     commands: [
+      ...cleanup.commands,
       {
         commandId: `${input.commandPrefix}_delete_page`,
         type: "delete_page",
@@ -227,6 +254,38 @@ export function planDeletePage(
       },
     ],
   };
+}
+
+export function planClearPage(
+  document: DesignDocument,
+  input: ClearPageInput,
+): PageOperationPlan {
+  const page = ownPage(document, input.pageId);
+  if (!page) return missingPage(input.pageId);
+  if (page.rootNodeIds.length === 0) {
+    return failure("no-op", `Page ${page.id} is already empty`);
+  }
+  const cleanup = planPageDeletionReferenceCleanup(
+    document,
+    page.id,
+    input.commandPrefix,
+  );
+  if (!cleanup.ok) return failure("invalid", cleanup.message);
+  const commands: DesignOperation[] = [
+    ...cleanup.commands,
+    ...page.rootNodeIds.map((nodeId, index): DesignOperation => ({
+      commandId: `${input.commandPrefix}_clear_root_${index}`,
+      type: "delete_element",
+      nodeId,
+    })),
+  ];
+  if (commands.length > MAX_TRANSACTION_COMMANDS) {
+    return failure(
+      "operation-limit",
+      `Clearing Page ${page.id} requires ${commands.length} commands, exceeding the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+    );
+  }
+  return { ok: true, pageId: page.id, commands };
 }
 
 function collectPageNodes(

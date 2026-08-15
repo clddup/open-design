@@ -551,6 +551,88 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("stages direct image crop movement and commits one crop placement", async () => {
+    const onImageCropCommit = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onImageCropCommit"]>
+    >(() => true);
+    const onImageCropStateChange =
+      vi.fn<NonNullable<LeaferEngineCallbacks["onImageCropStateChange"]>>();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onImageCropCommit,
+      onImageCropStateChange,
+    });
+    const input = withImageFixture(createInput());
+    input.selection = { nodeIds: ["hero_image"], anchorNodeId: "hero_image" };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+
+    expect(adapter.startImageCrop("hero_image")).toBe(true);
+    expect(app.editor.visible).toBe(false);
+    const initial = onImageCropStateChange.mock.calls.at(-1)?.[0];
+    expect(initial?.nodeId).toBe("hero_image");
+    expect(initial?.placement).toMatchObject({ mode: "crop", zoom: 1 });
+    expect(adapter.updateImageCropZoom(2)).toBe(true);
+    const hit = findElement(
+      app.sky,
+      "__opendesign_image_crop_hit__:hero_image",
+    );
+    if (!hit) throw new Error("Missing image crop hit area");
+    app.emit("pointer.down", pointerEvent(100, 100, hit));
+    app.emit("pointer.move", pointerEvent(130, 80, hit));
+    app.emit("pointer.up", pointerEvent(130, 80, hit));
+
+    const staged = onImageCropStateChange.mock.calls.at(-1)?.[0];
+    expect(staged).toMatchObject({
+      nodeId: "hero_image",
+      placement: { mode: "crop", zoom: 2 },
+    });
+    expect(staged?.placement.focalPoint).not.toEqual({ x: 0.5, y: 0.5 });
+    emitWindowKey("Enter");
+
+    expect(onImageCropCommit).toHaveBeenCalledTimes(1);
+    const committed = onImageCropCommit.mock.calls[0]?.[0];
+    expect(committed?.nodeId).toBe("hero_image");
+    expect(committed?.placement).toMatchObject({ mode: "crop", zoom: 2 });
+    expect(onImageCropStateChange).toHaveBeenLastCalledWith(null);
+    expect(app.editor.visible).toBe(true);
+    adapter.dispose();
+  });
+
+  it("cancels image crop on Escape or stale revision without committing", async () => {
+    const onImageCropCommit = vi.fn<
+      NonNullable<LeaferEngineCallbacks["onImageCropCommit"]>
+    >(() => true);
+    const onImageCropStateChange =
+      vi.fn<NonNullable<LeaferEngineCallbacks["onImageCropStateChange"]>>();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onImageCropCommit,
+      onImageCropStateChange,
+    });
+    const input = withImageFixture(createInput());
+    input.selection = { nodeIds: ["hero_image"], anchorNodeId: "hero_image" };
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    expect(adapter.startImageCrop("hero_image")).toBe(true);
+    expect(adapter.updateImageCropZoom(3)).toBe(true);
+    emitWindowKey("Escape");
+    expect(onImageCropCommit).not.toHaveBeenCalled();
+    expect(onImageCropStateChange).toHaveBeenLastCalledWith(null);
+    expect(app.editor.visible).toBe(true);
+
+    expect(adapter.startImageCrop("hero_image")).toBe(true);
+    const changed = structuredClone(input.document);
+    changed.revision += 1;
+    adapter.sync({ ...input, document: changed });
+    expect(onImageCropCommit).not.toHaveBeenCalled();
+    expect(onImageCropStateChange).toHaveBeenLastCalledWith(null);
+    expect(app.editor.visible).toBe(true);
+    adapter.dispose();
+  });
+
   it("maps synthetic Text hits to one authoritative selection and edit proxy", async () => {
     const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
       () => true,
@@ -4830,6 +4912,41 @@ function createInput(): LeaferEngineSyncInput {
     tool: "select",
     viewport: { panX: 0, panY: 0, zoom: 1, width: 1024, height: 768 },
   };
+}
+
+function withImageFixture(input: LeaferEngineSyncInput): LeaferEngineSyncInput {
+  const document = structuredClone(input.document);
+  document.assetsById.hero_asset = {
+    id: "hero_asset",
+    kind: "image",
+    name: "Hero source",
+    mimeType: "image/png",
+    source: { type: "data", value: "AQID" },
+    size: { width: 800, height: 600 },
+    extensions: {},
+  };
+  document.nodesById.hero_image = {
+    id: "hero_image",
+    kind: "image",
+    name: "Hero image",
+    parentId: "frame_welcome",
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 120, 180],
+    size: { width: 320, height: 240 },
+    exportSettings: [],
+    opacity: 1,
+    extensions: {},
+    properties: {
+      assetId: "hero_asset",
+      placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
+      altText: "",
+      cornerRadius: 0,
+    },
+  };
+  document.nodesById.frame_welcome?.childIds.push("hero_image");
+  return { ...input, document };
 }
 
 function textRunProjection(

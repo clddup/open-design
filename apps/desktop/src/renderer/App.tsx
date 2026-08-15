@@ -166,6 +166,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const textEditingStyleController = useRef<
     ((style: LeaferTextStyleUpdate) => boolean) | null
   >(null);
+  const imageCropController = useRef<((nodeId: string) => boolean) | null>(
+    null,
+  );
   const [textLayoutProviderEpoch, setTextLayoutProviderEpoch] = useState(0);
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
@@ -224,6 +227,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const updateTextEditingStyle = useCallback(
     (style: LeaferTextStyleUpdate) =>
       textEditingStyleController.current?.(style) ?? false,
+    [],
+  );
+  const handleImageCropControllerChange = useCallback(
+    (controller: ((nodeId: string) => boolean) | null) => {
+      imageCropController.current = controller;
+    },
     [],
   );
   useProfessionalFixtureSmoke({
@@ -1873,6 +1882,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               generationActivity={generationActivity}
               onTransactionError={setEditorError}
               onAssetDrop={placeImageAssetAtPoint}
+              onImageCropControllerChange={handleImageCropControllerChange}
               onTextLayoutProviderReady={handleTextLayoutProviderReady}
               onTextEditingStyleControllerChange={
                 handleTextEditingStyleControllerChange
@@ -1972,6 +1982,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                   void importExport.exportStoredSetting(setting)
                 }
                 onExportSvg={() => void importExport.exportSvg()}
+                onCropImage={() => {
+                  if (selectedNode?.kind !== "image") return false;
+                  return (
+                    imageCropController.current?.(selectedNode.id) ?? false
+                  );
+                }}
                 onReplaceImage={() => void replaceSelectedImage()}
                 onRemoveComponent={removeSelectedComponent}
                 onRemoveVariant={removeSelectedVariantFromSet}

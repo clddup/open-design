@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { resolveImagePlacement } from "./index.js";
+import {
+  createImageCropSession,
+  imageCropSourceTransform,
+  moveImageCrop,
+  resetImageCrop,
+  resolveImagePlacement,
+  setImageCropZoom,
+} from "./index.js";
 
 describe("image placement geometry", () => {
   it("preserves direct stretch and fit modes", () => {
@@ -84,5 +91,109 @@ describe("image placement geometry", () => {
         targetSize: { width: 400, height: 200 },
       }),
     ).toThrow("sourceSize must have positive finite dimensions");
+  });
+});
+
+describe("image crop interaction session", () => {
+  it("enters crop from Fill without changing its resolved geometry", () => {
+    const sourceSize = { width: 1_600, height: 900 };
+    const targetSize = { width: 400, height: 400 };
+    const fill = {
+      mode: "fill" as const,
+      focalPoint: { x: 0.35, y: 0.6 },
+    };
+    const session = createImageCropSession({
+      placement: fill,
+      sourceSize,
+      targetSize,
+    });
+    const resolvedFill = resolveImagePlacement({
+      placement: fill,
+      sourceSize,
+      targetSize,
+    });
+    expect(session.current).toMatchObject({
+      mode: "crop",
+      focalPoint:
+        resolvedFill.mode === "clip"
+          ? resolvedFill.effectiveFocalPoint
+          : fill.focalPoint,
+      zoom: 1,
+      rotation: 0,
+    });
+    expect(
+      resolveImagePlacement({
+        placement: session.current,
+        sourceSize,
+        targetSize,
+      }),
+    ).toEqual(resolvedFill);
+  });
+
+  it("repositions the source in target-local coordinates and clamps empty pixels", () => {
+    const session = createImageCropSession({
+      placement: {
+        mode: "crop",
+        focalPoint: { x: 0.5, y: 0.5 },
+        zoom: 1.5,
+        rotation: 0,
+        flipHorizontal: false,
+        flipVertical: false,
+      },
+      sourceSize: { width: 800, height: 600 },
+      targetSize: { width: 400, height: 300 },
+    });
+    const before = imageCropSourceTransform(session);
+    const moved = moveImageCrop(session, { x: 30, y: -20 });
+    const after = imageCropSourceTransform(moved);
+    expect(after[4] - before[4]).toBeCloseTo(30);
+    expect(after[5] - before[5]).toBeCloseTo(-20);
+
+    const clamped = moveImageCrop(moved, { x: 100_000, y: -100_000 });
+    expect(clamped.current.focalPoint.x).toBeGreaterThanOrEqual(0);
+    expect(clamped.current.focalPoint.x).toBeLessThanOrEqual(1);
+    expect(clamped.current.focalPoint.y).toBeGreaterThanOrEqual(0);
+    expect(clamped.current.focalPoint.y).toBeLessThanOrEqual(1);
+  });
+
+  it("zooms around the focal point, supports reset, and preserves finite rotated flips", () => {
+    const session = createImageCropSession({
+      placement: {
+        mode: "crop",
+        focalPoint: { x: 0.25, y: 0.7 },
+        zoom: 2,
+        rotation: 35,
+        flipHorizontal: true,
+        flipVertical: false,
+      },
+      sourceSize: { width: 1_200, height: 800 },
+      targetSize: { width: 480, height: 320 },
+    });
+    const zoomed = setImageCropZoom(session, 80);
+    expect(zoomed.current.zoom).toBe(64);
+    expect(imageCropSourceTransform(zoomed).every(Number.isFinite)).toBe(true);
+    expect(setImageCropZoom(session, 0).current.zoom).toBe(1);
+    expect(resetImageCrop(session).current).toEqual({
+      mode: "crop",
+      focalPoint: { x: 0.5, y: 0.5 },
+      zoom: 1,
+      rotation: 0,
+      flipHorizontal: false,
+      flipVertical: false,
+    });
+  });
+
+  it("rejects non-finite interaction input", () => {
+    const session = createImageCropSession({
+      placement: { mode: "fit" },
+      sourceSize: { width: 100, height: 100 },
+      targetSize: { width: 50, height: 50 },
+    });
+    expect(() => moveImageCrop(session, { x: Number.NaN, y: 0 })).toThrow(
+      "finite",
+    );
+    expect(() => setImageCropZoom(session, Number.POSITIVE_INFINITY)).toThrow(
+      "finite",
+    );
   });
 });

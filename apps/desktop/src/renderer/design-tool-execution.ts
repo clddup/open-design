@@ -15,6 +15,7 @@ import {
   componentMainNodeId,
   diagnoseDesignTargetLayout,
   diagnoseDesignPages,
+  planClearPage,
   planCreatePage,
   planCreateBooleanGroup,
   planDeletePage,
@@ -478,10 +479,42 @@ async function executeDesignToolRequestUnsafe(
                   index: input.index,
                   commandPrefix: operationId,
                 })
-              : planDeletePage(document, {
-                  pageId: input.pageId,
-                  commandPrefix: operationId,
-                });
+              : input.action === "clear"
+                ? planClearPage(document, {
+                    pageId: input.pageId,
+                    commandPrefix: operationId,
+                  })
+                : planDeletePage(document, {
+                    pageId: input.pageId,
+                    commandPrefix: operationId,
+                  });
+    if (!plan.ok && input.action === "clear" && plan.code === "no-op") {
+      const page = document.pagesById[input.pageId];
+      if (!page) {
+        throw new Error(
+          `page-operation.invalid: Page ${input.pageId} does not exist`,
+        );
+      }
+      return {
+        requestId: request.requestId,
+        ok: true,
+        result: {
+          observedRevision: document.revision,
+          content: {
+            kind: "page-operation-result",
+            version: 1,
+            ok: true,
+            action: "clear",
+            pageId: page.id,
+            name: page.name,
+            pageOrder: [...document.pageOrder],
+            revision: document.revision,
+            atomic: true,
+            unchanged: true,
+          },
+        },
+      };
+    }
     if (!plan.ok) {
       throw new Error(`page-operation.${plan.code}: ${plan.message}`);
     }
@@ -2206,10 +2239,13 @@ function assertPageToolMutationTarget(
   input: DesignPageToolInput,
   mutationTarget: DesignMutationTarget,
 ): void {
-  if (input.action === "rename" && mutationTarget.kind === "page") {
+  if (
+    (input.action === "rename" || input.action === "clear") &&
+    mutationTarget.kind === "page"
+  ) {
     if (input.pageId !== mutationTarget.pageId) {
       throw new Error(
-        `Page rename targets ${input.pageId} outside the registered Page scope`,
+        `Page ${input.action} targets ${input.pageId} outside the registered Page scope`,
       );
     }
     return;

@@ -9,9 +9,15 @@ import {
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import { createEmptyDesignDocument } from "./document.js";
+import { normalizeDesignDocument } from "./document.js";
 import { EditorRuntime } from "./runtime.js";
 import { canDeleteNodes } from "./layer-operations.js";
-import { planDeletePage, planDuplicatePage } from "./page-operations.js";
+import { planDeleteNodes } from "./deletion-operations.js";
+import {
+  planClearPage,
+  planDeletePage,
+  planDuplicatePage,
+} from "./page-operations.js";
 import {
   planCreateComponent,
   planCreateInstance,
@@ -272,11 +278,11 @@ describe("component operations", () => {
     ).toBe(true);
   });
 
-  it("protects main deletion and keeps duplicate Page component semantics explicit", () => {
+  it("deletes a Main Page atomically and preserves surviving instances as editable frames", () => {
     const runtime = new EditorRuntime(componentFixture(true));
     expect(
       canDeleteNodes(runtime.getSnapshot().document, ["button_main"]),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canDeleteNodes(runtime.getSnapshot().document, ["button_instance"]),
     ).toBe(true);
@@ -302,13 +308,79 @@ describe("component operations", () => {
     });
     expect(deleteMainPage.ok).toBe(true);
     if (!deleteMainPage.ok) return;
-    const rejected = runtime.apply(
+    const deleted = runtime.apply(
       transaction(runtime, "delete-main-page", deleteMainPage.commands),
     );
-    expect(rejected).toMatchObject({
-      ok: false,
-      error: { code: "invalid" },
+    expect(deleted.ok).toBe(true);
+    const current = runtime.getSnapshot().document;
+    expect(current.pagesById.page_main).toBeUndefined();
+    expect(current.componentsById.component_button).toBeUndefined();
+    expect(current.nodesById.button_instance?.kind).toBe("frame");
+    expect(current.nodesById.button_instance_copy?.kind).toBe("frame");
+    expect(
+      normalizeDesignDocument(JSON.parse(JSON.stringify(current))).nodesById
+        .button_instance?.kind,
+    ).toBe("frame");
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.componentsById.component_button,
+    ).toBeDefined();
+    expect(runtime.getSnapshot().document.nodesById.button_instance?.kind).toBe(
+      "instance",
+    );
+  });
+
+  it("deletes a Frame containing both a Main and its instances without internal reference blocking", () => {
+    const document = componentFixture(true);
+    document.pagesById.page_main!.rootNodeIds = ["workspace"];
+    document.pagesById.page_instance!.rootNodeIds = [];
+    document.nodesById.workspace = frame("workspace", null, [
+      "button_main",
+      "button_instance",
+    ]);
+    document.nodesById.button_main!.parentId = "workspace";
+    document.nodesById.button_instance!.parentId = "workspace";
+    const runtime = new EditorRuntime(document);
+    const plan = planDeleteNodes(runtime.getSnapshot().document, {
+      nodeIds: ["workspace"],
+      commandPrefix: "delete_workspace",
     });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    apply(runtime, plan.commands, "delete-workspace");
+    expect(runtime.getSnapshot().document.nodesById.workspace).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.componentsById.component_button,
+    ).toBeUndefined();
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.workspace).toBeDefined();
+    expect(runtime.getSnapshot().document.nodesById.button_instance?.kind).toBe(
+      "instance",
+    );
+  });
+
+  it("clears one Page and preserves cross-Page component instances without capture state", () => {
+    const runtime = new EditorRuntime(componentFixture(true));
+    const plan = planClearPage(runtime.getSnapshot().document, {
+      pageId: "page_main",
+      commandPrefix: "clear_main",
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    apply(runtime, plan.commands, "clear-main");
+    const cleared = runtime.getSnapshot().document;
+    expect(cleared.pagesById.page_main?.rootNodeIds).toEqual([]);
+    expect(cleared.pagesById.page_instance?.rootNodeIds).toEqual([
+      "button_instance",
+    ]);
+    expect(cleared.nodesById.button_instance?.kind).toBe("frame");
+    expect(cleared.componentsById.component_button).toBeUndefined();
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.button_instance?.kind).toBe(
+      "instance",
+    );
   });
 
   it("removes component identity only after every instance is gone", () => {

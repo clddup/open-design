@@ -16,7 +16,7 @@
 - 实现方：OpenDesign Workspace + EditorRuntime
 - 表面：contract=available；runtime=degraded；human=degraded；agent=degraded；render=available；export=unavailable
 - 证据：自动化 7 项；实机 0 项
-- 限制：Agent 可通过显式 Page 或 Design File 写入目标创建、重命名、复制、排序和删除 Page，但尚不能管理 Project 或 Design File。
+- 限制：Agent 可通过显式 Page 或 Design File 写入目标创建、重命名、复制、排序、清空和删除 Page，但尚不能管理 Project 或 Design File。
 
 ### 画布导航与选择 — 降级可用
 
@@ -162,10 +162,11 @@
 非破坏性裁剪、选择焦点位置、替换来源并应用图片调整或滤镜。
 
 - ID：`image.crop-adjustments`
-- 实现方：DesignDocument 1.10.0 + OpenDesign Image service crop geometry + Leafer projection
+- 实现方：DesignDocument 1.10.0 + OpenDesign Image Service v2 + Leafer projection
 - 表面：contract=degraded；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=unavailable
-- 证据：自动化 7 项；实机 0 项
-- 限制：检查器与专用 Agent 工具已共用非破坏 placement 和来源替换语义，但画布直接裁剪控件、调整滤镜、导出保真及 macOS/Windows 原生交互证据仍未完成。
+- 证据：自动化 8 项；实机 0 项
+- 限制：检查器与专用 Agent 工具共用非破坏 placement 和来源替换语义。画布直接裁剪已支持拖动、缩放、重置、Enter 提交、Escape 取消和 stale session 恢复；调整滤镜、完整导出保真及 macOS/Windows 原生交互证据仍未完成。
+- 专业参照：[官方说明](docs/adr/0089-direct-image-crop-session.md)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040675194-Crop-an-image)
 
 ### AI 图片编辑 — 不可用

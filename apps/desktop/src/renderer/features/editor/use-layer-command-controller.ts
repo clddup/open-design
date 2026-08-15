@@ -16,6 +16,7 @@ import {
   planArrangeNodes,
   planCreateBooleanGroup,
   planGroupNodes,
+  planDeleteNodes,
   planReparentNodes,
   planReorderNodes,
   planSetBooleanOperation,
@@ -135,21 +136,23 @@ export function useLayerCommandController({
   const deleteNodes = useCallback(
     (nodeIds: readonly string[]) => {
       const current = runtime.getSnapshot();
-      if (!canDeleteNodes(current.document, nodeIds)) return false;
-      const roots = filterTopLevelNodeIds(current.document, nodeIds);
-      if (roots.length === 0) return false;
+      const operationId = `delete_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planDeleteNodes(current.document, {
+        nodeIds,
+        commandPrefix: operationId,
+      });
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return false;
+      }
       const deleted = applyCommands(
-        t("history.deleteLayers", { count: roots.length }),
-        roots.map((nodeId, index) => ({
-          commandId: `delete_${nodeId}_${index}`,
-          type: "delete_element" as const,
-          nodeId,
-        })),
+        t("history.deleteLayers", { count: plan.rootNodeIds.length }),
+        plan.commands,
       );
       if (deleted) runtime.setSelection([]);
       return deleted;
     },
-    [applyCommands, runtime, t],
+    [applyCommands, runtime, setEditorError, t, transactionCounter],
   );
 
   const duplicateSelection = useCallback(() => {

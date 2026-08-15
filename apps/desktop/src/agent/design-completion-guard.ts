@@ -17,6 +17,7 @@ import {
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
@@ -28,6 +29,7 @@ import {
 export function reviewDesignCompletion(
   context: AgentCompletionContext,
 ): AgentCompletionDecision {
+  if (hasSupersededDelivery(context.toolCalls)) return { allow: true };
   const unresolvedFailure = context.unresolvedDesignWriteFailure;
   if (unresolvedFailure) {
     const recovery = unresolvedFailure.inspectionCompleted
@@ -168,12 +170,24 @@ function latestDeliveryLedger(
   for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
     const result = toolCalls[index]?.result;
     if (!isRecord(result)) continue;
+    if (result.deliveryDisposition === "superseded") return undefined;
     const delivery = result.delivery;
     if (isDesignDeliveryLedger(delivery)) return delivery;
     const unfinishedDelivery = result.unfinishedDelivery;
     if (isDesignDeliveryLedger(unfinishedDelivery)) return unfinishedDelivery;
   }
   return undefined;
+}
+
+function hasSupersededDelivery(
+  toolCalls: readonly AgentToolCallRecord[],
+): boolean {
+  return toolCalls.some(
+    (call) =>
+      call.toolName === DESIGN_PAGE_TOOL_NAME &&
+      isRecord(call.result) &&
+      call.result.deliveryDisposition === "superseded",
+  );
 }
 
 function incompleteDeliveryDecision(

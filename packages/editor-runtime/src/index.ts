@@ -35,6 +35,11 @@ export {
   type LayerOperationPlan,
 } from "./layer-operations.js";
 export {
+  planDeleteNodes,
+  type DeleteNodesFailureCode,
+  type DeleteNodesPlan,
+} from "./deletion-operations.js";
+export {
   getArrangementSelectionMetrics,
   planArrangeNodes,
   type ArrangeAction,
@@ -226,11 +231,13 @@ export {
 } from "./runtime.js";
 export {
   normalizePageName,
+  planClearPage,
   planCreatePage,
   planDeletePage,
   planDuplicatePage,
   planRenamePage,
   planReorderPage,
+  type ClearPageInput,
   type CreatePageInput,
   type DeletePageInput,
   type DuplicatePageInput,

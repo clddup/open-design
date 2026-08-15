@@ -18,6 +18,8 @@ import {
   planSetComponentPropertyValue,
 } from "./component-property-operations.js";
 import { planRemoveComponent } from "./component-operations.js";
+import { planDeleteNodes } from "./deletion-operations.js";
+import { canDeleteNodes } from "./layer-operations.js";
 import { planCombineComponentsAsVariants } from "./variant-set-operations.js";
 import {
   planAddComponentToVariantSet,
@@ -633,6 +635,38 @@ describe("Figma-compatible Component Set variants", () => {
         "button_instance",
       ),
     ).toMatchObject({ ok: true, componentId: "button_hover" });
+  });
+
+  it("deletes a complete Component Set while preserving external instances", () => {
+    const runtime = new EditorRuntime(variantFixture());
+    expect(
+      canDeleteNodes(runtime.getSnapshot().document, ["button_default_root"]),
+    ).toBe(false);
+    expect(
+      canDeleteNodes(runtime.getSnapshot().document, ["button_set_root"]),
+    ).toBe(true);
+    const plan = planDeleteNodes(runtime.getSnapshot().document, {
+      nodeIds: ["button_set_root"],
+      commandPrefix: "delete_set",
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, plan.commands, "delete-set")),
+    ).toMatchObject({ ok: true, revision: { revision: 2 } });
+    const deleted = runtime.getSnapshot().document;
+    expect(deleted.variantSetsById.button_set).toBeUndefined();
+    expect(deleted.componentsById.button_default).toBeUndefined();
+    expect(deleted.componentsById.button_hover).toBeUndefined();
+    expect(deleted.nodesById.button_set_root).toBeUndefined();
+    expect(deleted.nodesById.button_instance?.kind).toBe("frame");
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.variantSetsById.button_set,
+    ).toBeDefined();
+    expect(runtime.getSnapshot().document.nodesById.button_instance?.kind).toBe(
+      "instance",
+    );
   });
 });
 

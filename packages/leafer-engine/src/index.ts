@@ -18,6 +18,8 @@ export type {
   LeaferGenerationSkeleton,
   LeaferGenerationSkeletonRegion,
   LeaferGenerationSkeletonRole,
+  LeaferImageCropCommitRequest,
+  LeaferImageCropState,
   LeaferOperationKind,
   LeaferOperationRequest,
   LeaferRasterExportResult,

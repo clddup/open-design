@@ -16,6 +16,7 @@ import {
 import type { EditorRuntime, EditorSnapshot } from "@opendesign/editor-runtime";
 import {
   navigateBooleanSelection,
+  planImageNodeUpdate,
   planDeleteVectorNode,
   planVectorLayersLineCut,
   planVectorNetworkUpdate,
@@ -34,6 +35,8 @@ import {
   type LeaferEngineSyncInput,
   type LeaferFidelityWarning,
   type LeaferGenerationActivity,
+  type LeaferImageCropCommitRequest,
+  type LeaferImageCropState,
   type LeaferOperationKind,
   type LeaferOperationRequest,
   type LeaferTextRangeSelection,
@@ -79,6 +82,7 @@ export function Canvas({
   snapshot,
   onTransactionError,
   onAssetDrop,
+  onImageCropControllerChange,
   onTextLayoutProviderReady,
   onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
@@ -95,6 +99,9 @@ export function Canvas({
     assetId: string,
     documentPoint: { x: number; y: number },
   ) => { ok: boolean };
+  onImageCropControllerChange: (
+    controller: ((nodeId: string) => boolean) | null,
+  ) => void;
   onTextLayoutProviderReady: (provider: TextLayoutProvider) => void;
   onTextEditingStyleControllerChange: (
     controller: ((style: LeaferTextStyleUpdate) => boolean) | null,
@@ -114,6 +121,8 @@ export function Canvas({
   );
   const [renderError, setRenderError] = useState<string | null>(null);
   const [assetDropActive, setAssetDropActive] = useState(false);
+  const [imageCropState, setImageCropState] =
+    useState<LeaferImageCropState | null>(null);
   const reducedMotion = useReducedMotion();
   const [fidelityWarnings, setFidelityWarnings] = useState<
     readonly LeaferFidelityWarning[]
@@ -318,6 +327,13 @@ export function Canvas({
   const handleCanvasKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
       if (event.target !== event.currentTarget) return;
+      if (imageCropState && (event.key === "Enter" || event.key === "Escape")) {
+        if (event.key === "Enter") adapter.current?.finishImageCrop();
+        else adapter.current?.cancelImageCrop();
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (
         vectorEditScope &&
         !event.altKey &&
@@ -362,7 +378,13 @@ export function Canvas({
       event.preventDefault();
       event.stopPropagation();
     },
-    [enterVectorEdit, runtime, selectBooleanTarget, vectorEditScope],
+    [
+      enterVectorEdit,
+      imageCropState,
+      runtime,
+      selectBooleanTarget,
+      vectorEditScope,
+    ],
   );
 
   const handleCanvasDoubleClick = useCallback(
@@ -374,6 +396,14 @@ export function Canvas({
         return;
       }
       const currentSelection = runtime.getSnapshot().state.selection.nodeIds;
+      if (
+        currentSelection.length === 1 &&
+        adapter.current?.startImageCrop(currentSelection[0])
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (enterVectorEdit(currentSelection)) {
         event.preventDefault();
         event.stopPropagation();
@@ -425,6 +455,25 @@ export function Canvas({
         transactionId: `canvas_${crypto.randomUUID().replaceAll("-", "")}`,
       }),
     [onResizeFrame, onTransactionError, runtime, t],
+  );
+
+  const applyImageCrop = useCallback(
+    (request: LeaferImageCropCommitRequest) => {
+      const current = runtime.getSnapshot();
+      const plan = planImageNodeUpdate(current.document, {
+        action: "set-placement",
+        pageId: activePageId,
+        nodeId: request.nodeId,
+        placement: request.placement,
+      });
+      if (!plan.ok) {
+        if (plan.code === "no-op") return true;
+        onTransactionError(plan.message);
+        return false;
+      }
+      return applyOperations({ kind: "image", operations: plan.commands });
+    },
+    [activePageId, applyOperations, onTransactionError, runtime],
   );
 
   const applyVectorEdit = useCallback(
@@ -751,6 +800,8 @@ export function Canvas({
         if (!disposed)
           setRenderError(error.message || t("canvas.renderFailed"));
       },
+      onImageCropCommit: applyImageCrop,
+      onImageCropStateChange: setImageCropState,
       onOperations: applyOperations,
       onSelectionChange: (nodeIds, anchorNodeId) => {
         runtime.setSelection(nodeIds, anchorNodeId);
@@ -797,6 +848,7 @@ export function Canvas({
           return;
         }
         adapter.current = engine;
+        onImageCropControllerChange((nodeId) => engine.startImageCrop(nodeId));
         onTextEditingStyleControllerChange((style) =>
           engine.updateTextEditingStyle(style),
         );
@@ -817,11 +869,14 @@ export function Canvas({
       disposed = true;
       adapter.current?.dispose();
       adapter.current = null;
+      onImageCropControllerChange(null);
       onTextEditingStyleControllerChange(null);
+      setImageCropState(null);
       setTextRunLayoutProvider(undefined);
       onTextRangeSelectionChange(null);
     };
   }, [
+    applyImageCrop,
     applyOperations,
     applyVectorCut,
     applyVectorEdit,
@@ -830,6 +885,7 @@ export function Canvas({
     createNode,
     createVectorNode,
     exitVectorEdit,
+    onImageCropControllerChange,
     onTextLayoutProviderReady,
     onTextEditingStyleControllerChange,
     onTextRangeSelectionChange,
@@ -925,6 +981,9 @@ export function Canvas({
   const warningBoolean = activeWarning
     ? snapshot.document.nodesById[activeWarning.nodeId]
     : undefined;
+  const imageCropNode = imageCropState
+    ? snapshot.document.nodesById[imageCropState.nodeId]
+    : undefined;
   const editScopeBoolean = booleanEditScope
     ? snapshot.document.nodesById[booleanEditScope.booleanId]
     : undefined;
@@ -959,7 +1018,15 @@ export function Canvas({
       onDrop={handleAssetDrop}
       onDoubleClick={handleCanvasDoubleClick}
       onKeyDown={handleCanvasKeyDown}
-      onPointerDown={() => host.current?.focus()}
+      onPointerDown={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest(`.${styles.contextStack}`)
+        ) {
+          return;
+        }
+        host.current?.focus();
+      }}
       ref={host}
       tabIndex={0}
     >
@@ -981,11 +1048,67 @@ export function Canvas({
           <small>{renderError}</small>
         </div>
       )}
-      {(vectorEditScope ||
+      {(imageCropState ||
+        vectorEditScope ||
         booleanEditScope ||
         activeWarning ||
         selectedRichTextWarning) && (
         <div className={styles.contextStack}>
+          {imageCropState && (
+            <div className={styles.editScope} role="status">
+              <span className={styles.contextMark} />
+              <span>
+                <strong>
+                  {t("canvas.imageCropping", {
+                    name: imageCropNode?.name || t("node.image"),
+                  })}
+                </strong>
+                <small>{t("canvas.imageCroppingHint")}</small>
+              </span>
+              <span className={styles.imageCropTools}>
+                <label>
+                  <span>{t("canvas.imageCropZoom")}</span>
+                  <input
+                    aria-label={t("canvas.imageCropZoom")}
+                    max={6_400}
+                    min={100}
+                    onChange={(event) =>
+                      adapter.current?.updateImageCropZoom(
+                        Number(event.target.value) / 100,
+                      )
+                    }
+                    step={1}
+                    type="range"
+                    value={Math.round(imageCropState.placement.zoom * 100)}
+                  />
+                  <output>
+                    {Math.round(imageCropState.placement.zoom * 100)}%
+                  </output>
+                </label>
+                <button
+                  onClick={() => adapter.current?.resetImageCrop()}
+                  type="button"
+                >
+                  {t("canvas.imageCropReset")}
+                </button>
+                <button
+                  onClick={() => adapter.current?.cancelImageCrop()}
+                  type="button"
+                >
+                  {t("canvas.imageCropCancel")}
+                  <kbd>Esc</kbd>
+                </button>
+                <button
+                  className={styles.primaryContextAction}
+                  onClick={() => adapter.current?.finishImageCrop()}
+                  type="button"
+                >
+                  {t("canvas.imageCropDone")}
+                  <kbd>Enter</kbd>
+                </button>
+              </span>
+            </div>
+          )}
           {selectedRichTextWarning && (
             <div
               className={`${styles.editScope} ${styles.fidelityWarning}`}
@@ -1244,6 +1367,8 @@ function operationLabel(
       return t("canvas.editText");
     case "vector":
       return t("canvas.editVector");
+    case "image":
+      return t("history.updateImagePlacement");
     case "transform":
       return t("canvas.transformLayers");
   }

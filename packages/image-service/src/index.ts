@@ -3,7 +3,19 @@ import type {
   NormalizedPoint,
   Point,
   Size,
+  Transform,
 } from "@opendesign/design-contracts";
+
+export const IMAGE_SERVICE_CONTRACT_VERSION = 2 as const;
+
+export type ImageCropPlacement = Extract<ImagePlacement, { mode: "crop" }>;
+
+export interface ImageCropSession {
+  current: ImageCropPlacement;
+  original: ImagePlacement;
+  sourceSize: Size;
+  targetSize: Size;
+}
 
 export type ResolvedImagePlacement =
   | { mode: "stretch" | "fit" }
@@ -84,6 +96,160 @@ export function resolveImagePlacement({
       y: targetSize.height / 2 - b * focalX - d * focalY,
     },
   };
+}
+
+export function createImageCropSession(input: {
+  placement: ImagePlacement;
+  sourceSize: Size;
+  targetSize: Size;
+}): ImageCropSession {
+  assertPositiveSize(input.sourceSize, "sourceSize");
+  assertPositiveSize(input.targetSize, "targetSize");
+  const crop: ImageCropPlacement =
+    input.placement.mode === "crop"
+      ? structuredClone(input.placement)
+      : {
+          mode: "crop",
+          focalPoint:
+            input.placement.mode === "fill"
+              ? structuredClone(input.placement.focalPoint)
+              : { x: 0.5, y: 0.5 },
+          zoom: 1,
+          rotation: 0,
+          flipHorizontal: false,
+          flipVertical: false,
+        };
+  return {
+    current: canonicalCropPlacement(crop, input.sourceSize, input.targetSize),
+    original: structuredClone(input.placement),
+    sourceSize: structuredClone(input.sourceSize),
+    targetSize: structuredClone(input.targetSize),
+  };
+}
+
+export function moveImageCrop(
+  session: ImageCropSession,
+  delta: Point,
+): ImageCropSession {
+  if (!Number.isFinite(delta.x) || !Number.isFinite(delta.y)) {
+    throw new RangeError("Image crop delta must be finite");
+  }
+  const resolved = requireClipPlacement(session);
+  const [a, b, c, d] = cropLinearTransform(resolved);
+  const determinant = a * d - b * c;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < 0.000_000_001) {
+    throw new RangeError("Image crop transform is not invertible");
+  }
+  const target = {
+    x: session.targetSize.width / 2 - (resolved.offset.x + delta.x),
+    y: session.targetSize.height / 2 - (resolved.offset.y + delta.y),
+  };
+  const focalPoint = {
+    x: (d * target.x - c * target.y) / determinant / session.sourceSize.width,
+    y: (-b * target.x + a * target.y) / determinant / session.sourceSize.height,
+  };
+  return {
+    ...session,
+    current: canonicalCropPlacement(
+      { ...session.current, focalPoint },
+      session.sourceSize,
+      session.targetSize,
+    ),
+  };
+}
+
+export function setImageCropZoom(
+  session: ImageCropSession,
+  zoom: number,
+): ImageCropSession {
+  if (!Number.isFinite(zoom)) {
+    throw new RangeError("Image crop zoom must be finite");
+  }
+  return {
+    ...session,
+    current: canonicalCropPlacement(
+      { ...session.current, zoom: clamp(zoom, 1, 64) },
+      session.sourceSize,
+      session.targetSize,
+    ),
+  };
+}
+
+export function resetImageCrop(session: ImageCropSession): ImageCropSession {
+  return {
+    ...session,
+    current: canonicalCropPlacement(
+      {
+        mode: "crop",
+        focalPoint: { x: 0.5, y: 0.5 },
+        zoom: 1,
+        rotation: 0,
+        flipHorizontal: false,
+        flipVertical: false,
+      },
+      session.sourceSize,
+      session.targetSize,
+    ),
+  };
+}
+
+export function imageCropSourceTransform(session: ImageCropSession): Transform {
+  const resolved = requireClipPlacement(session);
+  const [a, b, c, d] = cropLinearTransform(resolved);
+  return [a, b, c, d, resolved.offset.x, resolved.offset.y];
+}
+
+function canonicalCropPlacement(
+  placement: ImageCropPlacement,
+  sourceSize: Size,
+  targetSize: Size,
+): ImageCropPlacement {
+  const resolved = resolveImagePlacement({
+    placement: {
+      ...placement,
+      zoom: clamp(placement.zoom, 1, 64),
+      rotation: normalizeRotation(placement.rotation),
+    },
+    sourceSize,
+    targetSize,
+  });
+  if (resolved.mode !== "clip") {
+    throw new Error("Crop placement did not resolve to clip geometry");
+  }
+  return {
+    ...placement,
+    focalPoint: structuredClone(resolved.effectiveFocalPoint),
+    zoom: clamp(placement.zoom, 1, 64),
+    rotation: resolved.rotation,
+  };
+}
+
+function requireClipPlacement(
+  session: ImageCropSession,
+): Extract<ResolvedImagePlacement, { mode: "clip" }> {
+  const resolved = resolveImagePlacement({
+    placement: session.current,
+    sourceSize: session.sourceSize,
+    targetSize: session.targetSize,
+  });
+  if (resolved.mode !== "clip") {
+    throw new Error("Image crop session requires clip placement");
+  }
+  return resolved;
+}
+
+function cropLinearTransform(
+  placement: Extract<ResolvedImagePlacement, { mode: "clip" }>,
+): readonly [number, number, number, number] {
+  const radians = (placement.rotation * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  return [
+    cosine * placement.scale.x,
+    sine * placement.scale.x,
+    -sine * placement.scale.y,
+    cosine * placement.scale.y,
+  ];
 }
 
 function constrainFocalPoint(

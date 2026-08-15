@@ -117,6 +117,7 @@ export function SelectedNodeProperties({
   onDetachComponentInstance,
   onDuplicate,
   onGoToComponentMain,
+  onCropImage,
   onReplaceImage,
   onRemoveComponent,
   onRemoveVariant,
@@ -173,6 +174,7 @@ export function SelectedNodeProperties({
   onDetachComponentInstance: () => void;
   onDuplicate: () => void;
   onGoToComponentMain: () => void;
+  onCropImage: () => boolean;
   onReplaceImage: () => void;
   onRemoveComponent: () => void;
   onRemoveVariant: () => void;
@@ -780,6 +782,7 @@ export function SelectedNodeProperties({
         <ImageSection
           node={node}
           onChange={(placement) => onUpdate({ properties: { placement } })}
+          onCrop={onCropImage}
           onReplace={onReplaceImage}
         />
       )}

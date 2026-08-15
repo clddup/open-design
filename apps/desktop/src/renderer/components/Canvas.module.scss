@@ -102,7 +102,8 @@
   }
 }
 
-.editScope:has(.vectorTools) {
+.editScope:has(.vectorTools),
+.editScope:has(.imageCropTools) {
   grid-template-columns: auto minmax(120px, 1fr) auto auto;
 }
 
@@ -138,18 +139,21 @@
 
 .vectorTools,
 .vectorModes,
-.vectorActions {
+.vectorActions,
+.imageCropTools {
   display: inline-flex;
   align-items: center;
   gap: 2px;
 }
 
 @media (max-width: 900px) {
-  .editScope:has(.vectorTools) {
+  .editScope:has(.vectorTools),
+  .editScope:has(.imageCropTools) {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
-  .vectorTools {
+  .vectorTools,
+  .imageCropTools {
     grid-row: 2;
     grid-column: 2 / 4;
     flex-wrap: wrap;
@@ -159,6 +163,38 @@
 
 .vectorTools {
   gap: 6px;
+}
+
+.imageCropTools {
+  gap: 5px;
+
+  label {
+    display: inline-grid;
+    min-width: 170px;
+    grid-template-columns: auto minmax(72px, 1fr) 34px;
+    align-items: center;
+    gap: 6px;
+    color: var(--ui-text-muted);
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
+  input {
+    min-width: 72px;
+    accent-color: var(--ui-accent);
+  }
+
+  output {
+    color: var(--ui-text);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+}
+
+.editScope .primaryContextAction {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent-text);
+  background: var(--ui-accent-soft);
 }
 
 .vectorActions {

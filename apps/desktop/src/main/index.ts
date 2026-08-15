@@ -1659,11 +1659,27 @@ void app.whenReady().then(async () => {
           ...call,
           input: normalizedPageInput,
         });
-        if (result.designRevision) {
+        if (result.designRevision || normalizedPageInput.action === "clear") {
           globalTaskCoordinator.recordPageToolCompleted(
             context.runId,
             normalizedPageInput.action,
           );
+        }
+        if (normalizedPageInput.action === "clear") {
+          globalTaskCoordinator.supersedeDesignDeliveryForClearedPage(
+            context,
+            normalizedPageInput.pageId,
+          );
+          if (!isRecordValue(result.content)) {
+            throw new TypeError("Page clear result must be structured");
+          }
+          return {
+            ...result,
+            content: {
+              ...result.content,
+              deliveryDisposition: "superseded",
+            },
+          };
         }
         return result;
       }

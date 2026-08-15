@@ -62,6 +62,11 @@ const leaferHarness = vi.hoisted(() => ({
   callbacks: null as LeaferEngineCallbacks | null,
   input: null as LeaferEngineSyncInput | null,
   finishGenerationPresentation: vi.fn(),
+  cancelImageCrop: vi.fn(() => true),
+  finishImageCrop: vi.fn(() => true),
+  resetImageCrop: vi.fn(() => true),
+  startImageCrop: vi.fn((nodeId: string) => nodeId === "hero_image"),
+  updateImageCropZoom: vi.fn(() => true),
   sync: vi.fn(),
   retryBooleanGeometry: vi.fn(() => true),
   setVectorPointMode: vi.fn(() => true),
@@ -112,11 +117,15 @@ vi.mock("@opendesign/leafer-engine", () => ({
       canvas.className = "leafer-canvas-view";
       host.append(canvas);
       return Promise.resolve({
+        cancelImageCrop: leaferHarness.cancelImageCrop,
         dispose: () => canvas.remove(),
         finishGenerationPresentation:
           leaferHarness.finishGenerationPresentation,
+        finishImageCrop: leaferHarness.finishImageCrop,
+        resetImageCrop: leaferHarness.resetImageCrop,
         retryBooleanGeometry: leaferHarness.retryBooleanGeometry,
         setVectorPointMode: leaferHarness.setVectorPointMode,
+        startImageCrop: leaferHarness.startImageCrop,
         textLayoutProvider: {
           id: "test-text-layout",
           version: "1",
@@ -132,6 +141,8 @@ vi.mock("@opendesign/leafer-engine", () => ({
           leaferHarness.input = input;
           leaferHarness.sync(input);
         },
+        updateImageCropZoom: leaferHarness.updateImageCropZoom,
+        updateTextEditingStyle: vi.fn(() => true),
       });
     },
   ),
@@ -172,6 +183,11 @@ beforeEach(() => {
   leaferHarness.callbacks = null;
   leaferHarness.input = null;
   leaferHarness.finishGenerationPresentation.mockClear();
+  leaferHarness.cancelImageCrop.mockClear();
+  leaferHarness.finishImageCrop.mockClear();
+  leaferHarness.resetImageCrop.mockClear();
+  leaferHarness.startImageCrop.mockClear();
+  leaferHarness.updateImageCropZoom.mockClear();
   leaferHarness.sync.mockClear();
   leaferHarness.retryBooleanGeometry.mockClear();
   leaferHarness.setVectorPointMode.mockClear();
@@ -2701,6 +2717,58 @@ describe("App", () => {
     });
     await user.click(screen.getByRole("tab", { name: "Properties" }));
 
+    await user.click(screen.getByRole("button", { name: "Crop on canvas" }));
+    expect(leaferHarness.startImageCrop).toHaveBeenCalledWith("hero_image");
+
+    act(() => {
+      leaferCallbacks().onImageCropStateChange?.({
+        nodeId: "hero_image",
+        placement: {
+          mode: "crop",
+          focalPoint: { x: 0.5, y: 0.5 },
+          zoom: 1.2,
+          rotation: 0,
+          flipHorizontal: false,
+          flipVertical: false,
+        },
+      });
+    });
+    expect(screen.getByText("Cropping Hero image")).toBeVisible();
+    fireEvent.change(screen.getByRole("slider", { name: "Zoom" }), {
+      target: { value: "150" },
+    });
+    expect(leaferHarness.updateImageCropZoom).toHaveBeenCalledWith(1.5);
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(leaferHarness.resetImageCrop).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(screen.getByRole("main", { name: "Design canvas" }), {
+      key: "Escape",
+    });
+    expect(leaferHarness.cancelImageCrop).toHaveBeenCalledTimes(1);
+    act(() => leaferCallbacks().onImageCropStateChange?.(null));
+    expect(screen.queryByText("Cropping Hero image")).toBeNull();
+
+    const beforeCanvasCrop = runtime().getSnapshot().document.revision;
+    let cropAccepted = false;
+    act(() => {
+      cropAccepted =
+        leaferCallbacks().onImageCropCommit?.({
+          nodeId: "hero_image",
+          placement: {
+            mode: "crop",
+            focalPoint: { x: 0.45, y: 0.55 },
+            zoom: 1.2,
+            rotation: 0,
+            flipHorizontal: false,
+            flipVertical: false,
+          },
+        }) ?? false;
+    });
+    expect(cropAccepted).toBe(true);
+    expect(runtime().getSnapshot().document.revision).toBe(
+      beforeCanvasCrop + 1,
+    );
+
     fireEvent.change(screen.getByLabelText("Placement"), {
       target: { value: "crop" },
     });
@@ -2709,8 +2777,8 @@ describe("App", () => {
         properties: {
           placement: {
             mode: "crop",
-            focalPoint: { x: 0.5, y: 0.5 },
-            zoom: 1,
+            focalPoint: { x: 0.45, y: 0.55 },
+            zoom: 1.2,
             rotation: 0,
             flipHorizontal: false,
             flipVertical: false,

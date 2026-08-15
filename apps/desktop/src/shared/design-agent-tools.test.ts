@@ -269,7 +269,7 @@ describe("design Agent tool contract", () => {
       additionalProperties: false,
       properties: {
         action: {
-          enum: ["create", "rename", "duplicate", "reorder", "delete"],
+          enum: ["create", "rename", "duplicate", "reorder", "clear", "delete"],
         },
         label: { type: "string" },
         pageId: { type: "string" },
@@ -280,6 +280,7 @@ describe("design Agent tool contract", () => {
     expect(tool?.description).toContain(
       "opendesign_request_page_structure_access",
     );
+    expect(tool?.description).toContain("clear");
     expect(
       validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
         action: "create",
@@ -351,6 +352,13 @@ describe("design Agent tool contract", () => {
         unexpected: true,
       }),
     ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
+        action: "clear",
+        label: "Clear current Page",
+        pageId: "page_research",
+      }),
+    ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_PAGE_TOOL_NAME, {
         action: "delete",

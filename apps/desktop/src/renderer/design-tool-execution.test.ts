@@ -1474,6 +1474,78 @@ describe("Renderer design tool scope", () => {
       result: { content: { action: "rename", name: "Homepage", revision: 2 } },
     });
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
+
+    const cleared = await executeDesignToolRequest(
+      {
+        requestId: "page_clear_current",
+        call: {
+          toolCallId: "tool_page_clear_current",
+          toolName: DESIGN_PAGE_TOOL_NAME,
+          input: {
+            action: "clear",
+            label: "Clear current Page",
+            pageId: "page_welcome",
+          },
+        },
+        context: { ...pageContext, revision: 2 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(cleared).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "clear",
+          pageId: "page_welcome",
+          revision: 3,
+          atomic: true,
+        },
+        designRevision: { previousRevision: 2, revision: 3 },
+      },
+    });
+    expect(runtime.getSnapshot().document.pagesById.page_welcome).toMatchObject(
+      { name: "Homepage", rootNodeIds: [] },
+    );
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(3);
+
+    const clearedAgain = await executeDesignToolRequest(
+      {
+        requestId: "page_clear_current_again",
+        call: {
+          toolCallId: "tool_page_clear_current_again",
+          toolName: DESIGN_PAGE_TOOL_NAME,
+          input: {
+            action: "clear",
+            label: "Clear current Page again",
+            pageId: "page_welcome",
+          },
+        },
+        context: { ...pageContext, revision: 3 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(clearedAgain).toMatchObject({
+      ok: true,
+      result: {
+        observedRevision: 3,
+        content: {
+          action: "clear",
+          pageId: "page_welcome",
+          revision: 3,
+          unchanged: true,
+        },
+      },
+    });
+    if (!clearedAgain.ok) throw new Error(clearedAgain.error.message);
+    expect(clearedAgain.result.designRevision).toBeUndefined();
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(3);
+
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.pagesById.page_welcome?.rootNodeIds,
+    ).toContain("frame_welcome");
   });
 
   it("sanitizes provider tool-call separators before persisting host Page IDs", async () => {

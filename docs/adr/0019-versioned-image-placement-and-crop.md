@@ -4,6 +4,7 @@
 - 日期：2026-08-10
 - 文档协议：`1.3.0`
 - 补充：ADR-0010、ADR-0011、ADR-0012
+- 后续：画布直接裁剪 Session 已由 ADR-0089 实现
 - 取代：ADR-0011 中“下一次协议升级必须同时交付所有专业基础字段”的单体升级要求；专业能力仍须完整设计，但允许按可独立迁移和验证的纵向切片升级
 
 ## 背景
@@ -37,7 +38,7 @@ Leafer adapter 把 resolved placement 投影为固定 `leafer-editor@2.2.9` 的 
 
 一次同时引入 layout、rich text、component、token、image 和 export 的单体协议升级会阻塞可独立验证的高优先级能力。后续允许每个专业能力单独升级协议，但每个切片仍必须覆盖 schema、migration、runtime、human UI、Agent、provider、persistence/export、undo/redo 和能力清单；未覆盖完整表面的能力保持 `degraded`，不得以底层字段存在冒充完成。
 
-当前纵向切片已经覆盖协议、迁移、确定性 crop geometry、Leafer 投影、检查器 placement 控件、受限文件选择、来源替换，以及人工 UI/Agent 共用的显式 Page/node planner。来源替换以 `put_asset + update_properties + 可安全删除旧 asset` 的单个事务执行；共享 asset 保留，取消或失败不产生 revision，Agent 不读取实时选区。画布直接 Crop 模式、图片 adjustments/filter、保存重开的完整产品流和真实 macOS/Windows 指针验证尚未完成，因此 `image.crop-adjustments` 继续标记为 `degraded`。
+当前纵向切片已经覆盖协议、迁移、确定性 crop geometry、Leafer 投影、检查器 placement 控件、受限文件选择、来源替换，以及人工 UI/Agent 共用的显式 Page/node planner。来源替换以 `put_asset + update_properties + 可安全删除旧 asset` 的单个事务执行；共享 asset 保留，取消或失败不产生 revision，Agent 不读取实时选区。ADR-0089 已补齐画布直接 Crop 的拖拽/缩放、Enter 单事务应用、Escape 零 revision 和 stale session 取消；图片 adjustments/filter、AI 像素编辑、完整产品保存重开 smoke 和真实 macOS/Windows 指针验证尚未完成，因此 `image.crop-adjustments` 继续标记为 `degraded`。
 
 ## 验证
 

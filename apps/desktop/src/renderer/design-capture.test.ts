@@ -21,13 +21,18 @@ describe("deterministic design target capture", () => {
     const sync = vi.fn();
     const dispose = vi.fn();
     const adapter = {
+      cancelImageCrop: vi.fn(),
       capture,
       dispose,
       exportRaster: vi.fn(),
       finishGenerationPresentation: vi.fn(),
+      finishImageCrop: vi.fn(),
+      resetImageCrop: vi.fn(),
       retryBooleanGeometry: vi.fn(),
       setVectorPointMode: vi.fn(),
+      startImageCrop: vi.fn(),
       sync,
+      updateImageCropZoom: vi.fn(),
       updateTextEditingStyle: vi.fn(),
       textLayoutProvider: {
         id: "test-text-layout",
@@ -96,13 +101,18 @@ describe("deterministic design target capture", () => {
   it("bounds a stalled offscreen export and disposes its surface", async () => {
     const documentSnapshot = createWelcomeDocument();
     const adapter = {
+      cancelImageCrop: vi.fn(),
       capture: vi.fn(() => new Promise<never>(() => undefined)),
       dispose: vi.fn(),
       exportRaster: vi.fn(),
       finishGenerationPresentation: vi.fn(),
+      finishImageCrop: vi.fn(),
+      resetImageCrop: vi.fn(),
       retryBooleanGeometry: vi.fn(),
       setVectorPointMode: vi.fn(),
+      startImageCrop: vi.fn(),
       sync: vi.fn(),
+      updateImageCropZoom: vi.fn(),
       updateTextEditingStyle: vi.fn(),
       textLayoutProvider: {
         id: "test-text-layout",
@@ -134,6 +144,7 @@ describe("deterministic design target capture", () => {
     const documentSnapshot = createWelcomeDocument();
     const onStage = vi.fn();
     const adapter = {
+      cancelImageCrop: vi.fn(),
       capture: vi.fn().mockResolvedValue({
         bytes: new Uint8Array([1]),
         height: 10,
@@ -143,9 +154,13 @@ describe("deterministic design target capture", () => {
       dispose: vi.fn(),
       exportRaster: vi.fn(),
       finishGenerationPresentation: vi.fn(),
+      finishImageCrop: vi.fn(),
+      resetImageCrop: vi.fn(),
       retryBooleanGeometry: vi.fn(),
       setVectorPointMode: vi.fn(),
+      startImageCrop: vi.fn(),
       sync: vi.fn(),
+      updateImageCropZoom: vi.fn(),
       updateTextEditingStyle: vi.fn(),
       textLayoutProvider: {
         id: "test-text-layout",

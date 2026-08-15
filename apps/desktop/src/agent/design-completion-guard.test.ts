@@ -10,6 +10,7 @@ import {
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
+  DESIGN_PAGE_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
   GENERATE_IMAGE_TOOL_NAME,
@@ -197,6 +198,38 @@ describe("design completion guard", () => {
       ],
       "1/2 verified",
     );
+  });
+
+  it("allows an explicit trusted Page clear to supersede unfinished delivery without capture", () => {
+    const unfinished = deliveryResult("pending").delivery;
+    expect(
+      reviewDesignCompletion(
+        context(
+          [
+            { ...inspection, result: { unfinishedDelivery: unfinished } },
+            {
+              toolCallId: "clear_page",
+              toolName: DESIGN_PAGE_TOOL_NAME,
+              input: {
+                action: "clear",
+                label: "Clear current Page",
+                pageId: "page_1",
+              },
+              status: "completed",
+              revision: 5,
+              result: { deliveryDisposition: "superseded" },
+            },
+          ],
+          {
+            toolCallId: "old_failure",
+            toolName: DESIGN_APPLY_TOOL_NAME,
+            code: "design.invalid",
+            message: "Old Main deletion failed",
+            inspectionCompleted: true,
+          },
+        ),
+      ),
+    ).toEqual({ allow: true });
   });
 
   it("rejects completion after inspection until the failed design write is corrected", () => {
