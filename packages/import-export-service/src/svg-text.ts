@@ -240,7 +240,8 @@ function migrateTextProperties(version: string, value: unknown): unknown {
     version === PARAGRAPH_RUNS_TEXT_METADATA_VERSION &&
     Array.isArray(migrated.paragraphRuns)
   ) {
-    migrated.paragraphRuns = migrated.paragraphRuns.map((value) => {
+    const paragraphRuns: unknown[] = migrated.paragraphRuns;
+    migrated.paragraphRuns = paragraphRuns.map((value: unknown) => {
       if (!isRecord(value) || !isRecord(value.style)) return value;
       return {
         ...value,

@@ -325,35 +325,34 @@ describe("Renderer design tool scope", () => {
       },
     });
     const title = runtime.getSnapshot().document.nodesById.title_welcome;
-    expect(title).toMatchObject({
-      kind: "text",
-      properties: {
-        paragraphRuns: [
-          {
-            start: 0,
-            end: 33,
-            style: {
-              listOptions: { type: "ordered" },
-              indentation: 1,
-              listSpacing: 8,
-              paragraphIndent: 0,
-              paragraphSpacing: 12,
-            },
-          },
-        ],
-        runs: [
-          {
-            start: 0,
-            end: 6,
-            style: expect.objectContaining({
-              fontWeight: 700,
-              fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
-            }),
-          },
-          expect.objectContaining({ start: 6 }),
-        ],
+    if (!title || title.kind !== "text") {
+      throw new Error("Missing title fixture");
+    }
+    expect(title.properties.paragraphRuns).toEqual([
+      {
+        start: 0,
+        end: 33,
+        style: {
+          listOptions: { type: "ordered" },
+          indentation: 1,
+          listSpacing: 8,
+          paragraphIndent: 0,
+          paragraphSpacing: 12,
+        },
+      },
+    ]);
+    const runs = title.properties.runs;
+    if (!runs) throw new Error("Missing rich-text runs");
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({
+      start: 0,
+      end: 6,
+      style: {
+        fontWeight: 700,
+        fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
       },
     });
+    expect(runs[1]).toMatchObject({ start: 6 });
     expect(runtime.getSnapshot().state.selection).toEqual({
       nodeIds: ["title_welcome"],
       anchorNodeId: "title_welcome",
@@ -415,7 +414,9 @@ describe("Renderer design tool scope", () => {
     expect(crossPageRuntime.getSnapshot().document.revision).toBe(0);
 
     const lockedDocument = structuredClone(createWelcomeDocument());
-    lockedDocument.nodesById.title_welcome!.locked = true;
+    const lockedTitle = lockedDocument.nodesById.title_welcome;
+    if (!lockedTitle) throw new Error("Missing title fixture");
+    lockedTitle.locked = true;
     const lockedRuntime = new EditorRuntime(lockedDocument);
     expect(await execute(lockedRuntime, baseInput)).toMatchObject({
       ok: false,

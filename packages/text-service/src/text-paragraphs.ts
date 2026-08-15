@@ -48,17 +48,18 @@ export function validateTextParagraphRuns<Style extends TextParagraphStyle>(
   content: string,
   runs: readonly TextParagraphRun<Style>[],
 ): string | null {
-  if (!Array.isArray(runs) || runs.length > MAX_TEXT_PARAGRAPH_RUNS) {
+  const typedRuns = runs;
+  if (!Array.isArray(runs) || typedRuns.length > MAX_TEXT_PARAGRAPH_RUNS) {
     return `Text paragraph range count exceeds ${MAX_TEXT_PARAGRAPH_RUNS}`;
   }
-  const rangeIssue = validateTextStyleRuns(content, runs);
+  const rangeIssue = validateTextStyleRuns(content, typedRuns);
   if (rangeIssue) return rangeIssue.replaceAll("Text style", "Text paragraph");
-  if (runs.length === 0) return null;
+  if (typedRuns.length === 0) return null;
   const starts = new Set(
     textParagraphRanges(content).map((range) => range.start),
   );
   const ends = new Set(textParagraphRanges(content).map((range) => range.end));
-  for (const run of runs) {
+  for (const run of typedRuns) {
     if (!starts.has(run.start) || !ends.has(run.end)) {
       return "Text paragraph ranges must start and end on paragraph boundaries";
     }

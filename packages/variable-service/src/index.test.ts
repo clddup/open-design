@@ -110,6 +110,12 @@ function fixture(): DesignDocument {
       fontSlant: "normal",
       lineHeight: 20,
       letterSpacing: 0,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      listSpacing: 0,
+      hangingList: false,
+      textCase: "original",
+      textDecoration: "none",
       textAlignHorizontal: "left",
       textAlignVertical: "top",
       fills: [
@@ -129,6 +135,8 @@ function fixture(): DesignDocument {
       textResize: "fixed",
       textWrap: "word",
       textOverflow: "clip",
+      textTruncation: "disabled",
+      maxLines: null,
     },
     extensions: {},
   };

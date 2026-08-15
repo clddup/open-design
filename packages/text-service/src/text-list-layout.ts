@@ -21,9 +21,14 @@ export interface TextListLayout {
   markerX(paragraphStart: number, width: number): number;
 }
 
+interface LevelMetrics {
+  columnWidth: number;
+  gap: number;
+}
+
 interface BlockMetrics {
   indentStep: number;
-  levels: Map<number, { columnWidth: number; gap: number }>;
+  levels: Map<number, LevelMetrics>;
 }
 
 export function createTextListLayout(
@@ -35,12 +40,12 @@ export function createTextListLayout(
   );
   const blocks = new Map<number, BlockMetrics>();
   for (const marker of markers) {
-    const block = blocks.get(marker.blockIndex) ?? {
+    const block: BlockMetrics = blocks.get(marker.blockIndex) ?? {
       indentStep: 0,
-      levels: new Map(),
+      levels: new Map<number, LevelMetrics>(),
     };
     const gap = Math.max(4, marker.fontSize * 0.5);
-    const level = block.levels.get(marker.indentation) ?? {
+    const level: LevelMetrics = block.levels.get(marker.indentation) ?? {
       columnWidth: 0,
       gap: 0,
     };

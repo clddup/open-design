@@ -444,13 +444,19 @@ function validateMarkerGlyphs(
   sourceId: string,
   marker: LeaferTextRunMarker,
 ): void {
+  const glyphs = marker.glyphs;
   if (!Array.isArray(marker.glyphs)) {
     throw new Error(
       `Text run projection marker glyphs are invalid: ${sourceId}`,
     );
   }
   const ranges = new Map<number, number>();
-  for (const glyph of marker.glyphs) {
+  if (!glyphs) {
+    throw new Error(
+      `Text run projection marker glyphs are invalid: ${sourceId}`,
+    );
+  }
+  for (const glyph of glyphs) {
     if (
       !Number.isSafeInteger(glyph.glyphId) ||
       glyph.glyphId < 0 ||

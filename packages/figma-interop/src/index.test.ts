@@ -284,8 +284,9 @@ describe("Figma rich text range compatibility", () => {
       paragraphRuns: node.properties.paragraphRuns,
       runs: [{ start: 0, end: 7 }],
     });
-    expect(
-      fromFigmaTextRangeSegments(node.properties.content, [
+    const inconsistentParagraphs = fromFigmaTextRangeSegments(
+      node.properties.content,
+      [
         { ...exported.segments[0]!, end: 2 },
         {
           ...exported.segments[0]!,
@@ -294,28 +295,34 @@ describe("Figma rich text range compatibility", () => {
           paragraphIndent: 99,
         },
         exported.segments[1]!,
-      ]),
-    ).toMatchObject({
-      ok: false,
-      issues: expect.arrayContaining([
-        expect.stringContaining("inconsistent paragraph fields"),
-      ]),
-    });
+      ],
+    );
+    expect(inconsistentParagraphs.ok).toBe(false);
+    if (inconsistentParagraphs.ok) {
+      throw new Error("Expected inconsistent paragraph fields to be rejected");
+    }
+    expect(
+      inconsistentParagraphs.issues.some((issue) =>
+        issue.includes("inconsistent paragraph fields"),
+      ),
+    ).toBe(true);
   });
 
   it("rejects non-contiguous and half-surrogate Figma segments", () => {
     const node = richTextNode();
     const exported = toFigmaTextRangeSegments(node);
     if (!exported.ok) throw new Error(exported.issues.join("; "));
+    const invalidUtf16 = fromFigmaTextRangeSegments("A😀B", [
+      { ...exported.segments[0]!, start: 0, end: 2 },
+      { ...exported.segments[1]!, start: 2, end: 4 },
+    ]);
+    expect(invalidUtf16.ok).toBe(false);
+    if (invalidUtf16.ok) {
+      throw new Error("Expected half-surrogate segments to be rejected");
+    }
     expect(
-      fromFigmaTextRangeSegments("A😀B", [
-        { ...exported.segments[0]!, start: 0, end: 2 },
-        { ...exported.segments[1]!, start: 2, end: 4 },
-      ]),
-    ).toMatchObject({
-      ok: false,
-      issues: expect.arrayContaining([expect.stringContaining("UTF-16")]),
-    });
+      invalidUtf16.issues.some((issue) => issue.includes("UTF-16")),
+    ).toBe(true);
   });
 });
 
