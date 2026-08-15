@@ -73,6 +73,12 @@ import {
   type GenerationTweenPlan,
 } from "./generation-tween.js";
 import { createLeaferTextLayoutProvider } from "./text-layout.js";
+import { TextRunEditController } from "./text-run-edit-controller.js";
+import {
+  projectionNodeId,
+  projectTextRunProjection,
+  textRunProjectionNodeIds,
+} from "./text-run-projection.js";
 import { materializeLeaferTextData } from "./text-truncation.js";
 import { exportLeaferCapture } from "./capture-export.js";
 import {
@@ -283,6 +289,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #generationPresentationRoot: LeaferGroup;
   readonly #generationSkeletonLayer: LeaferGroup;
   readonly #editorOverlays: EditorOverlayController;
+  readonly #textRunEditor: TextRunEditController<LeaferElement>;
   readonly #elements = new Map<string, LeaferElement>();
   readonly #loadVectorGeometryProvider: () => Promise<VectorGeometryProvider>;
   #baseProjection: LeaferSceneProjection | null = null;
@@ -299,8 +306,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #pen: PenSession | null = null;
   #projection: LeaferSceneProjection | null = null;
   #synchronizing = false;
-  #textBefore: { nodeId: string; text: string } | null = null;
-  #cancelTextEdit = false;
   #transform: TransformSession | null = null;
   #activeVectorEditNodeId: string | null = null;
   readonly #vectorEdits = new Map<string, VectorEditSession>();
@@ -363,6 +368,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         max: MAX_VIEWPORT_ZOOM,
       },
       editor: {
+        beforeEditInner: ({ target }) =>
+          this.#textRunEditor.beforeEditInner(
+            this.#projectionId(target as LeaferElement),
+          ),
         editSize: "size",
         multipleSelect: true,
         boxSelect: "hit",
@@ -400,6 +409,26 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       leafer,
       presentationRoot: this.#generationPresentationRoot,
       viewportRoot: this.#app.tree as unknown as LeaferGroup,
+    });
+    this.#textRunEditor = new TextRunEditController({
+      applySpecData: (element, spec, overrides) =>
+        this.#applyElementSpecData(element, spec, overrides),
+      current: () => ({
+        baseProjection: this.#baseProjection,
+        document: this.#input?.document ?? null,
+        projection: this.#projection,
+      }),
+      element: (projectionId) => this.#elements.get(projectionId),
+      openProxy: (projectionId) => {
+        const proxy = this.#elements.get(projectionId);
+        if (proxy && !this.#disposed) this.#editor.openInnerEditor(proxy, true);
+      },
+      readText: (element) => readElementText(element),
+      scheduleBounds: (nodeId) =>
+        this.#scheduleEditorRefresh({ nodeBounds: new Set([nodeId]) }),
+      writeText: (element, content) => {
+        (element as LeaferElement & { text: string }).text = content;
+      },
     });
     this.#generationActivityLayer = new leafer.Group({
       editable: false,
@@ -497,10 +526,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#suppressedGenerationActivityIds.clear();
       this.#suppressedGenerationSkeletonIds.clear();
     }
-    this.#input = input;
-    const sceneChanged =
+    const documentSceneChanged =
       identityChanged ||
       previous?.document.revision !== input.document.revision;
+    const textRunProjectionChanged =
+      previous?.textRunProjection !== input.textRunProjection;
+    this.#textRunEditor.handleProjectionChange({
+      documentChanged: documentSceneChanged,
+      identityChanged,
+      projectionChanged: textRunProjectionChanged,
+    });
+    this.#input = input;
+    const sceneChanged = documentSceneChanged || textRunProjectionChanged;
     const editScopeChanged = !sameBooleanEditScope(
       previous?.booleanEditScope,
       input.booleanEditScope,
@@ -514,22 +551,27 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       if (sceneChanged) {
         const contiguousChanges =
           !identityChanged &&
+          !textRunProjectionChanged &&
           previous &&
           input.changes?.documentId === input.document.documentId &&
           input.changes.fromRevision === previous.document.revision &&
           input.changes.toRevision === input.document.revision;
-        const changedNodeIds = input.changes
-          ? changeSetNodeIds(input.changes)
-          : new Set<string>();
-        const baseProjection =
-          previous && this.#baseProjection && input.changes
+        const changedNodeIds = new Set([
+          ...(input.changes ? changeSetNodeIds(input.changes) : []),
+          ...textRunProjectionNodeIds(previous?.textRunProjection),
+          ...textRunProjectionNodeIds(input.textRunProjection),
+        ]);
+        const baseProjection = documentSceneChanged
+          ? previous && this.#baseProjection && input.changes
             ? projectDesignPageIncrementally(
                 this.#baseProjection,
                 input.document,
                 input.pageId,
                 input.changes,
               )
-            : projectDesignPage(input.document, input.pageId);
+            : projectDesignPage(input.document, input.pageId)
+          : (this.#baseProjection ??
+            projectDesignPage(input.document, input.pageId));
         this.#baseProjection = baseProjection;
         const projection = this.#projectScene(
           baseProjection,
@@ -612,8 +654,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#editor.innerEditing &&
           (identityChanged ||
             !contiguousChanges ||
-            (this.#textBefore &&
-              invalidatesInteraction(this.#textBefore.nodeId)))
+            (this.#textRunEditor.activeNodeId !== null &&
+              invalidatesInteraction(this.#textRunEditor.activeNodeId)))
         ) {
           this.#editor.closeInnerEditor();
         }
@@ -644,6 +686,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection.nodeIds);
+      this.#textRunEditor.syncPresentation();
       this.#editorOverlays.sync(input);
       this.#syncGenerationSkeleton(input.generationSkeleton);
       this.#syncGenerationActivity(
@@ -763,6 +806,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#booleanResolver = null;
     this.#baseProjection = null;
     this.#booleanNodeIds.clear();
+    this.#textRunEditor.clear();
     this.#boxSelect = null;
     this.#cancelDraw();
     this.#cancelPen();
@@ -889,20 +933,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#editor.on(EditorRotateEvent.ROTATE, changed);
     this.#editor.on(EditorSkewEvent.SKEW, changed);
 
-    this.#editor.on(InnerEditorEvent.BEFORE_OPEN, () => {
-      const element = this.#editor.list[0];
+    this.#editor.on(InnerEditorEvent.BEFORE_OPEN, (event: unknown) => {
+      const element =
+        (event as { editTarget?: LeaferElement } | undefined)?.editTarget ??
+        this.#editor.list[0];
       const nodeId = element && this.#nodeId(element as LeaferElement);
-      const node = nodeId ? this.#input?.document.nodesById[nodeId] : undefined;
-      if (nodeId && node?.kind === "text") {
+      if (
+        nodeId &&
+        element === this.#elements.get(nodeId) &&
+        this.#textRunEditor.begin(nodeId)
+      ) {
         this.#finishGenerationRevealNode(nodeId);
         this.#finishGenerationTweenNode(nodeId, true);
-        (element as LeaferElement & { text: string }).text =
-          node.properties.content;
-        this.#textBefore = {
-          nodeId,
-          text: node.properties.content,
-        };
-        this.#cancelTextEdit = false;
       }
     });
     this.#editor.on(InnerEditorEvent.CLOSE, () => this.#finishTextEdit());
@@ -1028,15 +1070,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const childrenChanged =
         !previousSpec || !sameStringList(previousSpec.childIds, spec.childIds);
       if (dataChanged) {
-        element.set(
-          spec.tag === "Text"
-            ? materializeLeaferTextData(
-                this.#leafer,
-                spec.data,
-                spec.textMaxLines,
-              )
-            : spec.data,
-        );
+        this.#applyElementSpecData(element, spec);
       }
       if (transformChanged)
         element.setTransform(transformToAffine(spec.transform));
@@ -1177,16 +1211,20 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const projection = this.#projectBooleanGeometry(base, forceBooleanIds);
     const document = this.#input?.document;
     if (!document) return projection;
-    return projectBooleanEditScope(
-      projection,
-      document,
-      this.#input?.booleanEditScope,
-      affectedEditScopeBooleanIds
-        ? {
-            affectedBooleanNodeIds: affectedEditScopeBooleanIds,
-            forceAffected: forceEditScopeAffected,
-          }
-        : {},
+    return projectTextRunProjection(
+      projectBooleanEditScope(
+        projection,
+        document,
+        this.#input?.booleanEditScope,
+        affectedEditScopeBooleanIds
+          ? {
+              affectedBooleanNodeIds: affectedEditScopeBooleanIds,
+              forceAffected: forceEditScopeAffected,
+            }
+          : {},
+      ),
+      this.#input?.textRunProjection,
+      this.#projection,
     );
   }
 
@@ -1283,6 +1321,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     return new Constructor();
   }
 
+  #applyElementSpecData(
+    element: LeaferElement,
+    spec: LeaferElementSpec,
+    overrides: Record<string, unknown> = {},
+  ): void {
+    const data =
+      spec.tag === "Text"
+        ? materializeLeaferTextData(this.#leafer, spec.data, spec.textMaxLines)
+        : spec.data;
+    element.set({ ...data, ...overrides });
+  }
+
   #tag(element: LeaferElement): string {
     return (element as LeaferElement & { tag?: string }).tag ?? "";
   }
@@ -1326,10 +1376,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #syncSelection(nodeIds: readonly string[]): void {
-    const target = nodeIds.flatMap((nodeId) => {
-      const element = this.#elements.get(nodeId);
-      return element ? [element] : [];
-    });
+    const target = this.#selectionElements(nodeIds);
     const current = this.#editor.list;
     if (
       current.length === target.length &&
@@ -1344,7 +1391,29 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #emitSelection(): void {
     if (this.#synchronizing || this.#disposed) return;
     const nodeIds = [...new Set(this.#selectedNodeIds())];
+    const canonical = this.#selectionElements(nodeIds);
+    const current = this.#editor.list;
+    if (
+      canonical.length > 0 &&
+      (current.length !== canonical.length ||
+        current.some((element, index) => element !== canonical[index]))
+    ) {
+      this.#synchronizing = true;
+      try {
+        this.#editor.target = canonical;
+      } finally {
+        this.#synchronizing = false;
+      }
+      this.#scheduleEditorRefresh();
+    }
     this.#callbacks.onSelectionChange(nodeIds, nodeIds.at(-1));
+  }
+
+  #selectionElements(nodeIds: readonly string[]): LeaferElement[] {
+    return nodeIds.flatMap((nodeId) => {
+      const element = this.#elements.get(nodeId);
+      return element ? [element] : [];
+    });
   }
 
   #beginTransform(): void {
@@ -1631,20 +1700,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #finishTextEdit(): void {
-    const before = this.#textBefore;
-    this.#textBefore = null;
-    if (!before || this.#synchronizing || this.#disposed) return;
-    const element = this.#elements.get(before.nodeId);
-    const node = this.#input?.document.nodesById[before.nodeId];
-    const spec = this.#projection?.elementsById.get(before.nodeId);
-    if (!element || !node || node.kind !== "text" || isLockedSpec(spec)) return;
-    const content = readElementText(element);
-    if (this.#cancelTextEdit) {
-      this.#cancelTextEdit = false;
-      this.#restoreProjection();
-      return;
-    }
-    if (content === before.text) {
+    const result = this.#textRunEditor.finish({
+      disposed: this.#disposed,
+      synchronizing: this.#synchronizing,
+    });
+    if (result.kind === "none") return;
+    if (result.kind === "restore") {
       this.#restoreProjection();
       return;
     }
@@ -1652,15 +1713,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       kind: "text",
       operations: [
         {
-          commandId: `leafer_text_${before.nodeId}`,
+          commandId: `leafer_text_${result.before.nodeId}`,
           type: "update_properties",
-          nodeId: before.nodeId,
-          properties: { ...node.properties, content },
+          nodeId: result.before.nodeId,
+          properties: { ...result.node.properties, content: result.content },
         },
       ],
-      selectionNodeIds: [before.nodeId],
+      selectionNodeIds: [result.before.nodeId],
     });
-    if (!accepted) this.#restoreProjection();
+    this.#textRunEditor.completeCommit(result, accepted);
+    if (!accepted) {
+      this.#restoreProjection();
+    }
   }
 
   #startBoxSelect(event: unknown): void {
@@ -3636,6 +3700,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       });
       this.#syncViewport(this.#input.viewport);
       this.#syncSelection(this.#input.selection.nodeIds);
+      this.#textRunEditor.syncPresentation();
       this.#syncVectorEdit();
     } finally {
       this.#synchronizing = false;
@@ -3663,11 +3728,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #nodeId(element: LeaferElement): string | undefined {
     const projectionId = this.#projectionId(element);
     if (!projectionId) return undefined;
-    const metadata =
-      this.#projection?.elementsById.get(projectionId)?.data.data;
-    if (typeof metadata !== "object" || metadata === null) return projectionId;
-    const nodeId = (metadata as Record<string, unknown>).opendesignNodeId;
-    return typeof nodeId === "string" ? nodeId : projectionId;
+    return this.#projection
+      ? projectionNodeId(this.#projection, projectionId)
+      : projectionId;
   }
 
   #projectionId(element: LeaferElement): string | undefined {
@@ -3732,7 +3795,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       return;
     }
     if (event.code === "Escape" && this.#editor.innerEditing) {
-      this.#cancelTextEdit = true;
+      this.#textRunEditor.cancel();
     }
   };
 

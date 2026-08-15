@@ -37,6 +37,8 @@ export {
 } from "./text-layout.js";
 export {
   projectResolvedTextRuns,
+  textRunEditProxyElementId,
+  textRunFragmentElementIds,
   textRunFragmentElementId,
   type LeaferTextRunFragment,
   type LeaferTextRunProjectionResolution,

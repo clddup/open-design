@@ -13,6 +13,10 @@ import { cutVectorPath } from "@opendesign/geometry-service/vector-edit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLeaferEngineAdapter } from "./adapter.js";
 import { booleanResultElementId } from "./mapping.js";
+import {
+  textRunFragmentElementId,
+  type LeaferTextRunProjectionResolution,
+} from "./text-run-projection.js";
 import type {
   LeaferCreateRequest,
   LeaferCreateVectorRequest,
@@ -55,6 +59,7 @@ class FakeElement extends FakeEventTarget {
   visible = true;
   width = 0;
   height = 0;
+  hittable = true;
   x = 0;
   y = 0;
   setCalls = 0;
@@ -297,6 +302,13 @@ class FakeEditor extends FakeEventTarget {
   visible = true;
   hittable = true;
   innerEditing = false;
+  editTarget: FakeElement | null = null;
+  beforeEditInner:
+    | ((request: {
+        name?: string;
+        target: FakeElement;
+      }) => false | string | undefined)
+    | undefined = undefined;
   hoverTarget: FakeElement | null = null;
   moving = false;
   resizing = false;
@@ -323,8 +335,32 @@ class FakeEditor extends FakeEventTarget {
     this.list = this.list.filter((candidate) => candidate !== item);
   }
 
+  openInnerEditor(
+    target?: FakeElement,
+    nameOrSelect?: string | boolean,
+    select?: boolean,
+  ): void {
+    let name = typeof nameOrSelect === "string" ? nameOrSelect : undefined;
+    if (typeof nameOrSelect === "boolean" && select === undefined) {
+      select = nameOrSelect;
+    }
+    target ??= this.list[0];
+    if (!target) return;
+    if (select) this.target = [target];
+    const check = this.beforeEditInner?.({ target, ...(name ? { name } : {}) });
+    if (check === false) return;
+    if (typeof check === "string") name = check;
+    this.innerEditing = true;
+    this.editTarget = target;
+    this.emit("inner.before-open", { editTarget: target, name });
+  }
+
   closeInnerEditor(): void {
+    if (!this.innerEditing) return;
     this.innerEditing = false;
+    const editTarget = this.editTarget;
+    this.editTarget = null;
+    this.emit("inner.close", { editTarget });
   }
 
   add(child: FakeElement): void {
@@ -345,6 +381,12 @@ class FakeApp extends FakeEventTarget {
     super();
     leaferHarness.app = this;
     leaferHarness.appConfig = config;
+    const editor = config.editor as
+      | {
+          beforeEditInner?: FakeEditor["beforeEditInner"];
+        }
+      | undefined;
+    this.editor.beforeEditInner = editor?.beforeEditInner;
   }
 
   add(root: FakeTree, index = this.children.length): void {
@@ -468,6 +510,290 @@ describe("Leafer engine selection bounds synchronization", () => {
       zoom: { min: 0.1, max: 8 },
     });
     adapter.dispose();
+  });
+
+  it("maps synthetic Text hits to one authoritative selection and edit proxy", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const onSelectionChange = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+      onSelectionChange,
+    });
+    const input = createInput();
+    input.selection = { nodeIds: [] };
+    input.textRunProjection = textRunProjection(input);
+    adapter.sync(input);
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const proxy = findElement(app.tree, "title_welcome") as
+      FakeText | undefined;
+    const firstFragment = findElement(
+      app.tree,
+      textRunFragmentElementId("title_welcome", 0),
+    ) as FakeText | undefined;
+    const secondFragment = findElement(
+      app.tree,
+      textRunFragmentElementId("title_welcome", 1),
+    ) as FakeText | undefined;
+    if (!proxy || !firstFragment || !secondFragment) {
+      throw new Error("Missing native Text run projection");
+    }
+    expect(findElement(app.tree, "feature_one")).toBeDefined();
+    expect(proxy).toMatchObject({
+      fill: "rgba(0, 0, 0, 0)",
+      hittable: true,
+    });
+    expect(firstFragment).toMatchObject({
+      editable: "single",
+      fill: "#111827",
+      hittable: true,
+      visible: true,
+    });
+
+    app.editor.target = [firstFragment];
+    app.editor.emit("editor.select");
+    expect(app.editor.list).toEqual([proxy]);
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      ["title_welcome"],
+      "title_welcome",
+    );
+
+    app.editor.openInnerEditor(firstFragment, true);
+    await flushMicrotasks();
+    expect(app.editor.innerEditing).toBe(true);
+    expect(app.editor.editTarget).toBe(proxy);
+    expect(app.editor.list).toEqual([proxy]);
+    expect(proxy).not.toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
+    expect(proxy.text).toBe(
+      (
+        input.document.nodesById.title_welcome as Extract<
+          DesignNode,
+          { kind: "text" }
+        >
+      ).properties.content,
+    );
+    expect(firstFragment).toMatchObject({ hittable: false, visible: false });
+    expect(secondFragment).toMatchObject({ hittable: false, visible: false });
+
+    proxy.text = "Updated mixed-style title";
+    app.editor.closeInnerEditor();
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    const firstEdit = onOperations.mock.calls[0]?.[0];
+    expect(firstEdit).toMatchObject({
+      kind: "text",
+      selectionNodeIds: ["title_welcome"],
+    });
+    expect(firstEdit?.operations[0]).toMatchObject({
+      commandId: "leafer_text_title_welcome",
+      nodeId: "title_welcome",
+      properties: { content: "Updated mixed-style title" },
+      type: "update_properties",
+    });
+    expect(proxy).not.toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
+    expect(firstFragment).toMatchObject({ hittable: false, visible: false });
+
+    const document = structuredClone(input.document);
+    document.revision += 1;
+    const title = document.nodesById.title_welcome;
+    if (!title || title.kind !== "text") throw new Error("Missing title");
+    title.properties.content = "Updated mixed-style title";
+    const next: LeaferEngineSyncInput = {
+      ...input,
+      document,
+      selection: {
+        nodeIds: [title.id],
+        anchorNodeId: title.id,
+      },
+    };
+    next.textRunProjection = textRunProjection(next);
+    adapter.sync(next);
+    flushAnimationFrames();
+
+    expect(proxy).toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
+    expect(firstFragment).toMatchObject({ hittable: true, visible: true });
+    expect(secondFragment).toMatchObject({ hittable: true, visible: true });
+    expect(app.editor.list).toEqual([proxy]);
+
+    const synchronousDocument = structuredClone(document);
+    synchronousDocument.revision += 1;
+    const synchronousTitle = synchronousDocument.nodesById.title_welcome;
+    if (!synchronousTitle || synchronousTitle.kind !== "text") {
+      throw new Error("Missing synchronous title");
+    }
+    synchronousTitle.properties.content = "Synchronous accepted title";
+    const synchronousInput: LeaferEngineSyncInput = {
+      ...next,
+      document: synchronousDocument,
+    };
+    synchronousInput.textRunProjection = textRunProjection(synchronousInput);
+    onOperations.mockImplementationOnce(() => {
+      adapter.sync(synchronousInput);
+      return true;
+    });
+    app.editor.openInnerEditor(firstFragment, true);
+    await flushMicrotasks();
+    proxy.text = synchronousTitle.properties.content;
+    app.editor.closeInnerEditor();
+    flushAnimationFrames();
+    expect(proxy).toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
+    expect(firstFragment).toMatchObject({ hittable: true, visible: true });
+
+    const plainDocument = structuredClone(synchronousDocument);
+    plainDocument.revision += 1;
+    const feature = plainDocument.nodesById.feature_one;
+    if (!feature) throw new Error("Missing feature fixture");
+    feature.opacity = 0.9;
+    const plainInput = { ...next };
+    delete plainInput.textRunProjection;
+    adapter.sync({
+      ...plainInput,
+      changes: changedNodeSet(
+        synchronousDocument,
+        plainDocument,
+        feature.id,
+        "opacity",
+      ),
+      document: plainDocument,
+    });
+    flushAnimationFrames();
+    expect(
+      findElement(app.tree, textRunFragmentElementId("title_welcome", 0)),
+    ).toBeUndefined();
+    expect(proxy).not.toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
+    adapter.dispose();
+  });
+
+  it("restores mixed Text projection on Escape and blocks inherited-locked editing", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.selection = { nodeIds: [] };
+    input.textRunProjection = textRunProjection(input);
+    adapter.sync(input);
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const proxy = findElement(app.tree, "title_welcome") as
+      FakeText | undefined;
+    const fragment = findElement(
+      app.tree,
+      textRunFragmentElementId("title_welcome", 0),
+    ) as FakeText | undefined;
+    if (!proxy || !fragment) throw new Error("Missing Text run fixture");
+
+    app.editor.openInnerEditor(fragment, true);
+    await flushMicrotasks();
+    proxy.text = "Cancelled content";
+    emitWindowKey("Escape");
+    app.editor.closeInnerEditor();
+    flushAnimationFrames();
+    expect(onOperations).not.toHaveBeenCalled();
+    expect(proxy).toMatchObject({ fill: "rgba(0, 0, 0, 0)" });
+    expect(fragment).toMatchObject({ hittable: true, visible: true });
+
+    const lockedDocument = structuredClone(input.document);
+    lockedDocument.revision += 1;
+    const title = lockedDocument.nodesById.title_welcome;
+    if (!title || title.kind !== "text") throw new Error("Missing title");
+    title.locked = true;
+    const lockedInput: LeaferEngineSyncInput = {
+      ...input,
+      changes: changedNodeSet(
+        input.document,
+        lockedDocument,
+        title.id,
+        "locked",
+      ),
+      document: lockedDocument,
+    };
+    lockedInput.textRunProjection = textRunProjection(lockedInput);
+    adapter.sync(lockedInput);
+    const lockedFragment = findElement(
+      app.tree,
+      textRunFragmentElementId("title_welcome", 0),
+    );
+    if (!lockedFragment) throw new Error("Missing locked Text fragment");
+    app.editor.openInnerEditor(lockedFragment, true);
+    await flushMicrotasks();
+    expect(app.editor.innerEditing).toBe(false);
+    expect(onOperations).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("closes rich Text editing on Page identity changes and clears dispose state", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    input.selection = { nodeIds: [] };
+    input.textRunProjection = textRunProjection(input);
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const fragment = findElement(
+      app.tree,
+      textRunFragmentElementId("title_welcome", 0),
+    );
+    if (!fragment) throw new Error("Missing Text fragment");
+
+    app.editor.openInnerEditor(fragment, true);
+    await flushMicrotasks();
+    expect(app.editor.innerEditing).toBe(true);
+
+    const document = structuredClone(input.document);
+    document.revision += 1;
+    document.pageOrder.push("page_other");
+    document.pagesById.page_other = {
+      extensions: {},
+      id: "page_other",
+      name: "Other",
+      rootNodeIds: [],
+    };
+    adapter.sync({
+      document,
+      pageId: "page_other",
+      selection: { nodeIds: [] },
+      tool: "select",
+      viewport: input.viewport,
+    });
+    expect(app.editor.innerEditing).toBe(false);
+    expect(onOperations).not.toHaveBeenCalled();
+
+    const back: LeaferEngineSyncInput = {
+      document,
+      pageId: input.pageId,
+      selection: { nodeIds: [] },
+      tool: "select",
+      viewport: input.viewport,
+    };
+    back.textRunProjection = textRunProjection(back);
+    adapter.sync(back);
+    const restoredFragment = findElement(
+      app.tree,
+      textRunFragmentElementId("title_welcome", 0),
+    );
+    if (!restoredFragment) throw new Error("Missing restored Text fragment");
+    app.editor.openInnerEditor(restoredFragment, true);
+    await flushMicrotasks();
+    expect(app.editor.innerEditing).toBe(true);
+    adapter.dispose();
+    app.editor.closeInnerEditor();
+    expect(app.destroy).toHaveBeenCalledTimes(1);
+    expect(onOperations).not.toHaveBeenCalled();
   });
 
   it("restores full text while editing and reprojects ending truncation after close", async () => {
@@ -3855,6 +4181,61 @@ function createInput(): LeaferEngineSyncInput {
     selection: { nodeIds: ["feature_one"], anchorNodeId: "feature_one" },
     tool: "select",
     viewport: { panX: 0, panY: 0, zoom: 1, width: 1024, height: 768 },
+  };
+}
+
+function textRunProjection(
+  input: LeaferEngineSyncInput,
+  nodeId = "title_welcome",
+): LeaferTextRunProjectionResolution {
+  const node = input.document.nodesById[nodeId];
+  if (!node || node.kind !== "text") throw new Error("Missing Text fixture");
+  const content = node.properties.content;
+  const split = Math.max(1, Math.floor(content.length / 2));
+  return {
+    documentId: input.document.documentId,
+    pageId: input.pageId,
+    revision: input.document.revision,
+    resultsByNodeId: new Map([
+      [
+        nodeId,
+        {
+          nodeId,
+          fragments: [
+            {
+              data: {
+                fill: "#111827",
+                fontFamily: "Inter",
+                fontSize: 32,
+                fontWeight: 700,
+              },
+              start: 0,
+              end: split,
+              text: content.slice(0, split),
+              x: 0,
+              y: 0,
+              width: split * 18,
+              height: 40,
+            },
+            {
+              data: {
+                fill: "#7c3aed",
+                fontFamily: "Inter",
+                fontSize: 32,
+                fontWeight: 500,
+              },
+              start: split,
+              end: content.length,
+              text: content.slice(split),
+              x: split * 18,
+              y: 0,
+              width: (content.length - split) * 18,
+              height: 40,
+            },
+          ],
+        },
+      ],
+    ]),
   };
 }
 

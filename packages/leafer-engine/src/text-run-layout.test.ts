@@ -157,7 +157,9 @@ describe("Leafer native text run layout provider", () => {
     const base = projectDesignPage(document, "page_welcome");
     const titleProjection = leaferTextRunLayoutToProjection(title.id, result);
     const nativeProjection = projectResolvedTextRuns(base, {
+      documentId: base.documentId,
       pageId: base.pageId,
+      revision: base.revision,
       resultsByNodeId: new Map([[title.id, titleProjection]]),
     });
     expect(

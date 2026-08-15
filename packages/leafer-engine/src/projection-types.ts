@@ -26,6 +26,7 @@ export interface LeaferElementSpec {
 
 export interface LeaferSceneProjection {
   affectedNodeIds?: ReadonlySet<string>;
+  documentId: string;
   elementsById: ReadonlyMap<string, LeaferElementSpec>;
   pageId: string;
   revision: number;

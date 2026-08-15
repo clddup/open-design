@@ -21,7 +21,9 @@ export interface LeaferTextRunProjectionResult {
 }
 
 export interface LeaferTextRunProjectionResolution {
+  documentId: string;
   pageId: string;
+  revision: number;
   resultsByNodeId: ReadonlyMap<string, LeaferTextRunProjectionResult>;
 }
 
@@ -35,14 +37,26 @@ export function projectResolvedTextRuns(
   base: LeaferSceneProjection,
   resolution: LeaferTextRunProjectionResolution,
 ): LeaferSceneProjection {
+  if (base.documentId !== resolution.documentId) {
+    throw new Error(
+      `Text run projection for ${resolution.documentId} cannot project document ${base.documentId}`,
+    );
+  }
   if (base.pageId !== resolution.pageId) {
     throw new Error(
       `Text run projection for ${resolution.pageId} cannot project page ${base.pageId}`,
     );
   }
+  if (base.revision !== resolution.revision) {
+    throw new Error(
+      `Text run projection revision ${resolution.revision} cannot project revision ${base.revision}`,
+    );
+  }
   const elementsById = new Map(base.elementsById);
   const rootIds = [...base.rootIds];
-  const affectedNodeIds = new Set(base.affectedNodeIds ?? []);
+  const affectedNodeIds = base.affectedNodeIds
+    ? new Set(base.affectedNodeIds)
+    : undefined;
 
   for (const [nodeId, result] of resolution.resultsByNodeId) {
     if (result.nodeId !== nodeId) {
@@ -81,7 +95,11 @@ export function projectResolvedTextRuns(
           ...fragment.data,
           id,
           name: `${sourceName} segment ${index + 1}`,
-          editable: false,
+          // Leafer 2.2.9's EditSelectHelper.findOne() skips falsy editable
+          // leaves. "single" keeps the fragment in the pointer hit path but
+          // out of box/multi selection; Adapter selection is then immediately
+          // canonicalized to the authoritative proxy.
+          editable: "single",
           hittable: true,
           opacity: source.data.opacity,
           text: fragment.text,
@@ -106,7 +124,7 @@ export function projectResolvedTextRuns(
         transform: translateTransform(source.transform, fragment.x, fragment.y),
       };
       elementsById.set(id, spec);
-      affectedNodeIds.add(id);
+      affectedNodeIds?.add(id);
       return id;
     });
 
@@ -123,17 +141,68 @@ export function projectResolvedTextRuns(
         ...parent,
         childIds: insertAfterCopy(parent.childIds, nodeId, fragmentIds),
       });
-      affectedNodeIds.add(parent.id);
+      affectedNodeIds?.add(parent.id);
     }
-    affectedNodeIds.add(nodeId);
+    affectedNodeIds?.add(nodeId);
   }
 
   return {
     ...base,
-    affectedNodeIds,
+    ...(affectedNodeIds === undefined ? {} : { affectedNodeIds }),
     elementsById,
     rootIds,
   };
+}
+
+/**
+ * Reconciles an optional exact-revision Text run resolution against the
+ * previous disposable scene so incremental sync also removes stale fragments
+ * and restores the original Text/parent specs.
+ */
+export function projectTextRunProjection(
+  base: LeaferSceneProjection,
+  resolution: LeaferTextRunProjectionResolution | undefined,
+  previous: LeaferSceneProjection | null,
+): LeaferSceneProjection {
+  const projection = resolution
+    ? projectResolvedTextRuns(base, resolution)
+    : base;
+  if (!previous || projection.affectedNodeIds === undefined) {
+    return projection;
+  }
+  const affectedNodeIds = new Set(projection.affectedNodeIds);
+  const currentIds = new Set(projection.elementsById.keys());
+  for (const previousSpec of previous.elementsById.values()) {
+    const proxyId = textRunEditProxyElementId(previous, previousSpec.id);
+    if (
+      currentIds.has(previousSpec.id) ||
+      proxyId === undefined ||
+      previousSpec.id === proxyId
+    ) {
+      continue;
+    }
+    const nodeId = projectionNodeId(previous, previousSpec.id);
+    affectedNodeIds.add(previousSpec.id);
+    if (nodeId) affectedNodeIds.add(nodeId);
+    if (previousSpec.parentId) affectedNodeIds.add(previousSpec.parentId);
+  }
+  return { ...projection, affectedNodeIds };
+}
+
+export function projectionNodeId(
+  projection: LeaferSceneProjection,
+  projectionId: string,
+): string | undefined {
+  const spec = projection.elementsById.get(projectionId);
+  if (!spec) return undefined;
+  const nodeId = metadata(spec.data.data).opendesignNodeId;
+  return typeof nodeId === "string" ? nodeId : projectionId;
+}
+
+export function textRunProjectionNodeIds(
+  resolution: LeaferTextRunProjectionResolution | undefined,
+): string[] {
+  return resolution ? [...resolution.resultsByNodeId.keys()] : [];
 }
 
 export function textRunFragmentElementId(
@@ -141,6 +210,43 @@ export function textRunFragmentElementId(
   index: number,
 ): string {
   return `${nodeId}::text-run::${index}`;
+}
+
+/**
+ * Resolves either an authoritative rich-text proxy or one of its disposable
+ * fragments to the single Leafer element that may own selection and direct
+ * editing. Ordinary Text projections intentionally return undefined.
+ */
+export function textRunEditProxyElementId(
+  projection: LeaferSceneProjection,
+  projectionId: string,
+): string | undefined {
+  const selected = projection.elementsById.get(projectionId);
+  if (!selected || selected.kind !== "text") return undefined;
+  const selectedMetadata = metadata(selected.data.data);
+  const sourceId =
+    typeof selectedMetadata.opendesignNodeId === "string"
+      ? selectedMetadata.opendesignNodeId
+      : selected.id;
+  const source = projection.elementsById.get(sourceId);
+  if (!source || source.kind !== "text") return undefined;
+  return metadata(source.data.data).opendesignTextEditProxy === true
+    ? source.id
+    : undefined;
+}
+
+export function textRunFragmentElementIds(
+  projection: LeaferSceneProjection,
+  nodeId: string,
+): string[] {
+  return [...projection.elementsById.values()].flatMap((spec) => {
+    const value = metadata(spec.data.data);
+    return value.opendesignSynthetic === true &&
+      value.opendesignNodeId === nodeId &&
+      isTextRunRange(value.opendesignTextRun)
+      ? [spec.id]
+      : [];
+  });
 }
 
 function validateFragments(
@@ -214,6 +320,18 @@ function metadata(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function isTextRunRange(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const range = value as Record<string, unknown>;
+  return (
+    Number.isSafeInteger(range.start) &&
+    Number.isSafeInteger(range.end) &&
+    Number(range.end) > Number(range.start)
+  );
 }
 
 function finiteNonNegative(value: unknown): value is number {

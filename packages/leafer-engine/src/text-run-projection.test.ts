@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { projectDesignPage } from "./mapping.js";
 import {
   projectResolvedTextRuns,
+  textRunEditProxyElementId,
+  textRunFragmentElementIds,
   textRunFragmentElementId,
 } from "./text-run-projection.js";
 
@@ -17,7 +19,9 @@ describe("native rich-text projection boundary", () => {
     const firstId = textRunFragmentElementId(source.id, 0);
     const secondId = textRunFragmentElementId(source.id, 1);
     const projection = projectResolvedTextRuns(base, {
+      documentId: base.documentId,
       pageId: base.pageId,
+      revision: base.revision,
       resultsByNodeId: new Map([
         [
           source.id,
@@ -80,7 +84,7 @@ describe("native rich-text projection boundary", () => {
       parentId: source.parentId,
       tag: "Text",
       data: {
-        editable: false,
+        editable: "single",
         fill: "#111827",
         fontWeight: 700,
         text: content.slice(0, split),
@@ -115,13 +119,42 @@ describe("native rich-text projection boundary", () => {
     expect(parent?.childIds.indexOf(secondId)).toBe(
       (parent?.childIds.indexOf(source.id) ?? -3) + 2,
     );
+    expect(textRunEditProxyElementId(projection, source.id)).toBe(source.id);
+    expect(textRunEditProxyElementId(projection, firstId)).toBe(source.id);
+    expect(textRunEditProxyElementId(projection, secondId)).toBe(source.id);
+    expect(textRunFragmentElementIds(projection, source.id)).toEqual([
+      firstId,
+      secondId,
+    ]);
+  });
+
+  it("rejects stale document and revision identities", () => {
+    const base = projectDesignPage(createWelcomeDocument(), "page_welcome");
+    expect(() =>
+      projectResolvedTextRuns(base, {
+        documentId: "another-document",
+        pageId: base.pageId,
+        revision: base.revision,
+        resultsByNodeId: new Map(),
+      }),
+    ).toThrow("cannot project document");
+    expect(() =>
+      projectResolvedTextRuns(base, {
+        documentId: base.documentId,
+        pageId: base.pageId,
+        revision: base.revision + 1,
+        resultsByNodeId: new Map(),
+      }),
+    ).toThrow("cannot project revision");
   });
 
   it("rejects incomplete or detached provider output", () => {
     const base = projectDesignPage(createWelcomeDocument(), "page_welcome");
     expect(() =>
       projectResolvedTextRuns(base, {
+        documentId: base.documentId,
         pageId: base.pageId,
+        revision: base.revision,
         resultsByNodeId: new Map([
           [
             "title_welcome",
@@ -153,7 +186,9 @@ describe("native rich-text projection boundary", () => {
     const content = String(source.data.text);
     expect(() =>
       projectResolvedTextRuns(base, {
+        documentId: base.documentId,
         pageId: base.pageId,
+        revision: base.revision,
         resultsByNodeId: new Map([
           [
             source.id,

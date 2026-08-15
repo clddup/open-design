@@ -16,6 +16,7 @@ import type {
   RasterExportRequest,
 } from "@opendesign/import-export-service/raster";
 import type { TextLayoutProvider } from "@opendesign/text-service";
+import type { LeaferTextRunProjectionResolution } from "./text-run-projection.js";
 
 export type LeaferCanvasTool =
   | "select"
@@ -225,6 +226,7 @@ export interface LeaferEngineSyncInput {
   pageId: string;
   reducedMotion?: boolean;
   selection: SelectionState;
+  textRunProjection?: LeaferTextRunProjectionResolution;
   tool: LeaferCanvasTool;
   vectorEditScope?: LeaferVectorEditScope;
   viewport: ViewportState;

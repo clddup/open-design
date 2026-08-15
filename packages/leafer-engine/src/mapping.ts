@@ -113,6 +113,7 @@ export function projectDesignPage(
   page.rootNodeIds.forEach(visit);
 
   return {
+    documentId: document.documentId,
     elementsById,
     pageId,
     revision: document.revision,
@@ -216,6 +217,7 @@ export function projectDesignPageIncrementally(
 
   return {
     affectedNodeIds,
+    documentId: document.documentId,
     elementsById,
     pageId,
     revision: document.revision,
@@ -734,6 +736,7 @@ export function projectResolvedBooleanGeometry(
   });
   return {
     ...(affectedNodeIds === undefined ? {} : { affectedNodeIds }),
+    documentId: base.documentId,
     elementsById,
     pageId: base.pageId,
     revision: base.revision,
