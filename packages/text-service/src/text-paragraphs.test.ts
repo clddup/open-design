@@ -9,6 +9,9 @@ import {
 } from "./text-paragraphs.js";
 
 const base: TextParagraphStyle = {
+  listOptions: { type: "none" },
+  indentation: 0,
+  listSpacing: 0,
   paragraphIndent: 0,
   paragraphSpacing: 0,
 };
@@ -37,7 +40,11 @@ describe("Text Paragraph Service", () => {
       {
         start: 0,
         end: 33,
-        style: { paragraphIndent: 24, paragraphSpacing: 12 },
+        style: {
+          ...base,
+          paragraphIndent: 24,
+          paragraphSpacing: 12,
+        },
       },
       { start: 33, end: 38, style: base },
     ]);
@@ -52,7 +59,7 @@ describe("Text Paragraph Service", () => {
         {
           start: 0,
           end: 10,
-          style: { paragraphIndent: 16, paragraphSpacing: 8 },
+          style: { ...base, paragraphIndent: 16, paragraphSpacing: 8 },
         },
       ],
       base,
@@ -63,7 +70,7 @@ describe("Text Paragraph Service", () => {
       {
         start: 0,
         end: 11,
-        style: { paragraphIndent: 16, paragraphSpacing: 8 },
+        style: { ...base, paragraphIndent: 16, paragraphSpacing: 8 },
       },
     ]);
 
@@ -74,12 +81,12 @@ describe("Text Paragraph Service", () => {
         {
           start: 0,
           end: 6,
-          style: { paragraphIndent: 8, paragraphSpacing: 4 },
+          style: { ...base, paragraphIndent: 8, paragraphSpacing: 4 },
         },
         {
           start: 6,
           end: 10,
-          style: { paragraphIndent: 32, paragraphSpacing: 20 },
+          style: { ...base, paragraphIndent: 32, paragraphSpacing: 20 },
         },
       ],
       base,
@@ -90,9 +97,28 @@ describe("Text Paragraph Service", () => {
       {
         start: 0,
         end: 9,
-        style: { paragraphIndent: 8, paragraphSpacing: 4 },
+        style: { ...base, paragraphIndent: 8, paragraphSpacing: 4 },
       },
     ]);
+  });
+
+  it("inherits semantic list state when a list item is split", () => {
+    const listed: TextParagraphStyle = {
+      ...base,
+      listOptions: { type: "ordered" },
+      indentation: 2,
+      listSpacing: 10,
+    };
+    expect(
+      remapTextParagraphRunsAfterContentChange(
+        "Alpha beta",
+        "Alpha\nbeta",
+        [{ start: 0, end: 10, style: listed }],
+        base,
+        "before",
+        same,
+      ),
+    ).toEqual([{ start: 0, end: 10, style: listed }]);
   });
 
   it("rejects style ranges that split paragraphs", () => {
@@ -105,6 +131,36 @@ describe("Text Paragraph Service", () => {
     expect(canonicalizeTextParagraphRuns("One\nTwo", [], base, same)).toEqual([
       { start: 0, end: 7, style: base },
     ]);
+  });
+
+  it("requires active lists to use one of five indentation levels", () => {
+    expect(
+      validateTextParagraphRuns("Item", [
+        {
+          start: 0,
+          end: 4,
+          style: {
+            ...base,
+            listOptions: { type: "ordered" },
+            indentation: 0,
+          },
+        },
+      ]),
+    ).toContain("valid list, indentation");
+    expect(
+      validateTextParagraphRuns("Item", [
+        {
+          start: 0,
+          end: 4,
+          style: {
+            ...base,
+            listOptions: { type: "unordered" },
+            indentation: 5,
+            listSpacing: 12,
+          },
+        },
+      ]),
+    ).toBeNull();
   });
 });
 

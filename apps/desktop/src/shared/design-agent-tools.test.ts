@@ -1312,6 +1312,8 @@ describe("design Agent tool contract", () => {
               letterSpacing: 0,
               paragraphIndent: 0,
               paragraphSpacing: 0,
+              listSpacing: 0,
+              hangingList: false,
               textCase: "uppercase",
               textDecoration: "underline",
               textAlignHorizontal: "left",

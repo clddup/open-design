@@ -37,6 +37,7 @@ describe("design rich-text projection resolution", () => {
           baseline: 18,
           lineIndex: 0,
         })),
+        markers: [],
         warnings: [],
       }),
     );
@@ -90,7 +91,13 @@ describe("design rich-text projection resolution", () => {
       {
         start: 0,
         end: node.properties.content.length,
-        style: { paragraphIndent: 24, paragraphSpacing: 10 },
+        style: {
+          listOptions: { type: "none" },
+          indentation: 0,
+          listSpacing: 0,
+          paragraphIndent: 24,
+          paragraphSpacing: 10,
+        },
       },
     ];
     const layout = vi.fn<TextRunLayoutProvider<LeaferTextRunStyle>["layout"]>(
@@ -125,6 +132,7 @@ describe("design rich-text projection resolution", () => {
             lineIndex: 0,
           },
         ],
+        markers: [],
         warnings: [],
       }),
     );

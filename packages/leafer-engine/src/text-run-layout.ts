@@ -1,11 +1,15 @@
 import {
   canonicalizeTextParagraphRuns,
   canonicalizeTextStyleRuns,
+  createTextListLayout,
+  resolveTextListMarkers,
+  textParagraphDirection,
   validateTextRunLayoutRequest,
   validateTextRunLayoutResult,
   type TextRunLayoutFailureCode,
   type TextRunLayoutFragment,
   type TextRunLayoutLine,
+  type TextRunLayoutMarker,
   type TextRunLayoutProvider,
   type TextRunLayoutRequest,
   type TextRunLayoutResult,
@@ -36,7 +40,8 @@ import {
 } from "./text-run-segmentation.js";
 
 export const LEAFER_TEXT_RUN_LAYOUT_PROVIDER_ID = "leafer-text-runs" as const;
-export const LEAFER_TEXT_RUN_LAYOUT_PROVIDER_VERSION = "2.2.9" as const;
+export const LEAFER_TEXT_RUN_LAYOUT_PROVIDER_VERSION =
+  "2.2.9+lists-v1" as const;
 
 type LeaferModule = typeof LeaferEditorModule;
 
@@ -139,6 +144,18 @@ export function leaferTextRunLayoutToProjection(
       x: fragment.x,
       y: fragment.y,
     })),
+    markers: result.markers.map((marker) => ({
+      baseline: marker.baseline,
+      data: leaferTextRunData(marker.style),
+      direction: marker.direction,
+      ...(marker.glyphs === undefined ? {} : { glyphs: marker.glyphs }),
+      height: marker.height,
+      paragraphStart: marker.paragraphStart,
+      text: marker.text,
+      width: marker.width,
+      x: marker.x,
+      y: marker.y,
+    })),
   };
 }
 
@@ -154,6 +171,9 @@ function layoutWithLeafer(
     request.content,
     request.paragraphRuns ?? [],
     {
+      listOptions: { type: "none" },
+      indentation: 0,
+      listSpacing: request.listSpacing,
       paragraphIndent: request.paragraphIndent,
       paragraphSpacing: request.paragraphSpacing,
     },
@@ -162,6 +182,9 @@ function layoutWithLeafer(
   const paragraphStyleAt = (offset: number): TextParagraphStyle =>
     paragraphRuns.find((run) => run.start <= offset && offset < run.end)
       ?.style ?? {
+      listOptions: { type: "none" },
+      indentation: 0,
+      listSpacing: request.listSpacing,
       paragraphIndent: request.paragraphIndent,
       paragraphSpacing: request.paragraphSpacing,
     };
@@ -229,17 +252,64 @@ function layoutWithLeafer(
   }
   assignTextRunBreakOpportunities(clusters);
 
+  const markerMeasurements = resolveTextListMarkers(
+    request.content,
+    paragraphRuns,
+    {
+      listOptions: { type: "none" },
+      indentation: 0,
+      listSpacing: request.listSpacing,
+      paragraphIndent: request.paragraphIndent,
+      paragraphSpacing: request.paragraphSpacing,
+    },
+  ).map((marker) => {
+    const style =
+      runs.find((run) => run.start <= marker.start && marker.start < run.end)
+        ?.style ?? request.baseStyle;
+    const measured = measureNativeText(Text, marker.text, style);
+    return {
+      ...marker,
+      baseline: measured.baseline,
+      direction: textParagraphDirection(
+        request.content,
+        marker.start,
+        marker.end,
+      ),
+      fontSize: style.fontSize,
+      height: measured.lineHeight,
+      paragraphStart: marker.start,
+      style,
+      width: measured.width,
+    };
+  });
+  const listLayout = createTextListLayout(
+    markerMeasurements,
+    request.hangingList,
+  );
+
   const broken = breakTextRunLines(
     clusters,
     request,
-    (offset) => paragraphStyleAt(offset).paragraphIndent,
+    (paragraphStart, firstLine) =>
+      listLayout.lineInsets(
+        paragraphStart,
+        firstLine,
+        paragraphStyleAt(paragraphStart).paragraphIndent,
+      ),
   );
   if (request.content.length === 0) {
-    broken.push({ clusters: [], paragraphStart: true, start: 0, end: 0 });
+    broken.push({
+      clusters: [],
+      paragraphStart: true,
+      paragraphStartOffset: 0,
+      start: 0,
+      end: 0,
+    });
   } else if (request.content.endsWith("\n") || request.content.endsWith("\r")) {
     broken.push({
       clusters: [],
       paragraphStart: true,
+      paragraphStartOffset: request.content.length,
       start: request.content.length,
       end: request.content.length,
     });
@@ -249,27 +319,26 @@ function layoutWithLeafer(
   const measuredLines = broken.map((line) =>
     measureLine(line, fallbackMetrics),
   );
-  const paragraphStyles = broken.map((line) => paragraphStyleAt(line.start));
+  const paragraphStyles = broken.map((line) =>
+    paragraphStyleAt(line.paragraphStartOffset),
+  );
   const contentHeight = measuredLines.reduce(
     (sum, line, index) =>
       sum +
       line.height +
       (index > 0 && broken[index]!.paragraphStart
-        ? paragraphStyles[index - 1]!.paragraphSpacing
+        ? paragraphGap(paragraphStyles[index - 1]!, paragraphStyles[index]!)
         : 0),
     0,
   );
-  const naturalWidth = measuredLines.reduce(
-    (maximum, line, index) =>
-      Math.max(
-        maximum,
-        line.width +
-          (broken[index]!.paragraphStart
-            ? paragraphStyles[index]!.paragraphIndent
-            : 0),
-      ),
-    0,
-  );
+  const naturalWidth = measuredLines.reduce((maximum, line, index) => {
+    const insets = listLayout.lineInsets(
+      broken[index]!.paragraphStartOffset,
+      broken[index]!.paragraphStart,
+      paragraphStyles[index]!.paragraphIndent,
+    );
+    return Math.max(maximum, line.width + insets.left + insets.right);
+  }, 0);
   const width =
     request.mode === "auto-width" ? naturalWidth : normalize(request.width!);
   const height =
@@ -292,14 +361,19 @@ function layoutWithLeafer(
     const sourceLine = broken[lineIndex]!;
     const measuredLine = measuredLines[lineIndex]!;
     if (lineIndex > 0 && sourceLine.paragraphStart) {
-      lineY += paragraphStyles[lineIndex - 1]!.paragraphSpacing;
+      lineY += paragraphGap(
+        paragraphStyles[lineIndex - 1]!,
+        paragraphStyles[lineIndex]!,
+      );
     }
-    const indent = sourceLine.paragraphStart
-      ? paragraphStyles[lineIndex]!.paragraphIndent
-      : 0;
-    const usableWidth = Math.max(0, width - indent);
+    const insets = listLayout.lineInsets(
+      sourceLine.paragraphStartOffset,
+      sourceLine.paragraphStart,
+      paragraphStyles[lineIndex]!.paragraphIndent,
+    );
+    const usableWidth = Math.max(0, width - insets.left - insets.right);
     const alignedX =
-      indent +
+      insets.left +
       (request.textAlignHorizontal === "center"
         ? Math.max(0, (usableWidth - measuredLine.width) / 2)
         : request.textAlignHorizontal === "right"
@@ -326,21 +400,48 @@ function layoutWithLeafer(
     lineY += measuredLine.height;
   }
 
+  const markers: TextRunLayoutMarker<LeaferTextRunStyle>[] =
+    markerMeasurements.map((marker) => {
+      const line = lines.find((candidate) => candidate.start === marker.start);
+      if (!line) {
+        throw new Error(
+          `Missing first line for list paragraph ${marker.start}`,
+        );
+      }
+      return {
+        baseline: normalize(marker.baseline),
+        direction: marker.direction,
+        height: normalize(marker.height),
+        paragraphStart: marker.start,
+        style: marker.style,
+        text: marker.text,
+        width: normalize(marker.width),
+        x: normalizeSigned(listLayout.markerX(marker.start, width)),
+        y: normalize(line.y + line.baseline - marker.baseline),
+      };
+    });
+
   const minX =
-    lines.length === 0 ? 0 : Math.min(...lines.map((line) => line.x));
-  const maxX = lines.reduce(
-    (maximum, line) => Math.max(maximum, line.x + line.width),
+    lines.length === 0 && markers.length === 0
+      ? 0
+      : Math.min(
+          ...lines.map((line) => line.x),
+          ...markers.map((marker) => marker.x),
+        );
+  const maxX = [...lines, ...markers].reduce(
+    (maximum, item) => Math.max(maximum, item.x + item.width),
     minX,
   );
   return {
     contentBounds: {
       height: normalize(contentHeight),
       width: normalize(maxX - minX),
-      x: normalize(minX),
+      x: normalizeSigned(minX),
       y: normalize(verticalOffset),
     },
     fragments,
     lines,
+    markers,
     ok: true,
     provider: LEAFER_TEXT_RUN_LAYOUT_PROVIDER_ID,
     providerVersion: LEAFER_TEXT_RUN_LAYOUT_PROVIDER_VERSION,
@@ -354,9 +455,22 @@ function equalParagraphStyle(
   right: TextParagraphStyle,
 ): boolean {
   return (
+    left.listOptions.type === right.listOptions.type &&
+    left.indentation === right.indentation &&
+    left.listSpacing === right.listSpacing &&
     left.paragraphIndent === right.paragraphIndent &&
     left.paragraphSpacing === right.paragraphSpacing
   );
+}
+
+function paragraphGap(
+  previous: TextParagraphStyle,
+  current: TextParagraphStyle,
+): number {
+  return previous.listOptions.type !== "none" &&
+    current.listOptions.type !== "none"
+    ? previous.listSpacing
+    : previous.paragraphSpacing;
 }
 
 function materializedRuns(
@@ -599,6 +713,11 @@ function failure(
 function normalize(value: number): number {
   if (!Number.isFinite(value)) return value;
   return Math.round(Math.max(0, value) * 1_000_000) / 1_000_000;
+}
+
+function normalizeSigned(value: number): number {
+  if (!Number.isFinite(value)) return value;
+  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 function finitePositive(value: unknown): value is number {

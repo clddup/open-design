@@ -45,6 +45,11 @@ export function useFontInspectorContext(options: {
       options.textRangeSelection,
       options.document,
     );
+    const paragraph = resolveInspectorParagraphRange(
+      selectedNode,
+      range?.start ?? 0,
+      range?.end ?? selectedNode.properties.content.length,
+    );
     const matching = Object.values(options.document.nodesById).filter(
       (node) =>
         node.kind === "text" &&
@@ -76,6 +81,24 @@ export function useFontInspectorContext(options: {
         ],
       );
     };
+    const updateRange = (
+      start: number,
+      end: number,
+      style: Parameters<
+        NonNullable<FontInspectorContext["range"]>["onUpdate"]
+      >[0],
+    ) => {
+      options.applyCommands(options.t("history.updateTextRange"), [
+        {
+          commandId: `text_range_${Date.now()}_${++options.transactionCounter.current}`,
+          type: "update_text_range_style",
+          nodeId: selectedNode.id,
+          start,
+          end,
+          style,
+        },
+      ]);
+    };
     return {
       availability: options.runtime.inspectTextFont(expectedFont),
       importState: state,
@@ -85,22 +108,16 @@ export function useFontInspectorContext(options: {
         ? {
             range: {
               ...range,
-              onUpdate: (
-                style: Parameters<
-                  NonNullable<FontInspectorContext["range"]>["onUpdate"]
-                >[0],
-              ) => {
-                options.applyCommands(options.t("history.updateTextRange"), [
-                  {
-                    commandId: `text_range_${Date.now()}_${++options.transactionCounter.current}`,
-                    type: "update_text_range_style",
-                    nodeId: selectedNode.id,
-                    start: range.start,
-                    end: range.end,
-                    style,
-                  },
-                ]);
-              },
+              onUpdate: (style) => updateRange(range.start, range.end, style),
+            },
+          }
+        : {}),
+      ...(paragraph
+        ? {
+            paragraph: {
+              ...paragraph,
+              onUpdate: (style) =>
+                updateRange(paragraph.start, paragraph.end, style),
             },
           }
         : {}),
@@ -158,6 +175,9 @@ function resolveInspectorTextRange(
     ...(node.fillStyleId ? { fillStyleId: node.fillStyleId } : {}),
   };
   const baseParagraphStyle: TextParagraphStyle = {
+    listOptions: { type: "none" },
+    indentation: 0,
+    listSpacing: node.properties.listSpacing,
     paragraphIndent: node.properties.paragraphIndent,
     paragraphSpacing: node.properties.paragraphSpacing,
   };
@@ -188,7 +208,13 @@ function resolveInspectorTextRange(
     "textDecoration",
     "fills",
   ] as const;
-  const paragraphFields = ["paragraphIndent", "paragraphSpacing"] as const;
+  const paragraphFields = [
+    "listOptions",
+    "indentation",
+    "listSpacing",
+    "paragraphIndent",
+    "paragraphSpacing",
+  ] as const;
   const mixedFields = [
     ...characterFields.filter((field) =>
       overlapping.some(
@@ -211,6 +237,48 @@ function resolveInspectorTextRange(
     text: node.properties.content.slice(selection.start, selection.end),
     style,
     mixedFields,
+  };
+}
+
+function resolveInspectorParagraphRange(
+  node: Extract<DesignNode, { kind: "text" }>,
+  start: number,
+  end: number,
+) {
+  if (start < 0 || end <= start || end > node.properties.content.length) {
+    return undefined;
+  }
+  const base: TextParagraphStyle = {
+    listOptions: { type: "none" },
+    indentation: 0,
+    listSpacing: node.properties.listSpacing,
+    paragraphIndent: node.properties.paragraphIndent,
+    paragraphSpacing: node.properties.paragraphSpacing,
+  };
+  const overlapping = canonicalizeTextParagraphRuns(
+    node.properties.content,
+    node.properties.paragraphRuns ?? [],
+    base,
+    sameStyle,
+  ).filter((run) => run.end > start && run.start < end);
+  const style = overlapping[0]?.style ?? base;
+  const fields = [
+    "listOptions",
+    "indentation",
+    "listSpacing",
+    "paragraphIndent",
+    "paragraphSpacing",
+  ] as const;
+  return {
+    start,
+    end,
+    style,
+    mixedFields: fields.filter((field) =>
+      overlapping.some(
+        (run) =>
+          JSON.stringify(run.style[field]) !== JSON.stringify(style[field]),
+      ),
+    ),
   };
 }
 

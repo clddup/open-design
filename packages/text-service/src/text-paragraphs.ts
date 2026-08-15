@@ -6,12 +6,19 @@ import {
   type TextStyleRun,
 } from "./text-ranges.js";
 
-export const TEXT_PARAGRAPH_SERVICE_CONTRACT_VERSION = 1 as const;
+export const TEXT_PARAGRAPH_SERVICE_CONTRACT_VERSION = 2 as const;
 export const MAX_TEXT_PARAGRAPH_RUNS = 16_384;
 
 export interface TextParagraphStyle {
+  listOptions: TextListOptions;
+  indentation: number;
+  listSpacing: number;
   paragraphIndent: number;
   paragraphSpacing: number;
+}
+
+export interface TextListOptions {
+  type: "none" | "ordered" | "unordered";
 }
 
 export type TextParagraphRun<Style extends TextParagraphStyle> =
@@ -56,7 +63,7 @@ export function validateTextParagraphRuns<Style extends TextParagraphStyle>(
       return "Text paragraph ranges must start and end on paragraph boundaries";
     }
     if (!validParagraphStyle(run.style)) {
-      return "Text paragraph style requires finite non-negative indent and spacing";
+      return "Text paragraph style requires valid list, indentation, and finite non-negative spacing fields";
     }
   }
   return null;
@@ -169,6 +176,15 @@ export function remapTextParagraphRunsAfterContentChange<
 
 function validParagraphStyle(value: TextParagraphStyle): boolean {
   return (
+    (value.listOptions.type === "none" ||
+      value.listOptions.type === "ordered" ||
+      value.listOptions.type === "unordered") &&
+    Number.isSafeInteger(value.indentation) &&
+    value.indentation >= 0 &&
+    value.indentation <= 5 &&
+    (value.listOptions.type === "none" || value.indentation > 0) &&
+    Number.isFinite(value.listSpacing) &&
+    value.listSpacing >= 0 &&
     Number.isFinite(value.paragraphIndent) &&
     value.paragraphIndent >= 0 &&
     Number.isFinite(value.paragraphSpacing) &&

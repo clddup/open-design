@@ -232,6 +232,18 @@ const TextSharedProperties = {
           end: Type.Integer({ minimum: 1 }),
           style: Type.Object(
             {
+              listOptions: Type.Object(
+                {
+                  type: Type.Union([
+                    Type.Literal("none"),
+                    Type.Literal("ordered"),
+                    Type.Literal("unordered"),
+                  ]),
+                },
+                { additionalProperties: false },
+              ),
+              indentation: Type.Integer({ minimum: 0, maximum: 5 }),
+              listSpacing: Type.Number({ minimum: 0 }),
               paragraphIndent: Type.Number({ minimum: 0 }),
               paragraphSpacing: Type.Number({ minimum: 0 }),
             },
@@ -289,6 +301,8 @@ const TextSharedProperties = {
   letterSpacing: Type.Number(),
   paragraphIndent: Type.Number({ minimum: 0 }),
   paragraphSpacing: Type.Number({ minimum: 0 }),
+  listSpacing: Type.Number({ minimum: 0 }),
+  hangingList: Type.Boolean(),
   textCase: Type.Union([
     Type.Literal("original"),
     Type.Literal("uppercase"),
@@ -1071,6 +1085,20 @@ export const UpdateTextRangeStyleCommandSchema = Type.Object(
         ),
         paragraphIndent: Type.Optional(Type.Number({ minimum: 0 })),
         paragraphSpacing: Type.Optional(Type.Number({ minimum: 0 })),
+        listOptions: Type.Optional(
+          Type.Object(
+            {
+              type: Type.Union([
+                Type.Literal("none"),
+                Type.Literal("ordered"),
+                Type.Literal("unordered"),
+              ]),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+        indentation: Type.Optional(Type.Integer({ minimum: 0, maximum: 5 })),
+        listSpacing: Type.Optional(Type.Number({ minimum: 0 })),
         fills: Type.Optional(Type.Array(PaintSchema, { maxItems: 64 })),
         textStyleId: Type.Optional(
           Type.Union([
@@ -2050,6 +2078,8 @@ function migrateTextNodes(document: Record<string, unknown>): void {
     textProperties.textResize ??= "fixed";
     textProperties.paragraphIndent ??= 0;
     textProperties.paragraphSpacing ??= 0;
+    textProperties.listSpacing ??= 0;
+    textProperties.hangingList ??= false;
     textProperties.textCase ??= "original";
     textProperties.textDecoration ??= "none";
     textProperties.runs ??= [];
@@ -2076,6 +2106,11 @@ function migrateTextNodes(document: Record<string, unknown>): void {
       const merged: unknown[] = [];
       for (const value of textProperties.paragraphRuns) {
         const run = isRecordValue(value) ? value : null;
+        if (run && isRecordValue(run.style)) {
+          run.style.listOptions ??= { type: "none" };
+          run.style.indentation ??= 0;
+          run.style.listSpacing ??= textProperties.listSpacing;
+        }
         const previous = merged.at(-1);
         if (
           run &&
@@ -2115,6 +2150,8 @@ function designDocumentHasValidParagraphRuns(
         run.end > node.properties.content.length ||
         !isParagraphStart(node.properties.content, run.start) ||
         !isParagraphEnd(node.properties.content, run.end) ||
+        (run.style.listOptions.type !== "none" &&
+          run.style.indentation === 0) ||
         style === previousStyle
       ) {
         return false;

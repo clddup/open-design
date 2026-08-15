@@ -34,6 +34,18 @@ export type FontInspectorContext = {
   onImport: () => Promise<void>;
   onReflow: () => void;
   onReplace: (font: TextFontDescriptor) => void;
+  paragraph?: {
+    start: number;
+    end: number;
+    style: TextParagraphStyle;
+    mixedFields: readonly (keyof TextParagraphStyle)[];
+    onUpdate: (
+      style: Extract<
+        DesignOperation,
+        { type: "update_text_range_style" }
+      >["style"],
+    ) => void;
+  };
   range?: {
     start: number;
     end: number;
@@ -87,6 +99,16 @@ export function TypographySection({
     replacementWeightNumber <= 1_000;
   const range = fontContext?.range;
   const activeStyle = range?.style ?? node.properties;
+  const paragraph = fontContext?.paragraph;
+  const activeParagraphStyle = paragraph?.style ?? {
+    listOptions: { type: "none" as const },
+    indentation: 0,
+    listSpacing: node.properties.listSpacing,
+    paragraphIndent: node.properties.paragraphIndent,
+    paragraphSpacing: node.properties.paragraphSpacing,
+  };
+  const isParagraphMixed = (field: keyof TextParagraphStyle) =>
+    paragraph?.mixedFields.includes(field) ?? false;
   const isMixed = (field: keyof TextSelectionStyle) =>
     range?.mixedFields.includes(field) ?? false;
   const updateTextStyle = (
@@ -446,6 +468,100 @@ export function TypographySection({
                 : formatNumber(activeStyle.paragraphSpacing)
             }
           />
+          <label className={styles.select}>
+            <span>{t("properties.listStyle")}</span>
+            <select
+              aria-label={t("properties.listStyle")}
+              disabled={!paragraph}
+              onChange={(event) =>
+                paragraph?.onUpdate({
+                  listOptions: {
+                    type: event.target
+                      .value as TextParagraphStyle["listOptions"]["type"],
+                  },
+                })
+              }
+              value={
+                isParagraphMixed("listOptions")
+                  ? ""
+                  : activeParagraphStyle.listOptions.type
+              }
+            >
+              {isParagraphMixed("listOptions") && (
+                <option value="">{t("properties.mixed")}</option>
+              )}
+              <option value="none">{t("properties.listNone")}</option>
+              <option value="unordered">{t("properties.listUnordered")}</option>
+              <option value="ordered">{t("properties.listOrdered")}</option>
+            </select>
+          </label>
+          <Field
+            accessibleLabel={t("properties.listIndentation")}
+            disabled={!paragraph}
+            label="Level"
+            max={5}
+            min={activeParagraphStyle.listOptions.type === "none" ? 0 : 1}
+            onCommit={(draft) =>
+              commitNumber(
+                draft,
+                activeParagraphStyle.indentation,
+                (indentation) => paragraph?.onUpdate({ indentation }),
+                {
+                  min: activeParagraphStyle.listOptions.type === "none" ? 0 : 1,
+                  max: 5,
+                  integer: true,
+                },
+              )
+            }
+            placeholder={
+              isParagraphMixed("indentation")
+                ? t("properties.mixed")
+                : undefined
+            }
+            value={
+              isParagraphMixed("indentation")
+                ? ""
+                : formatNumber(activeParagraphStyle.indentation)
+            }
+          />
+          <Field
+            accessibleLabel={t("properties.listSpacing")}
+            disabled={!paragraph}
+            label="List"
+            min={0}
+            onCommit={(draft) =>
+              commitNumber(
+                draft,
+                activeParagraphStyle.listSpacing,
+                (listSpacing) => paragraph?.onUpdate({ listSpacing }),
+                { min: 0 },
+              )
+            }
+            placeholder={
+              isParagraphMixed("listSpacing")
+                ? t("properties.mixed")
+                : undefined
+            }
+            value={
+              isParagraphMixed("listSpacing")
+                ? ""
+                : formatNumber(activeParagraphStyle.listSpacing)
+            }
+          />
+          <div className={styles.toggles}>
+            <label>
+              <input
+                checked={node.properties.hangingList}
+                onChange={(event) =>
+                  onUpdate({
+                    properties: { hangingList: event.target.checked },
+                  })
+                }
+                type="checkbox"
+              />
+              {t("properties.hangingList")}
+            </label>
+          </div>
           <label className={styles.select}>
             <span>{t("properties.textCase")}</span>
             <select

@@ -244,6 +244,8 @@ describe("versioned SVG interchange", () => {
         letterSpacing: -0.4,
         paragraphIndent: 6,
         paragraphSpacing: 4,
+        listSpacing: 0,
+        hangingList: false,
         textCase: "uppercase",
         textDecoration: "underline",
         textAlignHorizontal: "center",
@@ -288,7 +290,7 @@ describe("versioned SVG interchange", () => {
       { code: "text-layout-fidelity", severity: "warning" },
     ]);
     expect(first.svg).toContain("<text");
-    expect(first.svg).toContain('data-opendesign-text-version="7"');
+    expect(first.svg).toContain('data-opendesign-text-version="8"');
     expect(first.svg).toContain('font-family="Inter"');
     expect(first.svg).toContain('font-size="24"');
     expect(first.svg).toContain('font-weight="650"');
@@ -326,7 +328,7 @@ describe("versioned SVG interchange", () => {
 
     const typographyV2Svg = first.svg
       .replace(
-        'data-opendesign-text-version="7"',
+        'data-opendesign-text-version="8"',
         'data-opendesign-text-version="4"',
       )
       .replace("&quot;fontStyleName&quot;:&quot;Semi Bold Italic&quot;,", "")
@@ -348,7 +350,7 @@ describe("versioned SVG interchange", () => {
 
     const legacySvg = first.svg
       .replace(
-        'data-opendesign-text-version="7"',
+        'data-opendesign-text-version="8"',
         'data-opendesign-text-version="1"',
       )
       .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "")
@@ -381,7 +383,7 @@ describe("versioned SVG interchange", () => {
     }
     const typographyV1Svg = first.svg
       .replace(
-        'data-opendesign-text-version="7"',
+        'data-opendesign-text-version="8"',
         'data-opendesign-text-version="3"',
       )
       .replace("&quot;textTruncation&quot;:&quot;ending&quot;,", "")
@@ -408,6 +410,8 @@ describe("versioned SVG interchange", () => {
           maxLines: null,
           paragraphIndent: 0,
           paragraphSpacing: 0,
+          listSpacing: 0,
+          hangingList: false,
           textCase: "original",
           textDecoration: "none",
           textOverflow: "clip",
@@ -417,7 +421,7 @@ describe("versioned SVG interchange", () => {
     }
     const fixedLayoutSvg = first.svg
       .replace(
-        'data-opendesign-text-version="7"',
+        'data-opendesign-text-version="8"',
         'data-opendesign-text-version="2"',
       )
       .replace("&quot;textResize&quot;:&quot;fixed&quot;,", "")
@@ -447,7 +451,7 @@ describe("versioned SVG interchange", () => {
     const ambiguousLegacy = importSvg(
       {
         svg: first.svg.replace(
-          'data-opendesign-text-version="7"',
+          'data-opendesign-text-version="8"',
           'data-opendesign-text-version="1"',
         ),
         idPrefix: "text_ambiguous_legacy_metadata",
@@ -516,7 +520,7 @@ describe("versioned SVG interchange", () => {
     }
   });
 
-  it("round-trips authored rich text runs as standard styled tspans and metadata v7", () => {
+  it("round-trips authored rich text runs as standard styled tspans and metadata v8", () => {
     const baseStyle = {
       fontFamily: "Inter",
       fontStyleName: "Regular",
@@ -561,6 +565,8 @@ describe("versioned SVG interchange", () => {
         ],
         paragraphIndent: 0,
         paragraphSpacing: 0,
+        listSpacing: 0,
+        hangingList: false,
         textAlignHorizontal: "left",
         textAlignVertical: "top",
         textResize: "fixed",
@@ -582,7 +588,7 @@ describe("versioned SVG interchange", () => {
     });
     expect(exported.ok).toBe(true);
     if (!exported.ok) return;
-    expect(exported.svg).toContain('data-opendesign-text-version="7"');
+    expect(exported.svg).toContain('data-opendesign-text-version="8"');
     expect(exported.svg).toContain('data-opendesign-range-start="4"');
     expect(exported.svg).toContain('font-family="IBM Plex Sans"');
     expect(exported.svg).toContain('fill="#ff3366"');
@@ -597,10 +603,26 @@ describe("versioned SVG interchange", () => {
       kind: "text",
       properties: { content: "OpenDesign", runs: text.properties.runs },
     });
+    const legacyV7 = importSvg(
+      {
+        svg: exported.svg.replace(
+          'data-opendesign-text-version="8"',
+          'data-opendesign-text-version="7"',
+        ),
+        idPrefix: "rich_text_v7",
+      },
+      geometry,
+    );
+    expect(legacyV7.ok).toBe(true);
+    if (!legacyV7.ok) return;
+    expect(findImportedSource(legacyV7.nodes, text.id)).toMatchObject({
+      kind: "text",
+      properties: { paragraphRuns: [], runs: text.properties.runs },
+    });
     const legacyV6 = importSvg(
       {
         svg: exported.svg.replace(
-          'data-opendesign-text-version="7"',
+          'data-opendesign-text-version="8"',
           'data-opendesign-text-version="6"',
         ),
         idPrefix: "rich_text_v6",
@@ -613,6 +635,67 @@ describe("versioned SVG interchange", () => {
       kind: "text",
       properties: { paragraphRuns: [], runs: text.properties.runs },
     });
+  });
+
+  it("round-trips semantic ordered markers without inserting them into Text content", () => {
+    const text = textFixture("ordered_list", "Alpha\nBeta");
+    text.properties.hangingList = true;
+    text.properties.paragraphRuns = [
+      {
+        start: 0,
+        end: text.properties.content.length,
+        style: {
+          listOptions: { type: "ordered" },
+          indentation: 1,
+          listSpacing: 10,
+          paragraphIndent: 0,
+          paragraphSpacing: 0,
+        },
+      },
+    ];
+    const document = documentFromNodes("svg_ordered_list", [text], [text.id]);
+    const exported = exportSvg({
+      document,
+      rootNodeIds: [text.id],
+      viewport: { x: 0, y: 0, width: 400, height: 160 },
+      includeLayerIds: true,
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    expect(exported.svg).toContain('data-opendesign-text-version="8"');
+    expect(exported.svg).toContain('data-opendesign-list-marker="1."');
+    expect(exported.svg).toContain('data-opendesign-list-marker="2."');
+    expect(exported.svg).toContain('data-opendesign-list-type="ordered"');
+    const imported = importSvg(
+      { svg: exported.svg, idPrefix: "ordered_list_roundtrip" },
+      geometry,
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(findImportedSource(imported.nodes, text.id)).toMatchObject({
+      kind: "text",
+      properties: {
+        content: "Alpha\nBeta",
+        hangingList: true,
+        paragraphRuns: text.properties.paragraphRuns,
+      },
+    });
+    const tampered = importSvg(
+      {
+        svg: exported.svg.replace(
+          'data-opendesign-list-marker="1."',
+          'data-opendesign-list-marker="9."',
+        ),
+        idPrefix: "ordered_list_tampered",
+      },
+      geometry,
+    );
+    expect(tampered.ok).toBe(false);
+    if (!tampered.ok) {
+      expect(tampered.issues).toContainEqual(
+        expect.objectContaining({ code: "text-fidelity-unsupported" }),
+      );
+    }
   });
 
   it("round-trips per-paragraph indent and spacing with standard tspan evidence", () => {
@@ -639,16 +722,30 @@ describe("versioned SVG interchange", () => {
         letterSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 0,
+        listSpacing: 0,
+        hangingList: false,
         paragraphRuns: [
           {
             start: 0,
             end: 6,
-            style: { paragraphIndent: 8, paragraphSpacing: 14 },
+            style: {
+              listOptions: { type: "none" },
+              indentation: 0,
+              listSpacing: 0,
+              paragraphIndent: 8,
+              paragraphSpacing: 14,
+            },
           },
           {
             start: 6,
             end: 12,
-            style: { paragraphIndent: 24, paragraphSpacing: 0 },
+            style: {
+              listOptions: { type: "none" },
+              indentation: 0,
+              listSpacing: 0,
+              paragraphIndent: 24,
+              paragraphSpacing: 0,
+            },
           },
         ],
         runs: [],
@@ -676,7 +773,7 @@ describe("versioned SVG interchange", () => {
     });
     expect(exported.ok).toBe(true);
     if (!exported.ok) return;
-    expect(exported.svg).toContain('data-opendesign-text-version="7"');
+    expect(exported.svg).toContain('data-opendesign-text-version="8"');
     expect(exported.svg).toContain('data-opendesign-paragraph-indent="24"');
     expect(exported.svg).toContain('data-opendesign-paragraph-spacing="14"');
     const imported = importSvg(
@@ -730,7 +827,7 @@ describe("versioned SVG interchange", () => {
     }
   });
 
-  it("round-trips Auto Width and Auto Height semantics through text metadata v7", () => {
+  it("round-trips Auto Width and Auto Height semantics through text metadata v8", () => {
     const autoWidth: DesignNode = {
       id: "auto_width_text",
       kind: "text",
@@ -754,6 +851,8 @@ describe("versioned SVG interchange", () => {
         letterSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 0,
+        listSpacing: 0,
+        hangingList: false,
         textCase: "original",
         textDecoration: "none",
         textAlignHorizontal: "left",
@@ -800,7 +899,7 @@ describe("versioned SVG interchange", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) return;
     expect(
-      exported.svg.match(/data-opendesign-text-version="7"/g),
+      exported.svg.match(/data-opendesign-text-version="8"/g),
     ).toHaveLength(2);
 
     const imported = importSvg(
@@ -851,6 +950,8 @@ describe("versioned SVG interchange", () => {
         letterSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 0,
+        listSpacing: 0,
+        hangingList: false,
         textCase: "original",
         textDecoration: "none",
         textAlignHorizontal: "left",
@@ -2683,6 +2784,54 @@ function isPathLike(
   node: DesignNode,
 ): node is Extract<DesignNode, { kind: "path" | "vector" }> {
   return node.kind === "path" || node.kind === "vector";
+}
+
+function textFixture(
+  id: string,
+  content: string,
+): Extract<DesignNode, { kind: "text" }> {
+  return {
+    id,
+    kind: "text",
+    name: id,
+    parentId: null,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 320, height: 120 },
+    exportSettings: [],
+    opacity: 1,
+    properties: {
+      content,
+      fontFamily: "Inter",
+      fontStyleName: "Regular",
+      fontSize: 20,
+      fontWeight: 400,
+      fontSlant: "normal",
+      lineHeight: 28,
+      letterSpacing: 0,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      listSpacing: 0,
+      hangingList: false,
+      paragraphRuns: [],
+      runs: [],
+      textCase: "original",
+      textDecoration: "none",
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textResize: "fixed",
+      textWrap: "word",
+      textOverflow: "visible",
+      textTruncation: "disabled",
+      maxLines: null,
+      fills: [{ type: "solid", color: "#111111", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+    },
+    extensions: {},
+  };
 }
 
 function findImportedSource(

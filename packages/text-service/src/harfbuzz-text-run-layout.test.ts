@@ -61,6 +61,8 @@ function request<Style extends TextRunLayoutStyle>(
     baseStyle,
     content,
     mode: "auto-width",
+    hangingList: false,
+    listSpacing: 0,
     paragraphIndent: 0,
     paragraphSpacing: 0,
     runs: [],
@@ -188,12 +190,24 @@ describe("HarfBuzz text run layout", () => {
           {
             start: 0,
             end: 6,
-            style: { paragraphIndent: 12, paragraphSpacing: 18 },
+            style: {
+              listOptions: { type: "none" },
+              indentation: 0,
+              listSpacing: 0,
+              paragraphIndent: 12,
+              paragraphSpacing: 18,
+            },
           },
           {
             start: 6,
             end: 10,
-            style: { paragraphIndent: 28, paragraphSpacing: 0 },
+            style: {
+              listOptions: { type: "none" },
+              indentation: 0,
+              listSpacing: 0,
+              paragraphIndent: 28,
+              paragraphSpacing: 0,
+            },
           },
         ],
       }),
@@ -221,6 +235,49 @@ describe("HarfBuzz text run layout", () => {
     );
     expect(glyphs).not.toHaveLength(0);
     expect(new Set(glyphs.map((glyph) => glyph.x)).size).toBeGreaterThan(1);
+    expect(result.fragments.map((fragment) => fragment.text).join("")).toBe(
+      content,
+    );
+  });
+
+  it("shapes RTL ordered markers on the logical start edge with hanging geometry", async () => {
+    const runtime = await createHarfBuzzTextRunLayoutRuntime();
+    const face = await register(runtime, fontUrls.hebrew);
+    const content = "אבג\nדהו";
+    const paragraphRuns = [
+      {
+        start: 0,
+        end: content.length,
+        style: {
+          listOptions: { type: "ordered" as const },
+          indentation: 1,
+          listSpacing: 10,
+          paragraphIndent: 0,
+          paragraphSpacing: 0,
+        },
+      },
+    ];
+    const result = runtime.provider.layout(
+      request(content, style(face), {
+        hangingList: true,
+        mode: "auto-height",
+        paragraphRuns,
+        textAlignHorizontal: "right",
+        textWrap: "word",
+        width: 180,
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.markers).toHaveLength(2);
+    expect(result.markers.map((marker) => marker.direction)).toEqual([
+      "rtl",
+      "rtl",
+    ]);
+    expect(result.markers.every((marker) => marker.x > 180)).toBe(true);
+    expect(
+      result.markers.flatMap((marker) => marker.glyphs ?? []),
+    ).not.toHaveLength(0);
     expect(result.fragments.map((fragment) => fragment.text).join("")).toBe(
       content,
     );

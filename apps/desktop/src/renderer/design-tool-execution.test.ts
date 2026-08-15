@@ -300,6 +300,8 @@ describe("Renderer design tool scope", () => {
             end: 6,
             style: {
               fontWeight: 700,
+              listOptions: { type: "ordered" },
+              listSpacing: 8,
               paragraphSpacing: 12,
               fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
             },
@@ -330,7 +332,13 @@ describe("Renderer design tool scope", () => {
           {
             start: 0,
             end: 33,
-            style: { paragraphIndent: 0, paragraphSpacing: 12 },
+            style: {
+              listOptions: { type: "ordered" },
+              indentation: 1,
+              listSpacing: 8,
+              paragraphIndent: 0,
+              paragraphSpacing: 12,
+            },
           },
         ],
         runs: [
@@ -593,6 +601,8 @@ describe("Renderer design tool scope", () => {
                     letterSpacing: 0,
                     paragraphIndent: 0,
                     paragraphSpacing: 0,
+                    listSpacing: 0,
+                    hangingList: false,
                     textCase: "original",
                     textDecoration: "none",
                     textAlignHorizontal: "left",
@@ -1615,6 +1625,8 @@ describe("Renderer design tool scope", () => {
                     letterSpacing: 0,
                     paragraphIndent: 0,
                     paragraphSpacing: 0,
+                    listSpacing: 0,
+                    hangingList: false,
                     textCase: "original",
                     textDecoration: "none",
                     textAlignHorizontal: "left",

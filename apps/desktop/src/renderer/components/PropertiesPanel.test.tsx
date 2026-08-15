@@ -292,6 +292,8 @@ const textNode: TextNode = {
     letterSpacing: 0,
     paragraphIndent: 0,
     paragraphSpacing: 0,
+    listSpacing: 0,
+    hangingList: false,
     textCase: "original",
     textDecoration: "none",
     textAlignHorizontal: "left",
@@ -1966,6 +1968,7 @@ describe("PropertiesPanel text layout workflow", () => {
   it("routes typography edits to the exact live text range", async () => {
     const user = userEvent.setup();
     const onRangeUpdate = vi.fn();
+    const onParagraphUpdate = vi.fn();
     const { onUpdate } = renderPanel({
       node: textNode,
       selectionCount: 1,
@@ -1982,6 +1985,19 @@ describe("PropertiesPanel text layout workflow", () => {
         onImport: vi.fn().mockResolvedValue(undefined),
         onReflow: vi.fn(),
         onReplace: vi.fn(),
+        paragraph: {
+          start: 0,
+          end: 4,
+          style: {
+            listOptions: { type: "none" },
+            indentation: 0,
+            listSpacing: 0,
+            paragraphIndent: 0,
+            paragraphSpacing: 0,
+          },
+          mixedFields: [],
+          onUpdate: onParagraphUpdate,
+        },
         range: {
           start: 0,
           end: 4,
@@ -1996,6 +2012,9 @@ describe("PropertiesPanel text layout workflow", () => {
             letterSpacing: textNode.properties.letterSpacing,
             paragraphIndent: textNode.properties.paragraphIndent,
             paragraphSpacing: textNode.properties.paragraphSpacing,
+            listOptions: { type: "none" },
+            indentation: 0,
+            listSpacing: 0,
             textCase: textNode.properties.textCase,
             textDecoration: textNode.properties.textDecoration,
             fills: textNode.properties.fills,
@@ -2016,6 +2035,24 @@ describe("PropertiesPanel text layout workflow", () => {
     await user.type(paragraphSpacing, "16");
     await user.tab();
     expect(onRangeUpdate).toHaveBeenCalledWith({ paragraphSpacing: 16 });
+    await user.selectOptions(screen.getByLabelText("List style"), "ordered");
+    expect(onParagraphUpdate).toHaveBeenCalledWith({
+      listOptions: { type: "ordered" },
+    });
+    const listLevel = screen.getByLabelText("List indentation level");
+    await user.clear(listLevel);
+    await user.type(listLevel, "2");
+    await user.tab();
+    expect(onParagraphUpdate).toHaveBeenCalledWith({ indentation: 2 });
+    const listSpacing = screen.getByLabelText("List spacing");
+    await user.clear(listSpacing);
+    await user.type(listSpacing, "12");
+    await user.tab();
+    expect(onParagraphUpdate).toHaveBeenCalledWith({ listSpacing: 12 });
+    await user.click(screen.getByLabelText("Hanging list markers"));
+    expect(onUpdate).toHaveBeenCalledWith({
+      properties: { hangingList: true },
+    });
     expect(onUpdate).not.toHaveBeenCalledWith({ properties: { fontSize: 28 } });
     expect(onUpdate).not.toHaveBeenCalledWith({
       properties: { paragraphSpacing: 16 },

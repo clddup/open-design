@@ -18,6 +18,7 @@ export interface MeasuredTextRunCluster<Style extends TextRunLayoutStyle> {
 export interface BrokenTextRunLine<Style extends TextRunLayoutStyle> {
   clusters: MeasuredTextRunCluster<Style>[];
   paragraphStart: boolean;
+  paragraphStartOffset: number;
   start: number;
   end: number;
 }
@@ -25,11 +26,15 @@ export interface BrokenTextRunLine<Style extends TextRunLayoutStyle> {
 export function breakTextRunLines<Style extends TextRunLayoutStyle>(
   clusters: readonly MeasuredTextRunCluster<Style>[],
   request: TextRunLayoutRequest<Style>,
-  paragraphIndentAt: (offset: number) => number,
+  lineInsetsAt: (
+    paragraphStart: number,
+    firstLine: boolean,
+  ) => { left: number; right: number },
 ): BrokenTextRunLine<Style>[] {
   const lines: BrokenTextRunLine<Style>[] = [];
   let current: MeasuredTextRunCluster<Style>[] = [];
   let paragraphStart = true;
+  let paragraphStartOffset = 0;
   let nextStart = 0;
 
   const flush = (end: number, nextParagraphStart: boolean) => {
@@ -38,11 +43,13 @@ export function breakTextRunLines<Style extends TextRunLayoutStyle>(
       clusters: current,
       end,
       paragraphStart,
+      paragraphStartOffset,
       start: nextStart,
     });
     current = [];
     nextStart = end;
     paragraphStart = nextParagraphStart;
+    if (nextParagraphStart) paragraphStartOffset = end;
   };
 
   for (const cluster of clusters) {
@@ -53,12 +60,11 @@ export function breakTextRunLines<Style extends TextRunLayoutStyle>(
     }
     if (request.textWrap === "none" || request.width === undefined) continue;
 
-    while (
-      current.length > 1 &&
-      textRunLineWidth(current) +
-        (paragraphStart ? paragraphIndentAt(nextStart) : 0) >
-        request.width
-    ) {
+    const occupiedWidth = () => {
+      const insets = lineInsetsAt(paragraphStartOffset, paragraphStart);
+      return textRunLineWidth(current) + insets.left + insets.right;
+    };
+    while (current.length > 1 && occupiedWidth() > request.width) {
       const splitIndex =
         request.textWrap === "character"
           ? current.length - 1

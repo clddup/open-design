@@ -185,6 +185,8 @@ function compileElement(element: DesignFirstSliceElement): DesignNode {
       letterSpacing: element.text.letterSpacing ?? 0,
       paragraphIndent: 0,
       paragraphSpacing: 0,
+      listSpacing: 0,
+      hangingList: false,
       textCase: "original" as const,
       textDecoration: "none" as const,
       textAlignHorizontal: element.text.align ?? ("left" as const),

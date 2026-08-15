@@ -11,11 +11,17 @@ import {
   type TextParagraphStyle,
 } from "./text-paragraphs.js";
 import {
+  createTextListLayout,
+  type TextListLayout,
+} from "./text-list-layout.js";
+import { resolveTextListMarkers } from "./text-lists.js";
+import {
   validateTextRunLayoutRequest,
   validateTextRunLayoutResult,
   type TextRunLayoutFragment,
   type TextRunLayoutGlyph,
   type TextRunLayoutLine,
+  type TextRunLayoutMarker,
   type TextRunLayoutProvider,
   type TextRunLayoutRequest,
   type TextRunLayoutResult,
@@ -29,7 +35,7 @@ import {
 export const HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_ID =
   "harfbuzz-wasm-text-runs" as const;
 export const HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_VERSION =
-  "1.4.0+bidi-13" as const;
+  "1.4.0+bidi-13+lists-v1" as const;
 export const HARFBUZZ_BIDI_UNICODE_VERSION = "13.0.0" as const;
 const HARFBUZZ_COORDINATE_SCALE = 64;
 
@@ -199,6 +205,7 @@ interface BrokenLine<Style extends TextRunLayoutStyle> {
   clusters: ShapedCluster<Style>[];
   end: number;
   paragraphStart: boolean;
+  paragraphStartOffset: number;
   start: number;
 }
 
@@ -213,6 +220,9 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
     request.content,
     request.paragraphRuns ?? [],
     {
+      listOptions: { type: "none" },
+      indentation: 0,
+      listSpacing: request.listSpacing,
       paragraphIndent: request.paragraphIndent,
       paragraphSpacing: request.paragraphSpacing,
     },
@@ -221,6 +231,9 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
   const paragraphStyleAt = (offset: number): TextParagraphStyle =>
     paragraphRuns.find((run) => run.start <= offset && offset < run.end)
       ?.style ?? {
+      listOptions: { type: "none" },
+      indentation: 0,
+      listSpacing: request.listSpacing,
       paragraphIndent: request.paragraphIndent,
       paragraphSpacing: request.paragraphSpacing,
     };
@@ -235,41 +248,87 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
   }
   clusters.sort((left, right) => left.start - right.start);
   assignBreakOpportunities(clusters);
-  const broken = breakLines(clusters, request, paragraphStyleAt);
+  const markerMeasurements = resolveTextListMarkers(
+    request.content,
+    paragraphRuns,
+    {
+      listOptions: { type: "none" },
+      indentation: 0,
+      listSpacing: request.listSpacing,
+      paragraphIndent: request.paragraphIndent,
+      paragraphSpacing: request.paragraphSpacing,
+    },
+  ).map((marker) => {
+    const style =
+      runs.find((run) => run.start <= marker.start && marker.start < run.end)
+        ?.style ?? request.baseStyle;
+    const registered = resolved.get(harfBuzzStyleKey(style));
+    if (!registered) throw new Error("Resolved marker font face disappeared");
+    const shaped = shapeListMarker(hb, bidi, marker.text, style, registered);
+    return {
+      ...marker,
+      ...shaped,
+      direction:
+        ((embedding.levels[marker.start] ??
+          embedding.paragraphs.find(
+            (paragraph) =>
+              paragraph.start <= marker.start && marker.start < paragraph.end,
+          )?.level ??
+          0) &
+          1) ===
+        1
+          ? ("rtl" as const)
+          : ("ltr" as const),
+      fontSize: style.fontSize,
+      paragraphStart: marker.start,
+      style,
+    };
+  });
+  const listLayout = createTextListLayout(
+    markerMeasurements,
+    request.hangingList,
+  );
+  const broken = breakLines(clusters, request, paragraphStyleAt, listLayout);
   if (request.content.length === 0) {
-    broken.push({ clusters: [], end: 0, paragraphStart: true, start: 0 });
+    broken.push({
+      clusters: [],
+      end: 0,
+      paragraphStart: true,
+      paragraphStartOffset: 0,
+      start: 0,
+    });
   } else if (/\r\n$|[\r\n]$/.test(request.content)) {
     broken.push({
       clusters: [],
       end: request.content.length,
       paragraphStart: true,
+      paragraphStartOffset: request.content.length,
       start: request.content.length,
     });
   }
 
   const fallbackMetrics = fontMetrics(request.baseStyle, resolved);
   const measured = broken.map((line) => measureLine(line, fallbackMetrics));
-  const paragraphStyles = broken.map((line) => paragraphStyleAt(line.start));
+  const paragraphStyles = broken.map((line) =>
+    paragraphStyleAt(line.paragraphStartOffset),
+  );
   const contentHeight = measured.reduce(
     (sum, line, index) =>
       sum +
       line.height +
       (index > 0 && broken[index]!.paragraphStart
-        ? paragraphStyles[index - 1]!.paragraphSpacing
+        ? paragraphGap(paragraphStyles[index - 1]!, paragraphStyles[index]!)
         : 0),
     0,
   );
-  const naturalWidth = measured.reduce(
-    (maximum, line, index) =>
-      Math.max(
-        maximum,
-        line.width +
-          (broken[index]!.paragraphStart
-            ? paragraphStyles[index]!.paragraphIndent
-            : 0),
-      ),
-    0,
-  );
+  const naturalWidth = measured.reduce((maximum, line, index) => {
+    const insets = listLayout.lineInsets(
+      broken[index]!.paragraphStartOffset,
+      broken[index]!.paragraphStart,
+      paragraphStyles[index]!.paragraphIndent,
+    );
+    return Math.max(maximum, line.width + insets.left + insets.right);
+  }, 0);
   const width =
     request.mode === "auto-width" ? normalize(naturalWidth) : request.width!;
   const height =
@@ -290,14 +349,19 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
     const sourceLine = broken[lineIndex]!;
     const metrics = measured[lineIndex]!;
     if (lineIndex > 0 && sourceLine.paragraphStart) {
-      lineY += paragraphStyles[lineIndex - 1]!.paragraphSpacing;
+      lineY += paragraphGap(
+        paragraphStyles[lineIndex - 1]!,
+        paragraphStyles[lineIndex]!,
+      );
     }
-    const indent = sourceLine.paragraphStart
-      ? paragraphStyles[lineIndex]!.paragraphIndent
-      : 0;
-    const usableWidth = Math.max(0, width - indent);
+    const insets = listLayout.lineInsets(
+      sourceLine.paragraphStartOffset,
+      sourceLine.paragraphStart,
+      paragraphStyles[lineIndex]!.paragraphIndent,
+    );
+    const usableWidth = Math.max(0, width - insets.left - insets.right);
     const lineX =
-      indent +
+      insets.left +
       (request.textAlignHorizontal === "center"
         ? Math.max(0, (usableWidth - metrics.width) / 2)
         : request.textAlignHorizontal === "right"
@@ -328,10 +392,38 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
     lineY += metrics.height;
   }
 
+  const markers: TextRunLayoutMarker<Style>[] = markerMeasurements.map(
+    (marker) => {
+      const line = lines.find((candidate) => candidate.start === marker.start);
+      if (!line) {
+        throw new Error(
+          `Missing first line for list paragraph ${marker.start}`,
+        );
+      }
+      return {
+        baseline: normalize(marker.baseline),
+        direction: marker.direction,
+        glyphs: marker.glyphs,
+        height: normalize(marker.height),
+        paragraphStart: marker.start,
+        style: marker.style,
+        text: marker.text,
+        width: normalize(marker.width),
+        x: normalize(listLayout.markerX(marker.start, width)),
+        y: normalize(line.y + line.baseline - marker.baseline),
+      };
+    },
+  );
+
   const minX =
-    lines.length === 0 ? 0 : Math.min(...lines.map((line) => line.x));
-  const maxX = lines.reduce(
-    (maximum, line) => Math.max(maximum, line.x + line.width),
+    lines.length === 0 && markers.length === 0
+      ? 0
+      : Math.min(
+          ...lines.map((line) => line.x),
+          ...markers.map((marker) => marker.x),
+        );
+  const maxX = [...lines, ...markers].reduce(
+    (maximum, item) => Math.max(maximum, item.x + item.width),
     minX,
   );
   return {
@@ -343,6 +435,7 @@ function layoutWithHarfBuzz<Style extends TextRunLayoutStyle>(
     },
     fragments,
     lines,
+    markers,
     ok: true,
     provider: HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_ID,
     providerVersion: HARFBUZZ_TEXT_RUN_LAYOUT_PROVIDER_VERSION,
@@ -477,6 +570,52 @@ function shapeRun<Style extends TextRunLayoutStyle>(
   );
 }
 
+function shapeListMarker<Style extends TextRunLayoutStyle>(
+  hb: HarfBuzzModule,
+  bidi: BidiApi,
+  text: string,
+  style: Style,
+  registered: RegisteredHarfBuzzFace,
+): {
+  baseline: number;
+  glyphs: readonly TextRunLayoutGlyph[];
+  height: number;
+  width: number;
+} {
+  const embedding = bidi.getEmbeddingLevels(text);
+  const run: TextStyleRun<Style> = { start: 0, end: text.length, style };
+  const clusters = shapeRun(hb, text, run, registered, embedding);
+  const fallback = fontMetrics(
+    style,
+    new Map([[harfBuzzStyleKey(style), registered]]),
+  );
+  const line: BrokenLine<Style> = {
+    clusters,
+    end: text.length,
+    paragraphStart: true,
+    paragraphStartOffset: 0,
+    start: 0,
+  };
+  const metrics = measureLine(line, fallback);
+  const glyphs = positionLine(
+    bidi,
+    text,
+    [run],
+    line,
+    embedding,
+    0,
+    0,
+    0,
+    metrics,
+  ).flatMap((fragment) => fragment.glyphs ?? []);
+  return {
+    baseline: metrics.ascent,
+    glyphs,
+    height: metrics.height,
+    width: metrics.width,
+  };
+}
+
 function glyphJsonToPath(
   commands: readonly { type: string; values: readonly number[] }[],
 ): string {
@@ -506,23 +645,25 @@ function breakLines<Style extends TextRunLayoutStyle>(
   clusters: readonly ShapedCluster<Style>[],
   request: TextRunLayoutRequest<Style>,
   paragraphStyleAt: (offset: number) => TextParagraphStyle,
+  listLayout: TextListLayout,
 ): BrokenLine<Style>[] {
   const lines: BrokenLine<Style>[] = [];
   let index = 0;
   let paragraphStart = true;
+  let paragraphStartOffset = 0;
   while (index < clusters.length) {
     const startIndex = index;
     const lineStart = clusters[index]!.start;
+    const paragraphStyle = paragraphStyleAt(paragraphStartOffset);
+    const insets = listLayout.lineInsets(
+      paragraphStartOffset,
+      paragraphStart,
+      paragraphStyle.paragraphIndent,
+    );
     const limit =
       request.mode === "auto-width"
         ? Number.POSITIVE_INFINITY
-        : Math.max(
-            0,
-            request.width! -
-              (paragraphStart
-                ? paragraphStyleAt(lineStart).paragraphIndent
-                : 0),
-          );
+        : Math.max(0, request.width! - insets.left - insets.right);
     let width = 0;
     let lastWordBreak = -1;
     while (index < clusters.length) {
@@ -553,9 +694,11 @@ function breakLines<Style extends TextRunLayoutStyle>(
       clusters: lineClusters,
       end: last.end,
       paragraphStart,
+      paragraphStartOffset,
       start: lineStart,
     });
     paragraphStart = last.hardBreak;
+    if (paragraphStart) paragraphStartOffset = last.end;
   }
   return lines;
 }
@@ -565,9 +708,22 @@ function equalParagraphStyle(
   right: TextParagraphStyle,
 ): boolean {
   return (
+    left.listOptions.type === right.listOptions.type &&
+    left.indentation === right.indentation &&
+    left.listSpacing === right.listSpacing &&
     left.paragraphIndent === right.paragraphIndent &&
     left.paragraphSpacing === right.paragraphSpacing
   );
+}
+
+function paragraphGap(
+  previous: TextParagraphStyle,
+  current: TextParagraphStyle,
+): number {
+  return previous.listOptions.type !== "none" &&
+    current.listOptions.type !== "none"
+    ? previous.listSpacing
+    : previous.paragraphSpacing;
 }
 
 function measureLine<Style extends TextRunLayoutStyle>(

@@ -111,6 +111,8 @@ describe("Shared Styles EditorRuntime v1", () => {
           letterSpacing: 0,
           paragraphIndent: 0,
           paragraphSpacing: 8,
+          listSpacing: 0,
+          hangingList: false,
           textCase: "original",
           textDecoration: "none",
         },

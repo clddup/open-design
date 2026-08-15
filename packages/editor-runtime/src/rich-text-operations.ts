@@ -36,7 +36,13 @@ const RUN_STYLE_FIELDS = [
   "fills",
 ] as const;
 
-const PARAGRAPH_STYLE_FIELDS = ["paragraphIndent", "paragraphSpacing"] as const;
+const PARAGRAPH_STYLE_FIELDS = [
+  "paragraphIndent",
+  "paragraphSpacing",
+  "listOptions",
+  "indentation",
+  "listSpacing",
+] as const;
 const PARAGRAPH_STYLE_FIELD_SET = new Set<string>(PARAGRAPH_STYLE_FIELDS);
 
 export function normalizeTextNodeRuns(node: TextNode, commandId: string): void {
@@ -196,7 +202,7 @@ export function updateTextRangeStyle(
         nextParagraphs,
         textParagraphBaseStyle(node),
         { start: command.start, end: command.end },
-        (style) => ({ ...style, ...paragraphPatch }) as TextParagraphStyle,
+        (style) => patchParagraphStyle(style, paragraphPatch),
         sameParagraphStyle,
       );
     }
@@ -251,9 +257,28 @@ export function textRunBaseStyle(node: TextNode): TextRunStyle {
 
 export function textParagraphBaseStyle(node: TextNode): TextParagraphStyle {
   return {
+    listOptions: { type: "none" },
+    indentation: 0,
+    listSpacing: node.properties.listSpacing,
     paragraphIndent: node.properties.paragraphIndent,
     paragraphSpacing: node.properties.paragraphSpacing,
   };
+}
+
+function patchParagraphStyle(
+  style: TextParagraphStyle,
+  patch: Readonly<Record<string, unknown>>,
+): TextParagraphStyle {
+  const next = { ...style, ...patch } as TextParagraphStyle;
+  if (
+    Object.hasOwn(patch, "listOptions") &&
+    next.listOptions.type !== "none" &&
+    next.indentation === 0 &&
+    !Object.hasOwn(patch, "indentation")
+  ) {
+    next.indentation = 1;
+  }
+  return next;
 }
 
 function detachTextStyleReference(style: TextRunStyle): TextRunStyle {

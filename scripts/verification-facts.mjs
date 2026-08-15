@@ -29,6 +29,7 @@ const textRangeService = await text("packages/text-service/src/text-ranges.ts");
 const textParagraphService = await text(
   "packages/text-service/src/text-paragraphs.ts",
 );
+const textListService = await text("packages/text-service/src/text-lists.ts");
 const textRunLayoutService = await text(
   "packages/text-service/src/text-run-layout.ts",
 );
@@ -89,6 +90,13 @@ const textParagraphServiceContractVersion = Number(
     "Text Paragraph service contract version",
   ),
 );
+const textListServiceContractVersion = Number(
+  capture(
+    textListService,
+    /TEXT_LIST_SERVICE_CONTRACT_VERSION\s*=\s*([0-9]+)/,
+    "Text List service contract version",
+  ),
+);
 const textRunLayoutServiceContractVersion = Number(
   capture(
     textRunLayoutService,
@@ -136,6 +144,11 @@ assertEqual(
   baseline.contracts.textParagraphServiceContractVersion,
   textParagraphServiceContractVersion,
   "engine baseline Text Paragraph service contract",
+);
+assertEqual(
+  baseline.contracts.textListServiceContractVersion,
+  textListServiceContractVersion,
+  "engine baseline Text List service contract",
 );
 assertEqual(
   baseline.contracts.textRunLayoutServiceContractVersion,
@@ -187,8 +200,9 @@ const blocks = {
     `- Geometry Service：\`contract v${geometryServiceContractVersion}\``,
     `- Text Layout Service：\`contract v${textServiceContractVersion}\``,
     `- Text Range Service：\`contract v${textRangeServiceContractVersion}\`（DesignDocument rich-text runs 已接入）`,
-    `- Text Paragraph Service：\`contract v${textParagraphServiceContractVersion}\`（逐段 indent/spacing 已接入）`,
-    `- Text Run Layout Service：\`contract v${textRunLayoutServiceContractVersion}\`（native/HarfBuzz 生产投影已接入）`,
+    `- Text Paragraph Service：\`contract v${textParagraphServiceContractVersion}\`（逐段 indent/spacing/list 已接入）`,
+    `- Text List Service：\`contract v${textListServiceContractVersion}\`（ordered/unordered、五级层级与 hanging marker 已接入）`,
+    `- Text Run Layout Service：\`contract v${textRunLayoutServiceContractVersion}\`（native/HarfBuzz 列表生产投影已接入）`,
     `- Layout Service：\`contract v${layoutServiceContractVersion}\``,
     `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（${agentCoreStatus}）`,
     `- 生产画布：\`${baseline.components.leafer.dependency} ${engineVersion}\``,

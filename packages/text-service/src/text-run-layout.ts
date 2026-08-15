@@ -11,12 +11,14 @@ import {
   validateTextParagraphRuns,
   type TextParagraphStyle,
 } from "./text-paragraphs.js";
+import { resolveTextListMarkers } from "./text-lists.js";
 
-export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 3 as const;
+export const TEXT_RUN_LAYOUT_SERVICE_CONTRACT_VERSION = 4 as const;
 export const MAX_TEXT_RUN_LAYOUT_CHARACTERS = 100_000;
 export const MAX_TEXT_RUN_LAYOUT_RUNS = 16_384;
 export const MAX_TEXT_RUN_LAYOUT_FRAGMENTS = 100_000;
 export const MAX_TEXT_RUN_LAYOUT_LINES = 100_000;
+export const MAX_TEXT_RUN_LAYOUT_MARKERS = 16_384;
 export const MAX_TEXT_RUN_LAYOUT_GLYPHS = 200_000;
 export const MAX_TEXT_RUN_LAYOUT_GLYPH_PATH_CHARACTERS = 1_000_000;
 export const MAX_TEXT_RUN_LAYOUT_TOTAL_PATH_CHARACTERS = 16_000_000;
@@ -41,6 +43,8 @@ export interface TextRunLayoutRequest<
   mode: TextResizeMode;
   paragraphIndent: number;
   paragraphSpacing: number;
+  listSpacing: number;
+  hangingList: boolean;
   paragraphRuns?: readonly TextStyleRun<TextParagraphStyle>[];
   runs: readonly TextStyleRun<Style>[];
   textAlignHorizontal: TextRunLayoutHorizontalAlign;
@@ -91,6 +95,21 @@ export interface TextRunLayoutLine {
   y: number;
 }
 
+export interface TextRunLayoutMarker<
+  Style extends TextRunLayoutStyle = TextRunLayoutStyle,
+> {
+  baseline: number;
+  direction: "ltr" | "rtl";
+  glyphs?: readonly TextRunLayoutGlyph[];
+  height: number;
+  paragraphStart: number;
+  style: Style;
+  text: string;
+  width: number;
+  x: number;
+  y: number;
+}
+
 export type TextRunLayoutFailureCode =
   | "invalid-input"
   | "measurement-failed"
@@ -109,6 +128,7 @@ export type TextRunLayoutResult<
       };
       fragments: readonly TextRunLayoutFragment<Style>[];
       lines: readonly TextRunLayoutLine[];
+      markers: readonly TextRunLayoutMarker<Style>[];
       ok: true;
       provider: string;
       providerVersion: string;
@@ -217,6 +237,12 @@ export function validateTextRunLayoutRequest<Style extends TextRunLayoutStyle>(
   if (!nonNegativeBounded(request.paragraphSpacing)) {
     return "Text run layout paragraph spacing is outside supported finite limits";
   }
+  if (!nonNegativeBounded(request.listSpacing)) {
+    return "Text run layout list spacing is outside supported finite limits";
+  }
+  if (typeof request.hangingList !== "boolean") {
+    return "Text run layout hanging list mode must be boolean";
+  }
   const paragraphIssue = validateTextParagraphRuns(
     request.content,
     request.paragraphRuns ?? [],
@@ -310,12 +336,15 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
     !Array.isArray(value.lines) ||
     value.lines.length > MAX_TEXT_RUN_LAYOUT_LINES ||
     !Array.isArray(value.fragments) ||
-    value.fragments.length > MAX_TEXT_RUN_LAYOUT_FRAGMENTS
+    value.fragments.length > MAX_TEXT_RUN_LAYOUT_FRAGMENTS ||
+    !Array.isArray(value.markers) ||
+    value.markers.length > MAX_TEXT_RUN_LAYOUT_MARKERS
   ) {
     return "Text run layout provider exceeded structural limits";
   }
   const lines = value.lines as readonly TextRunLayoutLine[];
   const fragments = value.fragments as readonly TextRunLayoutFragment<Style>[];
+  const markers = value.markers as readonly TextRunLayoutMarker<Style>[];
   if (!validWarnings(value.warnings)) {
     return "Text run layout provider returned invalid warnings";
   }
@@ -442,7 +471,111 @@ export function validateTextRunLayoutResult<Style extends TextRunLayoutStyle>(
   if (request.content.length === 0 && fragments.length !== 0) {
     return "Empty text run layout must not return fragments";
   }
+  const expectedMarkers = resolveTextListMarkers(
+    request.content,
+    request.paragraphRuns ?? [],
+    {
+      listOptions: { type: "none" },
+      indentation: 0,
+      listSpacing: request.listSpacing,
+      paragraphIndent: request.paragraphIndent,
+      paragraphSpacing: request.paragraphSpacing,
+    },
+  );
+  if (markers.length !== expectedMarkers.length) {
+    return "Text run layout markers do not match authored list paragraphs";
+  }
+  for (let index = 0; index < markers.length; index += 1) {
+    const marker = markers[index]!;
+    const expected = expectedMarkers[index]!;
+    const line = lines.find(
+      (candidate) => candidate.start === marker.paragraphStart,
+    );
+    if (
+      marker.paragraphStart !== expected.start ||
+      marker.text !== expected.text ||
+      (marker.direction !== "ltr" && marker.direction !== "rtl") ||
+      !line ||
+      !finite(marker.x) ||
+      !finite(marker.y) ||
+      !nonNegativeBounded(marker.width) ||
+      !nonNegativeBounded(marker.height) ||
+      !nonNegativeBounded(marker.baseline) ||
+      marker.baseline > marker.height ||
+      Math.abs(marker.y + marker.baseline - (line.y + line.baseline)) >
+        0.000_001 ||
+      validateTextRunLayoutStyle(marker.style)
+    ) {
+      return "Text run layout provider returned invalid list markers";
+    }
+    const markerGlyphIssue = validateMarkerGlyphs(marker);
+    if (markerGlyphIssue) return markerGlyphIssue;
+    glyphCount += marker.glyphs?.length ?? 0;
+    totalPathCharacters +=
+      marker.glyphs?.reduce((sum, glyph) => sum + glyph.path.length, 0) ?? 0;
+    if (glyphCount > MAX_TEXT_RUN_LAYOUT_GLYPHS) {
+      return "Text run layout provider exceeded glyph limits";
+    }
+    if (totalPathCharacters > MAX_TEXT_RUN_LAYOUT_TOTAL_PATH_CHARACTERS) {
+      return "Text run layout provider exceeded outline limits";
+    }
+  }
   return null;
+}
+
+function validateMarkerGlyphs<Style extends TextRunLayoutStyle>(
+  marker: TextRunLayoutMarker<Style>,
+): string | null {
+  if (marker.glyphs === undefined) return null;
+  if (!Array.isArray(marker.glyphs)) {
+    return "Text run layout provider returned invalid marker glyphs";
+  }
+  const ranges = new Map<number, number>();
+  for (const glyph of marker.glyphs) {
+    const glyphId = isRecord(glyph) ? glyph.glyphId : undefined;
+    const clusterStart = isRecord(glyph) ? glyph.clusterStart : undefined;
+    const clusterEnd = isRecord(glyph) ? glyph.clusterEnd : undefined;
+    const path = isRecord(glyph) ? glyph.path : undefined;
+    const x = isRecord(glyph) ? glyph.x : undefined;
+    const y = isRecord(glyph) ? glyph.y : undefined;
+    const xAdvance = isRecord(glyph) ? glyph.xAdvance : undefined;
+    const yAdvance = isRecord(glyph) ? glyph.yAdvance : undefined;
+    if (
+      !isRecord(glyph) ||
+      !Number.isSafeInteger(glyphId) ||
+      Number(glyphId) < 0 ||
+      Number(glyphId) > 0xffff_ffff ||
+      !safeRange(clusterStart, clusterEnd, marker.text.length) ||
+      Number(clusterEnd) <= Number(clusterStart) ||
+      typeof path !== "string" ||
+      path.length > MAX_TEXT_RUN_LAYOUT_GLYPH_PATH_CHARACTERS ||
+      !boundedSigned(x) ||
+      !boundedSigned(y) ||
+      !boundedSigned(xAdvance) ||
+      !boundedSigned(yAdvance)
+    ) {
+      return "Text run layout provider returned invalid marker glyphs";
+    }
+    const validatedStart = Number(clusterStart);
+    const validatedEnd = Number(clusterEnd);
+    const end = ranges.get(validatedStart);
+    if (end !== undefined && end !== validatedEnd) {
+      return "Text run layout provider returned ambiguous marker glyphs";
+    }
+    ranges.set(validatedStart, validatedEnd);
+  }
+  let expectedStart = 0;
+  for (const [start, end] of [...ranges].sort(
+    (left, right) => left[0] - right[0],
+  )) {
+    if (start !== expectedStart) {
+      return "Text run layout marker glyphs do not cover marker text";
+    }
+    expectedStart = end;
+  }
+  return expectedStart === marker.text.length
+    ? null
+    : "Text run layout marker glyphs do not cover marker text";
 }
 
 function safeRange(

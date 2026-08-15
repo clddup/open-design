@@ -76,6 +76,7 @@ function success(providerId: string) {
         lineIndex: 0,
       },
     ],
+    markers: [],
     warnings: [],
   };
 }
@@ -87,6 +88,8 @@ function request() {
     mode: "fixed" as const,
     width: 10,
     height: 10,
+    hangingList: false,
+    listSpacing: 0,
     paragraphIndent: 0,
     paragraphSpacing: 0,
     runs: [],

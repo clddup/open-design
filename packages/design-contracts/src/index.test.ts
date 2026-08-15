@@ -12,6 +12,7 @@ import {
   FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
   FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
+  FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION,
   RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION,
   TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION,
@@ -57,9 +58,49 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION).toBe("1.30.0");
   expect(RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION).toBe("1.31.0");
   expect(PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION).toBe("1.32.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(
-    PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION,
-  );
+  expect(FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION).toBe("1.33.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION);
+});
+
+it("migrates 1.32 paragraph runs to explicit non-list defaults", () => {
+  const source = textDocumentFixture() as unknown as Record<string, unknown>;
+  source.schemaVersion = PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION;
+  const nodes = source.nodesById as Record<
+    string,
+    { properties: Record<string, unknown> }
+  >;
+  const properties = nodes.text_1!.properties;
+  delete properties.listSpacing;
+  delete properties.hangingList;
+  properties.paragraphRuns = [
+    {
+      start: 0,
+      end: String(properties.content).length,
+      style: { paragraphIndent: 12, paragraphSpacing: 8 },
+    },
+  ];
+  expect(migrateDesignDocument(source)).toMatchObject({
+    schemaVersion: DESIGN_SCHEMA_VERSION,
+    nodesById: {
+      text_1: {
+        properties: {
+          listSpacing: 0,
+          hangingList: false,
+          paragraphRuns: [
+            {
+              style: {
+                listOptions: { type: "none" },
+                indentation: 0,
+                listSpacing: 0,
+                paragraphIndent: 12,
+                paragraphSpacing: 8,
+              },
+            },
+          ],
+        },
+      },
+    },
+  });
 });
 
 it("migrates 1.31 text nodes to canonical empty paragraph runs", () => {
@@ -122,6 +163,8 @@ it("migrates 1.29 font requests without inventing a face style name", () => {
         letterSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 0,
+        listSpacing: 0,
+        hangingList: false,
         textCase: "original",
         textDecoration: "none",
       },
@@ -259,6 +302,8 @@ it("defines strict Paint, Text, Effect and Grid shared-style payloads", () => {
         letterSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 8,
+        listSpacing: 0,
+        hangingList: false,
         textCase: "original",
         textDecoration: "none",
       },
@@ -358,6 +403,8 @@ function textDocumentFixture() {
           letterSpacing: 0,
           paragraphIndent: 0,
           paragraphSpacing: 0,
+          listSpacing: 0,
+          hangingList: false,
           paragraphRuns: [],
           textCase: "original" as const,
           textDecoration: "none" as const,
@@ -1472,6 +1519,8 @@ describe("design contract schemas", () => {
       maxLines: null,
       paragraphIndent: 0,
       paragraphSpacing: 0,
+      listSpacing: 0,
+      hangingList: false,
       textCase: "original",
       textDecoration: "none",
     });
@@ -1555,6 +1604,8 @@ describe("design contract schemas", () => {
         maxLines: null,
         paragraphIndent: 0,
         paragraphSpacing: 0,
+        listSpacing: 0,
+        hangingList: false,
         textCase: "original",
         textDecoration: "none",
       },
@@ -1564,6 +1615,8 @@ describe("design contract schemas", () => {
       textStyle: {
         paragraphIndent: 0,
         paragraphSpacing: 0,
+        listSpacing: 0,
+        hangingList: false,
         textCase: "original",
         textDecoration: "none",
       },

@@ -69,6 +69,8 @@ const BOOTSTRAP_NODE_PROPERTIES_SCHEMA = {
     letterSpacing: { type: "number" },
     paragraphIndent: { type: "number", minimum: 0 },
     paragraphSpacing: { type: "number", minimum: 0 },
+    listSpacing: { type: "number", minimum: 0 },
+    hangingList: { type: "boolean" },
     textCase: {
       enum: ["original", "uppercase", "lowercase", "title-case", "small-caps"],
     },

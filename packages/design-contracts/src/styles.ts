@@ -38,6 +38,8 @@ export const TextStylePropertiesSchema = Type.Object(
     letterSpacing: Type.Number(),
     paragraphIndent: Type.Number({ minimum: 0 }),
     paragraphSpacing: Type.Number({ minimum: 0 }),
+    listSpacing: Type.Number({ minimum: 0 }),
+    hangingList: Type.Boolean(),
     textCase: Type.Union([
       Type.Literal("original"),
       Type.Literal("uppercase"),
@@ -249,6 +251,8 @@ export function migrateSharedStyles(document: Record<string, unknown>): void {
     properties.fontSlant ??= "normal";
     properties.paragraphIndent ??= 0;
     properties.paragraphSpacing ??= 0;
+    properties.listSpacing ??= 0;
+    properties.hangingList ??= false;
     properties.textCase ??= "original";
     properties.textDecoration ??= "none";
   }

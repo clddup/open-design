@@ -4410,6 +4410,8 @@ function componentInput(): LeaferEngineSyncInput {
       letterSpacing: 0,
       paragraphIndent: 0,
       paragraphSpacing: 0,
+      listSpacing: 0,
+      hangingList: false,
       textCase: "original",
       textDecoration: "none",
       textAlignHorizontal: "center",

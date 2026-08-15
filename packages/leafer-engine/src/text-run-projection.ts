@@ -28,8 +28,22 @@ export interface LeaferTextRunGlyph {
   yAdvance: number;
 }
 
+export interface LeaferTextRunMarker {
+  baseline: number;
+  data: Record<string, unknown>;
+  direction: "ltr" | "rtl";
+  glyphs?: readonly LeaferTextRunGlyph[];
+  height: number;
+  paragraphStart: number;
+  text: string;
+  width: number;
+  x: number;
+  y: number;
+}
+
 export interface LeaferTextRunProjectionResult {
   fragments: readonly LeaferTextRunFragment[];
+  markers?: readonly LeaferTextRunMarker[];
   nodeId: string;
 }
 
@@ -82,6 +96,7 @@ export function projectResolvedTextRuns(
       throw new Error(`Text run projection source is unavailable: ${nodeId}`);
     }
     validateFragments(source, result.fragments);
+    validateMarkers(source, result.markers ?? []);
 
     elementsById.set(nodeId, {
       ...source,
@@ -182,6 +197,89 @@ export function projectResolvedTextRuns(
         parentId: source.parentId,
         tag: "Text",
         transform: translateTransform(source.transform, fragment.x, fragment.y),
+      };
+      elementsById.set(id, spec);
+      affectedNodeIds?.add(id);
+      fragmentIds.push(id);
+    });
+    (result.markers ?? []).forEach((marker, markerIndex) => {
+      const sourceName =
+        typeof source.data.name === "string" ? source.data.name : nodeId;
+      if (marker.glyphs !== undefined) {
+        marker.glyphs.forEach((glyph, glyphIndex) => {
+          const id = textRunFragmentElementId(nodeId, projectionIndex++);
+          const spec: LeaferElementSpec = {
+            childIds: [],
+            data: {
+              fill: marker.data.fill,
+              id,
+              name: `${sourceName} marker ${markerIndex + 1} glyph ${glyphIndex + 1}`,
+              editable: "single",
+              hittable: glyph.path.length > 0,
+              opacity: source.data.opacity,
+              path: glyph.path || null,
+              visible: source.data.visible,
+              data: {
+                opendesignGlyphId: glyph.glyphId,
+                opendesignNodeId: nodeId,
+                opendesignNodeKind: "text",
+                opendesignProjectionId: id,
+                opendesignSynthetic: true,
+                opendesignTextMarker: {
+                  paragraphStart: marker.paragraphStart,
+                  text: marker.text,
+                },
+              },
+            },
+            id,
+            kind: "path",
+            parentId: source.parentId,
+            tag: "Path",
+            transform: composeTransform(source.transform, [
+              1,
+              0,
+              0,
+              -1,
+              marker.x + glyph.x,
+              marker.y + marker.baseline - glyph.y,
+            ]),
+          };
+          elementsById.set(id, spec);
+          affectedNodeIds?.add(id);
+          fragmentIds.push(id);
+        });
+        return;
+      }
+      const id = textRunFragmentElementId(nodeId, projectionIndex++);
+      const spec: LeaferElementSpec = {
+        childIds: [],
+        data: {
+          ...marker.data,
+          id,
+          name: `${sourceName} marker ${markerIndex + 1}`,
+          editable: "single",
+          hittable: true,
+          opacity: source.data.opacity,
+          text: marker.text,
+          visible: source.data.visible,
+          width: marker.width,
+          height: marker.height,
+          data: {
+            opendesignNodeId: nodeId,
+            opendesignNodeKind: "text",
+            opendesignProjectionId: id,
+            opendesignSynthetic: true,
+            opendesignTextMarker: {
+              paragraphStart: marker.paragraphStart,
+              text: marker.text,
+            },
+          },
+        },
+        id,
+        kind: "text",
+        parentId: source.parentId,
+        tag: "Text",
+        transform: translateTransform(source.transform, marker.x, marker.y),
       };
       elementsById.set(id, spec);
       affectedNodeIds?.add(id);
@@ -303,10 +401,98 @@ export function textRunFragmentElementIds(
     const value = metadata(spec.data.data);
     return value.opendesignSynthetic === true &&
       value.opendesignNodeId === nodeId &&
-      isTextRunRange(value.opendesignTextRun)
+      (isTextRunRange(value.opendesignTextRun) ||
+        isTextMarker(value.opendesignTextMarker))
       ? [spec.id]
       : [];
   });
+}
+
+function validateMarkers(
+  source: LeaferElementSpec,
+  markers: readonly LeaferTextRunMarker[],
+): void {
+  const sourceText =
+    typeof source.data.text === "string" ? source.data.text : "";
+  let previousStart = -1;
+  for (const marker of markers) {
+    if (
+      !Number.isSafeInteger(marker.paragraphStart) ||
+      marker.paragraphStart <= previousStart ||
+      marker.paragraphStart < 0 ||
+      marker.paragraphStart >= sourceText.length ||
+      typeof marker.text !== "string" ||
+      marker.text.length === 0 ||
+      (marker.direction !== "ltr" && marker.direction !== "rtl") ||
+      !finite(marker.x) ||
+      !finite(marker.y) ||
+      !finiteNonNegative(marker.width) ||
+      !finiteNonNegative(marker.height) ||
+      !finiteNonNegative(marker.baseline) ||
+      marker.baseline > marker.height
+    ) {
+      throw new Error(`Text run projection markers are invalid: ${source.id}`);
+    }
+    if (marker.glyphs !== undefined) {
+      validateMarkerGlyphs(source.id, marker);
+    }
+    previousStart = marker.paragraphStart;
+  }
+}
+
+function validateMarkerGlyphs(
+  sourceId: string,
+  marker: LeaferTextRunMarker,
+): void {
+  if (!Array.isArray(marker.glyphs)) {
+    throw new Error(
+      `Text run projection marker glyphs are invalid: ${sourceId}`,
+    );
+  }
+  const ranges = new Map<number, number>();
+  for (const glyph of marker.glyphs) {
+    if (
+      !Number.isSafeInteger(glyph.glyphId) ||
+      glyph.glyphId < 0 ||
+      !Number.isSafeInteger(glyph.clusterStart) ||
+      !Number.isSafeInteger(glyph.clusterEnd) ||
+      glyph.clusterStart < 0 ||
+      glyph.clusterEnd > marker.text.length ||
+      glyph.clusterEnd <= glyph.clusterStart ||
+      typeof glyph.path !== "string" ||
+      !finite(glyph.x) ||
+      !finite(glyph.y) ||
+      !finite(glyph.xAdvance) ||
+      !finite(glyph.yAdvance)
+    ) {
+      throw new Error(
+        `Text run projection marker glyphs are invalid: ${sourceId}`,
+      );
+    }
+    const end = ranges.get(glyph.clusterStart);
+    if (end !== undefined && end !== glyph.clusterEnd) {
+      throw new Error(
+        `Text run projection marker glyphs are ambiguous: ${sourceId}`,
+      );
+    }
+    ranges.set(glyph.clusterStart, glyph.clusterEnd);
+  }
+  let expectedStart = 0;
+  for (const [start, end] of [...ranges].sort(
+    (left, right) => left[0] - right[0],
+  )) {
+    if (start !== expectedStart) {
+      throw new Error(
+        `Text run projection marker glyphs do not cover text: ${sourceId}`,
+      );
+    }
+    expectedStart = end;
+  }
+  if (expectedStart !== marker.text.length) {
+    throw new Error(
+      `Text run projection marker glyphs do not cover text: ${sourceId}`,
+    );
+  }
 }
 
 function validateFragments(
@@ -459,6 +645,18 @@ function isTextRunRange(value: unknown): boolean {
     Number.isSafeInteger(range.start) &&
     Number.isSafeInteger(range.end) &&
     Number(range.end) > Number(range.start)
+  );
+}
+
+function isTextMarker(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const marker = value as Record<string, unknown>;
+  return (
+    Number.isSafeInteger(marker.paragraphStart) &&
+    typeof marker.text === "string" &&
+    marker.text.length > 0
   );
 }
 

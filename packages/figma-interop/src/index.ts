@@ -45,6 +45,8 @@ export type FigmaSharedStylePayload =
         | "textCase"
         | "paragraphIndent"
         | "paragraphSpacing"
+        | "listSpacing"
+        | "hangingList"
       >;
     }
   | { type: "EFFECT"; effects: ReadonlyArray<Effect> }
@@ -67,6 +69,9 @@ export interface FigmaTextRangeSegment {
   fontWeight: number;
   letterSpacing: LetterSpacing;
   lineHeight: LineHeight;
+  listOptions: TextListOptions;
+  listSpacing: number;
+  indentation: number;
   paragraphIndent: number;
   paragraphSpacing: number;
   start: number;
@@ -234,6 +239,8 @@ export function toFigmaSharedStylePayload(
           textCase: figmaTextCase(value.textCase),
           paragraphIndent: value.paragraphIndent,
           paragraphSpacing: value.paragraphSpacing,
+          listSpacing: value.listSpacing,
+          hangingList: value.hangingList,
         },
       },
     };
@@ -389,6 +396,9 @@ export function toFigmaTextRangeSegments(
           fontWeight: style.fontWeight,
           letterSpacing: { unit: "PIXELS", value: style.letterSpacing },
           lineHeight: { unit: "PIXELS", value: style.lineHeight },
+          listOptions: toFigmaListOptions(paragraphStyle.listOptions),
+          listSpacing: paragraphStyle.listSpacing,
+          indentation: paragraphStyle.indentation,
           paragraphIndent: paragraphStyle.paragraphIndent,
           paragraphSpacing: paragraphStyle.paragraphSpacing,
           textCase: figmaTextCase(style.textCase),
@@ -437,6 +447,15 @@ export function fromFigmaTextRangeSegments(
       return [];
     }
     if (
+      (segment.listOptions.type !== "NONE" &&
+        segment.listOptions.type !== "ORDERED" &&
+        segment.listOptions.type !== "UNORDERED") ||
+      !Number.isSafeInteger(segment.indentation) ||
+      segment.indentation < 0 ||
+      segment.indentation > 5 ||
+      (segment.listOptions.type !== "NONE" && segment.indentation === 0) ||
+      !Number.isFinite(segment.listSpacing) ||
+      segment.listSpacing < 0 ||
       !Number.isFinite(segment.paragraphIndent) ||
       segment.paragraphIndent < 0 ||
       !Number.isFinite(segment.paragraphSpacing) ||
@@ -489,6 +508,9 @@ export function fromFigmaTextRangeSegments(
       if (
         overlapping.some(
           (segment) =>
+            segment.listOptions.type !== first.listOptions.type ||
+            segment.indentation !== first.indentation ||
+            segment.listSpacing !== first.listSpacing ||
             segment.paragraphIndent !== first.paragraphIndent ||
             segment.paragraphSpacing !== first.paragraphSpacing,
         )
@@ -502,6 +524,9 @@ export function fromFigmaTextRangeSegments(
         {
           ...paragraph,
           style: {
+            listOptions: fromFigmaListOptions(first.listOptions),
+            indentation: first.indentation,
+            listSpacing: first.listSpacing,
             paragraphIndent: first.paragraphIndent,
             paragraphSpacing: first.paragraphSpacing,
           },
@@ -565,8 +590,37 @@ function textNodeBaseParagraphStyle(
   node: Extract<DesignNode, { kind: "text" }>,
 ): TextParagraphStyle {
   return {
+    listOptions: { type: "none" },
+    indentation: 0,
+    listSpacing: node.properties.listSpacing,
     paragraphIndent: node.properties.paragraphIndent,
     paragraphSpacing: node.properties.paragraphSpacing,
+  };
+}
+
+function toFigmaListOptions(
+  value: TextParagraphStyle["listOptions"],
+): TextListOptions {
+  return {
+    type:
+      value.type === "ordered"
+        ? "ORDERED"
+        : value.type === "unordered"
+          ? "UNORDERED"
+          : "NONE",
+  };
+}
+
+function fromFigmaListOptions(
+  value: TextListOptions,
+): TextParagraphStyle["listOptions"] {
+  return {
+    type:
+      value.type === "ORDERED"
+        ? "ordered"
+        : value.type === "UNORDERED"
+          ? "unordered"
+          : "none",
   };
 }
 

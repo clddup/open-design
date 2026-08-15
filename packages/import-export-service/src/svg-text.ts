@@ -6,9 +6,14 @@ import {
   type TextParagraphStyle,
   type TextRunStyle,
 } from "@opendesign/design-contracts";
-import { textParagraphRanges } from "@opendesign/text-service";
+import {
+  resolveTextListMarkers,
+  textParagraphDirection,
+  textParagraphRanges,
+} from "@opendesign/text-service";
 
-const TEXT_METADATA_VERSION = "7";
+const TEXT_METADATA_VERSION = "8";
+const PARAGRAPH_RUNS_TEXT_METADATA_VERSION = "7";
 const RICH_TEXT_TEXT_METADATA_VERSION = "6";
 const FONT_FACE_TEXT_METADATA_VERSION = "5";
 const TYPOGRAPHY_V2_TEXT_METADATA_VERSION = "4";
@@ -119,6 +124,7 @@ export function readSvgText(element: Element): SvgTextReadResult {
   const metadataVersion = element.getAttribute(VERSION_ATTRIBUTE);
   if (
     metadataVersion !== TEXT_METADATA_VERSION &&
+    metadataVersion !== PARAGRAPH_RUNS_TEXT_METADATA_VERSION &&
     metadataVersion !== RICH_TEXT_TEXT_METADATA_VERSION &&
     metadataVersion !== FONT_FACE_TEXT_METADATA_VERSION &&
     metadataVersion !== TYPOGRAPHY_V2_TEXT_METADATA_VERSION &&
@@ -208,6 +214,7 @@ function migrateTextProperties(version: string, value: unknown): unknown {
   }
   if (
     version !== TEXT_METADATA_VERSION &&
+    version !== PARAGRAPH_RUNS_TEXT_METADATA_VERSION &&
     version !== RICH_TEXT_TEXT_METADATA_VERSION &&
     version !== FONT_FACE_TEXT_METADATA_VERSION
   ) {
@@ -216,11 +223,36 @@ function migrateTextProperties(version: string, value: unknown): unknown {
   }
   if (
     version !== TEXT_METADATA_VERSION &&
+    version !== PARAGRAPH_RUNS_TEXT_METADATA_VERSION &&
     version !== RICH_TEXT_TEXT_METADATA_VERSION
   ) {
     migrated.runs = [];
   }
-  if (version !== TEXT_METADATA_VERSION) migrated.paragraphRuns = [];
+  if (
+    version !== TEXT_METADATA_VERSION &&
+    version !== PARAGRAPH_RUNS_TEXT_METADATA_VERSION
+  ) {
+    migrated.paragraphRuns = [];
+  }
+  migrated.listSpacing ??= 0;
+  migrated.hangingList ??= false;
+  if (
+    version === PARAGRAPH_RUNS_TEXT_METADATA_VERSION &&
+    Array.isArray(migrated.paragraphRuns)
+  ) {
+    migrated.paragraphRuns = migrated.paragraphRuns.map((value) => {
+      if (!isRecord(value) || !isRecord(value.style)) return value;
+      return {
+        ...value,
+        style: {
+          ...value.style,
+          listOptions: { type: "none" },
+          indentation: 0,
+          listSpacing: migrated.listSpacing,
+        },
+      };
+    });
+  }
   if (
     version !== TEXT_METADATA_VERSION &&
     version !== RICH_TEXT_TEXT_METADATA_VERSION &&
@@ -366,12 +398,85 @@ function writeUniformTextSpans(element: Element, node: TextNode): void {
 function writeRichTextSpans(element: Element, node: TextNode): void {
   const segments = resolvedTextSegments(node.properties);
   const baseX = lineX(node.size.width, node.properties);
-  const y = firstLineY(
+  const firstY = firstLineY(
     node.size.height,
     textLines(node.properties.content).length,
     node.properties,
   );
+  const paragraphPositions = richTextParagraphPositions(
+    node.properties,
+    segments,
+    firstY,
+  );
+  const markerByStart = new Map(
+    resolveTextListMarkers(
+      node.properties.content,
+      node.properties.paragraphRuns ?? [],
+      {
+        listOptions: { type: "none" },
+        indentation: 0,
+        listSpacing: node.properties.listSpacing,
+        paragraphIndent: node.properties.paragraphIndent,
+        paragraphSpacing: node.properties.paragraphSpacing,
+      },
+    ).map((marker) => [marker.start, marker]),
+  );
   segments.forEach((segment, index) => {
+    const position = paragraphPositions.get(segment.paragraphStartOffset);
+    if (!position) {
+      throw new Error(
+        `Missing SVG paragraph position at ${segment.paragraphStartOffset}`,
+      );
+    }
+    const direction = textParagraphDirection(
+      node.properties.content,
+      segment.paragraphStartOffset,
+      position.end,
+    );
+    const bodyX = svgParagraphBodyX(
+      baseX,
+      segment.paragraphStyle,
+      segment.style.fontSize,
+      node.properties.hangingList,
+      direction,
+    );
+    const marker = markerByStart.get(segment.start);
+    if (marker && segment.paragraphStart) {
+      const markerTspan = element.ownerDocument.createElementNS(
+        element.namespaceURI,
+        "tspan",
+      );
+      const gap = Math.max(4, segment.style.fontSize * 0.5);
+      markerTspan.setAttribute("data-opendesign-list-marker", marker.text);
+      markerTspan.setAttribute(
+        "data-opendesign-paragraph-start",
+        String(marker.start),
+      );
+      markerTspan.setAttribute("data-opendesign-list-type", marker.type);
+      markerTspan.setAttribute(
+        "data-opendesign-list-indentation",
+        String(marker.indentation),
+      );
+      markerTspan.setAttribute(
+        "data-opendesign-list-spacing",
+        formatNumber(segment.paragraphStyle.listSpacing),
+      );
+      markerTspan.setAttribute("direction", direction);
+      markerTspan.setAttribute(
+        "text-anchor",
+        direction === "rtl" ? "start" : "end",
+      );
+      markerTspan.setAttribute(
+        "x",
+        formatNumber(direction === "rtl" ? bodyX + gap : bodyX - gap),
+      );
+      markerTspan.setAttribute("y", formatNumber(position.y));
+      writeRunStyleAttributes(markerTspan, segment.style);
+      markerTspan.appendChild(
+        element.ownerDocument.createTextNode(marker.text),
+      );
+      element.appendChild(markerTspan);
+    }
     const tspan = element.ownerDocument.createElementNS(
       element.namespaceURI,
       "tspan",
@@ -386,24 +491,21 @@ function writeRichTextSpans(element: Element, node: TextNode): void {
       "data-opendesign-paragraph-spacing",
       formatNumber(segment.paragraphStyle.paragraphSpacing),
     );
-    if (index === 0) {
-      tspan.setAttribute(
-        "x",
-        formatNumber(baseX + segment.paragraphStyle.paragraphIndent),
-      );
-      tspan.setAttribute("y", formatNumber(y));
-    } else if (segment.paragraphStart) {
-      const previous = segments[index - 1]!;
-      tspan.setAttribute(
-        "x",
-        formatNumber(baseX + segment.paragraphStyle.paragraphIndent),
-      );
-      tspan.setAttribute(
-        "dy",
-        formatNumber(
-          previous.style.lineHeight + previous.paragraphStyle.paragraphSpacing,
-        ),
-      );
+    tspan.setAttribute(
+      "data-opendesign-list-type",
+      segment.paragraphStyle.listOptions.type,
+    );
+    tspan.setAttribute(
+      "data-opendesign-list-indentation",
+      String(segment.paragraphStyle.indentation),
+    );
+    tspan.setAttribute(
+      "data-opendesign-list-spacing",
+      formatNumber(segment.paragraphStyle.listSpacing),
+    );
+    if (index === 0 || segment.paragraphStart) {
+      tspan.setAttribute("x", formatNumber(bodyX));
+      tspan.setAttribute("y", formatNumber(position.y));
     }
     writeRunStyleAttributes(tspan, segment.style);
     tspan.appendChild(
@@ -413,6 +515,62 @@ function writeRichTextSpans(element: Element, node: TextNode): void {
     );
     element.appendChild(tspan);
   });
+}
+
+function richTextParagraphPositions(
+  properties: TextProperties,
+  segments: ReturnType<typeof resolvedTextSegments>,
+  firstY: number,
+): Map<number, { end: number; y: number }> {
+  const positions = new Map<number, { end: number; y: number }>();
+  const paragraphs = textParagraphRanges(properties.content);
+  let y = firstY;
+  paragraphs.forEach((paragraph, index) => {
+    const currentSegments = segments.filter(
+      (segment) =>
+        segment.end > paragraph.start && segment.start < paragraph.end,
+    );
+    const lineHeight = currentSegments.reduce(
+      (maximum, segment) => Math.max(maximum, segment.style.lineHeight),
+      properties.lineHeight,
+    );
+    positions.set(paragraph.start, { end: paragraph.end, y });
+    const next = paragraphs[index + 1];
+    if (!next) return;
+    const style = currentSegments[0]?.paragraphStyle ?? {
+      listOptions: { type: "none" as const },
+      indentation: 0,
+      listSpacing: properties.listSpacing,
+      paragraphIndent: properties.paragraphIndent,
+      paragraphSpacing: properties.paragraphSpacing,
+    };
+    const nextStyle = segments.find(
+      (segment) => segment.start <= next.start && next.start < segment.end,
+    )?.paragraphStyle;
+    y +=
+      lineHeight +
+      (style.listOptions.type !== "none" &&
+      nextStyle?.listOptions.type !== "none"
+        ? style.listSpacing
+        : style.paragraphSpacing);
+  });
+  return positions;
+}
+
+function svgParagraphBodyX(
+  baseX: number,
+  style: TextParagraphStyle,
+  fontSize: number,
+  hangingList: boolean,
+  direction: "ltr" | "rtl",
+): number {
+  const listOffset =
+    style.listOptions.type === "none"
+      ? 0
+      : (style.indentation - 1) * fontSize * 2 +
+        (hangingList ? 0 : fontSize * 1.5);
+  const offset = listOffset + style.paragraphIndent;
+  return direction === "rtl" ? baseX - offset : baseX + offset;
 }
 
 function writeRunStyleAttributes(element: Element, style: TextRunStyle): void {
@@ -458,49 +616,97 @@ function renderedRichTextMismatch(
   width: number,
   height: number,
   validateParagraphs: boolean,
+  validateLists: boolean,
 ): string | null {
   const runs = resolvedTextSegments(properties);
   const children = elementChildren(element);
+  const markerChildren = validateLists
+    ? children.filter((child) =>
+        child.hasAttribute("data-opendesign-list-marker"),
+      )
+    : [];
+  const runChildren = validateLists
+    ? children.filter(
+        (child) => !child.hasAttribute("data-opendesign-list-marker"),
+      )
+    : children;
   const baseX = lineX(width, properties);
   const firstY = firstLineY(
     height,
     textLines(properties.content).length,
     properties,
   );
+  const positions = richTextParagraphPositions(properties, runs, firstY);
+  const markers = resolveTextListMarkers(
+    properties.content,
+    properties.paragraphRuns ?? [],
+    {
+      listOptions: { type: "none" },
+      indentation: 0,
+      listSpacing: properties.listSpacing,
+      paragraphIndent: properties.paragraphIndent,
+      paragraphSpacing: properties.paragraphSpacing,
+    },
+  );
   if (
-    children.length !== runs.length ||
+    runChildren.length !== runs.length ||
+    markerChildren.length !== markers.length ||
     children.some((child) => child.localName.toLowerCase() !== "tspan")
   ) {
     return "OpenDesign rich text metadata does not match the rendered run structure";
   }
   for (let index = 0; index < runs.length; index += 1) {
     const run = runs[index]!;
-    const child = children[index]!;
+    const child = runChildren[index]!;
     const previous = runs[index - 1];
+    const position = positions.get(run.paragraphStartOffset);
+    const direction = position
+      ? textParagraphDirection(
+          properties.content,
+          run.paragraphStartOffset,
+          position.end,
+        )
+      : "ltr";
+    const bodyX = svgParagraphBodyX(
+      baseX,
+      run.paragraphStyle,
+      run.style.fontSize,
+      properties.hangingList,
+      direction,
+    );
     const paragraphPositionMismatch =
       validateParagraphs &&
-      (index === 0
-        ? !sameAttributeNumber(
-            child,
-            "x",
-            baseX + run.paragraphStyle.paragraphIndent,
-          ) || !sameAttributeNumber(child, "y", firstY)
-        : run.paragraphStart
+      (validateLists
+        ? index === 0 || run.paragraphStart
+          ? !position ||
+            !sameAttributeNumber(child, "x", bodyX) ||
+            !sameAttributeNumber(child, "y", position.y) ||
+            child.hasAttribute("dy")
+          : child.hasAttribute("x") ||
+            child.hasAttribute("y") ||
+            child.hasAttribute("dy")
+        : index === 0
           ? !sameAttributeNumber(
               child,
               "x",
               baseX + run.paragraphStyle.paragraphIndent,
-            ) ||
-            !previous ||
-            !sameAttributeNumber(
-              child,
-              "dy",
-              previous.style.lineHeight +
-                previous.paragraphStyle.paragraphSpacing,
-            )
-          : child.hasAttribute("x") ||
-            child.hasAttribute("y") ||
-            child.hasAttribute("dy"));
+            ) || !sameAttributeNumber(child, "y", firstY)
+          : run.paragraphStart
+            ? !sameAttributeNumber(
+                child,
+                "x",
+                baseX + run.paragraphStyle.paragraphIndent,
+              ) ||
+              !previous ||
+              !sameAttributeNumber(
+                child,
+                "dy",
+                previous.style.lineHeight +
+                  previous.paragraphStyle.paragraphSpacing,
+              )
+            : child.hasAttribute("x") ||
+              child.hasAttribute("y") ||
+              child.hasAttribute("dy"));
     if (
       child.getAttribute("data-opendesign-range-start") !== String(run.start) ||
       child.getAttribute("data-opendesign-range-end") !== String(run.end) ||
@@ -520,10 +726,67 @@ function renderedRichTextMismatch(
             child,
             "data-opendesign-paragraph-spacing",
             run.paragraphStyle.paragraphSpacing,
-          ))) ||
+          ) ||
+          (validateLists &&
+            (child.getAttribute("data-opendesign-list-type") !==
+              run.paragraphStyle.listOptions.type ||
+              child.getAttribute("data-opendesign-list-indentation") !==
+                String(run.paragraphStyle.indentation) ||
+              !sameAttributeNumber(
+                child,
+                "data-opendesign-list-spacing",
+                run.paragraphStyle.listSpacing,
+              ))))) ||
       paragraphPositionMismatch
     ) {
       return "OpenDesign rich text metadata does not match the rendered run content or style";
+    }
+  }
+  for (let index = 0; index < markers.length; index += 1) {
+    const marker = markers[index]!;
+    const child = markerChildren[index]!;
+    const run = runs.find((candidate) => candidate.start === marker.start);
+    const position = positions.get(marker.start);
+    if (!run || !position) {
+      return "OpenDesign list metadata does not match rendered marker structure";
+    }
+    const direction = textParagraphDirection(
+      properties.content,
+      marker.start,
+      marker.end,
+    );
+    const bodyX = svgParagraphBodyX(
+      baseX,
+      run.paragraphStyle,
+      run.style.fontSize,
+      properties.hangingList,
+      direction,
+    );
+    const gap = Math.max(4, run.style.fontSize * 0.5);
+    if (
+      child.textContent !== marker.text ||
+      child.getAttribute("data-opendesign-list-marker") !== marker.text ||
+      child.getAttribute("data-opendesign-paragraph-start") !==
+        String(marker.start) ||
+      child.getAttribute("data-opendesign-list-type") !== marker.type ||
+      child.getAttribute("data-opendesign-list-indentation") !==
+        String(marker.indentation) ||
+      !sameAttributeNumber(
+        child,
+        "data-opendesign-list-spacing",
+        run.paragraphStyle.listSpacing,
+      ) ||
+      child.getAttribute("direction") !== direction ||
+      child.getAttribute("text-anchor") !==
+        (direction === "rtl" ? "start" : "end") ||
+      !sameAttributeNumber(
+        child,
+        "x",
+        direction === "rtl" ? bodyX + gap : bodyX - gap,
+      ) ||
+      !sameAttributeNumber(child, "y", position.y)
+    ) {
+      return "OpenDesign list metadata does not match rendered marker content or geometry";
     }
   }
   return null;
@@ -549,6 +812,7 @@ function renderedTextMismatch(
   }
   if (
     (metadataVersion === TEXT_METADATA_VERSION ||
+      metadataVersion === PARAGRAPH_RUNS_TEXT_METADATA_VERSION ||
       metadataVersion === FONT_FACE_TEXT_METADATA_VERSION) &&
     element.getAttribute("font-style") !== properties.fontSlant
   ) {
@@ -571,7 +835,8 @@ function renderedTextMismatch(
   }
 
   if (
-    (metadataVersion === TEXT_METADATA_VERSION &&
+    ((metadataVersion === TEXT_METADATA_VERSION ||
+      metadataVersion === PARAGRAPH_RUNS_TEXT_METADATA_VERSION) &&
       ((properties.runs?.length ?? 0) > 0 ||
         (properties.paragraphRuns?.length ?? 0) > 0)) ||
     (metadataVersion === RICH_TEXT_TEXT_METADATA_VERSION &&
@@ -582,6 +847,8 @@ function renderedTextMismatch(
       properties,
       value.width,
       value.height,
+      metadataVersion === TEXT_METADATA_VERSION ||
+        metadataVersion === PARAGRAPH_RUNS_TEXT_METADATA_VERSION,
       metadataVersion === TEXT_METADATA_VERSION,
     );
   }
@@ -617,6 +884,7 @@ function renderedTextMismatch(
 function resolvedTextSegments(properties: TextProperties): Array<{
   end: number;
   paragraphStart: boolean;
+  paragraphStartOffset: number;
   paragraphStyle: TextParagraphStyle;
   start: number;
   style: TextRunStyle;
@@ -639,6 +907,9 @@ function resolvedTextSegments(properties: TextProperties): Array<{
       ? properties.runs!
       : [{ start: 0, end: properties.content.length, style: baseStyle }];
   const baseParagraphStyle: TextParagraphStyle = {
+    listOptions: { type: "none" },
+    indentation: 0,
+    listSpacing: properties.listSpacing,
     paragraphIndent: properties.paragraphIndent,
     paragraphSpacing: properties.paragraphSpacing,
   };
@@ -681,6 +952,10 @@ function resolvedTextSegments(properties: TextProperties): Array<{
       start,
       end: boundaries[index + 1]!,
       paragraphStart: paragraphStarts.has(start),
+      paragraphStartOffset:
+        explicitParagraphRanges.find(
+          (paragraph) => paragraph.start <= start && start < paragraph.end,
+        )?.start ?? 0,
       style,
       paragraphStyle,
     };
@@ -713,11 +988,26 @@ function paragraphSpacingTotal(properties: TextProperties): number {
   const paragraphs = textParagraphRanges(properties.content);
   if (paragraphs.length < 2) return 0;
   const runs = properties.paragraphRuns ?? [];
-  return paragraphs.slice(0, -1).reduce((sum, paragraph) => {
+  return paragraphs.slice(0, -1).reduce((sum, paragraph, index) => {
     const style = runs.find(
       (run) => run.start <= paragraph.start && paragraph.start < run.end,
     )?.style;
-    return sum + (style?.paragraphSpacing ?? properties.paragraphSpacing);
+    const next = paragraphs[index + 1];
+    const nextStyle = next
+      ? runs.find((run) => run.start <= next.start && next.start < run.end)
+          ?.style
+      : undefined;
+    const listGap =
+      style !== undefined &&
+      nextStyle !== undefined &&
+      style.listOptions.type !== "none" &&
+      nextStyle.listOptions.type !== "none";
+    return (
+      sum +
+      (listGap
+        ? (style?.listSpacing ?? properties.listSpacing)
+        : (style?.paragraphSpacing ?? properties.paragraphSpacing))
+    );
   }, 0);
 }
 

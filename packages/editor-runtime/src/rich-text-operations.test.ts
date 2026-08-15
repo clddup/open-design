@@ -141,17 +141,20 @@ describe("EditorRuntime rich text ranges", () => {
       {
         start: 0,
         end: 6,
-        style: { paragraphIndent: 0, paragraphSpacing: 0 },
+        style: paragraphStyle(),
       },
       {
         start: 6,
         end: 13,
-        style: { paragraphIndent: 28, paragraphSpacing: 12 },
+        style: paragraphStyle({
+          paragraphIndent: 28,
+          paragraphSpacing: 12,
+        }),
       },
       {
         start: 13,
         end: 18,
-        style: { paragraphIndent: 0, paragraphSpacing: 0 },
+        style: paragraphStyle(),
       },
     ]);
     expect(text(runtime).properties.runs).toEqual([]);
@@ -166,17 +169,20 @@ describe("EditorRuntime rich text ranges", () => {
       {
         start: 0,
         end: 6,
-        style: { paragraphIndent: 0, paragraphSpacing: 0 },
+        style: paragraphStyle(),
       },
       {
         start: 6,
         end: 14,
-        style: { paragraphIndent: 28, paragraphSpacing: 12 },
+        style: paragraphStyle({
+          paragraphIndent: 28,
+          paragraphSpacing: 12,
+        }),
       },
       {
         start: 14,
         end: 19,
-        style: { paragraphIndent: 0, paragraphSpacing: 0 },
+        style: paragraphStyle(),
       },
     ]);
     expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
@@ -210,6 +216,8 @@ describe("EditorRuntime rich text ranges", () => {
         lineHeight: title.properties.lineHeight,
         paragraphIndent: title.properties.paragraphIndent,
         paragraphSpacing: title.properties.paragraphSpacing,
+        listSpacing: 0,
+        hangingList: false,
         textCase: title.properties.textCase,
         textDecoration: title.properties.textDecoration,
       },
@@ -235,9 +243,73 @@ describe("EditorRuntime rich text ranges", () => {
       {
         start: 0,
         end: title.properties.content.length,
-        style: { paragraphIndent: 0, paragraphSpacing: 18 },
+        style: paragraphStyle({ paragraphSpacing: 18 }),
       },
     ]);
+  });
+
+  it("applies ordered and nested list semantics as paragraph facts with one undoable revision", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    apply(runtime, "list_content", {
+      commandId: "list_content",
+      type: "update_properties",
+      nodeId: "title_welcome",
+      properties: { content: "One\nTwo\nPlain" },
+    });
+    const before = runtime.getSnapshot().document.revision;
+    const result = apply(runtime, "list_style", {
+      commandId: "list_style",
+      type: "update_text_range_style",
+      nodeId: "title_welcome",
+      start: 0,
+      end: 7,
+      style: {
+        listOptions: { type: "ordered" },
+        listSpacing: 10,
+      },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      revision: { revision: before + 1 },
+    });
+    expect(text(runtime).properties.paragraphRuns).toEqual([
+      {
+        start: 0,
+        end: 8,
+        style: paragraphStyle({
+          listOptions: { type: "ordered" },
+          indentation: 1,
+          listSpacing: 10,
+        }),
+      },
+      { start: 8, end: 13, style: paragraphStyle() },
+    ]);
+
+    apply(runtime, "nested_list", {
+      commandId: "nested_list",
+      type: "update_text_range_style",
+      nodeId: "title_welcome",
+      start: 4,
+      end: 7,
+      style: { indentation: 2 },
+    });
+    expect(text(runtime).properties.paragraphRuns?.[1]).toEqual({
+      start: 4,
+      end: 8,
+      style: paragraphStyle({
+        listOptions: { type: "ordered" },
+        indentation: 2,
+        listSpacing: 10,
+      }),
+    });
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(text(runtime).properties.paragraphRuns?.[0]?.end).toBe(8);
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expect(text(reopened).properties.paragraphRuns).toEqual(
+      text(runtime).properties.paragraphRuns,
+    );
   });
 });
 
@@ -257,4 +329,21 @@ function text(runtime: EditorRuntime) {
   const node = runtime.getSnapshot().document.nodesById.title_welcome;
   if (!node || node.kind !== "text") throw new Error("Missing title");
   return node;
+}
+
+function paragraphStyle(
+  overrides: Partial<
+    NonNullable<
+      ReturnType<typeof text>["properties"]["paragraphRuns"]
+    >[number]["style"]
+  > = {},
+) {
+  return {
+    listOptions: { type: "none" as const },
+    indentation: 0,
+    listSpacing: 0,
+    paragraphIndent: 0,
+    paragraphSpacing: 0,
+    ...overrides,
+  };
 }

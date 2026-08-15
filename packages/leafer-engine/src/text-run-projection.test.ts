@@ -18,6 +18,7 @@ describe("native rich-text projection boundary", () => {
     const split = 7;
     const firstId = textRunFragmentElementId(source.id, 0);
     const secondId = textRunFragmentElementId(source.id, 1);
+    const markerId = textRunFragmentElementId(source.id, 2);
     const projection = projectResolvedTextRuns(base, {
       documentId: base.documentId,
       pageId: base.pageId,
@@ -57,6 +58,24 @@ describe("native rich-text projection boundary", () => {
                   fontSize: 32,
                   fontWeight: 500,
                 },
+              },
+            ],
+            markers: [
+              {
+                baseline: 30,
+                data: {
+                  fill: "#111827",
+                  fontFamily: "Inter",
+                  fontSize: 32,
+                  fontWeight: 700,
+                },
+                direction: "ltr",
+                height: 40,
+                paragraphStart: 0,
+                text: "1.",
+                width: 20,
+                x: -28,
+                y: 0,
               },
             ],
           },
@@ -107,11 +126,23 @@ describe("native rich-text projection boundary", () => {
       ],
       data: { fill: "#7c3aed", fontWeight: 500 },
     });
+    expect(projection.elementsById.get(markerId)).toMatchObject({
+      id: markerId,
+      kind: "text",
+      data: {
+        text: "1.",
+        data: {
+          opendesignNodeId: source.id,
+          opendesignSynthetic: true,
+          opendesignTextMarker: { paragraphStart: 0, text: "1." },
+        },
+      },
+    });
     const parent = source.parentId
       ? projection.elementsById.get(source.parentId)
       : undefined;
     expect(parent?.childIds).toEqual(
-      expect.arrayContaining([source.id, firstId, secondId]),
+      expect.arrayContaining([source.id, firstId, secondId, markerId]),
     );
     expect(parent?.childIds.indexOf(firstId)).toBe(
       (parent?.childIds.indexOf(source.id) ?? -2) + 1,
@@ -122,9 +153,11 @@ describe("native rich-text projection boundary", () => {
     expect(textRunEditProxyElementId(projection, source.id)).toBe(source.id);
     expect(textRunEditProxyElementId(projection, firstId)).toBe(source.id);
     expect(textRunEditProxyElementId(projection, secondId)).toBe(source.id);
+    expect(textRunEditProxyElementId(projection, markerId)).toBe(source.id);
     expect(textRunFragmentElementIds(projection, source.id)).toEqual([
       firstId,
       secondId,
+      markerId,
     ]);
   });
 

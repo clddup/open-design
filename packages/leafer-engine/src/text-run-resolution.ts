@@ -62,6 +62,8 @@ export function resolveDesignTextRuns(
           mode: node.properties.textResize,
           paragraphIndent: node.properties.paragraphIndent,
           paragraphSpacing: node.properties.paragraphSpacing,
+          listSpacing: node.properties.listSpacing,
+          hangingList: node.properties.hangingList,
           paragraphRuns: node.properties.paragraphRuns ?? [],
           runs: (node.properties.runs ?? []).map((run) => ({
             start: run.start,

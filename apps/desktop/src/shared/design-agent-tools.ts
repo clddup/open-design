@@ -929,6 +929,8 @@ const MODEL_TEXT_PROPERTIES = {
   letterSpacing: { type: "number" },
   paragraphIndent: { type: "number", minimum: 0 },
   paragraphSpacing: { type: "number", minimum: 0 },
+  listSpacing: { type: "number", minimum: 0 },
+  hangingList: { type: "boolean" },
   textCase: {
     enum: ["original", "uppercase", "lowercase", "title-case", "small-caps"],
   },
@@ -956,7 +958,7 @@ const MODEL_PATH_PROPERTY = {
 const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
   type: "object",
   description:
-    "Properties must match the inspected node kind. Frame requires shape fields, cornerRadius, and clipsContent; Group requires an empty object; Rectangle requires shape fields and cornerRadius; Ellipse requires shape fields; Line requires empty fills, stroke fields, start/end, and endpoints; Polygon/Star require their semantic fields; Text requires typography plus shape fields; Image requires assetId, placement, altText, and cornerRadius; Path/Vector require shape fields and exactly one geometry source. The trusted host validates the complete discriminated node before writing.",
+    "Properties must match the inspected node kind; Path/Vector require exactly one geometry source. The host validates the complete discriminated node before writing.",
   properties: {
     ...MODEL_SHAPE_PROPERTIES,
     cornerRadius: { type: "number", minimum: 0 },
@@ -971,6 +973,8 @@ const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
     letterSpacing: MODEL_TEXT_PROPERTIES.letterSpacing,
     paragraphIndent: MODEL_TEXT_PROPERTIES.paragraphIndent,
     paragraphSpacing: MODEL_TEXT_PROPERTIES.paragraphSpacing,
+    listSpacing: MODEL_TEXT_PROPERTIES.listSpacing,
+    hangingList: MODEL_TEXT_PROPERTIES.hangingList,
     textCase: MODEL_TEXT_PROPERTIES.textCase,
     textDecoration: MODEL_TEXT_PROPERTIES.textDecoration,
     textAlignHorizontal: MODEL_TEXT_PROPERTIES.textAlignHorizontal,
@@ -1214,6 +1218,16 @@ const MODEL_TEXT_RANGE_STYLE_SCHEMA = {
     letterSpacing: MODEL_TEXT_PROPERTIES.letterSpacing,
     paragraphIndent: MODEL_TEXT_PROPERTIES.paragraphIndent,
     paragraphSpacing: MODEL_TEXT_PROPERTIES.paragraphSpacing,
+    listOptions: {
+      type: "object",
+      properties: {
+        type: { enum: ["none", "ordered", "unordered"] },
+      },
+      required: ["type"],
+      additionalProperties: false,
+    },
+    indentation: { type: "integer", minimum: 0, maximum: 5 },
+    listSpacing: MODEL_TEXT_PROPERTIES.listSpacing,
     textCase: MODEL_TEXT_PROPERTIES.textCase,
     textDecoration: MODEL_TEXT_PROPERTIES.textDecoration,
     fills: { type: "array", maxItems: 64, items: MODEL_PAINT_SCHEMA },
@@ -2461,7 +2475,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "material-write" as const,
     },
     description:
-      "Style one inspected, non-empty UTF-16 [start,end) range on a stable Text node inside the active Page. Character fields apply to that exact range; paragraphIndent and paragraphSpacing expand to every complete paragraph touched by the range, matching Figma paragraph semantics. The host rejects stale revisions, locked/non-Text/cross-Page targets, empty or out-of-bounds ranges, surrogate splits, wrong Style types, and no-op patches. Exact Text/Paint Style IDs resolve through the current local style registry; direct typography or Fill edits detach the corresponding range reference. This writes one update_text_range_style transaction through the same Runtime, Auto Size, Auto Layout, revision, undo, save, projection, capture, and export path. Inspect current content, runs, and paragraphRuns first; never guess offsets from an earlier revision.",
+      "Style one inspected, non-empty UTF-16 [start,end) range on a stable Text node in the active Page. Character fields apply exactly; paragraph indent/spacing and list fields expand to all touched paragraphs. Markers derive from paragraph facts and never enter content. Active list levels are 1–5; enabling one defaults level 0 to 1. Change node-level hangingList with inspected update_properties. The host rejects stale revisions, invalid targets/ranges, surrogate splits, wrong Style types, and no-ops. Exact Text/Paint Style IDs use the local registry; direct typography or Fill edits detach that range reference. This writes one update_text_range_style transaction through the same Runtime, layout, revision, undo, save, projection, capture, and export path. Inspect current content, runs, and paragraphRuns first; never guess offsets.",
     inputSchema: MODEL_TEXT_RANGE_TOOL_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2546,11 +2560,11 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       beforePlan: "available" as const,
       role: "material-write" as const,
       bootstrapDescription:
-        "Create the first small but meaningful editable visual slice inside the planned artboard, or perform a basic inspected edit. On a host-inspected new-design turn, emit opendesign_define_design_plan first and this tool second in the same assistant turn when the write depends only on stable IDs and geometry already declared in that Plan; the host executes both calls sequentially, allocates the real Frame roots, and advances the trusted revision before this write. Never place this call before the Plan or bundle it across Page approval, image reading, or another prerequisite whose result must be inspected first. This compact phase supports Frame, Group, Rectangle, Ellipse, and Text with solid paints plus insert, basic property update, move, and delete commands. Every Text insert must include the complete Typography Core fields shown by the schema, including paragraphIndent, paragraphSpacing, textCase, textDecoration, textTruncation, and maxLines; disabled truncation uses maxLines null, while ending truncation on Auto Size needs a positive maxLines. Prefer one region such as navigation, hero, primary mark, or core content instead of waiting to emit an entire page. Ordered steps must represent real semantic units and cover every command exactly once. The trusted host still validates and applies these commands through the same OpenDesign transaction, revision, history, scope, and recovery boundary. After a successful material revision, the complete apply schema and advanced professional tools become available automatically.",
+        "Create the first small but meaningful editable visual slice inside the planned artboard, or perform a basic inspected edit. On a host-inspected new-design turn, emit opendesign_define_design_plan first and this tool second in the same assistant turn when the write depends only on stable IDs and geometry already declared in that Plan; the host executes both calls sequentially, allocates the real Frame roots, and advances the trusted revision before this write. Never place this call before the Plan or bundle it across Page approval, image reading, or another prerequisite whose result must be inspected first. This compact phase supports Frame, Group, Rectangle, Ellipse, and Text with solid paints plus insert, basic property update, move, and delete commands. Every Text insert must include the complete Typography Core fields shown by the schema, including paragraphIndent, paragraphSpacing, listSpacing, hangingList, textCase, textDecoration, textTruncation, and maxLines; disabled truncation uses maxLines null, while ending truncation on Auto Size needs a positive maxLines. Prefer one region such as navigation, hero, primary mark, or core content instead of waiting to emit an entire page. Ordered steps must represent real semantic units and cover every command exactly once. The trusted host still validates and applies these commands through the same OpenDesign transaction, revision, history, scope, and recovery boundary. After a successful material revision, the complete apply schema and advanced professional tools become available automatically.",
       bootstrapInputSchema: DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
     },
     description:
-      "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. Use opendesign_style_text_range for an inspected non-empty rich-text range and opendesign_manage_fonts for explicit file-font reflow or replacement, keeping the general node schema compact. When one target needs several meaningful visible stages, provide ordered steps whose commandIds cover every command exactly once and in command order; use semantic units such as navigation, hero, content, and footer, never arbitrary 1–3 command batches. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed plus paragraphIndent, paragraphSpacing, textCase, textDecoration, textTruncation, and maxLines. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap choices and visible/clip overflow. The trusted host measures Auto Size and derived ending ellipsis with the versioned Text providers while preserving complete authored content and concrete authoritative size. A size update without an explicit non-fixed textResize switches that text layer to Fixed. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside the active Frame and do not recreate it. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
+      "Apply one validated OpenDesign node transaction to the currently bound Design File and an existing Page. Supports insert_element, update_properties, move_element, delete_element, and replace_subtree. Use opendesign_style_text_range for an inspected non-empty rich-text range and opendesign_manage_fonts for explicit file-font reflow or replacement, keeping the general node schema compact. When one target needs several meaningful visible stages, provide ordered steps whose commandIds cover every command exactly once and in command order; use semantic units such as navigation, hero, content, and footer, never arbitrary 1–3 command batches. The host commits each valid step as a real revision inside one rollback-safe history group and reports the committed step revisions; without steps it applies the transaction once. update_properties must match the inspected target kind; Group properties are empty, and the host validates the merged discriminated node before writing. Text must declare textResize auto-width/auto-height/fixed plus paragraphIndent, paragraphSpacing, listSpacing, hangingList, textCase, textDecoration, textTruncation, and maxLines. List type and indentation are paragraph-range facts applied with opendesign_style_text_range, never fake marker characters. Auto Width uses textWrap none + textOverflow visible; Auto Height keeps width and uses word/character wrapping + visible overflow; Fixed supports all textWrap choices and visible/clip overflow. The trusted host measures Auto Size and derived ending ellipsis with the versioned Text providers while preserving complete authored content and concrete authoritative size. A size update without an explicit non-fixed textResize switches that text layer to Fixed. For editable organic silhouettes, mascots, logos, custom icons, wings, limbs, fabric, and other non-geometric contours, use path or vector nodes with properties.network. Use properties.path only when exact imported SVG path data must be preserved and node-level point editing is not required; never provide path and network together. Coordinates are parent-local and must fit the node's declared size. Plan-created artboard Frames are already allocated; add real content inside the active Frame and do not recreate it. Composite designs should create a named Frame or Group together with its children; do not flatten parts into Page-root layers. This tool does not manage Projects, Design Files, or Pages. Use stable unique IDs. Recoverable invariant failures return structured commandId/nodeId/path issues; inspect and revise instead of repeating the same transaction.",
     inputSchema: {
       ...MODEL_APPLY_TRANSACTION_SCHEMA,
     },

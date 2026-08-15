@@ -229,6 +229,8 @@ export function planCreateStyleFromNode(
         letterSpacing: resolved.properties.letterSpacing,
         paragraphIndent: resolved.properties.paragraphIndent,
         paragraphSpacing: resolved.properties.paragraphSpacing,
+        listSpacing: resolved.properties.listSpacing,
+        hangingList: resolved.properties.hangingList,
         textCase: resolved.properties.textCase,
         textDecoration: resolved.properties.textDecoration,
       },

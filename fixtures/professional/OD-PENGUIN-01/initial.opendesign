@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.32.0",
+  "schemaVersion": "1.33.0",
   "documentId": "document_od_penguin_01",
   "revision": 0,
   "pageOrder": ["page_penguin_01"],
@@ -831,6 +831,8 @@
         "letterSpacing": 2.4,
         "paragraphIndent": 0,
         "paragraphSpacing": 0,
+        "listSpacing": 0,
+        "hangingList": false,
         "textCase": "original",
         "textDecoration": "none",
         "textAlignHorizontal": "center",

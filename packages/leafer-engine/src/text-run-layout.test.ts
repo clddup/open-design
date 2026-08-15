@@ -105,6 +105,8 @@ describe("Leafer native text run layout provider", () => {
       content: "ABCD",
       height: 80,
       mode: "fixed",
+      hangingList: false,
+      listSpacing: 0,
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [
@@ -180,6 +182,8 @@ describe("Leafer native text run layout provider", () => {
       baseStyle: compact,
       content: "A😀BC",
       mode: "auto-height",
+      hangingList: false,
+      listSpacing: 0,
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [
@@ -219,6 +223,8 @@ describe("Leafer native text run layout provider", () => {
       baseStyle: base,
       content,
       mode: "auto-height",
+      hangingList: false,
+      listSpacing: 0,
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [],
@@ -240,6 +246,8 @@ describe("Leafer native text run layout provider", () => {
         baseStyle: base,
         content,
         mode: "auto-height",
+        hangingList: false,
+        listSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 0,
         runs: [
@@ -267,6 +275,8 @@ describe("Leafer native text run layout provider", () => {
       baseStyle: base,
       content: "AB\nC",
       mode: "auto-width",
+      hangingList: false,
+      listSpacing: 0,
       paragraphIndent: 8,
       paragraphSpacing: 6,
       runs: [],
@@ -283,18 +293,32 @@ describe("Leafer native text run layout provider", () => {
       baseStyle: base,
       content: "AB\nC",
       mode: "auto-width",
+      hangingList: false,
+      listSpacing: 0,
       paragraphIndent: 0,
       paragraphSpacing: 0,
       paragraphRuns: [
         {
           start: 0,
           end: 3,
-          style: { paragraphIndent: 8, paragraphSpacing: 6 },
+          style: {
+            listOptions: { type: "none" },
+            indentation: 0,
+            listSpacing: 0,
+            paragraphIndent: 8,
+            paragraphSpacing: 6,
+          },
         },
         {
           start: 3,
           end: 4,
-          style: { paragraphIndent: 20, paragraphSpacing: 2 },
+          style: {
+            listOptions: { type: "none" },
+            indentation: 0,
+            listSpacing: 0,
+            paragraphIndent: 20,
+            paragraphSpacing: 2,
+          },
         },
       ],
       runs: [],
@@ -315,6 +339,8 @@ describe("Leafer native text run layout provider", () => {
       baseStyle: base,
       content: "ab cd",
       mode: "auto-height",
+      hangingList: false,
+      listSpacing: 0,
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [],
@@ -334,6 +360,8 @@ describe("Leafer native text run layout provider", () => {
       baseStyle: base,
       content: "你好，世界",
       mode: "auto-height",
+      hangingList: false,
+      listSpacing: 0,
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [],
@@ -348,6 +376,70 @@ describe("Leafer native text run layout provider", () => {
       [1, 3],
       [3, 5],
     ]);
+  });
+
+  it("lays out real ordered markers, list spacing, wrapped body insets, and hanging mode", () => {
+    const base = style();
+    const provider = createLeaferTextRunLayoutProvider(leafer, {
+      fontAvailable: () => true,
+    });
+    const content = "First item wraps\nSecond";
+    const paragraphRuns = [
+      {
+        start: 0,
+        end: content.length,
+        style: {
+          listOptions: { type: "ordered" as const },
+          indentation: 1,
+          listSpacing: 12,
+          paragraphIndent: 0,
+          paragraphSpacing: 0,
+        },
+      },
+    ];
+    const result = provider.layout({
+      baseStyle: base,
+      content,
+      mode: "auto-height",
+      hangingList: false,
+      listSpacing: 0,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      paragraphRuns,
+      runs: [],
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textWrap: "word",
+      width: 120,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.markers.map((marker) => marker.text)).toEqual(["1.", "2."]);
+    expect(result.markers.every((marker) => marker.x === 0)).toBe(true);
+    expect(result.lines.every((line) => line.x === 30)).toBe(true);
+    const second = result.lines.find((line) => line.start === 17);
+    const previous = result.lines[result.lines.indexOf(second!) - 1];
+    expect(second!.y - (previous!.y + previous!.height)).toBe(12);
+
+    const hanging = provider.layout({
+      baseStyle: base,
+      content,
+      mode: "auto-height",
+      hangingList: true,
+      listSpacing: 0,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      paragraphRuns,
+      runs: [],
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textWrap: "word",
+      width: 120,
+    });
+    expect(hanging.ok).toBe(true);
+    if (!hanging.ok) return;
+    expect(hanging.lines.every((line) => line.x === 0)).toBe(true);
+    expect(hanging.markers.every((marker) => marker.x === -30)).toBe(true);
   });
 
   it("returns explicit failure for unavailable native metrics or range-local title case", () => {
@@ -376,6 +468,8 @@ describe("Leafer native text run layout provider", () => {
         baseStyle: style(),
         content: "A",
         mode: "auto-width",
+        hangingList: false,
+        listSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 0,
         runs: [],
@@ -395,6 +489,8 @@ describe("Leafer native text run layout provider", () => {
         baseStyle: style({ fill: () => "invalid" }),
         content: "A",
         mode: "auto-width",
+        hangingList: false,
+        listSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 0,
         runs: [],
@@ -409,6 +505,8 @@ describe("Leafer native text run layout provider", () => {
         baseStyle: style({ textCase: "title-case" }),
         content: "title",
         mode: "auto-width",
+        hangingList: false,
+        listSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 0,
         runs: [],
@@ -423,6 +521,8 @@ describe("Leafer native text run layout provider", () => {
         baseStyle: style(),
         content: "مرحبا",
         mode: "auto-width",
+        hangingList: false,
+        listSpacing: 0,
         paragraphIndent: 0,
         paragraphSpacing: 0,
         runs: [],
@@ -445,6 +545,8 @@ describe("Leafer native text run layout provider", () => {
       baseStyle: missing,
       content: "Fallback",
       mode: "auto-width",
+      hangingList: false,
+      listSpacing: 0,
       paragraphIndent: 0,
       paragraphSpacing: 0,
       runs: [],
