@@ -1,0 +1,148 @@
+import { createWelcomeDocument } from "@opendesign/editor-runtime";
+import { describe, expect, it } from "vitest";
+import { projectDesignPage } from "./mapping.js";
+import {
+  projectResolvedTextRuns,
+  textRunFragmentElementId,
+} from "./text-run-projection.js";
+
+describe("native rich-text projection boundary", () => {
+  it("keeps one authoritative Text proxy and adds native synthetic fragments", () => {
+    const document = createWelcomeDocument();
+    const base = projectDesignPage(document, "page_welcome");
+    const source = base.elementsById.get("title_welcome");
+    if (!source) throw new Error("Missing title projection");
+    const content = String(source.data.text);
+    const split = 7;
+    const firstId = textRunFragmentElementId(source.id, 0);
+    const secondId = textRunFragmentElementId(source.id, 1);
+    const projection = projectResolvedTextRuns(base, {
+      pageId: base.pageId,
+      resultsByNodeId: new Map([
+        [
+          source.id,
+          {
+            nodeId: source.id,
+            fragments: [
+              {
+                start: 0,
+                end: split,
+                text: content.slice(0, split),
+                x: 0,
+                y: 0,
+                width: 92,
+                height: 40,
+                data: {
+                  fill: "#111827",
+                  fontFamily: "Inter",
+                  fontSize: 32,
+                  fontWeight: 700,
+                },
+              },
+              {
+                start: split,
+                end: content.length,
+                text: content.slice(split),
+                x: 92,
+                y: 0,
+                width: 380,
+                height: 40,
+                data: {
+                  fill: "#7c3aed",
+                  fontFamily: "Inter",
+                  fontSize: 32,
+                  fontWeight: 500,
+                },
+              },
+            ],
+          },
+        ],
+      ]),
+    });
+
+    expect(projection.elementsById.get(source.id)).toMatchObject({
+      id: source.id,
+      kind: "text",
+      tag: "Text",
+      data: {
+        fill: "rgba(0, 0, 0, 0)",
+        hitFill: "all",
+        text: content,
+        data: {
+          opendesignNodeId: source.id,
+          opendesignTextEditProxy: true,
+        },
+      },
+    });
+    expect(projection.elementsById.get(firstId)).toMatchObject({
+      id: firstId,
+      kind: "text",
+      parentId: source.parentId,
+      tag: "Text",
+      data: {
+        editable: false,
+        fill: "#111827",
+        fontWeight: 700,
+        text: content.slice(0, split),
+        data: {
+          opendesignNodeId: source.id,
+          opendesignProjectionId: firstId,
+          opendesignSynthetic: true,
+          opendesignTextRun: { start: 0, end: split },
+        },
+      },
+    });
+    expect(projection.elementsById.get(secondId)).toMatchObject({
+      transform: [
+        source.transform[0],
+        source.transform[1],
+        source.transform[2],
+        source.transform[3],
+        source.transform[4] + source.transform[0] * 92,
+        source.transform[5] + source.transform[1] * 92,
+      ],
+      data: { fill: "#7c3aed", fontWeight: 500 },
+    });
+    const parent = source.parentId
+      ? projection.elementsById.get(source.parentId)
+      : undefined;
+    expect(parent?.childIds).toEqual(
+      expect.arrayContaining([source.id, firstId, secondId]),
+    );
+    expect(parent?.childIds.indexOf(firstId)).toBe(
+      (parent?.childIds.indexOf(source.id) ?? -2) + 1,
+    );
+    expect(parent?.childIds.indexOf(secondId)).toBe(
+      (parent?.childIds.indexOf(source.id) ?? -3) + 2,
+    );
+  });
+
+  it("rejects incomplete or detached provider output", () => {
+    const base = projectDesignPage(createWelcomeDocument(), "page_welcome");
+    expect(() =>
+      projectResolvedTextRuns(base, {
+        pageId: base.pageId,
+        resultsByNodeId: new Map([
+          [
+            "title_welcome",
+            {
+              nodeId: "title_welcome",
+              fragments: [
+                {
+                  start: 0,
+                  end: 1,
+                  text: "D",
+                  x: 0,
+                  y: 0,
+                  width: 10,
+                  height: 20,
+                  data: {},
+                },
+              ],
+            },
+          ],
+        ]),
+      }),
+    ).toThrow("does not cover source text");
+  });
+});

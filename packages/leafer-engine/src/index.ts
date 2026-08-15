@@ -35,3 +35,10 @@ export {
   LEAFER_TEXT_LAYOUT_PROVIDER_VERSION,
   type LeaferTextLayoutProviderOptions,
 } from "./text-layout.js";
+export {
+  projectResolvedTextRuns,
+  textRunFragmentElementId,
+  type LeaferTextRunFragment,
+  type LeaferTextRunProjectionResolution,
+  type LeaferTextRunProjectionResult,
+} from "./text-run-projection.js";

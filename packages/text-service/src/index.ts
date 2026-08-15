@@ -1,3 +1,5 @@
+export * from "./text-ranges.js";
+
 export const TEXT_LAYOUT_SERVICE_CONTRACT_VERSION = 4 as const;
 export const MAX_TEXT_LAYOUT_CHARACTERS = 1_000_000;
 export const MAX_TEXT_LAYOUT_CACHE_KEY_CHARACTERS = 4_000_000;
