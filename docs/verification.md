@@ -47,8 +47,8 @@ pnpm fixtures:check passed
 pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
-├── package tests   83 files / 735 tests
-└── desktop tests   91 files / 705 tests
+├── package tests   83 files / 736 tests
+└── desktop tests   91 files / 706 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main

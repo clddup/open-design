@@ -285,7 +285,8 @@ describe("EditorRuntime transactions", () => {
         nodeId: "title_welcome",
         properties: {
           textWrap: "none",
-          textOverflow: "ellipsis",
+          textOverflow: "clip",
+          textTruncation: "ending",
         },
       },
     ]);
@@ -299,7 +300,11 @@ describe("EditorRuntime transactions", () => {
     const applied = runtime.getSnapshot().document.nodesById.title_welcome;
     expect(applied).toMatchObject({
       kind: "text",
-      properties: { textWrap: "none", textOverflow: "ellipsis" },
+      properties: {
+        textWrap: "none",
+        textOverflow: "clip",
+        textTruncation: "ending",
+      },
     });
 
     const reopened = normalizeDesignDocument(
@@ -310,13 +315,21 @@ describe("EditorRuntime transactions", () => {
     expect(
       runtime.getSnapshot().document.nodesById.title_welcome,
     ).toMatchObject({
-      properties: { textWrap: "word", textOverflow: "clip" },
+      properties: {
+        textWrap: "word",
+        textOverflow: "clip",
+        textTruncation: "disabled",
+      },
     });
     expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
     expect(
       runtime.getSnapshot().document.nodesById.title_welcome,
     ).toMatchObject({
-      properties: { textWrap: "none", textOverflow: "ellipsis" },
+      properties: {
+        textWrap: "none",
+        textOverflow: "clip",
+        textTruncation: "ending",
+      },
     });
   });
 

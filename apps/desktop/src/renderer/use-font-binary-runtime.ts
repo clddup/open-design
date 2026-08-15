@@ -2,6 +2,8 @@ import {
   createHarfBuzzTextRunLayoutRuntime,
   type HarfBuzzFontFaceDescriptor,
   type HarfBuzzTextRunLayoutRuntime,
+} from "@opendesign/text-service/harfbuzz";
+import {
   type TextRunLayoutProvider,
   type TextRunLayoutStyle,
 } from "@opendesign/text-service";

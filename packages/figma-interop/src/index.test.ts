@@ -320,9 +320,9 @@ describe("Figma rich text range compatibility", () => {
     if (invalidUtf16.ok) {
       throw new Error("Expected half-surrogate segments to be rejected");
     }
-    expect(
-      invalidUtf16.issues.some((issue) => issue.includes("UTF-16")),
-    ).toBe(true);
+    expect(invalidUtf16.issues.some((issue) => issue.includes("UTF-16"))).toBe(
+      true,
+    );
   });
 });
 

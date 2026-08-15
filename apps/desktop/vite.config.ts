@@ -103,5 +103,8 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       sourcemap: !protectedBuild,
     },
+    worker: {
+      format: "es",
+    },
   };
 });
