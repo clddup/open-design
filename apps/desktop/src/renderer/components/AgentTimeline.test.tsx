@@ -197,7 +197,7 @@ describe("AgentTimeline", () => {
         itemId: "message:message_1",
         sessionId: "conversation_1",
         runId: "run_1",
-        sequence: 2,
+        sequence: 4,
         createdAt: now,
         updatedAt: now,
         type: "assistant.message",
@@ -1231,7 +1231,7 @@ describe("AgentTimeline", () => {
     expect(container).not.toHaveTextContent("Building on the canvas");
   });
 
-  it("turns canvas scope internals into a recoverable tool error", () => {
+  it("keeps recoverable canvas scope internals out of the user timeline", () => {
     const events: AgentEvent[] = [
       {
         type: "tool.requested",
@@ -1264,11 +1264,10 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(
-      screen.getByText(
-        "This change did not match the active canvas scope. The Agent can inspect the canvas and try again.",
-      ),
-    ).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-agent-item]")).toHaveLength(0);
+    expect(container).not.toHaveTextContent(
+      "This change did not match the active canvas scope",
+    );
     expect(container).not.toHaveTextContent("login-002");
     expect(container).not.toHaveTextContent("registered page scope");
   });

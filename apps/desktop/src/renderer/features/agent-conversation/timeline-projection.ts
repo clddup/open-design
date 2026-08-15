@@ -2,11 +2,11 @@ import type {
   AgentEvent,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
-import {
-  isDesignDeliveryLedger,
-  type DesignDeliveryLedger,
-} from "@opendesign/workspace-contracts";
 import type { AppLocale } from "../../../shared/i18n/locale";
+import {
+  parseCommittedDesignStep,
+  projectDurableDesignSteps,
+} from "./timeline-design-delivery";
 import {
   approvalDecisionKey,
   assistantReasoningSummary,
@@ -22,6 +22,7 @@ import {
 } from "./timeline-presentation";
 import { mergeReasoningByRun } from "./timeline-reasoning";
 import type { AgentTimelineItem, Translate } from "./timeline-types";
+export { latestDeliveryLedger } from "./timeline-design-delivery";
 export interface AgentTimelineProjectionInput {
   activeRunId: string | null;
   events: readonly AgentEvent[];
@@ -139,27 +140,6 @@ export function projectAgentTimeline({
   return mergeReasoningByRun(ordered, t);
 }
 
-export function latestDeliveryLedger(
-  timeline: readonly SessionTimelineItem[],
-  events: readonly AgentEvent[],
-  activeRunId: string | null,
-): DesignDeliveryLedger | undefined {
-  let latest: DesignDeliveryLedger | undefined;
-  for (const item of timeline) {
-    if (item.type !== "tool" || item.status !== "completed") continue;
-    if (activeRunId !== null && item.runId !== activeRunId) continue;
-    const delivery = deliveryFromResult(item.result);
-    if (delivery) latest = delivery;
-  }
-  for (const event of events) {
-    if (event.type !== "tool.completed") continue;
-    if (activeRunId !== null && event.runId !== activeRunId) continue;
-    const delivery = deliveryFromResult(event.result);
-    if (delivery) latest = delivery;
-  }
-  return latest;
-}
-
 export function timelineRenderMarker(
   items: readonly AgentTimelineItem[],
 ): string {
@@ -254,7 +234,8 @@ function projectDurableTimeline(
         ...base,
         routine:
           (detail.length === 0 && reasoning.length === 0) ||
-          (item.runId !== undefined &&
+          (!reasoningOnly &&
+            item.runId !== undefined &&
             item.sequence < (lastToolSequenceByRun.get(item.runId) ?? -1)),
         state: "done",
         kind: reasoningOnly ? "reasoning" : "assistant",
@@ -559,7 +540,7 @@ function projectLiveEvents(
       const id = `message:${event.messageId}`;
       const existing = items.get(id);
       updateEvent(id, {
-        routine: true,
+        routine: false,
         state: "active",
         kind: "assistant",
         time: t("common.now"),
@@ -736,60 +717,6 @@ function intermediateAssistantMessageIds(
     pendingByRun.delete(event.runId);
   }
   return intermediate;
-}
-
-function projectDurableDesignSteps(
-  timeline: readonly SessionTimelineItem[],
-): AgentTimelineItem[] {
-  return timeline.flatMap((item) => {
-    if (item.type !== "tool" || item.status !== "completed") return [];
-    const steps = committedStepsFromResult(item.result);
-    return steps.map((step, index) => ({
-      id: `design-step:${item.toolCallId}:${step.revision}`,
-      ...(item.runId ? { runId: item.runId } : {}),
-      order: item.sequence + (index + 1) / (steps.length + 1),
-      state: "done" as const,
-      kind: "system" as const,
-      time: `r${step.revision}`,
-      title: step.label,
-    }));
-  });
-}
-
-function committedStepsFromResult(
-  value: unknown,
-): Array<{ label: string; revision: number }> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  const steps = (value as { committedSteps?: unknown }).committedSteps;
-  if (!Array.isArray(steps) || steps.length > 32) return [];
-  return steps.flatMap((step) => {
-    if (!step || typeof step !== "object" || Array.isArray(step)) return [];
-    const candidate = step as { label?: unknown; revision?: unknown };
-    return typeof candidate.label === "string" &&
-      candidate.label.length > 0 &&
-      candidate.label.length <= 512 &&
-      Number.isSafeInteger(candidate.revision) &&
-      Number(candidate.revision) >= 0
-      ? [{ label: candidate.label, revision: Number(candidate.revision) }]
-      : [];
-  });
-}
-
-function parseCommittedDesignStep(
-  value: string,
-): { label: string; revision: number } | null {
-  const match = /^(.*) · r(\d+)$/.exec(value);
-  if (!match?.[1] || match[1].length > 512) return null;
-  const revision = Number(match[2]);
-  return Number.isSafeInteger(revision) ? { label: match[1], revision } : null;
-}
-
-function deliveryFromResult(value: unknown): DesignDeliveryLedger | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const delivery = (value as Record<string, unknown>).delivery;
-  return isDesignDeliveryLedger(delivery) ? delivery : undefined;
 }
 
 function finalizeTimelineActivity(item: AgentTimelineItem): AgentTimelineItem {
