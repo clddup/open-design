@@ -22,6 +22,7 @@ export type {
   LeaferOperationRequest,
   LeaferRasterExportResult,
   LeaferTextRangeSelection,
+  LeaferTextStyleUpdate,
   LeaferVectorEditRequest,
   LeaferVectorEditScope,
   LeaferVectorEditTool,

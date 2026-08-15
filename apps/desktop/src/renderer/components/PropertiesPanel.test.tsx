@@ -1999,6 +1999,7 @@ describe("PropertiesPanel text layout workflow", () => {
           onUpdate: onParagraphUpdate,
         },
         range: {
+          collapsed: false,
           start: 0,
           end: 4,
           text: "Open",
@@ -2057,5 +2058,79 @@ describe("PropertiesPanel text layout workflow", () => {
     expect(onUpdate).not.toHaveBeenCalledWith({
       properties: { paragraphSpacing: 16 },
     });
+  });
+
+  it("shows and edits a session-only typing style at a collapsed caret", async () => {
+    const user = userEvent.setup();
+    const onRangeUpdate = vi.fn();
+    renderPanel({
+      node: textNode,
+      selectionCount: 1,
+      fontContext: {
+        availability: {
+          status: "available",
+          provider: "test-font-provider",
+          providerVersion: "3",
+          message: "Inter is loaded",
+        },
+        importState: { status: "idle" },
+        matchingNodeCount: 1,
+        reflowableNodeCount: 0,
+        onImport: vi.fn().mockResolvedValue(undefined),
+        onReflow: vi.fn(),
+        onReplace: vi.fn(),
+        paragraph: {
+          start: 2,
+          end: 2,
+          style: {
+            listOptions: { type: "none" },
+            indentation: 0,
+            listSpacing: 0,
+            paragraphIndent: 0,
+            paragraphSpacing: 0,
+          },
+          mixedFields: [],
+          onUpdate: vi.fn(),
+        },
+        range: {
+          collapsed: true,
+          start: 2,
+          end: 2,
+          text: "",
+          style: {
+            fontFamily: textNode.properties.fontFamily,
+            fontStyleName: textNode.properties.fontStyleName,
+            fontSize: 24,
+            fontWeight: 700,
+            fontSlant: textNode.properties.fontSlant,
+            lineHeight: textNode.properties.lineHeight,
+            letterSpacing: textNode.properties.letterSpacing,
+            paragraphIndent: textNode.properties.paragraphIndent,
+            paragraphSpacing: textNode.properties.paragraphSpacing,
+            listOptions: { type: "none" },
+            indentation: 0,
+            listSpacing: 0,
+            textCase: textNode.properties.textCase,
+            textDecoration: textNode.properties.textDecoration,
+            fills: textNode.properties.fills,
+          },
+          mixedFields: [],
+          onUpdate: onRangeUpdate,
+        },
+      },
+    });
+
+    expect(screen.getByText("Typing at 2")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Typography changes apply to text typed from this caret.",
+      ),
+    ).toBeVisible();
+    const size = screen.getByLabelText("Font size");
+    expect(size).toHaveValue(24);
+    await user.clear(size);
+    await user.type(size, "30");
+    await user.tab();
+    expect(onRangeUpdate).toHaveBeenCalledWith({ fontSize: 30 });
   });
 });

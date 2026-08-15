@@ -3,6 +3,7 @@ import type {
   DesignDocument,
   DesignOperation,
   Point,
+  TextRunStyle,
   Transform,
   VectorNetwork,
   VectorPointMode,
@@ -119,6 +120,7 @@ import type {
   LeaferEngineSyncInput,
   LeaferOperationKind,
   LeaferRasterExportResult,
+  LeaferTextStyleUpdate,
 } from "./types.js";
 
 type LeaferModule = typeof LeaferEditorModule;
@@ -906,6 +908,47 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       return false;
     }
     return this.#submitVectorEdit(session, result.network);
+  }
+
+  updateTextEditingStyle(style: LeaferTextStyleUpdate): boolean {
+    if (this.#disposed) return false;
+    const update = this.#textRunEditor.updateStyle(style);
+    if (!update.changed) return false;
+    const root = this.#textEditDom;
+    const activeSelection = this.#textRunEditor.activeSelection;
+    if (root && activeSelection && update.characterChanged) {
+      if (activeSelection.start === activeSelection.end) {
+        const typingStyle = this.#textRunEditor.activeTypingStyle;
+        if (typingStyle) {
+          installTextEditTypingStyleMarker(
+            root,
+            activeSelection.start,
+            typingStyle,
+            shouldRestoreTextEditDomSelection(root),
+          );
+        }
+      } else {
+        finalizeTextEditTypingStyleMarkers(
+          root,
+          activeSelection,
+          shouldRestoreTextEditDomSelection(root),
+        );
+        const runs = this.#textRunEditor.activeRuns;
+        if (runs) {
+          applyTextEditCharacterStylesInPlace(
+            root,
+            activeSelection,
+            runs,
+            shouldRestoreTextEditDomSelection(root),
+          );
+        }
+      }
+    }
+    const nodeId = this.#textRunEditor.activeNodeId;
+    if (nodeId && activeSelection && this.#input) {
+      this.#publishTextEditingSelection(nodeId, this.#input, activeSelection);
+    }
+    return true;
   }
 
   #listen(): void {
@@ -1738,6 +1781,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           nodeId: result.before.nodeId,
           content: result.content,
           paragraphPatches: result.paragraphPatches,
+          ...(result.runs ? { runs: result.runs } : {}),
         },
       ],
       selectionNodeIds: [result.before.nodeId],
@@ -1755,6 +1799,9 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     root.addEventListener("input", this.#onTextEditInput);
     root.addEventListener("compositionstart", this.#onTextEditCompositionStart);
     root.addEventListener("compositionend", this.#onTextEditCompositionEnd);
+    const snapshot = textEditDomSnapshot(root);
+    this.#textRunEditor.selection(snapshot.selection);
+    this.#renderTextEditCharacterStyles(root, snapshot.selection, true);
   }
 
   #detachTextEditDom(sync: boolean): void {
@@ -1788,6 +1835,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #onTextEditCompositionEnd = (): void => {
     this.#textEditComposing = false;
+    if (this.#textEditDom) this.#syncTextEditDom(this.#textEditDom, false);
   };
 
   #syncTextEditDom(root: HTMLDivElement, automaticList: boolean): void {
@@ -1800,11 +1848,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         automaticList,
       );
       if (!result) return;
-      const rewrite =
-        result.rewrite ??
-        (snapshot.rawContent === snapshot.content
-          ? null
-          : { content: snapshot.content, selection: snapshot.selection });
+      const rewrite = result.rewrite ?? null;
       if (rewrite) this.#applyTextEditRewrite(root, rewrite);
       else this.#writeActiveTextEditContent(result.state.content);
       this.#emitTextRangeSelection();
@@ -1827,6 +1871,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const nodeId = this.#textRunEditor.activeNodeId;
     const element = nodeId ? this.#elements.get(nodeId) : undefined;
     if (element) (element as LeaferElement & { text: string }).text = content;
+  }
+
+  #renderTextEditCharacterStyles(
+    root: HTMLDivElement,
+    selection: { start: number; end: number },
+    restoreSelection: boolean,
+  ): void {
+    const content = this.#textRunEditor.activeContent;
+    const runs = this.#textRunEditor.activeRuns;
+    if (content === null || !runs) return;
+    writeStyledTextEditDom(root, content, runs);
+    if (restoreSelection) setTextEditDomSelection(root, selection);
   }
 
   #handleTextEditKeyDown(event: KeyboardEvent): boolean {
@@ -1889,14 +1945,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     ) {
       return;
     }
-    const authoritative = input.document.nodesById[nodeId];
-    if (
-      authoritative?.kind !== "text" ||
-      this.#textRunEditor.activeContent !== authoritative.properties.content
-    ) {
-      this.#callbacks.onTextRangeSelectionChange?.(null);
-      return;
-    }
     const range = selection.getRangeAt(0);
     if (
       !root.contains(range.startContainer) ||
@@ -1904,15 +1952,46 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     ) {
       return;
     }
-    const first = textDomOffset(root, range.startContainer, range.startOffset);
-    const second = textDomOffset(root, range.endContainer, range.endOffset);
-    if (first === null || second === null) return;
+    const snapshot = textEditDomSnapshot(root);
+    if (snapshot.content !== this.#textRunEditor.activeContent) return;
+    this.#publishTextEditingSelection(nodeId, input, snapshot.selection);
+    if (!this.#textRunEditor.hasTypingStyle) {
+      finalizeTextEditTypingStyleMarkers(
+        root,
+        snapshot.selection,
+        shouldRestoreTextEditDomSelection(root),
+      );
+    }
+  }
+
+  #publishTextEditingSelection(
+    nodeId: string,
+    input: LeaferEngineSyncInput,
+    activeSelection: { start: number; end: number },
+  ): void {
+    const authoritative = input.document.nodesById[nodeId];
+    if (authoritative?.kind !== "text") {
+      this.#callbacks.onTextRangeSelectionChange?.(null);
+      return;
+    }
+    const inspection = this.#textRunEditor.selection(activeSelection);
+    if (!inspection) {
+      this.#callbacks.onTextRangeSelectionChange?.(null);
+      return;
+    }
     this.#callbacks.onTextRangeSelectionChange?.({
       documentId: input.document.documentId,
+      editing: {
+        characterMixedFields: inspection.characterMixedFields,
+        characterStyle: inspection.characterStyle,
+        content:
+          this.#textRunEditor.activeContent ?? authoritative.properties.content,
+        paragraphMixedFields: inspection.paragraphMixedFields,
+        paragraphStyle: inspection.paragraphStyle,
+      },
       nodeId,
       revision: input.document.revision,
-      start: Math.min(first, second),
-      end: Math.max(first, second),
+      ...activeSelection,
     });
   }
 
@@ -4142,6 +4221,208 @@ function writeTextEditDom(root: HTMLDivElement, content: string): void {
     }
   });
   root.replaceChildren(fragment);
+}
+
+function writeStyledTextEditDom(
+  root: HTMLDivElement,
+  content: string,
+  runs: readonly { end: number; start: number; style: TextRunStyle }[],
+): void {
+  if (content.length === 0) {
+    writeTextEditDom(root, content);
+    return;
+  }
+  const fragment = root.ownerDocument.createDocumentFragment();
+  for (const run of runs) {
+    const pieces = content.slice(run.start, run.end).split("\n");
+    pieces.forEach((piece, index) => {
+      if (piece.length > 0) {
+        const span = root.ownerDocument.createElement("span");
+        span.textContent = piece;
+        applyTextRunDomStyle(span, run.style);
+        fragment.appendChild(span);
+      }
+      if (index < pieces.length - 1) {
+        fragment.appendChild(root.ownerDocument.createElement("br"));
+      }
+    });
+  }
+  root.replaceChildren(fragment);
+}
+
+const TEXT_EDIT_TYPING_STYLE_ATTRIBUTE = "data-opendesign-typing-style";
+
+function installTextEditTypingStyleMarker(
+  root: HTMLDivElement,
+  offset: number,
+  style: TextRunStyle,
+  restoreSelection: boolean,
+): void {
+  const selection = { start: offset, end: offset };
+  finalizeTextEditTypingStyleMarkers(root, selection, false);
+  const marker = root.ownerDocument.createElement("span");
+  marker.setAttribute(TEXT_EDIT_TYPING_STYLE_ATTRIBUTE, "true");
+  marker.textContent = "\u200B";
+  applyTextRunDomStyle(marker, style);
+  const point = textEditDomPoint(root, offset);
+  if (point.node.nodeType === Node.TEXT_NODE) {
+    const text = point.node as Text;
+    const parent = text.parentNode;
+    if (!parent) return;
+    if (point.offset === 0) {
+      parent.insertBefore(marker, text);
+    } else if (point.offset === (text.textContent?.length ?? 0)) {
+      parent.insertBefore(marker, text.nextSibling);
+    } else {
+      parent.insertBefore(marker, text.splitText(point.offset));
+    }
+  } else {
+    point.node.insertBefore(
+      marker,
+      point.node.childNodes[point.offset] ?? null,
+    );
+  }
+  if (restoreSelection) {
+    const range = root.ownerDocument.createRange();
+    const text = marker.firstChild;
+    if (!text) return;
+    range.setStart(text, 1);
+    range.collapse(true);
+    const domSelection = root.ownerDocument.getSelection();
+    domSelection?.removeAllRanges();
+    domSelection?.addRange(range);
+  }
+}
+
+function finalizeTextEditTypingStyleMarkers(
+  root: HTMLDivElement,
+  selection: { start: number; end: number },
+  restoreSelection: boolean,
+): void {
+  const markers = [
+    ...root.querySelectorAll<HTMLSpanElement>(
+      `[${TEXT_EDIT_TYPING_STYLE_ATTRIBUTE}]`,
+    ),
+  ];
+  if (markers.length === 0) return;
+  for (const marker of markers) {
+    for (const text of textEditDomTextNodes(marker)) {
+      text.textContent = (text.textContent ?? "").replaceAll("\u200B", "");
+    }
+    marker.removeAttribute(TEXT_EDIT_TYPING_STYLE_ATTRIBUTE);
+    if (textEditDomText(marker).length === 0) marker.remove();
+  }
+  if (restoreSelection) setTextEditDomSelection(root, selection);
+}
+
+function applyTextEditCharacterStylesInPlace(
+  root: HTMLDivElement,
+  selection: { start: number; end: number },
+  runs: readonly { end: number; start: number; style: TextRunStyle }[],
+  restoreSelection: boolean,
+): void {
+  const boundaries = new Set([selection.start, selection.end]);
+  for (const run of runs) {
+    if (run.start > selection.start && run.start < selection.end) {
+      boundaries.add(run.start);
+    }
+    if (run.end > selection.start && run.end < selection.end) {
+      boundaries.add(run.end);
+    }
+  }
+  [...boundaries]
+    .sort((left, right) => left - right)
+    .forEach((offset) => splitTextEditDomAtOffset(root, offset));
+
+  for (const text of textEditDomTextNodes(root)) {
+    const start = textDomOffset(root, text, 0);
+    const length = text.textContent?.length ?? 0;
+    if (
+      start === null ||
+      length === 0 ||
+      start < selection.start ||
+      start + length > selection.end
+    ) {
+      continue;
+    }
+    const style = runs.find(
+      (run) => run.start <= start && start < run.end,
+    )?.style;
+    if (!style) continue;
+    const parent = text.parentElement;
+    if (
+      parent instanceof HTMLSpanElement &&
+      parent.childNodes.length === 1 &&
+      !parent.hasAttribute(TEXT_EDIT_TYPING_STYLE_ATTRIBUTE)
+    ) {
+      applyTextRunDomStyle(parent, style);
+    } else {
+      const span = root.ownerDocument.createElement("span");
+      applyTextRunDomStyle(span, style);
+      text.replaceWith(span);
+      span.appendChild(text);
+    }
+  }
+  if (restoreSelection) setTextEditDomSelection(root, selection);
+}
+
+function splitTextEditDomAtOffset(root: HTMLDivElement, offset: number): void {
+  const point = textEditDomPoint(root, offset);
+  if (point.node.nodeType !== Node.TEXT_NODE) return;
+  const text = point.node as Text;
+  const length = text.textContent?.length ?? 0;
+  if (point.offset > 0 && point.offset < length) text.splitText(point.offset);
+}
+
+function textEditDomTextNodes(root: Node): Text[] {
+  const result: Text[] = [];
+  const visit = (node: Node): void => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      result.push(node as Text);
+      return;
+    }
+    node.childNodes.forEach(visit);
+  };
+  visit(root);
+  return result;
+}
+
+function shouldRestoreTextEditDomSelection(root: HTMLDivElement): boolean {
+  const active = root.ownerDocument.activeElement;
+  return (
+    active === null ||
+    active === root.ownerDocument.body ||
+    active === root.ownerDocument.documentElement ||
+    active === root ||
+    root.contains(active)
+  );
+}
+
+function applyTextRunDomStyle(
+  element: HTMLSpanElement,
+  style: TextRunStyle,
+): void {
+  element.style.fontFamily = style.fontFamily;
+  element.style.fontSize = `${style.fontSize}px`;
+  element.style.fontStyle = style.fontSlant;
+  element.style.fontWeight = String(style.fontWeight);
+  element.style.letterSpacing = `${style.letterSpacing}px`;
+  element.style.lineHeight = `${style.lineHeight}px`;
+  element.style.textDecorationLine =
+    style.textDecoration === "strikethrough"
+      ? "line-through"
+      : style.textDecoration;
+  element.style.textTransform =
+    style.textCase === "title-case"
+      ? "capitalize"
+      : style.textCase === "small-caps" || style.textCase === "original"
+        ? "none"
+        : style.textCase;
+  element.style.fontVariantCaps =
+    style.textCase === "small-caps" ? "small-caps" : "normal";
+  const fill = style.fills.find((paint) => paint.type === "solid");
+  element.style.color = fill?.color ?? "";
+  element.style.opacity = fill ? String(fill.opacity) : "";
 }
 
 function setTextEditDomSelection(

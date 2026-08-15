@@ -217,7 +217,7 @@ const blocks = {
     `- Text Range Service：\`contract v${textRangeServiceContractVersion}\`（DesignDocument rich-text runs 已接入）`,
     `- Text Paragraph Service：\`contract v${textParagraphServiceContractVersion}\`（逐段 indent/spacing/list 已接入）`,
     `- Text List Service：\`contract v${textListServiceContractVersion}\`（ordered/unordered、五级层级与 hanging marker 已接入）`,
-    `- Text Editing Session Service：\`contract v${textEditingSessionServiceContractVersion}\`（自动列表、结构键与单事务提交已接入）`,
+    `- Text Editing Session Service：\`contract v${textEditingSessionServiceContractVersion}\`（自动列表、光标输入样式、范围暂存与单事务提交已接入）`,
     `- Text Run Layout Service：\`contract v${textRunLayoutServiceContractVersion}\`（native/HarfBuzz 列表生产投影已接入）`,
     `- Layout Service：\`contract v${layoutServiceContractVersion}\``,
     `- Agent Core：\`${baseline.components.agentCore.dependency} ${agentCoreVersion}\`（${agentCoreStatus}）`,

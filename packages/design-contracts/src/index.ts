@@ -1157,6 +1157,7 @@ export const CommitTextEditCommandSchema = Type.Object(
     paragraphPatches: Type.Array(CommitTextEditParagraphPatchSchema, {
       maxItems: 16_384,
     }),
+    runs: TextSharedProperties.runs,
   },
   { additionalProperties: false },
 );

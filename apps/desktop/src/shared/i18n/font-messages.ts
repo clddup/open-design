@@ -6,6 +6,9 @@ export const fontMessages = {
     "properties.textRange": "Selected text {{start}}–{{end}}",
     "properties.textRangeHint":
       "Typography changes apply only to this text range.",
+    "properties.textCaret": "Typing at {{position}}",
+    "properties.textCaretHint":
+      "Typography changes apply to text typed from this caret.",
     "properties.mixed": "Mixed",
     "canvas.richTextFallback": "Rich text fallback",
     "properties.fontFamily": "Font family",
@@ -37,6 +40,8 @@ export const fontMessages = {
     "history.updateTextRange": "更新文字范围样式",
     "properties.textRange": "已选文字 {{start}}–{{end}}",
     "properties.textRangeHint": "排版更改仅应用于当前文字范围。",
+    "properties.textCaret": "输入位置 {{position}}",
+    "properties.textCaretHint": "排版更改将应用于从当前光标继续输入的文字。",
     "properties.mixed": "混合",
     "canvas.richTextFallback": "富文本回退",
     "properties.fontFamily": "字体",

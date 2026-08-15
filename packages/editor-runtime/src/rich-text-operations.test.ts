@@ -1,6 +1,7 @@
 import type {
   DesignOperation,
   DesignTransaction,
+  TextRunStyle,
 } from "@opendesign/design-contracts";
 import type {
   TextRunLayoutProvider,
@@ -365,6 +366,59 @@ describe("EditorRuntime rich text ranges", () => {
     });
   });
 
+  it("materializes session-only caret styling as authored character runs", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    apply(runtime, "caret_seed", {
+      commandId: "caret_seed",
+      type: "update_properties",
+      nodeId: "title_welcome",
+      properties: { content: "One" },
+    });
+    const base = textRunStyle(text(runtime));
+    const before = runtime.getSnapshot().document.revision;
+    expect(
+      apply(runtime, "caret_typing", {
+        commandId: "caret_typing",
+        type: "commit_text_edit",
+        nodeId: "title_welcome",
+        content: "One!",
+        paragraphPatches: [],
+        runs: [
+          { start: 0, end: 3, style: base },
+          {
+            start: 3,
+            end: 4,
+            style: {
+              ...base,
+              fontWeight: 700,
+              fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
+            },
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: true, revision: { revision: before + 1 } });
+    expect(text(runtime).properties).toMatchObject({
+      content: "One!",
+      runs: [
+        { start: 0, end: 3, style: { fontWeight: base.fontWeight } },
+        {
+          start: 3,
+          end: 4,
+          style: {
+            fontWeight: 700,
+            fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
+          },
+        },
+      ],
+    });
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(text(runtime).properties).toMatchObject({
+      content: "One",
+      runs: [],
+    });
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+  });
+
   it("lays out one committed editing session exactly once", () => {
     type RuntimeStyle = TextRunLayoutStyle & { fill: unknown };
     const document = structuredClone(createWelcomeDocument());
@@ -515,5 +569,20 @@ function paragraphStyle(
     paragraphIndent: 0,
     paragraphSpacing: 0,
     ...overrides,
+  };
+}
+
+function textRunStyle(node: ReturnType<typeof text>): TextRunStyle {
+  return {
+    fontFamily: node.properties.fontFamily,
+    fontStyleName: node.properties.fontStyleName,
+    fontSize: node.properties.fontSize,
+    fontWeight: node.properties.fontWeight,
+    fontSlant: node.properties.fontSlant,
+    lineHeight: node.properties.lineHeight,
+    letterSpacing: node.properties.letterSpacing,
+    textCase: node.properties.textCase,
+    textDecoration: node.properties.textDecoration,
+    fills: structuredClone(node.properties.fills),
   };
 }

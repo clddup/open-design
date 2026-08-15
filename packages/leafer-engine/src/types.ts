@@ -4,6 +4,8 @@ import type {
   DesignOperation,
   Point,
   SelectionState,
+  TextParagraphStyle,
+  TextRunStyle,
   Transform,
   VectorNetwork,
   VectorPointMode,
@@ -132,11 +134,23 @@ export interface LeaferEngineCallbacks {
 
 export interface LeaferTextRangeSelection {
   documentId: string;
+  editing?: {
+    characterMixedFields: readonly (keyof TextRunStyle)[];
+    characterStyle: TextRunStyle;
+    content: string;
+    paragraphMixedFields: readonly (keyof TextParagraphStyle)[];
+    paragraphStyle: TextParagraphStyle;
+  };
   nodeId: string;
   revision: number;
   start: number;
   end: number;
 }
+
+export type LeaferTextStyleUpdate = Extract<
+  DesignOperation,
+  { type: "update_text_range_style" }
+>["style"];
 
 export interface LeaferBooleanEditScope {
   booleanId: string;
@@ -275,6 +289,7 @@ export interface LeaferEngineAdapter {
   retryBooleanGeometry(): boolean;
   setVectorPointMode(mode: VectorPointMode): boolean;
   sync(input: LeaferEngineSyncInput): void;
+  updateTextEditingStyle(style: LeaferTextStyleUpdate): boolean;
   readonly textLayoutProvider: TextLayoutProvider;
   readonly textRunLayoutProvider: TextRunLayoutProvider<LeaferTextRunStyle>;
 }

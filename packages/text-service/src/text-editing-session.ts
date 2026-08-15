@@ -6,9 +6,17 @@ import {
   type TextParagraphRun,
   type TextParagraphStyle,
 } from "./text-paragraphs.js";
-import { diffTextContent, isUtf16CodePointBoundary } from "./text-ranges.js";
+import {
+  applyTextRangeStyle,
+  canonicalizeTextStyleRuns,
+  diffTextContent,
+  isUtf16CodePointBoundary,
+  remapTextStyleRunsAfterContentChange,
+  type TextContentEdit,
+  type TextStyleRun,
+} from "./text-ranges.js";
 
-export const TEXT_EDITING_SESSION_SERVICE_CONTRACT_VERSION = 1 as const;
+export const TEXT_EDITING_SESSION_SERVICE_CONTRACT_VERSION = 2 as const;
 
 export interface TextEditingSelection {
   end: number;
@@ -29,9 +37,10 @@ export interface TextEditingParagraphPatch {
   style: Partial<TextParagraphStyle>;
 }
 
-export interface TextEditingSessionCommit {
+export interface TextEditingSessionCommit<Style extends object = object> {
   content: string;
   paragraphPatches: TextEditingParagraphPatch[];
+  runs?: TextStyleRun<Style>[];
 }
 
 export interface TextEditingSessionRewrite {
@@ -39,32 +48,53 @@ export interface TextEditingSessionRewrite {
   selection: TextEditingSelection;
 }
 
-export interface TextEditingSessionInputResult {
+export interface TextEditingSessionInputResult<Style extends object = object> {
   rewrite?: TextEditingSessionRewrite;
-  state: TextEditingSessionState;
+  state: TextEditingSessionState<Style>;
 }
 
-export interface TextEditingSessionCommandResult {
+export interface TextEditingSessionCommandResult<
+  Style extends object = object,
+> {
   changed: boolean;
   handled: boolean;
-  state: TextEditingSessionState;
+  state: TextEditingSessionState<Style>;
 }
 
-interface AutomaticListUndo {
+interface TextEditingCharacterState<Style extends object> {
+  baseStyle: Style;
+  equalStyle: (left: Style, right: Style) => boolean;
+  originalRuns: TextStyleRun<Style>[];
+  runs: TextStyleRun<Style>[];
+  typingStyle: { offset: number; style: Style } | null;
+}
+
+interface AutomaticListUndo<Style extends object> {
+  character: TextEditingCharacterState<Style> | null;
   content: string;
   paragraphRuns: TextParagraphRun<TextParagraphStyle>[];
   selection: TextEditingSelection;
   trailingStyle: TextParagraphStyle | null;
 }
 
-export interface TextEditingSessionState {
-  automaticListUndo: AutomaticListUndo | null;
+export interface TextEditingSessionState<Style extends object = object> {
+  automaticListUndo: AutomaticListUndo<Style> | null;
   baseStyle: TextParagraphStyle;
+  character: TextEditingCharacterState<Style> | null;
   content: string;
   originalContent: string;
   originalParagraphRuns: TextParagraphRun<TextParagraphStyle>[];
   paragraphRuns: TextParagraphRun<TextParagraphStyle>[];
+  selection: TextEditingSelection;
   trailingStyle: TextParagraphStyle | null;
+}
+
+export interface TextEditingSelectionInspection<Style extends object> {
+  characterMixedFields: readonly (keyof Style)[];
+  characterStyle: Style;
+  paragraphMixedFields: readonly (keyof TextParagraphStyle)[];
+  paragraphStyle: TextParagraphStyle;
+  text: string;
 }
 
 interface EditingParagraphRange {
@@ -83,24 +113,64 @@ export function createTextEditingSession(
   return {
     automaticListUndo: null,
     baseStyle: structuredClone(baseStyle),
+    character: null,
     content,
     originalContent: content,
     originalParagraphRuns: structuredClone([...paragraphRuns]),
     paragraphRuns: canonical,
+    selection: { start: 0, end: 0 },
     trailingStyle: trailingParagraphStyle(content, canonical, baseStyle),
   };
 }
 
-export function applyTextEditingSessionInput(
-  current: TextEditingSessionState,
+export function createRichTextEditingSession<Style extends object>(
+  content: string,
+  runs: readonly TextStyleRun<Style>[],
+  baseCharacterStyle: Style,
+  paragraphRuns: readonly TextParagraphRun<TextParagraphStyle>[],
+  baseParagraphStyle: TextParagraphStyle,
+  equalStyle: (left: Style, right: Style) => boolean = sameStructuredValue,
+): TextEditingSessionState<Style> {
+  const paragraphState = createTextEditingSession(
+    content,
+    paragraphRuns,
+    baseParagraphStyle,
+  );
+  return {
+    automaticListUndo: null,
+    baseStyle: paragraphState.baseStyle,
+    character: {
+      baseStyle: structuredClone(baseCharacterStyle),
+      equalStyle,
+      originalRuns: structuredClone([...runs]),
+      runs: canonicalizeTextStyleRuns(
+        content,
+        runs,
+        baseCharacterStyle,
+        equalStyle,
+      ),
+      typingStyle: null,
+    },
+    content: paragraphState.content,
+    originalContent: paragraphState.originalContent,
+    originalParagraphRuns: paragraphState.originalParagraphRuns,
+    paragraphRuns: paragraphState.paragraphRuns,
+    selection: paragraphState.selection,
+    trailingStyle: paragraphState.trailingStyle,
+  };
+}
+
+export function applyTextEditingSessionInput<Style extends object>(
+  current: TextEditingSessionState<Style>,
   content: string,
   selection: TextEditingSelection,
   options: { automaticList: boolean },
-): TextEditingSessionInputResult {
+): TextEditingSessionInputResult<Style> {
   validateSelection(content, selection);
   let state = remapSessionContent(
     { ...current, automaticListUndo: null },
     content,
+    selection,
   );
   if (!options.automaticList || selection.start !== selection.end) {
     return { state };
@@ -111,14 +181,16 @@ export function applyTextEditingSessionInput(
   const style = paragraphStyle(state, paragraph);
   if (!listType || style.listOptions.type !== "none") return { state };
 
-  const undo: AutomaticListUndo = {
+  const undo: AutomaticListUndo<Style> = {
+    character: cloneCharacterState(state.character),
     content: state.content,
     paragraphRuns: structuredClone(state.paragraphRuns),
     selection: { ...selection },
     trailingStyle: cloneNullableStyle(state.trailingStyle),
   };
   const nextContent = `${state.content.slice(0, paragraph.start)}${state.content.slice(selection.end)}`;
-  state = remapSessionContent(state, nextContent);
+  const nextSelection = { start: paragraph.start, end: paragraph.start };
+  state = remapSessionContent(state, nextContent, nextSelection);
   state = updateParagraphStyles(
     state,
     { start: paragraph.start, end: paragraph.start },
@@ -132,22 +204,24 @@ export function applyTextEditingSessionInput(
   return {
     rewrite: {
       content: state.content,
-      selection: { start: paragraph.start, end: paragraph.start },
+      selection: nextSelection,
     },
     state,
   };
 }
 
-export function undoAutomaticTextList(
-  current: TextEditingSessionState,
-): TextEditingSessionInputResult | null {
+export function undoAutomaticTextList<Style extends object>(
+  current: TextEditingSessionState<Style>,
+): TextEditingSessionInputResult<Style> | null {
   const undo = current.automaticListUndo;
   if (!undo) return null;
-  const state: TextEditingSessionState = {
+  const state: TextEditingSessionState<Style> = {
     ...current,
     automaticListUndo: null,
+    character: cloneCharacterState(undo.character),
     content: undo.content,
     paragraphRuns: structuredClone(undo.paragraphRuns),
+    selection: { ...undo.selection },
     trailingStyle: cloneNullableStyle(undo.trailingStyle),
   };
   return {
@@ -156,11 +230,11 @@ export function undoAutomaticTextList(
   };
 }
 
-export function applyTextEditingListCommand(
-  current: TextEditingSessionState,
+export function applyTextEditingListCommand<Style extends object>(
+  current: TextEditingSessionState<Style>,
   selection: TextEditingSelection,
   command: TextEditingListCommand,
-): TextEditingSessionCommandResult {
+): TextEditingSessionCommandResult<Style> {
   validateSelection(current.content, selection);
   const paragraphs = touchedParagraphs(current.content, selection);
   if (paragraphs.length === 0) {
@@ -207,9 +281,10 @@ export function applyTextEditingListCommand(
     targetType !== null &&
     styles.every((style) => style.listOptions.type === targetType);
   let changed = false;
-  let state: TextEditingSessionState = {
+  let state: TextEditingSessionState<Style> = {
     ...current,
     automaticListUndo: null,
+    selection: { ...selection },
   };
   paragraphs.forEach((paragraph, index) => {
     const before = styles[index]!;
@@ -225,9 +300,144 @@ export function applyTextEditingListCommand(
   return { changed, handled: true, state };
 }
 
-export function finalizeTextEditingSession(
-  state: TextEditingSessionState,
-): TextEditingSessionCommit {
+export function updateTextEditingSelection<Style extends object>(
+  current: TextEditingSessionState<Style>,
+  selection: TextEditingSelection,
+): TextEditingSessionState<Style> {
+  validateSelection(current.content, selection);
+  const unchanged = sameSelection(current.selection, selection);
+  if (unchanged) return current;
+  return {
+    ...current,
+    automaticListUndo: null,
+    character: current.character
+      ? { ...current.character, typingStyle: null }
+      : null,
+    selection: { ...selection },
+  };
+}
+
+export function updateTextEditingCharacterStyle<Style extends object>(
+  current: TextEditingSessionState<Style>,
+  selection: TextEditingSelection,
+  update: (style: Style) => Style,
+): TextEditingSessionState<Style> {
+  const selected = updateTextEditingSelection(current, selection);
+  const character = selected.character;
+  if (!character) {
+    throw new Error("Text editing session does not own character styles");
+  }
+  if (selection.start === selection.end) {
+    const style = character.typingStyle
+      ? character.typingStyle.style
+      : characterStyleAtCaret(
+          selected.content,
+          character.runs,
+          character.baseStyle,
+          selection.start,
+        );
+    return {
+      ...selected,
+      automaticListUndo: null,
+      character: {
+        ...character,
+        typingStyle: {
+          offset: selection.start,
+          style: update(structuredClone(style)),
+        },
+      },
+    };
+  }
+  return {
+    ...selected,
+    automaticListUndo: null,
+    character: {
+      ...character,
+      runs: applyTextRangeStyle(
+        selected.content,
+        character.runs,
+        character.baseStyle,
+        selection,
+        update,
+        character.equalStyle,
+      ),
+      typingStyle: null,
+    },
+  };
+}
+
+export function updateTextEditingParagraphStyle<Style extends object>(
+  current: TextEditingSessionState<Style>,
+  selection: TextEditingSelection,
+  update: (style: TextParagraphStyle) => TextParagraphStyle,
+): TextEditingSessionState<Style> {
+  let selected = updateTextEditingSelection(current, selection);
+  for (const paragraph of touchedParagraphs(selected.content, selection)) {
+    selected = updateParagraphStyles(
+      selected,
+      { start: paragraph.start, end: paragraph.start },
+      update,
+    );
+  }
+  return { ...selected, selection: { ...selection } };
+}
+
+export function inspectTextEditingSelection<Style extends object>(
+  current: TextEditingSessionState<Style>,
+  selection: TextEditingSelection,
+): TextEditingSelectionInspection<Style> {
+  validateSelection(current.content, selection);
+  const character = current.character;
+  if (!character) {
+    throw new Error("Text editing session does not own character styles");
+  }
+  const characterStyles =
+    selection.start === selection.end
+      ? [
+          character.typingStyle?.offset === selection.start
+            ? character.typingStyle.style
+            : characterStyleAtCaret(
+                current.content,
+                character.runs,
+                character.baseStyle,
+                selection.start,
+              ),
+        ]
+      : canonicalizeTextStyleRuns(
+          current.content,
+          character.runs,
+          character.baseStyle,
+          character.equalStyle,
+        )
+          .filter(
+            (run) => run.end > selection.start && run.start < selection.end,
+          )
+          .map((run) => run.style);
+  const characterStyle = structuredClone(
+    characterStyles[0] ?? character.baseStyle,
+  );
+  const paragraphs = touchedParagraphs(current.content, selection);
+  const paragraphStyles = paragraphs.map((paragraph) =>
+    paragraphStyle(current, paragraph),
+  );
+  const paragraphStyleValue = structuredClone(
+    paragraphStyles[0] ?? current.baseStyle,
+  );
+  return {
+    characterMixedFields: mixedStyleFields(characterStyle, characterStyles),
+    characterStyle,
+    paragraphMixedFields: mixedStyleFields(
+      paragraphStyleValue,
+      paragraphStyles,
+    ),
+    paragraphStyle: paragraphStyleValue,
+    text: current.content.slice(selection.start, selection.end),
+  };
+}
+
+export function finalizeTextEditingSession<Style extends object = object>(
+  state: TextEditingSessionState<Style>,
+): TextEditingSessionCommit<Style> {
   const baseline = canonicalParagraphRuns(
     state.content,
     state.originalContent === state.content
@@ -263,14 +473,20 @@ export function finalizeTextEditingSession(
       patches.push({ ...paragraph, style });
     }
   }
-  return { content: state.content, paragraphPatches: patches };
+  const runs = finalizeCharacterRuns(state);
+  return {
+    content: state.content,
+    paragraphPatches: patches,
+    ...(runs ? { runs } : {}),
+  };
 }
 
-function remapSessionContent(
-  current: TextEditingSessionState,
+function remapSessionContent<Style extends object>(
+  current: TextEditingSessionState<Style>,
   content: string,
-): TextEditingSessionState {
-  if (content === current.content) return current;
+  selection: TextEditingSelection,
+): TextEditingSessionState<Style> {
+  if (content === current.content) return { ...current, selection };
   const edit = diffTextContent(current.content, content);
   const insertedIntoTrailing =
     current.trailingStyle !== null && edit.start === current.content.length;
@@ -301,20 +517,169 @@ function remapSessionContent(
           styleAt(paragraphRuns, inheritedAtEdit, content.length - 1),
         )
     : null;
+  const character = remapCharacterContent(current, content, selection, edit);
   return {
     ...current,
     automaticListUndo: null,
+    character,
     content,
     paragraphRuns,
+    selection,
     trailingStyle,
   };
 }
 
-function updateParagraphStyles(
-  current: TextEditingSessionState,
+function remapCharacterContent<Style extends object>(
+  current: TextEditingSessionState<Style>,
+  content: string,
+  selection: TextEditingSelection,
+  edit: TextContentEdit,
+): TextEditingCharacterState<Style> | null {
+  const character = current.character;
+  if (!character) return null;
+  let runs = remapTextStyleRunsAfterContentChange(
+    current.content,
+    content,
+    character.runs,
+    character.baseStyle,
+    "before",
+    character.equalStyle,
+  ).runs;
+  const typing = character.typingStyle;
+  const consumesTypingStyle =
+    typing !== null &&
+    edit.start === typing.offset &&
+    edit.end === typing.offset &&
+    edit.insert.length > 0;
+  if (consumesTypingStyle) {
+    runs = applyTextRangeStyle(
+      content,
+      runs,
+      character.baseStyle,
+      { start: edit.start, end: edit.start + edit.insert.length },
+      () => structuredClone(typing.style),
+      character.equalStyle,
+    );
+  }
+  return {
+    ...character,
+    runs,
+    typingStyle:
+      consumesTypingStyle && selection.start === selection.end
+        ? { offset: selection.start, style: structuredClone(typing.style) }
+        : null,
+  };
+}
+
+function finalizeCharacterRuns<Style extends object>(
+  state: TextEditingSessionState<Style>,
+): TextStyleRun<Style>[] | null {
+  const character = state.character;
+  if (!character) return null;
+  const baseline = canonicalizeTextStyleRuns(
+    state.content,
+    state.originalContent === state.content
+      ? character.originalRuns
+      : remapTextStyleRunsAfterContentChange(
+          state.originalContent,
+          state.content,
+          character.originalRuns,
+          character.baseStyle,
+          "before",
+          character.equalStyle,
+        ).runs,
+    character.baseStyle,
+    character.equalStyle,
+  );
+  const target = canonicalizeTextStyleRuns(
+    state.content,
+    character.runs,
+    character.baseStyle,
+    character.equalStyle,
+  );
+  return sameStyleRuns(baseline, target, character.equalStyle) ? null : target;
+}
+
+function characterStyleAtCaret<Style extends object>(
+  content: string,
+  runs: readonly TextStyleRun<Style>[],
+  baseStyle: Style,
+  offset: number,
+): Style {
+  if (content.length === 0) return structuredClone(baseStyle);
+  const target = offset === 0 ? 0 : Math.min(offset - 1, content.length - 1);
+  return structuredClone(
+    runs.find((run) => run.start <= target && target < run.end)?.style ??
+      baseStyle,
+  );
+}
+
+function sameStyleRuns<Style extends object>(
+  left: readonly TextStyleRun<Style>[],
+  right: readonly TextStyleRun<Style>[],
+  equal: (left: Style, right: Style) => boolean,
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (run, index) =>
+        run.start === right[index]?.start &&
+        run.end === right[index]?.end &&
+        right[index] !== undefined &&
+        equal(run.style, right[index].style),
+    )
+  );
+}
+
+function mixedStyleFields<Style extends object>(
+  baseline: Style,
+  values: readonly Style[],
+): readonly (keyof Style)[] {
+  const keys = new Set<keyof Style>();
+  for (const value of [baseline, ...values]) {
+    for (const key of Object.keys(value) as (keyof Style)[]) keys.add(key);
+  }
+  return [...keys].filter((key) =>
+    values.some(
+      (value) => JSON.stringify(value[key]) !== JSON.stringify(baseline[key]),
+    ),
+  );
+}
+
+function sameSelection(
+  left: TextEditingSelection,
+  right: TextEditingSelection,
+): boolean {
+  return left.start === right.start && left.end === right.end;
+}
+
+function sameStructuredValue<Value>(left: Value, right: Value): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function cloneCharacterState<Style extends object>(
+  value: TextEditingCharacterState<Style> | null,
+): TextEditingCharacterState<Style> | null {
+  if (!value) return null;
+  return {
+    ...value,
+    baseStyle: structuredClone(value.baseStyle),
+    originalRuns: structuredClone(value.originalRuns),
+    runs: structuredClone(value.runs),
+    typingStyle: value.typingStyle
+      ? {
+          offset: value.typingStyle.offset,
+          style: structuredClone(value.typingStyle.style),
+        }
+      : null,
+  };
+}
+
+function updateParagraphStyles<Style extends object>(
+  current: TextEditingSessionState<Style>,
   selection: TextEditingSelection,
   update: (style: TextParagraphStyle) => TextParagraphStyle,
-): TextEditingSessionState {
+): TextEditingSessionState<Style> {
   const materialized = applyStyleToMaterializedParagraphs(
     current.content,
     current.paragraphRuns,
@@ -329,6 +694,7 @@ function updateParagraphStyles(
     ...current,
     automaticListUndo: null,
     paragraphRuns: materialized.paragraphRuns,
+    selection: { ...selection },
     trailingStyle:
       trailing && current.trailingStyle
         ? update(structuredClone(current.trailingStyle))
@@ -404,8 +770,8 @@ function canonicalParagraphRuns(
   );
 }
 
-function paragraphStyleAtOffset(
-  state: TextEditingSessionState,
+function paragraphStyleAtOffset<Style extends object>(
+  state: TextEditingSessionState<Style>,
   offset: number,
 ): TextParagraphStyle {
   if (
@@ -423,8 +789,8 @@ function paragraphStyleAtOffset(
   );
 }
 
-function paragraphStyle(
-  state: TextEditingSessionState,
+function paragraphStyle<Style extends object>(
+  state: TextEditingSessionState<Style>,
   paragraph: EditingParagraphRange,
 ): TextParagraphStyle {
   if (paragraph.trailing) {

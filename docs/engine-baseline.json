@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 43,
+  "schemaVersion": 44,
   "recordedAt": "2026-08-15",
   "policy": {
     "allowFloatingRefs": false,
@@ -15,7 +15,7 @@
     "textRangeServiceContractVersion": 1,
     "textParagraphServiceContractVersion": 2,
     "textListServiceContractVersion": 1,
-    "textEditingSessionServiceContractVersion": 1,
+    "textEditingSessionServiceContractVersion": 2,
     "textRunLayoutServiceContractVersion": 4,
     "layoutServiceContractVersion": 6
   },
@@ -105,13 +105,13 @@
       "role": "figma-compatible-semantic-text-list-and-marker-service",
       "contractPackage": "@opendesign/text-service",
       "contractVersion": 1,
-      "productionStatus": "ordered-unordered-five-level-counter-list-spacing-hanging-ltr-rtl-runtime-inspector-agent-figma-svg-raster-and-keyboard-authoring-available-custom-markers-general-caret-typing-style-and-native-gate-pending"
+      "productionStatus": "ordered-unordered-five-level-counter-list-spacing-hanging-ltr-rtl-runtime-inspector-agent-figma-svg-raster-keyboard-and-caret-authoring-available-custom-markers-and-native-gate-pending"
     },
     "textEditingSession": {
       "role": "figma-compatible-short-lived-text-editing-and-list-authoring-service",
       "contractPackage": "@opendesign/text-service",
-      "contractVersion": 1,
-      "productionStatus": "typed-prefix-auto-list-immediate-undo-tab-outdent-empty-enter-marker-removal-shortcuts-composition-guard-and-single-runtime-commit-available-general-caret-typing-style-edit-dom-marker-projection-and-native-gate-pending"
+      "contractVersion": 2,
+      "productionStatus": "typed-prefix-auto-list-structural-keys-caret-typing-style-range-staging-disposable-edit-dom-marker-composition-guard-and-single-runtime-commit-available-native-ime-undo-and-visual-gate-pending"
     },
     "textRunLayout": {
       "role": "authoritative-rich-text-run-and-complex-script-layout-provider",

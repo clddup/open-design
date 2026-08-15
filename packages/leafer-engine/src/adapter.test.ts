@@ -811,15 +811,15 @@ describe("Leafer engine selection bounds synchronization", () => {
       onOperations,
     });
     const input = createInput();
-    const document = structuredClone(input.document);
-    const title = document.nodesById.title_welcome;
+    const designDocument = structuredClone(input.document);
+    const title = designDocument.nodesById.title_welcome;
     if (!title || title.kind !== "text") throw new Error("Missing title");
     title.properties.content = "";
     title.properties.runs = [];
     title.properties.paragraphRuns = [];
     adapter.sync({
       ...input,
-      document,
+      document: designDocument,
       selection: { nodeIds: [title.id], anchorNodeId: title.id },
     });
 
@@ -877,6 +877,252 @@ describe("Leafer engine selection bounds synchronization", () => {
         },
       ],
     });
+    adapter.dispose();
+  });
+
+  it("stages collapsed-caret typography and materializes it only after real input", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const onTextRangeSelectionChange =
+      vi.fn<NonNullable<LeaferEngineCallbacks["onTextRangeSelectionChange"]>>();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+      onTextRangeSelectionChange,
+    });
+    const input = createInput();
+    const designDocument = structuredClone(input.document);
+    const title = designDocument.nodesById.title_welcome;
+    if (!title || title.kind !== "text") throw new Error("Missing title");
+    title.properties.content = "AB";
+    title.properties.runs = [];
+    title.properties.paragraphRuns = [];
+    adapter.sync({
+      ...input,
+      document: designDocument,
+      selection: { nodeIds: [title.id], anchorNodeId: title.id },
+    });
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, title.id) as FakeText | undefined;
+    if (!element) throw new Error("Missing Text edit target");
+    app.editor.enableTextDom = true;
+    app.editor.openInnerEditor(element, true);
+    const root = app.editor.innerEditor?.editDom;
+    if (!root) throw new Error("Missing Text edit DOM");
+    setDomCaret(root, 1);
+    document.dispatchEvent(new Event("selectionchange"));
+
+    expect(
+      adapter.updateTextEditingStyle({
+        fontWeight: 700,
+        fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
+      }),
+    ).toBe(true);
+    expect(onOperations).not.toHaveBeenCalled();
+    const published = onTextRangeSelectionChange.mock.calls.at(-1)?.[0];
+    if (!published?.editing) throw new Error("Missing editing selection");
+    expect(published).toMatchObject({
+      nodeId: title.id,
+      start: 1,
+      end: 1,
+    });
+    expect(published.editing.characterStyle).toMatchObject({
+      fontWeight: 700,
+      fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
+    });
+
+    const marker = root.querySelector<HTMLSpanElement>(
+      "[data-opendesign-typing-style]",
+    );
+    if (!marker?.firstChild) throw new Error("Missing typing style marker");
+    expect(root.textContent).toBe("A\u200BB");
+    marker.firstChild.textContent = "\u200BX";
+    setDomCaret(root, 3);
+    root.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: "X",
+        inputType: "insertText",
+      }),
+    );
+    expect(root.querySelector("[data-opendesign-typing-style]")).toBe(marker);
+    expect(root.textContent?.replaceAll("\u200B", "")).toBe("AXB");
+    expect(marker.textContent).toBe("\u200BX");
+    expect(marker.style.fontWeight).toBe("700");
+
+    marker.firstChild.textContent = "\u200BXY";
+    setDomCaret(root, 4);
+    root.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: "Y",
+        inputType: "insertText",
+      }),
+    );
+    expect(root.querySelector("[data-opendesign-typing-style]")).toBe(marker);
+    app.editor.closeInnerEditor();
+
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    expect(onOperations.mock.calls[0]?.[0]).toMatchObject({
+      operations: [
+        {
+          type: "commit_text_edit",
+          nodeId: title.id,
+          content: "AXYB",
+          paragraphPatches: [],
+          runs: [
+            { start: 0, end: 1 },
+            {
+              start: 1,
+              end: 3,
+              style: {
+                fontWeight: 700,
+                fills: [{ type: "solid", color: "#ff3366", opacity: 1 }],
+              },
+            },
+            { start: 3, end: 4 },
+          ],
+        },
+      ],
+    });
+    adapter.dispose();
+  });
+
+  it("stages range typography in place and commits it without changing content", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    const designDocument = structuredClone(input.document);
+    const title = designDocument.nodesById.title_welcome;
+    if (!title || title.kind !== "text") throw new Error("Missing title");
+    title.properties.content = "AB";
+    title.properties.runs = [];
+    title.properties.paragraphRuns = [];
+    adapter.sync({ ...input, document: designDocument });
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, title.id) as FakeText | undefined;
+    if (!element) throw new Error("Missing Text edit target");
+    app.editor.enableTextDom = true;
+    app.editor.openInnerEditor(element, true);
+    const root = app.editor.innerEditor?.editDom;
+    if (!root) throw new Error("Missing Text edit DOM");
+    setDomSelection(root, 0, 1);
+    document.dispatchEvent(new Event("selectionchange"));
+    const untouched = root.lastChild;
+
+    expect(adapter.updateTextEditingStyle({ fontWeight: 700 })).toBe(true);
+    expect(root.lastChild).toBe(untouched);
+    expect(root.textContent).toBe("AB");
+    app.editor.closeInnerEditor();
+
+    expect(onOperations).toHaveBeenCalledTimes(1);
+    expect(onOperations.mock.calls[0]?.[0]).toMatchObject({
+      operations: [
+        {
+          type: "commit_text_edit",
+          content: "AB",
+          runs: [
+            { start: 0, end: 1, style: { fontWeight: 700 } },
+            { start: 1, end: 2 },
+          ],
+        },
+      ],
+    });
+    adapter.dispose();
+  });
+
+  it("keeps inspector focus, clears an unused typing override on caret move, and cancels cleanly", async () => {
+    const onOperations = vi.fn<LeaferEngineCallbacks["onOperations"]>(
+      () => true,
+    );
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onOperations,
+    });
+    const input = createInput();
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, "title_welcome") as
+      FakeText | undefined;
+    if (!element) throw new Error("Missing Text edit target");
+    app.editor.enableTextDom = true;
+    app.editor.openInnerEditor(element, true);
+    const root = app.editor.innerEditor?.editDom;
+    if (!root) throw new Error("Missing Text edit DOM");
+    setDomCaret(root, 1);
+    document.dispatchEvent(new Event("selectionchange"));
+
+    const inspectorInput = document.createElement("input");
+    document.body.appendChild(inspectorInput);
+    inspectorInput.focus();
+    expect(adapter.updateTextEditingStyle({ fontWeight: 700 })).toBe(true);
+    expect(document.activeElement).toBe(inspectorInput);
+    expect(root.querySelector("[data-opendesign-typing-style]")).not.toBeNull();
+
+    inspectorInput.remove();
+    setDomCaret(root, 0);
+    document.dispatchEvent(new Event("selectionchange"));
+    expect(root.querySelector("[data-opendesign-typing-style]")).toBeNull();
+    expect(root.textContent).not.toContain("\u200B");
+
+    expect(adapter.updateTextEditingStyle({ fontWeight: 800 })).toBe(true);
+    expect(root.querySelector("[data-opendesign-typing-style]")).not.toBeNull();
+    emitWindowKey("Escape");
+    app.editor.closeInnerEditor();
+    expect(onOperations).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
+  it("preserves the typing marker throughout IME composition", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const input = createInput();
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const element = findElement(app.tree, "title_welcome") as
+      FakeText | undefined;
+    if (!element) throw new Error("Missing Text edit target");
+    app.editor.enableTextDom = true;
+    app.editor.openInnerEditor(element, true);
+    const root = app.editor.innerEditor?.editDom;
+    if (!root) throw new Error("Missing Text edit DOM");
+    setDomCaret(root, 1);
+    document.dispatchEvent(new Event("selectionchange"));
+    adapter.updateTextEditingStyle({ fontWeight: 700 });
+    const marker = root.querySelector<HTMLSpanElement>(
+      "[data-opendesign-typing-style]",
+    );
+    if (!marker?.firstChild) throw new Error("Missing typing style marker");
+
+    root.dispatchEvent(new CompositionEvent("compositionstart"));
+    marker.firstChild.textContent = "\u200B漢";
+    setDomCaret(root, 3);
+    root.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        data: "漢",
+        inputType: "insertCompositionText",
+        isComposing: true,
+      }),
+    );
+    expect(root.querySelector("[data-opendesign-typing-style]")).toBe(marker);
+    root.dispatchEvent(new CompositionEvent("compositionend"));
+    expect(root.querySelector("[data-opendesign-typing-style]")).toBe(marker);
+    app.editor.closeInnerEditor();
     adapter.dispose();
   });
 
@@ -5186,13 +5432,52 @@ function emitTextEditWindowKey(
 }
 
 function setDomCaret(root: HTMLElement, offset: number): void {
-  const node = root.firstChild ?? root;
+  setDomSelection(root, offset, offset);
+}
+
+function setDomSelection(root: HTMLElement, start: number, end: number): void {
+  const startPoint = testDomPoint(root, start);
+  const endPoint = testDomPoint(root, end);
   const range = document.createRange();
-  range.setStart(node, Math.min(offset, node.textContent?.length ?? 0));
-  range.collapse(true);
+  range.setStart(startPoint.node, startPoint.offset);
+  range.setEnd(endPoint.node, endPoint.offset);
   const selection = document.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+}
+
+function testDomPoint(
+  root: HTMLElement,
+  offset: number,
+): { node: Node; offset: number } {
+  let remaining = offset;
+  let point: { node: Node; offset: number } | null = null;
+  const visit = (node: Node): void => {
+    if (point) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const length = node.textContent?.length ?? 0;
+      if (remaining <= length) point = { node, offset: remaining };
+      else remaining -= length;
+      return;
+    }
+    if (node instanceof HTMLBRElement) {
+      if (remaining === 0) {
+        const parent = node.parentNode;
+        if (parent) {
+          point = {
+            node: parent,
+            offset: [...parent.childNodes].indexOf(node),
+          };
+        }
+      } else {
+        remaining -= 1;
+      }
+      return;
+    }
+    node.childNodes.forEach(visit);
+  };
+  visit(root);
+  return point ?? { node: root, offset: root.childNodes.length };
 }
 
 function flushAnimationFrames(): void {

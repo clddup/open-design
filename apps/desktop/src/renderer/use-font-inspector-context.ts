@@ -29,17 +29,16 @@ export function useFontInspectorContext(options: {
   textLayoutProviderEpoch: number;
   textRangeSelection: LeaferTextRangeSelection | null;
   transactionCounter: { current: number };
+  updateTextEditingStyle: (
+    style: Parameters<
+      NonNullable<FontInspectorContext["range"]>["onUpdate"]
+    >[0],
+  ) => boolean;
 }): FontInspectorContext | undefined {
   const { epoch, importFonts, state } = options.fontBinaryRuntime;
   return useMemo(() => {
     const { selectedNode } = options;
     if (!selectedNode || selectedNode.kind !== "text") return undefined;
-    const expectedFont: TextFontDescriptor = {
-      fontFamily: selectedNode.properties.fontFamily,
-      fontStyleName: selectedNode.properties.fontStyleName,
-      fontWeight: selectedNode.properties.fontWeight,
-      fontSlant: selectedNode.properties.fontSlant,
-    };
     const range = resolveInspectorTextRange(
       selectedNode,
       options.textRangeSelection,
@@ -49,7 +48,15 @@ export function useFontInspectorContext(options: {
       selectedNode,
       range?.start ?? 0,
       range?.end ?? selectedNode.properties.content.length,
+      options.textRangeSelection,
     );
+    const expectedFont: TextFontDescriptor = {
+      fontFamily: range?.style.fontFamily ?? selectedNode.properties.fontFamily,
+      fontStyleName:
+        range?.style.fontStyleName ?? selectedNode.properties.fontStyleName,
+      fontWeight: range?.style.fontWeight ?? selectedNode.properties.fontWeight,
+      fontSlant: range?.style.fontSlant ?? selectedNode.properties.fontSlant,
+    };
     const matching = Object.values(options.document.nodesById).filter(
       (node) =>
         node.kind === "text" &&
@@ -88,6 +95,10 @@ export function useFontInspectorContext(options: {
         NonNullable<FontInspectorContext["range"]>["onUpdate"]
       >[0],
     ) => {
+      if (options.textRangeSelection?.editing) {
+        options.updateTextEditingStyle(style);
+        return;
+      }
       options.applyCommands(options.t("history.updateTextRange"), [
         {
           commandId: `text_range_${Date.now()}_${++options.transactionCounter.current}`,
@@ -154,7 +165,34 @@ function resolveInspectorTextRange(
     !selection ||
     selection.documentId !== document.documentId ||
     selection.revision !== document.revision ||
-    selection.nodeId !== node.id ||
+    selection.nodeId !== node.id
+  ) {
+    return undefined;
+  }
+  if (selection.editing) {
+    if (
+      selection.start < 0 ||
+      selection.end < selection.start ||
+      selection.end > selection.editing.content.length
+    ) {
+      return undefined;
+    }
+    return {
+      collapsed: selection.start === selection.end,
+      start: selection.start,
+      end: selection.end,
+      text: selection.editing.content.slice(selection.start, selection.end),
+      style: {
+        ...selection.editing.characterStyle,
+        ...selection.editing.paragraphStyle,
+      },
+      mixedFields: [
+        ...selection.editing.characterMixedFields,
+        ...selection.editing.paragraphMixedFields,
+      ],
+    };
+  }
+  if (
     selection.start >= selection.end ||
     selection.end > node.properties.content.length
   ) {
@@ -232,6 +270,7 @@ function resolveInspectorTextRange(
     ),
   ];
   return {
+    collapsed: false,
     start: selection.start,
     end: selection.end,
     text: node.properties.content.slice(selection.start, selection.end),
@@ -244,7 +283,21 @@ function resolveInspectorParagraphRange(
   node: Extract<DesignNode, { kind: "text" }>,
   start: number,
   end: number,
+  selection: LeaferTextRangeSelection | null,
 ) {
+  if (
+    selection?.editing &&
+    selection.nodeId === node.id &&
+    selection.start === start &&
+    selection.end === end
+  ) {
+    return {
+      start,
+      end,
+      style: selection.editing.paragraphStyle,
+      mixedFields: selection.editing.paragraphMixedFields,
+    };
+  }
   if (start < 0 || end <= start || end > node.properties.content.length) {
     return undefined;
   }

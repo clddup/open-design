@@ -47,6 +47,7 @@ export type FontInspectorContext = {
     ) => void;
   };
   range?: {
+    collapsed: boolean;
     start: number;
     end: number;
     text: string;
@@ -130,13 +131,21 @@ export function TypographySection({
         {range && (
           <div className={styles.textRangeStatus} role="status">
             <strong>
-              {t("properties.textRange", {
-                start: range.start,
-                end: range.end,
-              })}
+              {range.collapsed
+                ? t("properties.textCaret", { position: range.start })
+                : t("properties.textRange", {
+                    start: range.start,
+                    end: range.end,
+                  })}
             </strong>
-            <span title={range.text}>{range.text}</span>
-            <small>{t("properties.textRangeHint")}</small>
+            {!range.collapsed && <span title={range.text}>{range.text}</span>}
+            <small>
+              {t(
+                range.collapsed
+                  ? "properties.textCaretHint"
+                  : "properties.textRangeHint",
+              )}
+            </small>
           </div>
         )}
         <div

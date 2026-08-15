@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   applyTextEditingListCommand,
   applyTextEditingSessionInput,
+  createRichTextEditingSession,
   createTextEditingSession,
   finalizeTextEditingSession,
+  inspectTextEditingSelection,
   undoAutomaticTextList,
+  updateTextEditingCharacterStyle,
+  updateTextEditingParagraphStyle,
+  updateTextEditingSelection,
 } from "./text-editing-session.js";
 import type {
   TextParagraphRun,
@@ -25,6 +30,101 @@ const ordered: TextParagraphStyle = {
 };
 
 describe("Text Editing Session Service", () => {
+  it("keeps a collapsed-caret character style transient until typed content materializes it", () => {
+    const base = { color: "black", weight: 400 };
+    let state = createRichTextEditingSession("AB", [], base, [], plain);
+    state = updateTextEditingCharacterStyle(
+      state,
+      { start: 1, end: 1 },
+      (style) => ({ ...style, color: "red", weight: 700 }),
+    );
+    expect(inspectTextEditingSelection(state, { start: 1, end: 1 })).toEqual({
+      characterMixedFields: [],
+      characterStyle: { color: "red", weight: 700 },
+      paragraphMixedFields: [],
+      paragraphStyle: plain,
+      text: "",
+    });
+    expect(finalizeTextEditingSession(state)).toEqual({
+      content: "AB",
+      paragraphPatches: [],
+    });
+
+    state = applyTextEditingSessionInput(
+      state,
+      "AXB",
+      { start: 2, end: 2 },
+      { automaticList: false },
+    ).state;
+    state = applyTextEditingSessionInput(
+      state,
+      "AXYB",
+      { start: 3, end: 3 },
+      { automaticList: false },
+    ).state;
+    expect(finalizeTextEditingSession(state)).toEqual({
+      content: "AXYB",
+      paragraphPatches: [],
+      runs: [
+        { start: 0, end: 1, style: base },
+        {
+          start: 1,
+          end: 3,
+          style: { color: "red", weight: 700 },
+        },
+        { start: 3, end: 4, style: base },
+      ],
+    });
+  });
+
+  it("clears a caret override when the selection moves and stages non-empty range styling", () => {
+    const base = { weight: 400 };
+    let state = createRichTextEditingSession("ABC", [], base, [], plain);
+    state = updateTextEditingCharacterStyle(
+      state,
+      { start: 1, end: 1 },
+      (style) => ({ ...style, weight: 700 }),
+    );
+    state = updateTextEditingSelection(state, { start: 2, end: 2 });
+    state = applyTextEditingSessionInput(
+      state,
+      "ABXC",
+      { start: 3, end: 3 },
+      { automaticList: false },
+    ).state;
+    expect(finalizeTextEditingSession(state)).toEqual({
+      content: "ABXC",
+      paragraphPatches: [],
+    });
+
+    state = updateTextEditingCharacterStyle(
+      state,
+      { start: 1, end: 3 },
+      (style) => ({ ...style, weight: 700 }),
+    );
+    expect(finalizeTextEditingSession(state)).toEqual({
+      content: "ABXC",
+      paragraphPatches: [],
+      runs: [
+        { start: 0, end: 1, style: base },
+        { start: 1, end: 3, style: { weight: 700 } },
+        { start: 3, end: 4, style: base },
+      ],
+    });
+  });
+
+  it("applies a collapsed caret paragraph update to the containing final paragraph", () => {
+    const state = updateTextEditingParagraphStyle(
+      createRichTextEditingSession("Alpha", [], { weight: 400 }, [], plain),
+      { start: 5, end: 5 },
+      (style) => ({ ...style, paragraphSpacing: 12 }),
+    );
+    expect(finalizeTextEditingSession(state)).toEqual({
+      content: "Alpha",
+      paragraphPatches: [{ start: 0, end: 5, style: { paragraphSpacing: 12 } }],
+    });
+  });
+
   it("turns typed list shortcuts into semantic paragraph facts without persisting markers", () => {
     let state = createTextEditingSession("", [], plain);
     const automatic = applyTextEditingSessionInput(

@@ -6,7 +6,10 @@ import type {
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
-import type { LeaferTextRangeSelection } from "@opendesign/leafer-engine";
+import type {
+  LeaferTextRangeSelection,
+  LeaferTextStyleUpdate,
+} from "@opendesign/leafer-engine";
 import type { TextLayoutProvider } from "@opendesign/text-service";
 import type {
   ComponentOverridePatch,
@@ -160,6 +163,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const [editorError, setEditorError] = useState<string | null>(null);
   const [textRangeSelection, setTextRangeSelection] =
     useState<LeaferTextRangeSelection | null>(null);
+  const textEditingStyleController = useRef<
+    ((style: LeaferTextStyleUpdate) => boolean) | null
+  >(null);
   const [textLayoutProviderEpoch, setTextLayoutProviderEpoch] = useState(0);
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
@@ -208,6 +214,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       setTextLayoutProviderEpoch((current) => current + 1);
     },
     [workspace],
+  );
+  const handleTextEditingStyleControllerChange = useCallback(
+    (controller: ((style: LeaferTextStyleUpdate) => boolean) | null) => {
+      textEditingStyleController.current = controller;
+    },
+    [],
+  );
+  const updateTextEditingStyle = useCallback(
+    (style: LeaferTextStyleUpdate) =>
+      textEditingStyleController.current?.(style) ?? false,
+    [],
   );
   useProfessionalFixtureSmoke({
     activatePage,
@@ -653,6 +670,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     textLayoutProviderEpoch,
     textRangeSelection,
     transactionCounter,
+    updateTextEditingStyle,
   });
 
   const {
@@ -1856,6 +1874,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               onTransactionError={setEditorError}
               onAssetDrop={placeImageAssetAtPoint}
               onTextLayoutProviderReady={handleTextLayoutProviderReady}
+              onTextEditingStyleControllerChange={
+                handleTextEditingStyleControllerChange
+              }
               onTextRangeSelectionChange={setTextRangeSelection}
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onResizeFrame={resizeFrame}

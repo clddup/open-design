@@ -37,6 +37,7 @@ import {
   type LeaferOperationKind,
   type LeaferOperationRequest,
   type LeaferTextRangeSelection,
+  type LeaferTextStyleUpdate,
   type LeaferTextRunStyle,
   type LeaferVectorEditRequest,
   type LeaferVectorCutRequest,
@@ -79,6 +80,7 @@ export function Canvas({
   onTransactionError,
   onAssetDrop,
   onTextLayoutProviderReady,
+  onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
   onResizeFrame,
 }: {
@@ -94,6 +96,9 @@ export function Canvas({
     documentPoint: { x: number; y: number },
   ) => { ok: boolean };
   onTextLayoutProviderReady: (provider: TextLayoutProvider) => void;
+  onTextEditingStyleControllerChange: (
+    controller: ((style: LeaferTextStyleUpdate) => boolean) | null,
+  ) => void;
   onTextRangeSelectionChange: (
     selection: LeaferTextRangeSelection | null,
   ) => void;
@@ -792,6 +797,9 @@ export function Canvas({
           return;
         }
         adapter.current = engine;
+        onTextEditingStyleControllerChange((style) =>
+          engine.updateTextEditingStyle(style),
+        );
         onTextLayoutProviderReady(engine.textLayoutProvider);
         runtime.setTextRunLayoutProvider(engine.textRunLayoutProvider);
         setTextRunLayoutProvider(() => engine.textRunLayoutProvider);
@@ -809,6 +817,7 @@ export function Canvas({
       disposed = true;
       adapter.current?.dispose();
       adapter.current = null;
+      onTextEditingStyleControllerChange(null);
       setTextRunLayoutProvider(undefined);
       onTextRangeSelectionChange(null);
     };
@@ -822,6 +831,7 @@ export function Canvas({
     createVectorNode,
     exitVectorEdit,
     onTextLayoutProviderReady,
+    onTextEditingStyleControllerChange,
     onTextRangeSelectionChange,
     runtime,
     t,

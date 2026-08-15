@@ -28,6 +28,7 @@ describe("deterministic design target capture", () => {
       retryBooleanGeometry: vi.fn(),
       setVectorPointMode: vi.fn(),
       sync,
+      updateTextEditingStyle: vi.fn(),
       textLayoutProvider: {
         id: "test-text-layout",
         version: "1",
@@ -102,6 +103,7 @@ describe("deterministic design target capture", () => {
       retryBooleanGeometry: vi.fn(),
       setVectorPointMode: vi.fn(),
       sync: vi.fn(),
+      updateTextEditingStyle: vi.fn(),
       textLayoutProvider: {
         id: "test-text-layout",
         version: "1",
@@ -144,6 +146,7 @@ describe("deterministic design target capture", () => {
       retryBooleanGeometry: vi.fn(),
       setVectorPointMode: vi.fn(),
       sync: vi.fn(),
+      updateTextEditingStyle: vi.fn(),
       textLayoutProvider: {
         id: "test-text-layout",
         version: "1",

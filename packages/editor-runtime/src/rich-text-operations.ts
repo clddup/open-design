@@ -149,10 +149,24 @@ export function commitTextEditingSession(
 ): void {
   normalizeTextNodeRuns(node, command.commandId);
   const contentChanged = command.content !== node.properties.content;
-  if (!contentChanged && command.paragraphPatches.length === 0) {
+  if (command.runs) {
+    const issue = validateTextStyleRuns(command.content, command.runs);
+    if (issue) throw invalidRuns(node.id, command.commandId, issue);
+  }
+  const committedRuns = command.runs
+    ? compactRuns(structuredClone(command.runs), textRunBaseStyle(node))
+    : undefined;
+  const characterRunsChanged =
+    committedRuns !== undefined &&
+    !sameRuns(committedRuns, node.properties.runs ?? []);
+  if (
+    !contentChanged &&
+    !characterRunsChanged &&
+    command.paragraphPatches.length === 0
+  ) {
     throw new OperationError(
       command.commandId,
-      "Text editing session did not change content or paragraph styles",
+      "Text editing session did not change content, character styles, or paragraph styles",
       "invalid",
       { details: { code: "no-op", nodeId: node.id } },
     );
@@ -163,6 +177,7 @@ export function commitTextEditingSession(
     command.commandId,
   );
   node.properties.content = command.content;
+  if (committedRuns) node.properties.runs = committedRuns;
   const paragraphs = textParagraphRanges(command.content);
   const starts = new Set(paragraphs.map((paragraph) => paragraph.start));
   const ends = new Set(paragraphs.map((paragraph) => paragraph.end));

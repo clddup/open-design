@@ -1,15 +1,27 @@
-import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import type {
+  DesignDocument,
+  DesignNode,
+  DesignOperation,
+  TextRun,
+  TextRunStyle,
+} from "@opendesign/design-contracts";
 import {
   applyTextEditingListCommand,
   applyTextEditingSessionInput,
-  createTextEditingSession,
+  createRichTextEditingSession,
   finalizeTextEditingSession,
+  inspectTextEditingSelection,
   undoAutomaticTextList,
+  updateTextEditingCharacterStyle,
+  updateTextEditingParagraphStyle,
+  updateTextEditingSelection,
   type TextEditingListCommand,
   type TextEditingSelection,
+  type TextEditingSelectionInspection,
   type TextEditingSessionCommandResult,
   type TextEditingSessionInputResult,
   type TextEditingSessionState,
+  type TextParagraphStyle,
 } from "@opendesign/text-service";
 import type {
   LeaferElementSpec,
@@ -21,6 +33,16 @@ import {
 } from "./text-run-projection.js";
 
 type TextNode = Extract<DesignNode, { kind: "text" }>;
+type TextStyleUpdate = Extract<
+  DesignOperation,
+  { type: "update_text_range_style" }
+>["style"];
+type CharacterStyleUpdate = Partial<
+  Omit<TextRunStyle, "fillStyleId" | "textStyleId">
+> & {
+  fillStyleId?: string | null;
+  textStyleId?: string | null;
+};
 
 export interface TextRunEditElement {
   forceUpdate(boundsType?: string): void;
@@ -67,6 +89,7 @@ export type TextEditFinishResult =
       paragraphPatches: ReturnType<
         typeof finalizeTextEditingSession
       >["paragraphPatches"];
+      runs?: TextRun[];
     };
 
 interface TextRunEditPresentation {
@@ -88,7 +111,7 @@ export class TextRunEditController<Element extends TextRunEditElement> {
   #cancelled = false;
   #pendingProxyId: string | null = null;
   #presentation: TextRunEditPresentation | null = null;
-  #session: TextEditingSessionState | null = null;
+  #session: TextEditingSessionState<TextRunStyle> | null = null;
 
   constructor(environment: TextRunEditControllerEnvironment<Element>) {
     this.#environment = environment;
@@ -100,6 +123,25 @@ export class TextRunEditController<Element extends TextRunEditElement> {
 
   get activeContent(): string | null {
     return this.#session?.content ?? null;
+  }
+
+  get activeSelection(): TextEditingSelection | null {
+    return this.#session ? { ...this.#session.selection } : null;
+  }
+
+  get activeRuns(): readonly TextRun[] | null {
+    return this.#session?.character
+      ? structuredClone(this.#session.character.runs)
+      : null;
+  }
+
+  get hasTypingStyle(): boolean {
+    return this.#session?.character?.typingStyle != null;
+  }
+
+  get activeTypingStyle(): TextRunStyle | null {
+    const style = this.#session?.character?.typingStyle?.style;
+    return style ? structuredClone(style) : null;
   }
 
   beforeEditInner(projectionId: string | undefined): false | undefined {
@@ -152,8 +194,10 @@ export class TextRunEditController<Element extends TextRunEditElement> {
       revision: current.document.revision,
       text: node.properties.content,
     };
-    this.#session = createTextEditingSession(
+    this.#session = createRichTextEditingSession(
       node.properties.content,
+      node.properties.runs ?? [],
+      textRunBaseStyle(node),
       node.properties.paragraphRuns ?? [],
       {
         listOptions: { type: "none" },
@@ -167,11 +211,58 @@ export class TextRunEditController<Element extends TextRunEditElement> {
     return true;
   }
 
+  selection(
+    selection: TextEditingSelection,
+  ): TextEditingSelectionInspection<TextRunStyle> | null {
+    const before = this.#before;
+    const current = this.#environment.current();
+    if (
+      !before ||
+      !this.#session ||
+      current.document?.documentId !== before.documentId ||
+      current.document.revision !== before.revision
+    ) {
+      return null;
+    }
+    this.#session = updateTextEditingSelection(this.#session, selection);
+    return inspectTextEditingSelection(this.#session, selection);
+  }
+
+  updateStyle(style: TextStyleUpdate): {
+    changed: boolean;
+    characterChanged: boolean;
+  } {
+    if (!this.#session || Object.keys(style).length === 0) {
+      return { changed: false, characterChanged: false };
+    }
+    const selection = this.#session.selection;
+    const character = characterStyleUpdate(style);
+    const paragraph = paragraphStyleUpdate(style);
+    const characterChanged = Object.keys(character).length > 0;
+    let next = this.#session;
+    if (characterChanged) {
+      next = updateTextEditingCharacterStyle(next, selection, (current) =>
+        patchTextRunStyle(current, character),
+      );
+    }
+    if (Object.keys(paragraph).length > 0) {
+      next = updateTextEditingParagraphStyle(next, selection, (current) => ({
+        ...current,
+        ...paragraph,
+        ...(paragraph.listOptions
+          ? { listOptions: structuredClone(paragraph.listOptions) }
+          : {}),
+      }));
+    }
+    this.#session = next;
+    return { changed: true, characterChanged };
+  }
+
   input(
     content: string,
     selection: TextEditingSelection,
     automaticList: boolean,
-  ): TextEditingSessionInputResult | null {
+  ): TextEditingSessionInputResult<TextRunStyle> | null {
     if (!this.#session) return null;
     const result = applyTextEditingSessionInput(
       this.#session,
@@ -186,7 +277,7 @@ export class TextRunEditController<Element extends TextRunEditElement> {
   listCommand(
     selection: TextEditingSelection,
     command: TextEditingListCommand,
-  ): TextEditingSessionCommandResult | null {
+  ): TextEditingSessionCommandResult<TextRunStyle> | null {
     if (!this.#session) return null;
     const result = applyTextEditingListCommand(
       this.#session,
@@ -197,7 +288,7 @@ export class TextRunEditController<Element extends TextRunEditElement> {
     return result;
   }
 
-  undoAutomaticList(): TextEditingSessionInputResult | null {
+  undoAutomaticList(): TextEditingSessionInputResult<TextRunStyle> | null {
     if (!this.#session) return null;
     const result = undoAutomaticTextList(this.#session);
     if (result) this.#session = result.state;
@@ -259,7 +350,9 @@ export class TextRunEditController<Element extends TextRunEditElement> {
     this.#session = null;
     if (
       this.#cancelled ||
-      (commit.content === before.text && commit.paragraphPatches.length === 0)
+      (commit.content === before.text &&
+        commit.paragraphPatches.length === 0 &&
+        commit.runs === undefined)
     ) {
       this.#cancelled = false;
       this.restorePresentation();
@@ -272,6 +365,7 @@ export class TextRunEditController<Element extends TextRunEditElement> {
       kind: "commit",
       node,
       paragraphPatches: commit.paragraphPatches,
+      ...(commit.runs ? { runs: commit.runs } : {}),
     };
   }
 
@@ -411,4 +505,79 @@ function isLockedSpec(spec: LeaferElementSpec | undefined): boolean {
     metadata !== null &&
     (metadata as Record<string, unknown>).opendesignLocked === true
   );
+}
+
+const CHARACTER_STYLE_FIELDS = new Set([
+  "fontFamily",
+  "fontStyleName",
+  "fontSize",
+  "fontWeight",
+  "fontSlant",
+  "letterSpacing",
+  "lineHeight",
+  "textCase",
+  "textDecoration",
+  "fills",
+  "textStyleId",
+  "fillStyleId",
+]);
+const PARAGRAPH_STYLE_FIELDS = new Set([
+  "listOptions",
+  "indentation",
+  "listSpacing",
+  "paragraphIndent",
+  "paragraphSpacing",
+]);
+
+function characterStyleUpdate(style: TextStyleUpdate): CharacterStyleUpdate {
+  return filterStyleFields(style, CHARACTER_STYLE_FIELDS);
+}
+
+function paragraphStyleUpdate(
+  style: TextStyleUpdate,
+): Partial<TextParagraphStyle> {
+  return filterStyleFields(style, PARAGRAPH_STYLE_FIELDS);
+}
+
+function filterStyleFields<Result extends object>(
+  style: TextStyleUpdate,
+  fields: ReadonlySet<string>,
+): Result {
+  return Object.fromEntries(
+    Object.entries(style).filter(([field]) => fields.has(field)),
+  ) as Result;
+}
+
+function patchTextRunStyle(
+  current: TextRunStyle,
+  update: CharacterStyleUpdate,
+): TextRunStyle {
+  const { fillStyleId, textStyleId, ...values } = update;
+  const next: TextRunStyle = { ...current, ...values };
+  if (Object.hasOwn(update, "textStyleId")) {
+    if (textStyleId === null) delete next.textStyleId;
+    else if (textStyleId !== undefined) next.textStyleId = textStyleId;
+  }
+  if (Object.hasOwn(update, "fillStyleId")) {
+    if (fillStyleId === null) delete next.fillStyleId;
+    else if (fillStyleId !== undefined) next.fillStyleId = fillStyleId;
+  }
+  return next;
+}
+
+function textRunBaseStyle(node: TextNode): TextRunStyle {
+  return {
+    fontFamily: node.properties.fontFamily,
+    fontStyleName: node.properties.fontStyleName,
+    fontSize: node.properties.fontSize,
+    fontWeight: node.properties.fontWeight,
+    fontSlant: node.properties.fontSlant,
+    letterSpacing: node.properties.letterSpacing,
+    lineHeight: node.properties.lineHeight,
+    textCase: node.properties.textCase,
+    textDecoration: node.properties.textDecoration,
+    fills: structuredClone(node.properties.fills),
+    ...(node.textStyleId ? { textStyleId: node.textStyleId } : {}),
+    ...(node.fillStyleId ? { fillStyleId: node.fillStyleId } : {}),
+  };
 }
