@@ -43,9 +43,15 @@ Navigator 与 Utility 分别使用 `Cmd/Ctrl+Shift+1` 和 `Cmd/Ctrl+Shift+2` 切
 
 Titlebar、Toolbar、文件标签和 Statusbar 使用一致的紧凑尺寸、细分隔和有限强调色。普通控件不使用营销式卡片、巨型圆角、装饰渐变或大面积阴影。hover、selected、focus、running、error 和 hidden 必须同时有结构或文字信号，不能只靠颜色。
 
+### 画布直接操作优先于全局命令入口
+
+当前选区在 Select 工具下提供贴近画布底部的紧凑上下文操作条，包含复制、编组/解组、前后层级、打开 Properties 和删除。裁剪、矢量节点与 Boolean 编辑期间隐藏该操作条，避免与精密编辑模式争夺输入；所有写操作继续调用既有 EditorRuntime 命令，不建立第二份状态。Navigator/Utility 的拖拽与键盘调整宽度保存在 Renderer 本地工作台状态，不修改文档 revision。
+
+本阶段不增加全局命令面板。现有顶部工具、对象就地操作、Properties 和键盘快捷键已覆盖当前高频路径；在没有可证明的跨功能检索需求前，命令面板只会增加入口和维护成本。
+
 ## 当前切片与后续
 
-本 ADR 的第一、二切片已完成一级 IA、Layers 搜索、Library 二级切换、紧凑 Utility tabs、面板显隐、Shell 密度、可信 Agent 状态、Properties 渐进披露、面板快捷键/偏好和窄窗口画布优先策略。后续仍需在同一方向完成：命令面板、Canvas 就地快捷操作、面板宽度持久化、跨主题和打包产品视觉回归。后续切片不得重新把能力平铺为更多一级标签。
+本 ADR 的前三个切片已完成一级 IA、Layers 搜索、Library 二级切换、紧凑 Utility tabs、面板显隐、Shell 密度、可信 Agent 状态、Properties 渐进披露、面板快捷键/偏好、窄窗口画布优先策略、Canvas 选区就地操作和面板宽度持久化。后续仍需在同一方向完成跨主题和打包产品视觉回归；不得重新把能力平铺为更多一级标签。
 
 ## 验证
 
@@ -53,6 +59,8 @@ Titlebar、Toolbar、文件标签和 Statusbar 使用一致的紧凑尺寸、细
 - Titlebar 测试覆盖可访问的左右面板显隐控制；
 - App 交互测试覆盖键盘显隐、输入焦点保护、偏好写入与窄窗口跨阈值行为；
 - Properties 测试覆盖无效 Prototype 入口移除、高频分组默认展开与高级分组渐进披露；
+- Canvas 交互测试覆盖选区操作、编辑模式互斥、Properties 直达和重复 accessible name；
+- App 交互测试覆盖面板宽度读取、边界约束、键盘调整与本地持久化；
 - Agent/Utility 测试覆盖键盘 tab 切换、运行状态、Conversation 与停止；
 - Desktop 类型、交互测试与 Vite build 验证 CSS Modules 和 Renderer 集成；
 - macOS/Windows 原生 Action 继续阻塞发布，自动化不能替代打包产品的宽/窄窗口人工视觉 smoke。

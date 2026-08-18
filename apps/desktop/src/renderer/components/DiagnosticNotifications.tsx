@@ -12,6 +12,10 @@ export type DiagnosticNotificationsProps = {
   placement?: "editor" | "window";
 };
 
+export function isTaskScopedDiagnostic(event: DiagnosticEvent): boolean {
+  return Boolean(event.context?.conversationId && event.context.runId);
+}
+
 function cx(...classNames: Array<string | false | null | undefined>): string {
   return classNames.filter(Boolean).join(" ");
 }
@@ -130,7 +134,10 @@ export function DiagnosticNotifications({
   placement = "window",
 }: DiagnosticNotificationsProps) {
   const { t } = useI18n();
-  if (events.length === 0) return null;
+  const visibleEvents = events.filter(
+    (event) => !isTaskScopedDiagnostic(event),
+  );
+  if (visibleEvents.length === 0) return null;
   return (
     <aside
       aria-label={t("diagnostic.notifications")}
@@ -140,7 +147,7 @@ export function DiagnosticNotifications({
       )}
       data-placement={placement}
     >
-      {events.map((event) => (
+      {visibleEvents.map((event) => (
         <DiagnosticNotification
           event={event}
           key={event.eventId}

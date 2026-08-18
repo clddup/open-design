@@ -43,7 +43,11 @@ import type {
 } from "../shared/desktop-api";
 import { AgentTimeline } from "./components/AgentTimeline";
 import { Canvas } from "./components/Canvas";
-import { DiagnosticNotifications } from "./components/DiagnosticNotifications";
+import { CanvasSelectionActions } from "./components/CanvasSelectionActions";
+import {
+  DiagnosticNotifications,
+  isTaskScopedDiagnostic,
+} from "./components/DiagnosticNotifications";
 import { DesignFileTabs } from "./components/DesignFileTabs";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { ProjectHome } from "./components/ProjectHome";
@@ -145,6 +149,37 @@ function persistPanelVisibility(
   }
 }
 
+function readPanelWidth(
+  panel: "navigator" | "utility",
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  try {
+    const stored = window.localStorage.getItem(
+      `${WORKBENCH_PANEL_STORAGE_PREFIX}.${panel}.width`,
+    );
+    if (stored === null) return fallback;
+    const value = Number(stored);
+    return Number.isFinite(value)
+      ? Math.min(max, Math.max(min, value))
+      : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistPanelWidth(panel: "navigator" | "utility", width: number) {
+  try {
+    window.localStorage.setItem(
+      `${WORKBENCH_PANEL_STORAGE_PREFIX}.${panel}.width`,
+      String(Math.round(width)),
+    );
+  } catch {
+    // Panel sizing remains usable when persistence is unavailable.
+  }
+}
+
 export function App({ initialView }: { initialView?: AppView } = {}) {
   const { t } = useI18n();
   const {
@@ -171,8 +206,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [fileName, setFileName] = useState(() => t("file.untitled"));
-  const [leftWidth, setLeftWidth] = useState(236);
-  const [utilityWidth, setUtilityWidth] = useState(320);
+  const [leftWidth, setLeftWidth] = useState(() =>
+    readPanelWidth("navigator", 236, 184, 360),
+  );
+  const [utilityWidth, setUtilityWidth] = useState(() =>
+    readPanelWidth("utility", 320, 280, 400),
+  );
   const [leftPanelVisible, setLeftPanelVisible] = useState(() =>
     readPanelVisibility("navigator"),
   );
@@ -530,7 +569,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     if (!desktop || typeof desktop.onDiagnosticEvent !== "function") return;
     let active = true;
     const receive = (event: DiagnosticEvent) => {
-      if (!active || event.presentation !== "toast") return;
+      if (
+        !active ||
+        event.presentation !== "toast" ||
+        isTaskScopedDiagnostic(event)
+      ) {
+        return;
+      }
       setDiagnosticEvents((current) =>
         [
           ...current.filter((candidate) => candidate.eventId !== event.eventId),
@@ -927,6 +972,22 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       persistPanelVisibility("utility", next);
       return next;
     });
+  }, []);
+
+  const showUtilityTab = useCallback((tab: UtilityDockTab) => {
+    setUtilityTab(tab);
+    setUtilityPanelVisible(true);
+    persistPanelVisibility("utility", true);
+  }, []);
+
+  const resizeLeftPanel = useCallback((width: number) => {
+    setLeftWidth(width);
+    persistPanelWidth("navigator", width);
+  }, []);
+
+  const resizeUtilityPanel = useCallback((width: number) => {
+    setUtilityWidth(width);
+    persistPanelWidth("utility", width);
   }, []);
 
   useEffect(() => {
@@ -1978,7 +2039,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             label={t("resize.documentSidebar")}
             max={360}
             min={184}
-            onChange={setLeftWidth}
+            onChange={resizeLeftPanel}
             orientation="vertical"
             value={leftWidth}
           />
@@ -2005,6 +2066,35 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onResizeFrame={resizeFrame}
               runtime={runtime}
+              selectionActions={
+                state.selection.nodeIds.length > 0 ? (
+                  <CanvasSelectionActions
+                    canDelete={canDeleteSelection}
+                    canDuplicate={state.selection.nodeIds.length > 0}
+                    canHierarchyAction={
+                      canUngroupBooleanSelection ||
+                      canUngroupSelection ||
+                      canGroupSelection
+                    }
+                    canReorder={layerOrderAvailability}
+                    count={state.selection.nodeIds.length}
+                    hierarchyAction={
+                      selectedNode?.kind === "group" ||
+                      selectedNode?.kind === "boolean"
+                        ? "ungroup"
+                        : "group"
+                    }
+                    name={selectedNode?.name}
+                    onDelete={() => deleteNodes(state.selection.nodeIds)}
+                    onDuplicate={duplicateSelectionAction}
+                    onGroup={groupSelection}
+                    onOpenProperties={() => showUtilityTab("properties")}
+                    onReorder={reorderSelection}
+                    onUngroup={ungroupSelection}
+                    platform={platform}
+                  />
+                ) : undefined
+              }
               snapshot={snapshot}
             />
           </div>
@@ -2013,7 +2103,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             label={t("resize.utilityDock")}
             max={400}
             min={280}
-            onChange={setUtilityWidth}
+            onChange={resizeUtilityPanel}
             orientation="vertical"
             value={utilityWidth}
           />

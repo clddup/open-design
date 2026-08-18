@@ -4924,6 +4924,45 @@ describe("App", () => {
     expect(workspace).toHaveAttribute("data-left-panel", "visible");
   });
 
+  it("persists keyboard-resized panel widths without changing the document", () => {
+    renderApp();
+    const revision = runtime().getSnapshot().document.revision;
+    const navigatorResize = screen.getByRole("separator", {
+      name: "Resize document sidebar",
+    });
+
+    fireEvent.keyDown(navigatorResize, { key: "ArrowRight" });
+
+    expect(navigatorResize).toHaveAttribute("aria-valuenow", "244");
+    expect(
+      window.localStorage.getItem("opendesign.workbench.panel.navigator.width"),
+    ).toBe("244");
+    expect(runtime().getSnapshot().document.revision).toBe(revision);
+  });
+
+  it("opens hidden Properties directly from the canvas selection actions", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Toggle Agent and properties panel",
+      }),
+    );
+    act(() => runtime().setSelection(["shape_accent"], "shape_accent"));
+
+    const workspace = document.querySelector(".workspace");
+    expect(workspace).toHaveAttribute("data-utility-panel", "hidden");
+    await user.click(
+      screen.getByRole("button", { name: "Open selection properties" }),
+    );
+
+    expect(workspace).toHaveAttribute("data-utility-panel", "visible");
+    expect(screen.getByRole("tab", { name: "Properties" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
   it("sends a host-bound document scope and renders streamed Agent events", async () => {
     const { user, conversation } = await openProjectConversation();
 
@@ -5822,13 +5861,13 @@ describe("App", () => {
         eventId: "diagnostic_revision_conflict",
         occurredAt: now,
         level: "error",
-        source: "agent",
+        source: "main",
         presentation: "toast",
         code: "request_failed",
         message: "Run revision 136 is stale",
         appVersion: "0.0.0",
         platform: "darwin",
-        context: { conversationId: "conversation_1", runId: "run_1" },
+        context: { requestId: "request_revision_conflict" },
       });
     });
 

@@ -31,7 +31,7 @@ export function mergeReasoningByRun(
       ...existing,
       reasoning: summaries.join("\n\n"),
       reasoningCount,
-      title: t("agent.designProcessCount", { count: reasoningCount }),
+      title: t("agent.modelThinkingSummaryCount", { count: reasoningCount }),
       time: item.time,
     };
   }

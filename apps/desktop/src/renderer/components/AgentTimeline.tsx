@@ -183,8 +183,13 @@ export function AgentTimeline({
           ? t("agent.requestFailed")
           : conversationTitle;
   const timelineHasError = items.some((item) => item.state === "error");
+  const hasRunBoundAgentError = events.some(
+    (event) => event.type === "agent.error" && Boolean(event.runId),
+  );
   const standaloneAgentError =
-    error && !timelineHasError ? friendlyAgentError(error, t) : undefined;
+    error && !timelineHasError && !hasRunBoundAgentError
+      ? friendlyAgentError(error, t)
+      : undefined;
   const scopeLabel =
     scope?.kind === "selection"
       ? t("agent.scopeSelection", { count: scope.count })
@@ -359,10 +364,10 @@ export function AgentTimeline({
                           ...item,
                           title:
                             item.reasoningCount && item.reasoningCount > 1
-                              ? t("agent.designProcessCount", {
+                              ? t("agent.modelThinkingSummaryCount", {
                                   count: item.reasoningCount,
                                 })
-                              : t("agent.designProcess"),
+                              : t("agent.modelThinkingSummary"),
                         }}
                         t={t}
                       />

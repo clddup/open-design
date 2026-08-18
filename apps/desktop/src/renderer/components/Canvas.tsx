@@ -62,6 +62,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type ReactNode,
 } from "react";
 import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
@@ -93,6 +94,7 @@ export function Canvas({
   onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
   onResizeFrame,
+  selectionActions,
 }: {
   activeAgentRunId: string | null;
   agentRunExperience?: AgentRunExperience;
@@ -117,6 +119,7 @@ export function Canvas({
     selection: LeaferTextRangeSelection | null,
   ) => void;
   onResizeFrame: ResizeFrameHandler;
+  selectionActions?: ReactNode;
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLElement>(null);
@@ -1028,7 +1031,9 @@ export function Canvas({
       onPointerDown={(event) => {
         if (
           event.target instanceof Element &&
-          event.target.closest(`.${styles.contextStack}`)
+          event.target.closest(
+            `.${styles.contextStack}, .${styles.selectionQuickActions}`,
+          )
         ) {
           return;
         }
@@ -1066,6 +1071,13 @@ export function Canvas({
           </span>
         </div>
       )}
+      {selectionActions &&
+        tool === "select" &&
+        !imageCropState &&
+        !vectorEditScope &&
+        !booleanEditScope && (
+          <div className={styles.selectionQuickActions}>{selectionActions}</div>
+        )}
       {renderError && (
         <div className={styles.status} role="alert">
           <span className={styles.statusMark} />

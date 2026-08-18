@@ -68,7 +68,7 @@ Leafer 在 editor `sky` 中 selection/EditBox 下方的非交互展示层显示�
 
 普通模式下 cursor 在低频语义目标之间做 180 ms 短位移；Reduced Motion 直接跳到已提交目标。阶段文字同时投影为只读 `aria-live` status，因此状态不只依赖紫色。cursor 不命中、不改变用户选区，也不进入 `DesignDocument`、revision、history、保存、导出或 Conversation journal。
 
-Conversation Timeline 可以显示 Provider 明确返回并已进入 `AssistantTimelineBlock.reasoning_summary` 的有界摘要。同一 Run 的 reasoning-only 消息合并为一个默认折叠的低权重“设计过程 · N 步”，展开后明确标注“模型过程摘要，不代表系统测试或已执行操作”；真实 assistant text 仍作为普通回复显示。它不是模型隐藏思维链，也不能从加密/省略 reasoning 反推内容；没有 summary 时只显示 typed plan、tool、review 和 delivery 状态。摘要不参与权限、事务、完成判断或画布语义，Provider prose 仍不能驱动 cursor、阶段或完成状态。
+Conversation Timeline 可以显示 Provider 明确返回并已进入 `AssistantTimelineBlock.reasoning_summary` 的有界摘要。同一 Run 的 reasoning-only 消息合并为一个默认折叠的低权重“模型思考摘要 · N 条”，展开后明确标注“模型过程摘要，不代表系统测试或已执行操作”；真实 assistant text 始终作为普通回复保留，即使该消息后续紧跟 tool call，也不得在 live/durable 合并时消失。它不是模型隐藏思维链，也不能从加密/省略 reasoning 反推内容；没有 summary 时只显示 typed plan、tool、review 和 delivery 状态。摘要不参与权限、事务、完成判断或画布语义，Provider prose 仍不能驱动 cursor、阶段或完成状态。
 
 ### 生命周期与可信截图
 

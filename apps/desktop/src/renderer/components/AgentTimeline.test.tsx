@@ -1168,13 +1168,13 @@ describe("AgentTimeline", () => {
 
     expect(screen.getByText("Canvas updated")).toBeInTheDocument();
     const disclosure = screen
-      .getByText("Design process · 2 steps")
+      .getByText("Model thinking summary · 2 updates")
       .closest("details");
     expect(disclosure).not.toHaveAttribute("open");
     expect(container.querySelectorAll("[data-agent-reasoning]")).toHaveLength(
       1,
     );
-    fireEvent.click(screen.getByText("Design process · 2 steps"));
+    fireEvent.click(screen.getByText("Model thinking summary · 2 updates"));
     expect(disclosure).toHaveAttribute("open");
     expect(container).toHaveTextContent("Planning internal");
     expect(container).toHaveTextContent("Checking spacing and hierarchy");
@@ -1183,6 +1183,47 @@ describe("AgentTimeline", () => {
     );
     expect(container).not.toHaveTextContent("revision");
     expect(container).not.toHaveTextContent("Response completed");
+  });
+
+  it("does not repeat a run-bound Agent error below the timeline", () => {
+    const message =
+      "opendesign_apply_transaction produced 4 consecutive invalid tool calls without a successful document revision.";
+    const { container } = render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Conversation"
+        error={message}
+        events={[
+          {
+            type: "agent.error",
+            code: "tool_protocol_no_progress",
+            runId: "run_invalid_tools",
+            message,
+            failure: {
+              code: "tool_protocol_no_progress",
+              message,
+              retryable: false,
+            },
+          },
+          {
+            type: "run.completed",
+            runId: "run_invalid_tools",
+            finishedAt: now,
+            stopReason: "error",
+          },
+        ]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={[]}
+      />,
+    );
+
+    expect(
+      screen.getAllByText("Model cannot execute this design tool"),
+    ).toHaveLength(1);
+    expect(container.querySelectorAll("[data-agent-item][data-state='error']"))
+      .toHaveLength(1);
   });
 
   it("does not present interrupted durable activity as an active run", () => {

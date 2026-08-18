@@ -177,11 +177,6 @@ function projectDurableTimeline(
         : [],
     ),
   );
-  const lastToolSequenceByRun = new Map<string, number>();
-  for (const item of timeline) {
-    if (item.type !== "tool" || !item.runId) continue;
-    lastToolSequenceByRun.set(item.runId, item.sequence);
-  }
   const visibleTimeline = timeline.filter(
     (item) =>
       !(
@@ -232,14 +227,12 @@ function projectDurableTimeline(
       const reasoningOnly = detail.length === 0 && reasoning.length > 0;
       return {
         ...base,
-        routine:
-          (detail.length === 0 && reasoning.length === 0) ||
-          (!reasoningOnly &&
-            item.runId !== undefined &&
-            item.sequence < (lastToolSequenceByRun.get(item.runId) ?? -1)),
+        routine: detail.length === 0 && reasoning.length === 0,
         state: "done",
         kind: reasoningOnly ? "reasoning" : "assistant",
-        title: reasoningOnly ? t("agent.designProcess") : t("agent.response"),
+        title: reasoningOnly
+          ? t("agent.modelThinkingSummary")
+          : t("agent.response"),
         ...(detail ? { detail } : {}),
         ...(reasoning ? { reasoning, reasoningCount: 1 } : {}),
       };
@@ -388,7 +381,6 @@ function projectLiveEvents(
   stoppingRunId: string | null,
   t: Translate,
 ): AgentTimelineItem[] {
-  const intermediateMessageIds = intermediateAssistantMessageIds(events);
   const items = new Map<string, AgentTimelineItem>();
   const update = (
     id: string,
@@ -554,13 +546,13 @@ function projectLiveEvents(
       const reasoning = assistantReasoningSummary(event.blocks);
       const reasoningOnly = detail.length === 0 && reasoning.length > 0;
       updateEvent(`message:${event.messageId}`, {
-        routine:
-          (detail.length === 0 && reasoning.length === 0) ||
-          intermediateMessageIds.has(event.messageId),
+        routine: detail.length === 0 && reasoning.length === 0,
         state: "done",
         kind: reasoningOnly ? "reasoning" : "assistant",
         time: t("common.now"),
-        title: reasoningOnly ? t("agent.designProcess") : t("agent.response"),
+        title: reasoningOnly
+          ? t("agent.modelThinkingSummary")
+          : t("agent.response"),
         detail: detail || undefined,
         reasoning: reasoning || undefined,
         reasoningCount: reasoning ? 1 : undefined,
@@ -696,27 +688,6 @@ function projectLiveEvents(
     }
   });
   return [...items.values()];
-}
-
-function intermediateAssistantMessageIds(
-  events: readonly AgentEvent[],
-): Set<string> {
-  const pendingByRun = new Map<string, Set<string>>();
-  const intermediate = new Set<string>();
-  for (const event of events) {
-    if (event.type === "message.completed") {
-      const pending = pendingByRun.get(event.runId) ?? new Set<string>();
-      pending.add(event.messageId);
-      pendingByRun.set(event.runId, pending);
-      continue;
-    }
-    if (event.type !== "tool.requested") continue;
-    for (const messageId of pendingByRun.get(event.runId) ?? []) {
-      intermediate.add(messageId);
-    }
-    pendingByRun.delete(event.runId);
-  }
-  return intermediate;
 }
 
 function finalizeTimelineActivity(item: AgentTimelineItem): AgentTimelineItem {

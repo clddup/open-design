@@ -18,17 +18,18 @@ const event: DiagnosticEvent = {
   appVersion: "0.1.0",
   platform: "win32",
   context: {
-    conversationId: "conversation_1",
-    runId: "run_1",
     requestId: "request_1",
   },
 };
 
-function renderNotifications(onDismiss = vi.fn()) {
+function renderNotifications(
+  onDismiss = vi.fn(),
+  events: readonly DiagnosticEvent[] = [event],
+) {
   render(
     <TooltipProvider delayDuration={0}>
       <I18nProvider initialLocale="en">
-        <DiagnosticNotifications events={[event]} onDismiss={onDismiss} />
+        <DiagnosticNotifications events={events} onDismiss={onDismiss} />
       </I18nProvider>
     </TooltipProvider>,
   );
@@ -36,7 +37,7 @@ function renderNotifications(onDismiss = vi.fn()) {
 }
 
 describe("DiagnosticNotifications", () => {
-  it("shows the error code, message and correlated run", () => {
+  it("shows the error code, message and request correlation", () => {
     renderNotifications();
 
     expect(
@@ -47,7 +48,7 @@ describe("DiagnosticNotifications", () => {
     );
     expect(screen.getByRole("alert")).toHaveTextContent("model_bridge_failed");
     expect(screen.getByRole("alert")).toHaveTextContent(event.message);
-    expect(screen.getByRole("alert")).toHaveTextContent("Run run_1");
+    expect(screen.getByRole("alert")).toHaveTextContent("Request request_1");
   });
 
   it("copies a complete diagnostic report and can be dismissed", async () => {
@@ -61,9 +62,6 @@ describe("DiagnosticNotifications", () => {
 
     await user.click(screen.getByRole("button", { name: "Copy diagnostic" }));
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining("Conversation ID: conversation_1"),
-    );
-    expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining("Request ID: request_1"),
     );
     expect(screen.getByText("Diagnostic copied")).toBeInTheDocument();
@@ -72,5 +70,33 @@ describe("DiagnosticNotifications", () => {
       screen.getByRole("button", { name: "Dismiss notification" }),
     );
     expect(onDismiss).toHaveBeenCalledWith(event.eventId);
+  });
+
+  it("leaves task-scoped diagnostics in the Agent timeline instead of duplicating a toast", () => {
+    renderNotifications(vi.fn(), [
+      {
+        ...event,
+        context: {
+          conversationId: "conversation_1",
+          runId: "run_1",
+          requestId: "request_1",
+        },
+      },
+    ]);
+
+    expect(
+      screen.queryByRole("complementary", { name: "System notifications" }),
+    ).not.toBeInTheDocument();
+
+    renderNotifications(vi.fn(), [
+      {
+        ...event,
+        eventId: "diagnostic_global",
+        context: { requestId: "request_global" },
+      },
+    ]);
+    expect(
+      screen.getByRole("complementary", { name: "System notifications" }),
+    ).toBeInTheDocument();
   });
 });

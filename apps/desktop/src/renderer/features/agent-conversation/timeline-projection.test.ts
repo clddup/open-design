@@ -100,7 +100,7 @@ describe("Agent continuation timeline projection", () => {
     ).toEqual([]);
   });
 
-  it("hides intermediate model narration and routine component repair failures", () => {
+  it("keeps assistant text before tools while hiding routine component repair failures", () => {
     const runId = "run_component_repair";
     const events: AgentEvent[] = [
       {
@@ -156,12 +156,67 @@ describe("Agent continuation timeline projection", () => {
       t: (key, parameters) => translate("zh-CN", key, parameters),
     });
 
-    expect(items.some((item) => item.detail?.includes("组件已补齐"))).toBe(
-      false,
+    expect(items).toContainEqual(
+      expect.objectContaining({ detail: "组件已补齐，正在重新捕获。" }),
     );
     expect(items.some((item) => item.title === "设计更改失败")).toBe(false);
     expect(items).toContainEqual(
       expect.objectContaining({ detail: "任务需要继续修复组件绑定。" }),
+    );
+  });
+
+  it("keeps durable assistant text that precedes a later tool call", () => {
+    const now = "2026-08-18T03:36:00.000Z";
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "message:assistant_intro",
+        sessionId: "conversation_1",
+        runId: "run_1",
+        sequence: 3,
+        createdAt: now,
+        updatedAt: now,
+        type: "assistant.message",
+        messageId: "assistant_intro",
+        blocks: [
+          {
+            blockId: "assistant_intro_text",
+            type: "text",
+            text: "我会先落下窗口骨架和导航，再继续完善内容。",
+          },
+        ],
+      },
+      {
+        itemId: "tool:apply_shell",
+        sessionId: "conversation_1",
+        runId: "run_1",
+        sequence: 4,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "apply_shell",
+        toolName: "opendesign_apply_transaction",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        result: { ok: true },
+        revision: 1,
+      },
+    ];
+
+    const items = projectAgentTimeline({
+      activeRunId: null,
+      events: [],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline,
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items).toContainEqual(
+      expect.objectContaining({
+        kind: "assistant",
+        detail: "我会先落下窗口骨架和导航，再继续完善内容。",
+      }),
     );
   });
 

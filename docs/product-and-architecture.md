@@ -26,7 +26,7 @@ UI 设计是首要能力和最先打磨的工作流，但不是产品边界。�
   这里的“首轮合并”是模型编排合并：inspection 仍是 Main 的只读预检，不进入 history；真正共享一个 rollback-safe history group 的只有全部 Frame allocation 与第一 target 的材料 semantic stages。
 - 对既有画板继续设计时，Main 只信任当前 Renderer `inspect_document` 的 document/revision/Page/node 层级投影：`artboard.mode=existing` 会验证目标 Frame 并解析完整后代集合，随后允许写入既有或新建的嵌套 Group/Frame；Project 落盘副本、用户活动 viewport、发送时选区和本 Run 新增节点缓存均不能取代这一权威祖先判定。stale/invalid inspection 与错误 existing Frame 返回稳定可恢复码，不把一次计划失败升级为 Run 终态。
 - Renderer/Preload/Main/Agent 的运行时校验、最小环境变量 allowlist，以及按 run 分别冻结 Design File/revision、选区上下文与单一 Mutation Target 的设计工具桥。
-- Main-owned 结构化诊断 JSONL、按 Conversation/Run/Request/Tool Call 关联的右下角通知与单条诊断复制；Agent 对话在用户位于底部附近时跟随新消息和流式状态，用户上翻后暂停跟随。
+- Main-owned 结构化诊断 JSONL 与单条诊断复制；Conversation/Run 绑定的任务错误在 Agent 对话内单点呈现，非任务级系统通知才投影到右下角；Agent 对话在用户位于底部附近时跟随新消息和流式状态，用户上翻后暂停跟随。
 - Run 级 Renderer 设计工具熔断：同一任务的 apply/capture 连续两次停滞后，Main 以不可重试 `renderer_circuit_open` 终止当前模型循环，保留已提交 revision 与未完成交付，并阻止 durable continuation 自动重启同一故障；成功画布工具清零计数，普通 inspect 不掩盖持续截图故障。该能力是故障止损与可信恢复，不代表底层 Leafer capture/apply 停滞根因已修。
 - Agent 大型设计事务的真实根分配、有序语义步骤、组件决策、语义 Agent cursor、Leafer 新增节点 reveal 与既有节点属性 tween：`DesignPlanToolInput version: 4` 在 v3 多 target 结构上增加 LLM 明示的 component/ordinary 语义候选；Main 不按类别或次数猜测，并在最终检查中一次返回声明节点与真实 Frame/Group、Component Main、linked Instance 的有界非阻塞质量偏差。接受计划后仍立即通过同一 EditorRuntime 原子分配全部 target 的真实 Frame roots；accepted plan 不展示紫色 skeleton，version 2/3 历史计划继续兼容。Main 从 accepted plan 编译计划 Frame 的可信 Page、parent 和局部几何，Provider 不把局部 bounds 重复换算成世界坐标；计划 region 待首个实质事务按全局唯一稳定 ID 连同真实内容创建。真实顶层 Frame 只平移时，cursor 跟随当前 transform，已建立目标内纯新增事务在 Renderer 复核尺寸、轴对齐和祖先链后可安全 rebase 到最新 revision；resize/rotate/reparent/delete/跨 Page 或覆盖既有节点仍要求重新 inspect。cursor 的阶段只来自固定 tool 生命周期，位置跟随已提交 revision 的新增或更新节点 focus point，不消费 Provider 自由文本。`opendesign_apply_transaction.steps` 按语义边界覆盖全部 command，每个成功步骤产生真实 revision 并共享一个撤销组；未提供 steps 时整笔一次提交。新增节点按父级优先经历短暂线框与淡入，稳定匹配节点只插值实际变化的 transform/geometry/paint/effect/text/path 属性，不兼容语义有界 dissolve。reveal/tween 共用单 RAF 并按可见节点与实际帧时间调节节奏；同节点新 revision 从当前显示值 retarget，选区 editBox 同帧刷新。所有展示状态均可丢弃，不进入文档、history、selection、保存或导出；Reduced Motion、人工编辑、手动停止、Run 终态、切页、错误和截图恢复最终投影。Material write/capture/review 另以 observed document revision 建模，pan/zoom/选区/窗口变化不会制造冲突；可自动恢复的门禁错误返回稳定下一步并默认不堆叠红色时间线卡。Run 恢复另外以真实 design revision 为进度：同一工具 4 次 schema 失败或跨工具 8 次可恢复失败仍无 revision 时终止并保留已有设计，inspection 本身不冒充画布进度。见 ADR-0072。
 
@@ -69,7 +69,7 @@ OpenDesign 是跨平台桌面产品，不是 macOS 专用工具。macOS 与 Wind
 ## 3. 核心工作流
 
 1. 用户在 Workspace 中创建或打开 Project 与 Design File，并在 Page 的 Frame/Artboard 和 Layers 上直接编辑。
-2. 用户通过选区命令、命令面板或 Agent 面板描述目标；Conversation 保留 `homeProjectId`，但可以为本次 run 显式引用其他 Project 或目录。
+2. 用户通过选区命令、画布就地操作、Properties 或 Agent 面板描述目标；Conversation 保留 `homeProjectId`，但可以为本次 run 显式引用其他 Project 或目录。
 3. 主机为 run 固定 Working Set、Mutation Targets 与 Capabilities。三者分别表达可读上下文、计划写目标和策略允许的动作，互不隐式授予。
 4. Agent 读取经授权的最小上下文并返回结构化计划与设计事务；Tool Runtime 执行 Trust、Capability、Approval 与 Sandbox 检查。
 5. OpenDesign EditorRuntime 按每个 Design File 的 `baseRevision` 预演或应用事务，并向 UI 返回变更集、冲突、诊断和渲染状态。
@@ -245,7 +245,7 @@ Conversation 的原始 append-only journal 与模型上下文投影分离。Agen
 
 用户请求停止后，Renderer 立即把对应 Run 显示为“正在停止”并去除流式活动光标，但在 `run.completed` 或失败终态到达前仍保持并发占用。终态会兜底结束该 Run 遗留的 partial message、tool 与 approval 活动态，避免对话中残留看似仍在运行的蓝色光标。
 
-Timeline 把最后一个 Run 的 error/budget 作为当前高权重状态，显示具体 failure、阈值、重试语义和请求关联；后续 Run 一旦开始，之前 Run 的失败转为原时间位置上的中性紧凑历史行，旧 cancelled/completed 终态折叠，不再用“任务已停止”或旧错误边框冒充当前结果。活动 Run 的 `message/tool/approval/run` checkpoint 会 debounce 回读 durable `session.history`；live delta/progress 按稳定 ID 合并，只补充尚未持久投影的活动状态，不再以 200 条窗口截断旧消息。Conversation UI 由纯 durable/live projection、每 Conversation composer controller 和受控 Composer view 组成；Conversation epoch 丢弃切换后迟到的附件选择、附件导入和提交结果，Timeline 继续独占贴近底部才跟随的滚动语义。Provider 已明确返回的有界 `reasoning_summary` 按 Run 合并为默认折叠的低权重“设计过程”，展开后注明它是模型过程摘要而非系统测试或已执行画布操作；OpenDesign 不请求、推断或显示隐藏思维链，省略 summary 时继续只展示 typed plan/tool/review/delivery 状态。`invalid_tool_input`、重新 inspection 和相同失败抑制等模型可自行恢复的内部调用不会显示成用户终态红卡，但仍保留在 journal/诊断；真正业务失败继续可见。该规则同时作用于 live events、durable history 与 Conversation 切换，不删除 journal 审计，也不会让旧 approval/tool/cursor 恢复可操作状态。Main diagnostic v3 可复制同一受限 failure，但仍不记录 Prompt、附件正文、设计正文、凭据、路径或完整工具参数。
+Timeline 把最后一个 Run 的 error/budget 作为当前高权重状态，显示具体 failure、阈值、重试语义和请求关联；后续 Run 一旦开始，之前 Run 的失败转为原时间位置上的中性紧凑历史行，旧 cancelled/completed 终态折叠，不再用“任务已停止”或旧错误边框冒充当前结果。活动 Run 的 `message/tool/approval/run` checkpoint 会 debounce 回读 durable `session.history`；live delta/progress 按稳定 ID 合并，只补充尚未持久投影的活动状态，不再以 200 条窗口截断旧消息。任何包含真实 text block 的 assistant message 都是持久对话内容，即使后续紧跟 tool call 也不得标成 routine 或在 history 回读时消失。Conversation UI 由纯 durable/live projection、每 Conversation composer controller 和受控 Composer view 组成；Conversation epoch 丢弃切换后迟到的附件选择、附件导入和提交结果，Timeline 继续独占贴近底部才跟随的滚动语义。Provider 已明确返回的有界 `reasoning_summary` 按 Run 合并为默认折叠的低权重“模型思考摘要 · N 条”，展开后注明它是模型过程摘要而非系统测试或已执行画布操作；只有真实提交的 revision 才投影为设计步骤。OpenDesign 不请求、推断或显示隐藏思维链，省略 summary 时继续只展示 typed plan/tool/review/delivery 状态。`invalid_tool_input`、重新 inspection 和相同失败抑制等模型可自行恢复的内部调用不会显示成用户终态红卡，但仍保留在 journal/诊断；真正业务失败继续可见。该规则同时作用于 live events、durable history 与 Conversation 切换，不删除 journal 审计，也不会让旧 approval/tool/cursor 恢复可操作状态。Main diagnostic v3 可复制同一受限 failure，但仍不记录 Prompt、附件正文、设计正文、凭据、路径或完整工具参数。
 
 失败按“是否还能可靠地继续模型循环”分类，而不是按任意一层是否抛错分类：
 
@@ -255,7 +255,7 @@ Timeline 把最后一个 Run 的 error/budget 作为当前高权重状态，显�
 
 任何一类失败都不得只写终端日志。能继续的必须进入模型上下文，不能继续的必须进入用户可见终态；同一 `requestId`/`runId` 用于关联、审计和释放资源。
 
-Main 在应用 `userData/diagnostics/events.jsonl` 中维护有大小上限和单代轮转的结构化诊断日志。事件只包含时间、级别、来源、稳定错误码、错误消息、应用/平台版本，以及可用的 Conversation、Run、Request、Tool Call、Project 和 Design File ID；设计事务 invariant 事件可附带单条工具失败的有界 command/node/path issue 与恢复动作，但不记录 Prompt、附件正文、设计正文、Provider 凭据或完整工具参数。不可继续的错误和明确系统通知通过同一事件投影为不透明桌面通知，编辑器视图中停靠在画布右下并避开 Agent composer，其他视图停靠窗口右下；错误在用户关闭前保持，用户可一键复制当前事件的完整关联信息交给 Agent 排查。普通可自动恢复的 workflow 门禁仍静默；带 invariant details 的失败显示低打扰 warning，便于用户看到具体目标并复制诊断。
+Main 在应用 `userData/diagnostics/events.jsonl` 中维护有大小上限和单代轮转的结构化诊断日志。事件只包含时间、级别、来源、稳定错误码、错误消息、应用/平台版本，以及可用的 Conversation、Run、Request、Tool Call、Project 和 Design File ID；设计事务 invariant 事件可附带单条工具失败的有界 command/node/path issue 与恢复动作，但不记录 Prompt、附件正文、设计正文、Provider 凭据或完整工具参数。带 Conversation+Run 的任务诊断由 Agent Timeline 呈现，不再同时生成 Composer 错误和右下角 toast；JSONL 审计仍完整保留。非任务级不可继续错误和明确系统通知才投影为不透明桌面通知，编辑器视图中停靠在画布右下并避开 Agent composer，其他视图停靠窗口右下；错误在用户关闭前保持，用户可一键复制当前事件的完整关联信息交给 Agent 排查。普通可自动恢复的 workflow 门禁仍静默。
 
 Agent composer 还支持粘贴和拖入图片/文件。模型可按需调用 `opendesign_read_image` 读取当前 run 已附加的图片，或用户在当前 prompt 中精确明示的绝对路径、`file:` URL 和 HTTP(S) 图片 URL；Main 只做 source 授权、受限读取、内容寻址和完整性校验，识别由模型完成。tool result 内保存 attachment metadata，下一轮由 Model Gateway 解析成真实多模态图片块。`opendesign_place_image` 可把同一 attachment 以受信任的 asset + image node 原子事务嵌入画布。`inspect_document` 只返回引用 asset 的名称、类型、尺寸、source 类型和扩展键，不把 data URI、外部 URI 或像素内容复制进工具结果；Agent Runtime 对当前轮和旧 journal 中意外出现的超长工具字段还会在模型投影时省略，避免一张图片把下一轮上下文顶爆。远程读取不携带 Cookie 或 Provider 凭据，并限制协议、重定向、超时与大小。通用网页文本读取和隔离截图仍是后续 `fetch_reference` / `capture_reference` 能力，不把仅获取 HTML 描述为已经看见页面视觉。
 

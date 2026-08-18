@@ -85,6 +85,16 @@
   box-shadow: none;
 }
 
+.selectionQuickActions {
+  position: absolute;
+  z-index: 4;
+  bottom: 14px;
+  left: 50%;
+  max-width: calc(100% - 20px);
+  translate: -50% 0;
+  pointer-events: auto;
+}
+
 .contextStack {
   position: absolute;
   z-index: 2;
