@@ -1099,20 +1099,25 @@ describe("AgentTimeline", () => {
   it("shows provider reasoning summaries but hides native tool plumbing", () => {
     const timeline: SessionTimelineItem[] = [
       {
-        itemId: "message:reasoning_only",
+        itemId: "message:mixed_response",
         sessionId: "conversation_1",
         runId: "run_history_1",
         sequence: 1,
         createdAt: now,
         updatedAt: now,
         type: "assistant.message",
-        messageId: "reasoning_only",
+        messageId: "mixed_response",
         blocks: [
           {
             blockId: "reasoning_block_1",
             type: "reasoning_summary",
             status: "completed",
             summary: "**Planning internal transaction sequencing**",
+          },
+          {
+            blockId: "response_block_1",
+            type: "text",
+            text: "I will build the editable shell first.",
           },
         ],
       },
@@ -1167,6 +1172,9 @@ describe("AgentTimeline", () => {
     );
 
     expect(screen.getByText("Canvas updated")).toBeInTheDocument();
+    expect(
+      screen.getByText("I will build the editable shell first."),
+    ).toBeInTheDocument();
     const disclosure = screen
       .getByText("Model thinking summary · 2 updates")
       .closest("details");

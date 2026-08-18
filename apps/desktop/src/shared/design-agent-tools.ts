@@ -32,6 +32,7 @@ import {
   isDesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
 import {
+  explainInvalidDesignApplyToolInput,
   isInternalDesignApplyToolInput,
   normalizeDesignApplyToolInput,
   type DesignApplyToolInput,
@@ -55,6 +56,7 @@ import { DESIGN_VARIABLE_TOOL_INPUT_SCHEMA } from "./design-variable-tool-schema
 import { isDesignStyleToolInput } from "./design-style-tool";
 import { DESIGN_STYLE_TOOL_INPUT_SCHEMA } from "./design-style-tool-schema";
 export {
+  explainInvalidDesignApplyToolInput,
   isDesignApplyToolInput,
   isInternalDesignApplyToolInput,
   normalizeDesignApplyToolInput,
@@ -963,7 +965,7 @@ const MODEL_PATH_PROPERTY = {
 const MODEL_NODE_KIND_PROPERTIES_SCHEMA = {
   type: "object",
   description:
-    "Properties must match the inspected node kind; Path/Vector require exactly one geometry source. The host validates the complete discriminated node before writing.",
+    "Properties must match the inspected node kind; Path/Vector require exactly one geometry source. On insert, the host defaults omitted no-op appearance fields by kind: fills/strokes to [], strokeWidth/cornerRadius to 0, and Frame clipsContent to false. The host validates the complete discriminated node before writing.",
   properties: {
     ...MODEL_SHAPE_PROPERTIES,
     cornerRadius: { type: "number", minimum: 0 },
@@ -2584,6 +2586,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     },
     risk: "design_write" as const,
     approval: "never" as const,
+    explainInvalidInput: explainInvalidDesignApplyToolInput,
   },
 ] as const;
 

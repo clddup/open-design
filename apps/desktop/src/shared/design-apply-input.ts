@@ -1,5 +1,8 @@
 import {
+  DesignNodeSchema,
+  NodeDesignOperationSchema,
   isDesignOperation,
+  schemaValidationIssues,
   type DesignOperation,
 } from "@opendesign/design-contracts";
 
@@ -55,6 +58,55 @@ export function normalizeDesignApplyToolInput(
   };
 }
 
+export function explainInvalidDesignApplyToolInput(
+  input: unknown,
+): string | undefined {
+  if (normalizeDesignApplyToolInput(input)) return undefined;
+  if (!isRecord(input)) {
+    return "The design transaction must be an object with label and commands.";
+  }
+  if (
+    typeof input.label !== "string" ||
+    input.label.length === 0 ||
+    input.label.length > 256
+  ) {
+    return "The design transaction label must contain 1..256 characters.";
+  }
+  if (!Array.isArray(input.commands) || input.commands.length === 0) {
+    return "The design transaction commands must be a non-empty array.";
+  }
+  if (input.commands.length > 1_000) {
+    return "The design transaction cannot contain more than 1000 commands.";
+  }
+  if (
+    input.summary !== undefined &&
+    (typeof input.summary !== "string" || input.summary.length > 2_000)
+  ) {
+    return "The design transaction summary must be a string of at most 2000 characters.";
+  }
+  const extraKeys = Object.keys(input).filter(
+    (key) => !["label", "summary", "steps", "commands"].includes(key),
+  );
+  if (extraKeys.length > 0) {
+    return `The design transaction has unsupported field(s): ${extraKeys.join(", ")}.`;
+  }
+  if (!validRawDesignApplySteps(input.steps, input.commands)) {
+    return "The design transaction steps must reference every commandId exactly once and in command order.";
+  }
+
+  const issues = input.commands.flatMap((command, index) =>
+    explainInvalidModelOperation(command, index),
+  );
+  if (issues.length === 0) {
+    return "The design transaction contains an operation that apply_transaction does not permit. Use the dedicated component, page, text, asset, variable, or style tool for that operation.";
+  }
+  return [
+    "The design transaction has invalid command fields:",
+    ...issues.slice(0, 12).map((issue) => `- ${issue}`),
+    "Correct these exact fields and retry the transaction.",
+  ].join("\n");
+}
+
 export function isDesignApplyToolInput(
   input: unknown,
 ): input is DesignApplyToolInput {
@@ -78,7 +130,16 @@ function normalizeModelDesignOperation(
     const normalized = {
       ...command,
       nodes: rawNodes.map((node) =>
-        isRecord(node) ? { exportSettings: [], ...node } : node,
+        isRecord(node)
+          ? {
+              exportSettings: [],
+              ...node,
+              properties: normalizeModelNodeProperties(
+                node.kind,
+                node.properties,
+              ),
+            }
+          : node,
       ),
     };
     return isDesignOperation(normalized) ? normalized : undefined;
@@ -99,8 +160,15 @@ function normalizeModelDesignOperation(
   if (command.type !== "insert_element") {
     return isDesignOperation(command) ? command : undefined;
   }
+  const normalized = normalizeModelInsertOperation(command);
+  return normalized && isDesignOperation(normalized) ? normalized : undefined;
+}
+
+function normalizeModelInsertOperation(
+  command: Record<string, unknown>,
+): Record<string, unknown> | undefined {
   if (!isRecord(command.node)) return undefined;
-  const normalized = {
+  return {
     ...command,
     node: {
       visible: true,
@@ -111,9 +179,81 @@ function normalizeModelDesignOperation(
       ...command.node,
       parentId: command.parentId,
       childIds: command.node.childIds ?? [],
+      properties: normalizeModelNodeProperties(
+        command.node.kind,
+        command.node.properties,
+      ),
     },
   };
-  return isDesignOperation(normalized) ? normalized : undefined;
+}
+
+function normalizeModelNodeProperties(kind: unknown, value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const shapeDefaults = { fills: [], strokes: [], strokeWidth: 0 };
+  if (kind === "frame") {
+    return {
+      ...shapeDefaults,
+      cornerRadius: 0,
+      clipsContent: false,
+      ...value,
+    };
+  }
+  if (kind === "rectangle" || kind === "polygon" || kind === "star") {
+    return { ...shapeDefaults, cornerRadius: 0, ...value };
+  }
+  if (
+    kind === "ellipse" ||
+    kind === "line" ||
+    kind === "text" ||
+    kind === "vector" ||
+    kind === "path"
+  ) {
+    return { ...shapeDefaults, ...value };
+  }
+  if (kind === "image") {
+    return { cornerRadius: 0, ...value };
+  }
+  return value;
+}
+
+function explainInvalidModelOperation(value: unknown, index: number): string[] {
+  if (!isRecord(value)) return [`command[${index}] must be an object`];
+  const commandId =
+    typeof value.commandId === "string" ? value.commandId : `command[${index}]`;
+  if (value.type === "insert_element") {
+    const normalized = normalizeModelInsertOperation(value);
+    if (!normalized || !isRecord(normalized.node)) {
+      return [`${commandId} /node: Expected an insert node object`];
+    }
+    const nodeId =
+      typeof normalized.node.id === "string"
+        ? normalized.node.id
+        : "<unknown-node>";
+    return schemaValidationIssues(DesignNodeSchema, normalized.node).map(
+      (issue) => `${commandId} node ${nodeId} ${issue.path}: ${issue.message}`,
+    );
+  }
+  if (value.type === "replace_subtree" && Array.isArray(value.nodes)) {
+    return value.nodes.flatMap((node, nodeIndex) => {
+      if (!isRecord(node)) {
+        return [`${commandId} /nodes/${nodeIndex}: Expected a node object`];
+      }
+      const normalized: Record<string, unknown> = {
+        exportSettings: [],
+        ...node,
+        properties: normalizeModelNodeProperties(node.kind, node.properties),
+      };
+      const nodeId =
+        typeof normalized.id === "string" ? normalized.id : "<unknown-node>";
+      return schemaValidationIssues(DesignNodeSchema, normalized).map(
+        (issue) =>
+          `${commandId} node ${nodeId} /nodes/${nodeIndex}${issue.path}: ${issue.message}`,
+      );
+    });
+  }
+  return schemaValidationIssues(NodeDesignOperationSchema, value).map(
+    (issue) => `${commandId} ${issue.path}: ${issue.message}`,
+  );
 }
 
 function normalizeModelExportSetting(value: unknown): unknown {

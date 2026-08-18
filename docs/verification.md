@@ -48,7 +48,7 @@ pnpm lint           passed
 pnpm typecheck      passed
 pnpm test           passed
 ├── package tests   83 files / 753 tests
-└── desktop tests   93 files / 730 tests
+└── desktop tests   93 files / 733 tests
 pnpm build          passed
 ├── Renderer
 ├── Electron Main

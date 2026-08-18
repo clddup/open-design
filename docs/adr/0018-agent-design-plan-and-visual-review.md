@@ -2,7 +2,7 @@
 
 - 状态：已接受
 - 日期：2026-08-10
-- 更新：2026-08-11
+- 更新：2026-08-18
 - 关联：ADR-0007、ADR-0012、ADR-0013、ADR-0014、ADR-0015
 
 ## 背景
@@ -60,13 +60,13 @@ Renderer 只在收到 Main 对同一 tool call 的 `accepted` 结果后，才把
 
 Review 前置条件失败使用稳定 `design_workflow.material_write_required / capture_required / capture_revision_invalid / delivery_verification_required / delivery_structure_incomplete` 恢复指令。模型不得原样重试同一 review。普通可恢复门禁反馈进入 journal/日志但默认不堆叠为右侧红色失败卡；Run 最终无法恢复时，终态和诊断继续对用户可见。
 
-Renderer 与 Main 共同消费一个 workflow failure classifier；同一错误的恢复阶段、是否为普通可恢复反馈和 Timeline 呈现不得再由多套正则分别判断。历史 `component_strategy_incomplete` 仍可从 journal 读取并显示正确恢复阶段，但 ADR-0072 已停止在新最终 capture 中逐节点抛出该错误；当前检查一次返回 `blocking:false` 组件质量报告。组件工具的 `create-component` 统一使用 `rootNodeId` 表示被提升的既有 Frame/Group，并要求精确的 `action / label / pageId / rootNodeId / componentId / name`；action-specific 校验失败必须向模型返回缺失字段、意外字段与完整最小调用形状，不能只返回顶层 schema mismatch。
+Renderer 与 Main 共同消费一个 workflow failure classifier；同一错误的恢复阶段、是否为普通可恢复反馈和 Timeline 呈现不得再由多套正则分别判断。历史 `component_strategy_incomplete` 仍可从 journal 读取并显示正确恢复阶段，但 ADR-0072 已停止在新最终 capture 中逐节点抛出该错误；当前检查一次返回 `blocking:false` 组件质量报告。组件工具的 `create-component` 统一使用 `rootNodeId` 表示被提升的既有 Frame/Group，并要求精确的 `action / label / pageId / rootNodeId / componentId / name`；action-specific 校验失败必须向模型返回缺失字段、意外字段与完整最小调用形状，不能只返回顶层 schema mismatch。`apply_transaction` 使用同一原则：模型可见 schema 允许省略的无操作外观字段必须在可信边界确定性补齐，仍然无效的 command 必须返回 `commandId / nodeId / path / message`，不能让模型围绕泛化的“arguments do not match”盲重试。
 
-Timeline 把模型文字与可信产品状态分开。一个 Run 中后续仍发生工具调用的中间 assistant prose 视为内部过程，不作为用户可见进度；“真实设计步骤”只来自已提交 semantic step revision。组件定义、Variables 与其他可能不改变像素的文档元数据 revision 使用各自准确标题，不得显示成“画布已更新”；最终模型回复仍可见。
+Timeline 把模型文字与可信产品状态分开。包含真实 text block 的 assistant message 始终作为对话内容保留，即使后续仍发生工具调用；Provider 明确返回的 reasoning summary 按 Run 收集，无论它来自纯 reasoning message 还是同时带正文的 assistant message，都只投影成一个稳定、默认折叠的摘要入口，不能冒充执行进度或在每条正文下重复。“真实设计步骤”只来自已提交 semantic step revision。组件定义、Variables 与其他可能不改变像素的文档元数据 revision 使用各自准确标题，不得显示成“画布已更新”。
 
 设计事务违反 `EditorRuntime` invariant 时，`AgentEvent 3.6` 的可恢复 `tool.failed` 保留每项 `commandId / nodeId / path / message`、稳定 fingerprint、是否可原样重试，以及固定 `inspect-and-revise` 恢复动作。TypeBox 的 discriminated union 错误必须按节点 `kind` / command `type` 展开到最接近的具体字段，不能只返回顶层 `Expected union value`；`update_properties` 在 Runtime 内先把 patch 合并到真实目标节点，再按完整 `DesignNode` 校验，因此给 `Group` 写 paint、给 Text 写非法 geometry 等错误会在 revision 前绑定到真正负责的 command/node/path。失败事务保持原 revision，不生成部分历史；成功执行当前文档 inspection 后才解除设计写冻结。可信 Run binding、协议或基础设施损坏仍按不可恢复终态处理。
 
-Agent 的单节点 `insert_element` 必须把 `node.childIds` 视为空的派生字段，父子关系只由有序 child command 的 `parentId/index` 建立。为了兼容模型仍预声明未来 child ID 的输入，Renderer 在可信边界验证每个 ID 都对应更晚且 parent 匹配的 insert command，再规范为空；缺少对应命令、顺序错误或 parent 不一致会在 revision 前返回明确可恢复错误。`replace_subtree` 的完整子树仍保留显式 `childIds` 契约。
+Agent 的单节点 `insert_element` 必须把 `node.childIds` 视为空的派生字段，父子关系只由有序 child command 的 `parentId/index` 建立。为了兼容模型仍预声明未来 child ID 的输入，Renderer 在可信边界验证每个 ID 都对应更晚且 parent 匹配的 insert command，再规范为空；缺少对应命令、顺序错误或 parent 不一致会在 revision 前返回明确可恢复错误。模型 insert/replace 还可以省略确定性无操作外观：共享 Shape 的 `fills/strokes` 默认为 `[]`、`strokeWidth/cornerRadius` 默认为 `0`、Frame `clipsContent` 默认为 `false`、Image `cornerRadius` 默认为 `0`；模型显式值始终优先。`pointCount`、`innerRadius`、文字排版、图片资源与矢量几何等有业务含义的字段不得猜测。`replace_subtree` 的完整子树仍保留显式 `childIds` 契约。
 
 ## 结果
 
@@ -79,5 +79,5 @@ Agent 的单节点 `insert_element` 必须把 `node.childIds` 视为空的派生
 
 - Tool contract 测试覆盖 version 3 的一个/多个 target、target/Page/Frame/region 字段、重复/保留 ID、单图 target 上限、反模式与图片 role；version 2 历史输入继续可读。
 - Main coordinator 测试覆盖无计划拒绝、Page/Document scope、一个与多个 target、计划节点全局 ID 唯一、existing Frame 权威 inspection/后代解析、既有锁定容器、existing 逻辑 region 不改写真实层级/几何、create 可信结构几何编译与区域层级/bounds、首次空画板/空区域拒绝且 ledger 保持 pending、空 region 最终拒绝、根层散落、跨 target 操作拒绝、图片 role、capture target、revision 顺序、持久账本与中断恢复。Renderer 测试另覆盖 insert childIds 规范化、顶层 Frame 平移后的纯新增 rebase，以及 resize 时拒绝沿用旧布局条件。
-- Contract/Runtime/Agent/Renderer/bridge 测试覆盖 discriminated union 具体字段、kind-incompatible property patch、准确 command/node/path、失败零 revision、模型结构化 tool result、journal/Timeline/诊断复制、重新 inspection 后恢复，以及相同失败输入不重复执行。
+- Contract/Runtime/Agent/Renderer/bridge 测试覆盖模型无操作外观缺省、带 semantic steps 的 fill-only Shape 事务、discriminated union 具体字段、kind-incompatible property patch、准确 command/node/path、失败零 revision、模型结构化 tool result、journal/Timeline/诊断复制、重新 inspection 后恢复，以及相同失败输入不重复执行。
 - Completion guard 测试覆盖 plan、两次 capture、中间 review/refinement、`N/M` 未完成拒绝、全部 verified 完成、仅生图未写画布和 raster 主导的可编辑 composition 拒绝。

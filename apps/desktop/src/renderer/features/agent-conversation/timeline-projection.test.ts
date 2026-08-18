@@ -220,6 +220,97 @@ describe("Agent continuation timeline projection", () => {
     );
   });
 
+  it("projects one reasoning disclosure per Run without removing assistant text", () => {
+    const now = "2026-08-18T03:40:00.000Z";
+    const runId = "run_reasoning";
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "message:mixed",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "assistant.message",
+        messageId: "mixed",
+        blocks: [
+          {
+            blockId: "mixed_reasoning",
+            type: "reasoning_summary",
+            status: "completed",
+            summary: "Planning the first editable structure",
+          },
+          {
+            blockId: "mixed_text",
+            type: "text",
+            text: "我会先建立真实画板，再完善首屏。",
+          },
+        ],
+      },
+      {
+        itemId: "tool:apply_shell",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 2,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "apply_shell",
+        toolName: "opendesign_apply_transaction",
+        input: {},
+        risk: "design_write",
+        status: "completed",
+        result: { ok: true },
+        revision: 1,
+      },
+      {
+        itemId: "message:reasoning_only",
+        sessionId: "conversation_1",
+        runId,
+        sequence: 3,
+        createdAt: now,
+        updatedAt: now,
+        type: "assistant.message",
+        messageId: "reasoning_only",
+        blocks: [
+          {
+            blockId: "reasoning_only_block",
+            type: "reasoning_summary",
+            status: "completed",
+            summary: "Checking hierarchy and spacing",
+          },
+        ],
+      },
+    ];
+
+    const items = projectAgentTimeline({
+      activeRunId: null,
+      events: [],
+      locale: "zh-CN",
+      stoppingRunId: null,
+      timeline,
+      t: (key, parameters) => translate("zh-CN", key, parameters),
+    });
+
+    expect(items.map((item) => item.id)).toEqual([
+      "message:mixed",
+      `reasoning:${runId}`,
+      "tool:apply_shell",
+    ]);
+    expect(items[0]).toMatchObject({
+      kind: "assistant",
+      detail: "我会先建立真实画板，再完善首屏。",
+    });
+    expect(items[0]?.reasoning).toBeUndefined();
+    expect(items[1]).toMatchObject({
+      kind: "reasoning",
+      reasoningCount: 2,
+      title: "模型思考摘要 · 2 条",
+      reasoning:
+        "Planning the first editable structure\n\nChecking hierarchy and spacing",
+    });
+  });
+
   it("shows each committed semantic design revision once across durable and live state", () => {
     const now = "2026-08-13T01:00:00.000Z";
     const timeline: SessionTimelineItem[] = [

@@ -23,6 +23,7 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   PLACE_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
+  explainInvalidDesignApplyToolInput,
   explainInvalidDesignComponentToolInput,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
@@ -93,9 +94,23 @@ describe("design Agent tool contract", () => {
             kind: "rectangle",
             properties: {
               fills: [{ type: "solid", color: "#101820", opacity: 1 }],
-              strokes: [],
-              strokeWidth: 0,
-              cornerRadius: 0,
+            },
+          },
+        },
+        {
+          commandId: "insert_status_dot",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: "poster_artboard",
+          index: 1,
+          node: {
+            id: "status_dot",
+            name: "Status dot",
+            transform: [1, 0, 0, 1, 24, 24],
+            size: { width: 8, height: 8 },
+            kind: "ellipse",
+            properties: {
+              fills: [{ type: "solid", color: "#18B89A", opacity: 1 }],
             },
           },
         },
@@ -116,6 +131,20 @@ describe("design Agent tool contract", () => {
             exportSettings: [],
             opacity: 1,
             extensions: {},
+            properties: {
+              strokes: [],
+              strokeWidth: 0,
+              cornerRadius: 0,
+            },
+          },
+        },
+        {
+          node: {
+            id: "status_dot",
+            properties: {
+              strokes: [],
+              strokeWidth: 0,
+            },
           },
         },
       ],
@@ -126,6 +155,114 @@ describe("design Agent tool contract", () => {
         compactInput,
       ),
     ).toBe(false);
+  });
+
+  it("returns exact command and node paths for invalid apply input", () => {
+    const apply = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_APPLY_TOOL_NAME,
+    );
+    expect(apply).toHaveProperty(
+      "explainInvalidInput",
+      explainInvalidDesignApplyToolInput,
+    );
+    const explanation = explainInvalidDesignApplyToolInput({
+      label: "Create incomplete star",
+      commands: [
+        {
+          commandId: "insert_star",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: "poster_artboard",
+          index: 0,
+          node: {
+            id: "star_1",
+            name: "Star",
+            transform: [1, 0, 0, 1, 0, 0],
+            size: { width: 64, height: 64 },
+            kind: "star",
+            properties: {
+              fills: [{ type: "solid", color: "#FFFFFF", opacity: 1 }],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(explanation).toContain("insert_star node star_1");
+    expect(explanation).toContain("/properties/pointCount");
+    expect(explanation).toContain("/properties/innerRadius");
+    expect(explanation).toContain("Correct these exact fields");
+  });
+
+  it("accepts fill-only status primitives with semantic steps", () => {
+    const input = {
+      label: "Create runtime status bar",
+      steps: [
+        {
+          stepId: "status_bar",
+          label: "Runtime status",
+          commandIds: ["status_region", "status_dot", "status_separator"],
+        },
+      ],
+      commands: [
+        {
+          commandId: "status_region",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: "shell_region",
+          index: 3,
+          node: {
+            id: "status_region",
+            name: "Runtime Status",
+            transform: [1, 0, 0, 1, 88, 852],
+            size: { width: 1352, height: 48 },
+            kind: "frame",
+            properties: {
+              fills: [{ type: "solid", color: "#E8EEF5", opacity: 1 }],
+            },
+          },
+        },
+        {
+          commandId: "status_dot",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: "status_region",
+          index: 0,
+          node: {
+            id: "runtime_online_dot",
+            name: "Runtime Online",
+            transform: [1, 0, 0, 1, 20, 20],
+            size: { width: 8, height: 8 },
+            kind: "ellipse",
+            properties: {
+              fills: [{ type: "solid", color: "#18B89A", opacity: 1 }],
+            },
+          },
+        },
+        {
+          commandId: "status_separator",
+          type: "insert_element",
+          pageId: "page_1",
+          parentId: "status_region",
+          index: 1,
+          node: {
+            id: "status_separator",
+            name: "Status Separator",
+            transform: [1, 0, 0, 1, 180, 12],
+            size: { width: 1, height: 24 },
+            kind: "rectangle",
+            properties: {
+              fills: [{ type: "solid", color: "#C8D3E0", opacity: 1 }],
+            },
+          },
+        },
+      ],
+    };
+
+    expect(validateDesignAgentToolInput(DESIGN_APPLY_TOOL_NAME, input)).toBe(
+      true,
+    );
+    expect(explainInvalidDesignApplyToolInput(input)).toBeUndefined();
   });
 
   it("normalizes compact Agent export settings to the full document contract", () => {
