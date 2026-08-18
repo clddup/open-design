@@ -95,6 +95,7 @@ export function Canvas({
   onTextRangeSelectionChange,
   onResizeFrame,
   selectionActions,
+  showAgentRunStatus,
 }: {
   activeAgentRunId: string | null;
   agentRunExperience?: AgentRunExperience;
@@ -120,6 +121,7 @@ export function Canvas({
   ) => void;
   onResizeFrame: ResizeFrameHandler;
   selectionActions?: ReactNode;
+  showAgentRunStatus: boolean;
 }) {
   const { t } = useI18n();
   const host = useRef<HTMLElement>(null);
@@ -1053,9 +1055,11 @@ export function Canvas({
           {generationActivity.label}
         </span>
       )}
-      {agentRunExperience?.active && (
+      {showAgentRunStatus && agentRunExperience?.active && (
         <div
+          aria-label={t("agent.runStatus")}
           className={styles.agentRunStatus}
+          data-canvas-agent-status=""
           data-canvas-changed={
             agentRunExperience.hasCanvasChanges ? "true" : "false"
           }

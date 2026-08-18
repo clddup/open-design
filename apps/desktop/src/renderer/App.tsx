@@ -2066,6 +2066,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onResizeFrame={resizeFrame}
               runtime={runtime}
+              showAgentRunStatus={
+                !utilityPanelVisible || utilityTab !== "agent"
+              }
               selectionActions={
                 state.selection.nodeIds.length > 0 ? (
                   <CanvasSelectionActions

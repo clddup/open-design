@@ -31,6 +31,8 @@ Layers 与 Assets 都提供真实搜索；不再展示“搜索暂不可用”�
 
 Agent 与 Properties 保持两个模式，不同时挤压 Canvas。标签左对齐、内容优先；Agent 的 Conversation、可信运行状态、真实设计步骤、消息和 Composer 保持清晰层级。模型等待、真实 revision、自动修正和最终 delivery 由可信事件投影，不能由聊天文案冒充。
 
+活动 Run 的主状态在当前可见空间中只出现一次：Utility 打开且 Agent tab 可见时，由右侧详细状态区承载；Utility 隐藏或切到 Properties 时，Canvas 右上显示紧凑状态卡作为回退。基于真实 revision 的 cursor/reveal 继续留在 Canvas，因为它表达实际变更位置而不是重复状态。两种状态视图消费同一纯投影，不建立第二份 Run 状态。
+
 Properties 不为未实现能力保留禁用的一级标签。当前选区身份固定在 Inspector 顶部，高频 Layer、Component identity、Auto Layout、Layout、Typography 与 Appearance 在前；普通对象的组件创建以及 Effects、Styles、Variables 和 Export 使用可访问的折叠分组。分组开合是 Renderer 展示状态，不进入 DesignDocument、revision 或 history，也不改变现有语义事务回调。
 
 ### 面板键盘与窄窗口策略
@@ -51,7 +53,7 @@ Titlebar、Toolbar、文件标签和 Statusbar 使用一致的紧凑尺寸、细
 
 ## 当前切片与后续
 
-本 ADR 的前三个切片已完成一级 IA、Layers 搜索、Library 二级切换、紧凑 Utility tabs、面板显隐、Shell 密度、可信 Agent 状态、Properties 渐进披露、面板快捷键/偏好、窄窗口画布优先策略、Canvas 选区就地操作和面板宽度持久化。后续仍需在同一方向完成跨主题和打包产品视觉回归；不得重新把能力平铺为更多一级标签。
+本 ADR 的前三个切片已完成一级 IA、Layers 搜索、Library 二级切换、紧凑 Utility tabs、面板显隐、Shell 密度、可信 Agent 状态、Properties 渐进披露、面板快捷键/偏好、窄窗口画布优先策略、Canvas 选区就地操作和面板宽度持久化。第四个视觉收口切片已根据打包产品的浅色/深色证据消除 Agent 面板与 Canvas 状态卡的重复：当前可见空间只保留一个主状态入口，真实 cursor/reveal 不受影响。后续仍需完成窄窗口、触控板缩放和选区 editBox 的打包产品人工验收；不得重新把能力平铺为更多一级标签。
 
 ## 验证
 
@@ -62,5 +64,6 @@ Titlebar、Toolbar、文件标签和 Statusbar 使用一致的紧凑尺寸、细
 - Canvas 交互测试覆盖选区操作、编辑模式互斥、Properties 直达和重复 accessible name；
 - App 交互测试覆盖面板宽度读取、边界约束、键盘调整与本地持久化；
 - Agent/Utility 测试覆盖键盘 tab 切换、运行状态、Conversation 与停止；
+- App 交互测试覆盖 Agent tab、Properties tab 和隐藏 Utility 三种空间状态下只有一个可见的 Run 主状态；
 - Desktop 类型、交互测试与 Vite build 验证 CSS Modules 和 Renderer 集成；
 - macOS/Windows 原生 Action 继续阻塞发布，自动化不能替代打包产品的宽/窄窗口人工视觉 smoke。
