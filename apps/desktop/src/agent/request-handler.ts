@@ -1,6 +1,7 @@
 import type { AgentRunRequest } from "@opendesign/agent-runtime";
 import {
   AGENT_PROTOCOL_VERSION,
+  agentEventValidationError,
   type AgentEvent,
   type AgentRequest,
   type SessionTimelineItem,
@@ -24,13 +25,25 @@ export async function dispatchAgentRequest(
   request: AgentRequest,
   options: AgentRequestHandlerOptions,
 ): Promise<void> {
+  const postValidated = (event: AgentEvent): void => {
+    const validationError = agentEventValidationError(event);
+    if (validationError) {
+      throw new TypeError(
+        `Agent produced an invalid event: ${validationError}`,
+      );
+    }
+    options.postMessage(event);
+  };
   try {
-    await handleRequest(request, options);
+    await handleRequest(request, { ...options, postMessage: postValidated });
   } catch (error: unknown) {
+    const message = (
+      error instanceof Error ? error.message : "Agent request failed"
+    ).slice(0, 20_000);
     options.postMessage({
       type: "agent.error",
       code: "request_failed",
-      message: error instanceof Error ? error.message : "Agent request failed",
+      message,
       ...(request.type === "run.start" ||
       request.type === "run.cancel" ||
       request.type === "approval.resolve"

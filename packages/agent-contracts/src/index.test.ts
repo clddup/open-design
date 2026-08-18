@@ -6,6 +6,7 @@ import {
   MAX_INITIAL_DESIGN_INSPECTION_CHARACTERS,
   MAX_SELECTED_NODE_IDS,
   SelectionScopeSchema,
+  agentEventValidationError,
   isAgentEvent,
   isAgentRequest,
   isSelectionScope,
@@ -34,6 +35,17 @@ const validStart = {
 } as const;
 
 describe("Agent contracts", () => {
+  it("reports the failing field from the matching Agent event variant", () => {
+    expect(
+      agentEventValidationError({
+        type: "message.completed",
+        runId: "run_1",
+        messageId: "message_1",
+        blocks: "invalid",
+      }),
+    ).toContain("message.completed at /blocks");
+  });
+
   it("accepts a strict host-bound selection snapshot", () => {
     expect(isAgentRequest(validStart)).toBe(true);
     expect(

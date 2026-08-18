@@ -230,7 +230,8 @@ describe("AgentHost model bridge", () => {
     expect(events).toContainEqual({
       type: "agent.error",
       code: "invalid_event",
-      message: "Agent returned an invalid event",
+      message:
+        "Agent returned an invalid event: message.completed at /blocks: Expected array",
       runId: "run_invalid_event",
     });
     expect(electron.child.postMessage).toHaveBeenCalledWith({

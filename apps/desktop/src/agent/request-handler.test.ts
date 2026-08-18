@@ -94,6 +94,49 @@ describe("dispatchAgentRequest", () => {
     expect(isAgentEvent(events[0])).toBe(true);
   });
 
+  it("rejects an invalid runtime event before it crosses the process boundary", async () => {
+    const events: AgentEvent[] = [];
+    const runtime = createRuntime(vi.fn(() => Promise.resolve([])));
+    runtime.run = async function* () {
+      await Promise.resolve();
+      yield {
+        type: "message.completed",
+        runId: "run_invalid",
+        messageId: "message_invalid",
+        blocks: "invalid",
+      } as unknown as AgentEvent;
+    };
+
+    await dispatchAgentRequest(
+      {
+        type: "run.start",
+        runId: "run_invalid",
+        sessionId: "session_1",
+        prompt: "Create a design",
+        documentId: "document_1",
+        revision: 0,
+        scope: { kind: "document", selectedNodeIds: [] },
+        mutationTarget: { kind: "document" },
+        modelSelection: { providerId: "provider_1", modelId: "model_1" },
+      },
+      { runtime, postMessage: (event) => events.push(event) },
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "agent.error",
+      code: "request_failed",
+      runId: "run_invalid",
+    });
+    const error = events[0];
+    expect(error?.type).toBe("agent.error");
+    if (error?.type !== "agent.error") return;
+    expect(error.message).toContain(
+      "Agent produced an invalid event: message.completed",
+    );
+    expect(isAgentEvent(error)).toBe(true);
+  });
+
   it("routes an exact approval resolution to the pending approval controller", async () => {
     const events: AgentEvent[] = [];
     const resolveApproval = vi.fn(() => true);

@@ -9,6 +9,7 @@ import type {
   ResolvedModelIdentity,
 } from "@opendesign/model-gateway";
 import type { AgentRunRequest } from "./index.js";
+import { normalizeAssistantTimelineBlocks } from "./timeline-blocks.js";
 
 export type PiAgentEventMessage = Extract<
   PiAgentEvent,
@@ -19,25 +20,31 @@ export function toTimelineBlocks(
   message: AssistantMessage,
   messageId: string,
 ): AssistantTimelineBlock[] {
-  return message.content.flatMap((block, index): AssistantTimelineBlock[] => {
-    if (block.type === "text") {
-      return [
-        { blockId: blockId(messageId, index), type: "text", text: block.text },
-      ];
-    }
-    if (block.type === "thinking") {
-      const omitted = block.redacted === true || block.thinking.length === 0;
-      return [
-        {
-          blockId: blockId(messageId, index),
-          type: "reasoning_summary",
-          status: omitted ? "omitted" : "completed",
-          ...(omitted ? {} : { summary: block.thinking }),
-        },
-      ];
-    }
-    return [];
-  });
+  return normalizeAssistantTimelineBlocks(
+    message.content.flatMap((block, index): AssistantTimelineBlock[] => {
+      if (block.type === "text") {
+        return [
+          {
+            blockId: blockId(messageId, index),
+            type: "text",
+            text: block.text,
+          },
+        ];
+      }
+      if (block.type === "thinking") {
+        const omitted = block.redacted === true || block.thinking.length === 0;
+        return [
+          {
+            blockId: blockId(messageId, index),
+            type: "reasoning_summary",
+            status: omitted ? "omitted" : "completed",
+            ...(omitted ? {} : { summary: block.thinking }),
+          },
+        ];
+      }
+      return [];
+    }),
+  );
 }
 
 export function toResolvedIdentity(

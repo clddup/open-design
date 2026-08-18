@@ -1,4 +1,4 @@
-import { Type, type Static } from "@sinclair/typebox";
+import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { AgentContinuationSchemas } from "./continuation.js";
 export type { AgentRunContinuation } from "./continuation.js";
@@ -10,6 +10,8 @@ export const MAX_AGENT_ATTACHMENTS = 6;
 export const MAX_AGENT_ATTACHMENT_BYTES = 16 * 1024 * 1024;
 export const MAX_AGENT_IMAGE_ATTACHMENTS = MAX_AGENT_ATTACHMENTS;
 export const MAX_AGENT_IMAGE_BYTES = MAX_AGENT_ATTACHMENT_BYTES;
+export const MAX_ASSISTANT_TEXT_BLOCK_CHARACTERS = 500_000;
+export const MAX_REASONING_SUMMARY_CHARACTERS = 20_000;
 
 const IdSchema = Type.String({ minLength: 1, maxLength: 256 });
 const TimestampSchema = Type.String({ minLength: 1, maxLength: 64 });
@@ -310,7 +312,7 @@ export const AssistantTimelineBlockSchema = Type.Union([
     {
       blockId: IdSchema,
       type: Type.Literal("text"),
-      text: Type.String({ maxLength: 500_000 }),
+      text: Type.String({ maxLength: MAX_ASSISTANT_TEXT_BLOCK_CHARACTERS }),
     },
     { additionalProperties: false },
   ),
@@ -319,7 +321,9 @@ export const AssistantTimelineBlockSchema = Type.Union([
       blockId: IdSchema,
       type: Type.Literal("reasoning_summary"),
       status: ReasoningSummarySchema.properties.status,
-      summary: Type.Optional(Type.String({ maxLength: 20_000 })),
+      summary: Type.Optional(
+        Type.String({ maxLength: MAX_REASONING_SUMMARY_CHARACTERS }),
+      ),
     },
     { additionalProperties: false },
   ),
@@ -971,6 +975,46 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
             (item.status === "error" && item.stopReason === "error")),
       ))
   );
+}
+
+export function isSessionTimelineItem(
+  value: unknown,
+): value is SessionTimelineItem {
+  return Value.Check(SessionTimelineItemSchema, value);
+}
+
+export function agentEventValidationError(value: unknown): string | null {
+  if (isAgentEvent(value)) return null;
+  const type =
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof value.type === "string"
+      ? value.type.slice(0, 256)
+      : "unknown";
+  const schema = agentEventVariant(type) ?? AgentEventSchema;
+  const first = [...Value.Errors(schema, value)].find(
+    (error) => error.path.length > 0,
+  );
+  if (first) {
+    return `${type} at ${first.path}: ${first.message}`.slice(0, 2_000);
+  }
+  return `${type} violates AgentEvent semantic invariants`;
+}
+
+function agentEventVariant(type: string): TSchema | undefined {
+  const variants = (AgentEventSchema as { anyOf?: TSchema[] }).anyOf ?? [];
+  return variants.find((variant) => {
+    const properties = (variant as { properties?: Record<string, unknown> })
+      .properties;
+    const discriminator = properties?.type;
+    return (
+      typeof discriminator === "object" &&
+      discriminator !== null &&
+      "const" in discriminator &&
+      discriminator.const === type
+    );
+  });
 }
 
 export interface JsonRpcRequest<T = unknown> {

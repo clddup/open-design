@@ -1,6 +1,7 @@
 import { app, utilityProcess, type UtilityProcess } from "electron";
 import {
   AGENT_PROTOCOL_VERSION,
+  agentEventValidationError,
   isAgentEvent,
   type AgentEvent,
   type AgentRequest,
@@ -294,7 +295,9 @@ export class AgentHost {
       return;
     }
     if (!isAgentEvent(message)) {
-      console.error("Rejected invalid Agent event");
+      const validationError =
+        agentEventValidationError(message) ?? "unknown validation failure";
+      console.error(`Rejected invalid Agent event: ${validationError}`);
       const run = candidateRunId(message);
       if (run.runId) {
         this.#process?.postMessage({
@@ -305,7 +308,7 @@ export class AgentHost {
       this.emit({
         type: "agent.error",
         code: "invalid_event",
-        message: "Agent returned an invalid event",
+        message: `Agent returned an invalid event: ${validationError}`,
         ...run,
       });
       return;

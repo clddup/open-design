@@ -19,6 +19,7 @@ import {
   createPiModelGatewayStreamFn,
 } from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
+import { normalizeSessionHistory } from "./session-history.js";
 import {
   disclosedToolDefinitions,
   isSafeModelDisclosure,
@@ -107,9 +108,9 @@ export class OpenDesignPiRuntime {
   }
 
   async loadSessionHistory(sessionId: string): Promise<SessionTimelineItem[]> {
-    return (await this.options.sessionStore.readTimeline(
-      sessionId,
-    )) as SessionTimelineItem[];
+    return normalizeSessionHistory(
+      await this.options.sessionStore.readTimeline(sessionId),
+    );
   }
 
   async #execute(
