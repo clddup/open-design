@@ -1222,8 +1222,9 @@ describe("AgentTimeline", () => {
     expect(
       screen.getAllByText("Model cannot execute this design tool"),
     ).toHaveLength(1);
-    expect(container.querySelectorAll("[data-agent-item][data-state='error']"))
-      .toHaveLength(1);
+    expect(
+      container.querySelectorAll("[data-agent-item][data-state='error']"),
+    ).toHaveLength(1);
   });
 
   it("does not present interrupted durable activity as an active run", () => {
