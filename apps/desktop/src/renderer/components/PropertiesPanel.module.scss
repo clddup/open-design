@@ -627,6 +627,24 @@
   gap: 5px;
 }
 
+.trackRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(48px, 0.65fr) 24px 24px 24px;
+  align-items: end;
+  gap: 4px;
+
+  :global(.ui-icon-button) {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+.trackMoveUp {
+  :global(.ui-glyph) {
+    transform: rotate(180deg);
+  }
+}
+
 .typographyGrid {
   .field,
   .select {

@@ -173,7 +173,9 @@ function collectAncestorIds(
 }
 
 export function LeftSidebar({
+  className = "",
   document,
+  hidden = false,
   activePageId,
   selectedNodeIds,
   tab,
@@ -199,7 +201,9 @@ export function LeftSidebar({
   variableActions,
   styleActions,
 }: {
+  className?: string;
   document: DesignDocument;
+  hidden?: boolean;
   activePageId: string;
   selectedNodeIds: readonly string[];
   tab: SidebarTab;
@@ -499,8 +503,9 @@ export function LeftSidebar({
   return (
     <aside
       aria-label={t("sidebar.navigation")}
-      className={styles.root}
+      className={`${styles.root} ${className}`}
       data-library={tab === "styles" || tab === "variables" ? "true" : "false"}
+      hidden={hidden}
     >
       <SidebarViewTabs onChange={onTabChange} value={tab} />
       {(tab === "layers" || tab === "assets") && (

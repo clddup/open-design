@@ -10,6 +10,7 @@ import {
   EditorRuntime,
   createEmptyDesignDocument,
   normalizeDesignDocument,
+  planReorderGridTracks,
   planResizeFrameWithConstraints,
   planSetFrameAutoLayout,
   planSetNodeLayoutLimits,
@@ -1413,6 +1414,229 @@ describe("Grid Auto Layout Runtime", () => {
     ).toBe(false);
     expect(runtime.getSnapshot().document.revision).toBe(before);
   });
+
+  it("persists automatic rows across insert, undo, redo and reopen", () => {
+    const runtime = new EditorRuntime(layoutDocument());
+    const grid = {
+      mode: "grid" as const,
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fill" as const, value: 1 }],
+      columns: [
+        { type: "fill" as const, value: 1 },
+        { type: "fill" as const, value: 1 },
+      ],
+      itemsPositioning: "row-auto-flow" as const,
+      autoTracks: "rows" as const,
+    };
+    const enable = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      grid,
+      "auto_rows",
+    );
+    if (!enable.ok) throw new Error(enable.message);
+    expect(runtime.apply(transaction(runtime, enable.commands)).ok).toBe(true);
+    expect(
+      frameAutoLayout(runtime.getSnapshot().document, "frame"),
+    ).toMatchObject({ rows: [{ type: "fill", value: 1 }] });
+
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "insert_auto_row_child",
+            type: "insert_element",
+            pageId: "page_layout",
+            parentId: "frame",
+            index: 2,
+            node: rectangle("three", "frame", 0, 0, 20, 20),
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    let document = runtime.getSnapshot().document;
+    expect(frameAutoLayout(document, "frame")).toMatchObject({
+      rows: [
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+      ],
+    });
+    expect(document.nodesById.three?.gridPlacement).toMatchObject({
+      row: 1,
+      column: 0,
+    });
+
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      frameAutoLayout(runtime.getSnapshot().document, "frame"),
+    ).toMatchObject({ rows: [{ type: "fill", value: 1 }] });
+    expect(runtime.redo().ok).toBe(true);
+    document = runtime.getSnapshot().document;
+    const reopened = normalizeDesignDocument(
+      JSON.parse(JSON.stringify(document)),
+    );
+    expect(frameAutoLayout(reopened, "frame")).toMatchObject({
+      autoTracks: "rows",
+      rows: [
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+      ],
+    });
+  });
+
+  it("reorders manual tracks with span closure in one reversible transaction", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    frame.size = { width: 600, height: 100 };
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fill", value: 1 }],
+      columns: [
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 200 },
+        { type: "fixed", value: 300 },
+      ],
+      itemsPositioning: "manual",
+    };
+    document.nodesById.one!.gridPlacement = {
+      row: 0,
+      column: 0,
+      rowSpan: 1,
+      columnSpan: 2,
+      horizontalAlign: "auto",
+      verticalAlign: "auto",
+    };
+    document.nodesById.two!.gridPlacement = {
+      row: 0,
+      column: 2,
+      rowSpan: 1,
+      columnSpan: 1,
+      horizontalAlign: "auto",
+      verticalAlign: "auto",
+    };
+    delete document.nodesById.one!.constraints;
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    const plan = planReorderGridTracks(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      "columns",
+      [0, 0],
+      3,
+      "reorder_columns",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan.movements).toEqual([
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+      { from: 2, to: 0 },
+    ]);
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+    let result = runtime.getSnapshot().document;
+    expect(frameAutoLayout(result, "frame")).toMatchObject({
+      columns: [
+        { type: "fixed", value: 300 },
+        { type: "fixed", value: 100 },
+        { type: "fixed", value: 200 },
+      ],
+    });
+    expect(result.nodesById.one?.gridPlacement).toMatchObject({
+      column: 1,
+      columnSpan: 2,
+    });
+    expect(result.nodesById.two?.gridPlacement).toMatchObject({ column: 0 });
+    expectRect(result, "one", 300, 0, 40, 20);
+    expectRect(result, "two", 0, 0, 60, 30);
+
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.redo().ok).toBe(true);
+    result = runtime.getSnapshot().document;
+    expect(normalizeDesignDocument(JSON.parse(JSON.stringify(result)))).toEqual(
+      result,
+    );
+  });
+
+  it("reorders row-auto-flow content with its tracks and rejects invalid input without a revision", () => {
+    const document = layoutDocument();
+    const frame = document.nodesById.frame;
+    if (frame?.kind !== "frame") throw new Error("missing frame");
+    for (const id of ["three", "four", "five", "six"])
+      document.nodesById[id] = rectangle(id, "frame", 0, 0, 20, 20);
+    frame.childIds = ["one", "two", "three", "four", "five", "six"];
+    delete document.nodesById.one!.constraints;
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [
+        { type: "fixed", value: 20 },
+        { type: "fixed", value: 30 },
+        { type: "fixed", value: 40 },
+      ],
+      columns: [
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+      ],
+      itemsPositioning: "row-auto-flow",
+    };
+    const runtime = new EditorRuntime(normalizeDesignDocument(document));
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "resolve_grid_before_reorder",
+            type: "update_properties",
+            nodeId: "frame",
+            name: "Resolved Grid",
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+    const plan = planReorderGridTracks(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      "rows",
+      [0],
+      3,
+      "reorder_rows",
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(runtime.apply(transaction(runtime, plan.commands)).ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.frame?.childIds).toEqual([
+      "three",
+      "four",
+      "five",
+      "six",
+      "one",
+      "two",
+    ]);
+    expect(
+      runtime.getSnapshot().document.nodesById.one?.gridPlacement,
+    ).toMatchObject({ row: 2, column: 0 });
+
+    const revision = runtime.getSnapshot().document.revision;
+    expect(
+      planReorderGridTracks(
+        runtime.getSnapshot().document,
+        "page_layout",
+        "frame",
+        "rows",
+        [99],
+        0,
+        "invalid_reorder",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-target" });
+    expect(runtime.getSnapshot().document.revision).toBe(revision);
+  });
 });
 
 function enabledRuntime(): EditorRuntime {
@@ -1492,6 +1716,13 @@ function layoutDocument(): DesignDocument {
   document.nodesById.two = rectangle("two", "frame", 0, 0, 60, 30);
   document.pagesById.page_layout!.rootNodeIds = ["frame"];
   return document;
+}
+
+function frameAutoLayout(document: DesignDocument, frameId: string) {
+  const frame = document.nodesById[frameId];
+  return frame?.kind === "frame" || frame?.kind === "slot"
+    ? frame.properties.autoLayout
+    : undefined;
 }
 
 function rectangle(

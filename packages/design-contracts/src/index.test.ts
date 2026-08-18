@@ -14,6 +14,7 @@ import {
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
+  AUTO_LAYOUT_GRID_V2_DESIGN_SCHEMA_VERSION,
   PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION,
   RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION,
   TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION,
@@ -61,7 +62,8 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION).toBe("1.32.0");
   expect(FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION).toBe("1.33.0");
   expect(AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION).toBe("1.34.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION);
+  expect(AUTO_LAYOUT_GRID_V2_DESIGN_SCHEMA_VERSION).toBe("1.35.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(AUTO_LAYOUT_GRID_V2_DESIGN_SCHEMA_VERSION);
 });
 
 it("validates bounded Grid Auto Layout tracks and child placement", () => {
@@ -106,6 +108,19 @@ it("validates bounded Grid Auto Layout tracks and child placement", () => {
         ...frame.properties,
         autoLayout: {
           ...frame.properties.autoLayout,
+          itemsPositioning: "row-auto-flow",
+          autoTracks: "rows",
+        },
+      },
+    }),
+  ).toBe(true);
+  expect(
+    Value.Check(DesignNodeSchema, {
+      ...frame,
+      properties: {
+        ...frame.properties,
+        autoLayout: {
+          ...frame.properties.autoLayout,
           columns: [{ type: "fill", value: 0 }],
         },
       },
@@ -120,6 +135,61 @@ it("migrates 1.33 documents without inventing Grid state", () => {
   const migrated = migrateDesignDocument(source);
   expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
   expect(migrated?.nodesById.text_1?.gridPlacement).toBeUndefined();
+});
+
+it("migrates 1.34 Grid documents without inventing automatic tracks", () => {
+  const source = textDocumentFixture() as unknown as DesignDocument;
+  source.schemaVersion =
+    AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  source.pagesById.page_1!.rootNodeIds = ["grid_1"];
+  source.nodesById.text_1!.parentId = "grid_1";
+  source.nodesById.text_1!.gridPlacement = {
+    row: 0,
+    column: 0,
+    rowSpan: 1,
+    columnSpan: 1,
+    horizontalAlign: "auto",
+    verticalAlign: "auto",
+  };
+  source.nodesById.grid_1 = {
+    id: "grid_1",
+    kind: "frame",
+    name: "Legacy Grid",
+    parentId: null,
+    childIds: ["text_1"],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 240, height: 64 },
+    exportSettings: [],
+    opacity: 1,
+    properties: {
+      fills: [],
+      strokes: [],
+      strokeWidth: 0,
+      cornerRadius: 0,
+      clipsContent: true,
+      autoLayout: {
+        mode: "grid",
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        rowGap: 0,
+        columnGap: 0,
+        rows: [{ type: "hug" }],
+        columns: [{ type: "hug" }],
+        itemsPositioning: "manual",
+      },
+    },
+    extensions: {},
+  };
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  const frame = migrated?.nodesById.grid_1;
+  expect(frame).toMatchObject({ kind: "frame" });
+  if (frame?.kind !== "frame") throw new Error("Expected migrated Grid");
+  expect(frame.properties.autoLayout).toMatchObject({ mode: "grid" });
+  if (frame.properties.autoLayout?.mode !== "grid")
+    throw new Error("Expected migrated Grid Auto Layout");
+  expect(frame.properties.autoLayout.autoTracks).toBeUndefined();
 });
 
 it("validates bounded semantic text editing session commits", () => {

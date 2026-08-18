@@ -98,6 +98,12 @@ function renderPanel(
       frameId: string,
       layoutGuides: readonly LayoutGuide[],
     ) => void;
+    onReorderGridTracks?: (
+      frameId: string,
+      axis: "rows" | "columns",
+      fromIndices: readonly number[],
+      insertionIndex: number,
+    ) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
     fontContext?: FontInspectorContext;
   } = {},
@@ -170,6 +176,7 @@ function renderPanel(
           onSetConstraints={options.onSetConstraints ?? vi.fn()}
           onSetLayoutPositioning={options.onSetLayoutPositioning ?? vi.fn()}
           onSetFrameLayoutGuides={options.onSetFrameLayoutGuides ?? vi.fn()}
+          onReorderGridTracks={options.onReorderGridTracks ?? vi.fn()}
           onSvgExportSettingsChange={onSvgExportSettingsChange}
           onSetComponentProperty={options.onSetComponentProperty ?? vi.fn()}
           onClearComponentSlot={options.onClearComponentSlot ?? vi.fn()}
@@ -1111,6 +1118,7 @@ describe("PropertiesPanel SVG workflow", () => {
       ],
     });
     cleanup();
+    const onReorderGridTracks = vi.fn();
     renderPanel({
       node: {
         ...frame,
@@ -1132,6 +1140,24 @@ describe("PropertiesPanel SVG workflow", () => {
       },
       selectionCount: 1,
       onUpdate,
+      onReorderGridTracks,
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Move Columns track 1 down" }),
+    );
+    expect(onReorderGridTracks).toHaveBeenCalledWith(
+      "frame_grid",
+      "columns",
+      [0],
+      2,
+    );
+    await user.selectOptions(screen.getByLabelText("Rows"), "automatic");
+    expect(
+      onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout,
+    ).toMatchObject({
+      itemsPositioning: "row-auto-flow",
+      autoTracks: "rows",
+      sizing: { vertical: "fixed" },
     });
     await user.click(screen.getByRole("button", { name: "Add Columns track" }));
     expect(

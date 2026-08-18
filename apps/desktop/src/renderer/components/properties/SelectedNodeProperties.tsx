@@ -138,6 +138,7 @@ export function SelectedNodeProperties({
   onSetConstraints,
   onSetLayoutPositioning,
   onSetFrameLayoutGuides,
+  onReorderGridTracks,
   onUpdate,
   onUpdateComponentOverride,
   onSetComponentProperty,
@@ -214,6 +215,12 @@ export function SelectedNodeProperties({
   onSetFrameLayoutGuides: (
     frameId: string,
     layoutGuides: readonly LayoutGuide[],
+  ) => void;
+  onReorderGridTracks: (
+    frameId: string,
+    axis: "rows" | "columns",
+    fromIndices: readonly number[],
+    insertionIndex: number,
   ) => void;
   onUpdate: (updates: UpdatePropertiesPatch) => void;
   onUpdateComponentOverride: (
@@ -440,6 +447,9 @@ export function SelectedNodeProperties({
         <AutoLayoutSection
           autoLayout={node.properties.autoLayout ?? { mode: "none" }}
           onChange={(autoLayout) => onUpdate({ properties: { autoLayout } })}
+          onReorderGridTracks={(axis, fromIndices, insertionIndex) =>
+            onReorderGridTracks(node.id, axis, fromIndices, insertionIndex)
+          }
         />
       )}
       {node.kind === "boolean" && (

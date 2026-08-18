@@ -93,3 +93,5 @@
 | [0059](adr/0059-auto-layout-absolute-child-v1.md)                        | 已接受     | Auto Layout Ignore Flow / Absolute Child                           |
 | [0060](adr/0060-layout-guide-uniform-grid-v1.md)                         | 已接受     | Frame Layout Guide / Uniform Grid v1                               |
 | [0061](adr/0061-layout-guide-columns-rows-v2.md)                         | 已接受     | Layout Guide Columns / Rows v2                                     |
+| [0091](adr/0091-auto-layout-grid-v1.md)                                  | 已接受     | Auto Layout Grid v1 显式二维轨道与 cell/span                       |
+| [0092](adr/0092-auto-layout-grid-v2.md)                                  | 已接受     | Auto Layout Grid v2 自动行与 span-aware 轨道重排                   |

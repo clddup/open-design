@@ -312,6 +312,7 @@ export const AutoLayoutSchema = Type.Union([
         Type.Literal("manual"),
         Type.Literal("row-auto-flow"),
       ]),
+      autoTracks: Type.Optional(Type.Literal("rows")),
       sizing: Type.Optional(AutoLayoutFrameSizingSchema),
     },
     { additionalProperties: false },

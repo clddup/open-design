@@ -26,6 +26,35 @@ describe("Grid arrange tool contract", () => {
     ).toBe(true);
     expect(
       isDesignArrangeToolInput({
+        action: "set-auto-layout",
+        label: "Create automatic product rows",
+        pageId: "page_1",
+        frameId: "frame_grid",
+        autoLayout: {
+          mode: "grid",
+          padding: { top: 16, right: 16, bottom: 16, left: 16 },
+          rowGap: 12,
+          columnGap: 16,
+          rows: [{ type: "fill", value: 1 }],
+          columns: [{ type: "fill", value: 1 }],
+          itemsPositioning: "row-auto-flow",
+          autoTracks: "rows",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isDesignArrangeToolInput({
+        action: "reorder-grid-tracks",
+        label: "Move hero rows",
+        pageId: "page_1",
+        frameId: "frame_grid",
+        axis: "rows",
+        fromIndices: [2, 0, 2],
+        insertionIndex: 3,
+      }),
+    ).toBe(true);
+    expect(
+      isDesignArrangeToolInput({
         action: "set-grid-placement",
         label: "Span hero",
         pageId: "page_1",
@@ -58,6 +87,35 @@ describe("Grid arrange tool contract", () => {
           columns: [{ type: "fill", value: 1 }],
           itemsPositioning: "row-auto-flow",
         },
+      }),
+    ).toBe(false);
+    expect(
+      isDesignArrangeToolInput({
+        action: "set-auto-layout",
+        label: "Invalid automatic rows",
+        pageId: "page_1",
+        frameId: "frame_grid",
+        autoLayout: {
+          mode: "grid",
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          rowGap: 0,
+          columnGap: 0,
+          rows: [{ type: "fill", value: 1 }],
+          columns: [{ type: "fill", value: 1 }],
+          itemsPositioning: "manual",
+          autoTracks: "rows",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isDesignArrangeToolInput({
+        action: "reorder-grid-tracks",
+        label: "Invalid reorder",
+        pageId: "page_1",
+        frameId: "frame_grid",
+        axis: "rows",
+        fromIndices: [],
+        insertionIndex: 0,
       }),
     ).toBe(false);
     expect(

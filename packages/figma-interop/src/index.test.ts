@@ -76,10 +76,22 @@ describe("Figma Grid Auto Layout compatibility", () => {
     });
     expect(
       fromFigmaGridAutoLayout({ ...figmaGrid, gridAutoTracks: "ROWS" }),
-    ).toEqual({
-      ok: false,
-      issues: ["Automatic Figma Grid rows require OpenDesign Grid v2"],
+    ).toMatchObject({
+      ok: true,
+      grid: { autoTracks: "rows" },
     });
+    expect(
+      toFigmaGridAutoLayout({
+        mode: "grid",
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        rowGap: 0,
+        columnGap: 0,
+        rows: [{ type: "fill", value: 1 }],
+        columns: [{ type: "fill", value: 1 }],
+        itemsPositioning: "row-auto-flow",
+        autoTracks: "rows",
+      }).gridAutoTracks,
+    ).toBe("ROWS");
     const node = {
       id: "card",
       kind: "rectangle",

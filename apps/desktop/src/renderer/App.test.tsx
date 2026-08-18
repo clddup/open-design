@@ -4871,8 +4871,14 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
     const workspace = document.querySelector(".workspace");
+    const navigatorSlot = document.querySelector(".workspace__navigator");
+    const centerSlot = document.querySelector(".workspace__center");
+    const utilitySlot = document.querySelector(".workspace__utility");
     expect(workspace).toHaveAttribute("data-left-panel", "visible");
     expect(workspace).toHaveAttribute("data-utility-panel", "visible");
+    expect(navigatorSlot).not.toHaveAttribute("hidden");
+    expect(utilitySlot).not.toHaveAttribute("hidden");
+    expect(centerSlot).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "Toggle navigator panel" }),
@@ -4884,6 +4890,9 @@ describe("App", () => {
     );
     expect(workspace).toHaveAttribute("data-left-panel", "hidden");
     expect(workspace).toHaveAttribute("data-utility-panel", "hidden");
+    expect(navigatorSlot).toHaveAttribute("hidden");
+    expect(utilitySlot).toHaveAttribute("hidden");
+    expect(centerSlot).not.toHaveAttribute("hidden");
   });
 
   it("toggles workbench panels from keyboard without stealing editable input", () => {

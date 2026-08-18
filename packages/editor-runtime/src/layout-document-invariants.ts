@@ -25,10 +25,20 @@ export function validateNodeLayoutInvariants(
     const grid = node.properties.autoLayout;
     const sizing = grid.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING;
     if (
+      grid.autoTracks === "rows" &&
+      grid.itemsPositioning !== "row-auto-flow"
+    ) {
+      issues.push({
+        path: `/nodesById/${nodeId}/properties/autoLayout/autoTracks`,
+        message: "automatic Grid rows require row auto-flow positioning",
+      });
+    }
+    if (
       (sizing.horizontal === "hug" &&
         grid.columns.some((track) => track.type === "fill")) ||
       (sizing.vertical === "hug" &&
-        grid.rows.some((track) => track.type === "fill"))
+        (grid.rows.some((track) => track.type === "fill") ||
+          grid.autoTracks === "rows"))
     ) {
       issues.push({
         path: `/nodesById/${nodeId}/properties/autoLayout`,

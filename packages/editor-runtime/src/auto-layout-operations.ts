@@ -17,10 +17,12 @@ import {
 import {
   AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
   DEFAULT_LAYOUT_CONSTRAINTS,
+  GRID_AUTO_LAYOUT_CONTRACT_VERSION,
   LAYOUT_SERVICE_CONTRACT_VERSION,
   solveConstraints,
   solveLinearAutoLayout,
   solveGridAutoLayout,
+  type GridAutoLayoutResult,
 } from "@opendesign/layout-service";
 
 export type AutoLayoutOperationFailureCode =
@@ -94,10 +96,21 @@ export function planSetFrameAutoLayout(
   if (autoLayout.mode !== "none") {
     if (
       autoLayout.mode === "grid" &&
+      autoLayout.autoTracks === "rows" &&
+      autoLayout.itemsPositioning !== "row-auto-flow"
+    ) {
+      return failure(
+        "visual-fidelity",
+        `Automatic Grid rows on ${frameId} require row auto-flow positioning`,
+      );
+    }
+    if (
+      autoLayout.mode === "grid" &&
       (((autoLayout.sizing?.horizontal ?? "fixed") === "hug" &&
         autoLayout.columns.some((track) => track.type === "fill")) ||
         ((autoLayout.sizing?.vertical ?? "fixed") === "hug" &&
-          autoLayout.rows.some((track) => track.type === "fill")))
+          (autoLayout.rows.some((track) => track.type === "fill") ||
+            autoLayout.autoTracks === "rows")))
     ) {
       return failure(
         "visual-fidelity",
@@ -378,6 +391,8 @@ export function resolveAutoLayoutInPlace(
     }
     const previousFrameSize = frame.size;
     frame.size = result.frame;
+    if (autoLayout.mode === "grid" && isSuccessfulGridResult(result))
+      autoLayout.rows = result.rows;
     positioned.add(frame.id);
     if (
       previousFrameSize.width !== result.frame.width ||
@@ -524,7 +539,7 @@ function solveFrame(
 ) {
   if (autoLayout.mode === "grid") {
     return solveGridAutoLayout({
-      version: 1,
+      version: GRID_AUTO_LAYOUT_CONTRACT_VERSION,
       frame,
       frameSizing: autoLayout.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
       ...(frameLimits ? { frameLimits } : {}),
@@ -534,6 +549,7 @@ function solveFrame(
       rows: autoLayout.rows,
       columns: autoLayout.columns,
       itemsPositioning: autoLayout.itemsPositioning,
+      ...(autoLayout.autoTracks ? { autoTracks: autoLayout.autoTracks } : {}),
       children: children
         .filter((child) => child.positioning === "flow")
         .map((child) => ({
@@ -596,6 +612,17 @@ function isGridResolvedPlacement(value: {
     "placement" in value &&
     typeof (value as { placement?: unknown }).placement === "object" &&
     (value as { placement?: unknown }).placement !== null
+  );
+}
+
+function isSuccessfulGridResult(
+  value: unknown,
+): value is Extract<GridAutoLayoutResult, { ok: true }> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "rows" in value &&
+    Array.isArray(value.rows)
   );
 }
 

@@ -5143,6 +5143,93 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
+  it("creates automatic Grid rows and reorders them through one typed Agent transaction", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const automatic = await executeDesignToolRequest(
+      {
+        requestId: "auto_grid_rows",
+        call: {
+          toolCallId: "tool_auto_grid_rows",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "set-auto-layout",
+            label: "Create automatic content grid",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+            autoLayout: {
+              mode: "grid",
+              padding: { top: 24, right: 24, bottom: 24, left: 24 },
+              rowGap: 16,
+              columnGap: 16,
+              rows: [{ type: "fill", value: 1 }],
+              columns: [
+                { type: "fill", value: 1 },
+                { type: "fill", value: 1 },
+              ],
+              itemsPositioning: "row-auto-flow",
+              autoTracks: "rows",
+              sizing: { horizontal: "fixed", vertical: "fixed" },
+            },
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(automatic).toMatchObject({
+      ok: true,
+      result: { content: { action: "set-auto-layout", revision: 1 } },
+    });
+    const frame = runtime.getSnapshot().document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing welcome frame");
+    const grid = frame.properties.autoLayout;
+    if (!grid || grid.mode !== "grid") throw new Error("missing Grid layout");
+    expect(grid.autoTracks).toBe("rows");
+    expect(grid.rows.length).toBeGreaterThan(1);
+
+    const rowCount = grid.rows.length;
+    const reordered = await executeDesignToolRequest(
+      {
+        requestId: "reorder_grid_rows",
+        call: {
+          toolCallId: "tool_reorder_grid_rows",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "reorder-grid-tracks",
+            label: "Move first content row to the end",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+            axis: "rows",
+            fromIndices: [0],
+            insertionIndex: rowCount,
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(reordered).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "reorder-grid-tracks",
+          frameId: "frame_welcome",
+          axis: "rows",
+          revision: 2,
+          atomic: true,
+        },
+      },
+    });
+    if (!reordered.ok) throw new Error("Expected Grid track reorder result");
+    const content = reordered.result.content as { movements?: unknown };
+    expect(content.movements).toEqual(
+      expect.arrayContaining([{ from: 0, to: rowCount - 1 }]),
+    );
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
+  });
+
   it("sets Auto gap through the Agent tool and lets the host derive responsive positions", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const response = await executeDesignToolRequest(

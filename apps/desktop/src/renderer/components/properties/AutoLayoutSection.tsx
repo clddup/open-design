@@ -34,9 +34,15 @@ const defaultGridLayout: GridAutoLayout = {
 export function AutoLayoutSection({
   autoLayout,
   onChange,
+  onReorderGridTracks,
 }: {
   autoLayout: AutoLayout;
   onChange: (autoLayout: AutoLayout) => void;
+  onReorderGridTracks: (
+    axis: "rows" | "columns",
+    fromIndices: readonly number[],
+    insertionIndex: number,
+  ) => void;
 }) {
   const { t } = useI18n();
   const linearFlow =
@@ -291,7 +297,13 @@ export function AutoLayoutSection({
             </small>
           </>
         )}
-        {gridFlow && <GridControls grid={gridFlow} onChange={onChange} />}
+        {gridFlow && (
+          <GridControls
+            grid={gridFlow}
+            onChange={onChange}
+            onReorderGridTracks={onReorderGridTracks}
+          />
+        )}
       </div>
     </Section>
   );
@@ -331,9 +343,15 @@ type PackedAlignment = Exclude<
 function GridControls({
   grid,
   onChange,
+  onReorderGridTracks,
 }: {
   grid: GridAutoLayout;
   onChange: (autoLayout: AutoLayout) => void;
+  onReorderGridTracks: (
+    axis: "rows" | "columns",
+    fromIndices: readonly number[],
+    insertionIndex: number,
+  ) => void;
 }) {
   const { t } = useI18n();
   const update = (patch: Partial<GridAutoLayout>) =>
@@ -345,12 +363,15 @@ function GridControls({
           <span>{t("properties.autoLayoutGridPositioning")}</span>
           <select
             aria-label={t("properties.autoLayoutGridPositioning")}
-            onChange={(event) =>
-              update({
-                itemsPositioning: event.target.value as
-                  "manual" | "row-auto-flow",
-              })
-            }
+            onChange={(event) => {
+              const itemsPositioning = event.target.value as
+                "manual" | "row-auto-flow";
+              if (itemsPositioning === "manual") {
+                onChange({ ...withoutAutomaticRows(grid), itemsPositioning });
+                return;
+              }
+              update({ itemsPositioning });
+            }}
             value={grid.itemsPositioning}
           >
             <option value="row-auto-flow">
@@ -358,6 +379,34 @@ function GridControls({
             </option>
             <option value="manual">
               {t("properties.autoLayoutGridManual")}
+            </option>
+          </select>
+        </label>
+        <label className={styles.select}>
+          <span>{t("properties.autoLayoutGridRowMode")}</span>
+          <select
+            aria-label={t("properties.autoLayoutGridRowMode")}
+            onChange={(event) => {
+              if (event.target.value === "automatic") {
+                update({
+                  autoTracks: "rows",
+                  itemsPositioning: "row-auto-flow",
+                  sizing: {
+                    horizontal: grid.sizing?.horizontal ?? "fixed",
+                    vertical: "fixed",
+                  },
+                });
+                return;
+              }
+              onChange(withoutAutomaticRows(grid));
+            }}
+            value={grid.autoTracks === "rows" ? "automatic" : "explicit"}
+          >
+            <option value="explicit">
+              {t("properties.autoLayoutGridRowsExplicit")}
+            </option>
+            <option value="automatic">
+              {t("properties.autoLayoutGridRowsAutomatic")}
             </option>
           </select>
         </label>
@@ -390,13 +439,18 @@ function GridControls({
         />
       </div>
       <TrackList
+        axis="columns"
         label={t("properties.autoLayoutColumns")}
         onChange={(columns) => update({ columns })}
+        onReorder={onReorderGridTracks}
         tracks={grid.columns}
       />
       <TrackList
+        axis="rows"
+        fixedCount={grid.autoTracks === "rows"}
         label={t("properties.autoLayoutRows")}
         onChange={(rows) => update({ rows })}
+        onReorder={onReorderGridTracks}
         tracks={grid.rows}
       />
       <div className={styles.grid}>
@@ -427,7 +481,12 @@ function GridControls({
               value={grid.sizing?.[axis] ?? "fixed"}
             >
               <option value="fixed">{t("properties.autoLayoutFixed")}</option>
-              <option value="hug">{t("properties.autoLayoutHug")}</option>
+              <option
+                disabled={axis === "vertical" && grid.autoTracks === "rows"}
+                value="hug"
+              >
+                {t("properties.autoLayoutHug")}
+              </option>
             </select>
           </label>
         ))}
@@ -458,12 +517,22 @@ function GridControls({
 }
 
 function TrackList({
+  axis,
+  fixedCount = false,
   label,
   onChange,
+  onReorder,
   tracks,
 }: {
+  axis: "rows" | "columns";
+  fixedCount?: boolean;
   label: string;
   onChange: (tracks: GridTrack[]) => void;
+  onReorder: (
+    axis: "rows" | "columns",
+    fromIndices: readonly number[],
+    insertionIndex: number,
+  ) => void;
   tracks: readonly GridTrack[];
 }) {
   const { t } = useI18n();
@@ -472,13 +541,14 @@ function TrackList({
       <div className={styles.layoutGuideToolbar}>
         <span>{label}</span>
         <IconButton
+          disabled={fixedCount}
           icon="plus"
           label={t("properties.autoLayoutTrackAdd", { label })}
           onClick={() => onChange([...tracks, { type: "fill", value: 1 }])}
         />
       </div>
       {tracks.map((track, index) => (
-        <div className={styles.grid} key={index}>
+        <div className={styles.trackRow} key={index}>
           <label className={styles.select}>
             <span>{`${label} ${index + 1}`}</span>
             <select
@@ -520,8 +590,28 @@ function TrackList({
               value={formatNumber(track.value)}
             />
           )}
+          {track.type === "hug" && <span aria-hidden="true" />}
           <IconButton
-            disabled={tracks.length <= 1}
+            className={styles.trackMoveUp}
+            disabled={index === 0}
+            icon="chevron-down"
+            label={t("properties.autoLayoutTrackMoveUp", {
+              label,
+              index: index + 1,
+            })}
+            onClick={() => onReorder(axis, [index], index - 1)}
+          />
+          <IconButton
+            disabled={index === tracks.length - 1}
+            icon="chevron-down"
+            label={t("properties.autoLayoutTrackMoveDown", {
+              label,
+              index: index + 1,
+            })}
+            onClick={() => onReorder(axis, [index], index + 2)}
+          />
+          <IconButton
+            disabled={fixedCount || tracks.length <= 1}
             icon="trash"
             label={t("properties.autoLayoutTrackRemove", {
               label,
@@ -535,4 +625,10 @@ function TrackList({
       ))}
     </div>
   );
+}
+
+function withoutAutomaticRows(grid: GridAutoLayout): GridAutoLayout {
+  const explicitGrid = { ...grid };
+  delete explicitGrid.autoTracks;
+  return explicitGrid;
 }

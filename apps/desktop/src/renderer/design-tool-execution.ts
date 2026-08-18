@@ -1017,6 +1017,13 @@ async function executeDesignToolRequestUnsafe(
           ...(input.action === "set-grid-placement"
             ? { nodeId: input.nodeId, placement: input.placement }
             : {}),
+          ...(input.action === "reorder-grid-tracks"
+            ? {
+                frameId: input.frameId,
+                axis: input.axis,
+                movements: "movements" in plan ? plan.movements : [],
+              }
+            : {}),
           ...(input.action !== "resize-frame" &&
           input.action !== "set-constraints" &&
           input.action !== "set-auto-layout" &&
@@ -1025,6 +1032,7 @@ async function executeDesignToolRequestUnsafe(
           input.action !== "set-layout-limits" &&
           input.action !== "set-layout-guides" &&
           input.action !== "set-grid-placement" &&
+          input.action !== "reorder-grid-tracks" &&
           "orderedNodeIds" in plan
             ? { orderedNodeIds: plan.orderedNodeIds }
             : {}),

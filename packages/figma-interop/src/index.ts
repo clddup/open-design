@@ -91,6 +91,8 @@ export type FigmaGridChild = Pick<
   | "gridChildVerticalAlign"
 >;
 
+export type FigmaGridTrackReorderEntry = GridTrackReorderEntry;
+
 export type OpenDesignGridResult =
   { ok: true; grid: GridAutoLayout } | { ok: false; issues: readonly string[] };
 
@@ -233,7 +235,7 @@ export function toFigmaGridAutoLayout(
     gridColumnSizes: grid.columns.map(toFigmaGridTrack),
     gridItemsPositioning:
       grid.itemsPositioning === "manual" ? "MANUAL" : "ROW_AUTO_FLOW",
-    gridAutoTracks: "NONE",
+    gridAutoTracks: grid.autoTracks === "rows" ? "ROWS" : "NONE",
     layoutSizingHorizontal: grid.sizing?.horizontal === "hug" ? "HUG" : "FIXED",
     layoutSizingVertical: grid.sizing?.vertical === "hug" ? "HUG" : "FIXED",
   };
@@ -244,8 +246,6 @@ export function fromFigmaGridAutoLayout(
 ): OpenDesignGridResult {
   const issues: string[] = [];
   if (value.layoutMode !== "GRID") issues.push("Figma layoutMode is not GRID");
-  if (value.gridAutoTracks !== "NONE")
-    issues.push("Automatic Figma Grid rows require OpenDesign Grid v2");
   const rows = value.gridRowSizes.map((track, index) =>
     fromFigmaGridTrack(track, `row ${index}`, issues),
   );
@@ -273,6 +273,7 @@ export function fromFigmaGridAutoLayout(
       columns: columns as OpenDesignGridTrack[],
       itemsPositioning:
         value.gridItemsPositioning === "MANUAL" ? "manual" : "row-auto-flow",
+      ...(value.gridAutoTracks === "ROWS" ? { autoTracks: "rows" } : {}),
       sizing: {
         horizontal: value.layoutSizingHorizontal === "HUG" ? "hug" : "fixed",
         vertical: value.layoutSizingVertical === "HUG" ? "hug" : "fixed",

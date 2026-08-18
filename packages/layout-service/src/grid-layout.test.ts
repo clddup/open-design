@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  GRID_AUTO_LAYOUT_CONTRACT_VERSION,
   solveGridAutoLayout,
   type GridAutoLayoutRequest,
 } from "./grid-layout.js";
 
 function request(): GridAutoLayoutRequest {
   return {
-    version: 1,
+    version: GRID_AUTO_LAYOUT_CONTRACT_VERSION,
     frame: { width: 600, height: 300 },
     frameSizing: { horizontal: "fixed", vertical: "fixed" },
     padding: { top: 20, right: 20, bottom: 20, left: 20 },
@@ -77,7 +78,8 @@ describe("solveGridAutoLayout", () => {
         },
       },
     ];
-    expect(solveGridAutoLayout(source)).toMatchObject({
+    const result = solveGridAutoLayout(source);
+    expect(result).toMatchObject({
       ok: true,
       frame: { width: 180, height: 70 },
       rowSizes: [30],
@@ -116,6 +118,144 @@ describe("solveGridAutoLayout", () => {
     expect(solveGridAutoLayout(source)).toMatchObject({
       ok: false,
       code: "placement-conflict",
+    });
+  });
+
+  it("grows and trims automatic Fill rows from row-major content", () => {
+    const source = request();
+    source.itemsPositioning = "row-auto-flow";
+    source.autoTracks = "rows";
+    source.rows = [{ type: "fill", value: 1 }];
+    source.columns = [
+      { type: "fill", value: 1 },
+      { type: "fill", value: 1 },
+    ];
+    source.children = ["one", "two", "three", "four", "five"].map((id) => ({
+      id,
+      width: 20,
+      height: 20,
+      sizing: { horizontal: "fixed" as const, vertical: "fixed" as const },
+    }));
+
+    const expanded = solveGridAutoLayout(source);
+    expect(expanded).toMatchObject({
+      ok: true,
+      rows: [
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+      ],
+    });
+    expect(
+      expanded.ok && expanded.placements.map((item) => item.placement),
+    ).toEqual([
+      expect.objectContaining({ row: 0, column: 0 }),
+      expect.objectContaining({ row: 0, column: 1 }),
+      expect.objectContaining({ row: 1, column: 0 }),
+      expect.objectContaining({ row: 1, column: 1 }),
+      expect.objectContaining({ row: 2, column: 0 }),
+    ]);
+
+    source.rows = expanded.ok ? expanded.rows : source.rows;
+    source.children.splice(2);
+    expect(solveGridAutoLayout(source)).toMatchObject({
+      ok: true,
+      rows: [{ type: "fill", value: 1 }],
+    });
+  });
+
+  it("adds enough automatic rows for a spanning child", () => {
+    const source = request();
+    source.itemsPositioning = "row-auto-flow";
+    source.autoTracks = "rows";
+    source.rows = [{ type: "fill", value: 1 }];
+    source.columns = [{ type: "fill", value: 1 }];
+    source.children = [
+      {
+        id: "spanning",
+        width: 20,
+        height: 20,
+        sizing: { horizontal: "fixed", vertical: "fixed" },
+        placement: {
+          row: 0,
+          column: 0,
+          rowSpan: 3,
+          columnSpan: 1,
+          horizontalAlign: "auto",
+          verticalAlign: "auto",
+        },
+      },
+    ];
+    const spanningResult = solveGridAutoLayout(source);
+    expect(spanningResult).toMatchObject({
+      ok: true,
+      rows: [
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+      ],
+    });
+    expect(
+      spanningResult.ok && spanningResult.placements[0]?.placement,
+    ).toMatchObject({
+      row: 0,
+      rowSpan: 3,
+    });
+  });
+
+  it("rejects automatic rows with manual positioning or vertical Hug sizing", () => {
+    const manual = request();
+    manual.autoTracks = "rows";
+    expect(solveGridAutoLayout(manual)).toMatchObject({
+      ok: false,
+      code: "invalid-input",
+    });
+
+    const hugged = request();
+    hugged.itemsPositioning = "row-auto-flow";
+    hugged.autoTracks = "rows";
+    hugged.frameSizing.vertical = "hug";
+    hugged.rows = [{ type: "hug" }];
+    expect(solveGridAutoLayout(hugged)).toMatchObject({
+      ok: false,
+      code: "sizing-conflict",
+    });
+  });
+
+  it("fails closed at the 4096-track safety boundary", () => {
+    const source = request();
+    source.itemsPositioning = "row-auto-flow";
+    source.autoTracks = "rows";
+    source.rows = Array.from({ length: 4_096 }, () => ({
+      type: "fill" as const,
+      value: 1,
+    }));
+    source.columns = [{ type: "fill", value: 1 }];
+    source.children = [
+      {
+        id: "too-tall",
+        width: 20,
+        height: 20,
+        sizing: { horizontal: "fixed", vertical: "fixed" },
+        placement: {
+          row: 0,
+          column: 0,
+          rowSpan: 4_097,
+          columnSpan: 1,
+          horizontalAlign: "auto",
+          verticalAlign: "auto",
+        },
+      },
+    ];
+    expect(solveGridAutoLayout(source)).toMatchObject({
+      ok: false,
+      code: "placement-conflict",
+    });
+
+    source.rows.push({ type: "fill", value: 1 });
+    expect(solveGridAutoLayout(source)).toMatchObject({
+      ok: false,
+      code: "invalid-input",
     });
   });
 

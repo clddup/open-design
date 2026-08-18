@@ -2003,6 +2003,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           data-utility-panel={utilityPanelVisible ? "visible" : "hidden"}
         >
           <LeftSidebar
+            className="workspace__navigator"
+            hidden={!leftPanelVisible}
             activePageId={activePageId}
             document={designDocument}
             onDeleteAsset={deleteImageAsset}
@@ -2035,14 +2037,19 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             styleActions={styleActions}
             variableActions={variableActions}
           />
-          <ResizeHandle
-            label={t("resize.documentSidebar")}
-            max={360}
-            min={184}
-            onChange={resizeLeftPanel}
-            orientation="vertical"
-            value={leftWidth}
-          />
+          <div
+            className="workspace__navigator-resizer"
+            hidden={!leftPanelVisible}
+          >
+            <ResizeHandle
+              label={t("resize.documentSidebar")}
+              max={360}
+              min={184}
+              onChange={resizeLeftPanel}
+              orientation="vertical"
+              value={leftWidth}
+            />
+          </div>
           <div className="workspace__center">
             <DesignFileTabs
               canRename={(projectId) => projectsById[projectId] !== undefined}
@@ -2101,16 +2108,23 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               snapshot={snapshot}
             />
           </div>
-          <ResizeHandle
-            invert
-            label={t("resize.utilityDock")}
-            max={400}
-            min={280}
-            onChange={resizeUtilityPanel}
-            orientation="vertical"
-            value={utilityWidth}
-          />
+          <div
+            className="workspace__utility-resizer"
+            hidden={!utilityPanelVisible}
+          >
+            <ResizeHandle
+              invert
+              label={t("resize.utilityDock")}
+              max={400}
+              min={280}
+              onChange={resizeUtilityPanel}
+              orientation="vertical"
+              value={utilityWidth}
+            />
+          </div>
           <UtilityDock
+            className="workspace__utility"
+            hidden={!utilityPanelVisible}
             activeTab={utilityTab}
             agent={
               <AgentTimeline
@@ -2141,7 +2155,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                         kind: "selection",
                         count: state.selection.nodeIds.length,
                       }
-                    : { kind: "page", ...(pageName ? { name: pageName } : {}) }
+                    : {
+                        kind: "page",
+                        ...(pageName ? { name: pageName } : {}),
+                      }
                 }
                 timeline={activeAgentState.timeline}
               />
@@ -2214,6 +2231,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onSetConstraints={editorCommands.setNodeConstraints}
                 onSetLayoutPositioning={editorCommands.setNodeLayoutPositioning}
                 onSetFrameLayoutGuides={editorCommands.setFrameLayoutGuides}
+                onReorderGridTracks={editorCommands.reorderGridTracks}
                 onUpdate={(updates) => {
                   if (selectedNode) updateNode(selectedNode.id, updates);
                 }}

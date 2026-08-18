@@ -11,12 +11,16 @@ export function UtilityDock({
   activeTab,
   agent,
   agentRunning,
+  className = "",
+  hidden = false,
   onTabChange,
   properties,
 }: {
   activeTab: UtilityDockTab;
   agent: ReactNode;
   agentRunning: boolean;
+  className?: string;
+  hidden?: boolean;
   onTabChange: (tab: UtilityDockTab) => void;
   properties: ReactNode;
 }) {
@@ -51,7 +55,11 @@ export function UtilityDock({
   };
 
   return (
-    <aside aria-label={t("utility.dock")} className={styles.root}>
+    <aside
+      aria-label={t("utility.dock")}
+      className={`${styles.root} ${className}`}
+      hidden={hidden}
+    >
       <div
         aria-label={t("utility.views")}
         className={styles.tabs}

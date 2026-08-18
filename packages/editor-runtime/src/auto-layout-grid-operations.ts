@@ -1,9 +1,29 @@
 import type {
+  AutoLayout,
   DesignDocument,
   DesignNode,
+  DesignOperation,
   GridChildPlacement,
 } from "@opendesign/design-contracts";
+import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
 import type { AutoLayoutOperationPlan } from "./auto-layout-operations.js";
+
+export type GridTrackAxis = "rows" | "columns";
+
+export type GridTrackMovement = {
+  from: number;
+  to: number;
+};
+
+export type GridTrackReorderPlan =
+  | {
+      ok: true;
+      commands: DesignOperation[];
+      frameId: string;
+      nodeIds: string[];
+      movements: GridTrackMovement[];
+    }
+  | Extract<AutoLayoutOperationPlan, { ok: false }>;
 
 export function planSetNodeGridPlacement(
   document: DesignDocument,
@@ -61,6 +81,251 @@ export function planSetNodeGridPlacement(
   };
 }
 
+export function planReorderGridTracks(
+  document: DesignDocument,
+  pageId: string,
+  frameId: string,
+  axis: GridTrackAxis,
+  fromIndices: readonly number[],
+  insertionIndex: number,
+  commandPrefix: string,
+): GridTrackReorderPlan {
+  const frame = document.nodesById[frameId];
+  if (!frame) return failure("not-found", `Frame ${frameId} does not exist`);
+  if (
+    (frame.kind !== "frame" && frame.kind !== "slot") ||
+    !nodeBelongsToPage(document, pageId, frameId)
+  )
+    return failure(
+      "invalid-target",
+      `Target ${frameId} must be a Frame on Page ${pageId}`,
+    );
+  const grid = frame.properties.autoLayout;
+  if (!grid || grid.mode !== "grid")
+    return failure(
+      "invalid-target",
+      `Frame ${frameId} does not use Grid Auto Layout`,
+    );
+  if (isEffectivelyLocked(document, frameId))
+    return failure("locked", "Locked Frames cannot reorder Grid tracks");
+  for (const childId of frame.childIds)
+    if (!document.nodesById[childId])
+      return failure("not-found", `Layer ${childId} does not exist`);
+
+  const includeHidden = grid.itemsPositioning === "manual";
+  const affectedNodeIds = frame.childIds.filter((childId) => {
+    const child = document.nodesById[childId]!;
+    return (
+      (includeHidden || child.visible) && child.layoutPositioning !== "absolute"
+    );
+  });
+
+  const tracks = grid[axis];
+  if (
+    fromIndices.length === 0 ||
+    !Number.isInteger(insertionIndex) ||
+    insertionIndex < 0 ||
+    insertionIndex > tracks.length ||
+    fromIndices.some(
+      (index) =>
+        !Number.isInteger(index) || index < 0 || index >= tracks.length,
+    )
+  )
+    return failure(
+      "invalid-target",
+      `Grid ${axis} reorder indices are outside the declared tracks`,
+    );
+
+  const selected = closeSelectionOverChildSpans(
+    document,
+    frame.childIds,
+    axis,
+    new Set(fromIndices),
+    includeHidden,
+  );
+  const selectedIndices = [...selected].sort((left, right) => left - right);
+  const remainingIndices = Array.from(
+    { length: tracks.length },
+    (_, index) => index,
+  ).filter((index) => !selected.has(index));
+  const insertionInRemaining = remainingIndices.filter(
+    (index) => index < insertionIndex,
+  ).length;
+  const nextOrder = [
+    ...remainingIndices.slice(0, insertionInRemaining),
+    ...selectedIndices,
+    ...remainingIndices.slice(insertionInRemaining),
+  ];
+  if (nextOrder.every((from, to) => from === to))
+    return failure("no-op", `Grid ${axis} already use the requested order`);
+
+  const toByFrom = new Map(nextOrder.map((from, to) => [from, to] as const));
+  const movements = Array.from({ length: tracks.length }, (_, from) => ({
+    from,
+    to: toByFrom.get(from)!,
+  }));
+  const nextGrid: Extract<AutoLayout, { mode: "grid" }> = {
+    ...grid,
+    [axis]: nextOrder.map((index) => tracks[index]!),
+  };
+  const commands: DesignOperation[] = [
+    {
+      commandId: `${commandPrefix}_tracks`,
+      type: "update_properties",
+      nodeId: frameId,
+      properties: { autoLayout: nextGrid },
+    },
+  ];
+  if (grid.itemsPositioning === "manual") {
+    for (const childId of frame.childIds) {
+      const child = document.nodesById[childId];
+      if (
+        !child ||
+        child.layoutPositioning === "absolute" ||
+        !child.gridPlacement
+      )
+        continue;
+      const placement = remapPlacement(child.gridPlacement, axis, toByFrom);
+      if (samePlacement(placement, child.gridPlacement)) continue;
+      commands.push({
+        commandId: `${commandPrefix}_placement_${commands.length}`,
+        type: "update_properties",
+        nodeId: childId,
+        gridPlacement: placement,
+      });
+    }
+  } else {
+    const flowChildren = frame.childIds.filter((childId) => {
+      const child = document.nodesById[childId];
+      return (
+        child?.visible === true &&
+        child.layoutPositioning !== "absolute" &&
+        child.gridPlacement !== undefined
+      );
+    });
+    const originalFlowIndex = new Map(
+      flowChildren.map((childId, index) => [childId, index] as const),
+    );
+    const reorderedFlow = [...flowChildren].sort((leftId, rightId) => {
+      const left = remapPlacement(
+        document.nodesById[leftId]!.gridPlacement!,
+        axis,
+        toByFrom,
+      );
+      const right = remapPlacement(
+        document.nodesById[rightId]!.gridPlacement!,
+        axis,
+        toByFrom,
+      );
+      return (
+        left.row - right.row ||
+        left.column - right.column ||
+        originalFlowIndex.get(leftId)! - originalFlowIndex.get(rightId)!
+      );
+    });
+    const flowSlots = new Set(flowChildren);
+    let nextFlowIndex = 0;
+    const desiredChildren = frame.childIds.map((childId) =>
+      flowSlots.has(childId) ? reorderedFlow[nextFlowIndex++]! : childId,
+    );
+    const working = [...frame.childIds];
+    for (const [index, nodeId] of desiredChildren.entries()) {
+      if (working[index] === nodeId) continue;
+      const currentIndex = working.indexOf(nodeId);
+      if (currentIndex < 0)
+        return failure("not-found", `Layer ${nodeId} does not exist`);
+      working.splice(currentIndex, 1);
+      working.splice(index, 0, nodeId);
+      commands.push({
+        commandId: `${commandPrefix}_move_${commands.length}`,
+        type: "move_element",
+        nodeId,
+        pageId,
+        parentId: frameId,
+        index,
+      });
+    }
+  }
+
+  if (commands.length > MAX_TRANSACTION_COMMANDS)
+    return failure(
+      "operation-limit",
+      `Grid track reorder exceeds the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+    );
+  return {
+    ok: true,
+    commands,
+    frameId,
+    nodeIds: [frameId, ...affectedNodeIds],
+    movements,
+  };
+}
+
+function closeSelectionOverChildSpans(
+  document: DesignDocument,
+  childIds: readonly string[],
+  axis: GridTrackAxis,
+  selected: Set<number>,
+  includeHidden: boolean,
+): Set<number> {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const childId of childIds) {
+      const child = document.nodesById[childId];
+      if (
+        !child ||
+        (!includeHidden && !child.visible) ||
+        child.layoutPositioning === "absolute" ||
+        !child.gridPlacement
+      )
+        continue;
+      const start =
+        axis === "rows" ? child.gridPlacement.row : child.gridPlacement.column;
+      const span =
+        axis === "rows"
+          ? child.gridPlacement.rowSpan
+          : child.gridPlacement.columnSpan;
+      if (
+        !Array.from({ length: span }, (_, offset) => start + offset).some(
+          (index) => selected.has(index),
+        )
+      )
+        continue;
+      for (let index = start; index < start + span; index += 1) {
+        if (selected.has(index)) continue;
+        selected.add(index);
+        changed = true;
+      }
+    }
+  }
+  return selected;
+}
+
+function remapPlacement(
+  placement: GridChildPlacement,
+  axis: GridTrackAxis,
+  toByFrom: ReadonlyMap<number, number>,
+): GridChildPlacement {
+  const start = axis === "rows" ? placement.row : placement.column;
+  const span = axis === "rows" ? placement.rowSpan : placement.columnSpan;
+  const mapped = Array.from(
+    { length: span },
+    (_, offset) => toByFrom.get(start + offset) ?? start + offset,
+  );
+  const nextStart = Math.min(...mapped);
+  return axis === "rows"
+    ? { ...placement, row: nextStart }
+    : { ...placement, column: nextStart };
+}
+
+function samePlacement(
+  left: GridChildPlacement,
+  right: GridChildPlacement,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function nodeBelongsToPage(
   document: DesignDocument,
   pageId: string,
@@ -98,6 +363,6 @@ function isEffectivelyLocked(
 function failure(
   code: Extract<AutoLayoutOperationPlan, { ok: false }>["code"],
   message: string,
-): AutoLayoutOperationPlan {
+): Extract<AutoLayoutOperationPlan, { ok: false }> {
   return { ok: false, code, message };
 }

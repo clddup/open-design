@@ -1,6 +1,7 @@
 import type { DesignDocument } from "@opendesign/design-contracts";
 import {
   planArrangeNodes,
+  planReorderGridTracks,
   planResizeFrameWithConstraints,
   planSetFrameAutoLayout,
   planSetNodeConstraints,
@@ -23,6 +24,16 @@ export function planDesignArrangeTool(
       input.pageId,
       input.nodeId,
       input.constraints,
+      commandPrefix,
+    );
+  if (input.action === "reorder-grid-tracks")
+    return planReorderGridTracks(
+      document,
+      input.pageId,
+      input.frameId,
+      input.axis,
+      input.fromIndices,
+      input.insertionIndex,
       commandPrefix,
     );
   if (input.action === "resize-frame")

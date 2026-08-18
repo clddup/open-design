@@ -3,6 +3,8 @@ export type GridTrack =
   | { type: "fill"; value: number }
   | { type: "hug" };
 
+export const GRID_AUTO_LAYOUT_CONTRACT_VERSION = 2 as const;
+
 export type GridChildPlacement = {
   row: number;
   column: number;
@@ -22,7 +24,7 @@ type Limits = {
 };
 
 export type GridAutoLayoutRequest = {
-  version: 1;
+  version: typeof GRID_AUTO_LAYOUT_CONTRACT_VERSION;
   frame: { width: number; height: number };
   frameSizing: { horizontal: FrameAxisSizing; vertical: FrameAxisSizing };
   frameLimits?: Limits;
@@ -32,6 +34,7 @@ export type GridAutoLayoutRequest = {
   rows: GridTrack[];
   columns: GridTrack[];
   itemsPositioning: "manual" | "row-auto-flow";
+  autoTracks?: "rows";
   children: Array<{
     id: string;
     width: number;
@@ -56,6 +59,7 @@ export type GridAutoLayoutResult =
       }>;
       rowSizes: number[];
       columnSizes: number[];
+      rows: GridTrack[];
     }
   | {
       ok: false;
@@ -71,7 +75,8 @@ export function solveGridAutoLayout(
   if (
     (request.frameSizing.horizontal === "hug" &&
       request.columns.some(isFill)) ||
-    (request.frameSizing.vertical === "hug" && request.rows.some(isFill))
+    (request.frameSizing.vertical === "hug" &&
+      (request.rows.some(isFill) || request.autoTracks === "rows"))
   ) {
     return failure(
       "sizing-conflict",
@@ -79,7 +84,8 @@ export function solveGridAutoLayout(
     );
   }
 
-  const placements = resolvePlacements(request);
+  const effectiveRows = [...request.rows];
+  const placements = resolvePlacements(request, effectiveRows);
   if (!placements.ok) return placements;
   const columnSizes = resolveTracks(
     request.columns,
@@ -91,7 +97,7 @@ export function solveGridAutoLayout(
     request.frameSizing.horizontal,
   );
   const rowSizes = resolveTracks(
-    request.rows,
+    effectiveRows,
     placements.value,
     "vertical",
     request.frame.height,
@@ -133,6 +139,7 @@ export function solveGridAutoLayout(
     frame,
     rowSizes,
     columnSizes,
+    rows: effectiveRows,
     placements: placements.value.map(({ child, placement }) => {
       const area = gridArea(
         placement,
@@ -164,6 +171,7 @@ export function solveGridAutoLayout(
 
 function resolvePlacements(
   request: GridAutoLayoutRequest,
+  rows: GridTrack[],
 ):
   | {
       ok: true;
@@ -179,24 +187,36 @@ function resolvePlacements(
     placement: GridChildPlacement;
   }> = [];
   for (const child of request.children) {
-    const placement =
+    let placement =
       request.itemsPositioning === "manual"
         ? child.placement
         : nextAutoPlacement(
             occupied,
-            request.rows.length,
+            rows.length,
             request.columns.length,
             child.placement,
           );
+    while (
+      !placement &&
+      request.autoTracks === "rows" &&
+      request.itemsPositioning === "row-auto-flow" &&
+      rows.length < 4_096
+    ) {
+      rows.push({ type: "fill", value: 1 });
+      placement = nextAutoPlacement(
+        occupied,
+        rows.length,
+        request.columns.length,
+        child.placement,
+      );
+    }
     if (!placement) {
       return failure(
         "placement-conflict",
         `Grid child ${child.id} has no available explicit cell`,
       );
     }
-    if (
-      !placementFits(placement, request.rows.length, request.columns.length)
-    ) {
+    if (!placementFits(placement, rows.length, request.columns.length)) {
       return failure(
         "placement-conflict",
         `Grid child ${child.id} extends outside the declared tracks`,
@@ -212,6 +232,13 @@ function resolvePlacements(
     }
     for (const cell of occupiedCells(placement)) occupied.add(cell);
     value.push({ child, placement });
+  }
+  if (request.autoTracks === "rows") {
+    const requiredRows = Math.max(
+      1,
+      ...value.map(({ placement }) => placement.row + placement.rowSpan),
+    );
+    rows.splice(requiredRows);
   }
   return { ok: true, value };
 }
@@ -366,14 +393,19 @@ function occupiedCells(value: GridChildPlacement): string[] {
 
 function validRequest(value: GridAutoLayoutRequest): boolean {
   return (
-    value.version === 1 &&
+    value.version === GRID_AUTO_LAYOUT_CONTRACT_VERSION &&
     positiveSize(value.frame) &&
     finiteNonNegative(value.rowGap) &&
     finiteNonNegative(value.columnGap) &&
     value.rows.length > 0 &&
+    value.rows.length <= 4_096 &&
     value.columns.length > 0 &&
+    value.columns.length <= 4_096 &&
     value.rows.every(validTrack) &&
     value.columns.every(validTrack) &&
+    (value.autoTracks === undefined ||
+      (value.autoTracks === "rows" &&
+        value.itemsPositioning === "row-auto-flow")) &&
     Object.values(value.padding).every(finiteNonNegative) &&
     value.children.every(
       (child) =>

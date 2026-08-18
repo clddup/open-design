@@ -11,6 +11,7 @@ import type {
 } from "@opendesign/design-contracts";
 import {
   planSetFrameAutoLayout,
+  planReorderGridTracks,
   planSetNodeLayoutLimits,
   planSetNodeLayoutPositioning,
   planSetFrameLayoutGuides,
@@ -97,6 +98,32 @@ export function useEditorCommandController({
         return;
       }
       applyCommands(t("history.updateAutoLayout"), plan.commands);
+    },
+    [applyCommands, runtime, setEditorError, t],
+  );
+
+  const reorderGridTracks = useCallback(
+    (
+      frameId: string,
+      axis: "rows" | "columns",
+      fromIndices: readonly number[],
+      insertionIndex: number,
+    ) => {
+      const current = runtime.getSnapshot().document;
+      const plan = planReorderGridTracks(
+        current,
+        pageIdForNode(current, frameId),
+        frameId,
+        axis,
+        fromIndices,
+        insertionIndex,
+        `inspector_grid_reorder_${frameId}`,
+      );
+      if (!plan.ok) {
+        setEditorError(plan.message);
+        return;
+      }
+      applyCommands(t("history.reorderGridTracks"), plan.commands);
     },
     [applyCommands, runtime, setEditorError, t],
   );
@@ -294,6 +321,7 @@ export function useEditorCommandController({
   return {
     applyCommands,
     resizeFrame,
+    reorderGridTracks,
     setFrameAutoLayout,
     setNodeConstraints,
     setNodeLayoutLimits,
