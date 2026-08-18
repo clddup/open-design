@@ -2,39 +2,37 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 38px 42px minmax(0, 1fr);
+  grid-template-rows: auto 42px minmax(0, 1fr);
   background: var(--ui-surface);
+
+  &[data-library="true"] {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+}
+
+.viewNavigation {
+  display: grid;
+  min-width: 0;
 }
 
 .tabs {
-  display: flex;
+  display: grid;
   min-width: 0;
+  height: 38px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  justify-content: space-between;
-  padding: 0 8px;
+  padding: 0 6px;
   border-bottom: 1px solid var(--ui-border);
-}
-
-.primaryTabs,
-.libraryTabs {
-  display: flex;
-  height: 100%;
-  align-items: center;
-}
-
-.primaryTabs {
-  min-width: 0;
-  gap: 2px;
 }
 
 .primaryTab {
   position: relative;
   display: flex;
   height: 100%;
-  flex: 0 0 auto;
+  justify-content: center;
   align-items: center;
   gap: 6px;
-  padding: 0 8px;
+  padding: 0 5px;
   border: 0;
   color: var(--ui-text-muted);
   background: transparent;
@@ -58,21 +56,35 @@
 }
 
 .libraryTabs {
-  height: 24px;
-  flex: 0 0 auto;
-  gap: 1px;
-  padding-left: 5px;
-  border-left: 1px solid var(--ui-border);
+  display: grid;
+  height: 34px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface-sunken);
 
-  :global(.ui-icon-button) {
-    width: 24px;
-    height: 24px;
-    color: var(--ui-text-muted);
+  button {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    border: 0;
     border-radius: 4px;
+    color: var(--ui-text-muted);
+    background: transparent;
+    font-size: 10px;
 
-    &[aria-selected="true"] {
+    &[aria-pressed="true"] {
       color: var(--ui-text);
-      background: var(--ui-surface-sunken);
+      background: var(--ui-surface);
+      box-shadow: 0 0 0 1px var(--ui-border);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--ui-focus);
+      outline-offset: -1px;
     }
   }
 }
@@ -102,12 +114,26 @@
     &:focus-visible {
       box-shadow: inset 0 -1px 0 var(--ui-accent);
     }
-
-    &:disabled {
-      cursor: default;
-      opacity: 0.72;
-    }
   }
+
+  :global(.ui-icon-button) {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+.libraryPanel {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.noSearchResults {
+  display: block;
+  padding: 20px 12px;
+  color: var(--ui-text-faint);
+  font-size: 10px;
+  text-align: center;
 }
 
 .documentTree {

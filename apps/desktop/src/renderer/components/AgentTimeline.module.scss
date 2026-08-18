@@ -3,7 +3,7 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  grid-template-rows: 52px minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
   overflow: hidden;
   background: var(--ui-surface);
 }
@@ -66,9 +66,15 @@
   min-width: 0;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 6px 9px;
   border-bottom: 1px solid var(--ui-border-subtle);
   background: var(--ui-surface-sunken);
+
+  :global(.ui-icon-button) {
+    width: 28px;
+    height: 28px;
+    flex: none;
+  }
 }
 
 .conversationSelect {
@@ -81,7 +87,7 @@
   flex: 1;
   overflow: auto;
   margin: 0;
-  padding: 16px 13px 22px;
+  padding: 13px 12px 18px;
   list-style: none;
   scrollbar-color: var(--ui-border-strong) transparent;
   scrollbar-width: thin;
@@ -109,7 +115,7 @@
 .item {
   display: flex;
   min-width: 0;
-  margin: 0 0 14px;
+  margin: 0 0 11px;
 }
 
 .itemUser {

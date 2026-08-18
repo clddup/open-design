@@ -5,7 +5,7 @@ import type {
 } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
 import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
-import { Button, DesktopSelect, Glyph } from "@opendesign/ui";
+import { Button, DesktopSelect, Glyph, IconButton } from "@opendesign/ui";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PAGE_STRUCTURE_ACCESS_TOOL_NAME } from "../../shared/design-agent-tools";
 import {
@@ -281,20 +281,16 @@ export function AgentTimeline({
             }
             value={conversationId}
           />
-          <Button
+          <IconButton
             disabled={
               !onCreateConversation ||
               composer.creatingConversation ||
               Boolean(activeRunId)
             }
             icon="plus"
+            label={t("agent.newConversation")}
             onClick={() => void composer.createConversation()}
-            tone={hasConversation ? "quiet" : "primary"}
-          >
-            {composer.creatingConversation
-              ? t("common.creating")
-              : t("agent.newConversation")}
-          </Button>
+          />
         </div>
         {runExperience && <AgentRunStatus experience={runExperience} t={t} />}
         <ol

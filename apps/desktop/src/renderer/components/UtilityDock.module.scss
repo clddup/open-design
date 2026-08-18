@@ -2,27 +2,27 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 38px minmax(0, 1fr);
+  grid-template-rows: 34px minmax(0, 1fr);
   overflow: hidden;
   background: var(--ui-surface);
 }
 
 .tabs {
   display: flex;
-  align-items: end;
-  gap: 4px;
-  padding: 0 10px;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 7px;
   border-bottom: 1px solid var(--ui-border);
 
   button {
     position: relative;
     display: flex;
     height: 100%;
-    flex: 1;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 0 8px;
+    padding: 0 9px;
     border: 0;
     color: var(--ui-text-muted);
     background: transparent;
@@ -34,11 +34,11 @@
 
       &::after {
         position: absolute;
-        right: 6px;
+        right: 8px;
         bottom: -1px;
-        left: 6px;
+        left: 8px;
         height: 2px;
-        background: var(--ui-text);
+        background: var(--ui-accent);
         content: "";
       }
     }

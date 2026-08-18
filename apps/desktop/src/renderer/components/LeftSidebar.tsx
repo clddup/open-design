@@ -239,12 +239,37 @@ export function LeftSidebar({
   const [pageNameDraft, setPageNameDraft] = useState("");
   const [pageNameError, setPageNameError] = useState<string | null>(null);
   const [assetQuery, setAssetQuery] = useState("");
+  const [layerQuery, setLayerQuery] = useState("");
   const draggedNodeIds = useRef<readonly string[] | null>(null);
   const draggedPageId = useRef<string | null>(null);
   const pageNameInput = useRef<HTMLInputElement | null>(null);
   const composingPageName = useRef(false);
   const revealedSelectionKey = useRef<string | null>(null);
-  const layers = flattenPageTree(document, activePageId, collapsedNodeIds);
+  const normalizedLayerQuery = layerQuery.trim().toLocaleLowerCase();
+  const allLayers = flattenPageTree(
+    document,
+    activePageId,
+    normalizedLayerQuery ? new Set() : collapsedNodeIds,
+  );
+  const matchingLayerIds = new Set(
+    normalizedLayerQuery
+      ? allLayers
+          .filter(({ node }) =>
+            `${node.name} ${t(nodeKindKeys[node.kind])}`
+              .toLocaleLowerCase()
+              .includes(normalizedLayerQuery),
+          )
+          .map(({ node }) => node.id)
+      : [],
+  );
+  if (normalizedLayerQuery) {
+    collectAncestorIds(document, [...matchingLayerIds]).forEach((nodeId) =>
+      matchingLayerIds.add(nodeId),
+    );
+  }
+  const layers = normalizedLayerQuery
+    ? allLayers.filter(({ node }) => matchingLayerIds.has(node.id))
+    : allLayers;
   const selectedIds = new Set(selectedNodeIds);
   const componentIdentityNodeIds = new Set<string>();
   for (const component of Object.values(document.componentsById))
@@ -284,6 +309,7 @@ export function LeftSidebar({
 
   useEffect(() => {
     setAssetQuery("");
+    setLayerQuery("");
   }, [document.documentId]);
 
   useEffect(() => {
@@ -471,29 +497,45 @@ export function LeftSidebar({
   };
 
   return (
-    <aside aria-label={t("sidebar.navigation")} className={styles.root}>
+    <aside
+      aria-label={t("sidebar.navigation")}
+      className={styles.root}
+      data-library={tab === "styles" || tab === "variables" ? "true" : "false"}
+    >
       <SidebarViewTabs onChange={onTabChange} value={tab} />
-      <div className={styles.search}>
-        <Glyph name="search" />
-        <input
-          aria-label={
-            tab === "assets"
-              ? t("sidebar.searchAssets")
-              : t("sidebar.searchUnavailable", {
-                  view: t("sidebar.layers"),
-                })
-          }
-          disabled={tab !== "assets"}
-          onChange={(event) => setAssetQuery(event.target.value)}
-          placeholder={
-            tab === "assets"
-              ? t("sidebar.searchAssetsPlaceholder")
-              : t("sidebar.searchUnavailablePlaceholder")
-          }
-          type="search"
-          value={tab === "assets" ? assetQuery : ""}
-        />
-      </div>
+      {(tab === "layers" || tab === "assets") && (
+        <div className={styles.search}>
+          <Glyph name="search" />
+          <input
+            aria-label={
+              tab === "assets"
+                ? t("sidebar.searchAssets")
+                : t("sidebar.searchLayers")
+            }
+            onChange={(event) =>
+              tab === "assets"
+                ? setAssetQuery(event.target.value)
+                : setLayerQuery(event.target.value)
+            }
+            placeholder={
+              tab === "assets"
+                ? t("sidebar.searchAssetsPlaceholder")
+                : t("sidebar.searchLayersPlaceholder")
+            }
+            type="search"
+            value={tab === "assets" ? assetQuery : layerQuery}
+          />
+          {(tab === "assets" ? assetQuery : layerQuery) && (
+            <IconButton
+              icon="close"
+              label={t("sidebar.clearSearch")}
+              onClick={() =>
+                tab === "assets" ? setAssetQuery("") : setLayerQuery("")
+              }
+            />
+          )}
+        </div>
+      )}
       {tab === "layers" ? (
         <div
           aria-labelledby="sidebar-layers-tab"
@@ -680,6 +722,11 @@ export function LeftSidebar({
             role="tree"
           >
             <span className={styles.layerHeading}>{t("sidebar.layers")}</span>
+            {normalizedLayerQuery && layers.length === 0 && (
+              <span className={styles.noSearchResults}>
+                {t("sidebar.noLayersFound")}
+              </span>
+            )}
             {layers.map(({ node, depth, effectiveLocked, inheritedLocked }) => {
               const selected = selectedIds.has(node.id);
               const hasChildren = node.childIds.length > 0;
@@ -844,19 +891,28 @@ export function LeftSidebar({
           onReplace={onReplaceAsset}
           query={assetQuery}
         />
-      ) : tab === "variables" ? (
-        <VariablesPanel
-          actions={variableActions}
-          activePageId={activePageId}
-          document={document}
-        />
-      ) : styleActions ? (
-        <LocalStylesPanel
-          actions={styleActions}
-          document={document}
-          selectedNodeIds={selectedNodeIds}
-        />
-      ) : null}
+      ) : (
+        <div
+          aria-labelledby="sidebar-library-tab"
+          className={styles.libraryPanel}
+          id="sidebar-library"
+          role="tabpanel"
+        >
+          {tab === "variables" ? (
+            <VariablesPanel
+              actions={variableActions}
+              activePageId={activePageId}
+              document={document}
+            />
+          ) : styleActions ? (
+            <LocalStylesPanel
+              actions={styleActions}
+              document={document}
+              selectedNodeIds={selectedNodeIds}
+            />
+          ) : null}
+        </div>
+      )}
     </aside>
   );
 }

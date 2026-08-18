@@ -144,6 +144,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const [fileName, setFileName] = useState(() => t("file.untitled"));
   const [leftWidth, setLeftWidth] = useState(236);
   const [utilityWidth, setUtilityWidth] = useState(320);
+  const [leftPanelVisible, setLeftPanelVisible] = useState(true);
+  const [utilityPanelVisible, setUtilityPanelVisible] = useState(true);
   const [utilityTab, setUtilityTab] = useState<UtilityDockTab>("agent");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("layers");
   const [conversationsByProjectId, setConversationsByProjectId] = useState<
@@ -1794,6 +1796,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           canExportSvg={state.selection.nodeIds.length > 0}
           dirty={state.dirty}
           documentName={documentName}
+          leftPanelVisible={leftPanelVisible}
           onExportSvg={() => void importExport.exportSelection()}
           onImportSvg={() => void importExport.importSvg()}
           onOpen={activeProject ? undefined : () => void openDocument()}
@@ -1801,6 +1804,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           onSave={() => void saveDocument(false)}
           onSaveAs={activeProject ? undefined : () => void saveDocument(true)}
           onSettings={openSettings}
+          onToggleLeftPanel={() => setLeftPanelVisible((visible) => !visible)}
+          onToggleUtilityPanel={() =>
+            setUtilityPanelVisible((visible) => !visible)
+          }
           onThemeChange={changeTheme}
           onWorkspace={() => setView("workspace")}
           pageName={pageName}
@@ -1808,6 +1815,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           projectName={activeProject?.name}
           svgBusy={importExport.operation !== null}
           theme={theme}
+          utilityPanelVisible={utilityPanelVisible}
         />
         <Toolbar
           booleanOperation={
@@ -1845,7 +1853,11 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           platform={platform}
           tool={tool}
         />
-        <div className="workspace">
+        <div
+          className="workspace"
+          data-left-panel={leftPanelVisible ? "visible" : "hidden"}
+          data-utility-panel={utilityPanelVisible ? "visible" : "hidden"}
+        >
           <LeftSidebar
             activePageId={activePageId}
             document={designDocument}

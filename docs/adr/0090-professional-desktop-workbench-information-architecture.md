@@ -1,0 +1,48 @@
+# ADR-0090：专业桌面工作台的信息架构与画布优先体验
+
+- 状态：Accepted
+- 日期：2026-08-18
+- 文档协议：不变
+- 关联：ADR-0028、ADR-0050、ADR-0080
+
+## 背景
+
+现有编辑器已具备大量专业语义，但工作台入口随能力增长平铺：左侧把 Layers、Assets、Styles、Variables 四个同级入口压入窄面板，非 Assets 视图仍占用不可用搜索栏；右侧 Agent/Properties 平均分配整行标签，会话、运行状态和消息形成多层 Chrome；顶部 Titlebar、Toolbar、文件标签和底部状态栏共同侵占画布。功能存在不等于高频工作流容易使用。
+
+产品继续采用跨平台 Electron 客户端和 Web 画布。视觉可以参考 Figma 等现代专业设计工具的轻量 Web 技术表达，但信息架构必须保持桌面工作台特征：稳定空间、紧凑面板、直接操作、键盘与画布优先，而不是后台网站、营销页或卡片集合。
+
+## 决策
+
+### 画布是固定中心
+
+工作台维持 Title/command chrome、左 Navigator、中央 Canvas、右 Utility、底部状态的稳定关系。顶部各层缩短但不合并事实职责；左右面板可从 Titlebar 独立显隐，隐藏时同时移除 splitter 并把空间完整交还 Canvas。面板显隐是 Renderer session state，不修改设计文档、history 或 revision。
+
+### 左侧按用户对象而非底层 registry 分组
+
+一级入口固定为：
+
+1. Layers：Page 与当前 Page 图层树；
+2. Assets：图片和 Component 资产；
+3. Library：Styles 与 Variables 的二级视图。
+
+Layers 与 Assets 都提供真实搜索；不再展示“搜索暂不可用”的占位控件。Library 负责后续跨文件发布/消费入口，Styles/Variables 不再与文档导航争夺一级宽度。
+
+### 右侧按工作模式切换
+
+Agent 与 Properties 保持两个模式，不同时挤压 Canvas。标签左对齐、内容优先；Agent 的 Conversation、可信运行状态、真实设计步骤、消息和 Composer 保持清晰层级。模型等待、真实 revision、自动修正和最终 delivery 由可信事件投影，不能由聊天文案冒充。
+
+### 客户端密度与反馈
+
+Titlebar、Toolbar、文件标签和 Statusbar 使用一致的紧凑尺寸、细分隔和有限强调色。普通控件不使用营销式卡片、巨型圆角、装饰渐变或大面积阴影。hover、selected、focus、running、error 和 hidden 必须同时有结构或文字信号，不能只靠颜色。
+
+## 当前切片与后续
+
+本 ADR 的第一切片已完成一级 IA、Layers 搜索、Library 二级切换、紧凑 Utility tabs、面板显隐、Shell 密度和可信 Agent 状态。后续仍需在同一方向完成：面板显隐快捷键与持久 session、Properties 信息分组与渐进披露、命令面板、Canvas 就地快捷操作、窄窗口自动策略、跨主题和打包产品视觉回归。后续切片不得重新把能力平铺为更多一级标签。
+
+## 验证
+
+- Sidebar 测试覆盖三入口 IA、Library 二级切换、真实 Layers 搜索与空结果；
+- Titlebar 测试覆盖可访问的左右面板显隐控制；
+- Agent/Utility 测试覆盖键盘 tab 切换、运行状态、Conversation 与停止；
+- Desktop 类型、交互测试与 Vite build 验证 CSS Modules 和 Renderer 集成；
+- macOS/Windows 原生 Action 继续阻塞发布，自动化不能替代打包产品的宽/窄窗口人工视觉 smoke。

@@ -34,11 +34,11 @@
 
 .brandMark {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border: 1px solid var(--ui-border);
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--ui-text);
   background: var(--ui-surface-raised);
 }
@@ -60,6 +60,15 @@
   display: flex;
   align-items: center;
   gap: 3px;
+}
+
+.panelActions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-right: 3px;
+  padding-right: 5px;
+  border-right: 1px solid var(--ui-border);
 }
 
 .breadcrumb,

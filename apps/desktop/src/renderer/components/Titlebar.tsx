@@ -29,6 +29,10 @@ export function Titlebar({
   onWorkspace,
   onProject,
   onSettings,
+  leftPanelVisible,
+  utilityPanelVisible,
+  onToggleLeftPanel,
+  onToggleUtilityPanel,
 }: {
   theme: ThemePreference;
   platform: NodeJS.Platform;
@@ -47,6 +51,10 @@ export function Titlebar({
   onWorkspace: () => void;
   onProject?: () => void;
   onSettings: () => void;
+  leftPanelVisible?: boolean;
+  utilityPanelVisible?: boolean;
+  onToggleLeftPanel?: () => void;
+  onToggleUtilityPanel?: () => void;
 }) {
   const { t } = useI18n();
   const nextTheme = theme === "dark" ? "light" : "dark";
@@ -88,6 +96,26 @@ export function Titlebar({
         </span>
       </div>
       <div className={`${styles.actions} no-drag`}>
+        {(onToggleLeftPanel || onToggleUtilityPanel) && (
+          <span className={styles.panelActions}>
+            {onToggleLeftPanel && (
+              <IconButton
+                icon="layers"
+                label={t("title.toggleNavigator")}
+                onClick={onToggleLeftPanel}
+                selected={leftPanelVisible}
+              />
+            )}
+            {onToggleUtilityPanel && (
+              <IconButton
+                icon="agent"
+                label={t("title.toggleUtility")}
+                onClick={onToggleUtilityPanel}
+                selected={utilityPanelVisible}
+              />
+            )}
+          </span>
+        )}
         <Button onClick={onSave} tone="quiet">
           {t("common.save")}
         </Button>
@@ -117,13 +145,11 @@ export function Titlebar({
             {t("title.exportSvgSelection")}
           </DropdownMenuItem>
         </DropdownMenu>
-        <Button
-          aria-label={t("settings.open")}
+        <IconButton
           icon="settings"
+          label={t("settings.open")}
           onClick={onSettings}
-        >
-          {t("settings.title")}
-        </Button>
+        />
         <IconButton
           icon={theme === "dark" ? "sun" : "moon"}
           label={t(nextTheme === "dark" ? "theme.useDark" : "theme.useLight")}

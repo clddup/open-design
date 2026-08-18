@@ -18,6 +18,8 @@ function renderTitlebar() {
   const onSaveAs = vi.fn();
   const onExportSvg = vi.fn();
   const onThemeChange = vi.fn();
+  const onToggleLeftPanel = vi.fn();
+  const onToggleUtilityPanel = vi.fn();
 
   render(
     <TooltipProvider delayDuration={0}>
@@ -26,6 +28,7 @@ function renderTitlebar() {
           canExportSvg
           dirty={false}
           documentName="Welcome.opendesign"
+          leftPanelVisible
           onExportSvg={onExportSvg}
           onImportSvg={onImportSvg}
           onOpen={onOpen}
@@ -33,10 +36,13 @@ function renderTitlebar() {
           onSaveAs={onSaveAs}
           onSettings={vi.fn()}
           onThemeChange={onThemeChange}
+          onToggleLeftPanel={onToggleLeftPanel}
+          onToggleUtilityPanel={onToggleUtilityPanel}
           onWorkspace={vi.fn()}
           platform="darwin"
           svgBusy={false}
           theme="light"
+          utilityPanelVisible
         />
       </I18nProvider>
     </TooltipProvider>,
@@ -49,10 +55,29 @@ function renderTitlebar() {
     onSave,
     onSaveAs,
     onThemeChange,
+    onToggleLeftPanel,
+    onToggleUtilityPanel,
   };
 }
 
 describe("Titlebar behavior primitives", () => {
+  it("toggles navigator and utility panels without taking canvas focus", async () => {
+    const user = userEvent.setup();
+    const { onToggleLeftPanel, onToggleUtilityPanel } = renderTitlebar();
+    const navigator = screen.getByRole("button", {
+      name: "Toggle navigator panel",
+    });
+    const utility = screen.getByRole("button", {
+      name: "Toggle Agent and properties panel",
+    });
+    expect(navigator).toHaveAttribute("aria-pressed", "true");
+    expect(utility).toHaveAttribute("aria-pressed", "true");
+    await user.click(navigator);
+    await user.click(utility);
+    expect(onToggleLeftPanel).toHaveBeenCalledOnce();
+    expect(onToggleUtilityPanel).toHaveBeenCalledOnce();
+  });
+
   it("only reserves the native traffic-light area on macOS", () => {
     const { rerender } = render(
       <TooltipProvider delayDuration={0}>

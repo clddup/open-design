@@ -40,6 +40,57 @@ function pageActionProps() {
 }
 
 describe("LeftSidebar layer tree", () => {
+  it("groups Styles and Variables under one Library view and searches layers", async () => {
+    const user = userEvent.setup();
+    const onTabChange = vi.fn();
+    const props = {
+      ...pageActionProps(),
+      activePageId: "page_welcome",
+      document: createWelcomeDocument(),
+      onDelete: vi.fn(),
+      onPageChange: vi.fn(),
+      onReparent: vi.fn(() => ({ ok: true }) as const),
+      onSelect: vi.fn(),
+      onTabChange,
+      onToggleLock: vi.fn(),
+      onToggleVisibility: vi.fn(),
+      selectedNodeIds: [],
+    };
+    const view = render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar {...props} tab="layers" />
+      </I18nProvider>,
+    );
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Layers",
+      "Assets",
+      "Library",
+    ]);
+    expect(screen.queryByText("Search unavailable")).not.toBeInTheDocument();
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search layers" }),
+      "Atomic",
+    );
+    expect(screen.getByText("Atomic changes")).toBeInTheDocument();
+    expect(screen.getByText("Capabilities")).toBeInTheDocument();
+    expect(screen.queryByText("Structured editing")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Library" }));
+    expect(onTabChange).toHaveBeenLastCalledWith("styles");
+    view.rerender(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar {...props} tab="styles" />
+      </I18nProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Styles" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await user.click(screen.getByRole("button", { name: "Variables" }));
+    expect(onTabChange).toHaveBeenLastCalledWith("variables");
+  });
+
   it("presents one Component Set asset and places its default Variant", async () => {
     const user = userEvent.setup();
     const document = structuredClone(createWelcomeDocument());

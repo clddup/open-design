@@ -684,7 +684,9 @@ describe("App", () => {
     const settingsButton = screen.getByRole("button", {
       name: "Open Settings",
     });
-    expect(settingsButton).toHaveTextContent("Settings");
+    expect(
+      settingsButton.querySelector('[data-glyph="settings"]'),
+    ).toBeInTheDocument();
     await user.click(settingsButton);
     expect(
       screen.getByRole("heading", { name: "Language and appearance" }),
@@ -4833,6 +4835,25 @@ describe("App", () => {
     expect(
       within(properties).queryByText("No selection"),
     ).not.toBeInTheDocument();
+  });
+
+  it("returns navigator and utility space to the canvas on demand", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const workspace = document.querySelector(".workspace");
+    expect(workspace).toHaveAttribute("data-left-panel", "visible");
+    expect(workspace).toHaveAttribute("data-utility-panel", "visible");
+
+    await user.click(
+      screen.getByRole("button", { name: "Toggle navigator panel" }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Toggle Agent and properties panel",
+      }),
+    );
+    expect(workspace).toHaveAttribute("data-left-panel", "hidden");
+    expect(workspace).toHaveAttribute("data-utility-panel", "hidden");
   });
 
   it("sends a host-bound document scope and renders streamed Agent events", async () => {
