@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.33.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-15 · 文档协议：`1.34.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 21 项，不可用 1 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -228,10 +228,10 @@
 响应式布局 Frame，并添加不改变 child 几何且不导出的 Uniform、Columns 或 Rows Layout Guide。
 
 - ID：`layout.auto-layout`
-- 实现方：DesignDocument 1.20.0 Layout Guide + @opendesign/layout-service Auto Layout contract v6 + EditorRuntime
+- 实现方：DesignDocument 1.34.0 Auto Layout Grid + Layout Guide + @opendesign/layout-service Auto Layout contract v7 + EditorRuntime
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 16 项；实机 0 项
-- 限制：Uniform、Columns 与 Rows Layout Guide 支持 Frame 上稳定的视觉辅助，并保持在布局、child 几何、capture 和 export 之外。Guide style 与变量、吸附、Auto Layout Grid 的 track/cell/span/reflow、交叉轴 Auto gap、垂直 wrap、Wrap+Fill、baseline、旋转 absolute child、画布回流手柄、SVG 往返 metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 限制：Auto Layout Grid v1 已支持显式 Fixed/Fill/Hug 行列轨道、独立双 gap、Manual 或 row-major 自动排布、child cell/span/alignment、Fixed/Fill sizing、Runtime 确定回流、Inspector、Agent 与 Figma 公共 Plugin API 投影。Uniform、Columns 与 Rows Layout Guide 仍是不参与布局的视觉辅助。自动行轨道、轨道重排、Guide style/变量、吸附、交叉轴 Auto gap、垂直 wrap、Wrap+Fill、baseline、旋转 absolute child、画布回流手柄、SVG Grid metadata，以及 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040451373-Guide-to-auto-layout)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450513-Create-layout-guides)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/31289469907863-Use-the-grid-auto-layout-flow)

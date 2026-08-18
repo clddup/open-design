@@ -140,6 +140,49 @@ export const DEFAULT_LAYOUT_SIZING: LayoutSizing = Object.freeze({
   vertical: "fixed",
 });
 
+export const GridTrackSchema = Type.Union([
+  Type.Object(
+    {
+      type: Type.Literal("fixed"),
+      value: Type.Number({ minimum: 0, maximum: 1_000_000 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("fill"),
+      value: Type.Number({ exclusiveMinimum: 0, maximum: 1_000_000 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object({ type: Type.Literal("hug") }, { additionalProperties: false }),
+]);
+
+export type GridTrack = Static<typeof GridTrackSchema>;
+
+const GridIndexSchema = Type.Integer({ minimum: 0, maximum: 4_095 });
+const GridSpanSchema = Type.Integer({ minimum: 1, maximum: 4_096 });
+const GridChildAlignmentSchema = Type.Union([
+  Type.Literal("start"),
+  Type.Literal("center"),
+  Type.Literal("end"),
+  Type.Literal("auto"),
+]);
+
+export const GridChildPlacementSchema = Type.Object(
+  {
+    row: GridIndexSchema,
+    column: GridIndexSchema,
+    rowSpan: GridSpanSchema,
+    columnSpan: GridSpanSchema,
+    horizontalAlign: GridChildAlignmentSchema,
+    verticalAlign: GridChildAlignmentSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type GridChildPlacement = Static<typeof GridChildPlacementSchema>;
+
 const LayoutLimitSchema = Type.Number({ minimum: 0, maximum: 1_000_000 });
 
 export const LayoutLimitsSchema = Type.Object(
@@ -254,7 +297,31 @@ export const AutoLayoutSchema = Type.Union([
     },
     { additionalProperties: false },
   ),
+  Type.Object(
+    {
+      mode: Type.Literal("grid"),
+      padding: AutoLayoutPaddingSchema,
+      rowGap: Type.Number({ minimum: 0, maximum: 1_000_000 }),
+      columnGap: Type.Number({ minimum: 0, maximum: 1_000_000 }),
+      rows: Type.Array(GridTrackSchema, { minItems: 1, maxItems: 4_096 }),
+      columns: Type.Array(GridTrackSchema, {
+        minItems: 1,
+        maxItems: 4_096,
+      }),
+      itemsPositioning: Type.Union([
+        Type.Literal("manual"),
+        Type.Literal("row-auto-flow"),
+      ]),
+      sizing: Type.Optional(AutoLayoutFrameSizingSchema),
+    },
+    { additionalProperties: false },
+  ),
 ]);
 
 export type AutoLayout = Static<typeof AutoLayoutSchema>;
 export type AutoLayoutFlow = Exclude<AutoLayout, { mode: "none" }>;
+export type LinearAutoLayoutFlow = Extract<
+  AutoLayout,
+  { mode: "horizontal" | "vertical" }
+>;
+export type GridAutoLayout = Extract<AutoLayout, { mode: "grid" }>;

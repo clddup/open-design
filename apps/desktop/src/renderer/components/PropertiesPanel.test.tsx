@@ -1066,6 +1066,94 @@ describe("PropertiesPanel SVG workflow", () => {
     }
   });
 
+  it("switches to Grid and edits real tracks and independent gaps", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn<(updates: UpdatePropertiesPatch) => void>();
+    const frame: DesignNode = {
+      id: "frame_grid",
+      kind: "frame",
+      name: "Product grid",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 600, height: 400 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: true,
+        autoLayout: {
+          mode: "vertical",
+          padding: { top: 16, right: 16, bottom: 16, left: 16 },
+          gap: 12,
+          primaryAlignment: "start",
+          counterAlignment: "start",
+        },
+      },
+      extensions: {},
+    };
+    renderPanel({ node: frame, selectionCount: 1, onUpdate });
+    await user.selectOptions(screen.getByLabelText("Direction"), "grid");
+    expect(
+      onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout,
+    ).toMatchObject({
+      mode: "grid",
+      itemsPositioning: "row-auto-flow",
+      rows: [{ type: "hug" }],
+      columns: [
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+      ],
+    });
+    cleanup();
+    renderPanel({
+      node: {
+        ...frame,
+        properties: {
+          ...frame.properties,
+          autoLayout: {
+            mode: "grid",
+            padding: { top: 16, right: 16, bottom: 16, left: 16 },
+            rowGap: 12,
+            columnGap: 16,
+            rows: [{ type: "hug" }],
+            columns: [
+              { type: "fixed", value: 180 },
+              { type: "fill", value: 1 },
+            ],
+            itemsPositioning: "row-auto-flow",
+          },
+        },
+      },
+      selectionCount: 1,
+      onUpdate,
+    });
+    await user.click(screen.getByRole("button", { name: "Add Columns track" }));
+    expect(
+      onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout,
+    ).toMatchObject({
+      columns: [
+        { type: "fixed", value: 180 },
+        { type: "fill", value: 1 },
+        { type: "fill", value: 1 },
+      ],
+    });
+    const columnGap = screen.getByLabelText("Column gap");
+    await user.clear(columnGap);
+    await user.type(columnGap, "24");
+    await user.tab();
+    expect(
+      onUpdate.mock.calls.at(-1)?.[0].properties?.autoLayout,
+    ).toMatchObject({
+      columnGap: 24,
+    });
+  });
+
   it("shows cancellable background progress and disables conflicting export controls", async () => {
     const user = userEvent.setup();
     const { onCancelSvgOperation } = renderPanel({

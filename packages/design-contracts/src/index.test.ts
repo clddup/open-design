@@ -13,6 +13,7 @@ import {
   FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
+  AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
   PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION,
   RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION,
   TYPOGRAPHY_CORE_V2_DESIGN_SCHEMA_VERSION,
@@ -59,7 +60,66 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(RICH_TEXT_RUNS_DESIGN_SCHEMA_VERSION).toBe("1.31.0");
   expect(PARAGRAPH_STYLE_RUNS_DESIGN_SCHEMA_VERSION).toBe("1.32.0");
   expect(FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION).toBe("1.33.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION);
+  expect(AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION).toBe("1.34.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION);
+});
+
+it("validates bounded Grid Auto Layout tracks and child placement", () => {
+  const frame = {
+    id: "grid",
+    kind: "frame",
+    name: "Grid",
+    parentId: null,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 600, height: 400 },
+    opacity: 1,
+    exportSettings: [],
+    properties: {
+      fills: [],
+      strokes: [],
+      strokeWidth: 0,
+      cornerRadius: 0,
+      clipsContent: true,
+      autoLayout: {
+        mode: "grid",
+        padding: { top: 16, right: 16, bottom: 16, left: 16 },
+        rowGap: 12,
+        columnGap: 16,
+        rows: [{ type: "hug" }, { type: "fixed", value: 120 }],
+        columns: [
+          { type: "fixed", value: 180 },
+          { type: "fill", value: 1 },
+        ],
+        itemsPositioning: "manual",
+      },
+    },
+    extensions: {},
+  };
+  expect(Value.Check(DesignNodeSchema, frame)).toBe(true);
+  expect(
+    Value.Check(DesignNodeSchema, {
+      ...frame,
+      properties: {
+        ...frame.properties,
+        autoLayout: {
+          ...frame.properties.autoLayout,
+          columns: [{ type: "fill", value: 0 }],
+        },
+      },
+    }),
+  ).toBe(false);
+});
+
+it("migrates 1.33 documents without inventing Grid state", () => {
+  const source = textDocumentFixture();
+  source.schemaVersion =
+    FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById.text_1?.gridPlacement).toBeUndefined();
 });
 
 it("validates bounded semantic text editing session commits", () => {

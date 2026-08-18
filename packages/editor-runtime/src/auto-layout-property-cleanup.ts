@@ -3,6 +3,7 @@ import type { DesignNode } from "@opendesign/design-contracts";
 export function clearOrphanedFlowProperties(node: DesignNode): void {
   delete node.layoutPositioning;
   delete node.layoutSizing;
+  delete node.gridPlacement;
   const ownFlow =
     node.kind === "frame" || node.kind === "slot"
       ? node.properties.autoLayout
@@ -24,4 +25,6 @@ export function cleanReparentedLayoutProperties(
     delete node.constraints;
   }
   if (!targetUsesFlow) clearOrphanedFlowProperties(node);
+  else if (targetParent.properties.autoLayout?.mode !== "grid")
+    delete node.gridPlacement;
 }

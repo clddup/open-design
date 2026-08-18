@@ -22,13 +22,17 @@ export function nodeGeometryUpdate(
     before.layoutSizing?.vertical !== after.layoutSizing?.vertical;
   const layoutLimitsChanged =
     JSON.stringify(before.layoutLimits) !== JSON.stringify(after.layoutLimits);
+  const gridPlacementChanged =
+    JSON.stringify(before.gridPlacement) !==
+    JSON.stringify(after.gridPlacement);
   if (
     !transformChanged &&
     !sizeChanged &&
     !constraintsChanged &&
     !layoutPositioningChanged &&
     !layoutSizingChanged &&
-    !layoutLimitsChanged
+    !layoutLimitsChanged &&
+    !gridPlacementChanged
   )
     return null;
   return {
@@ -46,6 +50,9 @@ export function nodeGeometryUpdate(
       : {}),
     ...(layoutLimitsChanged
       ? { layoutLimits: after.layoutLimits ?? null }
+      : {}),
+    ...(gridPlacementChanged
+      ? { gridPlacement: after.gridPlacement ?? null }
       : {}),
   };
 }

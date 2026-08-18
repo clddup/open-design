@@ -1014,6 +1014,9 @@ async function executeDesignToolRequestUnsafe(
           ...(input.action === "set-layout-guides"
             ? { frameId: input.frameId, layoutGuides: input.layoutGuides }
             : {}),
+          ...(input.action === "set-grid-placement"
+            ? { nodeId: input.nodeId, placement: input.placement }
+            : {}),
           ...(input.action !== "resize-frame" &&
           input.action !== "set-constraints" &&
           input.action !== "set-auto-layout" &&
@@ -1021,6 +1024,7 @@ async function executeDesignToolRequestUnsafe(
           input.action !== "set-layout-positioning" &&
           input.action !== "set-layout-limits" &&
           input.action !== "set-layout-guides" &&
+          input.action !== "set-grid-placement" &&
           "orderedNodeIds" in plan
             ? { orderedNodeIds: plan.orderedNodeIds }
             : {}),
@@ -1373,6 +1377,11 @@ function assertAgentDoesNotBypassAutoLayout(
         `design_workflow.auto_layout_requires_layout_tool: Configure flow or absolute positioning with opendesign_arrange_layers action set-layout-positioning`,
       );
     }
+    if (commandNodes.some((node) => node.gridPlacement !== undefined)) {
+      throw new Error(
+        `design_workflow.auto_layout_requires_layout_tool: Configure Grid cells and spans with opendesign_arrange_layers action set-grid-placement`,
+      );
+    }
     const writesLayoutGuides =
       commandNodes.some(
         (node) =>
@@ -1408,6 +1417,14 @@ function assertAgentDoesNotBypassAutoLayout(
     ) {
       throw new Error(
         `design_workflow.auto_layout_requires_layout_tool: Configure Auto Layout min/max sizing with opendesign_arrange_layers action set-layout-limits`,
+      );
+    }
+    if (
+      command.type === "update_properties" &&
+      command.gridPlacement !== undefined
+    ) {
+      throw new Error(
+        `design_workflow.auto_layout_requires_layout_tool: Configure Grid cells and spans with opendesign_arrange_layers action set-grid-placement`,
       );
     }
     if (

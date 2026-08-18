@@ -108,6 +108,27 @@ export function planSetNodeLayoutPositioning(
       `Layer already uses ${nextAbsolute ? "absolute" : "flow"} positioning`,
     );
   }
+  const gridPlacement =
+    !nextAbsolute && flow.mode === "grid" && flow.itemsPositioning === "manual"
+      ? firstAvailableGridCell(
+          document,
+          parent.id,
+          flow.rows.length,
+          flow.columns.length,
+          node.id,
+        )
+      : undefined;
+  if (
+    !nextAbsolute &&
+    flow.mode === "grid" &&
+    flow.itemsPositioning === "manual" &&
+    !gridPlacement
+  ) {
+    return failure(
+      "visual-fidelity",
+      "Manual Grid has no free cell for this flow child",
+    );
+  }
   return {
     ok: true,
     commands: [
@@ -119,11 +140,55 @@ export function planSetNodeLayoutPositioning(
         constraints: nextAbsolute ? (nextConstraints ?? null) : null,
         ...(node.layoutSizing !== undefined ? { layoutSizing: null } : {}),
         ...(node.layoutLimits !== undefined ? { layoutLimits: null } : {}),
+        ...(nextAbsolute && node.gridPlacement !== undefined
+          ? { gridPlacement: null }
+          : gridPlacement
+            ? { gridPlacement }
+            : {}),
       },
     ],
     frameId: parent.id,
     nodeIds: [nodeId],
   };
+}
+
+function firstAvailableGridCell(
+  document: DesignDocument,
+  frameId: string,
+  rows: number,
+  columns: number,
+  excludedNodeId: string,
+) {
+  const occupied = new Set<string>();
+  const frame = document.nodesById[frameId];
+  for (const childId of frame?.childIds ?? []) {
+    if (childId === excludedNodeId) continue;
+    const placement = document.nodesById[childId]?.gridPlacement;
+    if (!placement) continue;
+    for (
+      let row = placement.row;
+      row < placement.row + placement.rowSpan;
+      row += 1
+    )
+      for (
+        let column = placement.column;
+        column < placement.column + placement.columnSpan;
+        column += 1
+      )
+        occupied.add(`${row}:${column}`);
+  }
+  for (let row = 0; row < rows; row += 1)
+    for (let column = 0; column < columns; column += 1)
+      if (!occupied.has(`${row}:${column}`))
+        return {
+          row,
+          column,
+          rowSpan: 1,
+          columnSpan: 1,
+          horizontalAlign: "auto" as const,
+          verticalAlign: "auto" as const,
+        };
+  return undefined;
 }
 
 function nodeBelongsToPage(

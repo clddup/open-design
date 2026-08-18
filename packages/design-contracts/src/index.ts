@@ -667,6 +667,7 @@ const NodeBaseProperties = {
   layoutPositioning: Type.Optional(layout.LayoutPositioningSchema),
   layoutSizing: Type.Optional(layout.LayoutSizingSchema),
   layoutLimits: Type.Optional(layout.LayoutLimitsSchema),
+  gridPlacement: Type.Optional(layout.GridChildPlacementSchema),
   componentPropertyReferences: Type.Optional(
     Type.Union([ComponentPropertyReferencesSchema, Type.Null()]),
   ),
@@ -977,6 +978,9 @@ export const UpdatePropertiesCommandSchema = Type.Object(
     ),
     layoutLimits: Type.Optional(
       Type.Union([layout.LayoutLimitsSchema, Type.Null()]),
+    ),
+    gridPlacement: Type.Optional(
+      Type.Union([layout.GridChildPlacementSchema, Type.Null()]),
     ),
     componentPropertyReferences: Type.Optional(
       Type.Union([ComponentPropertyReferencesSchema, Type.Null()]),

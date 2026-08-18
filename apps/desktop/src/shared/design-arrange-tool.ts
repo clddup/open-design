@@ -5,10 +5,18 @@ import type {
   LayoutLimits,
   LayoutPositioning,
   LayoutSizing,
+  GridChildPlacement,
 } from "@opendesign/design-contracts";
 import { isValidLayoutLimits } from "@opendesign/design-contracts";
 
 export type DesignArrangeToolInput =
+  | {
+      action: "set-grid-placement";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      placement: GridChildPlacement;
+    }
   | {
       action:
         | "align-left"
@@ -98,7 +106,7 @@ const nodeIds = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies to direct children of ordinary Frames and absolute children of Auto Layout Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures Frame Fixed/Hug sizing, fixed or Auto gap, and horizontal Wrap with an independent vertical gap; primaryAlignment=space-between selects Auto gap, which never becomes negative and is resolved independently per wrapped row. set-layout-positioning atomically toggles a direct Auto Layout child between flow and absolute, clearing incompatible sizing or constraints. set-layout-sizing configures flow-child Fixed/Fill sizing; set-layout-limits adds or clears bounded min/max width and height on an Auto Layout Frame or direct flow child. set-layout-guides replaces a Frame's non-exported Uniform, Columns, and Rows visual guide set; Columns/Rows use fixed start/center/end or stretch alignment and never alter child geometry. Frame padding remains a hard minimum. Wrap requires Fixed width and visible Fixed-size flow children. The host derives all flow geometry.",
+    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies to direct children of ordinary Frames and absolute children of Auto Layout Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures linear Fixed/Hug sizing, fixed or Auto gap, Horizontal Wrap, or a two-dimensional Grid with explicit Fixed/Fill(fr)/Hug rows and columns, independent gaps, and Manual or row-major automatic positioning. set-grid-placement configures one Grid child's zero-based cell, positive span and cell alignment. Grid capacity is explicit; automatic rows and track reorder are not supported yet. set-layout-positioning atomically toggles a child between flow and absolute, clearing incompatible sizing, constraints, or Grid placement. set-layout-sizing configures flow-child Fixed/Fill sizing; set-layout-limits adds or clears min/max. set-layout-guides replaces non-exported visual guides and never alters child geometry. The host derives all flow geometry.",
   properties: {
     action: {
       enum: [
@@ -120,6 +128,7 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
         "set-layout-positioning",
         "set-layout-limits",
         "set-layout-guides",
+        "set-grid-placement",
       ],
     },
     label,
@@ -258,7 +267,78 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
           ],
           additionalProperties: false,
         },
+        {
+          type: "object",
+          properties: {
+            mode: { const: "grid" },
+            padding: {
+              type: "object",
+              properties: {
+                top: { type: "number", minimum: 0, maximum: 1_000_000 },
+                right: { type: "number", minimum: 0, maximum: 1_000_000 },
+                bottom: { type: "number", minimum: 0, maximum: 1_000_000 },
+                left: { type: "number", minimum: 0, maximum: 1_000_000 },
+              },
+              required: ["top", "right", "bottom", "left"],
+              additionalProperties: false,
+            },
+            rowGap: { type: "number", minimum: 0, maximum: 1_000_000 },
+            columnGap: { type: "number", minimum: 0, maximum: 1_000_000 },
+            rows: {
+              type: "array",
+              minItems: 1,
+              maxItems: 4096,
+              items: gridTrackSchema(),
+            },
+            columns: {
+              type: "array",
+              minItems: 1,
+              maxItems: 4096,
+              items: gridTrackSchema(),
+            },
+            itemsPositioning: { enum: ["manual", "row-auto-flow"] },
+            sizing: {
+              type: "object",
+              properties: {
+                horizontal: { enum: ["fixed", "hug"] },
+                vertical: { enum: ["fixed", "hug"] },
+              },
+              required: ["horizontal", "vertical"],
+              additionalProperties: false,
+            },
+          },
+          required: [
+            "mode",
+            "padding",
+            "rowGap",
+            "columnGap",
+            "rows",
+            "columns",
+            "itemsPositioning",
+          ],
+          additionalProperties: false,
+        },
       ],
+    },
+    placement: {
+      type: "object",
+      properties: {
+        row: { type: "integer", minimum: 0, maximum: 4095 },
+        column: { type: "integer", minimum: 0, maximum: 4095 },
+        rowSpan: { type: "integer", minimum: 1, maximum: 4096 },
+        columnSpan: { type: "integer", minimum: 1, maximum: 4096 },
+        horizontalAlign: { enum: ["start", "center", "end", "auto"] },
+        verticalAlign: { enum: ["start", "center", "end", "auto"] },
+      },
+      required: [
+        "row",
+        "column",
+        "rowSpan",
+        "columnSpan",
+        "horizontalAlign",
+        "verticalAlign",
+      ],
+      additionalProperties: false,
     },
     sizing: {
       type: "object",
@@ -433,6 +513,13 @@ export function isDesignArrangeToolInput(
       safeId(input.nodeId) &&
       isLayoutSizing(input.sizing) &&
       onlyKeys(input, ["action", "label", "pageId", "nodeId", "sizing"])
+    );
+  }
+  if (action === "set-grid-placement") {
+    return (
+      safeId(input.nodeId) &&
+      isGridPlacement(input.placement) &&
+      onlyKeys(input, ["action", "label", "pageId", "nodeId", "placement"])
     );
   }
   if (action === "set-layout-positioning") {
@@ -631,6 +718,28 @@ function layoutGuideShapeIsValid(guide: Record<string, unknown>): boolean {
 function isAutoLayout(value: unknown): value is AutoLayout {
   if (!isRecord(value)) return false;
   if (value.mode === "none") return onlyKeys(value, ["mode"]);
+  if (value.mode === "grid") {
+    return (
+      isPadding(value.padding) &&
+      finiteNonNegativeBounded(value.rowGap) &&
+      finiteNonNegativeBounded(value.columnGap) &&
+      isGridTracks(value.rows) &&
+      isGridTracks(value.columns) &&
+      (value.itemsPositioning === "manual" ||
+        value.itemsPositioning === "row-auto-flow") &&
+      isFrameSizing(value.sizing) &&
+      onlyKeys(value, [
+        "mode",
+        "padding",
+        "rowGap",
+        "columnGap",
+        "rows",
+        "columns",
+        "itemsPositioning",
+        "sizing",
+      ])
+    );
+  }
   if (value.mode !== "horizontal" && value.mode !== "vertical") return false;
   const padding = value.padding;
   const sizing = value.sizing;
@@ -665,6 +774,105 @@ function isAutoLayout(value: unknown): value is AutoLayout {
       "counterAlignment",
       "sizing",
       "wrap",
+    ])
+  );
+}
+
+function gridTrackSchema() {
+  return {
+    oneOf: [
+      {
+        type: "object",
+        properties: {
+          type: { const: "fixed" },
+          value: { type: "number", minimum: 0, maximum: 1_000_000 },
+        },
+        required: ["type", "value"],
+        additionalProperties: false,
+      },
+      {
+        type: "object",
+        properties: {
+          type: { const: "fill" },
+          value: { type: "number", exclusiveMinimum: 0, maximum: 1_000_000 },
+        },
+        required: ["type", "value"],
+        additionalProperties: false,
+      },
+      {
+        type: "object",
+        properties: { type: { const: "hug" } },
+        required: ["type"],
+        additionalProperties: false,
+      },
+    ],
+  } as const;
+}
+
+function isPadding(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    ["top", "right", "bottom", "left"].every((side) =>
+      finiteNonNegativeBounded(value[side]),
+    ) &&
+    onlyKeys(value, ["top", "right", "bottom", "left"])
+  );
+}
+
+function isFrameSizing(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (isRecord(value) &&
+      ["fixed", "hug"].includes(String(value.horizontal)) &&
+      ["fixed", "hug"].includes(String(value.vertical)) &&
+      onlyKeys(value, ["horizontal", "vertical"]))
+  );
+}
+
+function isGridTracks(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length >= 1 &&
+    value.length <= 4096 &&
+    value.every(
+      (track) =>
+        isRecord(track) &&
+        (track.type === "hug"
+          ? onlyKeys(track, ["type"])
+          : (track.type === "fixed" || track.type === "fill") &&
+            finiteNonNegativeBounded(track.value) &&
+            (track.type !== "fill" || Number(track.value) > 0) &&
+            onlyKeys(track, ["type", "value"])),
+    )
+  );
+}
+
+function isGridPlacement(value: unknown): value is GridChildPlacement {
+  return (
+    isRecord(value) &&
+    Number.isInteger(value.row) &&
+    Number(value.row) >= 0 &&
+    Number(value.row) <= 4095 &&
+    Number.isInteger(value.column) &&
+    Number(value.column) >= 0 &&
+    Number(value.column) <= 4095 &&
+    Number.isInteger(value.rowSpan) &&
+    Number(value.rowSpan) >= 1 &&
+    Number(value.rowSpan) <= 4096 &&
+    Number.isInteger(value.columnSpan) &&
+    Number(value.columnSpan) >= 1 &&
+    Number(value.columnSpan) <= 4096 &&
+    ["start", "center", "end", "auto"].includes(
+      String(value.horizontalAlign),
+    ) &&
+    ["start", "center", "end", "auto"].includes(String(value.verticalAlign)) &&
+    onlyKeys(value, [
+      "row",
+      "column",
+      "rowSpan",
+      "columnSpan",
+      "horizontalAlign",
+      "verticalAlign",
     ])
   );
 }

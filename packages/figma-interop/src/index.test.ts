@@ -18,6 +18,9 @@ import {
   toFigmaNodeType,
   toFigmaNodeBoundVariables,
   toFigmaNodeStyleReferences,
+  toFigmaGridAutoLayout,
+  toFigmaGridChild,
+  fromFigmaGridAutoLayout,
   toFigmaSharedStyleMetadata,
   toFigmaSharedStylePayload,
   toFigmaVariable,
@@ -25,6 +28,96 @@ import {
   toFigmaVariantProperties,
   toFigmaVariantSetPropertyDefinitions,
 } from "./index.js";
+
+describe("Figma Grid Auto Layout compatibility", () => {
+  it("maps OpenDesign-owned tracks and cell semantics to public Plugin API shapes", () => {
+    const figmaGrid = toFigmaGridAutoLayout({
+      mode: "grid",
+      padding: { top: 8, right: 16, bottom: 8, left: 16 },
+      rowGap: 12,
+      columnGap: 20,
+      rows: [{ type: "hug" }, { type: "fixed", value: 120 }],
+      columns: [
+        { type: "fixed", value: 180 },
+        { type: "fill", value: 2 },
+      ],
+      itemsPositioning: "row-auto-flow",
+    });
+    expect(figmaGrid).toEqual({
+      layoutMode: "GRID",
+      paddingTop: 8,
+      paddingRight: 16,
+      paddingBottom: 8,
+      paddingLeft: 16,
+      gridRowCount: 2,
+      gridColumnCount: 2,
+      gridRowGap: 12,
+      gridColumnGap: 20,
+      gridRowSizes: [{ type: "HUG" }, { type: "FIXED", value: 120 }],
+      gridColumnSizes: [
+        { type: "FIXED", value: 180 },
+        { type: "FLEX", value: 2 },
+      ],
+      gridItemsPositioning: "ROW_AUTO_FLOW",
+      gridAutoTracks: "NONE",
+      layoutSizingHorizontal: "FIXED",
+      layoutSizingVertical: "FIXED",
+    });
+    expect(fromFigmaGridAutoLayout(figmaGrid)).toMatchObject({
+      ok: true,
+      grid: {
+        mode: "grid",
+        rows: [{ type: "hug" }, { type: "fixed", value: 120 }],
+        columns: [
+          { type: "fixed", value: 180 },
+          { type: "fill", value: 2 },
+        ],
+      },
+    });
+    expect(
+      fromFigmaGridAutoLayout({ ...figmaGrid, gridAutoTracks: "ROWS" }),
+    ).toEqual({
+      ok: false,
+      issues: ["Automatic Figma Grid rows require OpenDesign Grid v2"],
+    });
+    const node = {
+      id: "card",
+      kind: "rectangle",
+      name: "Card",
+      parentId: "grid",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 100, height: 80 },
+      opacity: 1,
+      exportSettings: [],
+      gridPlacement: {
+        row: 1,
+        column: 0,
+        rowSpan: 1,
+        columnSpan: 2,
+        horizontalAlign: "center",
+        verticalAlign: "end",
+      },
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+      },
+      extensions: {},
+    } satisfies DesignNode;
+    expect(toFigmaGridChild(node)).toEqual({
+      gridRowAnchorIndex: 1,
+      gridColumnAnchorIndex: 0,
+      gridRowSpan: 1,
+      gridColumnSpan: 2,
+      gridChildHorizontalAlign: "CENTER",
+      gridChildVerticalAlign: "MAX",
+    });
+  });
+});
 
 describe("Figma Shared Style compatibility", () => {
   it("maps exact face style identity to Figma FontName without guessing from weight", () => {

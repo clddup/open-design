@@ -5,7 +5,7 @@
 <!-- verification-facts:baseline:start -->
 
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
-- 文档协议：`DesignDocument 1.33.0`
+- 文档协议：`DesignDocument 1.34.0`
 - Agent 协议：`3.11.0`
 - Geometry Service：`contract v10`
 - Text Layout Service：`contract v4`
@@ -14,7 +14,7 @@
 - Text List Service：`contract v1`（ordered/unordered、五级层级与 hanging marker 已接入）
 - Text Editing Session Service：`contract v2`（自动列表、光标输入样式、范围暂存与单事务提交已接入）
 - Text Run Layout Service：`contract v4`（native/HarfBuzz 列表生产投影已接入）
-- Layout Service：`contract v6`
+- Layout Service：`contract v7`
 - Agent Core：`@earendil-works/pi-agent-core 0.84.1`（production-entry-native-gate-pending）
 - 生产画布：`leafer-editor 2.2.9`
 

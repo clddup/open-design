@@ -252,6 +252,22 @@ export function SelectedNodeProperties({
     layoutPositioningAvailable && node.layoutPositioning !== "absolute";
   const frameLayoutGuides =
     node.kind === "frame" ? (node.properties.layoutGuides ?? []) : [];
+  const layoutParent = node.parentId
+    ? document.nodesById[node.parentId]
+    : undefined;
+  const parentGrid =
+    (layoutParent?.kind === "frame" || layoutParent?.kind === "slot") &&
+    layoutParent.properties.autoLayout?.mode === "grid"
+      ? layoutParent.properties.autoLayout
+      : null;
+  const gridPlacement = node.gridPlacement ?? {
+    row: 0,
+    column: 0,
+    rowSpan: 1,
+    columnSpan: 1,
+    horizontalAlign: "auto" as const,
+    verticalAlign: "auto" as const,
+  };
   const updateTranslation = (index: 4 | 5, value: number) => {
     const transform: DesignNode["transform"] = [...node.transform];
     transform[index] = value;
@@ -733,6 +749,82 @@ export function SelectedNodeProperties({
                 </option>
               </select>
             </label>
+          </div>
+        )}
+        {parentGrid && node.layoutPositioning !== "absolute" && (
+          <div className={styles.grid}>
+            {(
+              [
+                ["row", "properties.autoLayoutGridRow", 0],
+                ["column", "properties.autoLayoutGridColumn", 0],
+                ["rowSpan", "properties.autoLayoutGridRowSpan", 1],
+                ["columnSpan", "properties.autoLayoutGridColumnSpan", 1],
+              ] as const
+            ).map(([key, label, min]) => (
+              <Field
+                accessibleLabel={t(label)}
+                disabled={
+                  parentGrid.itemsPositioning === "row-auto-flow" &&
+                  (key === "row" || key === "column")
+                }
+                key={key}
+                label={t(label)}
+                min={min}
+                max={
+                  key === "row" || key === "rowSpan"
+                    ? parentGrid.rows.length
+                    : parentGrid.columns.length
+                }
+                onCommit={(draft) =>
+                  commitNumber(
+                    draft,
+                    gridPlacement[key],
+                    (value) =>
+                      onUpdate({
+                        gridPlacement: {
+                          ...gridPlacement,
+                          [key]: Math.round(value),
+                        },
+                      }),
+                    { min, integer: true },
+                  )
+                }
+                type="number"
+                value={formatNumber(gridPlacement[key])}
+              />
+            ))}
+            {(
+              [
+                ["horizontalAlign", "properties.autoLayoutGridHorizontalAlign"],
+                ["verticalAlign", "properties.autoLayoutGridVerticalAlign"],
+              ] as const
+            ).map(([key, label]) => (
+              <label className={styles.select} key={key}>
+                <span>{t(label)}</span>
+                <select
+                  aria-label={t(label)}
+                  onChange={(event) =>
+                    onUpdate({
+                      gridPlacement: {
+                        ...gridPlacement,
+                        [key]: event.target.value as
+                          "start" | "center" | "end" | "auto",
+                      },
+                    })
+                  }
+                  value={gridPlacement[key]}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="start">
+                    {t("properties.autoLayoutStart")}
+                  </option>
+                  <option value="center">
+                    {t("properties.autoLayoutCenter")}
+                  </option>
+                  <option value="end">{t("properties.autoLayoutEnd")}</option>
+                </select>
+              </label>
+            ))}
           </div>
         )}
         {layoutLimitsAvailable && (

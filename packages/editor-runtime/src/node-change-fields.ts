@@ -17,6 +17,7 @@ export function nodeChangedFields(
     "layoutPositioning",
     "layoutSizing",
     "layoutLimits",
+    "gridPlacement",
     "blendMode",
     "effects",
     "maskMode",

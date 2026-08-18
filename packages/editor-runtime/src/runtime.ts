@@ -1167,6 +1167,7 @@ function updateProperties(
     "layoutPositioning",
     "layoutSizing",
     "layoutLimits",
+    "gridPlacement",
     "componentPropertyReferences",
     "blendMode",
     "effects",
@@ -1189,6 +1190,7 @@ function updateProperties(
         field === "layoutPositioning" ||
         field === "layoutSizing" ||
         field === "layoutLimits" ||
+        field === "gridPlacement" ||
         field === "componentPropertyReferences") &&
       value === null
     ) {

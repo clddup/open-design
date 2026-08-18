@@ -1,7 +1,14 @@
 import { solveHorizontalWrap } from "./wrap-layout.js";
+export {
+  solveGridAutoLayout,
+  type GridAutoLayoutRequest,
+  type GridAutoLayoutResult,
+  type GridChildPlacement,
+  type GridTrack,
+} from "./grid-layout.js";
 
 export const LAYOUT_SERVICE_CONTRACT_VERSION = 1 as const;
-export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 6 as const;
+export const AUTO_LAYOUT_SERVICE_CONTRACT_VERSION = 7 as const;
 
 export type HorizontalConstraint =
   "left" | "right" | "left-right" | "center" | "scale";

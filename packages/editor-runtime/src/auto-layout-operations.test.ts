@@ -15,6 +15,7 @@ import {
   planSetNodeLayoutLimits,
   planSetNodeLayoutPositioning,
   planSetNodeLayoutSizing,
+  planSetNodeGridPlacement,
   planSetNodeConstraints,
 } from "./index.js";
 
@@ -1229,6 +1230,188 @@ describe("linear Auto Layout Runtime", () => {
       minWidth: 100,
       maxWidth: 240,
     });
+  });
+});
+
+describe("Grid Auto Layout Runtime", () => {
+  it("reflows tracks, child Fill and persisted cell semantics in one history", () => {
+    const runtime = new EditorRuntime(layoutDocument());
+    const grid = {
+      mode: "grid" as const,
+      padding: { top: 10, right: 10, bottom: 10, left: 10 },
+      rowGap: 0,
+      columnGap: 10,
+      rows: [{ type: "fill" as const, value: 1 }],
+      columns: [
+        { type: "fixed" as const, value: 100 },
+        { type: "fill" as const, value: 1 },
+      ],
+      itemsPositioning: "row-auto-flow" as const,
+      sizing: { horizontal: "fixed" as const, vertical: "fixed" as const },
+    };
+    const enable = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      grid,
+      "grid",
+    );
+    if (!enable.ok) throw new Error(enable.message);
+    expect(runtime.apply(transaction(runtime, enable.commands)).ok).toBe(true);
+    expectRect(runtime.getSnapshot().document, "one", 10, 10, 40, 20);
+    expectRect(runtime.getSnapshot().document, "two", 120, 10, 60, 30);
+
+    const fill = planSetNodeLayoutSizing(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "one",
+      { horizontal: "fill", vertical: "fill" },
+      "fill",
+    );
+    if (!fill.ok) throw new Error(fill.message);
+    expect(runtime.apply(transaction(runtime, fill.commands)).ok).toBe(true);
+    expectRect(runtime.getSnapshot().document, "one", 10, 10, 100, 80);
+
+    const manual = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      { ...grid, itemsPositioning: "manual" },
+      "manual",
+    );
+    if (!manual.ok) throw new Error(manual.message);
+    expect(manual.ok).toBe(true);
+    expect(runtime.apply(transaction(runtime, manual.commands)).ok).toBe(true);
+    const document = runtime.getSnapshot().document;
+    const moveOne = planSetNodeGridPlacement(
+      document,
+      "page_layout",
+      "one",
+      {
+        row: 0,
+        column: 1,
+        rowSpan: 1,
+        columnSpan: 1,
+        horizontalAlign: "auto",
+        verticalAlign: "auto",
+      },
+      "one",
+    );
+    const moveTwo = planSetNodeGridPlacement(
+      document,
+      "page_layout",
+      "two",
+      {
+        row: 0,
+        column: 0,
+        rowSpan: 1,
+        columnSpan: 1,
+        horizontalAlign: "end",
+        verticalAlign: "center",
+      },
+      "two",
+    );
+    if (!moveOne.ok || !moveTwo.ok) throw new Error("Grid move failed");
+    expect(
+      runtime.apply(
+        transaction(runtime, [...moveOne.commands, ...moveTwo.commands]),
+      ).ok,
+    ).toBe(true);
+    expectRect(runtime.getSnapshot().document, "one", 120, 10, 170, 80);
+    expectRect(runtime.getSnapshot().document, "two", 50, 35, 60, 30);
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.redo().ok).toBe(true);
+    const reopened = normalizeDesignDocument(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)),
+    );
+    expect(reopened.nodesById.one?.gridPlacement).toMatchObject({
+      row: 0,
+      column: 1,
+    });
+  });
+
+  it("allocates cells for activation, insert and absolute-to-flow recovery", () => {
+    const runtime = new EditorRuntime(layoutDocument());
+    const manualGrid = {
+      mode: "grid" as const,
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fill" as const, value: 1 }],
+      columns: [
+        { type: "fill" as const, value: 1 },
+        { type: "fill" as const, value: 1 },
+      ],
+      itemsPositioning: "manual" as const,
+    };
+    const enable = planSetFrameAutoLayout(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "frame",
+      manualGrid,
+      "manual_grid",
+    );
+    if (!enable.ok) throw new Error(enable.message);
+    expect(runtime.apply(transaction(runtime, enable.commands)).ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.one?.gridPlacement,
+    ).toMatchObject({
+      row: 0,
+      column: 0,
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.two?.gridPlacement,
+    ).toMatchObject({
+      row: 0,
+      column: 1,
+    });
+
+    const absolute = planSetNodeLayoutPositioning(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "one",
+      "absolute",
+      "absolute",
+    );
+    if (!absolute.ok) throw new Error(absolute.message);
+    expect(runtime.apply(transaction(runtime, absolute.commands)).ok).toBe(
+      true,
+    );
+    expect(
+      runtime.getSnapshot().document.nodesById.one?.gridPlacement,
+    ).toBeUndefined();
+    const flow = planSetNodeLayoutPositioning(
+      runtime.getSnapshot().document,
+      "page_layout",
+      "one",
+      "flow",
+      "flow",
+    );
+    if (!flow.ok) throw new Error(flow.message);
+    expect(runtime.apply(transaction(runtime, flow.commands)).ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.one?.gridPlacement,
+    ).toMatchObject({
+      row: 0,
+      column: 0,
+    });
+
+    const before = runtime.getSnapshot().document.revision;
+    expect(
+      runtime.apply(
+        transaction(runtime, [
+          {
+            commandId: "insert_over_capacity",
+            type: "insert_element",
+            pageId: "page_layout",
+            parentId: "frame",
+            index: 2,
+            node: rectangle("three", "frame", 0, 0, 20, 20),
+          },
+        ]),
+      ).ok,
+    ).toBe(false);
+    expect(runtime.getSnapshot().document.revision).toBe(before);
   });
 });
 

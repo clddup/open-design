@@ -5,6 +5,8 @@ import type {
   ComponentPropertyReferences as OpenDesignComponentPropertyReferences,
   DesignDocument,
   DesignNode,
+  GridAutoLayout,
+  GridTrack as OpenDesignGridTrack,
   Paint as OpenDesignPaint,
   SharedStyleDefinition,
   TextParagraphRun,
@@ -59,6 +61,38 @@ export type FigmaStylePayloadResult =
 export type FigmaExportSettingsResult =
   | { ok: true; settings: readonly ExportSettings[] }
   | { ok: false; issues: readonly string[] };
+
+export type FigmaGridAutoLayout = Pick<
+  FrameNode,
+  | "layoutMode"
+  | "paddingTop"
+  | "paddingRight"
+  | "paddingBottom"
+  | "paddingLeft"
+  | "gridRowCount"
+  | "gridColumnCount"
+  | "gridRowGap"
+  | "gridColumnGap"
+  | "gridRowSizes"
+  | "gridColumnSizes"
+  | "gridItemsPositioning"
+  | "gridAutoTracks"
+  | "layoutSizingHorizontal"
+  | "layoutSizingVertical"
+>;
+
+export type FigmaGridChild = Pick<
+  RectangleNode,
+  | "gridRowAnchorIndex"
+  | "gridColumnAnchorIndex"
+  | "gridRowSpan"
+  | "gridColumnSpan"
+  | "gridChildHorizontalAlign"
+  | "gridChildVerticalAlign"
+>;
+
+export type OpenDesignGridResult =
+  { ok: true; grid: GridAutoLayout } | { ok: false; issues: readonly string[] };
 
 export interface FigmaTextRangeSegment {
   end: number;
@@ -180,6 +214,123 @@ export function toFigmaNodeType(node: DesignNode): SceneNode["type"] {
   if (node.kind === "text") return "TEXT";
   if (node.kind === "instance") return "INSTANCE";
   return "VECTOR";
+}
+
+export function toFigmaGridAutoLayout(
+  grid: GridAutoLayout,
+): FigmaGridAutoLayout {
+  return {
+    layoutMode: "GRID",
+    paddingTop: grid.padding.top,
+    paddingRight: grid.padding.right,
+    paddingBottom: grid.padding.bottom,
+    paddingLeft: grid.padding.left,
+    gridRowCount: grid.rows.length,
+    gridColumnCount: grid.columns.length,
+    gridRowGap: grid.rowGap,
+    gridColumnGap: grid.columnGap,
+    gridRowSizes: grid.rows.map(toFigmaGridTrack),
+    gridColumnSizes: grid.columns.map(toFigmaGridTrack),
+    gridItemsPositioning:
+      grid.itemsPositioning === "manual" ? "MANUAL" : "ROW_AUTO_FLOW",
+    gridAutoTracks: "NONE",
+    layoutSizingHorizontal: grid.sizing?.horizontal === "hug" ? "HUG" : "FIXED",
+    layoutSizingVertical: grid.sizing?.vertical === "hug" ? "HUG" : "FIXED",
+  };
+}
+
+export function fromFigmaGridAutoLayout(
+  value: FigmaGridAutoLayout,
+): OpenDesignGridResult {
+  const issues: string[] = [];
+  if (value.layoutMode !== "GRID") issues.push("Figma layoutMode is not GRID");
+  if (value.gridAutoTracks !== "NONE")
+    issues.push("Automatic Figma Grid rows require OpenDesign Grid v2");
+  const rows = value.gridRowSizes.map((track, index) =>
+    fromFigmaGridTrack(track, `row ${index}`, issues),
+  );
+  const columns = value.gridColumnSizes.map((track, index) =>
+    fromFigmaGridTrack(track, `column ${index}`, issues),
+  );
+  if (rows.length < 1 || rows.length !== value.gridRowCount)
+    issues.push("Figma Grid row count and track definitions do not match");
+  if (columns.length < 1 || columns.length !== value.gridColumnCount)
+    issues.push("Figma Grid column count and track definitions do not match");
+  if (issues.length > 0) return { ok: false, issues };
+  return {
+    ok: true,
+    grid: {
+      mode: "grid",
+      padding: {
+        top: value.paddingTop,
+        right: value.paddingRight,
+        bottom: value.paddingBottom,
+        left: value.paddingLeft,
+      },
+      rowGap: value.gridRowGap,
+      columnGap: value.gridColumnGap,
+      rows: rows as OpenDesignGridTrack[],
+      columns: columns as OpenDesignGridTrack[],
+      itemsPositioning:
+        value.gridItemsPositioning === "MANUAL" ? "manual" : "row-auto-flow",
+      sizing: {
+        horizontal: value.layoutSizingHorizontal === "HUG" ? "hug" : "fixed",
+        vertical: value.layoutSizingVertical === "HUG" ? "hug" : "fixed",
+      },
+    },
+  };
+}
+
+export function toFigmaGridChild(node: DesignNode): FigmaGridChild | null {
+  const placement = node.gridPlacement;
+  if (!placement) return null;
+  return {
+    gridRowAnchorIndex: placement.row,
+    gridColumnAnchorIndex: placement.column,
+    gridRowSpan: placement.rowSpan,
+    gridColumnSpan: placement.columnSpan,
+    gridChildHorizontalAlign: figmaGridAlignment(placement.horizontalAlign),
+    gridChildVerticalAlign: figmaGridAlignment(placement.verticalAlign),
+  };
+}
+
+function toFigmaGridTrack(track: OpenDesignGridTrack): GridTrackSize {
+  if (track.type === "hug") return { type: "HUG" };
+  return {
+    type: track.type === "fixed" ? "FIXED" : "FLEX",
+    value: track.value,
+  };
+}
+
+function fromFigmaGridTrack(
+  track: GridTrackSize,
+  label: string,
+  issues: string[],
+): OpenDesignGridTrack | null {
+  if (track.type === "HUG") return { type: "hug" };
+  if (track.type === "FLEX" && track.value === undefined)
+    return { type: "fill", value: 1 };
+  if (
+    typeof track.value !== "number" ||
+    !Number.isFinite(track.value) ||
+    track.value < 0 ||
+    (track.type === "FLEX" && track.value <= 0)
+  ) {
+    issues.push(`Figma Grid ${label} has an invalid track value`);
+    return null;
+  }
+  return track.type === "FIXED"
+    ? { type: "fixed", value: track.value }
+    : { type: "fill", value: track.value };
+}
+
+function figmaGridAlignment(
+  alignment: "start" | "center" | "end" | "auto",
+): FigmaGridChild["gridChildHorizontalAlign"] {
+  if (alignment === "start") return "MIN";
+  if (alignment === "center") return "CENTER";
+  if (alignment === "end") return "MAX";
+  return "AUTO";
 }
 
 export function toFigmaSharedStylePayload(

@@ -1,6 +1,8 @@
 import type {
   AutoLayout,
   AutoLayoutFlow,
+  GridAutoLayout,
+  GridChildPlacement,
   DesignDocument,
   DesignNode,
   DesignOperation,
@@ -18,6 +20,7 @@ import {
   LAYOUT_SERVICE_CONTRACT_VERSION,
   solveConstraints,
   solveLinearAutoLayout,
+  solveGridAutoLayout,
 } from "@opendesign/layout-service";
 
 export type AutoLayoutOperationFailureCode =
@@ -82,7 +85,25 @@ export function planSetFrameAutoLayout(
       properties: { autoLayout },
     },
   ];
+  const plannedGridPlacements =
+    autoLayout.mode === "grid" && autoLayout.itemsPositioning === "manual"
+      ? missingManualGridPlacements(document, frame, autoLayout)
+      : new Map<string, GridChildPlacement>();
+  if (typeof plannedGridPlacements === "string")
+    return failure("visual-fidelity", plannedGridPlacements);
   if (autoLayout.mode !== "none") {
+    if (
+      autoLayout.mode === "grid" &&
+      (((autoLayout.sizing?.horizontal ?? "fixed") === "hug" &&
+        autoLayout.columns.some((track) => track.type === "fill")) ||
+        ((autoLayout.sizing?.vertical ?? "fixed") === "hug" &&
+          autoLayout.rows.some((track) => track.type === "fill")))
+    ) {
+      return failure(
+        "visual-fidelity",
+        `Grid Auto Layout Frame ${frameId} cannot use Fill tracks on a hugged axis`,
+      );
+    }
     if (
       autoLayout.mode === "horizontal" &&
       autoLayout.wrap &&
@@ -104,6 +125,18 @@ export function planSetFrameAutoLayout(
         );
       }
       if (child.layoutPositioning === "absolute") continue;
+      if (
+        autoLayout.mode === "grid" &&
+        autoLayout.itemsPositioning === "manual" &&
+        child.visible &&
+        child.gridPlacement === undefined &&
+        !plannedGridPlacements.has(childId)
+      ) {
+        return failure(
+          "visual-fidelity",
+          `Manual Grid Auto Layout requires an explicit cell for child ${childId}`,
+        );
+      }
       const frameSizing = autoLayout.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING;
       const childSizing = child.layoutSizing ?? DEFAULT_LAYOUT_SIZING;
       if (
@@ -147,6 +180,14 @@ export function planSetFrameAutoLayout(
           type: "update_properties",
           nodeId: childId,
           layoutSizing: null,
+        });
+      }
+      if (child.gridPlacement !== undefined) {
+        commands.push({
+          commandId: `${commandPrefix}_clear_grid_${commands.length}`,
+          type: "update_properties",
+          nodeId: childId,
+          gridPlacement: null,
         });
       }
       const childOwnFlow = isAutoLayoutContainer(child)
@@ -198,6 +239,18 @@ export function planSetFrameAutoLayout(
         constraints: null,
       });
     }
+    if (autoLayout.mode !== "grid") {
+      for (const childId of frame.childIds) {
+        const child = document.nodesById[childId];
+        if (!child?.gridPlacement) continue;
+        commands.push({
+          commandId: `${commandPrefix}_clear_grid_${commands.length}`,
+          type: "update_properties",
+          nodeId: childId,
+          gridPlacement: null,
+        });
+      }
+    }
   }
   if (commands.length > MAX_TRANSACTION_COMMANDS) {
     return failure(
@@ -240,6 +293,18 @@ export function resolveAutoLayoutInPlace(
     }
     const autoLayout = frame.properties.autoLayout;
     if (!autoLayout || autoLayout.mode === "none") continue;
+    if (
+      autoLayout.mode === "grid" &&
+      autoLayout.itemsPositioning === "manual"
+    ) {
+      const missing = missingManualGridPlacements(document, frame, autoLayout);
+      if (typeof missing === "string")
+        return resolutionFailure("invalid-layout", frameId, missing);
+      for (const [childId, placement] of missing) {
+        const child = document.nodesById[childId];
+        if (child) child.gridPlacement = placement;
+      }
+    }
     const children: Array<{
       id: string;
       positioning: "flow" | "absolute";
@@ -247,6 +312,7 @@ export function resolveAutoLayoutInPlace(
       height: number;
       sizing: typeof DEFAULT_LAYOUT_SIZING;
       limits?: LayoutLimits;
+      gridPlacement?: GridChildPlacement;
     }> = [];
     for (const childId of frame.childIds) {
       const child = document.nodesById[childId];
@@ -271,6 +337,9 @@ export function resolveAutoLayoutInPlace(
           positioning: "absolute",
           ...child.size,
           sizing: DEFAULT_LAYOUT_SIZING,
+          ...(child.gridPlacement
+            ? { gridPlacement: child.gridPlacement }
+            : {}),
         });
         continue;
       }
@@ -288,6 +357,9 @@ export function resolveAutoLayoutInPlace(
           ...child.size,
           sizing: child.layoutSizing ?? DEFAULT_LAYOUT_SIZING,
           ...(child.layoutLimits ? { limits: child.layoutLimits } : {}),
+          ...(child.gridPlacement
+            ? { gridPlacement: child.gridPlacement }
+            : {}),
         });
       }
     }
@@ -352,6 +424,8 @@ export function resolveAutoLayoutInPlace(
       }
       child.transform = [1, 0, 0, 1, placement.x, placement.y];
       child.size = { width: placement.width, height: placement.height };
+      if (isGridResolvedPlacement(placement))
+        child.gridPlacement = placement.placement;
       positioned.add(child.id);
     }
   }
@@ -445,8 +519,33 @@ function solveFrame(
     height: number;
     sizing: LayoutSizing;
     limits?: LayoutLimits;
+    gridPlacement?: GridChildPlacement;
   }>,
 ) {
+  if (autoLayout.mode === "grid") {
+    return solveGridAutoLayout({
+      version: 1,
+      frame,
+      frameSizing: autoLayout.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING,
+      ...(frameLimits ? { frameLimits } : {}),
+      padding: autoLayout.padding,
+      rowGap: autoLayout.rowGap,
+      columnGap: autoLayout.columnGap,
+      rows: autoLayout.rows,
+      columns: autoLayout.columns,
+      itemsPositioning: autoLayout.itemsPositioning,
+      children: children
+        .filter((child) => child.positioning === "flow")
+        .map((child) => ({
+          id: child.id,
+          width: child.width,
+          height: child.height,
+          sizing: child.sizing,
+          ...(child.limits ? { limits: child.limits } : {}),
+          ...(child.gridPlacement ? { placement: child.gridPlacement } : {}),
+        })),
+    });
+  }
   return solveLinearAutoLayout({
     version: AUTO_LAYOUT_SERVICE_CONTRACT_VERSION,
     direction: autoLayout.mode,
@@ -484,6 +583,82 @@ function isTranslationOnly(node: DesignNode): boolean {
     node.transform[2] === 0 &&
     node.transform[3] === 1
   );
+}
+
+function isGridResolvedPlacement(value: {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): value is typeof value & { placement: GridChildPlacement } {
+  return (
+    "placement" in value &&
+    typeof (value as { placement?: unknown }).placement === "object" &&
+    (value as { placement?: unknown }).placement !== null
+  );
+}
+
+function missingManualGridPlacements(
+  document: DesignDocument,
+  frame: Extract<DesignNode, { kind: "frame" | "slot" }>,
+  grid: GridAutoLayout,
+): Map<string, GridChildPlacement> | string {
+  const occupied = new Set<string>();
+  const missing: string[] = [];
+  for (const childId of frame.childIds) {
+    const child = document.nodesById[childId];
+    if (!child || !child.visible || child.layoutPositioning === "absolute")
+      continue;
+    const placement = child.gridPlacement;
+    if (!placement) {
+      missing.push(childId);
+      continue;
+    }
+    if (
+      placement.row + placement.rowSpan > grid.rows.length ||
+      placement.column + placement.columnSpan > grid.columns.length
+    )
+      return `Grid placement for ${childId} extends outside the declared tracks`;
+    for (
+      let row = placement.row;
+      row < placement.row + placement.rowSpan;
+      row += 1
+    ) {
+      for (
+        let column = placement.column;
+        column < placement.column + placement.columnSpan;
+        column += 1
+      ) {
+        const cell = `${row}:${column}`;
+        if (occupied.has(cell))
+          return `Manual Grid children overlap at ${cell}`;
+        occupied.add(cell);
+      }
+    }
+  }
+  const result = new Map<string, GridChildPlacement>();
+  for (const childId of missing) {
+    let found: GridChildPlacement | undefined;
+    for (let row = 0; row < grid.rows.length && !found; row += 1) {
+      for (let column = 0; column < grid.columns.length; column += 1) {
+        if (occupied.has(`${row}:${column}`)) continue;
+        found = {
+          row,
+          column,
+          rowSpan: 1,
+          columnSpan: 1,
+          horizontalAlign: "auto",
+          verticalAlign: "auto",
+        };
+        occupied.add(`${row}:${column}`);
+        break;
+      }
+    }
+    if (!found) return `Manual Grid has no free cell for child ${childId}`;
+    result.set(childId, found);
+  }
+  return result;
 }
 
 function nodeDepth(document: DesignDocument, nodeId: string): number {

@@ -20,6 +20,24 @@ export function validateNodeLayoutInvariants(
   const issues: DocumentInvariantIssue[] = [];
   if (
     (node.kind === "frame" || node.kind === "slot") &&
+    node.properties.autoLayout?.mode === "grid"
+  ) {
+    const grid = node.properties.autoLayout;
+    const sizing = grid.sizing ?? DEFAULT_AUTO_LAYOUT_FRAME_SIZING;
+    if (
+      (sizing.horizontal === "hug" &&
+        grid.columns.some((track) => track.type === "fill")) ||
+      (sizing.vertical === "hug" &&
+        grid.rows.some((track) => track.type === "fill"))
+    ) {
+      issues.push({
+        path: `/nodesById/${nodeId}/properties/autoLayout`,
+        message: "a hugged Grid axis cannot contain Fill tracks",
+      });
+    }
+  }
+  if (
+    (node.kind === "frame" || node.kind === "slot") &&
     node.properties.autoLayout?.mode === "horizontal" &&
     node.properties.autoLayout.wrap &&
     (node.properties.autoLayout.sizing?.horizontal ?? "fixed") !== "fixed"
@@ -61,6 +79,37 @@ export function validateNodeLayoutInvariants(
     node.layoutPositioning === "absolute" &&
     parentFlow !== undefined &&
     parentFlow.mode !== "none";
+  const parentGrid = parentFlow?.mode === "grid" ? parentFlow : undefined;
+  if (node.gridPlacement !== undefined) {
+    if (!parentGrid || absoluteInFlow) {
+      issues.push({
+        path: `/nodesById/${nodeId}/gridPlacement`,
+        message:
+          "grid placement is only valid on flow children of a Grid Auto Layout Frame",
+      });
+    } else if (
+      node.gridPlacement.row + node.gridPlacement.rowSpan >
+        parentGrid.rows.length ||
+      node.gridPlacement.column + node.gridPlacement.columnSpan >
+        parentGrid.columns.length
+    ) {
+      issues.push({
+        path: `/nodesById/${nodeId}/gridPlacement`,
+        message:
+          "grid placement must stay inside the declared rows and columns",
+      });
+    }
+  } else if (
+    parentGrid?.itemsPositioning === "manual" &&
+    !absoluteInFlow &&
+    node.visible
+  ) {
+    issues.push({
+      path: `/nodesById/${nodeId}/gridPlacement`,
+      message:
+        "manual Grid flow requires an explicit cell for every visible child",
+    });
+  }
   if (node.layoutPositioning !== undefined && !absoluteInFlow) {
     issues.push({
       path: `/nodesById/${nodeId}/layoutPositioning`,

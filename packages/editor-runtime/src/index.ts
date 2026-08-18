@@ -57,6 +57,7 @@ export {
   type AutoLayoutResolution,
 } from "./auto-layout-operations.js";
 export { planSetNodeLayoutSizing } from "./auto-layout-sizing-operations.js";
+export { planSetNodeGridPlacement } from "./auto-layout-grid-operations.js";
 export { planSetNodeLayoutLimits } from "./auto-layout-limits-operations.js";
 export {
   planSetNodeLayoutPositioning,

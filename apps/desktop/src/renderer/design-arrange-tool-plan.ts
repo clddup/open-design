@@ -8,6 +8,7 @@ import {
   planSetNodeLayoutPositioning,
   planSetNodeLayoutSizing,
   planSetFrameLayoutGuides,
+  planSetNodeGridPlacement,
 } from "@opendesign/editor-runtime";
 import type { DesignArrangeToolInput } from "../shared/design-arrange-tool";
 
@@ -46,6 +47,14 @@ export function planDesignArrangeTool(
       input.pageId,
       input.nodeId,
       input.sizing,
+      commandPrefix,
+    );
+  if (input.action === "set-grid-placement")
+    return planSetNodeGridPlacement(
+      document,
+      input.pageId,
+      input.nodeId,
+      input.placement,
       commandPrefix,
     );
   if (input.action === "set-layout-positioning")

@@ -4795,6 +4795,38 @@ describe("Renderer semantic hierarchy tool", () => {
         "page_welcome",
       ),
     ).rejects.toThrow("set-layout-sizing");
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "grid_placement_bypass",
+          call: {
+            toolCallId: "tool_grid_placement_bypass",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              label: "Bypass Grid placement",
+              commands: [
+                {
+                  commandId: "bypass_grid_cell",
+                  type: "update_properties",
+                  nodeId: "subtitle_welcome",
+                  gridPlacement: {
+                    row: 0,
+                    column: 0,
+                    rowSpan: 1,
+                    columnSpan: 1,
+                    horizontalAlign: "auto",
+                    verticalAlign: "auto",
+                  },
+                },
+              ],
+            },
+          },
+          context: { ...pageContext, revision: 3 },
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("set-grid-placement");
     expect(runtime.getSnapshot().document.revision).toBe(3);
     await expect(
       executeDesignToolRequest(

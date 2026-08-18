@@ -15,6 +15,7 @@ import {
   planSetNodeLayoutPositioning,
   planSetFrameLayoutGuides,
   planSetNodeLayoutSizing,
+  planSetNodeGridPlacement,
   planResizeFrameWithConstraints,
   planSetNodeConstraints,
   type EditorRuntime,
@@ -193,6 +194,21 @@ export function useEditorCommandController({
         setNodeLayoutSizing(nodeId, updates.layoutSizing);
         return;
       }
+      if (updates.gridPlacement) {
+        const plan = planSetNodeGridPlacement(
+          current,
+          pageIdForNode(current, nodeId),
+          nodeId,
+          updates.gridPlacement,
+          `inspector_grid_${nodeId}`,
+        );
+        if (!plan.ok) {
+          setEditorError(plan.message);
+          return;
+        }
+        applyCommands(t("history.updateProperties"), plan.commands);
+        return;
+      }
       const autoLayout = updates.properties?.autoLayout;
       if (
         (node?.kind === "frame" || node?.kind === "slot") &&
@@ -293,7 +309,7 @@ function isAutoLayout(value: unknown): value is AutoLayout {
     value !== null &&
     typeof value === "object" &&
     !Array.isArray(value) &&
-    ["none", "horizontal", "vertical"].includes(
+    ["none", "horizontal", "vertical", "grid"].includes(
       String((value as { mode?: unknown }).mode),
     )
   );
