@@ -1,3 +1,7 @@
+import {
+  DESIGN_FIRST_SLICE_MAX_ELEMENTS,
+  DESIGN_FIRST_SLICE_MAX_STAGES,
+} from "./design-first-slice-budget";
 import type { DesignFirstSliceElement } from "./design-first-slice-tool";
 
 const ID_SCHEMA = { type: "string", minLength: 1, maxLength: 256 } as const;
@@ -226,7 +230,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
         stages: {
           type: "array",
           minItems: 1,
-          maxItems: 8,
+          maxItems: DESIGN_FIRST_SLICE_MAX_STAGES,
           items: {
             type: "object",
             properties: {
@@ -235,7 +239,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
               elements: {
                 type: "array",
                 minItems: 1,
-                maxItems: 120,
+                maxItems: DESIGN_FIRST_SLICE_MAX_ELEMENTS,
                 items: {
                   oneOf: [
                     elementSchema("group", {}),

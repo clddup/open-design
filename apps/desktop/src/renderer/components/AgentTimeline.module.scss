@@ -76,69 +76,6 @@
   flex: 1;
 }
 
-.delivery {
-  display: grid;
-  flex: none;
-  gap: 5px;
-  padding: 7px 12px 8px;
-  border-bottom: 1px solid var(--ui-border-subtle);
-  background: var(--ui-surface);
-
-  progress {
-    width: 100%;
-    height: 3px;
-    overflow: hidden;
-    border: 0;
-    border-radius: 2px;
-    appearance: none;
-    background: var(--ui-surface-sunken);
-
-    &::-webkit-progress-bar {
-      background: var(--ui-surface-sunken);
-    }
-
-    &::-webkit-progress-value {
-      border-radius: 2px;
-      background: var(--ui-accent);
-    }
-
-    &::-moz-progress-bar {
-      border-radius: 2px;
-      background: var(--ui-accent);
-    }
-  }
-
-  > small {
-    overflow: hidden;
-    color: var(--ui-text-faint);
-    font-size: 8px;
-    line-height: 1.3;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.deliverySummary {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 9px;
-
-  strong {
-    overflow: hidden;
-    color: var(--ui-text-muted);
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  span {
-    color: var(--ui-text-faint);
-  }
-}
-
 .thread {
   min-height: 0;
   flex: 1;

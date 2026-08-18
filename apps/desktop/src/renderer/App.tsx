@@ -86,6 +86,7 @@ import {
   projectAgentActiveRunId,
   projectAgentRunFileBinding,
 } from "./features/agent-conversation/continuation-binding";
+import { projectAgentRunExperience } from "./features/agent-conversation/agent-run-experience";
 import { reportRendererError } from "./diagnostics";
 import { useRendererDesignToolHost } from "./use-renderer-design-tool-host";
 import { useProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
@@ -368,6 +369,23 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     generationPlanPresentation.activityByRunId,
     t,
   ]);
+  const activeCanvasRunExperience = useMemo(
+    () =>
+      activeCanvasAgentRunId
+        ? projectAgentRunExperience({
+            activeRunId: activeCanvasAgentRunId,
+            events: activeAgentState.events,
+            timeline: activeAgentState.timeline,
+            error: activeAgentState.error,
+          })
+        : null,
+    [
+      activeAgentState.error,
+      activeAgentState.events,
+      activeAgentState.timeline,
+      activeCanvasAgentRunId,
+    ],
+  );
 
   const requestConversationHistory = useCallback(
     async (conversationId: string) => {
@@ -1878,6 +1896,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             />
             <Canvas
               activeAgentRunId={activeCanvasAgentRunId}
+              agentRunExperience={activeCanvasRunExperience ?? undefined}
               activePageId={activePageId}
               generationActivity={generationActivity}
               onTransactionError={setEditorError}

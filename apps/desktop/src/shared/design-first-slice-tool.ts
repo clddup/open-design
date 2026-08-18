@@ -1,7 +1,15 @@
 import type { RasterAssetRole } from "./design-agent-tools";
 import { compileValidatedDesignFirstSliceToolInput } from "./design-first-slice-compiler";
+import {
+  DESIGN_FIRST_SLICE_MAX_ELEMENTS,
+  DESIGN_FIRST_SLICE_MAX_STAGES,
+} from "./design-first-slice-budget";
 
 export { DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA } from "./design-first-slice-tool-schema";
+export {
+  DESIGN_FIRST_SLICE_MAX_ELEMENTS,
+  DESIGN_FIRST_SLICE_MAX_STAGES,
+} from "./design-first-slice-budget";
 
 type CompactPaint = {
   color: string;
@@ -227,7 +235,7 @@ export function isDesignFirstSliceToolInput(
         : [],
     ),
   );
-  if (materializedRegions.size === 0) return false;
+  if (materializedRegions.size !== 1) return false;
   if (
     ![...materializedRegions].some((regionId) =>
       allElements.some(
@@ -352,7 +360,7 @@ function isFirstSlice(value: unknown): boolean {
     !safeId(value.label) ||
     !Array.isArray(value.stages) ||
     value.stages.length < 1 ||
-    value.stages.length > 8 ||
+    value.stages.length > DESIGN_FIRST_SLICE_MAX_STAGES ||
     !exactKeys(value, ["targetId", "label", "stages"])
   ) {
     return false;
@@ -375,7 +383,7 @@ function isFirstSlice(value: unknown): boolean {
     stageIds.add(stage.stageId);
     total += stage.elements.length;
   }
-  return total <= 120;
+  return total <= DESIGN_FIRST_SLICE_MAX_ELEMENTS;
 }
 
 function isElement(value: unknown): value is DesignFirstSliceElement {

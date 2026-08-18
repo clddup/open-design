@@ -1050,6 +1050,15 @@ describe("App", () => {
         startedAt: now,
       });
     });
+    const canvas = screen.getByRole("main", { name: "Design canvas" });
+    expect(
+      within(canvas).getByText("Preparing the first real design"),
+    ).toBeInTheDocument();
+    expect(
+      within(canvas).getByText(
+        "Waiting for the model · the canvas has not changed yet",
+      ),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Acme Design" }));
     await user.click(screen.getByRole("button", { name: /Conversation B/ }));

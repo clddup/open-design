@@ -49,6 +49,7 @@ Main 注册 Plan 后生成全部真实 artboard allocation commands，并在不�
 - 用户在一个 Provider 回合后即可看到全部真实画板根和第一段真实可编辑内容；Timeline/cursor/reveal 只消费已提交 semantic revision，不播放假拖拽。
 - 附件、必须先看的图片、已有画布修改、continuation、选区命令、Page lifecycle 和歧义请求不走快路径，避免用速度优化绕过权限或上下文依赖。
 - 第一切片只使用基础元素；图片、矢量、组件实例化、布局、capture/review/refinement 等在成功后由完整工具继续完成。
+- 为把首次真实 revision 放在整页完整度之前，首切片固定为第一 target 的一个 planned region、1–3 个真实语义 stage、最多 24 个基础元素；其余 region 在成功切回完整工具后继续生成。这个上限约束 Provider 首次结构化输出，不改变全部 target 的稳定 Frame 分配、Plan v4、history group 或 ledger 语义。
 - 多 screen/target Provider 并行和 OpenPencil 式隔离 worker buffer 尚未实现。只有打包产品 `1/4/12` target 数据证明 `T_all` 仍主要受独立 target Provider 回合影响后，才评估“不同 artboard 并发生成、单 writer replay”；同一 Design File 仍不得并发写。
 - 真实收益仍需 macOS/Windows 打包产品分别对 Codex/Grok/GLM 记录 `T_plan/T0/T1/T2/T_all`。静态协议降幅和自动化调用图不能替代该证据。
 

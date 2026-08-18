@@ -13,14 +13,11 @@ import {
   isImageAttachment,
 } from "../features/agent-conversation/attachment-format";
 import {
-  latestDeliveryLedger,
   projectAgentTimeline,
   timelineRenderMarker,
 } from "../features/agent-conversation/timeline-projection";
-import {
-  deliveryStatusKey,
-  friendlyAgentError,
-} from "../features/agent-conversation/timeline-presentation";
+import { friendlyAgentError } from "../features/agent-conversation/timeline-presentation";
+import { projectAgentRunExperience } from "../features/agent-conversation/agent-run-experience";
 import type {
   AgentTimelineItem,
   Translate,
@@ -28,6 +25,7 @@ import type {
 import { useAgentComposerController } from "../features/agent-conversation/use-agent-composer-controller";
 import { useI18n } from "../i18n";
 import { AgentComposer } from "./AgentComposer";
+import { AgentRunStatus } from "./AgentRunStatus";
 import styles from "./AgentTimeline.module.scss";
 
 const itemStateStyles: Record<AgentTimelineItem["state"], string> = {
@@ -141,18 +139,18 @@ export function AgentTimeline({
     timeline,
     t,
   });
-  const delivery = latestDeliveryLedger(timeline, events, activeRunId);
+  const runExperience = projectAgentRunExperience({
+    activeRunId,
+    events,
+    timeline,
+    stopping: composer.stopping,
+    error,
+  });
   const pendingApprovalIds = items
     .filter((item) => item.kind === "approval" && item.state === "queued")
     .map((item) => item.approvalId)
     .filter(Boolean)
     .join("|");
-  const verifiedDeliveryCount =
-    delivery?.targets.filter((target) => target.status === "verified").length ??
-    0;
-  const activeDeliveryTarget = delivery?.targets.find(
-    (target) => target.targetId === delivery.activeTargetId,
-  );
   const renderMarker = timelineRenderMarker(items);
   const hasConversation = composer.hasConversation;
 
@@ -298,38 +296,7 @@ export function AgentTimeline({
               : t("agent.newConversation")}
           </Button>
         </div>
-        {delivery && (
-          <section
-            aria-label={t("agent.deliveryProgress")}
-            className={styles.delivery}
-          >
-            <div className={styles.deliverySummary}>
-              <strong>{t("agent.deliveryProgress")}</strong>
-              <span>
-                {t("agent.deliveryCount", {
-                  completed: verifiedDeliveryCount,
-                  total: delivery.targets.length,
-                })}
-              </span>
-            </div>
-            <progress
-              aria-label={t("agent.deliveryCount", {
-                completed: verifiedDeliveryCount,
-                total: delivery.targets.length,
-              })}
-              max={delivery.targets.length}
-              value={verifiedDeliveryCount}
-            />
-            <small>
-              {activeDeliveryTarget
-                ? t("agent.deliveryCurrent", {
-                    label: activeDeliveryTarget.label,
-                    status: t(deliveryStatusKey(activeDeliveryTarget.status)),
-                  })
-                : t("agent.deliveryComplete")}
-            </small>
-          </section>
-        )}
+        {runExperience && <AgentRunStatus experience={runExperience} t={t} />}
         <ol
           aria-live="polite"
           className={styles.thread}

@@ -66,6 +66,11 @@ import {
 import type { MessageKey, MessageParameters } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
 import { generationRevealFromEditorEvent } from "../generation-presentation";
+import {
+  agentRunPhaseDetailKey,
+  agentRunPhaseTitleKey,
+  type AgentRunExperience,
+} from "../features/agent-conversation/agent-run-experience";
 import { commitCanvasOperation } from "../features/editor/canvas-operation-commit";
 import type { ResizeFrameHandler } from "../features/editor/canvas-responsive-resize";
 import { isTool } from "../state/editor";
@@ -75,6 +80,7 @@ import styles from "./Canvas.module.scss";
 
 export function Canvas({
   activeAgentRunId,
+  agentRunExperience,
   activePageId,
   generationActivity,
   harfBuzzTextRunLayoutProvider,
@@ -89,6 +95,7 @@ export function Canvas({
   onResizeFrame,
 }: {
   activeAgentRunId: string | null;
+  agentRunExperience?: AgentRunExperience;
   activePageId: string;
   generationActivity?: LeaferGenerationActivity;
   harfBuzzTextRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
@@ -1040,6 +1047,24 @@ export function Canvas({
         <span aria-live="polite" className="visually-hidden" role="status">
           {generationActivity.label}
         </span>
+      )}
+      {agentRunExperience?.active && (
+        <div
+          className={styles.agentRunStatus}
+          data-canvas-changed={
+            agentRunExperience.hasCanvasChanges ? "true" : "false"
+          }
+          data-phase={agentRunExperience.phase}
+          role="status"
+        >
+          <span aria-hidden="true" className={styles.agentRunMark} />
+          <span>
+            <strong>
+              {t(agentRunPhaseTitleKey(agentRunExperience.phase))}
+            </strong>
+            <small>{t(agentRunPhaseDetailKey(agentRunExperience.phase))}</small>
+          </span>
+        </div>
       )}
       {renderError && (
         <div className={styles.status} role="alert">

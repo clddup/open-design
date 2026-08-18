@@ -27,6 +27,64 @@
   }
 }
 
+.agentRunStatus {
+  position: absolute;
+  z-index: 3;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  max-width: min(360px, calc(100% - 20px));
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: color-mix(in srgb, var(--ui-surface-raised) 94%, transparent);
+  box-shadow: var(--ui-shadow-sm);
+  pointer-events: none;
+
+  > span:last-child {
+    display: grid;
+    min-width: 0;
+    gap: 1px;
+  }
+
+  strong,
+  small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    font-size: 10px;
+    font-weight: 650;
+  }
+
+  small {
+    color: var(--ui-text-muted);
+    font-size: 9px;
+  }
+}
+
+.agentRunMark {
+  width: 7px;
+  height: 7px;
+  margin-top: 3px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 50%;
+  background: var(--ui-accent);
+  box-shadow: 0 0 0 3px var(--ui-accent-soft);
+}
+
+.agentRunStatus[data-canvas-changed="true"] .agentRunMark {
+  border-color: var(--ui-success);
+  background: var(--ui-success);
+  box-shadow: none;
+}
+
 .contextStack {
   position: absolute;
   z-index: 2;

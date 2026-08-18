@@ -16,6 +16,9 @@ describe("OpenDesign Agent system prompt", () => {
       "stages are real semantic commits",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "no more than 24 total elements",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "Do not claim completion after the first slice",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length).toBeLessThan(10_000);

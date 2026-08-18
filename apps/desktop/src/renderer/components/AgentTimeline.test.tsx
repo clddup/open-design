@@ -30,7 +30,7 @@ function deferred<T>() {
 }
 
 describe("AgentTimeline", () => {
-  it("shows host-verified multi-target delivery progress", () => {
+  it("shows trustworthy milestones with target counts as secondary facts", () => {
     const timeline: SessionTimelineItem[] = [
       {
         itemId: "tool:capture_home",
@@ -89,12 +89,12 @@ describe("AgentTimeline", () => {
       />,
     );
 
-    expect(screen.getByText("1/2 verified")).toBeInTheDocument();
     expect(
-      screen.getByText("Current: Profile · waiting to be built"),
+      screen.getByText("First editable design is visible"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("progressbar")).toHaveAttribute("value", "1");
-    expect(screen.getByRole("progressbar")).toHaveAttribute("max", "2");
+    expect(screen.getByText("1/2 real artboards")).toBeInTheDocument();
+    expect(screen.getByText("1/2 targets complete")).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
   it("does not present a previous Run delivery ledger as current progress", () => {

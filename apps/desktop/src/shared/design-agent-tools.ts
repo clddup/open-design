@@ -1923,7 +1923,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["new-design" as const],
     },
     description:
-      "Create a new editable design through one compact, rollback-safe first-delivery call. Declare every requested artboard root and one meaningful first slice for the first target. Main expands the compact input into DesignPlan v4, allocates all real Frames, validates the first target, and commits allocation plus semantic stages through the existing EditorRuntime and one history group. Use inspected Page IDs, stable unique IDs, parent-local coordinates, real region content, and explicit font face identity. This tool is available only for a high-confidence blank-canvas new-design run; after success the complete professional tools replace it automatically.",
+      "Create a new editable design through one compact, rollback-safe first-delivery call. Declare every requested artboard root and one meaningful first region for the first target, limited to 1-3 semantic stages and 24 total elements. Main expands the compact input into DesignPlan v4, allocates all real Frames, validates the first target, and commits allocation plus semantic stages through the existing EditorRuntime and one history group. Use inspected Page IDs, stable unique IDs, parent-local coordinates, real region content, and explicit font face identity. This tool is available only for a high-confidence blank-canvas new-design run; after success the complete professional tools replace it automatically.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
