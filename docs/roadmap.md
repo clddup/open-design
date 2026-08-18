@@ -153,7 +153,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [ ] 为同一 fixture 建立 macOS/Windows 像素视觉 baseline；必须由真实生产 Leafer 画布渲染并记录平台、DPR、字体、截图和允许差异，结构投影测试不能替代像素证据。
 - [x] 为 Path、渐变、光晕、模糊、blend、mask、图片和文字建立版本化预检：`inspect_document` 返回实际特性计数，并识别空 Path/文字、不可见或无绘制外观节点、丢失/不受支持的图片 asset、非有限 bounds、完全越出 clipping Frame 和异常根图层碎片；Agent prompt 要求先处理 error 并解释 warning。
 - [x] 建立版本化 capability manifest。每项能力记录 `available / degraded / unavailable`、provider、限制、六个产品表面、自动化证据和实机证据；Agent system context、`get_capabilities` tool、生成式帮助文档和发布摘要读取同一 JSON 事实来源，`capabilities:check` 阻止生成物漂移。能力状态不是设置项，不进入设置页。
-- [x] 让验证文档的环境/协议版本、测试数量和 Vite 构建产物由 `verification:generate` 从权威源更新，并由 `pnpm verify` 最后的 `verification:check` 阻止漂移；平台发布证据仍只允许在对应原生 runner 或已记录的本机命令完成后人工写入，不能由共享脚本伪造。
+- [x] 让验证文档的环境/协议版本和 Vite 构建产物由 `verification:generate` 从权威源更新，并由 `pnpm verify` 最后的 `verification:check` 阻止漂移；测试是否通过由实际测试命令负责，不把高频变化的精确用例数量重复设为文档发布门禁；平台发布证据仍只允许在对应原生 runner 或已记录的本机命令完成后人工写入，不能由共享脚本伪造。
 
 `OD-POSTER-01` 的首轮重放 prompt 固定为：
 

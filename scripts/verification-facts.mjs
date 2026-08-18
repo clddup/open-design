@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -38,11 +37,6 @@ const textRunLayoutService = await text(
 );
 const layoutService = await text("packages/layout-service/src/index.ts");
 const requireFromDesktop = createRequire(join(desktopRoot, "package.json"));
-const vitestPath = join(
-  dirname(requireFromDesktop.resolve("vitest/package.json")),
-  "vitest.mjs",
-);
-
 const nodeVersion = capture(
   workflow,
   /node-version:\s*([0-9.]+)/,
@@ -203,8 +197,6 @@ assertEqual(
   "Vite installed version",
 );
 
-const packageTests = listTests(root);
-const desktopTests = listTests(desktopRoot);
 const artifacts = await buildArtifacts();
 
 const blocks = {
@@ -233,8 +225,8 @@ const blocks = {
     "pnpm lint           passed",
     "pnpm typecheck      passed",
     "pnpm test           passed",
-    `├── package tests   ${packageTests.files} files / ${packageTests.tests} tests`,
-    `└── desktop tests   ${desktopTests.files} files / ${desktopTests.tests} tests`,
+    "├── package tests   passed",
+    "└── desktop tests   passed",
     "pnpm build          passed",
     "├── Renderer",
     "├── Electron Main",
@@ -277,26 +269,8 @@ if (write) {
   );
 } else {
   process.stdout.write(
-    `Verification facts are current: ${packageTests.tests + desktopTests.tests} tests · ${artifacts.length} build artifacts\n`,
+    `Verification facts are current: protocol pins · ${artifacts.length} build artifacts\n`,
   );
-}
-
-function listTests(cwd) {
-  const output = execFileSync(
-    process.execPath,
-    [vitestPath, "list", "--json"],
-    {
-      cwd,
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "ignore"],
-    },
-  );
-  const tests = JSON.parse(output);
-  return {
-    files: new Set(tests.map((test) => test.file)).size,
-    tests: tests.length,
-  };
 }
 
 async function buildArtifacts() {
