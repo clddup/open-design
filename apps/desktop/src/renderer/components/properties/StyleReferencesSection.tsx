@@ -24,7 +24,7 @@ export function StyleReferencesSection({
   const fields = compatibleFields(node);
   if (fields.length === 0) return null;
   return (
-    <Section title={t("styles.title")}>
+    <Section defaultOpen={false} title={t("styles.title")}>
       <div className={styles.stack}>
         {fields.map((field) => (
           <StyleReferenceRow

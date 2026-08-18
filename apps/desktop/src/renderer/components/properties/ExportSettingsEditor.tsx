@@ -35,7 +35,7 @@ export function ExportSettingsEditor({
     onChange(next);
   };
   return (
-    <Section title={t("properties.exportSettings")}>
+    <Section defaultOpen={false} title={t("properties.exportSettings")}>
       <div className={styles.list}>
         {node.exportSettings.length === 0 && (
           <p className={styles.empty}>{t("properties.exportSettingsEmpty")}</p>

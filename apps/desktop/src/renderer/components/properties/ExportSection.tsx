@@ -194,7 +194,7 @@ export function ExportSection({
   const fixedHeight =
     rasterSettings.size.mode === "height" ? rasterSettings.size.value : 1_080;
   return (
-    <Section title={t("properties.export")}>
+    <Section defaultOpen={false} title={t("properties.export")}>
       <div className={styles.exportSettings}>
         <label className={styles.selectRow}>
           <span>{t("properties.exportFormat")}</span>

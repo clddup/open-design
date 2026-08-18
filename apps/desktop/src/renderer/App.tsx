@@ -93,6 +93,9 @@ import { useProfessionalFixtureSmoke } from "./use-professional-fixture-smoke";
 import { useFontInspectorContext } from "./use-font-inspector-context";
 import { useFontBinaryRuntime } from "./use-font-binary-runtime";
 const HISTORY_SYNC_DEBOUNCE_MS = 80;
+const NAVIGATOR_AUTO_COLLAPSE_WIDTH = 960;
+const UTILITY_AUTO_COLLAPSE_WIDTH = 760;
+const WORKBENCH_PANEL_STORAGE_PREFIX = "opendesign.workbench.panel";
 type AppView = "workspace" | "project" | "editor" | "settings";
 
 type ConversationAgentState = {
@@ -114,6 +117,32 @@ function resolveTheme(preference: ThemePreference) {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
+}
+
+function readPanelVisibility(panel: "navigator" | "utility"): boolean {
+  try {
+    return (
+      window.localStorage.getItem(
+        `${WORKBENCH_PANEL_STORAGE_PREFIX}.${panel}`,
+      ) !== "hidden"
+    );
+  } catch {
+    return true;
+  }
+}
+
+function persistPanelVisibility(
+  panel: "navigator" | "utility",
+  visible: boolean,
+) {
+  try {
+    window.localStorage.setItem(
+      `${WORKBENCH_PANEL_STORAGE_PREFIX}.${panel}`,
+      visible ? "visible" : "hidden",
+    );
+  } catch {
+    // Session persistence is best-effort and never blocks the editor shell.
+  }
 }
 
 export function App({ initialView }: { initialView?: AppView } = {}) {
@@ -144,8 +173,12 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   const [fileName, setFileName] = useState(() => t("file.untitled"));
   const [leftWidth, setLeftWidth] = useState(236);
   const [utilityWidth, setUtilityWidth] = useState(320);
-  const [leftPanelVisible, setLeftPanelVisible] = useState(true);
-  const [utilityPanelVisible, setUtilityPanelVisible] = useState(true);
+  const [leftPanelVisible, setLeftPanelVisible] = useState(() =>
+    readPanelVisibility("navigator"),
+  );
+  const [utilityPanelVisible, setUtilityPanelVisible] = useState(() =>
+    readPanelVisibility("utility"),
+  );
   const [utilityTab, setUtilityTab] = useState<UtilityDockTab>("agent");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("layers");
   const [conversationsByProjectId, setConversationsByProjectId] = useState<
@@ -880,10 +913,60 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     [activePageId, runtime],
   );
 
+  const toggleLeftPanel = useCallback(() => {
+    setLeftPanelVisible((current) => {
+      const next = !current;
+      persistPanelVisibility("navigator", next);
+      return next;
+    });
+  }, []);
+
+  const toggleUtilityPanel = useCallback(() => {
+    setUtilityPanelVisible((current) => {
+      const next = !current;
+      persistPanelVisibility("utility", next);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    let previousWidth = Number.POSITIVE_INFINITY;
+    const prioritizeCanvas = () => {
+      const width = window.innerWidth;
+      if (
+        previousWidth > NAVIGATOR_AUTO_COLLAPSE_WIDTH &&
+        width <= NAVIGATOR_AUTO_COLLAPSE_WIDTH
+      ) {
+        setLeftPanelVisible(false);
+      }
+      if (
+        previousWidth > UTILITY_AUTO_COLLAPSE_WIDTH &&
+        width <= UTILITY_AUTO_COLLAPSE_WIDTH
+      ) {
+        setUtilityPanelVisible(false);
+      }
+      previousWidth = width;
+    };
+    prioritizeCanvas();
+    window.addEventListener("resize", prioritizeCanvas);
+    return () => window.removeEventListener("resize", prioritizeCanvas);
+  }, []);
+
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
       const modifier = event.metaKey || event.ctrlKey;
+      if (
+        modifier &&
+        event.shiftKey &&
+        !event.altKey &&
+        (event.code === "Digit1" || event.code === "Digit2")
+      ) {
+        event.preventDefault();
+        if (event.code === "Digit1") toggleLeftPanel();
+        else toggleUtilityPanel();
+        return;
+      }
       if (modifier && event.key.toLowerCase() === "z") {
         event.preventDefault();
         if (event.shiftKey) runtime.redo();
@@ -1003,6 +1086,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     reorderSelection,
     runtime,
     state.selection.nodeIds,
+    toggleLeftPanel,
+    toggleUtilityPanel,
     ungroupSelection,
   ]);
 
@@ -1804,10 +1889,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           onSave={() => void saveDocument(false)}
           onSaveAs={activeProject ? undefined : () => void saveDocument(true)}
           onSettings={openSettings}
-          onToggleLeftPanel={() => setLeftPanelVisible((visible) => !visible)}
-          onToggleUtilityPanel={() =>
-            setUtilityPanelVisible((visible) => !visible)
-          }
+          onToggleLeftPanel={toggleLeftPanel}
+          onToggleUtilityPanel={toggleUtilityPanel}
           onThemeChange={changeTheme}
           onWorkspace={() => setView("workspace")}
           pageName={pageName}

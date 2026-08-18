@@ -310,6 +310,44 @@ const textNode: TextNode = {
   },
 };
 
+describe("PropertiesPanel information architecture", () => {
+  it("prioritizes real design controls and progressively discloses advanced sections", async () => {
+    const user = userEvent.setup();
+    renderPanel({ node: lineNode, selectionCount: 1 });
+
+    expect(
+      screen.queryByRole("tab", { name: "Prototype properties unavailable" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Layer" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Layout" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Effects" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    const exportSection = screen.getByRole("button", { name: "Export" });
+    expect(exportSection).toHaveAttribute("aria-expanded", "false");
+    await user.click(exportSection);
+    expect(exportSection).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("keeps component identity visible but folds component creation for ordinary frames", () => {
+    const frame = createWelcomeDocument().nodesById.frame_welcome;
+    expect(frame?.kind).toBe("frame");
+    renderPanel({ node: frame, selectionCount: 1 });
+
+    expect(screen.getByRole("button", { name: "Component" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+});
+
 describe("PropertiesPanel SVG workflow", () => {
   it("runs the shared Tidy up planner from an enabled multi-selection control", async () => {
     const user = userEvent.setup();

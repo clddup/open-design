@@ -304,12 +304,16 @@ export function SelectedNodeProperties({
         <span className={styles.selectionIcon}>
           <Glyph name={nodeIcons[node.kind]} />
         </span>
-        <span>
+        <span className={styles.selectionIdentity}>
           <strong>
             {node.name ||
               t("sidebar.untitledNode", { kind: t(nodeKindKeys[node.kind]) })}
           </strong>
-          <small>{t(nodeKindKeys[node.kind])}</small>
+          <span className={styles.selectionFacts}>
+            <small>{t(nodeKindKeys[node.kind])}</small>
+            {!node.visible && <small>{t("properties.hidden")}</small>}
+            {node.locked && <small>{t("properties.locked")}</small>}
+          </span>
         </span>
         <span className={styles.selectionActions}>
           <IconButton
@@ -347,45 +351,6 @@ export function SelectedNodeProperties({
           </div>
         </Section>
       )}
-      <ComponentSection
-        componentContext={componentContext}
-        node={node}
-        onCreateComponent={onCreateComponent}
-        onCreateComponentInstance={onCreateComponentInstance}
-        onDuplicateVariant={onDuplicateVariant}
-        onDissolveVariantSet={onDissolveVariantSet}
-        onDetachComponentInstance={onDetachComponentInstance}
-        onGoToComponentMain={onGoToComponentMain}
-        onRemoveComponent={onRemoveComponent}
-        onRemoveVariant={onRemoveVariant}
-        onAddComponentProperty={onAddComponentProperty}
-        onAddVariantProperty={onAddVariantProperty}
-        onRemoveComponentProperty={onRemoveComponentProperty}
-        onRemoveVariantProperty={onRemoveVariantProperty}
-        onRenameComponentProperty={onRenameComponentProperty}
-        onReorderComponentProperties={onReorderComponentProperties}
-        onRenameVariantProperty={onRenameVariantProperty}
-        onRenameVariantValue={onRenameVariantValue}
-        onReorderVariantProperties={onReorderVariantProperties}
-        onReorderVariantValues={onReorderVariantValues}
-        onResetComponentInstance={onResetComponentInstance}
-        onResetComponentProperty={onResetComponentProperty}
-        onResetComponentSourceOverride={onResetComponentSourceOverride}
-        onUpdateComponentOverride={onUpdateComponentOverride}
-        onSetComponentProperty={onSetComponentProperty}
-        onClearComponentSlot={onClearComponentSlot}
-        onCreateComponentSlotOverride={onCreateComponentSlotOverride}
-        onResetComponentSlot={onResetComponentSlot}
-        onSetComponentSlotSettings={onSetComponentSlotSettings}
-        onSetVariantProperties={onSetVariantProperties}
-      />
-      <VariableSection
-        activePageId={activePageId}
-        document={document}
-        node={node}
-        onSetBinding={onSetVariableBinding}
-        onSetExplicitMode={onSetVariableMode}
-      />
       <Section title={t("properties.layer")}>
         <div className={styles.stack}>
           <Field
@@ -422,6 +387,39 @@ export function SelectedNodeProperties({
           </div>
         </div>
       </Section>
+      <ComponentSection
+        componentContext={componentContext}
+        defaultOpen={componentContext !== undefined}
+        node={node}
+        onCreateComponent={onCreateComponent}
+        onCreateComponentInstance={onCreateComponentInstance}
+        onDuplicateVariant={onDuplicateVariant}
+        onDissolveVariantSet={onDissolveVariantSet}
+        onDetachComponentInstance={onDetachComponentInstance}
+        onGoToComponentMain={onGoToComponentMain}
+        onRemoveComponent={onRemoveComponent}
+        onRemoveVariant={onRemoveVariant}
+        onAddComponentProperty={onAddComponentProperty}
+        onAddVariantProperty={onAddVariantProperty}
+        onRemoveComponentProperty={onRemoveComponentProperty}
+        onRemoveVariantProperty={onRemoveVariantProperty}
+        onRenameComponentProperty={onRenameComponentProperty}
+        onReorderComponentProperties={onReorderComponentProperties}
+        onRenameVariantProperty={onRenameVariantProperty}
+        onRenameVariantValue={onRenameVariantValue}
+        onReorderVariantProperties={onReorderVariantProperties}
+        onReorderVariantValues={onReorderVariantValues}
+        onResetComponentInstance={onResetComponentInstance}
+        onResetComponentProperty={onResetComponentProperty}
+        onResetComponentSourceOverride={onResetComponentSourceOverride}
+        onUpdateComponentOverride={onUpdateComponentOverride}
+        onSetComponentProperty={onSetComponentProperty}
+        onClearComponentSlot={onClearComponentSlot}
+        onCreateComponentSlotOverride={onCreateComponentSlotOverride}
+        onResetComponentSlot={onResetComponentSlot}
+        onSetComponentSlotSettings={onSetComponentSlotSettings}
+        onSetVariantProperties={onSetVariantProperties}
+      />
       {(node.kind === "frame" || node.kind === "slot") && (
         <AutoLayoutSection
           autoLayout={node.properties.autoLayout ?? { mode: "none" }}
@@ -766,11 +764,11 @@ export function SelectedNodeProperties({
           </div>
         )}
       </Section>
-      {styleActions && (
-        <StyleReferencesSection
-          actions={styleActions}
-          document={document}
+      {node.kind === "text" && (
+        <TypographySection
+          fontContext={fontContext}
           node={node}
+          onUpdate={onUpdate}
         />
       )}
       <AppearanceBasicsSection
@@ -786,17 +784,24 @@ export function SelectedNodeProperties({
           onReplace={onReplaceImage}
         />
       )}
-      {node.kind === "text" && (
-        <TypographySection
-          fontContext={fontContext}
-          node={node}
-          onUpdate={onUpdate}
-        />
-      )}
       <PaintAndEffectsSections
         appearanceControlled={booleanOperandParent !== undefined}
         node={node}
         onUpdate={onUpdate}
+      />
+      {styleActions && (
+        <StyleReferencesSection
+          actions={styleActions}
+          document={document}
+          node={node}
+        />
+      )}
+      <VariableSection
+        activePageId={activePageId}
+        document={document}
+        node={node}
+        onSetBinding={onSetVariableBinding}
+        onSetExplicitMode={onSetVariableMode}
       />
     </div>
   );

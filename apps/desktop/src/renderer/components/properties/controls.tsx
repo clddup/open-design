@@ -1,5 +1,11 @@
 import { Glyph } from "@opendesign/ui";
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import styles from "../PropertiesPanel.module.scss";
 
 export function cx(
@@ -121,19 +127,33 @@ export function ColorPicker({
 export function Section({
   title,
   children,
+  defaultOpen = true,
 }: {
   title: string;
   children: ReactNode;
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const contentId = useId();
   return (
     <section className={styles.section}>
       <header>
-        <button aria-expanded="true" disabled type="button">
-          <Glyph name="chevron-down" size={13} />
+        <button
+          aria-controls={contentId}
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          <Glyph name={open ? "chevron-down" : "chevron-right"} size={13} />
           {title}
         </button>
       </header>
-      {children}
+      <div
+        className={open ? styles.sectionBody : styles.sectionBodyCollapsed}
+        id={contentId}
+      >
+        {children}
+      </div>
     </section>
   );
 }

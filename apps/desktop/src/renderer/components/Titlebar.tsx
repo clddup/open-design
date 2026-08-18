@@ -100,6 +100,7 @@ export function Titlebar({
           <span className={styles.panelActions}>
             {onToggleLeftPanel && (
               <IconButton
+                aria-keyshortcuts="Control+Shift+1 Meta+Shift+1"
                 icon="layers"
                 label={t("title.toggleNavigator")}
                 onClick={onToggleLeftPanel}
@@ -108,6 +109,7 @@ export function Titlebar({
             )}
             {onToggleUtilityPanel && (
               <IconButton
+                aria-keyshortcuts="Control+Shift+2 Meta+Shift+2"
                 icon="agent"
                 label={t("title.toggleUtility")}
                 onClick={onToggleUtilityPanel}

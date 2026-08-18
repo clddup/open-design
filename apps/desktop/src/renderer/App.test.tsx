@@ -173,6 +173,12 @@ let requestDesignTool:
 let emitDiagnosticEvent: ((event: DiagnosticEvent) => void) | undefined;
 
 beforeEach(() => {
+  window.localStorage.clear();
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: 1_280,
+    writable: true,
+  });
   emitAgentEvent = undefined;
   requestOpenSettings = undefined;
   requestImportSvg = undefined;
@@ -4854,6 +4860,68 @@ describe("App", () => {
     );
     expect(workspace).toHaveAttribute("data-left-panel", "hidden");
     expect(workspace).toHaveAttribute("data-utility-panel", "hidden");
+  });
+
+  it("toggles workbench panels from keyboard without stealing editable input", () => {
+    renderApp();
+    const workspace = document.querySelector(".workspace");
+
+    fireEvent.keyDown(window, {
+      code: "Digit1",
+      key: "1",
+      metaKey: true,
+      shiftKey: true,
+    });
+    fireEvent.keyDown(window, {
+      code: "Digit2",
+      key: "2",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    expect(workspace).toHaveAttribute("data-left-panel", "hidden");
+    expect(workspace).toHaveAttribute("data-utility-panel", "hidden");
+    expect(
+      window.localStorage.getItem("opendesign.workbench.panel.navigator"),
+    ).toBe("hidden");
+    expect(
+      window.localStorage.getItem("opendesign.workbench.panel.utility"),
+    ).toBe("hidden");
+
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+    fireEvent.keyDown(input, {
+      code: "Digit1",
+      key: "1",
+      metaKey: true,
+      shiftKey: true,
+    });
+    expect(workspace).toHaveAttribute("data-left-panel", "hidden");
+    input.remove();
+  });
+
+  it("collapses panels once at narrow breakpoints while preserving manual control", () => {
+    renderApp();
+    const workspace = document.querySelector(".workspace");
+
+    window.innerWidth = 900;
+    fireEvent(window, new Event("resize"));
+    expect(workspace).toHaveAttribute("data-left-panel", "hidden");
+    expect(workspace).toHaveAttribute("data-utility-panel", "visible");
+
+    window.innerWidth = 740;
+    fireEvent(window, new Event("resize"));
+    expect(workspace).toHaveAttribute("data-utility-panel", "hidden");
+
+    fireEvent.keyDown(window, {
+      code: "Digit1",
+      key: "1",
+      metaKey: true,
+      shiftKey: true,
+    });
+    window.innerWidth = 739;
+    fireEvent(window, new Event("resize"));
+    expect(workspace).toHaveAttribute("data-left-panel", "visible");
   });
 
   it("sends a host-bound document scope and renders streamed Agent events", async () => {

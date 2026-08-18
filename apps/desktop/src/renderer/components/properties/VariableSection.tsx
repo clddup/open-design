@@ -76,7 +76,7 @@ export function VariableSection({
   });
 
   return (
-    <Section title={t("variables.modeOverrides")}>
+    <Section defaultOpen={false} title={t("variables.modeOverrides")}>
       <div className={styles.modeRows}>
         {document.variableCollectionOrder.map((collectionId) => {
           const collection = document.variableCollectionsById[collectionId];

@@ -238,38 +238,7 @@ export function PropertiesPanel({
   const { t } = useI18n();
   return (
     <section aria-label={t("properties.label")} className={styles.root}>
-      <div
-        aria-label={t("properties.views")}
-        className={styles.tabs}
-        role="tablist"
-      >
-        <button
-          aria-controls="properties-design-panel"
-          aria-selected="true"
-          id="properties-design-tab"
-          role="tab"
-          type="button"
-        >
-          {t("properties.design")}
-        </button>
-        <button
-          aria-label={t("properties.prototypeUnavailable")}
-          aria-selected="false"
-          disabled
-          id="properties-prototype-tab"
-          role="tab"
-          tabIndex={-1}
-          type="button"
-        >
-          {t("properties.prototype")}
-        </button>
-      </div>
-      <div
-        aria-labelledby="properties-design-tab"
-        className={styles.content}
-        id="properties-design-panel"
-        role="tabpanel"
-      >
+      <div className={styles.content}>
         {svgOperation && (
           <SvgOperationNotice
             onCancel={onCancelSvgOperation}

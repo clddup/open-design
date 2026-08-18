@@ -426,6 +426,7 @@ export function ComponentSection({
   onResetComponentSlot,
   onSetComponentSlotSettings,
   onUpdateComponentOverride,
+  defaultOpen = true,
 }: {
   componentContext?: ComponentInspectorContext;
   node: DesignNode;
@@ -486,13 +487,14 @@ export function ComponentSection({
     sourcePath: readonly string[],
     patch: ComponentOverridePatch,
   ) => void;
+  defaultOpen?: boolean;
 }) {
   const { t } = useI18n();
   if (!componentContext && node.kind !== "frame" && node.kind !== "group") {
     return null;
   }
   return (
-    <Section title={t("properties.component")}>
+    <Section defaultOpen={defaultOpen} title={t("properties.component")}>
       {componentContext ? (
         <div className={styles.componentCard}>
           <ComponentIdentitySummary

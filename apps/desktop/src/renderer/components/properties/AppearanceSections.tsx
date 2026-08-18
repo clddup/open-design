@@ -291,7 +291,7 @@ export function PaintAndEffectsSections({
         </Section>
       )}
       {!appearanceControlled && (
-        <Section title={t("properties.effects")}>
+        <Section defaultOpen={false} title={t("properties.effects")}>
           {(node.effects ?? []).map((effect, index) => (
             <EffectEditor
               effect={effect}

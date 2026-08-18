@@ -31,18 +31,28 @@ Layers 与 Assets 都提供真实搜索；不再展示“搜索暂不可用”�
 
 Agent 与 Properties 保持两个模式，不同时挤压 Canvas。标签左对齐、内容优先；Agent 的 Conversation、可信运行状态、真实设计步骤、消息和 Composer 保持清晰层级。模型等待、真实 revision、自动修正和最终 delivery 由可信事件投影，不能由聊天文案冒充。
 
+Properties 不为未实现能力保留禁用的一级标签。当前选区身份固定在 Inspector 顶部，高频 Layer、Component identity、Auto Layout、Layout、Typography 与 Appearance 在前；普通对象的组件创建以及 Effects、Styles、Variables 和 Export 使用可访问的折叠分组。分组开合是 Renderer 展示状态，不进入 DesignDocument、revision 或 history，也不改变现有语义事务回调。
+
+### 面板键盘与窄窗口策略
+
+Navigator 与 Utility 分别使用 `Cmd/Ctrl+Shift+1` 和 `Cmd/Ctrl+Shift+2` 切换；Titlebar 按钮通过 `aria-keyshortcuts` 暴露相同命令。快捷键在 input、textarea、select、contenteditable 和组合框内不执行，避免破坏画布文字编辑或 Inspector 输入。
+
+显隐偏好保存在 Renderer 本地工作台状态，不属于项目或设计文件。窗口从宽布局跨到 960px 时一次性收起 Navigator，跨到 760px 时再收起 Utility；在同一窄窗口区间内用户手动重开后保持其选择，不以每次 resize 强制覆盖。自动收起不覆盖持久偏好，扩大窗口也不擅自打开用户已隐藏的面板。
+
 ### 客户端密度与反馈
 
 Titlebar、Toolbar、文件标签和 Statusbar 使用一致的紧凑尺寸、细分隔和有限强调色。普通控件不使用营销式卡片、巨型圆角、装饰渐变或大面积阴影。hover、selected、focus、running、error 和 hidden 必须同时有结构或文字信号，不能只靠颜色。
 
 ## 当前切片与后续
 
-本 ADR 的第一切片已完成一级 IA、Layers 搜索、Library 二级切换、紧凑 Utility tabs、面板显隐、Shell 密度和可信 Agent 状态。后续仍需在同一方向完成：面板显隐快捷键与持久 session、Properties 信息分组与渐进披露、命令面板、Canvas 就地快捷操作、窄窗口自动策略、跨主题和打包产品视觉回归。后续切片不得重新把能力平铺为更多一级标签。
+本 ADR 的第一、二切片已完成一级 IA、Layers 搜索、Library 二级切换、紧凑 Utility tabs、面板显隐、Shell 密度、可信 Agent 状态、Properties 渐进披露、面板快捷键/偏好和窄窗口画布优先策略。后续仍需在同一方向完成：命令面板、Canvas 就地快捷操作、面板宽度持久化、跨主题和打包产品视觉回归。后续切片不得重新把能力平铺为更多一级标签。
 
 ## 验证
 
 - Sidebar 测试覆盖三入口 IA、Library 二级切换、真实 Layers 搜索与空结果；
 - Titlebar 测试覆盖可访问的左右面板显隐控制；
+- App 交互测试覆盖键盘显隐、输入焦点保护、偏好写入与窄窗口跨阈值行为；
+- Properties 测试覆盖无效 Prototype 入口移除、高频分组默认展开与高级分组渐进披露；
 - Agent/Utility 测试覆盖键盘 tab 切换、运行状态、Conversation 与停止；
 - Desktop 类型、交互测试与 Vite build 验证 CSS Modules 和 Renderer 集成；
 - macOS/Windows 原生 Action 继续阻塞发布，自动化不能替代打包产品的宽/窄窗口人工视觉 smoke。

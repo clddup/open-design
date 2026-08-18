@@ -94,7 +94,7 @@ textarea {
 @media (max-width: 860px) {
   .workspace {
     grid-template-columns:
-      min(120px, var(--left-width)) 1px minmax(0, 1fr)
+      min(184px, var(--left-width)) 1px minmax(0, 1fr)
       1px var(--utility-width);
   }
 }
