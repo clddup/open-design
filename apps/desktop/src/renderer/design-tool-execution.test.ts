@@ -529,6 +529,11 @@ describe("Renderer design tool scope", () => {
       ok: true,
       result: {
         content: {
+          idAllocation: {
+            version: 1,
+            scope: "run",
+            newNodeIdPrefix: "odr_run_1_",
+          },
           document: {
             variableCollectionsById: { theme: { defaultModeId: "default" } },
             variablesById: { "title-copy": { resolvedType: "STRING" } },

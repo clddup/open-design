@@ -15,6 +15,7 @@ import {
 export type InspectedHierarchy = {
   componentsById: Map<string, { id: string; rootNodeId: string }>;
   documentId: string;
+  newNodeIdPrefix?: string;
   nodesById: Map<
     string,
     {

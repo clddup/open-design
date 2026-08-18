@@ -17,6 +17,7 @@ import type {
   DesignPlanToolInput,
   DesignPlanToolInputV3,
 } from "../../shared/design-agent-tools.js";
+import { createAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
 
 const modelSelection = {
   providerId: "provider_1",
@@ -580,6 +581,68 @@ function withExistingArtboard(
 }
 
 describe("GlobalTaskCoordinator", () => {
+  it("requires the trusted Run namespace for create-plan document node IDs", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const runId = "run_namespace";
+    await coordinator.registerRun({
+      type: "run.start",
+      runId,
+      sessionId: "conversation_mobile",
+      prompt: "Design one new workspace",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId,
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    const inspected = inspectionResult(opened.document, pageId);
+    coordinator.recordDocumentInspection(context, {
+      ...inspected,
+      content: {
+        ...inspected.content,
+        idAllocation: createAgentDesignIdAllocation(runId),
+      },
+    });
+    const genericPlan = { ...designPlan, pageId };
+
+    expect(() => coordinator.registerDesignPlan(context, genericPlan)).toThrow(
+      /new_node_id_namespace_required.*workspace_artboard.*odr_run_namespace_/,
+    );
+
+    const prefix = "odr_run_namespace_";
+    const namespacedPlan = {
+      ...genericPlan,
+      artboard: {
+        ...genericPlan.artboard,
+        frameId: `${prefix}workspace_artboard`,
+      },
+      composition: {
+        ...genericPlan.composition,
+        regions: genericPlan.composition.regions.map((region) => ({
+          ...region,
+          nodeId: `${prefix}${region.nodeId}`,
+        })),
+      },
+    };
+    expect(() =>
+      coordinator.registerDesignPlan(context, namespacedPlan),
+    ).not.toThrow();
+    expect(
+      coordinator.createDesignPlanAllocation(runId)?.input.commands[0],
+    ).toMatchObject({
+      node: { id: `${prefix}workspace_artboard` },
+    });
+    store.close();
+  });
   it("enforces a planned artboard and a rendered review before refinement", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

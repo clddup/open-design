@@ -25,7 +25,9 @@ import {
 import type { ProjectHost } from "../project/project-host.js";
 import type { WorkspaceStore } from "../project/workspace-store.js";
 import {
+  componentStrategyOccurrencesForTarget,
   designApplyRequiresPlan,
+  designPlanComponentStrategy,
   designPlanTargets,
   type DesignApplyToolInput,
   type DesignComponentToolInput,
@@ -400,6 +402,7 @@ export class GlobalTaskCoordinator {
       );
     }
     const recoverableDelivery = this.getRecoverableDelivery(context);
+    assertPlanUsesNewNodeIdNamespace(plan, inspection);
     if (
       binding.mutationTarget.kind === "page" &&
       !this.hasPageStructureAccess(context.runId)
@@ -807,8 +810,13 @@ export class GlobalTaskCoordinator {
     role: PlaceableRasterAssetRole,
     parentId: string | null,
     attachmentId?: string,
+    nodeId?: string,
   ): DesignPlanToolInput {
     const state = this.#requireDesignPlan(context);
+    assertNewNodeIdUsesInspectionNamespace(
+      this.#inspectionsByRunId.get(context.runId),
+      nodeId,
+    );
     if (!state.plan.rasterAssetRoles.includes(role)) {
       throw new Error(
         `Raster role ${role} is not declared by the active design plan`,
@@ -845,6 +853,10 @@ export class GlobalTaskCoordinator {
     input: DesignApplyToolInput,
   ): DesignPlanApplyAuthorization | undefined {
     const state = this.#designPlansByRunId.get(context.runId);
+    assertApplyUsesNewNodeIdNamespace(
+      input,
+      this.#inspectionsByRunId.get(context.runId),
+    );
     if (!state) {
       if (!designApplyRequiresPlan(input)) return undefined;
       this.#requireDesignPlan(context);
@@ -891,6 +903,10 @@ export class GlobalTaskCoordinator {
     allocationTargetIds: readonly string[],
   ): DesignPlanApplyAuthorization {
     const state = this.#requireDesignPlan(context);
+    assertApplyUsesNewNodeIdNamespace(
+      input,
+      this.#inspectionsByRunId.get(context.runId),
+    );
     const assumedAllocatedTargetIds = new Set(allocationTargetIds);
     if (assumedAllocatedTargetIds.size !== allocationTargetIds.length) {
       throw new Error(
@@ -1283,6 +1299,81 @@ export class GlobalTaskCoordinator {
     }
     return inspection;
   }
+}
+
+function assertPlanUsesNewNodeIdNamespace(
+  plan: DesignPlanToolInput,
+  inspection: InspectedHierarchy,
+): void {
+  const prefix = inspection.newNodeIdPrefix;
+  if (!prefix) return;
+  const targets = designPlanTargets(plan);
+  for (const target of targets) {
+    if (target.artboard.mode !== "create") continue;
+    assertNewNodeIdHasPrefix(target.artboard.frameId, prefix);
+    for (const region of target.composition.regions) {
+      assertNewNodeIdHasPrefix(region.nodeId, prefix);
+    }
+  }
+  const strategy = designPlanComponentStrategy(plan);
+  if (!strategy) return;
+  const createTargetIds = new Set(
+    targets
+      .filter((target) => target.artboard.mode === "create")
+      .map((target) => target.targetId),
+  );
+  for (const targetId of createTargetIds) {
+    for (const occurrence of componentStrategyOccurrencesForTarget(
+      strategy,
+      targetId,
+    )) {
+      assertNewNodeIdHasPrefix(occurrence.nodeId, prefix);
+    }
+  }
+  for (const candidate of strategy.candidates) {
+    if (
+      candidate.decision === "component" &&
+      createTargetIds.has(candidate.main.targetId)
+    ) {
+      assertNewNodeIdHasPrefix(candidate.componentId, prefix);
+    }
+  }
+}
+
+function assertApplyUsesNewNodeIdNamespace(
+  input: DesignApplyToolInput,
+  inspection: InspectedHierarchy | undefined,
+): void {
+  const prefix = inspection?.newNodeIdPrefix;
+  if (!prefix) return;
+  for (const command of input.commands) {
+    if (command.type === "insert_element") {
+      assertNewNodeIdHasPrefix(command.node.id, prefix);
+      continue;
+    }
+    if (command.type !== "replace_subtree") continue;
+    for (const node of command.nodes) {
+      if (!inspection.nodesById.has(node.id)) {
+        assertNewNodeIdHasPrefix(node.id, prefix);
+      }
+    }
+  }
+}
+
+function assertNewNodeIdUsesInspectionNamespace(
+  inspection: InspectedHierarchy | undefined,
+  nodeId: string | undefined,
+): void {
+  if (inspection?.newNodeIdPrefix && nodeId !== undefined) {
+    assertNewNodeIdHasPrefix(nodeId, inspection.newNodeIdPrefix);
+  }
+}
+
+function assertNewNodeIdHasPrefix(nodeId: string, prefix: string): void {
+  if (nodeId.startsWith(prefix)) return;
+  throw new Error(
+    `design_workflow.new_node_id_namespace_required: New node ID ${nodeId} must start with ${prefix} from the latest trusted inspection so it cannot collide with hidden nodes on another Page`,
+  );
 }
 
 /**

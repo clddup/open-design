@@ -7,6 +7,7 @@ import {
   assertDeliveryTargetStructure,
   parseInspectedHierarchy,
 } from "./design-inspection.js";
+import { createAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
 import type {
   DesignDeliveryTargetState,
   InspectedHierarchy,
@@ -84,6 +85,7 @@ describe("Agent design inspection component strategy", () => {
       {
         observedRevision: 9,
         content: {
+          idAllocation: createAgentDesignIdAllocation("run_1"),
           document: {
             documentId: "document_1",
             revision: 9,
@@ -114,6 +116,7 @@ describe("Agent design inspection component strategy", () => {
         },
       },
     );
+    expect(inspection.newNodeIdPrefix).toBe("odr_run_1_");
 
     expect(
       inspection.componentsById.get("component_navigation")?.rootNodeId,

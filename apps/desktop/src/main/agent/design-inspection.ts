@@ -8,6 +8,7 @@ import {
   designPlanComponentStrategy,
   type DesignPlanToolInput,
 } from "../../shared/design-agent-tools.js";
+import { isAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
 import {
   inspectedNodeBelongsToPage,
   type DesignDeliveryTargetState,
@@ -24,6 +25,18 @@ export function parseInspectedHierarchy(
     );
   }
   const content = recordValue(result.content);
+  const rawIdAllocation = content?.idAllocation;
+  const idAllocation =
+    rawIdAllocation === undefined
+      ? undefined
+      : isAgentDesignIdAllocation(rawIdAllocation, context.runId)
+        ? rawIdAllocation
+        : null;
+  if (idAllocation === null) {
+    throw new Error(
+      "design_workflow.inspection_invalid: Document inspection contains an invalid new-node ID allocation; inspect again",
+    );
+  }
   const document = recordValue(content?.document);
   if (
     !document ||
@@ -143,6 +156,9 @@ export function parseInspectedHierarchy(
   return {
     componentsById,
     documentId: context.documentId,
+    ...(idAllocation === undefined
+      ? {}
+      : { newNodeIdPrefix: idAllocation.newNodeIdPrefix }),
     nodesById,
     pageRootsById,
     revision: result.observedRevision,

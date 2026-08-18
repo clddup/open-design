@@ -459,6 +459,10 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      // Agent design commits, cancellation and autosave must keep advancing
+      // while a native dialog is open or the workbench is temporarily
+      // occluded. Canvas reveal loops are bounded and clear on Run terminal.
+      backgroundThrottling: false,
       devTools: !app.isPackaged,
     },
   });
@@ -1403,6 +1407,7 @@ void app.whenReady().then(async () => {
           call.input.role,
           call.input.parentId,
           call.input.attachmentId,
+          call.input.nodeId,
         );
         const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
           context,

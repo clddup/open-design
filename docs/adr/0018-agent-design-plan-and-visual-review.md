@@ -28,6 +28,14 @@ Agent 新建设计内容前必须先读取文档，再调用 `opendesign_define_
 
 `opendesign_record_visual_review` 同步要求 `briefFidelity` 结论，逐次对照最新用户请求和当前 Plan 检查遗漏、错误替换与擅自发明；发现偏差必须进入可执行 `refinements`。影响 brief 的 Plan amendment 会保留已落地 `targetId/pageId/frameId/region nodeId`，同时把材料 target 降回 `drafted` 并清除旧 capture/review 证明，要求重新截图、审查、精修和验证。宿主不尝试用关键字规则猜测产品语义，避免把单个反馈固化成特例。
 
+### Page 作用域不牺牲 Design File 全局 ID 正确性
+
+Node、Component 等稳定 ID 在整个 Design File 内唯一，但 Page Mutation Target 的 inspection 不得为了让模型避碰而泄漏其他 Page 的结构和内容。每次可信 inspection 因此返回 `idAllocation v1`，其中 `newNodeIdPrefix` 是从可信 Run ID 派生的有界、Run-scoped namespace。模型在 Plan、compact first slice 和后续事务中创建的 Frame、region、layer、Component 与图片节点都必须使用该前缀；既有 inspection ID 保持原样。
+
+Main 在 Renderer 写入前验证 create Plan 的画板/区域/组件声明以及 material insert/replace/image 节点。缺失或错误前缀返回 `design_workflow.new_node_id_namespace_required`，不会让跨 Page 隐藏节点的冲突下沉为 `design.duplicate`。旧 Renderer inspection 没有 `idAllocation` 时保持只读恢复兼容，但当前生产 inspection 必须返回与当前 Run 匹配的 namespace；从另一个 Run 复制的前缀视为无效 inspection。
+
+语义步骤需要在窗口被原生文件选择器遮挡、最小化或暂时失焦时继续提交和响应取消。主 BrowserWindow 因此关闭 Chromium `backgroundThrottling`；该设置不增加固定动画 delay，generation reveal/cursor 仍是有界展示状态并在 Run 终态清理。这样 Renderer 的双帧 paint checkpoint 与 250ms fallback 不再因窗口计时器被节流而放大到 90 秒 Main idle timeout。
+
 ### 按用户需求建立 `1..N` 个 target
 
 计划按用户实际请求声明 `1..N` 个稳定交付 target：
@@ -90,7 +98,7 @@ Agent 的单节点 `insert_element` 必须把 `node.childIds` 视为空的派生
 
 ## 验证
 
-- Tool contract 测试覆盖 version 5 的 brief fidelity、组件策略、一个/多个 target、target/Page/Frame/region 字段、重复/保留 ID、单图 target 上限、反模式与图片 role；version 2/3/4 历史输入继续可读。
+- Tool contract 测试覆盖 version 5 的 brief fidelity、Run-scoped new-node namespace、组件策略、一个/多个 target、target/Page/Frame/region 字段、重复/保留 ID、单图 target 上限、反模式与图片 role；version 2/3/4 历史输入继续可读。
 - Main coordinator 测试覆盖无计划拒绝、Page/Document scope、一个与多个 target、计划节点全局 ID 唯一、existing Frame 权威 inspection/后代解析、既有锁定容器、existing 逻辑 region 不改写真实层级/几何、create 可信结构几何编译与区域层级/bounds、首次空画板/空区域拒绝且 ledger 保持 pending、空 region 最终拒绝、根层散落、跨 target 操作拒绝、图片 role、capture target、revision 顺序、持久账本与中断恢复。Renderer 测试另覆盖 insert childIds 规范化、顶层 Frame 平移后的纯新增 rebase，以及 resize 时拒绝沿用旧布局条件。
 - Contract/Runtime/Agent/Renderer/bridge 测试覆盖模型无操作外观缺省、带 semantic steps 的 fill-only Shape 事务、discriminated union 具体字段、kind-incompatible property patch、准确 command/node/path、失败零 revision、模型结构化 tool result、journal/Timeline/诊断复制、重新 inspection 后恢复，以及相同失败输入不重复执行。
 - Completion guard 测试覆盖 plan、两次 capture、中间 review/refinement、`N/M` 未完成拒绝、全部 verified 完成、仅生图未写画布和 raster 主导的可编辑 composition 拒绝。

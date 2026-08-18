@@ -68,6 +68,7 @@ import {
   type DesignPageToolInput,
   type DesignTextRangeToolInput,
 } from "../shared/design-agent-tools";
+import { createAgentDesignIdAllocation } from "../shared/design-id-allocation";
 import type {
   RendererDesignToolProgressPhase,
   RendererDesignToolRequest,
@@ -159,6 +160,7 @@ async function executeDesignToolRequestUnsafe(
           request.context.mutationTarget,
           request.context.scope,
           runtime,
+          request.context.runId,
         ),
       },
     };
@@ -1768,6 +1770,7 @@ function createScopedInspection(
   mutationTarget: DesignMutationTarget,
   selectionContext: SelectionScope,
   runtime: EditorRuntime,
+  runId: string,
 ) {
   const nodeIds = mutationTargetNodeIds(document, mutationTarget);
   const pageIds =
@@ -1916,6 +1919,7 @@ function createScopedInspection(
     createScopedStyleInspection(document, nodeIds);
 
   return {
+    idAllocation: createAgentDesignIdAllocation(runId),
     document: {
       documentId: document.documentId,
       revision: document.revision,
