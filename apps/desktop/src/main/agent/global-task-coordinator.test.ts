@@ -92,6 +92,8 @@ const designPlan: DesignPlanToolInput = {
 };
 
 const visualReview = {
+  briefFidelity:
+    "The rendered workspace preserves the requested product structure and adds no unrequested capability",
   composition: "The primary work area needs more width",
   hierarchy: "The inspector competes with the page title",
   typography: "Secondary labels need lower contrast",

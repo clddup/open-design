@@ -4,6 +4,7 @@ import type {
 } from "@opendesign/workspace-contracts";
 import {
   componentStrategyOccurrencesForTarget,
+  designPlanBriefFidelity,
   designPlanComponentStrategy,
   designPlanTargets,
   type DesignPlanTarget,
@@ -83,6 +84,12 @@ export function registerDesignWorkflowPlan(options: {
   const visualSystemChanged =
     existing !== undefined &&
     !sameJson(existing.plan.visualSystem, plan.visualSystem);
+  const briefFidelityChanged =
+    existing !== undefined &&
+    !sameJson(
+      designPlanBriefFidelity(existing.plan),
+      designPlanBriefFidelity(plan),
+    );
   const targetsById = new Map<string, DesignDeliveryTargetState>();
   const changedTargetIds: string[] = [];
   for (const target of targets) {
@@ -93,7 +100,12 @@ export function registerDesignWorkflowPlan(options: {
         existing ? componentOccurrences(existing.plan, target.targetId) : [],
         componentOccurrences(plan, target.targetId),
       );
-      if (targetChanged || visualSystemChanged || componentStrategyChanged)
+      if (
+        targetChanged ||
+        visualSystemChanged ||
+        componentStrategyChanged ||
+        briefFidelityChanged
+      )
         changedTargetIds.push(target.targetId);
       targetsById.set(
         target.targetId,
@@ -101,7 +113,10 @@ export function registerDesignWorkflowPlan(options: {
           current,
           target,
           inspection,
-          targetChanged || visualSystemChanged || componentStrategyChanged,
+          targetChanged ||
+            visualSystemChanged ||
+            componentStrategyChanged ||
+            briefFidelityChanged,
         ),
       );
       continue;

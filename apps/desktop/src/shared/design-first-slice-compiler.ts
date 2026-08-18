@@ -7,6 +7,7 @@ import type {
 import type {
   DesignPlanTarget,
   DesignPlanToolInputV4,
+  DesignPlanToolInputV5,
 } from "./design-agent-tools";
 import type {
   DesignFirstSliceElement,
@@ -16,7 +17,7 @@ import type {
 export function compileValidatedDesignFirstSliceToolInput(
   input: DesignFirstSliceToolInput,
 ): {
-  plan: DesignPlanToolInputV4;
+  plan: DesignPlanToolInputV4 | DesignPlanToolInputV5;
   apply: DesignApplyToolInput;
   insertedNodeIds: string[];
 } {
@@ -24,11 +25,10 @@ export function compileValidatedDesignFirstSliceToolInput(
   const componentStrategy = compileComponentStrategy(
     input.semanticObjects ?? [],
   );
-  const plan: DesignPlanToolInputV4 = {
-    version: 4,
+  const planBase = {
     deliverable: input.deliverable,
     objective: input.objective,
-    outputMode: "editable-composition",
+    outputMode: "editable-composition" as const,
     targets,
     visualSystem: {
       avoidances: [
@@ -44,6 +44,14 @@ export function compileValidatedDesignFirstSliceToolInput(
     rasterAssetRoles: [...input.rasterAssetRoles],
     componentStrategy,
   };
+  const plan: DesignPlanToolInputV4 | DesignPlanToolInputV5 =
+    input.briefFidelity === undefined
+      ? { ...planBase, version: 4 }
+      : {
+          ...planBase,
+          version: 5,
+          briefFidelity: structuredClone(input.briefFidelity),
+        };
   const childCounts = new Map<string, number>();
   const commands: DesignOperation[] = [];
   const steps: NonNullable<DesignApplyToolInput["steps"]> = [];

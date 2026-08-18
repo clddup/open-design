@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { DesignPlanToolInputV4 } from "../../shared/design-agent-tools.js";
+import type {
+  DesignBriefFidelity,
+  DesignPlanToolInputV4,
+  DesignPlanToolInputV5,
+} from "../../shared/design-agent-tools.js";
 import {
   registerDesignWorkflowPlan,
   type InspectedHierarchy,
@@ -93,6 +97,80 @@ describe("DesignPlan v4 component decision amendments", () => {
   });
 });
 
+describe("DesignPlan v5 brief fidelity amendments", () => {
+  it("reopens material targets without changing stable target geometry", () => {
+    const inspection = inspectedExistingDesign();
+    const initialPlan = existingPlanV5({
+      requiredContent: ["Existing Home navigation and primary content"],
+      preservedSemantics: ["Navigation labels and destinations"],
+      prohibitedAdditions: ["No unrequested workflow controls"],
+      assumptions: [],
+    });
+    const initial = registerDesignWorkflowPlan({
+      inspection,
+      plan: initialPlan,
+    });
+    const target = initial.state.targetsById.get("target_home");
+    expect(target).toBeDefined();
+    if (!target) return;
+    target.delivery = {
+      ...target.delivery,
+      status: "verified",
+      captureRevision: 7,
+      reviewRevision: 7,
+      refinementRevision: 7,
+      verifiedRevision: 7,
+    };
+    target.captureCount = 2;
+    target.lastCaptureRevision = 7;
+    target.lastReview = {
+      briefFidelity:
+        "The rendered Home preserves its navigation meaning and adds no workflow controls",
+      composition:
+        "The main content remains balanced within the existing frame",
+      hierarchy:
+        "Navigation and primary content retain distinct visual priority",
+      typography:
+        "Existing product labels remain legible and semantically unchanged",
+      assetIntegration: "No new assets alter the requested product meaning",
+      formAndSurface:
+        "The visual refresh preserves the product surface hierarchy",
+      effects:
+        "Effects remain restrained and do not imply new interaction states",
+      refinements: [
+        "Increase primary content spacing",
+        "Reduce secondary separator contrast",
+      ],
+    };
+    target.reviewedCaptureCount = 1;
+    target.reviewedCaptureRevision = 7;
+
+    const amendedPlan = existingPlanV5({
+      ...initialPlan.briefFidelity,
+      requiredContent: [
+        "Existing Home navigation, primary content, and account status",
+      ],
+    });
+    const amended = registerDesignWorkflowPlan({
+      existing: initial.state,
+      inspection,
+      plan: amendedPlan,
+    });
+    const amendedTarget = amended.state.targetsById.get("target_home");
+
+    expect(amended.changedTargetIds).toEqual(["target_home"]);
+    expect(amendedTarget?.delivery.status).toBe("drafted");
+    expect(amendedTarget?.planned.artboard.frameId).toBe("frame_home");
+    expect(amendedTarget?.planned.composition.regions[0]?.nodeId).toBe(
+      "logical_content",
+    );
+    expect(amendedTarget?.captureCount).toBe(0);
+    expect(amendedTarget?.lastCaptureRevision).toBeNull();
+    expect(amendedTarget?.lastReview).toBeNull();
+    expect(amendedTarget?.reviewedCaptureCount).toBe(0);
+  });
+});
+
 function existingPlan(
   componentStrategy: DesignPlanToolInputV4["componentStrategy"],
 ): DesignPlanToolInputV4 {
@@ -147,6 +225,20 @@ function existingPlan(
     },
     rasterAssetRoles: [],
     componentStrategy,
+  };
+}
+
+function existingPlanV5(
+  briefFidelity: DesignBriefFidelity,
+): DesignPlanToolInputV5 {
+  return {
+    ...existingPlan({
+      summary:
+        "No reusable semantic object is justified by this single existing screen refinement.",
+      candidates: [],
+    }),
+    version: 5,
+    briefFidelity,
   };
 }
 

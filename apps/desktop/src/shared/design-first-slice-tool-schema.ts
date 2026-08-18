@@ -3,6 +3,7 @@ import {
   DESIGN_FIRST_SLICE_MAX_STAGES,
 } from "./design-first-slice-budget";
 import type { DesignFirstSliceElement } from "./design-first-slice-tool";
+import { DESIGN_BRIEF_FIDELITY_SCHEMA } from "./design-brief-fidelity";
 
 const ID_SCHEMA = { type: "string", minLength: 1, maxLength: 256 } as const;
 const TEXT_SCHEMA = { type: "string", minLength: 1, maxLength: 1_000 } as const;
@@ -56,7 +57,7 @@ const ELEMENT_BASE_REQUIRED = [
 export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Compact new-design kernel: declare all real artboard roots and one meaningful editable first slice. The trusted host expands this into DesignPlan v4 plus one rollback-safe OpenDesign transaction.",
+    "Compact new-design kernel: declare the user-brief fidelity contract, all real artboard roots and one meaningful editable first slice. The trusted host expands this into DesignPlan v5 plus one rollback-safe OpenDesign transaction.",
   properties: {
     version: { const: 1 },
     deliverable: {
@@ -71,6 +72,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
       ],
     },
     objective: { type: "string", minLength: 1, maxLength: 2_000 },
+    briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
     targets: {
       type: "array",
       minItems: 1,
@@ -338,6 +340,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
     "version",
     "deliverable",
     "objective",
+    "briefFidelity",
     "targets",
     "visualSystem",
     "rasterAssetRoles",

@@ -28,6 +28,11 @@ import {
 import { isPortableFileName } from "./portable-file-name";
 import { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 import {
+  DESIGN_BRIEF_FIDELITY_SCHEMA,
+  isDesignBriefFidelity,
+  type DesignBriefFidelity,
+} from "./design-brief-fidelity";
+import {
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
   isDesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
@@ -62,6 +67,8 @@ export {
   normalizeDesignApplyToolInput,
 } from "./design-apply-input";
 export { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
+export { isDesignBriefFidelity } from "./design-brief-fidelity";
+export type { DesignBriefFidelity } from "./design-brief-fidelity";
 export {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
@@ -224,9 +231,17 @@ export type DesignPlanToolInputV4 = Omit<DesignPlanToolInputV3, "version"> & {
   version: 4;
   componentStrategy: DesignPlanComponentStrategy;
 };
+export type DesignPlanToolInputV5 = Omit<DesignPlanToolInputV4, "version"> & {
+  version: 5;
+  briefFidelity: DesignBriefFidelity;
+};
 export type DesignPlanToolInput =
-  LegacyDesignPlanToolInput | DesignPlanToolInputV3 | DesignPlanToolInputV4;
+  | LegacyDesignPlanToolInput
+  | DesignPlanToolInputV3
+  | DesignPlanToolInputV4
+  | DesignPlanToolInputV5;
 export type DesignVisualReviewToolInput = {
+  briefFidelity: string;
   composition: string;
   hierarchy: string;
   typography: string;
@@ -1784,9 +1799,9 @@ const MODEL_DESIGN_PLAN_TARGET_SCHEMA = {
 const MODEL_DESIGN_PLAN_SCHEMA = {
   type: "object",
   description:
-    "Version 4 of the executable delivery plan. targets must match the user's requested scope exactly and componentStrategy must explicitly judge plausible reusable semantic objects without category or occurrence-count shortcuts.",
+    "Version 5 of the executable delivery plan. targets must match the user's requested scope exactly, briefFidelity must preserve requested and inspected product semantics without invented capabilities, and componentStrategy must explicitly judge plausible reusable semantic objects without category or occurrence-count shortcuts.",
   properties: {
-    version: { const: 4 },
+    version: { const: 5 },
     deliverable: {
       enum: [
         "ui",
@@ -1864,6 +1879,7 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
       },
     },
     componentStrategy: DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA,
+    briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
     singleRasterEvidence: {
       type: "string",
       minLength: 1,
@@ -1881,6 +1897,7 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
     "visualSystem",
     "rasterAssetRoles",
     "componentStrategy",
+    "briefFidelity",
   ],
   additionalProperties: false,
 } as const;
@@ -1890,6 +1907,7 @@ const MODEL_VISUAL_REVIEW_SCHEMA = {
   description:
     "A concrete critique of the most recent rendered canvas capture. Every field must identify what the image actually shows and refinements must be actionable edits, not generic praise.",
   properties: {
+    briefFidelity: { type: "string", minLength: 12, maxLength: 1_000 },
     composition: { type: "string", minLength: 12, maxLength: 1_000 },
     hierarchy: { type: "string", minLength: 12, maxLength: 1_000 },
     typography: { type: "string", minLength: 12, maxLength: 1_000 },
@@ -1904,6 +1922,7 @@ const MODEL_VISUAL_REVIEW_SCHEMA = {
     },
   },
   required: [
+    "briefFidelity",
     "composition",
     "hierarchy",
     "typography",
@@ -1925,7 +1944,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["new-design" as const],
     },
     description:
-      "Create a new editable design through one compact, rollback-safe first-delivery call. Declare every requested artboard root and one meaningful first region for the first target, limited to 1-3 semantic stages and 24 total elements. Main expands the compact input into DesignPlan v4, allocates all real Frames, validates the first target, and commits allocation plus semantic stages through the existing EditorRuntime and one history group. Use inspected Page IDs, stable unique IDs, parent-local coordinates, real region content, and explicit font face identity. This tool is available only for a high-confidence blank-canvas new-design run; after success the complete professional tools replace it automatically.",
+      "Create a new editable design through one compact, rollback-safe first-delivery call. Declare the latest user brief's required content, preserved product semantics, prohibited unrequested additions and explicit assumptions, every requested artboard root, and one meaningful first region for the first target, limited to 1-3 semantic stages and 24 total elements. Main expands the compact input into DesignPlan v5, allocates all real Frames, validates the first target, and commits allocation plus semantic stages through the existing EditorRuntime and one history group. Use inspected Page IDs, stable unique IDs, parent-local coordinates, real region content, and explicit font face identity. This tool is available only for a high-confidence blank-canvas new-design run; after success the complete professional tools replace it automatically.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -1983,7 +2002,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "plan" as const,
     },
     description:
-      "Define version 4 of the executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. componentStrategy must identify plausible reusable semantic objects, decide component versus ordinary hierarchy from reuse, stable identity, centralized updates, structural consistency, and intended instance differences, and bind every declared occurrence to a stable target/node ID. The host verifies declared Component Mains, Instances, and ordinary semantic containers from the live captured document; an empty candidate list is valid only when the summary explains why no semantic object merits component consideration. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
+      "Define version 5 of the executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. briefFidelity must record required content, inspected product semantics preserved by default, prohibited unrequested additions, and explicit assumptions; visual restyling is not permission to add, remove, rename, or redefine product capabilities. componentStrategy must identify plausible reusable semantic objects, decide component versus ordinary hierarchy from reuse, stable identity, centralized updates, structural consistency, and intended instance differences, and bind every declared occurrence to a stable target/node ID. The host verifies declared Component Mains, Instances, and ordinary semantic containers from the live captured document; an empty candidate list is valid only when the summary explains why no semantic object merits component consideration. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
     inputSchema: MODEL_DESIGN_PLAN_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -1992,7 +2011,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: DESIGN_REVIEW_TOOL_NAME,
     modelDisclosure: { bootstrap: "deferred" as const },
     description:
-      "Record a structured critique of the newest unreviewed opendesign_capture_canvas result after a successful material design write in this Run. Evaluate the rendered composition, hierarchy, typography, asset integration, form/surface, and effects, then name at least two concrete refinements. Do not submit generic praise. The host rejects baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision with a design_workflow.* recovery instruction; follow that instruction instead of retrying the same review. This records Run review state and does not mutate the canvas.",
+      "Record a structured critique of the newest unreviewed opendesign_capture_canvas result after a successful material design write in this Run. First compare it with the latest user request and active Plan briefFidelity for omissions, semantic substitutions, and invented capabilities; then evaluate the rendered composition, hierarchy, typography, asset integration, form/surface, and effects and name at least two concrete refinements. Any fidelity mismatch must appear in refinements. Do not submit generic praise. The host rejects baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision with a design_workflow.* recovery instruction; follow that instruction instead of retrying the same review. This records Run review state and does not mutate the canvas.",
     inputSchema: MODEL_VISUAL_REVIEW_SCHEMA,
     risk: "read" as const,
     approval: "never" as const,
@@ -3186,11 +3205,14 @@ function isLegacyDesignPlanToolInput(
 
 function isMultiTargetDesignPlanToolInput(
   input: unknown,
-): input is DesignPlanToolInputV3 | DesignPlanToolInputV4 {
+): input is
+  DesignPlanToolInputV3 | DesignPlanToolInputV4 | DesignPlanToolInputV5 {
   if (!isRecord(input)) return false;
   const version4 = input.version === 4;
+  const version5 = input.version === 5;
+  const componentVersion = version4 || version5;
   if (
-    (input.version !== 3 && !version4) ||
+    (input.version !== 3 && !componentVersion) ||
     !isDesignDeliverable(input.deliverable) ||
     !boundedText(input.objective, 2_000) ||
     (input.outputMode !== "editable-composition" &&
@@ -3212,7 +3234,8 @@ function isMultiTargetDesignPlanToolInput(
       "targets",
       "visualSystem",
       "rasterAssetRoles",
-      ...(version4 ? ["componentStrategy"] : []),
+      ...(componentVersion ? ["componentStrategy"] : []),
+      ...(version5 ? ["briefFidelity"] : []),
       ...(input.singleRasterEvidence === undefined
         ? []
         : ["singleRasterEvidence"]),
@@ -3227,7 +3250,10 @@ function isMultiTargetDesignPlanToolInput(
   )
     ? input.componentStrategy
     : undefined;
-  if (version4 && !componentStrategy) {
+  if (componentVersion && !componentStrategy) {
+    return false;
+  }
+  if (version5 && !isDesignBriefFidelity(input.briefFidelity)) {
     return false;
   }
   if (
@@ -3256,7 +3282,7 @@ function isMultiTargetDesignPlanToolInput(
     return false;
   }
   if (
-    version4 &&
+    componentVersion &&
     componentStrategy &&
     targets.some((target) =>
       componentStrategyOccurrencesForTarget(
@@ -3272,7 +3298,7 @@ function isMultiTargetDesignPlanToolInput(
       targets.length === 1 &&
       boundedText(input.singleRasterEvidence, 200) &&
       input.rasterAssetRoles.includes("final-single-image") &&
-      (!version4 || componentStrategy?.candidates.length === 0)
+      (!componentVersion || componentStrategy?.candidates.length === 0)
     );
   }
   return (
@@ -3303,9 +3329,15 @@ export function designPlanTargets(
 export function designPlanComponentStrategy(
   plan: DesignPlanToolInput,
 ): DesignPlanComponentStrategy | undefined {
-  return plan.version === 4
+  return plan.version === 4 || plan.version === 5
     ? structuredClone(plan.componentStrategy)
     : undefined;
+}
+
+export function designPlanBriefFidelity(
+  plan: DesignPlanToolInput,
+): DesignBriefFidelity | undefined {
+  return plan.version === 5 ? structuredClone(plan.briefFidelity) : undefined;
 }
 
 function isDesignPlanTarget(value: unknown): value is DesignPlanTarget {
@@ -3406,6 +3438,7 @@ export function isDesignVisualReviewToolInput(
 ): input is DesignVisualReviewToolInput {
   return (
     isRecord(input) &&
+    substantiveReviewText(input.briefFidelity) &&
     substantiveReviewText(input.composition) &&
     substantiveReviewText(input.hierarchy) &&
     substantiveReviewText(input.typography) &&
@@ -3415,6 +3448,7 @@ export function isDesignVisualReviewToolInput(
     boundedTextArray(input.refinements, 2, 12, 500) &&
     input.refinements.every((item) => item.trim().length >= 8) &&
     exactKeys(input, [
+      "briefFidelity",
       "composition",
       "hierarchy",
       "typography",

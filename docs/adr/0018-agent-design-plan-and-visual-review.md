@@ -13,7 +13,20 @@
 
 ## 决策
 
-Agent 新建设计内容前必须先读取文档，再调用 `opendesign_define_design_plan`。当前模型契约已由 ADR-0062 升级为 `DesignPlanToolInput version: 4`；version 2/3 只为历史 tool input、journal、恢复和旧 generation presentation 兼容保留。计划是 Main 持有的当前 Run 状态，不是第二份设计文档，也不改变 revision。
+Agent 新建设计内容前必须先读取文档，再调用 `opendesign_define_design_plan`。当前模型契约为 `DesignPlanToolInput version: 5`；version 2/3/4 只为历史 tool input、journal、恢复和旧 generation presentation 兼容保留。计划是 Main 持有的当前 Run 状态，不是第二份设计文档，也不改变 revision。
+
+### 设计 brief 忠实度是计划和审查的共同契约
+
+仅验证目标数量、结构和视觉质量，不能阻止 Agent 在视觉重设计中凭空增加产品能力、替换信息架构或改写交互含义。Plan v5 因此增加 `briefFidelity`：
+
+- `requiredContent` 固定最新用户请求必须出现的内容与交付要求；
+- `preservedSemantics` 固定 inspection 中默认保留的产品功能、信息架构、标签和交互语义；
+- `prohibitedAdditions` 明确禁止未经请求的新能力、新入口或语义替换；
+- `assumptions` 只记录继续执行所必需且可审查的假设。
+
+视觉风格、构图、氛围、参考产品或“更高级”等审美要求不授权新增、删除、重命名或重定义产品能力，只有用户明确要求才能改变这些语义。空白概念设计可以没有既有 `preservedSemantics`，但仍必须声明所需内容和禁止的越界扩张。
+
+`opendesign_record_visual_review` 同步要求 `briefFidelity` 结论，逐次对照最新用户请求和当前 Plan 检查遗漏、错误替换与擅自发明；发现偏差必须进入可执行 `refinements`。影响 brief 的 Plan amendment 会保留已落地 `targetId/pageId/frameId/region nodeId`，同时把材料 target 降回 `drafted` 并清除旧 capture/review 证明，要求重新截图、审查、精修和验证。宿主不尝试用关键字规则猜测产品语义，避免把单个反馈固化成特例。
 
 ### 按用户需求建立 `1..N` 个 target
 
@@ -77,7 +90,7 @@ Agent 的单节点 `insert_element` 必须把 `node.childIds` 视为空的派生
 
 ## 验证
 
-- Tool contract 测试覆盖 version 3 的一个/多个 target、target/Page/Frame/region 字段、重复/保留 ID、单图 target 上限、反模式与图片 role；version 2 历史输入继续可读。
+- Tool contract 测试覆盖 version 5 的 brief fidelity、组件策略、一个/多个 target、target/Page/Frame/region 字段、重复/保留 ID、单图 target 上限、反模式与图片 role；version 2/3/4 历史输入继续可读。
 - Main coordinator 测试覆盖无计划拒绝、Page/Document scope、一个与多个 target、计划节点全局 ID 唯一、existing Frame 权威 inspection/后代解析、既有锁定容器、existing 逻辑 region 不改写真实层级/几何、create 可信结构几何编译与区域层级/bounds、首次空画板/空区域拒绝且 ledger 保持 pending、空 region 最终拒绝、根层散落、跨 target 操作拒绝、图片 role、capture target、revision 顺序、持久账本与中断恢复。Renderer 测试另覆盖 insert childIds 规范化、顶层 Frame 平移后的纯新增 rebase，以及 resize 时拒绝沿用旧布局条件。
 - Contract/Runtime/Agent/Renderer/bridge 测试覆盖模型无操作外观缺省、带 semantic steps 的 fill-only Shape 事务、discriminated union 具体字段、kind-incompatible property patch、准确 command/node/path、失败零 revision、模型结构化 tool result、journal/Timeline/诊断复制、重新 inspection 后恢复，以及相同失败输入不重复执行。
 - Completion guard 测试覆盖 plan、两次 capture、中间 review/refinement、`N/M` 未完成拒绝、全部 verified 完成、仅生图未写画布和 raster 主导的可编辑 composition 拒绝。

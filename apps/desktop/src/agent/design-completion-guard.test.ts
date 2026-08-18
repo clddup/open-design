@@ -61,6 +61,8 @@ const visualReview: AgentToolCallRecord = {
   toolCallId: "review_1",
   toolName: DESIGN_REVIEW_TOOL_NAME,
   input: {
+    briefFidelity:
+      "The rendered design preserves the requested mascot content without inventing product controls",
     composition: "Main silhouette needs more breathing room",
     hierarchy: "Primary and secondary elements compete",
     typography: "Secondary type needs lower contrast",

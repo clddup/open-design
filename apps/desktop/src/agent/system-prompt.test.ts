@@ -9,6 +9,7 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "opendesign_generate_first_slice",
     );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("briefFidelity");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "allocate all stable Frame roots now",
     );
@@ -73,7 +74,11 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "call opendesign_define_design_plan",
     );
-    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("Submit version 4");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("Submit version 5");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("briefFidelity");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "visual style, composition, mood",
+    );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("componentStrategy");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "For artboard.mode=existing, regions are logical planning and review areas",

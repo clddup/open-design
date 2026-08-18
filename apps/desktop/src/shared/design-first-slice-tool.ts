@@ -1,4 +1,8 @@
 import type { RasterAssetRole } from "./design-agent-tools";
+import {
+  isDesignBriefFidelity,
+  type DesignBriefFidelity,
+} from "./design-brief-fidelity";
 import { compileValidatedDesignFirstSliceToolInput } from "./design-first-slice-compiler";
 import {
   DESIGN_FIRST_SLICE_MAX_ELEMENTS,
@@ -77,6 +81,7 @@ export type DesignFirstSliceToolInput = {
     | "presentation-visual"
     | "other";
   objective: string;
+  briefFidelity?: DesignBriefFidelity;
   targets: Array<{
     targetId: string;
     label: string;
@@ -159,6 +164,8 @@ export function isDesignFirstSliceToolInput(
       "other",
     ].includes(String(value.deliverable)) ||
     !text(value.objective, 1, 2_000) ||
+    (value.briefFidelity !== undefined &&
+      !isDesignBriefFidelity(value.briefFidelity)) ||
     !Array.isArray(value.targets) ||
     value.targets.length < 1 ||
     value.targets.length > 32 ||
@@ -177,6 +184,7 @@ export function isDesignFirstSliceToolInput(
       "version",
       "deliverable",
       "objective",
+      ...(value.briefFidelity === undefined ? [] : ["briefFidelity"]),
       "targets",
       "visualSystem",
       "rasterAssetRoles",

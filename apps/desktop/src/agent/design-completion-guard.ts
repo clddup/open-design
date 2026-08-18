@@ -133,7 +133,7 @@ export function reviewDesignCompletion(
     return {
       allow: false,
       message:
-        "The first rendered draft needs a structured visual critique. Call opendesign_record_visual_review with concrete composition, hierarchy, typography, asset-integration, surface, and refinement findings before editing again.",
+        "The first rendered draft needs a structured visual critique. Call opendesign_record_visual_review with a comparison against the latest user brief and active Plan fidelity contract, plus concrete composition, hierarchy, typography, asset-integration, surface, and refinement findings before editing again.",
     };
   }
 

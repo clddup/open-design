@@ -960,6 +960,8 @@ describe("design Agent tool contract", () => {
       validationChecks: ["Check hierarchy", "Check density", "Check focus"],
     };
     const review = {
+      briefFidelity:
+        "The captured workspace preserves the requested analytics functions and adds no new product capability",
       composition: "Primary plane is clear but the inspector is too dominant",
       hierarchy: "Heading and chart compete at the same contrast",
       typography: "Secondary labels need a quieter weight",
@@ -980,8 +982,9 @@ describe("design Agent tool contract", () => {
       approval: "never",
       inputSchema: {
         properties: {
-          version: { const: 4 },
+          version: { const: 5 },
           componentStrategy: { type: "object" },
+          briefFidelity: { type: "object" },
         },
       },
     });
@@ -1080,7 +1083,13 @@ describe("design Agent tool contract", () => {
     ).toBe(true);
     const componentPlan = {
       ...multiTargetPlan,
-      version: 4,
+      version: 5,
+      briefFidelity: {
+        requiredContent: ["Home and Profile screens"],
+        preservedSemantics: ["Existing navigation labels and destinations"],
+        prohibitedAdditions: ["No unrequested product capabilities"],
+        assumptions: [],
+      },
       componentStrategy: {
         summary:
           "Use one linked navigation identity across both screens while keeping the one-off hero grouping ordinary.",
@@ -1214,6 +1223,7 @@ describe("design Agent tool contract", () => {
     ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, {
+        briefFidelity: "Looks good",
         composition: "Looks good",
         hierarchy: "Looks good",
         typography: "Looks good",

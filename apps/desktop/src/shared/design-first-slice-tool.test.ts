@@ -21,13 +21,20 @@ describe("compact first-slice tool", () => {
     ).toBe(24);
   });
 
-  it("compiles all targets into Plan v4 and the first semantic slice into canonical nodes", () => {
+  it("compiles all targets into Plan v5 and the first semantic slice into canonical nodes", () => {
     const input = fixture();
     expect(isDesignFirstSliceToolInput(input)).toBe(true);
 
     const compiled = compileDesignFirstSliceToolInput(input);
     expect(isDesignPlanToolInput(compiled.plan)).toBe(true);
     expect(isDesignApplyToolInput(compiled.apply)).toBe(true);
+    expect(compiled.plan).toMatchObject({
+      version: 5,
+      briefFidelity: {
+        requiredContent: ["Home and Profile product screens"],
+        prohibitedAdditions: ["No unrequested workflow or run features"],
+      },
+    });
     expect(
       compiled.plan.targets.map((target) => target.artboard.frameId),
     ).toEqual(["frame_home", "frame_profile"]);
@@ -61,6 +68,14 @@ describe("compact first-slice tool", () => {
         },
       },
     ]);
+  });
+
+  it("keeps historical compact inputs readable as Plan v4", () => {
+    const input = fixture();
+    delete input.briefFidelity;
+
+    expect(isDesignFirstSliceToolInput(input)).toBe(true);
+    expect(compileDesignFirstSliceToolInput(input).plan.version).toBe(4);
   });
 
   it("rejects duplicate IDs, forward parents, empty regions and a slice for a later target", () => {
@@ -167,6 +182,14 @@ export function fixture(): DesignFirstSliceToolInput {
     version: 1,
     deliverable: "ui",
     objective: "Create Home and Profile screens",
+    briefFidelity: {
+      requiredContent: ["Home and Profile product screens"],
+      preservedSemantics: [
+        "Home remains a product overview and Profile remains an account overview",
+      ],
+      prohibitedAdditions: ["No unrequested workflow or run features"],
+      assumptions: ["Use a mobile viewport for both requested screens"],
+    },
     targets: [
       {
         targetId: "home",
