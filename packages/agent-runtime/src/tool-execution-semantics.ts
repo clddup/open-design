@@ -106,6 +106,9 @@ function projectToolResultValue(value: unknown, depth = 0): unknown {
     return value.map((item) => projectToolResultValue(item, depth + 1));
   }
   if (typeof value === "object") {
+    if (isDesignChangeSetResult(value)) {
+      return projectToolResultValue(compactDesignChangeSet(value), depth + 1);
+    }
     return Object.fromEntries(
       Object.entries(value).map(([key, child]) => [
         key,
@@ -114,6 +117,41 @@ function projectToolResultValue(value: unknown, depth = 0): unknown {
     );
   }
   return `[OpenDesign omitted unsupported ${typeof value} tool-result value]`;
+}
+
+function compactDesignChangeSet(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const detailCounts = Object.fromEntries(
+    Object.entries(value).flatMap(([key, child]) =>
+      (key === "changes" || key.endsWith("Changes")) && Array.isArray(child)
+        ? [[key, child.length]]
+        : [],
+    ),
+  );
+  return {
+    ...Object.fromEntries(
+      Object.entries(value).filter(
+        ([key]) => key !== "changes" && !key.endsWith("Changes"),
+      ),
+    ),
+    changeDetailsOmitted: detailCounts,
+  };
+}
+
+function isDesignChangeSetResult(
+  value: object,
+): value is Record<string, unknown> {
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.documentId === "string" &&
+    Number.isInteger(record.fromRevision) &&
+    Number.isInteger(record.toRevision) &&
+    Array.isArray(record.addedNodeIds) &&
+    Array.isArray(record.changedNodeIds) &&
+    Array.isArray(record.removedNodeIds) &&
+    Array.isArray(record.changes)
+  );
 }
 
 function summarizeToolResultValue(value: unknown, depth = 0): unknown {

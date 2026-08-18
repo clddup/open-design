@@ -36,6 +36,8 @@ Main 在 Renderer 写入前验证 create Plan 的画板/区域/组件声明以�
 
 语义步骤需要在窗口被原生文件选择器遮挡、最小化或暂时失焦时继续提交和响应取消。主 BrowserWindow 因此关闭 Chromium `backgroundThrottling`；该设置不增加固定动画 delay，generation reveal/cursor 仍是有界展示状态并在 Run 终态清理。这样 Renderer 的双帧 paint checkpoint 与 250ms fallback 不再因窗口计时器被节流而放大到 90 秒 Main idle timeout。
 
+完整 `DesignChangeSet` 继续进入可信 journal、诊断、undo/history 与 UI diff，但 Provider 不需要在每个步骤后重新读取每个新增节点的完整 before/after 样式、文字和几何。Agent Runtime 的模型投影会识别版本化 change set，只返回 document/revision、稳定 added/changed/removed ID 列表、各类 change detail 数量、semantic committed steps、warnings 和 delivery 状态。该投影不改可信 tool result、持久证据或工具执行语义，只删除下一轮模型已经通过自己的命令和稳定 ID 知道的重复节点快照，避免多次 apply 把上下文与 Provider 处理时间线性放大。
+
 ### 按用户需求建立 `1..N` 个 target
 
 计划按用户实际请求声明 `1..N` 个稳定交付 target：
