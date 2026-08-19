@@ -16,7 +16,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 4,
+      version: 5,
       checkedNodeCount: 1,
       checkedQualityNodeCount: 0,
       checkedTextNodeCount: 0,
@@ -237,7 +237,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 4,
+      version: 5,
       checkedQualityNodeCount: 1,
       checkedTextNodeCount: 0,
       errorCount: 2,
@@ -306,6 +306,256 @@ describe("deterministic delivery layout quality", () => {
     });
   });
 
+  it("blocks intersecting declared hit areas using their transformed polygons", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const primary = rectangle(
+      "primary_action",
+      "artboard",
+      [1, 0, 0, 1, 20, 120],
+      48,
+      48,
+    );
+    const secondary = rectangle(
+      "secondary_action",
+      "artboard",
+      [1, 0, 0, 1, 50, 120],
+      48,
+      48,
+    );
+    artboard.childIds.push(primary.id, secondary.id);
+    document.nodesById[primary.id] = primary;
+    document.nodesById[secondary.id] = secondary;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      uiQualityProfile(primary.id, secondary.id),
+    );
+
+    expect(report.errorCount).toBe(1);
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        code: "interactive-target-overlap",
+        severity: "error",
+        nodeId: primary.id,
+        relatedNodeIds: ["artboard", secondary.id],
+        measurement: {
+          kind: "interaction-overlap",
+          intersectionArea: 864,
+          overlapRatio: 0.375,
+          otherNodeId: secondary.id,
+        },
+      }),
+    );
+    expect(isDesignLayoutQualityReport(report)).toBe(true);
+    const issueIndex = report.issues.findIndex(
+      (issue) => issue.code === "interactive-target-overlap",
+    );
+    const malformed = structuredClone(report);
+    const measurement = malformed.issues[issueIndex]?.measurement;
+    if (measurement?.kind !== "interaction-overlap") {
+      throw new Error("Missing interaction overlap measurement");
+    }
+    measurement.overlapRatio = 1.1;
+    expect(isDesignLayoutQualityReport(malformed)).toBe(false);
+  });
+
+  it("does not treat edge contact within tolerance as overlapping actions", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const primary = rectangle(
+      "primary_action",
+      "artboard",
+      [1, 0, 0, 1, 20, 120],
+      48,
+      48,
+    );
+    const secondary = rectangle(
+      "secondary_action",
+      "artboard",
+      [1, 0, 0, 1, 68, 120],
+      48,
+      48,
+    );
+    artboard.childIds.push(primary.id, secondary.id);
+    document.nodesById[primary.id] = primary;
+    document.nodesById[secondary.id] = secondary;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      uiQualityProfile(primary.id, secondary.id),
+    );
+
+    expect(report.errorCount).toBe(0);
+    expect(
+      report.issues.some(
+        (issue) => issue.code === "interactive-target-overlap",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not report rotated targets whose world AABBs overlap but polygons do not", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const rotation = Math.SQRT1_2;
+    const primary = rectangle(
+      "rotated_primary",
+      "artboard",
+      [rotation, rotation, -rotation, rotation, 80, 40],
+      48,
+      48,
+    );
+    const secondary = rectangle(
+      "rotated_secondary",
+      "artboard",
+      [rotation, rotation, -rotation, rotation, 120, 80],
+      48,
+      48,
+    );
+    artboard.childIds.push(primary.id, secondary.id);
+    document.nodesById[primary.id] = primary;
+    document.nodesById[secondary.id] = secondary;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      uiQualityProfile(primary.id, secondary.id),
+    );
+
+    expect(
+      report.issues.some(
+        (issue) => issue.code === "interactive-target-overlap",
+      ),
+    ).toBe(false);
+  });
+
+  it("blocks a hit area fully covered by an opaque later sibling", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const action = rectangle(
+      "covered_action",
+      "artboard",
+      [1, 0, 0, 1, 20, 120],
+      48,
+      48,
+    );
+    const cover = rectangle(
+      "opaque_cover",
+      "artboard",
+      [1, 0, 0, 1, 10, 110],
+      68,
+      68,
+    );
+    artboard.childIds.push(action.id, cover.id);
+    document.nodesById[action.id] = action;
+    document.nodesById[cover.id] = cover;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      uiQualityProfile(action.id),
+    );
+
+    expect(report.errorCount).toBe(1);
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        code: "interactive-target-fully-occluded",
+        severity: "error",
+        nodeId: action.id,
+        relatedNodeIds: ["artboard", cover.id],
+        measurement: {
+          kind: "interaction-occlusion",
+          coveredRatio: 1,
+          occluderNodeId: cover.id,
+          proof: "opaque-later-sibling",
+        },
+      }),
+    );
+  });
+
+  it("does not claim full occlusion for translucent, rounded, or earlier siblings", () => {
+    const documents = [layoutDocument(), layoutDocument(), layoutDocument()];
+    documents.forEach((document, index) => {
+      const artboard = document.nodesById.artboard;
+      if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+      const action = rectangle(
+        `action_${index}`,
+        "artboard",
+        [1, 0, 0, 1, 20, 120],
+        48,
+        48,
+      );
+      const cover = rectangle(
+        `cover_${index}`,
+        "artboard",
+        [1, 0, 0, 1, 10, 110],
+        68,
+        68,
+      );
+      if (index === 0) cover.properties.fills[0]!.opacity = 0.5;
+      if (index === 1) cover.properties.cornerRadius = 8;
+      artboard.childIds.push(
+        ...(index === 2 ? [cover.id, action.id] : [action.id, cover.id]),
+      );
+      document.nodesById[action.id] = action;
+      document.nodesById[cover.id] = cover;
+    });
+
+    for (const [index, document] of documents.entries()) {
+      const report = diagnoseDesignTargetLayout(
+        document,
+        "page_layout",
+        "artboard",
+        uiQualityProfile(`action_${index}`),
+      );
+      expect(
+        report.issues.some(
+          (issue) => issue.code === "interactive-target-fully-occluded",
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("fails closed for a degenerate transformed interaction polygon", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const action = rectangle(
+      "degenerate_action",
+      "artboard",
+      [1, 1, 1, 1, 20, 20],
+      48,
+      48,
+    );
+    artboard.childIds.push(action.id);
+    document.nodesById[action.id] = action;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      uiQualityProfile(action.id),
+    );
+
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        code: "interaction-geometry-unavailable",
+        severity: "error",
+        nodeId: action.id,
+      }),
+    );
+  });
+
   it("blocks provider-proven silent clipping of canonical text content", () => {
     const document = layoutDocument();
     const artboard = document.nodesById.artboard;
@@ -328,7 +578,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 4,
+      version: 5,
       checkedTextNodeCount: 1,
       errorCount: 1,
       warningCount: 0,
@@ -520,6 +770,17 @@ function layoutDocument(clipsContent = true): DesignDocument {
   );
   document.pagesById.page_layout!.rootNodeIds = ["artboard"];
   return document;
+}
+
+function uiQualityProfile(...interactiveNodeIds: string[]) {
+  return {
+    kind: "ui" as const,
+    platform: "android" as const,
+    interactionMode: "touch" as const,
+    safeAreaInsets: { top: 8, right: 8, bottom: 8, left: 8 },
+    safeAreaNodeIds: [...interactiveNodeIds],
+    interactiveNodeIds: [...interactiveNodeIds],
+  };
 }
 
 function rectangle(

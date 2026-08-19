@@ -10,7 +10,7 @@ const frameTarget = {
 };
 
 const report: DesignLayoutQualityReport = {
-  version: 4,
+  version: 5,
   documentId: "document_design",
   revision: 7,
   pageId: frameTarget.pageId,

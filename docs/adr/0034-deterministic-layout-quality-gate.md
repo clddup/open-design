@@ -55,7 +55,7 @@ Renderer 返回值仍是不可信跨进程数据。Main 必须运行时验证完
 
 ### 后续扩展
 
-后续 ADR-0096 已加入显式 UI safe area 与交互命中区，ADR-0097 已加入 production-provider 文字 shaping/截断证据。导航语义、异常遮挡、对齐、间距和可证明的 overlap 规则仍需要各自的明确语义与误报基线，再扩展相同版本化报告或升级版本。像素对比、视觉 critic、专业固定样张和人工盲评保持独立门禁。
+后续 ADR-0096 已加入显式 UI safe area 与交互命中区，ADR-0097 已加入 production-provider 文字 shaping/截断证据，ADR-0099 已把明确交互节点之间的真实多边形 overlap 和同 parent 可证明不透明 later-sibling 完全遮挡加入 v5。导航语义、部分/跨容器遮挡、对齐和间距仍需要各自的明确语义与误报基线。像素对比、视觉 critic、专业固定样张和人工盲评保持独立门禁。
 
 ## 后果
 

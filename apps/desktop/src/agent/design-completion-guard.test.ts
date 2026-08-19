@@ -330,7 +330,7 @@ describe("design completion guard", () => {
       revision: 5,
       result: {
         plan: {
-          version: 4,
+          version: 1,
           outputMode: "editable-composition",
           targets: [
             {

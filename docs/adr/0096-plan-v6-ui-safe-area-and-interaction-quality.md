@@ -67,7 +67,7 @@ Plan amendment 改变 inset、platform 或 interaction mode 会把已落地 targ
 - 解决“Frame 内但侵入安全区”和“视觉图标太小却被当作按钮”的确定性假阳性。
 - 质量 profile 不进入 `.opendesign`，不制造 Figma 兼容字段，也不改变人工设计文档语义；它是 Agent delivery acceptance policy。
 - 首版只检查显式节点，不从名称、颜色、图层 kind 或视觉外观猜哪些对象可交互。
-- 文字截断后来由 ADR-0097 的 production-provider evidence 与 Layout Quality Report v4 补齐。WCAG spacing exception、控件重叠/遮挡、对齐/间距异常、焦点状态、视觉 critic 与设计 skill 仍是后续独立切片。
+- 文字截断后来由 ADR-0097 的 production-provider evidence 与 Layout Quality Report v4 补齐；ADR-0099 的 v5 又加入明确命中区之间的真实多边形 overlap，以及同 parent 可证明不透明 later-sibling 的完全遮挡。WCAG spacing exception、部分/跨容器遮挡、对齐/间距异常、焦点状态和视觉 critic 仍是后续独立切片。
 - 图形交付不受 UI 规则误杀；视觉美感仍不能由本报告证明。
 
 ## 验证

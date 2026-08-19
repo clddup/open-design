@@ -632,7 +632,7 @@ function cleanLayoutQuality(
   qualityProfile: DesignPlanTarget["qualityProfile"],
 ): DesignLayoutQualityReport {
   return {
-    version: 4,
+    version: 5,
     documentId,
     revision,
     pageId,

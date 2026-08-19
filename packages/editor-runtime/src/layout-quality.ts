@@ -2,6 +2,7 @@ import type {
   DesignDocument,
   DesignNode,
   DesignTargetQualityProfile,
+  Point,
   Rect,
 } from "@opendesign/design-contracts";
 import {
@@ -19,7 +20,7 @@ import {
   invertTransform,
 } from "./geometry.js";
 
-export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 4 as const;
+export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 5 as const;
 
 export type DesignLayoutQualitySeverity = "error" | "warning";
 
@@ -33,6 +34,9 @@ export type DesignLayoutQualityCode =
   | "node-outside-safe-area"
   | "node-partial-artboard-overflow"
   | "interactive-target-too-small"
+  | "interactive-target-overlap"
+  | "interactive-target-fully-occluded"
+  | "interaction-geometry-unavailable"
   | "quality-node-missing"
   | "quality-node-not-visible"
   | "quality-profile-geometry-unavailable"
@@ -77,7 +81,19 @@ export type DesignLayoutQualityMeasurement =
   | ({ kind: "text-layout" } & Extract<
       TextLayoutQualityMeasurement,
       { status: "measured" }
-    >);
+    >)
+  | {
+      kind: "interaction-overlap";
+      intersectionArea: number;
+      overlapRatio: number;
+      otherNodeId: string;
+    }
+  | {
+      kind: "interaction-occlusion";
+      coveredRatio: 1;
+      occluderNodeId: string;
+      proof: "opaque-later-sibling";
+    };
 
 export interface DesignLayoutQualityReport {
   version: typeof DESIGN_LAYOUT_QUALITY_REPORT_VERSION;
@@ -98,6 +114,7 @@ const BOUNDS_TOLERANCE = 0.5;
 const PARTIAL_OVERFLOW_RATIO = 0.01;
 const EXCESSIVE_OVERFLOW_RATIO = 0.25;
 const MAX_QUALITY_ISSUES = 128;
+const INTERACTION_OVERLAP_AREA_TOLERANCE = 1;
 
 export function diagnoseDesignTargetLayout(
   document: DesignDocument,
@@ -323,6 +340,7 @@ function diagnoseQualityProfile(
   }
 
   const interactiveIds = new Set(qualityProfile.interactiveNodeIds);
+  const interactiveNodes: DesignNode[] = [];
   const minimumSize = minimumInteractiveTargetSize(qualityProfile);
   let checkedQualityNodeCount = 0;
   for (const nodeId of qualityProfile.safeAreaNodeIds) {
@@ -359,6 +377,7 @@ function diagnoseQualityProfile(
       continue;
     }
     checkedQualityNodeCount += 1;
+    if (interactiveIds.has(nodeId)) interactiveNodes.push(node);
     const outsideRatio = rectOutsideRatio(
       bounds,
       expandRect(safeAreaBounds, BOUNDS_TOLERANCE),
@@ -411,7 +430,110 @@ function diagnoseQualityProfile(
       });
     }
   }
+  diagnoseInteractionConflicts(
+    document,
+    artboard,
+    interactiveNodes,
+    interactiveIds,
+    issues,
+  );
   return checkedQualityNodeCount;
+}
+
+function diagnoseInteractionConflicts(
+  document: DesignDocument,
+  artboard: Extract<DesignNode, { kind: "frame" }>,
+  interactiveNodes: readonly DesignNode[],
+  interactiveIds: ReadonlySet<string>,
+  issues: DesignLayoutQualityIssue[],
+): void {
+  const polygons = new Map<string, Point[]>();
+  for (const node of interactiveNodes) {
+    const polygon = nodeWorldPolygon(document, node);
+    if (!polygon) {
+      appendQualityIssue(issues, artboard.id, {
+        code: "interaction-geometry-unavailable",
+        severity: "error",
+        nodeId: node.id,
+        relatedNodeIds: [artboard.id],
+        message: `Interactive target ${node.id} does not have a finite non-degenerate transformed hit-area polygon`,
+      });
+      continue;
+    }
+    polygons.set(node.id, polygon);
+  }
+
+  for (let leftIndex = 0; leftIndex < interactiveNodes.length; leftIndex += 1) {
+    const left = interactiveNodes[leftIndex]!;
+    const leftPolygon = polygons.get(left.id);
+    if (!leftPolygon) continue;
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < interactiveNodes.length;
+      rightIndex += 1
+    ) {
+      const right = interactiveNodes[rightIndex]!;
+      const rightPolygon = polygons.get(right.id);
+      if (!rightPolygon) continue;
+      const intersectionArea = polygonArea(
+        convexPolygonIntersection(leftPolygon, rightPolygon),
+      );
+      if (intersectionArea <= INTERACTION_OVERLAP_AREA_TOLERANCE) continue;
+      const overlapRatio = Math.min(
+        1,
+        intersectionArea /
+          Math.min(polygonArea(leftPolygon), polygonArea(rightPolygon)),
+      );
+      appendQualityIssue(issues, artboard.id, {
+        code: "interactive-target-overlap",
+        severity: "error",
+        nodeId: left.id,
+        relatedNodeIds: [artboard.id, right.id],
+        measurement: {
+          kind: "interaction-overlap",
+          intersectionArea: roundGeometry(intersectionArea),
+          overlapRatio: roundGeometry(overlapRatio),
+          otherNodeId: right.id,
+        },
+        message: `Interactive hit areas ${left.id} and ${right.id} overlap by ${roundGeometry(intersectionArea)} square world units (${Math.round(overlapRatio * 100)}% of the smaller target); separate the actual hit-area layers so one pointer location has one action`,
+      });
+    }
+  }
+
+  for (const target of interactiveNodes) {
+    const targetPolygon = polygons.get(target.id);
+    if (!targetPolygon || !target.parentId) continue;
+    const siblings = document.nodesById[target.parentId]?.childIds;
+    const targetIndex = siblings?.indexOf(target.id) ?? -1;
+    if (!siblings || targetIndex < 0) continue;
+    const occluder = siblings
+      .slice(targetIndex + 1)
+      .map((nodeId) => document.nodesById[nodeId])
+      .find(
+        (candidate): candidate is DesignNode =>
+          candidate !== undefined &&
+          !interactiveIds.has(candidate.id) &&
+          isProvablyOpaqueRectangle(document, candidate, artboard.id) &&
+          polygonContainsPolygon(
+            nodeWorldPolygon(document, candidate),
+            targetPolygon,
+          ),
+      );
+    if (!occluder) continue;
+    appendQualityIssue(issues, artboard.id, {
+      code: "interactive-target-fully-occluded",
+      severity: "error",
+      nodeId: target.id,
+      relatedNodeIds: [artboard.id, occluder.id],
+      measurement: {
+        kind: "interaction-occlusion",
+        coveredRatio: 1,
+        occluderNodeId: occluder.id,
+        proof: "opaque-later-sibling",
+      },
+      message: `Interactive hit area ${target.id} is fully covered in paint order by opaque later sibling ${occluder.id}; move, resize, reorder, hide, or remove the occluder before delivery`,
+    });
+  }
 }
 
 function diagnoseTextLayout(
@@ -614,6 +736,9 @@ function isDesignLayoutQualityIssue(
       "node-outside-safe-area",
       "node-partial-artboard-overflow",
       "interactive-target-too-small",
+      "interactive-target-overlap",
+      "interactive-target-fully-occluded",
+      "interaction-geometry-unavailable",
       "quality-node-missing",
       "quality-node-not-visible",
       "quality-profile-geometry-unavailable",
@@ -692,30 +817,59 @@ function isDesignLayoutQualityMeasurement(value: unknown): boolean {
       recordKeysOnly(record, ["kind", "actualSize", "requiredSize", "source"])
     );
   }
+  if (record.kind === "text-layout") {
+    return (
+      record.status === "measured" &&
+      safeText(record.nodeId) &&
+      safeText(record.provider) &&
+      safeText(record.providerVersion) &&
+      isFiniteSize(record.boxSize) &&
+      isFiniteSize(record.fullContentSize) &&
+      isFiniteSize(record.displayedContentSize) &&
+      isTextOverflowAxis(record.overflow) &&
+      typeof record.truncated === "boolean" &&
+      recordKeysOnly(record, [
+        "kind",
+        "status",
+        "nodeId",
+        "provider",
+        "providerVersion",
+        "boxSize",
+        "fullContentSize",
+        "displayedContentSize",
+        "overflow",
+        "truncated",
+      ])
+    );
+  }
+  if (record.kind === "interaction-overlap") {
+    return (
+      finiteNonNegative(record.intersectionArea) &&
+      finiteRatio(record.overlapRatio) &&
+      safeText(record.otherNodeId) &&
+      recordKeysOnly(record, [
+        "kind",
+        "intersectionArea",
+        "overlapRatio",
+        "otherNodeId",
+      ])
+    );
+  }
   return (
-    record.kind === "text-layout" &&
-    record.status === "measured" &&
-    safeText(record.nodeId) &&
-    safeText(record.provider) &&
-    safeText(record.providerVersion) &&
-    isFiniteSize(record.boxSize) &&
-    isFiniteSize(record.fullContentSize) &&
-    isFiniteSize(record.displayedContentSize) &&
-    isTextOverflowAxis(record.overflow) &&
-    typeof record.truncated === "boolean" &&
-    recordKeysOnly(record, [
-      "kind",
-      "status",
-      "nodeId",
-      "provider",
-      "providerVersion",
-      "boxSize",
-      "fullContentSize",
-      "displayedContentSize",
-      "overflow",
-      "truncated",
-    ])
+    record.kind === "interaction-occlusion" &&
+    record.coveredRatio === 1 &&
+    safeText(record.occluderNodeId) &&
+    record.proof === "opaque-later-sibling" &&
+    recordKeysOnly(record, ["kind", "coveredRatio", "occluderNodeId", "proof"])
   );
+}
+
+function finiteNonNegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function finiteRatio(value: unknown): value is number {
+  return finiteNonNegative(value) && value <= 1;
 }
 
 function isTextOverflowAxis(value: unknown): boolean {
@@ -967,6 +1121,215 @@ function isFinitePositiveRect(rect: Rect): boolean {
     rect.width > 0 &&
     rect.height > 0
   );
+}
+
+function nodeWorldPolygon(
+  document: DesignDocument,
+  node: DesignNode,
+): Point[] | null {
+  if (!hasPositiveArea(node)) return null;
+  const world = getWorldTransform(document, node.id);
+  if (!world) return null;
+  const polygon = [
+    transformPoint(world, 0, 0),
+    transformPoint(world, node.size.width, 0),
+    transformPoint(world, node.size.width, node.size.height),
+    transformPoint(world, 0, node.size.height),
+  ];
+  return polygon.every(
+    (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
+  ) && polygonArea(polygon) > 1e-9
+    ? polygon
+    : null;
+}
+
+function transformPoint(
+  transform: [number, number, number, number, number, number],
+  x: number,
+  y: number,
+): Point {
+  return {
+    x: transform[0] * x + transform[2] * y + transform[4],
+    y: transform[1] * x + transform[3] * y + transform[5],
+  };
+}
+
+function convexPolygonIntersection(
+  subject: readonly Point[],
+  clip: readonly Point[],
+): Point[] {
+  let output = [...subject];
+  const orientation = signedPolygonArea(clip) >= 0 ? 1 : -1;
+  for (let index = 0; index < clip.length; index += 1) {
+    const edgeStart = clip[index]!;
+    const edgeEnd = clip[(index + 1) % clip.length]!;
+    const input = output;
+    output = [];
+    if (input.length === 0) break;
+    let previous = input.at(-1)!;
+    let previousInside = pointInsideEdge(
+      previous,
+      edgeStart,
+      edgeEnd,
+      orientation,
+    );
+    for (const current of input) {
+      const currentInside = pointInsideEdge(
+        current,
+        edgeStart,
+        edgeEnd,
+        orientation,
+      );
+      if (currentInside !== previousInside) {
+        const intersection = segmentLineIntersection(
+          previous,
+          current,
+          edgeStart,
+          edgeEnd,
+        );
+        if (intersection) output.push(intersection);
+      }
+      if (currentInside) output.push(current);
+      previous = current;
+      previousInside = currentInside;
+    }
+  }
+  return output;
+}
+
+function pointInsideEdge(
+  point: Point,
+  edgeStart: Point,
+  edgeEnd: Point,
+  orientation: number,
+): boolean {
+  return (
+    orientation *
+      cross(
+        edgeEnd.x - edgeStart.x,
+        edgeEnd.y - edgeStart.y,
+        point.x - edgeStart.x,
+        point.y - edgeStart.y,
+      ) >=
+    -1e-9
+  );
+}
+
+function segmentLineIntersection(
+  start: Point,
+  end: Point,
+  lineStart: Point,
+  lineEnd: Point,
+): Point | null {
+  const edgeX = lineEnd.x - lineStart.x;
+  const edgeY = lineEnd.y - lineStart.y;
+  const startDistance = cross(
+    edgeX,
+    edgeY,
+    start.x - lineStart.x,
+    start.y - lineStart.y,
+  );
+  const endDistance = cross(
+    edgeX,
+    edgeY,
+    end.x - lineStart.x,
+    end.y - lineStart.y,
+  );
+  const denominator = startDistance - endDistance;
+  if (Math.abs(denominator) <= 1e-12) return null;
+  const t = startDistance / denominator;
+  return {
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t,
+  };
+}
+
+function polygonContainsPolygon(
+  container: readonly Point[] | null,
+  target: readonly Point[],
+): boolean {
+  if (!container || container.length < 3) return false;
+  const orientation = signedPolygonArea(container) >= 0 ? 1 : -1;
+  return target.every((point) =>
+    container.every((edgeStart, index) =>
+      pointInsideEdge(
+        point,
+        edgeStart,
+        container[(index + 1) % container.length]!,
+        orientation,
+      ),
+    ),
+  );
+}
+
+function polygonArea(polygon: readonly Point[]): number {
+  return Math.abs(signedPolygonArea(polygon));
+}
+
+function signedPolygonArea(polygon: readonly Point[]): number {
+  if (polygon.length < 3) return 0;
+  let twiceArea = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index]!;
+    const next = polygon[(index + 1) % polygon.length]!;
+    twiceArea += current.x * next.y - next.x * current.y;
+  }
+  return twiceArea / 2;
+}
+
+function cross(ax: number, ay: number, bx: number, by: number): number {
+  return ax * by - ay * bx;
+}
+
+function isProvablyOpaqueRectangle(
+  document: DesignDocument,
+  node: DesignNode,
+  ancestorId: string,
+): boolean {
+  if (
+    (node.kind !== "rectangle" && node.kind !== "frame") ||
+    node.properties.cornerRadius !== 0 ||
+    node.fillStyleId != null ||
+    node.effectStyleId != null ||
+    (node.effects?.length ?? 0) > 0 ||
+    !node.properties.fills.some(
+      (paint) =>
+        paint.type === "solid" &&
+        paint.visible !== false &&
+        paint.opacity === 1 &&
+        paint.blendMode === undefined &&
+        paint.boundVariables === undefined &&
+        opaqueHexColor(paint.color),
+    )
+  ) {
+    return false;
+  }
+  const visited = new Set<string>();
+  let current: string | null = node.id;
+  while (current !== null && !visited.has(current)) {
+    visited.add(current);
+    const candidate: DesignNode | undefined = document.nodesById[current];
+    if (
+      !candidate ||
+      !candidate.visible ||
+      candidate.opacity !== 1 ||
+      candidate.effectStyleId != null ||
+      (candidate.effects?.length ?? 0) > 0 ||
+      (candidate.maskMode !== undefined && candidate.maskMode !== "none") ||
+      (candidate.blendMode !== undefined &&
+        candidate.blendMode !== "normal" &&
+        candidate.blendMode !== "pass-through")
+    ) {
+      return false;
+    }
+    if (current === ancestorId) return true;
+    current = candidate.parentId;
+  }
+  return false;
+}
+
+function opaqueHexColor(color: string): boolean {
+  return /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(color);
 }
 
 function expandRect(rect: Rect, amount: number): Rect {
