@@ -82,6 +82,10 @@
   flex: 1;
 }
 
+.deleteAction {
+  color: var(--ui-danger);
+}
+
 .thread {
   min-height: 0;
   flex: 1;

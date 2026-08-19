@@ -1,23 +1,23 @@
 import type { NodeKind } from "@opendesign/design-contracts";
-import type { GlyphName } from "@opendesign/ui";
+import type { IconName } from "@opendesign/ui";
 import type { MessageKey } from "../../shared/i18n/messages";
 
-export const layerNodeIcons: Record<NodeKind, GlyphName> = {
-  frame: "frame",
-  slot: "frame",
-  group: "layers",
-  boolean: "boolean",
-  rectangle: "rectangle",
-  ellipse: "ellipse",
-  line: "line",
-  polygon: "polygon",
-  star: "star",
-  text: "text",
-  image: "assets",
-  vector: "pen",
-  path: "pen",
-  instance: "instance",
-  slice: "frame",
+export const layerNodeIcons: Record<NodeKind, IconName> = {
+  frame: "lucide:frame",
+  slot: "lucide:frame",
+  group: "lucide:layers",
+  boolean: "lucide:combine",
+  rectangle: "lucide:rectangle-horizontal",
+  ellipse: "lucide:circle",
+  line: "lucide:slash",
+  polygon: "lucide:pentagon",
+  star: "lucide:star",
+  text: "lucide:type",
+  image: "lucide:image",
+  vector: "lucide:pen",
+  path: "lucide:pen",
+  instance: "lucide:diamond",
+  slice: "lucide:frame",
 };
 
 export const layerNodeKindKeys: Record<NodeKind, MessageKey> = {

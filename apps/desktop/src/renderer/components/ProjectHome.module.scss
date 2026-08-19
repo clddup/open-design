@@ -252,6 +252,23 @@
   list-style: none;
 }
 
+.conversationItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  border-radius: 5px;
+
+  &:hover {
+    background: var(--ui-surface-raised);
+  }
+
+  > :global(.ui-icon-button) {
+    width: 26px;
+    height: 26px;
+    color: var(--ui-text-faint);
+  }
+}
+
 .conversationRow {
   display: grid;
   width: 100%;
@@ -267,7 +284,7 @@
 
   &:hover,
   &.conversationActive {
-    background: var(--ui-surface-raised);
+    background: transparent;
   }
 
   &:focus-visible {
@@ -293,6 +310,10 @@
     color: var(--ui-text-faint);
     font-size: 9px;
   }
+}
+
+.deleteAction {
+  color: var(--ui-danger);
 }
 
 .conversationActive {

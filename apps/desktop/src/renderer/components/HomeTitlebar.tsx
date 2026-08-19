@@ -1,4 +1,4 @@
-import { Glyph, type GlyphName } from "@opendesign/ui";
+import { Icon, type IconName } from "@opendesign/ui";
 import type { ReactNode } from "react";
 import styles from "./HomeTitlebar.module.scss";
 import { WindowControls } from "./WindowControls";
@@ -11,7 +11,7 @@ export function HomeTitlebar({
   surface = "translucent",
 }: {
   actions: ReactNode;
-  icon: GlyphName;
+  icon: IconName;
   identity: ReactNode;
   platform: NodeJS.Platform;
   surface?: "solid" | "translucent";
@@ -24,7 +24,7 @@ export function HomeTitlebar({
       <div aria-hidden="true" className={styles.nativeSafeZone} />
       <div className={styles.identity}>
         <span className={styles.brandMark}>
-          <Glyph name={icon} size={15} />
+          <Icon name={icon} size={15} />
         </span>
         {identity}
       </div>

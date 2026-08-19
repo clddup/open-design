@@ -1,4 +1,4 @@
-import { Glyph } from "@opendesign/ui";
+import { Icon } from "@opendesign/ui";
 import {
   useEffect,
   useId,
@@ -144,7 +144,10 @@ export function Section({
           onClick={() => setOpen((current) => !current)}
           type="button"
         >
-          <Glyph name={open ? "chevron-down" : "chevron-right"} size={13} />
+          <Icon
+            name={open ? "lucide:chevron-down" : "lucide:chevron-right"}
+            size={13}
+          />
           {title}
         </button>
       </header>

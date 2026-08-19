@@ -4,6 +4,7 @@ import { defineConfig } from "vite";
 import electron, {
   type MultiEnvElectronOptions,
 } from "vite-plugin-electron/multi-env";
+import OfflineIconify from "unplugin-offline-iconify/vite";
 import { electronBytecode } from "./build/bytecode-plugin.ts";
 
 const root = import.meta.dirname;
@@ -18,6 +19,13 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(root, "src/renderer"),
     plugins: [
+      OfflineIconify({
+        cwd: resolve(root, "../.."),
+        include: [
+          "apps/desktop/src/renderer/**/*.{ts,tsx}",
+          "packages/ui/src/**/*.{ts,tsx}",
+        ],
+      }),
       react(),
       electron([
         {

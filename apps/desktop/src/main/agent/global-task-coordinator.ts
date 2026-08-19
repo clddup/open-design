@@ -126,6 +126,12 @@ export class GlobalTaskCoordinator {
     }
   }
 
+  hasActiveConversationRun(conversationId: string): boolean {
+    return [...this.#tasksByRunId.values()].some(
+      (task) => task.conversationId === conversationId,
+    );
+  }
+
   async registerRun(request: RunStartRequest): Promise<GlobalTaskProjection> {
     if (
       this.#tasksByRunId.has(request.runId) ||
@@ -153,9 +159,6 @@ export class GlobalTaskCoordinator {
     }
     const match = matches[0];
     if (!match) throw new Error("Agent run document identity is unavailable");
-    if (match.project.projectId !== conversation.homeProjectId) {
-      throw new Error("Cross-project Agent targets require an explicit grant");
-    }
     const opened = await this.projectHost.readDesignFile(
       match.project.projectId,
       match.file.designFileId,
@@ -195,7 +198,6 @@ export class GlobalTaskCoordinator {
       version: WORKSPACE_CONTRACT_VERSION,
       taskId: `task_${request.runId}`,
       conversationId: conversation.conversationId,
-      homeProjectId: conversation.homeProjectId,
       runId: request.runId,
       title: conversation.title,
       lifecycle: "queued",

@@ -14,7 +14,7 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 
 - 阅读 `docs/product-and-architecture.md` 了解产品范围、系统边界和目标架构。
 - 阅读 `docs/design-capability-baseline.md` 与 `docs/roadmap.md` 了解完整专业能力范围、当前缺口和依赖顺序；不得按临时反馈把 schema 演化成零散补丁集合。
-- 阅读 `docs/adr/` 中已接受的决策；项目、多会话与跨目录 Agent 的作用域和安全模型见 ADR-0006。改变决策前应新增或取代 ADR，不要静默绕过。
+- 阅读 `docs/adr/` 中已接受的决策；项目、跨目录 Agent 的作用域和安全模型见 ADR-0006，Workspace 级 Conversation 与 Run 目标见 ADR-0094。改变决策前应新增或取代 ADR，不要静默绕过。
 - 阅读 `docs/engine-baseline.json` 获取文档协议与低层渲染后端的可复现版本。不得用浮动分支或“最新版本”替代固定版本。
 - 阅读 `THIRD_PARTY_NOTICES.md` 了解直接引入的第三方组件及许可义务。
 
@@ -25,8 +25,8 @@ OpenDesign 是跨平台桌面产品。macOS 与 Windows 是同级一级支持平
 - Renderer 只负责界面、交互和 Web 画布，不得获得原始 Node.js、Electron IPC 或任意文件系统访问能力。
 - Preload 只暴露小型、类型化、可验证的能力接口。主进程必须校验 IPC 的发送方、参数、权限和生命周期。
 - 内置垂直设计 Agent 是主产品路径。Agent Runtime 使用 TypeScript，运行在 Electron `utilityProcess` 中，并通过可替换 provider adapter 直接接入多种大模型。Agent 崩溃、取消或模型提供商异常不得带崩主进程或破坏画布状态。
-- 目标资源层级固定为 `Workspace → Project → Design File → Page → Frame/Artboard → Layers`。`Conversation.homeProjectId` 只提供默认组织与上下文锚点；Project 不是文件系统 sandbox，也不隐式授予项目目录权限。
-- Working Set、Mutation Targets 与 Capabilities 必须分别建模。上下文中可读不等于可写，被列为写目标也不等于已经授权；三者不得从 `homeProjectId`、当前选区或彼此隐式推导。
+- 目标资源层级固定为 `Workspace → Project → Design File → Page → Frame/Artboard → Layers`。Conversation 是 Workspace 一级实体；`originProjectId` 只记录不可变创建来源，`filedProjectId` 只提供可空、可移动的组织关系，Project 不是文件系统 sandbox，也不隐式授予项目目录权限。
+- Working Set、Mutation Targets 与 Capabilities 必须分别建模。上下文中可读不等于可写，被列为写目标也不等于已经授权；三者不得从 Conversation 的组织字段、当前选区或彼此隐式推导。Run `targetSet` 才是实际 Project/Design File/Page 的权威来源。
 - 项目可保存经批准的 attached roots；一次 run 也可持有不改变项目归属的 per-run references。跨目录、跨项目和多目标操作必须使用稳定资源 ID 或 Main 签发的句柄，并对每个目标单独解析能力、审批与 revision。
 - 权限控制分为 Trust、Capability、Approval 与 Sandbox 四层。四层职责不得合并：可信度不授予能力，能力不替代高风险动作审批，审批不扩大请求范围，sandbox 不充当授权策略。
 - Main 拥有路径解析与规范化、root/handle 登记、凭据、策略决策和工具执行代理。Agent Runtime、Renderer、skills 与 MCP 不得取得原始凭据、任意路径能力或未代理的工具执行入口。

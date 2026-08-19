@@ -30,6 +30,7 @@ import type {
 } from "@opendesign/leafer-engine";
 import {
   PROJECT_MANIFEST_VERSION,
+  WORKSPACE_CONTRACT_VERSION,
   type ConversationDescriptor,
   type GlobalTaskLifecycle,
   type GlobalTaskProjection,
@@ -342,7 +343,13 @@ beforeEach(() => {
     revealRecentProject: vi.fn().mockResolvedValue(undefined),
     listOpenProjects: vi.fn().mockResolvedValue([]),
     createConversation: vi.fn(),
-    listProjectConversations: vi.fn().mockResolvedValue([]),
+    deleteConversation: vi.fn(),
+    listConversations: vi.fn().mockResolvedValue([]),
+    resolveConversationOpenContext: vi.fn().mockResolvedValue({
+      kind: "target-unavailable",
+      conversationId: "conversation_mobile",
+      reason: "no-target",
+    }),
     listGlobalTasks: vi.fn().mockResolvedValue([]),
     createProjectDesignFile: vi.fn(),
     readProjectDesignFile: vi.fn(),
@@ -396,18 +403,50 @@ function runtimeOutput() {
   return screen.getByLabelText("Runtime state");
 }
 
+function mockConversationTargetResolution(manifest: ProjectManifest) {
+  vi.mocked(window.desktop!.resolveConversationOpenContext).mockImplementation(
+    ({ conversationId }) =>
+      Promise.resolve({
+        kind: "target-available",
+        conversationId,
+        source: "filed-project",
+        target: {
+          targetId: `target_${conversationId}`,
+          projectId: manifest.projectId,
+          designFileId: "design_mobile",
+          documentId: "document_mobile",
+          pageId: "page_welcome",
+          selectedNodeIds: [],
+          baseRevision: 0,
+        },
+      }),
+  );
+}
+
+function mockProjectDesignFileRead(manifest: ProjectManifest) {
+  const descriptor = manifest.designFiles[0];
+  if (!descriptor) throw new Error("Mobile design file is missing");
+  const document = structuredClone(createWelcomeDocument());
+  document.documentId = descriptor.documentId;
+  vi.mocked(window.desktop!.readProjectDesignFile).mockResolvedValue({
+    descriptor,
+    document,
+  });
+  return { descriptor, document };
+}
+
 async function openProjectWithConversations(
   conversations: ConversationDescriptor[],
 ) {
   const user = userEvent.setup();
   const manifest = projectManifest();
-  const descriptor = manifest.designFiles[0];
-  if (!descriptor) throw new Error("Mobile design file is missing");
+  const { descriptor } = mockProjectDesignFileRead(manifest);
+  mockConversationTargetResolution(manifest);
   vi.mocked(window.desktop!.listRecentProjects).mockResolvedValueOnce([
     { projectId: manifest.projectId, name: manifest.name, lastOpenedAt: now },
   ]);
   vi.mocked(window.desktop!.openRecentProject).mockResolvedValueOnce(manifest);
-  vi.mocked(window.desktop!.listProjectConversations).mockResolvedValueOnce(
+  vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce(
     conversations,
   );
   vi.mocked(window.desktop!.saveProjectDesignFile).mockImplementation(
@@ -427,12 +466,6 @@ async function openProjectWithConversations(
       });
     },
   );
-  const document = structuredClone(createWelcomeDocument());
-  document.documentId = descriptor.documentId;
-  vi.mocked(window.desktop!.readProjectDesignFile).mockResolvedValue({
-    descriptor,
-    document,
-  });
   renderApp("workspace");
   await user.click(await screen.findByRole("button", { name: /^Acme Design/ }));
   return { user, manifest };
@@ -441,7 +474,10 @@ async function openProjectWithConversations(
 async function openProjectConversation() {
   const conversation = conversationDescriptor();
   const { user, manifest } = await openProjectWithConversations([conversation]);
-  await user.click(await screen.findByRole("button", { name: /Mobile UI/ }));
+  await user.click(
+    await screen.findByRole("button", { name: conversation.title }),
+  );
+  await screen.findByRole("main", { name: "Design canvas" });
   return { user, manifest, conversation };
 }
 
@@ -501,7 +537,8 @@ function conversationDescriptor(
 ): ConversationDescriptor {
   return {
     conversationId: "conversation_mobile",
-    homeProjectId: "project_acme",
+    originProjectId: "project_acme",
+    filedProjectId: "project_acme",
     title: "Refine the mobile experience",
     createdAt: now,
     updatedAt: now,
@@ -589,10 +626,9 @@ function globalTask(
 ): GlobalTaskProjection {
   const runId = overrides.runId ?? `run_${lifecycle}`;
   const conversationId = overrides.conversationId ?? "conversation_mobile";
-  const homeProjectId = overrides.homeProjectId ?? "project_acme";
   const primaryTarget = {
     targetId: `target_${runId}`,
-    projectId: homeProjectId,
+    projectId: "project_acme",
     designFileId: "design_mobile",
     documentId: "document_mobile",
     pageId: "page_welcome",
@@ -600,10 +636,9 @@ function globalTask(
     baseRevision: 0,
   };
   return {
-    version: 1,
+    version: WORKSPACE_CONTRACT_VERSION,
     taskId: `task_${runId}`,
     conversationId,
-    homeProjectId,
     runId,
     title: `Task ${lifecycle}`,
     lifecycle,
@@ -691,7 +726,7 @@ describe("App", () => {
       name: "Open Settings",
     });
     expect(
-      settingsButton.querySelector('[data-glyph="settings"]'),
+      settingsButton.querySelector('[data-icon="lucide:settings-2"]'),
     ).toBeInTheDocument();
     await user.click(settingsButton);
     expect(
@@ -926,6 +961,132 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /Website/ })).toBeInTheDocument();
   });
 
+  it("opens a Conversation directly from the Workspace Project tree", async () => {
+    const user = userEvent.setup();
+    const manifest = projectManifest();
+    const conversation = conversationDescriptor();
+    vi.mocked(window.desktop!.listRecentProjects).mockResolvedValueOnce([
+      { projectId: manifest.projectId, name: manifest.name, lastOpenedAt: now },
+    ]);
+    vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce([
+      conversation,
+    ]);
+    vi.mocked(window.desktop!.openRecentProject).mockResolvedValueOnce(
+      manifest,
+    );
+    mockConversationTargetResolution(manifest);
+    mockProjectDesignFileRead(manifest);
+
+    renderApp("workspace");
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Refine the mobile experience",
+      }),
+    );
+
+    expect(window.desktop?.openRecentProject).toHaveBeenCalledOnce();
+    expect(window.desktop?.openRecentProject).toHaveBeenCalledWith({
+      projectId: manifest.projectId,
+    });
+    expect(
+      await screen.findByRole("combobox", { name: "Conversation" }),
+    ).toHaveTextContent("Refine the mobile experience");
+    expect(historyRequests(conversation.conversationId)).toHaveLength(1);
+  });
+
+  it("keeps Conversation history readable and disables composition when its target is unavailable", async () => {
+    const user = userEvent.setup();
+    const conversation = conversationDescriptor({ filedProjectId: null });
+    vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce([
+      conversation,
+    ]);
+
+    renderApp("workspace");
+    await user.click(
+      await screen.findByRole("button", { name: conversation.title }),
+    );
+
+    expect(await screen.findByText("Design target unavailable")).toBeVisible();
+    expect(screen.getByLabelText("Continue the task")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(historyRequests(conversation.conversationId)).toHaveLength(1);
+    expect(window.desktop?.openRecentProject).not.toHaveBeenCalled();
+    expect(window.desktop?.readProjectDesignFile).not.toHaveBeenCalled();
+  });
+
+  it("deletes a terminal Conversation from Workspace without deleting its Project", async () => {
+    const user = userEvent.setup();
+    const manifest = projectManifest();
+    const conversation = conversationDescriptor();
+    vi.mocked(window.desktop!.listRecentProjects).mockResolvedValueOnce([
+      { projectId: manifest.projectId, name: manifest.name, lastOpenedAt: now },
+    ]);
+    vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce([
+      conversation,
+    ]);
+    vi.mocked(window.desktop!.deleteConversation).mockResolvedValueOnce({
+      ...conversation,
+      lifecycle: "deleted",
+      updatedAt: "2026-08-07T12:01:00.000Z",
+    });
+
+    renderApp("workspace");
+    expect(
+      await screen.findByRole("button", {
+        name: "Refine the mobile experience",
+      }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Actions for Refine the mobile experience",
+      }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Delete Conversation" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(window.desktop?.deleteConversation).toHaveBeenCalledWith({
+      conversationId: conversation.conversationId,
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", {
+          name: "Refine the mobile experience",
+        }),
+      ).toBeNull(),
+    );
+    expect(screen.getByText(manifest.name)).toBeInTheDocument();
+  });
+
+  it("requires an active Conversation task to stop before deletion", async () => {
+    const user = userEvent.setup();
+    const manifest = projectManifest();
+    const conversation = conversationDescriptor();
+    vi.mocked(window.desktop!.listRecentProjects).mockResolvedValueOnce([
+      { projectId: manifest.projectId, name: manifest.name, lastOpenedAt: now },
+    ]);
+    vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce([
+      conversation,
+    ]);
+    vi.mocked(window.desktop!.listGlobalTasks).mockResolvedValueOnce([
+      globalTask("running", { conversationId: conversation.conversationId }),
+    ]);
+
+    renderApp("workspace");
+    await screen.findByRole("button", { name: "Refine the mobile experience" });
+    await user.click(
+      screen.getByRole("button", {
+        name: "Actions for Refine the mobile experience",
+      }),
+    );
+
+    expect(
+      screen.getByRole("menuitem", { name: "Stop the task before deleting" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(window.desktop?.deleteConversation).not.toHaveBeenCalled();
+  });
+
   it("creates and switches durable Project Conversations", async () => {
     const user = userEvent.setup();
     const manifest = projectManifest();
@@ -941,7 +1102,7 @@ describe("App", () => {
     vi.mocked(window.desktop!.openRecentProject).mockResolvedValueOnce(
       manifest,
     );
-    vi.mocked(window.desktop!.listProjectConversations).mockResolvedValueOnce([
+    vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce([
       existing,
     ]);
     vi.mocked(window.desktop!.createConversation).mockResolvedValueOnce(
@@ -952,12 +1113,10 @@ describe("App", () => {
     await user.click(
       await screen.findByRole("button", { name: /^Acme Design/ }),
     );
-    expect(window.desktop?.listProjectConversations).toHaveBeenCalledWith({
-      homeProjectId: manifest.projectId,
-    });
+    expect(window.desktop?.listConversations).toHaveBeenCalledWith();
     expect(
       await screen.findByRole("button", {
-        name: /Refine the mobile experience/,
+        name: "Refine the mobile experience",
       }),
     ).toBeInTheDocument();
 
@@ -969,12 +1128,12 @@ describe("App", () => {
 
     expect(window.desktop?.createConversation).toHaveBeenCalledWith(
       expect.objectContaining({
-        homeProjectId: manifest.projectId,
+        filedProjectId: manifest.projectId,
         title: "Design the website launch",
       }),
     );
     expect(
-      await screen.findByRole("button", { name: /Design the website launch/ }),
+      await screen.findByRole("button", { name: "Design the website launch" }),
     ).toHaveAttribute("aria-current", "true");
     expect(window.desktop?.sendAgentRequest).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -994,6 +1153,7 @@ describe("App", () => {
       title: "Conversation B",
     });
     const { user } = await openProjectWithConversations([first, second]);
+    await user.click(screen.getByRole("button", { name: "Conversation A" }));
     const firstHistory = historyRequests(first.conversationId).at(-1);
     if (!firstHistory)
       throw new Error("Conversation A history request is missing");
@@ -1006,11 +1166,10 @@ describe("App", () => {
       });
     });
 
-    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
     expect(await screen.findByText("History from A")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Acme Design" }));
-    await user.click(screen.getByRole("button", { name: /Conversation B/ }));
+    await user.click(screen.getByRole("button", { name: "Conversation B" }));
     const secondHistory = historyRequests(second.conversationId).at(-1);
     if (!secondHistory) {
       throw new Error("Conversation B history request is missing");
@@ -1023,14 +1182,12 @@ describe("App", () => {
         timeline: [historyMessage(second.conversationId, "History from B")],
       });
     });
-    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
 
     expect(await screen.findByText("History from B")).toBeInTheDocument();
     expect(screen.queryByText("History from A")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Acme Design" }));
-    await user.click(screen.getByRole("button", { name: /Conversation A/ }));
-    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
+    await user.click(screen.getByRole("button", { name: "Conversation A" }));
     expect(await screen.findByText("History from A")).toBeInTheDocument();
     expect(screen.queryByText("History from B")).not.toBeInTheDocument();
   });
@@ -1045,7 +1202,7 @@ describe("App", () => {
       title: "Conversation B",
     });
     const { user } = await openProjectWithConversations([first, second]);
-    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
+    await user.click(screen.getByRole("button", { name: "Conversation A" }));
 
     await user.type(screen.getByLabelText("Continue the task"), "Run A");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -1071,8 +1228,7 @@ describe("App", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Acme Design" }));
-    await user.click(screen.getByRole("button", { name: /Conversation B/ }));
-    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
+    await user.click(screen.getByRole("button", { name: "Conversation B" }));
     expect(screen.getByLabelText("Continue the task")).toBeEnabled();
 
     await user.type(screen.getByLabelText("Continue the task"), "Run B");
@@ -1080,8 +1236,7 @@ describe("App", () => {
     expect(runRequests(second.conversationId)).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: "Acme Design" }));
-    await user.click(screen.getByRole("button", { name: /Conversation A/ }));
-    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
+    await user.click(screen.getByRole("button", { name: "Conversation A" }));
 
     expect(screen.getByText("Request in progress")).toBeInTheDocument();
     const continuation = screen.getByLabelText("Continue the task");
@@ -1125,7 +1280,9 @@ describe("App", () => {
       updatedAt: "2026-08-07T12:00:00.000Z",
     });
     const { user } = await openProjectWithConversations([recent, older]);
-    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Recent Conversation" }),
+    );
     const conversationSelect = screen.getByRole("combobox", {
       name: "Conversation",
     });
@@ -1157,8 +1314,9 @@ describe("App", () => {
     const oldRequest = historyRequests(first.conversationId).at(-1);
     if (!oldRequest) throw new Error("Initial history request is missing");
 
-    await user.click(screen.getByRole("button", { name: /Conversation B/ }));
-    await user.click(screen.getByRole("button", { name: /Conversation A/ }));
+    await user.click(screen.getByRole("button", { name: "Conversation B" }));
+    await user.click(screen.getByRole("button", { name: "Acme Design" }));
+    await user.click(screen.getByRole("button", { name: "Conversation A" }));
     const latestRequest = historyRequests(first.conversationId).at(-1);
     if (!latestRequest || latestRequest.requestId === oldRequest.requestId) {
       throw new Error("Newer history request is missing");
@@ -1178,8 +1336,6 @@ describe("App", () => {
         timeline: [historyMessage(first.conversationId, "Current history")],
       });
     });
-    await user.click(screen.getByRole("button", { name: /Mobile UI/ }));
-
     expect(await screen.findByText("Current history")).toBeInTheDocument();
     expect(screen.queryByText("Stale history")).not.toBeInTheDocument();
   });
@@ -1300,7 +1456,7 @@ describe("App", () => {
     expect(screen.getAllByRole("button", { name: "Open" })).toHaveLength(3);
   });
 
-  it("opens a Global Task at its Home Project and Conversation", async () => {
+  it("opens a Global Task at its primary target and Conversation", async () => {
     const manifest = projectManifest();
     const first = conversationDescriptor({
       conversationId: "conversation_a",
@@ -1318,21 +1474,22 @@ describe("App", () => {
     vi.mocked(window.desktop!.openRecentProject).mockResolvedValueOnce(
       manifest,
     );
-    vi.mocked(window.desktop!.listProjectConversations).mockResolvedValueOnce([
+    vi.mocked(window.desktop!.listConversations).mockResolvedValueOnce([
       first,
       second,
     ]);
+    mockProjectDesignFileRead(manifest);
 
     const user = userEvent.setup();
     renderApp("workspace");
     await user.click(await screen.findByRole("button", { name: "Open" }));
 
     expect(window.desktop?.openRecentProject).toHaveBeenCalledWith({
-      projectId: task.homeProjectId,
+      projectId: task.targetSet.primaryTarget.projectId,
     });
     expect(
-      await screen.findByRole("button", { name: /Conversation B/ }),
-    ).toHaveAttribute("aria-current", "true");
+      await screen.findByRole("combobox", { name: "Conversation" }),
+    ).toHaveTextContent("Conversation B");
     expect(historyRequests(second.conversationId)).toHaveLength(1);
   });
 
@@ -4566,7 +4723,9 @@ describe("App", () => {
       });
       expect(distribute).toBeEnabled();
       expect(
-        distribute.querySelector('[data-glyph="distribute-horizontal"]'),
+        distribute.querySelector(
+          '[data-icon="lucide:align-horizontal-distribute-center"]',
+        ),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Distribute vertical spacing" }),
@@ -4636,7 +4795,7 @@ describe("App", () => {
       });
       expect(tidyUp).toBeEnabled();
       expect(
-        tidyUp.querySelector('[data-glyph="tidy-up"]'),
+        tidyUp.querySelector('[data-icon="lucide:panels-top-left"]'),
       ).toBeInTheDocument();
       await user.click(tidyUp);
 

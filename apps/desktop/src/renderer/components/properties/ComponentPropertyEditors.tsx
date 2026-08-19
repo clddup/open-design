@@ -5,7 +5,7 @@ import type {
   InstanceSwapPreferredValue,
   SlotSettings,
 } from "@opendesign/design-contracts";
-import { Button, Glyph } from "@opendesign/ui";
+import { Button, Icon } from "@opendesign/ui";
 import { useEffect, useState } from "react";
 import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
@@ -197,7 +197,7 @@ export function ComponentPropertyAuthoring({
                     onClick={() => onRemove(property.propertyName)}
                     type="button"
                   >
-                    <Glyph name="close" size={12} />
+                    <Icon name="lucide:x" size={12} />
                   </button>
                 </div>
                 {slotDefinition && (

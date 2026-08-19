@@ -49,12 +49,11 @@ export class WorkspaceStore {
 
       CREATE TABLE IF NOT EXISTS conversations (
         conversation_id TEXT PRIMARY KEY,
-        home_project_id TEXT NOT NULL,
+        origin_project_id TEXT,
+        filed_project_id TEXT,
         descriptor_json TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
-      CREATE INDEX IF NOT EXISTS conversations_home_project
-        ON conversations(home_project_id, updated_at DESC);
 
       CREATE TABLE IF NOT EXISTS root_grants (
         root_grant_id TEXT PRIMARY KEY,
@@ -64,7 +63,6 @@ export class WorkspaceStore {
 
       CREATE TABLE IF NOT EXISTS global_tasks (
         task_id TEXT PRIMARY KEY,
-        home_project_id TEXT NOT NULL,
         projection_json TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -76,6 +74,22 @@ export class WorkspaceStore {
         preference_value TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+    `);
+    const conversationColumns = this.#database
+      .prepare("PRAGMA table_info(conversations)")
+      .all() as Array<{ name: string }>;
+    const globalTaskColumns = this.#database
+      .prepare("PRAGMA table_info(global_tasks)")
+      .all() as Array<{ name: string }>;
+    if (
+      !conversationColumns.some(({ name }) => name === "filed_project_id") ||
+      globalTaskColumns.some(({ name }) => name === "home_project_id")
+    ) {
+      resetConversationAndTaskSchema(this.#database);
+    }
+    this.#database.exec(`
+      CREATE INDEX IF NOT EXISTS conversations_filed_project
+        ON conversations(filed_project_id, updated_at DESC);
     `);
     let projectColumns = this.#database
       .prepare("PRAGMA table_info(projects)")
@@ -241,15 +255,17 @@ export class WorkspaceStore {
         `
           INSERT INTO conversations(
             conversation_id,
-            home_project_id,
+            origin_project_id,
+            filed_project_id,
             descriptor_json,
             updated_at
-          ) VALUES (?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?)
         `,
       )
       .run(
         conversation.conversationId,
-        conversation.homeProjectId,
+        conversation.originProjectId,
+        conversation.filedProjectId,
         JSON.stringify(conversation),
         conversation.updatedAt,
       );
@@ -261,30 +277,36 @@ export class WorkspaceStore {
     }
     const existing = this.#database
       .prepare(
-        "SELECT home_project_id FROM conversations WHERE conversation_id = ?",
+        "SELECT origin_project_id FROM conversations WHERE conversation_id = ?",
       )
       .get(conversation.conversationId) as
-      { home_project_id: string } | undefined;
-    if (existing && existing.home_project_id !== conversation.homeProjectId) {
-      throw new Error("Conversation Home Project cannot be changed by save");
+      { origin_project_id: string | null } | undefined;
+    if (
+      existing &&
+      existing.origin_project_id !== conversation.originProjectId
+    ) {
+      throw new Error("Conversation origin Project cannot be changed by save");
     }
     this.#database
       .prepare(
         `
           INSERT INTO conversations(
             conversation_id,
-            home_project_id,
+            origin_project_id,
+            filed_project_id,
             descriptor_json,
             updated_at
-          ) VALUES (?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(conversation_id) DO UPDATE SET
+            filed_project_id = excluded.filed_project_id,
             descriptor_json = excluded.descriptor_json,
             updated_at = excluded.updated_at
         `,
       )
       .run(
         conversation.conversationId,
-        conversation.homeProjectId,
+        conversation.originProjectId,
+        conversation.filedProjectId,
         JSON.stringify(conversation),
         conversation.updatedAt,
       );
@@ -300,17 +322,16 @@ export class WorkspaceStore {
     return parseRows([row], isConversationDescriptor)[0] ?? null;
   }
 
-  listConversations(homeProjectId: string): ConversationDescriptor[] {
+  listConversations(): ConversationDescriptor[] {
     const rows = this.#database
       .prepare(
         `
           SELECT descriptor_json
           FROM conversations
-          WHERE home_project_id = ?
           ORDER BY updated_at DESC, conversation_id ASC
         `,
       )
-      .all(homeProjectId) as Array<{ descriptor_json: string }>;
+      .all() as Array<{ descriptor_json: string }>;
     return parseRows(rows, isConversationDescriptor);
   }
 
@@ -352,22 +373,15 @@ export class WorkspaceStore {
         `
           INSERT INTO global_tasks(
             task_id,
-            home_project_id,
             projection_json,
             updated_at
-          ) VALUES (?, ?, ?, ?)
+          ) VALUES (?, ?, ?)
           ON CONFLICT(task_id) DO UPDATE SET
-            home_project_id = excluded.home_project_id,
             projection_json = excluded.projection_json,
             updated_at = excluded.updated_at
         `,
       )
-      .run(
-        task.taskId,
-        task.homeProjectId,
-        JSON.stringify(task),
-        task.updatedAt,
-      );
+      .run(task.taskId, JSON.stringify(task), task.updatedAt);
   }
 
   listGlobalTasks(): GlobalTaskProjection[] {
@@ -386,6 +400,31 @@ export class WorkspaceStore {
   close(): void {
     this.#database.close();
   }
+}
+
+function resetConversationAndTaskSchema(database: DatabaseSync): void {
+  database.exec(`
+    DROP TABLE IF EXISTS global_tasks;
+    DROP TABLE IF EXISTS conversations;
+
+    CREATE TABLE conversations (
+      conversation_id TEXT PRIMARY KEY,
+      origin_project_id TEXT,
+      filed_project_id TEXT,
+      descriptor_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX conversations_filed_project
+      ON conversations(filed_project_id, updated_at DESC);
+
+    CREATE TABLE global_tasks (
+      task_id TEXT PRIMARY KEY,
+      projection_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX global_tasks_updated
+      ON global_tasks(updated_at DESC);
+  `);
 }
 
 function migrateProjectsRootPathToNullable(database: DatabaseSync): void {

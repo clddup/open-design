@@ -42,6 +42,8 @@ import type {
   ThemePreference,
 } from "../shared/desktop-api";
 import { AgentTimeline } from "./components/AgentTimeline";
+import { ConversationDeleteDialog } from "./components/ConversationDeleteDialog";
+import { ConversationHome } from "./components/ConversationHome";
 import { Canvas } from "./components/Canvas";
 import { CanvasSelectionActions } from "./components/CanvasSelectionActions";
 import {
@@ -100,7 +102,7 @@ const HISTORY_SYNC_DEBOUNCE_MS = 80;
 const NAVIGATOR_AUTO_COLLAPSE_WIDTH = 960;
 const UTILITY_AUTO_COLLAPSE_WIDTH = 760;
 const WORKBENCH_PANEL_STORAGE_PREFIX = "opendesign.workbench.panel";
-type AppView = "workspace" | "project" | "editor" | "settings";
+type AppView = "workspace" | "project" | "conversation" | "editor" | "settings";
 
 type ConversationAgentState = {
   timeline: SessionTimelineItem[];
@@ -220,11 +222,26 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   );
   const [utilityTab, setUtilityTab] = useState<UtilityDockTab>("agent");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("layers");
-  const [conversationsByProjectId, setConversationsByProjectId] = useState<
-    Readonly<Record<string, ConversationDescriptor[]>>
-  >({});
-  const [activeConversationIdByProjectId, setActiveConversationIdByProjectId] =
-    useState<Readonly<Record<string, string>>>({});
+  const [conversations, setConversations] = useState<ConversationDescriptor[]>(
+    [],
+  );
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
+  const [conversationOpenIssue, setConversationOpenIssue] = useState<
+    | "project-unavailable"
+    | "design-file-unavailable"
+    | "page-unavailable"
+    | "no-target"
+    | null
+  >(null);
+  const [pendingConversationDeletionId, setPendingConversationDeletionId] =
+    useState<string | null>(null);
+  const [conversationDeletionBusy, setConversationDeletionBusy] =
+    useState(false);
+  const [conversationDeletionError, setConversationDeletionError] = useState<
+    string | null
+  >(null);
   const [agentByConversationId, setAgentByConversationId] = useState<
     Readonly<Record<string, ConversationAgentState>>
   >({});
@@ -396,13 +413,19 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     state.selection.nodeIds,
   );
   const projectConversations = activeProject
-    ? (conversationsByProjectId[activeProject.projectId] ?? [])
+    ? conversations.filter(
+        (conversation) =>
+          conversation.filedProjectId === activeProject.projectId &&
+          conversation.lifecycle === "active",
+      )
     : [];
-  const activeConversationId = activeProject
-    ? (activeConversationIdByProjectId[activeProject.projectId] ?? null)
-    : null;
+  const conversationDeleteBlockedIds = globalTasks
+    .filter((task) =>
+      ["queued", "running", "waiting_approval"].includes(task.lifecycle),
+    )
+    .map((task) => task.conversationId);
   const activeConversation =
-    projectConversations.find(
+    conversations.find(
       (conversation) => conversation.conversationId === activeConversationId,
     ) ?? null;
   const activeAgentState = activeConversation
@@ -547,6 +570,18 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             "recent_projects_load_failed",
             error,
             t("error.loadRecentProjects"),
+          ),
+        );
+      });
+    void window.desktop
+      ?.listConversations()
+      .then(setConversations)
+      .catch((error: unknown) => {
+        setWorkspaceError(
+          reportRendererError(
+            "conversations_load_failed",
+            error,
+            t("error.loadConversations"),
           ),
         );
       });
@@ -705,8 +740,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
 
       const activityAt = agentEventActivityAt(event);
       if (activityAt) {
-        setConversationsByProjectId((current) =>
-          touchConversationCollections(current, conversationId, activityAt),
+        setConversations((current) =>
+          touchConversationList(current, conversationId, activityAt),
         );
       }
 
@@ -1184,47 +1219,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     if (tasks) setGlobalTasks(tasks);
   }, []);
 
-  const loadProjectConversations = useCallback(
-    async (projectId: string, preferredConversationId?: string) => {
-      if (!window.desktop) return;
-      try {
-        const conversations = await window.desktop.listProjectConversations({
-          homeProjectId: projectId,
-        });
-        setConversationsByProjectId((current) => ({
-          ...current,
-          [projectId]: conversations,
-        }));
-        const requestedId =
-          preferredConversationId ?? activeConversationIdByProjectId[projectId];
-        const selectedId = conversations.some(
-          ({ conversationId }) => conversationId === requestedId,
-        )
-          ? requestedId
-          : conversations[0]?.conversationId;
-        setActiveConversationIdByProjectId((current) => {
-          if (!selectedId) {
-            const remaining = { ...current };
-            delete remaining[projectId];
-            return remaining;
-          }
-          return { ...current, [projectId]: selectedId };
-        });
-        if (selectedId) void requestConversationHistory(selectedId);
-      } catch (error) {
-        setWorkspaceError(
-          reportRendererError(
-            "project_conversations_load_failed",
-            error,
-            t("error.loadProjectConversations"),
-            { projectId },
-          ),
-        );
-      }
-    },
-    [activeConversationIdByProjectId, requestConversationHistory, t],
-  );
-
   const showProject = useCallback(
     (manifest: ProjectManifest, preferredConversationId?: string) => {
       setProjectsById((projects) => ({
@@ -1234,12 +1228,19 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       setActiveProject(manifest);
       setWorkspaceError(null);
       setView("project");
-      void loadProjectConversations(
-        manifest.projectId,
-        preferredConversationId,
-      );
+      const conversationId =
+        preferredConversationId ??
+        conversations.find(
+          (conversation) =>
+            conversation.lifecycle === "active" &&
+            conversation.filedProjectId === manifest.projectId,
+        )?.conversationId;
+      if (conversationId) {
+        setActiveConversationId(conversationId);
+        void requestConversationHistory(conversationId);
+      }
     },
-    [loadProjectConversations],
+    [conversations, requestConversationHistory],
   );
 
   const createProject = useCallback(
@@ -1374,20 +1375,17 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       try {
         const conversation = await window.desktop.createConversation({
           conversationId: createConversationId(),
-          homeProjectId: activeProject.projectId,
+          filedProjectId: activeProject.projectId,
           title: title.trim(),
         });
-        setConversationsByProjectId((current) => ({
-          ...current,
-          [activeProject.projectId]: [
-            conversation,
-            ...(current[activeProject.projectId] ?? []),
-          ],
-        }));
-        setActiveConversationIdByProjectId((current) => ({
-          ...current,
-          [activeProject.projectId]: conversation.conversationId,
-        }));
+        setConversations((current) => [
+          conversation,
+          ...current.filter(
+            (candidate) =>
+              candidate.conversationId !== conversation.conversationId,
+          ),
+        ]);
+        setActiveConversationId(conversation.conversationId);
         void requestConversationHistory(conversation.conversationId);
         return true;
       } catch (error) {
@@ -1407,32 +1405,206 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     [activeProject, requestConversationHistory, t],
   );
 
-  const selectConversation = useCallback(
-    (conversationId: string) => {
-      if (!activeProject) return;
-      const exists = (
-        conversationsByProjectId[activeProject.projectId] ?? []
-      ).some((conversation) => conversation.conversationId === conversationId);
-      if (!exists) return;
-      setActiveConversationIdByProjectId((current) => ({
-        ...current,
-        [activeProject.projectId]: conversationId,
+  const requestDeleteConversation = useCallback((conversationId: string) => {
+    setConversationDeletionError(null);
+    setPendingConversationDeletionId(conversationId);
+  }, []);
+
+  const cancelDeleteConversation = useCallback(() => {
+    if (conversationDeletionBusy) return;
+    setConversationDeletionError(null);
+    setPendingConversationDeletionId(null);
+  }, [conversationDeletionBusy]);
+
+  const openProjectTarget = useCallback(
+    async (target: {
+      projectId: string;
+      designFileId: string;
+      pageId?: string;
+    }) => {
+      const desktop = window.desktop;
+      if (!desktop) throw new Error("Desktop Project services are unavailable");
+      const manifest =
+        projectsById[target.projectId] ??
+        (activeProject?.projectId === target.projectId
+          ? activeProject
+          : await desktop.openRecentProject({ projectId: target.projectId }));
+      const file = await desktop.readProjectDesignFile({
+        projectId: target.projectId,
+        designFileId: target.designFileId,
+      });
+      const identity = {
+        projectId: target.projectId,
+        designFileId: file.descriptor.designFileId,
+        name: file.descriptor.name,
+      };
+      let openedRuntime;
+      if (
+        workspaceSnapshot.openFileKeys.length === 1 &&
+        workspaceSnapshot.activeProjectId === LOCAL_PROJECT_ID &&
+        !runtime.getSnapshot().state.dirty
+      ) {
+        openedRuntime = workspace.replaceActiveFile(identity, file.document);
+      } else {
+        openedRuntime = openFile(identity, file.document);
+      }
+      projectAutosave.track({
+        projectId: identity.projectId,
+        designFileId: identity.designFileId,
+        documentId: file.document.documentId,
+        runtime: openedRuntime,
+      });
+      setProjectsById((projects) => ({
+        ...projects,
+        [manifest.projectId]: manifest,
       }));
-      void requestConversationHistory(conversationId);
+      setActiveProject(manifest);
+      setFileName(file.descriptor.name);
+      if (target.pageId && file.document.pagesById[target.pageId]) {
+        activatePage(target.pageId);
+      }
+      setUtilityTab("agent");
+      setUtilityPanelVisible(true);
+      setConversationOpenIssue(null);
+      setView("editor");
     },
-    [activeProject, conversationsByProjectId, requestConversationHistory],
+    [
+      activatePage,
+      activeProject,
+      openFile,
+      projectAutosave,
+      projectsById,
+      runtime,
+      workspace,
+      workspaceSnapshot.activeProjectId,
+      workspaceSnapshot.openFileKeys.length,
+    ],
+  );
+
+  const openConversation = useCallback(
+    async (conversation: ConversationDescriptor) => {
+      if (!window.desktop || conversation.lifecycle !== "active") return;
+      setActiveConversationId(conversation.conversationId);
+      void requestConversationHistory(conversation.conversationId);
+      setWorkspaceBusy(true);
+      setWorkspaceError(null);
+      try {
+        const context = await window.desktop.resolveConversationOpenContext({
+          conversationId: conversation.conversationId,
+        });
+        if (context.kind === "target-unavailable") {
+          setConversationOpenIssue(context.reason);
+          setView("conversation");
+          return;
+        }
+        await openProjectTarget(context.target);
+        await refreshRecentProjects();
+      } catch (error) {
+        setConversationOpenIssue("project-unavailable");
+        setView("conversation");
+        setWorkspaceError(
+          reportRendererError(
+            "conversation_open_failed",
+            error,
+            t("error.openConversation"),
+            {
+              conversationId: conversation.conversationId,
+            },
+          ),
+        );
+      } finally {
+        setWorkspaceBusy(false);
+      }
+    },
+    [openProjectTarget, refreshRecentProjects, requestConversationHistory, t],
+  );
+
+  const deleteConversation = useCallback(
+    async (conversationId: string) => {
+      const desktop = window.desktop;
+      const target = conversations.find(
+        (conversation) => conversation.conversationId === conversationId,
+      );
+      if (!desktop || !target) return false;
+      setConversationDeletionBusy(true);
+      setConversationDeletionError(null);
+      try {
+        await desktop.deleteConversation({ conversationId });
+        const replacement = conversations.find(
+          (conversation) =>
+            conversation.conversationId !== conversationId &&
+            conversation.lifecycle === "active",
+        );
+        setConversations((current) =>
+          current.filter(
+            (conversation) => conversation.conversationId !== conversationId,
+          ),
+        );
+        setAgentByConversationId((current) => {
+          const remaining = { ...current };
+          delete remaining[conversationId];
+          return remaining;
+        });
+        setActiveConversationId((current) =>
+          current === conversationId
+            ? (replacement?.conversationId ?? null)
+            : current,
+        );
+        if (
+          activeConversationId === conversationId &&
+          view === "conversation"
+        ) {
+          setConversationOpenIssue(null);
+          setView("workspace");
+        }
+        const pendingSync = historySyncTimers.current.get(conversationId);
+        if (pendingSync !== undefined) clearTimeout(pendingSync);
+        historySyncTimers.current.delete(conversationId);
+        const historyRequestId =
+          latestHistoryRequestId.current.get(conversationId);
+        if (historyRequestId) {
+          conversationIdByHistoryRequestId.current.delete(historyRequestId);
+        }
+        latestHistoryRequestId.current.delete(conversationId);
+        for (const [
+          runId,
+          mappedConversationId,
+        ] of conversationIdByRunId.current) {
+          if (mappedConversationId === conversationId) {
+            conversationIdByRunId.current.delete(runId);
+          }
+        }
+        if (replacement) {
+          void requestConversationHistory(replacement.conversationId);
+        }
+        setPendingConversationDeletionId(null);
+        return true;
+      } catch (error) {
+        setConversationDeletionError(
+          reportRendererError(
+            "conversation_delete_failed",
+            error,
+            t("error.deleteConversation"),
+            { conversationId },
+          ),
+        );
+        return false;
+      } finally {
+        setConversationDeletionBusy(false);
+      }
+    },
+    [activeConversationId, conversations, requestConversationHistory, t, view],
   );
 
   const openGlobalTask = useCallback(
     async (task: GlobalTaskProjection) => {
       if (!window.desktop) return;
+      setActiveConversationId(task.conversationId);
+      void requestConversationHistory(task.conversationId);
       setWorkspaceBusy(true);
       setWorkspaceError(null);
       try {
-        const manifest = await window.desktop.openRecentProject({
-          projectId: task.homeProjectId,
-        });
-        showProject(manifest, task.conversationId);
+        await openProjectTarget(task.targetSet.primaryTarget);
         await refreshRecentProjects();
       } catch (error) {
         setWorkspaceError(
@@ -1441,7 +1613,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             error,
             t("error.openAgentTask"),
             {
-              projectId: task.homeProjectId,
+              projectId: task.targetSet.primaryTarget.projectId,
               conversationId: task.conversationId,
               runId: task.runId,
             },
@@ -1451,7 +1623,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         setWorkspaceBusy(false);
       }
     },
-    [refreshRecentProjects, showProject, t],
+    [openProjectTarget, refreshRecentProjects, requestConversationHistory, t],
   );
 
   const renameProjectDesignFile = useCallback(
@@ -1522,37 +1694,14 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
 
   const openProjectDesignFile = useCallback(
     async (designFileId: string) => {
-      if (!window.desktop || !activeProject) return;
+      if (!activeProject) return;
       setWorkspaceBusy(true);
       setWorkspaceError(null);
       try {
-        const file = await window.desktop.readProjectDesignFile({
+        await openProjectTarget({
           projectId: activeProject.projectId,
           designFileId,
         });
-        const identity = {
-          projectId: activeProject.projectId,
-          designFileId: file.descriptor.designFileId,
-          name: file.descriptor.name,
-        };
-        let openedRuntime;
-        if (
-          workspaceSnapshot.openFileKeys.length === 1 &&
-          workspaceSnapshot.activeProjectId === LOCAL_PROJECT_ID &&
-          !runtime.getSnapshot().state.dirty
-        ) {
-          openedRuntime = workspace.replaceActiveFile(identity, file.document);
-        } else {
-          openedRuntime = openFile(identity, file.document);
-        }
-        projectAutosave.track({
-          projectId: identity.projectId,
-          designFileId: identity.designFileId,
-          documentId: file.document.documentId,
-          runtime: openedRuntime,
-        });
-        setFileName(file.descriptor.name);
-        setView("editor");
       } catch (error) {
         setWorkspaceError(
           reportRendererError(
@@ -1566,15 +1715,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         setWorkspaceBusy(false);
       }
     },
-    [
-      activeProject,
-      openFile,
-      projectAutosave,
-      runtime,
-      t,
-      workspace,
-      workspaceSnapshot,
-    ],
+    [activeProject, openProjectTarget, t],
   );
 
   const openDocument = async () => {
@@ -1749,8 +1890,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     );
     try {
       await window.desktop.sendAgentRequest(request);
-      setConversationsByProjectId((conversations) =>
-        touchConversationCollections(conversations, conversationId, createdAt),
+      setConversations((current) =>
+        touchConversationList(current, conversationId, createdAt),
       );
       void refreshGlobalTasks();
       return true;
@@ -1857,6 +1998,24 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       placement={view === "editor" ? "editor" : "window"}
     />
   );
+  const pendingConversationDeletion =
+    conversations.find(
+      (conversation) =>
+        conversation.conversationId === pendingConversationDeletionId,
+    ) ?? null;
+  const conversationDeleteDialog = (
+    <ConversationDeleteDialog
+      busy={conversationDeletionBusy}
+      conversation={pendingConversationDeletion}
+      error={conversationDeletionError}
+      onCancel={cancelDeleteConversation}
+      onConfirm={() => {
+        if (pendingConversationDeletionId) {
+          void deleteConversation(pendingConversationDeletionId);
+        }
+      }}
+    />
+  );
 
   if (view === "settings") {
     return (
@@ -1867,6 +2026,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           platform={platform}
           theme={theme}
         />
+        {conversationDeleteDialog}
         {notifications}
       </>
     );
@@ -1877,10 +2037,15 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
       <>
         <WorkspaceHome
           busy={workspaceBusy}
+          conversations={conversations}
           error={workspaceError}
           globalTasks={globalTasks}
           onCreateProject={createProject}
+          onRequestDeleteConversation={requestDeleteConversation}
           onOpenDesignFile={() => void openDocument()}
+          onOpenConversation={(conversation) =>
+            void openConversation(conversation)
+          }
           onOpenGlobalTask={(task) => void openGlobalTask(task)}
           onOpenProject={() => void openProject()}
           onOpenRecentProject={(projectId) => void openRecentProject(projectId)}
@@ -1892,6 +2057,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           recentProjects={recentProjects}
           theme={theme}
         />
+        {conversationDeleteDialog}
         {notifications}
       </>
     );
@@ -1903,20 +2069,72 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         <ProjectHome
           activeConversationId={activeConversationId}
           busy={workspaceBusy}
+          conversationDeleteBlockedIds={conversationDeleteBlockedIds}
           conversations={projectConversations}
           error={workspaceError}
           manifest={activeProject}
           onBack={() => setView("workspace")}
           onCreateConversation={createConversation}
+          onRequestDeleteConversation={requestDeleteConversation}
           onOpenDesignFile={(designFileId) =>
             void openProjectDesignFile(designFileId)
           }
-          onSelectConversation={selectConversation}
+          onOpenConversation={(conversationId) => {
+            const conversation = conversations.find(
+              (candidate) => candidate.conversationId === conversationId,
+            );
+            if (conversation) void openConversation(conversation);
+          }}
           onSettings={openSettings}
           onThemeChange={changeTheme}
           platform={platform}
           theme={theme}
         />
+        {conversationDeleteDialog}
+        {notifications}
+      </>
+    );
+  }
+
+  if (view === "conversation" && activeConversation) {
+    return (
+      <>
+        <ConversationHome
+          issue={conversationOpenIssue ?? "no-target"}
+          onBack={() => setView("workspace")}
+          onSettings={openSettings}
+          onThemeChange={changeTheme}
+          platform={platform}
+          theme={theme}
+          title={activeConversation.title}
+        >
+          <AgentTimeline
+            activeRunId={activeAgentState.activeRunId}
+            conversationId={activeConversation.conversationId}
+            conversationTitle={activeConversation.title}
+            conversations={conversations.filter(
+              (conversation) => conversation.lifecycle === "active",
+            )}
+            error={activeAgentState.error ?? agentRuntimeError}
+            events={activeAgentState.events}
+            onRequestDeleteConversation={requestDeleteConversation}
+            onResolveApproval={resolveAgentApproval}
+            onSelectConversation={(conversationId) => {
+              const conversation = conversations.find(
+                (candidate) => candidate.conversationId === conversationId,
+              );
+              if (conversation) void openConversation(conversation);
+            }}
+            onStop={stopAgentTask}
+            onSubmit={submitAgentTask}
+            submissionAvailable={false}
+            submissionBlockedMessage={t(
+              "workspace.conversationTargetUnavailableComposer",
+            )}
+            timeline={activeAgentState.timeline}
+          />
+        </ConversationHome>
+        {conversationDeleteDialog}
         {notifications}
       </>
     );
@@ -2146,7 +2364,13 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                         )
                     : undefined
                 }
-                onSelectConversation={selectConversation}
+                onRequestDeleteConversation={requestDeleteConversation}
+                onSelectConversation={(conversationId) => {
+                  const conversation = conversations.find(
+                    (candidate) => candidate.conversationId === conversationId,
+                  );
+                  if (conversation) void openConversation(conversation);
+                }}
                 onResolveApproval={resolveAgentApproval}
                 onStop={stopAgentTask}
                 onSubmit={submitAgentTask}
@@ -2274,6 +2498,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           }}
           zoom={state.viewport.zoom}
         />
+        {conversationDeleteDialog}
         {notifications}
       </div>
     </>
@@ -2347,38 +2572,26 @@ function updateConversationAgentState(
   };
 }
 
-function touchConversationCollections(
-  current: Readonly<Record<string, ConversationDescriptor[]>>,
+function touchConversationList(
+  current: ConversationDescriptor[],
   conversationId: string,
   updatedAt: string,
-): Readonly<Record<string, ConversationDescriptor[]>> {
-  let changed = false;
-  const collections = Object.fromEntries(
-    Object.entries(current).map(([projectId, conversations]) => {
-      const conversation = conversations.find(
-        (candidate) => candidate.conversationId === conversationId,
-      );
-      if (!conversation || conversation.updatedAt >= updatedAt) {
-        return [projectId, conversations];
-      }
-      changed = true;
-      return [
-        projectId,
-        conversations
-          .map((candidate) =>
-            candidate.conversationId === conversationId
-              ? { ...candidate, updatedAt }
-              : candidate,
-          )
-          .sort(
-            (left, right) =>
-              right.updatedAt.localeCompare(left.updatedAt) ||
-              left.conversationId.localeCompare(right.conversationId),
-          ),
-      ];
-    }),
+): ConversationDescriptor[] {
+  const conversation = current.find(
+    (candidate) => candidate.conversationId === conversationId,
   );
-  return changed ? collections : current;
+  if (!conversation || conversation.updatedAt >= updatedAt) return current;
+  return current
+    .map((candidate) =>
+      candidate.conversationId === conversationId
+        ? { ...candidate, updatedAt }
+        : candidate,
+    )
+    .sort(
+      (left, right) =>
+        right.updatedAt.localeCompare(left.updatedAt) ||
+        left.conversationId.localeCompare(right.conversationId),
+    );
 }
 
 function appendLiveAgentEvent(

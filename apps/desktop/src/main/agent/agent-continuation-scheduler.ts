@@ -35,6 +35,7 @@ export class AgentContinuationScheduler {
   >();
   readonly #requestsByRunId = new Map<string, RunStartRequest>();
   readonly #nextRunIdByParentRunId = new Map<string, string>();
+  readonly #pendingConversationIdByRunId = new Map<string, string>();
   #sequence = 0;
 
   constructor(private readonly now: () => number = () => Date.now()) {}
@@ -44,6 +45,16 @@ export class AgentContinuationScheduler {
       throw new Error(`Agent Run is already registered: ${request.runId}`);
     }
     this.#requestsByRunId.set(request.runId, structuredClone(request));
+    this.#pendingConversationIdByRunId.delete(request.runId);
+  }
+
+  hasActiveConversationRun(conversationId: string): boolean {
+    return (
+      [...this.#requestsByRunId.values()].some(
+        (request) => request.sessionId === conversationId,
+      ) ||
+      [...this.#pendingConversationIdByRunId.values()].includes(conversationId)
+    );
   }
 
   requestCancellation(runId: string): string | null {
@@ -75,6 +86,7 @@ export class AgentContinuationScheduler {
     this.#deliveryByRunId.delete(runId);
     this.#failureByRunId.delete(runId);
     this.#nextRunIdByParentRunId.delete(runId);
+    this.#pendingConversationIdByRunId.delete(runId);
     for (const [parentRunId, nextRunId] of this.#nextRunIdByParentRunId) {
       if (nextRunId === runId) {
         this.#nextRunIdByParentRunId.delete(parentRunId);
@@ -132,6 +144,7 @@ export class AgentContinuationScheduler {
     const nextRunId = `run_${this.now()}_auto_${++this.#sequence}`;
     this.#deliveryByRunId.set(nextRunId, structuredClone(currentDelivery));
     this.#nextRunIdByParentRunId.set(runId, nextRunId);
+    this.#pendingConversationIdByRunId.set(nextRunId, source.sessionId);
     return {
       kind: "schedule",
       source: structuredClone(source),

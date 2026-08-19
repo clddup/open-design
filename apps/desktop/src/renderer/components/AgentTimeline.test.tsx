@@ -1569,7 +1569,8 @@ describe("AgentTimeline", () => {
         conversations={[
           {
             conversationId: "conversation_1",
-            homeProjectId: "project_1",
+            originProjectId: "project_1",
+            filedProjectId: "project_1",
             title: "Conversation 1",
             lifecycle: "active",
             createdAt: now,
@@ -1577,7 +1578,8 @@ describe("AgentTimeline", () => {
           },
           {
             conversationId: "conversation_2",
-            homeProjectId: "project_1",
+            originProjectId: "project_1",
+            filedProjectId: "project_1",
             title: "Conversation 2",
             lifecycle: "active",
             createdAt: now,

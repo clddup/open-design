@@ -1,5 +1,5 @@
 import type { ImageNode, ImagePlacement } from "@opendesign/design-contracts";
-import { Glyph } from "@opendesign/ui";
+import { Icon } from "@opendesign/ui";
 import { useI18n } from "../../i18n";
 import styles from "../PropertiesPanel.module.scss";
 import { Field, Section, commitNumber, cx, formatNumber } from "./controls";
@@ -201,7 +201,7 @@ export function ImageSection({
           onClick={onCrop}
           type="button"
         >
-          <Glyph name="select" size={13} />
+          <Icon name="lucide:mouse-pointer-2" size={13} />
           {t("properties.imageEditCrop")}
         </button>
         <button
@@ -209,7 +209,7 @@ export function ImageSection({
           onClick={onReplace}
           type="button"
         >
-          <Glyph name="image" size={13} />
+          <Icon name="lucide:image" size={13} />
           {t("properties.imageReplace")}
         </button>
       </div>

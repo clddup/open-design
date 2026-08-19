@@ -5,7 +5,7 @@ import type {
   SharedStyleType,
   StyleReferenceTarget,
 } from "@opendesign/design-contracts";
-import { Glyph, IconButton } from "@opendesign/ui";
+import { Icon, IconButton } from "@opendesign/ui";
 import { useMemo, useState } from "react";
 import { useI18n } from "../i18n";
 import type { StyleActions } from "../use-style-actions";
@@ -88,7 +88,7 @@ export function LocalStylesPanel({
       <div className={styles.list} role="list">
         {orderedStyles.length === 0 ? (
           <div className={styles.empty}>
-            <Glyph name="component" size={18} />
+            <Icon name="lucide:component" size={18} />
             <strong>{t("styles.noStyles")}</strong>
             <span>{t("styles.noStylesHint")}</span>
           </div>
@@ -124,7 +124,7 @@ export function LocalStylesPanel({
         />
         <IconButton
           disabled={!selectedField}
-          icon="plus"
+          icon="lucide:plus"
           label={
             selectedField
               ? t("styles.create")
@@ -289,13 +289,13 @@ function StylePreview({ style }: { style: SharedStyleDefinition }) {
       style={color ? { background: color } : undefined}
     >
       {!color && (
-        <Glyph
+        <Icon
           name={
             style.styleType === "TEXT"
-              ? "text"
+              ? "lucide:type"
               : style.styleType === "GRID"
-                ? "frame"
-                : "spark"
+                ? "lucide:frame"
+                : "lucide:sparkles"
           }
           size={13}
         />

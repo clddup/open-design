@@ -31,6 +31,7 @@ export interface AgentComposerControllerOptions {
   ) => Promise<boolean>;
   timeline: readonly SessionTimelineItem[];
   t: Translate;
+  submissionAvailable?: boolean;
 }
 
 export interface AgentComposerController {
@@ -60,6 +61,7 @@ export interface AgentComposerController {
   submit: () => Promise<boolean>;
   submitting: boolean;
   supportsImageInput: boolean;
+  submissionAvailable: boolean;
   attachmentError: string | null;
   createConversation: () => Promise<void>;
 }
@@ -73,6 +75,7 @@ export function useAgentComposerController({
   onSubmit,
   timeline,
   t,
+  submissionAvailable = true,
 }: AgentComposerControllerOptions): AgentComposerController {
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -197,6 +200,7 @@ export function useAgentComposerController({
   const hasImageAttachments = attachments.some(isImageAttachment);
   const canSubmit = Boolean(
     hasConversation &&
+    submissionAvailable &&
     modelSelection &&
     prompt.trim() &&
     !(hasImageAttachments && !supportsImageInput) &&
@@ -382,6 +386,7 @@ export function useAgentComposerController({
     submit,
     submitting,
     supportsImageInput,
+    submissionAvailable,
   };
 }
 

@@ -85,7 +85,7 @@ button {
   outline-offset: 1px;
 }
 
-.ui-glyph {
+.ui-icon {
   display: block;
   fill: none;
   stroke: currentColor;
@@ -151,6 +151,15 @@ button {
   border-color: var(--ui-accent-hover);
   background: var(--ui-accent-hover);
 }
+.ui-button--danger {
+  border-color: var(--ui-danger);
+  background: var(--ui-danger);
+  color: white;
+}
+.ui-button--danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ui-danger) 82%, black);
+  background: color-mix(in srgb, var(--ui-danger) 82%, black);
+}
 .ui-button--quiet {
   border-color: transparent;
   background: transparent;
@@ -212,6 +221,76 @@ button {
 
 .ui-disabled-tooltip-trigger {
   display: inline-flex;
+}
+
+.ui-dialog-backdrop {
+  position: fixed;
+  z-index: 1190;
+  inset: 0;
+  background: rgb(0 0 0 / 42%);
+}
+.ui-dialog-viewport {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  overflow: auto;
+  padding: 24px;
+  place-items: center;
+}
+.ui-confirm-dialog {
+  display: grid;
+  width: min(420px, 100%);
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--ui-radius-md);
+  outline: none;
+  background: var(--ui-surface-raised);
+  box-shadow: var(--ui-shadow-lg);
+}
+.ui-confirm-dialog__icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--ui-danger);
+  background: color-mix(in srgb, var(--ui-danger) 12%, transparent);
+}
+.ui-confirm-dialog__content {
+  min-width: 0;
+}
+.ui-confirm-dialog__title {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.ui-confirm-dialog__description {
+  margin: 7px 0 0;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.ui-confirm-dialog__error {
+  margin-top: 8px;
+  color: var(--ui-danger);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.ui-confirm-dialog__actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.ui-dialog-backdrop[data-open],
+.ui-confirm-dialog[data-open] {
+  animation: ui-overlay-in 100ms ease-out;
 }
 
 .ui-tooltip,
@@ -404,7 +483,9 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .ui-tooltip,
   .ui-dropdown-menu,
-  .ui-select__popup {
+  .ui-select__popup,
+  .ui-dialog-backdrop,
+  .ui-confirm-dialog {
     animation: none !important;
   }
 }

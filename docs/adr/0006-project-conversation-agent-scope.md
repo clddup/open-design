@@ -4,6 +4,7 @@
 - 日期：2026-08-07
 - 补充：ADR-0002、ADR-0004 与 ADR-0005
 - 迁移说明：旧引擎移除已经关闭；专业能力延续路径由 ADR-0009、ADR-0011 定义
+- 部分取代：Conversation 的 `homeProjectId` 与 Project 强归属由 ADR-0094 取代；本 ADR 的资源、权限和并发边界继续有效
 
 ## 背景
 
@@ -49,7 +50,7 @@ Conversation 可以在后续 run 中引用其他 Project。引用其他 Project 
 - **Mutation Targets** 描述本次计划允许改变的资源，包括一个或多个 Design File、节点范围、输出文件或受控外部资源。每个目标携带资源 ID、目标 Project、预期 revision、允许的变更种类和生命周期。它回答“计划要改什么”，不代表调用已经获准。
 - **Capabilities** 描述某个主体可请求或执行的动作，例如 `design.read`、`design.mutate`、`file.read`、`file.write`、`network.fetch` 或受限进程工具。能力绑定主体、资源选择器、操作、有效期、来源和约束；它回答“策略最多允许什么”。
 
-一个资源可以只在 Working Set 中，也可以同时是 Mutation Target。写入必须同时满足：目标显式列入 Mutation Targets、调用方持有匹配 Capability、所需 Approval 已完成、执行环境满足 Sandbox 策略。任何集合都不得从另一个集合、当前选区或 `homeProjectId` 隐式扩大。
+一个资源可以只在 Working Set 中，也可以同时是 Mutation Target。写入必须同时满足：目标显式列入 Mutation Targets、调用方持有匹配 Capability、所需 Approval 已完成、执行环境满足 Sandbox 策略。任何集合都不得从另一个集合、当前选区或 Conversation 组织字段隐式扩大。
 
 ### Attached roots、per-run references 与跨项目多目标
 
@@ -109,9 +110,9 @@ OpenPencil 只作为历史调研与迁移记录，不是当前或目标 Agent、
 
 ## 当前实现与迁移
 
-接受本 ADR 不表示目标能力已经完成。当前仓库已经具备 OpenDesign 文档 schema、多 Page 数据结构、单文档 `DesignTransaction`/revision、Workspace/Project/File 持久化与导航、可持久化的 Conversation descriptor、按 Conversation 隔离的会话时间线、单目标 Global Task 投影和基础 Tool Runtime 策略/审批接口。Page 创建、重命名、复制、最终位置排序与删除使用同一事务/planner、稳定 ID、Page/node diff、history 和自动保存；复制重映射 Page 节点但共享文档 assets，删除不能移除最后一页，活动 Page 被事务或 undo/redo 删除时 Workspace 回退相邻 Page。人工 Pages 导航与 `opendesign_manage_pages` 共用该语义。Agent Run 默认冻结到发送时 Page，Composer 只显示 Page/选区上下文，不再常驻暴露内部写入范围。绑定 Page rename 可直接执行；创建、复制、排序、删除或跨 Page 修改先调用 `opendesign_request_page_structure_access`，由 Main 精确绑定一次性审批，批准后强制重新 inspect，并只为该 Run、该 Design File 解析 effective document execution context，终态自动回收。该临时授权不会扩展到 Project、其他 Design File 或文件路径，详细裁决见 ADR-0029。`homeProjectId` 已用于产品归档与 Main 目标校验，同一 Conversation 可在不同 run 中引用不同的已校验 Design File。Renderer 现在按 Main 已验证的 Run `documentId` 解析每个已打开 Design File 的唯一 `EditorRuntime`，而不是使用用户当前活动 tab：A 的 Run 会 retain A，用户切到 B 后 A 仍可写入和离屏截图，B 不接收 A 的 revision、selection 或生成展示，切回 A 直接读取其最新权威 snapshot。Project Design File 的人工和 Agent revision 由同一按文件串行的 autosave 协调器持久化；Agent 写工具在目标 revision flush 后才返回成功，窗口或应用退出前会 flush pending 文件，失败则保留 dirty 并报告诊断。Main 在 `before-quit` 只记录退出意图，到 `will-quit` 才销毁 Project/Agent 资源，macOS 在 Renderer 异步 flush 后恢复退出，Windows 复用同一状态机。Design File 重命名只通过稳定 Project/File ID 更新 manifest descriptor，不改变文档身份、relative path 或画布内容，并与 autosave 使用同一 Project mutation queue。独立打开的外部设计文件不被静默自动覆盖。当前每个 Agent run 仍只拥有单个 Design File；尚未实现完整三集合、多 root、跨项目多目标、通用 Main approval/audit bridge 或完整四层执行链。OpenPencil host、preload、IPC、vendor/submodule、构建入口和发行资源已经移除。
+接受本 ADR 不表示目标能力已经完成。当前仓库已经具备 OpenDesign 文档 schema、多 Page 数据结构、单文档 `DesignTransaction`/revision、Workspace/Project/File 持久化与导航、Workspace 级 Conversation descriptor、按 Conversation 隔离的会话时间线、单目标 Global Task 投影和基础 Tool Runtime 策略/审批接口。Page 创建、重命名、复制、最终位置排序与删除使用同一事务/planner、稳定 ID、Page/node diff、history 和自动保存；复制重映射 Page 节点但共享文档 assets，删除不能移除最后一页，活动 Page 被事务或 undo/redo 删除时 Workspace 回退相邻 Page。人工 Pages 导航与 `opendesign_manage_pages` 共用该语义。Agent Run 默认冻结到发送时 Page，Composer 只显示 Page/选区上下文，不再常驻暴露内部写入范围。绑定 Page rename 可直接执行；创建、复制、排序、删除或跨 Page 修改先调用 `opendesign_request_page_structure_access`，由 Main 精确绑定一次性审批，批准后强制重新 inspect，并只为该 Run、该 Design File 解析 effective document execution context，终态自动回收。该临时授权不会扩展到 Project、其他 Design File 或文件路径，详细裁决见 ADR-0029。Conversation 的 Project 字段只用于来源和归档，Main 以 Run `targetSet` 校验真实 Project/File/Page；详细取代决策见 ADR-0094。同一 Conversation 可在不同 Run 中引用不同的已校验 Design File。Renderer 现在按 Main 已验证的 Run `documentId` 解析每个已打开 Design File 的唯一 `EditorRuntime`，而不是使用用户当前活动 tab：A 的 Run 会 retain A，用户切到 B 后 A 仍可写入和离屏截图，B 不接收 A 的 revision、selection 或生成展示，切回 A 直接读取其最新权威 snapshot。Project Design File 的人工和 Agent revision 由同一按文件串行的 autosave 协调器持久化；Agent 写工具在目标 revision flush 后才返回成功，窗口或应用退出前会 flush pending 文件，失败则保留 dirty 并报告诊断。Main 在 `before-quit` 只记录退出意图，到 `will-quit` 才销毁 Project/Agent 资源，macOS 在 Renderer 异步 flush 后恢复退出，Windows 复用同一状态机。Design File 重命名只通过稳定 Project/File ID 更新 manifest descriptor，不改变文档身份、relative path 或画布内容，并与 autosave 使用同一 Project mutation queue。独立打开的外部设计文件不被静默自动覆盖。当前每个 Agent Run 仍只拥有单个 Design File；尚未实现完整三集合、多 root、跨项目多目标、通用 Main approval/audit bridge 或完整四层执行链。OpenPencil host、preload、IPC、vendor/submodule、构建入口和发行资源已经移除。
 
-实现必须通过版本化契约和迁移逐步加入新身份与作用域字段。旧会话可以迁移到明确的默认 Workspace 和 Project，但不得把其历史路径自动转换为 attached root 或持久 Capability。
+实现必须通过版本化契约和迁移逐步加入新身份与作用域字段。预发布 Conversation schema 已按 ADR-0094 破坏性重建；任何旧路径都不得自动转换为 attached root、Run target 或持久 Capability。
 
 ### 旧引擎迁移结果
 
@@ -124,7 +125,7 @@ OpenPencil host/preload/IPC、vendor/submodule、构建入口和发行资源已�
 ### 正面结果
 
 - 产品组织、推理上下文、写目标和权限不再混为一个“项目目录”。
-- Conversation 可以保留稳定归属，同时安全处理跨目录、跨 Project 和多目标任务。
+- Workspace 级 Conversation 可以保留稳定身份，同时安全处理跨目录、跨 Project 和多目标任务。
 - 内置 Agent 与 MCP 共用事务和安全执行面，减少权限旁路。
 - Revision 冲突为所有会话提供一致、可恢复的并发语义。
 - OpenPencil 的可取模型与不可接受的路径授权方式得到明确区分，并具有可验证的退出条件。
@@ -138,7 +139,7 @@ OpenPencil host/preload/IPC、vendor/submodule、构建入口和发行资源已�
 
 ## 验证
 
-- Contract tests 覆盖三集合互不推导、`homeProjectId` 不授予权限，以及 per-run reference 到期失效。
+- Contract tests 覆盖三集合互不推导、Conversation 组织字段不授予权限，以及 per-run reference 到期失效。
 - 安全测试覆盖路径穿越、符号链接替换、伪造 root handle、撤销、凭据泄漏、提示注入和裸 shell 请求。
 - 并发测试覆盖不同文件并行、同文件 stale revision、跨会话重试、多目标部分失败与撤销。
 - MCP contract tests 证明内外部调用进入同一 Tool Runtime 和 `DesignTransaction`，并拒绝任意本地 `filePath`。

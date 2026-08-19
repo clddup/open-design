@@ -18,7 +18,7 @@ import {
   isFontBinaryReadRequest,
   isGlobalImageGenerationSettings,
   isGlobalTaskProjectionResult,
-  isListProjectConversationsRequest,
+  isDeleteConversationRequest,
   isModelProviderCatalog,
   isProviderConnectionResult,
   migrateModelProviderCatalog,
@@ -532,16 +532,16 @@ describe("Project desktop API guards", () => {
 });
 
 describe("Conversation desktop API guards", () => {
-  it("accepts path-free creation and Project-scoped list requests", () => {
+  it("accepts path-free creation and deletion requests", () => {
     expect(
       isCreateConversationRequest({
         conversationId: "conversation_mobile",
-        homeProjectId: "project_acme",
+        filedProjectId: "project_acme",
         title: "Refine the mobile experience",
       }),
     ).toBe(true);
     expect(
-      isListProjectConversationsRequest({ homeProjectId: "project_acme" }),
+      isDeleteConversationRequest({ conversationId: "conversation_mobile" }),
     ).toBe(true);
   });
 
@@ -549,7 +549,7 @@ describe("Conversation desktop API guards", () => {
     expect(
       isCreateConversationRequest({
         conversationId: "conversation_mobile",
-        homeProjectId: "project_acme",
+        filedProjectId: "project_acme",
         title: "Refine the mobile experience",
         rootPath: "/tmp/Acme Design",
       }),
@@ -557,14 +557,14 @@ describe("Conversation desktop API guards", () => {
     expect(
       isCreateConversationRequest({
         conversationId: "conversation_mobile",
-        homeProjectId: "project_acme",
+        filedProjectId: "project_acme",
         title: "Refine the mobile experience",
         lifecycle: "active",
       }),
     ).toBe(false);
     expect(
-      isListProjectConversationsRequest({
-        homeProjectId: "project_acme",
+      isDeleteConversationRequest({
+        conversationId: "conversation_mobile",
         includeDeleted: true,
       }),
     ).toBe(false);
@@ -585,7 +585,8 @@ describe("Conversation desktop API guards", () => {
     };
     const conversation = {
       conversationId: "conversation_mobile",
-      homeProjectId: "project_acme",
+      originProjectId: "project_acme",
+      filedProjectId: "project_acme",
       title: "Refine the mobile experience",
       createdAt: now,
       updatedAt: now,
@@ -595,7 +596,6 @@ describe("Conversation desktop API guards", () => {
       version: WORKSPACE_CONTRACT_VERSION,
       taskId: "task_mobile",
       conversationId: conversation.conversationId,
-      homeProjectId: conversation.homeProjectId,
       runId: "run_mobile",
       title: conversation.title,
       lifecycle: "running",

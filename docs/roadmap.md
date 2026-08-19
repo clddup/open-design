@@ -41,6 +41,13 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 
 每阶段先锁定现有行为，迁移完整状态与取消/错误生命周期，补定向测试，再运行全仓 verify 并独立提交。Phase 1 只建立治理方法和首个切片，不代表剩余大模块已完成。规范见 [ADR-0046](adr/0046-project-module-boundaries-and-incremental-governance.md)。
 
+## Workspace 会话与桌面入口
+
+- [x] Conversation 已从 Project 子实体升级为 Workspace 一级实体；`WorkspaceContract 2` 使用不可变 `originProjectId` 与可空/可移动 `filedProjectId`，不保留 `homeProjectId` 兼容或双写。
+- [x] Workspace 提供全局最近会话、删除入口和 Global Task 审计；Project Home 只显示归档过滤视图，不再是进入会话的门槛。
+- [x] 打开 Conversation 由 Main 依次解析活动 Run、最近 Task 与归档 Project 默认文件，直接恢复准确 Project/Design File/Page；无有效目标时保留 Timeline 并禁用 Composer。
+- [x] Conversation 删除由 Main 活动 Run/continuation 权威门禁；已提交设计、文档 history 和 terminal Global Task 审计不随列表 tombstone 删除。见 [ADR-0094](adr/0094-workspace-owned-conversations.md)。
+
 ## P0-A：macOS 与 Windows 一级平台可用
 
 当前仓库已配置 `.github/workflows/native-desktop.yml`：macOS 与 Windows 原生 runner 分别执行共享 `pnpm verify`、目标平台 protected build/安装包、产物内容校验，并直接启动打包后的 `OpenDesign.app` / `OpenDesign.exe` 执行无窗口 Agent smoke；不启动开发 Electron 入口。原生 workflow [31384519288](https://github.com/clddup/open-design/actions/runs/31384519288) 已在两个平台通过并上传产物，macOS arm64 也已在本机生成未签名 DMG/ZIP。自动化 packaged smoke 不能替代干净安装、签名、升级/卸载和人工 GUI 产品 smoke，下面的完整 P0-A 发布门禁仍未完成。

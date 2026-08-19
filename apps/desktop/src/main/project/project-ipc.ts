@@ -1,9 +1,12 @@
-import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
+import type {
+  ConversationDescriptor,
+  DesignTarget,
+} from "@opendesign/workspace-contracts";
 import {
   isCreateConversationRequest,
+  isDeleteConversationRequest,
   isCreateProjectDesignFileRequest,
   isCreateProjectRequest,
-  isListProjectConversationsRequest,
   isOpenRecentProjectRequest,
   isProjectDesignFileRequest,
   isRenameProjectDesignFileRequest,
@@ -18,6 +21,7 @@ export type SelectProjectDirectory = (
   purpose: ProjectDirectoryPurpose,
 ) => Promise<string | null>;
 export type RevealProjectDirectory = (rootPath: string) => void;
+export type HasActiveConversationRun = (conversationId: string) => boolean;
 
 export class ProjectIpcService {
   constructor(
@@ -26,6 +30,8 @@ export class ProjectIpcService {
     private readonly selectProjectDirectory: SelectProjectDirectory,
     private readonly revealProjectDirectory: RevealProjectDirectory = () =>
       undefined,
+    private readonly hasActiveConversationRun: HasActiveConversationRun = () =>
+      false,
   ) {}
 
   async createProject(request: unknown) {
@@ -93,13 +99,14 @@ export class ProjectIpcService {
     if (!isCreateConversationRequest(request)) {
       throw new TypeError("Invalid Conversation create request");
     }
-    if (!this.workspaceStore.getProjectRoot(request.homeProjectId)) {
-      throw new Error("Conversation Home Project is not registered");
+    if (!this.workspaceStore.getProjectRoot(request.filedProjectId)) {
+      throw new Error("Conversation Project is not registered");
     }
     const timestamp = new Date().toISOString();
     const conversation: ConversationDescriptor = {
       conversationId: request.conversationId,
-      homeProjectId: request.homeProjectId,
+      originProjectId: request.filedProjectId,
+      filedProjectId: request.filedProjectId,
       title: request.title,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -109,14 +116,163 @@ export class ProjectIpcService {
     return conversation;
   }
 
-  listProjectConversations(request: unknown) {
-    if (!isListProjectConversationsRequest(request)) {
-      throw new TypeError("Invalid Project Conversation list request");
+  deleteConversation(request: unknown) {
+    if (!isDeleteConversationRequest(request)) {
+      throw new TypeError("Invalid Conversation delete request");
     }
-    if (!this.workspaceStore.getProjectRoot(request.homeProjectId)) {
-      throw new Error("Conversation Home Project is not registered");
+    const conversation = this.workspaceStore.getConversation(
+      request.conversationId,
+    );
+    if (!conversation) throw new Error("Conversation does not exist");
+    if (this.hasActiveConversationRun(conversation.conversationId)) {
+      throw new Error("A Conversation with an active task cannot be deleted");
     }
-    return this.workspaceStore.listConversations(request.homeProjectId);
+    if (conversation.lifecycle === "deleted") return conversation;
+    const deleted: ConversationDescriptor = {
+      ...conversation,
+      lifecycle: "deleted",
+      updatedAt: new Date().toISOString(),
+    };
+    this.workspaceStore.saveConversation(deleted);
+    return deleted;
+  }
+
+  listConversations() {
+    return this.workspaceStore
+      .listConversations()
+      .filter((conversation) => conversation.lifecycle === "active");
+  }
+
+  async resolveConversationOpenContext(request: unknown) {
+    if (!isDeleteConversationRequest(request)) {
+      throw new TypeError("Invalid Conversation open request");
+    }
+    const conversation = this.workspaceStore.getConversation(
+      request.conversationId,
+    );
+    if (!conversation || conversation.lifecycle !== "active") {
+      throw new Error("Conversation does not exist");
+    }
+    const tasks = this.workspaceStore
+      .listGlobalTasks()
+      .filter((task) => task.conversationId === conversation.conversationId);
+    const activeTask = tasks.find((task) =>
+      ["queued", "running", "waiting_approval"].includes(task.lifecycle),
+    );
+    const task = activeTask ?? tasks[0];
+    if (task) {
+      return this.#resolveConversationTarget(
+        conversation.conversationId,
+        task.targetSet.primaryTarget,
+        activeTask ? "active-task" : "recent-task",
+      );
+    }
+    if (!conversation.filedProjectId) {
+      return {
+        kind: "target-unavailable" as const,
+        conversationId: conversation.conversationId,
+        reason: "no-target" as const,
+      };
+    }
+    let manifest;
+    try {
+      manifest = await this.projectHost.openRecentProject(
+        conversation.filedProjectId,
+      );
+    } catch {
+      return {
+        kind: "target-unavailable" as const,
+        conversationId: conversation.conversationId,
+        reason: "project-unavailable" as const,
+      };
+    }
+    const descriptor = manifest.designFiles.find(
+      (file) => file.lifecycle === "active",
+    );
+    if (!descriptor) {
+      return {
+        kind: "target-unavailable" as const,
+        conversationId: conversation.conversationId,
+        reason: "design-file-unavailable" as const,
+      };
+    }
+    const opened = await this.projectHost.readDesignFile(
+      manifest.projectId,
+      descriptor.designFileId,
+    );
+    const pageId = opened.document.pageOrder[0];
+    if (!pageId) {
+      return {
+        kind: "target-unavailable" as const,
+        conversationId: conversation.conversationId,
+        reason: "page-unavailable" as const,
+      };
+    }
+    const target: DesignTarget = {
+      targetId: `resume_${conversation.conversationId}`,
+      projectId: manifest.projectId,
+      designFileId: descriptor.designFileId,
+      documentId: descriptor.documentId,
+      pageId,
+      selectedNodeIds: [],
+      baseRevision: opened.document.revision,
+    };
+    return {
+      kind: "target-available" as const,
+      conversationId: conversation.conversationId,
+      source: "filed-project" as const,
+      target,
+    };
+  }
+
+  async #resolveConversationTarget(
+    conversationId: string,
+    target: DesignTarget,
+    source: "active-task" | "recent-task",
+  ) {
+    let manifest;
+    try {
+      manifest = await this.projectHost.openRecentProject(target.projectId);
+    } catch {
+      return {
+        kind: "target-unavailable" as const,
+        conversationId,
+        reason: "project-unavailable" as const,
+        target,
+      };
+    }
+    const descriptor = manifest.designFiles.find(
+      (file) =>
+        file.designFileId === target.designFileId &&
+        file.documentId === target.documentId &&
+        file.lifecycle === "active",
+    );
+    if (!descriptor) {
+      return {
+        kind: "target-unavailable" as const,
+        conversationId,
+        reason: "design-file-unavailable" as const,
+        target,
+      };
+    }
+    const opened = await this.projectHost.readDesignFile(
+      manifest.projectId,
+      descriptor.designFileId,
+    );
+    if (!opened.document.pagesById[target.pageId]) {
+      return {
+        kind: "target-unavailable" as const,
+        conversationId,
+        reason: "page-unavailable" as const,
+        target,
+      };
+    }
+    return {
+      kind: "target-available" as const,
+      conversationId,
+      source,
+      target,
+    };
   }
 
   listGlobalTasks() {

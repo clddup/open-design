@@ -10,7 +10,7 @@ function titlebar(platform: NodeJS.Platform) {
       <I18nProvider initialLocale="en">
         <HomeTitlebar
           actions={<button type="button">Context action</button>}
-          icon="spark"
+          icon="lucide:sparkles"
           identity={<strong>OpenDesign workspace</strong>}
           platform={platform}
         />

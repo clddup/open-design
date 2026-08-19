@@ -7,7 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  Glyph,
+  Icon,
   IconButton,
 } from "@opendesign/ui";
 import {
@@ -510,7 +510,7 @@ export function LeftSidebar({
       <SidebarViewTabs onChange={onTabChange} value={tab} />
       {(tab === "layers" || tab === "assets") && (
         <div className={styles.search}>
-          <Glyph name="search" />
+          <Icon name="lucide:search" />
           <input
             aria-label={
               tab === "assets"
@@ -532,7 +532,7 @@ export function LeftSidebar({
           />
           {(tab === "assets" ? assetQuery : layerQuery) && (
             <IconButton
-              icon="close"
+              icon="lucide:x"
               label={t("sidebar.clearSearch")}
               onClick={() =>
                 tab === "assets" ? setAssetQuery("") : setLayerQuery("")
@@ -555,7 +555,7 @@ export function LeftSidebar({
             <div className={styles.pageHeading}>
               <span>{t("sidebar.pages")}</span>
               <IconButton
-                icon="plus"
+                icon="lucide:plus"
                 label={t("sidebar.createPage")}
                 onClick={createPage}
               />
@@ -630,7 +630,7 @@ export function LeftSidebar({
                 >
                   {editingPageId === pageId ? (
                     <div className={styles.pageEditor}>
-                      <Glyph name="frame" size={14} />
+                      <Icon name="lucide:frame" size={14} />
                       <input
                         aria-invalid={pageNameError ? "true" : undefined}
                         aria-label={t("sidebar.renamePage", {
@@ -683,7 +683,7 @@ export function LeftSidebar({
                       }}
                       type="button"
                     >
-                      <Glyph name="frame" size={14} />
+                      <Icon name="lucide:frame" size={14} />
                       <span>{page.name}</span>
                     </button>
                   )}
@@ -693,7 +693,7 @@ export function LeftSidebar({
                       align: "start",
                       sideOffset: 4,
                     }}
-                    icon={<Glyph name="more" size={14} />}
+                    icon={<Icon name="lucide:ellipsis" size={14} />}
                     label={t("sidebar.pageActions", { name: page.name })}
                   >
                     <DropdownMenuItem
@@ -790,8 +790,12 @@ export function LeftSidebar({
                       onClick={() => toggleNode(node.id)}
                       type="button"
                     >
-                      <Glyph
-                        name={collapsed ? "chevron-right" : "chevron-down"}
+                      <Icon
+                        name={
+                          collapsed
+                            ? "lucide:chevron-right"
+                            : "lucide:chevron-down"
+                        }
                         size={13}
                       />
                     </button>
@@ -817,10 +821,10 @@ export function LeftSidebar({
                     tabIndex={node.id === firstFocusableId ? 0 : -1}
                     type="button"
                   >
-                    <Glyph
+                    <Icon
                       name={
                         componentIdentityNodeIds.has(node.id)
-                          ? "component"
+                          ? "lucide:component"
                           : nodeIcons[node.kind]
                       }
                       size={14}
@@ -847,7 +851,7 @@ export function LeftSidebar({
                     <IconButton
                       className={effectiveLocked ? styles.layerLockActive : ""}
                       disabled={inheritedLocked && !node.locked}
-                      icon={effectiveLocked ? "lock" : "unlock"}
+                      icon={effectiveLocked ? "lucide:lock" : "lucide:unlock"}
                       label={t(
                         node.locked
                           ? "sidebar.unlockNode"
@@ -860,7 +864,7 @@ export function LeftSidebar({
                       selected={effectiveLocked}
                     />
                     <IconButton
-                      icon={node.visible ? "eye" : "eye-off"}
+                      icon={node.visible ? "lucide:eye" : "lucide:eye-off"}
                       label={t(
                         node.visible ? "sidebar.hideNode" : "sidebar.showNode",
                         { name: node.name || t(nodeKindKeys[node.kind]) },
@@ -869,7 +873,7 @@ export function LeftSidebar({
                     />
                     <IconButton
                       disabled={!canDeleteNodes(document, [node.id])}
-                      icon="trash"
+                      icon="lucide:trash-2"
                       label={t("sidebar.deleteNode", {
                         name: node.name || t(nodeKindKeys[node.kind]),
                       })}

@@ -4,9 +4,9 @@ import {
   Divider,
   DropdownMenu,
   DropdownMenuItem,
-  Glyph,
+  Icon,
   IconButton,
-  type GlyphName,
+  type IconName,
 } from "@opendesign/ui";
 import type { MessageKey } from "../../shared/i18n/messages";
 import { useI18n } from "../i18n";
@@ -16,37 +16,47 @@ import styles from "./Toolbar.module.scss";
 type ToolbarItem = {
   id: Tool;
   label: MessageKey;
-  icon: GlyphName;
+  icon: IconName;
   shortcut?: string;
 };
 
 const tools: ToolbarItem[] = [
-  { id: "select", label: "toolbar.select", icon: "select", shortcut: "V" },
-  { id: "frame", label: "toolbar.frame", icon: "frame", shortcut: "F" },
-  { id: "slice", label: "toolbar.slice", icon: "frame", shortcut: "S" },
+  {
+    id: "select",
+    label: "toolbar.select",
+    icon: "lucide:mouse-pointer-2",
+    shortcut: "V",
+  },
+  { id: "frame", label: "toolbar.frame", icon: "lucide:frame", shortcut: "F" },
+  { id: "slice", label: "toolbar.slice", icon: "lucide:frame", shortcut: "S" },
   {
     id: "rectangle",
     label: "toolbar.rectangle",
-    icon: "rectangle",
+    icon: "lucide:rectangle-horizontal",
     shortcut: "R",
   },
-  { id: "ellipse", label: "toolbar.ellipse", icon: "ellipse", shortcut: "O" },
-  { id: "line", label: "toolbar.line", icon: "line", shortcut: "L" },
+  {
+    id: "ellipse",
+    label: "toolbar.ellipse",
+    icon: "lucide:circle",
+    shortcut: "O",
+  },
+  { id: "line", label: "toolbar.line", icon: "lucide:slash", shortcut: "L" },
   {
     id: "arrow",
     label: "toolbar.arrow",
-    icon: "arrow",
+    icon: "lucide:arrow-up-right",
     shortcut: "Shift+L",
   },
-  { id: "polygon", label: "toolbar.polygon", icon: "polygon" },
-  { id: "star", label: "toolbar.star", icon: "star" },
+  { id: "polygon", label: "toolbar.polygon", icon: "lucide:pentagon" },
+  { id: "star", label: "toolbar.star", icon: "lucide:star" },
   {
     id: "pen",
     label: "toolbar.pen",
-    icon: "pen",
+    icon: "lucide:pen",
     shortcut: "P",
   },
-  { id: "text", label: "toolbar.text", icon: "text", shortcut: "T" },
+  { id: "text", label: "toolbar.text", icon: "lucide:type", shortcut: "T" },
 ];
 
 export function Toolbar({
@@ -152,13 +162,13 @@ export function Toolbar({
       >
         <IconButton
           disabled={!canUndo}
-          icon="undo"
+          icon="lucide:undo-2"
           label={t("toolbar.undo")}
           onClick={onUndo}
         />
         <IconButton
           disabled={!canRedo}
-          icon="redo"
+          icon="lucide:redo-2"
           label={t("toolbar.redo")}
           onClick={onRedo}
         />
@@ -171,19 +181,19 @@ export function Toolbar({
       >
         <IconButton
           disabled={!canDuplicate}
-          icon="duplicate"
+          icon="lucide:copy"
           label={`${t("toolbar.duplicate")} (${shortcuts.duplicate})`}
           onClick={onDuplicate}
         />
         <IconButton
           disabled={!canHierarchyAction}
-          icon="layers"
+          icon="lucide:layers"
           label={hierarchyLabel}
           onClick={hierarchyAction === "ungroup" ? onUngroup : onGroup}
         />
         <DropdownMenu
           disabled={!canBooleanAction}
-          icon={<Glyph name="boolean" />}
+          icon={<Icon name="lucide:combine" />}
           label={t("toolbar.booleanOperations")}
         >
           {booleanItems.map(({ operation, label }) => (
@@ -199,7 +209,7 @@ export function Toolbar({
         </DropdownMenu>
         <DropdownMenu
           disabled={!orderItems.some(({ action }) => canReorder[action])}
-          icon={<Glyph name="more" />}
+          icon={<Icon name="lucide:ellipsis" />}
           label={t("toolbar.layerOrder")}
         >
           {orderItems.map(({ action, label }) => (
@@ -215,7 +225,7 @@ export function Toolbar({
         </DropdownMenu>
         <IconButton
           disabled={!canDelete}
-          icon="trash"
+          icon="lucide:trash-2"
           label={`${t("toolbar.delete")} (Delete)`}
           onClick={onDelete}
         />

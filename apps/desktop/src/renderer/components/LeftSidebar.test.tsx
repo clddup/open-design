@@ -397,7 +397,7 @@ describe("LeftSidebar layer tree", () => {
       name: "Boolean cards",
     });
     expect(
-      booleanLayer.querySelector('[data-glyph="boolean"]'),
+      booleanLayer.querySelector('[data-icon="lucide:combine"]'),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: first.name }),
@@ -441,7 +441,9 @@ describe("LeftSidebar layer tree", () => {
       name: `Unlock ${frame.name}`,
     });
     expect(ownLock).toHaveAttribute("aria-pressed", "true");
-    expect(ownLock.querySelector('[data-glyph="lock"]')).toBeInTheDocument();
+    expect(
+      ownLock.querySelector('[data-icon="lucide:lock"]'),
+    ).toBeInTheDocument();
     await user.click(ownLock);
     expect(onToggleLock).toHaveBeenCalledWith(frame.id);
 
@@ -451,7 +453,7 @@ describe("LeftSidebar layer tree", () => {
     expect(inheritedLock).toBeDisabled();
     expect(inheritedLock).toHaveAttribute("aria-pressed", "true");
     expect(
-      inheritedLock.querySelector('[data-glyph="lock"]'),
+      inheritedLock.querySelector('[data-icon="lucide:lock"]'),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: child.name })).toHaveAttribute(
       "draggable",
@@ -486,7 +488,9 @@ describe("LeftSidebar layer tree", () => {
     });
     expect(unlocked).not.toBeDisabled();
     expect(unlocked).toHaveAttribute("aria-pressed", "false");
-    expect(unlocked.querySelector('[data-glyph="unlock"]')).toBeInTheDocument();
+    expect(
+      unlocked.querySelector('[data-icon="lucide:unlock"]'),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: child.name })).toHaveAttribute(
       "draggable",
       "true",

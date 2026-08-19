@@ -8,6 +8,11 @@
   "engines": {
     "node": ">=22.19.0"
   },
+  "pnpm": {
+    "overrides": {
+      "@iconify/json": "2.2.512"
+    }
+  },
   "scripts": {
     "agent-core:check": "node scripts/verify-agent-core-boundary.mjs",
     "architecture:check": "node --test scripts/workspace-path.test.mjs && node scripts/verify-architecture-boundaries.mjs",

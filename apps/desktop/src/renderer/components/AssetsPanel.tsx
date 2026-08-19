@@ -3,7 +3,7 @@ import {
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  Glyph,
+  Icon,
   IconButton,
 } from "@opendesign/ui";
 import { useMemo, useRef, useState } from "react";
@@ -158,12 +158,12 @@ export function AssetsPanel({
       </div>
       {Object.keys(document.componentsById).length === 0 ? (
         <div className={styles.compactEmpty}>
-          <Glyph name="component" size={17} />
+          <Icon name="lucide:component" size={17} />
           <span>{t("sidebar.noComponentsHint")}</span>
         </div>
       ) : componentAssets.length === 0 ? (
         <div className={styles.compactEmpty}>
-          <Glyph name="search" size={15} />
+          <Icon name="lucide:search" size={15} />
           <span>{t("sidebar.noMatchingComponents")}</span>
         </div>
       ) : (
@@ -189,7 +189,7 @@ export function AssetsPanel({
                   }
                   type="button"
                 >
-                  <Glyph name="component" size={16} />
+                  <Icon name="lucide:component" size={16} />
                   <span>
                     <strong title={component.name}>{component.name}</strong>
                     <small>
@@ -203,7 +203,7 @@ export function AssetsPanel({
                   </span>
                 </button>
                 <IconButton
-                  icon="select"
+                  icon="lucide:mouse-pointer-2"
                   label={t("sidebar.locateComponentMain", {
                     name: component.name,
                   })}
@@ -218,14 +218,14 @@ export function AssetsPanel({
         <span>{t("sidebar.fileImages")}</span>
         <IconButton
           disabled={busyKey !== null}
-          icon="plus"
+          icon="lucide:plus"
           label={t("sidebar.importImageAsset")}
           onClick={() => void runAsync("import", onImport)}
         />
       </div>
       {entries.length === 0 ? (
         <div className={styles.empty}>
-          <Glyph name="image" size={20} />
+          <Icon name="lucide:image" size={20} />
           <strong>{t("sidebar.noImageAssets")}</strong>
           <span>{t("sidebar.noImageAssetsHint")}</span>
           <button
@@ -238,7 +238,7 @@ export function AssetsPanel({
         </div>
       ) : filtered.length === 0 ? (
         <div className={`${styles.empty} ${styles.searchEmpty}`}>
-          <Glyph name="search" size={18} />
+          <Icon name="lucide:search" size={18} />
           <strong>{t("sidebar.noMatchingAssets")}</strong>
           <span>{t("sidebar.noMatchingAssetsHint", { query })}</span>
         </div>
@@ -294,7 +294,7 @@ export function AssetsPanel({
                         src={entry.previewDataUrl}
                       />
                     ) : (
-                      <Glyph name="image" size={18} />
+                      <Icon name="lucide:image" size={18} />
                     )}
                     {entry.status !== "ready" && <i aria-hidden="true">!</i>}
                   </span>
@@ -320,7 +320,7 @@ export function AssetsPanel({
                     align: "start",
                     sideOffset: 4,
                   }}
-                  icon={<Glyph name="more" size={14} />}
+                  icon={<Icon name="lucide:ellipsis" size={14} />}
                   label={t("sidebar.assetActions", { name: entry.name })}
                 >
                   <DropdownMenuItem

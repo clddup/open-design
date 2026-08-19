@@ -316,7 +316,7 @@ describe("Titlebar behavior primitives", () => {
 
     render(
       <TooltipProvider delayDuration={0}>
-        <IconButton disabled icon="undo" label="Undo unavailable" />
+        <IconButton disabled icon="lucide:undo-2" label="Undo unavailable" />
       </TooltipProvider>,
     );
 

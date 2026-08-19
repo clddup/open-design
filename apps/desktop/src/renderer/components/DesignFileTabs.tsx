@@ -1,4 +1,4 @@
-import { Glyph } from "@opendesign/ui";
+import { Icon } from "@opendesign/ui";
 import {
   useEffect,
   useRef,
@@ -161,7 +161,7 @@ export function DesignFileTabs({
               className={`${styles.tab} ${styles.editing}${active ? ` ${styles.active}` : ""}`}
               key={key}
             >
-              <Glyph name="frame" size={13} />
+              <Icon name="lucide:frame" size={13} />
               <input
                 aria-busy={renameState.saving}
                 aria-describedby={renameState.error ? errorId : undefined}
@@ -231,7 +231,7 @@ export function DesignFileTabs({
             title={renameable ? t("tabs.renameFileHint") : file.name}
             type="button"
           >
-            <Glyph name="frame" size={13} />
+            <Icon name="lucide:frame" size={13} />
             <span className={styles.name}>{file.name}</span>
             {file.retainedByRunIds.length > 0 && (
               <i

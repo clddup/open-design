@@ -81,7 +81,7 @@ function StyleReferenceRow({
         </select>
       </label>
       <IconButton
-        icon="plus"
+        icon="lucide:plus"
         label={t("styles.createForProperty")}
         onClick={() =>
           actions.createFromNode(node.id, field, t("styles.untitled"))

@@ -12,7 +12,7 @@ import type {
   VariantPropertyDefinition,
 } from "@opendesign/design-contracts";
 import type { ResolvedComponentSlot } from "@opendesign/component-service";
-import { Button, Glyph } from "@opendesign/ui";
+import { Button, Icon } from "@opendesign/ui";
 import { useEffect, useState } from "react";
 import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
@@ -300,7 +300,7 @@ function ComponentOverrideEditor({
             }
             type="button"
           >
-            <Glyph name="plus" size={13} />
+            <Icon name="lucide:plus" size={13} />
             {t("properties.addFill")}
           </button>
         </div>

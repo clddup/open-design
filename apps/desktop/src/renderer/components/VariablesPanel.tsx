@@ -7,7 +7,7 @@ import type {
   VariableScope,
   VariableValue,
 } from "@opendesign/design-contracts";
-import { Glyph, IconButton } from "@opendesign/ui";
+import { Icon, IconButton } from "@opendesign/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n";
 import styles from "./VariablesPanel.module.scss";
@@ -139,14 +139,14 @@ export function VariablesPanel({
         <div className={styles.heading}>
           <span>{t("variables.collections")}</span>
           <IconButton
-            icon="plus"
+            icon="lucide:plus"
             label={t("variables.createCollection")}
             onClick={createCollection}
           />
         </div>
         {document.variableCollectionOrder.length === 0 ? (
           <div className={styles.empty}>
-            <Glyph name="assets" size={18} />
+            <Icon name="lucide:shapes" size={18} />
             <strong>{t("variables.noCollections")}</strong>
             <span>{t("variables.noCollectionsHint")}</span>
           </div>

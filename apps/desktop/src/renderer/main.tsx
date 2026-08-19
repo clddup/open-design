@@ -1,3 +1,4 @@
+import "virtual:offline-iconify";
 import "@opendesign/ui/styles.css";
 import { TooltipProvider } from "@opendesign/ui";
 import { StrictMode } from "react";

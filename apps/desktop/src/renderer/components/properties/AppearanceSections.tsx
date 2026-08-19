@@ -4,7 +4,7 @@ import type {
   Effect,
   MaskMode,
 } from "@opendesign/design-contracts";
-import { Glyph } from "@opendesign/ui";
+import { Icon } from "@opendesign/ui";
 import { useI18n } from "../../i18n";
 import type { UpdatePropertiesPatch } from "../../features/editor/types";
 import styles from "../PropertiesPanel.module.scss";
@@ -159,7 +159,7 @@ export function PaintAndEffectsSections({
             }
             type="button"
           >
-            <Glyph name="plus" size={13} />
+            <Icon name="lucide:plus" size={13} />
             {t("properties.addFill")}
           </button>
         </Section>
@@ -285,7 +285,7 @@ export function PaintAndEffectsSections({
             }
             type="button"
           >
-            <Glyph name="plus" size={13} />
+            <Icon name="lucide:plus" size={13} />
             {t("properties.addStroke")}
           </button>
         </Section>

@@ -1,4 +1,4 @@
-import { Glyph } from "@opendesign/ui";
+import { Icon } from "@opendesign/ui";
 import { useI18n } from "../../i18n";
 import styles from "../PropertiesPanel.module.scss";
 
@@ -36,8 +36,10 @@ export function ComponentIdentitySummary({
   return (
     <>
       <span>
-        <Glyph
-          name={variantSet?.isRoot || isMain ? "component" : "instance"}
+        <Icon
+          name={
+            variantSet?.isRoot || isMain ? "lucide:component" : "lucide:diamond"
+          }
           size={15}
         />
         <span>

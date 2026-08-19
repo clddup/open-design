@@ -13,7 +13,7 @@ UI 设计是首要能力和最先打磨的工作流，但不是产品边界。�
 - OpenDesign 自有的 `DesignDocument 1.35.0`、正式矢量、Figma-compatible UTF-16 rich-text character/paragraph/list runs、响应式布局、Component/Instance/Variant/Slot、Variables、Shared Styles，以及正式 Slice 与节点有序 Export Settings。Page、节点、文字范围和设计系统操作共用事务、preview、单调 revision、diff、history、undo/redo、checkpoint；旧文档确定迁移新增 registry/字段，语义不明的非空旧 token 内容明确拒绝而不猜测。
 - `@opendesign/layout-service` contract v8 纯函数求解普通 Frame constraints、linear Auto Layout、Frame Fixed/Hug、直属 flow child Fixed/Fill、Horizontal Wrap、Frame/flow child Min/Max、主轴 Auto gap、Absolute child 排除，以及 Auto Layout Grid v2 的显式 Fixed/Fill/Hug rows/columns、row-auto-flow 自动增减 Fill 行、独立双 gap、Manual/row-major item positioning、cell/span/alignment 与 span-aware 行列重排。候选尺寸按 limits clamp，线性 Fill 以 bounded water-filling 重分配，Grid Fill track 按 fr 权重分配；Frame padding 是不可压缩的硬下限。EditorRuntime 以 deepest-first flow、宽度变化的 Auto Height Text 重测和有界 fingerprint 循环收敛，因此增删、显隐、resize、重排、reparent、父尺寸变化、保存重开与 undo/redo 共用同一权威几何。Inspector、快捷键、Layers、单选 populated Frame resize、absolute child 直接画布操作和 Agent `opendesign_arrange_layers` 复用 planner；flow child 普通 constraints 和直接 geometry、absolute child sizing/limits 与 Agent 通用旁路明确拒绝且零 revision。`DesignDocument 1.20.0` 的 Layout Guide 仍只做不可命中视觉辅助，不参与 child 几何或 capture/export。自动列/自定义自动轨道模板、吸附、counter-axis Auto gap、Vertical wrap、Wrap+Fill、baseline、画布 cell 拖拽手柄、SVG Grid metadata 与 breakpoint 尚未实现。
 - `@opendesign/component-service` contract v4 继续独占 Main/Instance/Variant/Slot 投影；`@opendesign/variable-service` contract v1 在 Component 物化后统一解析 Page→祖先→节点 mode 与 alias chain，再把 BOOLEAN/FLOAT/STRING/COLOR bindings 投影到 Leafer、SVG 和位图。权威节点保留 fallback，mode/value 改动不反写节点。人工 Variables 工作台/Inspector、Agent `opendesign_manage_variables`、inspection、diff/history、autosave 与保存重开共用同一事实。`@opendesign/text-service` 的 Text Layout contract v4、Text Range contract v1、Text Paragraph contract v2、Text List contract v1、Text Editing Session contract v2 和 Text Run Layout contract v4 分别覆盖单样式 Auto Size/字体状态、UTF-16 character range/edit remap、段落边界与逐段 indent/spacing/list facts、连续列表 block/嵌套计数、短生命周期 caret/自动列表/结构键/range staging，以及 mixed-run/list wrapping/baseline/glyph outline provider。固定 Leafer provider 保留 Latin/CJK native Text 边界；按需加载的 HarfBuzz 1.4.0 + bidi-js Unicode 13 provider 使用 Main 显式导入、SHA-256 内容寻址的 TTF/OTF/TTC，输出 cluster-aware complex shaping。Adapter 生成回映唯一原 Text proxy 的 disposable fragments、glyph Paths 和 list markers，marker 不进入 content/document/history。真实 edit DOM 支持四类前缀自动列表、结构键、collapsed-caret typing style、非空 range 暂存与 composition guard；普通 input 不重建 DOM，`U+200B` typing marker 不进入 content/history。关闭 TextEditor 时 optional character runs、final content 和最小 paragraph patches 以一条非 Agent `commit_text_edit` operation 在一次 Runtime transaction/reflow/revision 中提交。离屏 Page/Frame capture 与 Text/ancestor PNG/JPEG/WebP export 继续从精确 revision projection 重建一次性输出树。正式 character/paragraph/list runs、range/caret Inspector、Agent、Figma/SVG metadata v8 往返已接入；custom list markers、OpenType/axes、字体随文件打包、原生 IME/undo 与双平台视觉门禁仍未完成。`@opendesign/figma-interop` 只用固定 `@figma/plugin-typings 1.133.0` 做公共形状验证；nested Slot、更多 Variable binding、Motion、跨文件 Library 与 Plugin/REST/DTCG adapter 尚未实现。
-- Workspace/Project/Design File 持久化与导航、Project Design File 自动保存与稳定身份重命名、持久 Conversation、按 Conversation 隔离的时间线和单目标 Global Task 投影。
+- Workspace/Project/Design File 持久化与导航、Project Design File 自动保存与稳定身份重命名、Workspace 级持久 Conversation、按 Conversation 隔离的时间线和单目标 Global Task 投影。Conversation 使用不可变 `originProjectId` 与可空/可移动 `filedProjectId` 表达组织关系；打开会话由 Main 从活动/最近 Run target 或归档 Project 默认文件恢复准确 Project/File/Page，目标不可用时进入只读 Timeline 并禁用 Composer。
 - 固定 `leafer-editor@2.2.9` 的唯一生产画布路径，覆盖场景投影、pan/zoom、命中、选择、move/resize/rotate/skew 和文本内编辑。旧 Canvas2D、手写选择框和 OpenPencil 运行时已移除。
 - 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask、高级描边和事务化图片 asset 的公共设计语义及属性检查器/Leafer 映射。Image Service contract v2 另提供不进入文档/history 的直接裁剪 session；单选 Image 可通过双击或 Inspector 在画布中拖动/缩放，Enter 复用 placement planner 单事务提交，Escape、stale revision/selection/Page 切换零 revision 恢复权威投影。
 - 当前 Design File 的真实图片 Assets 面板：从权威文档索引 Image 与 image paint 引用，提供安全预览、搜索、使用次数、跨 Page 定位、只携带稳定 asset ID 的画布拖放、导入、全引用 replace/relink 和零引用删除；所有写入继续进入唯一 EditorRuntime，Renderer 不接收路径。字体、跨文件 Library、授权、派生谱系和批量工作台尚未完成。
@@ -32,7 +32,7 @@ UI 设计是首要能力和最先打磨的工作流，但不是产品边界。�
 
 macOS arm64 与 Windows x64 已在同一 GitHub 原生 workflow 上分别通过 verify、protected Vite build、包内容检查、packaged executable/Agent smoke 和 artifact 上传；Windows 已产出 NSIS 与 `OpenDesign-Windows-X64` artifact。两平台签名、安装后的人工 GUI 产品 smoke 仍未完成，不能据此宣称达到发布门禁。尚未完成的其他主要目标包括：完整 Working Set/Mutation Targets/Capabilities、attached roots、通用 per-run resource handles、Main approval/audit/sandbox 执行链、跨 Project 多目标、完整 MCP 产品链、`fetch_reference`/隔离 `capture_reference`，以及能力基线中列出的专业矢量、布局、组件、变量、富文本和导入导出。
 
-本文后续同时描述当前边界和已接受的目标架构；目标内容不能当作已完成事实。实施状态见[专业设计能力基线](design-capability-baseline.md)与[路线图](roadmap.md)，项目/会话/跨目录边界见 [ADR-0006](adr/0006-project-conversation-agent-scope.md)。
+本文后续同时描述当前边界和已接受的目标架构；目标内容不能当作已完成事实。实施状态见[专业设计能力基线](design-capability-baseline.md)与[路线图](roadmap.md)，项目/跨目录边界见 [ADR-0006](adr/0006-project-conversation-agent-scope.md)，Workspace 级会话与目标恢复见 [ADR-0094](adr/0094-workspace-owned-conversations.md)。
 
 ## 2. 产品原则
 
@@ -58,7 +58,7 @@ OpenDesign 追求高质量、低 Web 感的 Codex 式桌面 UI。应用应表现
 
 ### 2.6 组织、上下文与权限分离
 
-Project 用于组织设计文件、会话和持久配置，不是文件系统 sandbox。Conversation 的 `homeProjectId` 只定义默认归档与上下文锚点；实际读取、写入和执行由每个 run 的 Working Set、Mutation Targets、Capabilities、Approval 与 Sandbox 决定。
+Project 用于组织设计文件和持久配置，不是文件系统 sandbox。Conversation 是 Workspace 一级实体；`originProjectId` 记录创建来源，`filedProjectId` 只是可空、可移动的归档关系。实际读取、写入和执行由每个 Run 的 `targetSet`、Working Set、Mutation Targets、Capabilities、Approval 与 Sandbox 决定。
 
 ### 2.7 跨平台是发布能力
 
@@ -69,7 +69,7 @@ OpenDesign 是跨平台桌面产品，不是 macOS 专用工具。macOS 与 Wind
 ## 3. 核心工作流
 
 1. 用户在 Workspace 中创建或打开 Project 与 Design File，并在 Page 的 Frame/Artboard 和 Layers 上直接编辑。
-2. 用户通过选区命令、画布就地操作、Properties 或 Agent 面板描述目标；Conversation 保留 `homeProjectId`，但可以为本次 run 显式引用其他 Project 或目录。
+2. 用户可以从 Workspace 直接打开 Conversation，或通过选区命令、画布就地操作、Properties 和 Agent 面板描述目标；Conversation 的归档 Project 不限制本次 Run，Main 以显式 target 和授权资源确定实际 Project、Design File、Page 或目录引用。
 3. 主机为 run 固定 Working Set、Mutation Targets 与 Capabilities。三者分别表达可读上下文、计划写目标和策略允许的动作，互不隐式授予。
 4. Agent 读取经授权的最小上下文并返回结构化计划与设计事务；Tool Runtime 执行 Trust、Capability、Approval 与 Sandbox 检查。
 5. OpenDesign EditorRuntime 按每个 Design File 的 `baseRevision` 预演或应用事务，并向 UI 返回变更集、冲突、诊断和渲染状态。
@@ -179,7 +179,7 @@ Main 负责可信调度和系统能力，所有入口校验来源、参数、资
 
 ### 7.3 Agent utilityProcess
 
-Agent Runtime 使用 TypeScript 并运行于 Electron `utilityProcess`。当前 `AgentRequest 3.10` 的 `run.start` 包含 `sessionId`（承载产品 `conversationId`）、`runId`、prompt、model selection、可选的图片/文档/SVG 附件元数据、单个 `documentId`、revision、发送时的选区上下文与独立的单一 `mutationTarget`。选区只帮助模型理解用户当时关注的节点，不授予也不缩小写入范围；每个新 Run 的 Mutation Target 始终冻结为发送时活动 Page，Composer 只显示低权重 Page/选区上下文，不再提供 Design File 写入范围下拉。任务开始后 Renderer 的选区、活动页面、tab 和 viewport 变化都不会改变原始 binding。需要创建、复制、排序、删除 Page 或跨 Page 修改时，模型调用 `opendesign_request_page_structure_access`；Main 只接受精确匹配 `runId + toolCallId + approvalId` 的“允许本次”，批准后删除旧 inspection，并仅为该 Run、该 Design File 解析 effective document execution context，终态自动回收。绑定 Page rename 不需要额外授权，拒绝不得重复申请绕过。新 `run.start` 必须携带 Mutation Target；历史 `message.user` journal 允许缺省该字段以继续读取 3.2 及更早会话，不会从旧选区反推或补授写权限。Renderer 不得提交 `modelContext` 或 `initialDesignInspection`；Main 从所选 Model Profile 解析 `contextWindow/maxOutputTokens`，并可在同一 Renderer inspection/Coordinator 边界取得 exact-revision、60,000 字符内的初始设计快照后再注入 utility process。该快照只进入当前模型投影，journal 继续保存用户原文；失败回退公开 inspection。Main 在转发 Run 前根据当前 Project/Design File 注册并校验 host-bound revision；Conversation journal 只记录历史上下文，不得用历史最大 revision 覆盖当前活动文档事实。文档从持久化版本重新打开或放弃未保存修改后，即使 journal 曾记录更高 revision，也必须接受 Main 已验证的当前基线，后续写冲突仍由 Main 绑定与唯一 `EditorRuntime` 的 `baseRevision` 校验处理。`homeProjectId` 仍由 Main-owned Conversation descriptor 和 Global Task 目标校验承载。当前按需 Page 授权不等同于完整 Working Set、多 Mutation Targets、通用能力快照/审批和跨 Project 多目标；这些扩展仍需要后续协议升级和存量会话迁移。详细裁决见 [ADR-0029](adr/0029-contextual-page-structure-approval.md) 与 [ADR-0075](adr/0075-host-inspected-design-orchestrator.md)。
+Agent Runtime 使用 TypeScript 并运行于 Electron `utilityProcess`。当前 `AgentRequest 3.10` 的 `run.start` 包含 `sessionId`（承载产品 `conversationId`）、`runId`、prompt、model selection、可选的图片/文档/SVG 附件元数据、单个 `documentId`、revision、发送时的选区上下文与独立的单一 `mutationTarget`。选区只帮助模型理解用户当时关注的节点，不授予也不缩小写入范围；每个新 Run 的 Mutation Target 始终冻结为发送时活动 Page，Composer 只显示低权重 Page/选区上下文，不再提供 Design File 写入范围下拉。任务开始后 Renderer 的选区、活动页面、tab 和 viewport 变化都不会改变原始 binding。需要创建、复制、排序、删除 Page 或跨 Page 修改时，模型调用 `opendesign_request_page_structure_access`；Main 只接受精确匹配 `runId + toolCallId + approvalId` 的“允许本次”，批准后删除旧 inspection，并仅为该 Run、该 Design File 解析 effective document execution context，终态自动回收。绑定 Page rename 不需要额外授权，拒绝不得重复申请绕过。新 `run.start` 必须携带 Mutation Target；历史 `message.user` journal 允许缺省该字段以继续读取 3.2 及更早会话，不会从旧选区反推或补授写权限。Renderer 不得提交 `modelContext` 或 `initialDesignInspection`；Main 从所选 Model Profile 解析 `contextWindow/maxOutputTokens`，并可在同一 Renderer inspection/Coordinator 边界取得 exact-revision、60,000 字符内的初始设计快照后再注入 utility process。该快照只进入当前模型投影，journal 继续保存用户原文；失败回退公开 inspection。Main 在转发 Run 前根据当前 Project/Design File 注册并校验 host-bound revision；Conversation journal 只记录历史上下文，不得用历史最大 revision 覆盖当前活动文档事实。文档从持久化版本重新打开或放弃未保存修改后，即使 journal 曾记录更高 revision，也必须接受 Main 已验证的当前基线，后续写冲突仍由 Main 绑定与唯一 `EditorRuntime` 的 `baseRevision` 校验处理。Main-owned Conversation descriptor 只承载 `originProjectId`/`filedProjectId` 组织信息；Global Task 的 `targetSet` 承载真实 Project/File/Page 目标。当前按需 Page 授权不等同于完整 Working Set、多 Mutation Targets、通用能力快照/审批和跨 Project 多目标；这些扩展仍需要后续协议升级。详细裁决见 [ADR-0029](adr/0029-contextual-page-structure-approval.md)、[ADR-0075](adr/0075-host-inspected-design-orchestrator.md) 与 [ADR-0094](adr/0094-workspace-owned-conversations.md)。
 
 `DesignPlan v4` 已在这个单一 Design File 边界内提供 `1..N` 个交付 target，并在 v3 target 结构上声明通用 component/ordinary 语义候选：单个设计只产生一个 target，明确的一套页面、方案或物料按用户列出的交付项逐个产生。默认 Page Run 只能计划该 Page；获得一次性 Page 结构授权并重新检查后，effective document execution context 可以覆盖当前检查结果中的多个 Page。Main 接受 plan 后，用一次原子、可撤销并立即 autosave 的内部事务为所有 `mode=create` target 创建真实 Page-root Frame；不预建 Region 或垃圾 Group。Global Task 持久 `DesignDeliveryLedger v2` 按 `pending → allocated → drafted → captured → reviewed → refined → verified` 推进：allocated 只证明真实根已进入文档，不能 capture、review、计入 verified 或冒充首稿；首次材料写入才进入 drafted。最终验证从 exact-revision inspection 严格检查 Frame/region/material/layout 等交付正确性；已声明 Main/Instance 与 ordinary 语义容器的偏差一次投影为 `blocking:false` 组件质量报告，不再用串行模型修复阻塞可用视觉交付。旧 v1 ledger 和 v2/v3 Plan 在持久读取边界显式兼容。completion guard 在全部 target verified 前自动续跑，中断后的新 Run 从首个未完成项恢复。材料工具只允许写当前 active target，首 target 完成验证后才推进下一 target。Plan amendment 保留已落地 target/Page/root Frame、region 和材料语义节点 ID；意图变化把材料目标重置为 drafted。相同 plan 和续跑会从最新 inspection 复核真实 Frame：仅平移继续，resize/rotate/reparent/delete/undo 要求 inspect/amend。该交付账本不授予第二个 Design File/Project Mutation Target，也不等同于跨文件多目标事务；后一能力仍属于后续协议工作。详见 [ADR-0050](adr/0050-allocated-artboards-and-semantic-generation-steps.md)、[ADR-0062](adr/0062-agent-component-strategy-and-verification.md) 与 [ADR-0072](adr/0072-bounded-design-recovery-and-component-quality.md)。
 
@@ -267,13 +267,13 @@ Agent composer 还支持粘贴和拖入图片/文件。模型可按需调用 `op
 
 `EditorRuntime` 提供版本化、引擎无关的设计预检，`inspect_document` 对当前 Mutation Target 返回 Path、渐变、光晕、模糊、blend、mask、图片和文字的实际特性计数，并识别空内容、不可见/无绘制外观、缺失资源、非有限世界 bounds、完全越出 clipping Frame 与根图层碎片。该预检不替代 Leafer 绘制或像素视觉基线；它用于在调用 `capture_canvas` 前排除结构上必然失败的结果。
 
-### 9.1 Conversation 与 `homeProjectId`
+### 9.1 Workspace 级 Conversation 与 Project 归档
 
-Conversation 是持久会话。目标模型为每个 Conversation 保存 `conversationId` 和创建时确定的 `homeProjectId`；后者只提供默认浏览位置、相对引用起点、策略提示和 UI 归档位置，不构成 sandbox 或文件权限。Conversation 后续可以引用其他 Project，且不改变 `homeProjectId`，也不把外部目录自动附加到 home Project。
+Conversation 是 Workspace 一级持久会话。每个 Conversation 保存稳定 `conversationId`、不可变且可空的 `originProjectId`，以及可移动、可清空的 `filedProjectId`；两种 Project 关系都只服务来源记录与 UI 归档，不构成 sandbox、文件权限或 Run target。Main 按活动 Run、最近 Global Task、归档 Project 默认文件的顺序解析打开目标；无有效目标时 Timeline 仍可读，但 Composer 禁用。
 
 Conversation 列表按 `updatedAt` 降序排列。Main 在接受新 Run 以及收到 assistant/tool/终态活动时推进持久时间，Renderer 在同一事件链中立即重排本地投影；因此发送消息后当前会话马上置顶，重启后顺序与持久状态一致。
 
-每个 run 保存其实际作用域和权限快照。Project 被移动或归档后，会话审计记录仍应有效；旧会话迁移到默认 Project 时，不得把历史路径自动转成 attached root 或持久授权。
+每个 Run 保存其实际 `targetSet`、作用域和权限快照。Project 被移动、删除或不可用后，会话审计记录仍有效。预发布 `homeProjectId` schema 直接重建，不迁移为 attached root、持久授权或隐式目标。
 
 ### 9.2 Working Set、Mutation Targets 与 Capabilities
 
@@ -285,7 +285,7 @@ Conversation 列表按 `updatedAt` 降序排列。Main 在接受新 Run 以及�
 | Mutation Targets | 本次计划要改变什么   | Design File/节点范围、输出文件、预期 revision        | 不代表调用已经获准   |
 | Capabilities     | 主体最多能请求什么   | 主体、资源选择器、操作、有效期、配额和来源           | 不替代审批或执行隔离 |
 
-一个写调用必须同时满足：资源已列入 Mutation Targets、主体持有匹配 Capability、所需 Approval 已完成，并且执行符合 Sandbox 约束。三类集合不得从 `homeProjectId`、当前选区或彼此隐式扩大。上下文可读不等于可写，多目标计划也不等于跨文件原子事务。
+一个写调用必须同时满足：资源已列入 Mutation Targets、主体持有匹配 Capability、所需 Approval 已完成，并且执行符合 Sandbox 约束。三类集合不得从 Conversation 组织字段、当前选区或彼此隐式扩大。上下文可读不等于可写，多目标计划也不等于跨文件原子事务。
 
 ### 9.3 Attached roots 与 per-run references
 

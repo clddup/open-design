@@ -190,7 +190,7 @@ describe("ProjectIpcService", () => {
       throw new Error("Project selection was unexpectedly cancelled");
     const conversation = service.createConversation({
       conversationId: "conversation_original",
-      homeProjectId: original.projectId,
+      filedProjectId: original.projectId,
       title: "Original design work",
     });
     service.removeRecentProject({ projectId: original.projectId });
@@ -210,7 +210,7 @@ describe("ProjectIpcService", () => {
     expect(store.getProjectRoot(replacement.projectId)).toBe(
       await realpath(root),
     );
-    expect(store.listConversations(original.projectId)).toEqual([conversation]);
+    expect(store.listConversations()).toEqual([conversation]);
     expect(
       service.listOpenProjects().map(({ projectId }) => projectId),
     ).toEqual([replacement.projectId]);
@@ -308,7 +308,7 @@ describe("ProjectIpcService", () => {
     reopenedStore.close();
   });
 
-  it("creates durable Conversations for registered Home Projects", async () => {
+  it("creates and globally lists durable Conversations", async () => {
     const root = await projectRoot();
     const store = new WorkspaceStore(":memory:");
     const service = new ProjectIpcService(new ProjectHost(store), store, () =>
@@ -323,36 +323,114 @@ describe("ProjectIpcService", () => {
 
     const conversation = service.createConversation({
       conversationId: "conversation_mobile",
-      homeProjectId: manifest.projectId,
+      filedProjectId: manifest.projectId,
       title: "Refine the mobile experience",
     });
     expect(conversation).toMatchObject({
       conversationId: "conversation_mobile",
-      homeProjectId: manifest.projectId,
+      originProjectId: manifest.projectId,
+      filedProjectId: manifest.projectId,
       title: "Refine the mobile experience",
       lifecycle: "active",
     });
     expect(conversation.createdAt).toBe(conversation.updatedAt);
-    expect(
-      service.listProjectConversations({ homeProjectId: manifest.projectId }),
-    ).toEqual([conversation]);
+    expect(service.listConversations()).toEqual([conversation]);
     expect(() =>
       service.createConversation({
         conversationId: "conversation_mobile",
-        homeProjectId: manifest.projectId,
+        filedProjectId: manifest.projectId,
         title: "Replace the existing Conversation",
       }),
     ).toThrow();
     expect(() =>
       service.createConversation({
         conversationId: "conversation_unknown",
-        homeProjectId: "project_unknown",
+        filedProjectId: "project_unknown",
         title: "Unknown Project",
       }),
-    ).toThrow("Conversation Home Project is not registered");
+    ).toThrow("Conversation Project is not registered");
+    store.close();
+  });
+
+  it("tombstones terminal Conversations and rejects deleting active work", async () => {
+    const root = await projectRoot();
+    const store = new WorkspaceStore(":memory:");
+    let hasActiveRun = true;
+    const service = new ProjectIpcService(
+      new ProjectHost(store),
+      store,
+      () => Promise.resolve(root),
+      () => undefined,
+      () => hasActiveRun,
+    );
+    const manifest = await service.createProject({
+      projectId: "project_acme",
+      name: "Acme Design",
+    });
+    if (!manifest)
+      throw new Error("Project selection was unexpectedly cancelled");
+    const file = manifest.designFiles[0];
+    if (!file) throw new Error("Starter design file is missing");
+    const opened = await service.readDesignFile({
+      projectId: manifest.projectId,
+      designFileId: file.designFileId,
+    });
+    const pageId = opened.document.pageOrder[0];
+    if (!pageId) throw new Error("Starter design page is missing");
+    const conversation = service.createConversation({
+      conversationId: "conversation_mobile",
+      filedProjectId: manifest.projectId,
+      title: "Refine the mobile experience",
+    });
+    const primaryTarget = {
+      targetId: "target_mobile",
+      projectId: manifest.projectId,
+      designFileId: file.designFileId,
+      documentId: file.documentId,
+      pageId,
+      selectedNodeIds: [],
+      baseRevision: opened.document.revision,
+    };
+    const activeTask: GlobalTaskProjection = {
+      version: WORKSPACE_CONTRACT_VERSION,
+      taskId: "task_mobile",
+      conversationId: conversation.conversationId,
+      runId: "run_mobile",
+      title: conversation.title,
+      lifecycle: "running",
+      targetSet: { targets: [primaryTarget], primaryTarget },
+      createdAt: now,
+      updatedAt: now,
+    };
+    store.saveGlobalTask(activeTask);
+
     expect(() =>
-      service.listProjectConversations({ homeProjectId: "project_unknown" }),
-    ).toThrow("Conversation Home Project is not registered");
+      service.deleteConversation({
+        conversationId: conversation.conversationId,
+      }),
+    ).toThrow("active task cannot be deleted");
+
+    store.saveGlobalTask({
+      ...activeTask,
+      lifecycle: "completed",
+      updatedAt: "2026-08-07T12:01:00.000Z",
+    });
+    hasActiveRun = false;
+    expect(
+      service.deleteConversation({
+        conversationId: conversation.conversationId,
+      }),
+    ).toMatchObject({
+      conversationId: conversation.conversationId,
+      lifecycle: "deleted",
+    });
+    expect(service.listConversations()).toEqual([]);
+    expect(service.listGlobalTasks()).toEqual([
+      expect.objectContaining({
+        taskId: activeTask.taskId,
+        lifecycle: "completed",
+      }),
+    ]);
     store.close();
   });
 
@@ -389,7 +467,6 @@ describe("ProjectIpcService", () => {
       version: WORKSPACE_CONTRACT_VERSION,
       taskId: "task_mobile",
       conversationId: "conversation_mobile",
-      homeProjectId: manifest.projectId,
       runId: "run_mobile",
       title: "Refine the mobile experience",
       lifecycle: "running",

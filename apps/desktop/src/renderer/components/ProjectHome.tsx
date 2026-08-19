@@ -2,11 +2,12 @@ import type {
   ConversationDescriptor,
   ProjectManifest,
 } from "@opendesign/workspace-contracts";
-import { Button, Glyph, IconButton } from "@opendesign/ui";
+import { Button, Icon, IconButton } from "@opendesign/ui";
 import { useState, type FormEvent } from "react";
 import type { ThemePreference } from "../../shared/desktop-api";
 import { useI18n } from "../i18n";
 import { HomeTitlebar } from "./HomeTitlebar";
+import { ConversationActions } from "./ConversationActions";
 import homeStyles from "./HomeSurface.module.scss";
 import styles from "./ProjectHome.module.scss";
 
@@ -14,14 +15,16 @@ export type ProjectHomeProps = {
   activeConversationId: string | null;
   busy: boolean;
   conversations: ConversationDescriptor[];
+  conversationDeleteBlockedIds: readonly string[];
   error: string | null;
   manifest: ProjectManifest;
   platform: NodeJS.Platform;
   theme: ThemePreference;
   onBack: () => void;
   onCreateConversation: (title: string) => Promise<boolean>;
+  onRequestDeleteConversation: (conversationId: string) => void;
   onOpenDesignFile: (designFileId: string) => void;
-  onSelectConversation: (conversationId: string) => void;
+  onOpenConversation: (conversationId: string) => void;
   onSettings: () => void;
   onThemeChange: (theme: ThemePreference) => void;
 };
@@ -30,14 +33,16 @@ export function ProjectHome({
   activeConversationId,
   busy,
   conversations,
+  conversationDeleteBlockedIds,
   error,
   manifest,
   platform,
   theme,
   onBack,
   onCreateConversation,
+  onRequestDeleteConversation,
   onOpenDesignFile,
-  onSelectConversation,
+  onOpenConversation,
   onSettings,
   onThemeChange,
 }: ProjectHomeProps) {
@@ -64,13 +69,13 @@ export function ProjectHome({
           <>
             <Button
               aria-label={t("settings.open")}
-              icon="settings"
+              icon="lucide:settings-2"
               onClick={onSettings}
             >
               {t("settings.title")}
             </Button>
             <IconButton
-              icon={theme === "dark" ? "sun" : "moon"}
+              icon={theme === "dark" ? "lucide:sun" : "lucide:moon"}
               label={t(
                 nextTheme === "dark" ? "theme.useDark" : "theme.useLight",
               )}
@@ -78,7 +83,7 @@ export function ProjectHome({
             />
           </>
         }
-        icon="spark"
+        icon="lucide:sparkles"
         identity={
           <>
             <button
@@ -88,7 +93,7 @@ export function ProjectHome({
             >
               {t("workspace.label")}
             </button>
-            <Glyph name="chevron-right" size={13} />
+            <Icon name="lucide:chevron-right" size={13} />
             <strong>{manifest.name}</strong>
           </>
         }
@@ -158,7 +163,7 @@ export function ProjectHome({
                       <strong>{file.name}</strong>
                       <small>{file.relativePath}</small>
                     </span>
-                    <Glyph name="chevron-right" size={14} />
+                    <Icon name="lucide:chevron-right" size={14} />
                   </span>
                 </button>
               ))}
@@ -198,7 +203,7 @@ export function ProjectHome({
                     creatingConversation ||
                     conversationTitle.trim().length === 0
                   }
-                  icon="plus"
+                  icon="lucide:plus"
                   tone="primary"
                   type="submit"
                 >
@@ -211,7 +216,7 @@ export function ProjectHome({
                 <div
                   className={`${homeStyles.empty} ${homeStyles.emptyCompact} ${styles.summaryEmpty}`}
                 >
-                  <Glyph name="comment" size={20} />
+                  <Icon name="lucide:message-square" size={20} />
                   <strong>{t("project.noConversations")}</strong>
                   <p>{t("project.noConversationsDetail")}</p>
                 </div>
@@ -223,14 +228,21 @@ export function ProjectHome({
                   {conversations.map((conversation) => {
                     const active =
                       conversation.conversationId === activeConversationId;
+                    const deleteBlocked = conversationDeleteBlockedIds.includes(
+                      conversation.conversationId,
+                    );
                     return (
-                      <li key={conversation.conversationId}>
+                      <li
+                        className={styles.conversationItem}
+                        key={conversation.conversationId}
+                      >
                         <button
+                          aria-label={conversation.title}
                           aria-current={active ? "true" : undefined}
                           className={`${styles.conversationRow}${active ? ` ${styles.conversationActive}` : ""}`}
                           disabled={busy}
                           onClick={() =>
-                            onSelectConversation(conversation.conversationId)
+                            onOpenConversation(conversation.conversationId)
                           }
                           type="button"
                         >
@@ -242,8 +254,15 @@ export function ProjectHome({
                               })}
                             </time>
                           </span>
-                          <Glyph name="chevron-right" size={13} />
+                          <Icon name="lucide:chevron-right" size={13} />
                         </button>
+                        <ConversationActions
+                          conversationId={conversation.conversationId}
+                          deleteBlocked={deleteBlocked}
+                          disabled={busy}
+                          onRequestDelete={onRequestDeleteConversation}
+                          title={conversation.title}
+                        />
                       </li>
                     );
                   })}

@@ -1,4 +1,4 @@
-import { Glyph, type GlyphName } from "@opendesign/ui";
+import { Icon, type IconName } from "@opendesign/ui";
 import { useEffect, useRef } from "react";
 import { useI18n } from "../i18n";
 import type { SidebarTab } from "../state/editor";
@@ -6,21 +6,21 @@ import styles from "./LeftSidebar.module.scss";
 
 const primaryViews: readonly {
   tab: "layers" | "assets" | "library";
-  icon: GlyphName;
+  icon: IconName;
   label: "sidebar.layers" | "sidebar.assets" | "sidebar.library";
 }[] = [
-  { tab: "layers", icon: "layers", label: "sidebar.layers" },
-  { tab: "assets", icon: "assets", label: "sidebar.assets" },
-  { tab: "library", icon: "component", label: "sidebar.library" },
+  { tab: "layers", icon: "lucide:layers", label: "sidebar.layers" },
+  { tab: "assets", icon: "lucide:shapes", label: "sidebar.assets" },
+  { tab: "library", icon: "lucide:component", label: "sidebar.library" },
 ];
 
 const libraryViews: readonly {
   tab: SidebarTab;
-  icon: GlyphName;
+  icon: IconName;
   label: "styles.title" | "variables.title";
 }[] = [
-  { tab: "styles", icon: "spark", label: "styles.title" },
-  { tab: "variables", icon: "component", label: "variables.title" },
+  { tab: "styles", icon: "lucide:sparkles", label: "styles.title" },
+  { tab: "variables", icon: "lucide:component", label: "variables.title" },
 ];
 
 export function SidebarViewTabs({
@@ -64,7 +64,7 @@ export function SidebarViewTabs({
             role="tab"
             type="button"
           >
-            <Glyph name={view.icon} />
+            <Icon name={view.icon} />
             <span>{t(view.label)}</span>
           </button>
         ))}
@@ -82,7 +82,7 @@ export function SidebarViewTabs({
               onClick={() => onChange(view.tab)}
               type="button"
             >
-              <Glyph name={view.icon} size={13} />
+              <Icon name={view.icon} size={13} />
               <span>{t(view.label)}</span>
             </button>
           ))}

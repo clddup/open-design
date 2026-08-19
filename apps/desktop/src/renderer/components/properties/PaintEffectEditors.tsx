@@ -5,7 +5,7 @@ import type {
   MaskMode,
   Paint,
 } from "@opendesign/design-contracts";
-import { Glyph } from "@opendesign/ui";
+import { Icon } from "@opendesign/ui";
 import { useI18n } from "../../i18n";
 import styles from "../PropertiesPanel.module.scss";
 import {
@@ -205,7 +205,7 @@ export function PaintEditor({
           onClick={onRemove}
           type="button"
         >
-          <Glyph name="close" size={12} />
+          <Icon name="lucide:x" size={12} />
         </button>
       </div>
       {paint.type === "solid" && (
@@ -313,7 +313,7 @@ export function PaintEditor({
                 }
                 type="button"
               >
-                <Glyph name="close" size={11} />
+                <Icon name="lucide:x" size={11} />
               </button>
             </div>
           ))}
@@ -344,7 +344,7 @@ export function PaintEditor({
             }
             type="button"
           >
-            <Glyph name="plus" size={13} />
+            <Icon name="lucide:plus" size={13} />
             {t("properties.addGradientStop")}
           </button>
         </div>
@@ -457,7 +457,7 @@ export function EffectEditor({
           onClick={onRemove}
           type="button"
         >
-          <Glyph name="close" size={12} />
+          <Icon name="lucide:x" size={12} />
         </button>
       </div>
       {blur && (

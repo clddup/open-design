@@ -542,7 +542,7 @@ function TrackList({
         <span>{label}</span>
         <IconButton
           disabled={fixedCount}
-          icon="plus"
+          icon="lucide:plus"
           label={t("properties.autoLayoutTrackAdd", { label })}
           onClick={() => onChange([...tracks, { type: "fill", value: 1 }])}
         />
@@ -594,7 +594,7 @@ function TrackList({
           <IconButton
             className={styles.trackMoveUp}
             disabled={index === 0}
-            icon="chevron-down"
+            icon="lucide:chevron-down"
             label={t("properties.autoLayoutTrackMoveUp", {
               label,
               index: index + 1,
@@ -603,7 +603,7 @@ function TrackList({
           />
           <IconButton
             disabled={index === tracks.length - 1}
-            icon="chevron-down"
+            icon="lucide:chevron-down"
             label={t("properties.autoLayoutTrackMoveDown", {
               label,
               index: index + 1,
@@ -612,7 +612,7 @@ function TrackList({
           />
           <IconButton
             disabled={fixedCount || tracks.length <= 1}
-            icon="trash"
+            icon="lucide:trash-2"
             label={t("properties.autoLayoutTrackRemove", {
               label,
               index: index + 1,

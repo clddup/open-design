@@ -1,5 +1,5 @@
 import type { LayerOrderAction } from "@opendesign/editor-runtime";
-import { Glyph, IconButton } from "@opendesign/ui";
+import { Icon, IconButton } from "@opendesign/ui";
 import { useI18n } from "../i18n";
 import styles from "./CanvasSelectionActions.module.scss";
 
@@ -43,7 +43,7 @@ export function CanvasSelectionActions({
       role="toolbar"
     >
       <span className={styles.selection} title={name}>
-        <Glyph name="select" size={14} />
+        <Icon name="lucide:mouse-pointer-2" size={14} />
         <span>
           {count === 1 && name
             ? name
@@ -53,13 +53,13 @@ export function CanvasSelectionActions({
       <span aria-hidden="true" className={styles.divider} />
       <IconButton
         disabled={!canDuplicate}
-        icon="duplicate"
+        icon="lucide:copy"
         label={t("canvas.duplicateSelection", { shortcut: `${modifier}D` })}
         onClick={onDuplicate}
       />
       <IconButton
         disabled={!canHierarchyAction}
-        icon="layers"
+        icon="lucide:layers"
         label={t(
           hierarchyAction === "ungroup"
             ? "canvas.ungroupSelection"
@@ -87,14 +87,14 @@ export function CanvasSelectionActions({
       </button>
       <span aria-hidden="true" className={styles.divider} />
       <IconButton
-        icon="settings"
+        icon="lucide:settings-2"
         label={t("canvas.openProperties")}
         onClick={onOpenProperties}
       />
       <IconButton
         className={styles.deleteAction}
         disabled={!canDelete}
-        icon="trash"
+        icon="lucide:trash-2"
         label={t("canvas.deleteSelection")}
         onClick={onDelete}
       />

@@ -552,14 +552,24 @@ function registerProjectIpc() {
     assertArgumentCount(args, 1);
     return requireProjectIpc().createConversation(args[0]);
   });
+  ipcMain.handle(channels.deleteConversation, (event, ...args: unknown[]) => {
+    assertMainRenderer(event);
+    assertArgumentCount(args, 1);
+    return requireProjectIpc().deleteConversation(args[0]);
+  });
   ipcMain.handle(
-    channels.listProjectConversations,
+    channels.resolveConversationOpenContext,
     (event, ...args: unknown[]) => {
       assertMainRenderer(event);
       assertArgumentCount(args, 1);
-      return requireProjectIpc().listProjectConversations(args[0]);
+      return requireProjectIpc().resolveConversationOpenContext(args[0]);
     },
   );
+  ipcMain.handle(channels.listConversations, (event, ...args: unknown[]) => {
+    assertMainRenderer(event);
+    assertArgumentCount(args, 0);
+    return requireProjectIpc().listConversations();
+  });
   ipcMain.handle(channels.designToolProgress, (event, ...args: unknown[]) => {
     assertMainRenderer(event);
     assertArgumentCount(args, 1);
@@ -1821,15 +1831,20 @@ void app.whenReady().then(async () => {
     },
   );
   projectHost = new ProjectHost(workspaceStore);
+  globalTaskCoordinator = new GlobalTaskCoordinator(
+    projectHost,
+    workspaceStore,
+  );
   projectIpc = new ProjectIpcService(
     projectHost,
     workspaceStore,
     selectProjectDirectory,
     (rootPath) => shell.showItemInFolder(rootPath),
-  );
-  globalTaskCoordinator = new GlobalTaskCoordinator(
-    projectHost,
-    workspaceStore,
+    (conversationId) =>
+      Boolean(
+        globalTaskCoordinator?.hasActiveConversationRun(conversationId) ||
+        agentContinuationScheduler.hasActiveConversationRun(conversationId),
+      ),
   );
   globalTaskCoordinator.reconcileInterruptedTasks();
   try {

@@ -3,7 +3,7 @@ import {
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  Glyph,
+  Icon,
   IconButton,
 } from "@opendesign/ui";
 import type { ThemePreference } from "../../shared/desktop-api";
@@ -68,7 +68,7 @@ export function Titlebar({
           onClick={onWorkspace}
           type="button"
         >
-          <Glyph name="spark" size={15} />
+          <Icon name="lucide:sparkles" size={15} />
         </button>
         {projectName && (
           <>
@@ -79,7 +79,7 @@ export function Titlebar({
             >
               {projectName}
             </button>
-            <Glyph name="chevron-right" size={12} />
+            <Icon name="lucide:chevron-right" size={12} />
           </>
         )}
         <span className={styles.file} title={documentName}>
@@ -87,7 +87,7 @@ export function Titlebar({
         </span>
         {pageName && (
           <>
-            <Glyph name="chevron-right" size={12} />
+            <Icon name="lucide:chevron-right" size={12} />
             <span className={styles.page}>{pageName}</span>
           </>
         )}
@@ -101,7 +101,7 @@ export function Titlebar({
             {onToggleLeftPanel && (
               <IconButton
                 aria-keyshortcuts="Control+Shift+1 Meta+Shift+1"
-                icon="layers"
+                icon="lucide:layers"
                 label={t("title.toggleNavigator")}
                 onClick={onToggleLeftPanel}
                 selected={leftPanelVisible}
@@ -110,7 +110,7 @@ export function Titlebar({
             {onToggleUtilityPanel && (
               <IconButton
                 aria-keyshortcuts="Control+Shift+2 Meta+Shift+2"
-                icon="agent"
+                icon="lucide:bot"
                 label={t("title.toggleUtility")}
                 onClick={onToggleUtilityPanel}
                 selected={utilityPanelVisible}
@@ -122,7 +122,7 @@ export function Titlebar({
           {t("common.save")}
         </Button>
         <DropdownMenu
-          icon={<Glyph name="more" />}
+          icon={<Icon name="lucide:ellipsis" />}
           label={t("title.fileActions")}
         >
           {onOpen && (
@@ -148,12 +148,12 @@ export function Titlebar({
           </DropdownMenuItem>
         </DropdownMenu>
         <IconButton
-          icon="settings"
+          icon="lucide:settings-2"
           label={t("settings.open")}
           onClick={onSettings}
         />
         <IconButton
-          icon={theme === "dark" ? "sun" : "moon"}
+          icon={theme === "dark" ? "lucide:sun" : "lucide:moon"}
           label={t(nextTheme === "dark" ? "theme.useDark" : "theme.useLight")}
           onClick={() => onThemeChange(nextTheme)}
         />

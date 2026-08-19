@@ -1,5 +1,5 @@
 import { useRef, type KeyboardEvent, type ReactNode } from "react";
-import { Glyph } from "@opendesign/ui";
+import { Icon } from "@opendesign/ui";
 import { useI18n } from "../i18n";
 import styles from "./UtilityDock.module.scss";
 
@@ -79,7 +79,7 @@ export function UtilityDock({
           tabIndex={activeTab === "agent" ? 0 : -1}
           type="button"
         >
-          <Glyph name="agent" size={13} />
+          <Icon name="lucide:bot" size={13} />
           {t("utility.agent")}
           {activityLabel && (
             <span
@@ -103,7 +103,7 @@ export function UtilityDock({
           tabIndex={activeTab === "properties" ? 0 : -1}
           type="button"
         >
-          <Glyph name="component" size={13} />
+          <Icon name="lucide:component" size={13} />
           {t("utility.properties")}
         </button>
       </div>

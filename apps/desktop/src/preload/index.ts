@@ -21,11 +21,12 @@ import {
   isFontBinaryReadRequest,
   isDesignFileDescriptorResult,
   isConversationDescriptorResult,
+  isConversationOpenContext,
   isCreateConversationRequest,
+  isDeleteConversationRequest,
   isCreateProjectDesignFileRequest,
   isCreateProjectRequest,
   isGlobalTaskProjectionResult,
-  isListProjectConversationsRequest,
   isModelProviderCatalog,
   isOpenRecentProjectRequest,
   isProviderConnectionResult,
@@ -49,6 +50,8 @@ import {
   isRendererDiagnosticReport,
   isTestModelProviderConnectionRequest,
   type CreateConversationRequest,
+  type ConversationOpenContext,
+  type DeleteConversationRequest,
   type AgentAttachmentPreviewRequest,
   type AgentAttachmentPreviewResult,
   type AgentAttachmentSelection,
@@ -60,7 +63,6 @@ import {
   type CreateProjectDesignFileRequest,
   type CreateProjectRequest,
   type DesktopApi,
-  type ListProjectConversationsRequest,
   type OpenRecentProjectRequest,
   type ModelProviderCatalog,
   type GlobalImageGenerationSettings,
@@ -591,22 +593,48 @@ const desktopApi: DesktopApi = Object.freeze({
       "Invalid Conversation response",
     );
   },
-  listProjectConversations: async (
-    request: ListProjectConversationsRequest,
+  deleteConversation: async (request: DeleteConversationRequest) => {
+    validate(
+      request,
+      isDeleteConversationRequest,
+      "Invalid Conversation delete request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.deleteConversation,
+      request,
+    );
+    return validate<ConversationDescriptor>(
+      result,
+      isConversationDescriptorResult,
+      "Invalid deleted Conversation response",
+    );
+  },
+  resolveConversationOpenContext: async (
+    request: DeleteConversationRequest,
   ) => {
     validate(
       request,
-      isListProjectConversationsRequest,
-      "Invalid Project Conversation list request",
+      isDeleteConversationRequest,
+      "Invalid Conversation open request",
     );
     const result: unknown = await ipcRenderer.invoke(
-      channels.listProjectConversations,
+      channels.resolveConversationOpenContext,
       request,
+    );
+    return validate<ConversationOpenContext>(
+      result,
+      isConversationOpenContext,
+      "Invalid Conversation open context",
+    );
+  },
+  listConversations: async () => {
+    const result: unknown = await ipcRenderer.invoke(
+      channels.listConversations,
     );
     return validateArray<ConversationDescriptor>(
       result,
       isConversationDescriptorResult,
-      "Invalid Project Conversations response",
+      "Invalid Conversations response",
     );
   },
   listGlobalTasks: async () => {

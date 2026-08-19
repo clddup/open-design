@@ -5,7 +5,7 @@ import type {
 } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
 import type { ConversationDescriptor } from "@opendesign/workspace-contracts";
-import { Button, DesktopSelect, Glyph, IconButton } from "@opendesign/ui";
+import { Button, DesktopSelect, Icon, IconButton } from "@opendesign/ui";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PAGE_STRUCTURE_ACCESS_TOOL_NAME } from "../../shared/design-agent-tools";
 import {
@@ -26,6 +26,7 @@ import { useAgentComposerController } from "../features/agent-conversation/use-a
 import { useI18n } from "../i18n";
 import { AgentComposer } from "./AgentComposer";
 import { AgentRunStatus } from "./AgentRunStatus";
+import { ConversationActions } from "./ConversationActions";
 import styles from "./AgentTimeline.module.scss";
 
 const itemStateStyles: Record<AgentTimelineItem["state"], string> = {
@@ -57,6 +58,7 @@ export type AgentTimelineProps = {
   conversationTitle: string | null;
   conversations?: readonly ConversationDescriptor[];
   onCreateConversation?: () => Promise<boolean>;
+  onRequestDeleteConversation?: (conversationId: string) => void;
   onSelectConversation?: (conversationId: string) => void;
   onSubmit: (
     prompt: string,
@@ -73,6 +75,8 @@ export type AgentTimelineProps = {
   }) => Promise<boolean>;
   scope?:
     { kind: "page"; name?: string } | { kind: "selection"; count: number };
+  submissionAvailable?: boolean;
+  submissionBlockedMessage?: string;
 };
 
 function ReasoningDisclosure({
@@ -106,12 +110,15 @@ export function AgentTimeline({
   conversationTitle,
   conversations = [],
   onCreateConversation,
+  onRequestDeleteConversation,
   onSelectConversation,
   onSubmit,
   onStop,
   approvalResourceName,
   onResolveApproval,
   scope,
+  submissionAvailable = true,
+  submissionBlockedMessage,
 }: AgentTimelineProps) {
   const { locale, t } = useI18n();
   const [approvalError, setApprovalError] = useState<string | null>(null);
@@ -130,7 +137,9 @@ export function AgentTimeline({
     onSubmit,
     timeline,
     t,
+    submissionAvailable,
   });
+
   const items = projectAgentTimeline({
     activeRunId,
     events,
@@ -200,6 +209,7 @@ export function AgentTimeline({
     approvalError ??
     composer.attachmentError ??
     composer.catalogError ??
+    (!submissionAvailable ? submissionBlockedMessage : undefined) ??
     (composer.hasImageAttachments && !composer.supportsImageInput
       ? t("agent.modelNoImageInput")
       : composer.attachments.length > 0 && composer.selectedModelName
@@ -259,7 +269,7 @@ export function AgentTimeline({
       <header className={styles.header}>
         <div className={styles.identity}>
           <span className={styles.mark}>
-            <Glyph name="agent" />
+            <Icon name="lucide:bot" />
           </span>
           <span>
             <strong>{t("agent.designAgent")}</strong>
@@ -292,10 +302,23 @@ export function AgentTimeline({
               composer.creatingConversation ||
               Boolean(activeRunId)
             }
-            icon="plus"
+            icon="lucide:plus"
             label={t("agent.newConversation")}
             onClick={() => void composer.createConversation()}
           />
+          {conversationId && onRequestDeleteConversation ? (
+            <ConversationActions
+              conversationId={conversationId}
+              deleteBlocked={Boolean(activeRunId)}
+              onRequestDelete={onRequestDeleteConversation}
+            />
+          ) : (
+            <IconButton
+              disabled
+              icon="lucide:ellipsis"
+              label={t("agent.conversationActions")}
+            />
+          )}
         </div>
         {runExperience && <AgentRunStatus experience={runExperience} t={t} />}
         <ol
@@ -513,7 +536,7 @@ function TimelineAttachments({
             key={attachment.attachmentId}
             title={`${attachment.name} · ${formatBytes(attachment.byteSize)}`}
           >
-            <Glyph name="file" />
+            <Icon name="lucide:file" />
             <small>{attachment.name}</small>
           </span>
         ),

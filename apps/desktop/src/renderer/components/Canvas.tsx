@@ -25,7 +25,7 @@ import {
   resolveVectorEditCollectionScope,
   screenToDocument,
 } from "@opendesign/editor-runtime";
-import { Glyph } from "@opendesign/ui";
+import { Icon } from "@opendesign/ui";
 import {
   createLeaferEngineAdapter,
   resolveDesignTextRuns,
@@ -1062,7 +1062,7 @@ export function Canvas({
     >
       {assetDropActive && (
         <div className={styles.assetDropHint} role="status">
-          <Glyph name="image" size={15} />
+          <Icon name="lucide:image" size={15} />
           {t("canvas.dropImageAsset")}
         </div>
       )}

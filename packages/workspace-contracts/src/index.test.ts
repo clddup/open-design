@@ -104,7 +104,6 @@ function accessSnapshot() {
     snapshotId: "snapshot_1",
     runId: "run_1",
     conversationId: "conversation_1",
-    homeProjectId: "project_home",
     capturedAt: now,
     targetSet: targetSet(),
     rootGrants: [rootGrant()],
@@ -410,22 +409,17 @@ describe("workspace contract schemas", () => {
     ).toBe(false);
   });
 
-  it("treats the home project as ownership rather than an access boundary", () => {
+  it("keeps Conversation identity separate from target and access scope", () => {
     const snapshot = accessSnapshot();
 
-    expect(snapshot.homeProjectId).not.toBe(
-      snapshot.targetSet.primaryTarget.projectId,
+    expect(snapshot.conversationId).toBe("conversation_1");
+    expect(snapshot.targetSet.primaryTarget.projectId).toBe(
+      "project_collaboration",
     );
-    expect(snapshot.homeProjectId).not.toBe(
-      snapshot.rootGrants[0]!.scope.type === "project"
-        ? snapshot.rootGrants[0]!.scope.projectId
-        : undefined,
-    );
-    expect(snapshot.homeProjectId).not.toBe(
-      snapshot.resources[1]!.locator.scheme === "project"
-        ? snapshot.resources[1]!.locator.projectId
-        : undefined,
-    );
+    expect(snapshot.rootGrants[0]!.scope).toEqual({
+      type: "project",
+      projectId: "project_assets",
+    });
     expect(isRunAccessSnapshot(snapshot)).toBe(true);
   });
 
@@ -496,7 +490,6 @@ describe("workspace contract schemas", () => {
       version: WORKSPACE_CONTRACT_VERSION,
       taskId: "task_1",
       conversationId: "conversation_1",
-      homeProjectId: "project_home",
       runId: "run_1",
       title: "Refine the mobile design",
       lifecycle: "queued" as const,
@@ -624,7 +617,6 @@ describe("workspace contract schemas", () => {
       version: WORKSPACE_CONTRACT_VERSION,
       taskId: "task_legacy",
       conversationId: "conversation_1",
-      homeProjectId: "project_home",
       runId: "run_legacy",
       title: "Legacy task",
       lifecycle: "interrupted",

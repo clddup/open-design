@@ -18,7 +18,7 @@ import {
   type ArrangeOperation,
   type ArrangementSelectionMetrics,
 } from "@opendesign/editor-runtime";
-import { Glyph } from "@opendesign/ui";
+import { Icon } from "@opendesign/ui";
 import { useI18n } from "../i18n";
 import type { UpdatePropertiesPatch } from "../features/editor/types";
 import type { StyleActions } from "../use-style-actions";
@@ -346,7 +346,7 @@ export function PropertiesPanel({
         ) : selectionCount > 1 ? (
           <div className={styles.multiProperties}>
             <div className={styles.noSelection} role="status">
-              <Glyph name="layers" size={22} />
+              <Icon name="lucide:layers" size={22} />
               <strong>
                 {t("properties.layersSelected", { count: selectionCount })}
               </strong>
@@ -363,20 +363,36 @@ export function PropertiesPanel({
               >
                 {(
                   [
-                    ["align-left", "align-left", "properties.alignLeft"],
+                    [
+                      "align-left",
+                      "lucide:align-start-horizontal",
+                      "properties.alignLeft",
+                    ],
                     [
                       "align-horizontal-center",
-                      "align-h-center",
+                      "lucide:align-center-horizontal",
                       "properties.alignHCenter",
                     ],
-                    ["align-right", "align-right", "properties.alignRight"],
-                    ["align-top", "align-top", "properties.alignTop"],
+                    [
+                      "align-right",
+                      "lucide:align-end-horizontal",
+                      "properties.alignRight",
+                    ],
+                    [
+                      "align-top",
+                      "lucide:align-start-vertical",
+                      "properties.alignTop",
+                    ],
                     [
                       "align-vertical-center",
-                      "align-v-center",
+                      "lucide:align-center-vertical",
                       "properties.alignVCenter",
                     ],
-                    ["align-bottom", "align-bottom", "properties.alignBottom"],
+                    [
+                      "align-bottom",
+                      "lucide:align-end-vertical",
+                      "properties.alignBottom",
+                    ],
                   ] as const
                 ).map(([action, icon, key]) => (
                   <button
@@ -386,7 +402,7 @@ export function PropertiesPanel({
                     onClick={() => onArrange({ action })}
                     type="button"
                   >
-                    <Glyph name={icon} size={15} />
+                    <Icon name={icon} size={15} />
                   </button>
                 ))}
               </div>
@@ -406,7 +422,10 @@ export function PropertiesPanel({
                   onClick={() => onArrange({ action: "distribute-horizontal" })}
                   type="button"
                 >
-                  <Glyph name="distribute-horizontal" size={15} />
+                  <Icon
+                    name="lucide:align-horizontal-distribute-center"
+                    size={15}
+                  />
                   {t("properties.horizontal")}
                 </button>
                 <button
@@ -415,7 +434,10 @@ export function PropertiesPanel({
                   onClick={() => onArrange({ action: "distribute-vertical" })}
                   type="button"
                 >
-                  <Glyph name="distribute-vertical" size={15} />
+                  <Icon
+                    name="lucide:align-vertical-distribute-center"
+                    size={15}
+                  />
                   {t("properties.vertical")}
                 </button>
                 <button
@@ -431,7 +453,7 @@ export function PropertiesPanel({
                   onClick={() => onArrange({ action: "tidy-up" })}
                   type="button"
                 >
-                  <Glyph name="tidy-up" size={15} />
+                  <Icon name="lucide:panels-top-left" size={15} />
                   {t("properties.tidyUp")}
                 </button>
               </div>
@@ -491,29 +513,29 @@ export function PropertiesPanel({
             <div className={styles.multiActions}>
               {canCombineVariants && (
                 <button onClick={onCombineVariants} type="button">
-                  <Glyph name="component" size={13} />
+                  <Icon name="lucide:component" size={13} />
                   {t("properties.combineAsVariants")}
                 </button>
               )}
               {canAddToVariantSet && (
                 <button onClick={onAddToVariantSet} type="button">
-                  <Glyph name="component" size={13} />
+                  <Icon name="lucide:component" size={13} />
                   {t("properties.addToVariantSet")}
                 </button>
               )}
               <button onClick={onDuplicate} type="button">
-                <Glyph name="duplicate" size={13} />
+                <Icon name="lucide:copy" size={13} />
                 {t("properties.duplicateLayers")}
               </button>
               <button onClick={onDelete} type="button">
-                <Glyph name="trash" size={13} />
+                <Icon name="lucide:trash-2" size={13} />
                 {t("properties.deleteLayers")}
               </button>
             </div>
           </div>
         ) : (
           <div className={styles.noSelection} role="status">
-            <Glyph name="select" size={22} />
+            <Icon name="lucide:mouse-pointer-2" size={22} />
             <strong>{t("properties.noSelection")}</strong>
             <span>{t("properties.selectLayer")}</span>
           </div>

@@ -1,7 +1,7 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export const WORKSPACE_CONTRACT_VERSION = 1 as const;
+export const WORKSPACE_CONTRACT_VERSION = 2 as const;
 export const PROJECT_MANIFEST_VERSION = "1.0.0" as const;
 export const DESIGN_DELIVERY_LEDGER_VERSION = 2 as const;
 export const MAX_PROJECT_DESIGN_FILES = 4_096;
@@ -164,7 +164,8 @@ export const ProjectDescriptorSchema = ProjectManifestSchema;
 export const ConversationDescriptorSchema = Type.Object(
   {
     conversationId: StableIdSchema,
-    homeProjectId: StableIdSchema,
+    originProjectId: Type.Union([StableIdSchema, Type.Null()]),
+    filedProjectId: Type.Union([StableIdSchema, Type.Null()]),
     title: TitleSchema,
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
@@ -346,7 +347,6 @@ export const RunAccessSnapshotSchema = Type.Object(
     snapshotId: StableIdSchema,
     runId: StableIdSchema,
     conversationId: StableIdSchema,
-    homeProjectId: StableIdSchema,
     capturedAt: TimestampSchema,
     targetSet: RunTargetSetSchema,
     rootGrants: Type.Array(RootGrantSchema, {
@@ -364,7 +364,6 @@ export const GlobalTaskProjectionSchema = Type.Object(
     version: Type.Literal(WORKSPACE_CONTRACT_VERSION),
     taskId: StableIdSchema,
     conversationId: StableIdSchema,
-    homeProjectId: StableIdSchema,
     runId: Type.Optional(StableIdSchema),
     title: TitleSchema,
     lifecycle: GlobalTaskLifecycleSchema,

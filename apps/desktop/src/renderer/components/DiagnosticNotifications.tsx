@@ -102,7 +102,7 @@ function DiagnosticNotification({
         <span aria-hidden="true" className={styles.mark} />
         <strong>{t(titleKey(event.level))}</strong>
         <IconButton
-          icon="close"
+          icon="lucide:x"
           label={t("diagnostic.dismiss")}
           onClick={() => onDismiss(event.eventId)}
         />

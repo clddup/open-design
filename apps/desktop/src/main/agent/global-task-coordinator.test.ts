@@ -409,7 +409,8 @@ async function setup() {
   if (!pageId) throw new Error("Starter page is missing");
   store.createConversation({
     conversationId: "conversation_mobile",
-    homeProjectId: manifest.projectId,
+    originProjectId: manifest.projectId,
+    filedProjectId: manifest.projectId,
     title: "Refine the mobile experience",
     createdAt: "2026-08-07T12:00:00.000Z",
     updatedAt: "2026-08-07T12:00:00.000Z",
@@ -2366,7 +2367,8 @@ describe("GlobalTaskCoordinator", () => {
     const { store, host, file, opened, pageId } = await setup();
     store.createConversation({
       conversationId: "conversation_recent",
-      homeProjectId: "project_acme",
+      originProjectId: "project_acme",
+      filedProjectId: "project_acme",
       title: "A newer idle conversation",
       createdAt: "2026-08-08T12:00:00.000Z",
       updatedAt: "2026-08-08T12:00:00.000Z",
@@ -2392,7 +2394,7 @@ describe("GlobalTaskCoordinator", () => {
 
     expect(
       store
-        .listConversations("project_acme")
+        .listConversations()
         .map((conversation) => [
           conversation.conversationId,
           conversation.updatedAt,
@@ -2566,7 +2568,6 @@ describe("GlobalTaskCoordinator", () => {
     expect(task).toMatchObject({
       taskId: "task_run_mobile",
       conversationId: "conversation_mobile",
-      homeProjectId: "project_acme",
       runId: "run_mobile",
       lifecycle: "queued",
       targetSet: {

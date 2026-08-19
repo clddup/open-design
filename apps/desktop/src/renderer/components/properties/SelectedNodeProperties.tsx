@@ -15,7 +15,7 @@ import type {
   SlotSettings,
   VariableBindingTarget,
 } from "@opendesign/design-contracts";
-import { Button, Glyph, IconButton, type GlyphName } from "@opendesign/ui";
+import { Button, Icon, IconButton, type IconName } from "@opendesign/ui";
 import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
 import type { UpdatePropertiesPatch } from "../../features/editor/types";
@@ -38,22 +38,22 @@ import { VariableSection } from "./VariableSection";
 import { StyleReferencesSection } from "./StyleReferencesSection";
 import { Field, Section, commitNumber, formatNumber } from "./controls";
 
-const nodeIcons: Record<DesignNode["kind"], GlyphName> = {
-  frame: "frame",
-  slot: "frame",
-  group: "layers",
-  boolean: "boolean",
-  rectangle: "rectangle",
-  ellipse: "ellipse",
-  line: "line",
-  polygon: "polygon",
-  star: "star",
-  text: "text",
-  image: "assets",
-  vector: "pen",
-  path: "pen",
-  instance: "instance",
-  slice: "frame",
+const nodeIcons: Record<DesignNode["kind"], IconName> = {
+  frame: "lucide:frame",
+  slot: "lucide:frame",
+  group: "lucide:layers",
+  boolean: "lucide:combine",
+  rectangle: "lucide:rectangle-horizontal",
+  ellipse: "lucide:circle",
+  line: "lucide:slash",
+  polygon: "lucide:pentagon",
+  star: "lucide:star",
+  text: "lucide:type",
+  image: "lucide:image",
+  vector: "lucide:pen",
+  path: "lucide:pen",
+  instance: "lucide:diamond",
+  slice: "lucide:frame",
 };
 
 const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
@@ -325,7 +325,7 @@ export function SelectedNodeProperties({
     <div>
       <div className={styles.selectionHeading}>
         <span className={styles.selectionIcon}>
-          <Glyph name={nodeIcons[node.kind]} />
+          <Icon name={nodeIcons[node.kind]} />
         </span>
         <span className={styles.selectionIdentity}>
           <strong>
@@ -340,13 +340,13 @@ export function SelectedNodeProperties({
         </span>
         <span className={styles.selectionActions}>
           <IconButton
-            icon="duplicate"
+            icon="lucide:copy"
             label={t("properties.duplicateLayer")}
             onClick={onDuplicate}
           />
           <IconButton
             disabled={!canDelete}
-            icon="trash"
+            icon="lucide:trash-2"
             label={t("properties.deleteLayer")}
             onClick={onDelete}
           />
@@ -355,7 +355,7 @@ export function SelectedNodeProperties({
       {booleanOperandParent && (
         <Section title={t("properties.booleanSourceLayer")}>
           <div className={styles.contextNote}>
-            <Glyph name="boolean" size={15} />
+            <Icon name="lucide:combine" size={15} />
             <span>
               <strong>{t("properties.booleanAppearanceControlled")}</strong>
               <small>

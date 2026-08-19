@@ -1,4 +1,4 @@
-import { Button, Glyph, IconButton } from "@opendesign/ui";
+import { Button, Icon, IconButton } from "@opendesign/ui";
 import {
   Component,
   useEffect,
@@ -94,12 +94,12 @@ function SettingsPageContent({
       <HomeTitlebar
         actions={
           <IconButton
-            icon="close"
+            icon="lucide:x"
             label={t("settings.close")}
             onClick={onClose}
           />
         }
-        icon="settings"
+        icon="lucide:settings-2"
         identity={<strong>{t("settings.title")}</strong>}
         platform={platform}
         surface="solid"
@@ -124,13 +124,13 @@ function SettingsPageContent({
                 tabIndex={activeTab === tab ? 0 : -1}
                 type="button"
               >
-                <Glyph
+                <Icon
                   name={
                     tab === "general"
-                      ? "settings"
+                      ? "lucide:settings-2"
                       : tab === "models"
-                        ? "agent"
-                        : "assets"
+                        ? "lucide:bot"
+                        : "lucide:shapes"
                   }
                 />
                 {t(
@@ -229,18 +229,18 @@ class SettingsErrorBoundary extends Component<
         <HomeTitlebar
           actions={
             <IconButton
-              icon="close"
+              icon="lucide:x"
               label={this.props.closeLabel}
               onClick={this.props.onClose}
             />
           }
-          icon="settings"
+          icon="lucide:settings-2"
           identity={<strong>{this.props.title}</strong>}
           platform={this.props.platform}
           surface="solid"
         />
         <main className={styles.recovery} role="alert">
-          <Glyph name="settings" size={22} />
+          <Icon name="lucide:settings-2" size={22} />
           <h1>{this.props.title}</h1>
           <p>{this.props.description}</p>
           <div>
@@ -584,7 +584,7 @@ function GlobalImageGenerationForm() {
             </label>
           )}
           <p className={formStyles.securityNote}>
-            <Glyph name="lock" size={14} />
+            <Icon name="lucide:lock" size={14} />
             {t("settings.imageGenerationCredentialBoundary")}
           </p>
           <footer className={formStyles.providerActions}>
@@ -857,7 +857,7 @@ function ModelProviderForm() {
           <div className={formStyles.providerListHeading}>
             <strong>{t("settings.providers")}</strong>
             <button onClick={addProvider} type="button">
-              <Glyph name="plus" size={14} />
+              <Icon name="lucide:plus" size={14} />
               {t("settings.addProvider")}
             </button>
           </div>
@@ -1049,7 +1049,7 @@ function ModelProviderForm() {
                 }
               />
               <p className={formStyles.securityNote}>
-                <Glyph name="lock" size={14} />
+                <Icon name="lucide:lock" size={14} />
                 {t("settings.credentialBoundary")}
               </p>
               <footer className={formStyles.providerActions}>
@@ -1133,7 +1133,7 @@ function ModelListEditor({
           onClick={() => onChange([...models, newModelProfile()])}
           type="button"
         >
-          <Glyph name="plus" size={14} />
+          <Icon name="lucide:plus" size={14} />
           {t("settings.addModel")}
         </button>
       </header>
@@ -1256,7 +1256,7 @@ function ModelListEditor({
           </div>
           <IconButton
             disabled={busy || models.length === 1}
-            icon="close"
+            icon="lucide:x"
             label={`${t("settings.removeModel")} ${model.name || index + 1}`}
             onClick={() => {
               onChange(models.filter((_, modelIndex) => modelIndex !== index));

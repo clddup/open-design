@@ -1,4 +1,4 @@
-import { Button, Glyph } from "@opendesign/ui";
+import { Button, Icon } from "@opendesign/ui";
 import { useState } from "react";
 import { useI18n } from "../../i18n";
 import panelStyles from "../PropertiesPanel.module.scss";
@@ -76,7 +76,7 @@ export function VariantMatrixEditor({
               onClick={() => onRemoveProperty(name)}
               type="button"
             >
-              <Glyph name="close" size={12} />
+              <Icon name="lucide:x" size={12} />
             </button>
             <div className={styles.variantValues}>
               {variantSet.propertyDefinitions[name]?.variantOptions.map(

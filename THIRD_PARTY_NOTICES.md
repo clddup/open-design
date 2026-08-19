@@ -40,6 +40,8 @@ Text shaping tests use development-only `@expo-google-fonts/noto-sans` 0.4.2, `@
 
 `@opendesign/desktop` uses Dart Sass (`sass` 1.102.0) from [sass/dart-sass](https://github.com/sass/dart-sass) as a development-only Vite preprocessor for component-scoped SCSS Modules. Dart Sass is distributed under the MIT License, Copyright (c) 2016 Google Inc.; its bundled Dart SDK and analyzer components retain their own notices in the package license. Sass is not a Renderer styling runtime and does not enter OpenDesign document, Agent, or design transaction boundaries.
 
+`@opendesign/desktop` uses `unplugin-offline-iconify` 1.1.0 from [clddup/unplugin-iconfiy](https://github.com/clddup/unplugin-iconfiy) as a development-only Vite transform under the MIT License. It resolves statically declared Iconify identifiers and bundles only the referenced SVG symbols into the Renderer; the production application does not fetch icons from the Iconify API. The current OpenDesign semantic icon map uses the Lucide collection distributed under the ISC License by the Lucide Contributors. `@iconify/json` 2.2.512 is pinned as build-time source data and is not shipped as a complete icon archive.
+
 Before distribution, generate a machine-readable inventory from the lockfile and the actual packaged artifact, resolve every package's license and required notice text, and ship the resulting license bundle. Do not infer that a dependency is absent merely because it is bundled into ASAR or JavaScript output.
 
 ## Architecture references

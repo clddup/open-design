@@ -3,7 +3,7 @@ import {
   DesktopSelect,
   DropdownMenu,
   DropdownMenuItem,
-  Glyph,
+  Icon,
   IconButton,
 } from "@opendesign/ui";
 import { useI18n } from "../../i18n";
@@ -30,7 +30,7 @@ export function LayoutGuidesSection({
       <div className={styles.layoutGuideToolbar}>
         <span>{t("properties.layoutGuides")}</span>
         <DropdownMenu
-          icon={<Glyph name="plus" />}
+          icon={<Icon name="lucide:plus" />}
           label={t("properties.layoutGuideAdd")}
           disabled={guides.length >= 8}
         >
@@ -85,7 +85,7 @@ function GuideEditor({
         value={guide.type}
       />
       <IconButton
-        icon="trash"
+        icon="lucide:trash-2"
         label={`${t("properties.layoutGuideRemove")} ${guide.id}`}
         onClick={onRemove}
       />

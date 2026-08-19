@@ -80,7 +80,7 @@ export function RasterExportReport({
           {t("properties.rasterExportComplete", { name: feedback.name })}
         </strong>
         <IconButton
-          icon="close"
+          icon="lucide:x"
           label={t("properties.dismissRasterFeedback")}
           onClick={onDismiss}
         />
@@ -126,7 +126,7 @@ export function SvgFidelityReport({
           )}
         </strong>
         <IconButton
-          icon="close"
+          icon="lucide:x"
           label={t("properties.dismissSvgFeedback")}
           onClick={onDismiss}
         />

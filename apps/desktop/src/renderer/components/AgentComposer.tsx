@@ -1,6 +1,6 @@
 import { MAX_AGENT_ATTACHMENTS } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
-import { Button, DesktopSelect, Glyph, IconButton } from "@opendesign/ui";
+import { Button, DesktopSelect, Icon, IconButton } from "@opendesign/ui";
 import type {
   ClipboardEvent,
   DragEvent,
@@ -99,7 +99,7 @@ export function AgentComposer({
         {controller.hasConversation && (
           <div className={styles.scope}>
             <span className={styles.context}>
-              <Glyph name="select" size={12} />
+              <Icon name="lucide:mouse-pointer-2" size={12} />
               <span>{t("agent.contextScope", { scope: scopeLabel })}</span>
             </span>
           </div>
@@ -118,7 +118,7 @@ export function AgentComposer({
                     aria-hidden="true"
                     className={styles.attachmentFileIcon}
                   >
-                    <Glyph name="file" />
+                    <Icon name="lucide:file" />
                   </span>
                 )}
                 <span>
@@ -129,7 +129,7 @@ export function AgentComposer({
                   </small>
                 </span>
                 <IconButton
-                  icon="close"
+                  icon="lucide:x"
                   label={t("agent.removeAttachment", { name: attachment.name })}
                   onClick={() =>
                     controller.removeAttachment(attachment.attachmentId)
@@ -143,7 +143,9 @@ export function AgentComposer({
           <textarea
             aria-label={t("agent.continueTask")}
             aria-busy={Boolean(activeRunId)}
-            disabled={!controller.hasConversation}
+            disabled={
+              !controller.hasConversation || !controller.submissionAvailable
+            }
             id="agent-prompt"
             onChange={(event) => controller.setPrompt(event.target.value)}
             onKeyDown={handlePromptKeyDown}
@@ -161,10 +163,11 @@ export function AgentComposer({
           <IconButton
             disabled={
               !controller.hasConversation ||
+              !controller.submissionAvailable ||
               controller.selectingAttachments ||
               controller.attachments.length >= MAX_AGENT_ATTACHMENTS
             }
-            icon="paperclip"
+            icon="lucide:paperclip"
             label={t("agent.addAttachments")}
             onClick={() => void controller.selectAttachments()}
           />
@@ -172,7 +175,7 @@ export function AgentComposer({
             <Button
               className={styles.stop}
               disabled={controller.stopping}
-              icon="stop"
+              icon="lucide:square"
               onClick={() => void controller.stop()}
               tone="quiet"
               type="button"
@@ -182,7 +185,7 @@ export function AgentComposer({
           ) : (
             <Button
               disabled={!controller.canSubmit}
-              icon="spark"
+              icon="lucide:sparkles"
               tone="primary"
               type="submit"
             >
@@ -196,7 +199,9 @@ export function AgentComposer({
           ariaLabel={t("agent.model")}
           className={styles.modelSelect}
           disabled={
-            Boolean(activeRunId) || controller.modelOptions.length === 0
+            Boolean(activeRunId) ||
+            !controller.submissionAvailable ||
+            controller.modelOptions.length === 0
           }
           onValueChange={(value) => {
             const next = controller.modelOptions.find(
@@ -224,7 +229,7 @@ export function AgentComposer({
           <DesktopSelect
             ariaLabel={t("agent.reasoning")}
             className={styles.reasoningSelect}
-            disabled={Boolean(activeRunId)}
+            disabled={Boolean(activeRunId) || !controller.submissionAvailable}
             onValueChange={(value) => {
               if (!controller.modelSelection) return;
               controller.setModelSelection({

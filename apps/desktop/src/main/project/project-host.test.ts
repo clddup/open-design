@@ -806,7 +806,8 @@ describe("WorkspaceStore", () => {
     const store = new WorkspaceStore(":memory:");
     const conversation: ConversationDescriptor = {
       conversationId: "conversation_1",
-      homeProjectId: "project_acme",
+      originProjectId: "project_acme",
+      filedProjectId: "project_acme",
       title: "Refine the mobile experience",
       createdAt: now,
       updatedAt: now,
@@ -828,7 +829,6 @@ describe("WorkspaceStore", () => {
       version: WORKSPACE_CONTRACT_VERSION,
       taskId: "task_1",
       conversationId: "conversation_1",
-      homeProjectId: "project_acme",
       runId: "run_1",
       title: "Refine the mobile experience",
       lifecycle: "running",
@@ -845,77 +845,60 @@ describe("WorkspaceStore", () => {
       conversation,
     );
     expect(store.getConversation("conversation_missing")).toBeNull();
-    expect(store.listConversations("project_acme")).toEqual([conversation]);
+    expect(store.listConversations()).toEqual([conversation]);
     expect(store.listRootGrants()).toEqual([grant]);
     expect(store.listGlobalTasks()).toEqual([task]);
     store.close();
   });
 
-  it("upgrades persisted v1 delivery ledgers when listing global tasks", async () => {
+  it("resets the pre-release Conversation and task schema without a compatibility path", async () => {
     const root = await mkdtemp(join(tmpdir(), "opendesign-workspace-v1-"));
     const databasePath = join(root, "workspace.sqlite");
     const initialized = new WorkspaceStore(databasePath);
     initialized.close();
     const database = new DatabaseSync(databasePath);
-    const primaryTarget = designTarget();
-    const legacy = {
-      version: WORKSPACE_CONTRACT_VERSION,
-      taskId: "task_legacy_delivery",
-      conversationId: "conversation_1",
-      homeProjectId: "project_acme",
-      runId: "run_legacy_delivery",
-      title: "Legacy delivery",
-      lifecycle: "interrupted",
-      targetSet: { targets: [primaryTarget], primaryTarget },
-      delivery: {
-        version: 1,
-        targets: [
-          {
-            targetId: "target_home",
-            label: "Home",
-            pageId: primaryTarget.pageId,
-            rootNodeId: "frame_home",
-            status: "drafted",
-            draftRevision: 3,
-          },
-        ],
-        activeTargetId: "target_home",
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
-    database
-      .prepare(
-        "INSERT INTO global_tasks(task_id, home_project_id, projection_json, updated_at) VALUES (?, ?, ?, ?)",
-      )
-      .run(
-        legacy.taskId,
-        legacy.homeProjectId,
-        JSON.stringify(legacy),
-        legacy.updatedAt,
+    database.exec(`
+      DROP TABLE global_tasks;
+      DROP TABLE conversations;
+      CREATE TABLE conversations (
+        conversation_id TEXT PRIMARY KEY,
+        home_project_id TEXT NOT NULL,
+        descriptor_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       );
+      CREATE TABLE global_tasks (
+        task_id TEXT PRIMARY KEY,
+        home_project_id TEXT NOT NULL,
+        projection_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO conversations VALUES (
+        'conversation_legacy',
+        'project_acme',
+        '{}',
+        '${now}'
+      );
+      INSERT INTO global_tasks VALUES (
+        'task_legacy',
+        'project_acme',
+        '{}',
+        '${now}'
+      );
+    `);
     database.close();
 
     const reopened = new WorkspaceStore(databasePath);
-    expect(reopened.listGlobalTasks()[0]?.delivery).toMatchObject({
-      version: 2,
-      targets: [
-        {
-          targetId: "target_home",
-          status: "drafted",
-          allocatedRevision: 3,
-          draftRevision: 3,
-        },
-      ],
-    });
+    expect(reopened.listConversations()).toEqual([]);
+    expect(reopened.listGlobalTasks()).toEqual([]);
     reopened.close();
   });
 
-  it("rejects duplicate Conversation creation and implicit Home Project moves", () => {
+  it("keeps Conversation origin immutable while allowing filed Project moves", () => {
     const store = new WorkspaceStore(":memory:");
     const conversation: ConversationDescriptor = {
       conversationId: "conversation_1",
-      homeProjectId: "project_acme",
+      originProjectId: "project_acme",
+      filedProjectId: "project_acme",
       title: "Refine the mobile experience",
       createdAt: now,
       updatedAt: now,
@@ -924,15 +907,20 @@ describe("WorkspaceStore", () => {
 
     store.createConversation(conversation);
     expect(() => store.createConversation(conversation)).toThrow();
+    const unfiled = {
+      ...conversation,
+      filedProjectId: null,
+      updatedAt: "2026-08-07T13:00:00.000Z",
+    };
+    store.saveConversation(unfiled);
+    expect(store.listConversations()).toEqual([unfiled]);
     expect(() =>
       store.saveConversation({
-        ...conversation,
-        homeProjectId: "project_other",
-        updatedAt: "2026-08-07T13:00:00.000Z",
+        ...unfiled,
+        originProjectId: "project_other",
+        updatedAt: "2026-08-07T14:00:00.000Z",
       }),
-    ).toThrow("Conversation Home Project cannot be changed by save");
-    expect(store.listConversations("project_acme")).toEqual([conversation]);
-    expect(store.listConversations("project_other")).toEqual([]);
+    ).toThrow("Conversation origin Project cannot be changed by save");
     store.close();
   });
 });
