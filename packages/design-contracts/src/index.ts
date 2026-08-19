@@ -2433,3 +2433,4 @@ export function isDesignTransactionResult(
 export function isEditorEvent(value: unknown): value is EditorEvent {
   return checkSchema(EditorEventSchema, value);
 }
+export * from "./design-quality.js";

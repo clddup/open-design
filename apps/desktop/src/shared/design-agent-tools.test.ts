@@ -983,12 +983,19 @@ describe("design Agent tool contract", () => {
       approval: "never",
       inputSchema: {
         properties: {
-          version: { const: 5 },
+          version: { const: 6 },
+          targets: { type: "array" },
           componentStrategy: { type: "object" },
           briefFidelity: { type: "object" },
         },
       },
     });
+    expect(JSON.stringify(planSpec?.inputSchema)).toContain(
+      '"safeAreaNodeIds"',
+    );
+    expect(JSON.stringify(planSpec?.inputSchema)).toContain(
+      '"interactiveNodeIds"',
+    );
     expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, plan)).toBe(
       true,
     );
@@ -1130,6 +1137,39 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, componentPlan),
     ).toBe(true);
+    const qualityPlan = {
+      ...componentPlan,
+      version: 6,
+      targets: componentPlan.targets.map((target) => ({
+        ...target,
+        qualityProfile: {
+          kind: "ui",
+          platform: "web",
+          interactionMode: "pointer",
+          safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 },
+          safeAreaNodeIds: [
+            target.composition.regions[0]?.nodeId ?? "missing_region",
+          ],
+          interactiveNodeIds: [],
+        },
+      })),
+    };
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, qualityPlan),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...qualityPlan,
+        targets: qualityPlan.targets.map((target, index) =>
+          index === 0
+            ? {
+                ...target,
+                qualityProfile: { kind: "graphic" },
+              }
+            : target,
+        ),
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
         ...componentPlan,

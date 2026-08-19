@@ -16,8 +16,9 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 2,
+      version: 3,
       checkedNodeCount: 1,
+      checkedQualityNodeCount: 0,
       errorCount: 0,
       warningCount: 0,
       issues: [],
@@ -69,8 +70,10 @@ describe("deterministic delivery layout quality", () => {
           outsideRatio: 1,
           geometry: {
             coordinateSpace: "world",
+            constraint: "artboard",
             nodeBounds: { x: 440, y: 200, width: 30, height: 30 },
             artboardBounds: { x: 100, y: 80, width: 300, height: 200 },
+            constraintBounds: { x: 100, y: 80, width: 300, height: 200 },
             parentId: "artboard",
             currentLocalPosition: { x: 340, y: 120 },
             recommendedLocalDelta: { x: -70, y: 0 },
@@ -201,6 +204,102 @@ describe("deterministic delivery layout quality", () => {
       recommendedLocalDelta: { x: 0, y: -780 },
       recommendedLocalPosition: { x: 72, y: 1_320 },
       requiresResize: false,
+    });
+  });
+
+  it("blocks UI foreground outside an explicit safe area and undersized hit targets", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const action = rectangle(
+      "bottom_navigation_action",
+      "artboard",
+      [1, 0, 0, 1, 20, 160],
+      32,
+      32,
+    );
+    artboard.childIds.push(action.id);
+    document.nodesById[action.id] = action;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      {
+        kind: "ui",
+        platform: "ios",
+        interactionMode: "touch",
+        safeAreaInsets: { top: 10, right: 0, bottom: 30, left: 0 },
+        safeAreaNodeIds: [action.id],
+        interactiveNodeIds: [action.id],
+      },
+    );
+
+    expect(report).toMatchObject({
+      version: 3,
+      checkedQualityNodeCount: 1,
+      errorCount: 2,
+      qualityProfile: { kind: "ui", platform: "ios" },
+    });
+    const safeAreaIssue = report.issues.find(
+      (issue) => issue.code === "node-outside-safe-area",
+    );
+    expect(safeAreaIssue).toMatchObject({
+      nodeId: action.id,
+      geometry: {
+        constraint: "safe-area",
+        constraintBounds: { x: 100, y: 90, width: 300, height: 160 },
+        recommendedLocalPosition: { x: 20, y: 138 },
+      },
+    });
+    const targetSizeIssue = report.issues.find(
+      (issue) => issue.code === "interactive-target-too-small",
+    );
+    expect(targetSizeIssue).toMatchObject({
+      nodeId: action.id,
+      measurement: {
+        kind: "minimum-interactive-size",
+        actualSize: { width: 32, height: 32 },
+        requiredSize: { width: 44, height: 44 },
+        source: "Apple 44pt",
+      },
+    });
+    expect(isDesignLayoutQualityReport(report)).toBe(true);
+  });
+
+  it("accepts an Android 48dp hit area inside the declared safe area", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const action = rectangle(
+      "primary_action",
+      "artboard",
+      [1, 0, 0, 1, 20, 120],
+      48,
+      48,
+    );
+    artboard.childIds.push(action.id);
+    document.nodesById[action.id] = action;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      {
+        kind: "ui",
+        platform: "android",
+        interactionMode: "touch",
+        safeAreaInsets: { top: 8, right: 8, bottom: 8, left: 8 },
+        safeAreaNodeIds: [action.id],
+        interactiveNodeIds: [action.id],
+      },
+    );
+
+    expect(report).toMatchObject({
+      checkedQualityNodeCount: 1,
+      errorCount: 0,
+      warningCount: 0,
+      issues: [],
     });
   });
 });

@@ -70,6 +70,18 @@ export type DesignFirstSliceElement =
       };
     });
 
+export type DesignFirstSliceQualityProfile =
+  | { kind: "graphic" }
+  | {
+      kind: "ui";
+      platform:
+        "web" | "macos" | "windows" | "ios" | "ipados" | "android" | "other";
+      input: "pointer" | "touch" | "mixed";
+      insets: [number, number, number, number];
+      safeNodeIds: string[];
+      hitNodeIds: string[];
+    };
+
 export type DesignFirstSliceToolInput = {
   version: 1;
   deliverable:
@@ -96,6 +108,7 @@ export type DesignFirstSliceToolInput = {
     };
     layout: string;
     spacing: string;
+    qualityProfile?: DesignFirstSliceQualityProfile;
     regions: Array<{
       nodeId: string;
       name: string;
@@ -195,6 +208,18 @@ export function isDesignFirstSliceToolInput(
     return false;
   }
   const targets = value.targets as DesignFirstSliceToolInput["targets"];
+  const qualityProfiles = targets.map((target) => target.qualityProfile);
+  if (
+    qualityProfiles.some((profile) => profile !== undefined) &&
+    (qualityProfiles.some((profile) => profile === undefined) ||
+      targets.some((target) =>
+        value.deliverable === "ui"
+          ? target.qualityProfile?.kind !== "ui"
+          : target.qualityProfile?.kind !== "graphic",
+      ))
+  ) {
+    return false;
+  }
   const targetIds = new Set(targets.map((target) => target.targetId));
   const frameIds = new Set(targets.map((target) => target.frame.frameId));
   const regionIds = targets.flatMap((target) =>
@@ -288,6 +313,11 @@ function isTarget(value: unknown): boolean {
     !dimension(value.frame.width) ||
     !dimension(value.frame.height) ||
     !exactKeys(value.frame, ["frameId", "x", "y", "width", "height"]) ||
+    (value.qualityProfile !== undefined &&
+      !isCompactQualityProfile(value.qualityProfile, {
+        width: value.frame.width,
+        height: value.frame.height,
+      })) ||
     !Array.isArray(value.regions) ||
     value.regions.length < 1 ||
     value.regions.length > 12 ||
@@ -303,8 +333,73 @@ function isTarget(value: unknown): boolean {
     "frame",
     "layout",
     "spacing",
+    ...(value.qualityProfile === undefined ? [] : ["qualityProfile"]),
     "regions",
   ]);
+}
+
+function isCompactQualityProfile(
+  value: unknown,
+  frameSize: { width: number; height: number },
+): value is DesignFirstSliceQualityProfile {
+  if (!isRecord(value)) return false;
+  if (value.kind === "graphic") return exactKeys(value, ["kind"]);
+  const safeNodeIds = value.safeNodeIds;
+  const hitNodeIds = value.hitNodeIds;
+  const insets = value.insets;
+  if (
+    value.kind !== "ui" ||
+    !["web", "macos", "windows", "ios", "ipados", "android", "other"].includes(
+      String(value.platform),
+    ) ||
+    !["pointer", "touch", "mixed"].includes(String(value.input)) ||
+    !isInsetTuple(insets) ||
+    !idArray(safeNodeIds, 1, 64) ||
+    !idArray(hitNodeIds, 0, 64) ||
+    !hitNodeIds.every((nodeId) => safeNodeIds.includes(nodeId)) ||
+    !exactKeys(value, [
+      "kind",
+      "platform",
+      "input",
+      "insets",
+      "safeNodeIds",
+      "hitNodeIds",
+    ])
+  ) {
+    return false;
+  }
+  const [top, right, bottom, left] = insets;
+  return left + right < frameSize.width && top + bottom < frameSize.height;
+}
+
+function isInsetTuple(
+  value: unknown,
+): value is [number, number, number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 4 &&
+    value.every(
+      (inset: unknown) =>
+        typeof inset === "number" &&
+        Number.isFinite(inset) &&
+        inset >= 0 &&
+        inset <= 10_000,
+    )
+  );
+}
+
+function idArray(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length >= minimum &&
+    value.length <= maximum &&
+    value.every((nodeId) => safeId(nodeId)) &&
+    new Set(value).size === value.length
+  );
 }
 
 function isRegion(value: unknown): boolean {

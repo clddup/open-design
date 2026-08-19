@@ -3,6 +3,7 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
 import type { DesignLayoutQualityReport } from "@opendesign/editor-runtime";
+import { designTargetQualityProfilesEqual } from "@opendesign/design-contracts";
 import {
   componentStrategyOccurrencesForTarget,
   designPlanComponentStrategy,
@@ -346,7 +347,11 @@ export function assertLayoutQualityMatchesCapture(
     layoutQuality.documentId !== context.documentId ||
     layoutQuality.revision !== observedRevision ||
     layoutQuality.pageId !== target.planned.pageId ||
-    layoutQuality.artboardFrameId !== target.planned.artboard.frameId
+    layoutQuality.artboardFrameId !== target.planned.artboard.frameId ||
+    !designTargetQualityProfilesEqual(
+      layoutQuality.qualityProfile,
+      target.planned.qualityProfile,
+    )
   ) {
     throw new Error(
       "design_workflow.layout_quality_unavailable: The deterministic layout-quality report does not match the current delivery document, revision, Page, and Frame; inspect and capture the current target again",

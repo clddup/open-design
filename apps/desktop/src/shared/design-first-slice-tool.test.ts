@@ -15,13 +15,15 @@ describe("compact first-slice tool", () => {
     const properties = DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA.properties;
     expect(properties.visualSystem.properties.typography.maxItems).toBe(8);
     expect(properties.firstSlice.properties.stages.maxItems).toBe(3);
+    expect(JSON.stringify(properties.targets)).toContain('"safeNodeIds"');
+    expect(JSON.stringify(properties.targets)).toContain('"hitNodeIds"');
     expect(
       properties.firstSlice.properties.stages.items.properties.elements
         .maxItems,
     ).toBe(24);
   });
 
-  it("compiles all targets into Plan v5 and the first semantic slice into canonical nodes", () => {
+  it("compiles all targets into Plan v6 and the first semantic slice into canonical nodes", () => {
     const input = fixture();
     expect(isDesignFirstSliceToolInput(input)).toBe(true);
 
@@ -29,7 +31,7 @@ describe("compact first-slice tool", () => {
     expect(isDesignPlanToolInput(compiled.plan)).toBe(true);
     expect(isDesignApplyToolInput(compiled.apply)).toBe(true);
     expect(compiled.plan).toMatchObject({
-      version: 5,
+      version: 6,
       briefFidelity: {
         requiredContent: ["Home and Profile product screens"],
         prohibitedAdditions: ["No unrequested workflow or run features"],
@@ -38,6 +40,11 @@ describe("compact first-slice tool", () => {
     expect(
       compiled.plan.targets.map((target) => target.artboard.frameId),
     ).toEqual(["frame_home", "frame_profile"]);
+    expect(compiled.plan.targets[0]?.qualityProfile).toMatchObject({
+      kind: "ui",
+      platform: "ios",
+      safeAreaNodeIds: ["hero_title"],
+    });
     expect(compiled.apply.steps).toEqual([
       {
         stepId: "hero_stage",
@@ -73,6 +80,7 @@ describe("compact first-slice tool", () => {
   it("keeps historical compact inputs readable as Plan v4", () => {
     const input = fixture();
     delete input.briefFidelity;
+    input.targets.forEach((target) => delete target.qualityProfile);
 
     expect(isDesignFirstSliceToolInput(input)).toBe(true);
     expect(compileDesignFirstSliceToolInput(input).plan.version).toBe(4);
@@ -205,6 +213,14 @@ export function fixture(): DesignFirstSliceToolInput {
         },
         layout: "Vertical mobile composition",
         spacing: "8px base with 24px section rhythm",
+        qualityProfile: {
+          kind: "ui",
+          platform: "ios",
+          input: "touch",
+          insets: [59, 0, 34, 0],
+          safeNodeIds: ["hero_title"],
+          hitNodeIds: [],
+        },
         regions: [
           {
             nodeId: "home_hero",
@@ -231,6 +247,14 @@ export function fixture(): DesignFirstSliceToolInput {
         },
         layout: "Vertical mobile composition",
         spacing: "8px base with 24px section rhythm",
+        qualityProfile: {
+          kind: "ui",
+          platform: "ios",
+          input: "touch",
+          insets: [59, 0, 34, 0],
+          safeNodeIds: ["profile_header"],
+          hitNodeIds: [],
+        },
         regions: [
           {
             nodeId: "profile_header",

@@ -16,6 +16,7 @@ import type {
   DesignPlanTarget,
   DesignPlanToolInput,
   DesignPlanToolInputV3,
+  DesignPlanToolInputV6,
 } from "../../shared/design-agent-tools.js";
 import { createAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
 
@@ -162,6 +163,40 @@ function multiTargetPlan(pageId: string): DesignPlanToolInputV3 {
       effects: ["Subtle navigation shadow"],
     },
     rasterAssetRoles: [],
+  };
+}
+
+function qualityProfilePlan(pageId: string): DesignPlanToolInputV6 {
+  const source = multiTargetPlan(pageId);
+  const home = source.targets[0];
+  if (!home) throw new Error("Home target is missing");
+  return {
+    ...source,
+    version: 6,
+    objective: "Design the Home screen with executable UI geometry policy",
+    targets: [
+      {
+        ...home,
+        qualityProfile: {
+          kind: "ui",
+          platform: "ios",
+          interactionMode: "touch",
+          safeAreaInsets: { top: 59, right: 0, bottom: 34, left: 0 },
+          safeAreaNodeIds: ["frame_home_content"],
+          interactiveNodeIds: [],
+        },
+      },
+    ],
+    componentStrategy: {
+      summary: "No reusable semantic object is needed for one screen.",
+      candidates: [],
+    },
+    briefFidelity: {
+      requiredContent: ["Home screen"],
+      preservedSemantics: [],
+      prohibitedAdditions: ["No unrequested product capability"],
+      assumptions: ["Use an iOS safe area"],
+    },
   };
 }
 
@@ -462,15 +497,17 @@ function cleanLayoutQuality(
   revision: number,
 ): DesignLayoutQualityReport {
   return {
-    version: 2,
+    version: 3,
     documentId,
     revision,
     pageId,
     artboardFrameId,
     checkedNodeCount: 1,
+    checkedQualityNodeCount: 0,
     errorCount: 0,
     warningCount: 0,
     issues: [],
+    qualityProfile: null,
   };
 }
 
@@ -582,6 +619,48 @@ function withExistingArtboard(
 }
 
 describe("GlobalTaskCoordinator", () => {
+  it("binds the accepted Plan v6 quality profile to the active Frame capture target", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_quality_profile",
+      sessionId: "conversation_mobile",
+      prompt: "Design an iOS Home screen",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_quality_profile",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan = qualityProfilePlan(pageId);
+    coordinator.registerDesignPlan(context, plan);
+    coordinator.recordDesignPlanAllocated(
+      context.runId,
+      plan.targets.map((target) => target.targetId),
+      1,
+    );
+
+    expect(coordinator.resolveCanvasCaptureTarget(context)).toEqual({
+      kind: "frame",
+      pageId,
+      nodeId: "frame_home",
+      qualityProfile: plan.targets[0]?.qualityProfile,
+    });
+  });
+
   it("requires the trusted Run namespace for create-plan document node IDs", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
@@ -642,6 +721,43 @@ describe("GlobalTaskCoordinator", () => {
     ).toMatchObject({
       node: { id: `${prefix}workspace_artboard` },
     });
+    const qualitySource = qualityProfilePlan(pageId);
+    const qualityTarget = qualitySource.targets[0];
+    const qualityPlan = {
+      ...qualitySource,
+      targets: [
+        {
+          ...qualityTarget,
+          artboard: {
+            ...qualityTarget.artboard,
+            frameId: `${prefix}${qualityTarget.artboard.frameId}`,
+          },
+          composition: {
+            ...qualityTarget.composition,
+            regions: qualityTarget.composition.regions.map((region) => ({
+              ...region,
+              nodeId: `${prefix}${region.nodeId}`,
+            })),
+          },
+        },
+      ],
+    } satisfies DesignPlanToolInputV6;
+    expect(() => coordinator.registerDesignPlan(context, qualityPlan)).toThrow(
+      /new_node_id_namespace_required.*frame_home_content/i,
+    );
+    const qualityProfile = qualityPlan.targets[0].qualityProfile;
+    if (!qualityProfile || qualityProfile.kind !== "ui") {
+      throw new Error("UI profile required");
+    }
+    qualityPlan.targets[0].qualityProfile = {
+      ...qualityProfile,
+      safeAreaNodeIds: qualityProfile.safeAreaNodeIds.map(
+        (nodeId) => `${prefix}${nodeId}`,
+      ),
+    };
+    expect(() =>
+      coordinator.registerDesignPlan(context, qualityPlan),
+    ).not.toThrow();
     store.close();
   });
   it("enforces a planned artboard and a rendered review before refinement", async () => {

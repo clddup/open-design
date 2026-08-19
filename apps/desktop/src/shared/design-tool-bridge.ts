@@ -9,6 +9,10 @@ import type {
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
 import {
+  isDesignTargetQualityProfile,
+  type DesignTargetQualityProfile,
+} from "./design-plan-quality-profile";
+import {
   DESIGN_CAPTURE_TOOL_NAME,
   isPreparedAgentRasterExport,
   validateDesignAgentToolInput,
@@ -56,7 +60,12 @@ export type RendererDesignToolRequest = {
 
 export type RendererDesignCaptureTarget =
   | { kind: "page"; pageId: string }
-  | { kind: "frame"; pageId: string; nodeId: string };
+  | {
+      kind: "frame";
+      pageId: string;
+      nodeId: string;
+      qualityProfile?: DesignTargetQualityProfile;
+    };
 
 export type RendererDesignToolCancel = {
   requestId: string;
@@ -406,8 +415,10 @@ function isRendererDesignCaptureTarget(
   return (
     value.kind === "frame" &&
     safeId(value.nodeId) &&
+    (value.qualityProfile === undefined ||
+      isDesignTargetQualityProfile(value.qualityProfile)) &&
     Object.keys(value).every((key) =>
-      ["kind", "pageId", "nodeId"].includes(key),
+      ["kind", "pageId", "nodeId", "qualityProfile"].includes(key),
     )
   );
 }

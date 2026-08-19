@@ -186,6 +186,7 @@ async function executeDesignToolRequestUnsafe(
             document,
             request.captureTarget.pageId,
             request.captureTarget.nodeId,
+            request.captureTarget.qualityProfile,
           )
         : undefined;
     return {

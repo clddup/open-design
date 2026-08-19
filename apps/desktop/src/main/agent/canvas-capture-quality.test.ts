@@ -10,15 +10,17 @@ const frameTarget = {
 };
 
 const report: DesignLayoutQualityReport = {
-  version: 2,
+  version: 3,
   documentId: "document_design",
   revision: 7,
   pageId: frameTarget.pageId,
   artboardFrameId: frameTarget.nodeId,
   checkedNodeCount: 4,
+  checkedQualityNodeCount: 0,
   errorCount: 0,
   warningCount: 0,
   issues: [],
+  qualityProfile: null,
 };
 
 const missingLayoutQuality = Symbol("missing-layout-quality");
@@ -57,6 +59,34 @@ describe("Main canvas capture layout-quality boundary", () => {
         kind: "page",
         pageId: "page_design",
       }),
+    ).toThrow("design_workflow.layout_quality_unavailable");
+  });
+
+  it("binds the report to the exact Main-selected quality profile", () => {
+    const qualityProfile = {
+      kind: "ui" as const,
+      platform: "web" as const,
+      interactionMode: "pointer" as const,
+      safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 },
+      safeAreaNodeIds: ["primary_action"],
+      interactiveNodeIds: ["primary_action"],
+    };
+    const target = { ...frameTarget, qualityProfile };
+    const qualityReport = { ...report, qualityProfile };
+
+    expect(
+      requireCanvasCaptureLayoutQuality(
+        captureResult(qualityReport),
+        "document_design",
+        target,
+      ),
+    ).toEqual(qualityReport);
+    expect(() =>
+      requireCanvasCaptureLayoutQuality(
+        captureResult({ ...qualityReport, qualityProfile: null }),
+        "document_design",
+        target,
+      ),
     ).toThrow("design_workflow.layout_quality_unavailable");
   });
 

@@ -339,6 +339,33 @@ function assertMaterialTargetsRemainStable(
         `design_workflow.plan_amendment_invalid: Material region ${removedRegion.nodeId} must retain its stable node ID`,
       );
     }
+    const currentQuality = current.planned.qualityProfile;
+    const nextQuality = next.qualityProfile;
+    if (currentQuality?.kind === "ui") {
+      if (nextQuality?.kind !== "ui") {
+        throw new Error(
+          `design_workflow.plan_amendment_invalid: Material UI target ${current.delivery.targetId} must retain its executable UI quality profile`,
+        );
+      }
+      const nextSafeIds = new Set(nextQuality.safeAreaNodeIds);
+      const removedSafeId = currentQuality.safeAreaNodeIds.find(
+        (nodeId) => !nextSafeIds.has(nodeId),
+      );
+      if (removedSafeId) {
+        throw new Error(
+          `design_workflow.plan_amendment_invalid: Material safe-area node ${removedSafeId} cannot be removed from the quality profile`,
+        );
+      }
+      const nextInteractiveIds = new Set(nextQuality.interactiveNodeIds);
+      const removedInteractiveId = currentQuality.interactiveNodeIds.find(
+        (nodeId) => !nextInteractiveIds.has(nodeId),
+      );
+      if (removedInteractiveId) {
+        throw new Error(
+          `design_workflow.plan_amendment_invalid: Material interaction target ${removedInteractiveId} cannot be removed from the quality profile`,
+        );
+      }
+    }
   }
 }
 

@@ -120,6 +120,7 @@ describe("Renderer design tool bridge", () => {
         kind: "frame" as const,
         pageId: "page_1",
         nodeId: "frame_1",
+        qualityProfile: { kind: "graphic" as const },
       },
     };
 
@@ -131,6 +132,22 @@ describe("Renderer design tool bridge", () => {
       isRendererDesignToolRequest({
         ...request,
         captureTarget: { ...request.captureTarget, filePath: "C:\\draft" },
+      }),
+    ).toBe(false);
+    expect(
+      isRendererDesignToolRequest({
+        ...request,
+        captureTarget: {
+          ...request.captureTarget,
+          qualityProfile: {
+            kind: "ui",
+            platform: "ios",
+            interactionMode: "touch",
+            safeAreaInsets: { top: 900, right: 0, bottom: 0, left: 0 },
+            safeAreaNodeIds: [],
+            interactiveNodeIds: [],
+          },
+        },
       }),
     ).toBe(false);
     expect(

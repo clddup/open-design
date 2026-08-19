@@ -53,6 +53,11 @@ import {
   type DesignPlanComponentStrategy,
 } from "./design-plan-component-strategy";
 import {
+  DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
+  isDesignTargetQualityProfile,
+  type DesignTargetQualityProfile,
+} from "./design-plan-quality-profile";
+import {
   explainInvalidDesignComponentToolInput,
   isDesignComponentToolInput,
 } from "./design-component-tool";
@@ -69,6 +74,18 @@ export {
 export { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 export { isDesignBriefFidelity } from "./design-brief-fidelity";
 export type { DesignBriefFidelity } from "./design-brief-fidelity";
+export {
+  DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
+  isDesignTargetQualityProfile,
+  minimumInteractiveTargetSize,
+  qualityProfileNodeIds,
+} from "./design-plan-quality-profile";
+export type {
+  DesignQualityInteractionMode,
+  DesignQualityPlatform,
+  DesignSafeAreaInsets,
+  DesignTargetQualityProfile,
+} from "./design-plan-quality-profile";
 export {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
@@ -195,6 +212,7 @@ export type DesignPlanTarget = {
   editableLayers: string[];
   implementationSteps: string[];
   validationChecks: string[];
+  qualityProfile?: DesignTargetQualityProfile;
 };
 export type LegacyDesignPlanToolInput = {
   version: 2;
@@ -236,11 +254,15 @@ export type DesignPlanToolInputV5 = Omit<DesignPlanToolInputV4, "version"> & {
   version: 5;
   briefFidelity: DesignBriefFidelity;
 };
+export type DesignPlanToolInputV6 = Omit<DesignPlanToolInputV5, "version"> & {
+  version: 6;
+};
 export type DesignPlanToolInput =
   | LegacyDesignPlanToolInput
   | DesignPlanToolInputV3
   | DesignPlanToolInputV4
-  | DesignPlanToolInputV5;
+  | DesignPlanToolInputV5
+  | DesignPlanToolInputV6;
 export type DesignVisualReviewToolInput = {
   briefFidelity: string;
   composition: string;
@@ -1809,12 +1831,21 @@ const MODEL_DESIGN_PLAN_TARGET_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_DESIGN_PLAN_TARGET_V6_SCHEMA = {
+  ...MODEL_DESIGN_PLAN_TARGET_SCHEMA,
+  properties: {
+    ...MODEL_DESIGN_PLAN_TARGET_SCHEMA.properties,
+    qualityProfile: DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
+  },
+  required: [...MODEL_DESIGN_PLAN_TARGET_SCHEMA.required, "qualityProfile"],
+} as const;
+
 const MODEL_DESIGN_PLAN_SCHEMA = {
   type: "object",
   description:
-    "Version 5 of the executable delivery plan. targets must match the user's requested scope exactly, briefFidelity must preserve requested and inspected product semantics without invented capabilities, and componentStrategy must explicitly judge plausible reusable semantic objects without category or occurrence-count shortcuts.",
+    "Version 6 of the executable delivery plan. targets must match the user's requested scope exactly, briefFidelity must preserve requested and inspected product semantics without invented capabilities, componentStrategy must explicitly judge reusable semantic objects, and every target must declare an executable qualityProfile. UI profiles identify foreground safe-area nodes and actual interaction hit-area nodes; graphic profiles explicitly disable UI-only checks.",
   properties: {
-    version: { const: 5 },
+    version: { const: 6 },
     deliverable: {
       enum: [
         "ui",
@@ -1832,7 +1863,7 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
       type: "array",
       minItems: 1,
       maxItems: 32,
-      items: MODEL_DESIGN_PLAN_TARGET_SCHEMA,
+      items: MODEL_DESIGN_PLAN_TARGET_V6_SCHEMA,
     },
     visualSystem: {
       type: "object",
@@ -1985,7 +2016,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["new-design" as const],
     },
     description:
-      "Create a new editable design through one compact, rollback-safe first-delivery call. Declare the latest user brief's required content, preserved product semantics, prohibited unrequested additions and explicit assumptions, every requested artboard root, and one meaningful first region for the first target, limited to 1-3 semantic stages and 24 total elements. Main expands the compact input into DesignPlan v5, allocates all real Frames, validates the first target, and commits allocation plus semantic stages through the existing EditorRuntime and one history group. Use inspected Page IDs, stable unique IDs, parent-local coordinates, real region content, and explicit font face identity. This tool is available only for a high-confidence blank-canvas new-design run; after success the complete professional tools replace it automatically.",
+      "Create a new editable design through one rollback-safe call. Declare brief fidelity, every requested artboard root and UI/graphic quality profile, plus one meaningful first-target region in 1-3 stages and at most 24 elements. Main compiles Plan v6 and commits allocation plus real semantic stages through the canonical EditorRuntime/history path. Use inspected Page IDs, stable prefixed IDs, parent-local geometry, actual control hit areas and explicit font faces. Available only for a high-confidence blank new-design Run; full tools replace it after success.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2043,7 +2074,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "plan" as const,
     },
     description:
-      "Define version 5 of the executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. briefFidelity must record required content, inspected product semantics preserved by default, prohibited unrequested additions, and explicit assumptions; visual restyling is not permission to add, remove, rename, or redefine product capabilities. componentStrategy must identify plausible reusable semantic objects, decide component versus ordinary hierarchy from reuse, stable identity, centralized updates, structural consistency, and intended instance differences, and bind every declared occurrence to a stable target/node ID. The host verifies declared Component Mains, Instances, and ordinary semantic containers from the live captured document; an empty candidate list is valid only when the summary explains why no semantic object merits component consideration. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
+      "Define version 6 of the executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. briefFidelity must record required content, inspected product semantics preserved by default, prohibited unrequested additions, and explicit assumptions; visual restyling is not permission to add, remove, rename, or redefine product capabilities. Every target must declare qualityProfile: UI profiles explicitly name platform, interaction mode, safe-area insets, foreground safe-area nodes and actual interaction hit-area nodes, while non-UI targets use graphic. Do not infer device insets from dimensions. componentStrategy must identify plausible reusable semantic objects, decide component versus ordinary hierarchy from reuse, stable identity, centralized updates, structural consistency, and intended instance differences, and bind every declared occurrence to a stable target/node ID. The host verifies quality geometry, declared Component Mains, Instances, and ordinary semantic containers from the live captured document; an empty candidate list is valid only when the summary explains why no semantic object merits component consideration. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
     inputSchema: MODEL_DESIGN_PLAN_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -3259,11 +3290,16 @@ function isLegacyDesignPlanToolInput(
 function isMultiTargetDesignPlanToolInput(
   input: unknown,
 ): input is
-  DesignPlanToolInputV3 | DesignPlanToolInputV4 | DesignPlanToolInputV5 {
+  | DesignPlanToolInputV3
+  | DesignPlanToolInputV4
+  | DesignPlanToolInputV5
+  | DesignPlanToolInputV6 {
   if (!isRecord(input)) return false;
   const version4 = input.version === 4;
   const version5 = input.version === 5;
-  const componentVersion = version4 || version5;
+  const version6 = input.version === 6;
+  const componentVersion = version4 || version5 || version6;
+  const briefVersion = version5 || version6;
   if (
     (input.version !== 3 && !componentVersion) ||
     !isDesignDeliverable(input.deliverable) ||
@@ -3273,7 +3309,7 @@ function isMultiTargetDesignPlanToolInput(
     !Array.isArray(input.targets) ||
     input.targets.length < 1 ||
     input.targets.length > 32 ||
-    !input.targets.every(isDesignPlanTarget) ||
+    !input.targets.every((target) => isDesignPlanTarget(target, version6)) ||
     !isDesignPlanVisualSystem(input.visualSystem) ||
     !Array.isArray(input.rasterAssetRoles) ||
     input.rasterAssetRoles.length > 5 ||
@@ -3288,7 +3324,7 @@ function isMultiTargetDesignPlanToolInput(
       "visualSystem",
       "rasterAssetRoles",
       ...(componentVersion ? ["componentStrategy"] : []),
-      ...(version5 ? ["briefFidelity"] : []),
+      ...(briefVersion ? ["briefFidelity"] : []),
       ...(input.singleRasterEvidence === undefined
         ? []
         : ["singleRasterEvidence"]),
@@ -3306,7 +3342,19 @@ function isMultiTargetDesignPlanToolInput(
   if (componentVersion && !componentStrategy) {
     return false;
   }
-  if (version5 && !isDesignBriefFidelity(input.briefFidelity)) {
+  if (briefVersion && !isDesignBriefFidelity(input.briefFidelity)) {
+    return false;
+  }
+  if (
+    version6 &&
+    input.targets.some((target) => {
+      if (!isRecord(target)) return true;
+      const qualityProfile = target.qualityProfile;
+      return input.deliverable === "ui"
+        ? !isRecord(qualityProfile) || qualityProfile.kind !== "ui"
+        : !isRecord(qualityProfile) || qualityProfile.kind !== "graphic";
+    })
+  ) {
     return false;
   }
   if (
@@ -3382,7 +3430,7 @@ export function designPlanTargets(
 export function designPlanComponentStrategy(
   plan: DesignPlanToolInput,
 ): DesignPlanComponentStrategy | undefined {
-  return plan.version === 4 || plan.version === 5
+  return plan.version === 4 || plan.version === 5 || plan.version === 6
     ? structuredClone(plan.componentStrategy)
     : undefined;
 }
@@ -3390,10 +3438,15 @@ export function designPlanComponentStrategy(
 export function designPlanBriefFidelity(
   plan: DesignPlanToolInput,
 ): DesignBriefFidelity | undefined {
-  return plan.version === 5 ? structuredClone(plan.briefFidelity) : undefined;
+  return plan.version === 5 || plan.version === 6
+    ? structuredClone(plan.briefFidelity)
+    : undefined;
 }
 
-function isDesignPlanTarget(value: unknown): value is DesignPlanTarget {
+function isDesignPlanTarget(
+  value: unknown,
+  requireQualityProfile = false,
+): value is DesignPlanTarget {
   if (!isRecord(value)) return false;
   const artboard = value.artboard;
   const composition = value.composition;
@@ -3434,6 +3487,11 @@ function isDesignPlanTarget(value: unknown): value is DesignPlanTarget {
     !boundedTextArray(value.editableLayers, 2, 24, 256) ||
     !boundedTextArray(value.implementationSteps, 2, 16, 500) ||
     !boundedTextArray(value.validationChecks, 2, 16, 500) ||
+    (requireQualityProfile &&
+      !isDesignTargetQualityProfile(value.qualityProfile, {
+        width: artboard.width,
+        height: artboard.height,
+      })) ||
     !exactKeys(value, [
       "targetId",
       "label",
@@ -3444,6 +3502,7 @@ function isDesignPlanTarget(value: unknown): value is DesignPlanTarget {
       "editableLayers",
       "implementationSteps",
       "validationChecks",
+      ...(requireQualityProfile ? ["qualityProfile"] : []),
     ])
   ) {
     return false;

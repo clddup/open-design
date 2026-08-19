@@ -53,11 +53,68 @@ const ELEMENT_BASE_REQUIRED = [
   "width",
   "height",
 ] as const;
+const COMPACT_QUALITY_PROFILE_SCHEMA = {
+  oneOf: [
+    {
+      type: "object",
+      properties: { kind: { const: "graphic" } },
+      required: ["kind"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: { const: "ui" },
+        platform: {
+          enum: [
+            "web",
+            "macos",
+            "windows",
+            "ios",
+            "ipados",
+            "android",
+            "other",
+          ],
+        },
+        input: { enum: ["pointer", "touch", "mixed"] },
+        insets: {
+          type: "array",
+          minItems: 4,
+          maxItems: 4,
+          items: { type: "number", minimum: 0, maximum: 10_000 },
+          description: "Safe-area top, right, bottom, left.",
+        },
+        safeNodeIds: {
+          type: "array",
+          minItems: 1,
+          maxItems: 64,
+          uniqueItems: true,
+          items: ID_SCHEMA,
+        },
+        hitNodeIds: {
+          type: "array",
+          maxItems: 64,
+          uniqueItems: true,
+          items: ID_SCHEMA,
+        },
+      },
+      required: [
+        "kind",
+        "platform",
+        "input",
+        "insets",
+        "safeNodeIds",
+        "hitNodeIds",
+      ],
+      additionalProperties: false,
+    },
+  ],
+} as const;
 
 export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Compact new-design kernel: declare the user-brief fidelity contract, all real artboard roots and one meaningful editable first slice. The trusted host expands this into DesignPlan v5 plus one rollback-safe OpenDesign transaction.",
+    "Compact Plan v6, real artboard roots and one editable first slice.",
   properties: {
     version: { const: 1 },
     deliverable: {
@@ -98,6 +155,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
           },
           layout: TEXT_SCHEMA,
           spacing: { type: "string", minLength: 1, maxLength: 500 },
+          qualityProfile: COMPACT_QUALITY_PROFILE_SCHEMA,
           regions: {
             type: "array",
             minItems: 1,
@@ -137,6 +195,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
           "frame",
           "layout",
           "spacing",
+          "qualityProfile",
           "regions",
         ],
         additionalProperties: false,

@@ -13,7 +13,7 @@
 
 ## 决策
 
-Agent 新建设计内容前必须先读取文档，再调用 `opendesign_define_design_plan`。当前模型契约为 `DesignPlanToolInput version: 5`；version 2/3/4 只为历史 tool input、journal、恢复和旧 generation presentation 兼容保留。计划是 Main 持有的当前 Run 状态，不是第二份设计文档，也不改变 revision。
+Agent 新建设计内容前必须先读取文档，再调用 `opendesign_define_design_plan`。本 ADR 建立的 fidelity 当前由 ADR-0096 的 `DesignPlanToolInput version: 6` 继续承载；version 2/3/4/5 只为历史 tool input、journal、恢复和旧 generation presentation 兼容保留。计划是 Main 持有的当前 Run 状态，不是第二份设计文档，也不改变 revision。
 
 ### 设计 brief 忠实度是计划和审查的共同契约
 

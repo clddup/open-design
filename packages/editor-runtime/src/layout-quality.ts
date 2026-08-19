@@ -1,7 +1,12 @@
 import type {
   DesignDocument,
   DesignNode,
+  DesignTargetQualityProfile,
   Rect,
+} from "@opendesign/design-contracts";
+import {
+  isDesignTargetQualityProfile,
+  minimumInteractiveTargetSize,
 } from "@opendesign/design-contracts";
 import {
   getNodeBounds,
@@ -9,7 +14,7 @@ import {
   invertTransform,
 } from "./geometry.js";
 
-export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 2 as const;
+export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 3 as const;
 
 export type DesignLayoutQualitySeverity = "error" | "warning";
 
@@ -20,7 +25,12 @@ export type DesignLayoutQualityCode =
   | "node-excessive-artboard-overflow"
   | "node-fully-outside-artboard"
   | "node-geometry-unavailable"
+  | "node-outside-safe-area"
   | "node-partial-artboard-overflow"
+  | "interactive-target-too-small"
+  | "quality-node-missing"
+  | "quality-node-not-visible"
+  | "quality-profile-geometry-unavailable"
   | "quality-scan-truncated"
   | "target-frame-invalid";
 
@@ -30,19 +40,29 @@ export interface DesignLayoutQualityIssue {
   nodeId: string;
   outsideRatio?: number;
   geometry?: DesignLayoutQualityGeometry;
+  measurement?: DesignLayoutQualityMeasurement;
   relatedNodeIds: string[];
   severity: DesignLayoutQualitySeverity;
 }
 
 export interface DesignLayoutQualityGeometry {
   coordinateSpace: "world";
+  constraint: "artboard" | "safe-area";
   nodeBounds: Rect;
   artboardBounds: Rect;
+  constraintBounds: Rect;
   parentId: string | null;
   currentLocalPosition: { x: number; y: number };
   recommendedLocalDelta: { x: number; y: number };
   recommendedLocalPosition: { x: number; y: number };
   requiresResize: boolean;
+}
+
+export interface DesignLayoutQualityMeasurement {
+  kind: "minimum-interactive-size";
+  actualSize: { width: number; height: number };
+  requiredSize: { width: number; height: number };
+  source: string;
 }
 
 export interface DesignLayoutQualityReport {
@@ -52,9 +72,11 @@ export interface DesignLayoutQualityReport {
   pageId: string;
   artboardFrameId: string;
   checkedNodeCount: number;
+  checkedQualityNodeCount: number;
   errorCount: number;
   warningCount: number;
   issues: DesignLayoutQualityIssue[];
+  qualityProfile: DesignTargetQualityProfile | null;
 }
 
 const BOUNDS_TOLERANCE = 0.5;
@@ -66,6 +88,7 @@ export function diagnoseDesignTargetLayout(
   document: DesignDocument,
   pageId: string,
   artboardFrameId: string,
+  qualityProfile?: DesignTargetQualityProfile,
 ): DesignLayoutQualityReport {
   const issues: DesignLayoutQualityIssue[] = [];
   const artboard = document.nodesById[artboardFrameId];
@@ -80,7 +103,15 @@ export function diagnoseDesignTargetLayout(
       relatedNodeIds: [],
       message: `Delivery artboard ${artboardFrameId} is missing, is not a Frame, or does not belong to Page ${pageId}`,
     });
-    return report(document, pageId, artboardFrameId, 0, issues);
+    return report(
+      document,
+      pageId,
+      artboardFrameId,
+      0,
+      0,
+      issues,
+      qualityProfile,
+    );
   }
 
   const artboardBounds = getNodeBounds(document, artboardFrameId);
@@ -92,7 +123,15 @@ export function diagnoseDesignTargetLayout(
       relatedNodeIds: [],
       message: `Delivery artboard ${artboardFrameId} has invalid world bounds`,
     });
-    return report(document, pageId, artboardFrameId, 0, issues);
+    return report(
+      document,
+      pageId,
+      artboardFrameId,
+      0,
+      0,
+      issues,
+      qualityProfile,
+    );
   }
 
   if (!artboard.visible || artboard.opacity <= 0) {
@@ -152,7 +191,14 @@ export function diagnoseDesignTargetLayout(
       expandRect(artboardBounds, BOUNDS_TOLERANCE),
     );
     if (outsideRatio === 0) continue;
-    const geometry = overflowGeometry(document, node, bounds, artboardBounds);
+    const geometry = containmentGeometry(
+      document,
+      node,
+      bounds,
+      artboardBounds,
+      artboardBounds,
+      "artboard",
+    );
     if (outsideRatio >= 1) {
       appendQualityIssue(issues, artboardFrameId, {
         code: "node-fully-outside-artboard",
@@ -198,7 +244,148 @@ export function diagnoseDesignTargetLayout(
     }
   }
 
-  return report(document, pageId, artboardFrameId, checkedNodeCount, issues);
+  const checkedQualityNodeCount = diagnoseQualityProfile(
+    document,
+    artboard,
+    artboardBounds,
+    qualityProfile,
+    issues,
+  );
+  return report(
+    document,
+    pageId,
+    artboardFrameId,
+    checkedNodeCount,
+    checkedQualityNodeCount,
+    issues,
+    qualityProfile,
+  );
+}
+
+function diagnoseQualityProfile(
+  document: DesignDocument,
+  artboard: Extract<DesignNode, { kind: "frame" }>,
+  artboardBounds: Rect,
+  qualityProfile: DesignTargetQualityProfile | undefined,
+  issues: DesignLayoutQualityIssue[],
+): number {
+  if (!qualityProfile || qualityProfile.kind === "graphic") return 0;
+  const world = getWorldTransform(document, artboard.id);
+  const insets = qualityProfile.safeAreaInsets;
+  const safeAreaBounds = {
+    x: artboardBounds.x + insets.left,
+    y: artboardBounds.y + insets.top,
+    width: artboardBounds.width - insets.left - insets.right,
+    height: artboardBounds.height - insets.top - insets.bottom,
+  };
+  if (
+    !world ||
+    !approximately(world[0], 1) ||
+    !approximately(world[1], 0) ||
+    !approximately(world[2], 0) ||
+    !approximately(world[3], 1) ||
+    !isFinitePositiveRect(safeAreaBounds)
+  ) {
+    appendQualityIssue(issues, artboard.id, {
+      code: "quality-profile-geometry-unavailable",
+      severity: "error",
+      nodeId: artboard.id,
+      relatedNodeIds: [],
+      message: `Delivery artboard ${artboard.id} cannot apply its UI safe-area profile because the Frame is rotated, skewed, scaled, or the declared insets leave no positive content area`,
+    });
+    return 0;
+  }
+
+  const interactiveIds = new Set(qualityProfile.interactiveNodeIds);
+  const minimumSize = minimumInteractiveTargetSize(qualityProfile);
+  let checkedQualityNodeCount = 0;
+  for (const nodeId of qualityProfile.safeAreaNodeIds) {
+    const node = document.nodesById[nodeId];
+    if (!node || !nodeDescendsFrom(document, nodeId, artboard.id)) {
+      appendQualityIssue(issues, artboard.id, {
+        code: "quality-node-missing",
+        severity: "error",
+        nodeId,
+        relatedNodeIds: [artboard.id],
+        message: `Planned UI quality node ${nodeId} is missing or is not a descendant of delivery artboard ${artboard.id}`,
+      });
+      continue;
+    }
+    if (!nodeIsEffectivelyVisible(document, nodeId, artboard.id)) {
+      appendQualityIssue(issues, artboard.id, {
+        code: "quality-node-not-visible",
+        severity: "error",
+        nodeId,
+        relatedNodeIds: [artboard.id],
+        message: `Planned UI quality node ${nodeId} is hidden or has zero opacity inside delivery artboard ${artboard.id}`,
+      });
+      continue;
+    }
+    const bounds = getNodeBounds(document, nodeId);
+    if (!bounds || !isFinitePositiveRect(bounds)) {
+      appendQualityIssue(issues, artboard.id, {
+        code: "node-geometry-unavailable",
+        severity: "error",
+        nodeId,
+        relatedNodeIds: [artboard.id],
+        message: `Planned UI quality node ${nodeId} has invalid world bounds inside delivery artboard ${artboard.id}`,
+      });
+      continue;
+    }
+    checkedQualityNodeCount += 1;
+    const outsideRatio = rectOutsideRatio(
+      bounds,
+      expandRect(safeAreaBounds, BOUNDS_TOLERANCE),
+    );
+    if (outsideRatio > 0) {
+      const geometry = containmentGeometry(
+        document,
+        node,
+        bounds,
+        artboardBounds,
+        safeAreaBounds,
+        "safe-area",
+      );
+      appendQualityIssue(issues, artboard.id, {
+        code: "node-outside-safe-area",
+        severity: "error",
+        nodeId,
+        relatedNodeIds: [artboard.id],
+        outsideRatio: Math.round(outsideRatio * 10_000) / 10_000,
+        ...(geometry ? { geometry } : {}),
+        message: overflowMessage(
+          `Planned foreground node ${nodeId} extends outside the declared ${qualityProfile.platform} safe area of delivery artboard ${artboard.id}`,
+          geometry,
+        ),
+      });
+    }
+    if (
+      interactiveIds.has(nodeId) &&
+      (bounds.width + BOUNDS_TOLERANCE < minimumSize.width ||
+        bounds.height + BOUNDS_TOLERANCE < minimumSize.height)
+    ) {
+      appendQualityIssue(issues, artboard.id, {
+        code: "interactive-target-too-small",
+        severity: "error",
+        nodeId,
+        relatedNodeIds: [artboard.id],
+        measurement: {
+          kind: "minimum-interactive-size",
+          actualSize: {
+            width: roundGeometry(bounds.width),
+            height: roundGeometry(bounds.height),
+          },
+          requiredSize: {
+            width: minimumSize.width,
+            height: minimumSize.height,
+          },
+          source: minimumSize.source,
+        },
+        message: `Interactive target ${nodeId} is ${roundGeometry(bounds.width)}×${roundGeometry(bounds.height)} but ${qualityProfile.platform}/${qualityProfile.interactionMode} requires at least ${minimumSize.width}×${minimumSize.height} (${minimumSize.source}); point the profile at the actual hit-area Frame or enlarge it`,
+      });
+    }
+  }
+  return checkedQualityNodeCount;
 }
 
 export function isDesignLayoutQualityReport(
@@ -214,6 +401,7 @@ export function isDesignLayoutQualityReport(
     safeText(record.pageId) &&
     safeText(record.artboardFrameId) &&
     boundedCount(record.checkedNodeCount) &&
+    boundedCount(record.checkedQualityNodeCount) &&
     boundedCount(record.errorCount) &&
     boundedCount(record.warningCount) &&
     Array.isArray(record.issues) &&
@@ -223,6 +411,8 @@ export function isDesignLayoutQualityReport(
       record.issues.filter((issue) => issue.severity === "error").length &&
     record.warningCount ===
       record.issues.filter((issue) => issue.severity === "warning").length &&
+    (record.qualityProfile === null ||
+      isDesignTargetQualityProfile(record.qualityProfile)) &&
     recordKeysOnly(record, [
       "version",
       "documentId",
@@ -230,9 +420,11 @@ export function isDesignLayoutQualityReport(
       "pageId",
       "artboardFrameId",
       "checkedNodeCount",
+      "checkedQualityNodeCount",
       "errorCount",
       "warningCount",
       "issues",
+      "qualityProfile",
     ])
   );
 }
@@ -250,7 +442,12 @@ function isDesignLayoutQualityIssue(
       "node-excessive-artboard-overflow",
       "node-fully-outside-artboard",
       "node-geometry-unavailable",
+      "node-outside-safe-area",
       "node-partial-artboard-overflow",
+      "interactive-target-too-small",
+      "quality-node-missing",
+      "quality-node-not-visible",
+      "quality-profile-geometry-unavailable",
       "quality-scan-truncated",
       "target-frame-invalid",
     ].includes(String(record.code)) &&
@@ -267,12 +464,15 @@ function isDesignLayoutQualityIssue(
         record.outsideRatio <= 1)) &&
     (record.geometry === undefined ||
       isDesignLayoutQualityGeometry(record.geometry)) &&
+    (record.measurement === undefined ||
+      isDesignLayoutQualityMeasurement(record.measurement)) &&
     recordKeysOnly(record, [
       "code",
       "message",
       "nodeId",
       "outsideRatio",
       "geometry",
+      "measurement",
       "relatedNodeIds",
       "severity",
     ])
@@ -284,8 +484,10 @@ function isDesignLayoutQualityGeometry(value: unknown): boolean {
   if (!record) return false;
   return (
     record.coordinateSpace === "world" &&
+    (record.constraint === "artboard" || record.constraint === "safe-area") &&
     isFiniteRect(record.nodeBounds) &&
     isFiniteRect(record.artboardBounds) &&
+    isFiniteRect(record.constraintBounds) &&
     (record.parentId === null || safeText(record.parentId)) &&
     isFinitePoint(record.currentLocalPosition) &&
     isFinitePoint(record.recommendedLocalDelta) &&
@@ -293,8 +495,10 @@ function isDesignLayoutQualityGeometry(value: unknown): boolean {
     typeof record.requiresResize === "boolean" &&
     recordKeysOnly(record, [
       "coordinateSpace",
+      "constraint",
       "nodeBounds",
       "artboardBounds",
+      "constraintBounds",
       "parentId",
       "currentLocalPosition",
       "recommendedLocalDelta",
@@ -304,11 +508,25 @@ function isDesignLayoutQualityGeometry(value: unknown): boolean {
   );
 }
 
-function overflowGeometry(
+function isDesignLayoutQualityMeasurement(value: unknown): boolean {
+  const record = recordValue(value);
+  return (
+    record !== null &&
+    record.kind === "minimum-interactive-size" &&
+    isFiniteSize(record.actualSize) &&
+    isFiniteSize(record.requiredSize) &&
+    safeText(record.source) &&
+    recordKeysOnly(record, ["kind", "actualSize", "requiredSize", "source"])
+  );
+}
+
+function containmentGeometry(
   document: DesignDocument,
   node: DesignNode,
   nodeBounds: Rect,
   artboardBounds: Rect,
+  constraintBounds: Rect,
+  constraint: DesignLayoutQualityGeometry["constraint"],
 ): DesignLayoutQualityGeometry | undefined {
   const parentWorld = node.parentId
     ? getWorldTransform(document, node.parentId)
@@ -319,14 +537,14 @@ function overflowGeometry(
     x: containmentDelta(
       nodeBounds.x,
       nodeBounds.width,
-      artboardBounds.x,
-      artboardBounds.width,
+      constraintBounds.x,
+      constraintBounds.width,
     ),
     y: containmentDelta(
       nodeBounds.y,
       nodeBounds.height,
-      artboardBounds.y,
-      artboardBounds.height,
+      constraintBounds.y,
+      constraintBounds.height,
     ),
   };
   const localDelta = {
@@ -336,8 +554,10 @@ function overflowGeometry(
   const current = { x: node.transform[4], y: node.transform[5] };
   return {
     coordinateSpace: "world",
+    constraint,
     nodeBounds,
     artboardBounds,
+    constraintBounds,
     parentId: node.parentId,
     currentLocalPosition: current,
     recommendedLocalDelta: roundPoint(localDelta),
@@ -346,8 +566,8 @@ function overflowGeometry(
       y: current.y + localDelta.y,
     }),
     requiresResize:
-      nodeBounds.width > artboardBounds.width + BOUNDS_TOLERANCE ||
-      nodeBounds.height > artboardBounds.height + BOUNDS_TOLERANCE,
+      nodeBounds.width > constraintBounds.width + BOUNDS_TOLERANCE ||
+      nodeBounds.height > constraintBounds.height + BOUNDS_TOLERANCE,
   };
 }
 
@@ -373,7 +593,9 @@ function overflowMessage(
 ): string {
   if (!geometry) return prefix;
   const position = geometry.recommendedLocalPosition;
-  return `${prefix}; set its parent-local position to x=${position.x}, y=${position.y}${geometry.requiresResize ? " and resize it to fit the artboard" : ""}`;
+  const constraint =
+    geometry.constraint === "safe-area" ? "safe area" : "artboard";
+  return `${prefix}; set its parent-local position to x=${position.x}, y=${position.y}${geometry.requiresResize ? ` and resize it to fit the ${constraint}` : ""}`;
 }
 
 function roundPoint(point: { x: number; y: number }): { x: number; y: number } {
@@ -410,12 +632,28 @@ function isFiniteRect(value: unknown): boolean {
   );
 }
 
+function isFiniteSize(value: unknown): boolean {
+  const record = recordValue(value);
+  return (
+    record !== null &&
+    typeof record.width === "number" &&
+    Number.isFinite(record.width) &&
+    record.width >= 0 &&
+    typeof record.height === "number" &&
+    Number.isFinite(record.height) &&
+    record.height >= 0 &&
+    recordKeysOnly(record, ["width", "height"])
+  );
+}
+
 function report(
   document: DesignDocument,
   pageId: string,
   artboardFrameId: string,
   checkedNodeCount: number,
+  checkedQualityNodeCount: number,
   issues: DesignLayoutQualityIssue[],
+  qualityProfile: DesignTargetQualityProfile | undefined,
 ): DesignLayoutQualityReport {
   return {
     version: DESIGN_LAYOUT_QUALITY_REPORT_VERSION,
@@ -424,9 +662,11 @@ function report(
     pageId,
     artboardFrameId,
     checkedNodeCount,
+    checkedQualityNodeCount,
     errorCount: issues.filter((issue) => issue.severity === "error").length,
     warningCount: issues.filter((issue) => issue.severity === "warning").length,
     issues,
+    qualityProfile: qualityProfile ? structuredClone(qualityProfile) : null,
   };
 }
 
@@ -466,6 +706,42 @@ function nodeBelongsToPage(
     current = node.parentId;
   }
   return false;
+}
+
+function nodeDescendsFrom(
+  document: DesignDocument,
+  nodeId: string,
+  ancestorId: string,
+): boolean {
+  const visited = new Set<string>();
+  let current = document.nodesById[nodeId]?.parentId ?? null;
+  while (current !== null && !visited.has(current)) {
+    if (current === ancestorId) return true;
+    visited.add(current);
+    current = document.nodesById[current]?.parentId ?? null;
+  }
+  return false;
+}
+
+function nodeIsEffectivelyVisible(
+  document: DesignDocument,
+  nodeId: string,
+  ancestorId: string,
+): boolean {
+  const visited = new Set<string>();
+  let current: string | null = nodeId;
+  while (current !== null && !visited.has(current)) {
+    visited.add(current);
+    const node: DesignNode | undefined = document.nodesById[current];
+    if (!node || !node.visible || node.opacity <= 0) return false;
+    if (current === ancestorId) return true;
+    current = node.parentId;
+  }
+  return false;
+}
+
+function approximately(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 1e-9;
 }
 
 function hasPositiveArea(node: DesignNode): boolean {

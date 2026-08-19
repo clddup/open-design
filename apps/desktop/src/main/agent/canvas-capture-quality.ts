@@ -1,4 +1,5 @@
 import type { TrustedToolResult } from "@opendesign/agent-runtime";
+import { designTargetQualityProfilesEqual } from "@opendesign/design-contracts";
 import {
   isDesignLayoutQualityReport,
   type DesignLayoutQualityReport,
@@ -25,7 +26,11 @@ export function requireCanvasCaptureLayoutQuality(
     layoutQuality.documentId !== documentId ||
     layoutQuality.revision !== result.observedRevision ||
     layoutQuality.pageId !== captureTarget.pageId ||
-    layoutQuality.artboardFrameId !== captureTarget.nodeId
+    layoutQuality.artboardFrameId !== captureTarget.nodeId ||
+    !designTargetQualityProfilesEqual(
+      layoutQuality.qualityProfile,
+      captureTarget.qualityProfile,
+    )
   ) {
     throw new Error(
       "design_workflow.layout_quality_unavailable: The rendered Frame capture did not include a trusted layout-quality report for the exact document, revision, Page, and Frame; inspect and capture the current target again",

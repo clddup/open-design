@@ -28,6 +28,7 @@ import {
   componentStrategyOccurrencesForTarget,
   designApplyRequiresPlan,
   designPlanComponentStrategy,
+  qualityProfileNodeIds,
   designPlanTargets,
   type DesignApplyToolInput,
   type DesignComponentToolInput,
@@ -709,6 +710,9 @@ export class GlobalTaskCoordinator {
         kind: "frame",
         pageId: target.planned.pageId,
         nodeId: target.planned.artboard.frameId,
+        ...(target.planned.qualityProfile
+          ? { qualityProfile: structuredClone(target.planned.qualityProfile) }
+          : {}),
       };
     }
     const binding = this.#toolBindingsByRunId.get(context.runId);
@@ -1315,6 +1319,9 @@ function assertPlanUsesNewNodeIdNamespace(
     assertNewNodeIdHasPrefix(target.artboard.frameId, prefix);
     for (const region of target.composition.regions) {
       assertNewNodeIdHasPrefix(region.nodeId, prefix);
+    }
+    for (const nodeId of qualityProfileNodeIds(target.qualityProfile)) {
+      assertNewNodeIdHasPrefix(nodeId, prefix);
     }
   }
   const strategy = designPlanComponentStrategy(plan);

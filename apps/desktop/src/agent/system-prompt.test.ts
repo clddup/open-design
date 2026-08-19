@@ -77,7 +77,10 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "call opendesign_define_design_plan",
     );
-    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("Submit version 5");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("Submit version 6");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "actual hit-area node IDs",
+    );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("briefFidelity");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "visual style, composition, mood",
@@ -93,10 +96,10 @@ describe("OpenDesign Agent system prompt", () => {
       "does not unlock opendesign_record_visual_review",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "A host-inspected Run exposes Plan and compact apply_transaction together",
+      "A high-confidence blank new-design Run exposes generate_first_slice",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "emit opendesign_define_design_plan followed by the first opendesign_apply_transaction",
+      "use opendesign_design_checkpoint action apply-and-capture",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "smallest meaningful visible region or vertical slice",

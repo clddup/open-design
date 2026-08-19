@@ -3,6 +3,7 @@ import type {
   DesignBriefFidelity,
   DesignPlanToolInputV4,
   DesignPlanToolInputV5,
+  DesignPlanToolInputV6,
 } from "../../shared/design-agent-tools.js";
 import {
   registerDesignWorkflowPlan,
@@ -171,6 +172,55 @@ describe("DesignPlan v5 brief fidelity amendments", () => {
   });
 });
 
+describe("DesignPlan v6 quality profile amendments", () => {
+  it("reopens changed policy while preserving material quality node identities", () => {
+    const inspection = inspectedExistingDesign();
+    const qualityProfile: NonNullable<
+      DesignPlanToolInputV6["targets"][number]["qualityProfile"]
+    > = {
+      kind: "ui",
+      platform: "ios",
+      interactionMode: "touch",
+      safeAreaInsets: { top: 0, right: 0, bottom: 34, left: 0 },
+      safeAreaNodeIds: ["navigation_group"],
+      interactiveNodeIds: ["navigation_group"],
+    };
+    const initialPlan = existingPlanV6(qualityProfile);
+    const initial = registerDesignWorkflowPlan({
+      inspection,
+      plan: initialPlan,
+    });
+
+    const amended = registerDesignWorkflowPlan({
+      existing: initial.state,
+      inspection,
+      plan: existingPlanV6({
+        ...qualityProfile,
+        safeAreaInsets: { top: 44, right: 0, bottom: 34, left: 0 },
+      }),
+    });
+    expect(amended.changedTargetIds).toEqual(["target_home"]);
+    expect(amended.state.targetsById.get("target_home")?.delivery.status).toBe(
+      "drafted",
+    );
+
+    expect(() =>
+      registerDesignWorkflowPlan({
+        existing: initial.state,
+        inspection,
+        plan: existingPlanV6({
+          kind: "ui",
+          platform: "ios",
+          interactionMode: "touch",
+          safeAreaInsets: { top: 0, right: 0, bottom: 34, left: 0 },
+          safeAreaNodeIds: ["navigation_label"],
+          interactiveNodeIds: [],
+        }),
+      }),
+    ).toThrow(/safe-area node navigation_group cannot be removed/i);
+  });
+});
+
 function existingPlan(
   componentStrategy: DesignPlanToolInputV4["componentStrategy"],
 ): DesignPlanToolInputV4 {
@@ -239,6 +289,24 @@ function existingPlanV5(
     }),
     version: 5,
     briefFidelity,
+  };
+}
+
+function existingPlanV6(
+  qualityProfile: NonNullable<
+    DesignPlanToolInputV6["targets"][number]["qualityProfile"]
+  >,
+): DesignPlanToolInputV6 {
+  const plan = existingPlanV5({
+    requiredContent: ["Existing Home navigation and primary content"],
+    preservedSemantics: ["Navigation labels and destinations"],
+    prohibitedAdditions: ["No unrequested workflow controls"],
+    assumptions: [],
+  });
+  return {
+    ...plan,
+    version: 6,
+    targets: plan.targets.map((target) => ({ ...target, qualityProfile })),
   };
 }
 
