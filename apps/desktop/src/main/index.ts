@@ -49,6 +49,10 @@ import { handleAgentRunControlRequest } from "./agent/agent-run-starter";
 import { prepareInitialDesignInspection } from "./agent/agent-initial-design-inspection";
 import { handleDesignPlanTool } from "./agent/design-plan-tool-handler";
 import { handleDesignFirstSliceTool } from "./agent/design-first-slice-tool-handler";
+import {
+  handleDesignCheckpointTool,
+  handleFirstSliceCheckpoint,
+} from "./agent/design-checkpoint-tool-handler";
 import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
@@ -104,6 +108,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
@@ -140,7 +145,9 @@ import {
   READ_IMAGE_TOOL_NAME,
   UPDATE_IMAGE_TOOL_NAME,
   type DesignArrangeToolInput,
+  type DesignApplyToolInput,
   type DesignHierarchyToolInput,
+  type DesignVisualReviewToolInput,
   type DesignVectorToolInput,
 } from "../shared/design-agent-tools";
 import {
@@ -1242,12 +1249,122 @@ void app.whenReady().then(async () => {
         globalTaskCoordinator.resolveExecutionContext(context);
       const executeRendererTool = (
         rendererCall: ToolCallRequest,
-        options: { captureTarget?: RendererDesignCaptureTarget } = {},
+        options: {
+          captureTarget?: RendererDesignCaptureTarget;
+          reportProgress?: (message: string, progress: number) => void;
+        } = {},
       ) =>
         rendererDesignToolHost.execute(rendererCall, executionContext, signal, {
-          ...options,
-          reportProgress,
+          ...(options.captureTarget
+            ? { captureTarget: options.captureTarget }
+            : {}),
+          reportProgress: options.reportProgress ?? reportProgress,
         });
+      const recordVisualReview = (
+        review: DesignVisualReviewToolInput,
+      ): TrustedToolResult => {
+        globalTaskCoordinator!.registerVisualReview(context, review);
+        return {
+          content: {
+            ok: true,
+            status: "accepted",
+            refinements: review.refinements,
+            delivery: globalTaskCoordinator!.getDeliveryLedger(context.runId),
+          },
+        };
+      };
+      const executeDesignApply = async (
+        applyCall: ToolCallRequest,
+        input: DesignApplyToolInput,
+        stageProgress?: (message: string, progress: number) => void,
+      ): Promise<TrustedToolResult> => {
+        const normalizedInput = normalizeDesignApplyToolInput(input);
+        if (!normalizedInput) {
+          throw new TypeError("Invalid design apply tool input");
+        }
+        globalTaskCoordinator!.assertVisualReviewBeforeWrite(context);
+        const authorization = globalTaskCoordinator!.assertDesignPlanForApply(
+          context,
+          normalizedInput,
+        );
+        const resolvedInput = authorization?.input ?? normalizedInput;
+        const result = await executeRendererTool(
+          authorization
+            ? {
+                ...applyCall,
+                toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+                input: {
+                  ...resolvedInput,
+                  ...(authorization.rebaseGuard
+                    ? { rebaseGuard: authorization.rebaseGuard }
+                    : {}),
+                },
+              }
+            : { ...applyCall, input: normalizedInput },
+          stageProgress ? { reportProgress: stageProgress } : {},
+        );
+        globalTaskCoordinator!.assertDesignApplyResult(
+          context,
+          authorization,
+          result,
+        );
+        globalTaskCoordinator!.recordDesignApplyCompleted(
+          context.runId,
+          resolvedInput,
+          authorization,
+          result.designRevision?.revision,
+        );
+        return withDesignDelivery(result, context.runId);
+      };
+      const executeCanvasCapture = async (
+        captureCall: ToolCallRequest,
+        stageProgress?: (message: string, progress: number) => void,
+      ): Promise<TrustedToolResult> => {
+        const captureTarget =
+          globalTaskCoordinator!.resolveCanvasCaptureTarget(context);
+        const result = await executeRendererTool(captureCall, {
+          captureTarget,
+          ...(stageProgress ? { reportProgress: stageProgress } : {}),
+        });
+        if (!isRecordValue(result.content)) {
+          throw new TypeError(
+            "Canvas capture returned invalid structured content",
+          );
+        }
+        const layoutQuality = requireCanvasCaptureLayoutQuality(
+          result,
+          context.documentId,
+          captureTarget,
+        );
+        const inspection = await executeRendererTool({
+          toolCallId: `${captureCall.toolCallId}_delivery_inspection`.slice(
+            0,
+            256,
+          ),
+          toolName: DESIGN_INSPECT_TOOL_NAME,
+          input: {},
+        });
+        globalTaskCoordinator!.recordDocumentInspection(context, inspection);
+        if (inspection.observedRevision !== result.observedRevision) {
+          throw new Error(
+            "design_workflow.capture_revision_invalid: The document changed between the rendered capture and its authoritative verification; capture the current target again",
+          );
+        }
+        const reviewWorkflow = globalTaskCoordinator!.recordCanvasCapture(
+          context,
+          result.observedRevision,
+          layoutQuality,
+        );
+        return {
+          ...result,
+          content: {
+            ...result.content,
+            captureTarget,
+            reviewWorkflow,
+            delivery: globalTaskCoordinator!.getDeliveryLedger(context.runId),
+          },
+        };
+      };
       if (call.toolName === PAGE_STRUCTURE_ACCESS_TOOL_NAME) {
         if (!isPageStructureAccessToolInput(call.input)) {
           throw new TypeError("Invalid Page structure access input");
@@ -1268,13 +1385,44 @@ void app.whenReady().then(async () => {
         };
       }
       if (call.toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
-        return await handleDesignFirstSliceTool(
-          globalTaskCoordinator,
-          rendererDesignToolHost,
+        return await handleFirstSliceCheckpoint(
+          {
+            firstSlice: (stageProgress) =>
+              handleDesignFirstSliceTool(
+                globalTaskCoordinator!,
+                rendererDesignToolHost,
+                call,
+                context,
+                executionContext,
+                signal,
+                stageProgress,
+              ),
+            capture: (stageProgress) =>
+              executeCanvasCapture(
+                {
+                  ...call,
+                  toolCallId: `${call.toolCallId.slice(0, 248)}_capture`,
+                  toolName: DESIGN_CAPTURE_TOOL_NAME,
+                  input: {},
+                },
+                stageProgress,
+              ),
+            getDelivery: () =>
+              globalTaskCoordinator!.getDeliveryLedger(context.runId),
+          },
+          reportProgress,
+        );
+      }
+      if (call.toolName === DESIGN_CHECKPOINT_TOOL_NAME) {
+        return await handleDesignCheckpointTool(
           call,
-          context,
-          executionContext,
-          signal,
+          {
+            apply: executeDesignApply,
+            capture: executeCanvasCapture,
+            getDelivery: () =>
+              globalTaskCoordinator!.getDeliveryLedger(context.runId),
+            review: recordVisualReview,
+          },
           reportProgress,
         );
       }
@@ -1293,15 +1441,7 @@ void app.whenReady().then(async () => {
         if (!isDesignVisualReviewToolInput(call.input)) {
           throw new TypeError("Invalid visual review tool input");
         }
-        globalTaskCoordinator.registerVisualReview(context, call.input);
-        return {
-          content: {
-            ok: true,
-            status: "accepted",
-            refinements: call.input.refinements,
-            delivery: globalTaskCoordinator.getDeliveryLedger(context.runId),
-          },
-        };
+        return recordVisualReview(call.input);
       }
       if (call.toolName === EXPORT_SVG_TOOL_NAME) {
         if (!isExportSvgToolInput(call.input)) {
@@ -1586,42 +1726,13 @@ void app.whenReady().then(async () => {
         return withDesignDelivery(result, context.runId);
       }
       if (call.toolName === DESIGN_APPLY_TOOL_NAME) {
-        const normalizedInput = normalizeDesignApplyToolInput(call.input);
-        if (!normalizedInput) {
+        if (!normalizeDesignApplyToolInput(call.input)) {
           throw new TypeError("Invalid design apply tool input");
         }
-        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
-        const authorization = globalTaskCoordinator.assertDesignPlanForApply(
-          context,
-          normalizedInput,
+        return await executeDesignApply(
+          call,
+          call.input as DesignApplyToolInput,
         );
-        const resolvedInput = authorization?.input ?? normalizedInput;
-        const result = await executeRendererTool(
-          authorization
-            ? {
-                ...call,
-                toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-                input: {
-                  ...resolvedInput,
-                  ...(authorization.rebaseGuard
-                    ? { rebaseGuard: authorization.rebaseGuard }
-                    : {}),
-                },
-              }
-            : { ...call, input: normalizedInput },
-        );
-        globalTaskCoordinator.assertDesignApplyResult(
-          context,
-          authorization,
-          result,
-        );
-        globalTaskCoordinator.recordDesignApplyCompleted(
-          context.runId,
-          resolvedInput,
-          authorization,
-          result.designRevision?.revision,
-        );
-        return withDesignDelivery(result, context.runId);
       }
       if (call.toolName === DESIGN_FONT_TOOL_NAME) {
         if (!isDesignFontToolInput(call.input)) {
@@ -1771,44 +1882,7 @@ void app.whenReady().then(async () => {
         return withDesignDelivery(result, context.runId);
       }
       if (call.toolName === DESIGN_CAPTURE_TOOL_NAME) {
-        const captureTarget =
-          globalTaskCoordinator.resolveCanvasCaptureTarget(context);
-        const result = await executeRendererTool(call, { captureTarget });
-        if (!isRecordValue(result.content)) {
-          throw new TypeError(
-            "Canvas capture returned invalid structured content",
-          );
-        }
-        const layoutQuality = requireCanvasCaptureLayoutQuality(
-          result,
-          context.documentId,
-          captureTarget,
-        );
-        const inspection = await executeRendererTool({
-          toolCallId: `${call.toolCallId}_delivery_inspection`,
-          toolName: DESIGN_INSPECT_TOOL_NAME,
-          input: {},
-        });
-        globalTaskCoordinator.recordDocumentInspection(context, inspection);
-        if (inspection.observedRevision !== result.observedRevision) {
-          throw new Error(
-            "design_workflow.capture_revision_invalid: The document changed between the rendered capture and its authoritative verification; capture the current target again",
-          );
-        }
-        const reviewWorkflow = globalTaskCoordinator.recordCanvasCapture(
-          context,
-          result.observedRevision,
-          layoutQuality,
-        );
-        return {
-          ...result,
-          content: {
-            ...result.content,
-            captureTarget,
-            reviewWorkflow,
-            delivery: globalTaskCoordinator.getDeliveryLedger(context.runId),
-          },
-        };
+        return await executeCanvasCapture(call);
       }
       const result = await executeRendererTool(call);
       if (call.toolName === DESIGN_INSPECT_TOOL_NAME) {

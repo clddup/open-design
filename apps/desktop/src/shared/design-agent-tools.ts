@@ -110,6 +110,7 @@ export const DESIGN_CAPTURE_TOOL_NAME = "opendesign_capture_canvas";
 export const DESIGN_PLAN_TOOL_NAME = "opendesign_define_design_plan";
 export const DESIGN_FIRST_SLICE_TOOL_NAME = "opendesign_generate_first_slice";
 export const DESIGN_REVIEW_TOOL_NAME = "opendesign_record_visual_review";
+export const DESIGN_CHECKPOINT_TOOL_NAME = "opendesign_design_checkpoint";
 export const DESIGN_APPLY_TOOL_NAME = "opendesign_apply_transaction";
 export const DESIGN_HIERARCHY_TOOL_NAME = "opendesign_edit_hierarchy";
 export const DESIGN_ARRANGE_TOOL_NAME = "opendesign_arrange_layers";
@@ -250,6 +251,18 @@ export type DesignVisualReviewToolInput = {
   effects: string;
   refinements: string[];
 };
+export type DesignCheckpointToolInput =
+  | {
+      version: 1;
+      action: "apply-and-capture";
+      apply: DesignApplyToolInput;
+    }
+  | {
+      version: 1;
+      action: "review-refine-and-capture";
+      review: DesignVisualReviewToolInput;
+      refinement: DesignApplyToolInput;
+    };
 export type ImageGenerationSize = "auto" | `${number}x${number}`;
 export type ImageGenerationQuality = "auto" | "low" | "medium" | "high";
 export type ImageGenerationOutputFormat = "png" | "jpeg" | "webp";
@@ -1934,6 +1947,34 @@ const MODEL_VISUAL_REVIEW_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const MODEL_DESIGN_CHECKPOINT_SCHEMA = {
+  type: "object",
+  description:
+    "A host-conditional design checkpoint. apply-and-capture commits one material transaction and captures only its successful revision. review-refine-and-capture first accepts the structured review, then commits its refinement, then captures only the successful refined revision.",
+  oneOf: [
+    {
+      properties: {
+        version: { const: 1 },
+        action: { const: "apply-and-capture" },
+        apply: MODEL_APPLY_TRANSACTION_SCHEMA,
+      },
+      required: ["version", "action", "apply"],
+      additionalProperties: false,
+    },
+    {
+      properties: {
+        version: { const: 1 },
+        action: { const: "review-refine-and-capture" },
+        review: MODEL_VISUAL_REVIEW_SCHEMA,
+        refinement: MODEL_APPLY_TRANSACTION_SCHEMA,
+      },
+      required: ["version", "action", "review", "refinement"],
+      additionalProperties: false,
+    },
+  ],
+  additionalProperties: false,
+} as const;
+
 export const DESIGN_AGENT_TOOL_SPECS = [
   {
     name: DESIGN_FIRST_SLICE_TOOL_NAME,
@@ -2014,6 +2055,15 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       "Record a structured critique of the newest unreviewed opendesign_capture_canvas result after a successful material design write in this Run. First compare it with the latest user request and active Plan briefFidelity for omissions, semantic substitutions, and invented capabilities; then evaluate the rendered composition, hierarchy, typography, asset integration, form/surface, and effects and name at least two concrete refinements. Any fidelity mismatch must appear in refinements. Do not submit generic praise. The host rejects baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision with a design_workflow.* recovery instruction; follow that instruction instead of retrying the same review. This records Run review state and does not mutate the canvas.",
     inputSchema: MODEL_VISUAL_REVIEW_SCHEMA,
     risk: "read" as const,
+    approval: "never" as const,
+  },
+  {
+    name: DESIGN_CHECKPOINT_TOOL_NAME,
+    modelDisclosure: { bootstrap: "deferred" as const },
+    description:
+      "Execute a real design checkpoint without a Provider round trip used only to request capture. Use apply-and-capture when the next material transaction is fully known: Main validates and commits it through the canonical apply path, then captures only if that write produced a new trusted revision. After analyzing the first returned capture, use review-refine-and-capture when the structured review and concrete refinement are both known: Main accepts the review first, applies the refinement through the same canonical path, and captures only the successful refined revision. A failed prerequisite short-circuits later stages. If capture fails after a committed write, the result preserves that designRevision and reports capture-failed so you can recover without repeating the write. This tool does not replace inspect, Plan, image generation, Page approval, or dependencies whose result must be read before authoring the next stage.",
+    inputSchema: MODEL_DESIGN_CHECKPOINT_SCHEMA,
+    risk: "design_write" as const,
     approval: "never" as const,
   },
   {
@@ -2628,6 +2678,9 @@ export function validateDesignAgentToolInput(
   if (toolName === DESIGN_PLAN_TOOL_NAME) return isDesignPlanToolInput(input);
   if (toolName === DESIGN_REVIEW_TOOL_NAME) {
     return isDesignVisualReviewToolInput(input);
+  }
+  if (toolName === DESIGN_CHECKPOINT_TOOL_NAME) {
+    return isDesignCheckpointToolInput(input);
   }
   if (toolName === READ_IMAGE_TOOL_NAME) {
     return (
@@ -3457,6 +3510,30 @@ export function isDesignVisualReviewToolInput(
       "effects",
       "refinements",
     ])
+  );
+}
+
+export function isDesignCheckpointToolInput(
+  input: unknown,
+): input is DesignCheckpointToolInput {
+  if (
+    !isRecord(input) ||
+    input.version !== 1 ||
+    (input.action !== "apply-and-capture" &&
+      input.action !== "review-refine-and-capture")
+  ) {
+    return false;
+  }
+  if (input.action === "apply-and-capture") {
+    return (
+      normalizeDesignApplyToolInput(input.apply) !== undefined &&
+      exactKeys(input, ["version", "action", "apply"])
+    );
+  }
+  return (
+    isDesignVisualReviewToolInput(input.review) &&
+    normalizeDesignApplyToolInput(input.refinement) !== undefined &&
+    exactKeys(input, ["version", "action", "review", "refinement"])
   );
 }
 

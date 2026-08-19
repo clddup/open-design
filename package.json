@@ -25,6 +25,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "prepare": "husky",
     "test": "vitest run && pnpm --filter @opendesign/desktop test",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
@@ -36,9 +37,18 @@
     "@eslint/js": "^9.39.1",
     "@types/node": "^22.19.3",
     "eslint": "^9.39.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
     "prettier": "^3.7.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.50.1",
     "vitest": "^4.0.16"
+  },
+  "lint-staged": {
+    "*.{js,mjs,cjs,ts,tsx}": [
+      "eslint --max-warnings=0",
+      "prettier --check"
+    ],
+    "*.{json,md,yml,yaml,css,scss}": "prettier --check"
   }
 }

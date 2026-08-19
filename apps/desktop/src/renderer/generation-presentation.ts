@@ -17,6 +17,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
@@ -29,6 +30,7 @@ import {
   INTERNAL_UPDATE_IMAGE_TOOL_NAME,
   designPlanTargets,
   compileDesignFirstSliceToolInput,
+  isDesignCheckpointToolInput,
   isDesignFirstSliceToolInput,
   isDesignPlanToolInput,
   PLACE_IMAGE_TOOL_NAME,
@@ -51,6 +53,7 @@ interface RequestedGenerationPlan {
 }
 
 interface RequestedGenerationTool {
+  checkpointAction?: "apply-and-capture" | "review-refine-and-capture";
   runId: string;
   toolName: string;
 }
@@ -178,7 +181,14 @@ export function projectGenerationPlanPresentationEvent(
       },
       requestedToolByCallId: {
         ...state.requestedToolByCallId,
-        [callId]: { runId: event.runId, toolName: event.toolName },
+        [callId]: {
+          runId: event.runId,
+          toolName: event.toolName,
+          ...(event.toolName === DESIGN_CHECKPOINT_TOOL_NAME &&
+          isDesignCheckpointToolInput(event.input)
+            ? { checkpointAction: event.input.action }
+            : {}),
+        },
       },
     };
   }
@@ -250,7 +260,9 @@ export function projectGenerationPlanPresentationEvent(
   }
 
   const reviewedByRunId = { ...state.reviewedByRunId };
-  const reviewCompleted = requestedTool.toolName === DESIGN_REVIEW_TOOL_NAME;
+  const reviewCompleted =
+    requestedTool.toolName === DESIGN_REVIEW_TOOL_NAME ||
+    requestedTool.checkpointAction === "review-refine-and-capture";
   if (reviewCompleted) reviewedByRunId[event.runId] = true;
   const phase = reviewCompleted
     ? "refining"
@@ -549,7 +561,8 @@ function generationPhaseForTool(
   }
   if (
     toolName === DESIGN_CAPTURE_TOOL_NAME ||
-    toolName === DESIGN_REVIEW_TOOL_NAME
+    toolName === DESIGN_REVIEW_TOOL_NAME ||
+    toolName === DESIGN_CHECKPOINT_TOOL_NAME
   ) {
     return "reviewing";
   }

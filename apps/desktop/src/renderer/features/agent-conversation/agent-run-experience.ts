@@ -4,6 +4,7 @@ import type {
 } from "@opendesign/agent-contracts";
 import {
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_REVIEW_TOOL_NAME,
 } from "../../../shared/design-agent-tools";
@@ -116,7 +117,8 @@ export function projectAgentRunExperience(input: {
     if (input.stopping) phase = "stopping";
     else if (
       activeToolNames.has(DESIGN_CAPTURE_TOOL_NAME) ||
-      activeToolNames.has(DESIGN_REVIEW_TOOL_NAME)
+      activeToolNames.has(DESIGN_REVIEW_TOOL_NAME) ||
+      activeToolNames.has(DESIGN_CHECKPOINT_TOOL_NAME)
     ) {
       phase = "reviewing";
     } else if (

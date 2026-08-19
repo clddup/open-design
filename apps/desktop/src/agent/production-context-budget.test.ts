@@ -478,7 +478,7 @@ describe("production Agent context budget", () => {
           .every(
             (request) =>
               request.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-              request.tools.length === 23,
+              request.tools.length === 24,
           ),
       ).toBe(true);
       expect(
@@ -654,7 +654,7 @@ describe("production Agent context budget", () => {
         gateway.requests.every(
           (providerRequest) =>
             providerRequest.system === OPENDESIGN_AGENT_SYSTEM_PROMPT &&
-            providerRequest.tools.length === 24,
+            providerRequest.tools.length === 25,
         ),
       ).toBe(true);
       expect(

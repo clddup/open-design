@@ -46,6 +46,7 @@ export function reviewDesignCompletion(
       (target) => target.status !== "verified",
     );
     if (incomplete) return incompleteDeliveryDecision(delivery, incomplete);
+    return { allow: true };
   }
   const generationIndex = context.toolCalls.findIndex(
     (call) => call.toolName === GENERATE_IMAGE_TOOL_NAME,

@@ -7,6 +7,7 @@ import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
+  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_INSPECT_TOOL_NAME,
@@ -386,6 +387,31 @@ describe("design completion guard", () => {
           visualReview,
           refinementWrite,
           allTargetsVerified,
+        ]),
+      ),
+    ).toEqual({ allow: true });
+  });
+
+  it("accepts an all-verified host ledger from one conditional checkpoint", () => {
+    expect(
+      reviewDesignCompletion(
+        context([
+          {
+            toolCallId: "checkpoint_verified",
+            toolName: DESIGN_CHECKPOINT_TOOL_NAME,
+            input: {
+              version: 1,
+              action: "review-refine-and-capture",
+              review: visualReview.input,
+              refinement: refinementWrite.input,
+            },
+            status: "completed",
+            revision: 8,
+            result: {
+              ...deliveryResult("verified"),
+              checkpoint: { status: "completed", materialRevision: 8 },
+            },
+          },
         ]),
       ),
     ).toEqual({ allow: true });

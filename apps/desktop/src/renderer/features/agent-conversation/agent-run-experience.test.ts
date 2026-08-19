@@ -66,6 +66,26 @@ describe("Agent run experience projection", () => {
     });
   });
 
+  it("shows an active conditional checkpoint as trusted review work", () => {
+    expect(
+      projectAgentRunExperience({
+        activeRunId: "run_1",
+        events: [
+          { type: "run.started", runId: "run_1", startedAt: now },
+          {
+            type: "tool.requested",
+            runId: "run_1",
+            toolCallId: "checkpoint_1",
+            toolName: "opendesign_design_checkpoint",
+            input: { version: 1, action: "apply-and-capture" },
+            risk: "design_write",
+          },
+        ],
+        timeline: [],
+      }),
+    ).toMatchObject({ phase: "reviewing", active: true });
+  });
+
   it("summarizes recoverable failures and preserves partial work on terminal failure", () => {
     const timeline: SessionTimelineItem[] = [
       {

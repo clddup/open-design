@@ -9,6 +9,7 @@ import {
 } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
 import {
+  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   type LegacyDesignPlanToolInput,
 } from "../shared/design-agent-tools";
@@ -757,6 +758,75 @@ describe("Renderer typed plan skeleton presentation", () => {
     expect(generationActivityMessageKey("recovering")).toBe(
       "agent.canvasPhaseRecovering",
     );
+  });
+
+  it("projects review-refine checkpoints as one reviewing then refining stage", () => {
+    const requested = projectGenerationPlanPresentationEvent(
+      {
+        ...EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
+        acceptedByRunId: {
+          run_checkpoint: {
+            id: "run_checkpoint:plan",
+            plan: generationPlan,
+            runId: "run_checkpoint",
+            toolCallId: "plan",
+          },
+        },
+      },
+      {
+        type: "tool.requested",
+        runId: "run_checkpoint",
+        toolCallId: "checkpoint_1",
+        toolName: DESIGN_CHECKPOINT_TOOL_NAME,
+        risk: "design_write",
+        input: {
+          version: 1,
+          action: "review-refine-and-capture",
+          review: {
+            briefFidelity:
+              "The rendered result preserves the requested content",
+            composition:
+              "The primary form needs more surrounding negative space",
+            hierarchy: "Secondary content competes with the intended action",
+            typography: "Supporting type needs a quieter visual rhythm",
+            assetIntegration:
+              "The image edge needs a clearer title relationship",
+            formAndSurface: "The foreground surface is currently too heavy",
+            effects: "The glow needs a tighter radius and lower opacity",
+            refinements: [
+              "Increase space around the primary form",
+              "Reduce secondary surface contrast",
+            ],
+          },
+          refinement: {
+            label: "Remove obsolete badge",
+            commands: [
+              {
+                commandId: "remove_badge",
+                type: "delete_element",
+                nodeId: "obsolete_badge",
+              },
+            ],
+          },
+        },
+      },
+    );
+
+    expect(requested.activityByRunId.run_checkpoint).toMatchObject({
+      phase: "reviewing",
+    });
+    const completed = projectGenerationPlanPresentationEvent(requested, {
+      type: "tool.completed",
+      runId: "run_checkpoint",
+      toolCallId: "checkpoint_1",
+      result: { ok: true },
+      revision: 5,
+      transactionId: "transaction_checkpoint",
+    });
+    expect(completed.reviewedByRunId.run_checkpoint).toBe(true);
+    expect(completed.activityByRunId.run_checkpoint).toMatchObject({
+      phase: "refining",
+    });
   });
 });
 

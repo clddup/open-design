@@ -5,6 +5,7 @@ import {
   DESIGN_ARRANGE_TOOL_NAME,
   DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA,
   DESIGN_CAPABILITIES_TOOL_NAME,
+  DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
@@ -1231,6 +1232,47 @@ describe("design Agent tool contract", () => {
         formAndSurface: "Looks good",
         effects: "Looks good",
         refinements: ["Looks good", "Looks good"],
+      }),
+    ).toBe(false);
+
+    const checkpointApply = {
+      label: "Refine hero spacing",
+      commands: [
+        {
+          commandId: "remove_obsolete_badge",
+          type: "delete_element",
+          nodeId: "obsolete_badge",
+        },
+      ],
+    };
+    expect(
+      validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
+        version: 1,
+        action: "apply-and-capture",
+        apply: checkpointApply,
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
+        version: 1,
+        action: "review-refine-and-capture",
+        review,
+        refinement: checkpointApply,
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
+        version: 1,
+        action: "review-refine-and-capture",
+        review,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
+        version: 1,
+        action: "apply-and-capture",
+        apply: checkpointApply,
+        captureAnyway: true,
       }),
     ).toBe(false);
   });
