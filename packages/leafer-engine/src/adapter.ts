@@ -458,6 +458,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationPresentationRoot.addAt(this.#generationSkeletonLayer, 0);
     this.#editorOverlays = new EditorOverlayController({
       leafer,
+      onGridTrackReorder: (request) =>
+        this.#callbacks.onGridTrackReorder?.(request) ?? false,
       presentationRoot: this.#generationPresentationRoot,
       viewportRoot: this.#app.tree as unknown as LeaferGroup,
     });
@@ -1367,16 +1369,19 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#finishDraw(event);
     });
     this.#app.on(PointerEvent.DOWN, (event: unknown) => {
+      if (this.#editorOverlays.gridPointerDown(asLeaferEvent(event))) return;
       this.#imageCropPointerDown(event);
       this.#penPointerDown(event);
       this.#vectorEditPointerDown(event);
     });
     this.#app.on(PointerEvent.MOVE, (event: unknown) => {
+      if (this.#editorOverlays.gridPointerMove(asLeaferEvent(event))) return;
       this.#imageCropPointerMove(event);
       this.#penPointerMove(event);
       this.#vectorEditPointerMove(event);
     });
     this.#app.on(PointerEvent.UP, (event: unknown) => {
+      if (this.#editorOverlays.gridPointerUp(asLeaferEvent(event))) return;
       this.#imageCropPointerUp(event);
       this.#penPointerUp(event);
       this.#vectorEditPointerUp(event);
@@ -4388,6 +4393,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #onWindowKeyDown = (event: KeyboardEvent) => {
     if (this.#handleTextEditKeyDown(event)) return;
+    if (
+      event.code === "Escape" &&
+      this.#editorOverlays.gridDragging &&
+      !isKeyboardInputTarget(event.target)
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.#editorOverlays.cancelGridDrag();
+      return;
+    }
     if (this.#imageCrop && !isKeyboardInputTarget(event.target)) {
       if (event.code === "Escape" || event.code === "Enter") {
         event.preventDefault();

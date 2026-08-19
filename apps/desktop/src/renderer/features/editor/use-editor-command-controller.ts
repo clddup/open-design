@@ -120,10 +120,14 @@ export function useEditorCommandController({
         `inspector_grid_reorder_${frameId}`,
       );
       if (!plan.ok) {
+        if (plan.code === "no-op") {
+          setEditorError(null);
+          return true;
+        }
         setEditorError(plan.message);
-        return;
+        return false;
       }
-      applyCommands(t("history.reorderGridTracks"), plan.commands);
+      return applyCommands(t("history.reorderGridTracks"), plan.commands);
     },
     [applyCommands, runtime, setEditorError, t],
   );

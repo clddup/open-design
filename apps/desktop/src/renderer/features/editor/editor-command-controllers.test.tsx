@@ -263,4 +263,55 @@ describe("editor command controllers", () => {
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(2);
     expect(setEditorError).toHaveBeenLastCalledWith(null);
   });
+
+  it("commits a canvas Grid track reorder as one reversible Runtime history entry", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const frame = document.nodesById.frame_welcome;
+    if (frame?.kind !== "frame") throw new Error("missing Frame");
+    frame.properties.autoLayout = {
+      mode: "grid",
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      rowGap: 0,
+      columnGap: 0,
+      rows: [{ type: "fixed", value: 180 }],
+      columns: frame.childIds.map((_, index) => ({
+        type: "fixed" as const,
+        value: 80 + index,
+      })),
+      itemsPositioning: "row-auto-flow",
+    };
+    const runtime = new EditorRuntime(document);
+    const beforeFrame = structuredClone(
+      runtime.getSnapshot().document.nodesById.frame_welcome,
+    );
+    const { result, setEditorError } = renderControllers(runtime);
+    let accepted = false;
+
+    act(() => {
+      accepted = result.current.editor.reorderGridTracks(
+        frame.id,
+        "columns",
+        [0],
+        frame.childIds.length,
+      );
+    });
+
+    expect(accepted).toBe(true);
+    const snapshot = runtime.getSnapshot();
+    expect(snapshot.document.revision).toBe(1);
+    expect(snapshot.state.history.undo).toHaveLength(1);
+    const reorderedFrame = snapshot.document.nodesById.frame_welcome;
+    if (reorderedFrame?.kind !== "frame") throw new Error("missing Frame");
+    expect(reorderedFrame.properties.autoLayout).toMatchObject({
+      columns: [{ value: 81 }, { value: 82 }, { value: 83 }, { value: 80 }],
+    });
+    expect(setEditorError).toHaveBeenLastCalledWith(null);
+
+    act(() => {
+      runtime.undo();
+    });
+    expect(runtime.getSnapshot().document.nodesById.frame_welcome).toEqual(
+      beforeFrame,
+    );
+  });
 });

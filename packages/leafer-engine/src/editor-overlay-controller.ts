@@ -11,6 +11,11 @@ import {
   type ComponentSlotOverlaySpec,
 } from "./component-slot-overlay.js";
 import {
+  GridEditorOverlayController,
+  type GridEditorPointerEvent,
+} from "./grid-editor-overlay-controller.js";
+import type { GridEditorAxis } from "./grid-editor-overlay.js";
+import {
   createLayoutGuideOverlayPlan,
   layoutGuideDocumentTransform,
   reconcileLayoutGuideElements,
@@ -36,6 +41,7 @@ export class EditorOverlayController {
   #guideFrameId: string | undefined;
   #guideFingerprint: string | null = null;
   readonly #guideLayer: LeaferGroup;
+  readonly #gridEditor: GridEditorOverlayController;
   readonly #leafer: LeaferModule;
   readonly #presentationRoot: LeaferGroup;
   readonly #slotElements = new Map<string, LeaferElement>();
@@ -50,6 +56,12 @@ export class EditorOverlayController {
 
   constructor(options: {
     leafer: LeaferModule;
+    onGridTrackReorder: (request: {
+      axis: GridEditorAxis;
+      frameId: string;
+      fromIndices: readonly number[];
+      insertionIndex: number;
+    }) => boolean;
     presentationRoot: LeaferGroup;
     viewportRoot: LeaferGroup;
   }) {
@@ -59,14 +71,30 @@ export class EditorOverlayController {
     this.#guideLayer = this.#createLayer(1);
     this.#slotLayer = this.#createLayer(2);
     this.#sliceLayer = this.#createLayer(3);
+    this.#gridEditor = new GridEditorOverlayController({
+      layerIndex: 4,
+      leafer: options.leafer,
+      onReorder: options.onGridTrackReorder,
+      presentationRoot: options.presentationRoot,
+      viewportRoot: options.viewportRoot,
+    });
   }
 
   get active(): boolean {
     return (
       this.#guideElements.size > 0 ||
       this.#slotElements.size > 0 ||
-      this.#sliceElements.size > 0
+      this.#sliceElements.size > 0 ||
+      this.#gridEditor.active
     );
+  }
+
+  get gridDragging(): boolean {
+    return this.#gridEditor.dragging;
+  }
+
+  cancelGridDrag(): boolean {
+    return this.#gridEditor.cancelDrag();
   }
 
   dispose(): void {
@@ -76,6 +104,7 @@ export class EditorOverlayController {
     this.#guideAreaIds.clear();
     this.#slotSpecs.clear();
     this.#sliceSpecs.clear();
+    this.#gridEditor.dispose();
     this.#guideLayer.remove();
     this.#guideLayer.destroy();
     this.#slotLayer.remove();
@@ -86,6 +115,7 @@ export class EditorOverlayController {
 
   sync(input: {
     document: DesignDocument;
+    gridEditorFrameId?: string;
     layoutGuideFrameId?: string;
     pageId: string;
   }): void {
@@ -94,13 +124,30 @@ export class EditorOverlayController {
     this.#syncGuides(input.document, input.layoutGuideFrameId);
     this.#syncSlots(input.document, input.pageId);
     this.#syncSlices(input.document, input.pageId);
+    this.#gridEditor.sync({
+      document: input.document,
+      ...(input.gridEditorFrameId ? { frameId: input.gridEditorFrameId } : {}),
+    });
     this.syncViewport();
+  }
+
+  gridPointerDown(event: GridEditorPointerEvent): boolean {
+    return this.#gridEditor.pointerDown(event);
+  }
+
+  gridPointerMove(event: GridEditorPointerEvent): boolean {
+    return this.#gridEditor.pointerMove(event);
+  }
+
+  gridPointerUp(event: GridEditorPointerEvent): boolean {
+    return this.#gridEditor.pointerUp(event);
   }
 
   syncViewport(): void {
     this.#syncGuideViewport();
     this.#syncSlotViewport();
     this.#syncSliceViewport();
+    this.#gridEditor.syncViewport();
   }
 
   #createLayer(index: number): LeaferGroup {

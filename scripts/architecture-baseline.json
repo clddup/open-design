@@ -68,6 +68,7 @@
       "@opendesign/geometry-service",
       "@opendesign/image-service",
       "@opendesign/import-export-service",
+      "@opendesign/layout-service",
       "@opendesign/style-service",
       "@opendesign/text-service",
       "@opendesign/variable-service"

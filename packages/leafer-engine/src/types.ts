@@ -96,6 +96,13 @@ export interface LeaferImageCropState {
   placement: Extract<ImagePlacement, { mode: "crop" }>;
 }
 
+export interface LeaferGridTrackReorderRequest {
+  axis: "rows" | "columns";
+  frameId: string;
+  fromIndices: readonly number[];
+  insertionIndex: number;
+}
+
 export interface LeaferVectorCutRequest {
   at: VectorCutLocation;
   nodeId: string;
@@ -127,6 +134,7 @@ export interface LeaferEngineCallbacks {
   onCreate(request: LeaferCreateRequest): boolean;
   onCreateVector(request: LeaferCreateVectorRequest): boolean;
   onError(error: Error): void;
+  onGridTrackReorder?(request: LeaferGridTrackReorderRequest): boolean;
   onImageCropCommit?(request: LeaferImageCropCommitRequest): boolean;
   onImageCropStateChange?(state: LeaferImageCropState | null): void;
   onOperations(request: LeaferOperationRequest): boolean;
@@ -269,6 +277,7 @@ export interface LeaferEngineSyncInput {
   generationActivity?: LeaferGenerationActivity;
   generationReveal?: LeaferGenerationReveal;
   generationSkeleton?: LeaferGenerationSkeleton;
+  gridEditorFrameId?: string;
   layoutGuideFrameId?: string;
   pageId: string;
   reducedMotion?: boolean;

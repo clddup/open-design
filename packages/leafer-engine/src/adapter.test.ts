@@ -551,6 +551,73 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("reorders selected Grid tracks from editor-sky controls through one semantic callback", async () => {
+    const onGridTrackReorder = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridTrackReorder,
+    });
+    const input = withGridFixture(createInput());
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const hit = findElement(
+      app.sky,
+      "__opendesign_grid_track_hit__:frame_welcome:columns:0",
+    );
+    if (!hit) throw new Error("Missing Grid column track control");
+    expect(findElement(app.tree, hit.id!)).toBeUndefined();
+
+    app.emit("pointer.down", pointerEvent(80, -20, hit));
+    app.emit("pointer.move", pointerEvent(1_175, 40, app.sky));
+    app.emit("pointer.up", pointerEvent(1_175, 40, app.sky));
+
+    expect(onGridTrackReorder).toHaveBeenCalledTimes(1);
+    expect(onGridTrackReorder).toHaveBeenCalledWith({
+      axis: "columns",
+      frameId: "frame_welcome",
+      fromIndices: [0],
+      insertionIndex: 2,
+    });
+    adapter.dispose();
+  });
+
+  it("cancels Grid track drag on adjacent slots, Escape, or a stale revision", async () => {
+    const onGridTrackReorder = vi.fn(() => true);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onGridTrackReorder,
+    });
+    const input = withGridFixture(createInput());
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const hit =
+      app &&
+      findElement(
+        app.sky,
+        "__opendesign_grid_track_hit__:frame_welcome:columns:0",
+      );
+    if (!app || !hit) throw new Error("Missing Grid column track control");
+
+    app.emit("pointer.down", pointerEvent(80, -20, hit));
+    app.emit("pointer.up", pointerEvent(140, -20, hit));
+    expect(onGridTrackReorder).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(80, -20, hit));
+    app.emit("pointer.move", pointerEvent(1_175, 40, app.sky));
+    emitWindowKey("Escape");
+    app.emit("pointer.up", pointerEvent(1_175, 40, app.sky));
+    expect(onGridTrackReorder).not.toHaveBeenCalled();
+
+    app.emit("pointer.down", pointerEvent(80, -20, hit));
+    const changed = structuredClone(input);
+    changed.document.revision += 1;
+    adapter.sync(changed);
+    app.emit("pointer.up", pointerEvent(1_175, 40, app.sky));
+    expect(onGridTrackReorder).not.toHaveBeenCalled();
+    adapter.dispose();
+  });
+
   it("stages direct image crop movement and commits one crop placement", async () => {
     const onImageCropCommit = vi.fn<
       NonNullable<LeaferEngineCallbacks["onImageCropCommit"]>
@@ -4947,6 +5014,36 @@ function withImageFixture(input: LeaferEngineSyncInput): LeaferEngineSyncInput {
   };
   document.nodesById.frame_welcome?.childIds.push("hero_image");
   return { ...input, document };
+}
+
+function withGridFixture(input: LeaferEngineSyncInput): LeaferEngineSyncInput {
+  const document = structuredClone(input.document);
+  const frame = document.nodesById.frame_welcome;
+  if (frame?.kind !== "frame") throw new Error("Missing welcome Frame");
+  frame.size = { width: 1_200, height: 240 };
+  frame.childIds = ["feature_one", "feature_two"];
+  frame.properties.autoLayout = {
+    mode: "grid",
+    padding: { top: 16, right: 20, bottom: 16, left: 20 },
+    rowGap: 8,
+    columnGap: 12,
+    rows: [
+      { type: "fixed", value: 100 },
+      { type: "fixed", value: 100 },
+    ],
+    columns: [
+      { type: "fixed", value: 120 },
+      { type: "fill", value: 1 },
+    ],
+    itemsPositioning: "row-auto-flow",
+  };
+  return {
+    ...input,
+    document,
+    gridEditorFrameId: frame.id,
+    selection: { nodeIds: [frame.id], anchorNodeId: frame.id },
+    tool: "select",
+  };
 }
 
 function textRunProjection(

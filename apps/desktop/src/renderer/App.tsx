@@ -2072,6 +2072,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               onTextRangeSelectionChange={setTextRangeSelection}
               harfBuzzTextRunLayoutProvider={fontBinaryRuntime.provider}
               onResizeFrame={resizeFrame}
+              onReorderGridTracks={editorCommands.reorderGridTracks}
               runtime={runtime}
               showAgentRunStatus={
                 !utilityPanelVisible || utilityTab !== "agent"

@@ -380,6 +380,9 @@ importers:
       '@opendesign/import-export-service':
         specifier: workspace:*
         version: link:../import-export-service
+      '@opendesign/layout-service':
+        specifier: workspace:*
+        version: link:../layout-service
       '@opendesign/style-service':
         specifier: workspace:*
         version: link:../style-service

@@ -93,6 +93,7 @@ export function Canvas({
   onTextLayoutProviderReady,
   onTextEditingStyleControllerChange,
   onTextRangeSelectionChange,
+  onReorderGridTracks,
   onResizeFrame,
   selectionActions,
   showAgentRunStatus,
@@ -119,6 +120,12 @@ export function Canvas({
   onTextRangeSelectionChange: (
     selection: LeaferTextRangeSelection | null,
   ) => void;
+  onReorderGridTracks: (
+    frameId: string,
+    axis: "rows" | "columns",
+    fromIndices: readonly number[],
+    insertionIndex: number,
+  ) => boolean;
   onResizeFrame: ResizeFrameHandler;
   selectionActions?: ReactNode;
   showAgentRunStatus: boolean;
@@ -814,6 +821,8 @@ export function Canvas({
       },
       onImageCropCommit: applyImageCrop,
       onImageCropStateChange: setImageCropState,
+      onGridTrackReorder: ({ axis, frameId, fromIndices, insertionIndex }) =>
+        onReorderGridTracks(frameId, axis, fromIndices, insertionIndex),
       onOperations: applyOperations,
       onSelectionChange: (nodeIds, anchorNodeId) => {
         runtime.setSelection(nodeIds, anchorNodeId);
@@ -898,6 +907,7 @@ export function Canvas({
     createVectorNode,
     exitVectorEdit,
     onImageCropControllerChange,
+    onReorderGridTracks,
     onTextLayoutProviderReady,
     onTextEditingStyleControllerChange,
     onTextRangeSelectionChange,
@@ -930,6 +940,12 @@ export function Canvas({
       snapshot.document.nodesById[snapshot.state.selection.nodeIds[0] ?? ""]
         ?.kind === "frame"
         ? { layoutGuideFrameId: snapshot.state.selection.nodeIds[0] }
+        : {}),
+      ...(tool === "select" &&
+      snapshot.state.selection.nodeIds.length === 1 &&
+      snapshot.document.nodesById[snapshot.state.selection.nodeIds[0] ?? ""]
+        ?.kind === "frame"
+        ? { gridEditorFrameId: snapshot.state.selection.nodeIds[0] }
         : {}),
       reducedMotion,
       ...(richTextResolution
