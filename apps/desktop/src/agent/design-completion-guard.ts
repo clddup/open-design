@@ -32,6 +32,12 @@ export function reviewDesignCompletion(
   if (hasSupersededDelivery(context.toolCalls)) return { allow: true };
   const unresolvedFailure = context.unresolvedDesignWriteFailure;
   if (unresolvedFailure) {
+    if (unresolvedFailure.code === "invalid_tool_input") {
+      return {
+        allow: false,
+        message: `The latest design write has invalid structured input and no design revision was committed (${unresolvedFailure.message}). Submit a corrected tool call using the reported field path. Do not finish with a text-only explanation or ask the user to restart the request.`,
+      };
+    }
     const recovery = unresolvedFailure.inspectionCompleted
       ? "The document was inspected, but no corrected revision-advancing design write has succeeded yet. Submit a materially revised transaction based on the live structure, then capture and verify the affected target."
       : "Inspect the live document, then submit a materially revised transaction before attempting completion.";

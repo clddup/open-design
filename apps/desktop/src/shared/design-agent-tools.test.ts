@@ -8,6 +8,7 @@ import {
   DESIGN_CAPABILITIES_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_COMPONENT_TOOL_NAME,
+  DESIGN_FIRST_SLICE_TOOL_NAME,
   DESIGN_FONT_TOOL_NAME,
   DESIGN_HIERARCHY_TOOL_NAME,
   DESIGN_TEXT_RANGE_TOOL_NAME,
@@ -27,6 +28,7 @@ import {
   UPDATE_IMAGE_TOOL_NAME,
   explainInvalidDesignApplyToolInput,
   explainInvalidDesignComponentToolInput,
+  explainInvalidDesignFirstSliceToolInput,
   isAgentSvgImportResult,
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
@@ -80,6 +82,19 @@ describe("component tool recovery contract", () => {
 });
 
 describe("design Agent tool contract", () => {
+  it("wires field-level compact first-slice recovery into the production tool definition", () => {
+    const firstSlice = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_FIRST_SLICE_TOOL_NAME,
+    );
+    expect(firstSlice).toHaveProperty(
+      "explainInvalidInput",
+      explainInvalidDesignFirstSliceToolInput,
+    );
+    expect(firstSlice?.description).toContain(
+      "at most 32 elements total, not per stage",
+    );
+  });
+
   it("normalizes model insert defaults before the trusted design boundary", () => {
     const compactInput = {
       label: "Create poster background",

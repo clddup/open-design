@@ -34,6 +34,16 @@ export class PiDesignFailureRecovery {
   }): TrustedToolFailure {
     const details = options.failure.details;
     const fingerprint = details?.fingerprint;
+    if (options.designWrite && options.failure.recoverable) {
+      this.#unresolvedFailure = {
+        toolCallId: options.toolCallId,
+        toolName: options.toolName,
+        code: options.failure.code,
+        message: options.failure.message,
+        inspectionCompleted: false,
+        ...(details === undefined ? {} : { details }),
+      };
+    }
     if (!details || !fingerprint || !options.failure.recoverable) {
       return options.failure;
     }

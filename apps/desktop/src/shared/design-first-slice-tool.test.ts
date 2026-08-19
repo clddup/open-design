@@ -3,6 +3,7 @@ import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
+  explainInvalidDesignFirstSliceToolInput,
   isDesignFirstSliceToolInput,
   normalizeDesignFirstSliceToolInput,
   type DesignFirstSliceToolInput,
@@ -23,7 +24,10 @@ describe("compact first-slice tool", () => {
     expect(
       properties.firstSlice.properties.stages.items.properties.elements
         .maxItems,
-    ).toBe(24);
+    ).toBe(32);
+    expect(properties.firstSlice.properties.stages.description).toContain(
+      "total across all stages",
+    );
   });
 
   it("accepts distinct safe-area foreground and interactive hit-area IDs", () => {
@@ -111,6 +115,14 @@ describe("compact first-slice tool", () => {
     const normalized = normalizeDesignFirstSliceToolInput(modelInput);
     expect(normalized?.skillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
     expect(normalized && isDesignFirstSliceToolInput(normalized)).toBe(true);
+
+    const staleHostEcho = {
+      ...modelInput,
+      skillRefs: [{ id: "stale", version: 99, hash: "model-controlled" }],
+    };
+    expect(
+      normalizeDesignFirstSliceToolInput(staleHostEcho)?.skillRefs,
+    ).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
   });
 
   it("rejects duplicate IDs, forward parents, empty regions and a slice for a later target", () => {
@@ -131,10 +143,38 @@ describe("compact first-slice tool", () => {
     expect(isDesignFirstSliceToolInput(wrongTarget)).toBe(false);
   });
 
-  it("bounds the first visible write to one planned region, three stages and 24 elements", () => {
+  it("accepts the 25-element two-stage production login slice that previously failed before any revision", () => {
+    const input = fixture();
+    input.firstSlice.stages.push({
+      stageId: "auth_stage",
+      label: "Build editable authentication controls",
+      elements: Array.from({ length: 22 }, (_, index) => ({
+        id: `auth_control_${index}`,
+        kind: "rectangle" as const,
+        name: `Auth Control ${index}`,
+        parentId: "home_hero",
+        x: 8 + (index % 11) * 20,
+        y: 160 + Math.floor(index / 11) * 24,
+        width: 16,
+        height: 16,
+        fill: { color: "#7C3AED" },
+      })),
+    });
+
+    expect(
+      input.firstSlice.stages.reduce(
+        (total, stage) => total + stage.elements.length,
+        0,
+      ),
+    ).toBe(25);
+    expect(normalizeDesignFirstSliceToolInput(input)).toBeDefined();
+    expect(explainInvalidDesignFirstSliceToolInput(input)).toBeUndefined();
+  });
+
+  it("bounds the first visible write to one planned region, three stages and 32 elements with a field-level recovery", () => {
     const tooManyElements = fixture();
     const stage = tooManyElements.firstSlice.stages[0];
-    for (let index = 0; index < 22; index += 1) {
+    for (let index = 0; index < 30; index += 1) {
       stage.elements.push({
         id: `support_${index}`,
         kind: "rectangle",
@@ -148,6 +188,12 @@ describe("compact first-slice tool", () => {
       });
     }
     expect(isDesignFirstSliceToolInput(tooManyElements)).toBe(false);
+    expect(explainInvalidDesignFirstSliceToolInput(tooManyElements)).toContain(
+      "/firstSlice/stages: contains 33 elements",
+    );
+    expect(explainInvalidDesignFirstSliceToolInput(tooManyElements)).toContain(
+      "combined maximum is 32",
+    );
 
     const tooManyStages = fixture();
     for (let index = 0; index < 3; index += 1) {

@@ -326,15 +326,24 @@ export class OpenDesignPiToolAdapter {
     if (active.duplicate) return undefined;
     if (event.isError) {
       const definition = this.#definitions.get(active.toolName);
+      const existingFailure = this.#failures.get(event.toolCallId);
+      const inferredFailure =
+        definition &&
+        definition.explainInvalidInput &&
+        !definition.validateInput(active.input)
+          ? invalidInputFailure(definition, active.input)
+          : inferPiToolFailure(active, event.result);
       const failure =
-        this.#failures.get(event.toolCallId) ??
+        existingFailure ??
         this.#recordProgressFailure(
           active.toolName,
-          definition &&
-            definition.explainInvalidInput &&
-            !definition.validateInput(active.input)
-            ? invalidInputFailure(definition, active.input)
-            : inferPiToolFailure(active, event.result),
+          this.#designFailureRecovery.recordFailure({
+            toolCallId: active.toolCallId,
+            toolName: active.toolName,
+            input: active.input,
+            failure: inferredFailure,
+            designWrite: active.risk === "design_write",
+          }),
         );
       return {
         status: "failed",
@@ -433,9 +442,17 @@ export class OpenDesignPiToolAdapter {
       );
     }
     if (!definition.validateInput(context.args)) {
+      const baseFailure = invalidInputFailure(definition, context.args);
+      const recoveredFailure = this.#designFailureRecovery.recordFailure({
+        toolCallId: active.toolCallId,
+        toolName: active.toolName,
+        input: context.args,
+        failure: baseFailure,
+        designWrite: definition.risk === "design_write",
+      });
       const schemaFailure = this.#recordProgressFailure(
         active.toolName,
-        invalidInputFailure(definition, context.args),
+        recoveredFailure,
       );
       this.#failures.set(active.toolCallId, schemaFailure);
       return {

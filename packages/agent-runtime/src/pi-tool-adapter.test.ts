@@ -332,6 +332,12 @@ describe("OpenDesign Pi tool adapter", () => {
       code: "invalid_tool_input",
     });
     expect(typeof failure?.message).toBe("string");
+    expect(result.adapter.unresolvedDesignWriteFailure).toMatchObject({
+      toolCallId: "invalid_move_1",
+      toolName: moveTool.name,
+      code: "invalid_tool_input",
+      inspectionCompleted: false,
+    });
     expect(result.events.at(-1)).toMatchObject({
       type: "run.completed",
       stopReason: "complete",

@@ -306,15 +306,191 @@ export function normalizeDesignFirstSliceToolInput(
   input: unknown,
 ): DesignFirstSliceToolInput | undefined {
   if (!isRecord(input)) return undefined;
+  const modelInput = { ...input };
+  delete modelInput.skillRefs;
   const skillRefs =
     input.deliverable === "ui"
       ? BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({ ...reference }))
       : [];
-  const candidate =
-    input.skillRefs === undefined ? { ...input, skillRefs } : input;
+  const candidate = { ...modelInput, skillRefs };
   return isDesignFirstSliceToolInput(candidate)
     ? structuredClone(candidate)
     : undefined;
+}
+
+/**
+ * Returns a bounded, model-facing explanation for the first failing contract
+ * layer. The Provider schema cannot express aggregate counts across nested
+ * stage arrays, so those semantic constraints must never collapse into a
+ * generic top-level schema mismatch.
+ */
+export function explainInvalidDesignFirstSliceToolInput(
+  input: unknown,
+): string | undefined {
+  if (normalizeDesignFirstSliceToolInput(input)) return undefined;
+  if (!isRecord(input)) {
+    return "Invalid compact first-slice input. / must be an object.";
+  }
+
+  const allowedKeys = new Set([
+    "version",
+    "deliverable",
+    "objective",
+    "designIntent",
+    "briefFidelity",
+    "targets",
+    "visualSystem",
+    "rasterAssetRoles",
+    "semanticObjects",
+    "firstSlice",
+    // Host-owned legacy echoes are ignored and replaced with locally pinned
+    // refs. They are not part of the Provider schema or model authority.
+    "skillRefs",
+  ]);
+  const unexpected = Object.keys(input).filter((key) => !allowedKeys.has(key));
+  if (unexpected.length > 0) {
+    return invalidFirstSliceMessage(
+      `/: unexpected field${unexpected.length === 1 ? "" : "s"} ${unexpected
+        .map((key) => JSON.stringify(key))
+        .join(", ")}`,
+    );
+  }
+
+  if (input.version !== 1) {
+    return invalidFirstSliceMessage("/version: must equal 1");
+  }
+  if (
+    ![
+      "ui",
+      "poster",
+      "logo",
+      "brand-asset",
+      "illustration",
+      "presentation-visual",
+      "other",
+    ].includes(String(input.deliverable))
+  ) {
+    return invalidFirstSliceMessage(
+      "/deliverable: must be a supported current deliverable",
+    );
+  }
+  if (!text(input.objective, 1, 2_000)) {
+    return invalidFirstSliceMessage(
+      "/objective: must be a non-empty string of at most 2000 characters",
+    );
+  }
+  if (!isCompactDesignIntent(input.designIntent)) {
+    return invalidFirstSliceMessage(
+      "/designIntent: must contain the exact current visual intent fields and 3-12 distinct antiPatterns",
+    );
+  }
+  if (!isDesignBriefFidelity(input.briefFidelity)) {
+    return invalidFirstSliceMessage(
+      "/briefFidelity: must contain the current requiredContent, preservedSemantics, prohibitedAdditions, and assumptions arrays",
+    );
+  }
+  if (!Array.isArray(input.targets) || input.targets.length < 1) {
+    return invalidFirstSliceMessage("/targets: must contain 1-32 targets");
+  }
+  if (input.targets.length > 32) {
+    return invalidFirstSliceMessage(
+      `/targets: contains ${input.targets.length} targets; maximum is 32`,
+    );
+  }
+  const invalidTargetIndex = input.targets.findIndex(
+    (target) => !isTarget(target),
+  );
+  if (invalidTargetIndex >= 0) {
+    return invalidFirstSliceMessage(
+      `/targets/${invalidTargetIndex}: target, frame, qualityProfile, or region fields do not match the exact current shape`,
+    );
+  }
+  if (!isVisualSystem(input.visualSystem)) {
+    return invalidFirstSliceMessage(
+      "/visualSystem: must contain formLanguage, palette, surfaceAndDepth, typography, and optional effects",
+    );
+  }
+  if (!isRasterRoles(input.rasterAssetRoles)) {
+    return invalidFirstSliceMessage(
+      "/rasterAssetRoles: must contain at most four distinct supported roles",
+    );
+  }
+  const targetIds = new Set(
+    (input.targets as DesignFirstSliceToolInput["targets"]).map(
+      (target) => target.targetId,
+    ),
+  );
+  if (
+    input.semanticObjects !== undefined &&
+    (!Array.isArray(input.semanticObjects) ||
+      !isSemanticObjects(input.semanticObjects, targetIds))
+  ) {
+    return invalidFirstSliceMessage(
+      "/semanticObjects: decisions and occurrences must use the exact current shape and declared target IDs",
+    );
+  }
+
+  const firstSlice = input.firstSlice;
+  if (!isRecord(firstSlice) || !Array.isArray(firstSlice.stages)) {
+    return invalidFirstSliceMessage(
+      "/firstSlice: must contain targetId, label, and 1-3 semantic stages",
+    );
+  }
+  const stages = firstSlice.stages as unknown[];
+  if (stages.length < 1 || stages.length > DESIGN_FIRST_SLICE_MAX_STAGES) {
+    return invalidFirstSliceMessage(
+      `/firstSlice/stages: contains ${stages.length} stages; expected 1-${DESIGN_FIRST_SLICE_MAX_STAGES}`,
+    );
+  }
+  const stageElementCounts = stages.map((stage) =>
+    isRecord(stage) && Array.isArray(stage.elements)
+      ? stage.elements.length
+      : 0,
+  );
+  const totalElements = stageElementCounts.reduce(
+    (total, count) => total + count,
+    0,
+  );
+  if (totalElements > DESIGN_FIRST_SLICE_MAX_ELEMENTS) {
+    return invalidFirstSliceMessage(
+      `/firstSlice/stages: contains ${totalElements} elements across ${stages.length} stages (${stageElementCounts.join(" + ")}); combined maximum is ${DESIGN_FIRST_SLICE_MAX_ELEMENTS}. Remove or defer ${totalElements - DESIGN_FIRST_SLICE_MAX_ELEMENTS} nonessential element${totalElements - DESIGN_FIRST_SLICE_MAX_ELEMENTS === 1 ? "" : "s"}`,
+    );
+  }
+  for (let stageIndex = 0; stageIndex < stages.length; stageIndex += 1) {
+    const stage = stages[stageIndex];
+    if (!isRecord(stage) || !Array.isArray(stage.elements)) {
+      return invalidFirstSliceMessage(
+        `/firstSlice/stages/${stageIndex}: must contain stageId, label, and a non-empty elements array`,
+      );
+    }
+    const invalidElementIndex = stage.elements.findIndex(
+      (element) => !isElement(element),
+    );
+    if (invalidElementIndex >= 0) {
+      return invalidFirstSliceMessage(
+        `/firstSlice/stages/${stageIndex}/elements/${invalidElementIndex}: element fields do not match its kind-specific exact shape`,
+      );
+    }
+  }
+  if (!isFirstSlice(firstSlice)) {
+    return invalidFirstSliceMessage(
+      "/firstSlice: stage IDs, labels, element arrays, or exact fields are invalid",
+    );
+  }
+  const targets = input.targets as DesignFirstSliceToolInput["targets"];
+  if (firstSlice.targetId !== targets[0]?.targetId) {
+    return invalidFirstSliceMessage(
+      `/firstSlice/targetId: must equal the first declared target ID ${JSON.stringify(targets[0]?.targetId)}`,
+    );
+  }
+
+  return invalidFirstSliceMessage(
+    "Cross-field structure is invalid. The first slice must target targets[0], use unique IDs, declare parents before children, materialize exactly one planned region, and include editable non-container content inside it",
+  );
+}
+
+function invalidFirstSliceMessage(issue: string): string {
+  return `Invalid opendesign_generate_first_slice input. ${issue}. Submit a corrected call; do not repeat the unchanged arguments or finish with a text-only explanation.`;
 }
 
 function isCompactDesignIntent(value: unknown): value is DesignIntent {
@@ -681,9 +857,10 @@ function isPaintLike(
 }
 
 function isSemanticObjects(
-  objects: NonNullable<DesignFirstSliceToolInput["semanticObjects"]>,
+  objects: unknown,
   targetIds: ReadonlySet<string>,
-): boolean {
+): objects is NonNullable<DesignFirstSliceToolInput["semanticObjects"]> {
+  if (!Array.isArray(objects)) return false;
   const decisions = new Set<string>();
   const components = new Set<string>();
   const nodes = new Set<string>();
@@ -697,14 +874,14 @@ function isSemanticObjects(
       return false;
     }
     decisions.add(object.decisionId);
+    const instances: unknown[] = Array.isArray(object.instances)
+      ? (object.instances as unknown[])
+      : [];
     const occurrences =
       object.decision === "ordinary"
         ? object.occurrences
         : object.decision === "component"
-          ? [
-              object.main,
-              ...(Array.isArray(object.instances) ? object.instances : []),
-            ]
+          ? [object.main, ...instances]
           : undefined;
     if (
       !Array.isArray(occurrences) ||

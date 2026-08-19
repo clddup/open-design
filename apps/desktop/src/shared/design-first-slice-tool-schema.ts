@@ -340,6 +340,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
           type: "array",
           minItems: 1,
           maxItems: DESIGN_FIRST_SLICE_MAX_STAGES,
+          description: `1-${DESIGN_FIRST_SLICE_MAX_STAGES} stages; at most ${DESIGN_FIRST_SLICE_MAX_ELEMENTS} elements total across all stages.`,
           items: {
             type: "object",
             properties: {

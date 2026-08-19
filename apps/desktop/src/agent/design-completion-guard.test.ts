@@ -190,6 +190,25 @@ describe("design completion guard", () => {
     expectBlocked([inspection, designPlan], "not a completed design");
   });
 
+  it("rejects text-only completion after an invalid first-slice structure", () => {
+    const result = reviewDesignCompletion(
+      context([], {
+        toolCallId: "invalid_first_slice",
+        toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+        code: "invalid_tool_input",
+        message:
+          "/firstSlice/stages contains 33 elements; combined maximum is 32",
+        inspectionCompleted: false,
+      }),
+    );
+
+    expect(result.allow).toBe(false);
+    if (result.allow) throw new Error("Expected completion to be blocked");
+    expect(result.message).toContain("corrected tool call");
+    expect(result.message).toContain("text-only explanation");
+    expect(result.message).toContain("restart the request");
+  });
+
   it("blocks a resumed Run while inspection reports unfinished delivery", () => {
     const unfinished = deliveryResult("pending").delivery;
     expectBlocked(
