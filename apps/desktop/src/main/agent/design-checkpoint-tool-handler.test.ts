@@ -2,7 +2,9 @@ import type {
   ToolCallRequest,
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
+import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import { describe, expect, it, vi } from "vitest";
+import type { DesignVisualReviewToolInput } from "../../shared/design-agent-tools";
 import {
   captureCommittedDesignCheckpoint,
   handleDesignCheckpointTool,
@@ -22,19 +24,44 @@ const applyInput = {
 };
 
 const review = {
+  version: 1,
+  skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+    ...reference,
+  })),
   briefFidelity:
     "The rendered target preserves every requested product function and label",
+  distinctiveness:
+    "The asymmetric hero and signal rail create a recognizable product identity",
+  signatureMotif:
+    "The signal rail connects the primary form to the supporting content rhythm",
   composition: "The hero needs more negative space around its primary form",
   hierarchy: "The secondary content currently competes with the main action",
   typography: "Supporting typography needs lower contrast and tighter rhythm",
   assetIntegration: "The image edge needs a clearer relationship to the title",
   formAndSurface: "The foreground surface is visually heavier than intended",
   effects: "The current glow needs a smaller radius and lower opacity",
+  antiTemplate:
+    "The composition avoids an equal card grid and ornamental gradient identity",
+  criteria: {
+    "visual-thesis":
+      "The directional product thesis is visible in the dominant hero plane",
+    "signature-motif":
+      "The signal rail is present but needs stronger integration with the title",
+    "composition-tension":
+      "The offset hero establishes one focal path despite tight surrounding space",
+    "typography-character":
+      "Display and supporting text have distinct roles and a deliberate contrast",
+    "material-coherence":
+      "The image edge, surfaces, and glow belong to one restrained material system",
+    "template-avoidance":
+      "The rendered design does not rely on repeated cards or decorative gradients",
+  },
+  failedCriteria: ["signature-motif", "composition-tension"],
   refinements: [
     "Increase negative space around the primary form",
     "Reduce the secondary surface contrast",
   ],
-};
+} satisfies DesignVisualReviewToolInput;
 
 const applied: TrustedToolResult = {
   content: {
