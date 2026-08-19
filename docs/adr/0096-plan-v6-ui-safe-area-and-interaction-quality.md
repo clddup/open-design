@@ -6,6 +6,7 @@
 - Layout Quality：`DesignLayoutQualityReport 3`
 - 文档协议：不变（质量策略属于 Run/Plan，不写入 `DesignDocument`）
 - 关联：ADR-0018、ADR-0034、ADR-0050、ADR-0095
+- 修订：`interactiveNodeIds` 必须重复出现在 `safeAreaNodeIds` 的要求已由 ADR-0101 取代。
 
 ## 背景
 
@@ -29,7 +30,7 @@ Layout Quality Report v2 能确定性发现 Frame 越界，但只知道目标 ar
 - `graphic`：Logo、海报、品牌资产、插画等非 UI 交付，不执行设备安全区或交互目标检查；
 - `ui`：声明 `platform`、`interactionMode`、四边 `safeAreaInsets`、`safeAreaNodeIds` 与 `interactiveNodeIds`。
 
-`safeAreaInsets` 是目标 Frame 的 parent-local 内边距。模型不得根据 Frame 尺寸猜设备；用户或产品上下文没有建立 inset 时使用零。`safeAreaNodeIds` 只列必须留在安全区内的前景内容，不应把可延伸至设备边缘的背景列入。`interactiveNodeIds` 必须是 `safeAreaNodeIds` 子集，并指向实际按钮/控件 hit-area Frame 或 layer，而不是其中 16–24 px 的可见 icon。
+`safeAreaInsets` 是目标 Frame 的 parent-local 内边距。模型不得根据 Frame 尺寸猜设备；用户或产品上下文没有建立 inset 时使用零。`safeAreaNodeIds` 只列必须留在安全区内的前景内容，不应把可延伸至设备边缘的背景列入。交互节点的独立声明与安全区检查以后续 ADR-0101 为准。
 
 UI deliverable 只能使用 `ui` profile，其他 deliverable 只能使用 `graphic`。v2/v3/v4/v5 Plan 继续读取用于历史 journal 和恢复，但不获得未声明的设备规则；当前模型 schema 只生成 v6。高置信空白画布 compact first-slice 同样要求 profile并编译为 v6；缺少新字段的历史 compact input 仍按原规则编译为 v4/v5。
 

@@ -399,7 +399,6 @@ function isCompactQualityProfile(
     !isInsetTuple(insets) ||
     !idArray(safeNodeIds, 1, 64) ||
     !idArray(hitNodeIds, 0, 64) ||
-    !hitNodeIds.every((nodeId) => safeNodeIds.includes(nodeId)) ||
     !exactKeys(value, [
       "kind",
       "platform",

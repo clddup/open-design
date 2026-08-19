@@ -616,6 +616,9 @@ function imageGenerationDraft(
 function ModelProviderForm() {
   const { t } = useI18n();
   const translateRef = useRef(t);
+  const addProviderButtonRef = useRef<HTMLButtonElement>(null);
+  const providerNameInputRef = useRef<HTMLInputElement>(null);
+  const previousProviderIdRef = useRef<string | null>(null);
   const [catalog, setCatalog] = useState<ModelProviderCatalog | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
     null,
@@ -676,6 +679,7 @@ function ModelProviderForm() {
   }, []); // Preserve unsaved drafts across locale changes.
 
   const loadProvider = (profile: ModelProviderProfile) => {
+    previousProviderIdRef.current = null;
     setSelectedProviderId(profile.providerId);
     setDraft(profileDraft(profile));
     setHasApiKey(profile.hasApiKey);
@@ -693,8 +697,20 @@ function ModelProviderForm() {
     setConfirmDelete(false);
   };
 
+  const providerExists = (providerId: string | null) =>
+    providerId !== null &&
+    Boolean(
+      catalog?.providers.some((provider) => provider.providerId === providerId),
+    );
+  const creatingProvider = draft !== null && !providerExists(draft.providerId);
+
   const addProvider = () => {
+    if (creatingProvider) {
+      providerNameInputRef.current?.focus();
+      return;
+    }
     const next = newProviderDraft();
+    previousProviderIdRef.current = selectedProviderId;
     setSelectedProviderId(next.providerId);
     setDraft(next);
     setHasApiKey(false);
@@ -704,6 +720,7 @@ function ModelProviderForm() {
     setDirty(true);
     setConfirmDelete(false);
     setStatus(undefined);
+    requestAnimationFrame(() => providerNameInputRef.current?.focus());
   };
 
   const save = async (testAfterSave: boolean) => {
@@ -804,6 +821,31 @@ function ModelProviderForm() {
   const busy = loading || saving || testing;
   const valid = draft !== null && validProviderDraft(draft);
 
+  const cancelDraft = () => {
+    if (!draft || busy) return;
+    const fallbackId = creatingProvider
+      ? previousProviderIdRef.current
+      : selectedProviderId;
+    const fallback = catalog?.providers.find(
+      (provider) => provider.providerId === fallbackId,
+    );
+    const next = fallback ?? catalog?.providers[0];
+    if (next) loadProvider(next);
+    else {
+      setSelectedProviderId(null);
+      setDraft(null);
+      setHasApiKey(false);
+      setApiKey("");
+      setClearApiKey(false);
+      setSetAsDefault(false);
+      setDirty(false);
+      setConfirmDelete(false);
+      setStatus(undefined);
+    }
+    previousProviderIdRef.current = null;
+    requestAnimationFrame(() => addProviderButtonRef.current?.focus());
+  };
+
   const deleteProvider = async () => {
     const desktop = window.desktop;
     if (!selectedProviderId || busy) return;
@@ -839,7 +881,15 @@ function ModelProviderForm() {
   };
 
   return (
-    <form className={formStyles.provider} onSubmit={submit}>
+    <form
+      className={formStyles.provider}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || !dirty || busy) return;
+        event.preventDefault();
+        cancelDraft();
+      }}
+      onSubmit={submit}
+    >
       <SettingsHeading
         description={t("settings.modelsDescription")}
         title={t("settings.modelsTitle")}
@@ -856,7 +906,12 @@ function ModelProviderForm() {
         <aside className={formStyles.providerList}>
           <div className={formStyles.providerListHeading}>
             <strong>{t("settings.providers")}</strong>
-            <button onClick={addProvider} type="button">
+            <button
+              disabled={busy || (dirty && !creatingProvider)}
+              onClick={addProvider}
+              ref={addProviderButtonRef}
+              type="button"
+            >
               <Icon name="lucide:plus" size={14} />
               {t("settings.addProvider")}
             </button>
@@ -870,11 +925,13 @@ function ModelProviderForm() {
               <button
                 aria-pressed={selectedProviderId === provider.providerId}
                 className={formStyles.providerListItem}
+                disabled={
+                  busy || (dirty && selectedProviderId !== provider.providerId)
+                }
                 key={provider.providerId}
                 onClick={() => {
-                  if (!dirty || selectedProviderId === provider.providerId) {
+                  if (selectedProviderId !== provider.providerId)
                     loadProvider(provider);
-                  }
                 }}
                 type="button"
               >
@@ -903,9 +960,54 @@ function ModelProviderForm() {
             </div>
           ) : draft ? (
             <>
-              <div className={formStyles.providerDetailHeading}>
+              <header className={formStyles.providerDetailHeading}>
+                <div className={formStyles.providerIdentity}>
+                  {creatingProvider && (
+                    <IconButton
+                      icon="lucide:arrow-left"
+                      label={t("settings.backToProviders")}
+                      onClick={cancelDraft}
+                      type="button"
+                    />
+                  )}
+                  <span>
+                    <strong>
+                      {creatingProvider
+                        ? t("settings.newProvider")
+                        : draft.name || t("settings.provider")}
+                    </strong>
+                    <small>
+                      {creatingProvider
+                        ? t("settings.newProviderDescription")
+                        : t("settings.editProviderDescription")}
+                    </small>
+                  </span>
+                </div>
+                <div className={formStyles.providerState}>
+                  {dirty && (
+                    <span className={formStyles.unsavedIndicator}>
+                      {t("settings.unsavedChanges")}
+                    </span>
+                  )}
+                  <label className={formStyles.checkbox}>
+                    <input
+                      checked={draft.enabled}
+                      disabled={busy}
+                      onChange={(event) =>
+                        updateDraft((current) => ({
+                          ...current,
+                          enabled: event.target.checked,
+                        }))
+                      }
+                      type="checkbox"
+                    />
+                    <span>{t("settings.enabled")}</span>
+                  </label>
+                </div>
+              </header>
+              <div className={formStyles.providerGrid}>
                 <label
-                  className={`${formStyles.field} ${formStyles.fieldInline}`}
+                  className={`${formStyles.field} ${formStyles.fieldWide}`}
                 >
                   <span>{t("settings.providerName")}</span>
                   <input
@@ -918,25 +1020,10 @@ function ModelProviderForm() {
                         name: event.target.value,
                       }))
                     }
+                    ref={providerNameInputRef}
                     value={draft.name}
                   />
                 </label>
-                <label className={formStyles.checkbox}>
-                  <input
-                    checked={draft.enabled}
-                    disabled={busy}
-                    onChange={(event) =>
-                      updateDraft((current) => ({
-                        ...current,
-                        enabled: event.target.checked,
-                      }))
-                    }
-                    type="checkbox"
-                  />
-                  <span>{t("settings.enabled")}</span>
-                </label>
-              </div>
-              <div className={formStyles.providerGrid}>
                 <label
                   className={`${formStyles.field} ${formStyles.fieldWide}`}
                 >
@@ -1015,7 +1102,11 @@ function ModelProviderForm() {
                     autoComplete="off"
                     disabled={busy || clearApiKey || draft.authMode === "none"}
                     maxLength={8_192}
-                    onChange={(event) => setApiKey(event.target.value)}
+                    onChange={(event) => {
+                      setApiKey(event.target.value);
+                      setDirty(true);
+                      setConfirmDelete(false);
+                    }}
                     placeholder={t("settings.apiKeyPlaceholder")}
                     type="password"
                     value={apiKey}
@@ -1035,6 +1126,8 @@ function ModelProviderForm() {
                     onChange={(event) => {
                       setClearApiKey(event.target.checked);
                       if (event.target.checked) setApiKey("");
+                      setDirty(true);
+                      setConfirmDelete(false);
                     }}
                     type="checkbox"
                   />
@@ -1057,18 +1150,28 @@ function ModelProviderForm() {
                   <input
                     checked={setAsDefault}
                     disabled={busy}
-                    onChange={(event) => setSetAsDefault(event.target.checked)}
+                    onChange={(event) => {
+                      setSetAsDefault(event.target.checked);
+                      setDirty(true);
+                      setConfirmDelete(false);
+                    }}
                     type="checkbox"
                   />
                   <span>{t("settings.useAsDefault")}</span>
                 </label>
-                <span />
+                <span className={formStyles.providerActionSpacer} />
+                {dirty && (
+                  <Button
+                    disabled={busy}
+                    onClick={cancelDraft}
+                    tone="quiet"
+                    type="button"
+                  >
+                    {t("settings.cancelChanges")}
+                  </Button>
+                )}
                 <Button
-                  disabled={
-                    !catalog?.providers.some(
-                      (provider) => provider.providerId === draft.providerId,
-                    ) || busy
-                  }
+                  disabled={creatingProvider || busy}
                   onClick={() => void deleteProvider()}
                   tone="quiet"
                   type="button"

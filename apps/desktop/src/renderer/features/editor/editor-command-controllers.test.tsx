@@ -14,10 +14,7 @@ import { usePageCommandController } from "./use-page-command-controller";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
 
-const t: Translate = (key, parameters) =>
-  key === "sidebar.defaultPageName"
-    ? `Page ${String(parameters?.count ?? "")}`
-    : key;
+const t: Translate = (key) => `中文:${key}`;
 
 function renderControllers(runtime: EditorRuntime) {
   const setEditorError = vi.fn<(message: string | null) => void>();
@@ -63,6 +60,7 @@ describe("editor command controllers", () => {
     const created = result.current.page.createPage();
     expect(created.ok).toBe(true);
     if (!created.ok) return;
+    expect(created.name).toBe("Page 2");
     const renamed = result.current.page.renamePage(created.pageId, "Flows");
     expect(renamed).toEqual({
       ok: true,

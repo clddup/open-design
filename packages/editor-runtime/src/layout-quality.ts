@@ -343,7 +343,10 @@ function diagnoseQualityProfile(
   const interactiveNodes: DesignNode[] = [];
   const minimumSize = minimumInteractiveTargetSize(qualityProfile);
   let checkedQualityNodeCount = 0;
-  for (const nodeId of qualityProfile.safeAreaNodeIds) {
+  for (const nodeId of new Set([
+    ...qualityProfile.safeAreaNodeIds,
+    ...qualityProfile.interactiveNodeIds,
+  ])) {
     const node = document.nodesById[nodeId];
     if (!node || !nodeDescendsFrom(document, nodeId, artboard.id)) {
       appendQualityIssue(issues, artboard.id, {

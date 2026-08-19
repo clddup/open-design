@@ -28,6 +28,7 @@ import { validateComponentPropertyOrder } from "./component-property-order.js";
 import { isBooleanOperandNode, isContainerNode } from "./node-semantics.js";
 import { validateVariantSetInvariants } from "./variant-set-invariants.js";
 import { canonicalJsonStringify } from "./document-fingerprint.js";
+import { defaultPageName } from "./page-naming.js";
 
 export { canonicalJsonStringify } from "./document-fingerprint.js";
 
@@ -513,7 +514,7 @@ export function createEmptyDesignDocument(
     pagesById: {
       [pageId]: {
         id: pageId,
-        name: "Page 1",
+        name: defaultPageName(1),
         rootNodeIds: [],
         extensions: {},
       },

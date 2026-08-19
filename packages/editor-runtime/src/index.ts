@@ -253,3 +253,4 @@ export {
   type RenamePageInput,
   type ReorderPageInput,
 } from "./page-operations.js";
+export { defaultPageName } from "./page-naming.js";

@@ -24,6 +24,22 @@ describe("compact first-slice tool", () => {
     ).toBe(24);
   });
 
+  it("accepts distinct safe-area foreground and interactive hit-area IDs", () => {
+    const input = fixture();
+    const profile = input.targets[0].qualityProfile;
+    if (profile.kind !== "ui") throw new Error("Expected UI fixture");
+    profile.hitNodeIds = ["hero_panel"];
+
+    expect(profile.safeNodeIds).not.toContain("hero_panel");
+    expect(isDesignFirstSliceToolInput(input)).toBe(true);
+    expect(
+      compileDesignFirstSliceToolInput(input).plan.targets[0]?.qualityProfile,
+    ).toMatchObject({
+      safeAreaNodeIds: ["hero_title"],
+      interactiveNodeIds: ["hero_panel"],
+    });
+  });
+
   it("compiles all targets into the current Plan with pinned skills and a canonical first slice", () => {
     const input = fixture();
     expect(isDesignFirstSliceToolInput(input)).toBe(true);

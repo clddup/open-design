@@ -28,7 +28,7 @@ export const DESIGN_TARGET_QUALITY_PROFILE_SCHEMA = {
     {
       type: "object",
       description:
-        "Executable UI geometry policy. safeAreaInsets are parent-local artboard insets, safeAreaNodeIds name foreground content that must remain inside them, and interactiveNodeIds name actual hit-area Frames or layers—not merely their visible icon children. The host applies platform minimum hit sizes and exact-revision geometry checks.",
+        "Executable UI geometry policy. safeAreaInsets are parent-local artboard insets, safeAreaNodeIds name foreground content that must remain inside them, and interactiveNodeIds independently name actual hit-area Frames or layers—not merely their visible icon children. Do not duplicate interactiveNodeIds into safeAreaNodeIds; the host automatically checks both sets against the safe area, then applies platform minimum hit sizes to interactiveNodeIds.",
       properties: {
         kind: { const: "ui" },
         platform: {

@@ -292,6 +292,7 @@ describe("LeftSidebar layer tree", () => {
     await user.click(screen.getByRole("button", { name: "Create Page" }));
     expect(onCreatePage).toHaveBeenCalledTimes(1);
     expect(onPageChange).toHaveBeenCalledWith("page_four");
+    expect(screen.queryByText("Created Page")).toBeNull();
 
     await user.click(
       screen.getByRole("button", { name: "Actions for Page 2" }),
@@ -299,12 +300,14 @@ describe("LeftSidebar layer tree", () => {
     await user.click(screen.getByRole("menuitem", { name: "Duplicate" }));
     expect(onDuplicatePage).toHaveBeenCalledWith("page_two");
     expect(onPageChange).toHaveBeenCalledWith("page_two_copy");
+    expect(screen.queryByText("Duplicated Page")).toBeNull();
 
     await user.click(
       screen.getByRole("button", { name: "Actions for Page 3" }),
     );
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(onDeletePage).toHaveBeenCalledWith("page_three");
+    expect(screen.queryByText("Deleted Page")).toBeNull();
 
     const source = screen.getByRole("button", {
       name: "Welcome",
@@ -332,6 +335,7 @@ describe("LeftSidebar layer tree", () => {
     Object.defineProperty(drop, "clientY", { value: 127 });
     fireEvent(target, drop);
     expect(onReorderPage).toHaveBeenCalledWith("page_welcome", 2);
+    expect(screen.queryByText("Reordered Page")).toBeNull();
   });
 
   it("presents Boolean groups as named, collapsible vector containers", async () => {

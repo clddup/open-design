@@ -12,6 +12,40 @@ import { I18nProvider } from "../i18n";
 import { SettingsPage } from "./SettingsPage";
 
 const emptyCatalog: ModelProviderCatalog = { version: 3, providers: [] };
+const configuredCatalog: ModelProviderCatalog = {
+  version: 3,
+  providers: [
+    {
+      providerId: "provider-saved",
+      name: "Saved provider",
+      enabled: true,
+      apiFormat: "openai-responses",
+      authMode: "bearer",
+      baseUrl: "https://provider.example/v1",
+      models: [
+        {
+          modelId: "saved-model",
+          name: "Saved model",
+          contextWindow: 200_000,
+          maxOutputTokens: 16_384,
+          reasoningEfforts: ["off", "low", "medium", "high"],
+          capabilities: {
+            toolUse: true,
+            imageInput: true,
+            reasoning: true,
+          },
+        },
+      ],
+      hasApiKey: true,
+      updatedAt: "2026-08-09T00:00:00.000Z",
+    },
+  ],
+  defaultSelection: {
+    providerId: "provider-saved",
+    modelId: "saved-model",
+    reasoningEffort: "medium",
+  },
+};
 
 beforeEach(() => {
   window.desktop = {
@@ -265,6 +299,48 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText("API format")).toHaveValue(
       "openai-chat-completions",
     );
+  });
+
+  it("cancels a new Provider with Back or Escape and restores the saved Provider", async () => {
+    vi.mocked(window.desktop!.getModelProviderCatalog).mockResolvedValue(
+      configuredCatalog,
+    );
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(screen.getByRole("tab", { name: "Models" }));
+    await screen.findByDisplayValue("Saved provider");
+    await user.click(screen.getByRole("button", { name: "Add provider" }));
+
+    expect(screen.getByText("New provider")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Back to providers" }),
+    ).toBeVisible();
+    expect(screen.getByText("Unsaved")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Back to providers" }));
+    expect(screen.getByLabelText("Provider name")).toHaveValue(
+      "Saved provider",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add provider" }));
+
+    await user.type(screen.getByLabelText("Provider name"), " draft");
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByLabelText("Provider name")).toHaveValue(
+      "Saved provider",
+    );
+    expect(screen.queryByText("New provider")).toBeNull();
+    expect(screen.queryByText("Unsaved")).toBeNull();
+
+    await user.type(screen.getByLabelText("API key"), "replacement-key");
+    expect(screen.getByText("Unsaved")).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.getByLabelText("API key")).toHaveValue("");
+    expect(screen.queryByText("Unsaved")).toBeNull();
+    expect(window.desktop!.saveModelProviderProfile).not.toHaveBeenCalled();
   });
 
   it("does not report text-only endpoints as Agent compatible", async () => {

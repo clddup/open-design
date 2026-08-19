@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   EditorRuntime,
   createWelcomeDocument,
+  defaultPageName,
   planCreatePage,
   planDeletePage,
   planDuplicatePage,
@@ -27,6 +28,14 @@ function applyPlan(
 }
 
 describe("Page operations", () => {
+  it("uses locale-neutral canonical default Page names", () => {
+    expect(defaultPageName(1)).toBe("Page 1");
+    expect(defaultPageName(12)).toBe("Page 12");
+    expect(() => defaultPageName(0)).toThrow(
+      "Page number must be a positive safe integer",
+    );
+  });
+
   it("creates and names an empty Page as one undoable revision", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const plan = planCreatePage(runtime.getSnapshot().document, {

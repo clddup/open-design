@@ -40,7 +40,7 @@ describe("design target quality profile", () => {
     ).toMatchObject({ width: 24, height: 24 });
   });
 
-  it("rejects unsafe insets, duplicate IDs and interactive IDs outside the safe set", () => {
+  it("rejects unsafe insets and duplicate IDs while keeping quality concerns independent", () => {
     expect(
       isDesignTargetQualityProfile(
         {
@@ -61,7 +61,7 @@ describe("design target quality profile", () => {
         ...uiProfile,
         interactiveNodeIds: ["undeclared_action"],
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("keeps graphics explicit and returns a bounded unique node set", () => {

@@ -36,7 +36,6 @@ export function isDesignTargetQualityProfile(
     !isSafeAreaInsets(value.safeAreaInsets) ||
     !boundedUniqueIds(safeAreaNodeIds, 1, 64) ||
     !boundedUniqueIds(interactiveNodeIds, 0, 64) ||
-    !interactiveNodeIds.every((nodeId) => safeAreaNodeIds.includes(nodeId)) ||
     !exactKeys(value, [
       "kind",
       "platform",

@@ -331,6 +331,7 @@ export function LeftSidebar({
     setEditingPageId(pageId);
     setPageNameDraft(name);
     setPageNameError(null);
+    setPageStatus("");
   };
 
   const cancelPageRename = () => {
@@ -350,9 +351,7 @@ export function LeftSidebar({
       setPageNameError(result.error);
       return;
     }
-    setPageStatus(
-      t("sidebar.renamedPage", { name: result.name ?? pageNameDraft.trim() }),
-    );
+    setPageStatus("");
     cancelPageRename();
   };
 
@@ -364,7 +363,6 @@ export function LeftSidebar({
     }
     onPageChange(result.pageId);
     beginPageRename(result.pageId, result.name ?? t("sidebar.newPage"));
-    setPageStatus(t("sidebar.createdPage"));
   };
 
   const duplicatePage = (pageId: string) => {
@@ -374,12 +372,12 @@ export function LeftSidebar({
       return;
     }
     onPageChange(result.pageId);
-    setPageStatus(t("sidebar.duplicatedPage"));
+    setPageStatus("");
   };
 
   const deletePage = (pageId: string) => {
     const result = onDeletePage(pageId);
-    setPageStatus(result.ok ? t("sidebar.deletedPage") : result.error);
+    setPageStatus(result.ok ? "" : result.error);
   };
 
   const clearPageDrag = () => {
@@ -398,7 +396,7 @@ export function LeftSidebar({
     if (targetIndex < 0) return;
     const index = targetIndex + (position === "after" ? 1 : 0);
     const result = onReorderPage(sourcePageId, index);
-    setPageStatus(result.ok ? t("sidebar.reorderedPage") : result.error);
+    setPageStatus(result.ok ? "" : result.error);
   };
 
   const expandNode = (nodeId: string) => {

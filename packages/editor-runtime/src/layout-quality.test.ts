@@ -208,7 +208,7 @@ describe("deterministic delivery layout quality", () => {
     });
   });
 
-  it("blocks UI foreground outside an explicit safe area and undersized hit targets", () => {
+  it("checks interactive hit areas against the safe area without duplicate declarations", () => {
     const document = layoutDocument();
     const artboard = document.nodesById.artboard;
     if (artboard?.kind !== "frame") throw new Error("Missing artboard");
@@ -231,14 +231,14 @@ describe("deterministic delivery layout quality", () => {
         platform: "ios",
         interactionMode: "touch",
         safeAreaInsets: { top: 10, right: 0, bottom: 30, left: 0 },
-        safeAreaNodeIds: [action.id],
+        safeAreaNodeIds: ["inside"],
         interactiveNodeIds: [action.id],
       },
     );
 
     expect(report).toMatchObject({
       version: 5,
-      checkedQualityNodeCount: 1,
+      checkedQualityNodeCount: 2,
       checkedTextNodeCount: 0,
       errorCount: 2,
       qualityProfile: { kind: "ui", platform: "ios" },

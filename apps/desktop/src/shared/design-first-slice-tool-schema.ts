@@ -91,12 +91,16 @@ const COMPACT_QUALITY_PROFILE_SCHEMA = {
           maxItems: 64,
           uniqueItems: true,
           items: ID_SCHEMA,
+          description:
+            "Foreground IDs that must remain inside the safe area. Do not repeat hitNodeIds here unless a node is independently part of the foreground set.",
         },
         hitNodeIds: {
           type: "array",
           maxItems: 64,
           uniqueItems: true,
           items: ID_SCHEMA,
+          description:
+            "Actual interactive hit-area IDs. The host independently applies safe-area and platform minimum-size checks to these nodes.",
         },
       },
       required: [

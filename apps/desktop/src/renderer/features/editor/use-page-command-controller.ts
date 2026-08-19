@@ -1,4 +1,5 @@
 import {
+  defaultPageName,
   planCreatePage,
   planDeletePage,
   planDuplicatePage,
@@ -32,9 +33,7 @@ export function usePageCommandController({
   const createPage = useCallback((): PageActionResult => {
     const current = runtime.getSnapshot().document;
     const operationId = `page_create_${Date.now()}_${++transactionCounter.current}`;
-    const name = t("sidebar.defaultPageName", {
-      count: current.pageOrder.length + 1,
-    });
+    const name = defaultPageName(current.pageOrder.length + 1);
     const plan = planCreatePage(current, {
       pageId: operationId,
       name,

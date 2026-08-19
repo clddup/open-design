@@ -1,5 +1,8 @@
 import type { DesignDocument } from "@opendesign/design-contracts";
-import { createEmptyDesignDocument } from "@opendesign/editor-runtime";
+import {
+  createEmptyDesignDocument,
+  defaultPageName,
+} from "@opendesign/editor-runtime";
 import type { DesignFileDescriptor } from "@opendesign/workspace-contracts";
 
 export interface StarterProjectFile {
@@ -18,7 +21,7 @@ export function createStarterProjectFiles(
       name: "Untitled",
       relativePath: "designs/untitled.opendesign",
       now,
-      page: { id: `page_${projectId}_1`, name: "Page 1" },
+      page: { id: `page_${projectId}_1`, name: defaultPageName(1) },
     }),
   ];
 }
