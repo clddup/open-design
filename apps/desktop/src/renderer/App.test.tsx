@@ -440,7 +440,7 @@ async function openProjectWithConversations(
 ) {
   const user = userEvent.setup();
   const manifest = projectManifest();
-  const { descriptor } = mockProjectDesignFileRead(manifest);
+  mockProjectDesignFileRead(manifest);
   mockConversationTargetResolution(manifest);
   vi.mocked(window.desktop!.listRecentProjects).mockResolvedValueOnce([
     { projectId: manifest.projectId, name: manifest.name, lastOpenedAt: now },
