@@ -67,18 +67,8 @@
   }
 }
 
-.facts {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
+.elapsed {
   grid-column: 2;
-  gap: 3px 9px;
   color: var(--ui-text-faint);
   font-size: 8px;
-
-  span:not(:last-child)::after {
-    position: relative;
-    left: 5px;
-    content: "·";
-  }
 }

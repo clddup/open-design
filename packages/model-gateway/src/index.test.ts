@@ -100,6 +100,7 @@ describe("multi-protocol model gateway", () => {
     ["transport termination", "terminated", true],
     ["HTTP 400 invalid request", "invalid", false],
     ["wrapped context overflow", "context", false],
+    ["HTTP 504 upstream first-byte timeout", "upstream-timeout", true],
   ])("classifies %s retryability", async (_name, kind, retryable) => {
     const fetch: typeof globalThis.fetch =
       kind === "terminated"
@@ -112,16 +113,20 @@ describe("multi-protocol model gateway", () => {
                     code:
                       kind === "context"
                         ? "internal_server_error"
-                        : "invalid_request_error",
+                        : kind === "upstream-timeout"
+                          ? "upstream_first_byte_timeout"
+                          : "invalid_request_error",
                     message:
                       kind === "context"
                         ? "upstream internal_server_error: context_too_large"
-                        : "Invalid request",
+                        : kind === "upstream-timeout"
+                          ? "upstream_first_byte_timeout"
+                          : "Invalid request",
                     type: "invalid_request_error",
                   },
                 }),
                 {
-                  status: 400,
+                  status: kind === "upstream-timeout" ? 504 : 400,
                   headers: { "Content-Type": "application/json" },
                 },
               ),

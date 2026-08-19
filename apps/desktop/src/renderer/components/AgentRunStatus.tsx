@@ -30,35 +30,7 @@ export function AgentRunStatus({
         <strong>{t(agentRunPhaseTitleKey(experience.phase))}</strong>
         <small>{t(agentRunPhaseDetailKey(experience.phase))}</small>
       </span>
-      <span className={styles.facts}>
-        {elapsed && <span>{elapsed}</span>}
-        {experience.totalTargetCount > 0 && (
-          <span>
-            {t("agent.realArtboardsCount", {
-              completed: experience.allocatedTargetCount,
-              total: experience.totalTargetCount,
-            })}
-          </span>
-        )}
-        {experience.verifiedTargetCount > 0 && (
-          <span>
-            {t("agent.finishedTargetsCount", {
-              completed: experience.verifiedTargetCount,
-              total: experience.totalTargetCount,
-            })}
-          </span>
-        )}
-        {experience.recoverableFailureCount > 0 && (
-          <span>
-            {t("agent.automaticCorrections", {
-              count: experience.recoverableFailureCount,
-            })}
-          </span>
-        )}
-        {experience.partialWorkPreserved && (
-          <span>{t("agent.partialWorkPreserved")}</span>
-        )}
-      </span>
+      {elapsed && <span className={styles.elapsed}>{elapsed}</span>}
     </section>
   );
 }

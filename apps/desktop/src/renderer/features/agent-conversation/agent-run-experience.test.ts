@@ -18,7 +18,6 @@ describe("Agent run experience projection", () => {
     ).toMatchObject({
       phase: "waiting-model",
       hasCanvasChanges: false,
-      recoverableFailureCount: 0,
       startedAt: now,
     });
   });
@@ -62,7 +61,6 @@ describe("Agent run experience projection", () => {
       phase: "first-content",
       hasCanvasChanges: true,
       hasEditableContent: true,
-      allocatedTargetCount: 2,
     });
   });
 
@@ -86,7 +84,7 @@ describe("Agent run experience projection", () => {
     ).toMatchObject({ phase: "reviewing", active: true });
   });
 
-  it("summarizes recoverable failures and preserves partial work on terminal failure", () => {
+  it("reports a truthful partial phase when a terminal failure follows a canvas revision", () => {
     const timeline: SessionTimelineItem[] = [
       {
         itemId: "run:run_1",
@@ -145,8 +143,6 @@ describe("Agent run experience projection", () => {
       }),
     ).toMatchObject({
       phase: "partial",
-      partialWorkPreserved: true,
-      recoverableFailureCount: 1,
       hasCanvasChanges: true,
     });
   });

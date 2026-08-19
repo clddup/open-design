@@ -10,7 +10,6 @@ import {
 } from "../../../shared/design-agent-tools";
 import type { MessageKey } from "../../../shared/i18n/messages";
 import { latestDeliveryLedger } from "./timeline-design-delivery";
-import { isRoutineRecoverableToolFailure } from "./timeline-presentation";
 
 export type AgentRunExperiencePhase =
   | "waiting-model"
@@ -32,12 +31,6 @@ export type AgentRunExperience = {
   active: boolean;
   hasCanvasChanges: boolean;
   hasEditableContent: boolean;
-  partialWorkPreserved: boolean;
-  recoverableFailureCount: number;
-  allocatedTargetCount: number;
-  verifiedTargetCount: number;
-  totalTargetCount: number;
-  activeTargetLabel?: string;
 };
 
 export function agentRunPhaseTitleKey(
@@ -98,19 +91,11 @@ export function projectAgentRunExperience(input: {
     );
   const hasCanvasChanges = allocatedTargetCount > 0 || hasRevision;
   const activeToolNames = activeTools(timelineForRun, eventsForRun);
-  const recoverableFailureCount = recoverableFailures(
-    timelineForRun,
-    eventsForRun,
-  );
-  const activeTargetLabel = delivery?.targets.find(
-    (target) => target.targetId === delivery.activeTargetId,
-  )?.label;
   const active = input.activeRunId !== null;
   const allVerified =
     targetStatuses.length > 0 && verifiedTargetCount === targetStatuses.length;
   const failed =
     Boolean(input.error) || terminal === "error" || terminal === "budget";
-  const partialWorkPreserved = !active && failed && hasCanvasChanges;
 
   let phase: AgentRunExperiencePhase;
   if (active) {
@@ -147,12 +132,6 @@ export function projectAgentRunExperience(input: {
     active,
     hasCanvasChanges,
     hasEditableContent,
-    partialWorkPreserved,
-    recoverableFailureCount,
-    allocatedTargetCount,
-    verifiedTargetCount,
-    totalTargetCount: targetStatuses.length,
-    ...(activeTargetLabel ? { activeTargetLabel } : {}),
   };
 }
 
@@ -180,26 +159,6 @@ function activeTools(
     }
   }
   return new Set(tools.values());
-}
-
-function recoverableFailures(
-  timeline: readonly SessionTimelineItem[],
-  events: readonly AgentEvent[],
-): number {
-  const failures = new Map<string, { code: string; message: string }>();
-  for (const item of timeline) {
-    if (item.type === "tool" && item.status === "failed" && item.error) {
-      failures.set(item.toolCallId, item.error);
-    }
-  }
-  for (const event of events) {
-    if (event.type === "tool.failed") {
-      failures.set(event.toolCallId, event);
-    }
-  }
-  return [...failures.values()].filter((failure) =>
-    isRoutineRecoverableToolFailure(failure.code, failure.message),
-  ).length;
 }
 
 function terminalRunState(

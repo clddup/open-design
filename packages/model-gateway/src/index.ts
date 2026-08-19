@@ -785,9 +785,9 @@ function isRetryableProviderFailureMessage(message: string): boolean {
   )?.[1];
   if (status !== undefined) {
     const value = Number(status);
-    if (value >= 400 && value < 500 && ![408, 409, 429].includes(value)) {
-      return false;
-    }
+    if (value >= 500 && value < 600) return true;
+    if ([408, 409, 425, 429].includes(value)) return true;
+    if (value >= 400 && value < 500) return false;
   }
   if (deterministicProviderFailurePattern.test(message)) return false;
   return isRetryableAssistantError({

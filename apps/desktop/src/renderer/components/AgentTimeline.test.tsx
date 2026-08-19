@@ -30,7 +30,7 @@ function deferred<T>() {
 }
 
 describe("AgentTimeline", () => {
-  it("shows trustworthy milestones with target counts as secondary facts", () => {
+  it("shows a trustworthy milestone without inferred delivery counts", () => {
     const timeline: SessionTimelineItem[] = [
       {
         itemId: "tool:capture_home",
@@ -92,9 +92,96 @@ describe("AgentTimeline", () => {
     expect(
       screen.getByText("First editable design is visible"),
     ).toBeInTheDocument();
-    expect(screen.getByText("1/2 real artboards")).toBeInTheDocument();
-    expect(screen.getByText("1/2 targets complete")).toBeInTheDocument();
+    expect(screen.queryByText(/real artboards/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/targets complete/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1\/2/)).not.toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("describes a saved page without exposing internal completion fractions", () => {
+    const timeline: SessionTimelineItem[] = [
+      {
+        itemId: "run:run_1",
+        sessionId: "conversation_1",
+        runId: "run_1",
+        sequence: 1,
+        createdAt: now,
+        updatedAt: now,
+        type: "run",
+        status: "error",
+        startedAt: now,
+        finishedAt: now,
+        stopReason: "error",
+      },
+      {
+        itemId: "tool:capture_register",
+        sessionId: "conversation_1",
+        runId: "run_1",
+        sequence: 2,
+        createdAt: now,
+        updatedAt: now,
+        type: "tool",
+        toolCallId: "capture_register",
+        toolName: "opendesign_capture_canvas",
+        input: {},
+        risk: "read",
+        status: "completed",
+        revision: 8,
+        transactionId: "transaction_register",
+        result: {
+          delivery: {
+            version: 2,
+            targets: [
+              {
+                targetId: "login",
+                label: "Login",
+                pageId: "page_1",
+                rootNodeId: "frame_login",
+                status: "verified",
+                allocatedRevision: 1,
+                draftRevision: 2,
+                captureRevision: 3,
+                reviewRevision: 4,
+                refinementRevision: 5,
+                verifiedRevision: 6,
+              },
+              {
+                targetId: "register",
+                label: "Register",
+                pageId: "page_1",
+                rootNodeId: "frame_register",
+                status: "captured",
+                allocatedRevision: 1,
+                draftRevision: 7,
+                captureRevision: 8,
+              },
+            ],
+            activeTargetId: "register",
+          },
+        },
+      },
+    ];
+
+    render(
+      <AgentTimeline
+        activeRunId={null}
+        conversationId="conversation_1"
+        conversationTitle="Product suite"
+        error="Provider request timed out"
+        events={[]}
+        onStop={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(true)}
+        timeline={timeline}
+      />,
+    );
+
+    expect(
+      screen.getByText("Page saved; later checks incomplete"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/\d+\/\d+/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/usable work preserved/i),
+    ).not.toBeInTheDocument();
   });
 
   it("does not present a previous Run delivery ledger as current progress", () => {
