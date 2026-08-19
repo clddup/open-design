@@ -11,6 +11,8 @@ Before drawing, name the subject, audience, primary job, and one visual thesis. 
 
 Commit to one signature motif that can be seen in the first meaningful slice. It may be a distinctive silhouette, spatial rule, type treatment, material behavior, data expression, or interaction surface. It must support the product rather than decorate an otherwise generic template.
 
+Derive the motif from the actual user job. If the brief is generic, do not invent a fake security system, dashboard, data stream, or brand mythology merely to create visual noise. A login screen can derive character from the transition into the product, the credential relationship, typography, spatial framing, or material behavior without pretending unsupported capabilities exist.
+
 Specify:
 
 - typography with a role and personality, not only a font size;
@@ -19,6 +21,13 @@ Specify:
 - a coherent surface/depth language;
 - the few details worth refining instead of many interchangeable effects.
 
-Avoid default AI output: centered card-on-background login screens, purple-on-white gradients, repeated same-radius cards, icon tiles above every heading, evenly distributed accent colors, placeholder dashboards, and decoration unrelated to the subject. Minimalism is valid only when proportion, typography, spacing, and material precision carry a recognizable point of view.
+Test the direction before drawing:
+
+- At a 25% thumbnail, the primary task, dominant focal area, and main action must still read in that order.
+- If brand copy and accent color were removed, composition, silhouette, typography, or material behavior should still carry a recognizable point of view.
+- The first slice should establish a dominant field, an actionable core, and at least one crafted relationship between them; a small generic card floating in unused space is not enough.
+- Microcopy, hairlines, tracking, and decorative metadata cannot carry the concept by themselves.
+
+Avoid default AI output: centered card-on-background login screens, purple-on-white gradients, repeated same-radius cards, icon tiles above every heading, evenly distributed accent colors, placeholder dashboards, and decoration unrelated to the subject. Dark backgrounds with cyan circuit lines, concentric scanner rings, HUD micro-labels, or generic “secure channel” copy are also templates unless the actual product context makes them necessary and the composition remains distinctive without them. Minimalism is valid only when proportion, typography, spacing, and material precision carry a recognizable point of view.
 
 The first real slice must already demonstrate the thesis and motif. Do not postpone all identity to a later refinement.

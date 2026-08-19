@@ -69,7 +69,8 @@ export function registerDesignWorkflowPlan(options: {
   plan: DesignPlanToolInput;
   recoverableDelivery?: DesignDeliveryLedger;
 }): DesignPlanRegistration {
-  const { existing, inspection, plan, recoverableDelivery } = options;
+  const { existing, inspection, recoverableDelivery } = options;
+  const plan = normalizePlanQualityProfiles(options.plan);
   const targets = designPlanTargets(plan);
   assertUniquePlannedNodeIds(targets);
   if (existing && sameJson(existing.plan, plan)) {
@@ -362,26 +363,33 @@ function assertMaterialTargetsRemainStable(
           `design_workflow.plan_amendment_invalid: Material UI target ${current.delivery.targetId} must retain its executable UI quality profile`,
         );
       }
-      const nextSafeIds = new Set(nextQuality.safeAreaNodeIds);
-      const removedSafeId = currentQuality.safeAreaNodeIds.find(
-        (nodeId) => !nextSafeIds.has(nodeId),
-      );
-      if (removedSafeId) {
-        throw new Error(
-          `design_workflow.plan_amendment_invalid: Material safe-area node ${removedSafeId} cannot be removed from the quality profile`,
-        );
-      }
-      const nextInteractiveIds = new Set(nextQuality.interactiveNodeIds);
-      const removedInteractiveId = currentQuality.interactiveNodeIds.find(
-        (nodeId) => !nextInteractiveIds.has(nodeId),
-      );
-      if (removedInteractiveId) {
-        throw new Error(
-          `design_workflow.plan_amendment_invalid: Material interaction target ${removedInteractiveId} cannot be removed from the quality profile`,
-        );
-      }
     }
   }
+}
+
+function normalizePlanQualityProfiles(
+  plan: DesignPlanToolInput,
+): DesignPlanToolInput {
+  return {
+    ...structuredClone(plan),
+    targets: plan.targets.map((target) => {
+      const qualityProfile = target.qualityProfile;
+      if (qualityProfile.kind !== "ui") return structuredClone(target);
+      const rootId = target.artboard.frameId;
+      return {
+        ...structuredClone(target),
+        qualityProfile: {
+          ...structuredClone(qualityProfile),
+          safeAreaNodeIds: qualityProfile.safeAreaNodeIds.filter(
+            (nodeId) => nodeId !== rootId,
+          ),
+          interactiveNodeIds: qualityProfile.interactiveNodeIds.filter(
+            (nodeId) => nodeId !== rootId,
+          ),
+        },
+      };
+    }),
+  };
 }
 
 function assertUniquePlannedNodeIds(

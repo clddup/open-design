@@ -6,7 +6,7 @@ import type {
 import {
   DESIGN_APPLY_TOOL_NAME,
   DESIGN_CAPTURE_TOOL_NAME,
-  isDesignCheckpointToolInput,
+  normalizeDesignCheckpointToolInput,
   type DesignApplyToolInput,
   type DesignCheckpointToolInput,
   type DesignVisualReviewToolInput,
@@ -56,10 +56,10 @@ export async function handleDesignCheckpointTool(
   dependencies: DesignCheckpointDependencies,
   reportProgress?: ReportProgress,
 ): Promise<TrustedToolResult> {
-  if (!isDesignCheckpointToolInput(call.input)) {
+  const input = normalizeDesignCheckpointToolInput(call.input);
+  if (!input) {
     throw new TypeError("Invalid design checkpoint tool input");
   }
-  const input: DesignCheckpointToolInput = call.input;
   if (input.action === "apply-and-capture") {
     const applied = await dependencies.apply(
       subcall(call, "apply", DESIGN_APPLY_TOOL_NAME, input.apply),

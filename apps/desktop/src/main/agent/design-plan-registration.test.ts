@@ -96,6 +96,62 @@ describe("current Design Plan amendments", () => {
     }
   });
 
+  it("drops artboard self references and lets quality sets follow current descendants", () => {
+    const initialPlan = plan();
+    const initialTarget = initialPlan.targets[0];
+    if (initialTarget.qualityProfile.kind !== "ui") {
+      throw new Error("UI quality profile required");
+    }
+    initialTarget.qualityProfile.safeAreaNodeIds = [
+      "frame_home",
+      "navigation_group",
+    ];
+    initialTarget.qualityProfile.interactiveNodeIds = [
+      "frame_home",
+      "navigation_group",
+    ];
+    const initial = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: initialPlan,
+    });
+    expect(initial.plan.targets[0]?.qualityProfile).toMatchObject({
+      safeAreaNodeIds: ["navigation_group"],
+      interactiveNodeIds: ["navigation_group"],
+    });
+
+    markVerified(initial.state.targetsById.get("target_home"));
+    const acceptedTarget = initial.plan.targets[0];
+    if (!acceptedTarget || acceptedTarget.qualityProfile.kind !== "ui") {
+      throw new Error("Accepted UI quality profile required");
+    }
+    const amended = registerDesignWorkflowPlan({
+      existing: initial.state,
+      inspection: inspectedExistingDesign(),
+      plan: {
+        ...initial.plan,
+        targets: [
+          {
+            ...acceptedTarget,
+            qualityProfile: {
+              ...acceptedTarget.qualityProfile,
+              safeAreaNodeIds: ["navigation_label"],
+              interactiveNodeIds: [],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(amended.status).toBe("amended");
+    expect(amended.plan.targets[0]?.qualityProfile).toMatchObject({
+      safeAreaNodeIds: ["navigation_label"],
+      interactiveNodeIds: [],
+    });
+    expect(amended.state.targetsById.get("target_home")?.delivery.status).toBe(
+      "drafted",
+    );
+  });
+
   it("preserves material Component identity across amendments", () => {
     const initialPlan = plan();
     initialPlan.componentStrategy = {
@@ -281,8 +337,14 @@ function review(): DesignVisualReviewToolInput {
       "material-coherence": "Color and surface decisions form one system.",
       "template-avoidance":
         "No default card grid or gradient identity appears.",
+      "glance-legibility":
+        "The primary task and action remain clear at thumbnail scale.",
+      "subject-specificity":
+        "The composition remains tied to the requested product subject.",
+      "craft-precision":
+        "Spacing and control proportions still need deliberate refinement.",
     },
-    failedCriteria: [],
+    failedCriteria: ["composition-tension", "craft-precision"],
     refinements: ["Increase primary spacing", "Reduce separator contrast"],
   };
 }

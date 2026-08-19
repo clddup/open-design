@@ -347,6 +347,10 @@ function diagnoseQualityProfile(
     ...qualityProfile.safeAreaNodeIds,
     ...qualityProfile.interactiveNodeIds,
   ])) {
+    // The delivery root defines the coordinate space; it is not foreground
+    // content. Treat legacy self references as a no-op instead of producing an
+    // impossible self-descendant failure that the Plan cannot repair.
+    if (nodeId === artboard.id) continue;
     const node = document.nodesById[nodeId];
     if (!node || !nodeDescendsFrom(document, nodeId, artboard.id)) {
       appendQualityIssue(issues, artboard.id, {

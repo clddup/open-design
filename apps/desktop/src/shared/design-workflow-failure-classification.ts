@@ -43,6 +43,11 @@ const WORKFLOW_FAILURES: Readonly<
     true,
   ),
   plan_amendment_invalid: recovery("plan-repair", "repairing-plan", true),
+  frame_resize_requires_layout_tool: recovery(
+    "layout-repair",
+    "repairing-layout",
+    true,
+  ),
   layout_quality_failed: recovery("layout-repair", "repairing-layout", true),
 };
 

@@ -132,7 +132,7 @@ import {
   normalizeDesignPageToolInput,
   isDesignVectorToolInput,
   isPageStructureAccessToolInput,
-  isDesignVisualReviewToolInput,
+  normalizeDesignVisualReviewToolInput,
   isGenerateImageToolInput,
   isExportSvgToolInput,
   isExportRasterToolInput,
@@ -1438,10 +1438,11 @@ void app.whenReady().then(async () => {
         );
       }
       if (call.toolName === DESIGN_REVIEW_TOOL_NAME) {
-        if (!isDesignVisualReviewToolInput(call.input)) {
+        const review = normalizeDesignVisualReviewToolInput(call.input);
+        if (!review) {
           throw new TypeError("Invalid visual review tool input");
         }
-        return recordVisualReview(call.input);
+        return recordVisualReview(review);
       }
       if (call.toolName === EXPORT_SVG_TOOL_NAME) {
         if (!isExportSvgToolInput(call.input)) {

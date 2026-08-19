@@ -19,7 +19,7 @@ const skills = [
   {
     id: "ui-visual-direction",
     version: 1,
-    hash: "d7113302c59c9bf92c31bb7b19b811b85e0d77b65e05ea4fd2da5b0928460072",
+    hash: "6ae3a0f3c40d9644ed25984b44ffd667fbbe83e561fb9f5ae8f0e15f939dd824",
     deliverables: ["ui"],
     phases: ["plan"],
     content: visualDirection,
@@ -27,7 +27,7 @@ const skills = [
   {
     id: "ui-ux-structure",
     version: 1,
-    hash: "e8632570c6061639aad5af485d91a1b9ea7691f1fc1b1d835777247f2f91aae6",
+    hash: "a53ec4e1537422ddf87491b5db54eaff4b46cfee8fa51fab98bd57f8bb5279ff",
     deliverables: ["ui"],
     phases: ["plan"],
     content: uxStructure,
@@ -35,7 +35,7 @@ const skills = [
   {
     id: "ui-capture-critic",
     version: 1,
-    hash: "dacdd1eaa9c0e253168ce67255dd35fad65948b13f2b782b2a4f76f188f5a99f",
+    hash: "b5f752bc336e5f93895546ea7d39ab672afba875df347502cce5262fd8a66035",
     deliverables: ["ui"],
     phases: ["review"],
     content: captureCritic,

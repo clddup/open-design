@@ -55,6 +55,12 @@ const review = {
       "The image edge, surfaces, and glow belong to one restrained material system",
     "template-avoidance":
       "The rendered design does not rely on repeated cards or decorative gradients",
+    "glance-legibility":
+      "The primary task and action remain clear at thumbnail scale.",
+    "subject-specificity":
+      "The composition remains tied to the requested product subject.",
+    "craft-precision":
+      "Spacing and control proportions still need deliberate refinement.",
   },
   failedCriteria: ["signature-motif", "composition-tension"],
   refinements: [

@@ -338,6 +338,61 @@ describe("OpenDesign Pi tool adapter", () => {
     });
   });
 
+  it("bounds oversized tool failures before publishing or journaling them", async () => {
+    const result = await runPiToolLoop({
+      gateway: new RecordingGateway(
+        new MockModelGateway([
+          {
+            blocks: [
+              {
+                id: "oversized_failure",
+                type: "tool_call",
+                toolCallId: "oversized_failure_1",
+                name: moveTool.name,
+                input: { dx: 8 },
+              },
+            ],
+            stopReason: "tool_use",
+          },
+          { blocks: [{ id: "done", type: "text", text: "Recovered" }] },
+        ]),
+      ),
+      definitions: [moveTool],
+      toolExecutor: {
+        async *execute(): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield {
+            type: "failed",
+            error: {
+              code: "invalid_tool_input",
+              message: `Validation failed\n${"x".repeat(34_870)}`,
+              retryable: false,
+              recoverable: true,
+            },
+          };
+        },
+      },
+    });
+
+    const published = result.events.find(
+      (event): event is Extract<AgentEvent, { type: "tool.failed" }> =>
+        event.type === "tool.failed",
+    );
+    expect(published?.message).toHaveLength(20_000);
+    expect(published?.message).toContain(
+      "[OpenDesign truncated oversized internal tool diagnostics]",
+    );
+    const journaled = result.store.events.find(
+      (event) => event.type === "tool.failed",
+    );
+    const journaledMessage =
+      journaled?.type === "tool.failed" &&
+      typeof (journaled.payload as { message?: unknown }).message === "string"
+        ? (journaled.payload as { message: string }).message
+        : undefined;
+    expect(journaledMessage).toHaveLength(20_000);
+  });
+
   it("rejects an invalid revision transition without advancing trusted state", async () => {
     const result = await runPiToolLoop({
       gateway: new RecordingGateway(

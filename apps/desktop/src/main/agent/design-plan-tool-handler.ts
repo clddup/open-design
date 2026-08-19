@@ -6,7 +6,7 @@ import type {
 import {
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   designPlanTargets,
-  isDesignPlanToolInput,
+  normalizeDesignPlanToolInput,
 } from "../../shared/design-agent-tools.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
@@ -20,10 +20,11 @@ export async function handleDesignPlanTool(
   signal: AbortSignal,
   reportProgress?: (message: string, progress: number) => void,
 ): Promise<TrustedToolResult> {
-  if (!isDesignPlanToolInput(call.input)) {
+  const plan = normalizeDesignPlanToolInput(call.input);
+  if (!plan) {
     throw new TypeError("Invalid design plan tool input");
   }
-  const registration = coordinator.registerDesignPlan(context, call.input);
+  const registration = coordinator.registerDesignPlan(context, plan);
   const allocation = coordinator.createDesignPlanAllocation(context.runId);
   const allocated = allocation
     ? await rendererHost.execute(

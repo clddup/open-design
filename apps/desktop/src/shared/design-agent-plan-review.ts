@@ -142,6 +142,9 @@ export const DESIGN_VISUAL_CRITERIA = [
   "typography-character",
   "material-coherence",
   "template-avoidance",
+  "glance-legibility",
+  "subject-specificity",
+  "craft-precision",
 ] as const;
 
 export type DesignVisualCriterion = (typeof DESIGN_VISUAL_CRITERIA)[number];
@@ -292,26 +295,6 @@ const DESIGN_PLAN_TARGET_SCHEMA = {
   required: [...DESIGN_PLAN_TARGET_BASE_SCHEMA.required, "qualityProfile"],
 } as const;
 
-const DESIGN_SKILL_REFS_SCHEMA = {
-  type: "array",
-  minItems: BUILTIN_UI_DESIGN_SKILL_REFS.length,
-  maxItems: BUILTIN_UI_DESIGN_SKILL_REFS.length,
-  items: {
-    oneOf: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
-      type: "object",
-      properties: {
-        id: { const: reference.id },
-        version: { const: reference.version },
-        hash: { const: reference.hash },
-      },
-      required: ["id", "version", "hash"],
-      additionalProperties: false,
-    })),
-  },
-  description:
-    "Exact ordered references to the locally bundled UI design skills. Required for UI and empty for non-UI deliverables.",
-} as const;
-
 const DESIGN_INTENT_SCHEMA = {
   type: "object",
   properties: {
@@ -356,7 +339,7 @@ const DESIGN_INTENT_SCHEMA = {
 export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Current executable delivery plan. targets must match the user's requested scope exactly. designIntent must commit to a subject-grounded visual thesis and signature motif before drawing. UI plans must cite the exact built-in skill bundle. briefFidelity preserves requested and inspected product semantics without invented capabilities, componentStrategy explicitly judges reusable semantic objects, and every target declares an executable qualityProfile.",
+    "Current executable delivery plan. targets must match the user's requested scope exactly. designIntent must commit to a subject-grounded visual thesis and signature motif before drawing. Main binds the exact locally loaded UI skill bundle. briefFidelity preserves requested and inspected product semantics without invented capabilities, componentStrategy explicitly judges reusable semantic objects, and every target declares an executable qualityProfile.",
   properties: {
     version: { const: 1 },
     deliverable: {
@@ -438,9 +421,6 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
     componentStrategy: DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA,
     briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
     designIntent: DESIGN_INTENT_SCHEMA,
-    skillRefs: {
-      oneOf: [DESIGN_SKILL_REFS_SCHEMA, { type: "array", maxItems: 0 }],
-    },
     singleRasterEvidence: {
       type: "string",
       minLength: 1,
@@ -460,7 +440,6 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
     "componentStrategy",
     "briefFidelity",
     "designIntent",
-    "skillRefs",
   ],
   additionalProperties: false,
 } as const;
@@ -468,12 +447,9 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
 export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Current concrete critique of the most recent rendered UI capture. Evaluate every non-compensating visual criterion against the active Plan and exact built-in skill references. Every field must identify what the image actually shows and refinements must be actionable edits, not generic praise.",
+    "Current concrete critique of the most recent rendered UI capture. Evaluate every non-compensating visual criterion against the active Plan and the host-bound critic revision. Every field must identify what the image actually shows and refinements must be actionable edits, not generic praise.",
   properties: {
     version: { const: 1 },
-    skillRefs: {
-      oneOf: [DESIGN_SKILL_REFS_SCHEMA, { type: "array", maxItems: 0 }],
-    },
     briefFidelity: { type: "string", minLength: 12, maxLength: 1_000 },
     distinctiveness: { type: "string", minLength: 12, maxLength: 1_000 },
     signatureMotif: { type: "string", minLength: 12, maxLength: 1_000 },
@@ -497,6 +473,7 @@ export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = {
     },
     failedCriteria: {
       type: "array",
+      minItems: 2,
       maxItems: DESIGN_VISUAL_CRITERIA.length,
       uniqueItems: true,
       items: { enum: [...DESIGN_VISUAL_CRITERIA] },
@@ -510,7 +487,6 @@ export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = {
   },
   required: [
     "version",
-    "skillRefs",
     "briefFidelity",
     "distinctiveness",
     "signatureMotif",
@@ -635,6 +611,21 @@ export function isDesignPlanToolInput(
   );
 }
 
+export function normalizeDesignPlanToolInput(
+  input: unknown,
+): DesignPlanToolInput | undefined {
+  if (!isRecord(input)) return undefined;
+  const skillRefs =
+    input.deliverable === "ui"
+      ? BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({ ...reference }))
+      : [];
+  const candidate =
+    input.skillRefs === undefined ? { ...input, skillRefs } : input;
+  return isDesignPlanToolInput(candidate)
+    ? structuredClone(candidate)
+    : undefined;
+}
+
 export function designPlanTargets(
   plan: DesignPlanToolInput,
 ): DesignPlanTarget[] {
@@ -690,6 +681,7 @@ export function isDesignVisualReviewToolInput(
     ) ||
     !exactKeys(criteria, DESIGN_VISUAL_CRITERIA) ||
     !Array.isArray(input.failedCriteria) ||
+    input.failedCriteria.length < 2 ||
     input.failedCriteria.length > DESIGN_VISUAL_CRITERIA.length ||
     !input.failedCriteria.every((criterion) =>
       DESIGN_VISUAL_CRITERIA.includes(criterion as DesignVisualCriterion),
@@ -717,6 +709,24 @@ export function isDesignVisualReviewToolInput(
     "failedCriteria",
     "refinements",
   ]);
+}
+
+export function normalizeDesignVisualReviewToolInput(
+  input: unknown,
+): DesignVisualReviewToolInput | undefined {
+  if (!isRecord(input)) return undefined;
+  const candidate =
+    input.skillRefs === undefined
+      ? {
+          ...input,
+          skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+            ...reference,
+          })),
+        }
+      : input;
+  return isDesignVisualReviewToolInput(candidate)
+    ? structuredClone(candidate)
+    : undefined;
 }
 
 export function isRasterAssetRole(value: unknown): value is RasterAssetRole {

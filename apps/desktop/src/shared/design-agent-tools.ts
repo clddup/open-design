@@ -1,7 +1,7 @@
 import { DESIGN_BOOTSTRAP_APPLY_INPUT_SCHEMA } from "./design-bootstrap-apply-schema";
 import {
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
-  isDesignFirstSliceToolInput,
+  normalizeDesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
 import {
   explainInvalidDesignApplyToolInput,
@@ -15,8 +15,8 @@ import {
 import {
   DESIGN_PLAN_TOOL_INPUT_SCHEMA,
   DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
-  isDesignPlanToolInput,
-  isDesignVisualReviewToolInput,
+  normalizeDesignPlanToolInput,
+  normalizeDesignVisualReviewToolInput,
 } from "./design-agent-plan-review";
 import { isRecord } from "./design-agent-validation";
 import {
@@ -90,7 +90,7 @@ import {
 } from "./design-agent-document-tools";
 import {
   DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
-  isDesignCheckpointToolInput,
+  normalizeDesignCheckpointToolInput,
 } from "./design-agent-checkpoint";
 import {
   explainInvalidDesignComponentToolInput,
@@ -126,6 +126,7 @@ export {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
   isDesignFirstSliceToolInput,
+  normalizeDesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
 export type {
   DesignFirstSliceElement,
@@ -157,6 +158,8 @@ export {
   designPlanTargets,
   isDesignPlanToolInput,
   isDesignVisualReviewToolInput,
+  normalizeDesignPlanToolInput,
+  normalizeDesignVisualReviewToolInput,
 } from "./design-agent-plan-review";
 export type {
   DesignDeliverable,
@@ -267,6 +270,7 @@ export type {
 export {
   DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA,
   isDesignCheckpointToolInput,
+  normalizeDesignCheckpointToolInput,
 } from "./design-agent-checkpoint";
 export type { DesignCheckpointToolInput } from "./design-agent-checkpoint";
 export * from "./design-agent-tool-names";
@@ -280,7 +284,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["new-design" as const],
     },
     description:
-      "Create a new editable design through one rollback-safe call. The current contract declares brief fidelity, structured design intent, exact built-in UI skill references, every requested artboard root and UI/graphic quality profile, plus one meaningful first-target region in 1-3 stages and at most 24 elements. Main compiles the canonical Design Plan and commits allocation plus real semantic stages through the EditorRuntime/history path. The first UI slice must visibly express its visual thesis and signature motif. Use inspected Page IDs, stable prefixed IDs, parent-local geometry, actual control hit areas and explicit font faces. Available only for a high-confidence blank new-design Run; full tools replace it after success.",
+      "Create a new editable design through one rollback-safe call. The current contract declares brief fidelity, structured design intent, every requested artboard root and UI/graphic quality profile, plus one meaningful first-target region in 1-3 stages and at most 24 elements. Main binds the exact locally loaded UI skill revisions; do not send skillRefs. Main compiles the canonical Design Plan and commits allocation plus real semantic stages through the EditorRuntime/history path. The first UI slice must visibly express its visual thesis and signature motif. Use inspected Page IDs, stable prefixed IDs, parent-local geometry, descendant foreground IDs, actual descendant control hit areas and explicit font faces; never list the delivery Frame itself as a quality node. Available only for a high-confidence blank new-design Run; full tools replace it after success.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -338,7 +342,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "plan" as const,
     },
     description:
-      "Define the current executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. UI plans cite the exact bundled skillRefs and commit designIntent to a subject, audience, primary job, visual thesis, signature motif, typography/material language, composition tension, and concrete anti-patterns before drawing; non-UI plans keep skillRefs empty. briefFidelity records required content, inspected product semantics preserved by default, prohibited unrequested additions, and explicit assumptions; visual restyling is not permission to add, remove, rename, or redefine product capabilities. Every target declares qualityProfile: UI profiles explicitly name platform, interaction mode, safe-area insets, foreground safe-area nodes and actual interaction hit-area nodes, while non-UI targets use graphic. Do not infer device insets from dimensions. componentStrategy identifies plausible reusable semantic objects and binds every occurrence to a stable target/node ID. The host verifies quality geometry, declared Component Mains, Instances, and ordinary semantic containers from the live captured document. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
+      "Define the current executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. For UI, Main binds the exact locally loaded skill revisions; do not send skillRefs. Commit designIntent to a subject, audience, primary job, visual thesis, signature motif, typography/material language, composition tension, and concrete anti-patterns before drawing. briefFidelity records required content, inspected product semantics preserved by default, prohibited unrequested additions, and explicit assumptions; visual restyling is not permission to add, remove, rename, or redefine product capabilities. Every target declares qualityProfile: UI profiles explicitly name platform, interaction mode, safe-area insets, foreground descendant safe-area nodes and actual descendant interaction hit-area nodes; never include the delivery Frame itself. Non-UI targets use graphic. Do not infer device insets from dimensions. componentStrategy identifies plausible reusable semantic objects and binds every occurrence to a stable target/node ID. The host verifies quality geometry, declared Component Mains, Instances, and ordinary semantic containers from the live captured document. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
     inputSchema: DESIGN_PLAN_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -347,7 +351,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: DESIGN_REVIEW_TOOL_NAME,
     modelDisclosure: { bootstrap: "deferred" as const },
     description:
-      "Record the current typed Visual Review for the newest unreviewed opendesign_capture_canvas result after a successful UI material write. Cite the exact built-in skillRefs; compare the capture with the latest request, briefFidelity and active designIntent; evaluate every non-compensating critic criterion, explicitly list failedCriteria, and name at least two concrete refinements. Strong color or accessibility cannot compensate for a missing visual thesis, invisible signature motif, generic composition, weak typography, incoherent material system, or template symptoms. Any fidelity or criterion failure must appear in refinements. Do not submit generic praise. The host rejects malformed reviews, baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision. This records Run review state and does not mutate the canvas.",
+      "Record the current typed Visual Review for the newest unreviewed opendesign_capture_canvas result after a successful UI material write. Main binds the exact locally loaded critic revision; do not send skillRefs. Compare the capture with the latest request, briefFidelity and active designIntent; evaluate every non-compensating critic criterion, explicitly list failedCriteria, and name at least two concrete refinements. Strong color or accessibility cannot compensate for a missing visual thesis, invisible signature motif, generic composition, weak typography, incoherent material system, or template symptoms. Any fidelity or criterion failure must appear in refinements. Do not submit generic praise. The host rejects malformed reviews, baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision. This records Run review state and does not mutate the canvas.",
     inputSchema: DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
     risk: "read" as const,
     approval: "never" as const,
@@ -590,7 +594,7 @@ export function validateDesignAgentToolInput(
   input: unknown,
 ): boolean {
   if (toolName === DESIGN_FIRST_SLICE_TOOL_NAME) {
-    return isDesignFirstSliceToolInput(input);
+    return normalizeDesignFirstSliceToolInput(input) !== undefined;
   }
   if (toolName === DESIGN_CAPABILITIES_TOOL_NAME) {
     return isRecord(input) && Object.keys(input).length === 0;
@@ -601,12 +605,14 @@ export function validateDesignAgentToolInput(
   if (toolName === DESIGN_CAPTURE_TOOL_NAME) {
     return isRecord(input) && Object.keys(input).length === 0;
   }
-  if (toolName === DESIGN_PLAN_TOOL_NAME) return isDesignPlanToolInput(input);
+  if (toolName === DESIGN_PLAN_TOOL_NAME) {
+    return normalizeDesignPlanToolInput(input) !== undefined;
+  }
   if (toolName === DESIGN_REVIEW_TOOL_NAME) {
-    return isDesignVisualReviewToolInput(input);
+    return normalizeDesignVisualReviewToolInput(input) !== undefined;
   }
   if (toolName === DESIGN_CHECKPOINT_TOOL_NAME) {
-    return isDesignCheckpointToolInput(input);
+    return normalizeDesignCheckpointToolInput(input) !== undefined;
   }
   if (toolName === READ_IMAGE_TOOL_NAME) {
     return (

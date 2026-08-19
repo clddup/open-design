@@ -15,5 +15,12 @@ Review these criteria independently:
 4. Typography character: do type choices and hierarchy carry personality while remaining readable?
 5. Material coherence: do color, imagery, shape, surface, and effects feel like one system?
 6. Template avoidance: does the result avoid generic card stacks, default purple gradients, uniform radii, weak centered composition, and ornamental noise?
+7. Glance legibility: at a 25% thumbnail, are the primary task, focal area, and main action still visible in the intended order without relying on tiny labels or hairlines?
+8. Subject specificity: if brand copy and accent color disappeared, would the composition, type, silhouette, or material still belong to this brief rather than a fashionable generic template?
+9. Craft precision: are alignment, spacing rhythm, text scale, control proportions, edge treatment, and visual balance deliberate enough for delivery rather than merely structurally valid?
 
 These criteria are non-compensating. Strong color does not excuse generic composition; good accessibility does not prove distinctiveness; a signature illustration does not excuse broken hierarchy. Mark every failed criterion explicitly and attach a concrete refinement. Do not approve with generic praise such as “looks polished” or “feels modern”.
+
+Treat dark backdrops with cyan lines, concentric scanner rings, HUD microcopy, generic security language, and a conventional form card as template symptoms unless the actual product context requires them and at least two independent visual decisions remain distinctive without those devices. Do not confuse the presence of a planned motif with the motif being original, strong, or well crafted.
+
+The first captured draft must expose at least two real failed criteria. Choose the two most consequential visual shortcomings, not two minor geometry defects. A deterministic layout warning may support a failure, but it cannot be the entire critique when the design is generic, weak at thumbnail scale, or under-crafted.

@@ -31,6 +31,8 @@ import {
   isPreparedAgentSvgExport,
   isPreparedAgentRasterExport,
   normalizeDesignApplyToolInput,
+  normalizeDesignPlanToolInput,
+  normalizeDesignVisualReviewToolInput,
   normalizeDesignPageToolInput,
   validateDesignAgentToolInput,
 } from "./design-agent-tools";
@@ -1072,8 +1074,14 @@ describe("design Agent tool contract", () => {
           "Condensed numerals add identity without noise.",
         "material-coherence": "Graphite planes and one accent form a system.",
         "template-avoidance": "The screen avoids repeated cards and gradients.",
+        "glance-legibility":
+          "The primary task and action remain clear at thumbnail scale.",
+        "subject-specificity":
+          "The composition remains tied to the requested product subject.",
+        "craft-precision":
+          "Spacing, alignment, and control proportions need deliberate polish.",
       },
-      failedCriteria: ["signature-motif"],
+      failedCriteria: ["signature-motif", "craft-precision"],
       refinements: [
         "Reduce inspector width and contrast",
         "Integrate the signal rail with the primary metric",
@@ -1100,6 +1108,15 @@ describe("design Agent tool contract", () => {
     );
     expect(JSON.stringify(planSpec?.inputSchema)).toContain(
       '"interactiveNodeIds"',
+    );
+    expect(JSON.stringify(planSpec?.inputSchema)).not.toContain('"skillRefs"');
+    const { skillRefs: _planSkillRefs, ...modelPlan } = plan;
+    expect(_planSkillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+    expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, modelPlan)).toBe(
+      true,
+    );
+    expect(normalizeDesignPlanToolInput(modelPlan)?.skillRefs).toEqual(
+      BUILTIN_UI_DESIGN_SKILL_REFS,
     );
     expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, plan)).toBe(
       true,
@@ -1205,6 +1222,14 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, review)).toBe(
       true,
     );
+    const { skillRefs: _reviewSkillRefs, ...modelReview } = review;
+    expect(_reviewSkillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+    expect(
+      validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, modelReview),
+    ).toBe(true);
+    expect(
+      normalizeDesignVisualReviewToolInput(modelReview)?.skillRefs,
+    ).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
     expect(
       validateDesignAgentToolInput(DESIGN_REVIEW_TOOL_NAME, {
         ...review,
@@ -1253,6 +1278,15 @@ describe("design Agent tool contract", () => {
         apply: checkpointApply,
       }),
     ).toBe(true);
+    const checkpointSpec = DESIGN_AGENT_TOOL_SPECS.find(
+      (tool) => tool.name === DESIGN_CHECKPOINT_TOOL_NAME,
+    );
+    expect(checkpointSpec?.inputSchema).not.toHaveProperty(
+      "additionalProperties",
+    );
+    expect(checkpointSpec?.inputSchema).toMatchObject({
+      oneOf: [{ additionalProperties: false }, { additionalProperties: false }],
+    });
     expect(
       validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
         version: 1,

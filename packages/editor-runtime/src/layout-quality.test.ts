@@ -269,6 +269,30 @@ describe("deterministic delivery layout quality", () => {
     expect(isDesignLayoutQualityReport(report)).toBe(true);
   });
 
+  it("treats a legacy artboard quality self reference as a no-op", () => {
+    const report = diagnoseDesignTargetLayout(
+      layoutDocument(),
+      "page_layout",
+      "artboard",
+      {
+        kind: "ui",
+        platform: "web",
+        interactionMode: "pointer",
+        safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 },
+        safeAreaNodeIds: ["artboard", "inside"],
+        interactiveNodeIds: [],
+      },
+    );
+
+    expect(report.checkedQualityNodeCount).toBe(1);
+    expect(
+      report.issues.some(
+        (issue) =>
+          issue.code === "quality-node-missing" && issue.nodeId === "artboard",
+      ),
+    ).toBe(false);
+  });
+
   it("accepts an Android 48dp hit area inside the declared safe area", () => {
     const document = layoutDocument();
     const artboard = document.nodesById.artboard;

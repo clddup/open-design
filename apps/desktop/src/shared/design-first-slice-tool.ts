@@ -1,4 +1,5 @@
 import {
+  BUILTIN_UI_DESIGN_SKILL_REFS,
   isBuiltinUiDesignSkillRefs,
   type BuiltinDesignSkillRef,
 } from "@opendesign/design-skills";
@@ -299,6 +300,21 @@ export function isDesignFirstSliceToolInput(
     return false;
   }
   return true;
+}
+
+export function normalizeDesignFirstSliceToolInput(
+  input: unknown,
+): DesignFirstSliceToolInput | undefined {
+  if (!isRecord(input)) return undefined;
+  const skillRefs =
+    input.deliverable === "ui"
+      ? BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({ ...reference }))
+      : [];
+  const candidate =
+    input.skillRefs === undefined ? { ...input, skillRefs } : input;
+  return isDesignFirstSliceToolInput(candidate)
+    ? structuredClone(candidate)
+    : undefined;
 }
 
 function isCompactDesignIntent(value: unknown): value is DesignIntent {

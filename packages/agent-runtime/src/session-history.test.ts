@@ -89,4 +89,45 @@ describe("Agent session history normalization", () => {
       (timeline[0]?.type === "tool" && timeline[0].error) || undefined,
     ).not.toHaveProperty("details");
   });
+
+  it("recovers a legacy oversized tool failure without discarding session history", () => {
+    const timeline = normalizeSessionHistory([
+      {
+        type: "tool",
+        itemId: "tool:call_oversized",
+        sessionId: "session_1",
+        runId: "run_1",
+        sequence: 59,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        toolCallId: "call_oversized",
+        toolName: "opendesign_design_checkpoint",
+        input: {},
+        risk: "design_write",
+        status: "failed",
+        error: {
+          code: "invalid_tool_input",
+          message: `Validation failed\n${"x".repeat(34_870)}`,
+          recoverable: true,
+        },
+      },
+    ]);
+
+    const tool = timeline[0];
+    expect(tool?.type).toBe("tool");
+    if (tool?.type !== "tool") return;
+    expect(tool.error?.message).toHaveLength(20_000);
+    expect(tool.error?.message).toContain("Validation failed");
+    expect(tool.error?.message).toContain(
+      "[OpenDesign truncated legacy tool diagnostics]",
+    );
+    expect(
+      isAgentEvent({
+        type: "session.history",
+        requestId: "history_1",
+        sessionId: "session_1",
+        timeline,
+      }),
+    ).toBe(true);
+  });
 });

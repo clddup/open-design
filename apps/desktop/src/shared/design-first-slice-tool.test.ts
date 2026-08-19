@@ -4,6 +4,7 @@ import {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
   isDesignFirstSliceToolInput,
+  normalizeDesignFirstSliceToolInput,
   type DesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
 import {
@@ -18,6 +19,7 @@ describe("compact first-slice tool", () => {
     expect(properties.firstSlice.properties.stages.maxItems).toBe(3);
     expect(JSON.stringify(properties.targets)).toContain('"safeNodeIds"');
     expect(JSON.stringify(properties.targets)).toContain('"hitNodeIds"');
+    expect(JSON.stringify(properties)).not.toContain('"skillRefs"');
     expect(
       properties.firstSlice.properties.stages.items.properties.elements
         .maxItems,
@@ -99,6 +101,16 @@ describe("compact first-slice tool", () => {
         },
       },
     ]);
+  });
+
+  it("lets Main bind skill revisions instead of requiring model hash echoing", () => {
+    const input = fixture();
+    const { skillRefs: _skillRefs, ...modelInput } = input;
+    expect(_skillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+
+    const normalized = normalizeDesignFirstSliceToolInput(modelInput);
+    expect(normalized?.skillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+    expect(normalized && isDesignFirstSliceToolInput(normalized)).toBe(true);
   });
 
   it("rejects duplicate IDs, forward parents, empty regions and a slice for a later target", () => {

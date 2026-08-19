@@ -5,7 +5,7 @@ import {
 import { DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-agent-operation-schemas";
 import {
   DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
-  isDesignVisualReviewToolInput,
+  normalizeDesignVisualReviewToolInput,
   type DesignVisualReviewToolInput,
 } from "./design-agent-plan-review";
 import { exactKeys, isRecord } from "./design-agent-validation";
@@ -48,29 +48,41 @@ export const DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA = {
       additionalProperties: false,
     },
   ],
-  additionalProperties: false,
 } as const;
 
 export function isDesignCheckpointToolInput(
   input: unknown,
 ): input is DesignCheckpointToolInput {
+  return normalizeDesignCheckpointToolInput(input) !== undefined;
+}
+
+export function normalizeDesignCheckpointToolInput(
+  input: unknown,
+): DesignCheckpointToolInput | undefined {
   if (
     !isRecord(input) ||
     input.version !== 1 ||
     (input.action !== "apply-and-capture" &&
       input.action !== "review-refine-and-capture")
   ) {
-    return false;
+    return undefined;
   }
   if (input.action === "apply-and-capture") {
-    return (
-      normalizeDesignApplyToolInput(input.apply) !== undefined &&
-      exactKeys(input, ["version", "action", "apply"])
-    );
+    const apply = normalizeDesignApplyToolInput(input.apply);
+    return apply && exactKeys(input, ["version", "action", "apply"])
+      ? { version: 1, action: "apply-and-capture", apply }
+      : undefined;
   }
-  return (
-    isDesignVisualReviewToolInput(input.review) &&
-    normalizeDesignApplyToolInput(input.refinement) !== undefined &&
+  const review = normalizeDesignVisualReviewToolInput(input.review);
+  const refinement = normalizeDesignApplyToolInput(input.refinement);
+  return review &&
+    refinement &&
     exactKeys(input, ["version", "action", "review", "refinement"])
-  );
+    ? {
+        version: 1,
+        action: "review-refine-and-capture",
+        review,
+        refinement,
+      }
+    : undefined;
 }

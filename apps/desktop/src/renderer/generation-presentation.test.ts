@@ -968,8 +968,14 @@ function generationVisualReview() {
       "typography-character": "Display and support type have distinct roles.",
       "material-coherence": "Paper, ink, and accent form one material system.",
       "template-avoidance": "The capture avoids repeated cards and gradients.",
+      "glance-legibility":
+        "The primary task and action remain clear at thumbnail scale.",
+      "subject-specificity":
+        "The composition remains tied to the requested product subject.",
+      "craft-precision":
+        "Spacing and control proportions still need deliberate refinement.",
     },
-    failedCriteria: ["composition-tension"],
+    failedCriteria: ["composition-tension", "craft-precision"],
     refinements: [
       "Increase space around the primary form",
       "Reduce secondary surface contrast",

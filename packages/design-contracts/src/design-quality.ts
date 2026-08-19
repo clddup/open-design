@@ -34,7 +34,7 @@ export function isDesignTargetQualityProfile(
     !isDesignQualityPlatform(value.platform) ||
     !["pointer", "touch", "mixed"].includes(String(value.interactionMode)) ||
     !isSafeAreaInsets(value.safeAreaInsets) ||
-    !boundedUniqueIds(safeAreaNodeIds, 1, 64) ||
+    !boundedUniqueIds(safeAreaNodeIds, 0, 64) ||
     !boundedUniqueIds(interactiveNodeIds, 0, 64) ||
     !exactKeys(value, [
       "kind",

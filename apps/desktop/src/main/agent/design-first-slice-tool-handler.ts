@@ -7,9 +7,9 @@ import {
   compileDesignFirstSliceToolInput,
   designPlanTargets,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
-  isDesignFirstSliceToolInput,
   isDesignPlanToolInput,
   normalizeDesignApplyToolInput,
+  normalizeDesignFirstSliceToolInput,
 } from "../../shared/design-agent-tools.js";
 import type { GlobalTaskCoordinator } from "./global-task-coordinator.js";
 import type { RendererDesignToolHost } from "./renderer-design-tool-host.js";
@@ -23,10 +23,11 @@ export async function handleDesignFirstSliceTool(
   signal: AbortSignal,
   reportProgress?: (message: string, progress: number) => void,
 ): Promise<TrustedToolResult> {
-  if (!isDesignFirstSliceToolInput(call.input)) {
+  const input = normalizeDesignFirstSliceToolInput(call.input);
+  if (!input) {
     throw new TypeError("Invalid compact first-slice tool input");
   }
-  const compiled = compileDesignFirstSliceToolInput(call.input);
+  const compiled = compileDesignFirstSliceToolInput(input);
   if (!isDesignPlanToolInput(compiled.plan)) {
     throw new TypeError("Compiled first-slice plan is invalid");
   }
@@ -131,8 +132,8 @@ export async function handleDesignFirstSliceTool(
         revision: allocationRevision,
       },
       firstSlice: {
-        targetId: call.input.firstSlice.targetId,
-        label: call.input.firstSlice.label,
+        targetId: input.firstSlice.targetId,
+        label: input.firstSlice.label,
         insertedNodeIds: compiled.insertedNodeIds,
         revision: applied.designRevision?.revision,
       },

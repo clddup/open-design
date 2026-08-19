@@ -171,8 +171,14 @@ const visualReview = {
       "Neutral planes and one accent form a coherent system.",
     "template-avoidance":
       "The capture avoids repeated cards and ornamental gradients.",
+    "glance-legibility":
+      "The primary task and action remain clear at thumbnail scale.",
+    "subject-specificity":
+      "The composition remains tied to the requested product subject.",
+    "craft-precision":
+      "Spacing and control proportions still need deliberate refinement.",
   },
-  failedCriteria: ["composition-tension"] as const,
+  failedCriteria: ["composition-tension", "craft-precision"] as const,
   refinements: ["Reduce inspector contrast", "Remove secondary borders"],
 };
 

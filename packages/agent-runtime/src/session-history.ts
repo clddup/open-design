@@ -30,14 +30,18 @@ function normalizeItem(item: unknown): unknown {
       ),
     };
   }
-  if (
-    item.type === "tool" &&
-    isRecord(item.error) &&
-    item.error.details !== undefined &&
-    !isAgentToolFailureDetails(item.error.details)
-  ) {
+  if (item.type === "tool" && isRecord(item.error)) {
     const error = { ...item.error };
-    delete error.details;
+    if (
+      error.details !== undefined &&
+      !isAgentToolFailureDetails(error.details)
+    ) {
+      delete error.details;
+    }
+    if (typeof error.message === "string" && error.message.length > 20_000) {
+      const suffix = "\n[OpenDesign truncated legacy tool diagnostics]";
+      error.message = `${error.message.slice(0, 20_000 - suffix.length)}${suffix}`;
+    }
     return { ...item, error };
   }
   return item;

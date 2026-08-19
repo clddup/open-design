@@ -16,6 +16,7 @@ describe("design workflow failure classification", () => {
       "repairing-components",
     ],
     ["plan_amendment_invalid", "plan-repair", "repairing-plan"],
+    ["frame_resize_requires_layout_tool", "layout-repair", "repairing-layout"],
     ["layout_quality_failed", "layout-repair", "repairing-layout"],
   ] as const)(
     "classifies %s once for Main and Timeline",

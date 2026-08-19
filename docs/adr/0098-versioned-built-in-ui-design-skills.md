@@ -7,6 +7,7 @@
 - Built-in Design Skills：`1`
 - 文档协议：不变
 - 关联：ADR-0018、ADR-0050、ADR-0072、ADR-0095、ADR-0096、ADR-0097
+- 修订：模型回抄 skill refs 与六项 critic 已由 ADR-0102 取代；Main 绑定 refs，Visual Review 扩为九项。
 
 ## 背景
 
@@ -38,13 +39,13 @@
 - 至少三个具体 `antiPatterns`；
 - `skillRefs {id, version, hash}`。
 
-UI Plan 必须精确引用内置 UI bundle；非 UI Plan 的 refs 必须为空。当前 compact first-slice v1 同时提交这些字段并编译为同一个 Plan v1，因此视觉身份不能全部推迟到首稿之后。
+内部 UI Plan 必须精确记录内置 UI bundle；非 UI Plan 的 refs 为空。按 ADR-0102，模型 schema 不再提交这些宿主已知字段，Main 在 Plan、compact first-slice 与 review 边界注入精确 refs。视觉身份仍不能全部推迟到首稿之后。
 
 Plan amendment 改变 design intent 或 skill refs 时，所有已经落地且受影响的 target 降回 drafted，并清除旧 capture/review 证明；稳定 target/Page/Frame/region/Component 身份仍按既有 amendment 规则保留。
 
 ### 单一当前 Visual Review
 
-UI Plan 的 capture 只接受 `DesignVisualReviewToolInput version: 1`。Review 必须带同一组固定 skill refs，分别给出六项像素证据，并显式列出 `failedCriteria`：
+UI Plan 的 capture 只接受 `DesignVisualReviewToolInput version: 1`。Main 为 Review 绑定同一组固定 skill refs；模型按 ADR-0102 给出九项像素证据，并显式列出 `failedCriteria`。本 ADR 最初的六项为：
 
 1. visual thesis；
 2. signature motif；
@@ -52,6 +53,8 @@ UI Plan 的 capture 只接受 `DesignVisualReviewToolInput version: 1`。Review 
 4. typography character；
 5. material coherence；
 6. template avoidance。
+
+ADR-0102 在同一 Review v1 当前契约中追加 `glance-legibility`、`subject-specificity` 与 `craft-precision`，并要求首稿至少暴露两个真实失败项。
 
 这些项不相互补偿：色彩好不能抵消构图模板化，可访问性合格不能证明独特性。Main 拒绝缺字段、skill refs 不匹配或非当前版本的 review；refinement 继续通过 canonical typed transaction 和 exact-revision capture 执行。
 

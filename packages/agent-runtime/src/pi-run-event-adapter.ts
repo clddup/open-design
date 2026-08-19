@@ -756,10 +756,11 @@ export class PiRunEventAdapter {
     },
     acknowledge?: () => void,
   ): Promise<void> {
+    const message = boundedToolFailureMessage(failure.message);
     const payload = {
       toolCallId: failure.toolCallId,
       code: failure.code,
-      message: failure.message,
+      message,
       retryable: failure.retryable,
       recoverable: failure.recoverable,
       ...(failure.details === undefined ? {} : { details: failure.details }),
@@ -802,6 +803,18 @@ export class PiRunEventAdapter {
       ...approval,
     });
   }
+}
+
+const MAX_TOOL_FAILURE_MESSAGE_LENGTH = 20_000;
+const TOOL_FAILURE_TRUNCATION_SUFFIX =
+  "\n[OpenDesign truncated oversized internal tool diagnostics]";
+
+function boundedToolFailureMessage(message: string): string {
+  if (message.length <= MAX_TOOL_FAILURE_MESSAGE_LENGTH) return message;
+  return `${message.slice(
+    0,
+    MAX_TOOL_FAILURE_MESSAGE_LENGTH - TOOL_FAILURE_TRUNCATION_SUFFIX.length,
+  )}${TOOL_FAILURE_TRUNCATION_SUFFIX}`;
 }
 
 function snapshotRequest(request: AgentRunRequest): AgentRunRequest {

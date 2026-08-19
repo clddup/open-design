@@ -7,6 +7,7 @@
 - 文档协议：不变（质量策略属于 Run/Plan，不写入 `DesignDocument`）
 - 关联：ADR-0018、ADR-0034、ADR-0050、ADR-0095
 - 修订：`interactiveNodeIds` 必须重复出现在 `safeAreaNodeIds` 的要求已由 ADR-0101 取代。
+- 修订：质量节点集合在材料写入后不得删除的限制已由 ADR-0102 取代；稳定 delivery 身份与可修订验收策略分离。
 
 ## 背景
 
@@ -61,7 +62,7 @@ Main 同时校验 report 的 document/revision/Page/Frame/profile 与当前 Plan
 
 ### Amendment 与身份
 
-Plan amendment 改变 inset、platform 或 interaction mode 会把已落地 target 重新置为 drafted。材料已经开始后，已有 safe-area 和 interactive node ID 不能删除或换名；可以新增质量节点。create target 的质量节点继续受 Run-scoped new-node prefix 约束，防止与未披露 Page 节点冲突。
+Plan amendment 改变 inset、platform、interaction mode 或质量节点集合会把已落地 target 重新置为 drafted。按 ADR-0102，`targetId/Page/artboard Frame/region` 保持稳定，而 safe-area 与 interactive 集合可以随真实后代删除、替换和修复；delivery Frame 本身不是质量节点。create target 的新质量节点继续受 Run-scoped new-node prefix 约束，防止与未披露 Page 节点冲突。
 
 ## 后果与限制
 
