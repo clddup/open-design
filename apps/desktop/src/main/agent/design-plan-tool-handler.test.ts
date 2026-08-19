@@ -1,14 +1,15 @@
 import type { ToolCallRequest } from "@opendesign/agent-runtime";
+import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import { describe, expect, it, vi } from "vitest";
 import {
   DESIGN_PLAN_TOOL_NAME,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
-  type DesignPlanToolInputV3,
+  type DesignPlanToolInput,
 } from "../../shared/design-agent-tools.js";
 import { handleDesignPlanTool } from "./design-plan-tool-handler.js";
 
-const plan: DesignPlanToolInputV3 = {
-  version: 3,
+const plan: DesignPlanToolInput = {
+  version: 1,
   deliverable: "ui",
   objective: "Design Home and Profile",
   outputMode: "editable-composition",
@@ -25,6 +26,39 @@ const plan: DesignPlanToolInputV3 = {
     effects: ["Subtle navigation shadow"],
   },
   rasterAssetRoles: [],
+  componentStrategy: {
+    summary: "No reusable semantic object is needed for this fixture.",
+    candidates: [],
+  },
+  briefFidelity: {
+    requiredContent: ["Home and Profile screens"],
+    preservedSemantics: [],
+    prohibitedAdditions: ["No unrequested product capability"],
+    assumptions: ["Use an iOS mobile viewport"],
+  },
+  designIntent: {
+    subject: "A mobile product for focused creative work",
+    audience: "Independent designers continuing time-sensitive work",
+    primaryJob: "Recognize the next task and continue it immediately",
+    visualThesis:
+      "A directional editorial field expresses momentum instead of a generic card stack.",
+    signatureMotif:
+      "One cropped signal rail connects identity, next action, and progress.",
+    typographyLanguage:
+      "Editorial display type sets pace while compact neutral text preserves clarity.",
+    colorMaterialLanguage:
+      "Tinted ink planes and one electric signal color create controlled hierarchy.",
+    compositionTension:
+      "Offset alignment and decisive scale contrast pull attention toward action.",
+    antiPatterns: [
+      "No centered card floating on a decorative background",
+      "No equal grid of same-radius feature tiles",
+      "No generic purple gradient used as the only identity",
+    ],
+  },
+  skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+    ...reference,
+  })),
 };
 
 const context = {
@@ -214,5 +248,13 @@ function target(targetId: string, label: string, frameId: string, x: number) {
     editableLayers: ["Navigation", "Content"],
     implementationSteps: ["Build navigation", "Build content"],
     validationChecks: ["Check hierarchy", "Check spacing"],
+    qualityProfile: {
+      kind: "ui" as const,
+      platform: "ios" as const,
+      interactionMode: "touch" as const,
+      safeAreaInsets: { top: 59, right: 0, bottom: 34, left: 0 },
+      safeAreaNodeIds: [`${frameId}_content`],
+      interactiveNodeIds: [],
+    },
   };
 }

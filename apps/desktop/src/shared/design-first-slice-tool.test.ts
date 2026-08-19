@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
@@ -23,7 +24,7 @@ describe("compact first-slice tool", () => {
     ).toBe(24);
   });
 
-  it("compiles all targets into Plan v6 and the first semantic slice into canonical nodes", () => {
+  it("compiles all targets into the current Plan with pinned skills and a canonical first slice", () => {
     const input = fixture();
     expect(isDesignFirstSliceToolInput(input)).toBe(true);
 
@@ -31,7 +32,14 @@ describe("compact first-slice tool", () => {
     expect(isDesignPlanToolInput(compiled.plan)).toBe(true);
     expect(isDesignApplyToolInput(compiled.apply)).toBe(true);
     expect(compiled.plan).toMatchObject({
-      version: 6,
+      version: 1,
+      skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS,
+      designIntent: {
+        visualThesis:
+          "Momentum is expressed as a directional editorial system rather than a generic mobile card stack.",
+        signatureMotif:
+          "A cropped directional panel and offset type axis create a recognizable motion cue.",
+      },
       briefFidelity: {
         requiredContent: ["Home and Profile product screens"],
         prohibitedAdditions: ["No unrequested workflow or run features"],
@@ -75,15 +83,6 @@ describe("compact first-slice tool", () => {
         },
       },
     ]);
-  });
-
-  it("keeps historical compact inputs readable as Plan v4", () => {
-    const input = fixture();
-    delete input.briefFidelity;
-    input.targets.forEach((target) => delete target.qualityProfile);
-
-    expect(isDesignFirstSliceToolInput(input)).toBe(true);
-    expect(compileDesignFirstSliceToolInput(input).plan.version).toBe(4);
   });
 
   it("rejects duplicate IDs, forward parents, empty regions and a slice for a later target", () => {
@@ -190,6 +189,29 @@ export function fixture(): DesignFirstSliceToolInput {
     version: 1,
     deliverable: "ui",
     objective: "Create Home and Profile screens",
+    designIntent: {
+      subject: "A mobile product for maintaining creative momentum",
+      audience: "Independent designers managing focused daily work",
+      primaryJob: "See the next meaningful task and continue it immediately",
+      visualThesis:
+        "Momentum is expressed as a directional editorial system rather than a generic mobile card stack.",
+      signatureMotif:
+        "A cropped directional panel and offset type axis create a recognizable motion cue.",
+      typographyLanguage:
+        "Editorial display type creates pace while compact neutral body type preserves clarity.",
+      colorMaterialLanguage:
+        "Deep ink surfaces and one electric violet signal use paper-like tonal separation.",
+      compositionTension:
+        "Offset alignment, decisive scale contrast, and cropped edges pull attention forward.",
+      antiPatterns: [
+        "No centered card floating on a decorative background",
+        "No repeated same-radius feature tiles",
+        "No generic purple gradient used as the only identity",
+      ],
+    },
+    skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+      ...reference,
+    })),
     briefFidelity: {
       requiredContent: ["Home and Profile product screens"],
       preservedSemantics: [

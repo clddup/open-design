@@ -56,7 +56,7 @@ import type { DiagnosticEvent } from "../shared/diagnostics";
 import {
   DESIGN_PLAN_TOOL_NAME,
   PAGE_STRUCTURE_ACCESS_TOOL_NAME,
-  type LegacyDesignPlanToolInput,
+  type DesignPlanToolInput,
 } from "../shared/design-agent-tools";
 
 const leaferHarness = vi.hoisted(() => ({
@@ -5251,18 +5251,7 @@ describe("App", () => {
         type: "tool.completed",
         runId: request.runId,
         toolCallId: "tool_plan_poster",
-        result: {
-          ok: true,
-          status: "accepted",
-          version: plan.version,
-          deliverable: plan.deliverable,
-          outputMode: plan.outputMode,
-          pageId: plan.pageId,
-          artboard: plan.artboard,
-          regions: plan.composition.regions,
-          editableLayers: plan.editableLayers,
-          rasterAssetRoles: plan.rasterAssetRoles,
-        },
+        result: rendererAcceptedPlanResult(plan),
       });
     });
     await waitFor(() =>
@@ -5348,18 +5337,7 @@ describe("App", () => {
         type: "tool.completed",
         runId: request.runId,
         toolCallId: "tool_plan_stop",
-        result: {
-          ok: true,
-          status: "accepted",
-          version: plan.version,
-          deliverable: plan.deliverable,
-          outputMode: plan.outputMode,
-          pageId: plan.pageId,
-          artboard: plan.artboard,
-          regions: plan.composition.regions,
-          editableLayers: plan.editableLayers,
-          rasterAssetRoles: plan.rasterAssetRoles,
-        },
+        result: rendererAcceptedPlanResult(plan),
       });
     });
     await waitFor(() =>
@@ -5745,18 +5723,7 @@ describe("App", () => {
         type: "tool.completed",
         runId: run.runId,
         toolCallId: "tool_background_plan_a",
-        result: {
-          ok: true,
-          status: "accepted",
-          version: plan.version,
-          deliverable: plan.deliverable,
-          outputMode: plan.outputMode,
-          pageId: plan.pageId,
-          artboard: plan.artboard,
-          regions: plan.composition.regions,
-          editableLayers: plan.editableLayers,
-          rasterAssetRoles: plan.rasterAssetRoles,
-        },
+        result: rendererAcceptedPlanResult(plan),
       });
     });
     await waitFor(() =>
@@ -5969,18 +5936,7 @@ describe("App", () => {
         type: "tool.completed",
         runId: run.runId,
         toolCallId: "tool_plan_capture",
-        result: {
-          ok: true,
-          status: "accepted",
-          version: plan.version,
-          deliverable: plan.deliverable,
-          outputMode: plan.outputMode,
-          pageId: plan.pageId,
-          artboard: plan.artboard,
-          regions: plan.composition.regions,
-          editableLayers: plan.editableLayers,
-          rasterAssetRoles: plan.rasterAssetRoles,
-        },
+        result: rendererAcceptedPlanResult(plan),
       });
     });
     await waitFor(() =>
@@ -6110,48 +6066,63 @@ describe("App", () => {
   });
 });
 
-function rendererGenerationPlan(): LegacyDesignPlanToolInput {
+function rendererGenerationPlan(): DesignPlanToolInput {
   return {
-    version: 2,
-    pageId: "page_welcome",
+    version: 1,
     deliverable: "poster",
     objective: "Create an editorial launch poster",
     outputMode: "editable-composition",
-    artboard: {
-      mode: "create",
-      frameId: "poster_artboard",
-      x: 1_240,
-      y: 80,
-      width: 800,
-      height: 1_000,
-    },
-    composition: {
-      direction: "Asymmetric editorial composition",
-      hierarchy: ["Hero visual", "Launch typography"],
-      regions: [
-        {
-          nodeId: "poster_hero",
-          name: "Hero visual",
-          role: "graphic",
-          x: 48,
+    targets: [
+      {
+        targetId: "poster",
+        label: "Launch poster",
+        pageId: "page_welcome",
+        objective: "Create an editorial launch poster",
+        artboard: {
+          mode: "create",
+          frameId: "poster_artboard",
+          x: 1_240,
           y: 80,
-          width: 704,
-          height: 560,
+          width: 800,
+          height: 1_000,
         },
-        {
-          nodeId: "poster_title",
-          name: "Launch typography",
-          role: "typography",
-          x: 48,
-          y: 688,
-          width: 704,
-          height: 200,
+        composition: {
+          direction: "Asymmetric editorial composition",
+          hierarchy: ["Hero visual", "Launch typography"],
+          regions: [
+            {
+              nodeId: "poster_hero",
+              name: "Hero visual",
+              role: "graphic",
+              x: 48,
+              y: 80,
+              width: 704,
+              height: 560,
+            },
+            {
+              nodeId: "poster_title",
+              name: "Launch typography",
+              role: "typography",
+              x: 48,
+              y: 688,
+              width: 704,
+              height: 200,
+            },
+          ],
+          assetIntegration:
+            "Use editable vector artwork with intentional overlap and negative space",
+          spacingRhythm: "8/16/24/48 px editorial rhythm",
         },
-      ],
-      assetIntegration:
-        "Use editable vector artwork with intentional overlap and negative space",
-      spacingRhythm: "8/16/24/48 px editorial rhythm",
-    },
+        editableLayers: ["Hero visual", "Title", "Supporting copy"],
+        implementationSteps: [
+          "Create the artboard",
+          "Build the planned regions",
+          "Refine depth and hierarchy",
+        ],
+        validationChecks: ["Check silhouette", "Check type hierarchy"],
+        qualityProfile: { kind: "graphic" },
+      },
+    ],
     visualSystem: {
       avoidances: ["No generic text slab", "No centered card stack"],
       formLanguage: "Sharp editorial geometry with one organic hero",
@@ -6161,13 +6132,49 @@ function rendererGenerationPlan(): LegacyDesignPlanToolInput {
       effects: ["Tight outer glow"],
     },
     rasterAssetRoles: [],
-    editableLayers: ["Hero visual", "Title", "Supporting copy"],
-    implementationSteps: [
-      "Create the artboard",
-      "Build the planned regions",
-      "Refine depth and hierarchy",
-    ],
-    validationChecks: ["Check silhouette", "Check type hierarchy"],
+    componentStrategy: {
+      summary: "A single poster does not need a reusable component.",
+      candidates: [],
+    },
+    briefFidelity: {
+      requiredContent: ["Editorial launch poster"],
+      preservedSemantics: [],
+      prohibitedAdditions: ["No unrequested product capability"],
+      assumptions: ["Use a portrait poster format"],
+    },
+    designIntent: {
+      subject: "An editorial poster for a focused product launch",
+      audience: "Design-aware launch viewers",
+      primaryJob: "Recognize the launch identity and message immediately",
+      visualThesis:
+        "An asymmetric editorial collision makes the launch message memorable.",
+      signatureMotif:
+        "One organic hero silhouette cuts through a rigid typographic grid.",
+      typographyLanguage:
+        "Large editorial display type contrasts with controlled supporting copy.",
+      colorMaterialLanguage:
+        "Warm paper, deep ink, and one violet signal create tactile contrast.",
+      compositionTension:
+        "Cropping, overlap, and asymmetric mass create a decisive focal path.",
+      antiPatterns: [
+        "No generic centered text slab",
+        "No repeated rounded cards",
+        "No decorative gradient without purpose",
+      ],
+    },
+    skillRefs: [],
+  };
+}
+
+function rendererAcceptedPlanResult(plan: DesignPlanToolInput) {
+  return {
+    ok: true,
+    status: "accepted",
+    version: plan.version,
+    deliverable: plan.deliverable,
+    outputMode: plan.outputMode,
+    targets: plan.targets,
+    rasterAssetRoles: plan.rasterAssetRoles,
   };
 }
 

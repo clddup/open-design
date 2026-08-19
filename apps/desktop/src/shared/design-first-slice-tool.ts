@@ -1,4 +1,8 @@
-import type { RasterAssetRole } from "./design-agent-tools";
+import {
+  isBuiltinUiDesignSkillRefs,
+  type BuiltinDesignSkillRef,
+} from "@opendesign/design-skills";
+import type { DesignIntent, RasterAssetRole } from "./design-agent-tools";
 import {
   isDesignBriefFidelity,
   type DesignBriefFidelity,
@@ -93,7 +97,9 @@ export type DesignFirstSliceToolInput = {
     | "presentation-visual"
     | "other";
   objective: string;
-  briefFidelity?: DesignBriefFidelity;
+  designIntent: DesignIntent;
+  skillRefs: BuiltinDesignSkillRef[];
+  briefFidelity: DesignBriefFidelity;
   targets: Array<{
     targetId: string;
     label: string;
@@ -108,7 +114,7 @@ export type DesignFirstSliceToolInput = {
     };
     layout: string;
     spacing: string;
-    qualityProfile?: DesignFirstSliceQualityProfile;
+    qualityProfile: DesignFirstSliceQualityProfile;
     regions: Array<{
       nodeId: string;
       name: string;
@@ -165,7 +171,16 @@ export type DesignFirstSliceToolInput = {
 export function isDesignFirstSliceToolInput(
   value: unknown,
 ): value is DesignFirstSliceToolInput {
-  if (!isRecord(value) || value.version !== 1) return false;
+  if (
+    !isRecord(value) ||
+    value.version !== 1 ||
+    !isDesignBriefFidelity(value.briefFidelity) ||
+    !isCompactDesignIntent(value.designIntent) ||
+    (value.deliverable === "ui"
+      ? !isBuiltinUiDesignSkillRefs(value.skillRefs)
+      : !Array.isArray(value.skillRefs) || value.skillRefs.length !== 0)
+  )
+    return false;
   if (
     ![
       "ui",
@@ -177,8 +192,6 @@ export function isDesignFirstSliceToolInput(
       "other",
     ].includes(String(value.deliverable)) ||
     !text(value.objective, 1, 2_000) ||
-    (value.briefFidelity !== undefined &&
-      !isDesignBriefFidelity(value.briefFidelity)) ||
     !Array.isArray(value.targets) ||
     value.targets.length < 1 ||
     value.targets.length > 32 ||
@@ -197,7 +210,9 @@ export function isDesignFirstSliceToolInput(
       "version",
       "deliverable",
       "objective",
-      ...(value.briefFidelity === undefined ? [] : ["briefFidelity"]),
+      "designIntent",
+      "skillRefs",
+      "briefFidelity",
       "targets",
       "visualSystem",
       "rasterAssetRoles",
@@ -208,15 +223,12 @@ export function isDesignFirstSliceToolInput(
     return false;
   }
   const targets = value.targets as DesignFirstSliceToolInput["targets"];
-  const qualityProfiles = targets.map((target) => target.qualityProfile);
   if (
-    qualityProfiles.some((profile) => profile !== undefined) &&
-    (qualityProfiles.some((profile) => profile === undefined) ||
-      targets.some((target) =>
-        value.deliverable === "ui"
-          ? target.qualityProfile?.kind !== "ui"
-          : target.qualityProfile?.kind !== "graphic",
-      ))
+    targets.some((target) =>
+      value.deliverable === "ui"
+        ? target.qualityProfile.kind !== "ui"
+        : target.qualityProfile.kind !== "graphic",
+    )
   ) {
     return false;
   }
@@ -289,6 +301,38 @@ export function isDesignFirstSliceToolInput(
   return true;
 }
 
+function isCompactDesignIntent(value: unknown): value is DesignIntent {
+  if (!isRecord(value)) return false;
+  const antiPatterns = value.antiPatterns;
+  return (
+    text(value.subject, 8, 500) &&
+    text(value.audience, 8, 500) &&
+    text(value.primaryJob, 8, 500) &&
+    text(value.visualThesis, 16, 1_000) &&
+    text(value.signatureMotif, 16, 1_000) &&
+    text(value.typographyLanguage, 12, 1_000) &&
+    text(value.colorMaterialLanguage, 12, 1_000) &&
+    text(value.compositionTension, 12, 1_000) &&
+    textArray(antiPatterns, 3, 12, 256) &&
+    Array.isArray(antiPatterns) &&
+    antiPatterns.every(
+      (item) => typeof item === "string" && item.trim().length >= 8,
+    ) &&
+    new Set(antiPatterns).size === antiPatterns.length &&
+    exactKeys(value, [
+      "subject",
+      "audience",
+      "primaryJob",
+      "visualThesis",
+      "signatureMotif",
+      "typographyLanguage",
+      "colorMaterialLanguage",
+      "compositionTension",
+      "antiPatterns",
+    ])
+  );
+}
+
 export function compileDesignFirstSliceToolInput(
   input: DesignFirstSliceToolInput,
 ): ReturnType<typeof compileValidatedDesignFirstSliceToolInput> {
@@ -313,11 +357,10 @@ function isTarget(value: unknown): boolean {
     !dimension(value.frame.width) ||
     !dimension(value.frame.height) ||
     !exactKeys(value.frame, ["frameId", "x", "y", "width", "height"]) ||
-    (value.qualityProfile !== undefined &&
-      !isCompactQualityProfile(value.qualityProfile, {
-        width: value.frame.width,
-        height: value.frame.height,
-      })) ||
+    !isCompactQualityProfile(value.qualityProfile, {
+      width: value.frame.width,
+      height: value.frame.height,
+    }) ||
     !Array.isArray(value.regions) ||
     value.regions.length < 1 ||
     value.regions.length > 12 ||
@@ -333,7 +376,7 @@ function isTarget(value: unknown): boolean {
     "frame",
     "layout",
     "spacing",
-    ...(value.qualityProfile === undefined ? [] : ["qualityProfile"]),
+    "qualityProfile",
     "regions",
   ]);
 }
@@ -726,7 +769,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function exactKeys(
   value: Record<string, unknown>,
-  expected: string[],
+  expected: readonly string[],
 ): boolean {
   const keys = Object.keys(value);
   return (

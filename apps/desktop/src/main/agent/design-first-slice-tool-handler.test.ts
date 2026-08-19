@@ -1,5 +1,6 @@
 import type { ToolCallRequest } from "@opendesign/agent-runtime";
 import { describe, expect, it, vi } from "vitest";
+import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_NAME,
@@ -206,6 +207,35 @@ function firstSliceInput(): DesignFirstSliceToolInput {
     version: 1,
     deliverable: "ui",
     objective: "Create a focused home screen",
+    designIntent: {
+      subject: "A mobile product home for focused creative work",
+      audience: "Independent designers continuing time-sensitive work",
+      primaryJob: "Recognize the next task and continue it immediately",
+      visualThesis:
+        "A directional editorial field expresses momentum instead of a generic mobile card stack.",
+      signatureMotif:
+        "One cropped signal rail connects identity, next action, and progress.",
+      typographyLanguage:
+        "Editorial display type sets pace while compact neutral text preserves clarity.",
+      colorMaterialLanguage:
+        "Tinted ink planes and one electric signal color create controlled hierarchy.",
+      compositionTension:
+        "Offset alignment and decisive scale contrast pull attention toward action.",
+      antiPatterns: [
+        "No centered card floating on a decorative background",
+        "No equal grid of same-radius feature tiles",
+        "No generic purple gradient used as the only identity",
+      ],
+    },
+    skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+      ...reference,
+    })),
+    briefFidelity: {
+      requiredContent: ["Focused home screen"],
+      preservedSemantics: [],
+      prohibitedAdditions: ["No unrequested product capability"],
+      assumptions: ["Use an iOS mobile viewport"],
+    },
     targets: [
       {
         targetId: "home",
@@ -221,6 +251,14 @@ function firstSliceInput(): DesignFirstSliceToolInput {
         },
         layout: "Vertical mobile composition",
         spacing: "8px base with 24px sections",
+        qualityProfile: {
+          kind: "ui",
+          platform: "ios",
+          input: "touch",
+          insets: [59, 0, 34, 0],
+          safeNodeIds: ["home_hero"],
+          hitNodeIds: [],
+        },
         regions: [
           {
             nodeId: "home_hero",

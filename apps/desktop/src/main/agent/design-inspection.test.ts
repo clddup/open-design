@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import type {
   DesignPlanTarget,
-  DesignPlanToolInputV4,
+  DesignPlanToolInput,
 } from "../../shared/design-agent-tools.js";
 import {
   assertDeliveryTargetStructure,
@@ -21,8 +22,8 @@ const profileTarget = target(
   "Profile",
 );
 
-const plan: DesignPlanToolInputV4 = {
-  version: 4,
+const plan: DesignPlanToolInput = {
+  version: 1,
   deliverable: "ui",
   objective: "Design Home and Profile with a reusable navigation identity",
   outputMode: "editable-composition",
@@ -69,6 +70,35 @@ const plan: DesignPlanToolInputV4 = {
       },
     ],
   },
+  briefFidelity: {
+    requiredContent: ["Home and Profile screens"],
+    preservedSemantics: [],
+    prohibitedAdditions: ["No unrequested product capability"],
+    assumptions: ["Use an iOS mobile viewport"],
+  },
+  designIntent: {
+    subject: "A mobile product for focused creative work",
+    audience: "Independent designers continuing time-sensitive work",
+    primaryJob: "Recognize the next task and continue it immediately",
+    visualThesis:
+      "A directional editorial field expresses momentum instead of a generic card stack.",
+    signatureMotif:
+      "One cropped signal rail connects identity, next action, and progress.",
+    typographyLanguage:
+      "Editorial display type sets pace while compact neutral text preserves clarity.",
+    colorMaterialLanguage:
+      "Tinted ink planes and one electric signal color create controlled hierarchy.",
+    compositionTension:
+      "Offset alignment and decisive scale contrast pull attention toward action.",
+    antiPatterns: [
+      "No centered card floating on a decorative background",
+      "No equal grid of same-radius feature tiles",
+      "No generic purple gradient used as the only identity",
+    ],
+  },
+  skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+    ...reference,
+  })),
 };
 
 describe("Agent design inspection component strategy", () => {
@@ -283,6 +313,14 @@ function target(
     editableLayers: ["Navigation", "Content"],
     implementationSteps: ["Build hierarchy", "Add content"],
     validationChecks: ["Check hierarchy", "Check component identity"],
+    qualityProfile: {
+      kind: "ui",
+      platform: "ios",
+      interactionMode: "touch",
+      safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 },
+      safeAreaNodeIds: [regionId],
+      interactiveNodeIds: [],
+    },
   };
 }
 

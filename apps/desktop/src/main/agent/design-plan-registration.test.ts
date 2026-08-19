@@ -1,231 +1,152 @@
+import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import { describe, expect, it } from "vitest";
 import type {
-  DesignBriefFidelity,
-  DesignPlanToolInputV4,
-  DesignPlanToolInputV5,
-  DesignPlanToolInputV6,
+  DesignPlanToolInput,
+  DesignVisualReviewToolInput,
 } from "../../shared/design-agent-tools.js";
 import {
   registerDesignWorkflowPlan,
+  type DesignDeliveryTargetState,
   type InspectedHierarchy,
 } from "./design-plan-registration.js";
 
-describe("DesignPlan v4 component decision amendments", () => {
-  it("resets affected material targets and preserves declared semantic identity", () => {
-    const inspection = inspectedExistingDesign();
-    const ordinary = existingPlan({
-      summary:
-        "Keep the unique navigation composition as an ordinary semantic group until reuse is justified.",
-      candidates: [
-        {
-          decisionId: "navigation-candidate",
-          label: "Navigation",
-          decision: "ordinary",
-          rationale:
-            "Only one occurrence is currently required and no centralized update relationship is established.",
-          occurrences: [
-            { targetId: "target_home", nodeId: "navigation_group" },
+describe("current Design Plan amendments", () => {
+  it("reopens a material target when visual intent changes and keeps stable geometry", () => {
+    const initialPlan = plan();
+    const initial = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: initialPlan,
+    });
+    markVerified(initial.state.targetsById.get("target_home"));
+    const amended = registerDesignWorkflowPlan({
+      existing: initial.state,
+      inspection: inspectedExistingDesign(),
+      plan: {
+        ...initialPlan,
+        designIntent: {
+          ...initialPlan.designIntent,
+          visualThesis:
+            "A sharper editorial signal system makes the next action immediate and unmistakable.",
+        },
+      },
+    });
+    const target = amended.state.targetsById.get("target_home");
+    expect(amended.changedTargetIds).toEqual(["target_home"]);
+    expect(target?.delivery.status).toBe("drafted");
+    expect(target?.planned.artboard.frameId).toBe("frame_home");
+    expect(target?.planned.composition.regions[0]?.nodeId).toBe(
+      "logical_content",
+    );
+    expect(target?.lastReview).toBeNull();
+  });
+
+  it("reopens a material target when the brief, quality policy, or skill refs change", () => {
+    const initialPlan = plan();
+    const initial = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: initialPlan,
+    });
+    markVerified(initial.state.targetsById.get("target_home"));
+    const qualityTarget = initialPlan.targets[0];
+    if (qualityTarget.qualityProfile.kind !== "ui") {
+      throw new Error("UI quality profile required");
+    }
+    const amendments: DesignPlanToolInput[] = [
+      {
+        ...initialPlan,
+        briefFidelity: {
+          ...initialPlan.briefFidelity,
+          requiredContent: [
+            "Existing Home navigation, primary content, and account status",
           ],
         },
-      ],
-    });
-    const initial = registerDesignWorkflowPlan({ inspection, plan: ordinary });
-    expect(initial.state.targetsById.get("target_home")?.delivery.status).toBe(
-      "drafted",
-    );
+      },
+      {
+        ...initialPlan,
+        targets: [
+          {
+            ...qualityTarget,
+            qualityProfile: {
+              ...qualityTarget.qualityProfile,
+              safeAreaInsets: {
+                ...qualityTarget.qualityProfile.safeAreaInsets,
+                top: 44,
+              },
+            },
+          },
+        ],
+      },
+      {
+        ...initialPlan,
+        skillRefs: initialPlan.skillRefs.map((reference, index) =>
+          index === 0 ? { ...reference, hash: "stale" } : reference,
+        ),
+      },
+    ];
+    for (const amendedPlan of amendments) {
+      const amended = registerDesignWorkflowPlan({
+        existing: initial.state,
+        inspection: inspectedExistingDesign(),
+        plan: amendedPlan,
+      });
+      expect(amended.changedTargetIds).toEqual(["target_home"]);
+      expect(
+        amended.state.targetsById.get("target_home")?.delivery.status,
+      ).toBe("drafted");
+    }
+  });
 
-    const component = existingPlan({
-      summary:
-        "Promote the stable navigation identity to a reusable component before adding linked screen instances.",
+  it("preserves material Component identity across amendments", () => {
+    const initialPlan = plan();
+    initialPlan.componentStrategy = {
+      summary: "Use one stable linked navigation identity.",
       candidates: [
         {
           decisionId: "navigation-candidate",
           label: "Navigation",
           decision: "component",
           rationale:
-            "The navigation now has a stable identity and centralized updates are required for later screens.",
+            "The navigation has one durable identity and centralized update value.",
           componentId: "component_navigation",
           main: {
-            mode: "create",
+            mode: "existing",
             targetId: "target_home",
             nodeId: "navigation_group",
           },
           instances: [],
         },
       ],
+    };
+    const initial = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: initialPlan,
     });
-    const amended = registerDesignWorkflowPlan({
-      existing: initial.state,
-      inspection,
-      plan: component,
-    });
-    expect(amended.status).toBe("amended");
-    expect(amended.changedTargetIds).toEqual(["target_home"]);
-    expect(amended.state.targetsById.get("target_home")?.delivery.status).toBe(
-      "drafted",
-    );
-
+    markVerified(initial.state.targetsById.get("target_home"));
+    const candidate = initialPlan.componentStrategy.candidates[0];
+    if (candidate.decision !== "component") {
+      throw new Error("Navigation candidate must be a component");
+    }
     expect(() =>
       registerDesignWorkflowPlan({
         existing: initial.state,
-        inspection,
-        plan: existingPlan({
-          summary:
-            "No reusable semantic candidates remain after revising the current design direction.",
-          candidates: [],
-        }),
-      }),
-    ).toThrow(/plan_amendment_invalid.*navigation_group/i);
-
-    expect(() =>
-      registerDesignWorkflowPlan({
-        existing: amended.state,
-        inspection,
+        inspection: inspectedExistingDesign(),
         plan: {
-          ...component,
+          ...initialPlan,
           componentStrategy: {
-            ...component.componentStrategy,
+            ...initialPlan.componentStrategy,
             candidates: [
-              {
-                ...component.componentStrategy.candidates[0],
-                componentId: "component_navigation_replacement",
-              },
+              { ...candidate, componentId: "component_navigation_replacement" },
             ],
           },
-        } as DesignPlanToolInputV4,
+        },
       }),
     ).toThrow(/preserve its Main\/Instance role and component ID/i);
   });
 });
 
-describe("DesignPlan v5 brief fidelity amendments", () => {
-  it("reopens material targets without changing stable target geometry", () => {
-    const inspection = inspectedExistingDesign();
-    const initialPlan = existingPlanV5({
-      requiredContent: ["Existing Home navigation and primary content"],
-      preservedSemantics: ["Navigation labels and destinations"],
-      prohibitedAdditions: ["No unrequested workflow controls"],
-      assumptions: [],
-    });
-    const initial = registerDesignWorkflowPlan({
-      inspection,
-      plan: initialPlan,
-    });
-    const target = initial.state.targetsById.get("target_home");
-    expect(target).toBeDefined();
-    if (!target) return;
-    target.delivery = {
-      ...target.delivery,
-      status: "verified",
-      captureRevision: 7,
-      reviewRevision: 7,
-      refinementRevision: 7,
-      verifiedRevision: 7,
-    };
-    target.captureCount = 2;
-    target.lastCaptureRevision = 7;
-    target.lastReview = {
-      briefFidelity:
-        "The rendered Home preserves its navigation meaning and adds no workflow controls",
-      composition:
-        "The main content remains balanced within the existing frame",
-      hierarchy:
-        "Navigation and primary content retain distinct visual priority",
-      typography:
-        "Existing product labels remain legible and semantically unchanged",
-      assetIntegration: "No new assets alter the requested product meaning",
-      formAndSurface:
-        "The visual refresh preserves the product surface hierarchy",
-      effects:
-        "Effects remain restrained and do not imply new interaction states",
-      refinements: [
-        "Increase primary content spacing",
-        "Reduce secondary separator contrast",
-      ],
-    };
-    target.reviewedCaptureCount = 1;
-    target.reviewedCaptureRevision = 7;
-
-    const amendedPlan = existingPlanV5({
-      ...initialPlan.briefFidelity,
-      requiredContent: [
-        "Existing Home navigation, primary content, and account status",
-      ],
-    });
-    const amended = registerDesignWorkflowPlan({
-      existing: initial.state,
-      inspection,
-      plan: amendedPlan,
-    });
-    const amendedTarget = amended.state.targetsById.get("target_home");
-
-    expect(amended.changedTargetIds).toEqual(["target_home"]);
-    expect(amendedTarget?.delivery.status).toBe("drafted");
-    expect(amendedTarget?.planned.artboard.frameId).toBe("frame_home");
-    expect(amendedTarget?.planned.composition.regions[0]?.nodeId).toBe(
-      "logical_content",
-    );
-    expect(amendedTarget?.captureCount).toBe(0);
-    expect(amendedTarget?.lastCaptureRevision).toBeNull();
-    expect(amendedTarget?.lastReview).toBeNull();
-    expect(amendedTarget?.reviewedCaptureCount).toBe(0);
-  });
-});
-
-describe("DesignPlan v6 quality profile amendments", () => {
-  it("reopens changed policy while preserving material quality node identities", () => {
-    const inspection = inspectedExistingDesign();
-    const qualityProfile: NonNullable<
-      DesignPlanToolInputV6["targets"][number]["qualityProfile"]
-    > = {
-      kind: "ui",
-      platform: "ios",
-      interactionMode: "touch",
-      safeAreaInsets: { top: 0, right: 0, bottom: 34, left: 0 },
-      safeAreaNodeIds: ["navigation_group"],
-      interactiveNodeIds: ["navigation_group"],
-    };
-    const initialPlan = existingPlanV6(qualityProfile);
-    const initial = registerDesignWorkflowPlan({
-      inspection,
-      plan: initialPlan,
-    });
-
-    const amended = registerDesignWorkflowPlan({
-      existing: initial.state,
-      inspection,
-      plan: existingPlanV6({
-        ...qualityProfile,
-        safeAreaInsets: { top: 44, right: 0, bottom: 34, left: 0 },
-      }),
-    });
-    expect(amended.changedTargetIds).toEqual(["target_home"]);
-    expect(amended.state.targetsById.get("target_home")?.delivery.status).toBe(
-      "drafted",
-    );
-
-    expect(() =>
-      registerDesignWorkflowPlan({
-        existing: initial.state,
-        inspection,
-        plan: existingPlanV6({
-          kind: "ui",
-          platform: "ios",
-          interactionMode: "touch",
-          safeAreaInsets: { top: 0, right: 0, bottom: 34, left: 0 },
-          safeAreaNodeIds: ["navigation_label"],
-          interactiveNodeIds: [],
-        }),
-      }),
-    ).toThrow(/safe-area node navigation_group cannot be removed/i);
-  });
-});
-
-function existingPlan(
-  componentStrategy: DesignPlanToolInputV4["componentStrategy"],
-): DesignPlanToolInputV4 {
+function plan(): DesignPlanToolInput {
   return {
-    version: 4,
+    version: 1,
     deliverable: "ui",
     objective: "Refine the existing Home screen",
     outputMode: "editable-composition",
@@ -263,6 +184,14 @@ function existingPlan(
         editableLayers: ["Navigation", "Content"],
         implementationSteps: ["Refine hierarchy", "Verify component intent"],
         validationChecks: ["Check hierarchy", "Check component identity"],
+        qualityProfile: {
+          kind: "ui",
+          platform: "ios",
+          interactionMode: "touch",
+          safeAreaInsets: { top: 0, right: 0, bottom: 34, left: 0 },
+          safeAreaNodeIds: ["navigation_group"],
+          interactiveNodeIds: ["navigation_group"],
+        },
       },
     ],
     visualSystem: {
@@ -274,45 +203,98 @@ function existingPlan(
       effects: ["Subtle navigation separator"],
     },
     rasterAssetRoles: [],
-    componentStrategy,
-  };
-}
-
-function existingPlanV5(
-  briefFidelity: DesignBriefFidelity,
-): DesignPlanToolInputV5 {
-  return {
-    ...existingPlan({
-      summary:
-        "No reusable semantic object is justified by this single existing screen refinement.",
+    componentStrategy: {
+      summary: "No reusable semantic object is justified in this fixture.",
       candidates: [],
-    }),
-    version: 5,
-    briefFidelity,
+    },
+    briefFidelity: {
+      requiredContent: ["Existing Home navigation and primary content"],
+      preservedSemantics: ["Navigation labels and destinations"],
+      prohibitedAdditions: ["No unrequested workflow controls"],
+      assumptions: [],
+    },
+    designIntent: {
+      subject: "An existing mobile product home for focused creative work",
+      audience: "Independent designers continuing time-sensitive work",
+      primaryJob: "Recognize the next task and continue it immediately",
+      visualThesis:
+        "A directional editorial field expresses momentum instead of a generic card stack.",
+      signatureMotif:
+        "One cropped signal rail connects identity, next action, and progress.",
+      typographyLanguage:
+        "Editorial display type sets pace while compact neutral text preserves clarity.",
+      colorMaterialLanguage:
+        "Tinted ink planes and one electric signal color create controlled hierarchy.",
+      compositionTension:
+        "Offset alignment and decisive scale contrast pull attention toward action.",
+      antiPatterns: [
+        "No centered card floating on a decorative background",
+        "No equal grid of same-radius feature tiles",
+        "No generic purple gradient used as the only identity",
+      ],
+    },
+    skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+      ...reference,
+    })),
   };
 }
 
-function existingPlanV6(
-  qualityProfile: NonNullable<
-    DesignPlanToolInputV6["targets"][number]["qualityProfile"]
-  >,
-): DesignPlanToolInputV6 {
-  const plan = existingPlanV5({
-    requiredContent: ["Existing Home navigation and primary content"],
-    preservedSemantics: ["Navigation labels and destinations"],
-    prohibitedAdditions: ["No unrequested workflow controls"],
-    assumptions: [],
-  });
+function markVerified(target: DesignDeliveryTargetState | undefined): void {
+  if (!target) throw new Error("Home target is missing");
+  target.delivery = {
+    ...target.delivery,
+    status: "verified",
+    captureRevision: 7,
+    reviewRevision: 7,
+    refinementRevision: 7,
+    verifiedRevision: 7,
+  };
+  target.lastReview = review();
+  target.lastCaptureRevision = 7;
+  target.captureCount = 2;
+  target.reviewedCaptureCount = 1;
+  target.reviewedCaptureRevision = 7;
+}
+
+function review(): DesignVisualReviewToolInput {
   return {
-    ...plan,
-    version: 6,
-    targets: plan.targets.map((target) => ({ ...target, qualityProfile })),
+    version: 1,
+    skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+      ...reference,
+    })),
+    briefFidelity: "The capture preserves the requested product semantics.",
+    distinctiveness: "The signal field is recognizable beyond a generic UI.",
+    signatureMotif:
+      "The signal rail remains visible across the main hierarchy.",
+    composition: "The primary content has deliberate visual priority.",
+    hierarchy: "Navigation and content retain distinct visual roles.",
+    typography: "Display and body roles are legible and differentiated.",
+    assetIntegration: "Native layers form one coherent editable composition.",
+    formAndSurface: "Surface hierarchy is restrained and intentional.",
+    effects: "Effects support selection without decorative noise.",
+    antiTemplate: "The design avoids repeated cards and ornamental gradients.",
+    criteria: {
+      "visual-thesis": "The directional editorial thesis is visible.",
+      "signature-motif": "The signal rail is visibly integrated.",
+      "composition-tension": "Offset alignment creates one focal path.",
+      "typography-character": "Type roles add character while staying clear.",
+      "material-coherence": "Color and surface decisions form one system.",
+      "template-avoidance":
+        "No default card grid or gradient identity appears.",
+    },
+    failedCriteria: [],
+    refinements: ["Increase primary spacing", "Reduce separator contrast"],
   };
 }
 
 function inspectedExistingDesign(): InspectedHierarchy {
   return {
-    componentsById: new Map(),
+    componentsById: new Map([
+      [
+        "component_navigation",
+        { id: "component_navigation", rootNodeId: "navigation_group" },
+      ],
+    ]),
     documentId: "document_1",
     nodesById: new Map([
       [
@@ -332,7 +314,7 @@ function inspectedExistingDesign(): InspectedHierarchy {
         "navigation_group",
         {
           childIds: ["navigation_label"],
-          componentId: null,
+          componentId: "component_navigation",
           id: "navigation_group",
           kind: "group",
           locked: false,

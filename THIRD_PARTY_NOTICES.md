@@ -48,6 +48,8 @@ Before distribution, generate a machine-readable inventory from the lockfile and
 
 Project documentation mentions third-party products and projects as architectural references for Agent, editor, and security design. A reference does not mean source code is included. If code or other copyrightable material from a reference project is introduced later, add the exact project, source revision, license, copyright notice, modification note, and required license text before distribution.
 
+The built-in UI design methods in `@opendesign/design-skills` were informed by public design-agent research, then rewritten for OpenDesign's typed design tools and transaction model without vendoring upstream source or executing upstream scripts: Anthropic `frontend-design` at `0a64e398ec6bb34a494f0c347e8ccae53a862f8e` (Apache-2.0), Impeccable at `f88b2837a7d7c3182e46307bbbb091a1ed547571` (Apache-2.0), Vercel Web Interface Guidelines at `e3d624baaf29dc1fc645aff3e38f03e564d2d6b1` (MIT), and Huey frontend-agent-skills at `2841c079dd8a9c634882227194dc42e25227710d` (MIT). These are fixed research references, not runtime dependencies or bundled third-party Skill packages. See ADR-0098 for the selection and boundary decision.
+
 ## Release requirements
 
 Before producing a distributable build:

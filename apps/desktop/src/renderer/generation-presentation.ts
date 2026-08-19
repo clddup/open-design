@@ -373,10 +373,7 @@ export function generationSkeletonFromAcceptedPlan(
     ? actualArtboard.transform
     : [1, 0, 0, 1, artboard.x, artboard.y];
   return {
-    id:
-      accepted.plan.version === 2
-        ? accepted.id
-        : `${accepted.id}:${target.targetId}`,
+    id: `${accepted.id}:${target.targetId}`,
     artboard: {
       frameId: artboard.frameId,
       height: useActualArtboard ? actualArtboard.size.height : artboard.height,
@@ -614,14 +611,7 @@ function acceptedGenerationPlan(
   if (sameJson(value.targets, designPlanTargets(authoritative))) {
     return structuredClone(authoritative);
   }
-  return plan.version === 2 &&
-    authoritative.version === 2 &&
-    value.pageId === authoritative.pageId &&
-    sameJson(value.artboard, authoritative.artboard) &&
-    sameJson(value.regions, authoritative.composition.regions) &&
-    sameJson(value.editableLayers, authoritative.editableLayers)
-    ? structuredClone(authoritative)
-    : undefined;
+  return undefined;
 }
 
 function generationRegionFulfilled(

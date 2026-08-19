@@ -24,10 +24,15 @@
   box-shadow: none;
 }
 
-.root[data-phase="failed"] .indicator,
-.root[data-phase="partial"] .indicator {
+.root[data-phase="failed"] .indicator {
   border-color: var(--ui-danger);
   background: var(--ui-danger);
+  box-shadow: none;
+}
+
+.root[data-phase="partial"] .indicator {
+  border-color: var(--ui-warning);
+  background: var(--ui-warning);
   box-shadow: none;
 }
 

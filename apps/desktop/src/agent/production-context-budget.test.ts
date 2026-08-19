@@ -142,7 +142,7 @@ describe("production Agent context budget", () => {
       expect(
         OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length +
           JSON.stringify(gateway.requests[0]?.tools).length,
-      ).toBeLessThan(20_000);
+      ).toBeLessThan(30_000);
       expect(gateway.requests[0]?.tools).not.toContainEqual(
         expect.objectContaining({ name: GENERATE_IMAGE_TOOL_NAME }),
       );

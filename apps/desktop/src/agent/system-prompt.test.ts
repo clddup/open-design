@@ -9,6 +9,10 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "opendesign_generate_first_slice",
     );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "ui-visual-direction",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("current contract");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("briefFidelity");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "allocate all stable Frame roots now",
@@ -22,7 +26,7 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "Do not claim completion after the first slice",
     );
-    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length).toBeLessThan(10_000);
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length).toBeLessThan(16_000);
   });
 
   it("fixes the product role to visual design instead of coding or files", () => {
@@ -77,7 +81,13 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "call opendesign_define_design_plan",
     );
-    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("Submit version 6");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "Submit the current contract",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "current typed Visual Review",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("signature motif");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "actual hit-area node IDs",
     );

@@ -1,0 +1,19 @@
+---
+name: ui-capture-critic
+description: Critique an exact-revision UI capture for distinctiveness, composition, typography, material coherence, and template symptoms.
+---
+
+# UI capture critic
+
+Use this skill only for `deliverable=ui` and only after a trusted capture exists. Judge pixels and the active Plan together; structure alone is not visual proof.
+
+Review these criteria independently:
+
+1. Visual thesis: can the intended subject and point of view be inferred from the rendered result?
+2. Signature motif: is the planned memorable device visible, integrated, and strong enough to survive at a glance?
+3. Composition tension: do scale, balance, negative space, density, overlap, or asymmetry create deliberate focus rather than a default template?
+4. Typography character: do type choices and hierarchy carry personality while remaining readable?
+5. Material coherence: do color, imagery, shape, surface, and effects feel like one system?
+6. Template avoidance: does the result avoid generic card stacks, default purple gradients, uniform radii, weak centered composition, and ornamental noise?
+
+These criteria are non-compensating. Strong color does not excuse generic composition; good accessibility does not prove distinctiveness; a signature illustration does not excuse broken hierarchy. Mark every failed criterion explicitly and attach a concrete refinement. Do not approve with generic praise such as “looks polished” or “feels modern”.

@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
-  type LegacyDesignPlanToolInput,
+  type DesignPlanToolInput,
 } from "../shared/design-agent-tools";
 import {
   EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
@@ -23,45 +23,57 @@ import {
 } from "./generation-presentation";
 
 const generationPlan = {
-  version: 2,
-  pageId: "page_welcome",
+  version: 1,
   deliverable: "poster",
   objective: "Create an editorial launch poster",
   outputMode: "editable-composition",
-  artboard: {
-    mode: "create",
-    frameId: "poster_artboard",
-    x: 1_240,
-    y: 80,
-    width: 800,
-    height: 1_000,
-  },
-  composition: {
-    direction: "Asymmetric editorial composition",
-    hierarchy: ["Hero visual", "Launch typography"],
-    regions: [
-      {
-        nodeId: "poster_hero",
-        name: "Hero visual",
-        role: "graphic",
-        x: 48,
+  targets: [
+    {
+      targetId: "poster",
+      label: "Launch poster",
+      pageId: "page_welcome",
+      objective: "Create an editorial launch poster",
+      artboard: {
+        mode: "create",
+        frameId: "poster_artboard",
+        x: 1_240,
         y: 80,
-        width: 704,
-        height: 560,
+        width: 800,
+        height: 1_000,
       },
-      {
-        nodeId: "poster_title",
-        name: "Launch typography",
-        role: "typography",
-        x: 48,
-        y: 688,
-        width: 704,
-        height: 200,
+      composition: {
+        direction: "Asymmetric editorial composition",
+        hierarchy: ["Hero visual", "Launch typography"],
+        regions: [
+          {
+            nodeId: "poster_hero",
+            name: "Hero visual",
+            role: "graphic",
+            x: 48,
+            y: 80,
+            width: 704,
+            height: 560,
+          },
+          {
+            nodeId: "poster_title",
+            name: "Launch typography",
+            role: "typography",
+            x: 48,
+            y: 688,
+            width: 704,
+            height: 200,
+          },
+        ],
+        assetIntegration:
+          "Use editable vector artwork with intentional overlap",
+        spacingRhythm: "8/16/24/48 px editorial rhythm",
       },
-    ],
-    assetIntegration: "Use editable vector artwork with intentional overlap",
-    spacingRhythm: "8/16/24/48 px editorial rhythm",
-  },
+      editableLayers: ["Hero visual", "Title", "Supporting copy"],
+      implementationSteps: ["Create artboard", "Build regions", "Refine depth"],
+      validationChecks: ["Check silhouette", "Check type hierarchy"],
+      qualityProfile: { kind: "graphic" },
+    },
+  ],
   visualSystem: {
     avoidances: ["No generic text slab", "No centered card stack"],
     formLanguage: "Sharp editorial geometry with one organic hero",
@@ -71,10 +83,39 @@ const generationPlan = {
     effects: ["Tight outer glow"],
   },
   rasterAssetRoles: [],
-  editableLayers: ["Hero visual", "Title", "Supporting copy"],
-  implementationSteps: ["Create artboard", "Build regions", "Refine depth"],
-  validationChecks: ["Check silhouette", "Check type hierarchy"],
-} satisfies LegacyDesignPlanToolInput;
+  componentStrategy: {
+    summary: "No reusable semantic object is needed for one poster.",
+    candidates: [],
+  },
+  briefFidelity: {
+    requiredContent: ["Editorial launch poster"],
+    preservedSemantics: [],
+    prohibitedAdditions: ["No unrequested product capability"],
+    assumptions: ["Use a portrait poster format"],
+  },
+  designIntent: {
+    subject: "An editorial poster for a focused product launch",
+    audience: "Design-aware viewers encountering the launch campaign",
+    primaryJob: "Recognize the launch identity and key message immediately",
+    visualThesis:
+      "An asymmetric editorial collision turns the launch message into a memorable visual event.",
+    signatureMotif:
+      "One organic hero silhouette cuts through a rigid typographic grid.",
+    typographyLanguage:
+      "Large editorial display type contrasts with tightly controlled supporting copy.",
+    colorMaterialLanguage:
+      "Warm paper tones, deep ink, and one violet signal create tactile contrast.",
+    compositionTension:
+      "Cropping, overlap, and asymmetric mass create a decisive focal path.",
+    antiPatterns: [
+      "No generic centered text slab",
+      "No repeated rounded card containers",
+      "No decorative gradient without narrative purpose",
+    ],
+  },
+  skillRefs: [],
+} satisfies DesignPlanToolInput;
+const generationTarget = generationPlan.targets[0];
 
 describe("Renderer Agent generation presentation", () => {
   it("derives parent-first reveal order from committed Agent additions", () => {
@@ -318,13 +359,16 @@ describe("Renderer typed plan skeleton presentation", () => {
 
   it("replaces the visible skeleton with the authoritative amended plan", () => {
     const requestedPlan = structuredClone(generationPlan);
-    const amendedPlan: LegacyDesignPlanToolInput = {
+    const amendedPlan: DesignPlanToolInput = {
       ...structuredClone(generationPlan),
       objective: "Create a stronger editorial launch poster",
-      composition: {
-        ...structuredClone(generationPlan.composition),
-        direction: "Asymmetric editorial composition with stronger overlap",
-      },
+      targets: generationPlan.targets.map((target) => ({
+        ...structuredClone(target),
+        composition: {
+          ...structuredClone(target.composition),
+          direction: "Asymmetric editorial composition with stronger overlap",
+        },
+      })),
     };
     const requested = projectGenerationPlanPresentationEvent(
       EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
@@ -345,7 +389,7 @@ describe("Renderer typed plan skeleton presentation", () => {
         ...acceptedPlanResult(amendedPlan),
         status: "amended",
         planRevision: 2,
-        changedTargetIds: [amendedPlan.artboard.frameId],
+        changedTargetIds: [amendedPlan.targets[0].artboard.frameId],
         plan: amendedPlan,
       },
     });
@@ -363,7 +407,7 @@ describe("Renderer typed plan skeleton presentation", () => {
         runId: "run_bad",
         toolCallId: "tool_bad",
         toolName: DESIGN_PLAN_TOOL_NAME,
-        input: { ...generationPlan, version: 1 },
+        input: { ...generationPlan, version: 7 },
         risk: "read",
       },
     );
@@ -386,7 +430,10 @@ describe("Renderer typed plan skeleton presentation", () => {
       toolCallId: "tool_bad",
       result: {
         ...acceptedPlanResult(generationPlan),
-        pageId: "page_other",
+        targets: generationPlan.targets.map((target) => ({
+          ...target,
+          pageId: "page_other",
+        })),
       },
     });
     expect(mismatched.acceptedByRunId.run_bad).toBeUndefined();
@@ -505,7 +552,7 @@ describe("Renderer typed plan skeleton presentation", () => {
         "page_welcome",
       ),
     ).toEqual({
-      id: accepted.id,
+      id: `${accepted.id}:poster`,
       artboard: {
         frameId: "poster_artboard",
         height: 1_000,
@@ -513,7 +560,7 @@ describe("Renderer typed plan skeleton presentation", () => {
         transform: [1, 0, 0, 1, 1_240, 80],
         width: 800,
       },
-      regions: generationPlan.composition.regions.map((region) => ({
+      regions: generationTarget.composition.regions.map((region) => ({
         height: region.height,
         id: region.nodeId,
         name: region.name,
@@ -655,7 +702,10 @@ describe("Renderer typed plan skeleton presentation", () => {
       id: "run_existing:tool_plan",
       plan: {
         ...generationPlan,
-        artboard: { ...generationPlan.artboard, mode: "existing" as const },
+        targets: generationPlan.targets.map((target) => ({
+          ...target,
+          artboard: { ...target.artboard, mode: "existing" as const },
+        })),
       },
       runId: "run_existing",
       toolCallId: "tool_plan",
@@ -782,22 +832,7 @@ describe("Renderer typed plan skeleton presentation", () => {
         input: {
           version: 1,
           action: "review-refine-and-capture",
-          review: {
-            briefFidelity:
-              "The rendered result preserves the requested content",
-            composition:
-              "The primary form needs more surrounding negative space",
-            hierarchy: "Secondary content competes with the intended action",
-            typography: "Supporting type needs a quieter visual rhythm",
-            assetIntegration:
-              "The image edge needs a clearer title relationship",
-            formAndSurface: "The foreground surface is currently too heavy",
-            effects: "The glow needs a tighter radius and lower opacity",
-            refinements: [
-              "Increase space around the primary form",
-              "Reduce secondary surface contrast",
-            ],
-          },
+          review: generationVisualReview(),
           refinement: {
             label: "Remove obsolete badge",
             commands: [
@@ -855,7 +890,10 @@ it("treats existing-artboard regions as logical review areas instead of physical
     id: "run_existing:tool_plan",
     plan: {
       ...generationPlan,
-      artboard: { ...generationPlan.artboard, mode: "existing" as const },
+      targets: generationPlan.targets.map((target) => ({
+        ...target,
+        artboard: { ...target.artboard, mode: "existing" as const },
+      })),
     },
     runId: "run_existing",
     toolCallId: "tool_plan",
@@ -893,18 +931,49 @@ function acceptPlanPresentation(runId: string, toolCallId: string) {
   });
 }
 
-function acceptedPlanResult(plan: LegacyDesignPlanToolInput) {
+function acceptedPlanResult(plan: DesignPlanToolInput) {
   return {
     ok: true,
     status: "accepted",
     version: plan.version,
     deliverable: plan.deliverable,
     outputMode: plan.outputMode,
-    pageId: plan.pageId,
-    artboard: plan.artboard,
-    regions: plan.composition.regions,
-    editableLayers: plan.editableLayers,
+    targets: plan.targets,
     rasterAssetRoles: plan.rasterAssetRoles,
+  };
+}
+
+function generationVisualReview() {
+  return {
+    version: 1,
+    skillRefs: [],
+    briefFidelity:
+      "The rendered result preserves the requested content and product meaning.",
+    distinctiveness:
+      "The editorial collision creates a recognizable launch identity.",
+    signatureMotif:
+      "The organic hero silhouette visibly cuts through the rigid type grid.",
+    composition: "The primary form needs more surrounding negative space.",
+    hierarchy: "Secondary content competes with the intended action.",
+    typography: "Supporting type needs a quieter visual rhythm.",
+    assetIntegration: "The image edge needs a clearer title relationship.",
+    formAndSurface: "The foreground surface is currently too heavy.",
+    effects: "The glow needs a tighter radius and lower opacity.",
+    antiTemplate:
+      "The composition avoids centered cards and ornamental gradient identity.",
+    criteria: {
+      "visual-thesis": "The editorial collision is visible in the capture.",
+      "signature-motif": "The hero silhouette crosses the type grid.",
+      "composition-tension": "Asymmetric mass creates a clear focal path.",
+      "typography-character": "Display and support type have distinct roles.",
+      "material-coherence": "Paper, ink, and accent form one material system.",
+      "template-avoidance": "The capture avoids repeated cards and gradients.",
+    },
+    failedCriteria: ["composition-tension"],
+    refinements: [
+      "Increase space around the primary form",
+      "Reduce secondary surface contrast",
+    ],
   };
 }
 

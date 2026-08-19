@@ -26,6 +26,7 @@
     "@opendesign/component-service": "workspace:*",
     "@opendesign/design-capabilities": "workspace:*",
     "@opendesign/design-contracts": "workspace:*",
+    "@opendesign/design-skills": "workspace:*",
     "@opendesign/editor-runtime": "workspace:*",
     "@opendesign/geometry-service": "workspace:*",
     "@opendesign/import-export-service": "workspace:*",

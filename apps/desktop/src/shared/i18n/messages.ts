@@ -760,7 +760,7 @@ export const enMessages = {
   "agent.runPhase.refining": "Refining visible details",
   "agent.runPhase.stopping": "Stopping safely",
   "agent.runPhase.complete": "Design work complete",
-  "agent.runPhase.partial": "Design stopped with usable work",
+  "agent.runPhase.partial": "Design incomplete, usable work preserved",
   "agent.runPhase.stopped": "Design work stopped",
   "agent.runPhase.failed": "Design did not reach the canvas",
   "agent.runPhaseDetail.waiting-model":
@@ -1792,7 +1792,7 @@ const zhCNMessages = {
   "agent.runPhase.refining": "正在优化可见细节",
   "agent.runPhase.stopping": "正在安全停止",
   "agent.runPhase.complete": "设计任务已完成",
-  "agent.runPhase.partial": "任务已停止，画布保留有效内容",
+  "agent.runPhase.partial": "设计未全部完成，已保留有效内容",
   "agent.runPhase.stopped": "设计任务已停止",
   "agent.runPhase.failed": "设计尚未写入画布",
   "agent.runPhaseDetail.waiting-model": "正在等待模型 · 画布尚未发生变化",

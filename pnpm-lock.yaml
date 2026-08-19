@@ -68,6 +68,9 @@ importers:
       '@opendesign/design-contracts':
         specifier: workspace:*
         version: link:../../packages/design-contracts
+      '@opendesign/design-skills':
+        specifier: workspace:*
+        version: link:../../packages/design-skills
       '@opendesign/editor-runtime':
         specifier: workspace:*
         version: link:../../packages/editor-runtime
@@ -236,6 +239,15 @@ importers:
         specifier: workspace:*
         version: link:../design-contracts
     devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/design-skills:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

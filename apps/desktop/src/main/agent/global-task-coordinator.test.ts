@@ -1,4 +1,5 @@
 import { createStarterProjectFiles } from "../../shared/project/starter-project.js";
+import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,8 +16,6 @@ import type {
   DesignApplyToolInput,
   DesignPlanTarget,
   DesignPlanToolInput,
-  DesignPlanToolInputV3,
-  DesignPlanToolInputV6,
 } from "../../shared/design-agent-tools.js";
 import { createAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
 
@@ -27,55 +26,73 @@ const modelSelection = {
 };
 
 const designPlan: DesignPlanToolInput = {
-  version: 2,
-  pageId: "page_welcome",
+  version: 1,
   deliverable: "ui",
   objective: "Design a polished product workspace",
   outputMode: "editable-composition",
-  artboard: {
-    mode: "create",
-    frameId: "workspace_artboard",
-    x: 120,
-    y: 80,
-    width: 1440,
-    height: 1024,
-  },
-  composition: {
-    direction: "Dense desktop workspace with a dominant primary work area",
-    hierarchy: ["Navigation", "Primary work area", "Contextual inspector"],
-    regions: [
-      {
-        nodeId: "workspace_navigation",
-        name: "Navigation",
-        role: "structure",
-        x: 32,
-        y: 32,
-        width: 1376,
-        height: 72,
+  targets: [
+    {
+      targetId: "workspace",
+      label: "Product workspace",
+      pageId: "page_welcome",
+      objective: "Design a polished product workspace",
+      artboard: {
+        mode: "create",
+        frameId: "workspace_artboard",
+        x: 120,
+        y: 80,
+        width: 1440,
+        height: 1024,
       },
-      {
-        nodeId: "workspace_primary",
-        name: "Primary work area",
-        role: "content",
-        x: 32,
-        y: 128,
-        width: 960,
-        height: 864,
+      composition: {
+        direction: "Dense desktop workspace with a dominant primary work area",
+        hierarchy: ["Navigation", "Primary work area", "Contextual inspector"],
+        regions: [
+          {
+            nodeId: "workspace_navigation",
+            name: "Navigation",
+            role: "structure",
+            x: 32,
+            y: 32,
+            width: 1376,
+            height: 72,
+          },
+          {
+            nodeId: "workspace_primary",
+            name: "Primary work area",
+            role: "content",
+            x: 32,
+            y: 128,
+            width: 960,
+            height: 864,
+          },
+          {
+            nodeId: "workspace_inspector",
+            name: "Contextual inspector",
+            role: "interaction",
+            x: 1016,
+            y: 128,
+            width: 392,
+            height: 864,
+          },
+        ],
+        assetIntegration:
+          "Integrate one hero image below editable navigation and data",
+        spacingRhythm: "4/8/12/20/32 px rhythm",
       },
-      {
-        nodeId: "workspace_inspector",
-        name: "Contextual inspector",
-        role: "interaction",
-        x: 1016,
-        y: 128,
-        width: 392,
-        height: 864,
+      editableLayers: ["Navigation", "Workspace", "Inspector"],
+      implementationSteps: ["Create artboard", "Build hierarchy", "Add states"],
+      validationChecks: ["Check hierarchy", "Check density", "Check focus"],
+      qualityProfile: {
+        kind: "ui",
+        platform: "web",
+        interactionMode: "pointer",
+        safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 },
+        safeAreaNodeIds: ["workspace_navigation", "workspace_primary"],
+        interactiveNodeIds: [],
       },
-    ],
-    assetIntegration:
-      "Integrate one hero image below editable navigation and data",
-    spacingRhythm: "4/8/12/20/32 px rhythm",
-  },
+    },
+  ],
   visualSystem: {
     avoidances: [
       "Do not wrap every region in the same rounded card",
@@ -88,24 +105,117 @@ const designPlan: DesignPlanToolInput = {
     effects: ["Subtle separators", "Focused selection halo"],
   },
   rasterAssetRoles: ["hero", "background"],
-  editableLayers: ["Navigation", "Workspace", "Inspector"],
-  implementationSteps: ["Create artboard", "Build hierarchy", "Add states"],
-  validationChecks: ["Check hierarchy", "Check density", "Check focus"],
+  componentStrategy: {
+    summary: "No reusable semantic object is needed in this fixture.",
+    candidates: [],
+  },
+  briefFidelity: {
+    requiredContent: ["Product workspace"],
+    preservedSemantics: [],
+    prohibitedAdditions: ["No unrequested product capability"],
+    assumptions: ["Use a desktop Web workspace"],
+  },
+  designIntent: {
+    subject: "A desktop workspace for focused product operations",
+    audience: "Product operators managing dense day-to-day decisions",
+    primaryJob: "See the primary work state and act without losing context",
+    visualThesis:
+      "A precise signal workspace makes operational hierarchy visible without a generic card dashboard.",
+    signatureMotif:
+      "One continuous signal rail connects navigation, primary work, and contextual inspection.",
+    typographyLanguage:
+      "Compact utilitarian labels support one decisive editorial heading tier.",
+    colorMaterialLanguage:
+      "Tinted neutral planes and one focused action accent establish controlled depth.",
+    compositionTension:
+      "An asymmetric primary plane and narrow contextual edge create deliberate focus.",
+    antiPatterns: [
+      "No equal grid of interchangeable cards",
+      "No decorative purple gradient as identity",
+      "No floating icon tile above every section",
+    ],
+  },
+  skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+    ...reference,
+  })),
 };
 
 const visualReview = {
+  version: 1 as const,
+  skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+    ...reference,
+  })),
   briefFidelity:
     "The rendered workspace preserves the requested product structure and adds no unrequested capability",
+  distinctiveness:
+    "The signal workspace has a recognizable hierarchy beyond a generic product dashboard.",
+  signatureMotif:
+    "The continuous signal rail links navigation and the dominant primary work plane.",
   composition: "The primary work area needs more width",
   hierarchy: "The inspector competes with the page title",
   typography: "Secondary labels need lower contrast",
   assetIntegration: "Native icons align with the control grid",
   formAndSurface: "Secondary groups use too many borders",
   effects: "Selection treatment is clear and restrained",
+  antiTemplate:
+    "The result avoids an equal card grid and decorative gradient identity.",
+  criteria: {
+    "visual-thesis":
+      "The operational signal thesis is visible in the primary plane.",
+    "signature-motif":
+      "The rail remains visible across navigation and content.",
+    "composition-tension":
+      "The asymmetric split establishes one dominant region.",
+    "typography-character": "Type roles are distinct and remain readable.",
+    "material-coherence":
+      "Neutral planes and one accent form a coherent system.",
+    "template-avoidance":
+      "The capture avoids repeated cards and ornamental gradients.",
+  },
+  failedCriteria: ["composition-tension"] as const,
   refinements: ["Reduce inspector contrast", "Remove secondary borders"],
 };
 
-function multiTargetPlan(pageId: string): DesignPlanToolInputV3 {
+function designPlanForPage(pageId: string): DesignPlanToolInput {
+  return {
+    ...structuredClone(designPlan),
+    targets: designPlan.targets.map((target) => ({
+      ...structuredClone(target),
+      pageId,
+    })),
+  };
+}
+
+function existingArtboardPlan(
+  pageId: string,
+  frameId = "existing_artboard",
+): DesignPlanToolInput {
+  const plan = designPlanForPage(pageId);
+  return {
+    ...plan,
+    targets: plan.targets.map((target) => ({
+      ...target,
+      artboard: {
+        mode: "existing",
+        frameId,
+        x: 80,
+        y: 64,
+        width: 1120,
+        height: 720,
+      },
+      qualityProfile: {
+        kind: "ui",
+        platform: "web",
+        interactionMode: "pointer",
+        safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 },
+        safeAreaNodeIds: ["workspace_navigation"],
+        interactiveNodeIds: [],
+      },
+    })),
+  };
+}
+
+function multiTargetPlan(pageId: string): DesignPlanToolInput {
   const target = (
     targetId: string,
     label: string,
@@ -144,9 +254,17 @@ function multiTargetPlan(pageId: string): DesignPlanToolInputV3 {
     editableLayers: ["Navigation", "Main content"],
     implementationSteps: ["Create the screen", "Build its content"],
     validationChecks: ["Check hierarchy", "Check mobile spacing"],
+    qualityProfile: {
+      kind: "ui",
+      platform: "ios",
+      interactionMode: "touch",
+      safeAreaInsets: { top: 59, right: 0, bottom: 34, left: 0 },
+      safeAreaNodeIds: [`${frameId}_content`],
+      interactiveNodeIds: [],
+    },
   });
   return {
-    version: 3,
+    version: 1,
     deliverable: "ui",
     objective: "Design the requested Home and Profile screens",
     outputMode: "editable-composition",
@@ -163,34 +281,50 @@ function multiTargetPlan(pageId: string): DesignPlanToolInputV3 {
       effects: ["Subtle navigation shadow"],
     },
     rasterAssetRoles: [],
+    componentStrategy: {
+      summary: "No reusable semantic object is needed for this fixture.",
+      candidates: [],
+    },
+    briefFidelity: {
+      requiredContent: ["Home and Profile screens"],
+      preservedSemantics: [],
+      prohibitedAdditions: ["No unrequested product capability"],
+      assumptions: ["Use an iOS safe area"],
+    },
+    designIntent: {
+      subject: "A mobile product for focused creative work",
+      audience: "Independent designers continuing time-sensitive work",
+      primaryJob: "Recognize the next task and continue it immediately",
+      visualThesis:
+        "A directional editorial field expresses momentum instead of a generic mobile card stack.",
+      signatureMotif:
+        "One cropped signal rail connects identity, next action, and progress.",
+      typographyLanguage:
+        "Editorial display type sets pace while compact neutral text preserves clarity.",
+      colorMaterialLanguage:
+        "Tinted ink planes and one electric signal color create controlled hierarchy.",
+      compositionTension:
+        "Offset alignment and decisive scale contrast pull attention toward action.",
+      antiPatterns: [
+        "No centered card floating on a decorative background",
+        "No equal grid of same-radius feature tiles",
+        "No generic purple gradient used as the only identity",
+      ],
+    },
+    skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+      ...reference,
+    })),
   };
 }
 
-function qualityProfilePlan(pageId: string): DesignPlanToolInputV6 {
+function qualityProfilePlan(pageId: string): DesignPlanToolInput {
   const source = multiTargetPlan(pageId);
   const home = source.targets[0];
   if (!home) throw new Error("Home target is missing");
   return {
     ...source,
-    version: 6,
     objective: "Design the Home screen with executable UI geometry policy",
-    targets: [
-      {
-        ...home,
-        qualityProfile: {
-          kind: "ui",
-          platform: "ios",
-          interactionMode: "touch",
-          safeAreaInsets: { top: 59, right: 0, bottom: 34, left: 0 },
-          safeAreaNodeIds: ["frame_home_content"],
-          interactiveNodeIds: [],
-        },
-      },
-    ],
-    componentStrategy: {
-      summary: "No reusable semantic object is needed for one screen.",
-      candidates: [],
-    },
+    targets: [home],
     briefFidelity: {
       requiredContent: ["Home screen"],
       preservedSemantics: [],
@@ -495,6 +629,7 @@ function cleanLayoutQuality(
   pageId: string,
   artboardFrameId: string,
   revision: number,
+  qualityProfile: DesignPlanTarget["qualityProfile"],
 ): DesignLayoutQualityReport {
   return {
     version: 4,
@@ -508,7 +643,7 @@ function cleanLayoutQuality(
     errorCount: 0,
     warningCount: 0,
     issues: [],
-    qualityProfile: null,
+    qualityProfile: structuredClone(qualityProfile),
   };
 }
 
@@ -662,6 +797,73 @@ describe("GlobalTaskCoordinator", () => {
     });
   });
 
+  it("requires the review skill references to match the active Plan", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const runId = "run_design_skills";
+    await coordinator.registerRun({
+      type: "run.start",
+      runId,
+      sessionId: "conversation_mobile",
+      prompt: "Design a distinctive iOS Home screen",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId,
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan = qualityProfilePlan(pageId);
+    coordinator.registerDesignPlan(context, plan);
+    coordinator.recordDesignPlanAllocated(runId, [plan.targets[0].targetId], 1);
+    const draft = draftTargets(pageId, plan.targets);
+    const authorization = coordinator.assertDesignPlanForApply(context, draft);
+    coordinator.recordDesignApplyCompleted(
+      runId,
+      authorization?.input ?? draft,
+      authorization,
+      2,
+    );
+    const drafted = withDraftedTargets(
+      opened.document,
+      pageId,
+      plan.targets,
+      2,
+    );
+    coordinator.recordCanvasCapture(
+      context,
+      2,
+      diagnoseDesignTargetLayout(
+        drafted,
+        pageId,
+        plan.targets[0].artboard.frameId,
+        plan.targets[0].qualityProfile,
+      ),
+    );
+
+    expect(() =>
+      coordinator.registerVisualReview(context, {
+        ...visualReview,
+        skillRefs: [],
+      }),
+    ).toThrow("design_workflow.visual_review_skill_mismatch");
+    expect(() =>
+      coordinator.registerVisualReview(context, visualReview),
+    ).not.toThrow();
+    store.close();
+  });
+
   it("requires the trusted Run namespace for create-plan document node IDs", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
@@ -693,7 +895,10 @@ describe("GlobalTaskCoordinator", () => {
         idAllocation: createAgentDesignIdAllocation(runId),
       },
     });
-    const genericPlan = { ...designPlan, pageId };
+    const genericPlan: DesignPlanToolInput = {
+      ...designPlan,
+      targets: designPlan.targets.map((target) => ({ ...target, pageId })),
+    };
 
     expect(() => coordinator.registerDesignPlan(context, genericPlan)).toThrow(
       /new_node_id_namespace_required.*workspace_artboard.*odr_run_namespace_/,
@@ -702,17 +907,29 @@ describe("GlobalTaskCoordinator", () => {
     const prefix = "odr_run_namespace_";
     const namespacedPlan = {
       ...genericPlan,
-      artboard: {
-        ...genericPlan.artboard,
-        frameId: `${prefix}workspace_artboard`,
-      },
-      composition: {
-        ...genericPlan.composition,
-        regions: genericPlan.composition.regions.map((region) => ({
-          ...region,
-          nodeId: `${prefix}${region.nodeId}`,
-        })),
-      },
+      targets: genericPlan.targets.map((target) => ({
+        ...target,
+        artboard: {
+          ...target.artboard,
+          frameId: `${prefix}${target.artboard.frameId}`,
+        },
+        composition: {
+          ...target.composition,
+          regions: target.composition.regions.map((region) => ({
+            ...region,
+            nodeId: `${prefix}${region.nodeId}`,
+          })),
+        },
+        qualityProfile:
+          target.qualityProfile.kind === "ui"
+            ? {
+                ...target.qualityProfile,
+                safeAreaNodeIds: target.qualityProfile.safeAreaNodeIds.map(
+                  (nodeId) => `${prefix}${nodeId}`,
+                ),
+              }
+            : target.qualityProfile,
+      })),
     };
     expect(() =>
       coordinator.registerDesignPlan(context, namespacedPlan),
@@ -742,7 +959,7 @@ describe("GlobalTaskCoordinator", () => {
           },
         },
       ],
-    } satisfies DesignPlanToolInputV6;
+    } satisfies DesignPlanToolInput;
     expect(() => coordinator.registerDesignPlan(context, qualityPlan)).toThrow(
       /new_node_id_namespace_required.*frame_home_content/i,
     );
@@ -788,7 +1005,7 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.assertDesignPlanForRaster(context, "hero"),
     ).toThrow("structured design plan");
     expect(() =>
-      coordinator.registerDesignPlan(context, { ...designPlan, pageId }),
+      coordinator.registerDesignPlan(context, designPlanForPage(pageId)),
     ).toThrow("Inspect the bound design document");
     expect(() => coordinator.assertDocumentInspected(context)).toThrow(
       "Inspect the bound design document",
@@ -807,7 +1024,7 @@ describe("GlobalTaskCoordinator", () => {
       kind: "page",
       pageId,
     });
-    coordinator.registerDesignPlan(context, { ...designPlan, pageId });
+    coordinator.registerDesignPlan(context, designPlanForPage(pageId));
     expect(coordinator.recordCanvasCapture(context)).toEqual({
       capturedRevision: 0,
       nextAction: "write-material-content",
@@ -832,8 +1049,7 @@ describe("GlobalTaskCoordinator", () => {
     coordinator.recordGeneratedRaster(context, "image_generated", "hero");
     expect(() =>
       coordinator.registerDesignPlan(context, {
-        ...designPlan,
-        pageId,
+        ...designPlanForPage(pageId),
         outputMode: "single-raster",
         rasterAssetRoles: ["final-single-image"],
         singleRasterEvidence: "Refine the mobile experience",
@@ -984,7 +1200,7 @@ describe("GlobalTaskCoordinator", () => {
       }),
     ).toThrow("design_workflow.empty_artboard_draft");
     expect(coordinator.getDeliveryLedger(context.runId)?.targets).toMatchObject(
-      [{ targetId: "workspace_artboard", status: "pending" }],
+      [{ targetId: "workspace", status: "pending" }],
     );
     const authorization = coordinator.assertDesignPlanForApply(
       context,
@@ -1000,6 +1216,7 @@ describe("GlobalTaskCoordinator", () => {
       kind: "frame",
       nodeId: "workspace_artboard",
       pageId,
+      qualityProfile: designPlan.targets[0].qualityProfile,
     });
     expect(() => coordinator.recordCanvasCapture(context, 0)).toThrow(
       "design_workflow.capture_revision_invalid",
@@ -1011,12 +1228,18 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.recordCanvasCapture(
         context,
         1,
-        cleanLayoutQuality(context.documentId, pageId, "workspace_artboard", 1),
+        cleanLayoutQuality(
+          context.documentId,
+          pageId,
+          "workspace_artboard",
+          1,
+          designPlan.targets[0].qualityProfile,
+        ),
       ),
     ).toEqual({
       captureSequence: 1,
       capturedRevision: 1,
-      deliveryTargetId: "workspace_artboard",
+      deliveryTargetId: "workspace",
       nextAction: "record-visual-review",
       reviewEligible: true,
     });
@@ -1031,12 +1254,18 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.recordCanvasCapture(
         context,
         1,
-        cleanLayoutQuality(context.documentId, pageId, "workspace_artboard", 1),
+        cleanLayoutQuality(
+          context.documentId,
+          pageId,
+          "workspace_artboard",
+          1,
+          designPlan.targets[0].qualityProfile,
+        ),
       ),
     ).toEqual({
       captureSequence: 2,
       capturedRevision: 1,
-      deliveryTargetId: "workspace_artboard",
+      deliveryTargetId: "workspace",
       nextAction: "refine-reviewed-target",
       reviewEligible: false,
     });
@@ -1338,18 +1567,29 @@ describe("GlobalTaskCoordinator", () => {
       kind: "frame",
       pageId,
       nodeId: "frame_home",
+      qualityProfile: homeTarget.qualityProfile,
     });
     expect(() =>
       coordinator.recordCanvasCapture(
         context,
         2,
-        diagnoseDesignTargetLayout(draftedDocument, pageId, "frame_profile"),
+        diagnoseDesignTargetLayout(
+          draftedDocument,
+          pageId,
+          "frame_profile",
+          profileTarget.qualityProfile,
+        ),
       ),
     ).toThrow("design_workflow.layout_quality_unavailable");
     coordinator.recordCanvasCapture(
       context,
       2,
-      diagnoseDesignTargetLayout(draftedDocument, pageId, "frame_home"),
+      diagnoseDesignTargetLayout(
+        draftedDocument,
+        pageId,
+        "frame_home",
+        homeTarget.qualityProfile,
+      ),
     );
     coordinator.registerVisualReview(context, visualReview);
     const refineHome: DesignApplyToolInput = {
@@ -1393,6 +1633,7 @@ describe("GlobalTaskCoordinator", () => {
       overflowingHome,
       pageId,
       "frame_home",
+      homeTarget.qualityProfile,
     );
     expect(failingHomeQuality.errorCount).toBeGreaterThan(0);
     expect(() =>
@@ -1407,7 +1648,12 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.recordCanvasCapture(
         context,
         3,
-        diagnoseDesignTargetLayout(homeRefinedDocument, pageId, "frame_home"),
+        diagnoseDesignTargetLayout(
+          homeRefinedDocument,
+          pageId,
+          "frame_home",
+          homeTarget.qualityProfile,
+        ),
       ),
     ).toMatchObject({
       deliveryTargetId: "target_home",
@@ -1442,6 +1688,7 @@ describe("GlobalTaskCoordinator", () => {
         profileDraftedDocument,
         pageId,
         "frame_profile",
+        profileTarget.qualityProfile,
       ),
     );
     coordinator.registerVisualReview(context, visualReview);
@@ -1481,6 +1728,7 @@ describe("GlobalTaskCoordinator", () => {
       profileRefinedDocument,
       pageId,
       "frame_profile",
+      profileTarget.qualityProfile,
     );
     expect(profileQuality.errorCount).toBe(0);
     expect(profileQuality.warningCount).toBeGreaterThan(0);
@@ -1598,7 +1846,7 @@ describe("GlobalTaskCoordinator", () => {
         })),
       },
     };
-    const amended: DesignPlanToolInputV3 = {
+    const amended: DesignPlanToolInput = {
       ...structuredClone(plan),
       objective: "Design the Home, Profile, and Settings screens",
       targets: [
@@ -1696,7 +1944,7 @@ describe("GlobalTaskCoordinator", () => {
     const sourcePlan = multiTargetPlan(pageId);
     const homeTarget = sourcePlan.targets[0];
     if (!homeTarget) throw new Error("Home target is missing");
-    const plan: DesignPlanToolInputV3 = {
+    const plan: DesignPlanToolInput = {
       ...sourcePlan,
       objective: "Design the requested Home screen",
       targets: [homeTarget],
@@ -1736,7 +1984,12 @@ describe("GlobalTaskCoordinator", () => {
     coordinator.recordCanvasCapture(
       context,
       1,
-      diagnoseDesignTargetLayout(draftedDocument, pageId, "frame_home"),
+      diagnoseDesignTargetLayout(
+        draftedDocument,
+        pageId,
+        "frame_home",
+        homeTarget.qualityProfile,
+      ),
     );
     coordinator.registerVisualReview(context, visualReview);
     const refinement: DesignApplyToolInput = {
@@ -1775,7 +2028,12 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.recordCanvasCapture(
         context,
         2,
-        diagnoseDesignTargetLayout(emptyDocument, pageId, "frame_home"),
+        diagnoseDesignTargetLayout(
+          emptyDocument,
+          pageId,
+          "frame_home",
+          homeTarget.qualityProfile,
+        ),
       ),
     ).toThrow("Planned region frame_home_content is empty");
     expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
@@ -1861,7 +2119,7 @@ describe("GlobalTaskCoordinator", () => {
       activeTargetId: "target_profile",
     });
     const plan = multiTargetPlan(pageId);
-    const existingPlan: DesignPlanToolInputV3 = {
+    const existingPlan: DesignPlanToolInput = {
       ...plan,
       targets: plan.targets.map((target) => ({
         ...target,
@@ -1890,6 +2148,7 @@ describe("GlobalTaskCoordinator", () => {
       kind: "frame",
       pageId,
       nodeId: "frame_profile",
+      qualityProfile: existingPlan.targets[1].qualityProfile,
     });
 
     store.close();
@@ -1939,24 +2198,13 @@ describe("GlobalTaskCoordinator", () => {
       context,
       inspectionResult(document, pageId),
     );
-    const existingPlan: DesignPlanToolInput = {
-      ...designPlan,
-      pageId,
-      artboard: {
-        mode: "existing",
-        frameId: "existing_artboard",
-        x: 80,
-        y: 64,
-        width: 1120,
-        height: 720,
-      },
-    };
+    const existingPlan = existingArtboardPlan(pageId);
 
     expect(() =>
-      coordinator.registerDesignPlan(context, {
-        ...existingPlan,
-        artboard: { ...existingPlan.artboard, frameId: "missing_frame" },
-      }),
+      coordinator.registerDesignPlan(
+        context,
+        existingArtboardPlan(pageId, "missing_frame"),
+      ),
     ).toThrow("design_workflow.existing_artboard_invalid");
     expect(() =>
       coordinator.registerDesignPlan(context, existingPlan),
@@ -2013,11 +2261,17 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.recordCanvasCapture(
         contextAtRevision1,
         1,
-        cleanLayoutQuality(context.documentId, pageId, "existing_artboard", 1),
+        cleanLayoutQuality(
+          context.documentId,
+          pageId,
+          "existing_artboard",
+          1,
+          existingPlan.targets[0].qualityProfile,
+        ),
       ),
     ).toMatchObject({
       reviewEligible: true,
-      deliveryTargetId: "existing_artboard",
+      deliveryTargetId: "workspace",
     });
     coordinator.registerVisualReview(contextAtRevision1, visualReview);
     const refinement: DesignApplyToolInput = {
@@ -2076,6 +2330,7 @@ describe("GlobalTaskCoordinator", () => {
           verifiedDocument,
           pageId,
           "existing_artboard",
+          existingPlan.targets[0].qualityProfile,
         ),
       ),
     ).toMatchObject({
@@ -2151,18 +2406,7 @@ describe("GlobalTaskCoordinator", () => {
       context,
       inspectionResult(document, pageId),
     );
-    coordinator.registerDesignPlan(context, {
-      ...designPlan,
-      pageId,
-      artboard: {
-        mode: "existing",
-        frameId: "existing_artboard",
-        x: 80,
-        y: 64,
-        width: 1120,
-        height: 720,
-      },
-    });
+    coordinator.registerDesignPlan(context, existingArtboardPlan(pageId));
     const replacement: DesignApplyToolInput = {
       label: "Replace nested design",
       commands: [
@@ -2314,18 +2558,7 @@ describe("GlobalTaskCoordinator", () => {
       ...initialContext,
       revision: opened.document.revision + 1,
     };
-    const existingPlan: DesignPlanToolInput = {
-      ...designPlan,
-      pageId,
-      artboard: {
-        mode: "existing",
-        frameId: "existing_artboard",
-        x: 80,
-        y: 64,
-        width: 1120,
-        height: 720,
-      },
-    };
+    const existingPlan = existingArtboardPlan(pageId);
     expect(() =>
       coordinator.registerDesignPlan(currentContext, existingPlan),
     ).toThrow("design_workflow.inspection_stale");
@@ -2422,7 +2655,7 @@ describe("GlobalTaskCoordinator", () => {
     const source = multiTargetPlan(pageId);
     const home = source.targets[0];
     if (!home) throw new Error("Home target is missing");
-    const plan: DesignPlanToolInputV3 = {
+    const plan: DesignPlanToolInput = {
       ...source,
       objective: "Design Home",
       targets: [home],

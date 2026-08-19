@@ -6,9 +6,7 @@ import type {
 } from "./design-plan-component-strategy";
 import type {
   DesignPlanTarget,
-  DesignPlanToolInputV4,
-  DesignPlanToolInputV5,
-  DesignPlanToolInputV6,
+  DesignPlanToolInput,
 } from "./design-agent-tools";
 import type {
   DesignFirstSliceElement,
@@ -18,7 +16,7 @@ import type {
 export function compileValidatedDesignFirstSliceToolInput(
   input: DesignFirstSliceToolInput,
 ): {
-  plan: DesignPlanToolInputV4 | DesignPlanToolInputV5 | DesignPlanToolInputV6;
+  plan: DesignPlanToolInput;
   apply: DesignApplyToolInput;
   insertedNodeIds: string[];
 } {
@@ -26,7 +24,8 @@ export function compileValidatedDesignFirstSliceToolInput(
   const componentStrategy = compileComponentStrategy(
     input.semanticObjects ?? [],
   );
-  const planBase = {
+  const plan: DesignPlanToolInput = {
+    version: 1,
     deliverable: input.deliverable,
     objective: input.objective,
     outputMode: "editable-composition" as const,
@@ -44,29 +43,10 @@ export function compileValidatedDesignFirstSliceToolInput(
     },
     rasterAssetRoles: [...input.rasterAssetRoles],
     componentStrategy,
+    briefFidelity: structuredClone(input.briefFidelity),
+    designIntent: structuredClone(input.designIntent),
+    skillRefs: structuredClone(input.skillRefs),
   };
-  const hasQualityProfiles = targets.every(
-    (target) => target.qualityProfile !== undefined,
-  );
-  const plan:
-    DesignPlanToolInputV4 | DesignPlanToolInputV5 | DesignPlanToolInputV6 =
-    input.briefFidelity === undefined
-      ? {
-          ...planBase,
-          version: 4,
-          targets: targets.map(stripTargetQualityProfile),
-        }
-      : hasQualityProfiles
-        ? {
-            ...planBase,
-            version: 6,
-            briefFidelity: structuredClone(input.briefFidelity),
-          }
-        : {
-            ...planBase,
-            version: 5,
-            briefFidelity: structuredClone(input.briefFidelity),
-          };
   const childCounts = new Map<string, number>();
   const commands: DesignOperation[] = [];
   const steps: NonNullable<DesignApplyToolInput["steps"]> = [];
@@ -109,12 +89,6 @@ export function compileValidatedDesignFirstSliceToolInput(
   };
 }
 
-function stripTargetQualityProfile(target: DesignPlanTarget): DesignPlanTarget {
-  const legacy = structuredClone(target);
-  delete legacy.qualityProfile;
-  return legacy;
-}
-
 function compileTarget(
   target: DesignFirstSliceToolInput["targets"][number],
 ): DesignPlanTarget {
@@ -142,17 +116,13 @@ function compileTarget(
       "All visible material remains inside the delivery artboard with intentional spacing.",
       "Typography, hierarchy, reusable structure and contrast remain coherent after rendering.",
     ],
-    ...(target.qualityProfile
-      ? { qualityProfile: compileQualityProfile(target.qualityProfile) }
-      : {}),
+    qualityProfile: compileQualityProfile(target.qualityProfile),
   };
 }
 
 function compileQualityProfile(
-  profile: NonNullable<
-    DesignFirstSliceToolInput["targets"][number]["qualityProfile"]
-  >,
-): NonNullable<DesignPlanTarget["qualityProfile"]> {
+  profile: DesignFirstSliceToolInput["targets"][number]["qualityProfile"],
+): DesignPlanTarget["qualityProfile"] {
   if (profile.kind === "graphic") return { kind: "graphic" };
   const [top, right, bottom, left] = profile.insets;
   return {

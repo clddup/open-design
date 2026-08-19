@@ -10,6 +10,11 @@ import {
   type TextFontDescriptor,
 } from "@opendesign/design-contracts";
 import {
+  BUILTIN_UI_DESIGN_SKILL_REFS,
+  isBuiltinUiDesignSkillRefs,
+  type BuiltinDesignSkillRef,
+} from "@opendesign/design-skills";
+import {
   isSvgInterchangeIssue,
   type SvgInterchangeIssue,
 } from "@opendesign/import-export-service/svg-issues";
@@ -212,65 +217,65 @@ export type DesignPlanTarget = {
   editableLayers: string[];
   implementationSteps: string[];
   validationChecks: string[];
-  qualityProfile?: DesignTargetQualityProfile;
+  qualityProfile: DesignTargetQualityProfile;
 };
-export type LegacyDesignPlanToolInput = {
-  version: 2;
-  pageId: string;
-  deliverable: DesignDeliverable;
-  objective: string;
-  outputMode: "editable-composition" | "single-raster";
-  artboard: DesignPlanArtboard;
-  composition: DesignPlanComposition;
-  visualSystem: {
-    avoidances: string[];
-    formLanguage: string;
-    palette: string[];
-    surfaceAndDepth: string;
-    typography: string[];
-    effects: string[];
-  };
-  rasterAssetRoles: RasterAssetRole[];
-  editableLayers: string[];
-  implementationSteps: string[];
-  validationChecks: string[];
-  singleRasterEvidence?: string;
+export type DesignPlanVisualSystem = {
+  avoidances: string[];
+  formLanguage: string;
+  palette: string[];
+  surfaceAndDepth: string;
+  typography: string[];
+  effects: string[];
 };
-export type DesignPlanToolInputV3 = {
-  version: 3;
+export type DesignPlanToolInput = {
+  version: 1;
   deliverable: DesignDeliverable;
   objective: string;
   outputMode: "editable-composition" | "single-raster";
   targets: DesignPlanTarget[];
-  visualSystem: LegacyDesignPlanToolInput["visualSystem"];
+  visualSystem: DesignPlanVisualSystem;
   rasterAssetRoles: RasterAssetRole[];
+  componentStrategy: DesignPlanComponentStrategy;
+  briefFidelity: DesignBriefFidelity;
+  designIntent: DesignIntent;
+  skillRefs: BuiltinDesignSkillRef[];
   singleRasterEvidence?: string;
 };
-export type DesignPlanToolInputV4 = Omit<DesignPlanToolInputV3, "version"> & {
-  version: 4;
-  componentStrategy: DesignPlanComponentStrategy;
+export type DesignIntent = {
+  subject: string;
+  audience: string;
+  primaryJob: string;
+  visualThesis: string;
+  signatureMotif: string;
+  typographyLanguage: string;
+  colorMaterialLanguage: string;
+  compositionTension: string;
+  antiPatterns: string[];
 };
-export type DesignPlanToolInputV5 = Omit<DesignPlanToolInputV4, "version"> & {
-  version: 5;
-  briefFidelity: DesignBriefFidelity;
-};
-export type DesignPlanToolInputV6 = Omit<DesignPlanToolInputV5, "version"> & {
-  version: 6;
-};
-export type DesignPlanToolInput =
-  | LegacyDesignPlanToolInput
-  | DesignPlanToolInputV3
-  | DesignPlanToolInputV4
-  | DesignPlanToolInputV5
-  | DesignPlanToolInputV6;
+export const DESIGN_VISUAL_CRITERIA = [
+  "visual-thesis",
+  "signature-motif",
+  "composition-tension",
+  "typography-character",
+  "material-coherence",
+  "template-avoidance",
+] as const;
+export type DesignVisualCriterion = (typeof DESIGN_VISUAL_CRITERIA)[number];
 export type DesignVisualReviewToolInput = {
+  version: 1;
+  skillRefs: BuiltinDesignSkillRef[];
   briefFidelity: string;
+  distinctiveness: string;
+  signatureMotif: string;
   composition: string;
   hierarchy: string;
   typography: string;
   assetIntegration: string;
   formAndSurface: string;
   effects: string;
+  antiTemplate: string;
+  criteria: Record<DesignVisualCriterion, string>;
+  failedCriteria: readonly DesignVisualCriterion[];
   refinements: string[];
 };
 export type DesignCheckpointToolInput =
@@ -1787,7 +1792,7 @@ const MODEL_DESIGN_PLAN_COMPOSITION_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-const MODEL_DESIGN_PLAN_TARGET_SCHEMA = {
+const MODEL_DESIGN_PLAN_TARGET_BASE_SCHEMA = {
   type: "object",
   description:
     "One required user-facing deliverable. Use exactly one target for a single requested design and one target per requested screen or asset for a set.",
@@ -1831,21 +1836,85 @@ const MODEL_DESIGN_PLAN_TARGET_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-const MODEL_DESIGN_PLAN_TARGET_V6_SCHEMA = {
-  ...MODEL_DESIGN_PLAN_TARGET_SCHEMA,
+const MODEL_DESIGN_PLAN_TARGET_SCHEMA = {
+  ...MODEL_DESIGN_PLAN_TARGET_BASE_SCHEMA,
   properties: {
-    ...MODEL_DESIGN_PLAN_TARGET_SCHEMA.properties,
+    ...MODEL_DESIGN_PLAN_TARGET_BASE_SCHEMA.properties,
     qualityProfile: DESIGN_TARGET_QUALITY_PROFILE_SCHEMA,
   },
-  required: [...MODEL_DESIGN_PLAN_TARGET_SCHEMA.required, "qualityProfile"],
+  required: [
+    ...MODEL_DESIGN_PLAN_TARGET_BASE_SCHEMA.required,
+    "qualityProfile",
+  ],
+} as const;
+
+const MODEL_DESIGN_SKILL_REFS_SCHEMA = {
+  type: "array",
+  minItems: BUILTIN_UI_DESIGN_SKILL_REFS.length,
+  maxItems: BUILTIN_UI_DESIGN_SKILL_REFS.length,
+  items: {
+    oneOf: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+      type: "object",
+      properties: {
+        id: { const: reference.id },
+        version: { const: reference.version },
+        hash: { const: reference.hash },
+      },
+      required: ["id", "version", "hash"],
+      additionalProperties: false,
+    })),
+  },
+  description:
+    "Exact ordered references to the locally bundled UI design skills. Required for UI and empty for non-UI deliverables.",
+} as const;
+
+const MODEL_DESIGN_INTENT_SCHEMA = {
+  type: "object",
+  properties: {
+    subject: { type: "string", minLength: 8, maxLength: 500 },
+    audience: { type: "string", minLength: 8, maxLength: 500 },
+    primaryJob: { type: "string", minLength: 8, maxLength: 500 },
+    visualThesis: { type: "string", minLength: 16, maxLength: 1_000 },
+    signatureMotif: { type: "string", minLength: 16, maxLength: 1_000 },
+    typographyLanguage: { type: "string", minLength: 12, maxLength: 1_000 },
+    colorMaterialLanguage: {
+      type: "string",
+      minLength: 12,
+      maxLength: 1_000,
+    },
+    compositionTension: {
+      type: "string",
+      minLength: 12,
+      maxLength: 1_000,
+    },
+    antiPatterns: {
+      type: "array",
+      minItems: 3,
+      maxItems: 12,
+      uniqueItems: true,
+      items: { type: "string", minLength: 8, maxLength: 256 },
+    },
+  },
+  required: [
+    "subject",
+    "audience",
+    "primaryJob",
+    "visualThesis",
+    "signatureMotif",
+    "typographyLanguage",
+    "colorMaterialLanguage",
+    "compositionTension",
+    "antiPatterns",
+  ],
+  additionalProperties: false,
 } as const;
 
 const MODEL_DESIGN_PLAN_SCHEMA = {
   type: "object",
   description:
-    "Version 6 of the executable delivery plan. targets must match the user's requested scope exactly, briefFidelity must preserve requested and inspected product semantics without invented capabilities, componentStrategy must explicitly judge reusable semantic objects, and every target must declare an executable qualityProfile. UI profiles identify foreground safe-area nodes and actual interaction hit-area nodes; graphic profiles explicitly disable UI-only checks.",
+    "Current executable delivery plan. targets must match the user's requested scope exactly. designIntent must commit to a subject-grounded visual thesis and signature motif before drawing. UI plans must cite the exact built-in skill bundle. briefFidelity preserves requested and inspected product semantics without invented capabilities, componentStrategy explicitly judges reusable semantic objects, and every target declares an executable qualityProfile.",
   properties: {
-    version: { const: 6 },
+    version: { const: 1 },
     deliverable: {
       enum: [
         "ui",
@@ -1863,7 +1932,7 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
       type: "array",
       minItems: 1,
       maxItems: 32,
-      items: MODEL_DESIGN_PLAN_TARGET_V6_SCHEMA,
+      items: MODEL_DESIGN_PLAN_TARGET_SCHEMA,
     },
     visualSystem: {
       type: "object",
@@ -1924,6 +1993,10 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
     },
     componentStrategy: DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA,
     briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
+    designIntent: MODEL_DESIGN_INTENT_SCHEMA,
+    skillRefs: {
+      oneOf: [MODEL_DESIGN_SKILL_REFS_SCHEMA, { type: "array", maxItems: 0 }],
+    },
     singleRasterEvidence: {
       type: "string",
       minLength: 1,
@@ -1942,6 +2015,8 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
     "rasterAssetRoles",
     "componentStrategy",
     "briefFidelity",
+    "designIntent",
+    "skillRefs",
   ],
   additionalProperties: false,
 } as const;
@@ -1949,15 +2024,39 @@ const MODEL_DESIGN_PLAN_SCHEMA = {
 const MODEL_VISUAL_REVIEW_SCHEMA = {
   type: "object",
   description:
-    "A concrete critique of the most recent rendered canvas capture. Every field must identify what the image actually shows and refinements must be actionable edits, not generic praise.",
+    "Current concrete critique of the most recent rendered UI capture. Evaluate every non-compensating visual criterion against the active Plan and exact built-in skill references. Every field must identify what the image actually shows and refinements must be actionable edits, not generic praise.",
   properties: {
+    version: { const: 1 },
+    skillRefs: {
+      oneOf: [MODEL_DESIGN_SKILL_REFS_SCHEMA, { type: "array", maxItems: 0 }],
+    },
     briefFidelity: { type: "string", minLength: 12, maxLength: 1_000 },
+    distinctiveness: { type: "string", minLength: 12, maxLength: 1_000 },
+    signatureMotif: { type: "string", minLength: 12, maxLength: 1_000 },
     composition: { type: "string", minLength: 12, maxLength: 1_000 },
     hierarchy: { type: "string", minLength: 12, maxLength: 1_000 },
     typography: { type: "string", minLength: 12, maxLength: 1_000 },
     assetIntegration: { type: "string", minLength: 12, maxLength: 1_000 },
     formAndSurface: { type: "string", minLength: 12, maxLength: 1_000 },
     effects: { type: "string", minLength: 12, maxLength: 1_000 },
+    antiTemplate: { type: "string", minLength: 12, maxLength: 1_000 },
+    criteria: {
+      type: "object",
+      properties: Object.fromEntries(
+        DESIGN_VISUAL_CRITERIA.map((criterion) => [
+          criterion,
+          { type: "string", minLength: 12, maxLength: 1_000 },
+        ]),
+      ),
+      required: [...DESIGN_VISUAL_CRITERIA],
+      additionalProperties: false,
+    },
+    failedCriteria: {
+      type: "array",
+      maxItems: DESIGN_VISUAL_CRITERIA.length,
+      uniqueItems: true,
+      items: { enum: [...DESIGN_VISUAL_CRITERIA] },
+    },
     refinements: {
       type: "array",
       minItems: 2,
@@ -1966,13 +2065,20 @@ const MODEL_VISUAL_REVIEW_SCHEMA = {
     },
   },
   required: [
+    "version",
+    "skillRefs",
     "briefFidelity",
+    "distinctiveness",
+    "signatureMotif",
     "composition",
     "hierarchy",
     "typography",
     "assetIntegration",
     "formAndSurface",
     "effects",
+    "antiTemplate",
+    "criteria",
+    "failedCriteria",
     "refinements",
   ],
   additionalProperties: false,
@@ -2016,7 +2122,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["new-design" as const],
     },
     description:
-      "Create a new editable design through one rollback-safe call. Declare brief fidelity, every requested artboard root and UI/graphic quality profile, plus one meaningful first-target region in 1-3 stages and at most 24 elements. Main compiles Plan v6 and commits allocation plus real semantic stages through the canonical EditorRuntime/history path. Use inspected Page IDs, stable prefixed IDs, parent-local geometry, actual control hit areas and explicit font faces. Available only for a high-confidence blank new-design Run; full tools replace it after success.",
+      "Create a new editable design through one rollback-safe call. The current contract declares brief fidelity, structured design intent, exact built-in UI skill references, every requested artboard root and UI/graphic quality profile, plus one meaningful first-target region in 1-3 stages and at most 24 elements. Main compiles the canonical Design Plan and commits allocation plus real semantic stages through the EditorRuntime/history path. The first UI slice must visibly express its visual thesis and signature motif. Use inspected Page IDs, stable prefixed IDs, parent-local geometry, actual control hit areas and explicit font faces. Available only for a high-confidence blank new-design Run; full tools replace it after success.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2074,7 +2180,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "plan" as const,
     },
     description:
-      "Define version 6 of the executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. briefFidelity must record required content, inspected product semantics preserved by default, prohibited unrequested additions, and explicit assumptions; visual restyling is not permission to add, remove, rename, or redefine product capabilities. Every target must declare qualityProfile: UI profiles explicitly name platform, interaction mode, safe-area insets, foreground safe-area nodes and actual interaction hit-area nodes, while non-UI targets use graphic. Do not infer device insets from dimensions. componentStrategy must identify plausible reusable semantic objects, decide component versus ordinary hierarchy from reuse, stable identity, centralized updates, structural consistency, and intended instance differences, and bind every declared occurrence to a stable target/node ID. The host verifies quality geometry, declared Component Mains, Instances, and ordinary semantic containers from the live captured document; an empty candidate list is valid only when the summary explains why no semantic object merits component consideration. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
+      "Define the current executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. UI plans cite the exact bundled skillRefs and commit designIntent to a subject, audience, primary job, visual thesis, signature motif, typography/material language, composition tension, and concrete anti-patterns before drawing; non-UI plans keep skillRefs empty. briefFidelity records required content, inspected product semantics preserved by default, prohibited unrequested additions, and explicit assumptions; visual restyling is not permission to add, remove, rename, or redefine product capabilities. Every target declares qualityProfile: UI profiles explicitly name platform, interaction mode, safe-area insets, foreground safe-area nodes and actual interaction hit-area nodes, while non-UI targets use graphic. Do not infer device insets from dimensions. componentStrategy identifies plausible reusable semantic objects and binds every occurrence to a stable target/node ID. The host verifies quality geometry, declared Component Mains, Instances, and ordinary semantic containers from the live captured document. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
     inputSchema: MODEL_DESIGN_PLAN_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -2083,7 +2189,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
     name: DESIGN_REVIEW_TOOL_NAME,
     modelDisclosure: { bootstrap: "deferred" as const },
     description:
-      "Record a structured critique of the newest unreviewed opendesign_capture_canvas result after a successful material design write in this Run. First compare it with the latest user request and active Plan briefFidelity for omissions, semantic substitutions, and invented capabilities; then evaluate the rendered composition, hierarchy, typography, asset integration, form/surface, and effects and name at least two concrete refinements. Any fidelity mismatch must appear in refinements. Do not submit generic praise. The host rejects baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision with a design_workflow.* recovery instruction; follow that instruction instead of retrying the same review. This records Run review state and does not mutate the canvas.",
+      "Record the current typed Visual Review for the newest unreviewed opendesign_capture_canvas result after a successful UI material write. Cite the exact built-in skillRefs; compare the capture with the latest request, briefFidelity and active designIntent; evaluate every non-compensating critic criterion, explicitly list failedCriteria, and name at least two concrete refinements. Strong color or accessibility cannot compensate for a missing visual thesis, invisible signature motif, generic composition, weak typography, incoherent material system, or template symptoms. Any fidelity or criterion failure must appear in refinements. Do not submit generic praise. The host rejects malformed reviews, baseline/pre-write captures, already-reviewed captures, and captures older than the latest material revision. This records Run review state and does not mutate the canvas.",
     inputSchema: MODEL_VISUAL_REVIEW_SCHEMA,
     risk: "read" as const,
     approval: "never" as const,
@@ -3156,152 +3262,9 @@ export function isInternalUpdateImageToolInput(
 export function isDesignPlanToolInput(
   input: unknown,
 ): input is DesignPlanToolInput {
-  return (
-    isLegacyDesignPlanToolInput(input) ||
-    isMultiTargetDesignPlanToolInput(input)
-  );
-}
-
-function isLegacyDesignPlanToolInput(
-  input: unknown,
-): input is LegacyDesignPlanToolInput {
   if (!isRecord(input)) return false;
-  const allowed = [
-    "version",
-    "pageId",
-    "deliverable",
-    "objective",
-    "outputMode",
-    "artboard",
-    "composition",
-    "visualSystem",
-    "rasterAssetRoles",
-    "editableLayers",
-    "implementationSteps",
-    "validationChecks",
-    "singleRasterEvidence",
-  ];
   if (
-    input.version !== 2 ||
-    !safeId(input.pageId) ||
-    !isDesignDeliverable(input.deliverable) ||
-    !boundedText(input.objective, 2_000) ||
-    (input.outputMode !== "editable-composition" &&
-      input.outputMode !== "single-raster") ||
-    !Object.keys(input).every((key) => allowed.includes(key))
-  ) {
-    return false;
-  }
-
-  const artboard = input.artboard;
-  if (
-    !isRecord(artboard) ||
-    (artboard.mode !== "create" && artboard.mode !== "existing") ||
-    !safeId(artboard.frameId) ||
-    !finiteBounded(artboard.x, 1_000_000) ||
-    !finiteBounded(artboard.y, 1_000_000) ||
-    !positiveBounded(artboard.width, 100_000) ||
-    !positiveBounded(artboard.height, 100_000) ||
-    !exactKeys(artboard, ["mode", "frameId", "x", "y", "width", "height"])
-  ) {
-    return false;
-  }
-  const artboardWidth = artboard.width;
-  const artboardHeight = artboard.height;
-
-  const composition = input.composition;
-  if (
-    !isRecord(composition) ||
-    !boundedText(composition.direction, 1_000) ||
-    !boundedTextArray(composition.hierarchy, 2, 16, 256) ||
-    !Array.isArray(composition.regions) ||
-    composition.regions.length < 1 ||
-    composition.regions.length > 16 ||
-    !composition.regions.every((region) =>
-      isDesignPlanRegion(region, artboardWidth, artboardHeight),
-    ) ||
-    composition.regions.some(
-      (region) => isRecord(region) && region.nodeId === artboard.frameId,
-    ) ||
-    new Set(
-      composition.regions.flatMap((region) =>
-        isRecord(region) && typeof region.nodeId === "string"
-          ? [region.nodeId]
-          : [],
-      ),
-    ).size !== composition.regions.length ||
-    !boundedText(composition.assetIntegration, 1_000) ||
-    !boundedText(composition.spacingRhythm, 500) ||
-    !exactKeys(composition, [
-      "direction",
-      "hierarchy",
-      "regions",
-      "assetIntegration",
-      "spacingRhythm",
-    ])
-  ) {
-    return false;
-  }
-
-  const visualSystem = input.visualSystem;
-  if (
-    !isRecord(visualSystem) ||
-    !boundedTextArray(visualSystem.avoidances, 2, 12, 256) ||
-    !boundedText(visualSystem.formLanguage, 1_000) ||
-    !boundedTextArray(visualSystem.palette, 1, 12, 128) ||
-    !boundedText(visualSystem.surfaceAndDepth, 1_000) ||
-    !boundedTextArray(visualSystem.typography, 1, 8, 256) ||
-    !boundedTextArray(visualSystem.effects, 0, 12, 256) ||
-    !exactKeys(visualSystem, [
-      "avoidances",
-      "formLanguage",
-      "palette",
-      "surfaceAndDepth",
-      "typography",
-      "effects",
-    ])
-  ) {
-    return false;
-  }
-
-  if (
-    !Array.isArray(input.rasterAssetRoles) ||
-    input.rasterAssetRoles.length > 5 ||
-    !input.rasterAssetRoles.every(isRasterAssetRole) ||
-    new Set(input.rasterAssetRoles).size !== input.rasterAssetRoles.length ||
-    !boundedTextArray(input.editableLayers, 2, 24, 256) ||
-    !boundedTextArray(input.implementationSteps, 2, 16, 500) ||
-    !boundedTextArray(input.validationChecks, 2, 16, 500)
-  ) {
-    return false;
-  }
-  if (input.outputMode === "single-raster") {
-    return (
-      boundedText(input.singleRasterEvidence, 200) &&
-      input.rasterAssetRoles.includes("final-single-image")
-    );
-  }
-  return (
-    input.singleRasterEvidence === undefined &&
-    !input.rasterAssetRoles.includes("final-single-image")
-  );
-}
-
-function isMultiTargetDesignPlanToolInput(
-  input: unknown,
-): input is
-  | DesignPlanToolInputV3
-  | DesignPlanToolInputV4
-  | DesignPlanToolInputV5
-  | DesignPlanToolInputV6 {
-  if (!isRecord(input)) return false;
-  const version4 = input.version === 4;
-  const version5 = input.version === 5;
-  const version6 = input.version === 6;
-  const componentVersion = version4 || version5 || version6;
-  const briefVersion = version5 || version6;
-  if (
-    (input.version !== 3 && !componentVersion) ||
+    input.version !== 1 ||
     !isDesignDeliverable(input.deliverable) ||
     !boundedText(input.objective, 2_000) ||
     (input.outputMode !== "editable-composition" &&
@@ -3309,12 +3272,21 @@ function isMultiTargetDesignPlanToolInput(
     !Array.isArray(input.targets) ||
     input.targets.length < 1 ||
     input.targets.length > 32 ||
-    !input.targets.every((target) => isDesignPlanTarget(target, version6)) ||
+    !input.targets.every(isDesignPlanTarget) ||
     !isDesignPlanVisualSystem(input.visualSystem) ||
     !Array.isArray(input.rasterAssetRoles) ||
     input.rasterAssetRoles.length > 5 ||
     !input.rasterAssetRoles.every(isRasterAssetRole) ||
     new Set(input.rasterAssetRoles).size !== input.rasterAssetRoles.length ||
+    !isDesignPlanComponentStrategy(
+      input.componentStrategy,
+      input.targets.map((target) => target.targetId),
+    ) ||
+    !isDesignBriefFidelity(input.briefFidelity) ||
+    !isDesignIntent(input.designIntent) ||
+    (input.deliverable === "ui"
+      ? !isBuiltinUiDesignSkillRefs(input.skillRefs)
+      : !Array.isArray(input.skillRefs) || input.skillRefs.length !== 0) ||
     !exactKeys(input, [
       "version",
       "deliverable",
@@ -3323,8 +3295,10 @@ function isMultiTargetDesignPlanToolInput(
       "targets",
       "visualSystem",
       "rasterAssetRoles",
-      ...(componentVersion ? ["componentStrategy"] : []),
-      ...(briefVersion ? ["briefFidelity"] : []),
+      "componentStrategy",
+      "briefFidelity",
+      "designIntent",
+      "skillRefs",
       ...(input.singleRasterEvidence === undefined
         ? []
         : ["singleRasterEvidence"]),
@@ -3333,20 +3307,8 @@ function isMultiTargetDesignPlanToolInput(
     return false;
   }
   const targets = input.targets;
-  const componentStrategy = isDesignPlanComponentStrategy(
-    input.componentStrategy,
-    targets.map((target) => target.targetId),
-  )
-    ? input.componentStrategy
-    : undefined;
-  if (componentVersion && !componentStrategy) {
-    return false;
-  }
-  if (briefVersion && !isDesignBriefFidelity(input.briefFidelity)) {
-    return false;
-  }
+  const componentStrategy = input.componentStrategy;
   if (
-    version6 &&
     input.targets.some((target) => {
       if (!isRecord(target)) return true;
       const qualityProfile = target.qualityProfile;
@@ -3383,8 +3345,6 @@ function isMultiTargetDesignPlanToolInput(
     return false;
   }
   if (
-    componentVersion &&
-    componentStrategy &&
     targets.some((target) =>
       componentStrategyOccurrencesForTarget(
         componentStrategy,
@@ -3399,7 +3359,7 @@ function isMultiTargetDesignPlanToolInput(
       targets.length === 1 &&
       boundedText(input.singleRasterEvidence, 200) &&
       input.rasterAssetRoles.includes("final-single-image") &&
-      (!componentVersion || componentStrategy?.candidates.length === 0)
+      componentStrategy.candidates.length === 0
     );
   }
   return (
@@ -3411,42 +3371,65 @@ function isMultiTargetDesignPlanToolInput(
 export function designPlanTargets(
   plan: DesignPlanToolInput,
 ): DesignPlanTarget[] {
-  if (plan.version !== 2) return structuredClone(plan.targets);
-  return [
-    {
-      targetId: plan.artboard.frameId,
-      label: plan.objective,
-      pageId: plan.pageId,
-      objective: plan.objective,
-      artboard: structuredClone(plan.artboard),
-      composition: structuredClone(plan.composition),
-      editableLayers: [...plan.editableLayers],
-      implementationSteps: [...plan.implementationSteps],
-      validationChecks: [...plan.validationChecks],
-    },
-  ];
+  return structuredClone(plan.targets);
 }
 
 export function designPlanComponentStrategy(
   plan: DesignPlanToolInput,
-): DesignPlanComponentStrategy | undefined {
-  return plan.version === 4 || plan.version === 5 || plan.version === 6
-    ? structuredClone(plan.componentStrategy)
-    : undefined;
+): DesignPlanComponentStrategy {
+  return structuredClone(plan.componentStrategy);
 }
 
 export function designPlanBriefFidelity(
   plan: DesignPlanToolInput,
-): DesignBriefFidelity | undefined {
-  return plan.version === 5 || plan.version === 6
-    ? structuredClone(plan.briefFidelity)
-    : undefined;
+): DesignBriefFidelity {
+  return structuredClone(plan.briefFidelity);
 }
 
-function isDesignPlanTarget(
-  value: unknown,
-  requireQualityProfile = false,
-): value is DesignPlanTarget {
+export function designPlanDesignIntent(
+  plan: DesignPlanToolInput,
+): DesignIntent {
+  return structuredClone(plan.designIntent);
+}
+
+export function designPlanSkillRefs(
+  plan: DesignPlanToolInput,
+): BuiltinDesignSkillRef[] {
+  return structuredClone(plan.skillRefs);
+}
+
+function isDesignIntent(value: unknown): value is DesignIntent {
+  return (
+    isRecord(value) &&
+    boundedText(value.subject, 500) &&
+    value.subject.trim().length >= 8 &&
+    boundedText(value.audience, 500) &&
+    value.audience.trim().length >= 8 &&
+    boundedText(value.primaryJob, 500) &&
+    value.primaryJob.trim().length >= 8 &&
+    substantiveReviewText(value.visualThesis) &&
+    substantiveReviewText(value.signatureMotif) &&
+    substantiveReviewText(value.typographyLanguage) &&
+    substantiveReviewText(value.colorMaterialLanguage) &&
+    substantiveReviewText(value.compositionTension) &&
+    boundedTextArray(value.antiPatterns, 3, 12, 256) &&
+    value.antiPatterns.every((item) => item.trim().length >= 8) &&
+    new Set(value.antiPatterns).size === value.antiPatterns.length &&
+    exactKeys(value, [
+      "subject",
+      "audience",
+      "primaryJob",
+      "visualThesis",
+      "signatureMotif",
+      "typographyLanguage",
+      "colorMaterialLanguage",
+      "compositionTension",
+      "antiPatterns",
+    ])
+  );
+}
+
+function isDesignPlanTarget(value: unknown): value is DesignPlanTarget {
   if (!isRecord(value)) return false;
   const artboard = value.artboard;
   const composition = value.composition;
@@ -3487,11 +3470,10 @@ function isDesignPlanTarget(
     !boundedTextArray(value.editableLayers, 2, 24, 256) ||
     !boundedTextArray(value.implementationSteps, 2, 16, 500) ||
     !boundedTextArray(value.validationChecks, 2, 16, 500) ||
-    (requireQualityProfile &&
-      !isDesignTargetQualityProfile(value.qualityProfile, {
-        width: artboard.width,
-        height: artboard.height,
-      })) ||
+    !isDesignTargetQualityProfile(value.qualityProfile, {
+      width: artboard.width,
+      height: artboard.height,
+    }) ||
     !exactKeys(value, [
       "targetId",
       "label",
@@ -3502,7 +3484,7 @@ function isDesignPlanTarget(
       "editableLayers",
       "implementationSteps",
       "validationChecks",
-      ...(requireQualityProfile ? ["qualityProfile"] : []),
+      "qualityProfile",
     ])
   ) {
     return false;
@@ -3525,7 +3507,7 @@ function isDesignPlanArtboard(value: unknown): value is DesignPlanArtboard {
 
 function isDesignPlanVisualSystem(
   value: unknown,
-): value is LegacyDesignPlanToolInput["visualSystem"] {
+): value is DesignPlanVisualSystem {
   return (
     isRecord(value) &&
     boundedTextArray(value.avoidances, 2, 12, 256) &&
@@ -3548,28 +3530,55 @@ function isDesignPlanVisualSystem(
 export function isDesignVisualReviewToolInput(
   input: unknown,
 ): input is DesignVisualReviewToolInput {
-  return (
-    isRecord(input) &&
-    substantiveReviewText(input.briefFidelity) &&
-    substantiveReviewText(input.composition) &&
-    substantiveReviewText(input.hierarchy) &&
-    substantiveReviewText(input.typography) &&
-    substantiveReviewText(input.assetIntegration) &&
-    substantiveReviewText(input.formAndSurface) &&
-    substantiveReviewText(input.effects) &&
-    boundedTextArray(input.refinements, 2, 12, 500) &&
-    input.refinements.every((item) => item.trim().length >= 8) &&
-    exactKeys(input, [
-      "briefFidelity",
-      "composition",
-      "hierarchy",
-      "typography",
-      "assetIntegration",
-      "formAndSurface",
-      "effects",
-      "refinements",
-    ])
-  );
+  if (!isRecord(input)) return false;
+  const criteria = input.criteria;
+  if (
+    input.version !== 1 ||
+    (!isBuiltinUiDesignSkillRefs(input.skillRefs) &&
+      (!Array.isArray(input.skillRefs) || input.skillRefs.length !== 0)) ||
+    !substantiveReviewText(input.briefFidelity) ||
+    !substantiveReviewText(input.distinctiveness) ||
+    !substantiveReviewText(input.signatureMotif) ||
+    !substantiveReviewText(input.composition) ||
+    !substantiveReviewText(input.hierarchy) ||
+    !substantiveReviewText(input.typography) ||
+    !substantiveReviewText(input.assetIntegration) ||
+    !substantiveReviewText(input.formAndSurface) ||
+    !substantiveReviewText(input.effects) ||
+    !substantiveReviewText(input.antiTemplate) ||
+    !isRecord(criteria) ||
+    !DESIGN_VISUAL_CRITERIA.every((criterion) =>
+      substantiveReviewText(criteria[criterion]),
+    ) ||
+    !exactKeys(criteria, DESIGN_VISUAL_CRITERIA) ||
+    !Array.isArray(input.failedCriteria) ||
+    input.failedCriteria.length > DESIGN_VISUAL_CRITERIA.length ||
+    !input.failedCriteria.every((criterion) =>
+      DESIGN_VISUAL_CRITERIA.includes(criterion as DesignVisualCriterion),
+    ) ||
+    new Set(input.failedCriteria).size !== input.failedCriteria.length ||
+    !boundedTextArray(input.refinements, 2, 12, 500) ||
+    !input.refinements.every((item) => item.trim().length >= 8)
+  ) {
+    return false;
+  }
+  return exactKeys(input, [
+    "version",
+    "skillRefs",
+    "briefFidelity",
+    "distinctiveness",
+    "signatureMotif",
+    "composition",
+    "hierarchy",
+    "typography",
+    "assetIntegration",
+    "formAndSurface",
+    "effects",
+    "antiTemplate",
+    "criteria",
+    "failedCriteria",
+    "refinements",
+  ]);
 }
 
 export function isDesignCheckpointToolInput(
@@ -4096,7 +4105,10 @@ function boundedTextArray(
   );
 }
 
-function exactKeys(value: Record<string, unknown>, keys: string[]): boolean {
+function exactKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): boolean {
   return (
     Object.keys(value).length === keys.length &&
     Object.keys(value).every((key) => keys.includes(key))

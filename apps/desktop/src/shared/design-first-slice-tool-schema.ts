@@ -4,6 +4,7 @@ import {
 } from "./design-first-slice-budget";
 import type { DesignFirstSliceElement } from "./design-first-slice-tool";
 import { DESIGN_BRIEF_FIDELITY_SCHEMA } from "./design-brief-fidelity";
+import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 
 const ID_SCHEMA = { type: "string", minLength: 1, maxLength: 256 } as const;
 const TEXT_SCHEMA = { type: "string", minLength: 1, maxLength: 1_000 } as const;
@@ -114,7 +115,7 @@ const COMPACT_QUALITY_PROFILE_SCHEMA = {
 export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Compact Plan v6, real artboard roots and one editable first slice.",
+    "Current compact Design Plan, exact built-in design skill references, real artboard roots and one editable first slice.",
   properties: {
     version: { const: 1 },
     deliverable: {
@@ -129,6 +130,72 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
       ],
     },
     objective: { type: "string", minLength: 1, maxLength: 2_000 },
+    designIntent: {
+      type: "object",
+      properties: {
+        subject: { type: "string", minLength: 8, maxLength: 500 },
+        audience: { type: "string", minLength: 8, maxLength: 500 },
+        primaryJob: { type: "string", minLength: 8, maxLength: 500 },
+        visualThesis: { type: "string", minLength: 16, maxLength: 1_000 },
+        signatureMotif: { type: "string", minLength: 16, maxLength: 1_000 },
+        typographyLanguage: {
+          type: "string",
+          minLength: 12,
+          maxLength: 1_000,
+        },
+        colorMaterialLanguage: {
+          type: "string",
+          minLength: 12,
+          maxLength: 1_000,
+        },
+        compositionTension: {
+          type: "string",
+          minLength: 12,
+          maxLength: 1_000,
+        },
+        antiPatterns: {
+          type: "array",
+          minItems: 3,
+          maxItems: 12,
+          uniqueItems: true,
+          items: { type: "string", minLength: 8, maxLength: 256 },
+        },
+      },
+      required: [
+        "subject",
+        "audience",
+        "primaryJob",
+        "visualThesis",
+        "signatureMotif",
+        "typographyLanguage",
+        "colorMaterialLanguage",
+        "compositionTension",
+        "antiPatterns",
+      ],
+      additionalProperties: false,
+    },
+    skillRefs: {
+      oneOf: [
+        {
+          type: "array",
+          minItems: BUILTIN_UI_DESIGN_SKILL_REFS.length,
+          maxItems: BUILTIN_UI_DESIGN_SKILL_REFS.length,
+          items: {
+            oneOf: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
+              type: "object",
+              properties: {
+                id: { const: reference.id },
+                version: { const: reference.version },
+                hash: { const: reference.hash },
+              },
+              required: ["id", "version", "hash"],
+              additionalProperties: false,
+            })),
+          },
+        },
+        { type: "array", maxItems: 0 },
+      ],
+    },
     briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
     targets: {
       type: "array",
@@ -399,6 +466,8 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
     "version",
     "deliverable",
     "objective",
+    "designIntent",
+    "skillRefs",
     "briefFidelity",
     "targets",
     "visualSystem",

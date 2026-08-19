@@ -765,6 +765,13 @@ export class GlobalTaskCoordinator {
         "design_workflow.capture_revision_invalid: The latest rendered capture predates the latest material design revision; capture the current canvas again before recording the review",
       );
     }
+    if (
+      JSON.stringify(review.skillRefs) !== JSON.stringify(state.plan.skillRefs)
+    ) {
+      throw new Error(
+        "design_workflow.visual_review_skill_mismatch: Visual review skill references must exactly match the active Design Plan",
+      );
+    }
     target.lastReview = structuredClone(review);
     target.reviewedCaptureCount = target.captureCount;
     target.reviewedCaptureRevision = target.lastCaptureRevision;

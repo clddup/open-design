@@ -6,6 +6,8 @@ import {
   componentStrategyOccurrencesForTarget,
   designPlanBriefFidelity,
   designPlanComponentStrategy,
+  designPlanDesignIntent,
+  designPlanSkillRefs,
   designPlanTargets,
   type DesignPlanTarget,
   type DesignPlanToolInput,
@@ -91,6 +93,15 @@ export function registerDesignWorkflowPlan(options: {
       designPlanBriefFidelity(existing.plan),
       designPlanBriefFidelity(plan),
     );
+  const designIntentChanged =
+    existing !== undefined &&
+    !sameJson(
+      designPlanDesignIntent(existing.plan),
+      designPlanDesignIntent(plan),
+    );
+  const designSkillsChanged =
+    existing !== undefined &&
+    !sameJson(designPlanSkillRefs(existing.plan), designPlanSkillRefs(plan));
   const targetsById = new Map<string, DesignDeliveryTargetState>();
   const changedTargetIds: string[] = [];
   for (const target of targets) {
@@ -105,7 +116,9 @@ export function registerDesignWorkflowPlan(options: {
         targetChanged ||
         visualSystemChanged ||
         componentStrategyChanged ||
-        briefFidelityChanged
+        briefFidelityChanged ||
+        designIntentChanged ||
+        designSkillsChanged
       )
         changedTargetIds.push(target.targetId);
       targetsById.set(
@@ -117,7 +130,9 @@ export function registerDesignWorkflowPlan(options: {
           targetChanged ||
             visualSystemChanged ||
             componentStrategyChanged ||
-            briefFidelityChanged,
+            briefFidelityChanged ||
+            designIntentChanged ||
+            designSkillsChanged,
         ),
       );
       continue;
