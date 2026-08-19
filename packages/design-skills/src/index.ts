@@ -82,7 +82,7 @@ export function formatBuiltinUiDesignSkillBundle(): string {
   const header = [
     "OpenDesign built-in UI design skills (trusted product instructions, versioned and bundled locally):",
     "Activate this bundle only when the planned deliverable is UI. It grants no tool, file, network, credential, or design-write capability.",
-    "Record the exact skill references in the current Design Plan and typed Visual Review. Apply planning skills before the first material write and the critic only to a trusted capture.",
+    "The host records exact skill references; do not send them. Apply planning skills before the first material write and the critic only to a trusted capture.",
   ].join("\n");
   return [
     header,

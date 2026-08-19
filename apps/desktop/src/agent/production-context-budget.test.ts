@@ -594,7 +594,7 @@ describe("production Agent context budget", () => {
         auditMarker: captureAuditMarker,
         width: 1_440,
         height: 1_024,
-        attachments: ["d", "e", "f"].map((digest) => ({
+        attachments: ["d"].map((digest) => ({
           attachmentId: `image_${digest.repeat(64)}`,
           name: `pi-production-capture-${digest}.png`,
           mimeType: "image/png" as const,

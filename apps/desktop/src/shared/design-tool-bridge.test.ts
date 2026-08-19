@@ -143,7 +143,7 @@ describe("Renderer design tool bridge", () => {
             kind: "ui",
             platform: "ios",
             interactionMode: "touch",
-            safeAreaInsets: { top: 900, right: 0, bottom: 0, left: 0 },
+            safeAreaInsets: { top: 10_001, right: 0, bottom: 0, left: 0 },
             safeAreaNodeIds: [],
             interactiveNodeIds: [],
           },

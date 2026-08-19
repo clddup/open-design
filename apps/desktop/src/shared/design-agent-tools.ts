@@ -284,7 +284,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["new-design" as const],
     },
     description:
-      "Create a new editable design through one rollback-safe call. The current contract declares brief fidelity, structured design intent, every requested artboard root and UI/graphic quality profile, plus one meaningful first-target region in 1-3 stages and at most 24 elements. Main binds the exact locally loaded UI skill revisions; do not send skillRefs. Main compiles the canonical Design Plan and commits allocation plus real semantic stages through the EditorRuntime/history path. The first UI slice must visibly express its visual thesis and signature motif. Use inspected Page IDs, stable prefixed IDs, parent-local geometry, descendant foreground IDs, actual descendant control hit areas and explicit font faces; never list the delivery Frame itself as a quality node. Available only for a high-confidence blank new-design Run; full tools replace it after success.",
+      "Create a blank-Page design through one rollback-safe call: declare brief fidelity, intent, every requested artboard root and quality profile, then commit allocation plus one meaningful first-target region (1-3 stages, at most 24 elements) through EditorRuntime/history. Main binds local UI skill revisions; omit skillRefs. The first UI slice must show its thesis and motif. Use inspected Page IDs, stable prefixed IDs, parent-local geometry, descendant safe-area/control hit nodes and explicit font faces; never list the delivery Frame as a quality node. Available only for a high-confidence new-design Run; full tools follow success.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,

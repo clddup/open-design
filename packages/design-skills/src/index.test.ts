@@ -26,6 +26,8 @@ describe("built-in design skills", () => {
       expect(bundle).toContain(`sha256="${reference.hash}"`);
     }
     expect(bundle).toContain("grants no tool");
+    expect(bundle).toContain("The host records exact skill references");
+    expect(bundle).toContain("do not send them");
     expect(bundle.length).toBeLessThan(12_000);
   });
 

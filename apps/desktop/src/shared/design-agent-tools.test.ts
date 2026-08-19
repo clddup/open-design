@@ -1281,12 +1281,19 @@ describe("design Agent tool contract", () => {
     const checkpointSpec = DESIGN_AGENT_TOOL_SPECS.find(
       (tool) => tool.name === DESIGN_CHECKPOINT_TOOL_NAME,
     );
-    expect(checkpointSpec?.inputSchema).not.toHaveProperty(
-      "additionalProperties",
-    );
     expect(checkpointSpec?.inputSchema).toMatchObject({
+      properties: {
+        version: { const: 1 },
+        action: {
+          enum: ["apply-and-capture", "review-refine-and-capture"],
+        },
+      },
       oneOf: [{ additionalProperties: false }, { additionalProperties: false }],
+      additionalProperties: false,
     });
+    expect(checkpointSpec?.inputSchema).toHaveProperty("properties.apply");
+    expect(checkpointSpec?.inputSchema).toHaveProperty("properties.review");
+    expect(checkpointSpec?.inputSchema).toHaveProperty("properties.refinement");
     expect(
       validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
         version: 1,

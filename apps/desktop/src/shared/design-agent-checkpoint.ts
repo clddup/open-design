@@ -27,6 +27,15 @@ export const DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
     "A host-conditional design checkpoint. apply-and-capture commits one material transaction and captures only its successful revision. review-refine-and-capture first accepts the structured review, then commits its refinement, then captures only the successful refined revision.",
+  properties: {
+    version: { const: 1 },
+    action: {
+      enum: ["apply-and-capture", "review-refine-and-capture"],
+    },
+    apply: DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+    review: DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
+    refinement: DESIGN_APPLY_TOOL_INPUT_SCHEMA,
+  },
   oneOf: [
     {
       properties: {
@@ -48,6 +57,7 @@ export const DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA = {
       additionalProperties: false,
     },
   ],
+  additionalProperties: false,
 } as const;
 
 export function isDesignCheckpointToolInput(

@@ -89,7 +89,7 @@ describe("OpenDesign Agent system prompt", () => {
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("signature motif");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "actual hit-area node IDs",
+      "actual descendant hit-area node IDs",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("text-content-clipped");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
