@@ -67,6 +67,8 @@ Phase 4 把 Inspector 拆为 Appearance、Paint/Effect、Typography、Image、Co
 
 Phase 5 随 Figma-compatible Component Properties 垂直切片增加 `@opendesign/figma-interop`。该包最初只依赖 Component Service 与 Design Contracts，并只使用固定官方 typings 做编译期公共 API 形状验证；ADR-0083/0084 后为 styled text segments 增加对纯函数 Text Service 的单向依赖。EditorRuntime、Renderer、Leafer 和核心 Contracts 不反向依赖它。新增属性 schema/迁移、Runtime default 同步、Renderer context/plan 和 Main policy 分别进入明确职责模块，`design-agent-tools` 只保留聚合 schema。
 
+模块治理 Phase 5 已按 ADR-0100 完成：`design-agent-tools` 只保留稳定重导出、25 个公开工具的有序聚合和统一 validator dispatcher。Plan/Review/Checkpoint、Image、Import/Export、Hierarchy/Vector、Page/Text/Font、Component 与共享节点事务 schema 各有明确 owner；既有 Arrange、Variable、Style family 不复制 schema。聚合测试直接锁定工具顺序和 schema 对象身份，禁止在聚合入口再次手写同一契约。
+
 ### 自动边界门禁与职责治理
 
 `pnpm architecture:check` 是根 `pnpm verify` 的必经步骤，并校验：
@@ -99,6 +101,7 @@ ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证
 - 导入/导出现在具有独立取消和反馈生命周期，并继续从唯一 Runtime snapshot 生成事务或产物。
 - Page 与 Layer view 不再直接拥有 planner/transaction 编排；新增人工编辑命令应进入对应 controller 或新的完整业务 controller，不应重新堆回 `App.tsx`。
 - Inspector section 不拥有 Runtime 或文档副本；新增 property family 应进入对应 section，通过现有语义 callback 提交，不能重新堆回顶层 `PropertiesPanel.tsx`。
+- Agent tool family 自己拥有类型、schema、validator 与必要的纯投影；`design-agent-tools` 只聚合公开契约和分发校验。跨 family 共用的节点操作 schema 进入无状态 schema primitives，不能复制，也不能取得 Runtime、文档或 Electron 能力。
 
 ## 验证
 

@@ -38,6 +38,7 @@
     "@opendesign/design-capabilities": [],
     "@opendesign/design-contracts": [],
     "@opendesign/design-engine": ["@opendesign/design-contracts"],
+    "@opendesign/design-skills": [],
     "@opendesign/discovery": [],
     "@opendesign/editor-runtime": [
       "@opendesign/component-service",

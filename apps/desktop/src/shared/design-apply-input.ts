@@ -36,6 +36,13 @@ export type InternalDesignApplyToolInput = DesignApplyToolInput & {
   rebaseGuard?: PlannedDesignRebaseGuard;
 };
 
+export function designApplyRequiresPlan(input: DesignApplyToolInput): boolean {
+  return input.commands.some(
+    (command) =>
+      command.type === "insert_element" || command.type === "replace_subtree",
+  );
+}
+
 export function normalizeDesignApplyToolInput(
   input: unknown,
 ): DesignApplyToolInput | undefined {
