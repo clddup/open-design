@@ -9,12 +9,17 @@ import {
   minimumInteractiveTargetSize,
 } from "@opendesign/design-contracts";
 import {
+  isTextLayoutQualityEvidence,
+  type TextLayoutQualityEvidence,
+  type TextLayoutQualityMeasurement,
+} from "@opendesign/text-service";
+import {
   getNodeBounds,
   getWorldTransform,
   invertTransform,
 } from "./geometry.js";
 
-export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 3 as const;
+export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 4 as const;
 
 export type DesignLayoutQualitySeverity = "error" | "warning";
 
@@ -32,6 +37,10 @@ export type DesignLayoutQualityCode =
   | "quality-node-not-visible"
   | "quality-profile-geometry-unavailable"
   | "quality-scan-truncated"
+  | "text-content-clipped"
+  | "text-content-overflow"
+  | "text-ending-truncation-active"
+  | "text-layout-evidence-unavailable"
   | "target-frame-invalid";
 
 export interface DesignLayoutQualityIssue {
@@ -58,12 +67,17 @@ export interface DesignLayoutQualityGeometry {
   requiresResize: boolean;
 }
 
-export interface DesignLayoutQualityMeasurement {
-  kind: "minimum-interactive-size";
-  actualSize: { width: number; height: number };
-  requiredSize: { width: number; height: number };
-  source: string;
-}
+export type DesignLayoutQualityMeasurement =
+  | {
+      kind: "minimum-interactive-size";
+      actualSize: { width: number; height: number };
+      requiredSize: { width: number; height: number };
+      source: string;
+    }
+  | ({ kind: "text-layout" } & Extract<
+      TextLayoutQualityMeasurement,
+      { status: "measured" }
+    >);
 
 export interface DesignLayoutQualityReport {
   version: typeof DESIGN_LAYOUT_QUALITY_REPORT_VERSION;
@@ -73,6 +87,7 @@ export interface DesignLayoutQualityReport {
   artboardFrameId: string;
   checkedNodeCount: number;
   checkedQualityNodeCount: number;
+  checkedTextNodeCount: number;
   errorCount: number;
   warningCount: number;
   issues: DesignLayoutQualityIssue[];
@@ -89,6 +104,7 @@ export function diagnoseDesignTargetLayout(
   pageId: string,
   artboardFrameId: string,
   qualityProfile?: DesignTargetQualityProfile,
+  textLayoutEvidence?: TextLayoutQualityEvidence,
 ): DesignLayoutQualityReport {
   const issues: DesignLayoutQualityIssue[] = [];
   const artboard = document.nodesById[artboardFrameId];
@@ -109,6 +125,7 @@ export function diagnoseDesignTargetLayout(
       artboardFrameId,
       0,
       0,
+      0,
       issues,
       qualityProfile,
     );
@@ -127,6 +144,7 @@ export function diagnoseDesignTargetLayout(
       document,
       pageId,
       artboardFrameId,
+      0,
       0,
       0,
       issues,
@@ -251,12 +269,20 @@ export function diagnoseDesignTargetLayout(
     qualityProfile,
     issues,
   );
+  const checkedTextNodeCount = diagnoseTextLayout(
+    document,
+    pageId,
+    artboard,
+    textLayoutEvidence,
+    issues,
+  );
   return report(
     document,
     pageId,
     artboardFrameId,
     checkedNodeCount,
     checkedQualityNodeCount,
+    checkedTextNodeCount,
     issues,
     qualityProfile,
   );
@@ -388,6 +414,147 @@ function diagnoseQualityProfile(
   return checkedQualityNodeCount;
 }
 
+function diagnoseTextLayout(
+  document: DesignDocument,
+  pageId: string,
+  artboard: Extract<DesignNode, { kind: "frame" }>,
+  evidence: TextLayoutQualityEvidence | undefined,
+  issues: DesignLayoutQualityIssue[],
+): number {
+  const evidenceMatches =
+    evidence !== undefined &&
+    isTextLayoutQualityEvidence(evidence) &&
+    evidence.documentId === document.documentId &&
+    evidence.revision === document.revision &&
+    evidence.pageId === pageId;
+  const measurements = new Map(
+    evidenceMatches
+      ? evidence.measurements.map((measurement) => [
+          measurement.nodeId,
+          measurement,
+        ])
+      : [],
+  );
+  let checkedTextNodeCount = 0;
+  for (const node of visibleTextDescendants(document, artboard.id)) {
+    const measurement = measurements.get(node.id);
+    if (!measurement || measurement.status === "unavailable") {
+      appendQualityIssue(issues, artboard.id, {
+        code: "text-layout-evidence-unavailable",
+        severity: "error",
+        nodeId: node.id,
+        relatedNodeIds: [artboard.id],
+        message: measurement
+          ? `Production text layout evidence is unavailable for ${node.id}: ${measurement.message}`
+          : `Production text layout evidence is missing or stale for visible Text node ${node.id}`,
+      });
+      continue;
+    }
+    if (
+      !sizesApproximatelyEqual(measurement.boxSize, node.size) ||
+      (node.properties.textResize !== "fixed" &&
+        (measurement.overflow.horizontal || measurement.overflow.vertical)) ||
+      (node.properties.textTruncation === "disabled" && measurement.truncated)
+    ) {
+      appendQualityIssue(issues, artboard.id, {
+        code: "text-layout-evidence-unavailable",
+        severity: "error",
+        nodeId: node.id,
+        relatedNodeIds: [artboard.id],
+        message: `Production text layout evidence for ${node.id} is inconsistent with the exact document revision`,
+      });
+      continue;
+    }
+    checkedTextNodeCount += 1;
+    const overflow =
+      measurement.overflow.horizontal || measurement.overflow.vertical;
+    if (
+      overflow &&
+      node.properties.textOverflow === "clip" &&
+      node.properties.textTruncation === "disabled"
+    ) {
+      appendQualityIssue(issues, artboard.id, {
+        code: "text-content-clipped",
+        severity: "error",
+        nodeId: node.id,
+        relatedNodeIds: [artboard.id],
+        measurement: textLayoutMeasurement(measurement),
+        message: `Visible Text node ${node.id} silently clips canonical content: its ${formatSize(measurement.fullContentSize)} full layout exceeds the ${formatSize(measurement.boxSize)} fixed box without an ending-truncation policy`,
+      });
+    } else if (overflow && node.properties.textOverflow === "visible") {
+      appendQualityIssue(issues, artboard.id, {
+        code: "text-content-overflow",
+        severity: "warning",
+        nodeId: node.id,
+        relatedNodeIds: [artboard.id],
+        measurement: textLayoutMeasurement(measurement),
+        message: `Visible Text node ${node.id} renders content beyond its ${formatSize(measurement.boxSize)} fixed box; confirm that this visible overflow is intentional`,
+      });
+    }
+    if (node.properties.textTruncation === "ending" && measurement.truncated) {
+      appendQualityIssue(issues, artboard.id, {
+        code: "text-ending-truncation-active",
+        severity: "warning",
+        nodeId: node.id,
+        relatedNodeIds: [artboard.id],
+        measurement: textLayoutMeasurement(measurement),
+        message: `Visible Text node ${node.id} intentionally shortens canonical content with ending truncation; verify that the delivered copy remains understandable`,
+      });
+    }
+  }
+  return checkedTextNodeCount;
+}
+
+function visibleTextDescendants(
+  document: DesignDocument,
+  ancestorId: string,
+): Array<Extract<DesignNode, { kind: "text" }>> {
+  const root = document.nodesById[ancestorId];
+  if (!root) return [];
+  const result: Array<Extract<DesignNode, { kind: "text" }>> = [];
+  const pending = root.childIds
+    .slice()
+    .reverse()
+    .map((nodeId) => ({
+      nodeId,
+      visible: root.visible && root.opacity > 0,
+    }));
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || visited.has(current.nodeId)) continue;
+    visited.add(current.nodeId);
+    const node = document.nodesById[current.nodeId];
+    if (!node) continue;
+    const visible = current.visible && node.visible && node.opacity > 0;
+    for (const childId of [...node.childIds].reverse()) {
+      pending.push({ nodeId: childId, visible });
+    }
+    if (visible && node.kind === "text") result.push(node);
+  }
+  return result;
+}
+
+function textLayoutMeasurement(
+  measurement: Extract<TextLayoutQualityMeasurement, { status: "measured" }>,
+): DesignLayoutQualityMeasurement {
+  return { kind: "text-layout", ...structuredClone(measurement) };
+}
+
+function sizesApproximatelyEqual(
+  left: { width: number; height: number },
+  right: { width: number; height: number },
+): boolean {
+  return (
+    Math.abs(left.width - right.width) <= BOUNDS_TOLERANCE &&
+    Math.abs(left.height - right.height) <= BOUNDS_TOLERANCE
+  );
+}
+
+function formatSize(size: { width: number; height: number }): string {
+  return `${roundGeometry(size.width)}×${roundGeometry(size.height)}`;
+}
+
 export function isDesignLayoutQualityReport(
   value: unknown,
 ): value is DesignLayoutQualityReport {
@@ -402,6 +569,7 @@ export function isDesignLayoutQualityReport(
     safeText(record.artboardFrameId) &&
     boundedCount(record.checkedNodeCount) &&
     boundedCount(record.checkedQualityNodeCount) &&
+    boundedCount(record.checkedTextNodeCount) &&
     boundedCount(record.errorCount) &&
     boundedCount(record.warningCount) &&
     Array.isArray(record.issues) &&
@@ -421,6 +589,7 @@ export function isDesignLayoutQualityReport(
       "artboardFrameId",
       "checkedNodeCount",
       "checkedQualityNodeCount",
+      "checkedTextNodeCount",
       "errorCount",
       "warningCount",
       "issues",
@@ -449,6 +618,10 @@ function isDesignLayoutQualityIssue(
       "quality-node-not-visible",
       "quality-profile-geometry-unavailable",
       "quality-scan-truncated",
+      "text-content-clipped",
+      "text-content-overflow",
+      "text-ending-truncation-active",
+      "text-layout-evidence-unavailable",
       "target-frame-invalid",
     ].includes(String(record.code)) &&
     (record.severity === "error" || record.severity === "warning") &&
@@ -510,13 +683,48 @@ function isDesignLayoutQualityGeometry(value: unknown): boolean {
 
 function isDesignLayoutQualityMeasurement(value: unknown): boolean {
   const record = recordValue(value);
+  if (!record) return false;
+  if (record.kind === "minimum-interactive-size") {
+    return (
+      isFiniteSize(record.actualSize) &&
+      isFiniteSize(record.requiredSize) &&
+      safeText(record.source) &&
+      recordKeysOnly(record, ["kind", "actualSize", "requiredSize", "source"])
+    );
+  }
+  return (
+    record.kind === "text-layout" &&
+    record.status === "measured" &&
+    safeText(record.nodeId) &&
+    safeText(record.provider) &&
+    safeText(record.providerVersion) &&
+    isFiniteSize(record.boxSize) &&
+    isFiniteSize(record.fullContentSize) &&
+    isFiniteSize(record.displayedContentSize) &&
+    isTextOverflowAxis(record.overflow) &&
+    typeof record.truncated === "boolean" &&
+    recordKeysOnly(record, [
+      "kind",
+      "status",
+      "nodeId",
+      "provider",
+      "providerVersion",
+      "boxSize",
+      "fullContentSize",
+      "displayedContentSize",
+      "overflow",
+      "truncated",
+    ])
+  );
+}
+
+function isTextOverflowAxis(value: unknown): boolean {
+  const record = recordValue(value);
   return (
     record !== null &&
-    record.kind === "minimum-interactive-size" &&
-    isFiniteSize(record.actualSize) &&
-    isFiniteSize(record.requiredSize) &&
-    safeText(record.source) &&
-    recordKeysOnly(record, ["kind", "actualSize", "requiredSize", "source"])
+    typeof record.horizontal === "boolean" &&
+    typeof record.vertical === "boolean" &&
+    recordKeysOnly(record, ["horizontal", "vertical"])
   );
 }
 
@@ -652,6 +860,7 @@ function report(
   artboardFrameId: string,
   checkedNodeCount: number,
   checkedQualityNodeCount: number,
+  checkedTextNodeCount: number,
   issues: DesignLayoutQualityIssue[],
   qualityProfile: DesignTargetQualityProfile | undefined,
 ): DesignLayoutQualityReport {
@@ -663,6 +872,7 @@ function report(
     artboardFrameId,
     checkedNodeCount,
     checkedQualityNodeCount,
+    checkedTextNodeCount,
     errorCount: issues.filter((issue) => issue.severity === "error").length,
     warningCount: issues.filter((issue) => issue.severity === "warning").length,
     issues,

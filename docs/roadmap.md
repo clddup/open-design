@@ -140,7 +140,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成确定性布局质检的首个垂直切片：`DesignLayoutQualityReport v1` 从权威文档世界坐标检查 Run 绑定 Frame 的目标身份、无效几何、`clipsContent`、完全越界、1%–25% 部分越界和至少 25% 大面积越界；有界 issue 列表超限时失败关闭。Renderer 用离屏 capture 的同一 revision 生成报告，Main 运行时验证 document/revision/Page/Frame 身份，初次 capture 把 node-specific 结果交给模型 review，refinement 后 error 阻止账本进入 `verified`，warning-only 可继续。pan/zoom/selection/窗口与活动文件不参与报告。安全区、文字 shaping/截断、触控区、重叠、对齐、间距和视觉 critic 仍属于下一切片，不能把本项宣传为审美已解决。见 ADR-0034。
 - [ ] 建立独立的设计策略、确定性布局质检与视觉 critic 切片，解决“方块卡片 + 圆形光晕”的模板化收敛以及截图中底部导航活动项越过画板/安全区却通过审核的假阳性。宿主先对画板越界、clipsContent、导航/设备安全区、触控区、重叠、截断、对齐和间距异常做可复现几何门禁；计划再形成可验收的视觉命题、signature motif、造型/图像/字体语言和明确反模板项，capture critic 对独特性、构图张力、类型层级、形态多样性、素材融合与过度重复做结构化评分，refinement 必须落实失败项。提供按 UI/Web、海报、Logo、品牌/插画版本化的内置设计 skills，并允许用户追加不授予权限的自定义 skill；skill 只提供设计策略/参考范式/反模式，不能替代几何门禁、真实 capture 和人工盲评。固定任务基线不能以节点数量、用了渐变/path 或模型自评冒充审美提升。
   - [x] 完成确定性质检第二切片：DesignPlan v6 为每个 target 声明 `graphic` 或显式 UI platform/interaction/safe-area/hit-area profile；Layout Quality Report v3 在 exact-revision capture 上检查质量节点存在/可见、前景安全区 containment 与宿主固定最小交互尺寸，返回 safe-area parent-local 恢复坐标和实际/所需尺寸。Main 校验 report 未替换 Plan profile，final error 阻止 verified；不按 Frame 尺寸猜设备，不把小 icon 冒充 hit area，不对 Logo/海报套 UI 规则。见 ADR-0096。
-  - [ ] 后续依次补可证明的文字截断、交互目标重叠/遮挡、对齐与间距异常；再独立实现视觉命题/critic 和版本化内置 design skills。启发式项必须带置信度，不得混入 deterministic error。
+  - [x] 完成确定性质检第三切片：Frame capture 用生产 Leafer plain/rich text providers 生成 exact-revision `TextLayoutQualityEvidence v1`，Layout Quality Report v4 区分无 ending 声明的静默 clip error、证据缺失 error、visible overflow warning 和实际 ending truncation warning；不按字符数/字号猜 shaping，不让 intentional ellipsis 阻止 verified。见 ADR-0097。
+  - [ ] 后续依次补交互目标重叠/遮挡、对齐与间距异常；再独立实现视觉命题/critic 和版本化内置 design skills。启发式项必须带置信度，不得混入 deterministic error。
 - [ ] 在本仓库启动的 Electron 实例中复验：Agent 渐进事务期间 pan/zoom/resize 后 Leafer editBox 始终贴合选区，不出现巨大蓝色角、残影或输入锁死。
 - [ ] 实机复验复杂渐变/光晕/模糊、属性检查器同步、`capture_canvas` 多模态视觉回读、本地路径/URL `read_image`、全局 GPT Image 2 `generate_image`、粘贴/拖放附件和 `place_image`。
 - [x] 将 Leafer revision 同步改为 transaction change set 驱动的 affected-node 增量投影与 reconcile：未变节点不再 `set()`，无关 revision 不再隐藏 Editor、取消直接操作或刷新 tree bounds；选区相关变化只刷新对应元素 bounds，断档/切页/恢复才全量回退。
@@ -306,6 +307,7 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - 保留“写入 → `capture_canvas` → refinement → `capture_canvas`”可信完成门禁，并加入结构诊断结果、渲染失败和导出失败的阻断条件。截图次数本身不能证明设计质量。
 - [x] Layout Quality Report v2 为 Frame overflow 返回 exact-revision world bounds、当前 parent-local position、最小 parent-local recovery delta/position 与 resize 必要性；完成门禁和 Agent 恢复指令直接消费这些可信几何，禁止把 world 坐标误写为 local transform 后反复试错。
 - [x] Layout Quality Report v3 继续保留 v2 artboard 几何，并消费 Plan v6 的显式 UI safe-area 与真实 hit-area IDs；Apple/Android/Web 最小目标阈值由可信 contract 固定，模型不能自行提交更小数值。非 UI target 显式使用 graphic profile，历史 Plan 不猜设备语义。见 ADR-0096。
+- [x] Layout Quality Report v4 消费同一离屏 capture 的 production-provider 文字测量，阻止 Fixed Text 静默裁剪 canonical content；显式 ending truncation 与 visible overflow 只作为可审查 warning，证据丢失或 rich-text truncation 不支持时失败关闭。见 ADR-0097。
 - 使用固定 prompt、参考资源、模型配置、工具轨迹、最终文档和视觉评分运行回归。任何提示词、模型 adapter、工具 schema 或渲染后端变更都必须重放受影响样张。
 
 ## 持续门禁

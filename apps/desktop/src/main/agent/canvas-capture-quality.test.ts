@@ -10,13 +10,14 @@ const frameTarget = {
 };
 
 const report: DesignLayoutQualityReport = {
-  version: 3,
+  version: 4,
   documentId: "document_design",
   revision: 7,
   pageId: frameTarget.pageId,
   artboardFrameId: frameTarget.nodeId,
   checkedNodeCount: 4,
   checkedQualityNodeCount: 0,
+  checkedTextNodeCount: 0,
   errorCount: 0,
   warningCount: 0,
   issues: [],

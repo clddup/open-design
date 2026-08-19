@@ -497,13 +497,14 @@ function cleanLayoutQuality(
   revision: number,
 ): DesignLayoutQualityReport {
   return {
-    version: 3,
+    version: 4,
     documentId,
     revision,
     pageId,
     artboardFrameId,
     checkedNodeCount: 1,
     checkedQualityNodeCount: 0,
+    checkedTextNodeCount: 0,
     errorCount: 0,
     warningCount: 0,
     issues: [],

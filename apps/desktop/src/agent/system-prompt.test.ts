@@ -81,6 +81,10 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "actual hit-area node IDs",
     );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("text-content-clipped");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "not permission to guess from character count",
+    );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("briefFidelity");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "visual style, composition, mood",

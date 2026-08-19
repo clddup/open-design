@@ -1,5 +1,6 @@
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import type { LeaferEngineAdapter } from "@opendesign/leafer-engine";
+import type { TextLayoutRequest } from "@opendesign/text-service";
 import { describe, expect, it, vi } from "vitest";
 import { captureDesignTarget } from "./design-capture";
 
@@ -37,7 +38,16 @@ describe("deterministic design target capture", () => {
       textLayoutProvider: {
         id: "test-text-layout",
         version: "1",
-        measure: vi.fn(),
+        measure: vi.fn((request: TextLayoutRequest) => ({
+          ok: true as const,
+          provider: "test-text-layout",
+          providerVersion: "1",
+          size: {
+            width: request.width ?? 320,
+            height: request.content.startsWith("Design") ? 72 : 62,
+          },
+          warnings: [],
+        })),
       },
       textRunLayoutProvider,
     } satisfies LeaferEngineAdapter;
@@ -62,6 +72,16 @@ describe("deterministic design target capture", () => {
     );
 
     expect(result.bytes).toEqual(new Uint8Array([4, 5, 6]));
+    expect(result.textLayoutQuality).toMatchObject({
+      version: 1,
+      documentId: documentSnapshot.documentId,
+      revision: documentSnapshot.revision,
+      pageId: "page_welcome",
+      measurements: [
+        { status: "measured", nodeId: "title_welcome" },
+        { status: "measured", nodeId: "subtitle_welcome" },
+      ],
+    });
     expect(createAdapter).toHaveBeenCalledTimes(1);
     expect(sync).toHaveBeenCalledWith({
       document: documentSnapshot,

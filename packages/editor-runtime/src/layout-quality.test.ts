@@ -16,9 +16,10 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 3,
+      version: 4,
       checkedNodeCount: 1,
       checkedQualityNodeCount: 0,
+      checkedTextNodeCount: 0,
       errorCount: 0,
       warningCount: 0,
       issues: [],
@@ -236,8 +237,9 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 3,
+      version: 4,
       checkedQualityNodeCount: 1,
+      checkedTextNodeCount: 0,
       errorCount: 2,
       qualityProfile: { kind: "ui", platform: "ios" },
     });
@@ -297,12 +299,192 @@ describe("deterministic delivery layout quality", () => {
 
     expect(report).toMatchObject({
       checkedQualityNodeCount: 1,
+      checkedTextNodeCount: 0,
       errorCount: 0,
       warningCount: 0,
       issues: [],
     });
   });
+
+  it("blocks provider-proven silent clipping of canonical text content", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const copy = text("body_copy", "artboard", 160, 40);
+    artboard.childIds.push(copy.id);
+    document.nodesById[copy.id] = copy;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      undefined,
+      textEvidence(document, copy.id, {
+        overflow: { horizontal: false, vertical: true },
+        truncated: false,
+        fullContentSize: { width: 160, height: 84 },
+        displayedContentSize: { width: 160, height: 84 },
+      }),
+    );
+
+    expect(report).toMatchObject({
+      version: 4,
+      checkedTextNodeCount: 1,
+      errorCount: 1,
+      warningCount: 0,
+    });
+    expect(
+      report.issues.find((issue) => issue.code === "text-content-clipped"),
+    ).toMatchObject({
+      code: "text-content-clipped",
+      severity: "error",
+      nodeId: copy.id,
+      measurement: {
+        kind: "text-layout",
+        provider: "test-text",
+        boxSize: { width: 160, height: 40 },
+        fullContentSize: { width: 160, height: 84 },
+      },
+    });
+    expect(isDesignLayoutQualityReport(report)).toBe(true);
+  });
+
+  it("reports explicit ending truncation without treating it as silent loss", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const copy = text("summary", "artboard", 160, 40);
+    copy.properties.textTruncation = "ending";
+    copy.properties.maxLines = 2;
+    artboard.childIds.push(copy.id);
+    document.nodesById[copy.id] = copy;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+      undefined,
+      textEvidence(document, copy.id, {
+        overflow: { horizontal: false, vertical: true },
+        truncated: true,
+        fullContentSize: { width: 160, height: 84 },
+        displayedContentSize: { width: 160, height: 40 },
+      }),
+    );
+
+    expect(report.errorCount).toBe(0);
+    expect(report.warningCount).toBe(1);
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        code: "text-ending-truncation-active",
+        severity: "warning",
+        nodeId: copy.id,
+      }),
+    );
+  });
+
+  it("fails closed when visible text lacks exact-revision shaping evidence", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const copy = text("body_copy", "artboard", 160, 40);
+    artboard.childIds.push(copy.id);
+    document.nodesById[copy.id] = copy;
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+    );
+
+    expect(report.checkedTextNodeCount).toBe(0);
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        code: "text-layout-evidence-unavailable",
+        severity: "error",
+        nodeId: copy.id,
+      }),
+    );
+  });
 });
+
+function text(
+  id: string,
+  parentId: string,
+  width: number,
+  height: number,
+): Extract<DesignNode, { kind: "text" }> {
+  return {
+    id,
+    kind: "text",
+    name: id,
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 20, 80],
+    size: { width, height },
+    exportSettings: [],
+    opacity: 1,
+    properties: {
+      content: "Canonical text that requires more than the fixed text box.",
+      fontFamily: "Inter",
+      fontStyleName: null,
+      fontSize: 16,
+      fontWeight: 400,
+      fontSlant: "normal",
+      lineHeight: 20,
+      letterSpacing: 0,
+      paragraphIndent: 0,
+      paragraphSpacing: 0,
+      listSpacing: 0,
+      hangingList: false,
+      textCase: "original",
+      textDecoration: "none",
+      textAlignHorizontal: "left",
+      textAlignVertical: "top",
+      textResize: "fixed",
+      textWrap: "word",
+      textOverflow: "clip",
+      textTruncation: "disabled",
+      maxLines: null,
+      fills: [{ type: "solid", color: "#111111", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+    },
+    extensions: {},
+  };
+}
+
+function textEvidence(
+  document: DesignDocument,
+  nodeId: string,
+  measurement: {
+    overflow: { horizontal: boolean; vertical: boolean };
+    truncated: boolean;
+    fullContentSize: { width: number; height: number };
+    displayedContentSize: { width: number; height: number };
+  },
+) {
+  const node = document.nodesById[nodeId];
+  if (!node) throw new Error("Missing Text node");
+  return {
+    version: 1 as const,
+    documentId: document.documentId,
+    revision: document.revision,
+    pageId: "page_layout",
+    measurements: [
+      {
+        status: "measured" as const,
+        nodeId,
+        provider: "test-text",
+        providerVersion: "1",
+        boxSize: structuredClone(node.size),
+        ...measurement,
+      },
+    ],
+  };
+}
 
 function layoutDocument(clipsContent = true): DesignDocument {
   const document = structuredClone(

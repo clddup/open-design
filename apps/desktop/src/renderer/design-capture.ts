@@ -1,6 +1,7 @@
 import type { DesignDocument } from "@opendesign/design-contracts";
 import {
   createLeaferEngineAdapter,
+  inspectDesignTextLayoutQuality,
   resolveDesignTextRuns,
   type LeaferCaptureResult,
   type LeaferCaptureTarget,
@@ -9,7 +10,10 @@ import {
   type LeaferTextRunProjectionResolution,
   type LeaferTextRunStyle,
 } from "@opendesign/leafer-engine";
-import type { TextRunLayoutProvider } from "@opendesign/text-service";
+import type {
+  TextLayoutQualityEvidence,
+  TextRunLayoutProvider,
+} from "@opendesign/text-service";
 import { composeTextRunLayoutProviders } from "./text-run-provider-fallback";
 
 const CAPTURE_WIDTH = 1_280;
@@ -43,12 +47,16 @@ type CaptureDesignTargetOptions = {
   timeoutMs?: number;
 };
 
+export type DesignCaptureResult = LeaferCaptureResult & {
+  textLayoutQuality?: TextLayoutQualityEvidence;
+};
+
 export async function captureDesignTarget(
   designDocument: DesignDocument,
   target: LeaferCaptureTarget,
   signal?: AbortSignal,
   options: CaptureDesignTargetOptions = {},
-): Promise<LeaferCaptureResult> {
+): Promise<DesignCaptureResult> {
   const createAdapter = options.createAdapter ?? createLeaferEngineAdapter;
   const timeoutMs = options.timeoutMs ?? CAPTURE_EXPORT_TIMEOUT_MS;
   throwIfAborted(signal);
@@ -82,15 +90,16 @@ export async function captureDesignTarget(
     );
     options.onStage?.("adapter-created");
     throwIfAborted(signal);
+    const textRunLayoutProvider = composeTextRunLayoutProviders(
+      adapter.textRunLayoutProvider,
+      options.textRunLayoutProvider,
+    );
     const textRunProjection =
       options.textRunProjection ??
       resolveDesignTextRuns(
         designDocument,
         target.pageId,
-        composeTextRunLayoutProviders(
-          adapter.textRunLayoutProvider,
-          options.textRunLayoutProvider,
-        ),
+        textRunLayoutProvider,
       ).projection;
     adapter.sync({
       document: designDocument,
@@ -118,7 +127,20 @@ export async function captureDesignTarget(
       timeoutMs,
     );
     options.onStage?.("export-completed");
-    return result;
+    return {
+      ...result,
+      ...(target.kind === "frame"
+        ? {
+            textLayoutQuality: inspectDesignTextLayoutQuality(
+              designDocument,
+              target.pageId,
+              target.nodeId,
+              adapter.textLayoutProvider,
+              textRunLayoutProvider,
+            ),
+          }
+        : {}),
+    };
   } finally {
     adapter?.dispose();
     host.remove();

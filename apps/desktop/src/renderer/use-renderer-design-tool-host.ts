@@ -108,6 +108,9 @@ export function useRendererDesignToolHost(
                     byteSize: attachment.byteSize,
                   },
                   height: preview.height,
+                  ...(preview.textLayoutQuality
+                    ? { textLayoutQuality: preview.textLayoutQuality }
+                    : {}),
                   width: preview.width,
                 };
               },

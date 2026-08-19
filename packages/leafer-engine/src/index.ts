@@ -63,3 +63,4 @@ export {
   resolveDesignTextRuns,
   type DesignTextRunResolution,
 } from "./text-run-resolution.js";
+export { inspectDesignTextLayoutQuality } from "./text-quality-inspection.js";

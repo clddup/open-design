@@ -11,6 +11,7 @@ import type {
   DesignTransaction,
   TextFontDescriptor,
 } from "@opendesign/design-contracts";
+import type { TextLayoutQualityEvidence } from "@opendesign/text-service";
 import {
   componentMainNodeId,
   diagnoseDesignTargetLayout,
@@ -95,6 +96,7 @@ type ExecuteDesignToolOptions = {
       name: string;
     };
     height: number;
+    textLayoutQuality?: TextLayoutQualityEvidence;
     width: number;
   }>;
   exportSvg?: typeof runSvgExportInWorker;
@@ -187,6 +189,7 @@ async function executeDesignToolRequestUnsafe(
             request.captureTarget.pageId,
             request.captureTarget.nodeId,
             request.captureTarget.qualityProfile,
+            preview.textLayoutQuality,
           )
         : undefined;
     return {
