@@ -64,47 +64,31 @@ describe("design capability manifest", () => {
       throw new Error("Expected capability array");
     }
     const capabilityValues: unknown[] = agentManifest.capabilities;
-    const components: unknown = capabilityValues.find(
-      (value: unknown) =>
-        typeof value === "object" &&
-        value !== null &&
-        "id" in value &&
-        value.id === "components.instances-variants",
-    );
-    expect(components).toMatchObject({
-      id: "components.instances-variants",
-      status: "degraded",
-      name: "Components, instances, and variants",
-      provider:
-        "DesignDocument 1.25.0 + @opendesign/component-service contract v5 + isolated @opendesign/figma-interop",
-      evidence: { automated: 14, manual: 0 },
-    });
-    const variables: unknown = capabilityValues.find(
-      (value: unknown) =>
-        typeof value === "object" &&
-        value !== null &&
-        "id" in value &&
-        value.id === "variables.collections-modes",
-    );
-    expect(variables).toMatchObject({
-      status: "degraded",
-      provider:
-        "DesignDocument 1.26.0 + @opendesign/variable-service contract v1 + isolated @opendesign/figma-interop",
-      evidence: { automated: 11, manual: 0 },
-    });
-    const styles: unknown = capabilityValues.find(
-      (value: unknown) =>
-        typeof value === "object" &&
-        value !== null &&
-        "id" in value &&
-        value.id === "styles.shared-local",
-    );
-    expect(styles).toMatchObject({
-      status: "degraded",
-      provider:
-        "DesignDocument 1.27.0 + @opendesign/style-service contract v1 + isolated @opendesign/figma-interop",
-      evidence: { automated: 10, manual: 0 },
-    });
+    for (const id of [
+      "components.instances-variants",
+      "variables.collections-modes",
+      "styles.shared-local",
+    ]) {
+      const source = getDesignCapability(id);
+      if (!source) throw new Error(`Missing source capability ${id}`);
+      const projected: unknown = capabilityValues.find(
+        (value: unknown) =>
+          typeof value === "object" &&
+          value !== null &&
+          "id" in value &&
+          value.id === id,
+      );
+      expect(projected).toMatchObject({
+        id: source.id,
+        status: source.status,
+        name: source.label.en,
+        provider: source.provider,
+        evidence: {
+          automated: source.evidence.automated.length,
+          manual: source.evidence.manual.length,
+        },
+      });
+    }
   });
 
   it("rejects unknown fields and inconsistent declared status", () => {
