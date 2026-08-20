@@ -887,7 +887,7 @@ describe("App", () => {
       height: 720,
     });
     expect(screen.getByText("Exported Structured editing.png")).toBeVisible();
-    expect(screen.getByText("PNG · 1200 × 720 px · 3 B")).toBeVisible();
+    expect(screen.queryByText("PNG · 1200 × 720 px · 3 B")).toBeNull();
     expect(runtime().getSnapshot().document.revision).toBe(0);
   });
 
@@ -3375,6 +3375,40 @@ describe("App", () => {
     expect(duplicatedGroup?.childIds).toHaveLength(3);
     expect(snapshot.document.revision).toBe(1);
     expect(snapshot.state.selection.nodeIds).toEqual([duplicatedGroup?.id]);
+  });
+
+  it("toggles Figma lock and visibility shortcuts as one transaction per selection", () => {
+    renderApp();
+    act(() =>
+      runtime().setSelection(
+        ["title_welcome", "subtitle_welcome"],
+        "title_welcome",
+      ),
+    );
+
+    fireEvent.keyDown(window, {
+      code: "KeyL",
+      key: "L",
+      metaKey: true,
+      shiftKey: true,
+    });
+    let snapshot = runtime().getSnapshot();
+    expect(snapshot.document.nodesById.title_welcome?.locked).toBe(true);
+    expect(snapshot.document.nodesById.subtitle_welcome?.locked).toBe(true);
+    expect(snapshot.document.revision).toBe(1);
+    expect(snapshot.state.history.undo).toHaveLength(1);
+
+    fireEvent.keyDown(window, {
+      code: "KeyH",
+      key: "H",
+      metaKey: true,
+      shiftKey: true,
+    });
+    snapshot = runtime().getSnapshot();
+    expect(snapshot.document.nodesById.title_welcome?.visible).toBe(false);
+    expect(snapshot.document.nodesById.subtitle_welcome?.visible).toBe(false);
+    expect(snapshot.document.revision).toBe(2);
+    expect(snapshot.state.history.undo).toHaveLength(2);
   });
 
   it("groups and ungroups the current selection as undoable transactions", async () => {

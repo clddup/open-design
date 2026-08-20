@@ -75,7 +75,7 @@ describe("component operations", () => {
     const override = planSetComponentOverride(runtime.getSnapshot().document, {
       instanceId: "button_instance",
       sourcePath: ["button_bg"],
-      patch: { opacity: 0.8 },
+      patch: { locked: true, opacity: 0.8, visible: false },
       commandPrefix: "retain_projected_selection",
     });
     expect(override.ok).toBe(true);
@@ -88,6 +88,15 @@ describe("component operations", () => {
       instanceId: "button_instance",
       sourcePath: ["button_label"],
     });
+    const resolved = resolveComponentInstance(
+      runtime.getSnapshot().document,
+      "button_instance",
+    );
+    expect(
+      resolved.ok
+        ? resolved.nodes.find((node) => node.sourceNodeId === "button_bg")?.node
+        : resolved,
+    ).toMatchObject({ locked: true, opacity: 0.8, visible: false });
 
     const deletion = planDeleteNodes(runtime.getSnapshot().document, {
       nodeIds: ["button_label"],

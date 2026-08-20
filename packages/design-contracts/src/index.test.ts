@@ -11,6 +11,7 @@ import {
   FIGMA_VARIABLES_DESIGN_SCHEMA_VERSION,
   FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
   FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
+  FIGMA_LAYER_STATE_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
@@ -86,7 +87,17 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION).toBe("1.33.0");
   expect(AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION).toBe("1.34.0");
   expect(AUTO_LAYOUT_GRID_V2_DESIGN_SCHEMA_VERSION).toBe("1.35.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(AUTO_LAYOUT_GRID_V2_DESIGN_SCHEMA_VERSION);
+  expect(FIGMA_LAYER_STATE_DESIGN_SCHEMA_VERSION).toBe("1.36.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(FIGMA_LAYER_STATE_DESIGN_SCHEMA_VERSION);
+});
+
+it("migrates 1.35 documents without inventing layer state overrides", () => {
+  const source = textDocumentFixture() as unknown as DesignDocument;
+  source.schemaVersion =
+    AUTO_LAYOUT_GRID_V2_DESIGN_SCHEMA_VERSION as typeof source.schemaVersion;
+  const migrated = migrateDesignDocument(source);
+  expect(migrated?.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
+  expect(migrated?.nodesById.text_1?.locked).toBe(false);
 });
 
 it("validates bounded Grid Auto Layout tracks and child placement", () => {
@@ -640,6 +651,7 @@ describe("design contract schemas", () => {
     expect(
       Value.Check(ComponentOverridePatchSchema, {
         visible: false,
+        locked: true,
         opacity: 0.8,
         properties: { content: "Buy now" },
       }),

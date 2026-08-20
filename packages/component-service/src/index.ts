@@ -17,7 +17,7 @@ import {
   slotLimitViolations,
 } from "./component-resolution-support.js";
 
-export const COMPONENT_SERVICE_VERSION = 5 as const;
+export const COMPONENT_SERVICE_VERSION = 6 as const;
 export const COMPONENT_PROJECTION_PREFIX = "__opendesign_instance__:";
 
 export type ComponentResolutionIssueCode =

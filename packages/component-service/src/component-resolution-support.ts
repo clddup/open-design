@@ -317,6 +317,7 @@ export function applyOverride(
   if (!patch) return clone;
   if (patch.name !== undefined) clone.name = patch.name;
   if (patch.visible !== undefined) clone.visible = patch.visible;
+  if (patch.locked !== undefined) clone.locked = patch.locked;
   if (patch.opacity !== undefined) clone.opacity = patch.opacity;
   if (patch.blendMode !== undefined) clone.blendMode = patch.blendMode;
   if (patch.effects !== undefined)

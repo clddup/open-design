@@ -225,6 +225,11 @@ export interface LeaferGenerationActivity {
   target: Point;
 }
 
+export interface LeaferLayerHoverTarget {
+  componentTarget?: ComponentSelectionTarget;
+  nodeId: string;
+}
+
 export type LeaferCaptureTarget =
   | { kind: "page"; pageId: string }
   | { kind: "frame"; pageId: string; nodeId: string };
@@ -283,6 +288,7 @@ export interface LeaferEngineSyncInput {
   generationReveal?: LeaferGenerationReveal;
   generationSkeleton?: LeaferGenerationSkeleton;
   gridEditorFrameId?: string;
+  layerHoverTarget?: LeaferLayerHoverTarget;
   layoutGuideFrameId?: string;
   pageId: string;
   reducedMotion?: boolean;

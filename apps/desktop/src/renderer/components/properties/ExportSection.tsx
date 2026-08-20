@@ -9,7 +9,6 @@ import { Button, IconButton } from "@opendesign/ui";
 import { useI18n } from "../../i18n";
 import type {
   ExportFormat,
-  RasterExportFeedback,
   RasterExportSettings,
   SvgInterchangeFeedback,
   SvgOperationStatus,
@@ -22,7 +21,6 @@ import {
   Section,
   commitNumber,
   cx,
-  formatByteSize,
   formatNumber,
 } from "./controls";
 
@@ -58,41 +56,6 @@ export function SvgOperationNotice({
       <Button onClick={onCancel} tone="quiet">
         {t("properties.cancelSvgOperation")}
       </Button>
-    </section>
-  );
-}
-
-export function RasterExportReport({
-  feedback,
-  onDismiss,
-}: {
-  feedback: RasterExportFeedback;
-  onDismiss: () => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <section aria-live="polite" className={styles.fidelityReport} role="status">
-      <header>
-        <span aria-hidden="true" className={styles.fidelityMark}>
-          ✓
-        </span>
-        <strong>
-          {t("properties.rasterExportComplete", { name: feedback.name })}
-        </strong>
-        <IconButton
-          icon="lucide:x"
-          label={t("properties.dismissRasterFeedback")}
-          onClick={onDismiss}
-        />
-      </header>
-      <p>
-        {t("properties.rasterExportSummary", {
-          format: feedback.format.toUpperCase(),
-          width: feedback.width,
-          height: feedback.height,
-          size: formatByteSize(feedback.byteSize),
-        })}
-      </p>
     </section>
   );
 }

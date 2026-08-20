@@ -6,4 +6,5 @@ export * from "./layout/Divider";
 export * from "./layout/ResizeHandle";
 export * from "./overlays/ConfirmDialog";
 export * from "./overlays/DropdownMenu";
+export * from "./overlays/Message";
 export * from "./overlays/Tooltip";

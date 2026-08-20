@@ -1,0 +1,115 @@
+.viewport {
+  position: fixed;
+  z-index: 1260;
+  top: 44px;
+  left: 50%;
+  display: grid;
+  width: min(520px, calc(100vw - 32px));
+  gap: 7px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.message {
+  display: block;
+  max-width: 100%;
+  justify-self: center;
+  pointer-events: auto;
+  transition:
+    opacity 140ms ease,
+    transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.message[data-limited] {
+  display: none;
+}
+
+.message[data-starting-style],
+.message[data-ending-style] {
+  opacity: 0;
+  transform: translateY(-5px) scale(0.985);
+}
+
+.body {
+  display: grid;
+  min-height: 34px;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 7px;
+  color: var(--ui-text);
+  background: color-mix(in srgb, var(--ui-surface-raised) 96%, transparent);
+  box-shadow:
+    0 8px 24px rgb(25 25 23 / 14%),
+    0 1px 3px rgb(25 25 23 / 12%);
+  font: 500 12px/1.4 var(--ui-font);
+  backdrop-filter: blur(8px);
+}
+
+.icon {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  color: var(--ui-text-muted);
+}
+
+.success .icon {
+  color: var(--ui-success);
+}
+
+.info .icon,
+.loading .icon {
+  color: var(--ui-accent);
+}
+
+.warning .icon {
+  color: var(--ui-warning);
+}
+
+.error .icon {
+  color: var(--ui-danger);
+}
+
+.loading .icon {
+  animation: message-spin 900ms linear infinite;
+}
+
+.content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.close {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  margin: -2px -4px -2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  place-items: center;
+  color: var(--ui-text-faint);
+  background: transparent;
+}
+
+.close:hover {
+  color: var(--ui-text);
+  background: var(--ui-surface-sunken);
+}
+
+@keyframes message-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message,
+  .loading .icon {
+    transition: none;
+    animation: none;
+  }
+}

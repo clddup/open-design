@@ -441,6 +441,17 @@
   opacity: 1;
 }
 
+.layerVisibilityInactive:global(.ui-icon-button) {
+  opacity: 1;
+}
+
+.layerHidden {
+  > .layerMain {
+    color: var(--ui-text-faint);
+    opacity: 0.62;
+  }
+}
+
 .layerDropBefore,
 .layerDropInside,
 .layerDropAfter {

@@ -517,11 +517,13 @@ export function useComponentActions({
     [applyCommands, runtime, setEditorError, t, transactionCounter],
   );
 
-  const updateSelectedInstanceSource = useCallback(
-    (sourcePath: readonly string[], patch: ComponentOverridePatch) => {
+  const updateInstanceSource = useCallback(
+    (
+      instanceId: string,
+      sourcePath: readonly string[],
+      patch: ComponentOverridePatch,
+    ) => {
       const current = runtime.getSnapshot();
-      const instanceId = singleSelection(current.state.selection.nodeIds);
-      if (!instanceId) return;
       const plan = planSetComponentOverride(current.document, {
         instanceId,
         sourcePath,
@@ -535,6 +537,17 @@ export function useComponentActions({
       applyCommands(t("history.updateComponentOverride"), plan.commands);
     },
     [applyCommands, runtime, setEditorError, t, transactionCounter],
+  );
+
+  const updateSelectedInstanceSource = useCallback(
+    (sourcePath: readonly string[], patch: ComponentOverridePatch) => {
+      const instanceId = singleSelection(
+        runtime.getSnapshot().state.selection.nodeIds,
+      );
+      if (!instanceId) return;
+      updateInstanceSource(instanceId, sourcePath, patch);
+    },
+    [runtime, updateInstanceSource],
   );
 
   const setSelectedInstanceComponentProperty = useCallback(
@@ -681,6 +694,7 @@ export function useComponentActions({
     resetSelectedInstanceSource,
     resetSelectedInstanceComponentProperty,
     setSelectedInstanceComponentProperty,
+    updateInstanceSource,
     updateSelectedInstanceSource,
   };
 }

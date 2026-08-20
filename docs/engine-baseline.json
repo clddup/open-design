@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.35.0",
+    "documentSchemaVersion": "1.36.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.11.0",
     "geometryServiceContractVersion": 10,
@@ -43,8 +43,8 @@
       "role": "component-instance-resolution-service",
       "package": "@opendesign/component-service",
       "path": "packages/component-service",
-      "contractVersion": 4,
-      "productionStatus": "same-file-main-instance-ordered-component-properties-variant-sets-matrix-and-slots-available-native-gate-pending"
+      "contractVersion": 6,
+      "productionStatus": "same-file-main-instance-ordered-properties-variants-slots-unified-derived-selection-and-layer-state-available-native-gate-pending"
     },
     "variableService": {
       "role": "figma-compatible-variable-mode-alias-and-binding-resolution-service",

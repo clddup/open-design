@@ -24,7 +24,6 @@ import type { UpdatePropertiesPatch } from "../features/editor/types";
 import type { StyleActions } from "../use-style-actions";
 import type {
   ExportFormat,
-  RasterExportFeedback,
   RasterExportSettings,
   SvgInterchangeFeedback,
   SvgOperationStatus,
@@ -37,7 +36,6 @@ import {
 } from "./properties/ComponentSection";
 import {
   ExportSection,
-  RasterExportReport,
   SvgFidelityReport,
   SvgOperationNotice,
 } from "./properties/ExportSection";
@@ -74,7 +72,6 @@ export function PropertiesPanel({
   onDuplicate,
   onGoToComponentMain,
   onCancelSvgOperation,
-  onDismissRasterFeedback,
   onDismissSvgFeedback,
   onExportSvg,
   onExportRaster,
@@ -116,7 +113,6 @@ export function PropertiesPanel({
   selectionCount,
   exportFormat,
   rasterExportSettings,
-  rasterFeedback,
   svgExportSettings,
   svgFeedback,
   svgOperation,
@@ -148,7 +144,6 @@ export function PropertiesPanel({
   onDuplicate: () => void;
   onGoToComponentMain: () => void;
   onCancelSvgOperation: () => void;
-  onDismissRasterFeedback: () => void;
   onDismissSvgFeedback: () => void;
   onExportSvg: () => void;
   onExportRaster: () => void;
@@ -234,7 +229,6 @@ export function PropertiesPanel({
   selectionCount: number;
   exportFormat: ExportFormat;
   rasterExportSettings: RasterExportSettings;
-  rasterFeedback: RasterExportFeedback | null;
   svgExportSettings: SvgWorkerExportSettings;
   svgFeedback: SvgInterchangeFeedback | null;
   svgOperation: SvgOperationStatus | null;
@@ -256,12 +250,6 @@ export function PropertiesPanel({
           <SvgFidelityReport
             feedback={svgFeedback}
             onDismiss={onDismissSvgFeedback}
-          />
-        )}
-        {rasterFeedback && (
-          <RasterExportReport
-            feedback={rasterFeedback}
-            onDismiss={onDismissRasterFeedback}
           />
         )}
         {node ? (

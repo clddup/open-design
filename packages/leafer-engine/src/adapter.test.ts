@@ -4102,6 +4102,87 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("projects Layers-panel hover as an independent full-path canvas outline", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const input = createInput();
+    adapter.sync({
+      ...input,
+      layerHoverTarget: { nodeId: "feature_two" },
+    });
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const hovered = findElement(app.tree, "feature_two");
+    const hoverStroker = leaferHarness.strokers[1];
+    expect(hoverStroker?.target).toBe(hovered);
+    expect(hoverStroker).toMatchObject({
+      hittable: false,
+      opacity: 1,
+      strokePathType: "render-path",
+      strokeWidth: 1,
+    });
+
+    adapter.sync({
+      ...input,
+      layerHoverTarget: { nodeId: "feature_two" },
+      selection: { nodeIds: ["feature_two"], anchorNodeId: "feature_two" },
+    });
+    expect(hoverStroker?.target).toBeNull();
+
+    adapter.sync({
+      ...input,
+      layerHoverTarget: { nodeId: "feature_two" },
+      tool: "rectangle",
+    });
+    expect(hoverStroker?.target).toBeNull();
+
+    const hiddenDocument = structuredClone(input.document);
+    hiddenDocument.revision += 1;
+    const hidden = hiddenDocument.nodesById.feature_two;
+    if (!hidden) throw new Error("Missing hover fixture");
+    hidden.visible = false;
+    adapter.sync({
+      ...input,
+      document: hiddenDocument,
+      layerHoverTarget: { nodeId: "feature_two" },
+    });
+    expect(hoverStroker?.target).toBeNull();
+    adapter.dispose();
+  });
+
+  it("resolves Layers-panel hover for a component-derived layer", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const input = componentInput();
+    adapter.sync({
+      ...input,
+      layerHoverTarget: {
+        nodeId: "button_instance",
+        componentTarget: {
+          instanceId: "button_instance",
+          sourcePath: ["button_bg"],
+        },
+      },
+    });
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    const projected =
+      app &&
+      findElement(
+        app.tree,
+        componentProjectionId("button_instance", ["button_bg"]),
+      );
+    expect(leaferHarness.strokers[1]?.target).toBe(projected);
+    adapter.dispose();
+  });
+
   it("hides selection and hover chrome while the Pen tool owns the canvas", async () => {
     const adapter = await createLeaferEngineAdapter(
       createHost(),

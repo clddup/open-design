@@ -1,13 +1,11 @@
 import type {
+  ComponentOverridePatch,
   ComponentSelectionTarget,
   DesignDocument,
   DesignNode,
 } from "@opendesign/design-contracts";
 import { resolveComponentInstance } from "@opendesign/component-service";
-import {
-  canDeleteNodes,
-  resolveBooleanEditScope,
-} from "@opendesign/editor-runtime";
+import { resolveBooleanEditScope } from "@opendesign/editor-runtime";
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -31,6 +29,7 @@ import type {
   PageActionResult,
 } from "../features/editor/types";
 import { useI18n } from "../i18n";
+import type { LayerHoverTarget } from "../layer-hover-target";
 import type { SidebarTab } from "../state/editor";
 import { AssetsPanel } from "./AssetsPanel";
 import { VariablesPanel, type VariablesPanelActions } from "./VariablesPanel";
@@ -339,9 +338,10 @@ export function LeftSidebar({
   onPlaceAsset,
   onPlaceComponent,
   onReplaceAsset,
-  onDelete,
+  onLayerHoverChange,
   onSelect,
   onReparent,
+  onUpdateComponentLayer,
   onToggleLock,
   onToggleVisibility,
   variableActions,
@@ -369,13 +369,17 @@ export function LeftSidebar({
   onPlaceAsset: (assetId: string) => AssetActionResult;
   onPlaceComponent: (componentId: string) => AssetActionResult;
   onReplaceAsset: (assetId: string) => Promise<AssetActionResult>;
-  onDelete: (nodeId: string) => void;
+  onLayerHoverChange?: (target: LayerHoverTarget | null) => void;
   onSelect: (
     nodeIds: readonly string[],
     anchorNodeId?: string,
     componentTarget?: ComponentSelectionTarget,
   ) => void;
   onReparent: (request: LayerReparentRequest) => LayerReparentResult;
+  onUpdateComponentLayer: (
+    target: ComponentSelectionTarget,
+    patch: ComponentOverridePatch,
+  ) => void;
   onToggleLock: (nodeId: string) => void;
   onToggleVisibility: (nodeId: string) => void;
   variableActions: VariablesPanelActions;
@@ -936,6 +940,7 @@ export function LeftSidebar({
                   aria-selected={selected}
                   className={[
                     styles.layerRow,
+                    !node.visible ? styles.layerHidden : null,
                     booleanEditScope?.booleanId === node.id
                       ? styles.layerEditScopeParent
                       : node.parentId === booleanEditScope?.booleanId
@@ -952,6 +957,13 @@ export function LeftSidebar({
                     .filter(Boolean)
                     .join(" ")}
                   key={key}
+                  onPointerEnter={() =>
+                    onLayerHoverChange?.({
+                      nodeId: selectionNodeId,
+                      ...(componentTarget ? { componentTarget } : {}),
+                    })
+                  }
+                  onPointerLeave={() => onLayerHoverChange?.(null)}
                   onDragLeave={(event) => {
                     const nextTarget = event.relatedTarget;
                     if (
@@ -1063,45 +1075,46 @@ export function LeftSidebar({
                       )}
                     </span>
                   )}
-                  {!virtual && (
-                    <span className={styles.layerActions}>
-                      <IconButton
-                        className={
-                          effectiveLocked ? styles.layerLockActive : ""
-                        }
-                        disabled={inheritedLocked && !node.locked}
-                        icon={effectiveLocked ? "lucide:lock" : "lucide:unlock"}
-                        label={t(
-                          node.locked
-                            ? "sidebar.unlockNode"
-                            : inheritedLocked
-                              ? "sidebar.lockedByParent"
-                              : "sidebar.lockNode",
-                          { name: node.name || t(nodeKindKeys[node.kind]) },
-                        )}
-                        onClick={() => onToggleLock(node.id)}
-                        selected={effectiveLocked}
-                      />
-                      <IconButton
-                        icon={node.visible ? "lucide:eye" : "lucide:eye-off"}
-                        label={t(
-                          node.visible
-                            ? "sidebar.hideNode"
-                            : "sidebar.showNode",
-                          { name: node.name || t(nodeKindKeys[node.kind]) },
-                        )}
-                        onClick={() => onToggleVisibility(node.id)}
-                      />
-                      <IconButton
-                        disabled={!canDeleteNodes(document, [node.id])}
-                        icon="lucide:trash-2"
-                        label={t("sidebar.deleteNode", {
-                          name: node.name || t(nodeKindKeys[node.kind]),
-                        })}
-                        onClick={() => onDelete(node.id)}
-                      />
-                    </span>
-                  )}
+                  <span className={styles.layerActions}>
+                    <IconButton
+                      className={effectiveLocked ? styles.layerLockActive : ""}
+                      disabled={inheritedLocked && !node.locked}
+                      icon={effectiveLocked ? "lucide:lock" : "lucide:unlock"}
+                      label={t(
+                        node.locked
+                          ? "sidebar.unlockNode"
+                          : inheritedLocked
+                            ? "sidebar.lockedByParent"
+                            : "sidebar.lockNode",
+                        { name: node.name || t(nodeKindKeys[node.kind]) },
+                      )}
+                      onClick={() =>
+                        componentTarget
+                          ? onUpdateComponentLayer(componentTarget, {
+                              locked: !node.locked,
+                            })
+                          : onToggleLock(node.id)
+                      }
+                      selected={effectiveLocked}
+                    />
+                    <IconButton
+                      className={
+                        node.visible ? "" : styles.layerVisibilityInactive
+                      }
+                      icon={node.visible ? "lucide:eye" : "lucide:eye-off"}
+                      label={t(
+                        node.visible ? "sidebar.hideNode" : "sidebar.showNode",
+                        { name: node.name || t(nodeKindKeys[node.kind]) },
+                      )}
+                      onClick={() =>
+                        componentTarget
+                          ? onUpdateComponentLayer(componentTarget, {
+                              visible: !node.visible,
+                            })
+                          : onToggleVisibility(node.id)
+                      }
+                    />
+                  </span>
                 </div>
               );
             })}

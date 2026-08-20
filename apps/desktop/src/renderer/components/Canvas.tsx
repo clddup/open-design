@@ -87,6 +87,7 @@ export function Canvas({
   activePageId,
   generationActivity,
   harfBuzzTextRunLayoutProvider,
+  layerHoverTarget,
   runtime,
   snapshot,
   onTransactionError,
@@ -105,6 +106,7 @@ export function Canvas({
   activePageId: string;
   generationActivity?: LeaferGenerationActivity;
   harfBuzzTextRunLayoutProvider?: TextRunLayoutProvider<LeaferTextRunStyle>;
+  layerHoverTarget?: LeaferEngineSyncInput["layerHoverTarget"];
   runtime: EditorRuntime;
   snapshot: EditorSnapshot;
   onTransactionError: (message: string | null) => void;
@@ -977,6 +979,7 @@ export function Canvas({
       ...(generationActivity ? { generationActivity } : {}),
       ...(generationReveal ? { generationReveal } : {}),
       pageId: activePageId,
+      ...(layerHoverTarget ? { layerHoverTarget } : {}),
       ...(!snapshot.state.selection.componentTarget &&
       snapshot.state.selection.nodeIds.length === 1 &&
       snapshot.document.nodesById[snapshot.state.selection.nodeIds[0] ?? ""]
@@ -1017,6 +1020,7 @@ export function Canvas({
     activePageId,
     booleanEditScope,
     generationActivity,
+    layerHoverTarget,
     snapshot.document,
     reducedMotion,
     richTextResolution,

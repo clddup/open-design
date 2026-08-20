@@ -29,6 +29,7 @@ function pageActionProps() {
       () => ({ ok: false, error: "Unavailable" }) as const,
     ),
     onReplaceAsset: vi.fn(() => Promise.resolve({ ok: true } as const)),
+    onUpdateComponentLayer: vi.fn(),
     onCreatePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
     onDeletePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
     onDuplicatePage: vi.fn(
@@ -47,7 +48,6 @@ describe("LeftSidebar layer tree", () => {
       ...pageActionProps(),
       activePageId: "page_welcome",
       document: createWelcomeDocument(),
-      onDelete: vi.fn(),
       onPageChange: vi.fn(),
       onReparent: vi.fn(() => ({ ok: true }) as const),
       onSelect: vi.fn(),
@@ -140,7 +140,6 @@ describe("LeftSidebar layer tree", () => {
           {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
-          onDelete={vi.fn()}
           onPageChange={vi.fn()}
           onPlaceComponent={onPlaceComponent}
           onReparent={vi.fn(() => ({ ok: true }) as const)}
@@ -180,7 +179,6 @@ describe("LeftSidebar layer tree", () => {
           {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
-          onDelete={vi.fn()}
           onPageChange={vi.fn()}
           onRenamePage={onRenamePage}
           onReparent={vi.fn(() => ({ ok: true }) as const)}
@@ -273,7 +271,6 @@ describe("LeftSidebar layer tree", () => {
           activePageId="page_welcome"
           document={document}
           onCreatePage={onCreatePage}
-          onDelete={vi.fn()}
           onDeletePage={onDeletePage}
           onDuplicatePage={onDuplicatePage}
           onPageChange={onPageChange}
@@ -384,7 +381,6 @@ describe("LeftSidebar layer tree", () => {
           {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
-          onDelete={vi.fn()}
           onPageChange={vi.fn()}
           onReparent={vi.fn(() => ({ ok: true }) as const)}
           onSelect={vi.fn()}
@@ -428,7 +424,6 @@ describe("LeftSidebar layer tree", () => {
           {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
-          onDelete={vi.fn()}
           onPageChange={vi.fn()}
           onReparent={vi.fn(() => ({ ok: true }) as const)}
           onSelect={vi.fn()}
@@ -474,7 +469,6 @@ describe("LeftSidebar layer tree", () => {
           {...pageActionProps()}
           activePageId="page_welcome"
           document={unlockedDocument}
-          onDelete={vi.fn()}
           onPageChange={vi.fn()}
           onReparent={vi.fn(() => ({ ok: true }) as const)}
           onSelect={vi.fn()}
@@ -514,7 +508,6 @@ describe("LeftSidebar layer tree", () => {
           {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
-          onDelete={vi.fn()}
           onPageChange={vi.fn()}
           onReparent={vi.fn(() => ({ ok: true }) as const)}
           onSelect={onSelect}
@@ -588,6 +581,54 @@ describe("LeftSidebar layer tree", () => {
     ).toEqual({ nodeIds: ["footer"], anchorNodeId: "footer" });
   });
 
+  it("exposes Figma layer-state controls and projects row hover to the canvas", async () => {
+    const user = userEvent.setup();
+    const document = structuredClone(createWelcomeDocument());
+    const title = document.nodesById.title_welcome;
+    if (!title) throw new Error("Missing title fixture");
+    title.visible = false;
+    const onLayerHoverChange = vi.fn();
+    const onToggleLock = vi.fn();
+    const onToggleVisibility = vi.fn();
+    render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          {...pageActionProps()}
+          activePageId="page_welcome"
+          document={document}
+          onLayerHoverChange={onLayerHoverChange}
+          onPageChange={vi.fn()}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={vi.fn()}
+          onTabChange={vi.fn()}
+          onToggleLock={onToggleLock}
+          onToggleVisibility={onToggleVisibility}
+          selectedNodeIds={[]}
+          tab="layers"
+        />
+      </I18nProvider>,
+    );
+
+    const row = screen
+      .getByRole("button", { name: "Title" })
+      .closest('[role="treeitem"]');
+    if (!row) throw new Error("Missing title layer row");
+    fireEvent.pointerEnter(row);
+    expect(onLayerHoverChange).toHaveBeenLastCalledWith({
+      nodeId: "title_welcome",
+    });
+    fireEvent.pointerLeave(row);
+    expect(onLayerHoverChange).toHaveBeenLastCalledWith(null);
+
+    await user.click(screen.getByRole("button", { name: "Show Title" }));
+    expect(onToggleVisibility).toHaveBeenCalledWith("title_welcome");
+    await user.click(screen.getByRole("button", { name: "Lock Title" }));
+    expect(onToggleLock).toHaveBeenCalledWith("title_welcome");
+    expect(
+      screen.queryByRole("button", { name: "Delete Title" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows projected Instance layers and selects them by stable source path", async () => {
     const user = userEvent.setup();
     const document = structuredClone(createWelcomeDocument());
@@ -626,20 +667,23 @@ describe("LeftSidebar layer tree", () => {
       },
       extensions: {},
     };
+    const onLayerHoverChange = vi.fn();
     const onSelect = vi.fn();
+    const onUpdateComponentLayer = vi.fn();
     render(
       <I18nProvider initialLocale="en">
         <LeftSidebar
           {...pageActionProps()}
           activePageId="page_instances"
           document={document}
-          onDelete={vi.fn()}
+          onLayerHoverChange={onLayerHoverChange}
           onPageChange={vi.fn()}
           onReparent={vi.fn(() => ({ ok: true }) as const)}
           onSelect={onSelect}
           onTabChange={vi.fn()}
           onToggleLock={vi.fn()}
           onToggleVisibility={vi.fn()}
+          onUpdateComponentLayer={onUpdateComponentLayer}
           selectedNodeIds={["welcome_instance"]}
           tab="layers"
         />
@@ -654,6 +698,26 @@ describe("LeftSidebar layer tree", () => {
         instanceId: "welcome_instance",
         sourcePath: ["title_welcome"],
       },
+    );
+    const titleRow = screen
+      .getByRole("button", { name: "Title" })
+      .closest('[role="treeitem"]');
+    if (!titleRow) throw new Error("Missing projected title row");
+    fireEvent.pointerEnter(titleRow);
+    expect(onLayerHoverChange).toHaveBeenLastCalledWith({
+      nodeId: "welcome_instance",
+      componentTarget: {
+        instanceId: "welcome_instance",
+        sourcePath: ["title_welcome"],
+      },
+    });
+    await user.click(screen.getByRole("button", { name: "Lock Title" }));
+    expect(onUpdateComponentLayer).toHaveBeenLastCalledWith(
+      {
+        instanceId: "welcome_instance",
+        sourcePath: ["title_welcome"],
+      },
+      { locked: true },
     );
     expect(
       screen.queryByRole("button", { name: "Delete Title" }),
@@ -683,7 +747,6 @@ describe("LeftSidebar layer tree", () => {
           {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
-          onDelete={vi.fn()}
           onPageChange={vi.fn()}
           onReparent={onReparent}
           onSelect={vi.fn()}
@@ -752,7 +815,6 @@ describe("LeftSidebar layer tree", () => {
           {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
-          onDelete={vi.fn()}
           onPageChange={vi.fn()}
           onReparent={onReparent}
           onSelect={vi.fn()}
@@ -859,7 +921,6 @@ describe("LeftSidebar image assets", () => {
           {...pageActionProps()}
           activePageId="page_welcome"
           document={document}
-          onDelete={vi.fn()}
           onDeleteAsset={onDeleteAsset}
           onImportAsset={onImportAsset}
           onLocateAsset={onLocateAsset}

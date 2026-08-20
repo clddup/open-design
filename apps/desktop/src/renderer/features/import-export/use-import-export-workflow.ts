@@ -7,6 +7,7 @@ import { planStoredExportSetting } from "@opendesign/import-export-service/store
 import type { EditorRuntime } from "@opendesign/editor-runtime";
 import type { LeaferTextRunStyle } from "@opendesign/leafer-engine";
 import type { TextRunLayoutProvider } from "@opendesign/text-service";
+import type { AppMessageApi } from "@opendesign/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   MessageKey,
@@ -28,7 +29,6 @@ import {
 import { isAbortError, reportRendererError } from "../../diagnostics";
 import type {
   ExportFormat,
-  RasterExportFeedback,
   RasterExportSettings,
   SvgInterchangeFeedback,
   SvgOperationStatus,
@@ -42,6 +42,7 @@ export interface ImportExportWorkflowContext {
   activeProjectId: string;
   applyCommands: (label: string, commands: DesignOperation[]) => boolean;
   editorActive: boolean;
+  message: AppMessageApi;
   runtime: EditorRuntime;
   setEditorError: (message: string | null) => void;
   showProperties: () => void;
@@ -51,7 +52,6 @@ export interface ImportExportWorkflowContext {
 
 export interface ImportExportWorkflow {
   cancelOperation: () => void;
-  dismissRasterFeedback: () => void;
   dismissSvgFeedback: () => void;
   exportFormat: ExportFormat;
   exportRaster: () => Promise<void>;
@@ -61,7 +61,6 @@ export interface ImportExportWorkflow {
   importSvg: () => Promise<void>;
   operation: SvgOperationStatus | null;
   rasterExportSettings: RasterExportSettings;
-  rasterFeedback: RasterExportFeedback | null;
   setExportFormat: (format: ExportFormat) => void;
   setRasterExportSettings: (settings: RasterExportSettings) => void;
   setSvgExportSettings: (settings: SvgWorkerExportSettings) => void;
@@ -88,6 +87,7 @@ export function useImportExportWorkflow({
   activeProjectId,
   applyCommands,
   editorActive,
+  message,
   runtime,
   setEditorError,
   showProperties,
@@ -103,8 +103,6 @@ export function useImportExportWorkflow({
   const [svgFeedback, setSvgFeedback] = useState<SvgInterchangeFeedback | null>(
     null,
   );
-  const [rasterFeedback, setRasterFeedback] =
-    useState<RasterExportFeedback | null>(null);
   const operationController = useRef<AbortController | null>(null);
   const latest = useRef({
     activeDesignFileId,
@@ -113,6 +111,7 @@ export function useImportExportWorkflow({
     applyCommands,
     editorActive,
     exportFormat,
+    message,
     rasterExportSettings,
     runtime,
     setEditorError,
@@ -128,6 +127,7 @@ export function useImportExportWorkflow({
     applyCommands,
     editorActive,
     exportFormat,
+    message,
     rasterExportSettings,
     runtime,
     setEditorError,
@@ -143,7 +143,6 @@ export function useImportExportWorkflow({
     operationController.current = controller;
     setOperation(status);
     setSvgFeedback(null);
-    setRasterFeedback(null);
     latest.current.setEditorError(null);
     latest.current.showProperties();
     return controller;
@@ -211,11 +210,14 @@ export function useImportExportWorkflow({
         return;
       }
       current.runtime.setSelection([plan.rootNodeId], plan.rootNodeId);
-      setSvgFeedback({
-        kind: "import",
-        name: file.name,
-        issues: imported.issues.map((issue) => ({ ...issue })),
-      });
+      const issues = imported.issues.map((issue) => ({ ...issue }));
+      if (issues.length > 0) {
+        setSvgFeedback({ kind: "import", name: file.name, issues });
+      } else {
+        current.message.success(
+          current.t("properties.svgImportComplete", { name: file.name }),
+        );
+      }
     } catch (error) {
       if (!isAbortError(error)) {
         current.setEditorError(
@@ -298,11 +300,14 @@ export function useImportExportWorkflow({
           contents: result.svg,
         });
         if (!saved || controller.signal.aborted) return;
-        setSvgFeedback({
-          kind: "export",
-          name: saved.name,
-          issues: result.issues.map((issue) => ({ ...issue })),
-        });
+        const issues = result.issues.map((issue) => ({ ...issue }));
+        if (issues.length > 0) {
+          setSvgFeedback({ kind: "export", name: saved.name, issues });
+        } else {
+          current.message.success(
+            current.t("properties.svgExportComplete", { name: saved.name }),
+          );
+        }
       } catch (error) {
         if (!isAbortError(error)) {
           current.setEditorError(
@@ -400,13 +405,9 @@ export function useImportExportWorkflow({
           height: result.height,
         });
         if (!saved || controller.signal.aborted) return;
-        setRasterFeedback({
-          name: saved.name,
-          format: settings.format,
-          width: result.width,
-          height: result.height,
-          byteSize: saved.byteSize,
-        });
+        current.message.success(
+          current.t("properties.rasterExportComplete", { name: saved.name }),
+        );
       } catch (error) {
         if (!isAbortError(error)) {
           current.setEditorError(
@@ -505,7 +506,6 @@ export function useImportExportWorkflow({
 
   return {
     cancelOperation: () => operationController.current?.abort(),
-    dismissRasterFeedback: () => setRasterFeedback(null),
     dismissSvgFeedback: () => setSvgFeedback(null),
     exportFormat,
     exportRaster,
@@ -515,7 +515,6 @@ export function useImportExportWorkflow({
     importSvg,
     operation,
     rasterExportSettings,
-    rasterFeedback,
     setExportFormat,
     setRasterExportSettings,
     setSvgExportSettings,

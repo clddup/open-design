@@ -3,6 +3,7 @@ import {
   createWelcomeDocument,
   EditorRuntime,
 } from "@opendesign/editor-runtime";
+import type { AppMessageApi } from "@opendesign/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesktopApi } from "../../../shared/desktop-api";
 import { exportDesignRaster } from "../../raster-export";
@@ -45,8 +46,9 @@ describe("useImportExportWorkflow", () => {
       byteSize: 3,
     });
     const runtime = new EditorRuntime(createWelcomeDocument());
+    const message = createMessageApi();
     const { result } = renderHook(() =>
-      useImportExportWorkflow(workflowContext(runtime)),
+      useImportExportWorkflow(workflowContext(runtime, { message })),
     );
 
     act(() => result.current.setExportFormat("jpeg"));
@@ -66,11 +68,9 @@ describe("useImportExportWorkflow", () => {
       background: { mode: "color", color: "#ffffff" },
     });
     await waitFor(() => expect(result.current.operation).toBeNull());
-    expect(result.current.rasterFeedback).toMatchObject({
-      format: "jpeg",
-      width: 1_200,
-      height: 720,
-    });
+    expect(message.success).toHaveBeenCalledWith(
+      "properties.rasterExportComplete",
+    );
   });
 
   it("keeps operations mutually exclusive and cancels when the editor loses scope", async () => {
@@ -173,6 +173,7 @@ function workflowContext(
   runtime: EditorRuntime,
   overrides: {
     editorActive?: boolean;
+    message?: AppMessageApi;
     setEditorError?: (message: string | null) => void;
   } = {},
 ) {
@@ -182,10 +183,25 @@ function workflowContext(
     activeProjectId: "project_1",
     applyCommands: vi.fn().mockReturnValue(true),
     editorActive: overrides.editorActive ?? true,
+    message: overrides.message ?? createMessageApi(),
     runtime,
     setEditorError: overrides.setEditorError ?? vi.fn(),
     showProperties: vi.fn(),
     t: ((key: string) => key) as never,
+  };
+}
+
+function createMessageApi(): AppMessageApi {
+  const handle = { key: "test", dismiss: vi.fn() };
+  return {
+    clear: vi.fn(),
+    dismiss: vi.fn(),
+    error: vi.fn(() => handle),
+    info: vi.fn(() => handle),
+    loading: vi.fn(() => handle),
+    open: vi.fn(() => handle),
+    success: vi.fn(() => handle),
+    warning: vi.fn(() => handle),
   };
 }
 

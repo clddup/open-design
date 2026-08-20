@@ -149,7 +149,6 @@ function renderPanel(
           onDelete={vi.fn()}
           onDetachComponentInstance={vi.fn()}
           onDissolveVariantSet={options.onDissolveVariantSet ?? vi.fn()}
-          onDismissRasterFeedback={vi.fn()}
           onDismissSvgFeedback={onDismissSvgFeedback}
           onDuplicate={vi.fn()}
           onDuplicateVariant={options.onDuplicateVariant ?? vi.fn()}
@@ -207,7 +206,6 @@ function renderPanel(
             quality: 0.9,
             resampling: "smooth",
           }}
-          rasterFeedback={null}
           onUpdate={onUpdate}
           onUpdateComponentOverride={
             options.onUpdateComponentOverride ?? vi.fn()

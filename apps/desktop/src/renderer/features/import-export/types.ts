@@ -26,11 +26,3 @@ export interface SvgInterchangeFeedback {
   name: string;
   issues: readonly SvgInterchangeIssue[];
 }
-
-export interface RasterExportFeedback {
-  name: string;
-  format: RasterExportFormat;
-  width: number;
-  height: number;
-  byteSize: number;
-}

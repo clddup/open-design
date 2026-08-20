@@ -133,6 +133,7 @@ import type {
   LeaferGenerationReveal,
   LeaferGenerationSkeleton,
   LeaferImageCropState,
+  LeaferLayerHoverTarget,
   LeaferEngineOptions,
   LeaferEngineSyncInput,
   LeaferOperationKind,
@@ -302,6 +303,7 @@ const WHEEL_ZOOM_SPEED = 0.16;
 const VECTOR_CUT_GUIDE_COLOR = "#f248b5";
 const IMAGE_CROP_COLOR = "#4f7fff";
 const IMAGE_CROP_SOURCE_COLOR = "rgba(255, 255, 255, 0.88)";
+const LAYER_HOVER_COLOR = "#4f7fff";
 const GENERATION_REVEAL_COLOR = "#6574ff";
 const MAX_PROCESSED_GENERATION_REVEALS = 128;
 const GENERATION_SKELETON_COLOR = "#7c6ee6";
@@ -331,6 +333,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #leafer: LeaferModule;
   readonly #editor: LeaferEditor;
   readonly #generationRevealStroker: LeaferStroker;
+  readonly #layerHoverStroker: LeaferStroker;
   readonly #generationActivityElements: GenerationActivityElements;
   readonly #generationActivityLayer: LeaferGroup;
   readonly #generationPresentationRoot: LeaferGroup;
@@ -554,6 +557,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       strokeWidth: 1.25,
     });
     this.#editor.add(this.#generationRevealStroker);
+    this.#layerHoverStroker = new leafer.Stroker();
+    this.#layerHoverStroker.set({
+      hittable: false,
+      opacity: 0,
+      stroke: LAYER_HOVER_COLOR,
+      strokeAlign: "center",
+      strokePathType: "render-path",
+      strokeWidth: 1,
+    });
+    this.#editor.add(this.#layerHoverStroker);
     this.#listen();
   }
 
@@ -759,6 +772,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
       this.#syncSelection(input.selection);
+      this.#syncLayerHover(input.layerHoverTarget);
       this.#textRunEditor.syncPresentation();
       this.#editorOverlays.sync(input);
       this.#syncGenerationSkeleton(input.generationSkeleton);
@@ -888,6 +902,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationSkeletonLayer.destroy();
     this.#generationRevealStroker.remove();
     this.#generationRevealStroker.destroy();
+    this.#layerHoverStroker.remove();
+    this.#layerHoverStroker.destroy();
     window.removeEventListener("keydown", this.#onWindowKeyDown, true);
     document.removeEventListener(
       "selectionchange",
@@ -1813,6 +1829,57 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
     this.#editor.target = target.length === 0 ? (null as never) : target;
     this.#scheduleEditorRefresh();
+  }
+
+  #syncLayerHover(target: LeaferLayerHoverTarget | undefined): void {
+    const input = this.#input;
+    const projection = this.#projection;
+    const element = target?.componentTarget
+      ? this.#componentTargetElement(target.componentTarget)
+      : target
+        ? this.#elements.get(target.nodeId)
+        : undefined;
+    const projectionId = element ? this.#projectionId(element) : undefined;
+    const visible =
+      projection && projectionId
+        ? lineage(projectionId, projection).every(
+            (nodeId) =>
+              projection.elementsById.get(nodeId)?.data.visible !== false,
+          )
+        : false;
+    const show =
+      input?.tool === "select" &&
+      !input.vectorEditScope &&
+      !this.#imageCrop &&
+      element !== undefined &&
+      visible &&
+      !this.#editor.list.includes(element);
+    if (!show) {
+      this.#clearLayerHover();
+      return;
+    }
+    if (this.#layerHoverStroker.target !== element) {
+      this.#layerHoverStroker.setTarget(element, {
+        opacity: 1,
+        stroke: LAYER_HOVER_COLOR,
+        strokeWidth: 1,
+      });
+    } else if (this.#layerHoverStroker.opacity !== 1) {
+      this.#layerHoverStroker.opacity = 1;
+      this.#layerHoverStroker.update();
+    }
+  }
+
+  #clearLayerHover(): void {
+    if (
+      this.#layerHoverStroker.target === null &&
+      this.#layerHoverStroker.opacity === 0
+    ) {
+      return;
+    }
+    this.#layerHoverStroker.target = null as never;
+    this.#layerHoverStroker.opacity = 0;
+    this.#layerHoverStroker.update();
   }
 
   #emitSelection(): void {

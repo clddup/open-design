@@ -14,6 +14,7 @@ import type { TextLayoutProvider } from "@opendesign/text-service";
 import type {
   ComponentOverridePatch,
   DesignDocument,
+  UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
 import {
   getNodeBounds,
@@ -26,7 +27,7 @@ import type {
   GlobalTaskProjection,
   ProjectManifest,
 } from "@opendesign/workspace-contracts";
-import { ResizeHandle } from "@opendesign/ui";
+import { MessageProvider, ResizeHandle, useMessage } from "@opendesign/ui";
 import {
   useCallback,
   useEffect,
@@ -66,6 +67,7 @@ import {
   useEditorSnapshot,
 } from "./editor-runtime";
 import { useI18n } from "./i18n";
+import type { LayerHoverTarget } from "./layer-hover-target";
 import {
   canAddSelectionToVariantSet,
   createComponentInspectorContext,
@@ -184,6 +186,19 @@ function persistPanelWidth(panel: "navigator" | "utility", width: number) {
 
 export function App({ initialView }: { initialView?: AppView } = {}) {
   const { t } = useI18n();
+  return (
+    <MessageProvider
+      dismissLabel={t("message.dismiss")}
+      regionLabel={t("message.region")}
+    >
+      <AppContent initialView={initialView} />
+    </MessageProvider>
+  );
+}
+
+function AppContent({ initialView }: { initialView?: AppView } = {}) {
+  const { t } = useI18n();
+  const message = useMessage();
   const {
     activePageId,
     activateFile,
@@ -253,6 +268,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     null,
   );
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [layerHoverTarget, setLayerHoverTarget] =
+    useState<LayerHoverTarget | null>(null);
   const [textRangeSelection, setTextRangeSelection] =
     useState<LeaferTextRangeSelection | null>(null);
   const textEditingStyleController = useRef<
@@ -399,6 +416,10 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     designDocument,
     selectedNode,
     state.selection.componentTarget,
+  );
+  useEffect(
+    () => setLayerHoverTarget(null),
+    [activePageId, designDocument.documentId],
   );
   const selectedComponents = state.selection.nodeIds.flatMap((nodeId) => {
     const component = Object.values(designDocument.componentsById).find(
@@ -852,6 +873,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     activeProjectId: workspaceSnapshot.activeProjectId,
     applyCommands,
     editorActive: view === "editor",
+    message,
     runtime,
     setEditorError,
     showProperties: () => setUtilityTab("properties"),
@@ -880,6 +902,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     resetSelectedInstanceSource,
     resetSelectedInstanceComponentProperty,
     setSelectedInstanceComponentProperty,
+    updateInstanceSource,
     updateSelectedInstanceSource,
   } = useComponentActions({
     activePageId,
@@ -894,6 +917,63 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     selectedComponentContext?.variantSet && selectedNode?.kind !== "instance"
       ? duplicateSelectedVariant
       : duplicateSelection;
+
+  const toggleSelectedLayerState = useCallback(
+    (field: "locked" | "visible") => {
+      const current = runtime.getSnapshot();
+      const componentTarget = current.state.selection.componentTarget;
+      if (componentTarget) {
+        const instance = current.document.nodesById[componentTarget.instanceId];
+        const context = createComponentInspectorContext(
+          current.document,
+          instance,
+          componentTarget,
+        );
+        const source = context?.sourceNodes.find(
+          (candidate) =>
+            candidate.sourcePath.length === componentTarget.sourcePath.length &&
+            candidate.sourcePath.every(
+              (value, index) => value === componentTarget.sourcePath[index],
+            ),
+        );
+        if (!source) return false;
+        updateInstanceSource(
+          componentTarget.instanceId,
+          componentTarget.sourcePath,
+          field === "locked"
+            ? { locked: !source.node.locked }
+            : { visible: !source.node.visible },
+        );
+        return true;
+      }
+      const commands = current.state.selection.nodeIds.flatMap(
+        (nodeId, index): UpdatePropertiesCommand[] => {
+          const node = current.document.nodesById[nodeId];
+          if (!node) return [];
+          return [
+            {
+              commandId: `toggle_${field}_${index}_${nodeId}`,
+              type: "update_properties",
+              nodeId,
+              ...(field === "locked"
+                ? { locked: !node.locked }
+                : { visible: !node.visible }),
+            },
+          ];
+        },
+      );
+      if (commands.length === 0) return false;
+      return applyCommands(
+        t(
+          field === "locked"
+            ? "history.toggleLayerLock"
+            : "history.toggleLayerVisibility",
+        ),
+        commands,
+      );
+    },
+    [applyCommands, runtime, t, updateInstanceSource],
+  );
 
   const replaceSelectedImage = useCallback(async () => {
     const selected = runtime.getSnapshot().state.selection.nodeIds;
@@ -1088,6 +1168,16 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         else groupSelection();
         return;
       }
+      if (
+        modifier &&
+        event.shiftKey &&
+        !event.altKey &&
+        (event.code === "KeyL" || event.code === "KeyH")
+      ) {
+        event.preventDefault();
+        toggleSelectedLayerState(event.code === "KeyL" ? "locked" : "visible");
+        return;
+      }
       const booleanShortcut =
         (
           {
@@ -1191,6 +1281,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     runtime,
     state.selection.nodeIds,
     toggleLeftPanel,
+    toggleSelectedLayerState,
     toggleUtilityPanel,
     ungroupSelection,
   ]);
@@ -2250,7 +2341,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             onRenamePage={pageActions.renamePage}
             onReorderPage={pageActions.reorderPage}
             onReplaceAsset={replaceImageAsset}
-            onDelete={(nodeId) => deleteNodes([nodeId])}
+            onLayerHoverChange={setLayerHoverTarget}
             onReparent={reparentLayers}
             onSelect={(nodeIds, anchorNodeId, componentTarget) =>
               runtime.setSelection(nodeIds, anchorNodeId, componentTarget)
@@ -2264,6 +2355,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               const node = designDocument.nodesById[nodeId];
               if (node) updateNode(nodeId, { visible: !node.visible });
             }}
+            onUpdateComponentLayer={(target, patch) =>
+              updateInstanceSource(target.instanceId, target.sourcePath, patch)
+            }
             selectedNodeIds={state.selection.nodeIds}
             selectionAnchorNodeId={state.selection.anchorNodeId}
             selectionComponentTarget={state.selection.componentTarget}
@@ -2296,6 +2390,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               agentRunExperience={activeCanvasRunExperience ?? undefined}
               activePageId={activePageId}
               generationActivity={generationActivity}
+              layerHoverTarget={layerHoverTarget ?? undefined}
               onTransactionError={setEditorError}
               onAssetDrop={placeImageAssetAtPoint}
               onImageCropControllerChange={handleImageCropControllerChange}
@@ -2441,7 +2536,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 onDetachComponentInstance={detachSelectedInstance}
                 onDissolveVariantSet={dissolveSelectedVariantSet}
                 onDuplicateVariant={duplicateSelectedVariant}
-                onDismissRasterFeedback={importExport.dismissRasterFeedback}
                 onDismissSvgFeedback={importExport.dismissSvgFeedback}
                 onDuplicate={duplicateSelectionAction}
                 onGoToComponentMain={goToSelectedInstanceMain}
@@ -2494,7 +2588,6 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 fontContext={fontInspectorContext}
                 exportFormat={importExport.exportFormat}
                 rasterExportSettings={importExport.rasterExportSettings}
-                rasterFeedback={importExport.rasterFeedback}
                 selectionCount={state.selection.nodeIds.length}
                 svgExportSettings={importExport.svgExportSettings}
                 svgFeedback={importExport.svgFeedback}

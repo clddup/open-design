@@ -194,6 +194,16 @@ function ComponentOverrideEditor({
             />
             {t("properties.visible")}
           </label>
+          <label>
+            <input
+              checked={sourceNode.locked}
+              onChange={(event) =>
+                onUpdate(source.sourcePath, { locked: event.target.checked })
+              }
+              type="checkbox"
+            />
+            {t("properties.locked")}
+          </label>
         </div>
       </div>
       <div className={styles.grid}>

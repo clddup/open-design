@@ -606,6 +606,7 @@ export const ComponentOverridePatchSchema = Type.Object(
   {
     name: Type.Optional(Type.String()),
     visible: Type.Optional(Type.Boolean()),
+    locked: Type.Optional(Type.Boolean()),
     opacity: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
     blendMode: Type.Optional(BlendModeSchema),
     effects: Type.Optional(Type.Array(EffectSchema)),
