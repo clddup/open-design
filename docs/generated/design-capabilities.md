@@ -64,7 +64,7 @@
 - 证据：自动化 17 项；实机 0 项
 - 限制：Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。
 - 限制：Enter 或双击可让一个或多个已选 Vector 图层进入非分支多轮廓节点编辑；每层拥有独立 trace、稳定 point/path 选区和只读状态。Q 套索可圈选完整包含的节点与 line/cubic segment；Delete 对节点执行重连，对 segment 则真实断开并确定性生成开放 runs。同一 Vector 多节点变换及既有节点/手柄、Connect/Disconnect、Open/Close/Reverse、Cut、tight bounds 与单事务手势继续可用。
-- 限制：Cut 模式（X）支持节点/路径真实断点和跨多个 Vector 图层的有限 document-space 分割；point/path Lasso、segment Delete、同一 Vector Connect/Disconnect 与单 Vector 多节点变换共用稳定拓扑和原子手势。跨 Vector 统一变换框、Space 中途平移、segment Bend/per-segment appearance、嵌套/重叠 region、只切孔洞、跨层 Connect、分支网络、flatten、outline stroke、像素基线和打包交互证据仍未完成。
+- 限制：Cut 模式（X）支持节点/路径真实断点和跨多个 Vector 图层的有限 document-space 分割；闭合边界通过同侧 connector 与连续边界缝合处理穿孔和凹形多交点 component，开放 contour 按每个真实横穿交点拆成 retained/extracted 开放 runs，不补 connector、region 或隐式 Fill。point/path Lasso、segment Delete、同一 Vector Connect/Disconnect 与单 Vector 多节点变换共用稳定拓扑和原子手势。跨 Vector 统一变换框、Space 中途平移、segment Bend/per-segment appearance、嵌套/重叠 region、只切孔洞、跨层 Connect、分支网络、flatten、outline stroke、像素基线和打包交互证据仍未完成。
 - 限制：受控 OpenDesign SVG metadata 只在通过 schema、拓扑且与标准渲染 path 精确匹配时保留 editable network；没有 metadata 的外部 SVG 保持为精确 path 数据，不猜测可编辑拓扑。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
