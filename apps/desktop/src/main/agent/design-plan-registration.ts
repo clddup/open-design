@@ -74,6 +74,12 @@ export function registerDesignWorkflowPlan(options: {
   const { existing, inspection, recoverableDelivery } = options;
   const plan = normalizePlanQualityProfiles(options.plan);
   const targets = designPlanTargets(plan);
+  // Amendments are first constrained by identities that already own material
+  // document state. Placement and reservation validation may otherwise report
+  // a secondary error for a replacement ID before the caller learns that the
+  // replacement itself is forbidden.
+  assertMaterialTargetsRemainStable(existing, plan, targets);
+  assertMaterialComponentDecisionsRemainStable(existing, plan);
   assertUniquePlannedNodeIds(plan, targets);
   assertCreatedArtboardsDoNotOverlap(inspection, targets);
   if (existing && sameJson(existing.plan, plan)) {
@@ -86,8 +92,6 @@ export function registerDesignWorkflowPlan(options: {
       status: "unchanged",
     };
   }
-  assertMaterialTargetsRemainStable(existing, plan, targets);
-  assertMaterialComponentDecisionsRemainStable(existing, plan);
   const visualSystemChanged =
     existing !== undefined &&
     !sameJson(existing.plan.visualSystem, plan.visualSystem);

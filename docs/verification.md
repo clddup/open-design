@@ -7,7 +7,7 @@
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.36.0`
 - Agent 协议：`3.11.0`
-- Geometry Service：`contract v10`
+- Geometry Service：`contract v12`
 - Text Layout Service：`contract v4`
 - Text Range Service：`contract v1`（DesignDocument rich-text runs 已接入）
 - Text Paragraph Service：`contract v2`（逐段 indent/spacing/list 已接入）

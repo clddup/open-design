@@ -60,6 +60,39 @@ describe("current Design Plan amendments", () => {
     expect(target?.lastReview).toBeNull();
   });
 
+  it("reports material identity violations before replacement placement errors", () => {
+    const initialPlan = plan();
+    const initial = registerDesignWorkflowPlan({
+      inspection: inspectedExistingDesign(),
+      plan: initialPlan,
+    });
+    markVerified(initial.state.targetsById.get("target_home"));
+    const home = initialPlan.targets[0];
+    if (!home) throw new Error("Home target is missing");
+
+    expect(() =>
+      registerDesignWorkflowPlan({
+        existing: initial.state,
+        inspection: inspectedExistingDesign(),
+        plan: {
+          ...initialPlan,
+          targets: [
+            {
+              ...home,
+              artboard: {
+                ...home.artboard,
+                mode: "create",
+                frameId: "frame_home_replacement",
+              },
+            },
+          ],
+        },
+      }),
+    ).toThrow(
+      "design_workflow.plan_amendment_invalid: Material target target_home must preserve its Page and artboard Frame ID",
+    );
+  });
+
   it("reopens a material target when the brief, quality policy, or skill refs change", () => {
     const initialPlan = plan();
     const initial = registerDesignWorkflowPlan({
