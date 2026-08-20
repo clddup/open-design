@@ -54,6 +54,12 @@ describe("AgentReferenceHost", () => {
     expect(host.registerGeneratedImage(attachment, context)).toEqual(
       attachment,
     );
+    expect(host.hasAuthorizedImage(attachment.attachmentId, context)).toBe(
+      true,
+    );
+    expect(host.hasAuthorizedImage(`image_${"f".repeat(64)}`, context)).toBe(
+      false,
+    );
     await expect(
       host.materializeImage(attachment.attachmentId, context),
     ).resolves.toMatchObject({

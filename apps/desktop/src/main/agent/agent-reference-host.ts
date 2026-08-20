@@ -65,6 +65,16 @@ export class AgentReferenceHost {
     return snapshot;
   }
 
+  hasAuthorizedImage(
+    attachmentId: string,
+    context: TrustedToolContext,
+  ): boolean {
+    const metadata = this.#runs
+      .get(context.runId)
+      ?.attachments.get(attachmentId);
+    return metadata !== undefined && isImageAttachment(metadata);
+  }
+
   async readImage(
     input: ReadImageToolInput,
     context: TrustedToolContext,

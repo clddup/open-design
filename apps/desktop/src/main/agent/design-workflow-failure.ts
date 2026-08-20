@@ -20,6 +20,13 @@ export function trustedDesignWorkflowFailure(
       "Preserve every material targetId, pageId, artboard frameId, and planned region nodeId. Inspect the current document, keep those stable IDs, and amend only the target intent, visual system, labels, implementation steps, validation checks, or unfinished targets. Rebuild content inside the existing stable artboard instead of deleting the target.",
     );
   }
+  if (classification.code === "new_node_id_namespace_required") {
+    return failure(
+      "design_new_node_id_namespace_required",
+      message,
+      "Use the latest inspection's exact newNodeIdPrefix for every genuinely new node. A prior Run ID may be reused only when unfinishedDelivery explicitly lists it as a reservedNodeId; keep inspected existing IDs unchanged.",
+    );
+  }
   if (classification.code === "design_target_stale") {
     const commandId = /^Design command (.+?) targets/u.exec(message)?.[1];
     return failure(

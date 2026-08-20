@@ -551,6 +551,69 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("clears an opaque Frame surface when the authoritative fills become empty", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    const baseInput = createInput();
+    const first = {
+      ...baseInput,
+      document: structuredClone(baseInput.document),
+    };
+    const parent = first.document.nodesById.frame_welcome;
+    if (!parent || parent.kind !== "frame") throw new Error("Missing Frame");
+    first.document.nodesById.transparent_region = {
+      id: "transparent_region",
+      kind: "frame",
+      name: "Typography region",
+      parentId: parent.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: parent.size.width, height: parent.size.height },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        fills: [{ type: "solid", color: "#ffffff", opacity: 1 }],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+        clipsContent: false,
+      },
+      extensions: {},
+    };
+    parent.childIds.push("transparent_region");
+    adapter.sync(first);
+    const app = leaferHarness.app;
+    const region = app && findElement(app.tree, "transparent_region");
+    if (!region) throw new Error("Missing typography region");
+    expect((region as FakeElement & { fill?: unknown }).fill).toEqual([
+      { type: "solid", color: "#ffffff", opacity: 1, visible: true },
+    ]);
+
+    const secondDocument = structuredClone(first.document);
+    secondDocument.revision += 1;
+    const transparent = secondDocument.nodesById.transparent_region;
+    if (!transparent || transparent.kind !== "frame") {
+      throw new Error("Missing transparent typography region");
+    }
+    transparent.properties.fills = [];
+    adapter.sync({
+      ...first,
+      changes: changedNodeSet(
+        first.document,
+        secondDocument,
+        transparent.id,
+        "properties",
+      ),
+      document: secondDocument,
+    });
+    expect((region as FakeElement & { fill?: unknown }).fill).toBeNull();
+    adapter.dispose();
+  });
+
   it("reorders selected Grid tracks from editor-sky controls through one semantic callback", async () => {
     const onGridTrackReorder = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {

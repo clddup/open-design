@@ -1073,6 +1073,35 @@ describe("GlobalTaskCoordinator", () => {
       coordinator.assertDesignPlanForRaster(context, "final-single-image"),
     ).toThrow("not declared");
     coordinator.recordGeneratedRaster(context, "image_generated", "hero");
+    expect(
+      coordinator.resolveGeneratedRasterAttachmentId(
+        context,
+        `image_${"f".repeat(64)}`,
+        "hero",
+      ),
+    ).toBe("image_generated");
+    expect(
+      coordinator.resolveGeneratedRasterAttachmentId(
+        context,
+        "image_generated",
+        "hero",
+      ),
+    ).toBe("image_generated");
+    coordinator.recordGeneratedRaster(context, "image_generated_2", "hero");
+    expect(() =>
+      coordinator.resolveGeneratedRasterAttachmentId(
+        context,
+        `image_${"e".repeat(64)}`,
+        "hero",
+      ),
+    ).toThrow("image_attachment_ambiguous");
+    expect(() =>
+      coordinator.resolveGeneratedRasterAttachmentId(
+        context,
+        "image_generated",
+        "background",
+      ),
+    ).toThrow("cannot be placed as background");
     expect(() =>
       coordinator.registerDesignPlan(context, {
         ...designPlanForPage(pageId),
@@ -1871,6 +1900,18 @@ describe("GlobalTaskCoordinator", () => {
           nodeId: region.nodeId.replace("frame_profile", "frame_settings"),
         })),
       },
+      qualityProfile:
+        profile.qualityProfile.kind === "ui"
+          ? {
+              ...structuredClone(profile.qualityProfile),
+              safeAreaNodeIds: profile.qualityProfile.safeAreaNodeIds.map(
+                (nodeId) => nodeId.replace("frame_profile", "frame_settings"),
+              ),
+              interactiveNodeIds: profile.qualityProfile.interactiveNodeIds.map(
+                (nodeId) => nodeId.replace("frame_profile", "frame_settings"),
+              ),
+            }
+          : structuredClone(profile.qualityProfile),
     };
     const amended: DesignPlanToolInput = {
       ...structuredClone(plan),
@@ -2092,13 +2133,14 @@ describe("GlobalTaskCoordinator", () => {
       ...interrupted,
       lifecycle: "interrupted",
       delivery: {
-        version: 2,
+        version: 3,
         targets: [
           {
             targetId: "target_home",
             label: "Home",
             pageId,
             rootNodeId: "frame_home",
+            reservedNodeIds: ["frame_home", "frame_home_content"],
             status: "verified",
             allocatedRevision: 1,
             draftRevision: 1,
@@ -2112,6 +2154,7 @@ describe("GlobalTaskCoordinator", () => {
             label: "Profile",
             pageId,
             rootNodeId: "frame_profile",
+            reservedNodeIds: ["frame_profile", "frame_profile_content"],
             status: "drafted",
             allocatedRevision: 1,
             draftRevision: 2,
@@ -2158,10 +2201,21 @@ describe("GlobalTaskCoordinator", () => {
       existingPlan.targets,
       2,
     );
-    coordinator.recordDocumentInspection(
-      context,
-      inspectionResult(recoveredDocument, pageId),
-    );
+    const profileRoot = recoveredDocument.nodesById.frame_profile;
+    if (!profileRoot || profileRoot.kind !== "frame") {
+      throw new Error("Recovered Profile Frame is missing");
+    }
+    profileRoot.childIds = [];
+    delete recoveredDocument.nodesById.frame_profile_content;
+    delete recoveredDocument.nodesById.frame_profile_content_material;
+    const recoveredInspection = inspectionResult(recoveredDocument, pageId);
+    coordinator.recordDocumentInspection(context, {
+      ...recoveredInspection,
+      content: {
+        ...recoveredInspection.content,
+        idAllocation: createAgentDesignIdAllocation(context.runId),
+      },
+    });
     coordinator.registerDesignPlan(context, existingPlan);
     expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
       activeTargetId: "target_profile",
@@ -2176,6 +2230,18 @@ describe("GlobalTaskCoordinator", () => {
       nodeId: "frame_profile",
       qualityProfile: existingPlan.targets[1].qualityProfile,
     });
+    expect(() =>
+      coordinator.assertDesignPlanForApply(
+        context,
+        insertExistingChild(pageId, "frame_profile", "frame_profile_content"),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      coordinator.assertDesignPlanForApply(
+        context,
+        insertExistingChild(pageId, "frame_profile", "legacy_unreserved"),
+      ),
+    ).toThrow("new_node_id_namespace_required");
 
     store.close();
   });

@@ -34,6 +34,16 @@ const WORKFLOW_FAILURES: Readonly<
     "applying-draft",
     true,
   ),
+  planned_parent_not_materialized: recovery(
+    "material-write",
+    "applying-draft",
+    true,
+  ),
+  image_attachment_ambiguous: recovery(
+    "material-write",
+    "applying-draft",
+    false,
+  ),
   capture_required: recovery("capture", "capturing-canvas", false),
   capture_revision_invalid: recovery("capture", "capturing-canvas", true),
   delivery_verification_required: recovery("capture", "capturing-canvas", true),
@@ -43,6 +53,11 @@ const WORKFLOW_FAILURES: Readonly<
     true,
   ),
   plan_amendment_invalid: recovery("plan-repair", "repairing-plan", true),
+  new_node_id_namespace_required: recovery(
+    "plan-repair",
+    "repairing-plan",
+    false,
+  ),
   frame_resize_requires_layout_tool: recovery(
     "layout-repair",
     "repairing-layout",

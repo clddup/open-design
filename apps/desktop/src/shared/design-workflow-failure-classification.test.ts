@@ -7,6 +7,8 @@ describe("design workflow failure classification", () => {
     ["inspection_stale", "inspection", "applying-draft"],
     ["material_write_required", "material-write", "applying-draft"],
     ["delivery_structure_incomplete", "material-write", "applying-draft"],
+    ["planned_parent_not_materialized", "material-write", "applying-draft"],
+    ["image_attachment_ambiguous", "material-write", "applying-draft"],
     ["capture_required", "capture", "capturing-canvas"],
     ["capture_revision_invalid", "capture", "capturing-canvas"],
     ["delivery_verification_required", "capture", "capturing-canvas"],
@@ -16,6 +18,7 @@ describe("design workflow failure classification", () => {
       "repairing-components",
     ],
     ["plan_amendment_invalid", "plan-repair", "repairing-plan"],
+    ["new_node_id_namespace_required", "plan-repair", "repairing-plan"],
     ["frame_resize_requires_layout_tool", "layout-repair", "repairing-layout"],
     ["layout_quality_failed", "layout-repair", "repairing-layout"],
   ] as const)(

@@ -41,7 +41,7 @@ describe("initial design inspection", () => {
           }),
           recordDocumentInspection,
           getRecoverableDelivery: () => ({
-            version: 2,
+            version: 3,
             activeTargetId: "target_home",
             targets: [],
           }),

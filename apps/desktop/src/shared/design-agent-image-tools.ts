@@ -31,8 +31,7 @@ export type GenerateImageToolInput = {
   outputFormat?: ImageGenerationOutputFormat;
 };
 
-export type PlaceImageToolInput = {
-  attachmentId: string;
+type PlaceImageToolBaseInput = {
   pageId: string;
   parentId: string | null;
   index: number;
@@ -45,6 +44,12 @@ export type PlaceImageToolInput = {
   height?: number;
   placement?: ImagePlacement;
 };
+
+export type PlaceImageToolInput = PlaceImageToolBaseInput &
+  (
+    | { attachmentId: string; assetId?: never }
+    | { assetId: string; attachmentId?: never; width: number; height: number }
+  );
 
 export type UpdateImageToolInput =
   | {
@@ -169,6 +174,12 @@ export const PLACE_IMAGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   properties: {
     attachmentId: { type: "string", pattern: "^image_[a-f0-9]{64}$" },
+    assetId: {
+      type: "string",
+      pattern: "^asset_[a-f0-9]{64}$",
+      description:
+        "Persistent image asset in the current Design File. Use either assetId or attachmentId. Existing assets require explicit width and height from inspection metadata.",
+    },
     pageId: { type: "string", minLength: 1, maxLength: 256 },
     parentId: {
       anyOf: [
@@ -188,16 +199,13 @@ export const PLACE_IMAGE_TOOL_INPUT_SCHEMA = {
     height: { type: "number", exclusiveMinimum: 0 },
     placement: DESIGN_IMAGE_PLACEMENT_SCHEMA,
   },
-  required: [
-    "attachmentId",
-    "pageId",
-    "parentId",
-    "index",
-    "nodeId",
-    "name",
-    "role",
-    "x",
-    "y",
+  required: ["pageId", "parentId", "index", "nodeId", "name", "role", "x", "y"],
+  oneOf: [
+    { required: ["attachmentId"], not: { required: ["assetId"] } },
+    {
+      required: ["assetId", "width", "height"],
+      not: { required: ["attachmentId"] },
+    },
   ],
   additionalProperties: false,
 } as const;
@@ -269,9 +277,18 @@ export function isPlaceImageToolInput(
   input: unknown,
 ): input is PlaceImageToolInput {
   if (!isRecord(input)) return false;
-  return (
+  const attachmentSource =
     typeof input.attachmentId === "string" &&
     /^image_[a-f0-9]{64}$/.test(input.attachmentId) &&
+    input.assetId === undefined;
+  const assetSource =
+    typeof input.assetId === "string" &&
+    /^asset_[a-f0-9]{64}$/.test(input.assetId) &&
+    input.attachmentId === undefined &&
+    positive(input.width) &&
+    positive(input.height);
+  return (
+    (attachmentSource || assetSource) &&
     safeId(input.pageId) &&
     (input.parentId === null || safeId(input.parentId)) &&
     Number.isInteger(input.index) &&
@@ -289,6 +306,7 @@ export function isPlaceImageToolInput(
     Object.keys(input).every((key) =>
       [
         "attachmentId",
+        "assetId",
         "pageId",
         "parentId",
         "index",

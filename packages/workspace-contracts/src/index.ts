@@ -3,7 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 
 export const WORKSPACE_CONTRACT_VERSION = 2 as const;
 export const PROJECT_MANIFEST_VERSION = "1.0.0" as const;
-export const DESIGN_DELIVERY_LEDGER_VERSION = 2 as const;
+export const DESIGN_DELIVERY_LEDGER_VERSION = 3 as const;
 export const MAX_PROJECT_DESIGN_FILES = 4_096;
 export const MAX_DESIGN_TARGETS = 128;
 export const MAX_SELECTED_NODE_IDS = 512;
@@ -102,6 +102,11 @@ export const DesignDeliveryTargetSchema = Type.Object(
     label: NameSchema,
     pageId: DesignEntityIdSchema,
     rootNodeId: DesignEntityIdSchema,
+    reservedNodeIds: Type.Array(DesignEntityIdSchema, {
+      minItems: 1,
+      maxItems: 512,
+      uniqueItems: true,
+    }),
     status: DesignDeliveryStatusSchema,
     allocatedRevision: Type.Optional(Type.Integer({ minimum: 0 })),
     draftRevision: Type.Optional(Type.Integer({ minimum: 0 })),
@@ -584,6 +589,17 @@ export function isDesignDeliveryLedger(
   ) {
     return false;
   }
+  const reservedNodeIds = value.targets.flatMap(
+    (target) => target.reservedNodeIds,
+  );
+  if (
+    value.targets.some(
+      (target) => !target.reservedNodeIds.includes(target.rootNodeId),
+    ) ||
+    new Set(reservedNodeIds).size !== reservedNodeIds.length
+  ) {
+    return false;
+  }
   if (
     value.activeTargetId !== null &&
     !value.targets.some((target) => target.targetId === value.activeTargetId)
@@ -643,7 +659,7 @@ function hasValidDeliveryRevisions(target: DesignDeliveryTarget): boolean {
   );
 }
 
-/** Upgrade persisted v1 delivery ledgers without treating them as current. */
+/** Upgrade persisted v1/v2 delivery ledgers without inventing old Plan IDs. */
 export function normalizeDesignDeliveryLedger(
   value: unknown,
 ): DesignDeliveryLedger | null {
@@ -652,7 +668,8 @@ export function normalizeDesignDeliveryLedger(
     typeof value !== "object" ||
     value === null ||
     Array.isArray(value) ||
-    (value as { version?: unknown }).version !== 1
+    ((value as { version?: unknown }).version !== 1 &&
+      (value as { version?: unknown }).version !== 2)
   ) {
     return null;
   }
@@ -660,6 +677,7 @@ export function normalizeDesignDeliveryLedger(
   const rawTargets: unknown[] | undefined = Array.isArray(raw.targets)
     ? (raw.targets as unknown[])
     : undefined;
+  const legacyVersion = raw.version;
   const targets = rawTargets
     ? rawTargets.map((target) => {
         if (
@@ -670,9 +688,14 @@ export function normalizeDesignDeliveryLedger(
           return target;
         }
         const rawTarget = target as Record<string, unknown>;
-        return rawTarget.status === "pending"
-          ? { ...rawTarget }
-          : { ...rawTarget, allocatedRevision: rawTarget.draftRevision };
+        const withAllocation =
+          legacyVersion === 1 && rawTarget.status !== "pending"
+            ? { ...rawTarget, allocatedRevision: rawTarget.draftRevision }
+            : { ...rawTarget };
+        return {
+          ...withAllocation,
+          reservedNodeIds: [rawTarget.rootNodeId],
+        };
       })
     : raw.targets;
   const candidate = {

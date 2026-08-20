@@ -21,7 +21,7 @@ function request(
 }
 
 const incomplete: DesignDeliveryLedger = {
-  version: 2,
+  version: 3,
   activeTargetId: "target_1",
   targets: [
     {
@@ -29,6 +29,7 @@ const incomplete: DesignDeliveryLedger = {
       label: "Home",
       pageId: "page_1",
       rootNodeId: "frame_1",
+      reservedNodeIds: ["frame_1"],
       status: "drafted",
       allocatedRevision: 4,
       draftRevision: 5,

@@ -47,13 +47,14 @@ describe("AgentTimeline", () => {
         status: "completed",
         result: {
           delivery: {
-            version: 2,
+            version: 3,
             targets: [
               {
                 targetId: "target_home",
                 label: "Home",
                 pageId: "page_1",
                 rootNodeId: "frame_home",
+                reservedNodeIds: ["frame_home"],
                 status: "verified",
                 allocatedRevision: 1,
                 draftRevision: 1,
@@ -67,6 +68,7 @@ describe("AgentTimeline", () => {
                 label: "Profile",
                 pageId: "page_1",
                 rootNodeId: "frame_profile",
+                reservedNodeIds: ["frame_profile"],
                 status: "pending",
               },
             ],
@@ -130,13 +132,14 @@ describe("AgentTimeline", () => {
         transactionId: "transaction_register",
         result: {
           delivery: {
-            version: 2,
+            version: 3,
             targets: [
               {
                 targetId: "login",
                 label: "Login",
                 pageId: "page_1",
                 rootNodeId: "frame_login",
+                reservedNodeIds: ["frame_login"],
                 status: "verified",
                 allocatedRevision: 1,
                 draftRevision: 2,
@@ -150,6 +153,7 @@ describe("AgentTimeline", () => {
                 label: "Register",
                 pageId: "page_1",
                 rootNodeId: "frame_register",
+                reservedNodeIds: ["frame_register"],
                 status: "captured",
                 allocatedRevision: 1,
                 draftRevision: 7,
@@ -201,13 +205,14 @@ describe("AgentTimeline", () => {
         status: "completed",
         result: {
           delivery: {
-            version: 2,
+            version: 3,
             targets: [
               {
                 targetId: "target_previous",
                 label: "Previous",
                 pageId: "page_1",
                 rootNodeId: "frame_previous",
+                reservedNodeIds: ["frame_previous"],
                 status: "verified",
                 allocatedRevision: 1,
                 draftRevision: 1,

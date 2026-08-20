@@ -25,10 +25,8 @@ import {
 import type { ProjectHost } from "../project/project-host.js";
 import type { WorkspaceStore } from "../project/workspace-store.js";
 import {
-  componentStrategyOccurrencesForTarget,
   designApplyRequiresPlan,
   designPlanComponentStrategy,
-  qualityProfileNodeIds,
   designPlanTargets,
   type DesignApplyToolInput,
   type DesignComponentToolInput,
@@ -44,6 +42,7 @@ import {
   registerDesignWorkflowPlan,
   reconcileEstablishedArtboardDescendants,
   inspectedSubtreeIds,
+  plannedNodeIdsForTarget,
   type DesignDeliveryTargetState,
   type DesignPlanRegistration,
   type DesignWorkflowState,
@@ -405,7 +404,7 @@ export class GlobalTaskCoordinator {
       );
     }
     const recoverableDelivery = this.getRecoverableDelivery(context);
-    assertPlanUsesNewNodeIdNamespace(plan, inspection);
+    assertPlanUsesNewNodeIdNamespace(plan, inspection, recoverableDelivery);
     if (
       binding.mutationTarget.kind === "page" &&
       !this.hasPageStructureAccess(context.runId)
@@ -814,6 +813,35 @@ export class GlobalTaskCoordinator {
     roles.set(attachmentId, role);
   }
 
+  resolveGeneratedRasterAttachmentId(
+    context: TrustedToolContext,
+    requestedAttachmentId: string,
+    role: PlaceableRasterAssetRole,
+  ): string {
+    this.assertDesignPlanForRaster(context, role);
+    const generated = this.#generatedRasterRolesByRunId.get(context.runId);
+    const exactRole = generated?.get(requestedAttachmentId);
+    if (exactRole !== undefined) {
+      if (exactRole !== role) {
+        throw new Error(
+          `Generated raster was declared as ${exactRole} and cannot be placed as ${role}`,
+        );
+      }
+      return requestedAttachmentId;
+    }
+    const candidates = [...(generated?.entries() ?? [])].flatMap(
+      ([attachmentId, candidateRole]) =>
+        candidateRole === role ? [attachmentId] : [],
+    );
+    if (candidates.length === 1) return candidates[0] ?? requestedAttachmentId;
+    if (candidates.length > 1) {
+      throw new Error(
+        `design_workflow.image_attachment_ambiguous: Attachment ${requestedAttachmentId} is not authorized, and ${candidates.length} generated ${role} images are available in this Run; use the exact attachmentId returned by the intended generation result`,
+      );
+    }
+    return requestedAttachmentId;
+  }
+
   assertDesignPlanForImagePlacement(
     context: TrustedToolContext,
     role: PlaceableRasterAssetRole,
@@ -822,10 +850,6 @@ export class GlobalTaskCoordinator {
     nodeId?: string,
   ): DesignPlanToolInput {
     const state = this.#requireDesignPlan(context);
-    assertNewNodeIdUsesInspectionNamespace(
-      this.#inspectionsByRunId.get(context.runId),
-      nodeId,
-    );
     if (!state.plan.rasterAssetRoles.includes(role)) {
       throw new Error(
         `Raster role ${role} is not declared by the active design plan`,
@@ -840,6 +864,19 @@ export class GlobalTaskCoordinator {
       );
     }
     const target = findTargetForParent(state, parentId);
+    if (!target && parentId !== null) {
+      const plannedRegionTarget = [...state.targetsById.values()].find(
+        (candidate) =>
+          candidate.planned.composition.regions.some(
+            (region) => region.nodeId === parentId,
+          ) && !candidate.artboardDescendantIds.has(parentId),
+      );
+      if (plannedRegionTarget?.artboardEstablished) {
+        throw new Error(
+          `design_workflow.planned_parent_not_materialized: Planned region ${parentId} is a logical region and is not a real container in the current document; place the image inside an inspected descendant of artboard ${plannedRegionTarget.planned.artboard.frameId}, or first insert a current-namespace Frame under that artboard`,
+        );
+      }
+    }
     if (!target?.artboardEstablished) {
       throw new Error(
         "Image placement requires the planned artboard Frame to be created first",
@@ -853,6 +890,11 @@ export class GlobalTaskCoordinator {
         "Design images must be placed inside the planned artboard Frame",
       );
     }
+    assertNewNodeIdUsesInspectionNamespace(
+      this.#inspectionsByRunId.get(context.runId),
+      nodeId,
+      new Set(target.delivery.reservedNodeIds),
+    );
     if (target.delivery.status !== "captured") {
       this.assertVisualReviewBeforeWrite(context);
     }
@@ -865,11 +907,11 @@ export class GlobalTaskCoordinator {
     input: DesignApplyToolInput,
   ): DesignPlanApplyAuthorization | undefined {
     const state = this.#designPlansByRunId.get(context.runId);
-    assertApplyUsesNewNodeIdNamespace(
-      input,
-      this.#inspectionsByRunId.get(context.runId),
-    );
     if (!state) {
+      assertApplyUsesNewNodeIdNamespace(
+        input,
+        this.#inspectionsByRunId.get(context.runId),
+      );
       if (!designApplyRequiresPlan(input)) return undefined;
       this.#requireDesignPlan(context);
       return undefined;
@@ -881,6 +923,11 @@ export class GlobalTaskCoordinator {
         "Material design commands must target a declared delivery artboard",
       );
     }
+    assertApplyUsesNewNodeIdNamespace(
+      resolvedInput,
+      this.#inspectionsByRunId.get(context.runId),
+      reservedNodeIdsForTargets(state, targetIds),
+    );
     assertActiveMaterialTargets(state, targetIds);
     const rebaseTargets = targetIds.flatMap((targetId) => {
       const target = state.targetsById.get(targetId);
@@ -915,10 +962,6 @@ export class GlobalTaskCoordinator {
     allocationTargetIds: readonly string[],
   ): DesignPlanApplyAuthorization {
     const state = this.#requireDesignPlan(context);
-    assertApplyUsesNewNodeIdNamespace(
-      input,
-      this.#inspectionsByRunId.get(context.runId),
-    );
     const assumedAllocatedTargetIds = new Set(allocationTargetIds);
     if (assumedAllocatedTargetIds.size !== allocationTargetIds.length) {
       throw new Error(
@@ -951,6 +994,11 @@ export class GlobalTaskCoordinator {
         "design_workflow.material_write_required: Compact first-slice input must create real editable content inside the first allocated target",
       );
     }
+    assertApplyUsesNewNodeIdNamespace(
+      resolvedInput,
+      this.#inspectionsByRunId.get(context.runId),
+      reservedNodeIdsForTargets(state, targetIds),
+    );
     assertActiveMaterialTargets(state, targetIds);
     return {
       input: resolvedInput,
@@ -1174,6 +1222,7 @@ export class GlobalTaskCoordinator {
         label: target.delivery.label,
         pageId: target.delivery.pageId,
         rootNodeId: target.delivery.rootNodeId,
+        reservedNodeIds: [...target.delivery.reservedNodeIds],
         status: "drafted",
         allocatedRevision: target.delivery.allocatedRevision ?? revision,
         draftRevision: revision,
@@ -1316,39 +1365,30 @@ export class GlobalTaskCoordinator {
 function assertPlanUsesNewNodeIdNamespace(
   plan: DesignPlanToolInput,
   inspection: InspectedHierarchy,
+  recoverableDelivery: DesignDeliveryLedger | undefined,
 ): void {
   const prefix = inspection.newNodeIdPrefix;
   if (!prefix) return;
   const targets = designPlanTargets(plan);
   for (const target of targets) {
-    if (target.artboard.mode !== "create") continue;
-    assertNewNodeIdHasPrefix(target.artboard.frameId, prefix);
-    for (const region of target.composition.regions) {
-      assertNewNodeIdHasPrefix(region.nodeId, prefix);
-    }
-    for (const nodeId of qualityProfileNodeIds(target.qualityProfile)) {
+    const recovered = recoverableDelivery?.targets.find(
+      (candidate) =>
+        candidate.targetId === target.targetId &&
+        candidate.pageId === target.pageId &&
+        candidate.rootNodeId === target.artboard.frameId,
+    );
+    const reserved = new Set(recovered?.reservedNodeIds ?? []);
+    for (const nodeId of plannedNodeIdsForTarget(plan, target.targetId)) {
+      if (inspection.nodesById.has(nodeId) || reserved.has(nodeId)) continue;
       assertNewNodeIdHasPrefix(nodeId, prefix);
     }
   }
   const strategy = designPlanComponentStrategy(plan);
   if (!strategy) return;
-  const createTargetIds = new Set(
-    targets
-      .filter((target) => target.artboard.mode === "create")
-      .map((target) => target.targetId),
-  );
-  for (const targetId of createTargetIds) {
-    for (const occurrence of componentStrategyOccurrencesForTarget(
-      strategy,
-      targetId,
-    )) {
-      assertNewNodeIdHasPrefix(occurrence.nodeId, prefix);
-    }
-  }
   for (const candidate of strategy.candidates) {
     if (
       candidate.decision === "component" &&
-      createTargetIds.has(candidate.main.targetId)
+      !inspection.componentsById.has(candidate.componentId)
     ) {
       assertNewNodeIdHasPrefix(candidate.componentId, prefix);
     }
@@ -1358,18 +1398,23 @@ function assertPlanUsesNewNodeIdNamespace(
 function assertApplyUsesNewNodeIdNamespace(
   input: DesignApplyToolInput,
   inspection: InspectedHierarchy | undefined,
+  reservedNodeIds: ReadonlySet<string> = new Set(),
 ): void {
   const prefix = inspection?.newNodeIdPrefix;
   if (!prefix) return;
   for (const command of input.commands) {
     if (command.type === "insert_element") {
-      assertNewNodeIdHasPrefix(command.node.id, prefix);
+      assertNewNodeIdHasPrefixOrReservation(
+        command.node.id,
+        prefix,
+        reservedNodeIds,
+      );
       continue;
     }
     if (command.type !== "replace_subtree") continue;
     for (const node of command.nodes) {
       if (!inspection.nodesById.has(node.id)) {
-        assertNewNodeIdHasPrefix(node.id, prefix);
+        assertNewNodeIdHasPrefixOrReservation(node.id, prefix, reservedNodeIds);
       }
     }
   }
@@ -1378,10 +1423,36 @@ function assertApplyUsesNewNodeIdNamespace(
 function assertNewNodeIdUsesInspectionNamespace(
   inspection: InspectedHierarchy | undefined,
   nodeId: string | undefined,
+  reservedNodeIds: ReadonlySet<string> = new Set(),
 ): void {
   if (inspection?.newNodeIdPrefix && nodeId !== undefined) {
-    assertNewNodeIdHasPrefix(nodeId, inspection.newNodeIdPrefix);
+    assertNewNodeIdHasPrefixOrReservation(
+      nodeId,
+      inspection.newNodeIdPrefix,
+      reservedNodeIds,
+    );
   }
+}
+
+function assertNewNodeIdHasPrefixOrReservation(
+  nodeId: string,
+  prefix: string,
+  reservedNodeIds: ReadonlySet<string>,
+): void {
+  if (reservedNodeIds.has(nodeId)) return;
+  assertNewNodeIdHasPrefix(nodeId, prefix);
+}
+
+function reservedNodeIdsForTargets(
+  state: DesignWorkflowState,
+  targetIds: readonly string[],
+): Set<string> {
+  return new Set(
+    targetIds.flatMap(
+      (targetId) =>
+        state.targetsById.get(targetId)?.delivery.reservedNodeIds ?? [],
+    ),
+  );
 }
 
 function assertNewNodeIdHasPrefix(nodeId: string, prefix: string): void {

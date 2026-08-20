@@ -3,7 +3,7 @@
 - 状态：已接受
 - 日期：2026-08-13
 - 文档协议：不变（`DesignDocument 1.11.0`）
-- Workspace 交付账本：`DesignDeliveryLedger v2`
+- Workspace 交付账本：`DesignDeliveryLedger v3`（planned identity reservation 由 ADR-0105 扩展）
 - Agent 协议：不变（3.8）
 - 取代：ADR-0018 的 `pending → drafted` 初始状态、ADR-0028 的机械 progressive batch、ADR-0049 中尚未实现的真实根分配
 - 关联：ADR-0018、ADR-0028、ADR-0047、ADR-0049
@@ -64,7 +64,7 @@ pending → allocated → drafted → captured → reviewed → refined → veri
 
 - 12 个 Frame 的内部 atomic apply：一次 revision、一次 undo，undo 后全部根消失。
 - Plan handler：一次 Renderer 调用分配全部 target，并把 allocation、ledger 与 design revision 返回 Agent；失败不推进 ledger。
-- Ledger v1→v2 迁移与所有 revision 顺序 invariant。
+- Ledger v1→v2 的 allocated 迁移与所有 revision 顺序 invariant；当前持久格式已由 ADR-0105 升级为 v3。
 - allocated capture 不进入 review，首次材料写进入 drafted；第二 target 在第一 target verified 前拒绝。
 - semantic steps 产生逐步 revision、实时 progress、durable Timeline 去重；取消回滚已提交步骤。
 - 分配 Frame 仅平移可恢复，resize/delete 拒绝；planned insert rebase 继续验证真实 Page/Frame/尺寸/祖先链。

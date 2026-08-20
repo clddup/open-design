@@ -139,13 +139,14 @@ function expectBlocked(
 function deliveryResult(profileStatus: "pending" | "verified") {
   return {
     delivery: {
-      version: 2,
+      version: 3,
       targets: [
         {
           targetId: "target_home",
           label: "Home",
           pageId: "page_1",
           rootNodeId: "frame_home",
+          reservedNodeIds: ["frame_home"],
           status: "verified",
           allocatedRevision: 5,
           draftRevision: 5,
@@ -160,6 +161,7 @@ function deliveryResult(profileStatus: "pending" | "verified") {
               label: "Profile",
               pageId: "page_1",
               rootNodeId: "frame_profile",
+              reservedNodeIds: ["frame_profile"],
               status: "verified",
               allocatedRevision: 7,
               draftRevision: 7,
@@ -173,6 +175,7 @@ function deliveryResult(profileStatus: "pending" | "verified") {
               label: "Profile",
               pageId: "page_1",
               rootNodeId: "frame_profile",
+              reservedNodeIds: ["frame_profile"],
               status: "pending",
             },
       ],

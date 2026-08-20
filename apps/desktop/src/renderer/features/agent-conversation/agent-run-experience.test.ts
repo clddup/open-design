@@ -192,13 +192,14 @@ describe("Agent run experience projection", () => {
 
 function delivery(firstStatus: "drafted") {
   return {
-    version: 2 as const,
+    version: 3 as const,
     targets: [
       {
         targetId: "home",
         label: "Home",
         pageId: "page_1",
         rootNodeId: "frame_home",
+        reservedNodeIds: ["frame_home"],
         status: firstStatus,
         allocatedRevision: 1,
         draftRevision: 4,
@@ -208,6 +209,7 @@ function delivery(firstStatus: "drafted") {
         label: "Profile",
         pageId: "page_1",
         rootNodeId: "frame_profile",
+        reservedNodeIds: ["frame_profile"],
         status: "allocated" as const,
         allocatedRevision: 1,
       },

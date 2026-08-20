@@ -9,6 +9,7 @@ import {
   designPlanDesignIntent,
   designPlanSkillRefs,
   designPlanTargets,
+  qualityProfileNodeIds,
   type DesignPlanTarget,
   type DesignPlanToolInput,
   type DesignVisualReviewToolInput,
@@ -72,7 +73,7 @@ export function registerDesignWorkflowPlan(options: {
   const { existing, inspection, recoverableDelivery } = options;
   const plan = normalizePlanQualityProfiles(options.plan);
   const targets = designPlanTargets(plan);
-  assertUniquePlannedNodeIds(targets);
+  assertUniquePlannedNodeIds(plan, targets);
   if (existing && sameJson(existing.plan, plan)) {
     const refreshed = refreshEstablishedTargets(existing, inspection);
     return {
@@ -106,6 +107,7 @@ export function registerDesignWorkflowPlan(options: {
   const targetsById = new Map<string, DesignDeliveryTargetState>();
   const changedTargetIds: string[] = [];
   for (const target of targets) {
+    const reservedNodeIds = plannedNodeIdsForTarget(plan, target.targetId);
     const current = existing?.targetsById.get(target.targetId);
     if (current && current.delivery.status !== "pending") {
       const targetChanged = !sameJson(current.planned, target);
@@ -128,6 +130,7 @@ export function registerDesignWorkflowPlan(options: {
           current,
           target,
           inspection,
+          reservedNodeIds,
           targetChanged ||
             visualSystemChanged ||
             componentStrategyChanged ||
@@ -140,7 +143,12 @@ export function registerDesignWorkflowPlan(options: {
     }
     targetsById.set(
       target.targetId,
-      createTargetState(target, inspection, recoverableDelivery),
+      createTargetState(
+        target,
+        inspection,
+        recoverableDelivery,
+        reservedNodeIds,
+      ),
     );
     if (!current || !sameJson(current.planned, target)) {
       changedTargetIds.push(target.targetId);
@@ -212,6 +220,7 @@ function preserveMaterialTarget(
   current: DesignDeliveryTargetState,
   target: DesignPlanTarget,
   inspection: InspectedHierarchy,
+  reservedNodeIds: readonly string[],
   intentChanged: boolean,
 ): DesignDeliveryTargetState {
   if (current.delivery.status === "allocated") {
@@ -225,6 +234,7 @@ function preserveMaterialTarget(
           label: target.label,
           pageId: current.delivery.pageId,
           rootNodeId: current.delivery.rootNodeId,
+          reservedNodeIds: [...reservedNodeIds],
           status: "drafted" as const,
           allocatedRevision:
             current.delivery.allocatedRevision ??
@@ -233,7 +243,11 @@ function preserveMaterialTarget(
           draftRevision:
             current.lastMaterialWriteRevision ?? inspection.revision,
         }
-      : { ...structuredClone(current.delivery), label: target.label };
+      : {
+          ...structuredClone(current.delivery),
+          label: target.label,
+          reservedNodeIds: [...reservedNodeIds],
+        };
   return {
     ...current,
     artboardDescendantIds: descendants,
@@ -254,6 +268,7 @@ function createTargetState(
   target: DesignPlanTarget,
   inspection: InspectedHierarchy,
   recoverableDelivery: DesignDeliveryLedger | undefined,
+  reservedNodeIds: readonly string[],
 ): DesignDeliveryTargetState {
   const inspectedArtboard = inspection.nodesById.get(target.artboard.frameId);
   const recovered = recoverableDelivery?.targets.find(
@@ -291,6 +306,7 @@ function createTargetState(
         inspection.nodesById,
         target.artboard.frameId,
       ),
+    reservedNodeIds,
   );
   return {
     artboardDescendantIds,
@@ -393,20 +409,19 @@ function normalizePlanQualityProfiles(
 }
 
 function assertUniquePlannedNodeIds(
+  plan: DesignPlanToolInput,
   targets: readonly DesignPlanTarget[],
 ): void {
-  const ids = new Set<string>();
+  const targetByNodeId = new Map<string, string>();
   for (const target of targets) {
-    for (const nodeId of [
-      target.artboard.frameId,
-      ...target.composition.regions.map((region) => region.nodeId),
-    ]) {
-      if (ids.has(nodeId)) {
+    for (const nodeId of plannedNodeIdsForTarget(plan, target.targetId)) {
+      const ownerTargetId = targetByNodeId.get(nodeId);
+      if (ownerTargetId !== undefined) {
         throw new Error(
-          `design_workflow.plan_node_ambiguous: Planned node ID ${nodeId} is reused across delivery targets; inspect and define unique stable IDs`,
+          `design_workflow.plan_node_ambiguous: Planned node ID ${nodeId} is reserved by both ${ownerTargetId} and ${target.targetId}; inspect and define unique stable IDs for every delivery target`,
         );
       }
-      ids.add(nodeId);
+      targetByNodeId.set(nodeId, target.targetId);
     }
   }
 }
@@ -513,12 +528,14 @@ function recoverDeliveryTarget(
   currentRevision: number,
   artboardExists: boolean,
   artboardHasMaterial: boolean,
+  reservedNodeIds: readonly string[],
 ): DesignDeliveryTarget {
   const pending: DesignDeliveryTarget = {
     targetId: target.targetId,
     label: target.label,
     pageId: target.pageId,
     rootNodeId: target.artboard.frameId,
+    reservedNodeIds: [...reservedNodeIds],
     status: "pending",
   };
   if (!artboardExists) return pending;
@@ -538,13 +555,21 @@ function recoverDeliveryTarget(
     };
   }
   if (recovered.status === "allocated") {
-    return { ...structuredClone(recovered), label: target.label };
+    return {
+      ...structuredClone(recovered),
+      label: target.label,
+      reservedNodeIds: [...reservedNodeIds],
+    };
   }
   if (
     recovered.status === "verified" &&
     recovered.verifiedRevision === currentRevision
   ) {
-    return { ...structuredClone(recovered), label: target.label };
+    return {
+      ...structuredClone(recovered),
+      label: target.label,
+      reservedNodeIds: [...reservedNodeIds],
+    };
   }
   return {
     ...pending,
@@ -552,6 +577,31 @@ function recoverDeliveryTarget(
     allocatedRevision: recovered.allocatedRevision ?? currentRevision,
     draftRevision: currentRevision,
   };
+}
+
+export function plannedNodeIdsForTarget(
+  plan: DesignPlanToolInput,
+  targetId: string,
+): string[] {
+  const target = designPlanTargets(plan).find(
+    (candidate) => candidate.targetId === targetId,
+  );
+  if (!target) return [];
+  const nodeIds = new Set<string>([
+    target.artboard.frameId,
+    ...target.composition.regions.map((region) => region.nodeId),
+    ...qualityProfileNodeIds(target.qualityProfile),
+  ]);
+  const strategy = designPlanComponentStrategy(plan);
+  if (strategy) {
+    for (const occurrence of componentStrategyOccurrencesForTarget(
+      strategy,
+      targetId,
+    )) {
+      nodeIds.add(occurrence.nodeId);
+    }
+  }
+  return [...nodeIds];
 }
 
 function inspectedSubtreeHasMaterialNode(

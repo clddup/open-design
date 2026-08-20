@@ -384,7 +384,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       beforePlan: "deferred" as const,
     },
     description:
-      "Generate one original raster image with OpenDesign's globally configured image-generation model. A successful opendesign_define_design_plan call must already declare the exact role as reference, background, hero, supporting-content, or final-single-image. This selection is application-wide and independent of the current conversation model. The result is a content-addressed image attachment; call opendesign_place_image only for a declared placeable role. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
+      "Generate one original raster image with OpenDesign's globally configured image-generation model. A successful opendesign_define_design_plan call must already declare the exact role as reference, background, hero, supporting-content, or final-single-image. This selection is application-wide and independent of the current conversation model. The result is staged immediately as a persistent current-Design-File asset and also returned as a current-Run attachment. Call opendesign_place_image only for a declared placeable role. The tool never accepts a provider or model ID and fails explicitly when no global image-generation model is configured.",
     inputSchema: GENERATE_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "external" as const,
     approval: "never" as const,
@@ -396,7 +396,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "material-write" as const,
     },
     description:
-      "Place an image attachment returned by opendesign_read_image, opendesign_generate_image, or explicitly attached by the user into the currently bound Design File. A successful design plan must declare the image role. Editable posters must first create their planned artboard Frame with meaningful editable shape/text content, then place the image inside that existing Frame or one of its inspected/current descendants; parentId may never be null for this flow. Do not copy attachmentId into an insert_element image assetId. Editable posters cannot use final-single-image. The host imports the approved attachment as a durable project image asset and inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
+      "Place either a current-Run image attachment or a persistent assetId returned by current Design File inspection. Supply exactly one source. A successful design plan must declare the image role. Existing assetId placement requires explicit width and height. Editable posters must first create their planned artboard Frame with meaningful editable shape/text content, then place the image inside that existing Frame or one of its inspected/current descendants; parentId may never be null for this flow. Do not copy attachmentId into image assetId. Editable posters cannot use final-single-image. The host inserts one image node through the same atomic OpenDesign transaction and revision history as every other design edit.",
     inputSchema: PLACE_IMAGE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,

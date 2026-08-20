@@ -198,6 +198,35 @@ describe("current Design Plan amendments", () => {
       }),
     ).toThrow(/preserve its Main\/Instance role and component ID/i);
   });
+
+  it("rejects quality and component reservations shared across targets", () => {
+    const duplicateQualityPlan = plan();
+    const home = duplicateQualityPlan.targets[0];
+    duplicateQualityPlan.targets.push({
+      ...structuredClone(home),
+      targetId: "target_profile",
+      label: "Profile",
+      artboard: {
+        ...structuredClone(home.artboard),
+        mode: "create",
+        frameId: "frame_profile",
+        x: 430,
+      },
+      composition: {
+        ...structuredClone(home.composition),
+        regions: home.composition.regions.map((region) => ({
+          ...region,
+          nodeId: "logical_profile_content",
+        })),
+      },
+    });
+    expect(() =>
+      registerDesignWorkflowPlan({
+        inspection: inspectedExistingDesign(),
+        plan: duplicateQualityPlan,
+      }),
+    ).toThrow(/navigation_group.*target_home.*target_profile/i);
+  });
 });
 
 function plan(): DesignPlanToolInput {

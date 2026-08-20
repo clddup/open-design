@@ -334,6 +334,10 @@ function targetState(planned: DesignPlanTarget): DesignDeliveryTargetState {
       label: planned.label,
       pageId: planned.pageId,
       rootNodeId: planned.artboard.frameId,
+      reservedNodeIds: [
+        planned.artboard.frameId,
+        ...planned.composition.regions.map((region) => region.nodeId),
+      ],
       status: "refined",
       allocatedRevision: 1,
       draftRevision: 2,

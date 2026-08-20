@@ -1852,6 +1852,139 @@ describe("Renderer design tool scope", () => {
     ).toEqual([1, 0, 0, 1, 720, 620]);
   });
 
+  it("stages a new Design File image asset across unrelated revision changes", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    expect(
+      runtime.apply({
+        transactionId: "transaction_user_before_asset_stage",
+        documentId: "document_welcome",
+        baseRevision: 0,
+        actor: { type: "user", id: "local-user" },
+        label: "Edit while image generation is running",
+        commands: [
+          {
+            commandId: "rename_before_asset_stage",
+            type: "update_properties",
+            nodeId: "feature_one",
+            name: "Preserved user edit",
+          },
+        ],
+      }).ok,
+    ).toBe(true);
+    const assetId = `asset_${"a".repeat(64)}`;
+    const staged = await executeDesignToolRequest(
+      {
+        requestId: "stage_generated_asset",
+        call: {
+          toolCallId: "tool_stage_generated_asset",
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+          input: {
+            label: "Add generated image to Design File assets",
+            executionMode: "atomic",
+            commands: [
+              {
+                commandId: "put_generated_asset",
+                type: "put_asset",
+                asset: {
+                  id: assetId,
+                  kind: "image",
+                  name: "Generated hero.png",
+                  mimeType: "image/png",
+                  source: { type: "data", value: "aGVsbG8=" },
+                  size: { width: 1536, height: 1024 },
+                  extensions: {
+                    generatedBy: "opendesign-agent",
+                    designRole: "hero",
+                    staged: true,
+                  },
+                },
+              },
+            ],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(staged).toMatchObject({
+      ok: true,
+      result: {
+        designRevision: { previousRevision: 1, revision: 2 },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById.feature_one?.name).toBe(
+      "Preserved user edit",
+    );
+
+    const inspection = await executeDesignToolRequest(
+      {
+        requestId: "inspect_staged_asset",
+        call: {
+          toolCallId: "tool_inspect_staged_asset",
+          toolName: DESIGN_INSPECT_TOOL_NAME,
+          input: {},
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(inspection).toMatchObject({
+      ok: true,
+      result: {
+        observedRevision: 2,
+        content: {
+          document: {
+            assetsById: {
+              [assetId]: {
+                id: assetId,
+                size: { width: 1536, height: 1024 },
+                availability: "design-file",
+                generated: true,
+                designRole: "hero",
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await expect(
+      executeDesignToolRequest(
+        {
+          requestId: "overwrite_staged_asset_from_stale_revision",
+          call: {
+            toolCallId: "tool_overwrite_staged_asset",
+            toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+            input: {
+              label: "Overwrite generated image",
+              executionMode: "atomic",
+              commands: [
+                {
+                  commandId: "overwrite_generated_asset",
+                  type: "put_asset",
+                  asset: {
+                    id: assetId,
+                    kind: "image",
+                    name: "Conflicting image.png",
+                    mimeType: "image/png",
+                    source: { type: "data", value: "Y29uZmxpY3Q=" },
+                    size: { width: 512, height: 512 },
+                    extensions: { generatedBy: "opendesign-agent" },
+                  },
+                },
+              ],
+            },
+          },
+          context: pageContext,
+        },
+        runtime,
+        "page_welcome",
+      ),
+    ).rejects.toThrow("expected 0, current 2");
+  });
+
   it("requires a fresh inspection when the planned Frame is resized", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const resized = runtime.apply({

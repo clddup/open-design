@@ -257,6 +257,7 @@ function ledger(
       label: `Target ${index + 1}`,
       pageId: `page_${index + 1}`,
       rootNodeId: `frame_${index + 1}`,
+      reservedNodeIds: [`frame_${index + 1}`],
       status,
       ...revisions,
     };
@@ -265,7 +266,7 @@ function ledger(
     (target) => target.status !== "verified",
   );
   return {
-    version: 2,
+    version: 3,
     targets,
     activeTargetId: firstUnverified?.targetId ?? null,
   };

@@ -505,6 +505,7 @@ describe("workspace contract schemas", () => {
           label: "Home",
           pageId: "page_1",
           rootNodeId: "frame_home",
+          reservedNodeIds: ["frame_home", "region_home"],
           status: "refined" as const,
           allocatedRevision: 1,
           draftRevision: 1,
@@ -517,6 +518,7 @@ describe("workspace contract schemas", () => {
           label: "Profile",
           pageId: "page_1",
           rootNodeId: "frame_profile",
+          reservedNodeIds: ["frame_profile", "region_profile"],
           status: "pending" as const,
         },
       ],
@@ -531,12 +533,34 @@ describe("workspace contract schemas", () => {
             ...delivery.targets[0],
             pageId: "agent_page_call_1|fc_provider_1_page",
             rootNodeId: "frame|legacy",
+            reservedNodeIds: ["frame|legacy", "region_home"],
           },
           delivery.targets[1],
         ],
       }),
     ).toBe(true);
     expect(isGlobalTaskProjection({ ...projection, delivery })).toBe(true);
+    expect(
+      isDesignDeliveryLedger({
+        ...delivery,
+        targets: [
+          { ...delivery.targets[0], reservedNodeIds: ["region_home"] },
+          delivery.targets[1],
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      isDesignDeliveryLedger({
+        ...delivery,
+        targets: [
+          delivery.targets[0],
+          {
+            ...delivery.targets[1],
+            reservedNodeIds: ["frame_profile", "region_home"],
+          },
+        ],
+      }),
+    ).toBe(false);
     expect(
       isDesignDeliveryLedger({ ...delivery, activeTargetId: "target_missing" }),
     ).toBe(false);
@@ -592,7 +616,7 @@ describe("workspace contract schemas", () => {
     );
   });
 
-  it("upgrades persisted v1 delivery ledgers without accepting them as v2", () => {
+  it("upgrades persisted v1/v2 ledgers without inventing old Plan reservations", () => {
     const legacy = {
       version: 1,
       targets: [
@@ -611,7 +635,37 @@ describe("workspace contract schemas", () => {
     expect(normalizeDesignDeliveryLedger(legacy)).toEqual({
       ...legacy,
       version: DESIGN_DELIVERY_LEDGER_VERSION,
-      targets: [{ ...legacy.targets[0], allocatedRevision: 3 }],
+      targets: [
+        {
+          ...legacy.targets[0],
+          reservedNodeIds: ["frame_home"],
+          allocatedRevision: 3,
+        },
+      ],
+    });
+    expect(
+      normalizeDesignDeliveryLedger({
+        ...legacy,
+        version: 2,
+        targets: [
+          {
+            ...legacy.targets[0],
+            allocatedRevision: 2,
+            draftRevision: 3,
+          },
+        ],
+      }),
+    ).toEqual({
+      ...legacy,
+      version: DESIGN_DELIVERY_LEDGER_VERSION,
+      targets: [
+        {
+          ...legacy.targets[0],
+          reservedNodeIds: ["frame_home"],
+          allocatedRevision: 2,
+          draftRevision: 3,
+        },
+      ],
     });
     const projection = {
       version: WORKSPACE_CONTRACT_VERSION,

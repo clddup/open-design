@@ -1530,6 +1530,46 @@ void app.whenReady().then(async () => {
           authorized.attachmentId,
           call.input.role,
         );
+        const intrinsic = nativeImage
+          .createFromBuffer(Buffer.from(generated.bytes))
+          .getSize();
+        if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+          throw new TypeError("Generated image has invalid dimensions");
+        }
+        const digest = authorized.attachmentId.slice("image_".length);
+        const assetId = `asset_${digest}`;
+        const staged = await executeRendererTool({
+          ...call,
+          toolCallId: `${call.toolCallId.slice(0, 238)}_stage_asset`,
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+          input: {
+            label: "Add generated image to Design File assets",
+            executionMode: "atomic",
+            commands: [
+              {
+                commandId: `${call.toolCallId.slice(0, 240)}_asset`,
+                type: "put_asset",
+                asset: {
+                  id: assetId,
+                  kind: "image",
+                  name: authorized.name,
+                  mimeType: authorized.mimeType,
+                  source: {
+                    type: "data",
+                    value: Buffer.from(generated.bytes).toString("base64"),
+                  },
+                  size: { width: intrinsic.width, height: intrinsic.height },
+                  extensions: {
+                    attachmentId: authorized.attachmentId,
+                    designRole: call.input.role,
+                    generatedBy: "opendesign-agent",
+                    staged: true,
+                  },
+                },
+              },
+            ],
+          },
+        });
         return {
           content: {
             ok: true,
@@ -1545,18 +1585,42 @@ void app.whenReady().then(async () => {
             outputFormat: generated.outputFormat,
             attachment: authorized,
             attachments: [authorized],
+            asset: {
+              assetId,
+              name: authorized.name,
+              mimeType: authorized.mimeType,
+              size: { width: intrinsic.width, height: intrinsic.height },
+              role: call.input.role,
+              scope: "design-file",
+            },
           },
+          ...(staged.designRevision
+            ? { designRevision: staged.designRevision }
+            : {}),
         };
       }
       if (call.toolName === PLACE_IMAGE_TOOL_NAME) {
         if (!isPlaceImageToolInput(call.input)) {
           throw new TypeError("Invalid place image tool input");
         }
+        const attachmentId =
+          "attachmentId" in call.input && call.input.attachmentId !== undefined
+            ? requireAgentReferenceHost().hasAuthorizedImage(
+                call.input.attachmentId,
+                context,
+              )
+              ? call.input.attachmentId
+              : globalTaskCoordinator.resolveGeneratedRasterAttachmentId(
+                  context,
+                  call.input.attachmentId,
+                  call.input.role,
+                )
+            : undefined;
         globalTaskCoordinator.assertDesignPlanForImagePlacement(
           context,
           call.input.role,
           call.input.parentId,
-          call.input.attachmentId,
+          attachmentId,
           call.input.nodeId,
         );
         const targetIds = globalTaskCoordinator.resolveMaterialTargetIds(
@@ -1564,15 +1628,29 @@ void app.whenReady().then(async () => {
           [],
           call.input.parentId,
         );
-        const image = await requireAgentReferenceHost().materializeImage(
-          call.input.attachmentId,
-          context,
+        const image = attachmentId
+          ? await requireAgentReferenceHost().materializeImage(
+              attachmentId,
+              context,
+            )
+          : undefined;
+        const intrinsic = image
+          ? nativeImage
+              .createFromBuffer(Buffer.from(image.data, "base64"))
+              .getSize()
+          : undefined;
+        const persistentAssetInput =
+          "assetId" in call.input && call.input.assetId !== undefined
+            ? call.input
+            : undefined;
+        const intrinsicWidth = Math.max(
+          1,
+          intrinsic?.width ?? persistentAssetInput?.width ?? 1,
         );
-        const intrinsic = nativeImage
-          .createFromBuffer(Buffer.from(image.data, "base64"))
-          .getSize();
-        const intrinsicWidth = Math.max(1, intrinsic.width);
-        const intrinsicHeight = Math.max(1, intrinsic.height);
+        const intrinsicHeight = Math.max(
+          1,
+          intrinsic?.height ?? persistentAssetInput?.height ?? 1,
+        );
         const width =
           call.input.width ??
           (call.input.height
@@ -1583,23 +1661,23 @@ void app.whenReady().then(async () => {
           (call.input.width
             ? (call.input.width * intrinsicHeight) / intrinsicWidth
             : intrinsicHeight);
-        const digest = image.attachment.attachmentId.slice("image_".length);
-        const assetId = `asset_${digest}`;
-        const result = await executeRendererTool({
-          ...call,
-          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
-          input: {
-            label: `Place ${call.input.name}`,
-            commands: [
+        const assetId = persistentAssetInput
+          ? persistentAssetInput.assetId
+          : attachmentId
+            ? `asset_${attachmentId.slice("image_".length)}`
+            : undefined;
+        if (!assetId) throw new Error("Image placement source is missing");
+        const assetCommand = image
+          ? [
               {
                 commandId: `${call.toolCallId}_asset`,
-                type: "put_asset",
+                type: "put_asset" as const,
                 asset: {
                   id: assetId,
-                  kind: "image",
+                  kind: "image" as const,
                   name: image.attachment.name,
                   mimeType: image.mimeType,
-                  source: { type: "data", value: image.data },
+                  source: { type: "data" as const, value: image.data },
                   size: {
                     width: intrinsicWidth,
                     height: intrinsicHeight,
@@ -1610,6 +1688,15 @@ void app.whenReady().then(async () => {
                   },
                 },
               },
+            ]
+          : [];
+        const result = await executeRendererTool({
+          ...call,
+          toolName: INTERNAL_DESIGN_APPLY_TOOL_NAME,
+          input: {
+            label: `Place ${call.input.name}`,
+            commands: [
+              ...assetCommand,
               {
                 commandId: `${call.toolCallId}_node`,
                 type: "insert_element",

@@ -114,6 +114,7 @@ type ExecuteDesignToolOptions = {
 
 const MAX_INSPECTED_FONT_REQUESTS = 256;
 const MAX_INSPECTED_FONT_NODE_IDS = 1_000;
+const MAX_INSPECTED_STAGED_IMAGE_ASSETS = 64;
 
 export async function executeDesignToolRequest(
   request: RendererDesignToolRequest,
@@ -325,7 +326,8 @@ async function executeDesignToolRequestUnsafe(
   if (document.revision !== request.context.revision) {
     if (
       document.revision < request.context.revision ||
-      !canRebasePlannedInsert(request, document)
+      (!canRebasePlannedInsert(request, document) &&
+        !canRebaseNewDesignFileAssets(request, document))
     ) {
       throw new Error(
         `Design revision conflict: expected ${request.context.revision}, current ${document.revision}`,
@@ -1373,6 +1375,24 @@ async function executeDesignToolRequestUnsafe(
   });
 }
 
+function canRebaseNewDesignFileAssets(
+  request: RendererDesignToolRequest,
+  document: DesignDocument,
+): boolean {
+  if (
+    request.call.toolName !== INTERNAL_DESIGN_APPLY_TOOL_NAME ||
+    !isInternalDesignApplyToolInput(request.call.input) ||
+    request.call.input.commands.length === 0
+  ) {
+    return false;
+  }
+  return request.call.input.commands.every(
+    (command) =>
+      command.type === "put_asset" &&
+      document.assetsById[command.asset.id] === undefined,
+  );
+}
+
 function assertAgentDoesNotBypassAutoLayout(
   document: DesignDocument,
   commands: readonly DesignOperation[],
@@ -1913,6 +1933,15 @@ function createScopedInspection(
       }
     }
   }
+  const stagedAssetIds = Object.values(document.assetsById)
+    .filter(
+      (asset) =>
+        asset.kind === "image" &&
+        asset.extensions.generatedBy === "opendesign-agent",
+    )
+    .slice(-MAX_INSPECTED_STAGED_IMAGE_ASSETS)
+    .map((asset) => asset.id);
+  stagedAssetIds.forEach((assetId) => assetIds.add(assetId));
   const assetsById = Object.fromEntries(
     [...assetIds].flatMap((assetId) => {
       const asset = document.assetsById[assetId];
@@ -1934,6 +1963,15 @@ function createScopedInspection(
               ? {}
               : { size: structuredClone(asset.size) }),
             extensionKeys: Object.keys(asset.extensions),
+            ...(asset.extensions.generatedBy === "opendesign-agent"
+              ? {
+                  availability: "design-file",
+                  generated: true,
+                  ...(typeof asset.extensions.designRole === "string"
+                    ? { designRole: asset.extensions.designRole }
+                    : {}),
+                }
+              : {}),
           },
         ],
       ];

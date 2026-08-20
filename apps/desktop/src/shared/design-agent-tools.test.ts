@@ -2224,6 +2224,27 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
         ...input,
+        attachmentId: undefined,
+        assetId: `asset_${"b".repeat(64)}`,
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
+        ...input,
+        assetId: `asset_${"b".repeat(64)}`,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
+        ...input,
+        attachmentId: undefined,
+        assetId: `asset_${"b".repeat(64)}`,
+        width: undefined,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(PLACE_IMAGE_TOOL_NAME, {
+        ...input,
         placement: {
           ...input.placement,
           focalPoint: { x: -0.1, y: 0.36 },
