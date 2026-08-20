@@ -2903,6 +2903,14 @@ describe("design Agent tool contract", () => {
       pathId: "path_logo",
       vertexId: "vertex_logo_mid",
     };
+    const transform = {
+      action: "transform-vertices",
+      label: "Rotate selected logo points",
+      nodeId: "logo_contour",
+      pageId: "page_brand",
+      transform: [0, 1, -1, 0, 96, 0],
+      vertexIds: ["vertex_logo_a", "vertex_logo_mid"],
+    };
     const lineCut = {
       action: "cut-with-line",
       end: { x: 128, y: 48 },
@@ -2933,6 +2941,7 @@ describe("design Agent tool contract", () => {
       "crossed-hole boundaries become continuous",
     );
     expect(tool?.description).toContain("one atomic undoable");
+    expect(tool?.description).toContain("attached Bézier tangents");
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, close)).toBe(
       true,
     );
@@ -2947,6 +2956,9 @@ describe("design Agent tool contract", () => {
     );
     expect(
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, disconnect),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, transform),
     ).toBe(true);
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, lineCut)).toBe(
       true,
@@ -2964,6 +2976,18 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
         ...disconnect,
         vertexId: undefined,
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...transform,
+        transform: [1, 0, 0, 1, 0],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...transform,
+        vertexIds: [],
       }),
     ).toBe(false);
     expect(

@@ -15,6 +15,7 @@ import {
   inferVectorPointMode,
   reverseVectorPath,
   setVectorPathClosed,
+  transformVectorVertices,
   vectorNetworkEditability,
   type VectorCutLocation,
 } from "@opendesign/geometry-service/vector-edit";
@@ -45,6 +46,11 @@ export type VectorSemanticEdit =
       action: "disconnect-vertex";
       pathId: string;
       vertexId: string;
+    }
+  | {
+      action: "transform-vertices";
+      transform: Transform;
+      vertexIds: readonly string[];
     }
   | {
       action: "cut-path";
@@ -353,6 +359,20 @@ export function planVectorSemanticEdit(
     );
     if (!connected.ok) return vectorOperationFailure(connected);
     return planVectorNetworkUpdate(document, pageId, nodeId, connected.network);
+  }
+  if (edit.action === "transform-vertices") {
+    const transformed = transformVectorVertices(
+      node.properties.network,
+      edit.vertexIds,
+      edit.transform,
+    );
+    if (!transformed.ok) return vectorOperationFailure(transformed);
+    return planVectorNetworkUpdate(
+      document,
+      pageId,
+      nodeId,
+      transformed.network,
+    );
   }
   const edited =
     edit.action === "set-closed"

@@ -1096,6 +1096,38 @@ describe("vector editing runtime plans", () => {
     expect(vectorNetworkFrom(runtime)).toEqual(network());
   });
 
+  it("transforms explicit vertices and attached curve geometry through one semantic plan", () => {
+    const runtime = new EditorRuntime(documentWithVector());
+    const plan = planVectorSemanticEdit(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      "vector_editable",
+      {
+        action: "transform-vertices",
+        transform: [1, 0, 0, 1, 20, -10],
+        vertexIds: ["vertex_b", "vertex_c"],
+      },
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(
+      runtime.apply({
+        transactionId: "transform_vector_vertices",
+        documentId: runtime.getSnapshot().document.documentId,
+        baseRevision: runtime.getSnapshot().document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Transform vector vertices",
+        commands: [...plan.operations],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(vectorNetworkFrom(runtime).vertices).toEqual([
+      { id: "vertex_a", x: 0, y: 10, handleMode: "corner" },
+      { id: "vertex_b", x: 120, y: 0, handleMode: "corner" },
+      { id: "vertex_c", x: 120, y: 100, handleMode: "corner" },
+    ]);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+  });
+
   it("skips un-crossed Vector targets and rejects duplicate or non-invertible targets", () => {
     const document = documentWithVector();
     const frame = document.nodesById.frame_welcome;

@@ -1127,18 +1127,24 @@ async function executeDesignToolRequestUnsafe(
                         pathId: input.pathId,
                         vertexId: input.vertexId,
                       }
-                    : input.action === "cut-path"
+                    : input.action === "transform-vertices"
                       ? {
                           action: input.action,
-                          at: input.at,
-                          pathId: input.pathId,
+                          transform: input.transform,
+                          vertexIds: input.vertexIds,
                         }
-                      : {
-                          action: input.action,
-                          end: input.end,
-                          resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
-                          start: input.start,
-                        },
+                      : input.action === "cut-path"
+                        ? {
+                            action: input.action,
+                            at: input.at,
+                            pathId: input.pathId,
+                          }
+                        : {
+                            action: input.action,
+                            end: input.end,
+                            resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
+                            start: input.start,
+                          },
           );
     if (!plan.ok) {
       throw new Error(`vector-edit.${plan.code}: ${plan.message}`);

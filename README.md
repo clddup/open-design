@@ -6,8 +6,6 @@ UI 设计是第一个质量标杆，但不是产品边界。文档协议和能�
 
 OpenDesign 定位为跨平台桌面产品。**macOS 与 Windows 是一级支持平台，两者都必须可安装、启动、编辑、运行 Agent、保存并恢复项目，任一平台不满足门禁都不能视为桌面版本可发布。** Linux 保留在跨平台目标中，但当前阶段不作为发布阻塞项。
 
-> 当前处于早期开发阶段，不是可发布版本。已实现能力、缺口和验证状态分别以[版本化能力事实清单](docs/generated/design-capabilities.md)、[产品与架构](docs/product-and-architecture.md)、[专业设计能力基线](docs/design-capability-baseline.md)、[路线图](docs/roadmap.md)和[验证状态](docs/verification.md)为准。
-
 ## 架构概览
 
 ```text
@@ -25,19 +23,11 @@ Agent utilityProcess ── Conversation / Provider / typed design tools
 - 固定版本 `leafer-editor@2.2.9` 是唯一生产画布与直接操作引擎；Leafer 场景只是当前 revision 的可丢弃投影。
 - Renderer 没有 Node.js、原始 IPC、任意文件系统或模型凭据能力。
 - Agent、MCP 和人工操作都必须通过版本化设计契约进入同一 `EditorRuntime`。
-- OpenPencil、旧 Canvas2D 后端和手写选择框已经从运行时与发行路径移除，不存在 fallback 或双写入口。
+- OpenPencil、旧 Canvas2D 后端和旧通用手写选择框已经从运行时与发行路径移除，不存在 fallback 或双写入口。
 
-## 当前已实现
+## 项目状态
 
-- Workspace、Project、Design File、Page 与 Layers 的基础工作流和本地持久化。
-- `DesignDocument 1.10.0`、正式 Line/Arrow、Polygon/Star、SVG path-data、editable Vector Network、Fixed/Auto Width/Auto Height 文字、换行/溢出、非破坏图片 placement 与 Boolean Group，以及原子事务、单调 revision、preview、undo/redo、checkpoint 和冲突检查。
-- LeaferJS 场景投影、pan/zoom、命中、框选、多选、move/resize/rotate/skew 和文本内编辑。
-- 多 fill/stroke、渐变、图片 Paint、阴影/光晕/模糊、blend、mask 和事务化图片 asset 的公共语义。
-- 持久 Conversation、可取消 Agent run、只管理对话模型的 `ModelProviderCatalog v3`，以及 OpenAI Responses、OpenAI Chat Completions 和 Anthropic Messages adapter；独立的应用级图片生成配置拥有自己的 adapter、Base URL、鉴权、凭据和模型 ID，不受任何 Conversation 模型影响，当前 OpenAI Images adapter 已用 GPT Image 2 验证。
-- `get_capabilities`、`inspect_document`、`define_design_plan`、`capture_canvas`、`record_visual_review`、`edit_hierarchy`、`arrange_layers`、`edit_vector`、`apply_transaction`、`read_image`、`generate_image`、`place_image` 和 `update_image` 等 typed tools；Agent 从与帮助文档和发布摘要相同的 manifest 获取能力事实，并可把当前画布预览和生成图片作为多模态结果回读，而不是只凭节点坐标判断视觉质量。
-- 图片/文档附件、剪贴板/拖放导入，以及按需读取用户明示本地图片路径、`file:` URL 或 HTTP(S) 图片 URL 的受限链路。
-
-未完成的专业矢量、布局、组件、变量、富文本、导入导出、完整 Capability/Approval/Audit/Sandbox 和跨项目多目标能力不会被描述成已经支持；详见能力基线与路线图。
+OpenDesign 仍处于早期开发阶段，按专业桌面设计平台的能力依赖顺序持续推进。README 只提供项目入口；当前实现、限制、验证证据和后续顺序分别以[能力事实清单](docs/generated/design-capabilities.md)、[专业能力基线](docs/design-capability-baseline.md)、[验证记录](docs/verification.md)和[路线图](docs/roadmap.md)为准。
 
 ## 开发
 
@@ -72,7 +62,7 @@ pnpm --dir apps/desktop package:mac
 pnpm --dir apps/desktop package:win
 ```
 
-macOS/Windows 原生 workflow 已分别生成安装包并完成打包后 Agent smoke；签名、干净安装、升级/卸载和 GUI 产品 smoke 仍是 P0。当前 NSIS 配置已改为可交互安装并允许选择目录，仍须由最新 commit 的 Windows 原生产物复验，详见[验证状态](docs/verification.md)与[路线图](docs/roadmap.md)。
+原生构建、安装和 smoke 必须在对应操作系统验证；最新证据见[验证记录](docs/verification.md)。
 
 ## 仓库结构
 

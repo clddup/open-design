@@ -3860,6 +3860,19 @@ describe("App", () => {
       "aria-pressed",
       "true",
     );
+    fireEvent.keyDown(canvas, { key: "q", code: "KeyQ" });
+    await waitFor(() =>
+      expect(leaferHarness.input?.vectorEditScope?.tool).toBe("lasso"),
+    );
+    expect(
+      screen.getByText(
+        "Draw around vector points · Hold Shift to toggle enclosed points",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lasso" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     fireEvent.keyDown(canvas, { key: "v", code: "KeyV" });
     await waitFor(() =>
       expect(leaferHarness.input?.vectorEditScope?.tool).toBe("move"),

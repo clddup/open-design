@@ -1,6 +1,7 @@
 import {
   type BooleanOperation,
   type Point,
+  type Transform,
 } from "@opendesign/design-contracts";
 import {
   exactKeys,
@@ -94,6 +95,14 @@ export type DesignVectorToolInput =
       pageId: string;
       pathId: string;
       vertexId: string;
+    }
+  | {
+      action: "transform-vertices";
+      label: string;
+      nodeId: string;
+      pageId: string;
+      transform: Transform;
+      vertexIds: string[];
     }
   | {
       action: "cut-path";
@@ -213,7 +222,7 @@ const MODEL_HIERARCHY_SCHEMA = {
 const MODEL_VECTOR_EDIT_SCHEMA = {
   type: "object",
   description:
-    "Edit explicit existing editable Vector Networks by stable Page, node, path, vertex, and segment IDs from inspection. connect-endpoints joins exactly two real open endpoints without branches; disconnect-vertex breaks one internal vertex; set-closed requires closed; cut-path requires pathId and at; cut-with-line cuts one node's supported open or closed contours using node-local points; cut-layers-with-line cuts every crossed nodeId using one finite line in document coordinates. The host derives all new geometry, result layer IDs, bounds, transforms, and one atomic transaction.",
+    "Edit explicit existing editable Vector Networks by stable Page, node, path, vertex, and segment IDs from inspection. transform-vertices applies one finite node-local affine matrix to explicit vertices and their attached Bézier tangents; connect-endpoints joins exactly two real open endpoints without branches; disconnect-vertex breaks one internal vertex; set-closed requires closed; cut-path requires pathId and at; cut-with-line cuts one node's supported open or closed contours using node-local points; cut-layers-with-line cuts every crossed nodeId using one finite line in document coordinates. The host derives all new geometry, result layer IDs, bounds, transforms, and one atomic transaction.",
   properties: {
     action: {
       enum: [
@@ -221,6 +230,7 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
         "reverse-path",
         "connect-endpoints",
         "disconnect-vertex",
+        "transform-vertices",
         "cut-path",
         "cut-with-line",
         "cut-layers-with-line",
@@ -242,11 +252,20 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
     vertexId: { type: "string", minLength: 1, maxLength: 128 },
     vertexIds: {
       type: "array",
-      minItems: 2,
-      maxItems: 2,
+      minItems: 1,
+      maxItems: 16_384,
       uniqueItems: true,
       items: { type: "string", minLength: 1, maxLength: 128 },
-      description: "Required only for connect-endpoints.",
+      description:
+        "Required for connect-endpoints (exactly two) and transform-vertices (one or more).",
+    },
+    transform: {
+      type: "array",
+      minItems: 6,
+      maxItems: 6,
+      items: { type: "number", minimum: -1_000_000, maximum: 1_000_000 },
+      description:
+        "Required only for transform-vertices. Node-local [a,b,c,d,e,f] affine matrix.",
     },
     closed: {
       type: "boolean",
@@ -298,6 +317,7 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
             "reverse-path",
             "connect-endpoints",
             "disconnect-vertex",
+            "transform-vertices",
             "cut-path",
             "cut-with-line",
           ],
@@ -322,6 +342,7 @@ export function isDesignVectorToolInput(
       input.action !== "reverse-path" &&
       input.action !== "connect-endpoints" &&
       input.action !== "disconnect-vertex" &&
+      input.action !== "transform-vertices" &&
       input.action !== "cut-path" &&
       input.action !== "cut-with-line" &&
       input.action !== "cut-layers-with-line") ||
@@ -367,6 +388,31 @@ export function isDesignVectorToolInput(
         "pageId",
         "pathId",
         "vertexId",
+      ])
+    );
+  }
+  if (input.action === "transform-vertices") {
+    return (
+      Array.isArray(input.vertexIds) &&
+      input.vertexIds.length >= 1 &&
+      input.vertexIds.length <= 16_384 &&
+      input.vertexIds.every((vertexId) => safeId(vertexId)) &&
+      new Set(input.vertexIds).size === input.vertexIds.length &&
+      Array.isArray(input.transform) &&
+      input.transform.length === 6 &&
+      input.transform.every(
+        (value) =>
+          typeof value === "number" &&
+          Number.isFinite(value) &&
+          Math.abs(value) <= 1_000_000,
+      ) &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "nodeId",
+        "pageId",
+        "transform",
+        "vertexIds",
       ])
     );
   }

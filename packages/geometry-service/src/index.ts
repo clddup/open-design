@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 11 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 12 as const;
 
 export {
   alignItems,
@@ -34,6 +34,8 @@ export {
   reverseVectorPath,
   setVectorPathClosed,
   setVectorPointMode,
+  transformVectorVertices,
+  vectorVertexBounds,
   vectorNetworkEditability,
   type VectorCutLocation,
   type VectorCutResult,

@@ -743,6 +743,8 @@ export const enMessages = {
     "{{count}} points selected · Shift-click selects more",
   "canvas.vectorCutHint":
     "Click a point or path to create a break, or drag across the object to divide it into layers",
+  "canvas.vectorLassoHint":
+    "Draw around vector points · Hold Shift to toggle enclosed points",
   "canvas.vectorCutUnavailable": "Vector cut result is unavailable",
   "canvas.vectorCutApplyMissing":
     "Cut vector is unavailable after applying the edit",
@@ -755,6 +757,7 @@ export const enMessages = {
   "canvas.vectorEditTool": "Vector edit tool",
   "canvas.vectorToolMove": "Move",
   "canvas.vectorToolCut": "Cut",
+  "canvas.vectorToolLasso": "Lasso",
   "canvas.vectorPointMode": "Bézier point mode",
   "canvas.vectorPointCorner": "Corner",
   "canvas.vectorPointSmooth": "Smooth",
@@ -1805,6 +1808,7 @@ const zhCNMessages = {
   "canvas.vectorEditingHint": "已选择 {{count}} 个节点 · Shift 点击可多选",
   "canvas.vectorCutHint":
     "点击节点或路径创建断点，或拖拽穿过对象将其分为独立图层",
+  "canvas.vectorLassoHint": "圈选矢量节点 · 按住 Shift 切换圈内节点",
   "canvas.vectorCutUnavailable": "路径切断结果不可用",
   "canvas.vectorCutApplyMissing": "应用切断操作后找不到对应矢量",
   "canvas.vectorLineCutUnavailable": "矢量分割结果不可用",
@@ -1814,6 +1818,7 @@ const zhCNMessages = {
   "canvas.vectorEditTool": "矢量编辑工具",
   "canvas.vectorToolMove": "移动",
   "canvas.vectorToolCut": "切断",
+  "canvas.vectorToolLasso": "套索",
   "canvas.vectorPointMode": "贝塞尔节点模式",
   "canvas.vectorPointCorner": "直角",
   "canvas.vectorPointSmooth": "平滑",

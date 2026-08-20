@@ -4697,6 +4697,138 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("lassos vector points as session-only selection across one edit scope", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const input = withVectorEditFixture(createInput());
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync({
+      ...input,
+      vectorEditScope: { ...input.vectorEditScope!, tool: "lasso" },
+    });
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !path?.parent) throw new Error("Missing editable vector");
+    const overlay = path.parent.children.at(-1);
+    if (!(overlay instanceof FakeGroup)) {
+      throw new Error("Missing vector overlay");
+    }
+
+    app.emit("pointer.down", pointerEvent(-10, -10, app.tree));
+    app.emit("pointer.move", pointerEvent(70, -10, app.tree));
+    app.emit("pointer.move", pointerEvent(70, 40, app.tree));
+    app.emit("pointer.move", pointerEvent(-10, 40, app.tree));
+    const lasso = overlay.children.find(
+      (child): child is FakePath =>
+        child instanceof FakePath &&
+        child.visible &&
+        String(child.path).endsWith("Z"),
+    );
+    expect(lasso?.path).toContain("L 70 40");
+    app.emit("pointer.up", pointerEvent(-10, -10, app.tree));
+
+    expect(onVectorEditSelectionChange).toHaveBeenLastCalledWith(
+      "editable_curve",
+      ["vertex_a", "vertex_b"],
+    );
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    expect(lasso?.visible).toBe(false);
+
+    app.emit(
+      "pointer.down",
+      pointerEvent(50, -10, app.tree, { shiftKey: true }),
+    );
+    app.emit("pointer.move", pointerEvent(130, -10, app.tree));
+    app.emit("pointer.move", pointerEvent(130, 40, app.tree));
+    app.emit("pointer.move", pointerEvent(50, 40, app.tree));
+    app.emit("pointer.up", pointerEvent(50, -10, app.tree));
+    expect(onVectorEditSelectionChange).toHaveBeenLastCalledWith(
+      "editable_curve",
+      ["vertex_a", "vertex_c"],
+    );
+    adapter.dispose();
+  });
+
+  it("resizes and rotates multiple vector points with one commit per gesture", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput(), [
+      "vertex_a",
+      "vertex_b",
+    ]);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !path?.parent) throw new Error("Missing editable vector");
+    const overlay = path.parent.children.at(-1);
+    if (!(overlay instanceof FakeGroup)) {
+      throw new Error("Missing vector overlay");
+    }
+    const resizeHandles = overlay.children.filter(
+      (child): child is FakeRect =>
+        child instanceof FakeRect &&
+        (child as FakeRect & { cursor?: string }).cursor === "nwse-resize",
+    );
+    const southEast = resizeHandles.sort(
+      (left, right) => right.x + right.y - (left.x + left.y),
+    )[0];
+    if (!southEast) throw new Error("Missing vector resize handle");
+    app.emit("pointer.down", pointerEvent(60, 30, southEast));
+    app.emit("pointer.move", pointerEvent(120, 60, southEast));
+    expect(onVectorEdit).not.toHaveBeenCalled();
+    app.emit("pointer.up", pointerEvent(120, 60, southEast));
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const resized = onVectorEdit.mock.calls[0]?.[0];
+    if (!resized || resized.deleteNode) {
+      throw new Error("Expected resized vector network");
+    }
+    expect(resized.network.vertices).toContainEqual(
+      expect.objectContaining({ id: "vertex_b", x: 120, y: 60 }),
+    );
+    expect(resized.network.vertices).toContainEqual(
+      expect.objectContaining({ id: "vertex_c", x: 120, y: 0 }),
+    );
+
+    const resizedInput = structuredClone(input);
+    const resizedNode = resizedInput.document.nodesById.editable_curve;
+    if (
+      !resizedNode ||
+      resizedNode.kind !== "vector" ||
+      !("network" in resizedNode.properties)
+    ) {
+      throw new Error("Missing resized vector fixture");
+    }
+    resizedNode.properties.network = resized.network;
+    adapter.sync(resizedInput);
+    onVectorEdit.mockClear();
+    const refreshedOverlay = path.parent.children.at(-1);
+    if (!(refreshedOverlay instanceof FakeGroup)) {
+      throw new Error("Missing refreshed vector overlay");
+    }
+    const rotate = refreshedOverlay.children.find(
+      (child): child is FakeEllipse =>
+        child instanceof FakeEllipse &&
+        (child as FakeEllipse & { cursor?: string }).cursor === "crosshair",
+    );
+    if (!rotate) throw new Error("Missing vector rotation target");
+    app.emit("pointer.down", pointerEvent(-12, -12, rotate));
+    app.emit("pointer.move", pointerEvent(60, -40, rotate));
+    app.emit("pointer.up", pointerEvent(60, -40, rotate));
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
   it("forwards Cut path hits through the semantic callback and keeps editing the new endpoints", async () => {
     const authoritative =
       withVectorEditFixture(createInput()).document.nodesById.editable_curve;

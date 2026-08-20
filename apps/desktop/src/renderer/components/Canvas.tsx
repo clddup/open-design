@@ -400,9 +400,14 @@ export function Canvas({
         !event.ctrlKey &&
         !event.metaKey &&
         !event.shiftKey &&
-        (event.key.toLowerCase() === "x" || event.key.toLowerCase() === "v")
+        ["q", "v", "x"].includes(event.key.toLowerCase())
       ) {
-        const nextTool = event.key.toLowerCase() === "x" ? "cut" : "move";
+        const nextTool =
+          event.key.toLowerCase() === "x"
+            ? "cut"
+            : event.key.toLowerCase() === "q"
+              ? "lasso"
+              : "move";
         setVectorEditState((current) =>
           current ? { ...current, tool: nextTool } : current,
         );
@@ -1271,9 +1276,11 @@ export function Canvas({
                       ? t("canvas.vectorEditingReadOnly")
                       : vectorEditState?.tool === "cut"
                         ? t("canvas.vectorCutHint")
-                        : t("canvas.vectorEditingHint", {
-                            count: vectorEditScope.selectedVertexIds.length,
-                          })}
+                        : vectorEditState?.tool === "lasso"
+                          ? t("canvas.vectorLassoHint")
+                          : t("canvas.vectorEditingHint", {
+                              count: vectorEditScope.selectedVertexIds.length,
+                            })}
                   </small>
                 </span>
                 <span className={styles.vectorTools}>
@@ -1286,6 +1293,7 @@ export function Canvas({
                       [
                         ["move", "canvas.vectorToolMove", "V"],
                         ["cut", "canvas.vectorToolCut", "X"],
+                        ["lasso", "canvas.vectorToolLasso", "Q"],
                       ] as const
                     ).map(([mode, label, shortcut]) => (
                       <button

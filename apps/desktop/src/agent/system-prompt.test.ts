@@ -208,6 +208,9 @@ describe("OpenDesign Agent system prompt", () => {
       "connect-endpoints joins exactly two open endpoints",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "transform-vertices applies one finite node-local affine matrix",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "disconnect-vertex breaks one internal vertex",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

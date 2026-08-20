@@ -1,5 +1,7 @@
 import type {
   Point,
+  Rect,
+  Transform,
   VectorNetwork,
   VectorPathRun,
   VectorPointMode,
@@ -237,6 +239,119 @@ export function moveVectorVertices(
       ? { ...vertex, x: vertex.x + delta.x, y: vertex.y + delta.y }
       : vertex,
   );
+  return validated(next);
+}
+
+export function vectorVertexBounds(
+  network: VectorNetwork,
+  vertexIds: readonly string[],
+): Rect | null {
+  const selected = new Set(vertexIds);
+  if (selected.size === 0) return null;
+  const vertices = network.vertices.filter((vertex) => selected.has(vertex.id));
+  if (vertices.length !== selected.size) return null;
+  const xs = vertices.map((vertex) => vertex.x);
+  const ys = vertices.map((vertex) => vertex.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
+/**
+ * Applies one local-space affine transform to explicit vertices. Tangent
+ * endpoints attached to transformed vertices follow the same transform, so a
+ * node-level resize or rotation preserves the authored Bézier relationship.
+ */
+export function transformVectorVertices(
+  network: VectorNetwork,
+  vertexIds: readonly string[],
+  transform: Transform,
+): VectorEditResult {
+  const failure = editableFailure(network);
+  if (failure) return failure;
+  if (transform.length !== 6 || !transform.every(Number.isFinite)) {
+    return invalidNetwork(
+      "Vector vertex transform must be a finite affine matrix",
+    );
+  }
+  const selected = new Set(vertexIds);
+  if (selected.size === 0) {
+    return missingVertex("No vector vertices are selected");
+  }
+  const sourceVertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  if ([...selected].some((vertexId) => !sourceVertices.has(vertexId))) {
+    return missingVertex("A selected vector vertex does not exist");
+  }
+  const next = structuredClone(network);
+  const transformedVertices = new Map<string, Point>();
+  for (const vertexId of selected) {
+    transformedVertices.set(
+      vertexId,
+      transformVectorPoint(sourceVertices.get(vertexId)!, transform),
+    );
+  }
+  let changed = false;
+  next.vertices = next.vertices.map((vertex) => {
+    const point = transformedVertices.get(vertex.id);
+    if (
+      point &&
+      (Math.abs(point.x - vertex.x) > HANDLE_EPSILON ||
+        Math.abs(point.y - vertex.y) > HANDLE_EPSILON)
+    ) {
+      changed = true;
+    }
+    return point ? { ...vertex, ...point } : vertex;
+  });
+  next.segments = next.segments.map((segment) => {
+    const sourceStart = sourceVertices.get(segment.startVertexId)!;
+    const sourceEnd = sourceVertices.get(segment.endVertexId)!;
+    const transformedStart = transformedVertices.get(segment.startVertexId);
+    const transformedEnd = transformedVertices.get(segment.endVertexId);
+    const transformedTangentStart =
+      transformedStart && segment.tangentStart
+        ? subtract(
+            transformVectorPoint(
+              add(sourceStart, segment.tangentStart),
+              transform,
+            ),
+            transformedStart,
+          )
+        : undefined;
+    const transformedTangentEnd =
+      transformedEnd && segment.tangentEnd
+        ? subtract(
+            transformVectorPoint(add(sourceEnd, segment.tangentEnd), transform),
+            transformedEnd,
+          )
+        : undefined;
+    if (
+      (transformedTangentStart &&
+        segment.tangentStart &&
+        !samePoint(transformedTangentStart, segment.tangentStart)) ||
+      (transformedTangentEnd &&
+        segment.tangentEnd &&
+        !samePoint(transformedTangentEnd, segment.tangentEnd))
+    ) {
+      changed = true;
+    }
+    return {
+      ...segment,
+      ...(transformedTangentStart
+        ? { tangentStart: transformedTangentStart }
+        : {}),
+      ...(transformedTangentEnd ? { tangentEnd: transformedTangentEnd } : {}),
+    };
+  });
+  if (!changed) return noOp("Vector vertex transform does not change geometry");
   return validated(next);
 }
 
@@ -2871,6 +2986,20 @@ function add(left: Point, right: Point): Point {
 
 function subtract(left: Point, right: Point): Point {
   return { x: left.x - right.x, y: left.y - right.y };
+}
+
+function samePoint(left: Point, right: Point): boolean {
+  return (
+    Math.abs(left.x - right.x) <= HANDLE_EPSILON &&
+    Math.abs(left.y - right.y) <= HANDLE_EPSILON
+  );
+}
+
+function transformVectorPoint(point: Point, transform: Transform): Point {
+  return normalizePoint({
+    x: transform[0] * point.x + transform[2] * point.y + transform[4],
+    y: transform[1] * point.x + transform[3] * point.y + transform[5],
+  });
 }
 
 function lerp(start: Point, end: Point, t: number): Point {

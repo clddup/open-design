@@ -85,7 +85,7 @@ export type LeaferVectorEditRequest =
   | { deleteNode: true; nodeId: string }
   | { deleteNode: false; network: VectorNetwork; nodeId: string };
 
-export type LeaferVectorEditTool = "move" | "cut";
+export type LeaferVectorEditTool = "move" | "cut" | "lasso";
 
 export interface LeaferImageCropCommitRequest {
   nodeId: string;

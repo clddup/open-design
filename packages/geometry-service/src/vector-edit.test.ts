@@ -15,6 +15,8 @@ import {
   reverseVectorPath,
   setVectorPathClosed,
   setVectorPointMode,
+  transformVectorVertices,
+  vectorVertexBounds,
   vectorNetworkEditability,
 } from "./vector-edit.js";
 
@@ -284,6 +286,53 @@ describe("editable vector point operations", () => {
       { id: "vertex_d", x: 180, y: 30, handleMode: "corner" },
     ]);
     expect(result.network.segments[0]!.tangentEnd).toEqual({ x: -10, y: 5 });
+  });
+
+  it("bounds and affinely transforms explicit vertices with their Bézier tangents", () => {
+    const source = openNetwork();
+    const curvedSegment = source.segments[1];
+    if (!curvedSegment) throw new Error("Expected the middle test segment");
+    source.segments[1] = {
+      ...curvedSegment,
+      tangentStart: { x: 10, y: 0 },
+      tangentEnd: { x: -10, y: 0 },
+    };
+    expect(vectorVertexBounds(source, ["vertex_b", "vertex_c"])).toEqual({
+      x: 60,
+      y: 0,
+      width: 60,
+      height: 30,
+    });
+    const result = transformVectorVertices(
+      source,
+      ["vertex_b", "vertex_c"],
+      [2, 0, 0, 0.5, 10, -5],
+    );
+    if (!result.ok) throw new Error(result.message);
+    expect(result.network.vertices).toEqual([
+      source.vertices[0],
+      { ...source.vertices[1]!, x: 130, y: 10 },
+      { ...source.vertices[2]!, x: 250, y: -5 },
+      source.vertices[3],
+    ]);
+    expect(result.network.segments[1]).toEqual({
+      ...source.segments[1],
+      tangentStart: { x: 20, y: 0 },
+      tangentEnd: { x: -20, y: 0 },
+    });
+    expect(
+      transformVectorVertices(source, ["vertex_missing"], [1, 0, 0, 1, 0, 0]),
+    ).toMatchObject({ ok: false, code: "missing-vertex" });
+    expect(
+      transformVectorVertices(source, ["vertex_b"], [1, 0, 0, 1, 0, 0]),
+    ).toMatchObject({ ok: false, code: "no-op" });
+    expect(
+      transformVectorVertices(
+        source,
+        ["vertex_b"],
+        [1, 0, 0, 1, Number.NaN, 0],
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-network" });
   });
 
   it("creates deterministic smooth and mirrored handles from neighboring points", () => {

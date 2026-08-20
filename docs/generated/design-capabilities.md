@@ -25,7 +25,7 @@
 - ID：`canvas.navigation-selection`
 - 实现方：@opendesign/leafer-engine / leafer-editor@2.2.9
 - 表面：contract=available；runtime=available；human=available；agent=degraded；render=available；export=unavailable
-- 证据：自动化 4 项；实机 0 项
+- 证据：自动化 5 项；实机 0 项
 - 限制：macOS 与 Windows 上的真实 Electron 平移、缩放、选框稳定性和大节点量性能尚未完成验收。
 
 ### 图层层级 — 降级可用
@@ -59,12 +59,12 @@
 使用 Pen 创建可编辑三次曲线轮廓、继续调整已有节点和贝塞尔手柄，或精确保留 SVG Path 数据，并通过同一 Path 投影渲染。
 
 - ID：`vector.path-rendering`
-- 实现方：DesignDocument 1.10.0 + Geometry Service contract v11 vector-edit/Connect/Disconnect/Cut + EditorRuntime vector planner + Leafer Pen/point/Cut overlay + controlled SVG metadata v2
+- 实现方：DesignDocument 1.10.0 + Geometry Service contract v12 vector-edit/point transform/Connect/Disconnect/Cut + EditorRuntime vector planner + Leafer Pen/point/Lasso/transform/Cut overlay + controlled SVG metadata v2
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 16 项；实机 0 项
+- 证据：自动化 17 项；实机 0 项
 - 限制：Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。
-- 限制：Enter 或双击可让一个或多个已选 Vector 图层进入非分支多轮廓节点编辑；每层拥有独立 trace、anchors、节点选区和只读状态，Shift 点击加入图层，macOS Command / Windows Control 点击切换成员，命中层成为 active。节点与手柄拖动、持久化直角/平滑/镜像/独立模式、同一 Vector 端点连接/断开、明确轮廓的开放/闭合与反转、Delete/Backspace、Done/Escape、精确 bounds 和每次完成动作一条事务继续可用；专用 Agent 矢量工具通过稳定几何 ID 复用同一语义 planner。
-- 限制：Cut 模式（X）既可点击节点或直线/三次曲线创建真实断点，也可用一条 document-space 有限切线拖过多个 Vector 图层。闭合边界可有两次或更多真实横穿：边界弧与同侧 connector 会重建为有效闭合 component，包含源起点的一块保留稳定源 ID，其余 component 进入同一个可编辑兄弟图层。切线同时穿过唯一外轮廓和孔洞时，会将二者缝合成连续结果边界；未切孔洞继续跟随实际包含它的 component。开放描边按全部真实横穿交点切开。同一 Vector 的 Connect 可无分支地连接两个开放 endpoint；Disconnect 复用真实 Cut 断点，并可在不产生零长度 segment 的情况下重新连接。宿主解析 world transform，并把全部 source/result pairs 合并为一次原子 revision 和 undo。嵌套/重叠复合 region、只切孔洞不切外轮廓、跨层 Connect 与分支网络、套索、多节点变换框、flatten、outline stroke、完整外部 SVG 保真、像素基线和 macOS/Windows 打包交互证据仍未完成。
+- 限制：Enter 或双击可让一个或多个已选 Vector 图层进入非分支多轮廓节点编辑；每层拥有独立 trace、anchors、节点选区和只读状态，Shift 点击加入图层，macOS Command / Windows Control 点击切换成员，命中层成为 active。Q 套索可圈选节点；同一 Vector 选中两个以上节点后提供移动、八向缩放和旋转框，并支持 Shift/Option(Alt) modifier。节点/手柄、point mode、Connect/Disconnect、Open/Close/Reverse、Delete、tight bounds 与每次手势一条事务继续可用；Agent transform-vertices 通过稳定 ID 和 node-local matrix 复用同一 planner。
+- 限制：Cut 模式（X）支持节点/路径真实断点和跨多个 Vector 图层的有限 document-space 分割；闭合边界通过同侧 connector 与连续边界缝合处理穿孔和凹形多交点 component，开放描边按全部横穿交点切开。同一 Vector Connect/Disconnect、节点套索与单 Vector 多节点变换共用稳定拓扑，并在每次完成手势只提交一个原子 revision。路径段套索/选择、跨 Vector 统一变换框、变换中 Space 平移、嵌套/重叠复合 region、只切孔洞、跨层 Connect、分支网络、flatten、outline stroke、完整外部 SVG 保真、像素基线和双平台打包交互证据仍未完成。
 - 限制：受控 OpenDesign SVG metadata 只在通过 schema、拓扑且与标准渲染 path 精确匹配时保留 editable network；没有 metadata 的外部 SVG 保持为精确 path 数据，不猜测可编辑拓扑。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
@@ -111,10 +111,10 @@
 通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。
 
 - ID：`vector.pen-node-editing`
-- 实现方：DesignDocument 1.10.0 Vector Network + Geometry Service contract v11 vector-edit/Connect/Disconnect/Cut + EditorRuntime planner + Leafer native overlays
+- 实现方：DesignDocument 1.10.0 Vector Network + Geometry Service contract v12 vector-edit/point transform/Connect/Disconnect/Cut + EditorRuntime planner + Leafer native overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 9 项；实机 0 项
-- 限制：Pen 当前创建单条非分支轮廓；已有节点编辑支持包含互不连接非分支多轮廓的多 Vector layer collection，并通过人工与 Agent 共用语义提供开放/闭合、反转、点击 Cut 和 document-space 拖拽 Cut。闭合边界已通过连续边界缝合支持穿孔与凹形多交点分割；开放轮廓按全部横穿交点切开，未切 compound hole 以有效 loop direction 跟随实际包含它的 component。全部受影响图层只产生一次原子 revision，viewport 移动不改变 geometry。嵌套/重叠复合 region、只切孔洞不切外轮廓、连接/分支网络、连接/断开、flatten、outline stroke、套索、多节点变换框及双平台打包交互证据仍未完成。
+- 证据：自动化 10 项；实机 0 项
+- 限制：Pen 当前创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、Connect/Disconnect、节点套索、单 Vector 多节点 move/resize/rotate、点击 Cut 与 document-space 拖拽 Cut，并由人工/Agent 共用 Geometry 语义。闭合边界支持穿孔与凹形多交点分割，开放轮廓按全部横穿交点切开。路径段选择、跨 Vector 节点变换、嵌套/重叠复合 region、只切孔洞、分支网络、flatten、outline stroke 与双平台打包证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
 - 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/path_edit.rs)

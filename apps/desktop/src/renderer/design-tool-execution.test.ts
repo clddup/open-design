@@ -4155,6 +4155,52 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(editableVectorNetwork(runtime).vertices).toHaveLength(3);
   });
 
+  it("transforms inspected vector points without exposing network rewriting", async () => {
+    const runtime = createEditableVectorRuntime();
+    runtime.setSelection(["title_welcome"], "title_welcome");
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_transform_vertices",
+        call: {
+          toolCallId: "tool_vector_transform_vertices",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "transform-vertices",
+            label: "Move two logo points",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            transform: [1, 0, 0, 1, 20, 10],
+            vertexIds: ["vertex_b", "vertex_c"],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "transform-vertices",
+          atomic: true,
+          nodeId: "editable_logo_contour",
+          pathId: "logo_path",
+          revision: 1,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).vertices).toEqual([
+      { id: "vertex_a", x: 0, y: 0, handleMode: "corner" },
+      { id: "vertex_b", x: 140, y: 10, handleMode: "corner" },
+      { id: "vertex_c", x: 80, y: 90, handleMode: "corner" },
+    ]);
+    expect(runtime.getSnapshot().state.selection.nodeIds).toEqual([
+      "title_welcome",
+    ]);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+  });
+
   it("divides a closed vector with a node-local line into host-named sibling layers", async () => {
     const runtime = createClosedEditableVectorRuntime();
     runtime.setSelection(["title_welcome"], "title_welcome");
