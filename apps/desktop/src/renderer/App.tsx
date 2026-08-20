@@ -53,6 +53,7 @@ import {
 } from "./components/DiagnosticNotifications";
 import { DesignFileTabs } from "./components/DesignFileTabs";
 import { LeftSidebar } from "./components/LeftSidebar";
+import { RenameLayersDialog } from "./components/RenameLayersDialog";
 import { ProjectHome } from "./components/ProjectHome";
 import { SettingsPage } from "./components/SettingsPage";
 import { Statusbar } from "./components/Statusbar";
@@ -90,6 +91,7 @@ import { useImportExportWorkflow } from "./features/import-export/use-import-exp
 import { layoutInspectorMode } from "./features/editor/auto-layout-shortcut";
 import { useDocumentCommandControllers } from "./use-document-command-controllers";
 import { useLayerCommandController } from "./features/editor/use-layer-command-controller";
+import { useLayerRenameWorkflow } from "./features/editor/use-layer-rename-workflow";
 import {
   projectAgentActiveRunId,
   projectAgentRunFileBinding,
@@ -846,6 +848,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     canCreateBooleanSelection,
     canDeleteSelection,
     canGroupSelection,
+    canRenameSelection,
     canUngroupBooleanSelection,
     canUngroupSelection,
     deleteNodes,
@@ -853,6 +856,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     groupSelection,
     layerOrderAvailability,
     reorderSelection,
+    renameLayers,
     reparentLayers,
     ungroupSelection,
   } = useLayerCommandController({
@@ -917,6 +921,19 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     selectedComponentContext?.variantSet && selectedNode?.kind !== "instance"
       ? duplicateSelectedVariant
       : duplicateSelection;
+
+  const {
+    activeRename: activeLayerRename,
+    apply: applyActiveLayerRename,
+    close: closeLayerRename,
+    openSelection: openRenameLayers,
+    renameTarget: renameLayerTarget,
+  } = useLayerRenameWorkflow({
+    renameLayers,
+    runtime,
+    t,
+    updateInstanceSource,
+  });
 
   const toggleSelectedLayerState = useCallback(
     (field: "locked" | "visible") => {
@@ -1133,8 +1150,21 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) return;
       const modifier = event.metaKey || event.ctrlKey;
+      if (
+        view === "editor" &&
+        modifier &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.code === "KeyR"
+      ) {
+        event.preventDefault();
+        if (!isEditableTarget(event.target) && canRenameSelection) {
+          openRenameLayers();
+        }
+        return;
+      }
+      if (isEditableTarget(event.target)) return;
       if (event.key === "Escape" && state.selection.nodeIds.length > 0) {
         event.preventDefault();
         runtime.setSelection([]);
@@ -1270,12 +1300,14 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     return () => window.removeEventListener("keydown", handleKey);
   }, [
     canDeleteSelection,
+    canRenameSelection,
     changeZoom,
     applyBooleanOperation,
     deleteNodes,
     duplicateSelectionAction,
     fitCanvas,
     groupSelection,
+    openRenameLayers,
     platform,
     reorderSelection,
     runtime,
@@ -1284,6 +1316,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     toggleSelectedLayerState,
     toggleUtilityPanel,
     ungroupSelection,
+    view,
   ]);
 
   const changeTheme = (value: ThemePreference) => {
@@ -2343,6 +2376,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             onReplaceAsset={replaceImageAsset}
             onLayerHoverChange={setLayerHoverTarget}
             onReparent={reparentLayers}
+            onRenameLayer={renameLayerTarget}
             onSelect={(nodeIds, anchorNodeId, componentTarget) =>
               runtime.setSelection(nodeIds, anchorNodeId, componentTarget)
             }
@@ -2612,6 +2646,14 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
           zoom={state.viewport.zoom}
         />
         {conversationDeleteDialog}
+        {activeLayerRename && (
+          <RenameLayersDialog
+            items={activeLayerRename.items}
+            key={`${activeLayerRename.kind}:${activeLayerRename.baseRevision}:${activeLayerRename.items.map(({ id }) => id).join(":")}`}
+            onClose={closeLayerRename}
+            onRename={applyActiveLayerRename}
+          />
+        )}
         {notifications}
       </div>
     </>

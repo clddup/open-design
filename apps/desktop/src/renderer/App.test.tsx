@@ -3411,6 +3411,46 @@ describe("App", () => {
     expect(snapshot.state.history.undo).toHaveLength(2);
   });
 
+  it("previews and commits Figma-style bulk layer rename as one undo entry", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    act(() =>
+      runtime().setSelection(
+        ["title_welcome", "subtitle_welcome"],
+        "title_welcome",
+      ),
+    );
+
+    fireEvent.keyDown(window, {
+      code: "KeyR",
+      key: "r",
+      metaKey: true,
+    });
+    expect(
+      screen.getByRole("dialog", { name: "Rename layers" }),
+    ).toBeInTheDocument();
+    const renameTo = screen.getByRole("textbox", { name: "Rename to" });
+    await user.clear(renameTo);
+    await user.type(renameTo, "Heading ");
+    await user.click(screen.getByRole("button", { name: "Number ↑" }));
+    await user.click(screen.getByRole("button", { name: "Rename 2" }));
+
+    let snapshot = runtime().getSnapshot();
+    expect(snapshot.document.nodesById.title_welcome?.name).toBe("Heading 1");
+    expect(snapshot.document.nodesById.subtitle_welcome?.name).toBe(
+      "Heading 2",
+    );
+    expect(snapshot.document.revision).toBe(1);
+    expect(snapshot.state.history.undo).toHaveLength(1);
+
+    act(() => {
+      runtime().undo();
+    });
+    snapshot = runtime().getSnapshot();
+    expect(snapshot.document.nodesById.title_welcome?.name).toBe("Title");
+    expect(snapshot.document.nodesById.subtitle_welcome?.name).toBe("Subtitle");
+  });
+
   it("groups and ungroups the current selection as undoable transactions", async () => {
     const user = userEvent.setup();
     renderApp();

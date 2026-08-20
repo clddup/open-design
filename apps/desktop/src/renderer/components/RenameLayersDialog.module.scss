@@ -1,0 +1,132 @@
+.form {
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+
+  > span {
+    color: var(--ui-text-muted);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  input {
+    width: 100%;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-sm);
+    outline: 0;
+    color: var(--ui-text);
+    background: var(--ui-input-bg);
+    font-size: 12px;
+
+    &:focus-visible {
+      border-color: var(--ui-focus);
+      box-shadow: 0 0 0 1px var(--ui-focus);
+    }
+  }
+}
+
+.regexOption {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+
+  input {
+    margin: 0;
+    accent-color: var(--ui-accent);
+  }
+}
+
+.tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+
+  button {
+    height: 24px;
+    padding: 0 7px;
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    color: var(--ui-text-muted);
+    background: var(--ui-surface);
+    font-size: 10px;
+
+    &:hover {
+      border-color: var(--ui-border-strong);
+      color: var(--ui-text);
+      background: var(--ui-surface-sunken);
+    }
+  }
+}
+
+.preview {
+  min-height: 116px;
+  max-height: 248px;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-bg);
+}
+
+.previewHeading {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--ui-border-subtle);
+  color: var(--ui-text-faint);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.previewList {
+  max-height: 219px;
+  overflow: auto;
+}
+
+.previewRow {
+  display: grid;
+  min-height: 27px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--ui-border-subtle);
+  color: var(--ui-text-faint);
+  font-size: 10px;
+
+  span:first-child,
+  span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  span:last-child {
+    color: var(--ui-text);
+  }
+}
+
+.previewMore {
+  display: block;
+  padding: 7px 8px;
+  color: var(--ui-text-faint);
+  font-size: 10px;
+}
+
+.error {
+  color: var(--ui-danger);
+  font-size: 10px;
+  line-height: 1.4;
+}

@@ -17,6 +17,7 @@ import {
   planCreateBooleanGroup,
   planGroupNodes,
   planDeleteNodes,
+  planRenameLayers,
   planReparentNodes,
   planReorderNodes,
   planSetBooleanOperation,
@@ -25,13 +26,18 @@ import {
   type ArrangeOperation,
   type EditorRuntime,
   type LayerOrderAction,
+  type LayerRenameInput,
 } from "@opendesign/editor-runtime";
 import { useCallback, useMemo } from "react";
 import type {
   MessageKey,
   MessageParameters,
 } from "../../../shared/i18n/messages";
-import type { LayerReparentRequest, LayerReparentResult } from "./types";
+import type {
+  LayerActionResult,
+  LayerReparentRequest,
+  LayerReparentResult,
+} from "./types";
 import type { ApplyEditorCommands } from "./use-editor-command-controller";
 
 type Translate = (key: MessageKey, parameters?: MessageParameters) => string;
@@ -124,6 +130,9 @@ export function useLayerCommandController({
       canUngroupSelection:
         !componentTargetActive &&
         canUngroupNode(document, activePageId, selectedNodeIds),
+      canRenameSelection:
+        selectedNodeIds.length > 0 &&
+        selectedNodeIds.every((nodeId) => document.nodesById[nodeId]),
       layerOrderAvailability: Object.fromEntries(
         LAYER_ORDER_ACTIONS.map((action) => [
           action,
@@ -424,6 +433,59 @@ export function useLayerCommandController({
     ],
   );
 
+  const renameLayers = useCallback(
+    (
+      nodeIds: readonly string[],
+      input: LayerRenameInput,
+      expectedDocument?: { documentId: string; revision: number },
+    ): LayerActionResult => {
+      const current = runtime.getSnapshot();
+      if (
+        expectedDocument !== undefined &&
+        (current.document.documentId !== expectedDocument.documentId ||
+          current.document.revision !== expectedDocument.revision)
+      ) {
+        return { ok: false, error: t("renameLayers.documentChanged") };
+      }
+      const operationId = `rename_layers_${Date.now()}_${++transactionCounter.current}`;
+      const plan = planRenameLayers(
+        current.document,
+        activePageId,
+        nodeIds,
+        input,
+        operationId,
+      );
+      if (!plan.ok) {
+        return {
+          ok: false,
+          error:
+            plan.code === "invalid-regular-expression"
+              ? t("renameLayers.invalidRegularExpression")
+              : plan.code === "empty-name"
+                ? t("renameLayers.emptyName")
+                : plan.code === "name-too-long"
+                  ? t("renameLayers.nameTooLong")
+                  : plan.code === "no-op"
+                    ? t("renameLayers.noChange")
+                    : t("renameLayers.targetUnavailable"),
+        };
+      }
+      const applied = applyCommands(
+        t(
+          plan.commands.length === 1
+            ? "history.renameLayer"
+            : "history.renameLayers",
+          { count: plan.commands.length },
+        ),
+        plan.commands,
+      );
+      return applied
+        ? { ok: true }
+        : { ok: false, error: t("renameLayers.applyFailed") };
+    },
+    [activePageId, applyCommands, runtime, t, transactionCounter],
+  );
+
   return {
     ...capabilities,
     applyBooleanOperation,
@@ -431,6 +493,7 @@ export function useLayerCommandController({
     deleteNodes,
     duplicateSelection,
     groupSelection,
+    renameLayers,
     reorderSelection,
     reparentLayers,
     ungroupSelection,

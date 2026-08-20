@@ -35,6 +35,20 @@ export {
   type LayerOperationPlan,
 } from "./layer-operations.js";
 export {
+  LAYER_RENAME_ASCENDING_NUMBER_TOKEN,
+  LAYER_RENAME_CURRENT_NAME_TOKEN,
+  LAYER_RENAME_DESCENDING_NUMBER_TOKEN,
+  MAX_LAYER_NAME_LENGTH,
+  planRenameLayers,
+  previewLayerRenames,
+  type LayerRenameFailureCode,
+  type LayerRenameInput,
+  type LayerRenameItem,
+  type LayerRenamePlan,
+  type LayerRenamePreview,
+  type LayerRenamePreviewResult,
+} from "./layer-rename-operations.js";
+export {
   planDeleteNodes,
   type DeleteNodesFailureCode,
   type DeleteNodesPlan,

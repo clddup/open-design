@@ -30,6 +30,7 @@ function pageActionProps() {
     ),
     onReplaceAsset: vi.fn(() => Promise.resolve({ ok: true } as const)),
     onUpdateComponentLayer: vi.fn(),
+    onRenameLayer: vi.fn(() => ({ ok: true }) as const),
     onCreatePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
     onDeletePage: vi.fn(() => ({ ok: false, error: "Unavailable" }) as const),
     onDuplicatePage: vi.fn(
@@ -41,6 +42,44 @@ function pageActionProps() {
 }
 
 describe("LeftSidebar layer tree", () => {
+  it("renames one persistent layer inline with Enter", async () => {
+    const user = userEvent.setup();
+    const onRenameLayer = vi.fn(() => ({ ok: true }) as const);
+    render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          {...pageActionProps()}
+          activePageId="page_welcome"
+          document={createWelcomeDocument()}
+          onPageChange={vi.fn()}
+          onRenameLayer={onRenameLayer}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={vi.fn()}
+          onTabChange={vi.fn()}
+          onToggleLock={vi.fn()}
+          onToggleVisibility={vi.fn()}
+          selectedNodeIds={[]}
+          tab="layers"
+        />
+      </I18nProvider>,
+    );
+
+    await user.dblClick(screen.getByRole("button", { name: "Atomic changes" }));
+    const input = screen.getByRole("textbox", {
+      name: "Rename Atomic changes",
+    });
+    await user.clear(input);
+    await user.type(input, "Atomic workflow{Enter}");
+
+    expect(onRenameLayer).toHaveBeenCalledWith(
+      { nodeId: "feature_two" },
+      "Atomic workflow",
+    );
+    expect(
+      screen.queryByRole("textbox", { name: "Rename Atomic changes" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("groups Styles and Variables under one Library view and searches layers", async () => {
     const user = userEvent.setup();
     const onTabChange = vi.fn();

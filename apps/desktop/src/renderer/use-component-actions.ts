@@ -522,6 +522,7 @@ export function useComponentActions({
       instanceId: string,
       sourcePath: readonly string[],
       patch: ComponentOverridePatch,
+      historyLabel?: string,
     ) => {
       const current = runtime.getSnapshot();
       const plan = planSetComponentOverride(current.document, {
@@ -532,9 +533,12 @@ export function useComponentActions({
       });
       if (!plan.ok) {
         setEditorError(plan.message);
-        return;
+        return false;
       }
-      applyCommands(t("history.updateComponentOverride"), plan.commands);
+      return applyCommands(
+        historyLabel ?? t("history.updateComponentOverride"),
+        plan.commands,
+      );
     },
     [applyCommands, runtime, setEditorError, t, transactionCounter],
   );

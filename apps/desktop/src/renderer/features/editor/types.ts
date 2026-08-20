@@ -1,4 +1,7 @@
-import type { UpdatePropertiesCommand } from "@opendesign/design-contracts";
+import type {
+  ComponentSelectionTarget,
+  UpdatePropertiesCommand,
+} from "@opendesign/design-contracts";
 
 export type UpdatePropertiesPatch = Omit<
   UpdatePropertiesCommand,
@@ -7,6 +10,13 @@ export type UpdatePropertiesPatch = Omit<
 
 export type PageActionResult =
   { ok: true; pageId: string; name?: string } | { ok: false; error: string };
+
+export type LayerActionResult = { ok: true } | { ok: false; error: string };
+
+export type LayerRenameTarget = {
+  nodeId: string;
+  componentTarget?: ComponentSelectionTarget;
+};
 
 export type LayerDropPosition = "before" | "inside" | "after";
 

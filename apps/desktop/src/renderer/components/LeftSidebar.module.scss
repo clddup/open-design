@@ -392,6 +392,34 @@
   }
 }
 
+.layerEditor {
+  display: grid;
+  min-width: 0;
+  height: 100%;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  padding: 0 2px 0 calc(22px + var(--layer-depth) * 13px);
+
+  input {
+    min-width: 0;
+    height: 22px;
+    padding: 0 4px;
+    border: 1px solid var(--ui-focus);
+    border-radius: 3px;
+    outline: 0;
+    color: var(--ui-text);
+    background: var(--ui-input-bg);
+    font-size: 11px;
+    box-shadow: 0 0 0 1px var(--ui-focus);
+
+    &[aria-invalid="true"] {
+      border-color: var(--ui-danger);
+      box-shadow: 0 0 0 1px var(--ui-danger);
+    }
+  }
+}
+
 .layerDisclosure {
   position: absolute;
   z-index: 1;

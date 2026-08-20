@@ -24,6 +24,8 @@ import {
 import type { AssetActionResult, DesignAssetReference } from "../design-assets";
 import type {
   LayerDropPosition,
+  LayerActionResult,
+  LayerRenameTarget,
   LayerReparentRequest,
   LayerReparentResult,
   PageActionResult,
@@ -315,6 +317,23 @@ function sameComponentTarget(
   );
 }
 
+function componentTargetExists(
+  document: DesignDocument,
+  target: ComponentSelectionTarget,
+): boolean {
+  const resolution = resolveComponentInstance(document, target.instanceId);
+  return (
+    resolution.ok &&
+    resolution.nodes.some(
+      (candidate) =>
+        candidate.selectionSourcePath.length === target.sourcePath.length &&
+        candidate.selectionSourcePath.every(
+          (value, index) => value === target.sourcePath[index],
+        ),
+    )
+  );
+}
+
 export function LeftSidebar({
   className = "",
   document,
@@ -341,6 +360,7 @@ export function LeftSidebar({
   onLayerHoverChange,
   onSelect,
   onReparent,
+  onRenameLayer,
   onUpdateComponentLayer,
   onToggleLock,
   onToggleVisibility,
@@ -376,6 +396,7 @@ export function LeftSidebar({
     componentTarget?: ComponentSelectionTarget,
   ) => void;
   onReparent: (request: LayerReparentRequest) => LayerReparentResult;
+  onRenameLayer: (target: LayerRenameTarget, name: string) => LayerActionResult;
   onUpdateComponentLayer: (
     target: ComponentSelectionTarget,
     patch: ComponentOverridePatch,
@@ -398,12 +419,22 @@ export function LeftSidebar({
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [pageNameDraft, setPageNameDraft] = useState("");
   const [pageNameError, setPageNameError] = useState<string | null>(null);
+  const [editingLayer, setEditingLayer] = useState<
+    | (LayerRenameTarget & {
+        key: string;
+      })
+    | null
+  >(null);
+  const [layerNameDraft, setLayerNameDraft] = useState("");
+  const [layerNameError, setLayerNameError] = useState<string | null>(null);
   const [assetQuery, setAssetQuery] = useState("");
   const [layerQuery, setLayerQuery] = useState("");
   const draggedNodeIds = useRef<readonly string[] | null>(null);
   const draggedPageId = useRef<string | null>(null);
   const pageNameInput = useRef<HTMLInputElement | null>(null);
+  const layerNameInput = useRef<HTMLInputElement | null>(null);
   const composingPageName = useRef(false);
+  const composingLayerName = useRef(false);
   const revealedSelectionKey = useRef<string | null>(null);
   const normalizedLayerQuery = layerQuery.trim().toLocaleLowerCase();
   const allLayers = flattenPageTree(
@@ -492,6 +523,8 @@ export function LeftSidebar({
 
   useEffect(() => {
     setCollapsedNodeIds(new Set());
+    setEditingLayer(null);
+    setLayerNameError(null);
     revealedSelectionKey.current = null;
     draggedNodeIds.current = null;
     setActiveDrop(null);
@@ -514,11 +547,83 @@ export function LeftSidebar({
     pageNameInput.current?.select();
   }, [document, editingPageId]);
 
+  useEffect(() => {
+    if (!editingLayer) return;
+    layerNameInput.current?.focus();
+    layerNameInput.current?.select();
+  }, [editingLayer]);
+
+  useEffect(() => {
+    if (!editingLayer) return;
+    const available = editingLayer.componentTarget
+      ? componentTargetExists(document, editingLayer.componentTarget)
+      : document.nodesById[editingLayer.nodeId] !== undefined;
+    if (!available) {
+      setEditingLayer(null);
+      setLayerNameError(null);
+    }
+  }, [activePageId, document, editingLayer]);
+
   const beginPageRename = (pageId: string, name: string) => {
     setEditingPageId(pageId);
     setPageNameDraft(name);
     setPageNameError(null);
     setPageStatus("");
+  };
+
+  const beginLayerRename = (entry: TreeEntry) => {
+    setEditingLayer({
+      key: entry.key,
+      nodeId: entry.selectionNodeId,
+      ...(entry.componentTarget
+        ? { componentTarget: entry.componentTarget }
+        : {}),
+    });
+    setLayerNameDraft(entry.node.name);
+    setLayerNameError(null);
+  };
+
+  const cancelLayerRename = () => {
+    setEditingLayer(null);
+    setLayerNameError(null);
+  };
+
+  const commitLayerRename = () => {
+    if (!editingLayer) return;
+    const entry = allLayers.find(({ key }) => key === editingLayer.key);
+    if (!entry) {
+      cancelLayerRename();
+      return;
+    }
+    const nextName = layerNameDraft.trim();
+    if (nextName === entry.node.name) {
+      cancelLayerRename();
+      return;
+    }
+    if (nextName.length === 0 || nextName.length > 256) {
+      setLayerNameError(
+        nextName.length === 0
+          ? t("renameLayers.emptyName")
+          : t("renameLayers.nameTooLong"),
+      );
+      queueMicrotask(() => layerNameInput.current?.focus());
+      return;
+    }
+    const result = onRenameLayer(
+      {
+        nodeId: editingLayer.nodeId,
+        ...(editingLayer.componentTarget
+          ? { componentTarget: editingLayer.componentTarget }
+          : {}),
+      },
+      nextName,
+    );
+    if (!result.ok) {
+      setLayerNameError(result.error);
+      queueMicrotask(() => layerNameInput.current?.focus());
+      return;
+    }
+    cancelLayerRename();
   };
 
   const cancelPageRename = () => {
@@ -1011,59 +1116,114 @@ export function LeftSidebar({
                       />
                     </button>
                   )}
-                  <button
-                    className={styles.layerMain}
-                    draggable={!virtual && !effectiveLocked}
-                    onDragEnd={() => {
-                      if (draggedNodeIds.current) {
-                        clearDrag();
-                        setDragStatus("");
-                      }
-                    }}
-                    onDragStart={
-                      virtual || effectiveLocked
-                        ? undefined
-                        : (event) => startDrag(event, node.id)
-                    }
-                    onClick={(event) => {
-                      if (hasChildren) expandNode(key);
-                      if (componentTarget) {
-                        onSelect(
-                          [selectionNodeId],
-                          selectionNodeId,
-                          componentTarget,
-                        );
-                        return;
-                      }
-                      const selection = layerPanelSelection(
-                        layers
-                          .filter((candidate) => !candidate.virtual)
-                          .map((candidate) => candidate.selectionNodeId),
-                        selectedNodeIds,
-                        selectionAnchorNodeId,
-                        selectionNodeId,
-                        event,
-                      );
-                      onSelect(selection.nodeIds, selection.anchorNodeId);
-                    }}
-                    tabIndex={key === firstFocusableId ? 0 : -1}
-                    type="button"
-                  >
-                    <Icon
-                      name={
-                        componentIdentityNodeIds.has(node.id)
-                          ? "lucide:component"
-                          : nodeIcons[node.kind]
-                      }
-                      size={14}
-                    />
-                    <span>
-                      {node.name ||
-                        t("sidebar.untitledNode", {
-                          kind: t(nodeKindKeys[node.kind]),
+                  {editingLayer?.key === key ? (
+                    <div className={styles.layerEditor}>
+                      <Icon
+                        name={
+                          componentIdentityNodeIds.has(node.id)
+                            ? "lucide:component"
+                            : nodeIcons[node.kind]
+                        }
+                        size={14}
+                      />
+                      <input
+                        aria-invalid={layerNameError ? "true" : undefined}
+                        aria-label={t("sidebar.renameLayer", {
+                          name: node.name,
                         })}
-                    </span>
-                  </button>
+                        maxLength={256}
+                        onBlur={() => {
+                          if (!composingLayerName.current) commitLayerRename();
+                        }}
+                        onChange={(event) => {
+                          setLayerNameDraft(event.target.value);
+                          setLayerNameError(null);
+                        }}
+                        onCompositionEnd={() => {
+                          composingLayerName.current = false;
+                        }}
+                        onCompositionStart={() => {
+                          composingLayerName.current = true;
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            cancelLayerRename();
+                          } else if (
+                            event.key === "Enter" &&
+                            !composingLayerName.current
+                          ) {
+                            event.preventDefault();
+                            commitLayerRename();
+                          }
+                        }}
+                        ref={layerNameInput}
+                        title={layerNameError ?? undefined}
+                        value={layerNameDraft}
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      className={styles.layerMain}
+                      draggable={!virtual && !effectiveLocked}
+                      onDragEnd={() => {
+                        if (draggedNodeIds.current) {
+                          clearDrag();
+                          setDragStatus("");
+                        }
+                      }}
+                      onDragStart={
+                        virtual || effectiveLocked
+                          ? undefined
+                          : (event) => startDrag(event, node.id)
+                      }
+                      onClick={(event) => {
+                        if (hasChildren) expandNode(key);
+                        if (componentTarget) {
+                          onSelect(
+                            [selectionNodeId],
+                            selectionNodeId,
+                            componentTarget,
+                          );
+                          return;
+                        }
+                        const selection = layerPanelSelection(
+                          layers
+                            .filter((candidate) => !candidate.virtual)
+                            .map((candidate) => candidate.selectionNodeId),
+                          selectedNodeIds,
+                          selectionAnchorNodeId,
+                          selectionNodeId,
+                          event,
+                        );
+                        onSelect(selection.nodeIds, selection.anchorNodeId);
+                      }}
+                      onDoubleClick={() => beginLayerRename(entry)}
+                      onKeyDown={(event) => {
+                        if (event.key === "F2") {
+                          event.preventDefault();
+                          beginLayerRename(entry);
+                        }
+                      }}
+                      tabIndex={key === firstFocusableId ? 0 : -1}
+                      type="button"
+                    >
+                      <Icon
+                        name={
+                          componentIdentityNodeIds.has(node.id)
+                            ? "lucide:component"
+                            : nodeIcons[node.kind]
+                        }
+                        size={14}
+                      />
+                      <span>
+                        {node.name ||
+                          t("sidebar.untitledNode", {
+                            kind: t(nodeKindKeys[node.kind]),
+                          })}
+                      </span>
+                    </button>
+                  )}
                   {activeDrop?.nodeId === node.id && (
                     <span aria-hidden="true" className={styles.layerDropLabel}>
                       {t(
