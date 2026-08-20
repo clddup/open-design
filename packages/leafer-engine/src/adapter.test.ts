@@ -610,7 +610,9 @@ describe("Leafer engine selection bounds synchronization", () => {
       ),
       document: secondDocument,
     });
-    expect((region as FakeElement & { fill?: unknown }).fill).toBeNull();
+    expect((region as FakeElement & { fill?: unknown }).fill).toBe(
+      "rgba(0, 0, 0, 0)",
+    );
     adapter.dispose();
   });
 

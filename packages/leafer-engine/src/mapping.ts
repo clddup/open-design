@@ -350,17 +350,28 @@ function toElementSpec(
   let data: Record<string, unknown>;
   switch (node.kind) {
     case "frame":
-    case "slot":
+    case "slot": {
+      const shape = mapShapeProperties(
+        document,
+        node.id,
+        node.properties,
+        warnings,
+      );
       tag = "Frame";
       data = {
         ...base,
-        ...mapShapeProperties(document, node.id, node.properties, warnings),
+        ...shape,
+        // Leafer Frame declares a #FFFFFF default fill and treats null as
+        // "use the default". OpenDesign empty fills mean a truly transparent
+        // structural container, so project that state explicitly.
+        fill: shape.fill ?? "rgba(0, 0, 0, 0)",
         width: node.size.width,
         height: node.size.height,
         cornerRadius: node.properties.cornerRadius,
         overflow: node.properties.clipsContent ? "hide" : "show",
       };
       break;
+    }
     case "group":
       tag = "Group";
       data = { ...base, hitChildren: true };

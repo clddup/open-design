@@ -49,7 +49,7 @@ namespace、planned parent 与 attachment ambiguity 属于模型可恢复的内�
 - 已提交节点和图片资产继续属于唯一 DesignDocument；Run 只拥有临时来源授权和本轮生成映射。
 - ledger v3 增加少量持久状态，但避免从旧前缀、Conversation 归属或模型文本猜测身份。
 - 图片生成会增加一个无可见画布节点的 asset revision；它是用户可在 Assets 中看到、保存和撤销的真实文件状态，不得计作“首稿完成”。
-- 本决策不解决 Provider 延迟、视觉审美或所有图层构图错误。透明 Frame 的 Leafer 增量投影必须清除为 `fill: null`；不透明 sibling 遮挡仍由 exact-revision layout quality 和视觉审查处理。
+- 本决策不解决 Provider 延迟、视觉审美或所有图层构图错误。Leafer 2.2.9 的 Frame 把 `null` 解释为默认白色，因此 OpenDesign 空 fills 的 Frame/Slot 必须投影为显式透明色；不透明 sibling 遮挡仍由 exact-revision layout quality 和视觉审查处理。
 
 ## 验证
 
@@ -59,4 +59,4 @@ namespace、planned parent 与 attachment ambiguity 属于模型可恢复的内�
 - 错误 attachment ID 的唯一同 role 解析、多候选拒绝、role 不匹配拒绝和用户附件优先；
 - stale revision 上纯新增 generated asset 保留用户编辑并成功写入，stale 覆盖已有 asset 拒绝；
 - inspection 返回有界 Design File asset metadata，`place_image` 对 attachmentId/assetId 强制二选一；
-- Leafer 增量同步把 Frame 从 opaque fills 改为空 fills 后真实 element surface 清为 `null`。
+- Leafer 增量同步把 Frame 从 opaque fills 改为空 fills 后，真实 element surface 变为显式透明且不回退默认 `#FFFFFF`。
