@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 10 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 11 as const;
 
 export {
   alignItems,
@@ -20,9 +20,11 @@ export {
   type TidyUpPlan,
 } from "./arrangement.js";
 export {
+  connectVectorEndpoints,
   cutVectorNetworkByLine,
   cutVectorPath,
   deleteVectorVertices,
+  disconnectVectorVertex,
   findVectorPathIdForVertex,
   inferVectorPointMode,
   listVectorVertexHandles,

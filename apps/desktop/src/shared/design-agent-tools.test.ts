@@ -2888,6 +2888,21 @@ describe("design Agent tool contract", () => {
       pageId: "page_brand",
       pathId: "path_logo",
     };
+    const connect = {
+      action: "connect-endpoints",
+      label: "Connect the logo contour endpoints",
+      nodeId: "logo_contour",
+      pageId: "page_brand",
+      vertexIds: ["vertex_logo_a", "vertex_logo_b"],
+    };
+    const disconnect = {
+      action: "disconnect-vertex",
+      label: "Disconnect the logo contour",
+      nodeId: "logo_contour",
+      pageId: "page_brand",
+      pathId: "path_logo",
+      vertexId: "vertex_logo_mid",
+    };
     const lineCut = {
       action: "cut-with-line",
       end: { x: 128, y: 48 },
@@ -2927,12 +2942,30 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, cut)).toBe(
       true,
     );
+    expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, connect)).toBe(
+      true,
+    );
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, disconnect),
+    ).toBe(true);
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, lineCut)).toBe(
       true,
     );
     expect(
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, layerLineCut),
     ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...connect,
+        vertexIds: ["vertex_logo_a", "vertex_logo_a"],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...disconnect,
+        vertexId: undefined,
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
         ...cut,

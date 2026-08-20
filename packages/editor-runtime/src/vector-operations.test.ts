@@ -1037,6 +1037,65 @@ describe("vector editing runtime plans", () => {
     expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
   });
 
+  it("disconnects and reconnects explicit endpoints through atomic semantic plans", () => {
+    const runtime = new EditorRuntime(documentWithVector());
+    const disconnect = planVectorSemanticEdit(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      "vector_editable",
+      {
+        action: "disconnect-vertex",
+        pathId: "path_open",
+        vertexId: "vertex_b",
+      },
+    );
+    expect(disconnect).toMatchObject({
+      ok: true,
+      cutResult: {
+        cutVertexIds: ["vertex_b", "vertex_edit_1"],
+        pathIds: ["path_open", "path_edit_1"],
+      },
+    });
+    if (!disconnect.ok) throw new Error(disconnect.message);
+    expect(
+      runtime.apply({
+        transactionId: "disconnect_vector_vertex",
+        documentId: runtime.getSnapshot().document.documentId,
+        baseRevision: runtime.getSnapshot().document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Disconnect vector vertex",
+        commands: [...disconnect.operations],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(vectorNetworkFrom(runtime).paths).toHaveLength(2);
+
+    const connect = planVectorSemanticEdit(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      "vector_editable",
+      {
+        action: "connect-endpoints",
+        vertexIds: ["vertex_b", "vertex_edit_1"],
+      },
+    );
+    if (!connect.ok) throw new Error(connect.message);
+    expect(
+      runtime.apply({
+        transactionId: "connect_vector_endpoints",
+        documentId: runtime.getSnapshot().document.documentId,
+        baseRevision: runtime.getSnapshot().document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Connect vector endpoints",
+        commands: [...connect.operations],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(vectorNetworkFrom(runtime)).toEqual(network());
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+    expect(vectorNetworkFrom(runtime).paths).toHaveLength(2);
+    expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
+    expect(vectorNetworkFrom(runtime)).toEqual(network());
+  });
+
   it("skips un-crossed Vector targets and rejects duplicate or non-invertible targets", () => {
     const document = documentWithVector();
     const frame = document.nodesById.frame_welcome;

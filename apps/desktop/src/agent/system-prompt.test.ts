@@ -205,6 +205,12 @@ describe("OpenDesign Agent system prompt", () => {
       "use opendesign_edit_vector with explicit stable Page, node, path, vertex, and segment IDs",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "connect-endpoints joins exactly two open endpoints",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "disconnect-vertex breaks one internal vertex",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "cut-layers-with-line applies one finite document-space line",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(

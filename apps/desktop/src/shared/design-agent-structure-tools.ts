@@ -81,6 +81,21 @@ export type DesignVectorToolInput =
       pathId?: string;
     }
   | {
+      action: "connect-endpoints";
+      label: string;
+      nodeId: string;
+      pageId: string;
+      vertexIds: [string, string];
+    }
+  | {
+      action: "disconnect-vertex";
+      label: string;
+      nodeId: string;
+      pageId: string;
+      pathId: string;
+      vertexId: string;
+    }
+  | {
       action: "cut-path";
       at:
         | { kind: "vertex"; vertexId: string }
@@ -198,12 +213,14 @@ const MODEL_HIERARCHY_SCHEMA = {
 const MODEL_VECTOR_EDIT_SCHEMA = {
   type: "object",
   description:
-    "Edit explicit existing editable Vector Networks by stable Page, node, path, vertex, and segment IDs from inspection. set-closed requires closed; cut-path requires pathId and at; cut-with-line cuts one node's supported open or closed contours using node-local points; cut-layers-with-line cuts every crossed nodeId using one finite line in document coordinates. The host derives all new geometry, result layer IDs, bounds, transforms, and one atomic transaction.",
+    "Edit explicit existing editable Vector Networks by stable Page, node, path, vertex, and segment IDs from inspection. connect-endpoints joins exactly two real open endpoints without branches; disconnect-vertex breaks one internal vertex; set-closed requires closed; cut-path requires pathId and at; cut-with-line cuts one node's supported open or closed contours using node-local points; cut-layers-with-line cuts every crossed nodeId using one finite line in document coordinates. The host derives all new geometry, result layer IDs, bounds, transforms, and one atomic transaction.",
   properties: {
     action: {
       enum: [
         "set-closed",
         "reverse-path",
+        "connect-endpoints",
+        "disconnect-vertex",
         "cut-path",
         "cut-with-line",
         "cut-layers-with-line",
@@ -222,6 +239,15 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
         "Required only for cut-layers-with-line. Explicit stable Vector layer IDs from inspection, in result order.",
     },
     pathId: { type: "string", minLength: 1, maxLength: 128 },
+    vertexId: { type: "string", minLength: 1, maxLength: 128 },
+    vertexIds: {
+      type: "array",
+      minItems: 2,
+      maxItems: 2,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 128 },
+      description: "Required only for connect-endpoints.",
+    },
     closed: {
       type: "boolean",
       description: "Required only for set-closed.",
@@ -267,7 +293,14 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
     {
       properties: {
         action: {
-          enum: ["set-closed", "reverse-path", "cut-path", "cut-with-line"],
+          enum: [
+            "set-closed",
+            "reverse-path",
+            "connect-endpoints",
+            "disconnect-vertex",
+            "cut-path",
+            "cut-with-line",
+          ],
         },
       },
       required: ["nodeId"],
@@ -287,6 +320,8 @@ export function isDesignVectorToolInput(
     !isRecord(input) ||
     (input.action !== "set-closed" &&
       input.action !== "reverse-path" &&
+      input.action !== "connect-endpoints" &&
+      input.action !== "disconnect-vertex" &&
       input.action !== "cut-path" &&
       input.action !== "cut-with-line" &&
       input.action !== "cut-layers-with-line") ||
@@ -312,6 +347,29 @@ export function isDesignVectorToolInput(
     input.pathId === undefined ||
     (typeof input.pathId === "string" && safeId(input.pathId));
   if (!optionalPathId) return false;
+  if (input.action === "connect-endpoints") {
+    return (
+      Array.isArray(input.vertexIds) &&
+      input.vertexIds.length === 2 &&
+      input.vertexIds.every((vertexId) => safeId(vertexId)) &&
+      new Set(input.vertexIds).size === 2 &&
+      exactKeys(input, ["action", "label", "nodeId", "pageId", "vertexIds"])
+    );
+  }
+  if (input.action === "disconnect-vertex") {
+    return (
+      safeId(input.pathId) &&
+      safeId(input.vertexId) &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "nodeId",
+        "pageId",
+        "pathId",
+        "vertexId",
+      ])
+    );
+  }
   if (input.action === "set-closed") {
     return (
       typeof input.closed === "boolean" &&

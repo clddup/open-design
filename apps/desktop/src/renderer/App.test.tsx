@@ -3880,8 +3880,34 @@ describe("App", () => {
       "true",
     );
     expect(screen.getByRole("button", { name: "Close path" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Smooth" }));
     expect(leaferHarness.setVectorPointMode).toHaveBeenCalledWith("smooth");
+
+    const beforeDisconnectRevision = runtime().getSnapshot().document.revision;
+    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(runtime().getSnapshot().document.revision).toBe(
+      beforeDisconnectRevision + 1,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(runtime().getSnapshot().document.revision).toBe(
+      beforeDisconnectRevision + 2,
+    );
+    const reconnectedNode =
+      runtime().getSnapshot().document.nodesById.editable_vector;
+    if (
+      !reconnectedNode ||
+      reconnectedNode.kind !== "vector" ||
+      !("network" in reconnectedNode.properties)
+    ) {
+      throw new Error("Missing reconnected vector fixture");
+    }
+    expect(reconnectedNode.properties.network.paths).toHaveLength(1);
+    expect(reconnectedNode.properties.network.vertices).toHaveLength(3);
 
     const beforeCloseRevision = runtime().getSnapshot().document.revision;
     await user.click(screen.getByRole("button", { name: "Close path" }));

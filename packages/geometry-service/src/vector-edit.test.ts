@@ -1,9 +1,11 @@
 import type { VectorNetwork } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import {
+  connectVectorEndpoints,
   cutVectorNetworkByLine,
   cutVectorPath,
   deleteVectorVertices,
+  disconnectVectorVertex,
   findVectorPathIdForVertex,
   inferVectorPointMode,
   listVectorVertexHandles,
@@ -474,6 +476,78 @@ describe("editable vector point operations", () => {
     expect(inferVectorPointMode(result.network, "vertex_d")).toBe("mirrored");
   });
 
+  it("connects two open contours into one stable non-branching path", () => {
+    const result = connectVectorEndpoints(twoContourNetwork(), [
+      "vertex_d",
+      "vertex_e",
+    ]);
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.network.paths).toEqual([
+      {
+        id: "path_open",
+        closed: false,
+        segments: [
+          { segmentId: "segment_ab", reversed: false },
+          { segmentId: "segment_bc", reversed: false },
+          { segmentId: "segment_cd", reversed: false },
+          { segmentId: "segment_edit_1", reversed: false },
+          { segmentId: "segment_ef", reversed: false },
+          { segmentId: "segment_fg", reversed: false },
+        ],
+      },
+    ]);
+    expect(result.network.segments.at(-1)).toEqual({
+      id: "segment_edit_1",
+      startVertexId: "vertex_d",
+      endVertexId: "vertex_e",
+    });
+    expect(vectorNetworkEditability(result.network)).toEqual({
+      editable: true,
+    });
+  });
+
+  it("orients either selected endpoint and preserves the earlier path identity", () => {
+    const result = connectVectorEndpoints(twoContourNetwork(), [
+      "vertex_a",
+      "vertex_g",
+    ]);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.network.paths).toEqual([
+      {
+        id: "path_open",
+        closed: false,
+        segments: [
+          { segmentId: "segment_cd", reversed: true },
+          { segmentId: "segment_bc", reversed: true },
+          { segmentId: "segment_ab", reversed: true },
+          { segmentId: "segment_edit_1", reversed: false },
+          { segmentId: "segment_fg", reversed: true },
+          { segmentId: "segment_ef", reversed: true },
+        ],
+      },
+    ]);
+  });
+
+  it("closes one contour through Connect and rejects internal vertices", () => {
+    const closed = connectVectorEndpoints(openNetwork(), [
+      "vertex_a",
+      "vertex_d",
+    ]);
+    expect(closed).toMatchObject({
+      ok: true,
+      network: { paths: [{ id: "path_open", closed: true }] },
+    });
+    expect(
+      connectVectorEndpoints(openNetwork(), ["vertex_a", "vertex_c"]),
+    ).toEqual({
+      ok: false,
+      code: "unsupported-topology",
+      message:
+        "Vector Connect requires two endpoints from supported open contours",
+    });
+  });
+
   it("preserves stable segments and effective region winding when reversing twice", () => {
     const source = closedNetwork();
     source.paths[0]!.segments = [
@@ -552,10 +626,11 @@ describe("editable vector point operations", () => {
   });
 
   it("cuts an open contour at an internal vertex and keeps both sides independently editable", () => {
-    const result = cutVectorPath(openNetwork(), "path_open", {
-      kind: "vertex",
-      vertexId: "vertex_c",
-    });
+    const result = disconnectVectorVertex(
+      openNetwork(),
+      "path_open",
+      "vertex_c",
+    );
     if (!result.ok) throw new Error(result.message);
     expect(result.cutVertexIds).toEqual(["vertex_c", "vertex_edit_1"]);
     expect(result.pathIds).toEqual(["path_open", "path_edit_1"]);
@@ -585,6 +660,12 @@ describe("editable vector point operations", () => {
     expect(
       moved.network.vertices.find((vertex) => vertex.id === "vertex_edit_1"),
     ).toMatchObject({ x: 132, y: 8 });
+
+    const reconnected = connectVectorEndpoints(result.network, [
+      "vertex_c",
+      "vertex_edit_1",
+    ]);
+    expect(reconnected).toEqual({ ok: true, network: openNetwork() });
   });
 
   it("divides a closed object with one finite drag line into two closed networks", () => {

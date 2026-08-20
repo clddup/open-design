@@ -241,6 +241,132 @@ export function moveVectorVertices(
 }
 
 /**
+ * Connects two real endpoints without introducing a branch. Endpoints on one
+ * open contour close it; endpoints on two open contours add one connector and
+ * merge both path runs while preserving the earlier path ID.
+ */
+export function connectVectorEndpoints(
+  network: VectorNetwork,
+  vertexIds: readonly [string, string],
+): VectorEditResult {
+  const failure = editableFailure(network);
+  if (failure) return failure;
+  const [firstVertexId, secondVertexId] = vertexIds;
+  if (firstVertexId === secondVertexId) {
+    return missingVertex("Vector Connect requires two distinct endpoints");
+  }
+  const first = endpointContour(network, firstVertexId);
+  const second = endpointContour(network, secondVertexId);
+  if (!first || !second) {
+    return unsupportedTopology(
+      "Vector Connect requires two endpoints from supported open contours",
+    );
+  }
+  if (first.pathId === second.pathId) {
+    return setVectorPathClosed(network, true, first.pathId);
+  }
+
+  const firstIndex = network.paths.findIndex(
+    (path) => path.id === first.pathId,
+  );
+  const secondIndex = network.paths.findIndex(
+    (path) => path.id === second.pathId,
+  );
+  const retained = firstIndex < secondIndex ? first : second;
+  const appended = retained === first ? second : first;
+  const retainedEndpointId =
+    retained === first ? firstVertexId : secondVertexId;
+  const appendedEndpointId =
+    appended === first ? firstVertexId : secondVertexId;
+  const retainedReferences = referencesWithEndpoint(
+    retained,
+    retainedEndpointId,
+    "end",
+  );
+  const appendedReferences = referencesWithEndpoint(
+    appended,
+    appendedEndpointId,
+    "start",
+  );
+  if (!retainedReferences || !appendedReferences) {
+    return unsupportedTopology(
+      "Vector Connect could not orient the selected contour endpoints",
+    );
+  }
+
+  const next = structuredClone(network);
+  const retainedVertex = network.vertices.find(
+    (vertex) => vertex.id === retainedEndpointId,
+  )!;
+  const appendedVertex = network.vertices.find(
+    (vertex) => vertex.id === appendedEndpointId,
+  )!;
+  const coincident =
+    Math.abs(retainedVertex.x - appendedVertex.x) <= HANDLE_EPSILON &&
+    Math.abs(retainedVertex.y - appendedVertex.y) <= HANDLE_EPSILON;
+  let connectorReference: VectorSegmentReference[] = [];
+  if (coincident) {
+    next.segments = next.segments.map((segment) => ({
+      ...segment,
+      ...(segment.startVertexId === appendedEndpointId
+        ? { startVertexId: retainedEndpointId }
+        : {}),
+      ...(segment.endVertexId === appendedEndpointId
+        ? { endVertexId: retainedEndpointId }
+        : {}),
+    }));
+    next.vertices = next.vertices.filter(
+      (vertex) => vertex.id !== appendedEndpointId,
+    );
+  } else {
+    const connector: VectorSegment = {
+      id: nextSegmentId(new Set(next.segments.map((segment) => segment.id))),
+      startVertexId: retainedEndpointId,
+      endVertexId: appendedEndpointId,
+    };
+    mirrorEndpointHandleIntoClosingSegment(
+      network,
+      retainedEndpointId,
+      "outgoing",
+      connector,
+    );
+    mirrorEndpointHandleIntoClosingSegment(
+      network,
+      appendedEndpointId,
+      "incoming",
+      connector,
+    );
+    next.segments.push(connector);
+    connectorReference = [{ segmentId: connector.id, reversed: false }];
+  }
+  const retainedPath = next.paths.find((path) => path.id === retained.pathId)!;
+  retainedPath.closed = false;
+  retainedPath.segments = [
+    ...retainedReferences,
+    ...connectorReference,
+    ...appendedReferences,
+  ];
+  next.paths = next.paths.filter((path) => path.id !== appended.pathId);
+  if (coincident) {
+    const mergedVertex = next.vertices.find(
+      (vertex) => vertex.id === retainedEndpointId,
+    )!;
+    delete mergedVertex.handleMode;
+    mergedVertex.handleMode = inferVectorPointMode(next, retainedEndpointId);
+  }
+  return validated(next);
+}
+
+/** Creates a true topological break at one non-endpoint vertex. */
+export function disconnectVectorVertex(
+  network: VectorNetwork,
+  pathId: string,
+  vertexId: string,
+): VectorCutResult {
+  return cutVectorPath(network, pathId, { kind: "vertex", vertexId });
+}
+
+/**
  * Returns the nearest point on any editable contour. Cubics use a deterministic
  * coarse search followed by interval refinement; the returned t follows the
  * path reference direction so it can be passed directly to cutVectorPath().
@@ -1962,6 +2088,37 @@ function editableContour(
     editableContours(network).find((contour) => contour.pathId === pathId) ??
     null
   );
+}
+
+function endpointContour(
+  network: VectorNetwork,
+  vertexId: string,
+): EditableContour | null {
+  return (
+    editableContours(network).find(
+      (contour) =>
+        !contour.closed &&
+        (contour.vertexIds[0] === vertexId ||
+          contour.vertexIds.at(-1) === vertexId),
+    ) ?? null
+  );
+}
+
+function referencesWithEndpoint(
+  contour: EditableContour,
+  vertexId: string,
+  position: "start" | "end",
+): VectorSegmentReference[] | null {
+  const atStart = contour.vertexIds[0] === vertexId;
+  const atEnd = contour.vertexIds.at(-1) === vertexId;
+  if (!atStart && !atEnd) return null;
+  const alreadyOriented = position === "start" ? atStart : atEnd;
+  return alreadyOriented
+    ? contour.references.map((reference) => ({ ...reference }))
+    : [...contour.references].reverse().map((reference) => ({
+        segmentId: reference.segmentId,
+        reversed: !reference.reversed,
+      }));
 }
 
 function resolveTargetContour(

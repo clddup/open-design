@@ -1116,18 +1116,29 @@ async function executeDesignToolRequestUnsafe(
                     action: input.action,
                     ...(input.pathId ? { pathId: input.pathId } : {}),
                   }
-                : input.action === "cut-path"
+                : input.action === "connect-endpoints"
                   ? {
                       action: input.action,
-                      at: input.at,
-                      pathId: input.pathId,
+                      vertexIds: input.vertexIds,
                     }
-                  : {
-                      action: input.action,
-                      end: input.end,
-                      resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
-                      start: input.start,
-                    },
+                  : input.action === "disconnect-vertex"
+                    ? {
+                        action: input.action,
+                        pathId: input.pathId,
+                        vertexId: input.vertexId,
+                      }
+                    : input.action === "cut-path"
+                      ? {
+                          action: input.action,
+                          at: input.at,
+                          pathId: input.pathId,
+                        }
+                      : {
+                          action: input.action,
+                          end: input.end,
+                          resultNodeId: `vector_cut_${safeToolCallId}_${document.revision}`,
+                          start: input.start,
+                        },
           );
     if (!plan.ok) {
       throw new Error(`vector-edit.${plan.code}: ${plan.message}`);
@@ -1178,7 +1189,8 @@ async function executeDesignToolRequestUnsafe(
       input.action === "cut-with-line" ||
       input.action === "cut-layers-with-line"
         ? undefined
-        : (input.pathId ?? network?.paths[0]?.id);
+        : (("pathId" in input ? input.pathId : undefined) ??
+          network?.paths[0]?.id);
     const path = network?.paths.find((candidate) => candidate.id === pathId);
     return {
       requestId: request.requestId,

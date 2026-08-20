@@ -4086,6 +4086,75 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.redo()).toMatchObject({ ok: true, mode: "redo" });
   });
 
+  it("disconnects and reconnects inspected vector endpoints without model-authored geometry", async () => {
+    const runtime = createEditableVectorRuntime();
+    const disconnected = await executeDesignToolRequest(
+      {
+        requestId: "vector_disconnect",
+        call: {
+          toolCallId: "tool_vector_disconnect",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "disconnect-vertex",
+            label: "Disconnect the logo contour",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            pathId: "logo_path",
+            vertexId: "vertex_b",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(disconnected).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "disconnect-vertex",
+          atomic: true,
+          cutVertexIds: ["vertex_b", "vertex_edit_1"],
+          pathIds: ["logo_path", "path_edit_1"],
+          revision: 1,
+        },
+      },
+    });
+
+    const connected = await executeDesignToolRequest(
+      {
+        requestId: "vector_connect",
+        call: {
+          toolCallId: "tool_vector_connect",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "connect-endpoints",
+            label: "Reconnect the logo contour",
+            nodeId: "editable_logo_contour",
+            pageId: "page_welcome",
+            vertexIds: ["vertex_b", "vertex_edit_1"],
+          },
+        },
+        context: { ...pageContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(connected).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "connect-endpoints",
+          atomic: true,
+          pathId: "logo_path",
+          revision: 2,
+        },
+      },
+    });
+    expect(editableVectorNetwork(runtime).paths).toHaveLength(1);
+    expect(editableVectorNetwork(runtime).vertices).toHaveLength(3);
+  });
+
   it("divides a closed vector with a node-local line into host-named sibling layers", async () => {
     const runtime = createClosedEditableVectorRuntime();
     runtime.setSelection(["title_welcome"], "title_welcome");

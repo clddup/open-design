@@ -567,7 +567,16 @@ export function Canvas({
     (
       action:
         | { action: "set-closed"; closed: boolean; pathId?: string }
-        | { action: "reverse-path"; pathId?: string },
+        | { action: "reverse-path"; pathId?: string }
+        | {
+            action: "connect-endpoints";
+            vertexIds: readonly [string, string];
+          }
+        | {
+            action: "disconnect-vertex";
+            pathId: string;
+            vertexId: string;
+          },
     ) => {
       const current = runtime.getSnapshot();
       const nodeId = vectorEditState?.activeNodeId;
@@ -582,10 +591,25 @@ export function Canvas({
         onTransactionError(plan.message);
         return false;
       }
-      return applyOperations({
+      const accepted = applyOperations({
         kind: "vector",
         operations: [...plan.operations],
       });
+      const cutResult = plan.cutResult;
+      if (accepted && cutResult) {
+        setVectorEditState((state) =>
+          state?.nodeIds.includes(nodeId)
+            ? {
+                ...state,
+                selectedVertexIdsByNode: {
+                  ...state.selectedVertexIdsByNode,
+                  [nodeId]: [...cutResult.cutVertexIds],
+                },
+              }
+            : state,
+        );
+      }
+      return accepted;
     },
     [
       activePageId,
@@ -1318,6 +1342,47 @@ export function Canvas({
                     className={styles.vectorActions}
                     role="group"
                   >
+                    <button
+                      disabled={
+                        vectorEditScope.readOnly ||
+                        vectorEditScope.selectedVertexIds.length !== 2
+                      }
+                      onClick={() => {
+                        const [firstVertexId, secondVertexId] =
+                          vectorEditScope.selectedVertexIds;
+                        if (firstVertexId && secondVertexId) {
+                          applyVectorPathAction({
+                            action: "connect-endpoints",
+                            vertexIds: [firstVertexId, secondVertexId],
+                          });
+                        }
+                        requestAnimationFrame(() => host.current?.focus());
+                      }}
+                      type="button"
+                    >
+                      {t("canvas.vectorConnectEndpoints")}
+                    </button>
+                    <button
+                      disabled={
+                        vectorEditScope.readOnly ||
+                        vectorEditScope.selectedVertexIds.length !== 1 ||
+                        vectorEditScope.activePathId === undefined
+                      }
+                      onClick={() => {
+                        const [vertexId] = vectorEditScope.selectedVertexIds;
+                        if (vertexId && vectorEditScope.activePathId) {
+                          applyVectorPathAction({
+                            action: "disconnect-vertex",
+                            pathId: vectorEditScope.activePathId,
+                            vertexId,
+                          });
+                        }
+                        requestAnimationFrame(() => host.current?.focus());
+                      }}
+                      type="button"
+                    >
+                      {t("canvas.vectorDisconnectVertex")}
+                    </button>
                     <button
                       disabled={
                         vectorEditScope.readOnly ||

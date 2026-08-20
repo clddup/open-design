@@ -7,8 +7,10 @@ import type {
   VectorPointMode,
 } from "@opendesign/design-contracts";
 import {
+  connectVectorEndpoints,
   cutVectorNetworkByLine,
   cutVectorPath,
+  disconnectVectorVertex,
   findVectorPathIdForVertex,
   inferVectorPointMode,
   reverseVectorPath,
@@ -35,6 +37,15 @@ export type VectorOperationFailureCode =
 export type VectorSemanticEdit =
   | { action: "set-closed"; closed: boolean; pathId?: string }
   | { action: "reverse-path"; pathId?: string }
+  | {
+      action: "connect-endpoints";
+      vertexIds: readonly [string, string];
+    }
+  | {
+      action: "disconnect-vertex";
+      pathId: string;
+      vertexId: string;
+    }
   | {
       action: "cut-path";
       at: VectorCutLocation;
@@ -315,8 +326,15 @@ export function planVectorSemanticEdit(
   if (edit.action === "cut-with-line") {
     return planVectorLineCut(document, pageId, nodeId, edit);
   }
-  if (edit.action === "cut-path") {
-    const cut = cutVectorPath(node.properties.network, edit.pathId, edit.at);
+  if (edit.action === "cut-path" || edit.action === "disconnect-vertex") {
+    const cut =
+      edit.action === "cut-path"
+        ? cutVectorPath(node.properties.network, edit.pathId, edit.at)
+        : disconnectVectorVertex(
+            node.properties.network,
+            edit.pathId,
+            edit.vertexId,
+          );
     if (!cut.ok) return vectorOperationFailure(cut);
     const plan = planVectorNetworkUpdate(document, pageId, nodeId, cut.network);
     if (!plan.ok) return plan;
@@ -327,6 +345,14 @@ export function planVectorSemanticEdit(
         pathIds: cut.pathIds,
       },
     };
+  }
+  if (edit.action === "connect-endpoints") {
+    const connected = connectVectorEndpoints(
+      node.properties.network,
+      edit.vertexIds,
+    );
+    if (!connected.ok) return vectorOperationFailure(connected);
+    return planVectorNetworkUpdate(document, pageId, nodeId, connected.network);
   }
   const edited =
     edit.action === "set-closed"
