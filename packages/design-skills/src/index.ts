@@ -1,6 +1,8 @@
 import captureCritic from "../skills/ui-capture-critic/SKILL.md?raw";
 import graphicCaptureCritic from "../skills/graphic-capture-critic/SKILL.md?raw";
 import graphicVisualDirection from "../skills/graphic-visual-direction/SKILL.md?raw";
+import logoCaptureCritic from "../skills/logo-capture-critic/SKILL.md?raw";
+import logoVisualDirection from "../skills/logo-visual-direction/SKILL.md?raw";
 import uxStructure from "../skills/ui-ux-structure/SKILL.md?raw";
 import visualDirection from "../skills/ui-visual-direction/SKILL.md?raw";
 
@@ -80,6 +82,22 @@ const skills = [
     phases: ["review"],
     content: graphicCaptureCritic,
   },
+  {
+    id: "logo-visual-direction",
+    version: 1,
+    hash: "b92e381295b12a511dc5a77f3d5e457831f2c8bbd98e0145ea8726101bbd2941",
+    deliverables: ["logo"],
+    phases: ["plan"],
+    content: logoVisualDirection,
+  },
+  {
+    id: "logo-capture-critic",
+    version: 1,
+    hash: "0290398ae7e8f10f676b50109af3a723ca1b8cdab75ec6b7faa88d3fc71f45fc",
+    deliverables: ["logo"],
+    phases: ["review"],
+    content: logoCaptureCritic,
+  },
 ] as const satisfies readonly BuiltinDesignSkill[];
 
 export const BUILTIN_DESIGN_SKILLS: readonly BuiltinDesignSkill[] = deepFreeze(
@@ -121,6 +139,9 @@ export const BUILTIN_GRAPHIC_DESIGN_SKILL_REFS: readonly BuiltinDesignSkillRef[]
     })),
   );
 
+export const BUILTIN_LOGO_DESIGN_SKILL_REFS: readonly BuiltinDesignSkillRef[] =
+  deepFreeze(builtinDesignSkillRefsForDeliverable("logo"));
+
 export function isBuiltinUiDesignSkillRefs(
   value: unknown,
 ): value is BuiltinDesignSkillRef[] {
@@ -151,8 +172,17 @@ export function isKnownBuiltinDesignSkillRefs(
   value: unknown,
 ): value is BuiltinDesignSkillRef[] {
   return (
-    exactSkillRefs(value, BUILTIN_UI_DESIGN_SKILL_REFS) ||
-    exactSkillRefs(value, BUILTIN_GRAPHIC_DESIGN_SKILL_REFS)
+    [
+      "ui",
+      "poster",
+      "logo",
+      "brand-asset",
+      "illustration",
+      "presentation-visual",
+      "other",
+    ] as const
+  ).some((deliverable) =>
+    exactSkillRefs(value, builtinDesignSkillRefsForDeliverable(deliverable)),
   );
 }
 
@@ -172,6 +202,19 @@ export function formatBuiltinDesignPlanningSkillBundle(): string {
   return formatSkillBundle(
     BUILTIN_DESIGN_PLANNING_SKILLS,
     "deliverable-scoped planning",
+  );
+}
+
+export function formatBuiltinDesignPlanningSkillBundleForDeliverable(
+  deliverable: BuiltinDesignDeliverable,
+): string {
+  return formatSkillBundle(
+    BUILTIN_DESIGN_SKILLS.filter(
+      (skill) =>
+        skill.phases.includes("plan") &&
+        skill.deliverables.includes(deliverable),
+    ),
+    `${deliverable} planning`,
   );
 }
 

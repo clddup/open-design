@@ -7,6 +7,7 @@ import { designTargetQualityProfilesEqual } from "@opendesign/design-contracts";
 import {
   componentStrategyOccurrencesForTarget,
   designPlanComponentStrategy,
+  designPlanLogoExploration,
   type DesignPlanToolInput,
 } from "../../shared/design-agent-tools.js";
 import { isAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
@@ -188,6 +189,7 @@ export function assertDeliveryTargetStructure(
         `design_workflow.delivery_structure_incomplete: Existing delivery artboard ${artboardId} has no real editable content; add or refine material layers inside the artboard before capturing again`,
       );
     }
+    assertLogoExplorationEvidence(inspection, target, plan);
     return inspectDeclaredComponentStrategy(inspection, target, plan);
   }
   for (const region of target.planned.composition.regions) {
@@ -207,7 +209,51 @@ export function assertDeliveryTargetStructure(
       );
     }
   }
+  assertLogoExplorationEvidence(inspection, target, plan);
   return inspectDeclaredComponentStrategy(inspection, target, plan);
+}
+
+function assertLogoExplorationEvidence(
+  inspection: InspectedHierarchy,
+  target: DesignDeliveryTargetState,
+  plan: DesignPlanToolInput,
+): void {
+  const exploration = designPlanLogoExploration(plan);
+  if (!exploration || exploration.targetId !== target.delivery.targetId) return;
+  const artboardId = target.planned.artboard.frameId;
+  for (const direction of exploration.directions) {
+    const root = inspection.nodesById.get(direction.rootNodeId);
+    if (
+      !root ||
+      (root.kind !== "frame" && root.kind !== "group") ||
+      !inspectedParentChainReaches(
+        inspection.nodesById,
+        direction.rootNodeId,
+        artboardId,
+      )
+    ) {
+      throw new Error(
+        `design_workflow.logo_exploration_incomplete: Logo concept ${direction.conceptId} requires semantic Frame/Group ${direction.rootNodeId} inside exploration artboard ${artboardId}`,
+      );
+    }
+    for (const evidenceNodeId of [
+      direction.monochromeNodeId,
+      ...direction.smallSizeNodeIds,
+    ]) {
+      if (
+        !inspection.nodesById.has(evidenceNodeId) ||
+        !inspectedParentChainReaches(
+          inspection.nodesById,
+          evidenceNodeId,
+          direction.rootNodeId,
+        )
+      ) {
+        throw new Error(
+          `design_workflow.logo_exploration_incomplete: Logo concept ${direction.conceptId} requires evidence node ${evidenceNodeId} beneath ${direction.rootNodeId}; provide monochrome and ordered 32/24/16 px optical tests before final verification`,
+        );
+      }
+    }
+  }
 }
 
 export type DesignComponentStrategyIssue = {

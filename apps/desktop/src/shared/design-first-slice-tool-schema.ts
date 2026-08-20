@@ -4,6 +4,7 @@ import {
 } from "./design-first-slice-budget";
 import type { DesignFirstSliceElement } from "./design-first-slice-tool";
 import { DESIGN_BRIEF_FIDELITY_SCHEMA } from "./design-brief-fidelity";
+import { LOGO_CONCEPT_PRINCIPLES } from "./design-agent-plan-review";
 
 const ID_SCHEMA = { type: "string", minLength: 1, maxLength: 256 } as const;
 const TEXT_SCHEMA = { type: "string", minLength: 1, maxLength: 1_000 } as const;
@@ -285,6 +286,45 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
         enum: ["reference", "background", "hero", "supporting-content"],
       },
     },
+    logoExploration: {
+      type: "object",
+      description:
+        "Required for logo: three distinct principles with stable root and [monochrome,32,24,16] evidence IDs.",
+      properties: {
+        targetId: ID_SCHEMA,
+        directions: {
+          type: "array",
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: "object",
+            properties: {
+              conceptId: ID_SCHEMA,
+              principle: { enum: [...LOGO_CONCEPT_PRINCIPLES] },
+              thesis: { type: "string", minLength: 16, maxLength: 1_000 },
+              rootNodeId: ID_SCHEMA,
+              evidenceNodeIds: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                uniqueItems: true,
+                items: ID_SCHEMA,
+              },
+            },
+            required: [
+              "conceptId",
+              "principle",
+              "thesis",
+              "rootNodeId",
+              "evidenceNodeIds",
+            ],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["targetId", "directions"],
+      additionalProperties: false,
+    },
     semanticObjects: {
       type: "array",
       maxItems: 24,
@@ -382,6 +422,18 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
                       "ellipse",
                       { fill: PAINT_SCHEMA, stroke: STROKE_SCHEMA },
                       ["fill"],
+                    ),
+                    elementSchema(
+                      "path",
+                      {
+                        path: {
+                          type: "string",
+                          minLength: 1,
+                          maxLength: 20_000,
+                        },
+                        fill: PAINT_SCHEMA,
+                      },
+                      ["path", "fill"],
                     ),
                     elementSchema(
                       "text",

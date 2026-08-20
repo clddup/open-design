@@ -188,6 +188,7 @@ export interface AgentRuntimeOptions {
   limits?: Partial<AgentRuntimeLimits>;
   systemPrompt?: string;
   newDesignSystemPrompt?: string;
+  newDesignSystemPromptForRequest?: (request: AgentRunRequest) => string;
   now?: () => Date;
 }
 

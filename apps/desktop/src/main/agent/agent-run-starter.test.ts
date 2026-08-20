@@ -101,6 +101,56 @@ describe("Agent Run starter", () => {
     ).rejects.toThrow("Renderer cannot supply initial design inspection");
   });
 
+  it("cancels an automatic continuation before starting a new user Run", async () => {
+    const scheduler = new AgentContinuationScheduler(() => 1000);
+    scheduler.registerRun({
+      ...source,
+      runId: "run_automatic",
+      continuation: {
+        parentRunId: "run_parent",
+        rootRunId: "run_parent",
+        reason: "budget",
+        attempt: 1,
+        maxAttempts: 3,
+      },
+    });
+    const send = vi.fn();
+    const explicit = { ...source, runId: "run_explicit", prompt: "新消息" };
+
+    expect(
+      await handleAgentRunControlRequest(explicit, {
+        agentHost: { send } as never,
+        continuationScheduler: scheduler,
+        conversationIdByRunId: new Map(),
+        globalTaskCoordinator: {
+          registerRun: vi.fn().mockResolvedValue({}),
+        } as never,
+        modelProviderHost: {
+          resolveModelContext: vi.fn().mockReturnValue({
+            contextWindow: 200_000,
+            maxOutputTokens: 16_384,
+          }),
+        } as never,
+        prepareInitialDesignInspection: vi.fn().mockResolvedValue(undefined),
+        referenceHost: {
+          registerRun: vi.fn(),
+          releaseRun: vi.fn(),
+        } as never,
+        publish: vi.fn(),
+      }),
+    ).toBe(true);
+
+    expect(send.mock.calls[0]?.[0]).toEqual({
+      type: "run.cancel",
+      runId: "run_automatic",
+    });
+    expect(send.mock.calls[1]?.[0]).toMatchObject({
+      type: "run.start",
+      runId: "run_explicit",
+      prompt: "新消息",
+    });
+  });
+
   it("cancels the host inspection before the Agent Run is sent", async () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     const send = vi.fn();

@@ -312,8 +312,9 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - 增加渲染诊断与可读性检查，覆盖主体比例、层级、留白、对比度、文字可读性和关键内容裁切。启发式诊断必须标注置信度，不能把审美模型输出伪装成确定性错误。
 - 为对齐、布局、布尔、裁剪、组件、变量、导入和导出提供语义化 typed tools，避免模型通过大量低层坐标和节点重建完成专业操作。
 - 低优先级开放用户级与 Project 级设计 Skill/风格规范：记录来源、版本、内容哈希和权限，只影响设计方法、风格与评审标准，不能覆盖系统策略、扩展 Mutation Target 或替代底层设计能力。当前 `@opendesign/discovery` 只有隔离发现/优先级解析，尚未接入生产 Agent、管理 UI 或权限审计链，因此不得宣称已支持自定义 Skill/提示词。
-- [x] 内置受信任 Design Skills 按交付类型路由：UI 使用三个 OpenDesign 自有方法包，Logo/品牌/海报/插画/演示视觉使用两个 Graphic 方法包；首轮自动注入并在 Plan/Review 留下版本与内容哈希。Skill 只影响设计方法和媒介判断，不能获得工具、路径、网络、凭据或额外 Mutation Target。见 ADR-0098、ADR-0104。
-- [ ] 用同 prompt/模型/工具预算的固定 UI 样张盲评当前 Plan v1 / Visual Review v1，证明首个可用画面时间、成功率或视觉评分相对引入内置 Skill 前有净收益；未取得证据前不得把结构化自评宣传为审美已解决。
+- [x] 内置受信任 Design Skills 按交付类型路由：UI 使用三个 OpenDesign 自有方法包；通用非 UI 使用 Graphic 方法包；Logo 额外绑定专属 planning/critic，并以三项不同 principle、稳定 semantic root、黑白和 32/24/16 px evidence 约束身份探索。首轮自动注入并在 Plan/Review 留下版本与内容哈希。Skill 只影响设计方法和媒介判断，不能获得工具、路径、网络、凭据或额外 Mutation Target。见 ADR-0098、ADR-0104、ADR-0110。
+- [x] 新设计 compact first-slice 支持 editable Path，并允许在已有 Page 内容旁安全分配不重叠的新 artboard；用户显式 Run 会取代同 Conversation 的 automatic continuation，错误恢复在无 revision 时有界终止。见 ADR-0110、ADR-0111。
+- [ ] 用同 prompt/模型/工具预算的固定 UI 与 Logo 样张盲评当前 Plan v1 / Visual Review v1，记录 T0 全部真实画板、T1 首个真实内容、T2 首个精修 target、终态时间、成功率、概念分歧、小尺寸识别与视觉评分；未取得证据前不得把结构化自评宣传为速度或审美已解决。
 - 保留“写入 → `capture_canvas` → refinement → `capture_canvas`”可信完成门禁，并加入结构诊断结果、渲染失败和导出失败的阻断条件。截图次数本身不能证明设计质量。
 - [x] Layout Quality Report v2 为 Frame overflow 返回 exact-revision world bounds、当前 parent-local position、最小 parent-local recovery delta/position 与 resize 必要性；完成门禁和 Agent 恢复指令直接消费这些可信几何，禁止把 world 坐标误写为 local transform 后反复试错。
 - [x] Layout Quality Report v3 继续保留 v2 artboard 几何，并消费当前 Plan v1 的显式 UI safe-area 与真实 hit-area IDs；Apple/Android/Web 最小目标阈值由可信 contract 固定，模型不能自行提交更小数值。非 UI target 显式使用 graphic profile。见 ADR-0096、ADR-0098。

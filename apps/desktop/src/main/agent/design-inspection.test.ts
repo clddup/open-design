@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
+import {
+  BUILTIN_LOGO_DESIGN_SKILL_REFS,
+  BUILTIN_UI_DESIGN_SKILL_REFS,
+} from "@opendesign/design-skills";
 import type {
   DesignPlanTarget,
   DesignPlanToolInput,
@@ -213,7 +216,89 @@ describe("Agent design inspection component strategy", () => {
       blocking: false,
     });
   });
+
+  it("blocks final logo verification when a declared concept lacks real optical evidence", () => {
+    const inspection = completeInspection();
+    const logoPlan: DesignPlanToolInput = {
+      ...plan,
+      deliverable: "logo",
+      targets: plan.targets.map((target) => ({
+        ...target,
+        qualityProfile: { kind: "graphic" },
+      })),
+      logoExploration: {
+        targetId: "target_home",
+        directions: [
+          logoDirection("negative", "negative-space"),
+          logoDirection("modular", "modular-system"),
+          logoDirection("type", "typographic-relationship"),
+        ],
+      },
+      skillRefs: BUILTIN_LOGO_DESIGN_SKILL_REFS.map((reference) => ({
+        ...reference,
+      })),
+    };
+    const exploration = logoPlan.logoExploration;
+    if (!exploration) throw new Error("Logo exploration fixture is missing");
+    const region = requiredNode(inspection, "region_home");
+    for (const direction of exploration.directions) {
+      region.childIds.push(direction.rootNodeId);
+      inspection.nodesById.set(direction.rootNodeId, {
+        ...requiredNode(inspection, "home_hero_group"),
+        id: direction.rootNodeId,
+        parentId: "region_home",
+        childIds: [direction.monochromeNodeId, ...direction.smallSizeNodeIds],
+      });
+      for (const nodeId of [
+        direction.monochromeNodeId,
+        ...direction.smallSizeNodeIds,
+      ]) {
+        inspection.nodesById.set(nodeId, {
+          ...requiredNode(inspection, "hero_shape"),
+          id: nodeId,
+          parentId: direction.rootNodeId,
+        });
+      }
+    }
+
+    expect(() =>
+      assertDeliveryTargetStructure(
+        inspection,
+        targetState(logoPlan.targets[0]),
+        logoPlan,
+      ),
+    ).not.toThrow();
+
+    inspection.nodesById.delete("type_16");
+    expect(() =>
+      assertDeliveryTargetStructure(
+        inspection,
+        targetState(logoPlan.targets[0]),
+        logoPlan,
+      ),
+    ).toThrow("design_workflow.logo_exploration_incomplete");
+  });
 });
+
+function logoDirection(
+  prefix: string,
+  principle: "negative-space" | "modular-system" | "typographic-relationship",
+) {
+  return {
+    conceptId: `concept_${prefix}`,
+    label: `${prefix} concept`,
+    principle,
+    thesis: `${prefix} establishes a visibly distinct identity construction.`,
+    constructionLogic: `${prefix} uses a separate editable contour and counterform relationship.`,
+    rootNodeId: `${prefix}_root`,
+    monochromeNodeId: `${prefix}_mono`,
+    smallSizeNodeIds: [`${prefix}_32`, `${prefix}_24`, `${prefix}_16`] as [
+      string,
+      string,
+      string,
+    ],
+  };
+}
 
 function completeInspection(): InspectedHierarchy {
   const nodesById: InspectedHierarchy["nodesById"] = new Map();

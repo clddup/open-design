@@ -57,6 +57,21 @@ export class AgentContinuationScheduler {
     );
   }
 
+  supersedeAutomaticContinuations(conversationId: string): string[] {
+    const runIds = new Set<string>();
+    for (const [runId, request] of this.#requestsByRunId) {
+      if (request.sessionId === conversationId && request.continuation) {
+        runIds.add(runId);
+      }
+    }
+    for (const [runId, pendingConversationId] of this
+      .#pendingConversationIdByRunId) {
+      if (pendingConversationId === conversationId) runIds.add(runId);
+    }
+    for (const runId of runIds) this.#cancellationRequestedRunIds.add(runId);
+    return [...runIds];
+  }
+
   requestCancellation(runId: string): string | null {
     let targetRunId = runId;
     const visited = new Set<string>();

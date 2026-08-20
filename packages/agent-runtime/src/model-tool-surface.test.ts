@@ -28,7 +28,7 @@ describe("initial model tool surface", () => {
     ).toBe("general");
   });
 
-  it("accepts one empty starter Frame but rejects material existing content", () => {
+  it("accepts one empty starter Frame and allocates isolated new artboards beside existing content", () => {
     expect(
       resolveInitialModelToolSurface(
         request({ initialDesignInspection: inspection([emptyFrame()]) }),
@@ -42,7 +42,7 @@ describe("initial model tool surface", () => {
           ]),
         }),
       ),
-    ).toBe("general");
+    ).toBe("new-design");
   });
 });
 

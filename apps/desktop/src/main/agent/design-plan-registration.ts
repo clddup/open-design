@@ -7,6 +7,7 @@ import {
   designPlanBriefFidelity,
   designPlanComponentStrategy,
   designPlanDesignIntent,
+  designPlanLogoExploration,
   designPlanSkillRefs,
   designPlanTargets,
   qualityProfileNodeIds,
@@ -74,6 +75,7 @@ export function registerDesignWorkflowPlan(options: {
   const plan = normalizePlanQualityProfiles(options.plan);
   const targets = designPlanTargets(plan);
   assertUniquePlannedNodeIds(plan, targets);
+  assertCreatedArtboardsDoNotOverlap(inspection, targets);
   if (existing && sameJson(existing.plan, plan)) {
     const refreshed = refreshEstablishedTargets(existing, inspection);
     return {
@@ -592,6 +594,14 @@ export function plannedNodeIdsForTarget(
     ...target.composition.regions.map((region) => region.nodeId),
     ...qualityProfileNodeIds(target.qualityProfile),
   ]);
+  const logoExploration = designPlanLogoExploration(plan);
+  if (logoExploration?.targetId === targetId) {
+    for (const direction of logoExploration.directions) {
+      nodeIds.add(direction.rootNodeId);
+      nodeIds.add(direction.monochromeNodeId);
+      for (const nodeId of direction.smallSizeNodeIds) nodeIds.add(nodeId);
+    }
+  }
   const strategy = designPlanComponentStrategy(plan);
   if (strategy) {
     for (const occurrence of componentStrategyOccurrencesForTarget(
@@ -602,6 +612,80 @@ export function plannedNodeIdsForTarget(
     }
   }
   return [...nodeIds];
+}
+
+function assertCreatedArtboardsDoNotOverlap(
+  inspection: InspectedHierarchy,
+  targets: readonly DesignPlanTarget[],
+): void {
+  const created = targets.filter((target) => target.artboard.mode === "create");
+  for (let index = 0; index < created.length; index += 1) {
+    const target = created[index];
+    const bounds = {
+      x: target.artboard.x,
+      y: target.artboard.y,
+      width: target.artboard.width,
+      height: target.artboard.height,
+    };
+    for (let otherIndex = 0; otherIndex < index; otherIndex += 1) {
+      const other = created[otherIndex];
+      if (
+        rectanglesOverlap(bounds, {
+          x: other.artboard.x,
+          y: other.artboard.y,
+          width: other.artboard.width,
+          height: other.artboard.height,
+        })
+      ) {
+        throw new Error(
+          `design_workflow.artboard_overlap: Planned artboard ${target.artboard.frameId} overlaps new artboard ${other.artboard.frameId}; place every new delivery Frame in a separate visible canvas area`,
+        );
+      }
+    }
+    for (const rootId of inspection.pageRootsById.get(target.pageId) ?? []) {
+      if (rootId === target.artboard.frameId) continue;
+      const root = inspection.nodesById.get(rootId);
+      if (!root) continue;
+      if (rectanglesOverlap(bounds, transformedBounds(root))) {
+        throw new Error(
+          `design_workflow.artboard_overlap: Planned artboard ${target.artboard.frameId} overlaps existing Page root ${rootId}; use the inspected root bounds and place the new Frame in an unoccupied canvas area`,
+        );
+      }
+    }
+  }
+}
+
+function transformedBounds(
+  node: InspectedHierarchy["nodesById"] extends Map<string, infer T>
+    ? T
+    : never,
+): { x: number; y: number; width: number; height: number } {
+  const [a, b, c, d, tx, ty] = node.transform;
+  const points = [
+    [0, 0],
+    [node.size.width, 0],
+    [0, node.size.height],
+    [node.size.width, node.size.height],
+  ].map(([x, y]) => ({ x: a * x + c * y + tx, y: b * x + d * y + ty }));
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const left = Math.min(...xs);
+  const top = Math.min(...ys);
+  const right = Math.max(...xs);
+  const bottom = Math.max(...ys);
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+function rectanglesOverlap(
+  left: { x: number; y: number; width: number; height: number },
+  right: { x: number; y: number; width: number; height: number },
+): boolean {
+  return (
+    left.x < right.x + right.width &&
+    left.x + left.width > right.x &&
+    left.y < right.y + right.height &&
+    left.y + left.height > right.y
+  );
 }
 
 function inspectedSubtreeHasMaterialNode(

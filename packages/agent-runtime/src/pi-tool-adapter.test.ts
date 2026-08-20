@@ -1008,7 +1008,7 @@ describe("OpenDesign Pi tool adapter", () => {
     });
   });
 
-  it("terminates different malformed calls to one tool after four attempts without a revision", async () => {
+  it("terminates different malformed calls to one tool after two attempts without a revision", async () => {
     const gateway = new RecordingGateway(
       new MockModelGateway([
         {
@@ -1068,11 +1068,11 @@ describe("OpenDesign Pi tool adapter", () => {
       toolExecutor: neverToolExecutor(),
     });
 
-    expect(gateway.requests).toHaveLength(4);
+    expect(gateway.requests).toHaveLength(2);
     expect(result.events).toContainEqual(
       expect.objectContaining({
         type: "tool.failed",
-        toolCallId: "invalid_move_call_4",
+        toolCallId: "invalid_move_call_2",
         code: "tool_protocol_no_progress",
         recoverable: false,
       }),

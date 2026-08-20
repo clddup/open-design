@@ -17,15 +17,9 @@ const recoverableFailure: TrustedToolFailure = {
 };
 
 describe("PiToolProgressCircuit", () => {
-  it("stops four different invalid inputs for one tool without a revision", () => {
+  it("stops two different invalid inputs for one tool without a revision", () => {
     const circuit = new PiToolProgressCircuit();
 
-    expect(
-      circuit.recordFailure("opendesign_manage_components", invalidInput),
-    ).not.toHaveProperty("runTerminal");
-    expect(
-      circuit.recordFailure("opendesign_manage_components", invalidInput),
-    ).not.toHaveProperty("runTerminal");
     expect(
       circuit.recordFailure("opendesign_manage_components", invalidInput),
     ).not.toHaveProperty("runTerminal");
@@ -38,10 +32,10 @@ describe("PiToolProgressCircuit", () => {
     });
   });
 
-  it("stops a cross-tool recovery loop after eight failures without a revision", () => {
+  it("stops a cross-tool recovery loop after four failures without a revision", () => {
     const circuit = new PiToolProgressCircuit();
     let result = recoverableFailure;
-    for (let index = 0; index < 8; index += 1) {
+    for (let index = 0; index < 4; index += 1) {
       result = circuit.recordFailure(`tool_${index}`, recoverableFailure);
     }
     expect(result).toMatchObject({
@@ -53,9 +47,7 @@ describe("PiToolProgressCircuit", () => {
 
   it("resets the run circuit only when a trusted revision advances", () => {
     const circuit = new PiToolProgressCircuit();
-    for (let index = 0; index < 3; index += 1) {
-      circuit.recordFailure("opendesign_manage_components", invalidInput);
-    }
+    circuit.recordFailure("opendesign_manage_components", invalidInput);
 
     circuit.recordSuccess("opendesign_inspect_document", false);
     expect(

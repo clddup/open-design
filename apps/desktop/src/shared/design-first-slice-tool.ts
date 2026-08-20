@@ -4,6 +4,7 @@ import {
   type BuiltinDesignSkillRef,
 } from "@opendesign/design-skills";
 import type { DesignIntent, RasterAssetRole } from "./design-agent-tools";
+import { LOGO_CONCEPT_PRINCIPLES } from "./design-agent-plan-review";
 import {
   isDesignBriefFidelity,
   type DesignBriefFidelity,
@@ -57,6 +58,11 @@ export type DesignFirstSliceElement =
       kind: "ellipse";
       fill: CompactPaint;
       stroke?: CompactStroke;
+    })
+  | (CompactElementBase & {
+      kind: "path";
+      path: string;
+      fill: CompactPaint;
     })
   | (CompactElementBase & {
       kind: "text";
@@ -142,6 +148,16 @@ export type DesignFirstSliceToolInput = {
     effects?: string[];
   };
   rasterAssetRoles: RasterAssetRole[];
+  logoExploration?: {
+    targetId: string;
+    directions: Array<{
+      conceptId: string;
+      principle: (typeof LOGO_CONCEPT_PRINCIPLES)[number];
+      thesis: string;
+      rootNodeId: string;
+      evidenceNodeIds: [string, string, string, string];
+    }>;
+  };
   semanticObjects?: Array<
     | {
         decisionId: string;
@@ -207,6 +223,7 @@ export function isDesignFirstSliceToolInput(
       "targets",
       "visualSystem",
       "rasterAssetRoles",
+      ...(value.logoExploration === undefined ? [] : ["logoExploration"]),
       ...(value.semanticObjects === undefined ? [] : ["semanticObjects"]),
       "firstSlice",
     ])
@@ -214,6 +231,13 @@ export function isDesignFirstSliceToolInput(
     return false;
   }
   const targets = value.targets as DesignFirstSliceToolInput["targets"];
+  if (
+    value.deliverable === "logo"
+      ? !isCompactLogoExploration(value.logoExploration, targets)
+      : value.logoExploration !== undefined
+  ) {
+    return false;
+  }
   if (
     targets.some((target) =>
       value.deliverable === "ui"
@@ -343,6 +367,7 @@ export function explainInvalidDesignFirstSliceToolInput(
     "targets",
     "visualSystem",
     "rasterAssetRoles",
+    "logoExploration",
     "semanticObjects",
     "firstSlice",
     // Host-owned legacy echoes are ignored and replaced with locally pinned
@@ -415,6 +440,17 @@ export function explainInvalidDesignFirstSliceToolInput(
   if (!isRasterRoles(input.rasterAssetRoles)) {
     return invalidFirstSliceMessage(
       "/rasterAssetRoles: must contain at most four distinct supported roles",
+    );
+  }
+  if (
+    input.deliverable === "logo" &&
+    !isCompactLogoExploration(
+      input.logoExploration,
+      input.targets as DesignFirstSliceToolInput["targets"],
+    )
+  ) {
+    return invalidFirstSliceMessage(
+      "/logoExploration: logo deliverables require exactly three directions with distinct principles and stable monochrome plus 32/24/16 px evidence nodes",
     );
   }
   const targetIds = new Set(
@@ -770,6 +806,13 @@ function isElement(value: unknown): value is DesignFirstSliceElement {
       ])
     );
   }
+  if (value.kind === "path") {
+    return (
+      text(value.path, 1, 20_000) &&
+      isPaint(value.fill) &&
+      exactKeys(value, [...common, "path", "fill"])
+    );
+  }
   if (value.kind !== "rectangle" && value.kind !== "ellipse") return false;
   return (
     isPaint(value.fill) &&
@@ -786,6 +829,63 @@ function isElement(value: unknown): value is DesignFirstSliceElement {
         : []),
     ])
   );
+}
+
+function isCompactLogoExploration(
+  value: unknown,
+  targets: readonly Pick<
+    DesignFirstSliceToolInput["targets"][number],
+    "targetId"
+  >[],
+): value is NonNullable<DesignFirstSliceToolInput["logoExploration"]> {
+  if (
+    !isRecord(value) ||
+    !safeId(value.targetId, 128) ||
+    !targets.some((target) => target.targetId === value.targetId) ||
+    !Array.isArray(value.directions) ||
+    value.directions.length !== 3 ||
+    !exactKeys(value, ["targetId", "directions"])
+  ) {
+    return false;
+  }
+  const ids = new Set<string>();
+  const principles = new Set<string>();
+  for (const direction of value.directions) {
+    if (
+      !isRecord(direction) ||
+      !safeId(direction.conceptId, 128) ||
+      !LOGO_CONCEPT_PRINCIPLES.includes(
+        direction.principle as (typeof LOGO_CONCEPT_PRINCIPLES)[number],
+      ) ||
+      !text(direction.thesis, 16, 1_000) ||
+      !safeId(direction.rootNodeId) ||
+      !Array.isArray(direction.evidenceNodeIds) ||
+      direction.evidenceNodeIds.length !== 4 ||
+      !direction.evidenceNodeIds.every((nodeId) => safeId(nodeId)) ||
+      new Set(direction.evidenceNodeIds).size !== 4 ||
+      !exactKeys(direction, [
+        "conceptId",
+        "principle",
+        "thesis",
+        "rootNodeId",
+        "evidenceNodeIds",
+      ])
+    ) {
+      return false;
+    }
+    const principle = String(direction.principle);
+    if (principles.has(principle)) return false;
+    principles.add(principle);
+    for (const id of [
+      direction.conceptId,
+      direction.rootNodeId,
+      ...direction.evidenceNodeIds,
+    ]) {
+      if (ids.has(id)) return false;
+      ids.add(id);
+    }
+  }
+  return true;
 }
 
 function isCompactText(value: unknown): boolean {
@@ -938,6 +1038,7 @@ function isMaterialElement(element: DesignFirstSliceElement): boolean {
     element.kind === "text" ||
     element.kind === "rectangle" ||
     element.kind === "ellipse" ||
+    element.kind === "path" ||
     (element.kind === "frame" && element.fill !== undefined)
   );
 }

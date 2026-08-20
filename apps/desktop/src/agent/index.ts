@@ -16,6 +16,7 @@ import {
   validateDesignAgentToolInput,
 } from "../shared/design-agent-tools.js";
 import {
+  newDesignSystemPromptForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,
   OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
 } from "./system-prompt.js";
@@ -54,6 +55,7 @@ const runtime = new OpenDesignPiRuntime({
   completionGuard: DESIGN_VISUAL_COMPLETION_GUARD,
   systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
   newDesignSystemPrompt: OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
+  newDesignSystemPromptForRequest,
 });
 
 port.on("message", (event) => {

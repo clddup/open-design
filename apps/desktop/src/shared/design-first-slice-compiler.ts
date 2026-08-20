@@ -46,6 +46,31 @@ export function compileValidatedDesignFirstSliceToolInput(
     briefFidelity: structuredClone(input.briefFidelity),
     designIntent: structuredClone(input.designIntent),
     skillRefs: structuredClone(input.skillRefs),
+    ...(input.logoExploration === undefined
+      ? {}
+      : {
+          logoExploration: {
+            targetId: input.logoExploration.targetId,
+            directions: input.logoExploration.directions.map((direction) => {
+              const [monochromeNodeId, size32, size24, size16] =
+                direction.evidenceNodeIds;
+              return {
+                conceptId: direction.conceptId,
+                label: direction.conceptId,
+                principle: direction.principle,
+                thesis: direction.thesis,
+                constructionLogic: `${direction.thesis} The editable construction uses the ${direction.principle} principle.`,
+                rootNodeId: direction.rootNodeId,
+                monochromeNodeId,
+                smallSizeNodeIds: [size32, size24, size16] as [
+                  string,
+                  string,
+                  string,
+                ],
+              };
+            }),
+          },
+        }),
   };
   const childCounts = new Map<string, number>();
   const commands: DesignOperation[] = [];
@@ -238,6 +263,25 @@ function compileElement(element: DesignFirstSliceElement): DesignNode {
               textWrap: "word" as const,
             };
     return { ...base, kind: "text", properties };
+  }
+  if (element.kind === "path") {
+    return {
+      ...base,
+      kind: "path" as const,
+      properties: {
+        fills: [
+          {
+            type: "solid" as const,
+            color: element.fill.color,
+            opacity: element.fill.opacity ?? 1,
+          },
+        ],
+        strokes: [],
+        strokeWidth: 0,
+        path: element.path,
+        fillRule: "nonzero" as const,
+      },
+    };
   }
   const strokes = element.stroke
     ? [

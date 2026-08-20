@@ -39,8 +39,8 @@ import {
   validateDesignAgentToolInput,
 } from "../shared/design-agent-tools";
 import {
+  newDesignSystemPromptForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,
-  OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
 } from "./system-prompt";
 
 class RecordingGateway implements ModelGateway {
@@ -70,7 +70,7 @@ describe("production Agent context budget", () => {
         modelGateway: gateway,
         sessionStore,
         systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
-        newDesignSystemPrompt: OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
+        newDesignSystemPromptForRequest,
         toolCatalog: {
           listTools: () =>
             DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
@@ -123,7 +123,11 @@ describe("production Agent context budget", () => {
       );
       expect(gateway.requests).toHaveLength(1);
       expect(gateway.requests[0]?.system).toBe(
-        OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
+        newDesignSystemPromptForRequest({ prompt: "Create a real dashboard" }),
+      );
+      expect(gateway.requests[0]?.system).toContain('id="ui-visual-direction"');
+      expect(gateway.requests[0]?.system).not.toContain(
+        'id="graphic-visual-direction"',
       );
       expect(
         gateway.requests[0]?.modelSelection.reasoningEffort,
@@ -140,7 +144,7 @@ describe("production Agent context budget", () => {
         ),
       ).toContain('"firstSlice"');
       expect(
-        OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length +
+        (gateway.requests[0]?.system.length ?? 0) +
           JSON.stringify(gateway.requests[0]?.tools).length,
       ).toBeLessThan(30_000);
       expect(gateway.requests[0]?.tools).not.toContainEqual(

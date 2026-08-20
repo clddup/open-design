@@ -53,6 +53,7 @@ const WORKFLOW_FAILURES: Readonly<
     true,
   ),
   plan_amendment_invalid: recovery("plan-repair", "repairing-plan", true),
+  artboard_overlap: recovery("plan-repair", "repairing-plan", false),
   new_node_id_namespace_required: recovery(
     "plan-repair",
     "repairing-plan",
@@ -64,6 +65,11 @@ const WORKFLOW_FAILURES: Readonly<
     true,
   ),
   layout_quality_failed: recovery("layout-repair", "repairing-layout", true),
+  logo_exploration_incomplete: recovery(
+    "material-write",
+    "applying-draft",
+    true,
+  ),
 };
 
 export function classifyDesignWorkflowFailure(

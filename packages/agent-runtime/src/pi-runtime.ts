@@ -135,7 +135,8 @@ export class OpenDesignPiRuntime {
       );
       const systemPrompt =
         (initialModelToolSurface === "new-design"
-          ? this.options.newDesignSystemPrompt
+          ? (this.options.newDesignSystemPromptForRequest?.(request) ??
+            this.options.newDesignSystemPrompt)
           : this.options.systemPrompt) ??
         this.options.systemPrompt ??
         "You are the OpenDesign design agent. Use only the provided tools and respect the host-bound modification scope.";

@@ -1,7 +1,7 @@
 import type { TrustedToolFailure } from "./index.js";
 
-const MAX_CONSECUTIVE_INVALID_INPUTS_PER_TOOL = 4;
-const MAX_RECOVERABLE_FAILURES_WITHOUT_REVISION = 8;
+const MAX_CONSECUTIVE_INVALID_INPUTS_PER_TOOL = 2;
+const MAX_RECOVERABLE_FAILURES_WITHOUT_REVISION = 4;
 
 /**
  * Bounds model-driven recovery by user-visible document progress rather than

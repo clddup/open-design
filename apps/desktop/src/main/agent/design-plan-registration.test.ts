@@ -11,6 +11,26 @@ import {
 } from "./design-plan-registration.js";
 
 describe("current Design Plan amendments", () => {
+  it("rejects new allocation roots that cover existing Page artwork", () => {
+    const input = plan();
+    input.targets[0] = {
+      ...input.targets[0],
+      artboard: {
+        ...input.targets[0].artboard,
+        mode: "create",
+        frameId: "frame_new",
+        x: 0,
+        y: 0,
+      },
+    };
+    expect(() =>
+      registerDesignWorkflowPlan({
+        inspection: inspectedExistingDesign(),
+        plan: input,
+      }),
+    ).toThrow("design_workflow.artboard_overlap");
+  });
+
   it("reopens a material target when visual intent changes and keeps stable geometry", () => {
     const initialPlan = plan();
     const initial = registerDesignWorkflowPlan({

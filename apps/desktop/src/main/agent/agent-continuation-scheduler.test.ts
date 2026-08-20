@@ -63,6 +63,26 @@ function recordDelivery(
 }
 
 describe("AgentContinuationScheduler", () => {
+  it("lets an explicit user Run supersede queued and active automatic continuations", () => {
+    const scheduler = new AgentContinuationScheduler();
+    const automatic = request({
+      parentRunId: "run_initial",
+      rootRunId: "run_initial",
+      attempt: 1,
+      maxAttempts: 3,
+      reason: "retryable-error",
+    });
+    scheduler.registerRun(automatic);
+
+    expect(
+      scheduler.supersedeAutomaticContinuations(automatic.sessionId),
+    ).toEqual([automatic.runId]);
+    expect(scheduler.isCancellationRequested(automatic.runId)).toBe(true);
+    expect(
+      scheduler.supersedeAutomaticContinuations("conversation_other"),
+    ).toEqual([]);
+  });
+
   it("rotates an incomplete budget-limited Run without user input", () => {
     const scheduler = new AgentContinuationScheduler(() => 1000);
     const initial = request();

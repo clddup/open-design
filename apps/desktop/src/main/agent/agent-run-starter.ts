@@ -38,6 +38,14 @@ export async function handleAgentRunControlRequest(
     if (request.initialDesignInspection !== undefined) {
       throw new TypeError("Renderer cannot supply initial design inspection");
     }
+    if (request.continuation === undefined) {
+      for (const runId of dependencies.continuationScheduler.supersedeAutomaticContinuations(
+        request.sessionId,
+      )) {
+        initialInspectionControllers.get(runId)?.abort();
+        dependencies.agentHost.send({ type: "run.cancel", runId });
+      }
+    }
     const started = await startAgentRun(request, dependencies);
     if (!started) dependencies.publish(cancelledRun(request.runId));
     return true;

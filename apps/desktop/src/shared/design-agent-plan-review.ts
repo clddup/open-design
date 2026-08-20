@@ -122,6 +122,29 @@ export type DesignIntent = {
   antiPatterns: string[];
 };
 
+export const LOGO_CONCEPT_PRINCIPLES = [
+  "negative-space",
+  "modular-system",
+  "path-contour",
+  "spatial-layering",
+  "typographic-relationship",
+  "other",
+] as const;
+
+export type DesignLogoExploration = {
+  targetId: string;
+  directions: Array<{
+    conceptId: string;
+    label: string;
+    principle: (typeof LOGO_CONCEPT_PRINCIPLES)[number];
+    thesis: string;
+    constructionLogic: string;
+    rootNodeId: string;
+    monochromeNodeId: string;
+    smallSizeNodeIds: [string, string, string];
+  }>;
+};
+
 export type DesignPlanToolInput = {
   version: 1;
   deliverable: DesignDeliverable;
@@ -134,6 +157,7 @@ export type DesignPlanToolInput = {
   briefFidelity: DesignBriefFidelity;
   designIntent: DesignIntent;
   skillRefs: BuiltinDesignSkillRef[];
+  logoExploration?: DesignLogoExploration;
   singleRasterEvidence?: string;
 };
 
@@ -338,6 +362,58 @@ const DESIGN_INTENT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
+  type: "object",
+  description:
+    "Required when deliverable=logo. Three genuinely different concept directions with stable editable roots and rendered monochrome plus 32/24/16 px evidence. Cosmetic variants of one letterform are invalid.",
+  properties: {
+    targetId: { type: "string", minLength: 1, maxLength: 128 },
+    directions: {
+      type: "array",
+      minItems: 3,
+      maxItems: 3,
+      items: {
+        type: "object",
+        properties: {
+          conceptId: { type: "string", minLength: 1, maxLength: 128 },
+          label: { type: "string", minLength: 1, maxLength: 256 },
+          principle: { enum: [...LOGO_CONCEPT_PRINCIPLES] },
+          thesis: { type: "string", minLength: 16, maxLength: 1_000 },
+          constructionLogic: {
+            type: "string",
+            minLength: 16,
+            maxLength: 1_000,
+          },
+          rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
+          monochromeNodeId: { type: "string", minLength: 1, maxLength: 256 },
+          smallSizeNodeIds: {
+            type: "array",
+            minItems: 3,
+            maxItems: 3,
+            uniqueItems: true,
+            description:
+              "Stable evidence nodes ordered 32 px, 24 px, then 16 px.",
+            items: { type: "string", minLength: 1, maxLength: 256 },
+          },
+        },
+        required: [
+          "conceptId",
+          "label",
+          "principle",
+          "thesis",
+          "constructionLogic",
+          "rootNodeId",
+          "monochromeNodeId",
+          "smallSizeNodeIds",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["targetId", "directions"],
+  additionalProperties: false,
+} as const;
+
 export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
@@ -425,6 +501,7 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
     componentStrategy: DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA,
     briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
     designIntent: DESIGN_INTENT_SCHEMA,
+    logoExploration: DESIGN_LOGO_EXPLORATION_SCHEMA,
     singleRasterEvidence: {
       type: "string",
       minLength: 1,
@@ -549,6 +626,7 @@ export function isDesignPlanToolInput(
       "briefFidelity",
       "designIntent",
       "skillRefs",
+      ...(input.logoExploration === undefined ? [] : ["logoExploration"]),
       ...(input.singleRasterEvidence === undefined
         ? []
         : ["singleRasterEvidence"]),
@@ -558,6 +636,13 @@ export function isDesignPlanToolInput(
   }
   const targets = input.targets;
   const componentStrategy = input.componentStrategy;
+  if (
+    input.deliverable === "logo"
+      ? !isDesignLogoExploration(input.logoExploration, targets)
+      : input.logoExploration !== undefined
+  ) {
+    return false;
+  }
   if (
     targets.some((target) =>
       input.deliverable === "ui"
@@ -658,6 +743,14 @@ export function designPlanSkillRefs(
   plan: DesignPlanToolInput,
 ): BuiltinDesignSkillRef[] {
   return structuredClone(plan.skillRefs);
+}
+
+export function designPlanLogoExploration(
+  plan: DesignPlanToolInput,
+): DesignLogoExploration | undefined {
+  return plan.logoExploration === undefined
+    ? undefined
+    : structuredClone(plan.logoExploration);
 }
 
 export function isDesignVisualReviewToolInput(
@@ -789,6 +882,67 @@ function isDesignIntent(value: unknown): value is DesignIntent {
       "antiPatterns",
     ])
   );
+}
+
+export function isDesignLogoExploration(
+  value: unknown,
+  targets: readonly Pick<DesignPlanTarget, "targetId">[],
+): value is DesignLogoExploration {
+  if (
+    !isRecord(value) ||
+    !safeId(value.targetId) ||
+    !targets.some((target) => target.targetId === value.targetId) ||
+    !Array.isArray(value.directions) ||
+    value.directions.length !== 3 ||
+    !exactKeys(value, ["targetId", "directions"])
+  ) {
+    return false;
+  }
+  const ids = new Set<string>();
+  const principles = new Set<string>();
+  for (const direction of value.directions) {
+    if (
+      !isRecord(direction) ||
+      !safeId(direction.conceptId) ||
+      !boundedText(direction.label, 256) ||
+      !LOGO_CONCEPT_PRINCIPLES.includes(
+        direction.principle as (typeof LOGO_CONCEPT_PRINCIPLES)[number],
+      ) ||
+      !substantiveReviewText(direction.thesis) ||
+      !substantiveReviewText(direction.constructionLogic) ||
+      !safeId(direction.rootNodeId) ||
+      !safeId(direction.monochromeNodeId) ||
+      !Array.isArray(direction.smallSizeNodeIds) ||
+      direction.smallSizeNodeIds.length !== 3 ||
+      !direction.smallSizeNodeIds.every((nodeId) => safeId(nodeId)) ||
+      new Set(direction.smallSizeNodeIds).size !== 3 ||
+      !exactKeys(direction, [
+        "conceptId",
+        "label",
+        "principle",
+        "thesis",
+        "constructionLogic",
+        "rootNodeId",
+        "monochromeNodeId",
+        "smallSizeNodeIds",
+      ])
+    ) {
+      return false;
+    }
+    const principle = String(direction.principle);
+    if (principles.has(principle)) return false;
+    principles.add(principle);
+    for (const id of [
+      direction.conceptId,
+      direction.rootNodeId,
+      direction.monochromeNodeId,
+      ...direction.smallSizeNodeIds,
+    ]) {
+      if (ids.has(id)) return false;
+      ids.add(id);
+    }
+  }
+  return true;
 }
 
 function isDesignPlanTarget(value: unknown): value is DesignPlanTarget {

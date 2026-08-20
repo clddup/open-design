@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  inferNewDesignDeliverable,
+  newDesignSystemPromptForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,
   OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT,
 } from "./system-prompt";
 
 describe("OpenDesign Agent system prompt", () => {
-  it("keeps the blank-canvas first-slice kernel compact and truthful", () => {
+  it("keeps the new-design first-slice kernel compact and truthful", () => {
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "opendesign_generate_first_slice",
     );
@@ -14,6 +16,9 @@ describe("OpenDesign Agent system prompt", () => {
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "graphic-visual-direction",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "logo-visual-direction",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).not.toContain(
       "graphic-capture-critic",
@@ -32,7 +37,28 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "Do not claim completion after the first slice",
     );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("editable SVG Path");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length).toBeLessThan(16_000);
+  });
+
+  it("routes compact planning skills by the requested deliverable", () => {
+    const logoPrompt = newDesignSystemPromptForRequest({
+      prompt:
+        "Design an OpenDesign logo, app icon, and previews in the desktop UI",
+    });
+    expect(inferNewDesignDeliverable("设计一套 Logo 和应用图标")).toBe("logo");
+    expect(logoPrompt).toContain('id="graphic-visual-direction"');
+    expect(logoPrompt).toContain('id="logo-visual-direction"');
+    expect(logoPrompt).not.toContain('id="ui-visual-direction"');
+
+    const uiPrompt = newDesignSystemPromptForRequest({
+      prompt: "设计一个桌面端登录注册页面",
+    });
+    expect(uiPrompt).toContain('id="ui-visual-direction"');
+    expect(uiPrompt).toContain('id="ui-ux-structure"');
+    expect(uiPrompt).not.toContain('id="graphic-visual-direction"');
+
+    expect(inferNewDesignDeliverable("创造一个新的视觉方向")).toBeUndefined();
   });
 
   it("fixes the product role to visual design instead of coding or files", () => {
@@ -116,7 +142,7 @@ describe("OpenDesign Agent system prompt", () => {
       "does not unlock opendesign_record_visual_review",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "A high-confidence blank new-design Run exposes generate_first_slice",
+      "A high-confidence new-design Run exposes generate_first_slice",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "use opendesign_design_checkpoint action apply-and-capture",

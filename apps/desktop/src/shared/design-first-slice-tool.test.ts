@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
+  BUILTIN_LOGO_DESIGN_SKILL_REFS,
   BUILTIN_UI_DESIGN_SKILL_REFS,
 } from "@opendesign/design-skills";
 import {
@@ -150,6 +151,73 @@ describe("compact first-slice tool", () => {
       rasterAssetRoles: ["hero"],
       skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
     });
+  });
+
+  it("requires three structurally different logo directions and compiles editable Path evidence", () => {
+    const input = fixture();
+    input.deliverable = "logo";
+    input.targets = input.targets.map((target) => ({
+      ...target,
+      qualityProfile: { kind: "graphic" },
+    }));
+    input.logoExploration = {
+      targetId: "home",
+      directions: [
+        logoDirection("concept_negative", "negative-space", "negative"),
+        logoDirection("concept_modular", "modular-system", "modular"),
+        logoDirection(
+          "concept_typographic",
+          "typographic-relationship",
+          "typographic",
+        ),
+      ],
+    };
+    input.firstSlice.stages[0].elements[1] = {
+      id: "hero_panel",
+      kind: "path",
+      name: "Editable Identity Contour",
+      parentId: "home_hero",
+      x: 24,
+      y: 24,
+      width: 160,
+      height: 160,
+      path: "M 0 0 H 160 V 48 H 48 V 160 H 0 Z",
+      fill: { color: "#0F172A" },
+    };
+
+    const modelInput = structuredClone(input);
+    Reflect.deleteProperty(modelInput, "skillRefs");
+    const normalized = normalizeDesignFirstSliceToolInput(modelInput);
+    expect(normalized?.skillRefs).toEqual(BUILTIN_LOGO_DESIGN_SKILL_REFS);
+    expect(normalized && isDesignFirstSliceToolInput(normalized)).toBe(true);
+    expect(
+      normalized &&
+        compileDesignFirstSliceToolInput(normalized).apply.commands[1],
+    ).toMatchObject({
+      node: {
+        kind: "path",
+        properties: {
+          path: "M 0 0 H 160 V 48 H 48 V 160 H 0 Z",
+          fillRule: "nonzero",
+        },
+      },
+    });
+
+    const duplicatePrinciple = structuredClone(modelInput);
+    if (!duplicatePrinciple.logoExploration) {
+      throw new Error("Expected Logo exploration fixture");
+    }
+    duplicatePrinciple.logoExploration.directions[1].principle =
+      "negative-space";
+    expect(
+      normalizeDesignFirstSliceToolInput(duplicatePrinciple),
+    ).toBeUndefined();
+
+    const missingExploration = structuredClone(modelInput);
+    delete missingExploration.logoExploration;
+    expect(
+      normalizeDesignFirstSliceToolInput(missingExploration),
+    ).toBeUndefined();
   });
 
   it("rejects duplicate IDs, forward parents, empty regions and a slice for a later target", () => {
@@ -455,5 +523,24 @@ export function fixture(): DesignFirstSliceToolInput {
         },
       ],
     },
+  };
+}
+
+function logoDirection(
+  conceptId: string,
+  principle: "negative-space" | "modular-system" | "typographic-relationship",
+  prefix: string,
+) {
+  return {
+    conceptId,
+    principle,
+    thesis: `${prefix} construction creates a materially different brand silhouette.`,
+    rootNodeId: `${prefix}_root`,
+    evidenceNodeIds: [
+      `${prefix}_mono`,
+      `${prefix}_32`,
+      `${prefix}_24`,
+      `${prefix}_16`,
+    ] as [string, string, string, string],
   };
 }

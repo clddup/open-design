@@ -10,6 +10,7 @@ import {
   BUILTIN_UI_DESIGN_SKILL_REFS,
   formatBuiltinDesignSkillBundle,
   formatBuiltinDesignPlanningSkillBundle,
+  formatBuiltinDesignPlanningSkillBundleForDeliverable,
   formatBuiltinUiDesignSkillBundle,
   isBuiltinDesignSkillRefsForDeliverable,
   isBuiltinUiDesignSkillRefs,
@@ -21,7 +22,7 @@ describe("built-in design skills", () => {
     expect(Object.isFrozen(BUILTIN_DESIGN_PLANNING_SKILLS)).toBe(true);
     expect(Object.isFrozen(BUILTIN_UI_DESIGN_SKILLS)).toBe(true);
     expect(Object.isFrozen(BUILTIN_GRAPHIC_DESIGN_SKILLS)).toBe(true);
-    expect(new Set(BUILTIN_DESIGN_SKILLS.map(({ id }) => id)).size).toBe(5);
+    expect(new Set(BUILTIN_DESIGN_SKILLS.map(({ id }) => id)).size).toBe(7);
     for (const skill of BUILTIN_DESIGN_SKILLS) {
       expect(skill.hash).toBe(
         createHash("sha256").update(skill.content).digest("hex"),
@@ -54,6 +55,19 @@ describe("built-in design skills", () => {
     expect(planning).not.toContain('id="graphic-capture-critic"');
     expect(planning).not.toContain('id="ui-capture-critic"');
     expect(planning.length).toBeLessThan(12_000);
+
+    const logoPlanning =
+      formatBuiltinDesignPlanningSkillBundleForDeliverable("logo");
+    expect(logoPlanning).toContain('id="graphic-visual-direction"');
+    expect(logoPlanning).toContain('id="logo-visual-direction"');
+    expect(logoPlanning).not.toContain('id="ui-visual-direction"');
+    expect(logoPlanning).not.toContain('id="logo-capture-critic"');
+
+    const uiPlanning =
+      formatBuiltinDesignPlanningSkillBundleForDeliverable("ui");
+    expect(uiPlanning).toContain('id="ui-visual-direction"');
+    expect(uiPlanning).toContain('id="ui-ux-structure"');
+    expect(uiPlanning).not.toContain('id="graphic-visual-direction"');
   });
 
   it("accepts only the exact ordered built-in references", () => {
