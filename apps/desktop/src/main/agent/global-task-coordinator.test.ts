@@ -1,5 +1,8 @@
 import { createStarterProjectFiles } from "../../shared/project/starter-project.js";
-import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
+import {
+  BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
+  BUILTIN_UI_DESIGN_SKILL_REFS,
+} from "@opendesign/design-skills";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -803,7 +806,7 @@ describe("GlobalTaskCoordinator", () => {
     });
   });
 
-  it("requires the review skill references to match the active Plan", async () => {
+  it("binds review skills from the active non-UI Plan instead of the normalizer default", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     const runId = "run_design_skills";
@@ -811,7 +814,7 @@ describe("GlobalTaskCoordinator", () => {
       type: "run.start",
       runId,
       sessionId: "conversation_mobile",
-      prompt: "Design a distinctive iOS Home screen",
+      prompt: "Design a distinctive summer camp poster",
       documentId: file.documentId,
       revision: opened.document.revision,
       modelSelection,
@@ -830,7 +833,19 @@ describe("GlobalTaskCoordinator", () => {
       context,
       inspectionResult(opened.document, pageId),
     );
-    const plan = qualityProfilePlan(pageId);
+    const uiPlan = qualityProfilePlan(pageId);
+    const plan: DesignPlanToolInput = {
+      ...uiPlan,
+      deliverable: "poster",
+      rasterAssetRoles: ["hero"],
+      skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
+        ...reference,
+      })),
+      targets: uiPlan.targets.map((target) => ({
+        ...target,
+        qualityProfile: { kind: "graphic" },
+      })),
+    };
     coordinator.registerDesignPlan(context, plan);
     coordinator.recordDesignPlanAllocated(runId, [plan.targets[0].targetId], 1);
     const draft = draftTargets(pageId, plan.targets);
@@ -859,14 +874,19 @@ describe("GlobalTaskCoordinator", () => {
     );
 
     expect(() =>
-      coordinator.registerVisualReview(context, {
-        ...visualReview,
-        skillRefs: [],
-      }),
-    ).toThrow("design_workflow.visual_review_skill_mismatch");
+      coordinator.assertDesignPlanForImagePlacement(
+        context,
+        "hero",
+        plan.targets[0].artboard.frameId,
+      ),
+    ).not.toThrow();
+
     expect(() =>
       coordinator.registerVisualReview(context, visualReview),
     ).not.toThrow();
+    expect(() =>
+      coordinator.registerVisualReview(context, visualReview),
+    ).toThrow("design_workflow.capture_required");
     store.close();
   });
 

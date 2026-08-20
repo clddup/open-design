@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
+import {
+  BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
+  BUILTIN_UI_DESIGN_SKILL_REFS,
+} from "@opendesign/design-skills";
 import {
   compileDesignFirstSliceToolInput,
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
@@ -123,6 +126,30 @@ describe("compact first-slice tool", () => {
     expect(
       normalizeDesignFirstSliceToolInput(staleHostEcho)?.skillRefs,
     ).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+  });
+
+  it("binds graphic judgment skills and raster evidence roles for a poster", () => {
+    const input = fixture();
+    input.deliverable = "poster";
+    input.rasterAssetRoles = ["hero"];
+    input.targets = input.targets.map((target) => ({
+      ...target,
+      qualityProfile: { kind: "graphic" },
+    }));
+    const { skillRefs: modelSkillRefs, ...modelInput } = input;
+    expect(modelSkillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
+
+    const normalized = normalizeDesignFirstSliceToolInput(modelInput);
+    expect(normalized?.skillRefs).toEqual(BUILTIN_GRAPHIC_DESIGN_SKILL_REFS);
+    expect(normalized?.rasterAssetRoles).toEqual(["hero"]);
+    expect(normalized && isDesignFirstSliceToolInput(normalized)).toBe(true);
+    expect(
+      normalized && compileDesignFirstSliceToolInput(normalized).plan,
+    ).toMatchObject({
+      deliverable: "poster",
+      rasterAssetRoles: ["hero"],
+      skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS,
+    });
   });
 
   it("rejects duplicate IDs, forward parents, empty regions and a slice for a later target", () => {

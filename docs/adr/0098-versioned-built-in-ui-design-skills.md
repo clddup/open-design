@@ -7,7 +7,7 @@
 - Built-in Design Skills：`1`
 - 文档协议：不变
 - 关联：ADR-0018、ADR-0050、ADR-0072、ADR-0095、ADR-0096、ADR-0097
-- 修订：模型回抄 skill refs 与六项 critic 已由 ADR-0102 取代；Main 绑定 refs，Visual Review 扩为九项。
+- 修订：模型回抄 skill refs 与六项 critic 已由 ADR-0102 取代；Main 绑定 refs，Visual Review 扩为九项。非 UI Graphic bundle 与证据媒介判断由 ADR-0104 扩展。
 
 ## 背景
 
@@ -27,7 +27,7 @@
 
 每个 Skill 固定内容 SHA-256、版本、适用 deliverable 和 phase。构建时把 UI bundle 自动装配到普通 Agent 与 compact first-slice 的首个 Provider context，不新增 `read_skill` 往返，不执行 Skill 内脚本，也不动态获取远端内容。Skill 是受信任产品指令，但不授予工具、文件、网络、凭据、Capability、Approval 或 Mutation Target。
 
-首批只路由 `deliverable=ui`。Logo、海报、品牌与插画继续使用通用 Plan/工具链，不能机械套用 UI 规则；对应方法包须作为后续独立版本加入。
+本 ADR 的首批实现只路由 `deliverable=ui`。ADR-0104 已以独立版本加入 Graphic bundle，覆盖 Logo、海报、品牌、插画和演示视觉，并保持按 deliverable 路由，不能机械套用 UI 规则。
 
 ### 单一当前 Design Plan
 
@@ -84,4 +84,4 @@ ADR-0102 在同一 Review v1 当前契约中追加 `glance-legibility`、`subjec
 
 ## 复审条件
 
-加入 Logo/品牌/海报方法包、开放用户或 Project Skill、需要按任务动态缩短 bundle、Provider 对 schema 支持出现差异，或固定盲评证明静态 bundle 降低首屏速度/质量时复审。任何替代方案仍不得让 Skill 获得能力或绕过真实 capture/transaction 证据。
+开放用户或 Project Skill、需要按任务动态缩短 bundle、Provider 对 schema 支持出现差异，或固定盲评证明静态 bundle 降低首屏速度/质量时复审。Logo/品牌/海报方法包已由 ADR-0104 落地。任何替代方案仍不得让 Skill 获得能力或绕过真实 capture/transaction 证据。

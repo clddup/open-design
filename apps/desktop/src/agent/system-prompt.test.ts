@@ -12,6 +12,12 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "ui-visual-direction",
     );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "graphic-visual-direction",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).not.toContain(
+      "graphic-capture-critic",
+    );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("current contract");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("briefFidelity");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(

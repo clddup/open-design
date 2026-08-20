@@ -279,6 +279,8 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
       type: "array",
       maxItems: 4,
       uniqueItems: true,
+      description:
+        "Image evidence the full workflow must read, generate, or place after this compact slice. Use hero/background/supporting-content when credibility depends on real people, activity, place, product, food, interior, material, or environment; use [] for logos, diagrams, intentional vector illustration, or briefs whose communication job does not require raster evidence. Never claim generic vector geometry is photographic realism.",
       items: {
         enum: ["reference", "background", "hero", "supporting-content"],
       },

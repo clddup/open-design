@@ -1,6 +1,6 @@
 import {
-  BUILTIN_UI_DESIGN_SKILL_REFS,
-  isBuiltinUiDesignSkillRefs,
+  builtinDesignSkillRefsForDeliverable,
+  isBuiltinDesignSkillRefsForDeliverable,
   type BuiltinDesignSkillRef,
 } from "@opendesign/design-skills";
 import type { DesignIntent, RasterAssetRole } from "./design-agent-tools";
@@ -177,21 +177,11 @@ export function isDesignFirstSliceToolInput(
     value.version !== 1 ||
     !isDesignBriefFidelity(value.briefFidelity) ||
     !isCompactDesignIntent(value.designIntent) ||
-    (value.deliverable === "ui"
-      ? !isBuiltinUiDesignSkillRefs(value.skillRefs)
-      : !Array.isArray(value.skillRefs) || value.skillRefs.length !== 0)
+    !isCompactDeliverable(value.deliverable) ||
+    !isBuiltinDesignSkillRefsForDeliverable(value.deliverable, value.skillRefs)
   )
     return false;
   if (
-    ![
-      "ui",
-      "poster",
-      "logo",
-      "brand-asset",
-      "illustration",
-      "presentation-visual",
-      "other",
-    ].includes(String(value.deliverable)) ||
     !text(value.objective, 1, 2_000) ||
     !Array.isArray(value.targets) ||
     value.targets.length < 1 ||
@@ -308,14 +298,26 @@ export function normalizeDesignFirstSliceToolInput(
   if (!isRecord(input)) return undefined;
   const modelInput = { ...input };
   delete modelInput.skillRefs;
-  const skillRefs =
-    input.deliverable === "ui"
-      ? BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({ ...reference }))
-      : [];
+  if (!isCompactDeliverable(input.deliverable)) return undefined;
+  const skillRefs = builtinDesignSkillRefsForDeliverable(input.deliverable);
   const candidate = { ...modelInput, skillRefs };
   return isDesignFirstSliceToolInput(candidate)
     ? structuredClone(candidate)
     : undefined;
+}
+
+function isCompactDeliverable(
+  value: unknown,
+): value is DesignFirstSliceToolInput["deliverable"] {
+  return (
+    value === "ui" ||
+    value === "poster" ||
+    value === "logo" ||
+    value === "brand-asset" ||
+    value === "illustration" ||
+    value === "presentation-visual" ||
+    value === "other"
+  );
 }
 
 /**

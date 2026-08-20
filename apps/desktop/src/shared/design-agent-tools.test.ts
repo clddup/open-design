@@ -1186,7 +1186,13 @@ describe("design Agent tool contract", () => {
         ...plan,
         skillRefs: plan.skillRefs.slice(1),
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      normalizeDesignPlanToolInput({
+        ...plan,
+        skillRefs: plan.skillRefs.slice(1),
+      })?.skillRefs,
+    ).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
         ...plan,

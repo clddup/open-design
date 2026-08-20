@@ -1552,7 +1552,6 @@ void app.whenReady().then(async () => {
         if (!isPlaceImageToolInput(call.input)) {
           throw new TypeError("Invalid place image tool input");
         }
-        globalTaskCoordinator.assertVisualReviewBeforeWrite(context);
         globalTaskCoordinator.assertDesignPlanForImagePlacement(
           context,
           call.input.role,

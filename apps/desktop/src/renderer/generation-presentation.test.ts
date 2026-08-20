@@ -3,6 +3,7 @@ import type {
   EditorEvent,
   FrameNode,
 } from "@opendesign/design-contracts";
+import { BUILTIN_GRAPHIC_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import {
   createWelcomeDocument,
   EditorRuntime,
@@ -113,7 +114,9 @@ const generationPlan = {
       "No decorative gradient without narrative purpose",
     ],
   },
-  skillRefs: [],
+  skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
+    ...reference,
+  })),
 } satisfies DesignPlanToolInput;
 const generationTarget = generationPlan.targets[0];
 
@@ -946,7 +949,9 @@ function acceptedPlanResult(plan: DesignPlanToolInput) {
 function generationVisualReview() {
   return {
     version: 1,
-    skillRefs: [],
+    skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
+      ...reference,
+    })),
     briefFidelity:
       "The rendered result preserves the requested content and product meaning.",
     distinctiveness:

@@ -1,6 +1,8 @@
 import {
+  builtinDesignSkillRefsForDeliverable,
   BUILTIN_UI_DESIGN_SKILL_REFS,
-  isBuiltinUiDesignSkillRefs,
+  isBuiltinDesignSkillRefsForDeliverable,
+  isKnownBuiltinDesignSkillRefs,
   type BuiltinDesignSkillRef,
 } from "@opendesign/design-skills";
 import {
@@ -408,6 +410,8 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
       type: "array",
       maxItems: 5,
       uniqueItems: true,
+      description:
+        "Raster evidence required by the chosen visual strategy. Use a placeable role when credibility depends on real people, activity, place, product, food, interior, material, or environment. Keep this empty for logos, diagrams, intentional vector illustration, or briefs that do not need raster evidence. The model must make this judgment from the subject and communication job; generic vector shapes are not photographic evidence.",
       items: {
         enum: [
           "reference",
@@ -447,7 +451,7 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
 export const DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Current concrete critique of the most recent rendered UI capture. Evaluate every non-compensating visual criterion against the active Plan and the host-bound critic revision. Every field must identify what the image actually shows and refinements must be actionable edits, not generic praise.",
+    "Current concrete critique of the most recent rendered capture. Evaluate every non-compensating visual criterion against the active deliverable-scoped Plan and host-bound critic revision. Every field must identify what the image actually shows and refinements must be actionable edits, not generic praise.",
   properties: {
     version: { const: 1 },
     briefFidelity: { type: "string", minLength: 12, maxLength: 1_000 },
@@ -529,9 +533,10 @@ export function isDesignPlanToolInput(
     ) ||
     !isDesignBriefFidelity(input.briefFidelity) ||
     !isDesignIntent(input.designIntent) ||
-    (input.deliverable === "ui"
-      ? !isBuiltinUiDesignSkillRefs(input.skillRefs)
-      : !Array.isArray(input.skillRefs) || input.skillRefs.length !== 0) ||
+    !isBuiltinDesignSkillRefsForDeliverable(
+      input.deliverable,
+      input.skillRefs,
+    ) ||
     !exactKeys(input, [
       "version",
       "deliverable",
@@ -615,12 +620,11 @@ export function normalizeDesignPlanToolInput(
   input: unknown,
 ): DesignPlanToolInput | undefined {
   if (!isRecord(input)) return undefined;
-  const skillRefs =
-    input.deliverable === "ui"
-      ? BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({ ...reference }))
-      : [];
-  const candidate =
-    input.skillRefs === undefined ? { ...input, skillRefs } : input;
+  if (!isDesignDeliverable(input.deliverable)) return undefined;
+  const skillRefs = builtinDesignSkillRefsForDeliverable(input.deliverable);
+  const modelInput = { ...input };
+  delete modelInput.skillRefs;
+  const candidate = { ...modelInput, skillRefs };
   return isDesignPlanToolInput(candidate)
     ? structuredClone(candidate)
     : undefined;
@@ -663,8 +667,7 @@ export function isDesignVisualReviewToolInput(
   const criteria = input.criteria;
   if (
     input.version !== 1 ||
-    (!isBuiltinUiDesignSkillRefs(input.skillRefs) &&
-      (!Array.isArray(input.skillRefs) || input.skillRefs.length !== 0)) ||
+    !isKnownBuiltinDesignSkillRefs(input.skillRefs) ||
     !substantiveReviewText(input.briefFidelity) ||
     !substantiveReviewText(input.distinctiveness) ||
     !substantiveReviewText(input.signatureMotif) ||
