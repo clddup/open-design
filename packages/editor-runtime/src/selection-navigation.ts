@@ -4,6 +4,9 @@ import { isEffectivelyLocked } from "./layer-operations.js";
 export type BooleanSelectionDirection =
   "enter" | "exit" | "next-operand" | "previous-operand";
 
+export type LayerSelectionDirection =
+  "enter" | "exit" | "next-sibling" | "previous-sibling";
+
 export interface BooleanEditScope {
   booleanId: string;
   operandIds: readonly string[];
@@ -82,6 +85,39 @@ export function navigateBooleanSelection(
   if (index < 0) return null;
   const offset = direction === "next-operand" ? 1 : -1;
   return scope.operandIds[index + offset] ?? null;
+}
+
+export function navigateLayerSelection(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  direction: LayerSelectionDirection,
+): string | null {
+  if (nodeIds.length !== 1) return null;
+  const node = document.nodesById[nodeIds[0] ?? ""];
+  if (!node || !nodeBelongsToPage(document, pageId, node.id)) return null;
+
+  if (direction === "enter") {
+    return (
+      [...node.childIds]
+        .reverse()
+        .find((childId) => document.nodesById[childId]?.visible) ?? null
+    );
+  }
+  if (direction === "exit") return node.parentId;
+
+  const siblings = node.parentId
+    ? document.nodesById[node.parentId]?.childIds
+    : document.pagesById[pageId]?.rootNodeIds;
+  if (!siblings) return null;
+  const index = siblings.indexOf(node.id);
+  if (index < 0) return null;
+  const offset = direction === "next-sibling" ? 1 : -1;
+  for (let candidateIndex = index + offset; ; candidateIndex += offset) {
+    const candidateId = siblings[candidateIndex];
+    if (!candidateId) return null;
+    if (document.nodesById[candidateId]?.visible) return candidateId;
+  }
 }
 
 function nodeBelongsToPage(

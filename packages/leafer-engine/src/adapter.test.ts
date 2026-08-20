@@ -10,6 +10,7 @@ import type {
   DesignNode,
 } from "@opendesign/design-contracts";
 import { DESIGN_SCHEMA_VERSION } from "@opendesign/design-contracts";
+import { componentProjectionId } from "@opendesign/component-service";
 import type { VectorGeometryProvider } from "@opendesign/geometry-service/vector-path";
 import { cutVectorPath } from "@opendesign/geometry-service/vector-edit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -2205,8 +2206,10 @@ describe("Leafer engine selection bounds synchronization", () => {
 
   it("exports resolved component pixels and deduplicates internal instance selection", async () => {
     const onSelectionChange = vi.fn();
+    const onOperations = vi.fn(() => true);
     const adapter = await createLeaferEngineAdapter(createHost(), {
       ...createCallbacks(),
+      onOperations,
       onSelectionChange,
     });
     adapter.sync(componentInput());
@@ -2223,6 +2226,33 @@ describe("Leafer engine selection bounds synchronization", () => {
       ["button_instance"],
       "button_instance",
     );
+
+    const background = findElement(
+      app.tree,
+      componentProjectionId("button_instance", ["button_bg"]),
+    );
+    if (!background) throw new Error("Missing projected component background");
+    app.editor.target = [background];
+    app.editor.emit("editor.select");
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      ["button_instance"],
+      "button_instance",
+      {
+        instanceId: "button_instance",
+        sourcePath: ["button_bg"],
+      },
+    );
+    expect(app.editor.list).toEqual([background]);
+
+    app.editor.moving = true;
+    app.editor.editBox.dragging = true;
+    app.editor.emit("editor.before-move");
+    background.localTransform.e += 24;
+    app.editor.emit("editor.move");
+    app.editor.editBox.dragging = false;
+    app.editor.editBox.emit("drag.end");
+    expect(onOperations).not.toHaveBeenCalled();
+    expect(background.localTransform.e).toBe(0);
 
     await expect(
       adapter.exportRaster({

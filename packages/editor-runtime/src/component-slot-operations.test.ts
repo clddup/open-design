@@ -28,6 +28,69 @@ import { planCombineComponentsAsVariants } from "./variant-set-operations.js";
 import { planDuplicateVariant } from "./variant-set-membership-operations.js";
 
 describe("Component Slot lifecycle", () => {
+  it("assigns projected children inside a persistent Slot Instance to that nested Instance", () => {
+    const document = slotFixture();
+    const content = document.nodesById.card_content;
+    const outer = document.nodesById.card_instance;
+    const component = document.componentsById.card_component;
+    if (content?.kind !== "frame" || outer?.kind !== "instance" || !component) {
+      throw new Error("Slot ownership fixture is unavailable");
+    }
+    document.nodesById.card_content = {
+      ...content,
+      kind: "slot",
+      properties: {
+        ...content.properties,
+        sourceSlotId: null,
+      },
+    };
+    component.componentPropertyOrder = ["Content#card:content"];
+    component.componentPropertyDefinitions = {
+      "Content#card:content": {
+        type: "SLOT",
+        defaultValue: "card_content",
+      },
+    };
+    document.nodesById.card_slot_override = {
+      ...structuredClone(document.nodesById.card_content),
+      id: "card_slot_override",
+      parentId: outer.id,
+      childIds: ["nested_row_instance"],
+      properties: {
+        ...structuredClone(document.nodesById.card_content.properties),
+        sourceSlotId: "card_content",
+      },
+    };
+    document.nodesById.nested_row_instance = instance(
+      "nested_row_instance",
+      "card_slot_override",
+      "row_component",
+    );
+    outer.childIds = ["card_slot_override"];
+
+    const resolution = resolveComponentInstance(document, outer.id);
+    expect(resolution.ok).toBe(true);
+    if (!resolution.ok) return;
+    expect(
+      resolution.nodes.find(
+        (candidate) => candidate.sourceNodeId === "row_body",
+      ),
+    ).toMatchObject({
+      selectionInstanceId: "nested_row_instance",
+      selectionSourcePath: ["row_body"],
+    });
+
+    const runtime = new EditorRuntime(document);
+    runtime.setSelection(["nested_row_instance"], "nested_row_instance", {
+      instanceId: "nested_row_instance",
+      sourcePath: ["row_body"],
+    });
+    expect(runtime.getSnapshot().state.selection.componentTarget).toEqual({
+      instanceId: "nested_row_instance",
+      sourcePath: ["row_body"],
+    });
+  });
+
   it("composes Slots through a nested Instance without exposing its Slot as a root Instance action", () => {
     const source = slotFixture();
     const rowMain = source.nodesById.row_main;

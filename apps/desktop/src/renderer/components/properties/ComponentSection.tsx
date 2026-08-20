@@ -94,11 +94,13 @@ const nodeKindKeys: Record<DesignNode["kind"], MessageKey> = {
 };
 
 function ComponentOverrideEditor({
+  activeSourcePath,
   availableComponents,
   onReset,
   onUpdate,
   sources,
 }: {
+  activeSourcePath?: readonly string[];
   availableComponents: readonly ComponentInspectorOption[];
   onReset: (sourcePath: readonly string[]) => void;
   onUpdate: (
@@ -108,8 +110,9 @@ function ComponentOverrideEditor({
   sources: readonly ComponentInspectorSource[];
 }) {
   const { t } = useI18n();
+  const activeKey = activeSourcePath?.join("\u0000") ?? "";
   const [selectedKey, setSelectedKey] = useState(
-    () => sources[0]?.sourcePath.join("\u0000") ?? "",
+    () => activeKey || sources[0]?.sourcePath.join("\u0000") || "",
   );
   const source =
     sources.find(
@@ -117,10 +120,19 @@ function ComponentOverrideEditor({
     ) ?? sources[0];
 
   useEffect(() => {
+    if (
+      activeKey &&
+      sources.some(
+        (candidate) => candidate.sourcePath.join("\u0000") === activeKey,
+      )
+    ) {
+      setSelectedKey(activeKey);
+      return;
+    }
     if (!source && sources[0]) {
       setSelectedKey(sources[0].sourcePath.join("\u0000"));
     }
-  }, [source, sources]);
+  }, [activeKey, source, sources]);
 
   if (!source) return null;
   const sourceNode = source.node;
@@ -384,6 +396,7 @@ function ComponentOverrideEditor({
 }
 
 export type ComponentInspectorContext = {
+  activeSourcePath?: readonly string[];
   availableComponents: readonly ComponentInspectorOption[];
   availableSlotPreferredValues: readonly ComponentInspectorPreferredValueOption[];
   componentName: string;
@@ -490,9 +503,40 @@ export function ComponentSection({
   defaultOpen?: boolean;
 }) {
   const { t } = useI18n();
+  const activeSourceKey =
+    componentContext?.activeSourcePath?.join("\u0000") ?? "";
+  const [advancedOpen, setAdvancedOpen] = useState(Boolean(activeSourceKey));
+  useEffect(() => {
+    if (activeSourceKey) setAdvancedOpen(true);
+  }, [activeSourceKey]);
   if (!componentContext && node.kind !== "frame" && node.kind !== "group") {
     return null;
   }
+  const advancedOverrides = componentContext ? (
+    <details
+      className={styles.componentAdvancedOverrides}
+      onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+      open={advancedOpen}
+    >
+      <summary>{t("properties.advancedOverrides")}</summary>
+      {!componentContext.activeSourcePath && (
+        <Button
+          disabled={componentContext.overrideCount === 0}
+          onClick={onResetComponentInstance}
+          tone="quiet"
+        >
+          {t("properties.resetOverrides")}
+        </Button>
+      )}
+      <ComponentOverrideEditor
+        activeSourcePath={componentContext.activeSourcePath}
+        availableComponents={componentContext.availableComponents}
+        onReset={onResetComponentSourceOverride}
+        onUpdate={onUpdateComponentOverride}
+        sources={componentContext.sourceNodes}
+      />
+    </details>
+  ) : null;
   return (
     <Section defaultOpen={defaultOpen} title={t("properties.component")}>
       {componentContext ? (
@@ -559,6 +603,8 @@ export function ComponentSection({
                 sources={componentContext.sourceNodes}
               />
             </>
+          ) : componentContext.activeSourcePath ? (
+            advancedOverrides
           ) : (
             <>
               <ComponentPropertyValues
@@ -578,22 +624,7 @@ export function ComponentSection({
                   {t("properties.detachInstance")}
                 </Button>
               </div>
-              <details className={styles.componentAdvancedOverrides}>
-                <summary>{t("properties.advancedOverrides")}</summary>
-                <Button
-                  disabled={componentContext.overrideCount === 0}
-                  onClick={onResetComponentInstance}
-                  tone="quiet"
-                >
-                  {t("properties.resetOverrides")}
-                </Button>
-                <ComponentOverrideEditor
-                  availableComponents={componentContext.availableComponents}
-                  onReset={onResetComponentSourceOverride}
-                  onUpdate={onUpdateComponentOverride}
-                  sources={componentContext.sourceNodes}
-                />
-              </details>
+              {advancedOverrides}
             </>
           )}
         </div>

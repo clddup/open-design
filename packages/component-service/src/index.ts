@@ -3,6 +3,7 @@ import {
   schemaValidationIssues,
   type ComponentPropertyAssignment,
   type ComponentPropertyDefinition,
+  type ComponentSelectionTarget,
   type DesignDocument,
   type DesignNode,
   type InstanceNode,
@@ -16,7 +17,7 @@ import {
   slotLimitViolations,
 } from "./component-resolution-support.js";
 
-export const COMPONENT_SERVICE_VERSION = 4 as const;
+export const COMPONENT_SERVICE_VERSION = 5 as const;
 export const COMPONENT_PROJECTION_PREFIX = "__opendesign_instance__:";
 
 export type ComponentResolutionIssueCode =
@@ -41,6 +42,8 @@ export interface ResolvedComponentNode {
   parentProjectionId: string | null;
   projectionId: string;
   root: boolean;
+  selectionInstanceId: string;
+  selectionSourcePath: readonly string[];
   sourceNodeId: string;
   sourcePath: readonly string[];
   slotPropertyName?: string;
@@ -64,6 +67,14 @@ export interface ResolvedComponentOverrideTarget {
   node: DesignNode;
   sourceNodeId: string;
   sourcePath: readonly string[];
+}
+
+export type ComponentSelectionDirection =
+  "enter" | "exit" | "next-sibling" | "previous-sibling";
+
+export interface ComponentSelectionNavigationResult {
+  instanceId: string;
+  componentTarget?: ComponentSelectionTarget;
 }
 
 export interface ResolvedComponentProperty {
@@ -155,6 +166,83 @@ export function resolveComponentInstance(
     };
   }
   return resolveInstance(document, instance);
+}
+
+/**
+ * Navigates the disposable projected tree while returning only persistent
+ * Instance identity plus a stable source path. No projected node ID enters
+ * editor state or DesignDocument.
+ */
+export function navigateComponentSelection(
+  document: DesignDocument,
+  instanceId: string,
+  currentTarget: ComponentSelectionTarget | undefined,
+  direction: ComponentSelectionDirection,
+): ComponentSelectionNavigationResult | null {
+  const resolution = resolveComponentInstance(document, instanceId);
+  if (!resolution.ok) return null;
+  const selectable = resolution.nodes.filter(
+    (candidate) =>
+      !candidate.root &&
+      candidate.editableNodeId === undefined &&
+      candidate.selectionInstanceId === instanceId,
+  );
+  const currentKey = currentTarget
+    ? componentSourcePathKey(currentTarget.sourcePath)
+    : null;
+  const current = currentKey
+    ? selectable.find(
+        (candidate) =>
+          componentSourcePathKey(candidate.selectionSourcePath) === currentKey,
+      )
+    : undefined;
+  const root = resolution.nodes.find(
+    (candidate) =>
+      candidate.root && candidate.selectionInstanceId === instanceId,
+  );
+
+  if (direction === "enter") {
+    const parentProjectionId = current?.projectionId ?? root?.projectionId;
+    if (!parentProjectionId) return null;
+    const child = [...selectable]
+      .reverse()
+      .find(
+        (candidate) =>
+          candidate.parentProjectionId === parentProjectionId &&
+          candidate.node.visible,
+      );
+    return child ? componentNavigationTarget(child) : null;
+  }
+
+  if (!current) return null;
+  if (direction === "exit") {
+    const parent = selectable.find(
+      (candidate) => candidate.projectionId === current.parentProjectionId,
+    );
+    return parent ? componentNavigationTarget(parent) : { instanceId };
+  }
+
+  const siblings = selectable.filter(
+    (candidate) =>
+      candidate.parentProjectionId === current.parentProjectionId &&
+      candidate.node.visible,
+  );
+  const index = siblings.indexOf(current);
+  if (index < 0) return null;
+  const sibling = siblings[index + (direction === "next-sibling" ? 1 : -1)];
+  return sibling ? componentNavigationTarget(sibling) : null;
+}
+
+function componentNavigationTarget(
+  node: ResolvedComponentNode,
+): ComponentSelectionNavigationResult {
+  return {
+    instanceId: node.selectionInstanceId,
+    componentTarget: {
+      instanceId: node.selectionInstanceId,
+      sourcePath: [...node.selectionSourcePath],
+    },
+  };
 }
 
 export function materializeComponentInstances(
@@ -249,9 +337,13 @@ function resolveInstance(
     shell: InstanceNode,
     namespace: readonly string[],
     rootProjectionPath: readonly string[] | null,
+    selectionInstanceId: string,
+    selectionNamespace: readonly string[],
+    rootSelectionPath: readonly string[] | null,
     parentProjectionId: string | null,
     componentStack: readonly string[],
     root: boolean,
+    editableRootNodeId?: string,
   ): void => {
     const effectiveProperties = effectiveComponentProperties(
       document,
@@ -325,6 +417,7 @@ function resolveInstance(
     ): void => {
       const source = document.nodesById[sourceNodeId];
       const sourcePath = [...namespace, sourceNodeId];
+      const selectionSourcePath = [...selectionNamespace, sourceNodeId];
       if (!source) {
         issues.push({
           code: "missing-source-node",
@@ -379,6 +472,8 @@ function resolveInstance(
           parentProjectionId: parentId,
           projectionId,
           root: false,
+          selectionInstanceId,
+          selectionSourcePath,
           sourceNodeId,
           sourcePath,
           slotPropertyName: propertyName,
@@ -421,9 +516,13 @@ function resolveInstance(
               overrideNode,
               overridePath,
               overridePath,
+              overrideNode.id,
+              [],
+              null,
               overrideParentId,
               [...componentStack, resolvedComponentId],
               false,
+              overrideNode.id,
             );
             return;
           }
@@ -444,6 +543,8 @@ function resolveInstance(
             parentProjectionId: overrideParentId,
             projectionId: displayId,
             root: false,
+            selectionInstanceId,
+            selectionSourcePath: overridePath,
             sourceNodeId: overrideNode.id,
             sourcePath: overridePath,
           });
@@ -504,6 +605,9 @@ function resolveInstance(
           nestedShell,
           [...namespace, source.id],
           [...namespace, source.id],
+          selectionInstanceId,
+          [...selectionNamespace, source.id],
+          [...selectionNamespace, source.id],
           parentId,
           [...componentStack, resolvedComponentId],
           nodeRoot,
@@ -556,11 +660,19 @@ function resolveInstance(
       }
       sourcePaths.add(componentSourcePathKey(sourcePath));
       nodes.push({
+        ...(nodeRoot && editableRootNodeId
+          ? { editableNodeId: editableRootNodeId }
+          : {}),
         instanceId: instance.id,
         node: clone,
         parentProjectionId: clone.parentId,
         projectionId,
         root: root && nodeRoot,
+        selectionInstanceId,
+        selectionSourcePath:
+          nodeRoot && rootSelectionPath !== null
+            ? rootSelectionPath
+            : selectionSourcePath,
         sourceNodeId,
         sourcePath,
       });
@@ -575,6 +687,9 @@ function resolveInstance(
   visitComponent(
     instance.properties.componentId,
     instance,
+    [],
+    null,
+    instance.id,
     [],
     null,
     instance.parentId,

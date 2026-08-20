@@ -37,6 +37,7 @@ function renderControllers(runtime: EditorRuntime) {
     const layer = useLayerCommandController({
       activePageId: "page_welcome",
       applyCommands: editor.applyCommands,
+      componentTargetActive: false,
       document: snapshot.document,
       runtime,
       selectedNodeIds: snapshot.state.selection.nodeIds,

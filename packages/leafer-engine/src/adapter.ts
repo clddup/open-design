@@ -1,8 +1,10 @@
 import type {
+  ComponentSelectionTarget,
   DesignChangeSet,
   DesignDocument,
   DesignOperation,
   Point,
+  SelectionState,
   TextRunStyle,
   Transform,
   VectorNetwork,
@@ -10,6 +12,7 @@ import type {
   ViewportState,
 } from "@opendesign/design-contracts";
 import { normalizeLineEndpoints } from "@opendesign/design-contracts";
+import { componentSourcePathKey } from "@opendesign/component-service";
 import {
   BOOLEAN_GEOMETRY_RESOLVER_VERSION,
   createBooleanGeometryResolver,
@@ -425,6 +428,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           ),
         editSize: "size",
         multipleSelect: true,
+        multipleSelectKey: (event: {
+          ctrlKey?: boolean;
+          metaKey?: boolean;
+          shiftKey?: boolean;
+        }) => Boolean(event.ctrlKey || event.metaKey || event.shiftKey),
         boxSelect: "hit",
         hover: false,
         moveable: true,
@@ -750,7 +758,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#syncVectorEdit();
       this.#syncTool(input.tool);
       this.#syncViewport(input.viewport);
-      this.#syncSelection(input.selection.nodeIds);
+      this.#syncSelection(input.selection);
       this.#textRunEditor.syncPresentation();
       this.#editorOverlays.sync(input);
       this.#syncGenerationSkeleton(input.generationSkeleton);
@@ -1691,7 +1699,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         new Set(this.#booleanNodeIds),
       );
       this.#reconcile(projection);
-      this.#syncSelection(input.selection.nodeIds);
+      this.#syncSelection(input.selection);
     } catch (error) {
       this.#report(error);
     } finally {
@@ -1794,8 +1802,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#scheduleEditorRefresh();
   }
 
-  #syncSelection(nodeIds: readonly string[]): void {
-    const target = this.#selectionElements(nodeIds);
+  #syncSelection(selection: SelectionState): void {
+    const target = this.#selectionElements(selection);
     const current = this.#editor.list;
     if (
       current.length === target.length &&
@@ -1810,7 +1818,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #emitSelection(): void {
     if (this.#synchronizing || this.#disposed) return;
     const nodeIds = [...new Set(this.#selectedNodeIds())];
-    const canonical = this.#selectionElements(nodeIds);
+    const anchorNodeId = nodeIds.at(-1);
+    const componentTarget =
+      nodeIds.length === 1 ? this.#selectedComponentTarget() : undefined;
+    const canonical = this.#selectionElements({
+      nodeIds,
+      ...(anchorNodeId ? { anchorNodeId } : {}),
+      ...(componentTarget ? { componentTarget } : {}),
+    });
     const current = this.#editor.list;
     if (
       canonical.length > 0 &&
@@ -1825,11 +1840,24 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       }
       this.#scheduleEditorRefresh();
     }
-    this.#callbacks.onSelectionChange(nodeIds, nodeIds.at(-1));
+    if (componentTarget) {
+      this.#callbacks.onSelectionChange(nodeIds, anchorNodeId, componentTarget);
+    } else {
+      this.#callbacks.onSelectionChange(nodeIds, anchorNodeId);
+    }
   }
 
-  #selectionElements(nodeIds: readonly string[]): LeaferElement[] {
-    return nodeIds.flatMap((nodeId) => {
+  #selectionElements(selection: SelectionState): LeaferElement[] {
+    const componentTarget = selection.componentTarget;
+    if (
+      selection.nodeIds.length === 1 &&
+      componentTarget &&
+      componentTarget.instanceId === selection.nodeIds[0]
+    ) {
+      const target = this.#componentTargetElement(componentTarget);
+      if (target) return [target];
+    }
+    return selection.nodeIds.flatMap((nodeId) => {
       const element = this.#elements.get(nodeId);
       return element ? [element] : [];
     });
@@ -1837,6 +1865,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #beginTransform(): void {
     if (this.#synchronizing || this.#transform || this.#disposed) return;
+    if (this.#selectedComponentTarget()) return;
     if (this.#selectionHasLockedElement()) return;
     const nodeIds = this.#selectedSubtreeIds();
     if (nodeIds.length === 0) return;
@@ -1957,7 +1986,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           input.booleanEditScope,
         ),
       );
-      this.#syncSelection(input.selection.nodeIds);
+      this.#syncSelection(input.selection);
     } catch (error) {
       this.#report(error);
     } finally {
@@ -2100,6 +2129,64 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
   }
 
+  #selectedComponentTarget(): ComponentSelectionTarget | undefined {
+    if (this.#editor.list.length === 0 || !this.#projection) return undefined;
+    const targets = new Map<string, ComponentSelectionTarget>();
+    for (const candidate of this.#editor.list) {
+      const element = candidate as LeaferElement;
+      const projectionId = this.#projectionId(element);
+      const metadata = projectionId
+        ? this.#projection.elementsById.get(projectionId)?.data.data
+        : undefined;
+      if (!metadata || typeof metadata !== "object") continue;
+      const value = (metadata as Record<string, unknown>)
+        .opendesignComponentTarget;
+      if (!value || typeof value !== "object") continue;
+      const instanceId = (value as Record<string, unknown>).instanceId;
+      const sourcePath = (value as Record<string, unknown>).sourcePath;
+      if (
+        typeof instanceId !== "string" ||
+        !isStringArray(sourcePath) ||
+        sourcePath.length === 0 ||
+        this.#nodeId(element) !== instanceId
+      ) {
+        continue;
+      }
+      const target = {
+        instanceId,
+        sourcePath: [...sourcePath] as string[],
+      };
+      targets.set(
+        `${target.instanceId}:${componentSourcePathKey(target.sourcePath)}`,
+        target,
+      );
+    }
+    return targets.size === 1 ? [...targets.values()][0] : undefined;
+  }
+
+  #componentTargetElement(
+    target: ComponentSelectionTarget,
+  ): LeaferElement | undefined {
+    const targetPath = componentSourcePathKey(target.sourcePath);
+    for (const [projectionId, spec] of this.#projection?.elementsById ?? []) {
+      const metadata = spec.data.data;
+      if (!metadata || typeof metadata !== "object") continue;
+      const value = (metadata as Record<string, unknown>)
+        .opendesignComponentTarget;
+      if (!value || typeof value !== "object") continue;
+      const instanceId = (value as Record<string, unknown>).instanceId;
+      const sourcePath = (value as Record<string, unknown>).sourcePath;
+      if (
+        instanceId === target.instanceId &&
+        isStringArray(sourcePath) &&
+        componentSourcePathKey(sourcePath) === targetPath
+      ) {
+        return this.#elements.get(projectionId);
+      }
+    }
+    return undefined;
+  }
+
   #currentTransformKind(): LeaferOperationKind {
     if (this.#editor.resizing) return "resize";
     if (this.#editor.rotating) return "rotate";
@@ -2109,6 +2196,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   }
 
   #selectionHasLockedElement(): boolean {
+    if (this.#selectedComponentTarget()) return true;
     return this.#editor.list.some((element) => {
       const nodeId = this.#nodeId(element as LeaferElement);
       return (
@@ -4324,7 +4412,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         reapplyAll: true,
       });
       this.#syncViewport(this.#input.viewport);
-      this.#syncSelection(this.#input.selection.nodeIds);
+      this.#syncSelection(this.#input.selection);
       this.#textRunEditor.syncPresentation();
       this.#syncVectorEdit();
       this.#applyImageCropPreview();
@@ -5213,6 +5301,12 @@ function imageCropHitAreaId(nodeId: string): string {
 
 function sameStructuredValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function setLeaferElementData(

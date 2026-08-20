@@ -1,4 +1,8 @@
 import {
+  componentSourcePathKey,
+  resolveComponentInstance,
+} from "@opendesign/component-service";
+import {
   DesignNodeSchema,
   DesignTransactionSchema,
   ViewportStateSchema,
@@ -6,6 +10,7 @@ import {
   schemaValidationIssues,
   type DesignActor,
   type DesignChangeSet,
+  type ComponentSelectionTarget,
   type DesignDocument,
   type DesignError,
   type DesignNode,
@@ -482,21 +487,32 @@ export class EditorRuntime {
     });
   }
 
-  setSelection(nodeIds: readonly string[], anchorNodeId?: string): void {
+  setSelection(
+    nodeIds: readonly string[],
+    anchorNodeId?: string,
+    componentTarget?: ComponentSelectionTarget,
+  ): void {
     const unique = [...new Set(nodeIds)].filter(
       (nodeId) => this.#document.nodesById[nodeId] !== undefined,
     );
     const anchor =
       anchorNodeId && unique.includes(anchorNodeId) ? anchorNodeId : unique[0];
+    const target = validComponentSelectionTarget(
+      this.#document,
+      unique,
+      componentTarget,
+    );
     if (
       arraysEqual(unique, this.#selection.nodeIds) &&
-      anchor === this.#selection.anchorNodeId
+      anchor === this.#selection.anchorNodeId &&
+      sameComponentSelectionTarget(target, this.#selection.componentTarget)
     ) {
       return;
     }
     this.#selection = deepFreeze({
       nodeIds: unique,
       ...(anchor === undefined ? {} : { anchorNodeId: anchor }),
+      ...(target === undefined ? {} : { componentTarget: target }),
     });
     this.#refreshSnapshot();
     this.#emit({ type: "selection.changed", selection: this.#selection });
@@ -744,7 +760,18 @@ export class EditorRuntime {
     const selected = previousSelection.nodeIds.filter(
       (nodeId) => document.nodesById[nodeId] !== undefined,
     );
-    if (!arraysEqual(selected, previousSelection.nodeIds)) {
+    const componentTarget = validComponentSelectionTarget(
+      document,
+      selected,
+      previousSelection.componentTarget,
+    );
+    if (
+      !arraysEqual(selected, previousSelection.nodeIds) ||
+      !sameComponentSelectionTarget(
+        componentTarget,
+        previousSelection.componentTarget,
+      )
+    ) {
       const anchorNodeId =
         previousSelection.anchorNodeId &&
         selected.includes(previousSelection.anchorNodeId)
@@ -753,6 +780,7 @@ export class EditorRuntime {
       this.#selection = deepFreeze({
         nodeIds: selected,
         ...(anchorNodeId === undefined ? {} : { anchorNodeId }),
+        ...(componentTarget === undefined ? {} : { componentTarget }),
       });
     }
     this.#refreshSnapshot();
@@ -2439,6 +2467,42 @@ function arraysEqual(
   return (
     left.length === right.length &&
     left.every((value, index) => value === right[index])
+  );
+}
+
+function validComponentSelectionTarget(
+  document: DesignDocument,
+  selectedNodeIds: readonly string[],
+  target: ComponentSelectionTarget | undefined,
+): ComponentSelectionTarget | undefined {
+  if (!target || !selectedNodeIds.includes(target.instanceId)) return undefined;
+  const instance = document.nodesById[target.instanceId];
+  if (instance?.kind !== "instance") return undefined;
+  const resolution = resolveComponentInstance(document, instance.id);
+  if (!resolution.ok) return undefined;
+  const key = componentSourcePathKey(target.sourcePath);
+  const resolved = resolution.nodes.find(
+    (candidate) =>
+      !candidate.root &&
+      candidate.editableNodeId === undefined &&
+      candidate.selectionInstanceId === instance.id &&
+      componentSourcePathKey(candidate.selectionSourcePath) === key,
+  );
+  return resolved
+    ? deepFreeze({
+        instanceId: instance.id,
+        sourcePath: [...resolved.selectionSourcePath],
+      })
+    : undefined;
+}
+
+function sameComponentSelectionTarget(
+  left: ComponentSelectionTarget | undefined,
+  right: ComponentSelectionTarget | undefined,
+): boolean {
+  return (
+    left?.instanceId === right?.instanceId &&
+    arraysEqual(left?.sourcePath ?? [], right?.sourcePath ?? [])
   );
 }
 

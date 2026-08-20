@@ -91,9 +91,11 @@ export {
 } from "./boolean-operations.js";
 export {
   navigateBooleanSelection,
+  navigateLayerSelection,
   resolveBooleanEditScope,
   type BooleanEditScope,
   type BooleanSelectionDirection,
+  type LayerSelectionDirection,
 } from "./selection-navigation.js";
 export {
   planDeleteVectorNode,

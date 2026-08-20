@@ -321,6 +321,75 @@ export function SelectedNodeProperties({
     return formatNumber(parsed);
   };
 
+  const componentSection = (
+    <ComponentSection
+      componentContext={componentContext}
+      defaultOpen={componentContext !== undefined}
+      node={node}
+      onCreateComponent={onCreateComponent}
+      onCreateComponentInstance={onCreateComponentInstance}
+      onDuplicateVariant={onDuplicateVariant}
+      onDissolveVariantSet={onDissolveVariantSet}
+      onDetachComponentInstance={onDetachComponentInstance}
+      onGoToComponentMain={onGoToComponentMain}
+      onRemoveComponent={onRemoveComponent}
+      onRemoveVariant={onRemoveVariant}
+      onAddComponentProperty={onAddComponentProperty}
+      onAddVariantProperty={onAddVariantProperty}
+      onRemoveComponentProperty={onRemoveComponentProperty}
+      onRemoveVariantProperty={onRemoveVariantProperty}
+      onRenameComponentProperty={onRenameComponentProperty}
+      onReorderComponentProperties={onReorderComponentProperties}
+      onRenameVariantProperty={onRenameVariantProperty}
+      onRenameVariantValue={onRenameVariantValue}
+      onReorderVariantProperties={onReorderVariantProperties}
+      onReorderVariantValues={onReorderVariantValues}
+      onResetComponentInstance={onResetComponentInstance}
+      onResetComponentProperty={onResetComponentProperty}
+      onResetComponentSourceOverride={onResetComponentSourceOverride}
+      onUpdateComponentOverride={onUpdateComponentOverride}
+      onSetComponentProperty={onSetComponentProperty}
+      onClearComponentSlot={onClearComponentSlot}
+      onCreateComponentSlotOverride={onCreateComponentSlotOverride}
+      onResetComponentSlot={onResetComponentSlot}
+      onSetComponentSlotSettings={onSetComponentSlotSettings}
+      onSetVariantProperties={onSetVariantProperties}
+    />
+  );
+  const activeComponentSource = componentContext?.activeSourcePath
+    ? componentContext.sourceNodes.find(
+        (source) =>
+          source.sourcePath.join("\u0000") ===
+          componentContext.activeSourcePath?.join("\u0000"),
+      )
+    : undefined;
+
+  if (activeComponentSource) {
+    const sourceNode = activeComponentSource.node;
+    return (
+      <div>
+        <div className={styles.selectionHeading}>
+          <span className={styles.selectionIcon}>
+            <Icon name={nodeIcons[sourceNode.kind]} />
+          </span>
+          <span className={styles.selectionIdentity}>
+            <strong>
+              {sourceNode.name ||
+                t("sidebar.untitledNode", {
+                  kind: t(nodeKindKeys[sourceNode.kind]),
+                })}
+            </strong>
+            <span className={styles.selectionFacts}>
+              <small>{t(nodeKindKeys[sourceNode.kind])}</small>
+              <small>{t("properties.instanceLayerOverride")}</small>
+            </span>
+          </span>
+        </div>
+        {componentSection}
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className={styles.selectionHeading}>
@@ -410,39 +479,7 @@ export function SelectedNodeProperties({
           </div>
         </div>
       </Section>
-      <ComponentSection
-        componentContext={componentContext}
-        defaultOpen={componentContext !== undefined}
-        node={node}
-        onCreateComponent={onCreateComponent}
-        onCreateComponentInstance={onCreateComponentInstance}
-        onDuplicateVariant={onDuplicateVariant}
-        onDissolveVariantSet={onDissolveVariantSet}
-        onDetachComponentInstance={onDetachComponentInstance}
-        onGoToComponentMain={onGoToComponentMain}
-        onRemoveComponent={onRemoveComponent}
-        onRemoveVariant={onRemoveVariant}
-        onAddComponentProperty={onAddComponentProperty}
-        onAddVariantProperty={onAddVariantProperty}
-        onRemoveComponentProperty={onRemoveComponentProperty}
-        onRemoveVariantProperty={onRemoveVariantProperty}
-        onRenameComponentProperty={onRenameComponentProperty}
-        onReorderComponentProperties={onReorderComponentProperties}
-        onRenameVariantProperty={onRenameVariantProperty}
-        onRenameVariantValue={onRenameVariantValue}
-        onReorderVariantProperties={onReorderVariantProperties}
-        onReorderVariantValues={onReorderVariantValues}
-        onResetComponentInstance={onResetComponentInstance}
-        onResetComponentProperty={onResetComponentProperty}
-        onResetComponentSourceOverride={onResetComponentSourceOverride}
-        onUpdateComponentOverride={onUpdateComponentOverride}
-        onSetComponentProperty={onSetComponentProperty}
-        onClearComponentSlot={onClearComponentSlot}
-        onCreateComponentSlotOverride={onCreateComponentSlotOverride}
-        onResetComponentSlot={onResetComponentSlot}
-        onSetComponentSlotSettings={onSetComponentSlotSettings}
-        onSetVariantProperties={onSetVariantProperties}
-      />
+      {componentSection}
       {(node.kind === "frame" || node.kind === "slot") && (
         <AutoLayoutSection
           autoLayout={node.properties.autoLayout ?? { mode: "none" }}

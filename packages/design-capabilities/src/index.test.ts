@@ -76,7 +76,7 @@ describe("design capability manifest", () => {
       status: "degraded",
       name: "Components, instances, and variants",
       provider:
-        "DesignDocument 1.25.0 + @opendesign/component-service contract v4 + isolated @opendesign/figma-interop",
+        "DesignDocument 1.25.0 + @opendesign/component-service contract v5 + isolated @opendesign/figma-interop",
       evidence: { automated: 14, manual: 0 },
     });
     const variables: unknown = capabilityValues.find(

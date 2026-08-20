@@ -391,12 +391,14 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     state.selection.nodeIds.length === 1
       ? designDocument.nodesById[state.selection.nodeIds[0] ?? ""]
       : undefined;
+  const componentTargetActive = state.selection.componentTarget !== undefined;
   const selectedBooleanParent = selectedNode?.parentId
     ? designDocument.nodesById[selectedNode.parentId]
     : undefined;
   const selectedComponentContext = createComponentInspectorContext(
     designDocument,
     selectedNode,
+    state.selection.componentTarget,
   );
   const selectedComponents = state.selection.nodeIds.flatMap((nodeId) => {
     const component = Object.values(designDocument.componentsById).find(
@@ -835,6 +837,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
   } = useLayerCommandController({
     activePageId,
     applyCommands,
+    componentTargetActive,
     document: designDocument,
     runtime,
     selectedNodeIds: state.selection.nodeIds,
@@ -1052,6 +1055,11 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
     const handleKey = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
       const modifier = event.metaKey || event.ctrlKey;
+      if (event.key === "Escape" && state.selection.nodeIds.length > 0) {
+        event.preventDefault();
+        runtime.setSelection([]);
+        return;
+      }
       if (
         modifier &&
         event.shiftKey &&
@@ -2157,7 +2165,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         }
       >
         <Titlebar
-          canExportSvg={state.selection.nodeIds.length > 0}
+          canExportSvg={
+            state.selection.nodeIds.length > 0 && !componentTargetActive
+          }
           dirty={state.dirty}
           documentName={documentName}
           leftPanelVisible={leftPanelVisible}
@@ -2181,7 +2191,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
         />
         <Toolbar
           booleanOperation={
-            selectedNode?.kind === "boolean"
+            !componentTargetActive && selectedNode?.kind === "boolean"
               ? selectedNode.properties.operation
               : null
           }
@@ -2195,7 +2205,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
           }
           canReorder={layerOrderAvailability}
           canDelete={canDeleteSelection}
-          canDuplicate={state.selection.nodeIds.length > 0}
+          canDuplicate={
+            state.selection.nodeIds.length > 0 && !componentTargetActive
+          }
           canRedo={state.history.canRedo}
           canUndo={state.history.canUndo}
           hierarchyAction={
@@ -2240,7 +2252,9 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
             onReplaceAsset={replaceImageAsset}
             onDelete={(nodeId) => deleteNodes([nodeId])}
             onReparent={reparentLayers}
-            onSelect={(nodeId) => runtime.setSelection([nodeId], nodeId)}
+            onSelect={(nodeIds, anchorNodeId, componentTarget) =>
+              runtime.setSelection(nodeIds, anchorNodeId, componentTarget)
+            }
             onTabChange={setSidebarTab}
             onToggleLock={(nodeId) => {
               const node = designDocument.nodesById[nodeId];
@@ -2251,6 +2265,8 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
               if (node) updateNode(nodeId, { visible: !node.visible });
             }}
             selectedNodeIds={state.selection.nodeIds}
+            selectionAnchorNodeId={state.selection.anchorNodeId}
+            selectionComponentTarget={state.selection.componentTarget}
             tab={sidebarTab}
             styleActions={styleActions}
             variableActions={variableActions}
@@ -2299,7 +2315,7 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 state.selection.nodeIds.length > 0 ? (
                   <CanvasSelectionActions
                     canDelete={canDeleteSelection}
-                    canDuplicate={state.selection.nodeIds.length > 0}
+                    canDuplicate={!componentTargetActive}
                     canHierarchyAction={
                       canUngroupBooleanSelection ||
                       canUngroupSelection ||
@@ -2407,7 +2423,11 @@ export function App({ initialView }: { initialView?: AppView } = {}) {
                 canDelete={canDeleteSelection}
                 canAddToVariantSet={canAddToVariantSet}
                 canCombineVariants={canCombineVariants}
-                layoutMode={layoutInspectorMode(designDocument, selectedNode)}
+                layoutMode={
+                  componentTargetActive
+                    ? null
+                    : layoutInspectorMode(designDocument, selectedNode)
+                }
                 document={designDocument}
                 node={selectedNode}
                 onArrange={arrangeSelection}

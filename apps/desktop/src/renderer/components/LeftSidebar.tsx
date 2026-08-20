@@ -1,4 +1,9 @@
-import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import type {
+  ComponentSelectionTarget,
+  DesignDocument,
+  DesignNode,
+} from "@opendesign/design-contracts";
+import { resolveComponentInstance } from "@opendesign/component-service";
 import {
   canDeleteNodes,
   resolveBooleanEditScope,
@@ -16,6 +21,7 @@ import {
   useState,
   type CSSProperties,
   type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import type { AssetActionResult, DesignAssetReference } from "../design-assets";
 import type {
@@ -40,10 +46,15 @@ import styles from "./LeftSidebar.module.scss";
 import { SidebarViewTabs } from "./SidebarViewTabs";
 
 type TreeEntry = {
+  componentTarget?: ComponentSelectionTarget;
   node: DesignNode;
   depth: number;
   effectiveLocked: boolean;
+  hasChildren: boolean;
   inheritedLocked: boolean;
+  key: string;
+  selectionNodeId: string;
+  virtual: boolean;
 };
 
 type ActiveLayerDrop = {
@@ -146,8 +157,76 @@ function flattenPageTree(
 
     visited.add(nodeId);
     const effectiveLocked = node.locked || inheritedLocked;
-    entries.push({ node, depth, effectiveLocked, inheritedLocked });
+    let hasProjectedChildren = false;
+    const resolution =
+      node.kind === "instance"
+        ? resolveComponentInstance(document, node.id)
+        : null;
+    if (resolution?.ok) {
+      const root = resolution.nodes.find((candidate) => candidate.root);
+      hasProjectedChildren = Boolean(
+        root &&
+        resolution.nodes.some(
+          (candidate) =>
+            candidate.parentProjectionId === root.projectionId &&
+            candidate.editableNodeId === undefined,
+        ),
+      );
+    }
+    entries.push({
+      node,
+      depth,
+      effectiveLocked,
+      hasChildren: node.childIds.length > 0 || hasProjectedChildren,
+      inheritedLocked,
+      key: node.id,
+      selectionNodeId: node.id,
+      virtual: false,
+    });
     if (collapsedNodeIds.has(nodeId)) return;
+    if (resolution?.ok) {
+      const root = resolution.nodes.find((candidate) => candidate.root);
+      const visitProjected = (
+        parentProjectionId: string,
+        projectedDepth: number,
+        projectedInheritedLocked: boolean,
+      ) => {
+        for (const candidate of resolution.nodes) {
+          if (candidate.parentProjectionId !== parentProjectionId) continue;
+          if (candidate.editableNodeId !== undefined) continue;
+          const projectedLocked =
+            candidate.node.locked || projectedInheritedLocked;
+          const projectedChildren = resolution.nodes.filter(
+            (child) =>
+              child.parentProjectionId === candidate.projectionId &&
+              child.editableNodeId === undefined,
+          );
+          const componentTarget = {
+            instanceId: candidate.selectionInstanceId,
+            sourcePath: [...candidate.selectionSourcePath],
+          };
+          entries.push({
+            componentTarget,
+            node: candidate.node,
+            depth: projectedDepth,
+            effectiveLocked: projectedLocked,
+            hasChildren: projectedChildren.length > 0,
+            inheritedLocked: projectedInheritedLocked,
+            key: candidate.projectionId,
+            selectionNodeId: candidate.selectionInstanceId,
+            virtual: true,
+          });
+          if (!collapsedNodeIds.has(candidate.projectionId)) {
+            visitProjected(
+              candidate.projectionId,
+              projectedDepth + 1,
+              projectedLocked,
+            );
+          }
+        }
+      };
+      if (root) visitProjected(root.projectionId, depth + 1, effectiveLocked);
+    }
     for (const childId of node.childIds) {
       visit(childId, depth + 1, effectiveLocked);
     }
@@ -172,12 +251,79 @@ function collectAncestorIds(
   return ancestors;
 }
 
+function collectTreeAncestorKeys(
+  entries: readonly TreeEntry[],
+  matchingKeys: ReadonlySet<string>,
+): Set<string> {
+  const ancestors = new Set<string>();
+  const path: string[] = [];
+  for (const entry of entries) {
+    path.length = entry.depth;
+    if (matchingKeys.has(entry.key)) path.forEach((key) => ancestors.add(key));
+    path[entry.depth] = entry.key;
+  }
+  return ancestors;
+}
+
+export function layerPanelSelection(
+  visibleNodeIds: readonly string[],
+  selectedNodeIds: readonly string[],
+  anchorNodeId: string | undefined,
+  nodeId: string,
+  modifiers: Pick<ReactMouseEvent, "ctrlKey" | "metaKey" | "shiftKey">,
+): { nodeIds: string[]; anchorNodeId?: string } {
+  if (modifiers.shiftKey && anchorNodeId) {
+    const anchorIndex = visibleNodeIds.indexOf(anchorNodeId);
+    const targetIndex = visibleNodeIds.indexOf(nodeId);
+    if (anchorIndex >= 0 && targetIndex >= 0) {
+      return {
+        nodeIds: visibleNodeIds.slice(
+          Math.min(anchorIndex, targetIndex),
+          Math.max(anchorIndex, targetIndex) + 1,
+        ),
+        anchorNodeId,
+      };
+    }
+  }
+  if (modifiers.metaKey || modifiers.ctrlKey) {
+    const selected = new Set(selectedNodeIds);
+    if (selected.has(nodeId)) selected.delete(nodeId);
+    else selected.add(nodeId);
+    const nodeIds = visibleNodeIds.filter((candidate) =>
+      selected.has(candidate),
+    );
+    return {
+      nodeIds,
+      ...(nodeIds.length > 0
+        ? {
+            anchorNodeId: selected.has(nodeId) ? nodeId : nodeIds.at(-1),
+          }
+        : {}),
+    };
+  }
+  return { nodeIds: [nodeId], anchorNodeId: nodeId };
+}
+
+function sameComponentTarget(
+  left: ComponentSelectionTarget | undefined,
+  right: ComponentSelectionTarget | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return (
+    left.instanceId === right.instanceId &&
+    left.sourcePath.length === right.sourcePath.length &&
+    left.sourcePath.every((value, index) => value === right.sourcePath[index])
+  );
+}
+
 export function LeftSidebar({
   className = "",
   document,
   hidden = false,
   activePageId,
   selectedNodeIds,
+  selectionAnchorNodeId,
+  selectionComponentTarget,
   tab,
   onTabChange,
   onPageChange,
@@ -206,6 +352,8 @@ export function LeftSidebar({
   hidden?: boolean;
   activePageId: string;
   selectedNodeIds: readonly string[];
+  selectionAnchorNodeId?: string;
+  selectionComponentTarget?: ComponentSelectionTarget;
   tab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
   onPageChange: (pageId: string) => void;
@@ -222,7 +370,11 @@ export function LeftSidebar({
   onPlaceComponent: (componentId: string) => AssetActionResult;
   onReplaceAsset: (assetId: string) => Promise<AssetActionResult>;
   onDelete: (nodeId: string) => void;
-  onSelect: (nodeId: string) => void;
+  onSelect: (
+    nodeIds: readonly string[],
+    anchorNodeId?: string,
+    componentTarget?: ComponentSelectionTarget,
+  ) => void;
   onReparent: (request: LayerReparentRequest) => LayerReparentResult;
   onToggleLock: (nodeId: string) => void;
   onToggleVisibility: (nodeId: string) => void;
@@ -263,16 +415,16 @@ export function LeftSidebar({
               .toLocaleLowerCase()
               .includes(normalizedLayerQuery),
           )
-          .map(({ node }) => node.id)
+          .map(({ key }) => key)
       : [],
   );
   if (normalizedLayerQuery) {
-    collectAncestorIds(document, [...matchingLayerIds]).forEach((nodeId) =>
-      matchingLayerIds.add(nodeId),
+    collectTreeAncestorKeys(allLayers, matchingLayerIds).forEach((key) =>
+      matchingLayerIds.add(key),
     );
   }
   const layers = normalizedLayerQuery
-    ? allLayers.filter(({ node }) => matchingLayerIds.has(node.id))
+    ? allLayers.filter(({ key }) => matchingLayerIds.has(key))
     : allLayers;
   const selectedIds = new Set(selectedNodeIds);
   const componentIdentityNodeIds = new Set<string>();
@@ -286,14 +438,45 @@ export function LeftSidebar({
     selectedNodeIds,
   );
   const firstFocusableId =
-    layers.find(({ node }) => selectedIds.has(node.id))?.node.id ??
-    layers[0]?.node.id;
+    layers.find(({ componentTarget, selectionNodeId }) =>
+      componentTarget
+        ? sameComponentTarget(componentTarget, selectionComponentTarget)
+        : !selectionComponentTarget && selectedIds.has(selectionNodeId),
+    )?.key ?? layers[0]?.key;
 
   useEffect(() => {
-    const selectionKey = `${document.documentId}:${activePageId}:${selectedNodeIds.join("\u0000")}`;
+    const selectionKey = `${document.documentId}:${activePageId}:${selectedNodeIds.join("\u0000")}:${selectionComponentTarget?.sourcePath.join("\u0000") ?? ""}`;
     if (revealedSelectionKey.current === selectionKey) return;
     revealedSelectionKey.current = selectionKey;
     const ancestors = collectAncestorIds(document, selectedNodeIds);
+    if (selectionComponentTarget) {
+      ancestors.add(selectionComponentTarget.instanceId);
+      const resolution = resolveComponentInstance(
+        document,
+        selectionComponentTarget.instanceId,
+      );
+      if (resolution.ok) {
+        const target = resolution.nodes.find(
+          (candidate) =>
+            candidate.selectionInstanceId ===
+              selectionComponentTarget.instanceId &&
+            candidate.selectionSourcePath.length ===
+              selectionComponentTarget.sourcePath.length &&
+            candidate.selectionSourcePath.every(
+              (value, index) =>
+                value === selectionComponentTarget.sourcePath[index],
+            ),
+        );
+        let parentProjectionId = target?.parentProjectionId ?? null;
+        while (parentProjectionId) {
+          ancestors.add(parentProjectionId);
+          parentProjectionId =
+            resolution.nodes.find(
+              (candidate) => candidate.projectionId === parentProjectionId,
+            )?.parentProjectionId ?? null;
+        }
+      }
+    }
     if (ancestors.size === 0) return;
     setCollapsedNodeIds((current) => {
       if (![...ancestors].some((nodeId) => current.has(nodeId))) return current;
@@ -301,7 +484,7 @@ export function LeftSidebar({
       ancestors.forEach((nodeId) => next.delete(nodeId));
       return next;
     });
-  }, [activePageId, document, selectedNodeIds]);
+  }, [activePageId, document, selectedNodeIds, selectionComponentTarget]);
 
   useEffect(() => {
     setCollapsedNodeIds(new Set());
@@ -730,10 +913,22 @@ export function LeftSidebar({
                 {t("sidebar.noLayersFound")}
               </span>
             )}
-            {layers.map(({ node, depth, effectiveLocked, inheritedLocked }) => {
-              const selected = selectedIds.has(node.id);
-              const hasChildren = node.childIds.length > 0;
-              const collapsed = collapsedNodeIds.has(node.id);
+            {layers.map((entry) => {
+              const {
+                componentTarget,
+                node,
+                depth,
+                effectiveLocked,
+                hasChildren,
+                inheritedLocked,
+                key,
+                selectionNodeId,
+                virtual,
+              } = entry;
+              const selected = componentTarget
+                ? sameComponentTarget(componentTarget, selectionComponentTarget)
+                : !selectionComponentTarget && selectedIds.has(selectionNodeId);
+              const collapsed = collapsedNodeIds.has(key);
               return (
                 <div
                   aria-expanded={hasChildren ? !collapsed : undefined}
@@ -746,7 +941,7 @@ export function LeftSidebar({
                       : node.parentId === booleanEditScope?.booleanId
                         ? styles.layerEditScopeOperand
                         : null,
-                    activeDrop?.nodeId === node.id
+                    !virtual && activeDrop?.nodeId === node.id
                       ? activeDrop.position === "before"
                         ? styles.layerDropBefore
                         : activeDrop.position === "inside"
@@ -756,7 +951,7 @@ export function LeftSidebar({
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  key={node.id}
+                  key={key}
                   onDragLeave={(event) => {
                     const nextTarget = event.relatedTarget;
                     if (
@@ -769,10 +964,16 @@ export function LeftSidebar({
                       setActiveDrop(null);
                     }
                   }}
-                  onDragOver={(event) =>
-                    updateDrop(event, node, effectiveLocked)
+                  onDragOver={
+                    virtual
+                      ? undefined
+                      : (event) => updateDrop(event, node, effectiveLocked)
                   }
-                  onDrop={(event) => finishDrop(event, node, effectiveLocked)}
+                  onDrop={
+                    virtual
+                      ? undefined
+                      : (event) => finishDrop(event, node, effectiveLocked)
+                  }
                   role="treeitem"
                   style={{ "--layer-depth": depth } as CSSProperties}
                 >
@@ -785,7 +986,7 @@ export function LeftSidebar({
                         { name: node.name || t(nodeKindKeys[node.kind]) },
                       )}
                       className={styles.layerDisclosure}
-                      onClick={() => toggleNode(node.id)}
+                      onClick={() => toggleNode(key)}
                       type="button"
                     >
                       <Icon
@@ -800,7 +1001,7 @@ export function LeftSidebar({
                   )}
                   <button
                     className={styles.layerMain}
-                    draggable={!effectiveLocked}
+                    draggable={!virtual && !effectiveLocked}
                     onDragEnd={() => {
                       if (draggedNodeIds.current) {
                         clearDrag();
@@ -808,15 +1009,32 @@ export function LeftSidebar({
                       }
                     }}
                     onDragStart={
-                      effectiveLocked
+                      virtual || effectiveLocked
                         ? undefined
                         : (event) => startDrag(event, node.id)
                     }
-                    onClick={() => {
-                      if (hasChildren) expandNode(node.id);
-                      onSelect(node.id);
+                    onClick={(event) => {
+                      if (hasChildren) expandNode(key);
+                      if (componentTarget) {
+                        onSelect(
+                          [selectionNodeId],
+                          selectionNodeId,
+                          componentTarget,
+                        );
+                        return;
+                      }
+                      const selection = layerPanelSelection(
+                        layers
+                          .filter((candidate) => !candidate.virtual)
+                          .map((candidate) => candidate.selectionNodeId),
+                        selectedNodeIds,
+                        selectionAnchorNodeId,
+                        selectionNodeId,
+                        event,
+                      );
+                      onSelect(selection.nodeIds, selection.anchorNodeId);
                     }}
-                    tabIndex={node.id === firstFocusableId ? 0 : -1}
+                    tabIndex={key === firstFocusableId ? 0 : -1}
                     type="button"
                   >
                     <Icon
@@ -845,39 +1063,45 @@ export function LeftSidebar({
                       )}
                     </span>
                   )}
-                  <span className={styles.layerActions}>
-                    <IconButton
-                      className={effectiveLocked ? styles.layerLockActive : ""}
-                      disabled={inheritedLocked && !node.locked}
-                      icon={effectiveLocked ? "lucide:lock" : "lucide:unlock"}
-                      label={t(
-                        node.locked
-                          ? "sidebar.unlockNode"
-                          : inheritedLocked
-                            ? "sidebar.lockedByParent"
-                            : "sidebar.lockNode",
-                        { name: node.name || t(nodeKindKeys[node.kind]) },
-                      )}
-                      onClick={() => onToggleLock(node.id)}
-                      selected={effectiveLocked}
-                    />
-                    <IconButton
-                      icon={node.visible ? "lucide:eye" : "lucide:eye-off"}
-                      label={t(
-                        node.visible ? "sidebar.hideNode" : "sidebar.showNode",
-                        { name: node.name || t(nodeKindKeys[node.kind]) },
-                      )}
-                      onClick={() => onToggleVisibility(node.id)}
-                    />
-                    <IconButton
-                      disabled={!canDeleteNodes(document, [node.id])}
-                      icon="lucide:trash-2"
-                      label={t("sidebar.deleteNode", {
-                        name: node.name || t(nodeKindKeys[node.kind]),
-                      })}
-                      onClick={() => onDelete(node.id)}
-                    />
-                  </span>
+                  {!virtual && (
+                    <span className={styles.layerActions}>
+                      <IconButton
+                        className={
+                          effectiveLocked ? styles.layerLockActive : ""
+                        }
+                        disabled={inheritedLocked && !node.locked}
+                        icon={effectiveLocked ? "lucide:lock" : "lucide:unlock"}
+                        label={t(
+                          node.locked
+                            ? "sidebar.unlockNode"
+                            : inheritedLocked
+                              ? "sidebar.lockedByParent"
+                              : "sidebar.lockNode",
+                          { name: node.name || t(nodeKindKeys[node.kind]) },
+                        )}
+                        onClick={() => onToggleLock(node.id)}
+                        selected={effectiveLocked}
+                      />
+                      <IconButton
+                        icon={node.visible ? "lucide:eye" : "lucide:eye-off"}
+                        label={t(
+                          node.visible
+                            ? "sidebar.hideNode"
+                            : "sidebar.showNode",
+                          { name: node.name || t(nodeKindKeys[node.kind]) },
+                        )}
+                        onClick={() => onToggleVisibility(node.id)}
+                      />
+                      <IconButton
+                        disabled={!canDeleteNodes(document, [node.id])}
+                        icon="lucide:trash-2"
+                        label={t("sidebar.deleteNode", {
+                          name: node.name || t(nodeKindKeys[node.kind]),
+                        })}
+                        onClick={() => onDelete(node.id)}
+                      />
+                    </span>
+                  )}
                 </div>
               );
             })}

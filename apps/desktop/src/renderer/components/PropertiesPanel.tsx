@@ -540,7 +540,7 @@ export function PropertiesPanel({
             <span>{t("properties.selectLayer")}</span>
           </div>
         )}
-        {selectionCount > 0 && node && (
+        {selectionCount > 0 && node && !componentContext?.activeSourcePath && (
           <ExportSettingsEditor
             busy={svgOperation !== null}
             node={node}
@@ -550,7 +550,7 @@ export function PropertiesPanel({
             onExport={onExportStoredSetting}
           />
         )}
-        {selectionCount > 0 && (
+        {selectionCount > 0 && !componentContext?.activeSourcePath && (
           <ExportSection
             busy={svgOperation !== null}
             format={exportFormat}

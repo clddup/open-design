@@ -6,6 +6,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   componentProjectionId,
+  navigateComponentSelection,
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import { createEmptyDesignDocument } from "./document.js";
@@ -28,6 +29,93 @@ import {
 } from "./component-operations.js";
 
 describe("component operations", () => {
+  it("navigates projected instance layers by stable source path", () => {
+    const document = componentFixture(true);
+    const entered = navigateComponentSelection(
+      document,
+      "button_instance",
+      undefined,
+      "enter",
+    );
+    expect(entered).toEqual({
+      instanceId: "button_instance",
+      componentTarget: {
+        instanceId: "button_instance",
+        sourcePath: ["button_label"],
+      },
+    });
+    expect(
+      navigateComponentSelection(
+        document,
+        "button_instance",
+        {
+          instanceId: "button_instance",
+          sourcePath: ["button_bg"],
+        },
+        "next-sibling",
+      ),
+    ).toEqual(entered);
+    expect(
+      navigateComponentSelection(
+        document,
+        "button_instance",
+        entered?.componentTarget,
+        "exit",
+      ),
+    ).toEqual({ instanceId: "button_instance" });
+  });
+
+  it("keeps valid projected selection across revisions and falls back when its source disappears", () => {
+    const runtime = new EditorRuntime(componentFixture(true));
+    runtime.setSelection(["button_instance"], "button_instance", {
+      instanceId: "button_instance",
+      sourcePath: ["button_label"],
+    });
+
+    const override = planSetComponentOverride(runtime.getSnapshot().document, {
+      instanceId: "button_instance",
+      sourcePath: ["button_bg"],
+      patch: { opacity: 0.8 },
+      commandPrefix: "retain_projected_selection",
+    });
+    expect(override.ok).toBe(true);
+    apply(
+      runtime,
+      override.ok ? override.commands : [],
+      "retain-projected-selection",
+    );
+    expect(runtime.getSnapshot().state.selection.componentTarget).toEqual({
+      instanceId: "button_instance",
+      sourcePath: ["button_label"],
+    });
+
+    const deletion = planDeleteNodes(runtime.getSnapshot().document, {
+      nodeIds: ["button_label"],
+      commandPrefix: "remove_selected_component_source",
+    });
+    expect(deletion.ok).toBe(true);
+    apply(
+      runtime,
+      deletion.ok ? deletion.commands : [],
+      "remove-selected-component-source",
+    );
+    expect(runtime.getSnapshot().state.selection).toEqual({
+      nodeIds: ["button_instance"],
+      anchorNodeId: "button_instance",
+    });
+
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().state.selection).toEqual({
+      nodeIds: ["button_instance"],
+      anchorNodeId: "button_instance",
+    });
+    expect(runtime.redo().ok).toBe(true);
+    expect(runtime.getSnapshot().state.selection).toEqual({
+      nodeIds: ["button_instance"],
+      anchorNodeId: "button_instance",
+    });
+  });
+
   it("syncs main changes while retaining, resetting, and undoing overrides", () => {
     const runtime = new EditorRuntime(componentFixture());
     const created = planCreateComponent(runtime.getSnapshot().document, {
@@ -274,8 +362,39 @@ describe("component operations", () => {
       ),
     ).toBe(true);
     expect(
+      resolved.nodes.find(
+        (node) =>
+          node.projectionId ===
+          componentProjectionId("button_instance", ["nested_icon"]),
+      ),
+    ).toMatchObject({
+      selectionSourcePath: ["nested_icon"],
+      sourcePath: ["nested_icon", "icon_alt_main"],
+    });
+    expect(
       resolved.nodes.some((node) => node.sourceNodeId === "icon_alt_dot"),
     ).toBe(true);
+
+    runtime.setSelection(["button_instance"], "button_instance", {
+      instanceId: "button_instance",
+      sourcePath: ["nested_icon"],
+    });
+    expect(runtime.getSnapshot().state.selection).toEqual({
+      nodeIds: ["button_instance"],
+      anchorNodeId: "button_instance",
+      componentTarget: {
+        instanceId: "button_instance",
+        sourcePath: ["nested_icon"],
+      },
+    });
+    runtime.setSelection(["button_instance"], "button_instance", {
+      instanceId: "button_instance",
+      sourcePath: ["missing_nested_source"],
+    });
+    expect(runtime.getSnapshot().state.selection).toEqual({
+      nodeIds: ["button_instance"],
+      anchorNodeId: "button_instance",
+    });
   });
 
   it("deletes a Main Page atomically and preserves surviving instances as editable frames", () => {

@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
+  ComponentOverridePatch,
   DesignNode,
   InstanceSwapPreferredValue,
   LayoutConstraints,
@@ -105,6 +106,10 @@ function renderPanel(
       insertionIndex: number,
     ) => void;
     onUpdate?: (updates: UpdatePropertiesPatch) => void;
+    onUpdateComponentOverride?: (
+      sourcePath: readonly string[],
+      patch: ComponentOverridePatch,
+    ) => void;
     fontContext?: FontInspectorContext;
   } = {},
 ) {
@@ -204,7 +209,9 @@ function renderPanel(
           }}
           rasterFeedback={null}
           onUpdate={onUpdate}
-          onUpdateComponentOverride={vi.fn()}
+          onUpdateComponentOverride={
+            options.onUpdateComponentOverride ?? vi.fn()
+          }
           selectionCount={options.selectionCount ?? 2}
           svgExportSettings={{ includeLayerIds: false, padding: 0 }}
           svgFeedback={options.feedback ?? null}
@@ -317,6 +324,26 @@ const textNode: TextNode = {
   },
 };
 
+const componentInstanceNode: Extract<DesignNode, { kind: "instance" }> = {
+  id: "button_instance",
+  name: "Button instance",
+  parentId: null,
+  childIds: [],
+  visible: true,
+  locked: false,
+  transform: [1, 0, 0, 1, 120, 80],
+  size: { width: 240, height: 48 },
+  exportSettings: [],
+  opacity: 1,
+  extensions: {},
+  kind: "instance",
+  properties: {
+    componentId: "button_component",
+    componentProperties: {},
+    overrides: [],
+  },
+};
+
 describe("PropertiesPanel information architecture", () => {
   it("prioritizes real design controls and progressively discloses advanced sections", async () => {
     const user = userEvent.setup();
@@ -352,6 +379,51 @@ describe("PropertiesPanel information architecture", () => {
       "aria-expanded",
       "false",
     );
+  });
+
+  it("shows only the active derived component override after canvas drill-in", async () => {
+    const user = userEvent.setup();
+    const onUpdateComponentOverride = vi.fn();
+    renderPanel({
+      componentContext: {
+        activeSourcePath: [textNode.id],
+        availableComponents: [],
+        availableSlotPreferredValues: [],
+        componentName: "Primary button",
+        componentProperties: [],
+        componentPropertyDefinitions: [],
+        isMain: false,
+        overrideCount: 0,
+        sourceNodes: [
+          {
+            node: textNode,
+            overridden: false,
+            sourcePath: [textNode.id],
+          },
+        ],
+      },
+      node: componentInstanceNode,
+      onUpdateComponentOverride,
+      selectionCount: 1,
+    });
+
+    expect(screen.getAllByText(textNode.name)).toHaveLength(2);
+    expect(screen.getAllByText("Layer overrides").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Source layer")).toHaveValue(textNode.id);
+    expect(
+      screen.queryByRole("button", { name: "Duplicate layer" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete layer" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Export" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "Visible" }));
+    expect(onUpdateComponentOverride).toHaveBeenCalledWith([textNode.id], {
+      visible: false,
+    });
   });
 });
 

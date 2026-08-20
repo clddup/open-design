@@ -11,7 +11,7 @@ import {
 } from "./mapping.js";
 
 describe("component projection", () => {
-  it("projects instance children with stable ids and selects through the instance shell", () => {
+  it("projects instance children with stable ids and explicit drill-in targets", () => {
     const document = fixture();
     const projection = projectDesignPage(document, "instances");
     const backgroundId = componentProjectionId("button_instance", [
@@ -23,11 +23,15 @@ describe("component projection", () => {
     );
     expect(
       projection.elementsById.get("button_instance")?.data.editConfig,
-    ).toMatchObject({ preventEditInner: true, resizeable: false });
+    ).toMatchObject({ preventEditInner: false, resizeable: false });
     expect(projection.elementsById.get("button_instance")?.childIds).toContain(
       backgroundId,
     );
     expect(projection.elementsById.get(backgroundId)?.data.data).toMatchObject({
+      opendesignComponentTarget: {
+        instanceId: "button_instance",
+        sourcePath: ["button_bg"],
+      },
       opendesignNodeId: "button_instance",
       opendesignSourceNodeId: "button_bg",
     });

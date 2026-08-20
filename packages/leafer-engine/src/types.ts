@@ -1,4 +1,5 @@
 import type {
+  ComponentSelectionTarget,
   DesignChangeSet,
   DesignDocument,
   DesignOperation,
@@ -138,7 +139,11 @@ export interface LeaferEngineCallbacks {
   onImageCropCommit?(request: LeaferImageCropCommitRequest): boolean;
   onImageCropStateChange?(state: LeaferImageCropState | null): void;
   onOperations(request: LeaferOperationRequest): boolean;
-  onSelectionChange(nodeIds: string[], anchorNodeId?: string): void;
+  onSelectionChange(
+    nodeIds: string[],
+    anchorNodeId?: string,
+    componentTarget?: ComponentSelectionTarget,
+  ): void;
   onTextRangeSelectionChange?(selection: LeaferTextRangeSelection | null): void;
   onVectorCut?(request: LeaferVectorCutRequest): LeaferVectorCutResponse;
   onVectorLineCut?(

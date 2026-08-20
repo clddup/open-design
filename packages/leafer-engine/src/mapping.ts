@@ -1,4 +1,5 @@
 import type {
+  ComponentSelectionTarget,
   DesignChangeSet,
   DesignDocument,
   DesignNode,
@@ -93,7 +94,15 @@ export function projectDesignPage(
           projectionDocument.nodesById[resolved.projectionId] ?? resolved.node,
           warnings,
           {
-            nodeId: resolved.editableNodeId ?? node.id,
+            ...(!resolved.root && resolved.editableNodeId === undefined
+              ? {
+                  componentTarget: {
+                    instanceId: resolved.selectionInstanceId,
+                    sourcePath: [...resolved.selectionSourcePath],
+                  },
+                }
+              : {}),
+            nodeId: resolved.editableNodeId ?? resolved.selectionInstanceId,
             kind: resolved.root ? "instance" : resolved.node.kind,
             sourceNodeId: resolved.sourceNodeId,
           },
@@ -312,6 +321,7 @@ function toElementSpec(
   node: DesignNode,
   warnings: LeaferFidelityWarning[],
   identity?: {
+    componentTarget?: ComponentSelectionTarget;
     kind: DesignNode["kind"];
     nodeId: string;
     sourceNodeId: string;
@@ -333,13 +343,20 @@ function toElementSpec(
     ...(identity?.kind === "instance"
       ? {
           editConfig: {
-            preventEditInner: true,
+            preventEditInner: false,
             resizeable: false,
           },
         }
       : {}),
     ...mapNodeAppearance(node, warnings),
     data: {
+      ...(identity?.componentTarget
+        ? {
+            opendesignComponentTarget: structuredClone(
+              identity.componentTarget,
+            ),
+          }
+        : {}),
       opendesignLocked: effectivelyLocked,
       opendesignNodeId: identity?.nodeId ?? node.id,
       opendesignNodeKind: identity?.kind ?? node.kind,

@@ -161,6 +161,10 @@ export function useImportExportWorkflow({
     if (!desktop || !current.editorActive || operationController.current)
       return;
     const frozen = current.runtime.getSnapshot();
+    if (frozen.state.selection.componentTarget) {
+      current.setEditorError(current.t("error.importSvg"));
+      return;
+    }
     let target;
     try {
       target = captureSvgImportTarget(
@@ -235,7 +239,10 @@ export function useImportExportWorkflow({
       if (!desktop || !current.editorActive || operationController.current)
         return;
       const frozen = current.runtime.getSnapshot();
-      if (frozen.state.selection.nodeIds.length === 0) {
+      if (
+        frozen.state.selection.nodeIds.length === 0 ||
+        frozen.state.selection.componentTarget
+      ) {
         current.showProperties();
         current.setEditorError(current.t("error.exportSvgSelection"));
         return;
@@ -325,7 +332,10 @@ export function useImportExportWorkflow({
       if (!desktop || !current.editorActive || operationController.current)
         return;
       const frozen = current.runtime.getSnapshot();
-      if (frozen.state.selection.nodeIds.length !== 1) {
+      if (
+        frozen.state.selection.nodeIds.length !== 1 ||
+        frozen.state.selection.componentTarget
+      ) {
         current.showProperties();
         current.setEditorError(current.t("error.exportRasterSelection"));
         return;
@@ -421,7 +431,11 @@ export function useImportExportWorkflow({
       const frozen = current.runtime.getSnapshot();
       const nodeId = frozen.state.selection.nodeIds[0];
       const node = nodeId ? frozen.document.nodesById[nodeId] : undefined;
-      if (frozen.state.selection.nodeIds.length !== 1 || !node) {
+      if (
+        frozen.state.selection.nodeIds.length !== 1 ||
+        frozen.state.selection.componentTarget ||
+        !node
+      ) {
         current.setEditorError(current.t("error.exportRasterSelection"));
         return;
       }

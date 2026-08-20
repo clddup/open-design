@@ -3,7 +3,7 @@ import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
-import { LeftSidebar } from "./LeftSidebar";
+import { layerPanelSelection, LeftSidebar } from "./LeftSidebar";
 
 function pageActionProps() {
   return {
@@ -547,10 +547,131 @@ describe("LeftSidebar layer tree", () => {
       screen.getByRole("button", { name: `Collapse ${frame.name}` }),
     );
     await user.click(screen.getByRole("button", { name: frame.name }));
-    expect(onSelect).toHaveBeenCalledWith(frame.id);
+    expect(onSelect).toHaveBeenCalledWith([frame.id], frame.id);
     expect(
       screen.getByRole("button", { name: child.name }),
     ).toBeInTheDocument();
+  });
+
+  it("matches Figma layer-panel replace, range, and toggle selection", () => {
+    const visible = ["frame", "title", "body", "footer"];
+    expect(
+      layerPanelSelection(visible, ["title"], "title", "footer", {
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: true,
+      }),
+    ).toEqual({
+      nodeIds: ["title", "body", "footer"],
+      anchorNodeId: "title",
+    });
+    expect(
+      layerPanelSelection(visible, ["title", "footer"], "footer", "body", {
+        ctrlKey: false,
+        metaKey: true,
+        shiftKey: false,
+      }),
+    ).toEqual({ nodeIds: ["title", "body", "footer"], anchorNodeId: "body" });
+    expect(
+      layerPanelSelection(visible, ["title", "body"], "body", "body", {
+        ctrlKey: true,
+        metaKey: false,
+        shiftKey: false,
+      }),
+    ).toEqual({ nodeIds: ["title"], anchorNodeId: "title" });
+    expect(
+      layerPanelSelection(visible, ["title", "body"], "body", "footer", {
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+      }),
+    ).toEqual({ nodeIds: ["footer"], anchorNodeId: "footer" });
+  });
+
+  it("shows projected Instance layers and selects them by stable source path", async () => {
+    const user = userEvent.setup();
+    const document = structuredClone(createWelcomeDocument());
+    document.componentsById.welcome_component = {
+      id: "welcome_component",
+      name: "Welcome",
+      rootNodeId: "frame_welcome",
+      componentPropertyOrder: [],
+      componentPropertyDefinitions: {},
+      variantProperties: {},
+      extensions: {},
+    };
+    document.pagesById.page_instances = {
+      id: "page_instances",
+      name: "Instances",
+      rootNodeIds: ["welcome_instance"],
+      extensions: {},
+    };
+    document.pageOrder.push("page_instances");
+    document.nodesById.welcome_instance = {
+      id: "welcome_instance",
+      kind: "instance",
+      name: "Welcome instance",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 960, height: 640 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        componentId: "welcome_component",
+        componentProperties: {},
+        overrides: [],
+      },
+      extensions: {},
+    };
+    const onSelect = vi.fn();
+    render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          {...pageActionProps()}
+          activePageId="page_instances"
+          document={document}
+          onDelete={vi.fn()}
+          onPageChange={vi.fn()}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={onSelect}
+          onTabChange={vi.fn()}
+          onToggleLock={vi.fn()}
+          onToggleVisibility={vi.fn()}
+          selectedNodeIds={["welcome_instance"]}
+          tab="layers"
+        />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Title" }));
+    expect(onSelect).toHaveBeenCalledWith(
+      ["welcome_instance"],
+      "welcome_instance",
+      {
+        instanceId: "welcome_instance",
+        sourcePath: ["title_welcome"],
+      },
+    );
+    expect(
+      screen.queryByRole("button", { name: "Delete Title" }),
+    ).not.toBeInTheDocument();
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search layers" }),
+      "Capabilities",
+    );
+    expect(
+      screen.getByRole("button", { name: "Welcome instance" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Capabilities" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Title" }),
+    ).not.toBeInTheDocument();
   });
 
   it("moves a same-parent selected block with explicit before feedback", () => {

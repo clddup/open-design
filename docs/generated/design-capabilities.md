@@ -20,12 +20,12 @@
 
 ### 画布导航与选择 — 降级可用
 
-在生产 Leafer 画布中平移、缩放、命中、框选、多选并变换对象。
+在生产 Leafer 画布中平移、缩放、命中、框选、多选，通过兼容 Figma 的 Canvas/Layers/键盘统一选区遍历层级，并变换持久对象。
 
 - ID：`canvas.navigation-selection`
 - 实现方：@opendesign/leafer-engine / leafer-editor@2.2.9
 - 表面：contract=available；runtime=available；human=available；agent=degraded；render=available；export=unavailable
-- 证据：自动化 2 项；实机 0 项
+- 证据：自动化 4 项；实机 0 项
 - 限制：macOS 与 Windows 上的真实 Electron 平移、缩放、选框稳定性和大节点量性能尚未完成验收。
 
 ### 图层层级 — 降级可用
@@ -245,10 +245,10 @@
 创建主组件、实例、嵌套实例、override、组件属性、Slot 与 Variant Set。
 
 - ID：`components.instances-variants`
-- 实现方：DesignDocument 1.25.0 + @opendesign/component-service contract v4 + isolated @opendesign/figma-interop
+- 实现方：DesignDocument 1.25.0 + @opendesign/component-service contract v5 + isolated @opendesign/figma-interop
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
 - 证据：自动化 14 项；实机 0 项
-- 限制：已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义且具有普通属性显式顺序的 Boolean/Text/Instance-swap/SLOT 属性、真实 Component Set Frame、唯一 VARIANT 解析、Set 生命周期、二维矩阵与画布重排、稳定 sourcePath 高级 override、Slot settings 与指导性限制、Component/Component Set preferred values、Clear/Reset/Detach 物化、Inspector、Agent typed actions 与 inspection、持久 override 图层、不可导出的空 Slot 画布指示、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Slot-in-Slot 按 Figma 公开 composition model 永久失败封闭；Slot 内派生 nested Instance 直选/编辑、跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出和 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 限制：已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义且具有普通属性显式顺序的 Boolean/Text/Instance-swap/SLOT 属性、真实 Component Set Frame、唯一 VARIANT 解析、Set 生命周期、二维矩阵与画布重排、稳定 sourcePath 高级 override、Slot settings 与指导性限制、Component/Component Set preferred values、Clear/Reset/Detach 物化、Inspector、Agent typed actions 与 inspection、持久 override 图层、不可导出的空 Slot 画布指示、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Canvas、Layers、Inspector 与键盘导航共享唯一 Runtime selection；派生层只使用 session-only Instance 与稳定 source path，持久 nested Instance 拥有自身派生 child，受支持 override 继续进入事务，直接派生 transform 和危险命令失败封闭。Slot-in-Slot 按 Figma 公开 composition model 永久失败封闭；跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、完整派生直接操作和 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/5579474826519-Explore-component-properties)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants)

@@ -3,12 +3,17 @@ import {
   componentSourcePathKey,
   resolveComponentInstance,
 } from "@opendesign/component-service";
-import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import type {
+  ComponentSelectionTarget,
+  DesignDocument,
+  DesignNode,
+} from "@opendesign/design-contracts";
 import type { ComponentInspectorContext } from "./components/properties/ComponentSection";
 
 export function createComponentInspectorContext(
   document: DesignDocument,
   selectedNode: DesignNode | undefined,
+  componentTarget?: ComponentSelectionTarget,
 ): ComponentInspectorContext | undefined {
   const selectedVariantSet = selectedNode
     ? Object.values(document.variantSetsById).find(
@@ -91,7 +96,18 @@ export function createComponentInspectorContext(
               ? [{ node, overridden: false, sourcePath: [nodeId] }]
               : [];
           });
+  const activeSourcePath =
+    selectedNode?.kind === "instance" &&
+    componentTarget?.instanceId === selectedNode.id &&
+    sourceNodes.some(
+      (source) =>
+        componentSourcePathKey(source.sourcePath) ===
+        componentSourcePathKey(componentTarget.sourcePath),
+    )
+      ? [...componentTarget.sourcePath]
+      : undefined;
   return {
+    ...(activeSourcePath ? { activeSourcePath } : {}),
     componentName: variantSet?.name ?? component.name,
     isMain: selectedNode?.kind !== "instance",
     overrideCount:

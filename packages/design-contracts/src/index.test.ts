@@ -29,6 +29,7 @@ import {
   LAYOUT_GUIDE_DESIGN_SCHEMA_VERSION,
   LayoutGuideSchema,
   PaintSchema,
+  SelectionStateSchema,
   SharedStyleDefinitionSchema,
   isDesignDocument,
   isDesignTransaction,
@@ -43,6 +44,28 @@ import {
 } from "./index.js";
 
 const actor = { type: "user" as const, id: "user_1" };
+
+it("validates bounded derived Component selection targets", () => {
+  expect(
+    schemaValidationIssues(SelectionStateSchema, {
+      nodeIds: ["card_instance"],
+      anchorNodeId: "card_instance",
+      componentTarget: {
+        instanceId: "card_instance",
+        sourcePath: ["nested_row", "row_label"],
+      },
+    }),
+  ).toEqual([]);
+  expect(
+    schemaValidationIssues(SelectionStateSchema, {
+      nodeIds: ["card_instance"],
+      componentTarget: {
+        instanceId: "card_instance",
+        sourcePath: [],
+      },
+    }),
+  ).not.toEqual([]);
+});
 
 it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(AUTO_LAYOUT_DESIGN_SCHEMA_VERSION).toBe("1.18.0");

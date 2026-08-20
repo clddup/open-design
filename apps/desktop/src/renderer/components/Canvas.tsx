@@ -16,6 +16,7 @@ import {
 import type { EditorRuntime, EditorSnapshot } from "@opendesign/editor-runtime";
 import {
   navigateBooleanSelection,
+  navigateLayerSelection,
   planImageNodeUpdate,
   planDeleteVectorNode,
   planVectorLayersLineCut,
@@ -25,6 +26,7 @@ import {
   resolveVectorEditCollectionScope,
   screenToDocument,
 } from "@opendesign/editor-runtime";
+import { navigateComponentSelection } from "@opendesign/component-service";
 import { Icon } from "@opendesign/ui";
 import {
   createLeaferEngineAdapter,
@@ -343,6 +345,43 @@ export function Canvas({
     [activePageId, runtime],
   );
 
+  const navigateSelection = useCallback(
+    (direction: "enter" | "exit" | "next-sibling" | "previous-sibling") => {
+      const current = runtime.getSnapshot();
+      const selection = current.state.selection;
+      const nodeId =
+        selection.nodeIds.length === 1 ? selection.nodeIds[0] : undefined;
+      const node = nodeId ? current.document.nodesById[nodeId] : undefined;
+      if (node?.kind === "instance") {
+        const result = navigateComponentSelection(
+          current.document,
+          node.id,
+          selection.componentTarget,
+          direction,
+        );
+        if (result) {
+          runtime.setSelection(
+            [result.instanceId],
+            result.instanceId,
+            result.componentTarget,
+          );
+          return true;
+        }
+      }
+      if (selection.componentTarget) return false;
+      const target = navigateLayerSelection(
+        current.document,
+        activePageId,
+        selection.nodeIds,
+        direction,
+      );
+      if (!target) return false;
+      runtime.setSelection([target], target);
+      return true;
+    },
+    [activePageId, runtime],
+  );
+
   const handleCanvasKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
       if (event.target !== event.currentTarget) return;
@@ -379,29 +418,31 @@ export function Canvas({
         event.stopPropagation();
         return;
       }
+      if (event.key === "Escape") {
+        runtime.setSelection([]);
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       const direction =
         event.key === "Enter"
           ? event.shiftKey
             ? "exit"
             : "enter"
-          : event.key === "Escape"
-            ? "exit"
-            : event.key === "Tab"
-              ? event.shiftKey
-                ? "previous-operand"
-                : "next-operand"
-              : null;
-      if (!direction || !selectBooleanTarget(currentSelection, direction)) {
-        return;
-      }
+          : event.key === "Tab"
+            ? event.shiftKey
+              ? "previous-sibling"
+              : "next-sibling"
+            : null;
+      if (!direction || !navigateSelection(direction)) return;
       event.preventDefault();
       event.stopPropagation();
     },
     [
       enterVectorEdit,
       imageCropState,
+      navigateSelection,
       runtime,
-      selectBooleanTarget,
       vectorEditScope,
     ],
   );
@@ -824,8 +865,8 @@ export function Canvas({
       onGridTrackReorder: ({ axis, frameId, fromIndices, insertionIndex }) =>
         onReorderGridTracks(frameId, axis, fromIndices, insertionIndex),
       onOperations: applyOperations,
-      onSelectionChange: (nodeIds, anchorNodeId) => {
-        runtime.setSelection(nodeIds, anchorNodeId);
+      onSelectionChange: (nodeIds, anchorNodeId, componentTarget) => {
+        runtime.setSelection(nodeIds, anchorNodeId, componentTarget);
       },
       onTextRangeSelectionChange,
       onVectorCut: applyVectorCut,
@@ -936,12 +977,14 @@ export function Canvas({
       ...(generationActivity ? { generationActivity } : {}),
       ...(generationReveal ? { generationReveal } : {}),
       pageId: activePageId,
-      ...(snapshot.state.selection.nodeIds.length === 1 &&
+      ...(!snapshot.state.selection.componentTarget &&
+      snapshot.state.selection.nodeIds.length === 1 &&
       snapshot.document.nodesById[snapshot.state.selection.nodeIds[0] ?? ""]
         ?.kind === "frame"
         ? { layoutGuideFrameId: snapshot.state.selection.nodeIds[0] }
         : {}),
       ...(tool === "select" &&
+      !snapshot.state.selection.componentTarget &&
       snapshot.state.selection.nodeIds.length === 1 &&
       snapshot.document.nodesById[snapshot.state.selection.nodeIds[0] ?? ""]
         ?.kind === "frame"

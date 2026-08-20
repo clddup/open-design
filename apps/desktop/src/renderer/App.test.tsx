@@ -3582,9 +3582,7 @@ describe("App", () => {
       "feature_one",
     ]);
     fireEvent.keyDown(canvas, { key: "Escape" });
-    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([
-      booleanNode.id,
-    ]);
+    expect(runtime().getSnapshot().state.selection.nodeIds).toEqual([]);
     expect(
       screen.queryByText(`Editing ${booleanNode.name}`),
     ).not.toBeInTheDocument();

@@ -86,8 +86,8 @@
         "zh-CN": "画布导航与选择"
       },
       "description": {
-        "en": "Pan, zoom, hit test, box-select, multi-select, and transform objects on the production Leafer canvas.",
-        "zh-CN": "在生产 Leafer 画布中平移、缩放、命中、框选、多选并变换对象。"
+        "en": "Pan, zoom, hit test, box-select, multi-select, traverse hierarchy with Figma-compatible Canvas/Layers/keyboard selection, and transform persistent objects on the production Leafer canvas.",
+        "zh-CN": "在生产 Leafer 画布中平移、缩放、命中、框选、多选，通过兼容 Figma 的 Canvas/Layers/键盘统一选区遍历层级，并变换持久对象。"
       },
       "provider": "@opendesign/leafer-engine / leafer-editor@2.2.9",
       "requiredSurfaces": ["runtime", "human", "render"],
@@ -107,8 +107,10 @@
       ],
       "evidence": {
         "automated": [
+          "packages/editor-runtime/src/selection-navigation.test.ts",
           "packages/leafer-engine/src/adapter.test.ts",
-          "apps/desktop/src/renderer/App.test.tsx"
+          "apps/desktop/src/renderer/App.test.tsx",
+          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx"
         ],
         "manual": []
       },
@@ -893,7 +895,7 @@
         "en": "Create main components, instances, nested instances, overrides, component properties, slots, and variant sets.",
         "zh-CN": "创建主组件、实例、嵌套实例、override、组件属性、Slot 与 Variant Set。"
       },
-      "provider": "DesignDocument 1.25.0 + @opendesign/component-service contract v4 + isolated @opendesign/figma-interop",
+      "provider": "DesignDocument 1.25.0 + @opendesign/component-service contract v5 + isolated @opendesign/figma-interop",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -905,8 +907,8 @@
       },
       "limitations": [
         {
-          "en": "Same-file Main components, linked/nested instances, Figma-compatible Boolean/Text/Instance-swap/SLOT properties with explicit ordinary-property order, real Component Set Frames, unique VARIANT resolution, Set lifecycle, matrix editing and on-canvas reordering, stable source-path advanced overrides, Slot settings and guidance, Component/Component Set preferred values, clear/reset/detach materialization, Inspector, typed Agent actions and inspection, persistent override layers, non-exported empty-Slot canvas indicators, Canvas/SVG/raster projection, migration, persistence, autosave, and history are implemented. Slot-in-Slot is intentionally rejected to match Figma's public composition model. Direct selection and editing of derived nested instances inside Slots, cross-file libraries, private .fig decoding, Plugin/REST import-export, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义且具有普通属性显式顺序的 Boolean/Text/Instance-swap/SLOT 属性、真实 Component Set Frame、唯一 VARIANT 解析、Set 生命周期、二维矩阵与画布重排、稳定 sourcePath 高级 override、Slot settings 与指导性限制、Component/Component Set preferred values、Clear/Reset/Detach 物化、Inspector、Agent typed actions 与 inspection、持久 override 图层、不可导出的空 Slot 画布指示、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Slot-in-Slot 按 Figma 公开 composition model 永久失败封闭；Slot 内派生 nested Instance 直选/编辑、跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出和 macOS/Windows 打包 GUI 实机证据仍未完成。"
+          "en": "Same-file Main components, linked/nested instances, Figma-compatible Boolean/Text/Instance-swap/SLOT properties with explicit ordinary-property order, real Component Set Frames, unique VARIANT resolution, Set lifecycle, matrix editing and on-canvas reordering, stable source-path advanced overrides, Slot settings and guidance, Component/Component Set preferred values, clear/reset/detach materialization, Inspector, typed Agent actions and inspection, persistent override layers, non-exported empty-Slot canvas indicators, Canvas/SVG/raster projection, migration, persistence, autosave, and history are implemented. Canvas, Layers, Inspector, and keyboard navigation share one Runtime selection; derived layers use session-only Instance plus stable source path, persistent nested Instances own their projected children, and supported overrides remain transaction-backed while direct derived transforms and destructive commands fail closed. Slot-in-Slot is intentionally rejected to match Figma's public composition model. Cross-file libraries, private .fig decoding, Plugin/REST import-export, complete derived direct manipulation, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义且具有普通属性显式顺序的 Boolean/Text/Instance-swap/SLOT 属性、真实 Component Set Frame、唯一 VARIANT 解析、Set 生命周期、二维矩阵与画布重排、稳定 sourcePath 高级 override、Slot settings 与指导性限制、Component/Component Set preferred values、Clear/Reset/Detach 物化、Inspector、Agent typed actions 与 inspection、持久 override 图层、不可导出的空 Slot 画布指示、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Canvas、Layers、Inspector 与键盘导航共享唯一 Runtime selection；派生层只使用 session-only Instance 与稳定 source path，持久 nested Instance 拥有自身派生 child，受支持 override 继续进入事务，直接派生 transform 和危险命令失败封闭。Slot-in-Slot 按 Figma 公开 composition model 永久失败封闭；跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、完整派生直接操作和 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
       "evidence": {

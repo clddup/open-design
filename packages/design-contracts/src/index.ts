@@ -1583,10 +1583,22 @@ export const HistoryStateSchema: TSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ComponentSelectionTargetSchema = Type.Object(
+  {
+    instanceId: Type.String({ minLength: 1, maxLength: 256 }),
+    sourcePath: Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {
+      minItems: 1,
+      maxItems: 64,
+    }),
+  },
+  { additionalProperties: false },
+);
+
 export const SelectionStateSchema = Type.Object(
   {
     nodeIds: Type.Array(Type.String({ minLength: 1 }), { uniqueItems: true }),
     anchorNodeId: Type.Optional(Type.String({ minLength: 1 })),
+    componentTarget: Type.Optional(ComponentSelectionTargetSchema),
   },
   { additionalProperties: false },
 );
@@ -1891,6 +1903,9 @@ export interface HistoryState {
   undo: HistoryEntry[];
   redo: HistoryEntry[];
 }
+export type ComponentSelectionTarget = Static<
+  typeof ComponentSelectionTargetSchema
+>;
 export type SelectionState = Static<typeof SelectionStateSchema>;
 export type ViewportState = Static<typeof ViewportStateSchema>;
 export interface EditorState {

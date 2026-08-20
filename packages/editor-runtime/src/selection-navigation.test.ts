@@ -7,6 +7,7 @@ import {
 import { planCreateBooleanGroup } from "./boolean-operations.js";
 import {
   navigateBooleanSelection,
+  navigateLayerSelection,
   resolveBooleanEditScope,
 } from "./selection-navigation.js";
 
@@ -37,6 +38,29 @@ function createBooleanDocument() {
 }
 
 describe("Boolean nested selection navigation", () => {
+  it("uses Figma-style child, parent, and sibling traversal for ordinary layers", () => {
+    const document = createWelcomeDocument();
+    expect(
+      navigateLayerSelection(
+        document,
+        "page_welcome",
+        ["frame_welcome"],
+        "enter",
+      ),
+    ).toBe("feature_group");
+    expect(
+      navigateLayerSelection(document, "page_welcome", ["feature_one"], "exit"),
+    ).toBe("feature_group");
+    expect(
+      navigateLayerSelection(
+        document,
+        "page_welcome",
+        ["feature_one"],
+        "next-sibling",
+      ),
+    ).toBe("feature_two");
+  });
+
   it("derives transient editable scope only from direct operands of one Boolean", () => {
     const document = createBooleanDocument();
     expect(

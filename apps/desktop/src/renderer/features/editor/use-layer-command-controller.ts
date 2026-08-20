@@ -67,6 +67,7 @@ const BOOLEAN_OPERATIONS: readonly BooleanOperation[] = [
 export function useLayerCommandController({
   activePageId,
   applyCommands,
+  componentTargetActive,
   document,
   runtime,
   selectedNodeIds,
@@ -76,6 +77,7 @@ export function useLayerCommandController({
 }: {
   activePageId: string;
   applyCommands: ApplyEditorCommands;
+  componentTargetActive: boolean;
   document: DesignDocument;
   runtime: EditorRuntime;
   selectedNodeIds: readonly string[];
@@ -92,9 +94,10 @@ export function useLayerCommandController({
       arrangementMetrics: getArrangementSelectionMetrics(
         document,
         activePageId,
-        selectedNodeIds,
+        componentTargetActive ? [] : selectedNodeIds,
       ),
       canChangeSelectedBoolean:
+        !componentTargetActive &&
         selectedNode?.kind === "boolean" &&
         BOOLEAN_OPERATIONS.some(
           (operation) =>
@@ -107,35 +110,39 @@ export function useLayerCommandController({
               "boolean_capability_check",
             ).ok,
         ),
-      canCreateBooleanSelection: canCreateBooleanGroup(
-        document,
-        activePageId,
-        selectedNodeIds,
-      ),
-      canDeleteSelection: canDeleteNodes(document, selectedNodeIds),
-      canGroupSelection: canGroupNodes(document, activePageId, selectedNodeIds),
-      canUngroupBooleanSelection: canUngroupBooleanGroup(
-        document,
-        activePageId,
-        selectedNodeIds,
-      ),
-      canUngroupSelection: canUngroupNode(
-        document,
-        activePageId,
-        selectedNodeIds,
-      ),
+      canCreateBooleanSelection:
+        !componentTargetActive &&
+        canCreateBooleanGroup(document, activePageId, selectedNodeIds),
+      canDeleteSelection:
+        !componentTargetActive && canDeleteNodes(document, selectedNodeIds),
+      canGroupSelection:
+        !componentTargetActive &&
+        canGroupNodes(document, activePageId, selectedNodeIds),
+      canUngroupBooleanSelection:
+        !componentTargetActive &&
+        canUngroupBooleanGroup(document, activePageId, selectedNodeIds),
+      canUngroupSelection:
+        !componentTargetActive &&
+        canUngroupNode(document, activePageId, selectedNodeIds),
       layerOrderAvailability: Object.fromEntries(
         LAYER_ORDER_ACTIONS.map((action) => [
           action,
-          canReorderNodes(document, activePageId, selectedNodeIds, action),
+          !componentTargetActive &&
+            canReorderNodes(document, activePageId, selectedNodeIds, action),
         ]),
       ) as Record<LayerOrderAction, boolean>,
     };
-  }, [activePageId, document, selectedNodeIds]);
+  }, [activePageId, componentTargetActive, document, selectedNodeIds]);
 
   const deleteNodes = useCallback(
     (nodeIds: readonly string[]) => {
       const current = runtime.getSnapshot();
+      if (
+        current.state.selection.componentTarget &&
+        nodeIds.includes(current.state.selection.componentTarget.instanceId)
+      ) {
+        return false;
+      }
       const operationId = `delete_${Date.now()}_${++transactionCounter.current}`;
       const plan = planDeleteNodes(current.document, {
         nodeIds,
@@ -157,6 +164,7 @@ export function useLayerCommandController({
 
   const duplicateSelection = useCallback(() => {
     const current = runtime.getSnapshot();
+    if (current.state.selection.componentTarget) return;
     const duplicated = duplicateNodes(
       current.document,
       activePageId,
@@ -176,6 +184,7 @@ export function useLayerCommandController({
 
   const groupSelection = useCallback(() => {
     const current = runtime.getSnapshot();
+    if (current.state.selection.componentTarget) return;
     const operationId = `group_${Date.now()}_${++transactionCounter.current}`;
     const plan = planGroupNodes(
       current.document,
@@ -205,6 +214,7 @@ export function useLayerCommandController({
 
   const ungroupSelection = useCallback(() => {
     const current = runtime.getSnapshot();
+    if (current.state.selection.componentTarget) return;
     const containerId = current.state.selection.nodeIds[0];
     if (!containerId) return;
     const operationId = `ungroup_${Date.now()}_${++transactionCounter.current}`;
@@ -242,6 +252,7 @@ export function useLayerCommandController({
   const applyBooleanOperation = useCallback(
     (operation: BooleanOperation) => {
       const current = runtime.getSnapshot();
+      if (current.state.selection.componentTarget) return;
       const selection = current.state.selection.nodeIds;
       const selected =
         selection.length === 1
@@ -300,6 +311,7 @@ export function useLayerCommandController({
   const reorderSelection = useCallback(
     (action: LayerOrderAction) => {
       const current = runtime.getSnapshot();
+      if (current.state.selection.componentTarget) return;
       const operationId = `reorder_${action}_${Date.now()}_${++transactionCounter.current}`;
       const plan = planReorderNodes(
         current.document,
@@ -327,6 +339,14 @@ export function useLayerCommandController({
   const reparentLayers = useCallback(
     (request: LayerReparentRequest): LayerReparentResult => {
       const current = runtime.getSnapshot();
+      if (
+        current.state.selection.componentTarget &&
+        request.nodeIds.includes(
+          current.state.selection.componentTarget.instanceId,
+        )
+      ) {
+        return { ok: false, error: t("sidebar.dropUnavailable") };
+      }
       const operationId = `reparent_${Date.now()}_${++transactionCounter.current}`;
       const plan = planReparentNodes(
         current.document,
@@ -374,6 +394,7 @@ export function useLayerCommandController({
   const arrangeSelection = useCallback(
     (operation: ArrangeOperation) => {
       const current = runtime.getSnapshot();
+      if (current.state.selection.componentTarget) return;
       const operationId = `arrange_${operation.action}_${Date.now()}_${++transactionCounter.current}`;
       const plan = planArrangeNodes(
         current.document,
