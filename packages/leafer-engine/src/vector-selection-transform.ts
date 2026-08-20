@@ -1,4 +1,9 @@
-import type { Point, Rect, Transform } from "@opendesign/design-contracts";
+import type {
+  Point,
+  Rect,
+  Transform,
+  VectorNetwork,
+} from "@opendesign/design-contracts";
 
 export type VectorResizeHandle =
   | "north-west"
@@ -136,6 +141,73 @@ export function vectorLassoPath(points: readonly Point[]): string {
     .join(" ")} Z`;
 }
 
+export function vectorSegmentsInPolygon(
+  network: VectorNetwork,
+  polygon: readonly Point[],
+  tolerance: number,
+): string[] {
+  if (polygon.length < 3 || !Number.isFinite(tolerance) || tolerance <= 0) {
+    return [];
+  }
+  const vertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  return network.segments
+    .filter((segment) => {
+      const start = vertices.get(segment.startVertexId);
+      const end = vertices.get(segment.endVertexId);
+      if (!start || !end) return false;
+      const controlStart = segment.tangentStart
+        ? add(start, segment.tangentStart)
+        : start;
+      const controlEnd = segment.tangentEnd
+        ? add(end, segment.tangentEnd)
+        : end;
+      const points = flattenCubic(
+        start,
+        controlStart,
+        controlEnd,
+        end,
+        tolerance,
+      );
+      return (
+        points.every((point) => pointInPolygon(point, polygon)) &&
+        !polylineCrossesPolygon(points, polygon)
+      );
+    })
+    .map((segment) => segment.id);
+}
+
+export function vectorSegmentSelectionPath(
+  network: VectorNetwork,
+  segmentIds: readonly string[],
+): string {
+  const selected = new Set(segmentIds);
+  const vertices = new Map(
+    network.vertices.map((vertex) => [vertex.id, vertex]),
+  );
+  return network.segments
+    .filter((segment) => selected.has(segment.id))
+    .flatMap((segment) => {
+      const start = vertices.get(segment.startVertexId);
+      const end = vertices.get(segment.endVertexId);
+      if (!start || !end) return [];
+      const controlStart = segment.tangentStart
+        ? add(start, segment.tangentStart)
+        : start;
+      const controlEnd = segment.tangentEnd
+        ? add(end, segment.tangentEnd)
+        : end;
+      const curved = segment.tangentStart || segment.tangentEnd;
+      return [
+        curved
+          ? `M ${format(start.x)} ${format(start.y)} C ${format(controlStart.x)} ${format(controlStart.y)} ${format(controlEnd.x)} ${format(controlEnd.y)} ${format(end.x)} ${format(end.y)}`
+          : `M ${format(start.x)} ${format(start.y)} L ${format(end.x)} ${format(end.y)}`,
+      ];
+    })
+    .join(" ");
+}
+
 function pointOnSegment(point: Point, start: Point, end: Point): boolean {
   const lengthSquared = (end.x - start.x) ** 2 + (end.y - start.y) ** 2;
   if (lengthSquared <= MIN_AXIS ** 2) {
@@ -154,6 +226,89 @@ function pointOnSegment(point: Point, start: Point, end: Point): boolean {
 
 function cleanZero(value: number): number {
   return Math.abs(value) < 1e-12 ? 0 : value;
+}
+
+function add(left: Point, right: Point): Point {
+  return { x: left.x + right.x, y: left.y + right.y };
+}
+
+function flattenCubic(
+  start: Point,
+  controlStart: Point,
+  controlEnd: Point,
+  end: Point,
+  tolerance: number,
+  depth = 0,
+): Point[] {
+  if (
+    depth >= 10 ||
+    Math.max(
+      pointLineDistance(controlStart, start, end),
+      pointLineDistance(controlEnd, start, end),
+    ) <= tolerance
+  ) {
+    return [start, end];
+  }
+  const a = midpoint(start, controlStart);
+  const b = midpoint(controlStart, controlEnd);
+  const c = midpoint(controlEnd, end);
+  const d = midpoint(a, b);
+  const e = midpoint(b, c);
+  const center = midpoint(d, e);
+  const left = flattenCubic(start, a, d, center, tolerance, depth + 1);
+  const right = flattenCubic(center, e, c, end, tolerance, depth + 1);
+  return [...left.slice(0, -1), ...right];
+}
+
+function pointLineDistance(point: Point, start: Point, end: Point): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length <= MIN_AXIS)
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  return (
+    Math.abs(dy * point.x - dx * point.y + end.x * start.y - end.y * start.x) /
+    length
+  );
+}
+
+function midpoint(left: Point, right: Point): Point {
+  return { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 };
+}
+
+function polylineCrossesPolygon(
+  line: readonly Point[],
+  polygon: readonly Point[],
+): boolean {
+  for (let lineIndex = 1; lineIndex < line.length; lineIndex += 1) {
+    const lineStart = line[lineIndex - 1]!;
+    const lineEnd = line[lineIndex]!;
+    for (let edgeIndex = 0; edgeIndex < polygon.length; edgeIndex += 1) {
+      const edgeStart = polygon[edgeIndex]!;
+      const edgeEnd = polygon[(edgeIndex + 1) % polygon.length]!;
+      if (segmentsProperlyCross(lineStart, lineEnd, edgeStart, edgeEnd)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function segmentsProperlyCross(
+  a: Point,
+  b: Point,
+  c: Point,
+  d: Point,
+): boolean {
+  const abC = orientation(a, b, c);
+  const abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a);
+  const cdB = orientation(c, d, b);
+  return abC * abD < -MIN_AXIS && cdA * cdB < -MIN_AXIS;
+}
+
+function orientation(a: Point, b: Point, c: Point): number {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
 function format(value: number): string {

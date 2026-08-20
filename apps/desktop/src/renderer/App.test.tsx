@@ -3835,6 +3835,7 @@ describe("App", () => {
           {
             nodeId: "editable_vector",
             readOnly: false,
+            selectedSegmentIds: [],
             selectedVertexIds: [],
           },
         ],
@@ -3866,7 +3867,7 @@ describe("App", () => {
     );
     expect(
       screen.getByText(
-        "Draw around vector points · Hold Shift to toggle enclosed points",
+        "Draw around vector points and paths · Hold Shift to toggle enclosed content",
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lasso" })).toHaveAttribute(
@@ -3879,9 +3880,10 @@ describe("App", () => {
     );
 
     act(() => {
-      leaferCallbacks().onVectorEditSelectionChange?.("editable_vector", [
-        "vertex_b",
-      ]);
+      leaferCallbacks().onVectorEditSelectionChange?.("editable_vector", {
+        segmentIds: [],
+        vertexIds: ["vertex_b"],
+      });
     });
     await waitFor(() =>
       expect(

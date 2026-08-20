@@ -7,7 +7,7 @@
 - 环境基线：Node.js 24.14.0、pnpm 10.32.1、Electron 43.3.0、Vite 8.2.1
 - 文档协议：`DesignDocument 1.36.0`
 - Agent 协议：`3.11.0`
-- Geometry Service：`contract v12`
+- Geometry Service：`contract v13`
 - Text Layout Service：`contract v4`
 - Text Range Service：`contract v1`（DesignDocument rich-text runs 已接入）
 - Text Paragraph Service：`contract v2`（逐段 indent/spacing/list 已接入）
@@ -108,6 +108,7 @@ pnpm build          passed
 - Geometry Service contract v10 把穿孔与闭合凹形多交点纳入同一 Cut：精确切开的 outer/hole/concave boundary arcs 与同侧 connectors 组成无向临时图，cycle decomposition 重建全部连续 closed components。包含源 outer 起点的一块保留源 path/region ID，其余一个或多个 components 进入同一 extracted Vector sibling；outer + hole 四交点会得到两个 single-loop regions，不保留已经失效的 hole，未切 loops 则按真实包含关系继续分配。Runtime/Canvas/Agent 共享相同 planner、宿主结果 ID、一次 revision/undo 和结构化失败；Canvas 在 Cut 进行中 pan/zoom 仍提交原 document-space line。标准 SVG 将穿孔结果往返为两个单 `Z` 节点，将凹形 extracted sibling 往返为含两个 `Z` subpaths 的 metadata v2 editable network。direct-hole-only、歧义 outer、shared loops、嵌套/重叠 regions、self-intersection、连接/分支、connect/disconnect、flatten、outline stroke、像素基线和 macOS/Windows 打包交互仍未验收。
 - Geometry Service contract v11 在既有非分支 network 上增加同一 Vector 的 Connect/Disconnect。Connect 只接受两个开放 endpoint：同一路径两端复用 Close，不同 path runs 确定性定向并保留文档顺序较早的 path ID；重合 Cut endpoints 合并回一个稳定 vertex，不产生零长度垃圾 segment，不重合 endpoint 才建立真实 connector。Disconnect 复用 Cut vertex 的稳定双 endpoint/path 结果。Canvas 次级工具栏与 Agent `connect-endpoints/disconnect-vertex` 共用 `planVectorSemanticEdit`、Runtime preview/apply、tight bounds、单 revision、undo/redo、保存重开和 SVG metadata v2。测试覆盖正反 endpoint、重合恢复、有距离 connector、internal vertex 拒绝、按钮启用、Agent schema/实时 selection 隔离和生产工具预算。跨 Vector layer Join、degree>2 分支、flatten、outline stroke 与原生双平台交互仍未完成。
 - Geometry Service contract v12 增加稳定节点 bounds 与 node-local affine transform，并同步变换所选节点附着的 Bézier tangent endpoints。Canvas Vector Edit 新增 `Q` 节点 Lasso v1，以及同一 Vector 两个以上节点的内部移动、八向 resize 和四角 rotation hit area；Shift 支持比例缩放/15° 旋转吸附，Option/Alt 支持中心缩放。Lasso/preview 保持 session-only，pointer-up 经 `planVectorNetworkUpdate` 只提交一条 revision/undo；Agent `transform-vertices` 只接受 inspection 的 vertex IDs 和有限 6 元矩阵。专项自动化覆盖 polygon 边界、Shift toggle、resize/rotate、modifier、Bézier tangent、tight bounds、Runtime/Agent 原子事务、Canvas `Q` 快捷键和 Cut overlay 回归。path segment selection、跨 Vector 统一节点框、Space 中途平移与双平台打包 GUI 证据仍未完成。ADR-0113。
+- Geometry Service contract v13 增加稳定 segment 与 mixed point/path deletion。Leafer Vector Edit 的 Move 点击和 `Q` Lasso 分别维护 session-only `selectedVertexIds/selectedSegmentIds`；line/cubic 完整 polygon containment 使用有界自适应曲线投影，选中路径由当前 network 派生 overlay。Delete 区分节点重连与 segment 断开，开放/闭合 contour 确定性拆分 open runs、清理失效 region，并经现有 Runtime 只提交一次 revision/undo。专项覆盖 direct click、Shift toggle、line/cubic Lasso、稳定 path ID、region、mixed selection、只读和 Cut 回归。ADR-0114。
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。
 

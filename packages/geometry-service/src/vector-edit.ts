@@ -2157,6 +2157,155 @@ export function deleteVectorVertices(
     : result;
 }
 
+/**
+ * Deletes explicit graph edges without pretending they are their endpoint
+ * vertices. Affected contours become one or more open path runs; the earliest
+ * retained source run keeps the stable path ID and later runs receive
+ * deterministic IDs. Any fill region that referenced a broken contour is
+ * removed because its closed boundary no longer exists.
+ */
+export function deleteVectorSegments(
+  network: VectorNetwork,
+  segmentIds: readonly string[],
+): VectorDeleteResult {
+  const failure = editableFailure(network);
+  if (failure) return failure;
+  const selected = new Set(segmentIds);
+  if (selected.size === 0)
+    return missingSegment("No vector segments are selected");
+  const available = new Set(network.segments.map((segment) => segment.id));
+  if ([...selected].some((segmentId) => !available.has(segmentId))) {
+    return missingSegment(
+      "A selected vector segment does not exist in the editable network",
+    );
+  }
+
+  const usedPathIds = new Set(network.paths.map((path) => path.id));
+  const changedPathIds = new Set<string>();
+  const affectedVertexIds = new Set<string>();
+  const segmentsById = new Map(
+    network.segments.map((segment) => [segment.id, segment]),
+  );
+  const paths: VectorPathRun[] = [];
+  for (const path of network.paths) {
+    if (!path.segments.some((reference) => selected.has(reference.segmentId))) {
+      paths.push(structuredClone(path));
+      continue;
+    }
+    changedPathIds.add(path.id);
+    for (const reference of path.segments) {
+      const segment = segmentsById.get(reference.segmentId)!;
+      affectedVertexIds.add(segment.startVertexId);
+      affectedVertexIds.add(segment.endVertexId);
+    }
+    const runs = retainedSegmentRuns(path, selected);
+    for (const [index, references] of runs.entries()) {
+      const id = index === 0 ? path.id : nextPathId(usedPathIds);
+      usedPathIds.add(id);
+      paths.push({
+        ...structuredClone(path),
+        closed: false,
+        id,
+        segments: references.map((reference) => ({ ...reference })),
+      });
+    }
+  }
+  if (paths.length === 0) return { ok: true, deleteNode: true };
+
+  const retainedSegmentIds = new Set(
+    paths.flatMap((path) =>
+      path.segments.map((reference) => reference.segmentId),
+    ),
+  );
+  const segments = network.segments
+    .filter((segment) => retainedSegmentIds.has(segment.id))
+    .map((segment) => structuredClone(segment));
+  const retainedVertexIds = new Set(
+    segments.flatMap((segment) => [segment.startVertexId, segment.endVertexId]),
+  );
+  const next: VectorNetwork = {
+    vertices: network.vertices
+      .filter((vertex) => retainedVertexIds.has(vertex.id))
+      .map((vertex) => structuredClone(vertex)),
+    segments,
+    paths,
+    regions: network.regions
+      .filter(
+        (region) =>
+          !region.loops.some((loop) => changedPathIds.has(loop.pathId)),
+      )
+      .map((region) => structuredClone(region)),
+  };
+  next.vertices = next.vertices.map((vertex) =>
+    affectedVertexIds.has(vertex.id)
+      ? { ...vertex, handleMode: inferVectorPointMode(next, vertex.id) }
+      : vertex,
+  );
+  const result = validated(next);
+  return result.ok
+    ? { ok: true, deleteNode: false, network: result.network }
+    : result;
+}
+
+export function deleteVectorSelection(
+  network: VectorNetwork,
+  vertexIds: readonly string[],
+  segmentIds: readonly string[],
+): VectorDeleteResult {
+  if (vertexIds.length === 0 && segmentIds.length === 0) {
+    return missingVertex("No vector points or paths are selected");
+  }
+  const vertices = new Set(network.vertices.map((vertex) => vertex.id));
+  if (vertexIds.some((vertexId) => !vertices.has(vertexId))) {
+    return missingVertex(
+      "A selected vector vertex does not exist in the editable network",
+    );
+  }
+  let current = network;
+  if (segmentIds.length > 0) {
+    const deletedSegments = deleteVectorSegments(current, segmentIds);
+    if (!deletedSegments.ok || deletedSegments.deleteNode) {
+      return deletedSegments;
+    }
+    current = deletedSegments.network;
+  }
+  const retainedSelectedVertices = vertexIds.filter((vertexId) =>
+    current.vertices.some((vertex) => vertex.id === vertexId),
+  );
+  if (retainedSelectedVertices.length === 0) {
+    return { ok: true, deleteNode: false, network: current };
+  }
+  return deleteVectorVertices(current, retainedSelectedVertices);
+}
+
+function retainedSegmentRuns(
+  path: VectorPathRun,
+  selected: ReadonlySet<string>,
+): VectorSegmentReference[][] {
+  const runs: VectorSegmentReference[][] = [];
+  let current: VectorSegmentReference[] = [];
+  for (const reference of path.segments) {
+    if (selected.has(reference.segmentId)) {
+      if (current.length > 0) runs.push(current);
+      current = [];
+    } else {
+      current.push(reference);
+    }
+  }
+  if (current.length > 0) runs.push(current);
+  if (
+    path.closed &&
+    runs.length > 1 &&
+    !selected.has(path.segments[0]?.segmentId ?? "") &&
+    !selected.has(path.segments.at(-1)?.segmentId ?? "")
+  ) {
+    const first = runs.shift()!;
+    const last = runs.pop()!;
+    runs.unshift([...last, ...first]);
+  }
+  return runs;
+}
+
 function editableFailure(
   network: VectorNetwork,
 ): Extract<VectorEditResult, { ok: false }> | null {

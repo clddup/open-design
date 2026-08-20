@@ -190,6 +190,7 @@ describe("vector editing runtime plans", () => {
         ["vector_editable"],
         "vector_editable",
         ["vertex_b"],
+        ["segment_ab", "segment_missing"],
       ),
     ).toEqual({
       activePathId: "path_open",
@@ -197,6 +198,7 @@ describe("vector editing runtime plans", () => {
       pathCount: 1,
       pointMode: "corner",
       readOnly: false,
+      selectedSegmentIds: ["segment_ab"],
       selectedVertexIds: ["vertex_b"],
     });
 

@@ -4679,9 +4679,10 @@ describe("Leafer engine selection bounds synchronization", () => {
     app.emit("pointer.move", pointerEvent(24, 12, anchors[0]!));
     app.emit("pointer.up", pointerEvent(24, 12, anchors[0]!));
 
-    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", [
-      "vertex_a",
-    ]);
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", {
+      segmentIds: [],
+      vertexIds: ["vertex_a"],
+    });
     expect(onVectorEdit).toHaveBeenCalledTimes(1);
     const request = onVectorEdit.mock.calls[0]?.[0];
     expect(request).toMatchObject({
@@ -4697,7 +4698,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
-  it("lassos vector points as session-only selection across one edit scope", async () => {
+  it("lassos vector points and paths as session-only selection across one edit scope", async () => {
     const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
       () => true,
     );
@@ -4735,7 +4736,10 @@ describe("Leafer engine selection bounds synchronization", () => {
 
     expect(onVectorEditSelectionChange).toHaveBeenLastCalledWith(
       "editable_curve",
-      ["vertex_a", "vertex_b"],
+      {
+        segmentIds: ["segment_ab"],
+        vertexIds: ["vertex_a", "vertex_b"],
+      },
     );
     expect(onVectorEdit).not.toHaveBeenCalled();
     expect(lasso?.visible).toBe(false);
@@ -4750,8 +4754,31 @@ describe("Leafer engine selection bounds synchronization", () => {
     app.emit("pointer.up", pointerEvent(50, -10, app.tree));
     expect(onVectorEditSelectionChange).toHaveBeenLastCalledWith(
       "editable_curve",
-      ["vertex_a", "vertex_c"],
+      {
+        segmentIds: ["segment_ab", "segment_bc"],
+        vertexIds: ["vertex_a", "vertex_c"],
+      },
     );
+    adapter.dispose();
+  });
+
+  it("selects one stable path segment directly in vector Move mode", async () => {
+    const onVectorEditSelectionChange = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(withVectorEditFixture(createInput()));
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !path) throw new Error("Missing editable vector");
+
+    app.emit("pointer.down", pointerEvent(30, 15, path));
+
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", {
+      segmentIds: ["segment_ab"],
+      vertexIds: [],
+    });
     adapter.dispose();
   });
 
@@ -4889,10 +4916,10 @@ describe("Leafer engine selection bounds synchronization", () => {
       nodeId: "editable_curve",
       pathId: "path_open",
     });
-    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", [
-      "vertex_edit_1",
-      "vertex_edit_2",
-    ]);
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", {
+      segmentIds: [],
+      vertexIds: ["vertex_edit_1", "vertex_edit_2"],
+    });
     expect(network.paths).toHaveLength(2);
     expect(
       overlay.children.filter(
@@ -5139,7 +5166,7 @@ describe("Leafer engine selection bounds synchronization", () => {
     );
     expect(onVectorEditSelectionChange).toHaveBeenCalledWith(
       "editable_curve_second",
-      ["vertex_a"],
+      { segmentIds: [], vertexIds: ["vertex_a"] },
     );
 
     adapter.sync({
@@ -5233,6 +5260,44 @@ describe("Leafer engine selection bounds synchronization", () => {
       nodeId: "editable_curve",
     });
     expect(onVectorEditExit).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
+  it("deletes selected vector path segments without converting them to points", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const onVectorEditSelectionChange = vi.fn();
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+      onVectorEditSelectionChange,
+    });
+    adapter.sync(
+      withVectorEditFixture(createInput(), [], false, ["segment_ab"]),
+    );
+
+    emitWindowKey("Delete");
+
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Expected a retained Vector path");
+    }
+    expect(request.network.paths).toEqual([
+      {
+        id: "path_open",
+        closed: false,
+        segments: [{ segmentId: "segment_bc", reversed: false }],
+      },
+    ]);
+    expect(request.network.vertices.map((vertex) => vertex.id)).toEqual([
+      "vertex_b",
+      "vertex_c",
+    ]);
+    expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", {
+      segmentIds: [],
+      vertexIds: [],
+    });
     adapter.dispose();
   });
 
@@ -5684,6 +5749,7 @@ function withVectorEditFixture(
   input: LeaferEngineSyncInput,
   selectedVertexIds: readonly string[] = [],
   mirrored = false,
+  selectedSegmentIds: readonly string[] = [],
 ): LeaferEngineSyncInput {
   const document = structuredClone(input.document);
   const frame = document.nodesById.frame_welcome;
@@ -5759,6 +5825,7 @@ function withVectorEditFixture(
         {
           nodeId: "editable_curve",
           readOnly: false,
+          selectedSegmentIds,
           selectedVertexIds,
         },
       ],
@@ -5796,11 +5863,13 @@ function withMultiVectorEditFixture(
         {
           nodeId: first.id,
           readOnly: false,
+          selectedSegmentIds: [],
           selectedVertexIds: [],
         },
         {
           nodeId: second.id,
           readOnly: false,
+          selectedSegmentIds: [],
           selectedVertexIds: [],
         },
       ],

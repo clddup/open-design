@@ -1,4 +1,4 @@
-export const GEOMETRY_SERVICE_CONTRACT_VERSION = 12 as const;
+export const GEOMETRY_SERVICE_CONTRACT_VERSION = 13 as const;
 
 export {
   alignItems,
@@ -23,6 +23,8 @@ export {
   connectVectorEndpoints,
   cutVectorNetworkByLine,
   cutVectorPath,
+  deleteVectorSegments,
+  deleteVectorSelection,
   deleteVectorVertices,
   disconnectVectorVertex,
   findVectorPathIdForVertex,

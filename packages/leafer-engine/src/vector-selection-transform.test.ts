@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   pointInPolygon,
   vectorLassoPath,
+  vectorSegmentsInPolygon,
+  vectorSegmentSelectionPath,
   vectorSelectionResizeTransform,
   vectorSelectionRotationTransform,
 } from "./vector-selection-transform.js";
@@ -18,6 +20,45 @@ describe("vector selection transforms", () => {
     expect(pointInPolygon({ x: 0, y: 50 }, polygon)).toBe(true);
     expect(pointInPolygon({ x: 95, y: 70 }, polygon)).toBe(false);
     expect(vectorLassoPath(polygon)).toBe("M 0 0 L 100 0 L 80 80 L 0 100 Z");
+  });
+
+  it("selects fully enclosed line and cubic segments without reducing them to endpoints", () => {
+    const network = {
+      vertices: [
+        { id: "a", x: 10, y: 10 },
+        { id: "b", x: 90, y: 10 },
+        { id: "c", x: 10, y: 60 },
+        { id: "d", x: 90, y: 60 },
+        { id: "e", x: -10, y: 90 },
+        { id: "f", x: 110, y: 90 },
+      ],
+      segments: [
+        { id: "line", startVertexId: "a", endVertexId: "b" },
+        {
+          id: "curve",
+          startVertexId: "c",
+          endVertexId: "d",
+          tangentStart: { x: 25, y: -20 },
+          tangentEnd: { x: -25, y: -20 },
+        },
+        { id: "outside", startVertexId: "e", endVertexId: "f" },
+      ],
+      paths: [],
+      regions: [],
+    };
+    const polygon = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 80 },
+      { x: 0, y: 80 },
+    ];
+    expect(vectorSegmentsInPolygon(network, polygon, 0.5)).toEqual([
+      "line",
+      "curve",
+    ]);
+    expect(vectorSegmentSelectionPath(network, ["curve", "line"])).toBe(
+      "M 10 10 L 90 10 M 10 60 C 35 40 65 40 90 60",
+    );
   });
 
   it("builds opposite-edge and center-based resize matrices", () => {

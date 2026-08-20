@@ -158,7 +158,10 @@ export interface LeaferEngineCallbacks {
   onVectorEditExit?(): void;
   onVectorEditSelectionChange?(
     nodeId: string,
-    vertexIds: readonly string[],
+    selection: {
+      segmentIds: readonly string[];
+      vertexIds: readonly string[];
+    },
   ): void;
   onViewportChange(viewport: ViewportState): void;
   onWarning?(warning: LeaferFidelityWarning): void;
@@ -196,6 +199,7 @@ export interface LeaferVectorEditScope {
   nodes: readonly {
     nodeId: string;
     readOnly: boolean;
+    selectedSegmentIds: readonly string[];
     selectedVertexIds: readonly string[];
   }[];
   tool: LeaferVectorEditTool;

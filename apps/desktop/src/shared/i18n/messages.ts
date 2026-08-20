@@ -740,11 +740,11 @@ export const enMessages = {
   "canvas.vectorEditing": "Editing {{name}}",
   "canvas.vectorEditingLayers": "{{count}} vector layers",
   "canvas.vectorEditingHint":
-    "{{count}} points selected · Shift-click selects more",
+    "{{pointCount}} points · {{pathCount}} paths selected · Shift-click adds",
   "canvas.vectorCutHint":
     "Click a point or path to create a break, or drag across the object to divide it into layers",
   "canvas.vectorLassoHint":
-    "Draw around vector points · Hold Shift to toggle enclosed points",
+    "Draw around vector points and paths · Hold Shift to toggle enclosed content",
   "canvas.vectorCutUnavailable": "Vector cut result is unavailable",
   "canvas.vectorCutApplyMissing":
     "Cut vector is unavailable after applying the edit",
@@ -1805,10 +1805,11 @@ const zhCNMessages = {
   "canvas.imageCropDone": "完成",
   "canvas.vectorEditing": "正在编辑{{name}}",
   "canvas.vectorEditingLayers": "{{count}} 个矢量图层",
-  "canvas.vectorEditingHint": "已选择 {{count}} 个节点 · Shift 点击可多选",
+  "canvas.vectorEditingHint":
+    "已选择 {{pointCount}} 个节点 · {{pathCount}} 条路径 · Shift 点击可多选",
   "canvas.vectorCutHint":
     "点击节点或路径创建断点，或拖拽穿过对象将其分为独立图层",
-  "canvas.vectorLassoHint": "圈选矢量节点 · 按住 Shift 切换圈内节点",
+  "canvas.vectorLassoHint": "圈选矢量节点与路径 · 按住 Shift 切换圈内内容",
   "canvas.vectorCutUnavailable": "路径切断结果不可用",
   "canvas.vectorCutApplyMissing": "应用切断操作后找不到对应矢量",
   "canvas.vectorLineCutUnavailable": "矢量分割结果不可用",

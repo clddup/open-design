@@ -71,6 +71,7 @@ export interface VectorEditScope {
   pointMode?: VectorPointMode;
   readOnly: boolean;
   readOnlyReason?: string;
+  selectedSegmentIds: readonly string[];
   selectedVertexIds: readonly string[];
 }
 
@@ -122,6 +123,7 @@ export function resolveVectorEditScope(
   selectionNodeIds: readonly string[],
   editNodeId: string | null,
   selectedVertexIds: readonly string[],
+  selectedSegmentIds: readonly string[] = [],
 ): VectorEditScope | null {
   if (
     !editNodeId ||
@@ -135,6 +137,7 @@ export function resolveVectorEditScope(
     pageId,
     editNodeId,
     selectedVertexIds,
+    selectedSegmentIds,
   );
 }
 
@@ -145,6 +148,7 @@ export function resolveVectorEditCollectionScope(
   editNodeIds: readonly string[],
   activeNodeId: string | null,
   selectedVertexIdsByNode: Readonly<Record<string, readonly string[]>>,
+  selectedSegmentIdsByNode: Readonly<Record<string, readonly string[]>> = {},
 ): VectorEditCollectionScope | null {
   if (
     editNodeIds.length === 0 ||
@@ -162,6 +166,7 @@ export function resolveVectorEditCollectionScope(
       pageId,
       nodeId,
       selectedVertexIdsByNode[nodeId] ?? [],
+      selectedSegmentIdsByNode[nodeId] ?? [],
     ),
   );
   if (nodes.some((scope) => scope === null)) return null;
@@ -177,6 +182,7 @@ function resolveVectorNodeEditScope(
   pageId: string,
   nodeId: string,
   selectedVertexIds: readonly string[],
+  selectedSegmentIds: readonly string[],
 ): VectorEditScope | null {
   const node = document.nodesById[nodeId];
   if (
@@ -192,17 +198,27 @@ function resolveVectorNodeEditScope(
   const selected = [...new Set(selectedVertexIds)].filter((vertexId) =>
     vertices.has(vertexId),
   );
+  const segments = new Set(network.segments.map((segment) => segment.id));
+  const selectedSegments = [...new Set(selectedSegmentIds)].filter(
+    (segmentId) => segments.has(segmentId),
+  );
   const editability = vectorNetworkEditability(network);
   const locked = isEffectivelyLocked(document, node.id);
   const modes = new Set(
     selected.map((vertexId) => inferVectorPointMode(network, vertexId)),
   );
-  const selectedPathIds = new Set(
-    selected.flatMap((vertexId) => {
+  const selectedPathIds = new Set([
+    ...selected.flatMap((vertexId) => {
       const pathId = findVectorPathIdForVertex(network, vertexId);
       return pathId ? [pathId] : [];
     }),
-  );
+    ...selectedSegments.flatMap((segmentId) => {
+      const pathId = network.paths.find((path) =>
+        path.segments.some((reference) => reference.segmentId === segmentId),
+      )?.id;
+      return pathId ? [pathId] : [];
+    }),
+  ]);
   const activePathId =
     selectedPathIds.size === 1
       ? [...selectedPathIds][0]
@@ -224,6 +240,7 @@ function resolveVectorNodeEditScope(
       : {}),
     readOnly,
     ...(readOnlyReason ? { readOnlyReason } : {}),
+    selectedSegmentIds: selectedSegments,
     selectedVertexIds: selected,
   };
 }

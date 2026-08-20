@@ -25,7 +25,7 @@ import {
   serializeVectorNetwork,
 } from "@opendesign/geometry-service/editable-vector";
 import {
-  deleteVectorVertices,
+  deleteVectorSelection,
   findVectorPathIdForVertex,
   listVectorVertexHandles,
   moveVectorHandle,
@@ -125,6 +125,8 @@ import {
 } from "./scene-node-transform.js";
 import {
   pointInPolygon,
+  vectorSegmentsInPolygon,
+  vectorSegmentSelectionPath,
   vectorLassoPath,
   vectorSelectionResizeTransform,
   vectorSelectionRotationTransform,
@@ -322,8 +324,10 @@ interface VectorEditSession {
   overlayGroup: LeaferGroup;
   pathElement: LeaferElement;
   readOnly: boolean;
+  segmentSelectionPath: LeaferElement;
   selectionBox: LeaferElement;
   selectionHitArea: LeaferElement;
+  selectedSegmentIds: string[];
   selectedVertexIds: string[];
   tool: LeaferVectorEditTool;
   tracePath: LeaferElement;
@@ -2665,12 +2669,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const selectedVertexIds = [...new Set(item.selectedVertexIds)].filter(
         (vertexId) => network.vertices.some((vertex) => vertex.id === vertexId),
       );
+      const selectedSegmentIds = [
+        ...new Set(item.selectedSegmentIds ?? []),
+      ].filter((segmentId) =>
+        network.segments.some((segment) => segment.id === segmentId),
+      );
       let session = this.#vectorEdits.get(item.nodeId);
       if (!session) {
         session = this.#createVectorEditSession(
           item.nodeId,
           pathElement,
           network,
+          selectedSegmentIds,
           selectedVertexIds,
           item.readOnly,
           scope.tool,
@@ -2686,6 +2696,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         }
         session.pathElement = pathElement;
         session.readOnly = item.readOnly;
+        session.selectedSegmentIds = selectedSegmentIds;
         session.selectedVertexIds = selectedVertexIds;
         session.tool = scope.tool;
         if (!session.drag) session.network = structuredClone(network);
@@ -2704,6 +2715,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     nodeId: string,
     pathElement: LeaferElement,
     network: VectorNetwork,
+    selectedSegmentIds: string[],
     selectedVertexIds: string[],
     readOnly: boolean,
     tool: LeaferVectorEditTool,
@@ -2762,8 +2774,15 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       stroke: LEAFER_EDITOR_SELECTION_COLOR,
       visible: false,
     }) as LeaferElement;
+    const segmentSelectionPath = new this.#leafer.Path({
+      editable: false,
+      fill: null,
+      hittable: false,
+      stroke: LEAFER_EDITOR_SELECTION_COLOR,
+    }) as LeaferElement;
     overlayGroup.add(cutHitPath);
     overlayGroup.add(tracePath);
+    overlayGroup.add(segmentSelectionPath);
     overlayGroup.add(selectionHitArea);
     overlayGroup.add(selectionBox);
     overlayGroup.add(handlePath);
@@ -2788,8 +2807,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       overlayGroup,
       pathElement,
       readOnly,
+      segmentSelectionPath,
       selectionBox,
       selectionHitArea,
+      selectedSegmentIds,
       selectedVertexIds,
       tool,
       tracePath,
@@ -2830,6 +2851,13 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       strokeWidth: 14 / zoom,
     });
     session.tracePath.set({ path: serialized.path, strokeWidth: 1.5 / zoom });
+    session.segmentSelectionPath.set({
+      path: vectorSegmentSelectionPath(
+        session.network,
+        session.selectedSegmentIds,
+      ),
+      strokeWidth: 4 / zoom,
+    });
     session.cutGuidePath.set({ strokeWidth: 1.5 / zoom });
     this.#renderVectorCutGuide(session);
     session.anchorControls.forEach((control) => {
@@ -3052,19 +3080,34 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
   }
 
-  #setVectorVertexSelection(
+  #setVectorSelection(
     session: VectorEditSession,
+    segmentIds: readonly string[],
     vertexIds: readonly string[],
   ): void {
+    const availableSegments = new Set(
+      session.network.segments.map((segment) => segment.id),
+    );
     const available = new Set(
       session.network.vertices.map((vertex) => vertex.id),
+    );
+    const selectedSegments = [...new Set(segmentIds)].filter((segmentId) =>
+      availableSegments.has(segmentId),
     );
     const selected = [...new Set(vertexIds)].filter((vertexId) =>
       available.has(vertexId),
     );
-    if (sameStringList(selected, session.selectedVertexIds)) return;
+    if (
+      sameStringList(selectedSegments, session.selectedSegmentIds) &&
+      sameStringList(selected, session.selectedVertexIds)
+    )
+      return;
+    session.selectedSegmentIds = selectedSegments;
     session.selectedVertexIds = selected;
-    this.#callbacks.onVectorEditSelectionChange?.(session.nodeId, selected);
+    this.#callbacks.onVectorEditSelectionChange?.(session.nodeId, {
+      segmentIds: selectedSegments,
+      vertexIds: selected,
+    });
     this.#renderVectorEditOverlay(session);
   }
 
@@ -3222,7 +3265,28 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
     if (!control || control.kind === "path") {
       if (target && this.#nodeId(target) === session.nodeId) {
-        this.#setVectorVertexSelection(session, []);
+        const local = pointer.getInnerPoint(session.pathElement);
+        const hit = nearestVectorSegmentPoint(session.network, local);
+        const zoom = Math.max(
+          MATRIX_EPSILON,
+          Math.abs(this.#input?.viewport.zoom ?? 1),
+        );
+        const segmentIds = new Set(session.selectedSegmentIds);
+        if (hit && hit.distance <= 8 / zoom) {
+          if (pointer.shiftKey) {
+            if (segmentIds.has(hit.segmentId)) segmentIds.delete(hit.segmentId);
+            else segmentIds.add(hit.segmentId);
+            this.#setVectorSelection(
+              session,
+              [...segmentIds],
+              session.selectedVertexIds,
+            );
+          } else {
+            this.#setVectorSelection(session, [hit.segmentId], []);
+          }
+        } else if (!pointer.shiftKey) {
+          this.#setVectorSelection(session, [], []);
+        }
       }
       return;
     }
@@ -3236,7 +3300,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         current.clear();
         current.add(control.vertexId);
       }
-      this.#setVectorVertexSelection(session, [...current]);
+      this.#setVectorSelection(
+        session,
+        pointer.shiftKey ? session.selectedSegmentIds : [],
+        [...current],
+      );
       if (session.readOnly || !current.has(control.vertexId)) return;
       session.drag = {
         before: structuredClone(session.network),
@@ -3250,7 +3318,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
 
     if (!session.selectedVertexIds.includes(control.vertexId)) {
-      this.#setVectorVertexSelection(session, [control.vertexId]);
+      this.#setVectorSelection(session, [], [control.vertexId]);
     }
     if (session.readOnly) return;
     session.drag = {
@@ -3414,18 +3482,30 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (!lasso) return;
     this.#vectorLasso = null;
     let lastSelectedNodeId: string | null = null;
+    const zoom = Math.max(
+      MATRIX_EPSILON,
+      Math.abs(this.#input?.viewport.zoom ?? 1),
+    );
     for (const session of this.#vectorEdits.values()) {
       const polygon = lasso.pointsByNode.get(session.nodeId) ?? [];
-      const enclosed = lasso.moved
+      const enclosedVertices = lasso.moved
         ? session.network.vertices
             .filter((vertex) => pointInPolygon(vertex, polygon))
             .map((vertex) => vertex.id)
         : [];
-      const next = lasso.toggle
-        ? toggleStringSelection(session.selectedVertexIds, enclosed)
-        : enclosed;
-      if (next.length > 0) lastSelectedNodeId = session.nodeId;
-      this.#setVectorVertexSelection(session, next);
+      const enclosedSegments = lasso.moved
+        ? vectorSegmentsInPolygon(session.network, polygon, 0.75 / zoom)
+        : [];
+      const nextVertices = lasso.toggle
+        ? toggleStringSelection(session.selectedVertexIds, enclosedVertices)
+        : enclosedVertices;
+      const nextSegments = lasso.toggle
+        ? toggleStringSelection(session.selectedSegmentIds, enclosedSegments)
+        : enclosedSegments;
+      if (nextVertices.length > 0 || nextSegments.length > 0) {
+        lastSelectedNodeId = session.nodeId;
+      }
+      this.#setVectorSelection(session, nextSegments, nextVertices);
       session.lassoPath.set({ path: "", visible: false });
     }
     if (
@@ -3506,11 +3586,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
     if (this.#vectorEdits.get(session.nodeId) === session) {
       session.network = structuredClone(response.network);
+      session.selectedSegmentIds = [];
       session.selectedVertexIds = [...response.selectedVertexIds];
-      this.#callbacks.onVectorEditSelectionChange?.(
-        session.nodeId,
-        response.selectedVertexIds,
-      );
+      this.#callbacks.onVectorEditSelectionChange?.(session.nodeId, {
+        segmentIds: [],
+        vertexIds: response.selectedVertexIds,
+      });
       this.#renderVectorEditOverlay(session);
     }
     return true;
@@ -3539,10 +3620,16 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #deleteSelectedVectorVertices(): boolean {
     const session = this.#activeVectorEditSession();
     if (!session) return false;
-    if (session.readOnly || session.selectedVertexIds.length === 0) return true;
-    const result = deleteVectorVertices(
+    if (
+      session.readOnly ||
+      (session.selectedVertexIds.length === 0 &&
+        session.selectedSegmentIds.length === 0)
+    )
+      return true;
+    const result = deleteVectorSelection(
       session.network,
       session.selectedVertexIds,
+      session.selectedSegmentIds,
     );
     if (!result.ok) {
       this.#report(new Error(result.message));
@@ -3555,7 +3642,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         }) ?? false)
       : this.#submitVectorEdit(session, result.network);
     if (accepted) {
-      this.#callbacks.onVectorEditSelectionChange?.(session.nodeId, []);
+      this.#callbacks.onVectorEditSelectionChange?.(session.nodeId, {
+        segmentIds: [],
+        vertexIds: [],
+      });
       if (result.deleteNode) this.#callbacks.onVectorEditExit?.();
     }
     return true;

@@ -4,6 +4,8 @@ import {
   connectVectorEndpoints,
   cutVectorNetworkByLine,
   cutVectorPath,
+  deleteVectorSegments,
+  deleteVectorSelection,
   deleteVectorVertices,
   disconnectVectorVertex,
   findVectorPathIdForVertex,
@@ -471,6 +473,68 @@ describe("editable vector point operations", () => {
     expect(
       deleteVectorVertices(closedNetwork(), ["vertex_a", "vertex_b"]),
     ).toEqual({ ok: true, deleteNode: true });
+  });
+
+  it("deletes selected path segments into stable open runs", () => {
+    const open = deleteVectorSegments(openNetwork(), ["segment_bc"]);
+    expect(open).toMatchObject({ ok: true, deleteNode: false });
+    if (!open.ok || open.deleteNode) throw new Error("Expected split paths");
+    expect(open.network.paths).toEqual([
+      {
+        id: "path_open",
+        closed: false,
+        segments: [{ segmentId: "segment_ab", reversed: false }],
+      },
+      {
+        id: "path_edit_1",
+        closed: false,
+        segments: [{ segmentId: "segment_cd", reversed: false }],
+      },
+    ]);
+    expect(open.network.segments.map((segment) => segment.id)).toEqual([
+      "segment_ab",
+      "segment_cd",
+    ]);
+
+    const closed = deleteVectorSegments(closedNetwork(), ["segment_bc"]);
+    if (!closed.ok || closed.deleteNode)
+      throw new Error("Expected one opened path");
+    expect(closed.network.paths).toEqual([
+      {
+        id: "path_closed",
+        closed: false,
+        segments: [
+          { segmentId: "segment_cd", reversed: false },
+          { segmentId: "segment_da", reversed: false },
+          { segmentId: "segment_ab", reversed: false },
+        ],
+      },
+    ]);
+    expect(closed.network.regions).toEqual([]);
+  });
+
+  it("deletes mixed point and path selections in one deterministic edit", () => {
+    const result = deleteVectorSelection(
+      openNetwork(),
+      ["vertex_a"],
+      ["segment_bc"],
+    );
+    if (!result.ok || result.deleteNode)
+      throw new Error("Expected one retained path");
+    expect(result.network.paths).toEqual([
+      {
+        id: "path_edit_1",
+        closed: false,
+        segments: [{ segmentId: "segment_cd", reversed: false }],
+      },
+    ]);
+    expect(result.network.vertices.map((vertex) => vertex.id)).toEqual([
+      "vertex_c",
+      "vertex_d",
+    ]);
+    expect(
+      deleteVectorSegments(openNetwork(), ["segment_missing"]),
+    ).toMatchObject({ ok: false, code: "missing-segment" });
   });
 
   it("closes and reopens one contour with deterministic IDs and region semantics", () => {

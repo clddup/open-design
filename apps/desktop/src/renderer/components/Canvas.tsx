@@ -156,6 +156,7 @@ export function Canvas({
   const [vectorEditState, setVectorEditState] = useState<{
     activeNodeId: string;
     nodeIds: readonly string[];
+    selectedSegmentIdsByNode: Readonly<Record<string, readonly string[]>>;
     selectedVertexIdsByNode: Readonly<Record<string, readonly string[]>>;
     tool: LeaferVectorEditTool;
   } | null>(null);
@@ -201,6 +202,7 @@ export function Canvas({
         tool === "select" ? (vectorEditState?.nodeIds ?? []) : [],
         tool === "select" ? (vectorEditState?.activeNodeId ?? null) : null,
         vectorEditState?.selectedVertexIdsByNode ?? {},
+        vectorEditState?.selectedSegmentIdsByNode ?? {},
       ),
     [
       activePageId,
@@ -253,6 +255,9 @@ export function Canvas({
       const nextState = {
         activeNodeId: activeVectorNodeId,
         nodeIds: [...editableVectorNodeIds],
+        selectedSegmentIdsByNode: Object.fromEntries(
+          editableVectorNodeIds.map((nodeId) => [nodeId, []]),
+        ),
         selectedVertexIdsByNode: Object.fromEntries(
           editableVectorNodeIds.map((nodeId) => [nodeId, []]),
         ),
@@ -297,6 +302,12 @@ export function Canvas({
           current.selectedVertexIdsByNode[nodeId] ?? [],
         ]),
       );
+      const selectedSegmentIdsByNode = Object.fromEntries(
+        nodeIds.map((nodeId) => [
+          nodeId,
+          current.selectedSegmentIdsByNode[nodeId] ?? [],
+        ]),
+      );
       const activeNodeId = nodeIds.includes(request.nodeId)
         ? request.nodeId
         : current.activeNodeId === request.nodeId
@@ -311,6 +322,7 @@ export function Canvas({
           nodeIds,
           activeNodeId,
           selectedVertexIdsByNode,
+          selectedSegmentIdsByNode,
         )
       ) {
         return;
@@ -319,6 +331,7 @@ export function Canvas({
         ...current,
         activeNodeId,
         nodeIds,
+        selectedSegmentIdsByNode,
         selectedVertexIdsByNode,
       };
       vectorEditStateRef.current = next;
@@ -606,6 +619,10 @@ export function Canvas({
           state?.nodeIds.includes(nodeId)
             ? {
                 ...state,
+                selectedSegmentIdsByNode: {
+                  ...state.selectedSegmentIdsByNode,
+                  [nodeId]: [],
+                },
                 selectedVertexIdsByNode: {
                   ...state.selectedVertexIdsByNode,
                   [nodeId]: [...cutResult.cutVertexIds],
@@ -663,6 +680,10 @@ export function Canvas({
         state?.nodeIds.includes(request.nodeId)
           ? {
               ...state,
+              selectedSegmentIdsByNode: {
+                ...state.selectedSegmentIdsByNode,
+                [request.nodeId]: [],
+              },
               selectedVertexIdsByNode: {
                 ...state.selectedVertexIdsByNode,
                 [request.nodeId]: [...cutResult.cutVertexIds],
@@ -913,15 +934,19 @@ export function Canvas({
       onVectorEditExit: exitVectorEdit,
       onVectorEditScopeChange: changeVectorEditScope,
       onVectorLineCut: applyVectorLineCut,
-      onVectorEditSelectionChange: (nodeId, selectedVertexIds) => {
+      onVectorEditSelectionChange: (nodeId, selection) => {
         setVectorEditState((current) => {
           if (!current?.nodeIds.includes(nodeId)) return current;
           const next = {
             ...current,
             activeNodeId: nodeId,
+            selectedSegmentIdsByNode: {
+              ...current.selectedSegmentIdsByNode,
+              [nodeId]: [...selection.segmentIds],
+            },
             selectedVertexIdsByNode: {
               ...current.selectedVertexIdsByNode,
-              [nodeId]: [...selectedVertexIds],
+              [nodeId]: [...selection.vertexIds],
             },
           };
           vectorEditStateRef.current = next;
@@ -1035,6 +1060,7 @@ export function Canvas({
               nodes: vectorEditCollectionScope.nodes.map((scope) => ({
                 nodeId: scope.nodeId,
                 readOnly: scope.readOnly,
+                selectedSegmentIds: scope.selectedSegmentIds,
                 selectedVertexIds: scope.selectedVertexIds,
               })),
               tool: vectorEditState?.tool ?? "move",
@@ -1279,7 +1305,10 @@ export function Canvas({
                         : vectorEditState?.tool === "lasso"
                           ? t("canvas.vectorLassoHint")
                           : t("canvas.vectorEditingHint", {
-                              count: vectorEditScope.selectedVertexIds.length,
+                              pathCount:
+                                vectorEditScope.selectedSegmentIds.length,
+                              pointCount:
+                                vectorEditScope.selectedVertexIds.length,
                             })}
                   </small>
                 </span>
