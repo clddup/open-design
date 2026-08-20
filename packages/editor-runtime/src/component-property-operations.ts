@@ -16,11 +16,11 @@ import type {
   VariantPropertyDefinition,
 } from "@opendesign/design-contracts";
 import type { ComponentOperationPlan } from "./component-operations.js";
+import { replaceSlotContainerKindCommand } from "./component-slot-operations.js";
 import {
   hasSlotAncestor,
   hasSlotDescendant,
-  replaceSlotContainerKindCommand,
-} from "./component-slot-operations.js";
+} from "./component-slot-support.js";
 
 export type ComponentPropertyReferenceField =
   "visible" | "characters" | "mainComponent";
@@ -93,7 +93,10 @@ export function planAddComponentProperty(
     input.type === "SLOT" &&
     (hasSlotAncestor(document, source) || hasSlotDescendant(document, source))
   ) {
-    return failure("invalid", "Nested Slots are not supported in Slot v1");
+    return failure(
+      "invalid",
+      "A Slot cannot contain another Slot; compose nested flexible content through a component Instance instead",
+    );
   }
   const binding = bindingForType(input.type, source);
   if (!binding.ok) return failure("invalid", binding.message);

@@ -110,38 +110,6 @@ export function replaceSlotContainerKindCommand(
   };
 }
 
-export function hasSlotAncestor(
-  document: DesignDocument,
-  node: DesignNode,
-): boolean {
-  const visited = new Set<string>();
-  let parentId = node.parentId;
-  while (parentId && !visited.has(parentId)) {
-    visited.add(parentId);
-    const parent = document.nodesById[parentId];
-    if (parent?.kind === "slot") return true;
-    parentId = parent?.parentId ?? null;
-  }
-  return false;
-}
-
-export function hasSlotDescendant(
-  document: DesignDocument,
-  node: DesignNode,
-): boolean {
-  const pending = [...node.childIds];
-  const visited = new Set<string>();
-  while (pending.length > 0) {
-    const nodeId = pending.pop();
-    if (!nodeId || visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    const child = document.nodesById[nodeId];
-    if (child?.kind === "slot") return true;
-    if (child) pending.push(...child.childIds);
-  }
-  return false;
-}
-
 export function planCreateComponentSlotOverride(
   document: DesignDocument,
   input: {
@@ -326,8 +294,13 @@ function slotContext(
       resolution.issues[0]?.message ?? "Instance cannot be resolved",
     );
   }
+  const component = document.componentsById[resolution.componentId];
+  const definition = component?.componentPropertyDefinitions[propertyName];
   const slot = resolution.slots.find(
-    (candidate) => candidate.propertyName === propertyName,
+    (candidate) =>
+      definition?.type === "SLOT" &&
+      candidate.propertyName === propertyName &&
+      candidate.sourceSlotNodeId === definition.defaultValue,
   );
   if (!slot) {
     return failure(
@@ -336,7 +309,6 @@ function slotContext(
     );
   }
   const source = document.nodesById[slot.sourceSlotNodeId];
-  const component = document.componentsById[resolution.componentId];
   const pageId = pageContainingNode(document, instance.id);
   if (!component || source?.kind !== "slot" || !pageId) {
     return failure(

@@ -25,6 +25,7 @@ import {
   type DocumentInvariantIssue,
 } from "./layout-document-invariants.js";
 import { validateComponentPropertyOrder } from "./component-property-order.js";
+import { hasSlotAncestor } from "./component-slot-support.js";
 import { isBooleanOperandNode, isContainerNode } from "./node-semantics.js";
 import { validateVariantSetInvariants } from "./variant-set-invariants.js";
 import { canonicalJsonStringify } from "./document-fingerprint.js";
@@ -347,6 +348,13 @@ export function validateDocumentInvariants(
             path: `/nodesById/${nodeId}/properties/sourceSlotId`,
             message:
               "A source Slot must belong to exactly one Component SLOT property",
+          });
+        }
+        if (hasSlotAncestor(document, node)) {
+          issues.push({
+            path: `/nodesById/${nodeId}/parentId`,
+            message:
+              "A source Slot cannot be nested inside another Slot; use a nested component Instance for composable Slot content",
           });
         }
       } else {

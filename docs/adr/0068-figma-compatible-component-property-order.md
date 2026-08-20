@@ -52,4 +52,4 @@ Main Inspector 的 ordinary property authoring 列表直接按 `componentPropert
 
 ## 后果
 
-普通 Component Property 顺序成为可迁移、可审计和可撤销的 OpenDesign 文档事实，不再依赖 JavaScript 对象偶然行为。能力仍为 `degraded`：on-canvas matrix reordering、nested Slot、跨文件 Library、Plugin/REST import-export、Variables、派生 Main child 直选与 macOS/Windows 打包 GUI 实机证据仍未完成。
+普通 Component Property 顺序成为可迁移、可审计和可撤销的 OpenDesign 文档事实，不再依赖 JavaScript 对象偶然行为。Slot-in-Slot 的永久 composition boundary 见 ADR-0106；on-canvas matrix reordering 与 Variables 后续已经完成。能力仍为 `degraded`：跨文件 Library、Plugin/REST import-export、派生 nested Instance 直选/编辑与 macOS/Windows 打包 GUI 实机证据仍未完成。

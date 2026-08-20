@@ -324,6 +324,69 @@ describe("Figma-compatible component property operations", () => {
     });
   });
 
+  it("rejects Slot-in-Slot authoring from either nesting direction", () => {
+    const descendantRuntime = new EditorRuntime(nestedSlotCandidateFixture());
+    addSlotProperty(descendantRuntime, "slot_inner", "Inner", "slot:inner");
+    expect(
+      planAddComponentProperty(descendantRuntime.getSnapshot().document, {
+        componentId: "component_button",
+        propertyId: "slot:outer",
+        name: "Outer",
+        type: "SLOT",
+        sourceNodeId: "slot_outer",
+        commandPrefix: "reject_outer_slot",
+      }),
+    ).toEqual({
+      ok: false,
+      code: "invalid",
+      message:
+        "A Slot cannot contain another Slot; compose nested flexible content through a component Instance instead",
+    });
+
+    const ancestorRuntime = new EditorRuntime(nestedSlotCandidateFixture());
+    addSlotProperty(ancestorRuntime, "slot_outer", "Outer", "slot:outer");
+    expect(
+      planAddComponentProperty(ancestorRuntime.getSnapshot().document, {
+        componentId: "component_button",
+        propertyId: "slot:inner",
+        name: "Inner",
+        type: "SLOT",
+        sourceNodeId: "slot_inner",
+        commandPrefix: "reject_inner_slot",
+      }),
+    ).toMatchObject({ ok: false, code: "invalid" });
+  });
+
+  it("rejects a malformed persisted source Slot nested inside another Slot", () => {
+    const runtime = new EditorRuntime(nestedSlotCandidateFixture());
+    addSlotProperty(runtime, "slot_outer", "Outer", "slot:outer");
+    const malformed = structuredClone(runtime.getSnapshot().document);
+    const inner = malformed.nodesById.slot_inner;
+    if (inner?.kind !== "frame")
+      throw new Error("Missing inner Slot candidate");
+    malformed.nodesById.slot_inner = {
+      ...inner,
+      kind: "slot",
+      properties: {
+        ...inner.properties,
+        sourceSlotId: null,
+      },
+    };
+    const component = malformed.componentsById.component_button;
+    if (!component) throw new Error("Missing component fixture");
+    component.componentPropertyDefinitions["Inner#slot:inner"] = {
+      type: "SLOT",
+      defaultValue: "slot_inner",
+    };
+    component.componentPropertyOrder.push("Inner#slot:inner");
+
+    expect(validateDocumentInvariants(malformed)).toContainEqual({
+      path: "/nodesById/slot_inner/parentId",
+      message:
+        "A source Slot cannot be nested inside another Slot; use a nested component Instance for composable Slot content",
+    });
+  });
+
   it("rejects an Instance swap property value that creates a component cycle", () => {
     const runtime = new EditorRuntime(componentPropertyFixture(true));
     addProperty(runtime, {
@@ -357,6 +420,24 @@ function addProperty(
   });
   expect(plan.ok).toBe(true);
   apply(runtime, plan.ok ? plan.commands : [], `add-${input.propertyId}`);
+}
+
+function addSlotProperty(
+  runtime: EditorRuntime,
+  sourceNodeId: string,
+  name: string,
+  propertyId: string,
+): void {
+  const plan = planAddComponentProperty(runtime.getSnapshot().document, {
+    componentId: "component_button",
+    propertyId,
+    name,
+    type: "SLOT",
+    sourceNodeId,
+    commandPrefix: `add_${propertyId}`,
+  });
+  expect(plan.ok, JSON.stringify(plan)).toBe(true);
+  apply(runtime, plan.ok ? plan.commands : [], `add-${propertyId}`);
 }
 
 function setProperty(
@@ -472,6 +553,18 @@ function componentPropertyFixture(withCycleCandidate = false): DesignDocument {
       "cycle_main",
     );
   }
+  return document;
+}
+
+function nestedSlotCandidateFixture(): DesignDocument {
+  const document = componentPropertyFixture();
+  const root = document.nodesById.button_main;
+  if (root?.kind !== "frame") throw new Error("Missing component root");
+  root.childIds.push("slot_outer");
+  document.nodesById.slot_outer = frame("slot_outer", "button_main", [
+    "slot_inner",
+  ]);
+  document.nodesById.slot_inner = frame("slot_inner", "slot_outer", []);
   return document;
 }
 

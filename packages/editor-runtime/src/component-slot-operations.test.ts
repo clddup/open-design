@@ -28,6 +28,86 @@ import { planCombineComponentsAsVariants } from "./variant-set-operations.js";
 import { planDuplicateVariant } from "./variant-set-membership-operations.js";
 
 describe("Component Slot lifecycle", () => {
+  it("composes Slots through a nested Instance without exposing its Slot as a root Instance action", () => {
+    const source = slotFixture();
+    const rowMain = source.nodesById.row_main;
+    const rowBody = source.nodesById.row_body;
+    const cardContent = source.nodesById.card_content;
+    if (
+      rowMain?.kind !== "frame" ||
+      !rowBody ||
+      cardContent?.kind !== "frame"
+    ) {
+      throw new Error("Missing nested Instance Slot fixture nodes");
+    }
+    source.nodesById.row_content = frame("row_content", "row_main", [
+      "row_body",
+    ]);
+    rowMain.childIds = ["row_content"];
+    rowBody.parentId = "row_content";
+    source.nodesById.card_nested_row = instance(
+      "card_nested_row",
+      "card_content",
+      "row_component",
+    );
+    cardContent.childIds.push("card_nested_row");
+
+    const runtime = new EditorRuntime(source);
+    for (const property of [
+      {
+        componentId: "card_component",
+        propertyId: "card:content",
+        name: "Content",
+        sourceNodeId: "card_content",
+      },
+      {
+        componentId: "row_component",
+        propertyId: "row:content",
+        name: "Row content",
+        sourceNodeId: "row_content",
+      },
+    ]) {
+      const added = planAddComponentProperty(runtime.getSnapshot().document, {
+        ...property,
+        type: "SLOT",
+        commandPrefix: `add_${property.propertyId}`,
+      });
+      expect(added.ok, JSON.stringify(added)).toBe(true);
+      apply(
+        runtime,
+        added.ok ? added.commands : [],
+        `add-${property.propertyId}`,
+      );
+    }
+
+    const document = runtime.getSnapshot().document;
+    const resolution = resolveComponentInstance(document, "card_instance");
+    expect(
+      resolution.ok
+        ? resolution.slots.map((slot) => slot.propertyName)
+        : resolution,
+    ).toEqual(["Content#card:content", "Row content#row:content"]);
+    expect(
+      planCreateComponentSlotOverride(document, {
+        instanceId: "card_instance",
+        propertyName: "Row content#row:content",
+        commandPrefix: "invalid_nested_instance_slot_override",
+      }),
+    ).toEqual({
+      ok: false,
+      code: "missing-component",
+      message:
+        "SLOT property Row content#row:content does not exist on this Instance",
+    });
+    expect(
+      planCreateComponentSlotOverride(document, {
+        instanceId: "card_instance",
+        propertyName: "Content#card:content",
+        commandPrefix: "outer_slot_override",
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
   it("converts a Frame to a Slot and preserves default and overridden contents", () => {
     const runtime = new EditorRuntime(slotFixture());
     const added = planAddComponentProperty(runtime.getSnapshot().document, {
@@ -614,6 +694,32 @@ function rectangle(
       strokes: [],
       strokeWidth: 0,
       cornerRadius: 4,
+    },
+  };
+}
+
+function instance(
+  id: string,
+  parentId: string | null,
+  componentId: string,
+): Extract<DesignNode, { kind: "instance" }> {
+  return {
+    id,
+    name: id,
+    parentId,
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 0, 0],
+    size: { width: 240, height: 160 },
+    exportSettings: [],
+    opacity: 1,
+    extensions: {},
+    kind: "instance",
+    properties: {
+      componentId,
+      componentProperties: {},
+      overrides: [],
     },
   };
 }

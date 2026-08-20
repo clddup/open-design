@@ -5,7 +5,7 @@
 - 文档协议：`DesignDocument 1.24.0`
 - Component Service：contract v3
 - Figma compatibility baseline：`@figma/plugin-typings 1.133.0`，commit `83bfe81d9616ab759702f657eb18ef153f83e8ae`
-- 关联：ADR-0045、ADR-0063、ADR-0064、ADR-0065、ADR-0066
+- 关联：ADR-0045、ADR-0063、ADR-0064、ADR-0065、ADR-0066；composition boundary 由 ADR-0106 澄清
 
 ## 背景
 
@@ -82,4 +82,4 @@ Main Inspector 提供 Slot authoring、min/max、四项 settings、Component/Com
 
 ## 后果
 
-Slot 是 OpenDesign 自有文档和组件解析中的正式能力，不是 Figma adapter 特判。能力仍为 `degraded`：v1 不支持 nested Slot、跨文件 Library preferred key、画布内部派生 Main child 直选、Component Set 画布矩阵拖拽重排、私有 `.fig` 解码、Figma Plugin/REST 导入导出和 macOS/Windows 打包 GUI 实机证据。
+Slot 是 OpenDesign 自有文档和组件解析中的正式能力，不是 Figma adapter 特判。按 ADR-0106，Slot-in-Slot 是与 Figma 公开 composition model 一致的永久失败边界；灵活嵌套通过 Slot 内 Component Instance 表达。能力仍为 `degraded`：跨文件 Library preferred key、画布内部派生 nested Instance 直选/编辑、私有 `.fig` 解码、Figma Plugin/REST 导入导出和 macOS/Windows 打包 GUI 实机证据尚未完成；Component Set 画布矩阵拖拽重排已由 ADR-0093 完成。
