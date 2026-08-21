@@ -1,4 +1,5 @@
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
+import { componentProjectionId } from "@opendesign/component-service";
 import type {
   TextLayoutProvider,
   TextRunLayoutProvider,
@@ -8,6 +9,89 @@ import type { LeaferTextRunStyle } from "./text-run-layout.js";
 import { inspectDesignTextLayoutQuality } from "./text-quality-inspection.js";
 
 describe("design text layout quality inspection", () => {
+  it("measures visible Text inside the exact Component Instance projection", () => {
+    const document = structuredClone(createWelcomeDocument());
+    const sourceText = structuredClone(document.nodesById.title_welcome);
+    const artboard = document.nodesById.frame_welcome;
+    if (sourceText?.kind !== "text" || artboard?.kind !== "frame") {
+      throw new Error("Missing component text fixture");
+    }
+    sourceText.id = "component_text";
+    sourceText.parentId = "component_text_main";
+    sourceText.transform = [1, 0, 0, 1, 0, 0];
+    sourceText.size = { width: 180, height: 36 };
+    document.nodesById.component_text = sourceText;
+    document.nodesById.component_text_main = {
+      ...structuredClone(artboard),
+      id: "component_text_main",
+      name: "Text Component Main",
+      parentId: null,
+      childIds: [sourceText.id],
+      transform: [1, 0, 0, 1, 1_300, 64],
+      size: { width: 180, height: 36 },
+      properties: { ...artboard.properties, clipsContent: false },
+    };
+    document.nodesById.component_text_instance = {
+      id: "component_text_instance",
+      kind: "instance",
+      name: "Text component instance",
+      parentId: artboard.id,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 820, 100],
+      size: { width: 180, height: 36 },
+      exportSettings: [],
+      opacity: 1,
+      properties: {
+        componentId: "component_text_definition",
+        componentProperties: {},
+        overrides: [],
+      },
+      extensions: {},
+    };
+    document.componentsById.component_text_definition = {
+      id: "component_text_definition",
+      name: "Text Component",
+      rootNodeId: "component_text_main",
+      componentPropertyOrder: [],
+      componentPropertyDefinitions: {},
+      variantProperties: {},
+      extensions: {},
+    };
+    artboard.childIds.push("component_text_instance");
+    document.pagesById.page_welcome!.rootNodeIds.push("component_text_main");
+    const projectedTextId = componentProjectionId("component_text_instance", [
+      "component_text",
+    ]);
+
+    const evidence = inspectDesignTextLayoutQuality(
+      document,
+      "page_welcome",
+      artboard.id,
+      {
+        id: "test-plain",
+        version: "1",
+        measure: (request) => ({
+          ok: true,
+          provider: "test-plain",
+          providerVersion: "1",
+          size: { width: request.width ?? 180, height: 36 },
+          warnings: [],
+        }),
+      },
+      unusedRunProvider(),
+    );
+
+    expect(evidence.measurements).toContainEqual(
+      expect.objectContaining({
+        status: "measured",
+        nodeId: projectedTextId,
+        boxSize: { width: 180, height: 36 },
+      }),
+    );
+  });
+
   it("proves silent fixed-box clipping from full provider measurement", () => {
     const document = structuredClone(createWelcomeDocument());
     const title = document.nodesById.title_welcome;

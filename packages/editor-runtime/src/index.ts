@@ -250,6 +250,10 @@ export {
   type DesignLayoutQualitySeverity,
 } from "./layout-quality.js";
 export {
+  planRepairDeliveryOverflow,
+  type DeliveryOverflowRepairPlan,
+} from "./layout-overflow-repair.js";
+export {
   EditorRuntime,
   diffDocuments,
   type EditorRuntimeListener,

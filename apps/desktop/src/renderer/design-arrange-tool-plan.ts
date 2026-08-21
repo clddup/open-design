@@ -2,6 +2,7 @@ import type { DesignDocument } from "@opendesign/design-contracts";
 import {
   planArrangeNodes,
   planReorderGridTracks,
+  planRepairDeliveryOverflow,
   planResizeFrameWithConstraints,
   planSetFrameAutoLayout,
   planSetNodeConstraints,
@@ -18,6 +19,13 @@ export function planDesignArrangeTool(
   input: DesignArrangeToolInput,
   commandPrefix: string,
 ) {
+  if (input.action === "repair-overflow")
+    return planRepairDeliveryOverflow(
+      document,
+      input.pageId,
+      input.frameId,
+      commandPrefix,
+    );
   if (input.action === "set-constraints")
     return planSetNodeConstraints(
       document,

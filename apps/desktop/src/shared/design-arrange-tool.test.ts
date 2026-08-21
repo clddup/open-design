@@ -2,6 +2,26 @@ import { describe, expect, it } from "vitest";
 import { isDesignArrangeToolInput } from "./design-arrange-tool.js";
 
 describe("Grid arrange tool contract", () => {
+  it("accepts only the bounded delivery overflow repair target", () => {
+    expect(
+      isDesignArrangeToolInput({
+        action: "repair-overflow",
+        label: "Reveal clipped content",
+        pageId: "page_1",
+        frameId: "delivery_frame",
+      }),
+    ).toBe(true);
+    expect(
+      isDesignArrangeToolInput({
+        action: "repair-overflow",
+        label: "Reveal clipped content",
+        pageId: "page_1",
+        frameId: "delivery_frame",
+        width: 999,
+      }),
+    ).toBe(false);
+  });
+
   it("accepts Figma-shaped Grid tracks and strict child placement", () => {
     expect(
       isDesignArrangeToolInput({

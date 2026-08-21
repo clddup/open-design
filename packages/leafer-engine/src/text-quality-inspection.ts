@@ -3,6 +3,7 @@ import type {
   DesignNode,
   TextRunStyle,
 } from "@opendesign/design-contracts";
+import { projectComponentInstances } from "@opendesign/component-service";
 import {
   MAX_TEXT_LAYOUT_QUALITY_MEASUREMENTS,
   TEXT_LAYOUT_QUALITY_EVIDENCE_VERSION,
@@ -28,6 +29,7 @@ export function inspectDesignTextLayoutQuality(
   textLayoutProvider: TextLayoutProvider,
   textRunLayoutProvider: TextRunLayoutProvider<LeaferTextRunStyle>,
 ): TextLayoutQualityEvidence {
+  const projectionDocument = projectComponentInstances(document).document;
   const measurements: TextLayoutQualityMeasurement[] = [];
   const pending = [{ nodeId: rootNodeId, ancestorsVisible: true }];
   const visited = new Set<string>();
@@ -38,7 +40,7 @@ export function inspectDesignTextLayoutQuality(
     const current = pending.pop();
     if (!current || visited.has(current.nodeId)) continue;
     visited.add(current.nodeId);
-    const node = document.nodesById[current.nodeId];
+    const node = projectionDocument.nodesById[current.nodeId];
     if (!node) continue;
     const visible =
       current.ancestorsVisible && node.visible && node.opacity > 0;

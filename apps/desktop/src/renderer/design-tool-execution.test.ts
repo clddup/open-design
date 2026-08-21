@@ -2237,7 +2237,7 @@ describe("Renderer design tool scope", () => {
           attachment,
           attachments: [attachment],
           layoutQuality: {
-            version: 5,
+            version: 6,
             documentId: "document_welcome",
             revision: 0,
             pageId: "page_welcome",
@@ -4939,6 +4939,49 @@ describe("Renderer semantic hierarchy tool", () => {
       ),
     ).rejects.toThrow("frame_resize_requires_layout_tool");
     expect(runtime.getSnapshot().document.revision).toBe(2);
+  });
+
+  it("repairs trailing delivery overflow through one bounded Agent transaction", async () => {
+    const document = structuredClone(createWelcomeDocument());
+    const trailing = document.nodesById.feature_three;
+    if (!trailing) throw new Error("Missing trailing fixture node");
+    trailing.transform = [1, 0, 0, 1, 1_100, 24];
+    const runtime = new EditorRuntime(document);
+
+    const repaired = await executeDesignToolRequest(
+      {
+        requestId: "repair_delivery_overflow",
+        call: {
+          toolCallId: "tool_repair_delivery_overflow",
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "repair-overflow",
+            label: "Reveal complete delivery",
+            pageId: "page_welcome",
+            frameId: "frame_welcome",
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+
+    expect(repaired).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "repair-overflow",
+          nodeIds: ["frame_welcome"],
+          atomic: true,
+          revision: 1,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.frame_welcome?.size,
+    ).toEqual({ width: 1_336, height: 720 });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
   });
 
   it("sets Frame Auto Layout through host-derived geometry and one Agent transaction", async () => {

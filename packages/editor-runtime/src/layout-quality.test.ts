@@ -1,10 +1,12 @@
 import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import { componentProjectionId } from "@opendesign/component-service";
 import { describe, expect, it } from "vitest";
 import { createEmptyDesignDocument } from "./document.js";
 import {
   diagnoseDesignTargetLayout,
   isDesignLayoutQualityReport,
 } from "./layout-quality.js";
+import { planRepairDeliveryOverflow } from "./layout-overflow-repair.js";
 
 describe("deterministic delivery layout quality", () => {
   it("accepts visible material contained by a clipping delivery Frame", () => {
@@ -16,7 +18,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 5,
+      version: 6,
       checkedNodeCount: 1,
       checkedQualityNodeCount: 0,
       checkedTextNodeCount: 0,
@@ -179,6 +181,154 @@ describe("deterministic delivery layout quality", () => {
     });
   });
 
+  it("blocks clipped Component projection content with a stable instance source path", () => {
+    const document = layoutDocument();
+    addClippedComponentInstance(document);
+
+    const report = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+    );
+    const projectedRootId = "logo_instance";
+    const projectedMarkId = componentProjectionId("logo_instance", [
+      "logo_mark",
+    ]);
+
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "component-node-clipped-by-ancestor",
+          severity: "error",
+          nodeId: projectedRootId,
+          componentTarget: {
+            instanceId: "logo_instance",
+            sourcePath: ["logo_main"],
+          },
+          relatedNodeIds: ["artboard", "logo_lockup"],
+        }),
+        expect.objectContaining({
+          code: "component-node-clipped-by-ancestor",
+          severity: "error",
+          nodeId: projectedMarkId,
+          componentTarget: {
+            instanceId: "logo_instance",
+            sourcePath: ["logo_mark"],
+          },
+          relatedNodeIds: ["artboard", "logo_lockup"],
+        }),
+      ]),
+    );
+    expect(isDesignLayoutQualityReport(report)).toBe(true);
+    const malformed = structuredClone(report);
+    const componentIssue = malformed.issues.find(
+      (issue) => issue.componentTarget !== undefined,
+    );
+    if (!componentIssue?.componentTarget) {
+      throw new Error("Missing Component target issue");
+    }
+    componentIssue.componentTarget.sourcePath = [];
+    expect(isDesignLayoutQualityReport(malformed)).toBe(false);
+  });
+
+  it("expands a persistent clipping Frame in one deterministic repair plan", () => {
+    const document = layoutDocument();
+    addClippedComponentInstance(document);
+
+    const plan = planRepairDeliveryOverflow(
+      document,
+      "page_layout",
+      "artboard",
+      "repair_logo",
+    );
+
+    expect(plan).toMatchObject({
+      ok: true,
+      resizedFrameIds: ["logo_lockup"],
+      commands: [
+        {
+          commandId: "repair_logo_expand_0",
+          type: "update_properties",
+          nodeId: "logo_lockup",
+          size: { width: 120, height: 130 },
+        },
+      ],
+    });
+    if (!plan.ok) throw new Error(plan.message);
+    for (const command of plan.commands) {
+      if (command.type !== "update_properties" || !command.size) continue;
+      document.nodesById[command.nodeId]!.size = structuredClone(command.size);
+    }
+    const repaired = diagnoseDesignTargetLayout(
+      document,
+      "page_layout",
+      "artboard",
+    );
+    expect(
+      repaired.issues.some(
+        (issue) => issue.code === "component-node-clipped-by-ancestor",
+      ),
+    ).toBe(false);
+  });
+
+  it("expands the delivery artboard for trailing-edge overflow", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const overflow = rectangle(
+      "trailing_overflow",
+      "artboard",
+      [1, 0, 0, 1, 280, 180],
+      50,
+      40,
+    );
+    artboard.childIds.push(overflow.id);
+    document.nodesById[overflow.id] = overflow;
+
+    expect(
+      planRepairDeliveryOverflow(
+        document,
+        "page_layout",
+        "artboard",
+        "repair_artboard",
+      ),
+    ).toMatchObject({
+      ok: true,
+      resizedFrameIds: ["artboard"],
+      commands: [
+        {
+          nodeId: "artboard",
+          size: { width: 330, height: 220 },
+        },
+      ],
+    });
+  });
+
+  it("fails closed instead of shifting leading-edge overflow implicitly", () => {
+    const document = layoutDocument();
+    const artboard = document.nodesById.artboard;
+    if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+    const overflow = rectangle(
+      "leading_overflow",
+      "artboard",
+      [1, 0, 0, 1, -20, 20],
+      50,
+      40,
+    );
+    artboard.childIds.push(overflow.id);
+    document.nodesById[overflow.id] = overflow;
+
+    const plan = planRepairDeliveryOverflow(
+      document,
+      "page_layout",
+      "artboard",
+      "repair_leading",
+    );
+    expect(plan).toMatchObject({ ok: false, code: "unsafe-overflow" });
+    if (plan.ok) throw new Error("Leading-edge repair must fail closed");
+    expect(plan.message).toContain("leading-edge expansion");
+  });
+
   it("returns the observed footer recovery as a parent-local position", () => {
     const document = layoutDocument();
     const artboard = document.nodesById.artboard;
@@ -237,7 +387,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 5,
+      version: 6,
       checkedQualityNodeCount: 2,
       checkedTextNodeCount: 0,
       errorCount: 2,
@@ -602,7 +752,7 @@ describe("deterministic delivery layout quality", () => {
     );
 
     expect(report).toMatchObject({
-      version: 5,
+      version: 6,
       checkedTextNodeCount: 1,
       errorCount: 1,
       warningCount: 0,
@@ -834,4 +984,88 @@ function rectangle(
     },
     extensions: {},
   };
+}
+
+function addClippedComponentInstance(document: DesignDocument): void {
+  const artboard = document.nodesById.artboard;
+  if (artboard?.kind !== "frame") throw new Error("Missing artboard");
+  document.nodesById.logo_lockup = {
+    id: "logo_lockup",
+    kind: "frame",
+    name: "Logo lockup preview",
+    parentId: "artboard",
+    childIds: ["logo_instance"],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 120, 20],
+    size: { width: 120, height: 100 },
+    exportSettings: [],
+    opacity: 1,
+    properties: {
+      fills: [{ type: "solid", color: "#111111", opacity: 1 }],
+      strokes: [],
+      strokeWidth: 0,
+      cornerRadius: 0,
+      clipsContent: true,
+    },
+    extensions: {},
+  };
+  document.nodesById.logo_instance = {
+    id: "logo_instance",
+    kind: "instance",
+    name: "Logo instance",
+    parentId: "logo_lockup",
+    childIds: [],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 20, 50],
+    size: { width: 80, height: 80 },
+    exportSettings: [],
+    opacity: 1,
+    properties: {
+      componentId: "logo_component",
+      componentProperties: {},
+      overrides: [],
+    },
+    extensions: {},
+  };
+  document.nodesById.logo_main = {
+    id: "logo_main",
+    kind: "frame",
+    name: "Logo Main",
+    parentId: null,
+    childIds: ["logo_mark"],
+    visible: true,
+    locked: false,
+    transform: [1, 0, 0, 1, 450, 80],
+    size: { width: 80, height: 80 },
+    exportSettings: [],
+    opacity: 1,
+    properties: {
+      fills: [],
+      strokes: [],
+      strokeWidth: 0,
+      cornerRadius: 0,
+      clipsContent: false,
+    },
+    extensions: {},
+  };
+  document.nodesById.logo_mark = rectangle(
+    "logo_mark",
+    "logo_main",
+    [1, 0, 0, 1, 0, 0],
+    80,
+    80,
+  );
+  document.componentsById.logo_component = {
+    id: "logo_component",
+    name: "Logo",
+    rootNodeId: "logo_main",
+    componentPropertyOrder: [],
+    componentPropertyDefinitions: {},
+    variantProperties: {},
+    extensions: {},
+  };
+  artboard.childIds.push("logo_lockup");
+  document.pagesById.page_layout!.rootNodeIds.push("logo_main");
 }

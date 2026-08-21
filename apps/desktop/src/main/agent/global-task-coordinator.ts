@@ -25,6 +25,7 @@ import {
 import type { ProjectHost } from "../project/project-host.js";
 import type { WorkspaceStore } from "../project/workspace-store.js";
 import {
+  DESIGN_ARRANGE_TOOL_NAME,
   designApplyRequiresPlan,
   designPlanComponentStrategy,
   designPlanTargets,
@@ -625,6 +626,27 @@ export class GlobalTaskCoordinator {
       layoutQuality,
     );
     const captureSequence = target.captureCount + 1;
+    if (layoutQuality.errorCount > 0) {
+      target.captureCount = captureSequence;
+      target.lastCaptureRevision = observedRevision;
+      this.#persistDelivery(context.runId, state);
+      return {
+        captureSequence,
+        capturedRevision: observedRevision,
+        deliveryTargetId: target.delivery.targetId,
+        nextAction: "repair-layout-overflow",
+        reviewEligible: false,
+        repair: {
+          toolName: DESIGN_ARRANGE_TOOL_NAME,
+          input: {
+            action: "repair-overflow",
+            pageId: target.planned.pageId,
+            frameId: target.planned.artboard.frameId,
+          },
+          errorCount: layoutQuality.errorCount,
+        },
+      };
+    }
     let componentStrategy:
       ReturnType<typeof assertDeliveryTargetStructure> | undefined;
     if (target.delivery.status === "refined") {
@@ -639,16 +661,6 @@ export class GlobalTaskCoordinator {
         target,
         state.plan,
       );
-      if (layoutQuality.errorCount > 0) {
-        const failures = layoutQuality.issues
-          .filter((issue) => issue.severity === "error")
-          .slice(0, 8)
-          .map((issue) => `${issue.code} (${issue.nodeId}): ${issue.message}`)
-          .join("; ");
-        throw new Error(
-          `design_workflow.layout_quality_failed: Final delivery target ${target.delivery.targetId} has ${layoutQuality.errorCount} deterministic layout error(s): ${failures}. Correct the reported nodes, inspect the current document, and capture this target again`,
-        );
-      }
     }
     target.captureCount = captureSequence;
     target.lastCaptureRevision = observedRevision;

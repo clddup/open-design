@@ -1,4 +1,5 @@
 import type {
+  ComponentSelectionTarget,
   DesignDocument,
   DesignNode,
   DesignTargetQualityProfile,
@@ -6,9 +7,11 @@ import type {
   Rect,
 } from "@opendesign/design-contracts";
 import {
+  isFrameLikeNode,
   isDesignTargetQualityProfile,
   minimumInteractiveTargetSize,
 } from "@opendesign/design-contracts";
+import { projectComponentInstances } from "@opendesign/component-service";
 import {
   isTextLayoutQualityEvidence,
   type TextLayoutQualityEvidence,
@@ -20,7 +23,7 @@ import {
   invertTransform,
 } from "./geometry.js";
 
-export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 5 as const;
+export const DESIGN_LAYOUT_QUALITY_REPORT_VERSION = 6 as const;
 
 export type DesignLayoutQualitySeverity = "error" | "warning";
 
@@ -28,6 +31,8 @@ export type DesignLayoutQualityCode =
   | "artboard-clipping-disabled"
   | "artboard-geometry-unavailable"
   | "artboard-not-visible"
+  | "component-instance-resolution-failed"
+  | "component-node-clipped-by-ancestor"
   | "node-excessive-artboard-overflow"
   | "node-fully-outside-artboard"
   | "node-geometry-unavailable"
@@ -54,13 +59,14 @@ export interface DesignLayoutQualityIssue {
   outsideRatio?: number;
   geometry?: DesignLayoutQualityGeometry;
   measurement?: DesignLayoutQualityMeasurement;
+  componentTarget?: ComponentSelectionTarget;
   relatedNodeIds: string[];
   severity: DesignLayoutQualitySeverity;
 }
 
 export interface DesignLayoutQualityGeometry {
   coordinateSpace: "world";
-  constraint: "artboard" | "safe-area";
+  constraint: "artboard" | "clipping-ancestor" | "safe-area";
   nodeBounds: Rect;
   artboardBounds: Rect;
   constraintBounds: Rect;
@@ -117,12 +123,14 @@ const MAX_QUALITY_ISSUES = 128;
 const INTERACTION_OVERLAP_AREA_TOLERANCE = 1;
 
 export function diagnoseDesignTargetLayout(
-  document: DesignDocument,
+  sourceDocument: DesignDocument,
   pageId: string,
   artboardFrameId: string,
   qualityProfile?: DesignTargetQualityProfile,
   textLayoutEvidence?: TextLayoutQualityEvidence,
 ): DesignLayoutQualityReport {
+  const componentProjection = projectComponentInstances(sourceDocument);
+  const document = componentProjection.document;
   const issues: DesignLayoutQualityIssue[] = [];
   const artboard = document.nodesById[artboardFrameId];
   if (
@@ -189,6 +197,33 @@ export function diagnoseDesignTargetLayout(
     });
   }
 
+  for (const resolutionIssue of componentProjection.issues) {
+    if (
+      !nodeDescendsFrom(
+        sourceDocument,
+        resolutionIssue.instanceId,
+        artboardFrameId,
+      )
+    ) {
+      continue;
+    }
+    appendQualityIssue(issues, artboardFrameId, {
+      code: "component-instance-resolution-failed",
+      severity: "error",
+      nodeId: resolutionIssue.instanceId,
+      relatedNodeIds: [artboardFrameId],
+      ...(resolutionIssue.sourcePath
+        ? {
+            componentTarget: {
+              instanceId: resolutionIssue.instanceId,
+              sourcePath: [...resolutionIssue.sourcePath],
+            },
+          }
+        : {}),
+      message: `Component Instance ${resolutionIssue.instanceId} cannot be resolved for delivery layout verification: ${resolutionIssue.message}`,
+    });
+  }
+
   let checkedNodeCount = 0;
   const pending = artboard.childIds
     .slice()
@@ -220,6 +255,21 @@ export function diagnoseDesignTargetLayout(
         message: `Visible node ${node.id} has invalid world bounds inside delivery artboard ${artboardFrameId}`,
       });
       continue;
+    }
+    const componentTarget = componentProjection.targetsByNodeId.get(node.id);
+    if (componentTarget) {
+      diagnoseComponentClipping(
+        document,
+        artboardFrameId,
+        artboardBounds,
+        node,
+        bounds,
+        {
+          instanceId: componentTarget.instanceId,
+          sourcePath: [...componentTarget.sourcePath],
+        },
+        issues,
+      );
     }
     const outsideRatio = rectOutsideRatio(
       bounds,
@@ -303,6 +353,89 @@ export function diagnoseDesignTargetLayout(
     issues,
     qualityProfile,
   );
+}
+
+function diagnoseComponentClipping(
+  document: DesignDocument,
+  artboardFrameId: string,
+  artboardBounds: Rect,
+  node: DesignNode,
+  nodeBounds: Rect,
+  componentTarget: ComponentSelectionTarget,
+  issues: DesignLayoutQualityIssue[],
+): void {
+  const clippingAncestors: { id: string; bounds: Rect }[] = [];
+  const visited = new Set<string>();
+  let parentId = node.parentId;
+  while (
+    parentId !== null &&
+    parentId !== artboardFrameId &&
+    !visited.has(parentId)
+  ) {
+    visited.add(parentId);
+    const parent = document.nodesById[parentId];
+    if (!parent) break;
+    if (isFrameLikeNode(parent) && parent.properties.clipsContent) {
+      const bounds = getNodeBounds(document, parent.id);
+      if (!bounds || !isFinitePositiveRect(bounds)) {
+        appendQualityIssue(issues, artboardFrameId, {
+          code: "node-geometry-unavailable",
+          severity: "error",
+          nodeId: node.id,
+          componentTarget,
+          relatedNodeIds: [artboardFrameId, parent.id],
+          message: `Component-derived node ${node.id} cannot verify its clipping ancestor ${parent.id} because that ancestor has invalid world bounds`,
+        });
+        return;
+      }
+      clippingAncestors.push({ id: parent.id, bounds });
+    }
+    parentId = parent.parentId;
+  }
+  if (clippingAncestors.length === 0) return;
+  const constraintBounds = clippingAncestors.reduce<Rect | null>(
+    (current, ancestor) =>
+      current === null
+        ? ancestor.bounds
+        : intersectRects(current, ancestor.bounds),
+    null,
+  );
+  const outsideRatio = constraintBounds
+    ? rectOutsideRatio(
+        nodeBounds,
+        expandRect(constraintBounds, BOUNDS_TOLERANCE),
+      )
+    : 1;
+  if (outsideRatio < PARTIAL_OVERFLOW_RATIO) return;
+  const effectiveConstraint = constraintBounds ?? {
+    x: clippingAncestors[0]!.bounds.x,
+    y: clippingAncestors[0]!.bounds.y,
+    width: 0,
+    height: 0,
+  };
+  const geometry = containmentGeometry(
+    document,
+    node,
+    nodeBounds,
+    artboardBounds,
+    effectiveConstraint,
+    "clipping-ancestor",
+  );
+  const ancestorIds = clippingAncestors.map((ancestor) => ancestor.id);
+  const roundedRatio = Math.round(outsideRatio * 10_000) / 10_000;
+  appendQualityIssue(issues, artboardFrameId, {
+    code: "component-node-clipped-by-ancestor",
+    severity: "error",
+    nodeId: node.id,
+    componentTarget,
+    relatedNodeIds: [artboardFrameId, ...ancestorIds].slice(0, 8),
+    outsideRatio: roundedRatio,
+    ...(geometry ? { geometry } : {}),
+    message: overflowMessage(
+      `Component Instance ${componentTarget.instanceId} source ${componentTarget.sourcePath.join(" / ")} has ${Math.round(outsideRatio * 100)}% of its rendered area outside clipping ancestor${ancestorIds.length === 1 ? "" : "s"} ${ancestorIds.join(", ")}`,
+      geometry,
+    ),
+  });
 }
 
 function diagnoseQualityProfile(
@@ -737,6 +870,8 @@ function isDesignLayoutQualityIssue(
       "artboard-clipping-disabled",
       "artboard-geometry-unavailable",
       "artboard-not-visible",
+      "component-instance-resolution-failed",
+      "component-node-clipped-by-ancestor",
       "node-excessive-artboard-overflow",
       "node-fully-outside-artboard",
       "node-geometry-unavailable",
@@ -771,6 +906,8 @@ function isDesignLayoutQualityIssue(
       isDesignLayoutQualityGeometry(record.geometry)) &&
     (record.measurement === undefined ||
       isDesignLayoutQualityMeasurement(record.measurement)) &&
+    (record.componentTarget === undefined ||
+      isComponentSelectionTarget(record.componentTarget)) &&
     recordKeysOnly(record, [
       "code",
       "message",
@@ -778,6 +915,7 @@ function isDesignLayoutQualityIssue(
       "outsideRatio",
       "geometry",
       "measurement",
+      "componentTarget",
       "relatedNodeIds",
       "severity",
     ])
@@ -789,7 +927,9 @@ function isDesignLayoutQualityGeometry(value: unknown): boolean {
   if (!record) return false;
   return (
     record.coordinateSpace === "world" &&
-    (record.constraint === "artboard" || record.constraint === "safe-area") &&
+    (record.constraint === "artboard" ||
+      record.constraint === "clipping-ancestor" ||
+      record.constraint === "safe-area") &&
     isFiniteRect(record.nodeBounds) &&
     isFiniteRect(record.artboardBounds) &&
     isFiniteRect(record.constraintBounds) &&
@@ -810,6 +950,19 @@ function isDesignLayoutQualityGeometry(value: unknown): boolean {
       "recommendedLocalPosition",
       "requiresResize",
     ])
+  );
+}
+
+function isComponentSelectionTarget(value: unknown): boolean {
+  const record = recordValue(value);
+  return (
+    record !== null &&
+    safeText(record.instanceId, 256) &&
+    Array.isArray(record.sourcePath) &&
+    record.sourcePath.length > 0 &&
+    record.sourcePath.length <= 64 &&
+    record.sourcePath.every((segment) => safeText(segment, 256)) &&
+    recordKeysOnly(record, ["instanceId", "sourcePath"])
   );
 }
 
@@ -963,7 +1116,11 @@ function overflowMessage(
   if (!geometry) return prefix;
   const position = geometry.recommendedLocalPosition;
   const constraint =
-    geometry.constraint === "safe-area" ? "safe area" : "artboard";
+    geometry.constraint === "safe-area"
+      ? "safe area"
+      : geometry.constraint === "clipping-ancestor"
+        ? "clipping ancestor"
+        : "artboard";
   return `${prefix}; set its parent-local position to x=${position.x}, y=${position.y}${geometry.requiresResize ? ` and resize it to fit the ${constraint}` : ""}`;
 }
 
@@ -1346,6 +1503,16 @@ function expandRect(rect: Rect, amount: number): Rect {
     width: rect.width + amount * 2,
     height: rect.height + amount * 2,
   };
+}
+
+function intersectRects(left: Rect, right: Rect): Rect | null {
+  const x = Math.max(left.x, right.x);
+  const y = Math.max(left.y, right.y);
+  const maxX = Math.min(left.x + left.width, right.x + right.width);
+  const maxY = Math.min(left.y + left.height, right.y + right.height);
+  return maxX > x && maxY > y
+    ? { x, y, width: maxX - x, height: maxY - y }
+    : null;
 }
 
 function rectOutsideRatio(rect: Rect, container: Rect): number {

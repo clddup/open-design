@@ -50,6 +50,18 @@ export interface ResolvedComponentNode {
   slotOverride?: boolean;
 }
 
+export interface ComponentProjectionTarget {
+  instanceId: string;
+  sourceNodeId: string;
+  sourcePath: readonly string[];
+}
+
+export interface ComponentDocumentProjection {
+  document: DesignDocument;
+  issues: readonly ComponentResolutionIssue[];
+  targetsByNodeId: ReadonlyMap<string, ComponentProjectionTarget>;
+}
+
 export type SlotLimitViolation =
   "BELOW_MIN" | "ABOVE_MAX" | "HAS_NON_PREFERRED";
 
@@ -248,32 +260,58 @@ function componentNavigationTarget(
 export function materializeComponentInstances(
   document: DesignDocument,
 ): DesignDocument {
+  const projection = projectComponentInstances(document);
+  if (projection.issues.length > 0) {
+    throw new Error(
+      projection.issues[0]?.message ?? "Component instance cannot be resolved",
+    );
+  }
+  return projection.document;
+}
+
+export function projectComponentInstances(
+  document: DesignDocument,
+): ComponentDocumentProjection {
   const projectedDocument = materializeComponentMainProperties(document);
   if (
     !Object.values(projectedDocument.nodesById).some(
       (node) => node.kind === "instance",
     )
   ) {
-    return projectedDocument;
+    return {
+      document: projectedDocument,
+      issues: [],
+      targetsByNodeId: new Map(),
+    };
   }
   const nodesById: DesignDocument["nodesById"] = {
     ...projectedDocument.nodesById,
   };
+  const issues: ComponentResolutionIssue[] = [];
+  const targetsByNodeId = new Map<string, ComponentProjectionTarget>();
   for (const node of Object.values(projectedDocument.nodesById)) {
     if (node.kind !== "instance") continue;
     const resolution = resolveComponentInstance(projectedDocument, node.id);
     if (!resolution.ok) {
-      throw new Error(
-        resolution.issues[0]?.message ??
-          `Instance ${node.id} cannot be resolved`,
-      );
+      issues.push(...resolution.issues);
+      continue;
     }
-    delete nodesById[node.id];
     for (const resolved of resolution.nodes) {
       nodesById[resolved.projectionId] = structuredClone(resolved.node);
+      if (resolved.selectionSourcePath.length > 0) {
+        targetsByNodeId.set(resolved.projectionId, {
+          instanceId: resolved.selectionInstanceId,
+          sourceNodeId: resolved.sourceNodeId,
+          sourcePath: [...resolved.selectionSourcePath],
+        });
+      }
     }
   }
-  return { ...projectedDocument, nodesById };
+  return {
+    document: { ...projectedDocument, nodesById },
+    issues,
+    targetsByNodeId,
+  };
 }
 
 export function materializeComponentMainProperties(

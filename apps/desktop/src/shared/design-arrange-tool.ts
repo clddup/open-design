@@ -11,6 +11,12 @@ import { isValidLayoutLimits } from "@opendesign/design-contracts";
 
 export type DesignArrangeToolInput =
   | {
+      action: "repair-overflow";
+      label: string;
+      pageId: string;
+      frameId: string;
+    }
+  | {
       action: "reorder-grid-tracks";
       label: string;
       pageId: string;
@@ -115,7 +121,7 @@ const nodeIds = {
 export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies to direct children of ordinary Frames and absolute children of Auto Layout Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures linear Fixed/Hug sizing, fixed or Auto gap, Horizontal Wrap, or a two-dimensional Grid with Fixed/Fill(fr)/Hug tracks, independent gaps, Manual or row-major positioning, and optional automatic rows. set-grid-placement configures one Grid child's zero-based cell, positive span and cell alignment. reorder-grid-tracks moves rows or columns by original index, automatically includes tracks crossed by a spanning child, and returns the complete movement map. set-layout-positioning atomically toggles a child between flow and absolute, clearing incompatible sizing, constraints, or Grid placement. set-layout-sizing configures flow-child Fixed/Fill sizing; set-layout-limits adds or clears min/max. set-layout-guides replaces non-exported visual guides and never alters child geometry. The host derives all flow geometry.",
+    "repair-overflow deterministically expands the delivery artboard and persistent clipping Frames for trailing-edge overflow reported by capture_canvas, preserving existing content positions in one undoable transaction; unsafe leading-edge, transformed, Auto Layout, locked, or projected Component Main repairs fail closed for explicit structural correction. Align requires at least two explicit layers. Distribute and Tidy up require at least three. Set-spacing accepts finite positive, zero, or negative pixels. Constraints v1 applies to direct children of ordinary Frames and absolute children of Auto Layout Frames; resize-frame deterministically resizes that Frame and its constrained descendants in one transaction. set-auto-layout configures linear Fixed/Hug sizing, fixed or Auto gap, Horizontal Wrap, or a two-dimensional Grid with Fixed/Fill(fr)/Hug tracks, independent gaps, Manual or row-major positioning, and optional automatic rows. set-grid-placement configures one Grid child's zero-based cell, positive span and cell alignment. reorder-grid-tracks moves rows or columns by original index, automatically includes tracks crossed by a spanning child, and returns the complete movement map. set-layout-positioning atomically toggles a child between flow and absolute, clearing incompatible sizing, constraints, or Grid placement. set-layout-sizing configures flow-child Fixed/Fill sizing; set-layout-limits adds or clears min/max. set-layout-guides replaces non-exported visual guides and never alters child geometry. The host derives all flow geometry.",
   properties: {
     action: {
       enum: [
@@ -131,6 +137,7 @@ export const DESIGN_ARRANGE_TOOL_INPUT_SCHEMA = {
         "set-horizontal-spacing",
         "set-vertical-spacing",
         "set-constraints",
+        "repair-overflow",
         "resize-frame",
         "set-auto-layout",
         "set-layout-sizing",
@@ -498,6 +505,12 @@ export function isDesignArrangeToolInput(
 ): input is DesignArrangeToolInput {
   if (!isRecord(input) || !validLabelAndPage(input)) return false;
   const action = input.action;
+  if (action === "repair-overflow") {
+    return (
+      safeId(input.frameId) &&
+      onlyKeys(input, ["action", "label", "pageId", "frameId"])
+    );
+  }
   if (action === "set-constraints") {
     return (
       safeId(input.nodeId) &&

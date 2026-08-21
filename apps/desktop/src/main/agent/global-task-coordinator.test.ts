@@ -641,7 +641,7 @@ function cleanLayoutQuality(
   qualityProfile: DesignPlanTarget["qualityProfile"],
 ): DesignLayoutQualityReport {
   return {
-    version: 5,
+    version: 6,
     documentId,
     revision,
     pageId,
@@ -1691,11 +1691,22 @@ describe("GlobalTaskCoordinator", () => {
       homeTarget.qualityProfile,
     );
     expect(failingHomeQuality.errorCount).toBeGreaterThan(0);
-    expect(() =>
+    expect(
       coordinator.recordCanvasCapture(context, 3, failingHomeQuality),
-    ).toThrow(
-      /design_workflow\.layout_quality_failed:.*set its parent-local position to x=\d+, y=\d+/,
-    );
+    ).toMatchObject({
+      deliveryTargetId: "target_home",
+      nextAction: "repair-layout-overflow",
+      reviewEligible: false,
+      repair: {
+        toolName: "opendesign_arrange_layers",
+        input: {
+          action: "repair-overflow",
+          pageId,
+          frameId: "frame_home",
+        },
+        errorCount: failingHomeQuality.errorCount,
+      },
+    });
     expect(
       coordinator.getDeliveryLedger(context.runId)?.targets[0]?.status,
     ).toBe("refined");
