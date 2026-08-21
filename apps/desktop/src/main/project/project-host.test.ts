@@ -1,7 +1,13 @@
 import {
   createEmptyDesignDocument,
   createWelcomeDocument,
+  EditorRuntime,
+  planCreateLibraryInstance,
 } from "@opendesign/editor-runtime";
+import {
+  planLibraryReleaseUpdate,
+  resolveComponentInstance,
+} from "@opendesign/component-service";
 import {
   PROJECT_MANIFEST_VERSION,
   WORKSPACE_CONTRACT_VERSION,
@@ -126,6 +132,10 @@ describe("ProjectHost", () => {
     expect(
       first.release.componentsById.component_card?.nodesById.feature_group,
     ).toBeDefined();
+    expect(
+      first.release.componentsById.component_card?.nodesById.feature_group
+        ?.parentId,
+    ).toBeNull();
     await expect(
       readFile(join(root, PROJECT_LIBRARY_CATALOG_PATH), "utf8"),
     ).resolves.toContain(first.entry.libraryId);
@@ -139,6 +149,47 @@ describe("ProjectHost", () => {
     expect(
       enabled.enabledLibraryIdsByDesignFileId[consumerDescriptor.designFileId],
     ).toEqual([first.entry.libraryId]);
+
+    const consumerRuntime = new EditorRuntime(consumerDocument);
+    const instancePlan = planCreateLibraryInstance(
+      consumerRuntime.getSnapshot().document,
+      first.release,
+      {
+        componentId: "component_card",
+        instanceId: "instance_library_card",
+        pageId: "page_consumer",
+        parentId: null,
+        index: 0,
+        transform: [1, 0, 0, 1, 64, 64],
+        commandPrefix: "library_card",
+      },
+    );
+    expect(instancePlan.ok).toBe(true);
+    const placed = consumerRuntime.apply({
+      transactionId: "place_library_card",
+      documentId: consumerDocument.documentId,
+      baseRevision: consumerDocument.revision,
+      actor: { type: "user", id: "test" },
+      label: "Place Library component",
+      commands: instancePlan.ok ? instancePlan.commands : [],
+    });
+    expect(placed.ok).toBe(true);
+    await host.saveDesignFile(
+      "project_acme",
+      consumerDescriptor.designFileId,
+      consumerRuntime.getSnapshot().document,
+      now,
+    );
+    const reopenedConsumer = await host.readDesignFile(
+      "project_acme",
+      consumerDescriptor.designFileId,
+    );
+    expect(
+      resolveComponentInstance(
+        reopenedConsumer.document,
+        "instance_library_card",
+      ).ok,
+    ).toBe(true);
 
     const changedDocument = structuredClone(sourceDocument);
     changedDocument.revision = 1;
@@ -172,6 +223,90 @@ describe("ProjectHost", () => {
     await expect(
       host.readProjectLibraryRelease("project_acme", first.entry.libraryId),
     ).resolves.toMatchObject({ releaseId: second.entry.latestReleaseId });
+
+    const updateRuntime = new EditorRuntime(reopenedConsumer.document);
+    const updatePlan = planLibraryReleaseUpdate(
+      updateRuntime.getSnapshot().document,
+      second.release,
+      "accept_library_update",
+    );
+    const updated = updateRuntime.apply({
+      transactionId: "accept_library_update",
+      documentId: reopenedConsumer.document.documentId,
+      baseRevision: reopenedConsumer.document.revision,
+      actor: { type: "user", id: "test" },
+      label: "Update Library components",
+      commands: updatePlan.commands,
+    });
+    expect(updated.ok).toBe(true);
+    await host.saveDesignFile(
+      "project_acme",
+      consumerDescriptor.designFileId,
+      updateRuntime.getSnapshot().document,
+      later,
+    );
+    const reopenedUpdatedConsumer = await host.readDesignFile(
+      "project_acme",
+      consumerDescriptor.designFileId,
+    );
+    const resolvedUpdated = resolveComponentInstance(
+      reopenedUpdatedConsumer.document,
+      "instance_library_card",
+    );
+    expect(resolvedUpdated.ok).toBe(true);
+    expect(
+      resolvedUpdated.ok
+        ? resolvedUpdated.nodes.find(
+            (candidate) => candidate.sourceNodeId === "feature_one",
+          )?.node
+        : null,
+    ).toMatchObject({
+      properties: {
+        fills: [{ type: "solid", color: "#db2777", opacity: 1 }],
+      },
+    });
+
+    const accepted = await host.setProjectLibraryUpdateAccepted(
+      "project_acme",
+      consumerDescriptor.designFileId,
+      first.entry.libraryId,
+      second.entry.latestReleaseId,
+    );
+    expect(
+      accepted.acceptedReleaseIdsByDesignFileId[
+        consumerDescriptor.designFileId
+      ],
+    ).toEqual({ [first.entry.libraryId]: second.entry.latestReleaseId });
+
+    const ignored = await host.setProjectLibraryUpdateIgnored(
+      "project_acme",
+      consumerDescriptor.designFileId,
+      first.entry.libraryId,
+      second.entry.latestReleaseId,
+    );
+    expect(
+      ignored.ignoredReleaseIdsByDesignFileId[consumerDescriptor.designFileId],
+    ).toEqual({ [first.entry.libraryId]: second.entry.latestReleaseId });
+    expect(
+      ignored.acceptedReleaseIdsByDesignFileId[consumerDescriptor.designFileId],
+    ).toEqual({});
+    await expect(
+      host.setProjectLibraryUpdateIgnored(
+        "project_acme",
+        consumerDescriptor.designFileId,
+        first.entry.libraryId,
+        "release_unknown",
+      ),
+    ).rejects.toMatchObject({ code: "LIBRARY_NOT_FOUND" });
+    const cleared = await host.setProjectLibraryUpdateIgnored(
+      "project_acme",
+      consumerDescriptor.designFileId,
+      first.entry.libraryId,
+      null,
+    );
+    expect(
+      cleared.ignoredReleaseIdsByDesignFileId[consumerDescriptor.designFileId],
+    ).toEqual({});
   });
 
   it("replaces untouched legacy product templates with one neutral blank file", async () => {

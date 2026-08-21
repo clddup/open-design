@@ -33,6 +33,7 @@ import type {
 import { useI18n } from "../i18n";
 import type { LayerHoverTarget } from "../layer-hover-target";
 import type { SidebarTab } from "../state/editor";
+import type { ProjectLibraryActions } from "../use-project-library-actions";
 import { AssetsPanel } from "./AssetsPanel";
 import { VariablesPanel, type VariablesPanelActions } from "./VariablesPanel";
 import {
@@ -334,6 +335,26 @@ function componentTargetExists(
   );
 }
 
+const unavailableProjectLibraries: ProjectLibraryActions = {
+  available: false,
+  busyKey: null,
+  error: null,
+  items: [],
+  loading: false,
+  notice: null,
+  published: false,
+  publish: () => Promise.resolve(),
+  setEnabled: () => Promise.resolve(),
+  placeComponent: () =>
+    Promise.resolve({
+      ok: false,
+      error: "Project Library is unavailable",
+    }),
+  acceptUpdate: () => Promise.resolve(),
+  ignoreUpdate: () => Promise.resolve(),
+  clearError: () => undefined,
+};
+
 export function LeftSidebar({
   className = "",
   document,
@@ -366,6 +387,7 @@ export function LeftSidebar({
   onToggleVisibility,
   variableActions,
   styleActions,
+  projectLibraries = unavailableProjectLibraries,
 }: {
   className?: string;
   document: DesignDocument;
@@ -405,6 +427,7 @@ export function LeftSidebar({
   onToggleVisibility: (nodeId: string) => void;
   variableActions: VariablesPanelActions;
   styleActions?: LocalStylesPanelActions;
+  projectLibraries?: ProjectLibraryActions;
 }) {
   const { t } = useI18n();
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<ReadonlySet<string>>(
@@ -1293,6 +1316,7 @@ export function LeftSidebar({
           onPlace={onPlaceAsset}
           onPlaceComponent={onPlaceComponent}
           onReplace={onReplaceAsset}
+          projectLibraries={projectLibraries}
           query={assetQuery}
         />
       ) : (

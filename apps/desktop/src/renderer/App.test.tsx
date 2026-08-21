@@ -355,6 +355,18 @@ beforeEach(() => {
     readProjectDesignFile: vi.fn(),
     saveProjectDesignFile: vi.fn(),
     renameProjectDesignFile: vi.fn(),
+    publishProjectLibrary: vi.fn(),
+    listProjectLibraries: vi.fn().mockResolvedValue({
+      version: 1,
+      libraries: [],
+      enabledLibraryIdsByDesignFileId: {},
+      acceptedReleaseIdsByDesignFileId: {},
+      ignoredReleaseIdsByDesignFileId: {},
+    }),
+    readProjectLibraryRelease: vi.fn(),
+    setProjectLibraryEnabled: vi.fn(),
+    setProjectLibraryUpdateIgnored: vi.fn(),
+    setProjectLibraryUpdateAccepted: vi.fn(),
     sendAgentRequest: vi.fn().mockResolvedValue(undefined),
     onAgentEvent: vi
       .fn()

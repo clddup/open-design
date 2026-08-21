@@ -40,7 +40,10 @@ export function createLibraryReleaseSnapshot(
       const nodesById = Object.fromEntries(
         [...nodeIds].flatMap((nodeId) => {
           const node = document.nodesById[nodeId];
-          return node ? [[nodeId, structuredClone(node)] as const] : [];
+          if (!node) return [];
+          const cloned = structuredClone(node);
+          if (nodeId === component.rootNodeId) cloned.parentId = null;
+          return [[nodeId, cloned] as const];
         }),
       );
       const dependencyComponentIds = componentDependencies(

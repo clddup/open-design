@@ -17,6 +17,8 @@ import {
   type DesignAssetReference,
 } from "../design-assets";
 import styles from "./AssetsPanel.module.scss";
+import type { ProjectLibraryActions } from "../use-project-library-actions";
+import { ProjectLibrariesSection } from "./ProjectLibrariesSection";
 
 export function AssetsPanel({
   document,
@@ -28,6 +30,7 @@ export function AssetsPanel({
   onLocate,
   onPlace,
   onReplace,
+  projectLibraries,
 }: {
   document: DesignDocument;
   query: string;
@@ -38,6 +41,7 @@ export function AssetsPanel({
   onLocate: (reference: DesignAssetReference) => void;
   onPlace: (assetId: string) => AssetActionResult;
   onReplace: (assetId: string) => Promise<AssetActionResult>;
+  projectLibraries: ProjectLibraryActions;
 }) {
   const { t } = useI18n();
   const entries = useMemo(() => indexDesignImageAssets(document), [document]);
@@ -153,6 +157,11 @@ export function AssetsPanel({
       id="sidebar-assets"
       role="tabpanel"
     >
+      <ProjectLibrariesSection
+        actions={projectLibraries}
+        document={document}
+        query={query}
+      />
       <div className={styles.heading}>
         <span>{t("sidebar.fileComponents")}</span>
       </div>

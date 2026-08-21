@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
+  isLibraryReleaseSnapshot,
+  type LibraryReleaseSnapshot,
+} from "@opendesign/design-contracts";
+import {
   isAgentEvent,
   isAgentRequest,
   type AgentEvent,
@@ -34,6 +38,14 @@ import {
   isProjectDesignFileRequest,
   isProjectManifestResult,
   isRenameProjectDesignFileRequest,
+  isListProjectLibrariesRequest,
+  isProjectLibraryCatalog,
+  isPublishProjectLibraryRequest,
+  isPublishProjectLibraryResult,
+  isReadProjectLibraryReleaseRequest,
+  isSetProjectLibraryEnabledRequest,
+  isSetProjectLibraryUpdateAcceptedRequest,
+  isSetProjectLibraryUpdateIgnoredRequest,
   isRecentProject,
   isOpenSvgFile,
   isSaveProjectDesignFileRequest,
@@ -70,6 +82,14 @@ import {
   type ProjectDesignFile,
   type ProjectDesignFileRequest,
   type RenameProjectDesignFileRequest,
+  type ListProjectLibrariesRequest,
+  type ProjectLibraryCatalog,
+  type PublishProjectLibraryRequest,
+  type PublishProjectLibraryResult,
+  type ReadProjectLibraryReleaseRequest,
+  type SetProjectLibraryEnabledRequest,
+  type SetProjectLibraryUpdateAcceptedRequest,
+  type SetProjectLibraryUpdateIgnoredRequest,
   type RecentProject,
   type SaveDesignFileRequest,
   type OpenSvgFile,
@@ -707,6 +727,110 @@ const desktopApi: DesktopApi = Object.freeze({
       result,
       isDesignFileDescriptorResult,
       "Invalid design file rename response",
+    );
+  },
+  publishProjectLibrary: async (request: PublishProjectLibraryRequest) => {
+    validate(
+      request,
+      isPublishProjectLibraryRequest,
+      "Invalid Project Library publish request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.publishProjectLibrary,
+      request,
+    );
+    return validate<PublishProjectLibraryResult>(
+      result,
+      isPublishProjectLibraryResult,
+      "Invalid Project Library publish response",
+    );
+  },
+  listProjectLibraries: async (request: ListProjectLibrariesRequest) => {
+    validate(
+      request,
+      isListProjectLibrariesRequest,
+      "Invalid Project Library list request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.listProjectLibraries,
+      request,
+    );
+    return validate<ProjectLibraryCatalog>(
+      result,
+      isProjectLibraryCatalog,
+      "Invalid Project Library catalog response",
+    );
+  },
+  readProjectLibraryRelease: async (
+    request: ReadProjectLibraryReleaseRequest,
+  ) => {
+    validate(
+      request,
+      isReadProjectLibraryReleaseRequest,
+      "Invalid Project Library release request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.readProjectLibraryRelease,
+      request,
+    );
+    return validate<LibraryReleaseSnapshot>(
+      result,
+      isLibraryReleaseSnapshot,
+      "Invalid Project Library release response",
+    );
+  },
+  setProjectLibraryEnabled: async (
+    request: SetProjectLibraryEnabledRequest,
+  ) => {
+    validate(
+      request,
+      isSetProjectLibraryEnabledRequest,
+      "Invalid Project Library enable request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.setProjectLibraryEnabled,
+      request,
+    );
+    return validate<ProjectLibraryCatalog>(
+      result,
+      isProjectLibraryCatalog,
+      "Invalid Project Library catalog response",
+    );
+  },
+  setProjectLibraryUpdateIgnored: async (
+    request: SetProjectLibraryUpdateIgnoredRequest,
+  ) => {
+    validate(
+      request,
+      isSetProjectLibraryUpdateIgnoredRequest,
+      "Invalid Project Library ignore request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.setProjectLibraryUpdateIgnored,
+      request,
+    );
+    return validate<ProjectLibraryCatalog>(
+      result,
+      isProjectLibraryCatalog,
+      "Invalid Project Library catalog response",
+    );
+  },
+  setProjectLibraryUpdateAccepted: async (
+    request: SetProjectLibraryUpdateAcceptedRequest,
+  ) => {
+    validate(
+      request,
+      isSetProjectLibraryUpdateAcceptedRequest,
+      "Invalid Project Library accept request",
+    );
+    const result: unknown = await ipcRenderer.invoke(
+      channels.setProjectLibraryUpdateAccepted,
+      request,
+    );
+    return validate<ProjectLibraryCatalog>(
+      result,
+      isProjectLibraryCatalog,
+      "Invalid Project Library catalog response",
     );
   },
   onNativeThemeChange: (listener: (isDark: boolean) => void) => {

@@ -6,6 +6,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   componentProjectionId,
+  createLibraryReleaseSnapshot,
   navigateComponentSelection,
   resolveComponentInstance,
 } from "@opendesign/component-service";
@@ -22,6 +23,7 @@ import {
 import {
   planCreateComponent,
   planCreateInstance,
+  planCreateLibraryInstance,
   planDetachComponentInstance,
   planResetComponentOverrides,
   planRemoveComponent,
@@ -29,6 +31,67 @@ import {
 } from "./component-operations.js";
 
 describe("component operations", () => {
+  it("imports a Library release and creates its instance in one revision and undo step", () => {
+    const source = componentFixture(true);
+    const release = createLibraryReleaseSnapshot(source, {
+      libraryId: "library_acme",
+      releaseId: "release_acme",
+      sourceProjectId: "project_acme",
+      sourceDesignFileId: "design_system",
+      name: "Acme Library",
+      publishedAt: "2026-08-21T08:00:00.000Z",
+    });
+    const consumer = createEmptyDesignDocument(
+      "consumer_document",
+      "consumer_page",
+    );
+    const runtime = new EditorRuntime(consumer);
+    const plan = planCreateLibraryInstance(
+      runtime.getSnapshot().document,
+      release,
+      {
+        componentId: "component_button",
+        instanceId: "library_button_instance",
+        pageId: "consumer_page",
+        parentId: null,
+        index: 0,
+        transform: [1, 0, 0, 1, 64, 64],
+        commandPrefix: "library_button",
+      },
+    );
+
+    expect(plan.ok).toBe(true);
+    apply(runtime, plan.ok ? plan.commands : [], "create-library-instance");
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(
+      runtime.getSnapshot().document.libraryComponentsById.component_button
+        ?.source,
+    ).toMatchObject({
+      libraryId: "library_acme",
+      releaseId: "release_acme",
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.library_button_instance,
+    ).toMatchObject({
+      kind: "instance",
+      properties: { componentId: "component_button" },
+    });
+    expect(
+      resolveComponentInstance(
+        runtime.getSnapshot().document,
+        "library_button_instance",
+      ).ok,
+    ).toBe(true);
+
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.libraryComponentsById.component_button,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.library_button_instance,
+    ).toBeUndefined();
+  });
+
   it("navigates projected instance layers by stable source path", () => {
     const document = componentFixture(true);
     const entered = navigateComponentSelection(

@@ -22,6 +22,7 @@ import {
   isDesignDocument,
   type DesignAsset,
   type DesignDocument,
+  type LibraryReleaseSnapshot,
 } from "@opendesign/design-contracts";
 import {
   isConversationDescriptor,
@@ -67,6 +68,36 @@ export {
   type ProviderConnectionResult,
 } from "./provider-connection";
 import type { ProviderConnectionResult } from "./provider-connection";
+import type {
+  ListProjectLibrariesRequest,
+  ProjectLibraryCatalog,
+  PublishProjectLibraryRequest,
+  PublishProjectLibraryResult,
+  ReadProjectLibraryReleaseRequest,
+  SetProjectLibraryEnabledRequest,
+  SetProjectLibraryUpdateAcceptedRequest,
+  SetProjectLibraryUpdateIgnoredRequest,
+} from "./project-library-contract";
+
+export {
+  isListProjectLibrariesRequest,
+  isProjectLibraryCatalog,
+  isPublishProjectLibraryRequest,
+  isPublishProjectLibraryResult,
+  isReadProjectLibraryReleaseRequest,
+  isSetProjectLibraryEnabledRequest,
+  isSetProjectLibraryUpdateAcceptedRequest,
+  isSetProjectLibraryUpdateIgnoredRequest,
+  type ListProjectLibrariesRequest,
+  type ProjectLibraryCatalog,
+  type ProjectLibraryCatalogEntry,
+  type PublishProjectLibraryRequest,
+  type PublishProjectLibraryResult,
+  type ReadProjectLibraryReleaseRequest,
+  type SetProjectLibraryEnabledRequest,
+  type SetProjectLibraryUpdateAcceptedRequest,
+  type SetProjectLibraryUpdateIgnoredRequest,
+} from "./project-library-contract";
 
 export {
   formatDiagnosticReport,
@@ -404,6 +435,24 @@ export interface DesktopApi {
   renameProjectDesignFile: (
     request: RenameProjectDesignFileRequest,
   ) => Promise<DesignFileDescriptor>;
+  publishProjectLibrary: (
+    request: PublishProjectLibraryRequest,
+  ) => Promise<PublishProjectLibraryResult>;
+  listProjectLibraries: (
+    request: ListProjectLibrariesRequest,
+  ) => Promise<ProjectLibraryCatalog>;
+  readProjectLibraryRelease: (
+    request: ReadProjectLibraryReleaseRequest,
+  ) => Promise<LibraryReleaseSnapshot>;
+  setProjectLibraryEnabled: (
+    request: SetProjectLibraryEnabledRequest,
+  ) => Promise<ProjectLibraryCatalog>;
+  setProjectLibraryUpdateIgnored: (
+    request: SetProjectLibraryUpdateIgnoredRequest,
+  ) => Promise<ProjectLibraryCatalog>;
+  setProjectLibraryUpdateAccepted: (
+    request: SetProjectLibraryUpdateAcceptedRequest,
+  ) => Promise<ProjectLibraryCatalog>;
   sendAgentRequest: (request: AgentRequest) => Promise<void>;
   onAgentEvent: (listener: (event: AgentEvent) => void) => () => void;
 }
@@ -464,6 +513,12 @@ export const channels = {
   readProjectDesignFile: "project:design-file:read",
   saveProjectDesignFile: "project:design-file:save",
   renameProjectDesignFile: "project:design-file:rename",
+  publishProjectLibrary: "project:library:publish",
+  listProjectLibraries: "project:library:list",
+  readProjectLibraryRelease: "project:library:read-release",
+  setProjectLibraryEnabled: "project:library:set-enabled",
+  setProjectLibraryUpdateIgnored: "project:library:set-update-ignored",
+  setProjectLibraryUpdateAccepted: "project:library:set-update-accepted",
   agentRequest: "agent:request",
   agentEvent: "agent:event",
 } as const;

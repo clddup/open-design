@@ -3,6 +3,7 @@ import {
   componentSourceNode,
   componentSourcePathKey,
   componentSourceNodeIds,
+  planLibraryReleaseUpdate,
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import type {
@@ -11,6 +12,7 @@ import type {
   DesignNode,
   DesignOperation,
   InstanceNode,
+  LibraryReleaseSnapshot,
   Transform,
 } from "@opendesign/design-contracts";
 
@@ -164,6 +166,72 @@ export function planCreateInstance(
     instanceId: instance.id,
     mainNodeId: component.rootNodeId,
     selectionNodeIds: [instance.id],
+  };
+}
+
+export function planCreateLibraryInstance(
+  document: DesignDocument,
+  release: LibraryReleaseSnapshot,
+  input: {
+    componentId: string;
+    instanceId: string;
+    name?: string;
+    pageId: string;
+    parentId: string | null;
+    index: number;
+    transform: Transform;
+    commandPrefix: string;
+  },
+): ComponentOperationPlan {
+  const source = release.componentsById[input.componentId];
+  if (!source) {
+    return failure(
+      "missing-component",
+      `Component ${input.componentId} is not part of Library ${release.libraryId}`,
+    );
+  }
+  const local = document.componentsById[input.componentId];
+  if (local) {
+    return failure(
+      "duplicate",
+      `Component ${input.componentId} conflicts with a local component`,
+    );
+  }
+  const imported = document.libraryComponentsById[input.componentId];
+  if (
+    imported &&
+    (imported.source.libraryId !== release.libraryId ||
+      imported.source.sourceProjectId !== release.sourceProjectId ||
+      imported.source.sourceDesignFileId !== release.sourceDesignFileId ||
+      imported.source.sourceDocumentId !== release.sourceDocumentId ||
+      imported.source.sourceComponentId !== source.source.sourceComponentId)
+  ) {
+    return failure(
+      "duplicate",
+      `Component ${input.componentId} conflicts with another Library source`,
+    );
+  }
+  const update = planLibraryReleaseUpdate(
+    document,
+    release,
+    `${input.commandPrefix}_library`,
+  );
+  const stagedDocument: DesignDocument = {
+    ...document,
+    libraryComponentsById: {
+      ...document.libraryComponentsById,
+      ...release.componentsById,
+    },
+    libraryVariantSetsById: {
+      ...document.libraryVariantSetsById,
+      ...release.variantSetsById,
+    },
+  };
+  const instance = planCreateInstance(stagedDocument, input);
+  if (!instance.ok) return instance;
+  return {
+    ...instance,
+    commands: [...update.commands, ...instance.commands],
   };
 }
 

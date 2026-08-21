@@ -1,4 +1,7 @@
-import { createWelcomeDocument } from "@opendesign/editor-runtime";
+import {
+  createEmptyDesignDocument,
+  createWelcomeDocument,
+} from "@opendesign/editor-runtime";
 import {
   WORKSPACE_CONTRACT_VERSION,
   type DesignFileDescriptor,
@@ -36,6 +39,92 @@ async function projectRoot() {
 }
 
 describe("ProjectIpcService", () => {
+  it("publishes, enables, reads, and ignores Project Libraries through validated requests", async () => {
+    const root = await projectRoot();
+    const store = new WorkspaceStore(":memory:");
+    const service = new ProjectIpcService(new ProjectHost(store), store, () =>
+      Promise.resolve(root),
+    );
+    const manifest = await service.createProject({
+      projectId: "project_acme",
+      name: "Acme Design",
+    });
+    if (!manifest) throw new Error("Project selection was cancelled");
+    const source = manifest.designFiles[0];
+    if (!source) throw new Error("Source design file is missing");
+    const consumerDocument = createEmptyDesignDocument(
+      "document_consumer",
+      "page_consumer",
+    );
+    const consumer = designFileDescriptor({
+      designFileId: "design_consumer",
+      documentId: consumerDocument.documentId,
+      name: "Consumer",
+      relativePath: "designs/consumer.opendesign",
+    });
+    await service.createDesignFile({
+      projectId: manifest.projectId,
+      descriptor: consumer,
+      document: consumerDocument,
+    });
+
+    const published = await service.publishProjectLibrary({
+      projectId: manifest.projectId,
+      designFileId: source.designFileId,
+      name: "Acme Library",
+    });
+    expect(
+      await service.listProjectLibraries({ projectId: manifest.projectId }),
+    ).toEqual(published.catalog);
+    await expect(
+      service.readProjectLibraryRelease({
+        projectId: manifest.projectId,
+        libraryId: published.entry.libraryId,
+      }),
+    ).resolves.toEqual(published.release);
+    const enabled = await service.setProjectLibraryEnabled({
+      projectId: manifest.projectId,
+      designFileId: consumer.designFileId,
+      libraryId: published.entry.libraryId,
+      enabled: true,
+    });
+    expect(
+      enabled.enabledLibraryIdsByDesignFileId[consumer.designFileId],
+    ).toEqual([published.entry.libraryId]);
+    const accepted = await service.setProjectLibraryUpdateAccepted({
+      projectId: manifest.projectId,
+      designFileId: consumer.designFileId,
+      libraryId: published.entry.libraryId,
+      releaseId: published.entry.latestReleaseId,
+    });
+    expect(
+      accepted.acceptedReleaseIdsByDesignFileId[consumer.designFileId],
+    ).toEqual({
+      [published.entry.libraryId]: published.entry.latestReleaseId,
+    });
+    const ignored = await service.setProjectLibraryUpdateIgnored({
+      projectId: manifest.projectId,
+      designFileId: consumer.designFileId,
+      libraryId: published.entry.libraryId,
+      releaseId: published.entry.latestReleaseId,
+    });
+    expect(
+      ignored.ignoredReleaseIdsByDesignFileId[consumer.designFileId],
+    ).toEqual({
+      [published.entry.libraryId]: published.entry.latestReleaseId,
+    });
+    expect(() =>
+      service.setProjectLibraryEnabled({
+        projectId: manifest.projectId,
+        designFileId: consumer.designFileId,
+        libraryId: published.entry.libraryId,
+        enabled: true,
+        path: "/tmp/forged",
+      }),
+    ).toThrow("Invalid Project Library enable request");
+    store.close();
+  });
+
   it("returns null when the native directory selection is cancelled", async () => {
     const store = new WorkspaceStore(":memory:");
     const service = new ProjectIpcService(new ProjectHost(store), store, () =>

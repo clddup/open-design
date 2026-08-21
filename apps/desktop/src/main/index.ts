@@ -641,6 +641,51 @@ function registerProjectIpc() {
       return requireProjectIpc().renameDesignFile(args[0]);
     },
   );
+  ipcMain.handle(
+    channels.publishProjectLibrary,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      return requireProjectIpc().publishProjectLibrary(args[0]);
+    },
+  );
+  ipcMain.handle(channels.listProjectLibraries, (event, ...args: unknown[]) => {
+    assertMainRenderer(event);
+    assertArgumentCount(args, 1);
+    return requireProjectIpc().listProjectLibraries(args[0]);
+  });
+  ipcMain.handle(
+    channels.readProjectLibraryRelease,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      return requireProjectIpc().readProjectLibraryRelease(args[0]);
+    },
+  );
+  ipcMain.handle(
+    channels.setProjectLibraryEnabled,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      return requireProjectIpc().setProjectLibraryEnabled(args[0]);
+    },
+  );
+  ipcMain.handle(
+    channels.setProjectLibraryUpdateIgnored,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      return requireProjectIpc().setProjectLibraryUpdateIgnored(args[0]);
+    },
+  );
+  ipcMain.handle(
+    channels.setProjectLibraryUpdateAccepted,
+    (event, ...args: unknown[]) => {
+      assertMainRenderer(event);
+      assertArgumentCount(args, 1);
+      return requireProjectIpc().setProjectLibraryUpdateAccepted(args[0]);
+    },
+  );
 }
 
 function registerIpc(fontBinaryService: FontBinaryMainService) {

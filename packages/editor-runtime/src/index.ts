@@ -133,6 +133,7 @@ export {
   componentMainNodeId,
   planCreateComponent,
   planCreateInstance,
+  planCreateLibraryInstance,
   planDetachComponentInstance,
   planResetComponentOverrides,
   planRemoveComponent,

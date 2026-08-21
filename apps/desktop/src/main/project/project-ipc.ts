@@ -12,6 +12,14 @@ import {
   isRenameProjectDesignFileRequest,
   isSaveProjectDesignFileRequest,
 } from "../../shared/desktop-api.js";
+import {
+  isListProjectLibrariesRequest,
+  isPublishProjectLibraryRequest,
+  isReadProjectLibraryReleaseRequest,
+  isSetProjectLibraryEnabledRequest,
+  isSetProjectLibraryUpdateAcceptedRequest,
+  isSetProjectLibraryUpdateIgnoredRequest,
+} from "../../shared/project-library-contract.js";
 import { createStarterProjectFiles } from "../../shared/project/starter-project.js";
 import { ProjectHostError, type ProjectHost } from "./project-host.js";
 import type { WorkspaceStore } from "./workspace-store.js";
@@ -318,6 +326,71 @@ export class ProjectIpcService {
       request.projectId,
       request.designFileId,
       request.name,
+    );
+  }
+
+  publishProjectLibrary(request: unknown) {
+    if (!isPublishProjectLibraryRequest(request)) {
+      throw new TypeError("Invalid Project Library publish request");
+    }
+    return this.projectHost.publishDesignFileLibrary(
+      request.projectId,
+      request.designFileId,
+      request.name,
+    );
+  }
+
+  listProjectLibraries(request: unknown) {
+    if (!isListProjectLibrariesRequest(request)) {
+      throw new TypeError("Invalid Project Library list request");
+    }
+    return this.projectHost.listProjectLibraries(request.projectId);
+  }
+
+  readProjectLibraryRelease(request: unknown) {
+    if (!isReadProjectLibraryReleaseRequest(request)) {
+      throw new TypeError("Invalid Project Library release request");
+    }
+    return this.projectHost.readProjectLibraryRelease(
+      request.projectId,
+      request.libraryId,
+      request.releaseId,
+    );
+  }
+
+  setProjectLibraryEnabled(request: unknown) {
+    if (!isSetProjectLibraryEnabledRequest(request)) {
+      throw new TypeError("Invalid Project Library enable request");
+    }
+    return this.projectHost.setProjectLibraryEnabled(
+      request.projectId,
+      request.designFileId,
+      request.libraryId,
+      request.enabled,
+    );
+  }
+
+  setProjectLibraryUpdateIgnored(request: unknown) {
+    if (!isSetProjectLibraryUpdateIgnoredRequest(request)) {
+      throw new TypeError("Invalid Project Library ignore request");
+    }
+    return this.projectHost.setProjectLibraryUpdateIgnored(
+      request.projectId,
+      request.designFileId,
+      request.libraryId,
+      request.releaseId,
+    );
+  }
+
+  setProjectLibraryUpdateAccepted(request: unknown) {
+    if (!isSetProjectLibraryUpdateAcceptedRequest(request)) {
+      throw new TypeError("Invalid Project Library accept request");
+    }
+    return this.projectHost.setProjectLibraryUpdateAccepted(
+      request.projectId,
+      request.designFileId,
+      request.libraryId,
+      request.releaseId,
     );
   }
 }

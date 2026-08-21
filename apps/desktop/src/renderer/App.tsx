@@ -88,6 +88,7 @@ import {
 import { isTool, type SidebarTab, type Tool } from "./state/editor";
 import { useDesignAssetActions } from "./use-design-asset-actions";
 import { useComponentActions } from "./use-component-actions";
+import { useProjectLibraryActions } from "./use-project-library-actions";
 import { useImportExportWorkflow } from "./features/import-export/use-import-export-workflow";
 import { layoutInspectorMode } from "./features/editor/auto-layout-shortcut";
 import { useDocumentCommandControllers } from "./use-document-command-controllers";
@@ -884,6 +885,18 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     showProperties: () => setUtilityTab("properties"),
     t,
     textRunLayoutProvider: fontBinaryRuntime.provider,
+  });
+
+  const projectLibraries = useProjectLibraryActions({
+    activeDesignFileId: workspaceSnapshot.activeDesignFileId,
+    activePageId,
+    activeProjectId: workspaceSnapshot.activeProjectId,
+    applyCommands,
+    document: designDocument,
+    projectBacked: Boolean(projectsById[workspaceSnapshot.activeProjectId]),
+    runtime,
+    t,
+    transactionCounter,
   });
 
   const {
@@ -2399,6 +2412,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             selectionAnchorNodeId={state.selection.anchorNodeId}
             selectionComponentTarget={state.selection.componentTarget}
             tab={sidebarTab}
+            projectLibraries={projectLibraries}
             styleActions={styleActions}
             variableActions={variableActions}
           />
