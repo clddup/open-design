@@ -132,7 +132,7 @@ describe("current Design Plan amendments", () => {
       {
         ...initialPlan,
         skillRefs: initialPlan.skillRefs.map((reference, index) =>
-          index === 0 ? { ...reference, hash: "stale" } : reference,
+          index === 0 ? { id: "unknown-skill" } : reference,
         ),
       },
       {

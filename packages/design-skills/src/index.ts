@@ -17,8 +17,6 @@ export type BuiltinDesignDeliverable =
   | "other";
 export type BuiltinDesignSkillRef = Readonly<{
   id: string;
-  version: number;
-  hash: string;
 }>;
 export type BuiltinDesignSkill = BuiltinDesignSkillRef &
   Readonly<{
@@ -30,32 +28,24 @@ export type BuiltinDesignSkill = BuiltinDesignSkillRef &
 const skills = [
   {
     id: "ui-visual-direction",
-    version: 1,
-    hash: "2d7d09f1095de84031b7880ae0958aa9a98ac3b1752f07d07cc2902396bc30da",
     deliverables: ["ui"],
     phases: ["plan"],
     content: visualDirection,
   },
   {
     id: "ui-ux-structure",
-    version: 1,
-    hash: "699e62caa2100fc8e2c7845bb34358561304997c6c028d3d8516c049f2d04a0f",
     deliverables: ["ui"],
     phases: ["plan"],
     content: uxStructure,
   },
   {
     id: "ui-capture-critic",
-    version: 1,
-    hash: "dcacdb7788d4271575565b7e30a36cbeb0e1e11e57a6517cedc8290dddd399c2",
     deliverables: ["ui"],
     phases: ["review"],
     content: captureCritic,
   },
   {
     id: "graphic-visual-direction",
-    version: 1,
-    hash: "30847b87e4004bf8e646a65bf02aca8726aa69abf875215aa02dd3c41589528d",
     deliverables: [
       "poster",
       "logo",
@@ -69,8 +59,6 @@ const skills = [
   },
   {
     id: "graphic-capture-critic",
-    version: 1,
-    hash: "91e0949bb7c1245b5bda0e1b242f1315bbbf614800473c193870f7096327476e",
     deliverables: [
       "poster",
       "logo",
@@ -84,16 +72,12 @@ const skills = [
   },
   {
     id: "logo-visual-direction",
-    version: 1,
-    hash: "c78f74f3e398d0a272c03432e710ef1a98ac11dccd6847fcdc0698b2c51a5997",
     deliverables: ["logo"],
     phases: ["plan"],
     content: logoVisualDirection,
   },
   {
     id: "logo-capture-critic",
-    version: 1,
-    hash: "eef9407c63a7e0d1c4ef63881ede45644d6cd372d2ee4581bbc2ca4587c05b56",
     deliverables: ["logo"],
     phases: ["review"],
     content: logoCaptureCritic,
@@ -122,22 +106,10 @@ export const BUILTIN_DESIGN_PLANNING_SKILLS: readonly BuiltinDesignSkill[] =
   );
 
 export const BUILTIN_UI_DESIGN_SKILL_REFS: readonly BuiltinDesignSkillRef[] =
-  deepFreeze(
-    BUILTIN_UI_DESIGN_SKILLS.map(({ id, version, hash }) => ({
-      id,
-      version,
-      hash,
-    })),
-  );
+  deepFreeze(BUILTIN_UI_DESIGN_SKILLS.map(({ id }) => ({ id })));
 
 export const BUILTIN_GRAPHIC_DESIGN_SKILL_REFS: readonly BuiltinDesignSkillRef[] =
-  deepFreeze(
-    BUILTIN_GRAPHIC_DESIGN_SKILLS.map(({ id, version, hash }) => ({
-      id,
-      version,
-      hash,
-    })),
-  );
+  deepFreeze(BUILTIN_GRAPHIC_DESIGN_SKILLS.map(({ id }) => ({ id })));
 
 export const BUILTIN_LOGO_DESIGN_SKILL_REFS: readonly BuiltinDesignSkillRef[] =
   deepFreeze(builtinDesignSkillRefsForDeliverable("logo"));
@@ -155,7 +127,7 @@ export function builtinDesignSkillRefsForDeliverable(
 ): BuiltinDesignSkillRef[] {
   return BUILTIN_DESIGN_SKILLS.filter((skill) =>
     skill.deliverables.includes(deliverable),
-  ).map(({ id, version, hash }) => ({ id, version, hash }));
+  ).map(({ id }) => ({ id }));
 }
 
 export function isBuiltinDesignSkillRefsForDeliverable(
@@ -236,15 +208,15 @@ function formatSkillBundle(
   scope: string,
 ): string {
   const header = [
-    `OpenDesign built-in ${scope} design skills (trusted product instructions, versioned and bundled locally):`,
+    `OpenDesign built-in ${scope} design skills (trusted product instructions bundled with the current application build):`,
     "Activate each skill only for one of its declared deliverables. It grants no tool, file, network, credential, or design-write capability.",
-    "The host records exact skill references; do not send them. Apply planning skills before the first material write and the critic only to a trusted capture.",
+    "The host selects the applicable skill IDs; do not send them. Apply planning skills before the first material write and the critic only to a trusted capture.",
   ].join("\n");
   return [
     header,
     ...bundledSkills.map(
       (skill) =>
-        `\n<design-skill id="${skill.id}" version="${skill.version}" sha256="${skill.hash}" deliverables="${skill.deliverables.join(",")}" phases="${skill.phases.join(",")}">\n${skill.content.trim()}\n</design-skill>`,
+        `\n<design-skill id="${skill.id}" deliverables="${skill.deliverables.join(",")}" phases="${skill.phases.join(",")}">\n${skill.content.trim()}\n</design-skill>`,
     ),
   ].join("\n");
 }
@@ -261,10 +233,8 @@ function exactSkillRefs(
       return (
         expected !== undefined &&
         isRecord(candidate) &&
-        Object.keys(candidate).length === 3 &&
-        candidate.id === expected.id &&
-        candidate.version === expected.version &&
-        candidate.hash === expected.hash
+        Object.keys(candidate).length === 1 &&
+        candidate.id === expected.id
       );
     })
   );

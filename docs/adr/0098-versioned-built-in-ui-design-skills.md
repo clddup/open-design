@@ -37,7 +37,7 @@
 - `visualThesis` 与必须在首个真实 slice 可见的 `signatureMotif`；
 - `typographyLanguage`、`colorMaterialLanguage`、`compositionTension`；
 - 至少三个具体 `antiPatterns`；
-- `skillRefs {id, version, hash}`。
+- 由宿主绑定的当前内置 `skillRefs {id}`；skill 内容直接来自当前应用构建，不维护独立功能版本或手工内容哈希。
 
 内部 UI Plan 必须精确记录内置 UI bundle；非 UI Plan 的 refs 为空。按 ADR-0102，模型 schema 不再提交这些宿主已知字段，Main 在 Plan、compact first-slice 与 review 边界注入精确 refs。视觉身份仍不能全部推迟到首稿之后。
 

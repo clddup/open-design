@@ -1,0 +1,168 @@
+{
+  "scenarios": [
+    {
+      "id": "OD-UI-01",
+      "title": "Release readiness desktop workspace",
+      "deliverable": "ui",
+      "prompt": "fixtures/design-evaluation/OD-UI-01/prompt.md",
+      "expectedTargetCount": 2,
+      "modelContext": {
+        "contextWindow": 200000,
+        "maxOutputTokens": 16384,
+        "reasoningEffort": "medium"
+      },
+      "initialSurface": {
+        "toolNames": [
+          "opendesign_generate_first_slice",
+          "opendesign_inspect_document"
+        ],
+        "maxProtocolCharacters": 30000
+      },
+      "requiredMilestones": ["T_plan", "T0", "T1", "T2", "T_all"],
+      "criteria": [
+        {
+          "id": "brief-fidelity",
+          "label": "Brief fidelity",
+          "critical": true,
+          "description": "Both requested screens, product semantics, realistic content, and prohibited additions are respected."
+        },
+        {
+          "id": "task-hierarchy",
+          "label": "Task hierarchy",
+          "critical": true,
+          "description": "Release status, blockers, ownership, evidence, and primary actions read in the order required to complete the job."
+        },
+        {
+          "id": "desktop-density",
+          "label": "Desktop density",
+          "critical": false,
+          "description": "The composition uses professional desktop density without becoming a sparse marketing page or a wall of undifferentiated cards."
+        },
+        {
+          "id": "state-interaction",
+          "label": "State and interaction",
+          "critical": true,
+          "description": "Selection, severity, error, disabled and keyboard-focus states are visible, distinct, and usable."
+        },
+        {
+          "id": "component-system",
+          "label": "Component system",
+          "critical": true,
+          "description": "Shared semantic objects remain consistent and use justified linked components rather than copied primitive structures."
+        },
+        {
+          "id": "typography",
+          "label": "Typography",
+          "critical": false,
+          "description": "Type roles, sizes, line lengths, labels, tables and metadata remain legible and characterful at fit-to-artboard scale."
+        },
+        {
+          "id": "composition",
+          "label": "Composition",
+          "critical": false,
+          "description": "Scale, alignment, whitespace and emphasis create a clear working path instead of mechanically even distribution."
+        },
+        {
+          "id": "material-coherence",
+          "label": "Material coherence",
+          "critical": false,
+          "description": "Color, surfaces, borders, depth and icon language form one restrained product system."
+        },
+        {
+          "id": "template-avoidance",
+          "label": "Template avoidance",
+          "critical": true,
+          "description": "The result avoids generic card dashboards, decorative gradients, invented analytics and interchangeable AI-product styling."
+        },
+        {
+          "id": "craft-precision",
+          "label": "Craft precision",
+          "critical": true,
+          "description": "Spacing, clipping, text fit, control proportions and optical alignment are delivery-ready rather than merely present."
+        }
+      ]
+    },
+    {
+      "id": "OD-LOGO-01",
+      "title": "OpenDesign logo and desktop icon system",
+      "deliverable": "logo",
+      "prompt": "fixtures/design-evaluation/OD-LOGO-01/prompt.md",
+      "expectedTargetCount": 4,
+      "modelContext": {
+        "contextWindow": 200000,
+        "maxOutputTokens": 16384,
+        "reasoningEffort": "medium"
+      },
+      "initialSurface": {
+        "toolNames": [
+          "opendesign_generate_first_slice",
+          "opendesign_inspect_document"
+        ],
+        "maxProtocolCharacters": 30000
+      },
+      "requiredMilestones": ["T_plan", "T0", "T1", "T2", "T_all"],
+      "criteria": [
+        {
+          "id": "brief-fidelity",
+          "label": "Brief fidelity",
+          "critical": true,
+          "description": "All four requested boards and their named deliverables are visibly complete and editable."
+        },
+        {
+          "id": "concept-divergence",
+          "label": "Concept divergence",
+          "critical": true,
+          "description": "The three concepts use genuinely different generative principles rather than cosmetic variants of one mark."
+        },
+        {
+          "id": "silhouette-distinction",
+          "label": "Silhouette distinction",
+          "critical": true,
+          "description": "The selected symbol has an ownable black silhouette that does not depend on captions or color."
+        },
+        {
+          "id": "counterform",
+          "label": "Counterform",
+          "critical": false,
+          "description": "Positive and negative space remain deliberate, balanced and reproducible."
+        },
+        {
+          "id": "optical-balance",
+          "label": "Optical balance",
+          "critical": true,
+          "description": "Contour weight, spacing, lockups and clear space are optically corrected rather than only mathematically centered."
+        },
+        {
+          "id": "small-size",
+          "label": "Small-size recognition",
+          "critical": true,
+          "description": "The symbol and icon remain distinct at 32, 24 and 16 pixels without relying on fine detail."
+        },
+        {
+          "id": "wordmark",
+          "label": "Wordmark",
+          "critical": false,
+          "description": "The wordmark has deliberate type choice, spacing and a credible relationship to the symbol."
+        },
+        {
+          "id": "app-icon",
+          "label": "Desktop app icon",
+          "critical": true,
+          "description": "The app icon is optically adapted across sizes and desktop platforms rather than simply scaled into a rounded square."
+        },
+        {
+          "id": "component-system",
+          "label": "Logo component system",
+          "critical": false,
+          "description": "Reusable variants have coherent semantic roots and linked Instances while source geometry remains separate from presentation."
+        },
+        {
+          "id": "originality",
+          "label": "Originality",
+          "critical": true,
+          "description": "The identity avoids generic AI symbols, simple OD construction and imitation of named existing brands."
+        }
+      ]
+    }
+  ]
+}

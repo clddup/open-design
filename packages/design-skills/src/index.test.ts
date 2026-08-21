@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   builtinDesignSkillRefsForDeliverable,
@@ -18,27 +17,24 @@ import {
 } from "./index.js";
 
 describe("built-in design skills", () => {
-  it("pins immutable, unique content hashes", () => {
+  it("keeps the current built-in skill set immutable and unique", () => {
     expect(Object.isFrozen(BUILTIN_DESIGN_SKILLS)).toBe(true);
     expect(Object.isFrozen(BUILTIN_DESIGN_PLANNING_SKILLS)).toBe(true);
     expect(Object.isFrozen(BUILTIN_UI_DESIGN_SKILLS)).toBe(true);
     expect(Object.isFrozen(BUILTIN_GRAPHIC_DESIGN_SKILLS)).toBe(true);
     expect(new Set(BUILTIN_DESIGN_SKILLS.map(({ id }) => id)).size).toBe(7);
-    for (const skill of BUILTIN_DESIGN_SKILLS) {
-      expect(skill.hash).toBe(
-        createHash("sha256").update(skill.content).digest("hex"),
-      );
-    }
+    expect(
+      BUILTIN_DESIGN_SKILLS.every(({ content }) => content.length > 0),
+    ).toBe(true);
   });
 
   it("formats a bounded automatic bundle without executable capabilities", () => {
     const bundle = formatBuiltinUiDesignSkillBundle();
     for (const reference of BUILTIN_UI_DESIGN_SKILL_REFS) {
       expect(bundle).toContain(`id="${reference.id}"`);
-      expect(bundle).toContain(`sha256="${reference.hash}"`);
     }
     expect(bundle).toContain("grants no tool");
-    expect(bundle).toContain("The host records exact skill references");
+    expect(bundle).toContain("The host selects the applicable skill IDs");
     expect(bundle).toContain("do not send them");
     expect(bundle.length).toBeLessThan(12_000);
 
@@ -84,7 +80,7 @@ describe("built-in design skills", () => {
     ).toBe(false);
     expect(
       isBuiltinUiDesignSkillRefs([
-        { ...BUILTIN_UI_DESIGN_SKILL_REFS[0], hash: "stale" },
+        { id: "unknown-skill" },
         ...BUILTIN_UI_DESIGN_SKILL_REFS.slice(1),
       ]),
     ).toBe(false);

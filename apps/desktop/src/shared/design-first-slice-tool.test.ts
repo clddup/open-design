@@ -152,7 +152,7 @@ describe("compact first-slice tool", () => {
     ]);
   });
 
-  it("lets Main bind skill revisions instead of requiring model hash echoing", () => {
+  it("lets Main bind the current skill IDs instead of trusting model input", () => {
     const input = fixture();
     const { skillRefs: _skillRefs, ...modelInput } = input;
     expect(_skillRefs).toEqual(BUILTIN_UI_DESIGN_SKILL_REFS);
@@ -163,7 +163,7 @@ describe("compact first-slice tool", () => {
 
     const staleHostEcho = {
       ...modelInput,
-      skillRefs: [{ id: "stale", version: 99, hash: "model-controlled" }],
+      skillRefs: [{ id: "model-controlled" }],
     };
     expect(
       normalizeDesignFirstSliceToolInput(staleHostEcho)?.skillRefs,

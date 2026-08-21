@@ -19,7 +19,7 @@
 
 ### 宿主拥有稳定元数据
 
-模型面对的 Plan、first-slice 和 Visual Review schema 不再要求 `skillRefs`。Main 根据 deliverable 和当前本地 bundle 注入精确 `id/version/hash`，内部 Plan、review、恢复状态与审计结果仍保留这些 refs。模型负责设计判断，不负责逐字符复制宿主已经知道的哈希。
+模型面对的 Plan、first-slice 和 Visual Review schema 不再要求 `skillRefs`。Main 根据 deliverable 和当前应用构建注入适用的 skill ID，内部 Plan、review、恢复状态与审计结果只记录这些稳定 ID。skill 内容随应用一起构建，不另设功能版本或手工内容哈希；模型负责设计判断，也不回抄宿主已经知道的标识。
 
 UI quality profile 只引用 delivery Frame 的真实 descendants。Main 接受 Plan 时删除 Frame 自引用；Layout Quality 对历史自引用做无害降级。材料开始后仍必须稳定保留 `targetId + Page + artboard Frame + region`，但 `safeAreaNodeIds` 与 `interactiveNodeIds` 是可修订验收策略，必须能随真实节点删除、替换和修复而更新，不能形成不可恢复闭环。
 

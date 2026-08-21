@@ -20,6 +20,7 @@
     "capabilities:check": "node scripts/generate-capability-doc.mjs --check",
     "capabilities:generate": "node scripts/generate-capability-doc.mjs",
     "dev": "pnpm --filter @opendesign/desktop dev",
+    "evaluation:check": "node --test scripts/design-evaluation.test.mjs && node scripts/design-evaluation.mjs check",
     "fixtures:check": "node scripts/generate-professional-fixtures.mjs --check",
     "fixtures:generate": "node scripts/generate-professional-fixtures.mjs",
     "format": "prettier --write .",
