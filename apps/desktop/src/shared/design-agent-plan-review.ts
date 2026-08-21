@@ -136,6 +136,16 @@ export const LOGO_CONCEPT_PRINCIPLES = [
   "other",
 ] as const;
 
+export const DESIGN_LOGO_OUTPUTS = [
+  "symbol",
+  "wordmark",
+  "app-icon",
+  "lockups",
+  "usage-preview",
+] as const;
+
+export type DesignLogoOutput = (typeof DESIGN_LOGO_OUTPUTS)[number];
+
 export type DesignLogoExploration = {
   targetId: string;
   directions: Array<{
@@ -163,6 +173,7 @@ export type DesignPlanToolInput = {
   designIntent: DesignIntent;
   referenceStrategy?: DesignReferenceStrategy;
   skillRefs: BuiltinDesignSkillRef[];
+  logoOutputs?: DesignLogoOutput[];
   logoExploration?: DesignLogoExploration;
   singleRasterEvidence?: string;
 };
@@ -371,7 +382,7 @@ const DESIGN_INTENT_SCHEMA = {
 export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
   type: "object",
   description:
-    "Required when deliverable=logo. Three genuinely different concept directions with stable editable roots and rendered monochrome plus 32/24/16 px evidence. Cosmetic variants of one letterform are invalid.",
+    "Optional for a requested multi-direction Logo exploration. Three genuinely different concept directions with stable editable roots and rendered monochrome plus 32/24/16 px evidence. Each thesis states the relevant brand meaning; each constructionLogic names the visible geometric mechanism, memorable silhouette/counterform anchor, and feature that survives at 16 px. Cosmetic variants and caption-dependent arbitrary shapes are invalid.",
   properties: {
     targetId: { type: "string", minLength: 1, maxLength: 128 },
     directions: {
@@ -389,6 +400,8 @@ export const DESIGN_LOGO_EXPLORATION_SCHEMA = {
             type: "string",
             minLength: 16,
             maxLength: 1_000,
+            description:
+              "Causal meaning-to-form mechanism, including the memorable silhouette or counterform anchor and what remains recognizable at 16 px.",
           },
           rootNodeId: { type: "string", minLength: 1, maxLength: 256 },
           monochromeNodeId: { type: "string", minLength: 1, maxLength: 256 },
@@ -508,6 +521,15 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
     briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
     designIntent: DESIGN_INTENT_SCHEMA,
     referenceStrategy: DESIGN_REFERENCE_STRATEGY_SCHEMA,
+    logoOutputs: {
+      type: "array",
+      minItems: 1,
+      maxItems: 5,
+      uniqueItems: true,
+      description:
+        "Optional Logo scope hint. When present, list only the concrete Logo/Icon outputs requested by the user; omission must not block drawing.",
+      items: { enum: [...DESIGN_LOGO_OUTPUTS] },
+    },
     logoExploration: DESIGN_LOGO_EXPLORATION_SCHEMA,
     singleRasterEvidence: {
       type: "string",
@@ -619,6 +641,9 @@ export function isDesignPlanToolInput(
     !isDesignIntent(input.designIntent) ||
     (input.referenceStrategy !== undefined &&
       !isDesignReferenceStrategy(input.referenceStrategy)) ||
+    (input.logoOutputs !== undefined &&
+      (input.deliverable !== "logo" ||
+        !isDesignLogoOutputs(input.logoOutputs))) ||
     !isBuiltinDesignSkillRefsForDeliverable(
       input.deliverable,
       input.skillRefs,
@@ -636,6 +661,7 @@ export function isDesignPlanToolInput(
       "designIntent",
       "skillRefs",
       ...(input.referenceStrategy === undefined ? [] : ["referenceStrategy"]),
+      ...(input.logoOutputs === undefined ? [] : ["logoOutputs"]),
       ...(input.logoExploration === undefined ? [] : ["logoExploration"]),
       ...(input.singleRasterEvidence === undefined
         ? []
@@ -647,9 +673,9 @@ export function isDesignPlanToolInput(
   const targets = input.targets;
   const componentStrategy = input.componentStrategy;
   if (
-    input.deliverable === "logo"
-      ? !isDesignLogoExploration(input.logoExploration, targets)
-      : input.logoExploration !== undefined
+    input.logoExploration !== undefined &&
+    (input.deliverable !== "logo" ||
+      !isDesignLogoExploration(input.logoExploration, targets))
   ) {
     return false;
   }
@@ -899,6 +925,20 @@ function isDesignIntent(value: unknown): value is DesignIntent {
       "compositionTension",
       "antiPatterns",
     ])
+  );
+}
+
+export function isDesignLogoOutputs(
+  value: unknown,
+): value is DesignLogoOutput[] {
+  return (
+    Array.isArray(value) &&
+    value.length >= 1 &&
+    value.length <= DESIGN_LOGO_OUTPUTS.length &&
+    value.every((output) =>
+      DESIGN_LOGO_OUTPUTS.includes(output as DesignLogoOutput),
+    ) &&
+    new Set(value).size === value.length
   );
 }
 

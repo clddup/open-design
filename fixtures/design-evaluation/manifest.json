@@ -4,6 +4,7 @@
       "id": "OD-UI-01",
       "title": "Release readiness desktop workspace",
       "deliverable": "ui",
+      "generationMode": "thorough",
       "prompt": "fixtures/design-evaluation/OD-UI-01/prompt.md",
       "expectedTargetCount": 2,
       "modelContext": {
@@ -86,6 +87,7 @@
       "id": "OD-LOGO-01",
       "title": "OpenDesign logo and desktop icon system",
       "deliverable": "logo",
+      "generationMode": "thorough",
       "prompt": "fixtures/design-evaluation/OD-LOGO-01/prompt.md",
       "expectedTargetCount": 4,
       "modelContext": {
@@ -161,6 +163,81 @@
           "label": "Originality",
           "critical": true,
           "description": "The identity avoids generic AI symbols, simple OD construction and imitation of named existing brands."
+        }
+      ]
+    },
+    {
+      "id": "OD-MARK-01",
+      "title": "Focused OpenDesign mark and small-size adaptation",
+      "deliverable": "logo",
+      "generationMode": "fast",
+      "prompt": "fixtures/design-evaluation/OD-MARK-01/prompt.md",
+      "expectedTargetCount": 1,
+      "modelContext": {
+        "contextWindow": 200000,
+        "maxOutputTokens": 16384,
+        "reasoningEffort": "medium"
+      },
+      "initialSurface": {
+        "toolNames": [
+          "opendesign_generate_first_slice",
+          "opendesign_inspect_document"
+        ],
+        "maxProtocolCharacters": 30000
+      },
+      "requiredMilestones": ["T_plan", "T0", "T1", "T2", "T_all"],
+      "performanceBudgetMs": {
+        "T1": 60000,
+        "T_all": 300000
+      },
+      "criteria": [
+        {
+          "id": "brief-fidelity",
+          "label": "Brief fidelity",
+          "critical": true,
+          "description": "One focused editable mark is delivered without inventing a multi-board identity system or unrelated alternatives."
+        },
+        {
+          "id": "meaning-to-form",
+          "label": "Meaning to form",
+          "critical": true,
+          "description": "The visible construction expresses a relevant OpenDesign idea and does not depend on a caption to explain arbitrary geometry."
+        },
+        {
+          "id": "silhouette-distinction",
+          "label": "Silhouette distinction",
+          "critical": true,
+          "description": "The mark has one ownable black silhouette and a memorable contour or counterform anchor."
+        },
+        {
+          "id": "construction-logic",
+          "label": "Construction logic",
+          "critical": false,
+          "description": "Geometry, joins, apertures and negative space show deliberate reproducible construction rather than random primitive assembly."
+        },
+        {
+          "id": "small-size",
+          "label": "Small-size recognition",
+          "critical": true,
+          "description": "The identifying feature survives real 32, 24 and 16 pixel specimens without becoming noise or an indistinct blob."
+        },
+        {
+          "id": "optical-balance",
+          "label": "Optical balance",
+          "critical": true,
+          "description": "Weight, counterform, spacing and placement are optically balanced at both source and application sizes."
+        },
+        {
+          "id": "desktop-icon-fit",
+          "label": "Desktop icon fit",
+          "critical": false,
+          "description": "The same identity is credibly adapted for a desktop application context without treating a rounded square as the concept."
+        },
+        {
+          "id": "template-avoidance",
+          "label": "Template avoidance",
+          "critical": true,
+          "description": "The result avoids generic AI sparkles, node boxes, simple OD assembly, arbitrary blobs and imitation of named brands."
         }
       ]
     }

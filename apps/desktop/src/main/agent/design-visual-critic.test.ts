@@ -21,15 +21,35 @@ const criterionIds = [
   "glance-legibility",
   "subject-specificity",
   "craft-precision",
-  "concept-divergence",
   "black-silhouette",
   "counterform-contour",
   "optical-balance",
   "small-size-recognition",
   "monochrome-integrity",
+  "concept-divergence",
+  "logo-concept-open-contour-quality",
+  "logo-concept-modular-path-quality",
+  "logo-concept-spatial-link-quality",
   "symbol-wordmark-relationship",
   "app-icon-optical-redraw",
   "component-system-integrity",
+] as const;
+
+const singleMarkCriterionIds = [
+  "visual-thesis",
+  "signature-motif",
+  "composition-tension",
+  "typography-character",
+  "material-coherence",
+  "template-avoidance",
+  "glance-legibility",
+  "subject-specificity",
+  "craft-precision",
+  "black-silhouette",
+  "counterform-contour",
+  "optical-balance",
+  "small-size-recognition",
+  "monochrome-integrity",
 ] as const;
 
 describe("independent design visual critic", () => {
@@ -107,6 +127,66 @@ describe("independent design visual critic", () => {
       observedRevision: 8,
     });
     expect(result.review.failedCriteria).toHaveLength(2);
+  });
+
+  it("reviews one requested Logo/Icon without invented exploration or system criteria", async () => {
+    const context = criticContext("final");
+    context.plan.logoOutputs = ["symbol"];
+    delete context.plan.logoExploration;
+    let capturedRequest: Omit<ModelRequest, "signal"> | undefined;
+    const result = await runIndependentDesignVisualCritic(
+      {
+        complete: (request) => {
+          capturedRequest = request;
+          return Promise.resolve(
+            responseEvents(
+              request.attemptId,
+              scorecardFor(singleMarkCriterionIds, 4),
+            ),
+          );
+        },
+      },
+      context,
+      new AbortController().signal,
+    );
+
+    expect(result.passed).toBe(true);
+    expect(result.criteria).not.toHaveProperty("concept-divergence");
+    expect(result.criteria).not.toHaveProperty("app-icon-optical-redraw");
+    expect(result.criteria).not.toHaveProperty("component-system-integrity");
+    expect(JSON.stringify(capturedRequest?.tools)).not.toContain(
+      "concept-divergence",
+    );
+  });
+
+  it("rejects an exploration when its third direction is filler even if the other directions pass", async () => {
+    const weakThirdDirection = scorecard(4);
+    weakThirdDirection.criteria["logo-concept-spatial-link-quality"] = {
+      score: 2,
+      evidence:
+        "The third direction is two arbitrary blobs whose 24 and 16 px specimens collapse into unrelated noise.",
+      refinement:
+        "Replace the third direction with a constructed silhouette whose identifying contour survives at 16 px without its caption.",
+    };
+
+    const result = await runIndependentDesignVisualCritic(
+      {
+        complete: (request) =>
+          Promise.resolve(
+            responseEvents(request.attemptId, weakThirdDirection),
+          ),
+      },
+      criticContext("final"),
+      new AbortController().signal,
+    );
+
+    expect(result).toMatchObject({
+      passed: false,
+      failedCriteria: ["logo-concept-spatial-link-quality"],
+    });
+    expect(result.refinements).toContain(
+      "Replace the third direction with a constructed silhouette whose identifying contour survives at 16 px without its caption.",
+    );
   });
 
   it("fails closed when the Provider adds prose or duplicates the verdict", async () => {
@@ -291,11 +371,18 @@ function scorecard(score: number): {
   >;
   refinements: string[];
 } {
+  return scorecardFor(criterionIds, score);
+}
+
+function scorecardFor(
+  ids: readonly string[],
+  score: number,
+): ReturnType<typeof scorecard> {
   return {
     summary:
       "The exact revision shows a coherent logo system with visible small-size specimens.",
     criteria: Object.fromEntries(
-      criterionIds.map((id) => [
+      ids.map((id) => [
         id,
         {
           score,
@@ -371,6 +458,7 @@ function logoPlan(): DesignPlanToolInput {
   return {
     version: 1,
     deliverable: "logo",
+    logoOutputs: ["symbol", "wordmark", "app-icon", "lockups"],
     objective: "Create a distinctive logo system",
     outputMode: "editable-composition",
     targets: [
@@ -454,7 +542,37 @@ function logoPlan(): DesignPlanToolInput {
           constructionLogic: "A continuous contour defines aperture and edge",
           rootNodeId: "logo_direction",
           monochromeNodeId: "logo_monochrome",
-          smallSizeNodeIds: ["logo_16", "logo_24", "logo_32"],
+          smallSizeNodeIds: ["logo_32", "logo_24", "logo_16"],
+        },
+        {
+          conceptId: "modular-path",
+          label: "Modular Path",
+          principle: "modular-system",
+          thesis: "A modular path creates a precise recognizable system",
+          constructionLogic:
+            "Repeated modules lock into one asymmetric identifying contour",
+          rootNodeId: "logo_direction_modular",
+          monochromeNodeId: "logo_monochrome_modular",
+          smallSizeNodeIds: [
+            "logo_modular_32",
+            "logo_modular_24",
+            "logo_modular_16",
+          ],
+        },
+        {
+          conceptId: "spatial-link",
+          label: "Spatial Link",
+          principle: "spatial-layering",
+          thesis: "An open spatial link expresses structured collaboration",
+          constructionLogic:
+            "Two interlocking planes preserve one deliberate open counterform",
+          rootNodeId: "logo_direction_spatial",
+          monochromeNodeId: "logo_monochrome_spatial",
+          smallSizeNodeIds: [
+            "logo_spatial_32",
+            "logo_spatial_24",
+            "logo_spatial_16",
+          ],
         },
       ],
     },

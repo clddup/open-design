@@ -539,6 +539,27 @@ describe("workspace contract schemas", () => {
         ],
       }),
     ).toBe(true);
+    expect(
+      isDesignDeliveryLedger({
+        version: DESIGN_DELIVERY_LEDGER_VERSION,
+        targets: [
+          {
+            targetId: "target_fast_mark",
+            label: "Fast mark",
+            pageId: "page_1",
+            rootNodeId: "frame_fast_mark",
+            reservedNodeIds: ["frame_fast_mark", "region_fast_mark"],
+            status: "verified",
+            allocatedRevision: 1,
+            draftRevision: 2,
+            captureRevision: 2,
+            reviewRevision: 2,
+            verifiedRevision: 2,
+          },
+        ],
+        activeTargetId: null,
+      }),
+    ).toBe(true);
     expect(isGlobalTaskProjection({ ...projection, delivery })).toBe(true);
     expect(
       isDesignDeliveryLedger({

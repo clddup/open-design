@@ -182,6 +182,11 @@ export const AgentModelContextSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const DesignGenerationModeSchema = Type.Union([
+  Type.Literal("fast"),
+  Type.Literal("thorough"),
+]);
+
 export const AgentInitialDesignInspectionSchema = Type.Object(
   {
     version: Type.Literal(1),
@@ -689,6 +694,7 @@ export const AgentRequestSchema = Type.Union([
       scope: SelectionScopeSchema,
       mutationTarget: DesignMutationTargetSchema,
       modelSelection: ModelSelectionSchema,
+      generationMode: Type.Optional(DesignGenerationModeSchema),
       modelContext: Type.Optional(AgentModelContextSchema),
       initialDesignInspection: Type.Optional(
         AgentInitialDesignInspectionSchema,
@@ -885,6 +891,7 @@ export type AssistantTimelineBlock = Static<
 >;
 export type SessionTimelineItem = Static<typeof SessionTimelineItemSchema>;
 export type AgentAttachment = Static<typeof AgentAttachmentSchema>;
+export type DesignGenerationMode = Static<typeof DesignGenerationModeSchema>;
 export type AgentImageAttachment = Static<typeof AgentImageAttachmentSchema>;
 export type AgentDocumentAttachment = Static<
   typeof AgentDocumentAttachmentSchema

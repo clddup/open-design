@@ -623,6 +623,30 @@ export function isDesignDeliveryLedger(
 }
 
 function hasValidDeliveryRevisions(target: DesignDeliveryTarget): boolean {
+  if (target.status === "verified") {
+    const required = [
+      target.allocatedRevision,
+      target.draftRevision,
+      target.captureRevision,
+      target.reviewRevision,
+      target.verifiedRevision,
+    ];
+    if (required.some((revision) => revision === undefined)) return false;
+    const revisions = [
+      target.allocatedRevision,
+      target.draftRevision,
+      target.captureRevision,
+      target.reviewRevision,
+      ...(target.refinementRevision === undefined
+        ? []
+        : [target.refinementRevision]),
+      target.verifiedRevision,
+    ] as number[];
+    return revisions.every(
+      (revision, index) =>
+        index === 0 || revision >= (revisions[index - 1] ?? 0),
+    );
+  }
   const ordered = [
     target.allocatedRevision,
     target.draftRevision,
@@ -642,9 +666,7 @@ function hasValidDeliveryRevisions(target: DesignDeliveryTarget): boolean {
             ? 3
             : target.status === "reviewed"
               ? 4
-              : target.status === "refined"
-                ? 5
-                : 6;
+              : 5;
   if (
     ordered.slice(0, requiredCount).some((revision) => revision === undefined)
   ) {

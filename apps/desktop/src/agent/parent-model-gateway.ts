@@ -109,6 +109,9 @@ export class ParentModelGateway implements ModelGateway {
       ...(request.sessionId === undefined
         ? {}
         : { sessionId: request.sessionId }),
+      ...(request.latencyProfile === undefined
+        ? {}
+        : { latencyProfile: request.latencyProfile }),
       modelSelection: { ...request.modelSelection },
       system: request.system,
       messages: request.messages,

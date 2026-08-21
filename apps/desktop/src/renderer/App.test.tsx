@@ -2103,6 +2103,7 @@ describe("App", () => {
         selectedNodeIds: ["feature_one"],
       },
       mutationTarget: { kind: "page", pageId: "page_welcome" },
+      generationMode: "fast",
     });
   });
 

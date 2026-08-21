@@ -241,6 +241,7 @@ describe("Agent design inspection component strategy", () => {
     const logoPlan: DesignPlanToolInput = {
       ...plan,
       deliverable: "logo",
+      logoOutputs: ["symbol"],
       targets: plan.targets.map((target) => ({
         ...target,
         qualityProfile: { kind: "graphic" },

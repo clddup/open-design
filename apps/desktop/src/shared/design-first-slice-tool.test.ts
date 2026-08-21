@@ -194,9 +194,10 @@ describe("compact first-slice tool", () => {
     });
   });
 
-  it("requires three structurally different logo directions and compiles editable Path evidence", () => {
+  it("validates requested Logo exploration and also accepts one focused Logo/Icon", () => {
     const input = fixture();
     input.deliverable = "logo";
+    input.logoOutputs = ["symbol", "app-icon"];
     input.targets = input.targets.map((target) => ({
       ...target,
       qualityProfile: { kind: "graphic" },
@@ -256,9 +257,25 @@ describe("compact first-slice tool", () => {
 
     const missingExploration = structuredClone(modelInput);
     delete missingExploration.logoExploration;
+    missingExploration.logoOutputs = ["symbol"];
+    const focused = normalizeDesignFirstSliceToolInput(missingExploration);
+    expect(focused).toMatchObject({
+      deliverable: "logo",
+      logoOutputs: ["symbol"],
+    });
+    expect(focused?.logoExploration).toBeUndefined();
     expect(
-      normalizeDesignFirstSliceToolInput(missingExploration),
-    ).toBeUndefined();
+      focused && compileDesignFirstSliceToolInput(focused).plan,
+    ).toMatchObject({
+      deliverable: "logo",
+      logoOutputs: ["symbol"],
+    });
+
+    const omittedOutputs = structuredClone(missingExploration);
+    delete omittedOutputs.logoOutputs;
+    const omitted = normalizeDesignFirstSliceToolInput(omittedOutputs);
+    expect(omitted?.deliverable).toBe("logo");
+    expect(omitted?.logoOutputs).toBeUndefined();
   });
 
   it("rejects duplicate IDs, forward parents, empty regions and a slice for a later target", () => {

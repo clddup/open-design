@@ -48,6 +48,11 @@ const defaultModelStreamTimeouts: ModelStreamTimeouts = {
   idleTimeoutMs: 120_000,
   totalTimeoutMs: 900_000,
 };
+const interactiveModelStreamTimeouts: ModelStreamTimeouts = {
+  firstResponseTimeoutMs: 60_000,
+  idleTimeoutMs: 60_000,
+  totalTimeoutMs: 300_000,
+};
 export interface CredentialCipher {
   available(): boolean;
   encrypt(value: string): Buffer;
@@ -88,6 +93,7 @@ export class ModelProviderHost {
     ) => ModelGateway,
   ) {
     assertModelStreamTimeouts(streamTimeouts);
+    assertModelStreamTimeouts(interactiveModelStreamTimeouts);
   }
 
   setPerformanceObserver(
@@ -347,7 +353,10 @@ export class ModelProviderHost {
     yield* streamModelProvider({
       request: resolved,
       signal,
-      timeouts: this.streamTimeouts,
+      timeouts:
+        resolved.latencyProfile === "interactive"
+          ? interactiveModelStreamTimeouts
+          : this.streamTimeouts,
       gateway: (selection) => this.gateway(selection),
       ...(this.#performanceObserver
         ? { observePerformance: this.#performanceObserver }

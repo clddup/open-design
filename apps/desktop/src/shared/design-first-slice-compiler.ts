@@ -49,6 +49,9 @@ export function compileValidatedDesignFirstSliceToolInput(
       ? {}
       : { referenceStrategy: structuredClone(input.referenceStrategy) }),
     skillRefs: structuredClone(input.skillRefs),
+    ...(input.logoOutputs === undefined
+      ? {}
+      : { logoOutputs: [...input.logoOutputs] }),
     ...(input.logoExploration === undefined
       ? {}
       : {

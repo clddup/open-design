@@ -4,7 +4,11 @@ import {
   type BuiltinDesignSkillRef,
 } from "@opendesign/design-skills";
 import type { DesignIntent, RasterAssetRole } from "./design-agent-tools";
-import { LOGO_CONCEPT_PRINCIPLES } from "./design-agent-plan-review";
+import {
+  isDesignLogoOutputs,
+  LOGO_CONCEPT_PRINCIPLES,
+  type DesignLogoOutput,
+} from "./design-agent-plan-review";
 import {
   isDesignBriefFidelity,
   type DesignBriefFidelity,
@@ -153,6 +157,7 @@ export type DesignFirstSliceToolInput = {
     effects?: string[];
   };
   rasterAssetRoles: RasterAssetRole[];
+  logoOutputs?: DesignLogoOutput[];
   logoExploration?: {
     targetId: string;
     directions: Array<{
@@ -219,6 +224,9 @@ export function isDesignFirstSliceToolInput(
     !isRasterRoles(value.rasterAssetRoles) ||
     (value.referenceStrategy !== undefined &&
       !isDesignReferenceStrategy(value.referenceStrategy)) ||
+    (value.logoOutputs !== undefined &&
+      (value.deliverable !== "logo" ||
+        !isDesignLogoOutputs(value.logoOutputs))) ||
     (value.semanticObjects !== undefined &&
       (!Array.isArray(value.semanticObjects) ||
         value.semanticObjects.length > 24)) ||
@@ -238,6 +246,7 @@ export function isDesignFirstSliceToolInput(
       "visualSystem",
       "rasterAssetRoles",
       ...(value.referenceStrategy === undefined ? [] : ["referenceStrategy"]),
+      ...(value.logoOutputs === undefined ? [] : ["logoOutputs"]),
       ...(value.logoExploration === undefined ? [] : ["logoExploration"]),
       ...(value.semanticObjects === undefined ? [] : ["semanticObjects"]),
       "firstSlice",
@@ -247,9 +256,9 @@ export function isDesignFirstSliceToolInput(
   }
   const targets = value.targets as DesignFirstSliceToolInput["targets"];
   if (
-    value.deliverable === "logo"
-      ? !isCompactLogoExploration(value.logoExploration, targets)
-      : value.logoExploration !== undefined
+    value.logoExploration !== undefined &&
+    (value.deliverable !== "logo" ||
+      !isCompactLogoExploration(value.logoExploration, targets))
   ) {
     return false;
   }
@@ -383,6 +392,7 @@ export function explainInvalidDesignFirstSliceToolInput(
     "visualSystem",
     "rasterAssetRoles",
     "referenceStrategy",
+    "logoOutputs",
     "logoExploration",
     "semanticObjects",
     "firstSlice",
@@ -467,14 +477,22 @@ export function explainInvalidDesignFirstSliceToolInput(
     );
   }
   if (
-    input.deliverable === "logo" &&
+    input.logoOutputs !== undefined &&
+    (input.deliverable !== "logo" || !isDesignLogoOutputs(input.logoOutputs))
+  ) {
+    return invalidFirstSliceMessage(
+      "/logoOutputs: when present, use only the requested symbol, wordmark, app-icon, lockups, or usage-preview outputs on a logo deliverable",
+    );
+  }
+  if (
+    input.logoExploration !== undefined &&
     !isCompactLogoExploration(
       input.logoExploration,
       input.targets as DesignFirstSliceToolInput["targets"],
     )
   ) {
     return invalidFirstSliceMessage(
-      "/logoExploration: logo deliverables require exactly three directions with distinct principles and stable monochrome plus 32/24/16 px evidence nodes",
+      "/logoExploration: when present, exploration requires exactly three directions with distinct principles and stable monochrome plus 32/24/16 px evidence nodes",
     );
   }
   const targetIds = new Set(

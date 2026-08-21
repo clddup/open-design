@@ -4,7 +4,10 @@ import {
 } from "./design-first-slice-budget";
 import type { DesignFirstSliceElement } from "./design-first-slice-tool";
 import { DESIGN_BRIEF_FIDELITY_SCHEMA } from "./design-brief-fidelity";
-import { LOGO_CONCEPT_PRINCIPLES } from "./design-agent-plan-review";
+import {
+  DESIGN_LOGO_OUTPUTS,
+  LOGO_CONCEPT_PRINCIPLES,
+} from "./design-agent-plan-review";
 import { DESIGN_REFERENCE_STRATEGY_SCHEMA } from "./design-reference-strategy";
 
 const ID_SCHEMA = { type: "string", minLength: 1, maxLength: 256 } as const;
@@ -288,10 +291,19 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
         enum: ["reference", "background", "hero", "supporting-content"],
       },
     },
+    logoOutputs: {
+      type: "array",
+      minItems: 1,
+      maxItems: 5,
+      uniqueItems: true,
+      description:
+        "Optional Logo scope hint. When present, list only the requested symbol, wordmark, app-icon, lockups, or usage-preview outputs; omission must not block the first real slice.",
+      items: { enum: [...DESIGN_LOGO_OUTPUTS] },
+    },
     logoExploration: {
       type: "object",
       description:
-        "Required for logo: three distinct principles with stable root and [monochrome,32,24,16] evidence IDs.",
+        "Optional requested multi-direction Logo exploration: three distinct principles with stable root and [monochrome,32,24,16] evidence IDs. Every thesis states relevant brand meaning and every construction must make that meaning visible through a memorable silhouette/counterform anchor that survives at 16 px; captions cannot rescue arbitrary geometry.",
       properties: {
         targetId: ID_SCHEMA,
         directions: {

@@ -60,6 +60,13 @@ export function modelBridgeRequestValidationError(
   if (request.sessionId !== undefined && !safeId(request.sessionId)) {
     return "sessionId is invalid";
   }
+  if (
+    request.latencyProfile !== undefined &&
+    request.latencyProfile !== "interactive" &&
+    request.latencyProfile !== "extended"
+  ) {
+    return "latencyProfile is invalid";
+  }
   if (!isModelSelection(request.modelSelection)) {
     return "modelSelection is invalid";
   }

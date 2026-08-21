@@ -25,6 +25,22 @@ function requestWith(content: unknown, tools: unknown[] = []) {
 }
 
 describe("Model bridge request guard", () => {
+  it("accepts only declared Provider latency profiles", () => {
+    const request = requestWith("Create one mark");
+    expect(
+      isModelBridgeRequest({
+        ...request,
+        request: { ...request.request, latencyProfile: "interactive" },
+      }),
+    ).toBe(true);
+    expect(
+      isModelBridgeRequest({
+        ...request,
+        request: { ...request.request, latencyProfile: "unbounded" },
+      }),
+    ).toBe(false);
+  });
+
   it("accepts only bounded structured Provider failures", () => {
     const response = {
       type: "model.event",

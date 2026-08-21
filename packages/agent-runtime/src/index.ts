@@ -3,6 +3,7 @@ import {
   type AgentAttachment,
   type AgentInitialDesignInspection,
   type AgentModelContext,
+  type DesignGenerationMode,
   type AgentRunContinuation,
   type AgentToolFailureDetails,
   type ApprovalDecision,
@@ -42,6 +43,7 @@ export interface AgentRunRequest {
   scope: SelectionScope;
   mutationTarget: DesignMutationTarget;
   modelSelection: ModelSelection;
+  generationMode?: DesignGenerationMode;
   modelContext?: AgentModelContext;
   initialDesignInspection?: AgentInitialDesignInspection;
   continuation?: AgentRunContinuation;
@@ -187,6 +189,7 @@ export interface AgentRuntimeOptions {
   completionGuard?: CompletionGuardPort;
   limits?: Partial<AgentRuntimeLimits>;
   systemPrompt?: string;
+  systemPromptForRequest?: (request: AgentRunRequest) => string;
   newDesignSystemPrompt?: string;
   newDesignSystemPromptForRequest?: (request: AgentRunRequest) => string;
   now?: () => Date;

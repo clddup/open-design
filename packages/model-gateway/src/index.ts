@@ -32,6 +32,7 @@ export const MODEL_REASONING_EFFORTS = [
 export type ModelApiFormat = (typeof MODEL_API_FORMATS)[number];
 export type ModelAuthMode = (typeof MODEL_AUTH_MODES)[number];
 export type ModelReasoningEffort = (typeof MODEL_REASONING_EFFORTS)[number];
+export type ModelLatencyProfile = "interactive" | "extended";
 
 export interface ModelSelection {
   providerId: string;
@@ -126,6 +127,7 @@ export interface ModelError {
 export interface ModelRequest {
   attemptId: string;
   sessionId?: string;
+  latencyProfile?: ModelLatencyProfile;
   modelSelection: ModelSelection;
   system: string;
   messages: CanonicalMessage[];

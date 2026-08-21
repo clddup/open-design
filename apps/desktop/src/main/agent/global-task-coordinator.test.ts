@@ -1626,6 +1626,105 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
+  it("lets fast mode complete a clean first draft without an elective refinement round", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    await coordinator.registerRun({
+      type: "run.start",
+      runId: "run_fast_delivery",
+      sessionId: "conversation_mobile",
+      prompt: "Design one focused logo",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      generationMode: "fast",
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId: "run_fast_delivery",
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const plan: DesignPlanToolInput = {
+      ...designPlanForPage(pageId),
+      deliverable: "brand-asset",
+      rasterAssetRoles: [],
+      skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
+        ...reference,
+      })),
+      targets: designPlanForPage(pageId).targets.map((target) => ({
+        ...target,
+        composition: {
+          ...target.composition,
+          regions: target.composition.regions.slice(0, 1),
+        },
+        qualityProfile: { kind: "graphic" },
+      })),
+    };
+    const target = plan.targets[0];
+    if (!target) throw new Error("Fast delivery target is missing");
+    coordinator.registerDesignPlan(context, plan);
+    const allocation = coordinator.createDesignPlanAllocation(context.runId);
+    coordinator.recordDesignPlanAllocated(
+      context.runId,
+      allocation?.targetIds ?? [],
+      1,
+    );
+    const draft = draftTargets(pageId, plan.targets);
+    const authorization = coordinator.assertDesignPlanForApply(context, draft);
+    coordinator.recordDesignApplyCompleted(
+      context.runId,
+      authorization?.input ?? draft,
+      authorization,
+      2,
+    );
+    const draftedDocument = withDraftedTargets(
+      opened.document,
+      pageId,
+      plan.targets,
+      2,
+    );
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(draftedDocument, pageId),
+    );
+
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        2,
+        diagnoseDesignTargetLayout(
+          draftedDocument,
+          pageId,
+          target.artboard.frameId,
+          target.qualityProfile,
+        ),
+        independentCritic(2, true),
+      ),
+    ).toMatchObject({
+      nextAction: "complete-delivery",
+      verified: true,
+      critic: { passed: true },
+    });
+    expect(
+      coordinator.getDeliveryLedger(context.runId)?.targets[0],
+    ).toMatchObject({
+      status: "verified",
+      captureRevision: 2,
+      reviewRevision: 2,
+      verifiedRevision: 2,
+    });
+    store.close();
+  });
+
   it("persists and enforces every user-requested delivery target", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

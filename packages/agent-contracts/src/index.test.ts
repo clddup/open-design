@@ -129,6 +129,18 @@ describe("Agent contracts", () => {
     ).toBe(false);
   });
 
+  it("accepts only explicit fast or thorough generation depth", () => {
+    expect(isAgentRequest({ ...validStart, generationMode: "fast" })).toBe(
+      true,
+    );
+    expect(isAgentRequest({ ...validStart, generationMode: "thorough" })).toBe(
+      true,
+    );
+    expect(isAgentRequest({ ...validStart, generationMode: "slow" })).toBe(
+      false,
+    );
+  });
+
   it("accepts only an exact-revision bounded Main inspection snapshot", () => {
     const initialDesignInspection = {
       version: 1,

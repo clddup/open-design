@@ -26,10 +26,11 @@ OpenDesign 尚未正式发布，也不需要兼容旧实验 skill 引用。Git �
 
 ### 固定 UI 与 Logo 真实评测
 
-仓库提供两个固定场景：
+仓库提供固定场景：
 
 - `OD-UI-01` 检查专业桌面工作台的信息层级、密度、状态、组件系统、模板规避和工艺精度。
 - `OD-LOGO-01` 检查概念分歧、轮廓、counterform、光学平衡、小尺寸、Wordmark、App Icon、组件系统和原创性。
+- `OD-MARK-01` 由 ADR-0121 增加，检查一个聚焦标志及同一标志的小尺寸桌面适配，并记录快速模式性能预算。
 
 场景 manifest 直接引用仓库中的 prompt 文件，不维护需要人工同步的 prompt hash。Git 提交固定 prompt、rubric、模型上下文预算和首轮工具面。
 

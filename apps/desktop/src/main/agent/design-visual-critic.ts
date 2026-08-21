@@ -23,23 +23,29 @@ const GENERIC_CRITERIA = [
   "craft-precision",
 ] as const satisfies readonly DesignVisualCriterion[];
 
-const LOGO_CRITERIA = [
-  "concept-divergence",
+const LOGO_BASE_CRITERIA = [
   "black-silhouette",
   "counterform-contour",
   "optical-balance",
   "small-size-recognition",
   "monochrome-integrity",
-  "symbol-wordmark-relationship",
-  "app-icon-optical-redraw",
-  "component-system-integrity",
 ] as const;
+
+type LogoOptionalCriterionId =
+  | "concept-divergence"
+  | "symbol-wordmark-relationship"
+  | "app-icon-optical-redraw"
+  | "component-system-integrity";
 
 const REFERENCE_CRITERION = "reference-adherence" as const;
 
+type LogoDirectionCriterionId = `logo-concept-${string}-quality`;
+
 type CriticCriterionId =
   | DesignVisualCriterion
-  | (typeof LOGO_CRITERIA)[number]
+  | (typeof LOGO_BASE_CRITERIA)[number]
+  | LogoOptionalCriterionId
+  | LogoDirectionCriterionId
   | typeof REFERENCE_CRITERION;
 
 export type DesignVisualCriticResult = {
@@ -68,6 +74,7 @@ export type DesignVisualCriticAttachment = {
 
 export type DesignVisualCriticContext = {
   runId: string;
+  generationMode?: "fast" | "thorough";
   modelSelection: ModelSelection;
   userRequest: string;
   plan: DesignPlanToolInput;
@@ -86,12 +93,15 @@ export async function runIndependentDesignVisualCritic(
   signal: AbortSignal,
 ): Promise<DesignVisualCriticResult> {
   const criterionIds = criticCriteria(context.plan);
+  const logoDirectionCriteria = logoDirectionCriterionContracts(context.plan);
   const attemptId =
     `visual_critic_${context.runId}_${context.observedRevision}`.slice(0, 220);
   const events = await modelProviderHost.complete(
     {
       attemptId,
       sessionId: `${context.runId}:visual-critic`,
+      latencyProfile:
+        context.generationMode === "fast" ? "interactive" : "extended",
       modelSelection: {
         providerId: context.modelSelection.providerId,
         modelId: context.modelSelection.modelId,
@@ -101,6 +111,7 @@ export async function runIndependentDesignVisualCritic(
         "You did not author this design. You receive no author conversation, reasoning, tool history, or self-review. Judge only the user brief, frozen target contract, and exact-revision capture.",
         "Call the critique tool exactly once. Do not answer with prose. Scores are integers from 1 (unacceptable) to 5 (delivery quality). Attractive presentation cannot compensate for a failed criterion.",
         "At final phase, use pass only when every criterion is independently delivery-ready. At draft phase, identify the most consequential real defects, not invented praise or minor filler.",
+        "For every logo-concept-*-quality criterion, judge that declared direction independently. It must have an ownable silhouette, visibly intentional construction, controlled contour or counterform, recognition at 32/24/16 px, anti-template originality, and visible agreement with its thesis. A caption cannot rescue an arbitrary shape, and stronger sibling concepts cannot compensate for one filler direction.",
         "When visual references are supplied, the first image is always the delivery capture and later images are the authorized references named in the JSON contract. Judge the declared transferable decisions and avoidances; do not demand literal copying or confuse a content asset with a style reference.",
         formatBuiltinDesignReviewSkillBundleForDeliverable(
           context.plan.deliverable,
@@ -128,6 +139,7 @@ export async function runIndependentDesignVisualCritic(
                   (attachment) => attachment.attachmentId,
                 ),
                 logoExploration: context.plan.logoExploration,
+                logoDirectionCriteria,
                 requiredCriteria: criterionIds,
               }),
             },
@@ -195,6 +207,9 @@ export async function runIndependentDesignVisualCritic(
           "glance-legibility",
           "template-avoidance",
         ]);
+  for (const direction of logoDirectionCriteria) {
+    criticalIds.add(direction.criterionId);
+  }
   if (criterionIds.includes(REFERENCE_CRITERION)) {
     criticalIds.add(REFERENCE_CRITERION);
   }
@@ -228,13 +243,68 @@ export async function runIndependentDesignVisualCritic(
 }
 
 function criticCriteria(plan: DesignPlanToolInput): CriticCriterionId[] {
+  const logoOutputs = new Set(plan.logoOutputs ?? []);
+  const directionCriteria = logoDirectionCriterionContracts(plan).map(
+    (direction) => direction.criterionId,
+  );
+  const logoCriteria: CriticCriterionId[] =
+    plan.deliverable !== "logo"
+      ? []
+      : [
+          ...LOGO_BASE_CRITERIA,
+          ...(plan.logoExploration === undefined
+            ? []
+            : (["concept-divergence"] as const)),
+          ...directionCriteria,
+          ...(logoOutputs.has("wordmark") || logoOutputs.has("lockups")
+            ? (["symbol-wordmark-relationship"] as const)
+            : []),
+          ...(logoOutputs.has("app-icon")
+            ? (["app-icon-optical-redraw"] as const)
+            : []),
+          ...(logoOutputs.size > 1
+            ? (["component-system-integrity"] as const)
+            : []),
+        ];
   return [
     ...GENERIC_CRITERIA,
-    ...(plan.deliverable === "logo" ? LOGO_CRITERIA : []),
+    ...logoCriteria,
     ...(activeVisualReferenceIds(plan.referenceStrategy).length > 0
       ? [REFERENCE_CRITERION]
       : []),
   ];
+}
+
+function logoDirectionCriterionContracts(plan: DesignPlanToolInput): Array<{
+  criterionId: LogoDirectionCriterionId;
+  conceptId: string;
+  label: string;
+  principle: string;
+  thesis: string;
+  constructionLogic: string;
+  requiredEvidenceNodeIds: [string, string, string, string];
+  rubric: readonly string[];
+}> {
+  return (plan.logoExploration?.directions ?? []).map((direction) => ({
+    criterionId: `logo-concept-${direction.conceptId}-quality`,
+    conceptId: direction.conceptId,
+    label: direction.label,
+    principle: direction.principle,
+    thesis: direction.thesis,
+    constructionLogic: direction.constructionLogic,
+    requiredEvidenceNodeIds: [
+      direction.monochromeNodeId,
+      ...direction.smallSizeNodeIds,
+    ],
+    rubric: [
+      "ownable black silhouette",
+      "visible intentional construction logic",
+      "controlled counterform or contour",
+      "recognition at 32, 24, and 16 px",
+      "anti-template originality",
+      "visible agreement between the form and declared thesis without relying on its caption",
+    ],
+  }));
 }
 
 function criticTool(

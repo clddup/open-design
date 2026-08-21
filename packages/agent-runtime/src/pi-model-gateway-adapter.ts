@@ -5,6 +5,7 @@ import type {
   CanonicalStreamEvent,
   ModelApiFormat,
   ModelGateway,
+  ModelLatencyProfile,
   ModelError,
   ModelReasoningEffort,
   ModelRequest,
@@ -28,6 +29,7 @@ import {
 
 export interface PiModelGatewayAdapterOptions {
   modelGateway: ModelGateway;
+  latencyProfile?: ModelLatencyProfile;
   contextProjection?: PiModelContextProjectionPort;
   failurePort?: PiModelFailurePort;
   nextAttemptId?: () => string;
@@ -95,6 +97,7 @@ export function createPiModelGatewayStreamFn(
         context,
         streamOptions,
         options.contextProjection,
+        options.latencyProfile,
       );
     } catch (error) {
       if (!(error instanceof PiContextProjectionError)) {
@@ -296,6 +299,7 @@ function toModelRequest(
   context: Context,
   options: SimpleStreamOptions | undefined,
   projection: PiModelContextProjectionPort | undefined,
+  latencyProfile: ModelLatencyProfile | undefined,
 ): ModelRequest {
   const failure = projection?.beforeProviderTurn();
   if (failure !== undefined) {
@@ -306,6 +310,7 @@ function toModelRequest(
     ...(options?.sessionId === undefined
       ? {}
       : { sessionId: options.sessionId }),
+    ...(latencyProfile === undefined ? {} : { latencyProfile }),
     modelSelection: {
       providerId: model.provider,
       modelId: model.id,

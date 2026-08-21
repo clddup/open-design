@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentSystemPromptForRequest,
   inferNewDesignDeliverable,
   newDesignSystemPromptForRequest,
   OPENDESIGN_AGENT_SYSTEM_PROMPT,
@@ -65,6 +66,23 @@ describe("OpenDesign Agent system prompt", () => {
     expect(uiPrompt).not.toContain('id="graphic-visual-direction"');
 
     expect(inferNewDesignDeliverable("创造一个新的视觉方向")).toBeUndefined();
+  });
+
+  it("binds explicit fast and thorough execution depth without changing scope", () => {
+    const fast = newDesignSystemPromptForRequest({
+      prompt: "设计一个 OpenDesign 应用图标",
+      generationMode: "fast",
+    });
+    const thorough = agentSystemPromptForRequest({
+      generationMode: "thorough",
+    });
+
+    expect(fast).toContain("execution depth: FAST");
+    expect(fast).toContain("one requested Logo/Icon focused");
+    expect(fast).toContain("logoOutputs is optional");
+    expect(fast).toContain("may complete directly");
+    expect(thorough).toContain("execution depth: THOROUGH");
+    expect(thorough).toContain("first meaningful real revision immediately");
   });
 
   it("fixes the product role to visual design instead of coding or files", () => {

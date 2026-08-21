@@ -1,6 +1,7 @@
 import type {
   AgentAttachment,
   AgentEvent,
+  DesignGenerationMode,
   SessionTimelineItem,
 } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
@@ -64,6 +65,7 @@ export type AgentTimelineProps = {
     prompt: string,
     selection: ModelSelection,
     attachments: readonly AgentAttachment[],
+    generationMode: DesignGenerationMode,
   ) => Promise<boolean>;
   onStop: () => boolean | void | Promise<boolean | void>;
   approvalResourceName?: string;

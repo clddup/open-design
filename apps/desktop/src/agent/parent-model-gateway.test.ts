@@ -46,6 +46,7 @@ describe("ParentModelGateway", () => {
     const stream = gateway.stream({
       attemptId: "attempt_1",
       sessionId: "session_1",
+      latencyProfile: "interactive",
       modelSelection: {
         providerId: "provider_1",
         modelId: "design-model",
@@ -62,6 +63,9 @@ describe("ParentModelGateway", () => {
     const request = messages[0] as { requestId: string };
 
     expect(JSON.stringify(request)).not.toContain("apiKey");
+    expect(request).toMatchObject({
+      request: { latencyProfile: "interactive" },
+    });
     expect(
       gateway.handleMessage({
         type: "model.event",

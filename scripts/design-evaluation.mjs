@@ -49,9 +49,13 @@ export async function loadDesignEvaluationScenarios(root = repositoryRoot) {
     ids.add(scenario.id);
     scenarios.push(scenario);
   }
-  if (!ids.has("OD-UI-01") || !ids.has("OD-LOGO-01")) {
+  if (
+    !ids.has("OD-UI-01") ||
+    !ids.has("OD-LOGO-01") ||
+    !ids.has("OD-MARK-01")
+  ) {
     throw new TypeError(
-      "Design evaluation must include OD-UI-01 and OD-LOGO-01",
+      "Design evaluation must include OD-UI-01, OD-LOGO-01 and OD-MARK-01",
     );
   }
   return scenarios;
@@ -271,23 +275,30 @@ async function validateScenario(value, root) {
       "id",
       "title",
       "deliverable",
+      "generationMode",
       "prompt",
       "expectedTargetCount",
       "modelContext",
       "initialSurface",
       "requiredMilestones",
+      ...(value.performanceBudgetMs === undefined
+        ? []
+        : ["performanceBudgetMs"]),
       "criteria",
     ]) ||
     !safeId(value.id, 64) ||
-    !/^OD-(UI|LOGO)-\d{2}$/.test(value.id) ||
+    !/^OD-(UI|LOGO|MARK)-\d{2}$/.test(value.id) ||
     !safeText(value.title, 256) ||
     !["ui", "logo"].includes(value.deliverable) ||
+    !["fast", "thorough"].includes(value.generationMode) ||
     !positiveInteger(value.expectedTargetCount, 32) ||
     !validModelContext(value.modelContext) ||
     !validInitialSurface(value.initialSurface) ||
     !Array.isArray(value.requiredMilestones) ||
     canonicalJson(value.requiredMilestones) !==
       canonicalJson(["T_plan", "T0", "T1", "T2", "T_all"]) ||
+    (value.performanceBudgetMs !== undefined &&
+      !validPerformanceBudget(value.performanceBudgetMs)) ||
     !Array.isArray(value.criteria) ||
     value.criteria.length < 6 ||
     value.criteria.length > 16
@@ -326,6 +337,7 @@ function validateEvidenceShape(value, scenario) {
       "platform",
       "appVersion",
       "model",
+      "generationMode",
       "protocol",
       "terminal",
       "success",
@@ -339,6 +351,7 @@ function validateEvidenceShape(value, scenario) {
     !safeId(value.runId, 256) ||
     !["darwin", "win32"].includes(value.platform) ||
     !safeText(value.appVersion, 128) ||
+    value.generationMode !== scenario.generationMode ||
     !validModel(value.model, scenario.modelContext) ||
     !validProtocol(value.protocol, scenario.initialSurface) ||
     !["completed", "error"].includes(value.terminal) ||
@@ -398,6 +411,14 @@ function validateEvidenceShape(value, scenario) {
       )
     ) {
       throw new TypeError("Successful evidence milestones are not monotonic");
+    }
+    if (
+      scenario.performanceBudgetMs !== undefined &&
+      (value.performance.milestonesMs.T1 > scenario.performanceBudgetMs.T1 ||
+        value.performance.milestonesMs.T_all >
+          scenario.performanceBudgetMs.T_all)
+    ) {
+      throw new TypeError("Successful evidence exceeds performance budget");
     }
     return;
   }
@@ -460,6 +481,16 @@ function validPerformance(value, scenario, terminal) {
     if (!(candidate === null || nonNegativeInteger(candidate))) return false;
   }
   return true;
+}
+
+function validPerformanceBudget(value) {
+  return (
+    record(value) &&
+    onlyKeys(value, ["T1", "T_all"]) &&
+    positiveInteger(value.T1, 86_400_000) &&
+    positiveInteger(value.T_all, 86_400_000) &&
+    value.T_all >= value.T1
+  );
 }
 
 function validCapture(value) {

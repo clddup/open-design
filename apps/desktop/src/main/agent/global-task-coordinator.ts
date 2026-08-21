@@ -3,6 +3,7 @@ import type {
   AgentEvent,
   AgentImageAttachment,
   AgentRequest,
+  DesignGenerationMode,
   DesignMutationTarget,
   SelectionScope,
 } from "@opendesign/agent-contracts";
@@ -113,6 +114,7 @@ export class GlobalTaskCoordinator {
       scope: SelectionScope;
       mutationTarget: DesignMutationTarget;
       prompt: string;
+      generationMode: DesignGenerationMode;
       modelSelection: ModelSelection;
       imageAttachments: AgentImageAttachment[];
     }
@@ -243,6 +245,7 @@ export class GlobalTaskCoordinator {
       revision: request.revision,
       scope: structuredClone(request.scope),
       mutationTarget: structuredClone(request.mutationTarget),
+      generationMode: request.generationMode ?? "thorough",
       prompt: request.prompt,
       modelSelection: structuredClone(request.modelSelection),
       imageAttachments: (request.attachments ?? [])
@@ -689,6 +692,52 @@ export class GlobalTaskCoordinator {
         "design_workflow.visual_critic_unavailable: The independent visual critic does not match the exact captured revision",
       );
     }
+    const generationMode = this.#toolBindingsByRunId.get(
+      context.runId,
+    )?.generationMode;
+    if (
+      generationMode === "fast" &&
+      visualCritic?.passed === true &&
+      (target.delivery.status === "drafted" ||
+        target.delivery.status === "captured")
+    ) {
+      const inspection = this.#inspectionsByRunId.get(context.runId);
+      if (!inspection || inspection.revision !== observedRevision) {
+        throw new Error(
+          "design_workflow.delivery_verification_required: Fast delivery requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
+        );
+      }
+      const componentStrategy = assertDeliveryTargetStructure(
+        inspection,
+        target,
+        state.plan,
+      );
+      target.captureCount = captureSequence;
+      target.lastCaptureRevision = observedRevision;
+      target.lastReview = structuredClone(visualCritic.review);
+      target.reviewedCaptureCount = captureSequence;
+      target.reviewedCaptureRevision = observedRevision;
+      target.delivery = {
+        ...target.delivery,
+        status: "verified",
+        captureRevision: observedRevision,
+        reviewRevision: observedRevision,
+        verifiedRevision: observedRevision,
+      };
+      this.#persistDelivery(context.runId, state);
+      return {
+        captureSequence,
+        capturedRevision: observedRevision,
+        deliveryTargetId: target.delivery.targetId,
+        nextAction: nextIncompleteTarget(state)
+          ? "continue-next-target"
+          : "complete-delivery",
+        reviewEligible: false,
+        verified: true,
+        critic: publicCriticResult(visualCritic),
+        ...(componentStrategy.issueCount === 0 ? {} : { componentStrategy }),
+      };
+    }
     if (
       visualCritic !== undefined &&
       (target.delivery.status === "drafted" ||
@@ -854,6 +903,7 @@ export class GlobalTaskCoordinator {
     }
     return {
       runId: context.runId,
+      generationMode: binding.generationMode,
       modelSelection: structuredClone(binding.modelSelection),
       userRequest: binding.prompt,
       plan: structuredClone(state.plan),

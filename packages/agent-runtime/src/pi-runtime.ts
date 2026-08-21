@@ -137,7 +137,8 @@ export class OpenDesignPiRuntime {
         (initialModelToolSurface === "new-design"
           ? (this.options.newDesignSystemPromptForRequest?.(request) ??
             this.options.newDesignSystemPrompt)
-          : this.options.systemPrompt) ??
+          : (this.options.systemPromptForRequest?.(request) ??
+            this.options.systemPrompt)) ??
         this.options.systemPrompt ??
         "You are the OpenDesign design agent. Use only the provided tools and respect the host-bound modification scope.";
       const model = createPiModel(request);
@@ -196,6 +197,8 @@ export class OpenDesignPiRuntime {
         sessionId: request.sessionId,
         streamFn: createPiModelGatewayStreamFn({
           modelGateway: this.options.modelGateway,
+          latencyProfile:
+            request.generationMode === "fast" ? "interactive" : "extended",
           contextProjection: prepared.context,
           failurePort: modelFailurePort,
           nextAttemptId: () => `${request.runId}_attempt_${++attempt}`,

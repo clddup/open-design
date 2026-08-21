@@ -20,7 +20,7 @@ describe("design evaluation", () => {
     const scenarios = await loadDesignEvaluationScenarios(repositoryRoot);
     assert.deepEqual(
       scenarios.map((scenario) => scenario.id),
-      ["OD-UI-01", "OD-LOGO-01"],
+      ["OD-UI-01", "OD-LOGO-01", "OD-MARK-01"],
     );
   });
 
@@ -113,9 +113,24 @@ describe("design evaluation", () => {
       /passing Critics/,
     );
   });
+
+  it("rejects a single-mark fast run that exceeds its packaged benchmark budget", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opendesign-mark-budget-"));
+    const evidence = await writeEvidence(root, "run_mark", "1.0.0", "mark", {
+      scenarioId: "OD-MARK-01",
+      generationMode: "fast",
+      T1: 60_001,
+      TAll: 300_000,
+    });
+    const scenarios = await loadDesignEvaluationScenarios(repositoryRoot);
+    await assert.rejects(
+      validateDesignEvaluationEvidence(evidence, scenarios),
+      /exceeds performance budget/,
+    );
+  });
 });
 
-async function writeEvidence(root, runId, appVersion, marker) {
+async function writeEvidence(root, runId, appVersion, marker, options = {}) {
   const directory = join(root, runId);
   await mkdir(directory, { recursive: true });
   const files = {
@@ -128,11 +143,16 @@ async function writeEvidence(root, runId, appVersion, marker) {
       writeFile(join(directory, file), bytes),
     ),
   );
+  const targetIds =
+    options.scenarioId === "OD-MARK-01"
+      ? ["target-one"]
+      : ["target-one", "target-two"];
   const report = {
-    scenarioId: "OD-UI-01",
+    scenarioId: options.scenarioId ?? "OD-UI-01",
     runId,
     platform: "darwin",
     appVersion,
+    generationMode: options.generationMode ?? "thorough",
     model: {
       providerId: "provider_test",
       modelId: "model-test",
@@ -151,25 +171,29 @@ async function writeEvidence(root, runId, appVersion, marker) {
     success: true,
     performance: {
       terminal: "completed",
-      targetCount: 2,
+      targetCount: targetIds.length,
       milestonesMs: {
         T_plan: 100,
         T0: 100,
-        T1: 200,
-        T2: 400,
-        T_all: 600,
-        firstReviewed: 300,
+        T1: options.T1 ?? 200,
+        T2: Math.max(400, (options.T1 ?? 200) + 100),
+        T_all: options.TAll ?? 600,
+        firstReviewed: Math.max(300, (options.T1 ?? 200) + 50),
       },
     },
-    captures: [
-      capture("target-one", "target-one.jpg", files["target-one.jpg"], 2),
-      capture("target-two", "target-two.jpg", files["target-two.jpg"], 5),
-    ],
+    captures: targetIds.map((targetId, index) =>
+      capture(
+        targetId,
+        `${targetId}.jpg`,
+        files[`${targetId}.jpg`],
+        index === 0 ? 2 : 5,
+      ),
+    ),
     finalDocument: {
       file: "final.opendesign",
       sha256: sha256(files["final.opendesign"]),
     },
-    critic: [critic("target-one"), critic("target-two")],
+    critic: targetIds.map(critic),
     failure: null,
   };
   await writeFile(

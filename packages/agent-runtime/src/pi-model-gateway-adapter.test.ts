@@ -128,6 +128,7 @@ describe("Pi ModelGateway adapter", () => {
     );
     const streamFn = createPiModelGatewayStreamFn({
       modelGateway: gateway,
+      latencyProfile: "interactive",
       nextAttemptId: () => "bridge_attempt_1",
       now: () => 1_786_000_000_000,
     });
@@ -210,6 +211,7 @@ describe("Pi ModelGateway adapter", () => {
     expect(gateway.requests[0]).toMatchObject({
       attemptId: "bridge_attempt_1",
       sessionId: "conversation_bridge",
+      latencyProfile: "interactive",
       modelSelection: {
         providerId: "configured-provider",
         modelId: "design-model",
