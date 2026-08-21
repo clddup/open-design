@@ -2,8 +2,8 @@ import type { AgentRunRequest, ModelToolSurface } from "./index.js";
 
 const CREATE_INTENT =
   /(?:设计|创建|新建|生成|制作|搭建|画一个|做一个|重新设计)|\b(?:design|create|generate|build|make|compose|draw)\b/i;
-const NON_GENERATION_INTENT =
-  /(?:修改|调整|优化|重新设计|替换|删除|重命名|移动|复制|导入|导出|继续|修复|打开|读取|分析)|\b(?:edit|change|update|redesign|refine|replace|delete|rename|move|duplicate|import|export|continue|resume|fix|open|read|inspect|analy[sz]e)\b/i;
+const CURRENT_EDIT_INTENT =
+  /(?:(?:修改|调整|优化|重新设计|替换|删除|重命名|移动|复制|继续|修复)[^。！？\n]{0,32}(?:当前|现有|已有|选中|刚才|之前|上一次|这个(?:页面|设计|画板|图层)))|(?:(?:当前|现有|已有|选中|刚才|之前|上一次|这个(?:页面|设计|画板|图层))[^。！？\n]{0,32}(?:修改|调整|优化|重新设计|替换|删除|重命名|移动|复制|继续|修复))|(?:\b(?:edit|change|update|redesign|refine|replace|delete|rename|move|duplicate|continue|resume|fix)\b[^.!?\n]{0,48}\b(?:current|existing|selected|previous|last)\b)|(?:\b(?:current|existing|selected|previous|last)\b[^.!?\n]{0,48}\b(?:edit|change|update|redesign|refine|replace|delete|rename|move|duplicate|continue|resume|fix)\b)/i;
 const PAGE_LIFECYCLE_INTENT =
   /(?:页签|页面标签|分页结构|创建页面|新建页面|删除页面|复制页面|页面排序|重命名页面)|\b(?:create|add|delete|duplicate|reorder|rename)\s+(?:a\s+|the\s+|\d+\s+)?pages?\b/i;
 
@@ -34,7 +34,7 @@ export function resolveInitialModelToolSurface(
     request.scope.selectedNodeIds.length > 0 ||
     request.mutationTarget.kind !== "page" ||
     !CREATE_INTENT.test(request.prompt) ||
-    (!targetPageIsEmpty && NON_GENERATION_INTENT.test(request.prompt)) ||
+    (!targetPageIsEmpty && CURRENT_EDIT_INTENT.test(request.prompt)) ||
     PAGE_LIFECYCLE_INTENT.test(request.prompt) ||
     !inspectionContainsTargetPage(
       request.initialDesignInspection.content,

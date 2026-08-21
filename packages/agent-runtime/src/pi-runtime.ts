@@ -189,7 +189,8 @@ export class OpenDesignPiRuntime {
           model,
           systemPrompt: prepared.systemPrompt,
           thinkingLevel:
-            initialModelToolSurface === "new-design"
+            initialModelToolSurface === "new-design" ||
+            request.generationMode === "fast"
               ? "off"
               : (request.modelSelection.reasoningEffort ?? "off"),
           tools: [...adapter.modelTools],

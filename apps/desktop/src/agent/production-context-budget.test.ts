@@ -247,6 +247,85 @@ describe("production Agent context budget", () => {
     }
   });
 
+  it("keeps fast existing-document work interactive even when the selected model preference is high reasoning", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opendesign-fast-general-"));
+    try {
+      const gateway = new RecordingGateway(
+        new MockModelGateway("Fast existing-document request accepted"),
+      );
+      const runtime = new OpenDesignPiRuntime({
+        modelGateway: gateway,
+        sessionStore: new JsonlSessionStore(join(directory, "events.jsonl")),
+        systemPrompt: OPENDESIGN_AGENT_SYSTEM_PROMPT,
+        newDesignSystemPromptForRequest,
+        toolCatalog: {
+          listTools: () =>
+            DESIGN_AGENT_TOOL_SPECS.map((tool) => ({
+              ...tool,
+              inputSchema: tool.inputSchema as unknown as Record<
+                string,
+                unknown
+              >,
+              validateInput: (input: unknown) =>
+                validateDesignAgentToolInput(tool.name, input),
+            })),
+        },
+      });
+
+      const events: AgentEvent[] = [];
+      for await (const event of runtime.run({
+        runId: "run_fast_general",
+        sessionId: "conversation_fast_general",
+        prompt: "继续优化当前 dashboard",
+        documentId: "document_1",
+        revision: 3,
+        scope: { kind: "page", pageId: "page_1", selectedNodeIds: [] },
+        mutationTarget: { kind: "page", pageId: "page_1" },
+        generationMode: "fast",
+        modelSelection: {
+          providerId: "configured",
+          modelId: "design-model",
+          reasoningEffort: "high",
+        },
+        modelContext: { contextWindow: 200_000, maxOutputTokens: 16_384 },
+        initialDesignInspection: {
+          version: 1,
+          observedRevision: 3,
+          content: JSON.stringify({
+            document: {
+              documentId: "document_1",
+              revision: 3,
+              pagesById: {
+                page_1: { id: "page_1", rootNodeIds: ["dashboard"] },
+              },
+              nodesById: {
+                dashboard: {
+                  id: "dashboard",
+                  kind: "frame",
+                  parentId: null,
+                  childIds: ["title"],
+                },
+              },
+            },
+          }),
+        },
+      })) {
+        events.push(event);
+      }
+
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: "agent.error" }),
+      );
+      expect(gateway.requests).toHaveLength(1);
+      expect(gateway.requests[0]?.system).toBe(OPENDESIGN_AGENT_SYSTEM_PROMPT);
+      expect(
+        gateway.requests[0]?.modelSelection.reasoningEffort,
+      ).toBeUndefined();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("adds only inspection-dependent read and export tools before material work", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "opendesign-inspected-tools-"),

@@ -58,6 +58,27 @@ describe("initial model tool surface", () => {
     expect(
       resolveInitialModelToolSurface(
         request({
+          prompt:
+            "创建四个真实 Logo 画板，先探索三个方向，再选择最强方向继续完成，并调整小尺寸比例",
+          initialDesignInspection: inspection([
+            { ...emptyFrame(), childIds: ["existing-title"] },
+          ]),
+        }),
+      ),
+    ).toBe("new-design");
+    expect(
+      resolveInitialModelToolSurface(
+        request({
+          prompt: "继续优化当前 dashboard",
+          initialDesignInspection: inspection([
+            { ...emptyFrame(), childIds: ["existing-title"] },
+          ]),
+        }),
+      ),
+    ).toBe("general");
+    expect(
+      resolveInitialModelToolSurface(
+        request({
           initialDesignInspection: inspection([
             { ...emptyFrame(), childIds: ["title"] },
           ]),
