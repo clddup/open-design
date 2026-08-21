@@ -155,6 +155,8 @@ function fixture(): DesignDocument {
     },
     componentsById: {},
     variantSetsById: {},
+    libraryComponentsById: {},
+    libraryVariantSetsById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},

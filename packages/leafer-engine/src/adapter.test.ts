@@ -5804,6 +5804,8 @@ function componentInput(): LeaferEngineSyncInput {
       },
     },
     variantSetsById: {},
+    libraryComponentsById: {},
+    libraryVariantSetsById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},

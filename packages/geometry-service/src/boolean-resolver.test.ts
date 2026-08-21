@@ -384,6 +384,8 @@ function designDocument(
     extensions: {},
     format: DESIGN_FORMAT,
     interactionsById: {},
+    libraryComponentsById: {},
+    libraryVariantSetsById: {},
     nodesById: Object.fromEntries(nodes.map((node) => [node.id, node])),
     pageOrder: ["page"],
     pagesById: {

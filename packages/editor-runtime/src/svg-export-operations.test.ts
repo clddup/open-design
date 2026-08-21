@@ -112,7 +112,8 @@ describe("SVG export request planner", () => {
       },
     });
     if (!plan.ok) return;
-    expect(plan.request.document).toBe(document);
+    expect(plan.request.document).toStrictEqual(document);
+    expect(plan.request.document).not.toBe(document);
 
     const exported = exportSvg(plan.request);
     expect(exported).toMatchObject({

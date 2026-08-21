@@ -477,6 +477,8 @@ function fixture(): DesignDocument {
       },
     },
     variantSetsById: {},
+    libraryComponentsById: {},
+    libraryVariantSetsById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},

@@ -9,7 +9,7 @@ const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
-const documentSchemaVersion = "1.36.0";
+const documentSchemaVersion = "1.37.0";
 
 const fixtureSources = [
   {
@@ -40,6 +40,8 @@ for (const source of fixtureSources) {
     iconBase64: iconBytes.toString("base64"),
     promptSha256: sha256(prompt),
   });
+  assertCurrentDocumentShape(built.initialDocument, source.id, "initial");
+  assertCurrentDocumentShape(built.finalDocument, source.id, "final");
   const directory = `${fixtureRoot}/${source.id}`;
   const paths = {
     initialDocument: `${directory}/initial.opendesign`,
@@ -1364,6 +1366,8 @@ function document({
     nodesById: Object.fromEntries(nodes.map((node) => [node.id, node])),
     componentsById: {},
     variantSetsById: {},
+    libraryComponentsById: {},
+    libraryVariantSetsById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
@@ -1373,6 +1377,22 @@ function document({
     assetsById: Object.fromEntries(assets.map((asset) => [asset.id, asset])),
     extensions,
   };
+}
+
+function assertCurrentDocumentShape(value, fixtureId, stage) {
+  if (
+    value?.schemaVersion !== documentSchemaVersion ||
+    !isPlainObject(value?.libraryComponentsById) ||
+    !isPlainObject(value?.libraryVariantSetsById)
+  ) {
+    throw new Error(
+      `${fixtureId} ${stage} document does not match the current generated document shape`,
+    );
+  }
+}
+
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function transaction({ transactionId, documentId, commands }) {

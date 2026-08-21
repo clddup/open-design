@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.36.0",
+  "schemaVersion": "1.37.0",
   "documentId": "document_od_brand_01",
   "revision": 0,
   "pageOrder": ["page_brand_01"],
@@ -408,6 +408,8 @@
   },
   "componentsById": {},
   "variantSetsById": {},
+  "libraryComponentsById": {},
+  "libraryVariantSetsById": {},
   "variableCollectionOrder": [],
   "variableCollectionsById": {},
   "variablesById": {},
