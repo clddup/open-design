@@ -5,11 +5,14 @@ import type {
 } from "@opendesign/design-contracts";
 import { describe, expect, it } from "vitest";
 import { createWelcomeDocument } from "./document.js";
+import { getWorldTransform, transformPoint } from "./geometry.js";
 import { EditorRuntime } from "./runtime.js";
 import {
   planDeleteVectorNode,
   planVectorLayersLineCut,
+  planVectorLayersVertexTransform,
   planVectorNetworkUpdate,
+  planVectorNetworkUpdates,
   planVectorSemanticEdit,
   resolveVectorEditCollectionScope,
   resolveVectorEditScope,
@@ -1130,6 +1133,100 @@ describe("vector editing runtime plans", () => {
     expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
   });
 
+  it("transforms vertices across differently transformed Vector layers in one revision", () => {
+    const document = documentWithVector();
+    const frame = document.nodesById.frame_welcome;
+    const first = document.nodesById.vector_editable;
+    if (
+      !frame ||
+      frame.kind !== "frame" ||
+      !first ||
+      first.kind !== "vector" ||
+      !("network" in first.properties)
+    ) {
+      throw new Error("Missing multi-layer vector fixture");
+    }
+    const second = structuredClone(first);
+    second.id = "vector_second";
+    second.transform = [2, 0, 0, 0.5, 300, 40];
+    document.nodesById[second.id] = second;
+    frame.childIds.push(second.id);
+    const before = [
+      worldVertex(document, first.id, "vertex_b"),
+      worldVertex(document, second.id, "vertex_c"),
+    ];
+    const plan = planVectorLayersVertexTransform(
+      document,
+      "page_welcome",
+      [
+        { nodeId: first.id, vertexIds: ["vertex_b"] },
+        { nodeId: second.id, vertexIds: ["vertex_c"] },
+      ],
+      [1, 0, 0, 1, 20, -10],
+    );
+    if (!plan.ok) throw new Error(plan.message);
+    expect(plan.operations).toHaveLength(2);
+    const runtime = new EditorRuntime(document);
+    expect(
+      runtime.apply({
+        transactionId: "transform_vector_layers",
+        documentId: document.documentId,
+        baseRevision: document.revision,
+        actor: { type: "user", id: "local-user" },
+        label: "Transform vector layers",
+        commands: [...plan.operations],
+      }),
+    ).toMatchObject({ ok: true });
+    const applied = runtime.getSnapshot().document;
+    expect(worldVertex(applied, first.id, "vertex_b")).toEqual({
+      x: before[0]!.x + 20,
+      y: before[0]!.y - 10,
+    });
+    expect(worldVertex(applied, second.id, "vertex_c")).toEqual({
+      x: before[1]!.x + 20,
+      y: before[1]!.y - 10,
+    });
+    expect(applied.revision).toBe(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+
+    second.locked = true;
+    expect(
+      planVectorLayersVertexTransform(
+        document,
+        "page_welcome",
+        [
+          { nodeId: first.id, vertexIds: ["vertex_b"] },
+          { nodeId: second.id, vertexIds: ["vertex_c"] },
+        ],
+        [1, 0, 0, 1, 20, -10],
+      ),
+    ).toMatchObject({ ok: false, code: "locked" });
+  });
+
+  it("validates batch network updates before returning any operation", () => {
+    const document = documentWithVector();
+    const source = document.nodesById.vector_editable;
+    if (
+      !source ||
+      source.kind !== "vector" ||
+      !("network" in source.properties)
+    ) {
+      throw new Error("Missing editable vector");
+    }
+    expect(
+      planVectorNetworkUpdates(document, "page_welcome", [
+        { nodeId: source.id, network: source.properties.network },
+        { nodeId: "missing", network: source.properties.network },
+      ]),
+    ).toMatchObject({ ok: false, code: "not-found" });
+    expect(
+      planVectorNetworkUpdates(document, "page_welcome", [
+        { nodeId: source.id, network: source.properties.network },
+        { nodeId: source.id, network: source.properties.network },
+      ]),
+    ).toMatchObject({ ok: false, code: "invalid-geometry" });
+  });
+
   it("skips un-crossed Vector targets and rejects duplicate or non-invertible targets", () => {
     const document = documentWithVector();
     const frame = document.nodesById.frame_welcome;
@@ -1287,4 +1384,26 @@ function vectorNetworkFrom(
     throw new Error("Missing editable vector");
   }
   return node.properties.network;
+}
+
+function worldVertex(
+  document: DesignDocument,
+  nodeId: string,
+  vertexId: string,
+): { x: number; y: number } {
+  const node = document.nodesById[nodeId];
+  const world = getWorldTransform(document, nodeId);
+  if (
+    !node ||
+    node.kind !== "vector" ||
+    !("network" in node.properties) ||
+    !world
+  ) {
+    throw new Error(`Missing editable vector ${nodeId}`);
+  }
+  const vertex = node.properties.network.vertices.find(
+    (candidate) => candidate.id === vertexId,
+  );
+  if (!vertex) throw new Error(`Missing vertex ${vertexId}`);
+  return transformPoint(vertex, world);
 }

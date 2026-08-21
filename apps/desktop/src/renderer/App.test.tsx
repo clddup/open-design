@@ -4017,8 +4017,7 @@ describe("App", () => {
       expect(
         leaferCallbacks().onVectorEdit?.({
           deleteNode: false,
-          network: editedNetwork,
-          nodeId: "editable_vector",
+          edits: [{ network: editedNetwork, nodeId: "editable_vector" }],
         }),
       ).toBe(true);
     });

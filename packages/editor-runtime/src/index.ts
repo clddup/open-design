@@ -113,13 +113,17 @@ export {
 } from "./selection-navigation.js";
 export {
   planDeleteVectorNode,
-  planVectorNetworkUpdate,
   planVectorLayersLineCut,
+  planVectorLayersVertexTransform,
+  planVectorNetworkUpdate,
+  planVectorNetworkUpdates,
   planVectorSemanticEdit,
   resolveVectorEditCollectionScope,
   resolveVectorEditScope,
   type VectorEditCollectionScope,
   type VectorEditScope,
+  type VectorLayerVertexTransformTarget,
+  type VectorNetworkUpdateTarget,
   type VectorOperationFailureCode,
   type VectorOperationPlan,
   type VectorSemanticEdit,

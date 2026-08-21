@@ -23,6 +23,7 @@ import { normalizeVectorNetwork } from "@opendesign/geometry-service/editable-ve
 import {
   getWorldTransform,
   invertTransform,
+  multiplyTransforms,
   transformPoint,
 } from "./geometry.js";
 import { isEffectivelyLocked } from "./layer-operations.js";
@@ -84,6 +85,16 @@ export interface VectorEditCollectionScope {
 export interface VectorLayerLineCutTarget {
   nodeId: string;
   resultNodeId: string;
+}
+
+export interface VectorNetworkUpdateTarget {
+  network: VectorNetwork;
+  nodeId: string;
+}
+
+export interface VectorLayerVertexTransformTarget {
+  nodeId: string;
+  vertexIds: readonly string[];
 }
 
 export type VectorOperationPlan =
@@ -318,6 +329,134 @@ export function planVectorNetworkUpdate(
       },
     ],
   };
+}
+
+/**
+ * Plans multiple editable-network updates against one authoritative document.
+ * Validation is all-or-nothing and the caller applies the returned operations
+ * as one EditorRuntime transaction/revision/undo step.
+ */
+export function planVectorNetworkUpdates(
+  document: DesignDocument,
+  pageId: string,
+  targets: readonly VectorNetworkUpdateTarget[],
+): VectorOperationPlan {
+  if (targets.length === 0 || targets.length > 500) {
+    return {
+      ok: false,
+      code: "invalid-geometry",
+      message: "Vector network updates require between 1 and 500 targets",
+    };
+  }
+  const nodeIds = new Set<string>();
+  const operations: DesignOperation[] = [];
+  for (const target of targets) {
+    if (!target.nodeId || nodeIds.has(target.nodeId)) {
+      return {
+        ok: false,
+        code: "invalid-geometry",
+        message: "Vector network updates require unique target node IDs",
+      };
+    }
+    nodeIds.add(target.nodeId);
+    const plan = planVectorNetworkUpdate(
+      document,
+      pageId,
+      target.nodeId,
+      target.network,
+    );
+    if (!plan.ok) return plan;
+    operations.push(...plan.operations);
+  }
+  return { ok: true, operations };
+}
+
+/**
+ * Applies one document-space affine matrix to explicit vertices across Vector
+ * layers. Every layer is conjugated through its current world transform before
+ * Geometry Service edits its node-local network.
+ */
+export function planVectorLayersVertexTransform(
+  document: DesignDocument,
+  pageId: string,
+  targets: readonly VectorLayerVertexTransformTarget[],
+  transform: Transform,
+): VectorOperationPlan {
+  if (
+    targets.length === 0 ||
+    targets.length > 500 ||
+    transform.length !== 6 ||
+    !transform.every(Number.isFinite)
+  ) {
+    return {
+      ok: false,
+      code: "invalid-geometry",
+      message:
+        "Vector layer transform requires 1..500 targets and one finite document-space affine matrix",
+    };
+  }
+  const nodeIds = new Set<string>();
+  const updates: VectorNetworkUpdateTarget[] = [];
+  for (const target of targets) {
+    if (
+      !target.nodeId ||
+      nodeIds.has(target.nodeId) ||
+      target.vertexIds.length === 0 ||
+      new Set(target.vertexIds).size !== target.vertexIds.length
+    ) {
+      return {
+        ok: false,
+        code: "invalid-geometry",
+        message:
+          "Vector layer transform requires unique nodes and explicit unique vertex IDs",
+      };
+    }
+    nodeIds.add(target.nodeId);
+    const node = document.nodesById[target.nodeId];
+    if (
+      !node ||
+      (node.kind !== "path" && node.kind !== "vector") ||
+      !("network" in node.properties) ||
+      !nodeBelongsToPage(document, pageId, target.nodeId)
+    ) {
+      return {
+        ok: false,
+        code: "not-found",
+        message: `Editable vector ${target.nodeId} does not exist on page ${pageId}`,
+      };
+    }
+    const world = getWorldTransform(document, target.nodeId);
+    const inverse = world ? invertTransform(world) : null;
+    if (!world || !inverse) {
+      return {
+        ok: false,
+        code: "non-invertible",
+        message: `Vector layer ${target.nodeId} has a non-invertible world transform`,
+      };
+    }
+    const localTransform = multiplyTransforms(
+      inverse,
+      multiplyTransforms(transform, world),
+    );
+    const transformed = transformVectorVertices(
+      node.properties.network,
+      target.vertexIds,
+      localTransform,
+    );
+    if (!transformed.ok) {
+      if (transformed.code === "no-op") continue;
+      return vectorOperationFailure(transformed);
+    }
+    updates.push({ nodeId: target.nodeId, network: transformed.network });
+  }
+  if (updates.length === 0) {
+    return {
+      ok: false,
+      code: "no-op",
+      message: "Vector layer transform does not move any targeted vertex",
+    };
+  }
+  return planVectorNetworkUpdates(document, pageId, updates);
 }
 
 export function planVectorSemanticEdit(

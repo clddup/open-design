@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   pointInPolygon,
   vectorLassoPath,
+  vectorDocumentSelectionBounds,
   vectorSegmentsInPolygon,
   vectorSegmentSelectionPath,
   vectorSelectionResizeTransform,
   vectorSelectionRotationTransform,
+  translateVectorSelectionTransform,
 } from "./vector-selection-transform.js";
 
 describe("vector selection transforms", () => {
@@ -107,5 +109,49 @@ describe("vector selection transforms", () => {
     );
     expect(rotation[0]).toBeCloseTo(Math.cos(Math.PI / 6));
     expect(rotation[1]).toBeCloseTo(Math.sin(Math.PI / 6));
+  });
+
+  it("measures selected vertices across independently transformed Vector layers", () => {
+    const network = {
+      vertices: [
+        { id: "a", x: 0, y: 0 },
+        { id: "b", x: 20, y: 10 },
+      ],
+      segments: [],
+      paths: [],
+      regions: [],
+    };
+    expect(
+      vectorDocumentSelectionBounds([
+        {
+          network,
+          vertexIds: ["a"],
+          worldTransform: [1, 0, 0, 1, 100, 50],
+        },
+        {
+          network,
+          vertexIds: ["b"],
+          worldTransform: [0, 2, -2, 0, 300, 20],
+        },
+      ]),
+    ).toEqual({ x: 100, y: 50, width: 180, height: 10 });
+    expect(
+      vectorDocumentSelectionBounds([
+        {
+          network,
+          vertexIds: ["missing"],
+          worldTransform: [1, 0, 0, 1, 0, 0],
+        },
+      ]),
+    ).toBeNull();
+  });
+
+  it("keeps an existing resize or rotation while composing Space reposition", () => {
+    expect(
+      translateVectorSelectionTransform([2, 0, 0, 0.5, -10, 20], {
+        x: 30,
+        y: -15,
+      }),
+    ).toEqual([2, 0, 0, 0.5, 20, 5]);
   });
 });

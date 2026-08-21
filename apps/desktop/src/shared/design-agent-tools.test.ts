@@ -2911,6 +2911,16 @@ describe("design Agent tool contract", () => {
       transform: [0, 1, -1, 0, 96, 0],
       vertexIds: ["vertex_logo_a", "vertex_logo_mid"],
     };
+    const layerTransform = {
+      action: "transform-layers-vertices",
+      label: "Scale selected logo points together",
+      pageId: "page_brand",
+      targets: [
+        { nodeId: "logo_contour", vertexIds: ["vertex_logo_a"] },
+        { nodeId: "logo_shadow", vertexIds: ["vertex_shadow_a"] },
+      ],
+      transform: [1.2, 0, 0, 1.2, -20, -20],
+    };
     const lineCut = {
       action: "cut-with-line",
       end: { x: 128, y: 48 },
@@ -2960,6 +2970,9 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, transform),
     ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, layerTransform),
+    ).toBe(true);
     expect(validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, lineCut)).toBe(
       true,
     );
@@ -2988,6 +3001,12 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
         ...transform,
         vertexIds: [],
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_VECTOR_TOOL_NAME, {
+        ...layerTransform,
+        targets: [layerTransform.targets[0], { ...layerTransform.targets[0] }],
       }),
     ).toBe(false);
     expect(

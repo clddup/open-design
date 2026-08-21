@@ -33,7 +33,6 @@ import {
   nearestVectorSegmentPoint,
   setVectorPointMode,
   transformVectorVertices,
-  vectorVertexBounds,
   type VectorCutLocation,
   type VectorHandleReference,
 } from "@opendesign/geometry-service/vector-edit";
@@ -120,11 +119,14 @@ import {
 } from "./affine.js";
 import { EditorOverlayController } from "./editor-overlay-controller.js";
 import {
+  documentTransformToLocal,
   getVisibleWorldTransform,
   multiplyTransforms,
 } from "./scene-node-transform.js";
 import {
   pointInPolygon,
+  translateVectorSelectionTransform,
+  vectorDocumentSelectionBounds,
   vectorSegmentsInPolygon,
   vectorSegmentSelectionPath,
   vectorLassoPath,
@@ -255,9 +257,9 @@ interface BoxSelectSession {
 type VectorEditControl =
   | { kind: "path"; nodeId: string }
   | { kind: "vertex"; nodeId: string; vertexId: string }
-  | { kind: "selection-box"; nodeId: string }
-  | { handle: VectorResizeHandle; kind: "resize"; nodeId: string }
-  | { kind: "rotate"; nodeId: string }
+  | { kind: "selection-box" }
+  | { handle: VectorResizeHandle; kind: "resize" }
+  | { kind: "rotate" }
   | {
       kind: "handle";
       nodeId: string;
@@ -275,22 +277,21 @@ type VectorEditDrag =
       vertexIds: readonly string[];
     }
   | {
-      before: VectorNetwork;
+      beforeByNode: ReadonlyMap<string, VectorNetwork>;
       bounds: Rect;
-      handle: VectorResizeHandle;
-      kind: "resize";
+      currentDocument: Point;
+      handle?: VectorResizeHandle;
+      kind: "selection-transform";
+      mode: "move" | "resize" | "rotate";
       moved: boolean;
+      repositionOffset: Point;
+      spaceActionDocument: Point | null;
+      spaceBaseOffset: Point | null;
+      spaceStartDocument: Point | null;
       startClient: Point;
-      vertexIds: readonly string[];
-    }
-  | {
-      before: VectorNetwork;
-      bounds: Rect;
-      kind: "rotate";
-      moved: boolean;
-      startClient: Point;
-      startLocal: Point;
-      vertexIds: readonly string[];
+      startDocument: Point;
+      vertexIdsByNode: ReadonlyMap<string, readonly string[]>;
+      worldByNode: ReadonlyMap<string, Transform>;
     }
   | {
       before: VectorNetwork;
@@ -325,13 +326,17 @@ interface VectorEditSession {
   pathElement: LeaferElement;
   readOnly: boolean;
   segmentSelectionPath: LeaferElement;
-  selectionBox: LeaferElement;
-  selectionHitArea: LeaferElement;
   selectedSegmentIds: string[];
   selectedVertexIds: string[];
   tool: LeaferVectorEditTool;
   tracePath: LeaferElement;
-  transformControls: LeaferElement[];
+}
+
+interface VectorSelectionOverlay {
+  box: LeaferElement;
+  controls: LeaferElement[];
+  group: LeaferGroup;
+  hitArea: LeaferElement;
 }
 
 interface VectorLassoSession {
@@ -414,6 +419,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     LeaferElement,
     VectorEditControl
   >();
+  readonly #vectorSelectionOverlay: VectorSelectionOverlay;
   #vectorLasso: VectorLassoSession | null = null;
   #viewportFrame: number | null = null;
   readonly #onDocumentSelectionChange = () => {
@@ -511,6 +517,35 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     // zoom cannot advance the document and overlays on independently scheduled
     // canvases. Keep these layers below the Editor child and non-interactive.
     this.#generationPresentationRoot = this.#app.sky as unknown as LeaferGroup;
+    const vectorSelectionGroup = new leafer.Group({
+      editable: false,
+      hitChildren: true,
+      hittable: false,
+      visible: false,
+    }) as LeaferGroup;
+    const vectorSelectionHitArea = new leafer.Rect({
+      editable: false,
+      fill: "rgba(0, 0, 0, 0.001)",
+      hittable: false,
+    }) as LeaferElement;
+    const vectorSelectionBox = new leafer.Rect({
+      editable: false,
+      fill: null,
+      hittable: false,
+      stroke: LEAFER_EDITOR_SELECTION_COLOR,
+    }) as LeaferElement;
+    vectorSelectionGroup.add(vectorSelectionHitArea);
+    vectorSelectionGroup.add(vectorSelectionBox);
+    this.#generationPresentationRoot.add(vectorSelectionGroup);
+    this.#vectorSelectionOverlay = {
+      box: vectorSelectionBox,
+      controls: [],
+      group: vectorSelectionGroup,
+      hitArea: vectorSelectionHitArea,
+    };
+    this.#vectorEditControls.set(vectorSelectionHitArea, {
+      kind: "selection-box",
+    });
     this.#generationSkeletonLayer = new leafer.Group({
       editable: false,
       hitChildren: false,
@@ -949,6 +984,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#generationActivityLayer.remove();
     this.#generationActivityLayer.destroy();
     this.#editorOverlays.dispose();
+    this.#vectorSelectionOverlay.group.remove();
+    this.#vectorSelectionOverlay.group.destroy();
     this.#generationSkeletonLayer.remove();
     this.#generationSkeletonLayer.destroy();
     this.#generationRevealStroker.remove();
@@ -956,6 +993,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#layerHoverStroker.remove();
     this.#layerHoverStroker.destroy();
     window.removeEventListener("keydown", this.#onWindowKeyDown, true);
+    window.removeEventListener("keyup", this.#onWindowKeyUp, true);
     document.removeEventListener(
       "selectionchange",
       this.#onDocumentSelectionChange,
@@ -1494,6 +1532,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     });
 
     window.addEventListener("keydown", this.#onWindowKeyDown, true);
+    window.addEventListener("keyup", this.#onWindowKeyUp, true);
     this.#host.addEventListener("contextlost", this.#onContextLost, true);
   }
 
@@ -2761,19 +2800,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       stroke: LEAFER_EDITOR_SELECTION_COLOR,
       visible: false,
     }) as LeaferElement;
-    const selectionHitArea = new this.#leafer.Rect({
-      editable: false,
-      fill: "rgba(0, 0, 0, 0.001)",
-      hittable: false,
-      visible: false,
-    }) as LeaferElement;
-    const selectionBox = new this.#leafer.Rect({
-      editable: false,
-      fill: null,
-      hittable: false,
-      stroke: LEAFER_EDITOR_SELECTION_COLOR,
-      visible: false,
-    }) as LeaferElement;
     const segmentSelectionPath = new this.#leafer.Path({
       editable: false,
       fill: null,
@@ -2783,17 +2809,11 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     overlayGroup.add(cutHitPath);
     overlayGroup.add(tracePath);
     overlayGroup.add(segmentSelectionPath);
-    overlayGroup.add(selectionHitArea);
-    overlayGroup.add(selectionBox);
     overlayGroup.add(handlePath);
     overlayGroup.add(lassoPath);
     overlayGroup.add(cutGuidePath);
     parent.add(overlayGroup);
     this.#vectorEditControls.set(cutHitPath, { kind: "path", nodeId });
-    this.#vectorEditControls.set(selectionHitArea, {
-      kind: "selection-box",
-      nodeId,
-    });
     return {
       anchorControls: [],
       cutGuidePath,
@@ -2808,13 +2828,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       pathElement,
       readOnly,
       segmentSelectionPath,
-      selectionBox,
-      selectionHitArea,
       selectedSegmentIds,
       selectedVertexIds,
       tool,
       tracePath,
-      transformControls: [],
     };
   }
 
@@ -2828,6 +2845,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     for (const session of this.#vectorEdits.values()) {
       this.#renderVectorEditOverlay(session);
     }
+    this.#renderVectorSelectionOverlay();
   }
 
   #renderVectorEditOverlay(session: VectorEditSession): void {
@@ -2868,14 +2886,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       control.remove();
       control.destroy();
     });
-    session.transformControls.forEach((control) => {
-      control.remove();
-      control.destroy();
-    });
     session.anchorControls = [];
     session.handleControls = [];
-    session.transformControls = [];
-    this.#renderVectorSelectionBox(session, zoom);
     const selected = new Set(session.selectedVertexIds);
     for (const vertex of session.network.vertices) {
       const isSelected = selected.has(vertex.id);
@@ -2953,32 +2965,48 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     }
   }
 
-  #renderVectorSelectionBox(session: VectorEditSession, zoom: number): void {
-    const bounds =
-      session.tool === "move" && session.selectedVertexIds.length >= 2
-        ? vectorVertexBounds(session.network, session.selectedVertexIds)
-        : null;
-    if (!bounds) {
-      session.selectionBox.set({ visible: false });
-      session.selectionHitArea.set({ hittable: false, visible: false });
+  #renderVectorSelectionOverlay(): void {
+    const overlay = this.#vectorSelectionOverlay;
+    overlay.controls.forEach((control) => {
+      control.remove();
+      control.destroy();
+    });
+    overlay.controls = [];
+    const targets = this.#vectorSelectionTargets();
+    const bounds = targets
+      ? vectorDocumentSelectionBounds(
+          targets.map((target) => ({
+            network: target.session.network,
+            vertexIds: target.vertexIds,
+            worldTransform: target.world,
+          })),
+        )
+      : null;
+    if (!bounds || !targets) {
+      overlay.group.set({ visible: false });
+      overlay.hitArea.set({ hittable: false });
       return;
     }
+    const zoom = Math.max(
+      MATRIX_EPSILON,
+      Math.abs(this.#input?.viewport.zoom ?? 1),
+    );
+    const readOnly = targets.some((target) => target.session.readOnly);
     const visualWidth = Math.max(bounds.width, 1 / zoom);
     const visualHeight = Math.max(bounds.height, 1 / zoom);
     const x = bounds.x + (bounds.width - visualWidth) / 2;
     const y = bounds.y + (bounds.height - visualHeight) / 2;
-    session.selectionBox.set({
+    overlay.group.set({ visible: true });
+    overlay.box.set({
       height: visualHeight,
       strokeWidth: 1.5 / zoom,
-      visible: true,
       width: visualWidth,
       x,
       y,
     });
-    session.selectionHitArea.set({
+    overlay.hitArea.set({
       height: visualHeight,
-      hittable: !session.readOnly,
-      visible: true,
+      hittable: !readOnly,
       width: visualWidth,
       x,
       y,
@@ -3036,24 +3064,23 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     ];
     for (const position of positions) {
       const control = new this.#leafer.Rect({
-        cursor: session.readOnly ? "default" : position.cursor,
+        cursor: readOnly ? "default" : position.cursor,
         editable: false,
         fill: "#ffffff",
         height: handleSize,
-        hittable: !session.readOnly,
+        hittable: !readOnly,
         stroke: LEAFER_EDITOR_SELECTION_COLOR,
         strokeWidth: 1 / zoom,
         width: handleSize,
         x: position.x - handleSize / 2,
         y: position.y - handleSize / 2,
       }) as LeaferElement;
-      session.transformControls.push(control);
+      overlay.controls.push(control);
       this.#vectorEditControls.set(control, {
         handle: position.handle,
         kind: "resize",
-        nodeId: session.nodeId,
       });
-      session.overlayGroup.add(control);
+      overlay.group.add(control);
     }
     const rotationOffset = 14 / zoom;
     for (const position of positions.filter((item) =>
@@ -3062,22 +3089,54 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       const directionX = position.x < x + visualWidth / 2 ? -1 : 1;
       const directionY = position.y < y + visualHeight / 2 ? -1 : 1;
       const control = new this.#leafer.Ellipse({
-        cursor: session.readOnly ? "default" : "crosshair",
+        cursor: readOnly ? "default" : "crosshair",
         editable: false,
         fill: "rgba(0, 0, 0, 0.001)",
         height: 12 / zoom,
-        hittable: !session.readOnly,
+        hittable: !readOnly,
         width: 12 / zoom,
         x: position.x + directionX * rotationOffset - 6 / zoom,
         y: position.y + directionY * rotationOffset - 6 / zoom,
       }) as LeaferElement;
-      session.transformControls.push(control);
+      overlay.controls.push(control);
       this.#vectorEditControls.set(control, {
         kind: "rotate",
-        nodeId: session.nodeId,
       });
-      session.overlayGroup.add(control);
+      overlay.group.add(control);
     }
+  }
+
+  #vectorSelectionTargets(): Array<{
+    session: VectorEditSession;
+    vertexIds: readonly string[];
+    world: Transform;
+  }> | null {
+    const document = this.#input?.document;
+    if (!document) return null;
+    const targets = [...this.#vectorEdits.values()].flatMap((session) => {
+      if (session.tool !== "move" || session.selectedVertexIds.length === 0) {
+        return [];
+      }
+      const world = getVisibleWorldTransform(
+        document.nodesById,
+        session.nodeId,
+      );
+      return world
+        ? [
+            {
+              session,
+              vertexIds: [...session.selectedVertexIds],
+              world,
+            },
+          ]
+        : [];
+    });
+    return targets.reduce(
+      (count, target) => count + target.vertexIds.length,
+      0,
+    ) >= 2
+      ? targets
+      : null;
   }
 
   #setVectorSelection(
@@ -3109,6 +3168,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       vertexIds: selected,
     });
     this.#renderVectorEditOverlay(session);
+    this.#renderVectorSelectionOverlay();
   }
 
   #vectorEditPointerDown(event: unknown): void {
@@ -3122,8 +3182,69 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (pointer.isCancel || pointer.right || pointer.middle) return;
     const target = isElement(pointer.target) ? pointer.target : undefined;
     const control = target ? this.#vectorEditControls.get(target) : undefined;
+    if (
+      control?.kind === "selection-box" ||
+      control?.kind === "resize" ||
+      control?.kind === "rotate"
+    ) {
+      const targets = this.#vectorSelectionTargets();
+      const bounds = targets
+        ? vectorDocumentSelectionBounds(
+            targets.map((item) => ({
+              network: item.session.network,
+              vertexIds: item.vertexIds,
+              worldTransform: item.world,
+            })),
+          )
+        : null;
+      const holder = this.#activeVectorEditSession() ?? targets?.[0]?.session;
+      if (
+        !targets ||
+        !bounds ||
+        !holder ||
+        targets.some((item) => item.session.readOnly)
+      ) {
+        return;
+      }
+      const startClient = eventClientPoint(pointer);
+      const startDocument = pointer.getInnerPoint(this.#app.tree);
+      holder.drag = {
+        beforeByNode: new Map(
+          targets.map((item) => [
+            item.session.nodeId,
+            structuredClone(item.session.network),
+          ]),
+        ),
+        bounds,
+        currentDocument: startDocument,
+        ...(control.kind === "resize" ? { handle: control.handle } : {}),
+        kind: "selection-transform",
+        mode:
+          control.kind === "selection-box"
+            ? "move"
+            : control.kind === "resize"
+              ? "resize"
+              : "rotate",
+        moved: false,
+        repositionOffset: { x: 0, y: 0 },
+        spaceActionDocument: null,
+        spaceBaseOffset: null,
+        spaceStartDocument: null,
+        startClient,
+        startDocument,
+        vertexIdsByNode: new Map(
+          targets.map((item) => [item.session.nodeId, item.vertexIds]),
+        ),
+        worldByNode: new Map(
+          targets.map((item) => [item.session.nodeId, item.world]),
+        ),
+      };
+      return;
+    }
+    const controlNodeId =
+      control && "nodeId" in control ? control.nodeId : undefined;
     const targetNodeId =
-      control?.nodeId ?? (target ? this.#nodeId(target) : undefined);
+      controlNodeId ?? (target ? this.#nodeId(target) : undefined);
     const targetNode = targetNodeId
       ? this.#input?.document.nodesById[targetNodeId]
       : undefined;
@@ -3145,8 +3266,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       });
       return;
     }
-    const targetSession = control
-      ? this.#vectorEdits.get(control.nodeId)
+    const targetSession = controlNodeId
+      ? this.#vectorEdits.get(controlNodeId)
       : target
         ? [...this.#vectorEdits.values()].find(
             (session) =>
@@ -3218,49 +3339,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         startDocument,
         startLocal,
       };
-      return;
-    }
-    if (
-      control?.kind === "selection-box" ||
-      control?.kind === "resize" ||
-      control?.kind === "rotate"
-    ) {
-      const bounds = vectorVertexBounds(
-        session.network,
-        session.selectedVertexIds,
-      );
-      if (session.readOnly || !bounds) return;
-      const startClient = eventClientPoint(pointer);
-      if (control.kind === "selection-box") {
-        session.drag = {
-          before: structuredClone(session.network),
-          kind: "vertices",
-          moved: false,
-          startClient,
-          startLocal: pointer.getInnerPoint(session.pathElement),
-          vertexIds: [...session.selectedVertexIds],
-        };
-      } else if (control.kind === "resize") {
-        session.drag = {
-          before: structuredClone(session.network),
-          bounds,
-          handle: control.handle,
-          kind: "resize",
-          moved: false,
-          startClient,
-          vertexIds: [...session.selectedVertexIds],
-        };
-      } else {
-        session.drag = {
-          before: structuredClone(session.network),
-          bounds,
-          kind: "rotate",
-          moved: false,
-          startClient,
-          startLocal: pointer.getInnerPoint(session.pathElement),
-          vertexIds: [...session.selectedVertexIds],
-        };
-      }
       return;
     }
     if (!control || control.kind === "path") {
@@ -3373,41 +3451,116 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     const client = eventClientPoint(pointer);
     drag.moved ||= pointDistance(drag.startClient, client) >= MIN_DRAW_DISTANCE;
     if (!drag.moved) return;
-    const local = pointer.getInnerPoint(session.pathElement);
     if (drag.kind === "cut") {
       drag.currentDocument = pointer.getInnerPoint(this.#app.tree);
-      drag.currentLocal = local;
+      drag.currentLocal = pointer.getInnerPoint(session.pathElement);
       this.#renderVectorCutGuide(session);
       return;
     }
+    if (drag.kind === "selection-transform") {
+      const currentDocument = pointer.getInnerPoint(this.#app.tree);
+      drag.currentDocument = currentDocument;
+      const repositioning =
+        drag.mode !== "move" &&
+        drag.spaceStartDocument !== null &&
+        drag.spaceBaseOffset !== null &&
+        drag.spaceActionDocument !== null;
+      if (repositioning) {
+        drag.repositionOffset = {
+          x:
+            drag.spaceBaseOffset!.x +
+            currentDocument.x -
+            drag.spaceStartDocument!.x,
+          y:
+            drag.spaceBaseOffset!.y +
+            currentDocument.y -
+            drag.spaceStartDocument!.y,
+        };
+      }
+      const actionDocument = repositioning
+        ? drag.spaceActionDocument!
+        : {
+            x: currentDocument.x - drag.repositionOffset.x,
+            y: currentDocument.y - drag.repositionOffset.y,
+          };
+      const baseTransform: Transform =
+        drag.mode === "move"
+          ? [
+              1,
+              0,
+              0,
+              1,
+              currentDocument.x - drag.startDocument.x,
+              currentDocument.y - drag.startDocument.y,
+            ]
+          : drag.mode === "resize" && drag.handle
+            ? vectorSelectionResizeTransform(
+                drag.bounds,
+                drag.handle,
+                actionDocument,
+                {
+                  fromCenter: pointer.altKey,
+                  proportional: pointer.shiftKey,
+                },
+              )
+            : vectorSelectionRotationTransform(
+                drag.bounds,
+                drag.startDocument,
+                actionDocument,
+                pointer.shiftKey,
+              );
+      const documentTransform =
+        drag.mode === "move"
+          ? baseTransform
+          : translateVectorSelectionTransform(
+              baseTransform,
+              drag.repositionOffset,
+            );
+      const previews = new Map<string, VectorNetwork>();
+      let changed = false;
+      for (const [nodeId, before] of drag.beforeByNode) {
+        const world = drag.worldByNode.get(nodeId);
+        const vertexIds = drag.vertexIdsByNode.get(nodeId);
+        const localTransform = world
+          ? documentTransformToLocal(world, documentTransform)
+          : null;
+        if (!world || !vertexIds || !localTransform) {
+          this.#report(
+            new Error(`Vector layer ${nodeId} has a non-invertible transform`),
+          );
+          return;
+        }
+        const result = transformVectorVertices(
+          before,
+          vertexIds,
+          localTransform,
+        );
+        if (!result.ok) {
+          if (result.code === "no-op") {
+            previews.set(nodeId, structuredClone(before));
+            continue;
+          }
+          this.#report(new Error(result.message));
+          return;
+        }
+        changed = true;
+        previews.set(nodeId, result.network);
+      }
+      if (!changed) drag.moved = false;
+      for (const [nodeId, network] of previews) {
+        const target = this.#vectorEdits.get(nodeId);
+        if (target) target.network = network;
+      }
+      this.#renderVectorEditOverlays();
+      return;
+    }
+    const local = pointer.getInnerPoint(session.pathElement);
     const result = (() => {
       if (drag.kind === "vertices") {
         return moveVectorVertices(drag.before, drag.vertexIds, {
           x: local.x - drag.startLocal.x,
           y: local.y - drag.startLocal.y,
         });
-      }
-      if (drag.kind === "resize") {
-        return transformVectorVertices(
-          drag.before,
-          drag.vertexIds,
-          vectorSelectionResizeTransform(drag.bounds, drag.handle, local, {
-            fromCenter: pointer.altKey,
-            proportional: pointer.shiftKey,
-          }),
-        );
-      }
-      if (drag.kind === "rotate") {
-        return transformVectorVertices(
-          drag.before,
-          drag.vertexIds,
-          vectorSelectionRotationTransform(
-            drag.bounds,
-            drag.startLocal,
-            local,
-            pointer.shiftKey,
-          ),
-        );
       }
       return (() => {
         const vertex = drag.before.vertices.find(
@@ -3469,6 +3622,22 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       if (moved) this.#submitVectorLineCut(start, end);
       else if (clickTarget) {
         this.#submitVectorCut(clickTarget.pathId, clickTarget.at);
+      }
+      return;
+    }
+    if (drag.kind === "selection-transform") {
+      session.drag = null;
+      if (moved) {
+        this.#submitVectorEdits(
+          [...drag.beforeByNode.keys()].flatMap((nodeId) => {
+            const target = this.#vectorEdits.get(nodeId);
+            return target
+              ? [{ network: target.network, nodeId: target.nodeId }]
+              : [];
+          }),
+        );
+      } else {
+        this.#renderVectorEditOverlays();
       }
       return;
     }
@@ -3540,7 +3709,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #cancelVectorEditDrag(session: VectorEditSession): void {
     const drag = session.drag;
     if (!drag) return;
-    if (drag.kind !== "cut") session.network = drag.before;
+    if (drag.kind === "selection-transform") {
+      for (const [nodeId, before] of drag.beforeByNode) {
+        const target = this.#vectorEdits.get(nodeId);
+        if (target) target.network = structuredClone(before);
+      }
+    } else if (drag.kind !== "cut") {
+      session.network = drag.before;
+    }
     session.drag = null;
     session.cutGuidePath.set({ path: "", visible: false });
   }
@@ -3549,23 +3725,29 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     session: VectorEditSession,
     network: VectorNetwork,
   ): boolean {
+    return this.#submitVectorEdits([{ network, nodeId: session.nodeId }]);
+  }
+
+  #submitVectorEdits(
+    edits: readonly { network: VectorNetwork; nodeId: string }[],
+  ): boolean {
     if (!this.#callbacks.onVectorEdit) {
       this.#report(new Error("Vector editing callback is unavailable"));
       return false;
     }
     const accepted = this.#callbacks.onVectorEdit({
       deleteNode: false,
-      network,
-      nodeId: session.nodeId,
+      edits,
     });
     if (!accepted) {
       this.#restoreProjection();
       return false;
     }
-    if (this.#vectorEdits.get(session.nodeId) === session) {
-      session.network = structuredClone(network);
-      this.#renderVectorEditOverlay(session);
+    for (const edit of edits) {
+      const session = this.#vectorEdits.get(edit.nodeId);
+      if (session) session.network = structuredClone(edit.network);
     }
+    this.#renderVectorEditOverlays();
     return true;
   }
 
@@ -3592,7 +3774,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         segmentIds: [],
         vertexIds: response.selectedVertexIds,
       });
-      this.#renderVectorEditOverlay(session);
+      this.#renderVectorEditOverlays();
     }
     return true;
   }
@@ -3653,6 +3835,12 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
 
   #cancelVectorEditSession(session: VectorEditSession): void {
     if (this.#vectorLasso) this.#cancelVectorLasso();
+    const sharedDrag = [...this.#vectorEdits.values()].find(
+      (candidate) =>
+        candidate.drag?.kind === "selection-transform" &&
+        candidate.drag.beforeByNode.has(session.nodeId),
+    );
+    if (sharedDrag) this.#cancelVectorEditDrag(sharedDrag);
     this.#vectorEdits.delete(session.nodeId);
     if (this.#activeVectorEditNodeId === session.nodeId) {
       this.#activeVectorEditNodeId = null;
@@ -3677,6 +3865,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       this.#cancelVectorEditSession(session);
     }
     this.#activeVectorEditNodeId = null;
+    this.#renderVectorSelectionOverlay();
   }
 
   #penPointerDown(event: unknown): void {
@@ -5045,6 +5234,39 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       }
     }
     if (this.#vectorEdits.size > 0 && !isKeyboardInputTarget(event.target)) {
+      const selectionDrag = [...this.#vectorEdits.values()]
+        .map((session) => session.drag)
+        .find(
+          (
+            drag,
+          ): drag is Extract<VectorEditDrag, { kind: "selection-transform" }> =>
+            drag?.kind === "selection-transform",
+        );
+      if (
+        event.code === "Space" &&
+        selectionDrag &&
+        selectionDrag.mode !== "move"
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!event.repeat && selectionDrag.spaceStartDocument === null) {
+          selectionDrag.spaceStartDocument = {
+            ...selectionDrag.currentDocument,
+          };
+          selectionDrag.spaceBaseOffset = {
+            ...selectionDrag.repositionOffset,
+          };
+          selectionDrag.spaceActionDocument = {
+            x:
+              selectionDrag.currentDocument.x -
+              selectionDrag.repositionOffset.x,
+            y:
+              selectionDrag.currentDocument.y -
+              selectionDrag.repositionOffset.y,
+          };
+        }
+        return;
+      }
       if (event.code === "Escape" && this.#vectorLasso) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -5059,7 +5281,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         );
         if (draggingSession) {
           this.#cancelVectorEditDrag(draggingSession);
-          this.#renderVectorEditOverlay(draggingSession);
+          this.#renderVectorEditOverlays();
           if (event.code === "Escape") return;
         }
         this.#callbacks.onVectorEditExit?.();
@@ -5106,6 +5328,30 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     if (event.code === "Escape" && this.#editor.innerEditing) {
       this.#textRunEditor.cancel();
     }
+  };
+
+  #onWindowKeyUp = (event: KeyboardEvent) => {
+    if (
+      event.code !== "Space" ||
+      this.#vectorEdits.size === 0 ||
+      isKeyboardInputTarget(event.target)
+    ) {
+      return;
+    }
+    const selectionDrag = [...this.#vectorEdits.values()]
+      .map((session) => session.drag)
+      .find(
+        (
+          drag,
+        ): drag is Extract<VectorEditDrag, { kind: "selection-transform" }> =>
+          drag?.kind === "selection-transform",
+      );
+    if (!selectionDrag || selectionDrag.spaceStartDocument === null) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    selectionDrag.spaceStartDocument = null;
+    selectionDrag.spaceBaseOffset = null;
+    selectionDrag.spaceActionDocument = null;
   };
 
   #onContextLost = (event: Event) => {

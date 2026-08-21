@@ -4,6 +4,7 @@ import type {
   Transform,
   VectorNetwork,
 } from "@opendesign/design-contracts";
+import { transformPoint } from "./scene-node-transform.js";
 
 export type VectorResizeHandle =
   | "north-west"
@@ -16,6 +17,61 @@ export type VectorResizeHandle =
   | "west";
 
 const MIN_AXIS = 0.000_001;
+
+export interface VectorDocumentSelectionTarget {
+  network: VectorNetwork;
+  vertexIds: readonly string[];
+  worldTransform: Transform;
+}
+
+export function vectorDocumentSelectionBounds(
+  targets: readonly VectorDocumentSelectionTarget[],
+): Rect | null {
+  const points: Point[] = [];
+  for (const target of targets) {
+    const selected = new Set(target.vertexIds);
+    if (selected.size !== target.vertexIds.length || selected.size === 0) {
+      return null;
+    }
+    const vertices = target.network.vertices.filter((vertex) =>
+      selected.has(vertex.id),
+    );
+    if (vertices.length !== selected.size) return null;
+    points.push(
+      ...vertices.map((vertex) =>
+        transformPoint(vertex, target.worldTransform),
+      ),
+    );
+  }
+  if (
+    points.length < 2 ||
+    points.some(
+      (point) => !Number.isFinite(point.x) || !Number.isFinite(point.y),
+    )
+  ) {
+    return null;
+  }
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
+export function translateVectorSelectionTransform(
+  transform: Transform,
+  offset: Point,
+): Transform {
+  const [a, b, c, d, e, f] = transform;
+  return [a, b, c, d, e + offset.x, f + offset.y];
+}
 
 export function pointInPolygon(
   point: Point,

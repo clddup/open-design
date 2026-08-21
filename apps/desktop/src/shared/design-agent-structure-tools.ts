@@ -105,6 +105,13 @@ export type DesignVectorToolInput =
       vertexIds: string[];
     }
   | {
+      action: "transform-layers-vertices";
+      label: string;
+      pageId: string;
+      targets: { nodeId: string; vertexIds: string[] }[];
+      transform: Transform;
+    }
+  | {
       action: "cut-path";
       at:
         | { kind: "vertex"; vertexId: string }
@@ -141,6 +148,22 @@ const MODEL_VECTOR_LOCAL_POINT_SCHEMA = {
     y: { type: "number", minimum: -1_000_000, maximum: 1_000_000 },
   },
   required: ["x", "y"],
+  additionalProperties: false,
+} as const;
+
+const MODEL_VECTOR_VERTEX_TARGET_SCHEMA = {
+  type: "object",
+  properties: {
+    nodeId: { type: "string", minLength: 1, maxLength: 256 },
+    vertexIds: {
+      type: "array",
+      minItems: 1,
+      maxItems: 16_384,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 128 },
+    },
+  },
+  required: ["nodeId", "vertexIds"],
   additionalProperties: false,
 } as const;
 
@@ -222,7 +245,7 @@ const MODEL_HIERARCHY_SCHEMA = {
 const MODEL_VECTOR_EDIT_SCHEMA = {
   type: "object",
   description:
-    "Edit explicit existing editable Vector Networks by stable Page, node, path, vertex, and segment IDs from inspection. transform-vertices applies one finite node-local affine matrix to explicit vertices and their attached Bézier tangents; connect-endpoints joins exactly two real open endpoints without branches; disconnect-vertex breaks one internal vertex; set-closed requires closed; cut-path requires pathId and at; cut-with-line cuts one node's supported open or closed contours using node-local points; cut-layers-with-line cuts every crossed nodeId using one finite line in document coordinates. The host derives all new geometry, result layer IDs, bounds, transforms, and one atomic transaction.",
+    "Edit explicit existing editable Vector Networks by stable Page, node, path, vertex, and segment IDs from inspection. transform-vertices applies one finite node-local affine matrix to one layer; transform-layers-vertices applies one document-space matrix to explicit vertex groups across layers and commits them atomically; connect/disconnect and Cut keep their existing topology semantics. The host derives local transforms, geometry, result layer IDs, bounds, and one atomic transaction.",
   properties: {
     action: {
       enum: [
@@ -231,6 +254,7 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
         "connect-endpoints",
         "disconnect-vertex",
         "transform-vertices",
+        "transform-layers-vertices",
         "cut-path",
         "cut-with-line",
         "cut-layers-with-line",
@@ -265,7 +289,16 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
       maxItems: 6,
       items: { type: "number", minimum: -1_000_000, maximum: 1_000_000 },
       description:
-        "Required only for transform-vertices. Node-local [a,b,c,d,e,f] affine matrix.",
+        "Required for transform-vertices (node-local) or transform-layers-vertices (document-space). [a,b,c,d,e,f] affine matrix.",
+    },
+    targets: {
+      type: "array",
+      minItems: 1,
+      maxItems: 500,
+      uniqueItems: true,
+      items: MODEL_VECTOR_VERTEX_TARGET_SCHEMA,
+      description:
+        "Required only for transform-layers-vertices. Explicit stable Vector layer and vertex IDs from inspection.",
     },
     closed: {
       type: "boolean",
@@ -329,6 +362,10 @@ const MODEL_VECTOR_EDIT_SCHEMA = {
       properties: { action: { const: "cut-layers-with-line" } },
       required: ["nodeIds"],
     },
+    {
+      properties: { action: { const: "transform-layers-vertices" } },
+      required: ["targets", "transform"],
+    },
   ],
   additionalProperties: false,
 } as const;
@@ -343,6 +380,7 @@ export function isDesignVectorToolInput(
       input.action !== "connect-endpoints" &&
       input.action !== "disconnect-vertex" &&
       input.action !== "transform-vertices" &&
+      input.action !== "transform-layers-vertices" &&
       input.action !== "cut-path" &&
       input.action !== "cut-with-line" &&
       input.action !== "cut-layers-with-line") ||
@@ -350,6 +388,46 @@ export function isDesignVectorToolInput(
     !safeId(input.pageId)
   ) {
     return false;
+  }
+  if (input.action === "transform-layers-vertices") {
+    if (
+      !Array.isArray(input.targets) ||
+      input.targets.length < 1 ||
+      input.targets.length > 500 ||
+      !Array.isArray(input.transform) ||
+      input.transform.length !== 6 ||
+      !input.transform.every(
+        (value) =>
+          typeof value === "number" &&
+          Number.isFinite(value) &&
+          Math.abs(value) <= 1_000_000,
+      )
+    ) {
+      return false;
+    }
+    const nodeIds = new Set<string>();
+    let vertexCount = 0;
+    for (const target of input.targets) {
+      if (
+        !isRecord(target) ||
+        !safeId(target.nodeId) ||
+        nodeIds.has(target.nodeId) ||
+        !Array.isArray(target.vertexIds) ||
+        target.vertexIds.length < 1 ||
+        target.vertexIds.length > 16_384 ||
+        !target.vertexIds.every((vertexId) => safeId(vertexId)) ||
+        new Set(target.vertexIds).size !== target.vertexIds.length ||
+        !exactKeys(target, ["nodeId", "vertexIds"])
+      ) {
+        return false;
+      }
+      nodeIds.add(target.nodeId);
+      vertexCount += target.vertexIds.length;
+    }
+    return (
+      vertexCount <= 16_384 &&
+      exactKeys(input, ["action", "label", "pageId", "targets", "transform"])
+    );
   }
   if (input.action === "cut-layers-with-line") {
     return (

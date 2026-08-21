@@ -20,7 +20,7 @@ import {
   planImageNodeUpdate,
   planDeleteVectorNode,
   planVectorLayersLineCut,
-  planVectorNetworkUpdate,
+  planVectorNetworkUpdates,
   planVectorSemanticEdit,
   resolveBooleanEditScope,
   resolveVectorEditCollectionScope,
@@ -561,11 +561,10 @@ export function Canvas({
       const current = runtime.getSnapshot();
       const plan = request.deleteNode
         ? planDeleteVectorNode(current.document, activePageId, request.nodeId)
-        : planVectorNetworkUpdate(
+        : planVectorNetworkUpdates(
             current.document,
             activePageId,
-            request.nodeId,
-            request.network,
+            request.edits,
           );
       if (!plan.ok) {
         onTransactionError(plan.message);

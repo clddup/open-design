@@ -2108,6 +2108,9 @@ function materialTargetRefsForStructuredTool(
       ...(input.action === "reparent" ? { parentId: input.parentId } : {}),
     };
   }
+  if ("targets" in input) {
+    return { nodeIds: input.targets.map((target) => target.nodeId) };
+  }
   if ("groupId" in input) return { nodeIds: [input.groupId] };
   return { nodeIds: [input.booleanId] };
 }

@@ -4687,12 +4687,12 @@ describe("Leafer engine selection bounds synchronization", () => {
     const request = onVectorEdit.mock.calls[0]?.[0];
     expect(request).toMatchObject({
       deleteNode: false,
-      nodeId: "editable_curve",
+      edits: [{ nodeId: "editable_curve" }],
     });
     if (!request || request.deleteNode) {
       throw new Error("Expected a vector network update");
     }
-    expect(request.network.vertices).toContainEqual(
+    expect(request.edits[0]!.network.vertices).toContainEqual(
       expect.objectContaining({ id: "vertex_a", x: 24, y: 12 }),
     );
     adapter.dispose();
@@ -4798,10 +4798,17 @@ describe("Leafer engine selection bounds synchronization", () => {
     const app = leaferHarness.app;
     const path = app && findElement(app.tree, "editable_curve");
     if (!app || !path?.parent) throw new Error("Missing editable vector");
-    const overlay = path.parent.children.at(-1);
-    if (!(overlay instanceof FakeGroup)) {
-      throw new Error("Missing vector overlay");
-    }
+    const overlay = app.sky.children.find(
+      (child): child is FakeGroup =>
+        child instanceof FakeGroup &&
+        child.children.some(
+          (control) =>
+            control instanceof FakeRect &&
+            (control as FakeRect & { cursor?: string }).cursor ===
+              "nwse-resize",
+        ),
+    );
+    if (!overlay) throw new Error("Missing vector selection overlay");
     const resizeHandles = overlay.children.filter(
       (child): child is FakeRect =>
         child instanceof FakeRect &&
@@ -4811,20 +4818,39 @@ describe("Leafer engine selection bounds synchronization", () => {
       (left, right) => right.x + right.y - (left.x + left.y),
     )[0];
     if (!southEast) throw new Error("Missing vector resize handle");
-    app.emit("pointer.down", pointerEvent(60, 30, southEast));
-    app.emit("pointer.move", pointerEvent(120, 60, southEast));
+    const resizeStart = {
+      x: southEast.x + southEast.width / 2,
+      y: southEast.y + southEast.height / 2,
+    };
+    app.emit(
+      "pointer.down",
+      pointerEvent(resizeStart.x, resizeStart.y, southEast),
+    );
+    app.emit(
+      "pointer.move",
+      pointerEvent(resizeStart.x + 60, resizeStart.y + 30, southEast),
+    );
     expect(onVectorEdit).not.toHaveBeenCalled();
-    app.emit("pointer.up", pointerEvent(120, 60, southEast));
+    app.emit(
+      "pointer.up",
+      pointerEvent(resizeStart.x + 60, resizeStart.y + 30, southEast),
+    );
     expect(onVectorEdit).toHaveBeenCalledTimes(1);
     const resized = onVectorEdit.mock.calls[0]?.[0];
     if (!resized || resized.deleteNode) {
       throw new Error("Expected resized vector network");
     }
-    expect(resized.network.vertices).toContainEqual(
-      expect.objectContaining({ id: "vertex_b", x: 120, y: 60 }),
-    );
-    expect(resized.network.vertices).toContainEqual(
-      expect.objectContaining({ id: "vertex_c", x: 120, y: 0 }),
+    const sourceNode = input.document.nodesById.editable_curve;
+    if (
+      !sourceNode ||
+      sourceNode.kind !== "vector" ||
+      !("network" in sourceNode.properties)
+    ) {
+      throw new Error("Missing source vector network");
+    }
+    expect(resized.edits).toHaveLength(1);
+    expect(resized.edits[0]!.network).not.toEqual(
+      sourceNode.properties.network,
     );
 
     const resizedInput = structuredClone(input);
@@ -4836,22 +4862,184 @@ describe("Leafer engine selection bounds synchronization", () => {
     ) {
       throw new Error("Missing resized vector fixture");
     }
-    resizedNode.properties.network = resized.network;
+    resizedNode.properties.network = resized.edits[0]!.network;
     adapter.sync(resizedInput);
     onVectorEdit.mockClear();
-    const refreshedOverlay = path.parent.children.at(-1);
-    if (!(refreshedOverlay instanceof FakeGroup)) {
-      throw new Error("Missing refreshed vector overlay");
-    }
+    const refreshedOverlay = app.sky.children.find(
+      (child): child is FakeGroup =>
+        child instanceof FakeGroup &&
+        child.children.some(
+          (control) =>
+            control instanceof FakeEllipse &&
+            (control as FakeEllipse & { cursor?: string }).cursor ===
+              "crosshair",
+        ),
+    );
+    if (!refreshedOverlay) throw new Error("Missing refreshed vector overlay");
     const rotate = refreshedOverlay.children.find(
       (child): child is FakeEllipse =>
         child instanceof FakeEllipse &&
         (child as FakeEllipse & { cursor?: string }).cursor === "crosshair",
     );
     if (!rotate) throw new Error("Missing vector rotation target");
-    app.emit("pointer.down", pointerEvent(-12, -12, rotate));
-    app.emit("pointer.move", pointerEvent(60, -40, rotate));
-    app.emit("pointer.up", pointerEvent(60, -40, rotate));
+    const rotateStart = {
+      x: rotate.x + rotate.width / 2,
+      y: rotate.y + rotate.height / 2,
+    };
+    app.emit(
+      "pointer.down",
+      pointerEvent(rotateStart.x, rotateStart.y, rotate),
+    );
+    app.emit(
+      "pointer.move",
+      pointerEvent(rotateStart.x + 40, rotateStart.y + 30, rotate),
+    );
+    app.emit(
+      "pointer.up",
+      pointerEvent(rotateStart.x + 40, rotateStart.y + 30, rotate),
+    );
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    adapter.dispose();
+  });
+
+  it("uses one document-space transform box and one batch commit across Vector layers", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const base = withMultiVectorEditFixture(createInput());
+    const input: LeaferEngineSyncInput = {
+      ...base,
+      vectorEditScope: {
+        ...base.vectorEditScope!,
+        nodes: [
+          {
+            ...base.vectorEditScope!.nodes[0]!,
+            selectedVertexIds: ["vertex_a"],
+          },
+          {
+            ...base.vectorEditScope!.nodes[1]!,
+            selectedVertexIds: ["vertex_c"],
+          },
+        ],
+      },
+    };
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Missing Leafer app");
+    const overlay = app.sky.children.find(
+      (child): child is FakeGroup =>
+        child instanceof FakeGroup &&
+        child.children.some(
+          (control) =>
+            control instanceof FakeRect &&
+            (control as FakeRect & { cursor?: string }).cursor ===
+              "nwse-resize",
+        ),
+    );
+    if (!overlay) throw new Error("Missing shared Vector selection overlay");
+    const visibleBox = overlay.children.find(
+      (child): child is FakeRect =>
+        child instanceof FakeRect &&
+        child.visible &&
+        typeof (child as FakeRect & { stroke?: unknown }).stroke === "string" &&
+        child.width > 250,
+    );
+    expect(visibleBox).toBeDefined();
+    const southEast = overlay.children
+      .filter(
+        (child): child is FakeRect =>
+          child instanceof FakeRect &&
+          (child as FakeRect & { cursor?: string }).cursor === "nwse-resize",
+      )
+      .sort((left, right) => right.x + right.y - (left.x + left.y))[0];
+    if (!southEast) throw new Error("Missing shared resize handle");
+    const start = {
+      x: southEast.x + southEast.width / 2,
+      y: southEast.y + southEast.height / 2,
+    };
+    app.emit("pointer.down", pointerEvent(start.x, start.y, southEast));
+    app.emit(
+      "pointer.move",
+      pointerEvent(start.x + 80, start.y + 40, southEast),
+    );
+    app.emit("pointer.up", pointerEvent(start.x + 80, start.y + 40, southEast));
+    expect(onVectorEdit).toHaveBeenCalledTimes(1);
+    const request = onVectorEdit.mock.calls[0]?.[0];
+    if (!request || request.deleteNode) {
+      throw new Error("Expected a batch Vector update");
+    }
+    expect(request.edits.map((edit) => edit.nodeId)).toEqual([
+      "editable_curve",
+      "editable_curve_second",
+    ]);
+    adapter.dispose();
+  });
+
+  it("repositions a resize with Space and resumes without a preview jump", async () => {
+    const onVectorEdit = vi.fn<(request: LeaferVectorEditRequest) => boolean>(
+      () => true,
+    );
+    const input = withVectorEditFixture(createInput(), [
+      "vertex_a",
+      "vertex_b",
+    ]);
+    const adapter = await createLeaferEngineAdapter(createHost(), {
+      ...createCallbacks(),
+      onVectorEdit,
+    });
+    adapter.sync(input);
+    const app = leaferHarness.app;
+    const path = app && findElement(app.tree, "editable_curve");
+    if (!app || !(path instanceof FakePath)) {
+      throw new Error("Missing editable Vector path");
+    }
+    const overlay = app.sky.children.find(
+      (child): child is FakeGroup =>
+        child instanceof FakeGroup &&
+        child.children.some(
+          (control) =>
+            control instanceof FakeRect &&
+            (control as FakeRect & { cursor?: string }).cursor ===
+              "nwse-resize",
+        ),
+    );
+    const southEast = overlay?.children
+      .filter(
+        (child): child is FakeRect =>
+          child instanceof FakeRect &&
+          (child as FakeRect & { cursor?: string }).cursor === "nwse-resize",
+      )
+      .sort((left, right) => right.x + right.y - (left.x + left.y))[0];
+    if (!southEast) throw new Error("Missing shared resize handle");
+    const start = {
+      x: southEast.x + southEast.width / 2,
+      y: southEast.y + southEast.height / 2,
+    };
+    app.emit("pointer.down", pointerEvent(start.x, start.y, southEast));
+    app.emit(
+      "pointer.move",
+      pointerEvent(start.x + 40, start.y + 20, southEast),
+    );
+    const spaceDown = emitWindowKey("Space");
+    app.emit(
+      "pointer.move",
+      pointerEvent(start.x + 70, start.y + 50, southEast),
+    );
+    const repositionedPath = path.path;
+    const spaceUp = emitWindowKeyUp("Space");
+    expect(path.path).toBe(repositionedPath);
+    app.emit(
+      "pointer.move",
+      pointerEvent(start.x + 80, start.y + 60, southEast),
+    );
+    expect(path.path).not.toBe(repositionedPath);
+    app.emit("pointer.up", pointerEvent(start.x + 80, start.y + 60, southEast));
+    expect(spaceDown.preventDefault).toHaveBeenCalledTimes(1);
+    expect(spaceUp.preventDefault).toHaveBeenCalledTimes(1);
     expect(onVectorEdit).toHaveBeenCalledTimes(1);
     adapter.dispose();
   });
@@ -5213,10 +5401,10 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(onVectorEdit).toHaveBeenCalledTimes(1);
     const request = onVectorEdit.mock.calls[0]?.[0];
     if (!request || request.deleteNode) throw new Error("Missing vector edit");
-    const segmentAb = request.network.segments.find(
+    const segmentAb = request.edits[0]!.network.segments.find(
       (segment) => segment.id === "segment_ab",
     );
-    const segmentBc = request.network.segments.find(
+    const segmentBc = request.edits[0]!.network.segments.find(
       (segment) => segment.id === "segment_bc",
     );
     expect(segmentAb?.tangentEnd).toEqual({ x: -30, y: -6 });
@@ -5227,15 +5415,19 @@ describe("Leafer engine selection bounds synchronization", () => {
     expect(onVectorEdit).toHaveBeenCalledWith(
       expect.objectContaining({
         deleteNode: false,
-        nodeId: "editable_curve",
+        edits: [expect.objectContaining({ nodeId: "editable_curve" })],
       }),
     );
     const cornerRequest = onVectorEdit.mock.calls[0]?.[0];
     if (!cornerRequest || cornerRequest.deleteNode) {
       throw new Error("Missing corner vector edit");
     }
-    expect(cornerRequest.network.segments[0]?.tangentEnd).toBeUndefined();
-    expect(cornerRequest.network.segments[1]?.tangentStart).toBeUndefined();
+    expect(
+      cornerRequest.edits[0]!.network.segments[0]?.tangentEnd,
+    ).toBeUndefined();
+    expect(
+      cornerRequest.edits[0]!.network.segments[1]?.tangentStart,
+    ).toBeUndefined();
     adapter.dispose();
   });
 
@@ -5283,17 +5475,16 @@ describe("Leafer engine selection bounds synchronization", () => {
     if (!request || request.deleteNode) {
       throw new Error("Expected a retained Vector path");
     }
-    expect(request.network.paths).toEqual([
+    expect(request.edits[0]!.network.paths).toEqual([
       {
         id: "path_open",
         closed: false,
         segments: [{ segmentId: "segment_bc", reversed: false }],
       },
     ]);
-    expect(request.network.vertices.map((vertex) => vertex.id)).toEqual([
-      "vertex_b",
-      "vertex_c",
-    ]);
+    expect(
+      request.edits[0]!.network.vertices.map((vertex) => vertex.id),
+    ).toEqual(["vertex_b", "vertex_c"]);
     expect(onVectorEditSelectionChange).toHaveBeenCalledWith("editable_curve", {
       segmentIds: [],
       vertexIds: [],
@@ -5983,7 +6174,10 @@ function clickPenPoint(app: FakeApp, x: number, y: number): void {
   app.emit("pointer.up", event);
 }
 
-function emitWindowKey(code: string): void {
+function emitWindowKey(code: string): {
+  preventDefault: ReturnType<typeof vi.fn>;
+  stopImmediatePropagation: ReturnType<typeof vi.fn>;
+} {
   const event = {
     code,
     preventDefault: vi.fn(),
@@ -5992,6 +6186,28 @@ function emitWindowKey(code: string): void {
   leaferHarness.windowListeners
     .get("keydown")
     ?.forEach((listener) => listener(event));
+  return event as unknown as {
+    preventDefault: ReturnType<typeof vi.fn>;
+    stopImmediatePropagation: ReturnType<typeof vi.fn>;
+  };
+}
+
+function emitWindowKeyUp(code: string): {
+  preventDefault: ReturnType<typeof vi.fn>;
+  stopImmediatePropagation: ReturnType<typeof vi.fn>;
+} {
+  const event = {
+    code,
+    preventDefault: vi.fn(),
+    stopImmediatePropagation: vi.fn(),
+  } as unknown as KeyboardEvent;
+  leaferHarness.windowListeners
+    .get("keyup")
+    ?.forEach((listener) => listener(event));
+  return event as unknown as {
+    preventDefault: ReturnType<typeof vi.fn>;
+    stopImmediatePropagation: ReturnType<typeof vi.fn>;
+  };
 }
 
 function emitTextEditWindowKey(

@@ -4201,6 +4201,75 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
   });
 
+  it("transforms explicit point groups across Vector layers with one document-space transaction", async () => {
+    const sourceRuntime = createEditableVectorRuntime();
+    const document = structuredClone(sourceRuntime.getSnapshot().document);
+    const frame = document.nodesById.frame_welcome;
+    const first = document.nodesById.editable_logo_contour;
+    if (!frame || frame.kind !== "frame" || !first) {
+      throw new Error("Missing multi-Vector transform fixture");
+    }
+    const second = structuredClone(first);
+    second.id = "editable_logo_shadow";
+    second.name = "Editable logo shadow";
+    second.transform = [2, 0, 0, 0.5, 220, 40];
+    document.nodesById[second.id] = second;
+    frame.childIds.push(second.id);
+    const runtime = new EditorRuntime(document);
+    const result = await executeDesignToolRequest(
+      {
+        requestId: "vector_transform_layers_vertices",
+        call: {
+          toolCallId: "tool_vector_transform_layers_vertices",
+          toolName: DESIGN_VECTOR_TOOL_NAME,
+          input: {
+            action: "transform-layers-vertices",
+            label: "Move logo points together",
+            pageId: "page_welcome",
+            targets: [
+              {
+                nodeId: "editable_logo_contour",
+                vertexIds: ["vertex_b"],
+              },
+              {
+                nodeId: "editable_logo_shadow",
+                vertexIds: ["vertex_c"],
+              },
+            ],
+            transform: [1, 0, 0, 1, 20, 10],
+          },
+        },
+        context: pageContext,
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "transform-layers-vertices",
+          atomic: true,
+          nodeIds: ["editable_logo_contour", "editable_logo_shadow"],
+          revision: 1,
+        },
+        designRevision: { previousRevision: 0, revision: 1 },
+      },
+    });
+    expect(
+      editableVectorNetwork(runtime, "editable_logo_contour").vertices,
+    ).toContainEqual(
+      expect.objectContaining({ id: "vertex_b", x: 140, y: 10 }),
+    );
+    expect(
+      editableVectorNetwork(runtime, "editable_logo_shadow").vertices,
+    ).toContainEqual(
+      expect.objectContaining({ id: "vertex_c", x: 70, y: 100 }),
+    );
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+    expect(runtime.undo()).toMatchObject({ ok: true, mode: "undo" });
+  });
+
   it("divides a closed vector with a node-local line into host-named sibling layers", async () => {
     const runtime = createClosedEditableVectorRuntime();
     runtime.setSelection(["title_welcome"], "title_welcome");
@@ -6010,8 +6079,11 @@ function createConcaveEditableVectorRuntime(): EditorRuntime {
   return new EditorRuntime(document);
 }
 
-function editableVectorNetwork(runtime: EditorRuntime) {
-  const node = runtime.getSnapshot().document.nodesById.editable_logo_contour;
+function editableVectorNetwork(
+  runtime: EditorRuntime,
+  nodeId = "editable_logo_contour",
+) {
+  const node = runtime.getSnapshot().document.nodesById[nodeId];
   if (!node || node.kind !== "vector" || !("network" in node.properties)) {
     throw new Error("Missing editable vector fixture");
   }

@@ -37,3 +37,47 @@ export function multiplyTransforms(
     b * k + d * l + f,
   ];
 }
+
+export function invertTransform(transform: Transform): Transform | null {
+  const [a, b, c, d, e, f] = transform;
+  const determinant = a * d - b * c;
+  if (Math.abs(determinant) < Number.EPSILON) return null;
+  const inverse = 1 / determinant;
+  return [
+    d * inverse,
+    -b * inverse,
+    -c * inverse,
+    a * inverse,
+    (c * f - d * e) * inverse,
+    (b * e - a * f) * inverse,
+  ];
+}
+
+export function transformPoint(
+  point: { x: number; y: number },
+  transform: Transform,
+) {
+  const [a, b, c, d, e, f] = transform;
+  return {
+    x: a * point.x + c * point.y + e,
+    y: b * point.x + d * point.y + f,
+  };
+}
+
+/**
+ * Conjugates one document-space transform into a Vector node's local space.
+ * This keeps a shared transform box correct for nodes under different nested
+ * translations, rotations and scales.
+ */
+export function documentTransformToLocal(
+  worldTransform: Transform,
+  documentTransform: Transform,
+): Transform | null {
+  const inverse = invertTransform(worldTransform);
+  return inverse
+    ? multiplyTransforms(
+        inverse,
+        multiplyTransforms(documentTransform, worldTransform),
+      )
+    : null;
+}

@@ -59,12 +59,12 @@
 使用 Pen 创建可编辑三次曲线轮廓、继续调整已有节点和贝塞尔手柄，或精确保留 SVG Path 数据，并通过同一 Path 投影渲染。
 
 - ID：`vector.path-rendering`
-- 实现方：DesignDocument 1.10.0 + Geometry Service contract v13 point/path selection-delete/transform/Connect/Disconnect/Cut + EditorRuntime vector planner + Leafer Pen/point/path/Lasso/transform/Cut overlay + controlled SVG metadata v2
+- 实现方：DesignDocument 1.10.0 + Geometry Service contract v13 point/path selection-delete/transform/Connect/Disconnect/Cut + EditorRuntime document-space multi-Vector planner + Leafer Pen/point/path/Lasso/shared-transform/Cut overlay + controlled SVG metadata v2
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 17 项；实机 0 项
 - 限制：Pen 已支持点击放点、拖拽镜像三次曲线手柄、首点闭合、Enter/Escape 完成开放路径、Backspace 回退、切换工具收尾、精确 bounds 和单次可撤销事务；当前只创建单条非分叉轮廓。
-- 限制：Enter 或双击可让一个或多个已选 Vector 图层进入非分支多轮廓节点编辑；每层拥有独立 trace、稳定 point/path 选区和只读状态。Q 套索可圈选完整包含的节点与 line/cubic segment；Delete 对节点执行重连，对 segment 则真实断开并确定性生成开放 runs。同一 Vector 多节点变换及既有节点/手柄、Connect/Disconnect、Open/Close/Reverse、Cut、tight bounds 与单事务手势继续可用。
-- 限制：Cut 模式（X）支持节点/路径真实断点和跨多个 Vector 图层的有限 document-space 分割；闭合边界通过同侧 connector 与连续边界缝合处理穿孔和凹形多交点 component，开放 contour 按每个真实横穿交点拆成 retained/extracted 开放 runs，不补 connector、region 或隐式 Fill。point/path Lasso、segment Delete、同一 Vector Connect/Disconnect 与单 Vector 多节点变换共用稳定拓扑和原子手势。跨 Vector 统一变换框、Space 中途平移、segment Bend/per-segment appearance、嵌套/重叠 region、只切孔洞、跨层 Connect、分支网络、flatten、outline stroke、像素基线和打包交互证据仍未完成。
+- 限制：Enter 或双击可让一个或多个已选 Vector 图层进入非分支多轮廓节点编辑；每层拥有独立 trace、稳定 point/path 选区和只读状态。Q 套索可圈选完整包含的节点与 line/cubic segment；Delete 对节点执行重连，对 segment 则真实断开并确定性生成开放 runs。编辑集合中任意两个以上节点共用一个 document-space 移动/八向缩放/旋转框；缩放或旋转中按住 Space 可平移选区，松开后无跳变继续原操作。pointer-up 与 Agent document-space 变换都把所有变化层提交为一次 revision/undo。
+- 限制：Cut 模式（X）支持节点/路径真实断点和跨多个 Vector 图层的有限 document-space 分割；闭合边界通过同侧 connector 与连续边界缝合处理穿孔和凹形多交点 component，开放 contour 按每个真实横穿交点拆成 retained/extracted 开放 runs，不补 connector、region 或隐式 Fill。point/path Lasso、segment Delete、同一 Vector Connect/Disconnect、跨 Vector 统一节点变换与 Space 中途平移共用稳定拓扑和原子手势。segment Bend/per-segment appearance、嵌套/重叠 region、只切孔洞、跨层 Connect、分支网络、flatten、outline stroke、像素基线和打包交互证据仍未完成。
 - 限制：受控 OpenDesign SVG metadata 只在通过 schema、拓扑且与标准渲染 path 精确匹配时保留 editable network；没有 metadata 的外部 SVG 保持为精确 path 数据，不猜测可编辑拓扑。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
@@ -111,10 +111,10 @@
 通过节点和贝塞尔手柄创建、编辑开放、闭合、分支与曲线矢量几何。
 
 - ID：`vector.pen-node-editing`
-- 实现方：DesignDocument 1.10.0 Vector Network + Geometry Service contract v13 point/path selection-delete/transform/Connect/Disconnect/Cut + EditorRuntime planner + Leafer native overlays
+- 实现方：DesignDocument 1.10.0 Vector Network + Geometry Service contract v13 point/path selection-delete/transform/Connect/Disconnect/Cut + EditorRuntime document-space multi-Vector planner + Leafer native overlays
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
 - 证据：自动化 10 项；实机 0 项
-- 限制：Pen 当前创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、Connect/Disconnect、point/path Lasso 与 segment Delete、单 Vector 多节点变换，以及点击/document-space Cut。跨 Vector 节点变换、segment Bend/per-segment appearance、嵌套/重叠 region、只切孔洞、分支网络、flatten、outline stroke 与打包证据仍未完成。
+- 限制：Pen 当前创建单条非分支轮廓；已有节点编辑支持多 Vector collection、Open/Close/Reverse、Connect/Disconnect、point/path Lasso 与 segment Delete、跨所选节点的统一 document-space 变换框、缩放/旋转中 Space 平移，以及点击/document-space Cut。segment Bend/per-segment appearance、嵌套/重叠 region、只切孔洞、分支网络、flatten、outline stroke 与打包证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450213-Vector-networks)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers)
 - 专业参照：[官方说明](https://github.com/ZSeven-W/openpencil/blob/449f31dd8b7df12965f65d9da774597332fc153d/crates/op-editor-core/src/path_edit.rs)
