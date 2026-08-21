@@ -166,27 +166,38 @@ function compileQualityProfile(
 function compileComponentStrategy(
   objects: NonNullable<DesignFirstSliceToolInput["semanticObjects"]>,
 ): DesignPlanComponentStrategy {
-  const candidates: DesignPlanComponentCandidate[] = objects.map((object) =>
-    object.decision === "ordinary"
-      ? {
-          decisionId: object.decisionId,
-          label: object.label,
-          decision: "ordinary",
-          rationale: `${object.label} remains ordinary because this delivery does not require centralized reusable instance behavior.`,
-          occurrences: object.occurrences.map((occurrence) => ({
-            ...occurrence,
-          })),
-        }
-      : {
-          decisionId: object.decisionId,
-          label: object.label,
-          decision: "component",
-          rationale: `${object.label} is reusable and should preserve centralized structure with explicit instances.`,
-          componentId: object.componentId,
-          main: { ...object.main, mode: "create" },
-          instances: object.instances.map((instance) => ({ ...instance })),
-        },
-  );
+  const candidates: DesignPlanComponentCandidate[] = objects.map((object) => {
+    if (object.decision === "ordinary") {
+      return {
+        decisionId: object.decisionId,
+        label: object.label,
+        decision: "ordinary",
+        rationale: `${object.label} remains ordinary because this delivery does not require centralized reusable instance behavior.`,
+        occurrences: object.occurrences.map((occurrence) => ({
+          ...occurrence,
+        })),
+      };
+    }
+    if (object.decision === "reuse-component") {
+      return {
+        decisionId: object.decisionId,
+        label: object.label,
+        decision: "reuse-component",
+        rationale: `${object.label} reuses a compatible Component Main already available in the Design File.`,
+        componentId: object.componentId,
+        instances: object.instances.map((instance) => ({ ...instance })),
+      };
+    }
+    return {
+      decisionId: object.decisionId,
+      label: object.label,
+      decision: "component",
+      rationale: `${object.label} is reusable and should preserve centralized structure with explicit instances.`,
+      componentId: object.componentId,
+      main: { ...object.main, mode: "create" },
+      instances: object.instances.map((instance) => ({ ...instance })),
+    };
+  });
   return {
     summary:
       candidates.length === 0

@@ -3,6 +3,13 @@ import {
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import type { DesignDocument, DesignNode } from "@opendesign/design-contracts";
+import {
+  MAX_DESIGN_SYSTEM_CATALOG_CHARACTERS,
+  MAX_DESIGN_SYSTEM_CATALOG_COMPONENTS,
+  MAX_DESIGN_SYSTEM_CATALOG_PROPERTIES,
+  type DesignSystemComponentCatalog,
+  type DesignSystemComponentCatalogEntry,
+} from "../shared/design-system-component-catalog";
 
 export function createScopedComponentInspection(
   document: DesignDocument,
@@ -109,7 +116,113 @@ export function createScopedComponentInspection(
           })),
         };
   }
-  return { componentsById, instancesById, variantSetsById };
+  return {
+    componentCatalog: createComponentCatalog(
+      document,
+      nodeIds,
+      scopedComponentIds,
+    ),
+    componentsById,
+    instancesById,
+    variantSetsById,
+  };
+}
+
+function createComponentCatalog(
+  document: DesignDocument,
+  scopedNodeIds: ReadonlySet<string>,
+  scopedComponentIds: ReadonlySet<string>,
+): DesignSystemComponentCatalog {
+  const usageCount = componentUsageCounts(document, undefined);
+  const scopeUsageCount = componentUsageCounts(document, scopedNodeIds);
+  const all = Object.values(document.componentsById)
+    .map((component): DesignSystemComponentCatalogEntry => {
+      const orderedPropertyNames = component.componentPropertyOrder.filter(
+        (name) => component.componentPropertyDefinitions[name] !== undefined,
+      );
+      const properties = orderedPropertyNames
+        .slice(0, MAX_DESIGN_SYSTEM_CATALOG_PROPERTIES)
+        .map((name) => ({
+          name,
+          type: component.componentPropertyDefinitions[name].type,
+        }));
+      return {
+        componentId: component.id,
+        name: component.name,
+        ...boundedDescription(component.description),
+        availability: scopedComponentIds.has(component.id)
+          ? "current-scope"
+          : "design-file",
+        usageCount: usageCount.get(component.id) ?? 0,
+        scopeUsageCount: scopeUsageCount.get(component.id) ?? 0,
+        ...(component.variantSetId
+          ? { variantSetId: component.variantSetId }
+          : {}),
+        variantProperties: Object.fromEntries(
+          Object.entries(component.variantProperties)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .slice(0, 12),
+        ),
+        properties,
+        propertiesTruncated:
+          orderedPropertyNames.length > MAX_DESIGN_SYSTEM_CATALOG_PROPERTIES,
+      };
+    })
+    .sort(
+      (left, right) =>
+        Number(right.availability === "current-scope") -
+          Number(left.availability === "current-scope") ||
+        right.scopeUsageCount - left.scopeUsageCount ||
+        right.usageCount - left.usageCount ||
+        left.name.localeCompare(right.name) ||
+        left.componentId.localeCompare(right.componentId),
+    );
+  const components: DesignSystemComponentCatalogEntry[] = [];
+  let serializedCharacters = 2;
+  for (const component of all) {
+    if (components.length >= MAX_DESIGN_SYSTEM_CATALOG_COMPONENTS) break;
+    const characters = JSON.stringify(component).length + 1;
+    if (
+      serializedCharacters + characters >
+      MAX_DESIGN_SYSTEM_CATALOG_CHARACTERS
+    ) {
+      continue;
+    }
+    components.push(component);
+    serializedCharacters += characters;
+  }
+  return {
+    totalCount: all.length,
+    truncated: all.length > components.length,
+    components,
+  };
+}
+
+function boundedDescription(
+  description: string | undefined,
+): Pick<
+  DesignSystemComponentCatalogEntry,
+  "description" | "descriptionTruncated"
+> {
+  if (!description) return {};
+  if (description.length <= 240) return { description };
+  return {
+    description: `${description.slice(0, 239)}…`,
+    descriptionTruncated: true,
+  };
+}
+
+function componentUsageCounts(
+  document: DesignDocument,
+  scope: ReadonlySet<string> | undefined,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const node of Object.values(document.nodesById)) {
+    if (node.kind !== "instance" || (scope && !scope.has(node.id))) continue;
+    const componentId = node.properties.componentId;
+    counts.set(componentId, (counts.get(componentId) ?? 0) + 1);
+  }
+  return counts;
 }
 
 function componentSourceNodeIdsForInspection(

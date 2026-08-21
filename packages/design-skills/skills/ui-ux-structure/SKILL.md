@@ -15,6 +15,8 @@ Plan realistic content and the states that materially affect the composition: lo
 
 Choose components from semantic reuse, stable identity, centralized updates, and controlled variation. A repeated visual shape is not automatically a component; a brand mark, field, control, navigation item, or content module with one durable identity often is. Preserve meaningful nested groups for one-off composites.
 
+Inspect the current Design File's component catalog, styles, and variables before creating a parallel system. Reuse a catalog Component only when its documented semantic job and variant/property surface fit the requested object; create a linked Instance and configure supported properties instead of rebuilding its primitive layers. Visual similarity alone is insufficient, and a missing fit is a reason to create a deliberate new Main or ordinary structure—not to force an unrelated component.
+
 Keep interaction targets, keyboard/focus behavior, safe areas, readable text, contrast, and recovery visible in the plan. Do not solve hierarchy by wrapping every region in a card or by making every action equally prominent.
 
 For the first meaningful slice, make the actionable hierarchy real before adding atmospheric decoration. Decorative systems may connect regions, but they cannot replace field labels, recovery, focus order, status meaning, or a clear primary action.

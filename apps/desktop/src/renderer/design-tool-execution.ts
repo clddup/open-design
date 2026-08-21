@@ -2014,7 +2014,7 @@ function createScopedInspection(
     }),
   );
   const diagnostics = diagnoseDesignPages(document, pageIds);
-  const { componentsById, instancesById, variantSetsById } =
+  const { componentCatalog, componentsById, instancesById, variantSetsById } =
     createScopedComponentInspection(document, nodeIds, nodesById);
   const { designSystemIds: variableDesignSystemIds, ...variableInspection } =
     createScopedVariableInspection(document, pageIds, nodesById);
@@ -2031,6 +2031,7 @@ function createScopedInspection(
       nodesById,
       assetsById,
       componentsById,
+      componentCatalog,
       variantSetsById,
       instancesById,
       ...variableInspection,

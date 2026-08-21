@@ -53,6 +53,17 @@ describe("compact first-slice tool", () => {
 
   it("compiles all targets into the current Plan with pinned skills and a canonical first slice", () => {
     const input = fixture();
+    input.semanticObjects = [
+      {
+        decisionId: "catalog-navigation",
+        label: "Product navigation",
+        decision: "reuse-component",
+        componentId: "component_catalog_navigation",
+        instances: [
+          { targetId: "profile", nodeId: "profile_navigation_instance" },
+        ],
+      },
+    ];
     input.referenceStrategy = {
       synthesis:
         "Transfer the attached reference's tonal hierarchy without changing the requested product semantics.",
@@ -86,6 +97,20 @@ describe("compact first-slice tool", () => {
         prohibitedAdditions: ["No unrequested workflow or run features"],
       },
       referenceStrategy: input.referenceStrategy,
+      componentStrategy: {
+        candidates: [
+          {
+            decision: "reuse-component",
+            componentId: "component_catalog_navigation",
+            instances: [
+              {
+                targetId: "profile",
+                nodeId: "profile_navigation_instance",
+              },
+            ],
+          },
+        ],
+      },
     });
     expect(
       compiled.plan.targets.map((target) => target.artboard.frameId),

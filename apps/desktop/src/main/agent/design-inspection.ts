@@ -12,6 +12,10 @@ import {
 } from "../../shared/design-agent-tools.js";
 import { isAgentDesignIdAllocation } from "../../shared/design-id-allocation.js";
 import {
+  isDesignSystemComponentCatalog,
+  type DesignSystemComponentCatalogEntry,
+} from "../../shared/design-system-component-catalog.js";
+import {
   inspectedNodeBelongsToPage,
   type DesignDeliveryTargetState,
   type InspectedHierarchy,
@@ -155,7 +159,29 @@ export function parseInspectedHierarchy(
       rootNodeId: component.rootNodeId,
     });
   }
+  const rawComponentCatalog = document.componentCatalog;
+  const componentCatalog =
+    rawComponentCatalog === undefined
+      ? { totalCount: 0, truncated: false, components: [] }
+      : isDesignSystemComponentCatalog(rawComponentCatalog)
+        ? rawComponentCatalog
+        : null;
+  if (componentCatalog === null) {
+    throw new Error(
+      "design_workflow.inspection_invalid: Document inspection contains an invalid reusable component catalog; inspect again",
+    );
+  }
+  const catalogComponentsById = new Map<
+    string,
+    DesignSystemComponentCatalogEntry
+  >(
+    componentCatalog.components.map((component) => [
+      component.componentId,
+      structuredClone(component),
+    ]),
+  );
   return {
+    catalogComponentsById,
     componentsById,
     documentId: context.documentId,
     ...(idAllocation === undefined

@@ -535,6 +535,11 @@ describe("Renderer design tool scope", () => {
             newNodeIdPrefix: "odr_run_1_",
           },
           document: {
+            componentCatalog: {
+              totalCount: 0,
+              truncated: false,
+              components: [],
+            },
             variableCollectionsById: { theme: { defaultModeId: "default" } },
             variablesById: { "title-copy": { resolvedType: "STRING" } },
             variableResolutionsByNodeId: {

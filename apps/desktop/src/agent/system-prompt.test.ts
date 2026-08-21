@@ -38,6 +38,12 @@ describe("OpenDesign Agent system prompt", () => {
       "Do not claim completion after the first slice",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("editable SVG Path");
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "inspection.document.componentCatalog",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "decision=reuse-component",
+    );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length).toBeLessThan(16_000);
   });
 
@@ -136,6 +142,10 @@ describe("OpenDesign Agent system prompt", () => {
       "visual style, composition, mood",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("componentStrategy");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "inspection.document.componentCatalog",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("reuse-component");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "For artboard.mode=existing, regions are logical planning and review areas",
     );

@@ -178,6 +178,13 @@ export type DesignFirstSliceToolInput = {
         main: { targetId: string; nodeId: string };
         instances: Array<{ targetId: string; nodeId: string }>;
       }
+    | {
+        decisionId: string;
+        label: string;
+        decision: "reuse-component";
+        componentId: string;
+        instances: Array<{ targetId: string; nodeId: string }>;
+      }
   >;
   firstSlice: {
     targetId: string;
@@ -1001,7 +1008,9 @@ function isSemanticObjects(
         ? object.occurrences
         : object.decision === "component"
           ? [object.main, ...instances]
-          : undefined;
+          : object.decision === "reuse-component"
+            ? instances
+            : undefined;
     if (
       !Array.isArray(occurrences) ||
       occurrences.length < 1 ||
@@ -1028,6 +1037,25 @@ function isSemanticObjects(
       ) {
         return false;
       }
+      continue;
+    }
+    if (object.decision === "reuse-component") {
+      if (
+        !safeId(object.componentId) ||
+        components.has(object.componentId) ||
+        !Array.isArray(object.instances) ||
+        object.instances.length < 1 ||
+        !exactKeys(object, [
+          "decisionId",
+          "label",
+          "decision",
+          "componentId",
+          "instances",
+        ])
+      ) {
+        return false;
+      }
+      components.add(object.componentId);
       continue;
     }
     if (

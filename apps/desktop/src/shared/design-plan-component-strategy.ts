@@ -16,6 +16,14 @@ export type DesignPlanComponentCandidate =
   | {
       decisionId: string;
       label: string;
+      decision: "reuse-component";
+      rationale: string;
+      componentId: string;
+      instances: DesignPlanSemanticOccurrence[];
+    }
+  | {
+      decisionId: string;
+      label: string;
       decision: "ordinary";
       rationale: string;
       occurrences: DesignPlanSemanticOccurrence[];
@@ -39,7 +47,7 @@ const OCCURRENCE_SCHEMA = {
 export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
   type: "object",
   description:
-    "The model's explicit reusable-component judgment. Declare plausible semantic candidates and decide component versus ordinary hierarchy from reuse, stable identity, centralized updates, structural consistency, and intended instance differences; do not classify by object category or a fixed occurrence count.",
+    "Explicit component judgment. Use reuse-component for a compatible componentId from inspection.document.componentCatalog, component when this delivery creates/owns the Main, and ordinary when linked reuse is not justified.",
   properties: {
     summary: { type: "string", minLength: 12, maxLength: 1_000 },
     candidates: {
@@ -47,6 +55,31 @@ export const DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA = {
       maxItems: 24,
       items: {
         oneOf: [
+          {
+            type: "object",
+            properties: {
+              decisionId: { type: "string", minLength: 1, maxLength: 128 },
+              label: { type: "string", minLength: 1, maxLength: 256 },
+              decision: { const: "reuse-component" },
+              rationale: { type: "string", minLength: 12, maxLength: 500 },
+              componentId: { type: "string", minLength: 1, maxLength: 256 },
+              instances: {
+                type: "array",
+                minItems: 1,
+                maxItems: 32,
+                items: OCCURRENCE_SCHEMA,
+              },
+            },
+            required: [
+              "decisionId",
+              "label",
+              "decision",
+              "rationale",
+              "componentId",
+              "instances",
+            ],
+            additionalProperties: false,
+          },
           {
             type: "object",
             properties: {
@@ -129,7 +162,7 @@ export function isDesignPlanComponentStrategy(
     if (!isCandidate(candidate, targetOrder)) return false;
     if (decisionIds.has(candidate.decisionId)) return false;
     decisionIds.add(candidate.decisionId);
-    if (candidate.decision === "component") {
+    if (candidate.decision !== "ordinary") {
       if (componentIds.has(candidate.componentId)) return false;
       componentIds.add(candidate.componentId);
     }
@@ -169,6 +202,19 @@ export function componentStrategyOccurrencesForTarget(
             decisionId: candidate.decisionId,
             decision: "ordinary" as const,
             nodeId: occurrence.nodeId,
+          })),
+      );
+      continue;
+    }
+    if (candidate.decision === "reuse-component") {
+      result.push(
+        ...candidate.instances
+          .filter((instance) => instance.targetId === targetId)
+          .map((instance) => ({
+            decisionId: candidate.decisionId,
+            decision: "component-instance" as const,
+            nodeId: instance.nodeId,
+            componentId: candidate.componentId,
           })),
       );
       continue;
@@ -219,6 +265,23 @@ function isCandidate(
         "decision",
         "rationale",
         "occurrences",
+      ])
+    );
+  }
+  if (value.decision === "reuse-component") {
+    return (
+      safeId(value.componentId, 256) &&
+      Array.isArray(value.instances) &&
+      value.instances.length >= 1 &&
+      value.instances.length <= 32 &&
+      value.instances.every((item) => isOccurrence(item, targetOrder)) &&
+      exactKeys(value, [
+        "decisionId",
+        "label",
+        "decision",
+        "rationale",
+        "componentId",
+        "instances",
       ])
     );
   }
@@ -284,9 +347,9 @@ function isOccurrenceFields(
 function candidateOccurrences(
   candidate: DesignPlanComponentCandidate,
 ): DesignPlanSemanticOccurrence[] {
-  return candidate.decision === "ordinary"
-    ? candidate.occurrences
-    : [candidate.main, ...candidate.instances];
+  if (candidate.decision === "ordinary") return candidate.occurrences;
+  if (candidate.decision === "reuse-component") return candidate.instances;
+  return [candidate.main, ...candidate.instances];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

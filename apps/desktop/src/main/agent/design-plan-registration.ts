@@ -16,8 +16,10 @@ import {
   type DesignPlanToolInput,
   type DesignVisualReviewToolInput,
 } from "../../shared/design-agent-tools.js";
+import type { DesignSystemComponentCatalogEntry } from "../../shared/design-system-component-catalog.js";
 
 export type InspectedHierarchy = {
+  catalogComponentsById: Map<string, DesignSystemComponentCatalogEntry>;
   componentsById: Map<string, { id: string; rootNodeId: string }>;
   documentId: string;
   newNodeIdPrefix?: string;
@@ -81,6 +83,7 @@ export function registerDesignWorkflowPlan(options: {
   // replacement itself is forbidden.
   assertMaterialTargetsRemainStable(existing, plan, targets);
   assertMaterialComponentDecisionsRemainStable(existing, plan);
+  assertReusableComponentsAreAvailable(inspection, plan);
   assertUniquePlannedNodeIds(plan, targets);
   assertCreatedArtboardsDoNotOverlap(inspection, targets);
   if (existing && sameJson(existing.plan, plan)) {
@@ -185,6 +188,24 @@ export function registerDesignWorkflowPlan(options: {
     state,
     status: existing ? "amended" : "accepted",
   };
+}
+
+function assertReusableComponentsAreAvailable(
+  inspection: InspectedHierarchy,
+  plan: DesignPlanToolInput,
+): void {
+  const strategy = designPlanComponentStrategy(plan);
+  if (!strategy) return;
+  const missing = strategy.candidates.find(
+    (candidate) =>
+      candidate.decision === "reuse-component" &&
+      !inspection.catalogComponentsById.has(candidate.componentId),
+  );
+  if (missing?.decision === "reuse-component") {
+    throw new Error(
+      `design_workflow.component_catalog_stale: Reusable Component ${missing.componentId} is not available in the current Design File catalog; inspect again and choose a current catalog Component or create a new Main inside the delivery plan`,
+    );
+  }
 }
 
 function assertMaterialComponentDecisionsRemainStable(

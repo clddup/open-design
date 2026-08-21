@@ -138,6 +138,8 @@ Agent Runtime 与 Main 当前强制执行“Main exact-revision inspection（失
 
 Design Reference Strategy 现把 Run raster 附件明确分为 style/composition/brand reference、content asset 或 ignore；有图 Run 缺少分类、漏图、跨 Run ID、重复 ID 或超过两张 active visual reference 均在 Plan 注册前失败封闭。compact first-slice 编译保留同一策略。Critic 多模态顺序固定为 exact-revision delivery JPEG 在前、最多两张授权 reference 在后，并新增 critical、非补偿 `reference-adherence`；content asset/ignore 不重复进入 Critic。专项自动化覆盖 schema、compact compile、Main 授权绑定、图片顺序和低分阻断。该证据不冒充跨文件 Pattern catalog、持久 Brand Context 或模板/Library。见 ADR-0118。
 
+Design File-local Component catalog 由 Renderer 从同一 inspection revision 投影，最多 64 项并明确 total/truncated；当前 scope Component 优先，其他条目只暴露名称、说明、变体/属性摘要和用量，不暴露 Main subtree。Main 对目录执行 exact-key/唯一 ID/计数/上限校验，Plan `reuse-component` 只接受当前目录 ID，交付内 Instance 继续由 typed Component Service 创建并在最终 inspection 验证链接。专项自动化覆盖目录排序/边界、跨进程解析、普通与 compact Plan、stale ID 拒绝、system/tool context 预算；该证据不冒充跨文件 Library 或普通结构自动 Pattern 发现。见 ADR-0119。
+
 ## 构建结果
 
 Vite 生产构建完成四个环境。共享门禁从实际 `out/` 检查每个预期产物唯一、存在且非空，不要求 macOS 与 Windows 的输出和某次本机构建保持精确字节相等。包体治理应使用明确的大小预算或回归阈值，并按目标平台分别记录，不能拿单个平台的一次构建字节数阻断其他平台。

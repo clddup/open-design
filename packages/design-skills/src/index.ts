@@ -39,7 +39,7 @@ const skills = [
   {
     id: "ui-ux-structure",
     version: 1,
-    hash: "a53ec4e1537422ddf87491b5db54eaff4b46cfee8fa51fab98bd57f8bb5279ff",
+    hash: "699e62caa2100fc8e2c7845bb34358561304997c6c028d3d8516c049f2d04a0f",
     deliverables: ["ui"],
     phases: ["plan"],
     content: uxStructure,

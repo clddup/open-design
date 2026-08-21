@@ -145,6 +145,22 @@ describe("Agent design inspection component strategy", () => {
                 rootNodeId: "component_main",
               },
             },
+            componentCatalog: {
+              totalCount: 1,
+              truncated: false,
+              components: [
+                {
+                  componentId: "component_navigation",
+                  name: "Navigation",
+                  availability: "current-scope",
+                  usageCount: 1,
+                  scopeUsageCount: 1,
+                  variantProperties: {},
+                  properties: [],
+                  propertiesTruncated: false,
+                },
+              ],
+            },
           },
         },
       },
@@ -157,6 +173,9 @@ describe("Agent design inspection component strategy", () => {
     expect(inspection.nodesById.get("instance_1")?.componentId).toBe(
       "component_navigation",
     );
+    expect(
+      inspection.catalogComponentsById.get("component_navigation")?.name,
+    ).toBe("Navigation");
   });
 
   it("reports no component-strategy issues for declared Main, Instance, and ordinary semantic roots", () => {
@@ -344,6 +363,7 @@ function completeInspection(): InspectedHierarchy {
     "component_navigation",
   );
   return {
+    catalogComponentsById: new Map(),
     componentsById: new Map([
       [
         "component_navigation",

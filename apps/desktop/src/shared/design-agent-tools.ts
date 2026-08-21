@@ -303,7 +303,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["new-design" as const],
     },
     description:
-      "Create a design in one rollback-safe call: declare fidelity, intent, requested artboards, quality profiles, and any Run image classifications; then commit all roots plus one meaningful region in targets[0]. Use 1-3 semantic stages and at most 32 elements total, not per stage. Omit host-bound skillRefs. Logo work needs deliverable=logo, three structurally distinct directions, editable Path contours, and monochrome 32/24/16 px evidence. Use inspected Pages, prefixed IDs, non-overlapping artboards, parent-local geometry, descendant quality nodes, and exact font faces. Full tools follow success.",
+      "Create all requested artboard roots and one meaningful targets[0] region in one rollback-safe call. Declare fidelity, intent, quality, image classifications, and component choices. Use 1-3 semantic stages and at most 32 elements total, not per stage. Omit skillRefs. Use inspected Pages, prefixed IDs, parent-local geometry, descendant quality nodes, and exact font faces. Full tools follow success.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,

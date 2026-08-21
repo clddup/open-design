@@ -337,6 +337,29 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
             properties: {
               decisionId: { type: "string", minLength: 1, maxLength: 128 },
               label: ID_SCHEMA,
+              decision: { const: "reuse-component" },
+              componentId: ID_SCHEMA,
+              instances: {
+                type: "array",
+                minItems: 1,
+                maxItems: 32,
+                items: occurrenceSchema(),
+              },
+            },
+            required: [
+              "decisionId",
+              "label",
+              "decision",
+              "componentId",
+              "instances",
+            ],
+            additionalProperties: false,
+          },
+          {
+            type: "object",
+            properties: {
+              decisionId: { type: "string", minLength: 1, maxLength: 128 },
+              label: ID_SCHEMA,
               decision: { const: "ordinary" },
               occurrences: {
                 type: "array",

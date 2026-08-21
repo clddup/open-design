@@ -1168,6 +1168,31 @@ describe("design Agent tool contract", () => {
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
         ...plan,
+        componentStrategy: {
+          summary:
+            "Reuse the existing navigation Component and keep the unique hero ordinary.",
+          candidates: [
+            {
+              decisionId: "catalog-navigation",
+              label: "Product navigation",
+              decision: "reuse-component",
+              rationale:
+                "The catalog Component has the same navigation job and supported variation surface.",
+              componentId: "component_catalog_navigation",
+              instances: [
+                {
+                  targetId: "target_home",
+                  nodeId: "catalog_navigation_instance",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...plan,
         version: 7,
       }),
     ).toBe(false);

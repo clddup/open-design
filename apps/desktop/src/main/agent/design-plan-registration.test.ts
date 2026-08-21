@@ -269,6 +269,50 @@ describe("current Design Plan amendments", () => {
     ).toThrow(/preserve its Main\/Instance role and component ID/i);
   });
 
+  it("accepts only reusable Components present in the current inspection catalog", () => {
+    const reusePlan = plan();
+    reusePlan.componentStrategy = {
+      summary: "Reuse the current product navigation Component.",
+      candidates: [
+        {
+          decisionId: "catalog-navigation",
+          label: "Product navigation",
+          decision: "reuse-component",
+          rationale:
+            "The catalog Component has the same semantic navigation job.",
+          componentId: "component_catalog_navigation",
+          instances: [
+            {
+              targetId: "target_home",
+              nodeId: "catalog_navigation_instance",
+            },
+          ],
+        },
+      ],
+    };
+    expect(() =>
+      registerDesignWorkflowPlan({
+        inspection: inspectedExistingDesign(),
+        plan: reusePlan,
+      }),
+    ).toThrow("design_workflow.component_catalog_stale");
+
+    const inspection = inspectedExistingDesign();
+    inspection.catalogComponentsById.set("component_catalog_navigation", {
+      componentId: "component_catalog_navigation",
+      name: "Product Navigation",
+      availability: "design-file",
+      usageCount: 4,
+      scopeUsageCount: 0,
+      variantProperties: {},
+      properties: [],
+      propertiesTruncated: false,
+    });
+    expect(
+      registerDesignWorkflowPlan({ inspection, plan: reusePlan }).status,
+    ).toBe("accepted");
+  });
+
   it("rejects quality and component reservations shared across targets", () => {
     const duplicateQualityPlan = plan();
     const home = duplicateQualityPlan.targets[0];
@@ -450,6 +494,7 @@ function review(): DesignVisualReviewToolInput {
 
 function inspectedExistingDesign(): InspectedHierarchy {
   return {
+    catalogComponentsById: new Map(),
     componentsById: new Map([
       [
         "component_navigation",
