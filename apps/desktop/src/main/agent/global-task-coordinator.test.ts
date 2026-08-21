@@ -831,6 +831,116 @@ describe("GlobalTaskCoordinator", () => {
     });
   });
 
+  it("requires every Run image to receive one bounded reference decision", async () => {
+    const { store, host, file, opened, pageId } = await setup();
+    const coordinator = new GlobalTaskCoordinator(host, store);
+    const runId = "run_reference_strategy";
+    const attachmentId = `image_${"b".repeat(64)}`;
+    await coordinator.registerRun({
+      type: "run.start",
+      runId,
+      sessionId: "conversation_mobile",
+      prompt: "Use the attached image as visual direction for this interface",
+      attachments: [
+        {
+          attachmentId,
+          name: "reference.png",
+          mimeType: "image/png",
+          byteSize: 4_000,
+        },
+      ],
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      modelSelection,
+      scope: { kind: "page", pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page", pageId },
+    });
+    const context = {
+      runId,
+      sessionId: "conversation_mobile",
+      documentId: file.documentId,
+      revision: opened.document.revision,
+      scope: { kind: "page" as const, pageId, selectedNodeIds: [] },
+      mutationTarget: { kind: "page" as const, pageId },
+    };
+    coordinator.recordDocumentInspection(
+      context,
+      inspectionResult(opened.document, pageId),
+    );
+    const basePlan = qualityProfilePlan(pageId);
+    expect(() => coordinator.registerDesignPlan(context, basePlan)).toThrow(
+      "design_workflow.reference_strategy_required",
+    );
+    expect(() =>
+      coordinator.registerDesignPlan(context, {
+        ...basePlan,
+        referenceStrategy: {
+          synthesis:
+            "Use the authorized reference only for transferable visual decisions.",
+          references: [
+            {
+              attachmentId: `image_${"c".repeat(64)}`,
+              decision: "style-reference",
+              application:
+                "Transfer restrained contrast without copying the original subject.",
+              preserve: ["restrained contrast"],
+              avoid: ["literal copying"],
+            },
+          ],
+        },
+      }),
+    ).toThrow("design_workflow.reference_strategy_invalid");
+
+    const plan: DesignPlanToolInput = {
+      ...basePlan,
+      referenceStrategy: {
+        synthesis:
+          "Use the reference's restrained contrast while preserving the requested product structure.",
+        references: [
+          {
+            attachmentId,
+            decision: "style-reference",
+            application:
+              "Transfer the tonal hierarchy and quiet material contrast into the interface.",
+            preserve: ["tonal hierarchy"],
+            avoid: ["literal composition copy"],
+          },
+        ],
+      },
+    };
+    coordinator.registerDesignPlan(context, plan);
+    coordinator.recordDesignPlanAllocated(
+      runId,
+      plan.targets.map((target) => target.targetId),
+      1,
+    );
+    const draft = draftTargets(pageId, plan.targets);
+    const authorization = coordinator.assertDesignPlanForApply(context, draft);
+    coordinator.recordDesignApplyCompleted(
+      runId,
+      authorization?.input ?? draft,
+      authorization,
+      2,
+    );
+    expect(
+      coordinator.resolveVisualCriticContext(context, 2, {
+        attachmentId: "capture_reference",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "capture.jpg",
+      }),
+    ).toMatchObject({
+      referenceAttachments: [
+        {
+          attachmentId,
+          mimeType: "image/png",
+          byteSize: 4_000,
+        },
+      ],
+    });
+    store.close();
+  });
+
   it("binds review skills from the active non-UI Plan instead of the normalizer default", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);

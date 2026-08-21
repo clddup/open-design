@@ -24,6 +24,7 @@ describe("compact first-slice tool", () => {
     expect(properties.firstSlice.properties.stages.maxItems).toBe(3);
     expect(JSON.stringify(properties.targets)).toContain('"safeNodeIds"');
     expect(JSON.stringify(properties.targets)).toContain('"hitNodeIds"');
+    expect(properties.referenceStrategy.type).toBe("object");
     expect(JSON.stringify(properties)).not.toContain('"skillRefs"');
     expect(
       properties.firstSlice.properties.stages.items.properties.elements
@@ -52,6 +53,20 @@ describe("compact first-slice tool", () => {
 
   it("compiles all targets into the current Plan with pinned skills and a canonical first slice", () => {
     const input = fixture();
+    input.referenceStrategy = {
+      synthesis:
+        "Transfer the attached reference's tonal hierarchy without changing the requested product semantics.",
+      references: [
+        {
+          attachmentId: `image_${"d".repeat(64)}`,
+          decision: "composition-reference",
+          application:
+            "Use its asymmetrical balance and negative-space ratio as directional guidance.",
+          preserve: ["asymmetrical balance"],
+          avoid: ["literal layout copy"],
+        },
+      ],
+    };
     expect(isDesignFirstSliceToolInput(input)).toBe(true);
 
     const compiled = compileDesignFirstSliceToolInput(input);
@@ -70,6 +85,7 @@ describe("compact first-slice tool", () => {
         requiredContent: ["Home and Profile product screens"],
         prohibitedAdditions: ["No unrequested workflow or run features"],
       },
+      referenceStrategy: input.referenceStrategy,
     });
     expect(
       compiled.plan.targets.map((target) => target.artboard.frameId),

@@ -17,4 +17,6 @@ Review the existing non-compensating criteria, and apply these graphic-specific 
 
 If required raster evidence is absent, name it as a failed criterion and require generation or placement as a concrete refinement before approval. Do not let strong typography compensate for a missing subject, and do not let an attractive image compensate for weak hierarchy or unreadable copy.
 
+When the host supplies visual references, judge the declared transferable decisions as one non-compensating reference-adherence criterion. Look for the selected hierarchy, crop, tonal, material, typography, or brand relationship, not a literal replica. Superficial palette matching fails when the declared structural or material direction is absent; copying text, subject, mark, or layout also fails.
+
 For intentionally vector work, judge silhouette, contour quality, proportion, small-size recognition, editability, and whether the visual language is genuinely deliberate. Do not penalize a logo or infographic for lacking photography when photography is not part of its communication job.

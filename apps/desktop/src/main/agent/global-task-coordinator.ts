@@ -1,5 +1,7 @@
 import type {
+  AgentAttachment,
   AgentEvent,
+  AgentImageAttachment,
   AgentRequest,
   DesignMutationTarget,
   SelectionScope,
@@ -28,12 +30,15 @@ import type { WorkspaceStore } from "../project/workspace-store.js";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
   designApplyRequiresPlan,
+  activeVisualReferenceIds,
   designPlanComponentStrategy,
+  designPlanReferenceStrategy,
   designPlanTargets,
   type DesignApplyToolInput,
   type DesignComponentToolInput,
   type DesignPlanTarget,
   type DesignPlanToolInput,
+  type DesignReferenceStrategy,
   type DesignVisualReviewToolInput,
   type PlannedDesignRebaseGuard,
   type PlaceableRasterAssetRole,
@@ -109,6 +114,7 @@ export class GlobalTaskCoordinator {
       mutationTarget: DesignMutationTarget;
       prompt: string;
       modelSelection: ModelSelection;
+      imageAttachments: AgentImageAttachment[];
     }
   >();
   readonly #designPlansByRunId = new Map<string, DesignWorkflowState>();
@@ -239,6 +245,9 @@ export class GlobalTaskCoordinator {
       mutationTarget: structuredClone(request.mutationTarget),
       prompt: request.prompt,
       modelSelection: structuredClone(request.modelSelection),
+      imageAttachments: (request.attachments ?? [])
+        .filter(isImageAttachmentMetadata)
+        .map((attachment) => structuredClone(attachment)),
     });
     return task;
   }
@@ -456,6 +465,10 @@ export class GlobalTaskCoordinator {
         );
       }
     }
+    assertReferenceStrategyMatchesRun(
+      designPlanReferenceStrategy(plan),
+      binding.imageAttachments,
+    );
     const registration = registerDesignWorkflowPlan({
       existing: existingPlan,
       inspection,
@@ -848,6 +861,19 @@ export class GlobalTaskCoordinator {
       observedRevision,
       phase: target.delivery.status === "refined" ? "final" : "draft",
       attachment: structuredClone(attachment),
+      referenceAttachments: activeVisualReferenceIds(
+        state.plan.referenceStrategy,
+      ).map((attachmentId) => {
+        const reference = binding.imageAttachments.find(
+          (candidate) => candidate.attachmentId === attachmentId,
+        );
+        if (!reference) {
+          throw new Error(
+            "design_workflow.reference_unavailable: An active visual reference is no longer authorized for this Run",
+          );
+        }
+        return structuredClone(reference);
+      }),
     };
   }
 
@@ -2221,6 +2247,46 @@ function assertActiveMaterialTargets(
       `design_workflow.active_target_required: Complete ${active.delivery.label} (${active.delivery.targetId}) before writing target ${unexpected}; work one target at a time so the first usable design appears early`,
     );
   }
+}
+
+function assertReferenceStrategyMatchesRun(
+  strategy: DesignReferenceStrategy | undefined,
+  attachments: readonly AgentImageAttachment[],
+): void {
+  if (attachments.length > 0 && strategy === undefined) {
+    throw new Error(
+      "design_workflow.reference_strategy_required: Classify every attached image as a style, composition, brand, content, or ignored reference before writing the design",
+    );
+  }
+  const authorized = new Set(
+    attachments.map((attachment) => attachment.attachmentId),
+  );
+  const declared = new Set(
+    strategy?.references.map((reference) => reference.attachmentId) ?? [],
+  );
+  const unknown = [...declared].find(
+    (attachmentId) => !authorized.has(attachmentId),
+  );
+  const missing = [...authorized].find(
+    (attachmentId) => !declared.has(attachmentId),
+  );
+  if (unknown || missing || declared.size !== authorized.size) {
+    throw new Error(
+      "design_workflow.reference_strategy_invalid: referenceStrategy must classify every image authorized for this Run exactly once and must not name images from another Run",
+    );
+  }
+}
+
+function isImageAttachmentMetadata(
+  attachment: AgentAttachment,
+): attachment is AgentImageAttachment {
+  return (
+    attachment.attachmentId.startsWith("image_") &&
+    (attachment.mimeType === "image/png" ||
+      attachment.mimeType === "image/jpeg" ||
+      attachment.mimeType === "image/webp" ||
+      attachment.mimeType === "image/gif")
+  );
 }
 
 function deliveryLedger(state: DesignWorkflowState): DesignDeliveryLedger {

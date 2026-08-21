@@ -45,6 +45,9 @@ export function compileValidatedDesignFirstSliceToolInput(
     componentStrategy,
     briefFidelity: structuredClone(input.briefFidelity),
     designIntent: structuredClone(input.designIntent),
+    ...(input.referenceStrategy === undefined
+      ? {}
+      : { referenceStrategy: structuredClone(input.referenceStrategy) }),
     skillRefs: structuredClone(input.skillRefs),
     ...(input.logoExploration === undefined
       ? {}

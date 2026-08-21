@@ -135,6 +135,23 @@ describe("current Design Plan amendments", () => {
           index === 0 ? { ...reference, hash: "stale" } : reference,
         ),
       },
+      {
+        ...initialPlan,
+        referenceStrategy: {
+          synthesis:
+            "Apply the supplied composition direction while preserving product semantics.",
+          references: [
+            {
+              attachmentId: `image_${"e".repeat(64)}`,
+              decision: "composition-reference",
+              application:
+                "Transfer the asymmetrical hierarchy and negative-space relationship.",
+              preserve: ["asymmetrical hierarchy"],
+              avoid: ["literal layout copy"],
+            },
+          ],
+        },
+      },
     ];
     for (const amendedPlan of amendments) {
       const amended = registerDesignWorkflowPlan({

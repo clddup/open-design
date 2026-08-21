@@ -158,6 +158,7 @@ export {
   designPlanComponentStrategy,
   designPlanDesignIntent,
   designPlanLogoExploration,
+  designPlanReferenceStrategy,
   designPlanSkillRefs,
   designPlanTargets,
   isDesignPlanToolInput,
@@ -182,6 +183,18 @@ export type {
   PlaceableRasterAssetRole,
   RasterAssetRole,
 } from "./design-agent-plan-review";
+export {
+  DESIGN_REFERENCE_DECISIONS,
+  DESIGN_REFERENCE_STRATEGY_SCHEMA,
+  MAX_ACTIVE_VISUAL_REFERENCES,
+  activeVisualReferenceIds,
+  isActiveVisualReferenceDecision,
+  isDesignReferenceStrategy,
+} from "./design-reference-strategy";
+export type {
+  DesignReferenceDecision,
+  DesignReferenceStrategy,
+} from "./design-reference-strategy";
 export {
   explainInvalidDesignComponentToolInput,
   isDesignComponentToolInput,
@@ -290,7 +303,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       surfaces: ["new-design" as const],
     },
     description:
-      "Create a new design in one rollback-safe call: declare fidelity, intent, all requested artboard roots and quality profiles, then commit allocation plus one meaningful region for targets[0] through EditorRuntime/history. Use 1-3 semantic stages and at most 32 elements total, not per stage; defer excess detail. Main binds deliverable-scoped skill revisions, so omit skillRefs. Logo work uses deliverable=logo, three structurally divergent logoExploration directions, and editable Path contours with monochrome and 32/24/16 px evidence. Use inspected Page IDs, stable prefixed IDs, non-overlapping artboards, parent-local geometry, descendant safe/control hit IDs and explicit font faces; never list the delivery Frame as a quality node. Available only for a high-confidence new-design Run; full tools follow success.",
+      "Create a design in one rollback-safe call: declare fidelity, intent, requested artboards, quality profiles, and any Run image classifications; then commit all roots plus one meaningful region in targets[0]. Use 1-3 semantic stages and at most 32 elements total, not per stage. Omit host-bound skillRefs. Logo work needs deliverable=logo, three structurally distinct directions, editable Path contours, and monochrome 32/24/16 px evidence. Use inspected Pages, prefixed IDs, non-overlapping artboards, parent-local geometry, descendant quality nodes, and exact font faces. Full tools follow success.",
     inputSchema: DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,
@@ -349,7 +362,7 @@ export const DESIGN_AGENT_TOOL_SPECS = [
       role: "plan" as const,
     },
     description:
-      "Define the current executable delivery plan after inspection and before generating imagery or creating design layers. targets must reflect the user's request exactly: one target for one design, or one stable artboard root per requested screen or asset for a set. Main binds the exact locally loaded deliverable-scoped skill revisions; do not send skillRefs. Commit designIntent to a subject, audience, primary job, visual thesis, signature motif, typography/material language, composition tension, and concrete anti-patterns before drawing. Decide the evidence medium from the subject and communication job: when credibility depends on real people, activity, place, product, food, interior, material, or environment, declare a background/hero/supporting-content raster role and generate or place authorized imagery; do not claim generic vector geometry is photographic realism. Logos, diagrams, intentional vector illustration, and explicitly vector briefs may keep rasterAssetRoles empty. briefFidelity records required content, inspected product semantics preserved by default, prohibited unrequested additions, and explicit assumptions; visual restyling is not permission to add, remove, rename, or redefine product capabilities. Every target declares qualityProfile: UI profiles explicitly name platform, interaction mode, safe-area insets, foreground descendant safe-area nodes and actual descendant interaction hit-area nodes; never include the delivery Frame itself. Non-UI targets use graphic. Do not infer device insets from dimensions. componentStrategy identifies plausible reusable semantic objects and binds every occurrence to a stable target/node ID. The host verifies quality geometry, declared Component Mains, Instances, and ordinary semantic containers from the live captured document. Every mode=create target is allocated as a real Page-root Frame and every target still passes draft, capture, review, refinement, and final verification. single-raster is allowed only for one target when singleRasterEvidence quotes an explicit current-user request and component candidates are empty.",
+      "Define the executable delivery plan after inspection and before imagery or design writes. Match requested deliverables exactly and omit host-bound skillRefs. Declare intent, brief fidelity, evidence medium, image classifications, component decisions, stable artboards/regions, and quality profiles. Use imagery when real-world subject evidence matters; vectors may serve logos, diagrams, and intentional illustration. UI quality nodes must be real foreground/control descendants, never the delivery Frame; non-UI uses graphic. Main allocates create targets as Page-root Frames and verifies live geometry, components, capture, review, refinement, and delivery. single-raster requires one explicitly requested flattened target and no component candidates.",
     inputSchema: DESIGN_PLAN_TOOL_INPUT_SCHEMA,
     risk: "design_write" as const,
     approval: "never" as const,

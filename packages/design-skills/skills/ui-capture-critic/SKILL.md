@@ -21,6 +21,8 @@ Review these criteria independently:
 
 These criteria are non-compensating. Strong color does not excuse generic composition; good accessibility does not prove distinctiveness; a signature illustration does not excuse broken hierarchy. Mark every failed criterion explicitly and attach a concrete refinement. Do not approve with generic praise such as “looks polished” or “feels modern”.
 
+When the host supplies visual references, also judge the declared transferable decisions as one non-compensating reference-adherence criterion. Require visible evidence of the selected hierarchy, material, typography, or composition relationship while rejecting literal copying and undeclared borrowing. A design can be original yet fail because it ignored the requested direction; superficial color matching is not adherence.
+
 Treat dark backdrops with cyan lines, concentric scanner rings, HUD microcopy, generic security language, and a conventional form card as template symptoms unless the actual product context requires them and at least two independent visual decisions remain distinctive without those devices. Do not confuse the presence of a planned motif with the motif being original, strong, or well crafted.
 
 The first captured draft must expose at least two real failed criteria. Choose the two most consequential visual shortcomings, not two minor geometry defects. A deterministic layout warning may support a failure, but it cannot be the entire critique when the design is generic, weak at thumbnail scale, or under-crafted.

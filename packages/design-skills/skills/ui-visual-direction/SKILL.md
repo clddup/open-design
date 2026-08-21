@@ -11,6 +11,8 @@ Before drawing, name the subject, audience, primary job, and one visual thesis. 
 
 Commit to one signature motif that can be seen in the first meaningful slice. It may be a distinctive silhouette, spatial rule, type treatment, material behavior, data expression, or interaction surface. It must support the product rather than decorate an otherwise generic template.
 
+When image references are attached, classify their role before drawing. A style reference contributes transferable color, type, material, and edge behavior; a composition reference contributes hierarchy, scale, crop, and negative-space relationships; a brand reference contributes supplied identity constraints. Extract a small set of explicit decisions and explicit avoidances. Do not copy the reference's product semantics, literal layout, text, subject, or brand mark, and do not place a reference image unless it is separately classified as a content asset.
+
 Derive the motif from the actual user job. If the brief is generic, do not invent a fake security system, dashboard, data stream, or brand mythology merely to create visual noise. A login screen can derive character from the transition into the product, the credential relationship, typography, spatial framing, or material behavior without pretending unsupported capabilities exist.
 
 Specify:

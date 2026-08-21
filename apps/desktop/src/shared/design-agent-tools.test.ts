@@ -1115,6 +1115,7 @@ describe("design Agent tool contract", () => {
           targets: { type: "array" },
           componentStrategy: { type: "object" },
           briefFidelity: { type: "object" },
+          referenceStrategy: { type: "object" },
         },
       },
     });
@@ -1136,6 +1137,34 @@ describe("design Agent tool contract", () => {
     expect(validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, plan)).toBe(
       true,
     );
+    const reference = (hex: string) => ({
+      attachmentId: `image_${hex.repeat(64)}`,
+      decision: "style-reference" as const,
+      application:
+        "Transfer the reference's tonal hierarchy without copying its subject.",
+      preserve: ["tonal hierarchy"],
+      avoid: ["literal subject copy"],
+    });
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...plan,
+        referenceStrategy: {
+          synthesis:
+            "Combine the reference's transferable visual decisions with the current product semantics.",
+          references: [reference("a")],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
+        ...plan,
+        referenceStrategy: {
+          synthesis:
+            "Three simultaneous visual references would make generation and critique unbounded.",
+          references: [reference("a"), reference("b"), reference("c")],
+        },
+      }),
+    ).toBe(false);
     expect(
       validateDesignAgentToolInput(DESIGN_PLAN_TOOL_NAME, {
         ...plan,

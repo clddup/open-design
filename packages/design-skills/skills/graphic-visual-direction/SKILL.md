@@ -9,6 +9,8 @@ Use this skill for non-UI visual deliverables. It changes design judgment, never
 
 Choose the evidence medium from the subject, audience, communication job, format, and visual thesis—not from whichever primitive is easiest.
 
+When image references are attached, classify each before drawing. Style references guide transferable color, typography, material, texture, and edge treatment; composition references guide hierarchy, crop, scale, rhythm, and negative space; brand references carry supplied identity constraints; content assets are actual pixels intended for placement. State what to preserve and what to avoid. Do not copy literal layouts, text, subjects, or unrelated marks, and do not mistake a visual reference for evidence that belongs in the final deliverable.
+
 - If credibility depends on real people, activities, places, products, food, interiors, materials, or environments, use an authorized/generated image with a declared `background`, `hero`, or `supporting-content` role. Geometry is not photographic evidence.
 - Prefer editable vectors for logos, symbols, diagrams, infographics, intentional illustration, and explicit vector briefs. Mixed work uses imagery for subject evidence and editable layers for type, branding, masks, charts, and decoration.
 - Keep headlines, logos, dates, prices, CTA, and required copy editable. For generated imagery specify subject, action, setting, viewpoint, lighting, crop, type-safe negative space, and exclusions; reject fake text, watermarks, stock staging, and invented facts.

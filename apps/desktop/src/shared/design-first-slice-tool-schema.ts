@@ -5,6 +5,7 @@ import {
 import type { DesignFirstSliceElement } from "./design-first-slice-tool";
 import { DESIGN_BRIEF_FIDELITY_SCHEMA } from "./design-brief-fidelity";
 import { LOGO_CONCEPT_PRINCIPLES } from "./design-agent-plan-review";
+import { DESIGN_REFERENCE_STRATEGY_SCHEMA } from "./design-reference-strategy";
 
 const ID_SCHEMA = { type: "string", minLength: 1, maxLength: 256 } as const;
 const TEXT_SCHEMA = { type: "string", minLength: 1, maxLength: 1_000 } as const;
@@ -179,6 +180,7 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
       additionalProperties: false,
     },
     briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
+    referenceStrategy: DESIGN_REFERENCE_STRATEGY_SCHEMA,
     targets: {
       type: "array",
       minItems: 1,

@@ -31,7 +31,7 @@ const skills = [
   {
     id: "ui-visual-direction",
     version: 1,
-    hash: "6ae3a0f3c40d9644ed25984b44ffd667fbbe83e561fb9f5ae8f0e15f939dd824",
+    hash: "2d7d09f1095de84031b7880ae0958aa9a98ac3b1752f07d07cc2902396bc30da",
     deliverables: ["ui"],
     phases: ["plan"],
     content: visualDirection,
@@ -47,7 +47,7 @@ const skills = [
   {
     id: "ui-capture-critic",
     version: 1,
-    hash: "b5f752bc336e5f93895546ea7d39ab672afba875df347502cce5262fd8a66035",
+    hash: "dcacdb7788d4271575565b7e30a36cbeb0e1e11e57a6517cedc8290dddd399c2",
     deliverables: ["ui"],
     phases: ["review"],
     content: captureCritic,
@@ -55,7 +55,7 @@ const skills = [
   {
     id: "graphic-visual-direction",
     version: 1,
-    hash: "a0f1b814cb1bb12accd3ab88bcba4e6901e12cfb21bf224ac5764bfea69396fc",
+    hash: "30847b87e4004bf8e646a65bf02aca8726aa69abf875215aa02dd3c41589528d",
     deliverables: [
       "poster",
       "logo",
@@ -70,7 +70,7 @@ const skills = [
   {
     id: "graphic-capture-critic",
     version: 1,
-    hash: "7ddf6b57f6d25c19a3f5321404b11e7fe0dac7263bde1883979a68ef77452f69",
+    hash: "91e0949bb7c1245b5bda0e1b242f1315bbbf614800473c193870f7096327476e",
     deliverables: [
       "poster",
       "logo",
@@ -85,7 +85,7 @@ const skills = [
   {
     id: "logo-visual-direction",
     version: 1,
-    hash: "b92e381295b12a511dc5a77f3d5e457831f2c8bbd98e0145ea8726101bbd2941",
+    hash: "c78f74f3e398d0a272c03432e710ef1a98ac11dccd6847fcdc0698b2c51a5997",
     deliverables: ["logo"],
     phases: ["plan"],
     content: logoVisualDirection,
@@ -93,7 +93,7 @@ const skills = [
   {
     id: "logo-capture-critic",
     version: 1,
-    hash: "0290398ae7e8f10f676b50109af3a723ca1b8cdab75ec6b7faa88d3fc71f45fc",
+    hash: "eef9407c63a7e0d1c4ef63881ede45644d6cd372d2ee4581bbc2ca4587c05b56",
     deliverables: ["logo"],
     phases: ["review"],
     content: logoCaptureCritic,

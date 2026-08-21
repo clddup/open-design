@@ -121,6 +121,10 @@ describe("OpenDesign Agent system prompt", () => {
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("signature motif");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "referenceStrategy is mandatory",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("reference-adherence");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "actual descendant hit-area node IDs",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("text-content-clipped");

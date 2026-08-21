@@ -214,6 +214,73 @@ describe("independent design visual critic", () => {
       }),
     ).toThrow("Exact-revision capture attachment is missing or invalid");
   });
+
+  it("reviews declared visual references as a non-compensating criterion", async () => {
+    const attachmentId = `image_${"a".repeat(64)}`;
+    const context = criticContext("final");
+    context.plan.referenceStrategy = {
+      synthesis:
+        "Transfer the reference's editorial contrast without copying its subject or layout literally.",
+      references: [
+        {
+          attachmentId,
+          decision: "style-reference",
+          application:
+            "Use the reference's hard tonal contrast and restrained material hierarchy.",
+          preserve: ["hard tonal contrast"],
+          avoid: ["literal composition copy"],
+        },
+      ],
+    };
+    context.referenceAttachments = [
+      {
+        attachmentId,
+        name: "reference.png",
+        mimeType: "image/png",
+        byteSize: 4_000,
+      },
+    ];
+    let capturedRequest: Omit<ModelRequest, "signal"> | undefined;
+    const referencedScorecard = {
+      ...scorecard(4),
+      criteria: {
+        ...scorecard(4).criteria,
+        "reference-adherence": {
+          score: 2,
+          evidence:
+            "The delivery ignores the reference's hard tonal contrast and material hierarchy.",
+          refinement:
+            "Rebuild the dominant tonal relationship while preserving the original content.",
+        },
+      },
+    };
+
+    const result = await runIndependentDesignVisualCritic(
+      {
+        complete: (request) => {
+          capturedRequest = request;
+          return Promise.resolve(
+            responseEvents(request.attemptId, referencedScorecard),
+          );
+        },
+      },
+      context,
+      new AbortController().signal,
+    );
+
+    expect(result.failedCriteria).toContain("reference-adherence");
+    const message = capturedRequest?.messages[0];
+    if (message?.role !== "user" || !Array.isArray(message.content)) {
+      throw new Error("Critic reference request is missing multimodal content");
+    }
+    expect(
+      message.content.filter((block) => block.type === "image_ref"),
+    ).toHaveLength(2);
+    expect(message.content.at(-1)).toMatchObject({
+      type: "image_ref",
+      attachmentId,
+    });
+  });
 });
 
 function scorecard(score: number): {
@@ -296,6 +363,7 @@ function criticContext(
       mimeType: "image/jpeg",
       name: "logo-capture.jpg",
     },
+    referenceAttachments: [],
   };
 }
 

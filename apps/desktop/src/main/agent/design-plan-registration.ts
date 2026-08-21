@@ -8,6 +8,7 @@ import {
   designPlanComponentStrategy,
   designPlanDesignIntent,
   designPlanLogoExploration,
+  designPlanReferenceStrategy,
   designPlanSkillRefs,
   designPlanTargets,
   qualityProfileNodeIds,
@@ -110,6 +111,12 @@ export function registerDesignWorkflowPlan(options: {
   const designSkillsChanged =
     existing !== undefined &&
     !sameJson(designPlanSkillRefs(existing.plan), designPlanSkillRefs(plan));
+  const referenceStrategyChanged =
+    existing !== undefined &&
+    !sameJson(
+      designPlanReferenceStrategy(existing.plan),
+      designPlanReferenceStrategy(plan),
+    );
   const targetsById = new Map<string, DesignDeliveryTargetState>();
   const changedTargetIds: string[] = [];
   for (const target of targets) {
@@ -127,7 +134,8 @@ export function registerDesignWorkflowPlan(options: {
         componentStrategyChanged ||
         briefFidelityChanged ||
         designIntentChanged ||
-        designSkillsChanged
+        designSkillsChanged ||
+        referenceStrategyChanged
       )
         changedTargetIds.push(target.targetId);
       targetsById.set(
@@ -142,7 +150,8 @@ export function registerDesignWorkflowPlan(options: {
             componentStrategyChanged ||
             briefFidelityChanged ||
             designIntentChanged ||
-            designSkillsChanged,
+            designSkillsChanged ||
+            referenceStrategyChanged,
         ),
       );
       continue;

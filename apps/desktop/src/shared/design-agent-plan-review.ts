@@ -22,6 +22,11 @@ import {
   type DesignTargetQualityProfile,
 } from "./design-plan-quality-profile";
 import {
+  DESIGN_REFERENCE_STRATEGY_SCHEMA,
+  isDesignReferenceStrategy,
+  type DesignReferenceStrategy,
+} from "./design-reference-strategy";
+import {
   boundedText,
   boundedTextArray,
   exactKeys,
@@ -156,6 +161,7 @@ export type DesignPlanToolInput = {
   componentStrategy: DesignPlanComponentStrategy;
   briefFidelity: DesignBriefFidelity;
   designIntent: DesignIntent;
+  referenceStrategy?: DesignReferenceStrategy;
   skillRefs: BuiltinDesignSkillRef[];
   logoExploration?: DesignLogoExploration;
   singleRasterEvidence?: string;
@@ -501,6 +507,7 @@ export const DESIGN_PLAN_TOOL_INPUT_SCHEMA = {
     componentStrategy: DESIGN_PLAN_COMPONENT_STRATEGY_SCHEMA,
     briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
     designIntent: DESIGN_INTENT_SCHEMA,
+    referenceStrategy: DESIGN_REFERENCE_STRATEGY_SCHEMA,
     logoExploration: DESIGN_LOGO_EXPLORATION_SCHEMA,
     singleRasterEvidence: {
       type: "string",
@@ -610,6 +617,8 @@ export function isDesignPlanToolInput(
     ) ||
     !isDesignBriefFidelity(input.briefFidelity) ||
     !isDesignIntent(input.designIntent) ||
+    (input.referenceStrategy !== undefined &&
+      !isDesignReferenceStrategy(input.referenceStrategy)) ||
     !isBuiltinDesignSkillRefsForDeliverable(
       input.deliverable,
       input.skillRefs,
@@ -626,6 +635,7 @@ export function isDesignPlanToolInput(
       "briefFidelity",
       "designIntent",
       "skillRefs",
+      ...(input.referenceStrategy === undefined ? [] : ["referenceStrategy"]),
       ...(input.logoExploration === undefined ? [] : ["logoExploration"]),
       ...(input.singleRasterEvidence === undefined
         ? []
@@ -737,6 +747,14 @@ export function designPlanDesignIntent(
   plan: DesignPlanToolInput,
 ): DesignIntent {
   return structuredClone(plan.designIntent);
+}
+
+export function designPlanReferenceStrategy(
+  plan: DesignPlanToolInput,
+): DesignReferenceStrategy | undefined {
+  return plan.referenceStrategy === undefined
+    ? undefined
+    : structuredClone(plan.referenceStrategy);
 }
 
 export function designPlanSkillRefs(

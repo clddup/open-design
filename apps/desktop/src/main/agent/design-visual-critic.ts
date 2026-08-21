@@ -1,3 +1,4 @@
+import type { AgentImageAttachment } from "@opendesign/agent-contracts";
 import type { ModelSelection } from "@opendesign/model-gateway";
 import { ModelResponseAccumulator } from "@opendesign/model-gateway";
 import { formatBuiltinDesignReviewSkillBundleForDeliverable } from "@opendesign/design-skills";
@@ -8,6 +9,7 @@ import type {
   DesignVisualCriterion,
   DesignVisualReviewToolInput,
 } from "../../shared/design-agent-tools.js";
+import { activeVisualReferenceIds } from "../../shared/design-agent-tools.js";
 
 const GENERIC_CRITERIA = [
   "visual-thesis",
@@ -33,7 +35,12 @@ const LOGO_CRITERIA = [
   "component-system-integrity",
 ] as const;
 
-type CriticCriterionId = DesignVisualCriterion | (typeof LOGO_CRITERIA)[number];
+const REFERENCE_CRITERION = "reference-adherence" as const;
+
+type CriticCriterionId =
+  | DesignVisualCriterion
+  | (typeof LOGO_CRITERIA)[number]
+  | typeof REFERENCE_CRITERION;
 
 export type DesignVisualCriticResult = {
   version: 1;
@@ -68,6 +75,7 @@ export type DesignVisualCriticContext = {
   observedRevision: number;
   phase: "draft" | "final";
   attachment: DesignVisualCriticAttachment;
+  referenceAttachments: AgentImageAttachment[];
 };
 
 const SUBMIT_CRITIQUE_TOOL = "opendesign_submit_independent_visual_critique";
@@ -93,6 +101,7 @@ export async function runIndependentDesignVisualCritic(
         "You did not author this design. You receive no author conversation, reasoning, tool history, or self-review. Judge only the user brief, frozen target contract, and exact-revision capture.",
         "Call the critique tool exactly once. Do not answer with prose. Scores are integers from 1 (unacceptable) to 5 (delivery quality). Attractive presentation cannot compensate for a failed criterion.",
         "At final phase, use pass only when every criterion is independently delivery-ready. At draft phase, identify the most consequential real defects, not invented praise or minor filler.",
+        "When visual references are supplied, the first image is always the delivery capture and later images are the authorized references named in the JSON contract. Judge the declared transferable decisions and avoidances; do not demand literal copying or confuse a content asset with a style reference.",
         formatBuiltinDesignReviewSkillBundleForDeliverable(
           context.plan.deliverable,
         ),
@@ -113,11 +122,20 @@ export async function runIndependentDesignVisualCritic(
                 visualSystem: context.plan.visualSystem,
                 briefFidelity: context.plan.briefFidelity,
                 designIntent: context.plan.designIntent,
+                referenceStrategy: context.plan.referenceStrategy,
+                deliveryCaptureAttachmentId: context.attachment.attachmentId,
+                visualReferenceAttachmentIds: context.referenceAttachments.map(
+                  (attachment) => attachment.attachmentId,
+                ),
                 logoExploration: context.plan.logoExploration,
                 requiredCriteria: criterionIds,
               }),
             },
             { type: "image_ref", ...context.attachment },
+            ...context.referenceAttachments.map((attachment) => ({
+              type: "image_ref" as const,
+              ...attachment,
+            })),
           ],
         },
       ],
@@ -177,6 +195,9 @@ export async function runIndependentDesignVisualCritic(
           "glance-legibility",
           "template-avoidance",
         ]);
+  if (criterionIds.includes(REFERENCE_CRITERION)) {
+    criticalIds.add(REFERENCE_CRITERION);
+  }
   const failedCriteria = criterionIds.filter((id) => {
     const score = parsed.criteria[id].score;
     return score < (criticalIds.has(id) ? 4 : 3);
@@ -210,6 +231,9 @@ function criticCriteria(plan: DesignPlanToolInput): CriticCriterionId[] {
   return [
     ...GENERIC_CRITERIA,
     ...(plan.deliverable === "logo" ? LOGO_CRITERIA : []),
+    ...(activeVisualReferenceIds(plan.referenceStrategy).length > 0
+      ? [REFERENCE_CRITERION]
+      : []),
   ];
 }
 

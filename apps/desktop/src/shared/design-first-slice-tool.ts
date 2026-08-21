@@ -14,6 +14,10 @@ import {
   DESIGN_FIRST_SLICE_MAX_ELEMENTS,
   DESIGN_FIRST_SLICE_MAX_STAGES,
 } from "./design-first-slice-budget";
+import {
+  isDesignReferenceStrategy,
+  type DesignReferenceStrategy,
+} from "./design-reference-strategy";
 
 export { DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA } from "./design-first-slice-tool-schema";
 export {
@@ -105,6 +109,7 @@ export type DesignFirstSliceToolInput = {
     | "other";
   objective: string;
   designIntent: DesignIntent;
+  referenceStrategy?: DesignReferenceStrategy;
   skillRefs: BuiltinDesignSkillRef[];
   briefFidelity: DesignBriefFidelity;
   targets: Array<{
@@ -205,6 +210,8 @@ export function isDesignFirstSliceToolInput(
     !value.targets.every(isTarget) ||
     !isVisualSystem(value.visualSystem) ||
     !isRasterRoles(value.rasterAssetRoles) ||
+    (value.referenceStrategy !== undefined &&
+      !isDesignReferenceStrategy(value.referenceStrategy)) ||
     (value.semanticObjects !== undefined &&
       (!Array.isArray(value.semanticObjects) ||
         value.semanticObjects.length > 24)) ||
@@ -223,6 +230,7 @@ export function isDesignFirstSliceToolInput(
       "targets",
       "visualSystem",
       "rasterAssetRoles",
+      ...(value.referenceStrategy === undefined ? [] : ["referenceStrategy"]),
       ...(value.logoExploration === undefined ? [] : ["logoExploration"]),
       ...(value.semanticObjects === undefined ? [] : ["semanticObjects"]),
       "firstSlice",
@@ -367,6 +375,7 @@ export function explainInvalidDesignFirstSliceToolInput(
     "targets",
     "visualSystem",
     "rasterAssetRoles",
+    "referenceStrategy",
     "logoExploration",
     "semanticObjects",
     "firstSlice",
@@ -414,6 +423,14 @@ export function explainInvalidDesignFirstSliceToolInput(
   if (!isDesignBriefFidelity(input.briefFidelity)) {
     return invalidFirstSliceMessage(
       "/briefFidelity: must contain the current requiredContent, preservedSemantics, prohibitedAdditions, and assumptions arrays",
+    );
+  }
+  if (
+    input.referenceStrategy !== undefined &&
+    !isDesignReferenceStrategy(input.referenceStrategy)
+  ) {
+    return invalidFirstSliceMessage(
+      "/referenceStrategy: must classify each image attachment once and use at most two active visual references",
     );
   }
   if (!Array.isArray(input.targets) || input.targets.length < 1) {
