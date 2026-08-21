@@ -82,7 +82,7 @@ describe("OpenDesign Agent system prompt", () => {
     expect(fast).toContain("one requested Logo/Icon focused");
     expect(fast).not.toContain("logoOutputs is optional");
     expect(fast).toContain("may complete directly");
-    expect(fast).toContain("one focused refinement");
+    expect(fast).toContain("do not wait for an independent Provider critic");
     expect(thorough).toContain("execution depth: THOROUGH");
     expect(thorough).toContain("first meaningful real revision immediately");
   });
@@ -143,7 +143,7 @@ describe("OpenDesign Agent system prompt", () => {
       "Submit the current contract",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "independent stateless visual critic",
+      "stateless independent critic",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("signature motif");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
@@ -173,7 +173,7 @@ describe("OpenDesign Agent system prompt", () => {
       "always set node.childIds to an empty array",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "does not unlock opendesign_record_visual_review",
+      "Call record_visual_review only when reviewEligible is explicitly true",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "A high-confidence new-design Run exposes generate_first_slice",
@@ -181,7 +181,9 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "use opendesign_design_checkpoint action apply-and-capture",
     );
-    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("refine-and-capture");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "thorough mode also returns independent critic findings",
+    );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).not.toContain(
       "review-refine-and-capture",
     );

@@ -20,7 +20,7 @@ export type DesignCheckpointToolInput =
 export const DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "A host-conditional design checkpoint. apply-and-capture commits one material transaction and captures only its successful revision. refine-and-capture consumes the independent critic findings returned by the previous capture, commits one refinement, then captures only the successful refined revision.",
+    "A host-conditional design checkpoint. apply-and-capture commits one material transaction and captures only its successful revision; fast mode returns deterministic verification while thorough mode may return independent critic findings. refine-and-capture consumes those thorough-mode findings, commits one refinement, then captures only the successful refined revision.",
   properties: {
     version: { const: 1 },
     action: {

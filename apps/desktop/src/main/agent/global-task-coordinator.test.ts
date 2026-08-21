@@ -1707,12 +1707,11 @@ describe("GlobalTaskCoordinator", () => {
           target.artboard.frameId,
           target.qualityProfile,
         ),
-        independentCritic(2, true),
       ),
     ).toMatchObject({
       nextAction: "complete-delivery",
       verified: true,
-      critic: { passed: true },
+      verification: "deterministic-fast-delivery",
     });
     expect(
       coordinator.getDeliveryLedger(context.runId)?.targets[0],
@@ -1725,7 +1724,7 @@ describe("GlobalTaskCoordinator", () => {
     store.close();
   });
 
-  it("bounds fast subjective review to one focused refinement", async () => {
+  it("verifies fast delivery without a Provider critic or forced refinement", async () => {
     const { store, host, file, opened, pageId } = await setup();
     const coordinator = new GlobalTaskCoordinator(host, store);
     await coordinator.registerRun({
@@ -1799,6 +1798,14 @@ describe("GlobalTaskCoordinator", () => {
       inspectionResult(draftedDocument, pageId),
     );
     expect(
+      coordinator.resolveVisualCriticContext(context, 2, {
+        attachmentId: "capture_fast",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "fast.jpg",
+      }),
+    ).toBeNull();
+    expect(
       coordinator.recordCanvasCapture(
         context,
         2,
@@ -1808,64 +1815,20 @@ describe("GlobalTaskCoordinator", () => {
           target.artboard.frameId,
           target.qualityProfile,
         ),
-        independentCritic(2, false),
       ),
     ).toMatchObject({
-      nextAction: "refine-independent-critic-findings",
-      critic: { passed: false },
-    });
-
-    const refinement: DesignApplyToolInput = {
-      label: "Apply focused critic refinement",
-      commands: [
-        {
-          commandId: "refine_fast_target",
-          type: "update_properties",
-          nodeId: target.composition.regions[0]?.nodeId ?? "missing_region",
-          opacity: 0.98,
-        },
-      ],
-    };
-    const refinementAuthorization = coordinator.assertDesignPlanForApply(
-      context,
-      refinement,
-    );
-    coordinator.recordDesignApplyCompleted(
-      context.runId,
-      refinement,
-      refinementAuthorization,
-      3,
-    );
-    const refinedDocument = structuredClone(draftedDocument);
-    refinedDocument.revision = 3;
-    coordinator.recordDocumentInspection(
-      context,
-      inspectionResult(refinedDocument, pageId),
-    );
-
-    const finalCapture = coordinator.recordCanvasCapture(
-      context,
-      3,
-      diagnoseDesignTargetLayout(
-        refinedDocument,
-        pageId,
-        target.artboard.frameId,
-        target.qualityProfile,
-      ),
-      independentCritic(3, false),
-    );
-    expect(finalCapture).toMatchObject({
       nextAction: "complete-delivery",
       verified: true,
-      critic: { passed: false },
+      verification: "deterministic-fast-delivery",
     });
-    expect(finalCapture).toHaveProperty(
-      "qualityAdvisory.refinements",
-      visualReview.refinements,
-    );
     expect(
       coordinator.getDeliveryLedger(context.runId)?.targets[0],
-    ).toMatchObject({ status: "verified", verifiedRevision: 3 });
+    ).toMatchObject({
+      status: "verified",
+      captureRevision: 2,
+      reviewRevision: 2,
+      verifiedRevision: 2,
+    });
     store.close();
   });
 
@@ -1956,9 +1919,9 @@ describe("GlobalTaskCoordinator", () => {
     });
 
     const draft = draftTargets(pageId, plan.targets);
-    expect(() => coordinator.assertDesignPlanForApply(context, draft)).toThrow(
-      "design_workflow.active_target_required",
-    );
+    expect(coordinator.assertDesignPlanForApply(context, draft)).toMatchObject({
+      targetIds: ["target_home", "target_profile"],
+    });
     const homeDraft = draftTargets(pageId, [homeTarget]);
     const draftAuthorization = coordinator.assertDesignPlanForApply(
       context,

@@ -697,9 +697,11 @@ export class GlobalTaskCoordinator {
     )?.generationMode;
     if (
       generationMode === "fast" &&
-      visualCritic?.passed === true &&
+      visualCritic === undefined &&
       (target.delivery.status === "drafted" ||
-        target.delivery.status === "captured")
+        target.delivery.status === "captured" ||
+        target.delivery.status === "reviewed" ||
+        target.delivery.status === "refined")
     ) {
       const inspection = this.#inspectionsByRunId.get(context.runId);
       if (!inspection || inspection.revision !== observedRevision) {
@@ -714,7 +716,6 @@ export class GlobalTaskCoordinator {
       );
       target.captureCount = captureSequence;
       target.lastCaptureRevision = observedRevision;
-      target.lastReview = structuredClone(visualCritic.review);
       target.reviewedCaptureCount = captureSequence;
       target.reviewedCaptureRevision = observedRevision;
       target.delivery = {
@@ -734,7 +735,7 @@ export class GlobalTaskCoordinator {
           : "complete-delivery",
         reviewEligible: false,
         verified: true,
-        critic: publicCriticResult(visualCritic),
+        verification: "deterministic-fast-delivery",
         ...(componentStrategy.issueCount === 0 ? {} : { componentStrategy }),
       };
     }
@@ -762,54 +763,6 @@ export class GlobalTaskCoordinator {
         nextAction: "refine-independent-critic-findings",
         reviewEligible: false,
         critic: publicCriticResult(visualCritic),
-      };
-    }
-    if (
-      generationMode === "fast" &&
-      visualCritic !== undefined &&
-      target.delivery.status === "refined"
-    ) {
-      const inspection = this.#inspectionsByRunId.get(context.runId);
-      if (!inspection || inspection.revision !== observedRevision) {
-        throw new Error(
-          "design_workflow.delivery_verification_required: Fast delivery requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
-        );
-      }
-      const componentStrategy = assertDeliveryTargetStructure(
-        inspection,
-        target,
-        state.plan,
-      );
-      target.captureCount = captureSequence;
-      target.lastCaptureRevision = observedRevision;
-      target.lastReview = structuredClone(visualCritic.review);
-      target.reviewedCaptureCount = captureSequence;
-      target.reviewedCaptureRevision = observedRevision;
-      target.delivery = {
-        ...target.delivery,
-        status: "verified",
-        verifiedRevision: observedRevision,
-      };
-      this.#persistDelivery(context.runId, state);
-      return {
-        captureSequence,
-        capturedRevision: observedRevision,
-        deliveryTargetId: target.delivery.targetId,
-        nextAction: nextIncompleteTarget(state)
-          ? "continue-next-target"
-          : "complete-delivery",
-        reviewEligible: false,
-        verified: true,
-        critic: publicCriticResult(visualCritic),
-        ...(visualCritic.passed
-          ? {}
-          : {
-              qualityAdvisory: {
-                summary: visualCritic.summary,
-                refinements: [...visualCritic.refinements],
-              },
-            }),
-        ...(componentStrategy.issueCount === 0 ? {} : { componentStrategy }),
       };
     }
     if (
@@ -943,6 +896,7 @@ export class GlobalTaskCoordinator {
       !state ||
       !target ||
       !binding ||
+      binding.generationMode === "fast" ||
       target.delivery.status === "pending" ||
       target.delivery.status === "allocated" ||
       target.delivery.status === "verified"
@@ -1159,7 +1113,7 @@ export class GlobalTaskCoordinator {
     if (target.delivery.status !== "captured") {
       this.assertVisualReviewBeforeWrite(context);
     }
-    assertActiveMaterialTargets(state, [target.delivery.targetId]);
+    assertDeliveryAcceptsMaterialWrites(state);
     return state.plan;
   }
 
@@ -1189,7 +1143,7 @@ export class GlobalTaskCoordinator {
       this.#inspectionsByRunId.get(context.runId),
       reservedNodeIdsForTargets(state, targetIds),
     );
-    assertActiveMaterialTargets(state, targetIds);
+    assertDeliveryAcceptsMaterialWrites(state);
     const rebaseTargets = targetIds.flatMap((targetId) => {
       const target = state.targetsById.get(targetId);
       if (!target?.artboardEstablished) return [];
@@ -1260,7 +1214,7 @@ export class GlobalTaskCoordinator {
       this.#inspectionsByRunId.get(context.runId),
       reservedNodeIdsForTargets(state, targetIds),
     );
-    assertActiveMaterialTargets(state, targetIds);
+    assertDeliveryAcceptsMaterialWrites(state);
     return {
       input: resolvedInput,
       plan: state.plan,
@@ -1410,7 +1364,7 @@ export class GlobalTaskCoordinator {
       );
     }
     const targetIds = [...targets];
-    assertActiveMaterialTargets(state, targetIds);
+    assertDeliveryAcceptsMaterialWrites(state);
     return targetIds;
   }
 
@@ -2326,23 +2280,10 @@ function nextIncompleteTarget(
     .find((target) => target?.delivery.status !== "verified");
 }
 
-function assertActiveMaterialTargets(
-  state: DesignWorkflowState,
-  targetIds: readonly string[],
-): void {
-  if (targetIds.length === 0) return;
-  const active = nextIncompleteTarget(state);
-  if (!active) {
+function assertDeliveryAcceptsMaterialWrites(state: DesignWorkflowState): void {
+  if (!nextIncompleteTarget(state)) {
     throw new Error(
       "design_workflow.delivery_already_verified: Every planned target is already verified; amend the plan before applying more material changes",
-    );
-  }
-  const unexpected = targetIds.find(
-    (targetId) => targetId !== active.delivery.targetId,
-  );
-  if (unexpected) {
-    throw new Error(
-      `design_workflow.active_target_required: Complete ${active.delivery.label} (${active.delivery.targetId}) before writing target ${unexpected}; work one target at a time so the first usable design appears early`,
     );
   }
 }
