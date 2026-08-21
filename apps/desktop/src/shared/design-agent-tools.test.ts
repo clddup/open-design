@@ -1306,28 +1306,25 @@ describe("design Agent tool contract", () => {
       properties: {
         version: { const: 1 },
         action: {
-          enum: ["apply-and-capture", "review-refine-and-capture"],
+          enum: ["apply-and-capture", "refine-and-capture"],
         },
       },
       oneOf: [{ additionalProperties: false }, { additionalProperties: false }],
       additionalProperties: false,
     });
     expect(checkpointSpec?.inputSchema).toHaveProperty("properties.apply");
-    expect(checkpointSpec?.inputSchema).toHaveProperty("properties.review");
     expect(checkpointSpec?.inputSchema).toHaveProperty("properties.refinement");
     expect(
       validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
         version: 1,
-        action: "review-refine-and-capture",
-        review,
+        action: "refine-and-capture",
         refinement: checkpointApply,
       }),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_CHECKPOINT_TOOL_NAME, {
         version: 1,
-        action: "review-refine-and-capture",
-        review,
+        action: "refine-and-capture",
       }),
     ).toBe(false);
     expect(

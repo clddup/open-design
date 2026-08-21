@@ -54,6 +54,10 @@ import {
   handleFirstSliceCheckpoint,
 } from "./agent/design-checkpoint-tool-handler";
 import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
+import {
+  requireDesignVisualCriticAttachment,
+  runIndependentDesignVisualCritic,
+} from "./agent/design-visual-critic";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
 import { GlobalTaskCoordinator } from "./agent/global-task-coordinator";
@@ -1331,6 +1335,15 @@ void app.whenReady().then(async () => {
             "Canvas capture returned invalid structured content",
           );
         }
+        const observedRevision = result.observedRevision;
+        if (
+          !Number.isSafeInteger(observedRevision) ||
+          observedRevision == null
+        ) {
+          throw new Error(
+            "design_workflow.capture_revision_invalid: Canvas capture did not return a valid document revision",
+          );
+        }
         const layoutQuality = requireCanvasCaptureLayoutQuality(
           result,
           context.documentId,
@@ -1345,15 +1358,38 @@ void app.whenReady().then(async () => {
           input: {},
         });
         globalTaskCoordinator!.recordDocumentInspection(context, inspection);
-        if (inspection.observedRevision !== result.observedRevision) {
+        if (inspection.observedRevision !== observedRevision) {
           throw new Error(
             "design_workflow.capture_revision_invalid: The document changed between the rendered capture and its authoritative verification; capture the current target again",
           );
         }
+        let visualCritic:
+          | Awaited<ReturnType<typeof runIndependentDesignVisualCritic>>
+          | undefined;
+        if (layoutQuality === undefined || layoutQuality.errorCount === 0) {
+          const attachment = requireDesignVisualCriticAttachment(
+            result.content,
+          );
+          const criticContext =
+            globalTaskCoordinator!.resolveVisualCriticContext(
+              context,
+              observedRevision,
+              attachment,
+            );
+          if (criticContext) {
+            stageProgress?.("Running independent visual critic", 0.94);
+            visualCritic = await runIndependentDesignVisualCritic(
+              requireModelProviderHost(),
+              criticContext,
+              signal,
+            );
+          }
+        }
         const reviewWorkflow = globalTaskCoordinator!.recordCanvasCapture(
           context,
-          result.observedRevision,
+          observedRevision,
           layoutQuality,
+          visualCritic,
         );
         return {
           ...result,
@@ -1418,10 +1454,11 @@ void app.whenReady().then(async () => {
           call,
           {
             apply: executeDesignApply,
+            assertRefinementReady: () =>
+              globalTaskCoordinator!.assertDesignRefinementReady(context),
             capture: executeCanvasCapture,
             getDelivery: () =>
               globalTaskCoordinator!.getDeliveryLedger(context.runId),
-            review: recordVisualReview,
           },
           reportProgress,
         );

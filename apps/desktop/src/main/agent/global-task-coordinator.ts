@@ -13,6 +13,7 @@ import type {
   DesignOperation,
   Transform,
 } from "@opendesign/design-contracts";
+import type { ModelSelection } from "@opendesign/model-gateway";
 import type { DesignLayoutQualityReport } from "@opendesign/editor-runtime";
 import {
   DESIGN_DELIVERY_LEDGER_VERSION,
@@ -58,6 +59,10 @@ import {
   conversationActivityAt,
   projectGlobalTaskLifecycle,
 } from "./global-task-lifecycle.js";
+import type {
+  DesignVisualCriticContext,
+  DesignVisualCriticResult,
+} from "./design-visual-critic.js";
 
 type RunStartRequest = Extract<AgentRequest, { type: "run.start" }>;
 
@@ -79,6 +84,19 @@ const activeLifecycles = new Set<GlobalTaskLifecycle>([
   "waiting_approval",
 ]);
 
+function publicCriticResult(result: DesignVisualCriticResult) {
+  return {
+    version: result.version,
+    observedRevision: result.observedRevision,
+    passed: result.passed,
+    averageScore: result.averageScore,
+    summary: result.summary,
+    criteria: structuredClone(result.criteria),
+    failedCriteria: [...result.failedCriteria],
+    refinements: [...result.refinements],
+  };
+}
+
 export class GlobalTaskCoordinator {
   readonly #tasksByRunId = new Map<string, GlobalTaskProjection>();
   readonly #toolBindingsByRunId = new Map<
@@ -90,6 +108,7 @@ export class GlobalTaskCoordinator {
       scope: SelectionScope;
       mutationTarget: DesignMutationTarget;
       prompt: string;
+      modelSelection: ModelSelection;
     }
   >();
   readonly #designPlansByRunId = new Map<string, DesignWorkflowState>();
@@ -219,6 +238,7 @@ export class GlobalTaskCoordinator {
       scope: structuredClone(request.scope),
       mutationTarget: structuredClone(request.mutationTarget),
       prompt: request.prompt,
+      modelSelection: structuredClone(request.modelSelection),
     });
     return task;
   }
@@ -583,6 +603,7 @@ export class GlobalTaskCoordinator {
     context: TrustedToolContext,
     observedRevision = context.revision,
     layoutQuality?: DesignLayoutQualityReport,
+    visualCritic?: DesignVisualCriticResult,
   ) {
     this.assertDesignToolContext(context);
     if (!Number.isSafeInteger(observedRevision) || observedRevision < 0) {
@@ -647,9 +668,68 @@ export class GlobalTaskCoordinator {
         },
       };
     }
+    if (
+      visualCritic !== undefined &&
+      visualCritic.observedRevision !== observedRevision
+    ) {
+      throw new Error(
+        "design_workflow.visual_critic_unavailable: The independent visual critic does not match the exact captured revision",
+      );
+    }
+    if (
+      visualCritic !== undefined &&
+      (target.delivery.status === "drafted" ||
+        target.delivery.status === "captured")
+    ) {
+      target.captureCount = captureSequence;
+      target.lastCaptureRevision = observedRevision;
+      target.lastReview = structuredClone(visualCritic.review);
+      target.reviewedCaptureCount = captureSequence;
+      target.reviewedCaptureRevision = observedRevision;
+      target.delivery = {
+        ...target.delivery,
+        status: "reviewed",
+        captureRevision: observedRevision,
+        reviewRevision: observedRevision,
+      };
+      this.#persistDelivery(context.runId, state);
+      return {
+        captureSequence,
+        capturedRevision: observedRevision,
+        deliveryTargetId: target.delivery.targetId,
+        nextAction: "refine-independent-critic-findings",
+        reviewEligible: false,
+        critic: publicCriticResult(visualCritic),
+      };
+    }
+    if (
+      visualCritic !== undefined &&
+      target.delivery.status === "refined" &&
+      !visualCritic.passed
+    ) {
+      target.captureCount = captureSequence;
+      target.lastCaptureRevision = observedRevision;
+      target.lastReview = structuredClone(visualCritic.review);
+      target.reviewedCaptureCount = captureSequence;
+      target.reviewedCaptureRevision = observedRevision;
+      this.#persistDelivery(context.runId, state);
+      return {
+        captureSequence,
+        capturedRevision: observedRevision,
+        deliveryTargetId: target.delivery.targetId,
+        nextAction: "refine-independent-critic-findings",
+        reviewEligible: false,
+        critic: publicCriticResult(visualCritic),
+      };
+    }
     let componentStrategy:
       ReturnType<typeof assertDeliveryTargetStructure> | undefined;
     if (target.delivery.status === "refined") {
+      if (visualCritic === undefined) {
+        throw new Error(
+          "design_workflow.visual_critic_unavailable: Final delivery verification requires an independent visual critic for the exact captured revision",
+        );
+      }
       const inspection = this.#inspectionsByRunId.get(context.runId);
       if (!inspection || inspection.revision !== observedRevision) {
         throw new Error(
@@ -740,6 +820,37 @@ export class GlobalTaskCoordinator {
     return { kind: "page", pageId };
   }
 
+  resolveVisualCriticContext(
+    context: TrustedToolContext,
+    observedRevision: number,
+    attachment: DesignVisualCriticContext["attachment"],
+  ): DesignVisualCriticContext | null {
+    this.assertDesignToolContext(context);
+    const state = this.#designPlansByRunId.get(context.runId);
+    const target = state ? nextCaptureTarget(state) : undefined;
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (
+      !state ||
+      !target ||
+      !binding ||
+      target.delivery.status === "pending" ||
+      target.delivery.status === "allocated" ||
+      target.delivery.status === "verified"
+    ) {
+      return null;
+    }
+    return {
+      runId: context.runId,
+      modelSelection: structuredClone(binding.modelSelection),
+      userRequest: binding.prompt,
+      plan: structuredClone(state.plan),
+      target: structuredClone(target.planned),
+      observedRevision,
+      phase: target.delivery.status === "refined" ? "final" : "draft",
+      attachment: structuredClone(attachment),
+    };
+  }
+
   registerVisualReview(
     context: TrustedToolContext,
     review: DesignVisualReviewToolInput,
@@ -795,6 +906,20 @@ export class GlobalTaskCoordinator {
     if (state && firstTargetWithStatus(state, "captured")) {
       throw new Error(
         "Record a structured visual review of the latest canvas capture before refining the design",
+      );
+    }
+  }
+
+  assertDesignRefinementReady(context: TrustedToolContext): void {
+    const state = this.#requireDesignPlan(context);
+    const target = nextCaptureTarget(state);
+    if (
+      !target ||
+      (target.delivery.status !== "reviewed" &&
+        target.delivery.status !== "refined")
+    ) {
+      throw new Error(
+        "design_workflow.visual_review_required: Capture the complete material draft and use its trusted independent visual review before starting the refinement checkpoint",
       );
     }
   }

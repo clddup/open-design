@@ -117,7 +117,7 @@ describe("OpenDesign Agent system prompt", () => {
       "Submit the current contract",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "current typed Visual Review",
+      "independent stateless visual critic",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("signature motif");
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
@@ -146,6 +146,10 @@ describe("OpenDesign Agent system prompt", () => {
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "use opendesign_design_checkpoint action apply-and-capture",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain("refine-and-capture");
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).not.toContain(
+      "review-refine-and-capture",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "smallest meaningful visible region or vertical slice",

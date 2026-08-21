@@ -134,6 +134,8 @@ Agent Runtime 与 Main 当前强制执行“Main exact-revision inspection（失
 
 `DesignLayoutQualityReport v6` 现在从 exact-revision Component Service 投影检查完整 Instance subtree、稳定 `instanceId + sourcePath` provenance、内部 clipping ancestor chain 和派生 Text production-provider evidence。确定性 error capture 不进入 Visual Review；Coordinator 返回 `repair-layout-overflow`，`opendesign_arrange_layers` 以一次事务扩展安全 trailing-edge artboard/持久 clipping Frame，unsafe 结构失败封闭并要求 inspect 后显式修复。专项自动化覆盖派生 root/child 裁切、严格 report schema、artboard 与内部 Frame 扩容、单 revision/undo 和清洁 recapture 后恢复 verified；审美独立 critic 与生成 rubric 不由该几何切片冒充完成。见 ADR-0116。
 
+生产 Frame capture 的视觉门禁已改为无作者上下文的 stateless critic：Main 复用 Run provider/model 身份与内容寻址 JPEG，但不继承作者 reasoning effort；请求只含 latest brief、active target contract 和 deliverable review skills，不含作者消息、reasoning 或工具历史。严格内部 tool schema 返回每项 1..5 分和像素证据；Draft 至少返回两条可执行 refinement，附带 prose、重复/额外 tool call、缺失/额外 criterion 均失败封闭。宿主自行计算 critical/ordinary threshold、平均分、failed criteria 与 refinement。Logo 专项阻断通用方块/字母变体、弱黑白轮廓、counterform、16/24/32px、Wordmark 和仅缩放 App Icon；Draft 自动 reviewed，Final 低分保持 refined，无 Critic 或未 pass 都不能 verified。自动化已覆盖请求隔离、attachment shape、响应唯一性、critical 单项不可补偿、全项达标、revision binding、draft/final ledger；固定样张人工盲评、独立 critic model 配置和生成端 Pattern/Style Reference 仍未完成。见 ADR-0117。
+
 ## 构建结果
 
 Vite 生产构建完成四个环境。共享门禁从实际 `out/` 检查每个预期产物唯一、存在且非空，不要求 macOS 与 Windows 的输出和某次本机构建保持精确字节相等。包体治理应使用明确的大小预算或回归阈值，并按目标平台分别记录，不能拿单个平台的一次构建字节数阻断其他平台。

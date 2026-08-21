@@ -423,8 +423,7 @@ describe("design completion guard", () => {
             toolName: DESIGN_CHECKPOINT_TOOL_NAME,
             input: {
               version: 1,
-              action: "review-refine-and-capture",
-              review: visualReview.input,
+              action: "refine-and-capture",
               refinement: refinementWrite.input,
             },
             status: "completed",

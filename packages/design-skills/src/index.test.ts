@@ -11,6 +11,7 @@ import {
   formatBuiltinDesignSkillBundle,
   formatBuiltinDesignPlanningSkillBundle,
   formatBuiltinDesignPlanningSkillBundleForDeliverable,
+  formatBuiltinDesignReviewSkillBundleForDeliverable,
   formatBuiltinUiDesignSkillBundle,
   isBuiltinDesignSkillRefsForDeliverable,
   isBuiltinUiDesignSkillRefs,
@@ -68,6 +69,12 @@ describe("built-in design skills", () => {
     expect(uiPlanning).toContain('id="ui-visual-direction"');
     expect(uiPlanning).toContain('id="ui-ux-structure"');
     expect(uiPlanning).not.toContain('id="graphic-visual-direction"');
+
+    const logoReview =
+      formatBuiltinDesignReviewSkillBundleForDeliverable("logo");
+    expect(logoReview).toContain('id="graphic-capture-critic"');
+    expect(logoReview).toContain('id="logo-capture-critic"');
+    expect(logoReview).not.toContain('id="logo-visual-direction"');
   });
 
   it("accepts only the exact ordered built-in references", () => {

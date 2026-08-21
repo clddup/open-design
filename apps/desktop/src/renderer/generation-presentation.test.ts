@@ -10,6 +10,7 @@ import {
 } from "@opendesign/editor-runtime";
 import { describe, expect, it } from "vitest";
 import {
+  DESIGN_CAPTURE_TOOL_NAME,
   DESIGN_CHECKPOINT_TOOL_NAME,
   DESIGN_PLAN_TOOL_NAME,
   type DesignPlanToolInput,
@@ -488,8 +489,8 @@ describe("Renderer typed plan skeleton presentation", () => {
     const reviewRequested = projectGenerationPlanPresentationEvent(failed, {
       type: "tool.requested",
       runId: "run_stages",
-      toolCallId: "tool_review",
-      toolName: "opendesign_record_visual_review",
+      toolCallId: "tool_capture",
+      toolName: DESIGN_CAPTURE_TOOL_NAME,
       input: {},
       risk: "read",
     });
@@ -498,8 +499,18 @@ describe("Renderer typed plan skeleton presentation", () => {
       {
         type: "tool.completed",
         runId: "run_stages",
-        toolCallId: "tool_review",
-        result: { ok: true },
+        toolCallId: "tool_capture",
+        result: {
+          ok: true,
+          reviewWorkflow: {
+            nextAction: "refine-independent-critic-findings",
+            critic: {
+              version: 1,
+              observedRevision: 2,
+              passed: false,
+            },
+          },
+        },
       },
     );
     expect(reviewCompleted.reviewedByRunId.run_stages).toBe(true);
@@ -813,7 +824,7 @@ describe("Renderer typed plan skeleton presentation", () => {
     );
   });
 
-  it("projects review-refine checkpoints as one reviewing then refining stage", () => {
+  it("projects independent-critic refinement checkpoints as a refining stage", () => {
     const requested = projectGenerationPlanPresentationEvent(
       {
         ...EMPTY_GENERATION_PLAN_PRESENTATION_STATE,
@@ -834,8 +845,7 @@ describe("Renderer typed plan skeleton presentation", () => {
         risk: "design_write",
         input: {
           version: 1,
-          action: "review-refine-and-capture",
-          review: generationVisualReview(),
+          action: "refine-and-capture",
           refinement: {
             label: "Remove obsolete badge",
             commands: [
@@ -851,7 +861,7 @@ describe("Renderer typed plan skeleton presentation", () => {
     );
 
     expect(requested.activityByRunId.run_checkpoint).toMatchObject({
-      phase: "reviewing",
+      phase: "refining",
     });
     const completed = projectGenerationPlanPresentationEvent(requested, {
       type: "tool.completed",
@@ -943,48 +953,6 @@ function acceptedPlanResult(plan: DesignPlanToolInput) {
     outputMode: plan.outputMode,
     targets: plan.targets,
     rasterAssetRoles: plan.rasterAssetRoles,
-  };
-}
-
-function generationVisualReview() {
-  return {
-    version: 1,
-    skillRefs: BUILTIN_GRAPHIC_DESIGN_SKILL_REFS.map((reference) => ({
-      ...reference,
-    })),
-    briefFidelity:
-      "The rendered result preserves the requested content and product meaning.",
-    distinctiveness:
-      "The editorial collision creates a recognizable launch identity.",
-    signatureMotif:
-      "The organic hero silhouette visibly cuts through the rigid type grid.",
-    composition: "The primary form needs more surrounding negative space.",
-    hierarchy: "Secondary content competes with the intended action.",
-    typography: "Supporting type needs a quieter visual rhythm.",
-    assetIntegration: "The image edge needs a clearer title relationship.",
-    formAndSurface: "The foreground surface is currently too heavy.",
-    effects: "The glow needs a tighter radius and lower opacity.",
-    antiTemplate:
-      "The composition avoids centered cards and ornamental gradient identity.",
-    criteria: {
-      "visual-thesis": "The editorial collision is visible in the capture.",
-      "signature-motif": "The hero silhouette crosses the type grid.",
-      "composition-tension": "Asymmetric mass creates a clear focal path.",
-      "typography-character": "Display and support type have distinct roles.",
-      "material-coherence": "Paper, ink, and accent form one material system.",
-      "template-avoidance": "The capture avoids repeated cards and gradients.",
-      "glance-legibility":
-        "The primary task and action remain clear at thumbnail scale.",
-      "subject-specificity":
-        "The composition remains tied to the requested product subject.",
-      "craft-precision":
-        "Spacing and control proportions still need deliberate refinement.",
-    },
-    failedCriteria: ["composition-tension", "craft-precision"],
-    refinements: [
-      "Increase space around the primary form",
-      "Reduce secondary surface contrast",
-    ],
   };
 }
 

@@ -9,7 +9,6 @@ import {
   normalizeDesignCheckpointToolInput,
   type DesignApplyToolInput,
   type DesignCheckpointToolInput,
-  type DesignVisualReviewToolInput,
 } from "../../shared/design-agent-tools.js";
 import { isTrustedToolFailure } from "../../shared/design-tool-bridge.js";
 
@@ -21,12 +20,12 @@ export type DesignCheckpointDependencies = {
     input: DesignApplyToolInput,
     reportProgress?: ReportProgress,
   ) => Promise<TrustedToolResult>;
+  assertRefinementReady: () => void;
   capture: (
     call: ToolCallRequest,
     reportProgress?: ReportProgress,
   ) => Promise<TrustedToolResult>;
   getDelivery: () => unknown;
-  review: (review: DesignVisualReviewToolInput) => TrustedToolResult;
 };
 
 export type FirstSliceCheckpointDependencies = {
@@ -78,12 +77,11 @@ export async function handleDesignCheckpointTool(
     });
   }
 
-  dependencies.review(input.review);
-  reportProgress?.("Visual review accepted", 0.08);
+  dependencies.assertRefinementReady();
   const applied = await dependencies.apply(
     subcall(call, "refine", DESIGN_APPLY_TOOL_NAME, input.refinement),
     input.refinement,
-    scaleProgress(reportProgress, 0.08, 0.62),
+    scaleProgress(reportProgress, 0, 0.62),
   );
   return await captureCommittedDesignCheckpoint({
     action: input.action,
@@ -94,7 +92,6 @@ export async function handleDesignCheckpointTool(
         scaleProgress(reportProgress, 0.62, 1),
       ),
     getDelivery: dependencies.getDelivery,
-    reviewAccepted: true,
   });
 }
 
@@ -104,7 +101,6 @@ export async function captureCommittedDesignCheckpoint(options: {
   capture: () => Promise<TrustedToolResult>;
   getDelivery: () => unknown;
   preserveAppliedContent?: boolean;
-  reviewAccepted?: boolean;
 }): Promise<TrustedToolResult> {
   const revision = options.applied.designRevision;
   if (!revision) {
@@ -118,7 +114,6 @@ export async function captureCommittedDesignCheckpoint(options: {
     action: options.action,
     materialRevision: revision.revision,
     transactionId: revision.transactionId,
-    ...(options.reviewAccepted ? { reviewAccepted: true } : {}),
     ...(Array.isArray(appliedContent.committedSteps)
       ? { committedSteps: appliedContent.committedSteps }
       : {}),

@@ -15,6 +15,7 @@ import {
 import { ProjectHost } from "../project/project-host.js";
 import { WorkspaceStore } from "../project/workspace-store.js";
 import { GlobalTaskCoordinator } from "./global-task-coordinator.js";
+import type { DesignVisualCriticResult } from "./design-visual-critic.js";
 import type {
   DesignApplyToolInput,
   DesignPlanTarget,
@@ -184,6 +185,30 @@ const visualReview = {
   failedCriteria: ["composition-tension", "craft-precision"] as const,
   refinements: ["Reduce inspector contrast", "Remove secondary borders"],
 };
+
+function independentCritic(
+  observedRevision: number,
+  passed: boolean,
+): DesignVisualCriticResult {
+  return {
+    version: 1,
+    observedRevision,
+    passed,
+    averageScore: passed ? 4 : 2.8,
+    summary: passed
+      ? "The exact revision clears every independent delivery criterion."
+      : "The exact revision still has generic composition and weak craft.",
+    criteria: Object.fromEntries(
+      Object.entries(visualReview.criteria).map(([id, evidence]) => [
+        id,
+        { score: passed ? 4 : 2, evidence },
+      ]),
+    ),
+    failedCriteria: passed ? [] : ["composition-tension", "craft-precision"],
+    refinements: passed ? [] : [...visualReview.refinements],
+    review: structuredClone(visualReview),
+  };
+}
 
 function designPlanForPage(pageId: string): DesignPlanToolInput {
   return {
@@ -1624,6 +1649,23 @@ describe("GlobalTaskCoordinator", () => {
       nodeId: "frame_home",
       qualityProfile: homeTarget.qualityProfile,
     });
+    expect(
+      coordinator.resolveVisualCriticContext(context, 2, {
+        attachmentId: "capture_home",
+        byteSize: 12_000,
+        mimeType: "image/jpeg",
+        name: "home.jpg",
+      }),
+    ).toMatchObject({
+      modelSelection,
+      observedRevision: 2,
+      phase: "draft",
+      target: { targetId: "target_home" },
+      attachment: { attachmentId: "capture_home" },
+    });
+    expect(() => coordinator.assertDesignRefinementReady(context)).toThrow(
+      "trusted independent visual review",
+    );
     expect(() =>
       coordinator.recordCanvasCapture(
         context,
@@ -1636,17 +1678,35 @@ describe("GlobalTaskCoordinator", () => {
         ),
       ),
     ).toThrow("design_workflow.layout_quality_unavailable");
-    coordinator.recordCanvasCapture(
-      context,
-      2,
-      diagnoseDesignTargetLayout(
-        draftedDocument,
-        pageId,
-        "frame_home",
-        homeTarget.qualityProfile,
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        2,
+        diagnoseDesignTargetLayout(
+          draftedDocument,
+          pageId,
+          "frame_home",
+          homeTarget.qualityProfile,
+        ),
+        independentCritic(2, false),
       ),
-    );
-    coordinator.registerVisualReview(context, visualReview);
+    ).toMatchObject({
+      nextAction: "refine-independent-critic-findings",
+      reviewEligible: false,
+      critic: {
+        passed: false,
+        criteria: {
+          "composition-tension": {
+            score: 2,
+            evidence: visualReview.criteria["composition-tension"],
+          },
+        },
+        failedCriteria: ["composition-tension", "craft-precision"],
+      },
+    });
+    expect(() =>
+      coordinator.assertDesignRefinementReady(context),
+    ).not.toThrow();
     const refineHome: DesignApplyToolInput = {
       label: "Refine Home hierarchy",
       commands: [
@@ -1710,6 +1770,20 @@ describe("GlobalTaskCoordinator", () => {
     expect(
       coordinator.getDeliveryLedger(context.runId)?.targets[0]?.status,
     ).toBe("refined");
+    expect(() =>
+      coordinator.recordCanvasCapture(
+        context,
+        3,
+        diagnoseDesignTargetLayout(
+          homeRefinedDocument,
+          pageId,
+          "frame_home",
+          homeTarget.qualityProfile,
+        ),
+      ),
+    ).toThrow(
+      "Final delivery verification requires an independent visual critic",
+    );
     expect(
       coordinator.recordCanvasCapture(
         context,
@@ -1720,6 +1794,27 @@ describe("GlobalTaskCoordinator", () => {
           "frame_home",
           homeTarget.qualityProfile,
         ),
+        independentCritic(3, false),
+      ),
+    ).toMatchObject({
+      nextAction: "refine-independent-critic-findings",
+      reviewEligible: false,
+      critic: { passed: false },
+    });
+    expect(
+      coordinator.getDeliveryLedger(context.runId)?.targets[0]?.status,
+    ).toBe("refined");
+    expect(
+      coordinator.recordCanvasCapture(
+        context,
+        3,
+        diagnoseDesignTargetLayout(
+          homeRefinedDocument,
+          pageId,
+          "frame_home",
+          homeTarget.qualityProfile,
+        ),
+        independentCritic(3, true),
       ),
     ).toMatchObject({
       deliveryTargetId: "target_home",
@@ -1799,7 +1894,12 @@ describe("GlobalTaskCoordinator", () => {
     expect(profileQuality.errorCount).toBe(0);
     expect(profileQuality.warningCount).toBeGreaterThan(0);
     expect(
-      coordinator.recordCanvasCapture(context, 5, profileQuality),
+      coordinator.recordCanvasCapture(
+        context,
+        5,
+        profileQuality,
+        independentCritic(5, true),
+      ),
     ).toMatchObject({
       deliveryTargetId: "target_profile",
       nextAction: "complete-delivery",
@@ -2112,6 +2212,7 @@ describe("GlobalTaskCoordinator", () => {
           "frame_home",
           homeTarget.qualityProfile,
         ),
+        independentCritic(2, true),
       ),
     ).toThrow("Planned region frame_home_content is empty");
     expect(coordinator.getDeliveryLedger(context.runId)).toMatchObject({
@@ -2435,6 +2536,7 @@ describe("GlobalTaskCoordinator", () => {
           "existing_artboard",
           existingPlan.targets[0].qualityProfile,
         ),
+        independentCritic(2, true),
       ),
     ).toMatchObject({
       verified: true,

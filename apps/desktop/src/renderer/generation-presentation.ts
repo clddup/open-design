@@ -53,7 +53,7 @@ interface RequestedGenerationPlan {
 }
 
 interface RequestedGenerationTool {
-  checkpointAction?: "apply-and-capture" | "review-refine-and-capture";
+  checkpointAction?: "apply-and-capture" | "refine-and-capture";
   runId: string;
   toolName: string;
 }
@@ -162,10 +162,18 @@ export function projectGenerationPlanPresentationEvent(
   }
   if (event.type === "tool.requested") {
     if (!state.acceptedByRunId[event.runId]) return state;
-    const phase = generationPhaseForTool(
-      event.toolName,
-      state.reviewedByRunId[event.runId] === true,
-    );
+    const checkpointInput =
+      event.toolName === DESIGN_CHECKPOINT_TOOL_NAME &&
+      isDesignCheckpointToolInput(event.input)
+        ? event.input
+        : undefined;
+    const phase =
+      checkpointInput?.action === "refine-and-capture"
+        ? "refining"
+        : generationPhaseForTool(
+            event.toolName,
+            state.reviewedByRunId[event.runId] === true,
+          );
     if (!phase) return state;
     const callId = generationPlanCallId(event.runId, event.toolCallId);
     return {
@@ -184,9 +192,8 @@ export function projectGenerationPlanPresentationEvent(
         [callId]: {
           runId: event.runId,
           toolName: event.toolName,
-          ...(event.toolName === DESIGN_CHECKPOINT_TOOL_NAME &&
-          isDesignCheckpointToolInput(event.input)
-            ? { checkpointAction: event.input.action }
+          ...(checkpointInput
+            ? { checkpointAction: checkpointInput.action }
             : {}),
         },
       },
@@ -208,8 +215,10 @@ export function projectGenerationPlanPresentationEvent(
     ) {
       return { ...state, requestedByCallId, requestedToolByCallId };
     }
+    const independentReviewCompleted = hasIndependentVisualCritic(event.result);
     const reviewedByRunId = { ...state.reviewedByRunId };
-    delete reviewedByRunId[event.runId];
+    if (independentReviewCompleted) reviewedByRunId[event.runId] = true;
+    else delete reviewedByRunId[event.runId];
     return {
       ...state,
       acceptedByRunId: {
@@ -228,7 +237,7 @@ export function projectGenerationPlanPresentationEvent(
         ...state.activityByRunId,
         [event.runId]: {
           id: `${callId}:accepted`,
-          phase: "structuring",
+          phase: independentReviewCompleted ? "refining" : "structuring",
           runId: event.runId,
           toolCallId: event.toolCallId,
         },
@@ -262,7 +271,8 @@ export function projectGenerationPlanPresentationEvent(
   const reviewedByRunId = { ...state.reviewedByRunId };
   const reviewCompleted =
     requestedTool.toolName === DESIGN_REVIEW_TOOL_NAME ||
-    requestedTool.checkpointAction === "review-refine-and-capture";
+    requestedTool.checkpointAction === "refine-and-capture" ||
+    hasIndependentVisualCritic(event.result);
   if (reviewCompleted) reviewedByRunId[event.runId] = true;
   const phase = reviewCompleted
     ? "refining"
@@ -671,4 +681,15 @@ function sameJson(left: unknown, right: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasIndependentVisualCritic(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.reviewWorkflow)) return false;
+  const critic = value.reviewWorkflow.critic;
+  return (
+    isRecord(critic) &&
+    critic.version === 1 &&
+    Number.isSafeInteger(critic.observedRevision) &&
+    typeof critic.passed === "boolean"
+  );
 }

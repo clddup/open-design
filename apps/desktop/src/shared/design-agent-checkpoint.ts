@@ -3,11 +3,6 @@ import {
   type DesignApplyToolInput,
 } from "./design-apply-input";
 import { DESIGN_APPLY_TOOL_INPUT_SCHEMA } from "./design-agent-operation-schemas";
-import {
-  DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
-  normalizeDesignVisualReviewToolInput,
-  type DesignVisualReviewToolInput,
-} from "./design-agent-plan-review";
 import { exactKeys, isRecord } from "./design-agent-validation";
 
 export type DesignCheckpointToolInput =
@@ -18,22 +13,20 @@ export type DesignCheckpointToolInput =
     }
   | {
       version: 1;
-      action: "review-refine-and-capture";
-      review: DesignVisualReviewToolInput;
+      action: "refine-and-capture";
       refinement: DesignApplyToolInput;
     };
 
 export const DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "A host-conditional design checkpoint. apply-and-capture commits one material transaction and captures only its successful revision. review-refine-and-capture first accepts the structured review, then commits its refinement, then captures only the successful refined revision.",
+    "A host-conditional design checkpoint. apply-and-capture commits one material transaction and captures only its successful revision. refine-and-capture consumes the independent critic findings returned by the previous capture, commits one refinement, then captures only the successful refined revision.",
   properties: {
     version: { const: 1 },
     action: {
-      enum: ["apply-and-capture", "review-refine-and-capture"],
+      enum: ["apply-and-capture", "refine-and-capture"],
     },
     apply: DESIGN_APPLY_TOOL_INPUT_SCHEMA,
-    review: DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
     refinement: DESIGN_APPLY_TOOL_INPUT_SCHEMA,
   },
   oneOf: [
@@ -49,11 +42,10 @@ export const DESIGN_CHECKPOINT_TOOL_INPUT_SCHEMA = {
     {
       properties: {
         version: { const: 1 },
-        action: { const: "review-refine-and-capture" },
-        review: DESIGN_VISUAL_REVIEW_TOOL_INPUT_SCHEMA,
+        action: { const: "refine-and-capture" },
         refinement: DESIGN_APPLY_TOOL_INPUT_SCHEMA,
       },
-      required: ["version", "action", "review", "refinement"],
+      required: ["version", "action", "refinement"],
       additionalProperties: false,
     },
   ],
@@ -73,7 +65,7 @@ export function normalizeDesignCheckpointToolInput(
     !isRecord(input) ||
     input.version !== 1 ||
     (input.action !== "apply-and-capture" &&
-      input.action !== "review-refine-and-capture")
+      input.action !== "refine-and-capture")
   ) {
     return undefined;
   }
@@ -83,15 +75,11 @@ export function normalizeDesignCheckpointToolInput(
       ? { version: 1, action: "apply-and-capture", apply }
       : undefined;
   }
-  const review = normalizeDesignVisualReviewToolInput(input.review);
   const refinement = normalizeDesignApplyToolInput(input.refinement);
-  return review &&
-    refinement &&
-    exactKeys(input, ["version", "action", "review", "refinement"])
+  return refinement && exactKeys(input, ["version", "action", "refinement"])
     ? {
         version: 1,
-        action: "review-refine-and-capture",
-        review,
+        action: "refine-and-capture",
         refinement,
       }
     : undefined;

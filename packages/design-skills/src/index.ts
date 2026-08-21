@@ -218,6 +218,19 @@ export function formatBuiltinDesignPlanningSkillBundleForDeliverable(
   );
 }
 
+export function formatBuiltinDesignReviewSkillBundleForDeliverable(
+  deliverable: BuiltinDesignDeliverable,
+): string {
+  return formatSkillBundle(
+    BUILTIN_DESIGN_SKILLS.filter(
+      (skill) =>
+        skill.phases.includes("review") &&
+        skill.deliverables.includes(deliverable),
+    ),
+    `${deliverable} review`,
+  );
+}
+
 function formatSkillBundle(
   bundledSkills: readonly BuiltinDesignSkill[],
   scope: string,

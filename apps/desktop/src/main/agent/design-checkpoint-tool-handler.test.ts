@@ -2,9 +2,7 @@ import type {
   ToolCallRequest,
   TrustedToolResult,
 } from "@opendesign/agent-runtime";
-import { BUILTIN_UI_DESIGN_SKILL_REFS } from "@opendesign/design-skills";
 import { describe, expect, it, vi } from "vitest";
-import type { DesignVisualReviewToolInput } from "../../shared/design-agent-tools";
 import {
   captureCommittedDesignCheckpoint,
   handleDesignCheckpointTool,
@@ -22,52 +20,6 @@ const applyInput = {
     },
   ],
 };
-
-const review = {
-  version: 1,
-  skillRefs: BUILTIN_UI_DESIGN_SKILL_REFS.map((reference) => ({
-    ...reference,
-  })),
-  briefFidelity:
-    "The rendered target preserves every requested product function and label",
-  distinctiveness:
-    "The asymmetric hero and signal rail create a recognizable product identity",
-  signatureMotif:
-    "The signal rail connects the primary form to the supporting content rhythm",
-  composition: "The hero needs more negative space around its primary form",
-  hierarchy: "The secondary content currently competes with the main action",
-  typography: "Supporting typography needs lower contrast and tighter rhythm",
-  assetIntegration: "The image edge needs a clearer relationship to the title",
-  formAndSurface: "The foreground surface is visually heavier than intended",
-  effects: "The current glow needs a smaller radius and lower opacity",
-  antiTemplate:
-    "The composition avoids an equal card grid and ornamental gradient identity",
-  criteria: {
-    "visual-thesis":
-      "The directional product thesis is visible in the dominant hero plane",
-    "signature-motif":
-      "The signal rail is present but needs stronger integration with the title",
-    "composition-tension":
-      "The offset hero establishes one focal path despite tight surrounding space",
-    "typography-character":
-      "Display and supporting text have distinct roles and a deliberate contrast",
-    "material-coherence":
-      "The image edge, surfaces, and glow belong to one restrained material system",
-    "template-avoidance":
-      "The rendered design does not rely on repeated cards or decorative gradients",
-    "glance-legibility":
-      "The primary task and action remain clear at thumbnail scale.",
-    "subject-specificity":
-      "The composition remains tied to the requested product subject.",
-    "craft-precision":
-      "Spacing and control proportions still need deliberate refinement.",
-  },
-  failedCriteria: ["signature-motif", "composition-tension"],
-  refinements: [
-    "Increase negative space around the primary form",
-    "Reduce the secondary surface contrast",
-  ],
-} satisfies DesignVisualReviewToolInput;
 
 const applied: TrustedToolResult = {
   content: {
@@ -103,9 +55,9 @@ function dependencies(
 ): DesignCheckpointDependencies {
   return {
     apply: vi.fn().mockResolvedValue(applied),
+    assertRefinementReady: vi.fn(),
     capture: vi.fn().mockResolvedValue(captured),
     getDelivery: vi.fn(() => ({ activeTargetId: "target_home" })),
-    review: vi.fn(() => ({ content: { ok: true, status: "accepted" } })),
     ...overrides,
   };
 }
@@ -200,13 +152,9 @@ describe("design checkpoint tool handler", () => {
     expect(result.observedRevision).toBeUndefined();
   });
 
-  it("accepts review before refinement and captures only after refinement", async () => {
+  it("applies critic-directed refinement and captures only after refinement", async () => {
     const order: string[] = [];
     const deps = dependencies({
-      review: vi.fn(() => {
-        order.push("review");
-        return { content: { ok: true } };
-      }),
       apply: vi.fn(() => {
         order.push("refine");
         return Promise.resolve(applied);
@@ -220,29 +168,47 @@ describe("design checkpoint tool handler", () => {
     const result = await handleDesignCheckpointTool(
       call({
         version: 1,
-        action: "review-refine-and-capture",
-        review,
+        action: "refine-and-capture",
         refinement: applyInput,
       }),
       deps,
     );
 
-    expect(order).toEqual(["review", "refine", "capture"]);
+    expect(order).toEqual(["refine", "capture"]);
     expect(result.content).toMatchObject({
       checkpoint: {
-        action: "review-refine-and-capture",
-        reviewAccepted: true,
+        action: "refine-and-capture",
         status: "completed",
       },
     });
   });
 
-  it("short-circuits refinement and capture when review is rejected", async () => {
+  it("short-circuits capture when critic-directed refinement is rejected", async () => {
+    const capture = vi.fn();
+    const deps = dependencies({
+      apply: vi.fn().mockRejectedValue(new Error("refinement rejected")),
+      capture,
+    });
+
+    await expect(
+      handleDesignCheckpointTool(
+        call({
+          version: 1,
+          action: "refine-and-capture",
+          refinement: applyInput,
+        }),
+        deps,
+      ),
+    ).rejects.toThrow("refinement rejected");
+    expect(capture).not.toHaveBeenCalled();
+  });
+
+  it("never applies a refinement before the active target has a trusted review", async () => {
     const apply = vi.fn();
     const capture = vi.fn();
     const deps = dependencies({
-      review: vi.fn(() => {
-        throw new Error("capture required");
+      assertRefinementReady: vi.fn(() => {
+        throw new Error("independent visual review required");
       }),
       apply,
       capture,
@@ -252,13 +218,12 @@ describe("design checkpoint tool handler", () => {
       handleDesignCheckpointTool(
         call({
           version: 1,
-          action: "review-refine-and-capture",
-          review,
+          action: "refine-and-capture",
           refinement: applyInput,
         }),
         deps,
       ),
-    ).rejects.toThrow("capture required");
+    ).rejects.toThrow("independent visual review required");
     expect(apply).not.toHaveBeenCalled();
     expect(capture).not.toHaveBeenCalled();
   });
