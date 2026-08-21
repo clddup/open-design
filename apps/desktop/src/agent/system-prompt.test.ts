@@ -25,7 +25,10 @@ describe("OpenDesign Agent system prompt", () => {
       "graphic-capture-critic",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("current contract");
-    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("briefFidelity");
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).not.toContain("briefFidelity");
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).not.toContain(
+      "semanticObjects decision",
+    );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "allocate all stable Frame roots now",
     );
@@ -42,9 +45,7 @@ describe("OpenDesign Agent system prompt", () => {
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "inspection.document.componentCatalog",
     );
-    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "decision=reuse-component",
-    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain("linked Instances");
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT.length).toBeLessThan(16_000);
   });
 
@@ -79,8 +80,9 @@ describe("OpenDesign Agent system prompt", () => {
 
     expect(fast).toContain("execution depth: FAST");
     expect(fast).toContain("one requested Logo/Icon focused");
-    expect(fast).toContain("logoOutputs is optional");
+    expect(fast).not.toContain("logoOutputs is optional");
     expect(fast).toContain("may complete directly");
+    expect(fast).toContain("one focused refinement");
     expect(thorough).toContain("execution depth: THOROUGH");
     expect(thorough).toContain("first meaningful real revision immediately");
   });

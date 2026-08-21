@@ -3,15 +3,8 @@ import {
   DESIGN_FIRST_SLICE_MAX_STAGES,
 } from "./design-first-slice-budget";
 import type { DesignFirstSliceElement } from "./design-first-slice-tool";
-import { DESIGN_BRIEF_FIDELITY_SCHEMA } from "./design-brief-fidelity";
-import {
-  DESIGN_LOGO_OUTPUTS,
-  LOGO_CONCEPT_PRINCIPLES,
-} from "./design-agent-plan-review";
-import { DESIGN_REFERENCE_STRATEGY_SCHEMA } from "./design-reference-strategy";
 
 const ID_SCHEMA = { type: "string", minLength: 1, maxLength: 256 } as const;
-const TEXT_SCHEMA = { type: "string", minLength: 1, maxLength: 1_000 } as const;
 const COORDINATE_SCHEMA = {
   type: "number",
   minimum: -1_000_000,
@@ -58,72 +51,10 @@ const ELEMENT_BASE_REQUIRED = [
   "width",
   "height",
 ] as const;
-const COMPACT_QUALITY_PROFILE_SCHEMA = {
-  oneOf: [
-    {
-      type: "object",
-      properties: { kind: { const: "graphic" } },
-      required: ["kind"],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: {
-        kind: { const: "ui" },
-        platform: {
-          enum: [
-            "web",
-            "macos",
-            "windows",
-            "ios",
-            "ipados",
-            "android",
-            "other",
-          ],
-        },
-        input: { enum: ["pointer", "touch", "mixed"] },
-        insets: {
-          type: "array",
-          minItems: 4,
-          maxItems: 4,
-          items: { type: "number", minimum: 0, maximum: 10_000 },
-          description: "Safe-area top, right, bottom, left.",
-        },
-        safeNodeIds: {
-          type: "array",
-          minItems: 1,
-          maxItems: 64,
-          uniqueItems: true,
-          items: ID_SCHEMA,
-          description:
-            "Foreground IDs that must remain inside the safe area. Do not repeat hitNodeIds here unless a node is independently part of the foreground set.",
-        },
-        hitNodeIds: {
-          type: "array",
-          maxItems: 64,
-          uniqueItems: true,
-          items: ID_SCHEMA,
-          description:
-            "Actual interactive hit-area IDs. The host independently applies safe-area and platform minimum-size checks to these nodes.",
-        },
-      },
-      required: [
-        "kind",
-        "platform",
-        "input",
-        "insets",
-        "safeNodeIds",
-        "hitNodeIds",
-      ],
-      additionalProperties: false,
-    },
-  ],
-} as const;
-
 export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
   type: "object",
   description:
-    "Current compact Design Plan, real artboard roots and one editable first slice. Main binds the exact locally loaded design skill revisions.",
+    "Real artboard roots and one editable first slice. Main binds design skills, derives ordinary planning metadata from the objective and visible elements, and keeps the exact user request for visual review so the first pixels are not delayed by duplicated prose.",
   properties: {
     version: { const: 1 },
     deliverable: {
@@ -138,52 +69,6 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
       ],
     },
     objective: { type: "string", minLength: 1, maxLength: 2_000 },
-    designIntent: {
-      type: "object",
-      properties: {
-        subject: { type: "string", minLength: 8, maxLength: 500 },
-        audience: { type: "string", minLength: 8, maxLength: 500 },
-        primaryJob: { type: "string", minLength: 8, maxLength: 500 },
-        visualThesis: { type: "string", minLength: 16, maxLength: 1_000 },
-        signatureMotif: { type: "string", minLength: 16, maxLength: 1_000 },
-        typographyLanguage: {
-          type: "string",
-          minLength: 12,
-          maxLength: 1_000,
-        },
-        colorMaterialLanguage: {
-          type: "string",
-          minLength: 12,
-          maxLength: 1_000,
-        },
-        compositionTension: {
-          type: "string",
-          minLength: 12,
-          maxLength: 1_000,
-        },
-        antiPatterns: {
-          type: "array",
-          minItems: 3,
-          maxItems: 12,
-          uniqueItems: true,
-          items: { type: "string", minLength: 8, maxLength: 256 },
-        },
-      },
-      required: [
-        "subject",
-        "audience",
-        "primaryJob",
-        "visualThesis",
-        "signatureMotif",
-        "typographyLanguage",
-        "colorMaterialLanguage",
-        "compositionTension",
-        "antiPatterns",
-      ],
-      additionalProperties: false,
-    },
-    briefFidelity: DESIGN_BRIEF_FIDELITY_SCHEMA,
-    referenceStrategy: DESIGN_REFERENCE_STRATEGY_SCHEMA,
     targets: {
       type: "array",
       minItems: 1,
@@ -194,7 +79,6 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
           targetId: { type: "string", minLength: 1, maxLength: 128 },
           label: ID_SCHEMA,
           pageId: ID_SCHEMA,
-          objective: { type: "string", minLength: 1, maxLength: 2_000 },
           frame: {
             type: "object",
             properties: {
@@ -207,9 +91,6 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
             required: ["frameId", "x", "y", "width", "height"],
             additionalProperties: false,
           },
-          layout: TEXT_SCHEMA,
-          spacing: { type: "string", minLength: 1, maxLength: 500 },
-          qualityProfile: COMPACT_QUALITY_PROFILE_SCHEMA,
           regions: {
             type: "array",
             minItems: 1,
@@ -241,173 +122,8 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
             },
           },
         },
-        required: [
-          "targetId",
-          "label",
-          "pageId",
-          "objective",
-          "frame",
-          "layout",
-          "spacing",
-          "qualityProfile",
-          "regions",
-        ],
+        required: ["targetId", "label", "pageId", "frame", "regions"],
         additionalProperties: false,
-      },
-    },
-    visualSystem: {
-      type: "object",
-      properties: {
-        formLanguage: TEXT_SCHEMA,
-        palette: {
-          type: "array",
-          minItems: 1,
-          maxItems: 12,
-          items: { type: "string", minLength: 1, maxLength: 128 },
-        },
-        surfaceAndDepth: TEXT_SCHEMA,
-        typography: {
-          type: "array",
-          minItems: 1,
-          maxItems: 8,
-          items: { type: "string", minLength: 1, maxLength: 256 },
-        },
-        effects: {
-          type: "array",
-          maxItems: 12,
-          items: { type: "string", minLength: 1, maxLength: 256 },
-        },
-      },
-      required: ["formLanguage", "palette", "surfaceAndDepth", "typography"],
-      additionalProperties: false,
-    },
-    rasterAssetRoles: {
-      type: "array",
-      maxItems: 4,
-      uniqueItems: true,
-      description:
-        "Image evidence the full workflow must read, generate, or place after this compact slice. Use hero/background/supporting-content when credibility depends on real people, activity, place, product, food, interior, material, or environment; use [] for logos, diagrams, intentional vector illustration, or briefs whose communication job does not require raster evidence. Never claim generic vector geometry is photographic realism.",
-      items: {
-        enum: ["reference", "background", "hero", "supporting-content"],
-      },
-    },
-    logoOutputs: {
-      type: "array",
-      minItems: 1,
-      maxItems: 5,
-      uniqueItems: true,
-      description:
-        "Optional Logo scope hint. When present, list only the requested symbol, wordmark, app-icon, lockups, or usage-preview outputs; omission must not block the first real slice.",
-      items: { enum: [...DESIGN_LOGO_OUTPUTS] },
-    },
-    logoExploration: {
-      type: "object",
-      description:
-        "Optional requested multi-direction Logo exploration: three distinct principles with stable root and [monochrome,32,24,16] evidence IDs. Every thesis states relevant brand meaning and every construction must make that meaning visible through a memorable silhouette/counterform anchor that survives at 16 px; captions cannot rescue arbitrary geometry.",
-      properties: {
-        targetId: ID_SCHEMA,
-        directions: {
-          type: "array",
-          minItems: 3,
-          maxItems: 3,
-          items: {
-            type: "object",
-            properties: {
-              conceptId: ID_SCHEMA,
-              principle: { enum: [...LOGO_CONCEPT_PRINCIPLES] },
-              thesis: { type: "string", minLength: 16, maxLength: 1_000 },
-              rootNodeId: ID_SCHEMA,
-              evidenceNodeIds: {
-                type: "array",
-                minItems: 4,
-                maxItems: 4,
-                uniqueItems: true,
-                items: ID_SCHEMA,
-              },
-            },
-            required: [
-              "conceptId",
-              "principle",
-              "thesis",
-              "rootNodeId",
-              "evidenceNodeIds",
-            ],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["targetId", "directions"],
-      additionalProperties: false,
-    },
-    semanticObjects: {
-      type: "array",
-      maxItems: 24,
-      items: {
-        oneOf: [
-          {
-            type: "object",
-            properties: {
-              decisionId: { type: "string", minLength: 1, maxLength: 128 },
-              label: ID_SCHEMA,
-              decision: { const: "reuse-component" },
-              componentId: ID_SCHEMA,
-              instances: {
-                type: "array",
-                minItems: 1,
-                maxItems: 32,
-                items: occurrenceSchema(),
-              },
-            },
-            required: [
-              "decisionId",
-              "label",
-              "decision",
-              "componentId",
-              "instances",
-            ],
-            additionalProperties: false,
-          },
-          {
-            type: "object",
-            properties: {
-              decisionId: { type: "string", minLength: 1, maxLength: 128 },
-              label: ID_SCHEMA,
-              decision: { const: "ordinary" },
-              occurrences: {
-                type: "array",
-                minItems: 1,
-                maxItems: 32,
-                items: occurrenceSchema(),
-              },
-            },
-            required: ["decisionId", "label", "decision", "occurrences"],
-            additionalProperties: false,
-          },
-          {
-            type: "object",
-            properties: {
-              decisionId: { type: "string", minLength: 1, maxLength: 128 },
-              label: ID_SCHEMA,
-              decision: { const: "component" },
-              componentId: ID_SCHEMA,
-              main: occurrenceSchema(),
-              instances: {
-                type: "array",
-                maxItems: 32,
-                items: occurrenceSchema(),
-              },
-            },
-            required: [
-              "decisionId",
-              "label",
-              "decision",
-              "componentId",
-              "main",
-              "instances",
-            ],
-            additionalProperties: false,
-          },
-        ],
       },
     },
     firstSlice: {
@@ -535,31 +251,9 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
       additionalProperties: false,
     },
   },
-  required: [
-    "version",
-    "deliverable",
-    "objective",
-    "designIntent",
-    "briefFidelity",
-    "targets",
-    "visualSystem",
-    "rasterAssetRoles",
-    "firstSlice",
-  ],
+  required: ["version", "deliverable", "objective", "targets", "firstSlice"],
   additionalProperties: false,
 } as const;
-
-function occurrenceSchema() {
-  return {
-    type: "object",
-    properties: {
-      targetId: { type: "string", minLength: 1, maxLength: 128 },
-      nodeId: ID_SCHEMA,
-    },
-    required: ["targetId", "nodeId"],
-    additionalProperties: false,
-  } as const;
-}
 
 function elementSchema(
   kind: DesignFirstSliceElement["kind"],

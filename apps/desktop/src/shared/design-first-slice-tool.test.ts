@@ -20,11 +20,13 @@ import {
 describe("compact first-slice tool", () => {
   it("keeps Provider schema budgets aligned with runtime validation", () => {
     const properties = DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA.properties;
-    expect(properties.visualSystem.properties.typography.maxItems).toBe(8);
     expect(properties.firstSlice.properties.stages.maxItems).toBe(3);
-    expect(JSON.stringify(properties.targets)).toContain('"safeNodeIds"');
-    expect(JSON.stringify(properties.targets)).toContain('"hitNodeIds"');
-    expect(properties.referenceStrategy.type).toBe("object");
+    expect(Object.keys(properties).sort()).toEqual(
+      ["deliverable", "firstSlice", "objective", "targets", "version"].sort(),
+    );
+    expect(JSON.stringify(properties)).not.toContain('"qualityProfile"');
+    expect(JSON.stringify(properties)).not.toContain('"designIntent"');
+    expect(JSON.stringify(properties)).not.toContain('"briefFidelity"');
     expect(JSON.stringify(properties)).not.toContain('"skillRefs"');
     expect(
       properties.firstSlice.properties.stages.items.properties.elements
@@ -33,6 +35,53 @@ describe("compact first-slice tool", () => {
     expect(properties.firstSlice.properties.stages.description).toContain(
       "total across all stages",
     );
+    expect(DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA.required).toEqual([
+      "version",
+      "deliverable",
+      "objective",
+      "targets",
+      "firstSlice",
+    ]);
+  });
+
+  it("derives ordinary planning metadata instead of making the model repeat it before pixels", () => {
+    const modelInput = structuredClone(fixture()) as unknown as Record<
+      string,
+      unknown
+    >;
+    Reflect.deleteProperty(modelInput, "skillRefs");
+    Reflect.deleteProperty(modelInput, "designIntent");
+    Reflect.deleteProperty(modelInput, "briefFidelity");
+    Reflect.deleteProperty(modelInput, "visualSystem");
+    Reflect.deleteProperty(modelInput, "rasterAssetRoles");
+    const targets = modelInput.targets as Array<Record<string, unknown>>;
+    for (const target of targets) {
+      Reflect.deleteProperty(target, "objective");
+      Reflect.deleteProperty(target, "layout");
+      Reflect.deleteProperty(target, "spacing");
+      Reflect.deleteProperty(target, "qualityProfile");
+    }
+
+    const normalized = normalizeDesignFirstSliceToolInput(modelInput);
+    expect(normalized).toBeDefined();
+    expect(normalized?.designIntent.visualThesis).toContain(
+      "visible first slice",
+    );
+    expect(normalized?.briefFidelity.requiredContent).toEqual([
+      "Create Home and Profile screens",
+    ]);
+    expect(normalized?.visualSystem.palette).toContain("#0F172A");
+    expect(normalized?.targets[0]?.qualityProfile).toMatchObject({
+      kind: "ui",
+      platform: "other",
+      safeNodeIds: ["home_hero"],
+    });
+    expect(
+      normalized &&
+        isDesignPlanToolInput(
+          compileDesignFirstSliceToolInput(normalized).plan,
+        ),
+    ).toBe(true);
   });
 
   it("accepts distinct safe-area foreground and interactive hit-area IDs", () => {

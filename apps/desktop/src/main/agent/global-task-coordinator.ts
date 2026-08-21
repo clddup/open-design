@@ -765,6 +765,54 @@ export class GlobalTaskCoordinator {
       };
     }
     if (
+      generationMode === "fast" &&
+      visualCritic !== undefined &&
+      target.delivery.status === "refined"
+    ) {
+      const inspection = this.#inspectionsByRunId.get(context.runId);
+      if (!inspection || inspection.revision !== observedRevision) {
+        throw new Error(
+          "design_workflow.delivery_verification_required: Fast delivery requires an authoritative document inspection from the exact captured revision; inspect and capture the current target again",
+        );
+      }
+      const componentStrategy = assertDeliveryTargetStructure(
+        inspection,
+        target,
+        state.plan,
+      );
+      target.captureCount = captureSequence;
+      target.lastCaptureRevision = observedRevision;
+      target.lastReview = structuredClone(visualCritic.review);
+      target.reviewedCaptureCount = captureSequence;
+      target.reviewedCaptureRevision = observedRevision;
+      target.delivery = {
+        ...target.delivery,
+        status: "verified",
+        verifiedRevision: observedRevision,
+      };
+      this.#persistDelivery(context.runId, state);
+      return {
+        captureSequence,
+        capturedRevision: observedRevision,
+        deliveryTargetId: target.delivery.targetId,
+        nextAction: nextIncompleteTarget(state)
+          ? "continue-next-target"
+          : "complete-delivery",
+        reviewEligible: false,
+        verified: true,
+        critic: publicCriticResult(visualCritic),
+        ...(visualCritic.passed
+          ? {}
+          : {
+              qualityAdvisory: {
+                summary: visualCritic.summary,
+                refinements: [...visualCritic.refinements],
+              },
+            }),
+        ...(componentStrategy.issueCount === 0 ? {} : { componentStrategy }),
+      };
+    }
+    if (
       visualCritic !== undefined &&
       target.delivery.status === "refined" &&
       !visualCritic.passed

@@ -28,6 +28,27 @@ describe("initial model tool surface", () => {
     ).toBe("general");
   });
 
+  it("lets empty host state outrank later-stage wording inside a creation brief", () => {
+    expect(
+      resolveInitialModelToolSurface(
+        request({
+          prompt:
+            "设计四个真实 Logo 画板，选择最强方向继续完成，并调整小尺寸比例",
+        }),
+      ),
+    ).toBe("new-design");
+    expect(
+      resolveInitialModelToolSurface(
+        request({
+          prompt: "继续优化当前 dashboard",
+          initialDesignInspection: inspection([
+            { ...emptyFrame(), childIds: ["title"] },
+          ]),
+        }),
+      ),
+    ).toBe("general");
+  });
+
   it("accepts one empty starter Frame and allocates isolated new artboards beside existing content", () => {
     expect(
       resolveInitialModelToolSurface(

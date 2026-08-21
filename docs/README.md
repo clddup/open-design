@@ -96,3 +96,4 @@
 | [0091](adr/0091-auto-layout-grid-v1.md)                                  | 已接受     | Auto Layout Grid v1 显式二维轨道与 cell/span                       |
 | [0092](adr/0092-auto-layout-grid-v2.md)                                  | 已接受     | Auto Layout Grid v2 自动行与 span-aware 轨道重排                   |
 | [0093](adr/0093-auto-layout-grid-canvas-track-reorder.md)                | 已接受     | Auto Layout Grid v3 画布轨道抓手与单事务重排                       |
+| [0122](adr/0122-first-visible-delivery-over-protocol-prose.md)           | 已接受     | 首个真实画面优先、首轮协议收缩与快速审查有界化                     |

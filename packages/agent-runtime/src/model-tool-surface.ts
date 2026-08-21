@@ -21,6 +21,12 @@ const PAGE_LIFECYCLE_INTENT =
 export function resolveInitialModelToolSurface(
   request: Readonly<AgentRunRequest>,
 ): ModelToolSurface {
+  const targetPageIsEmpty = inspectionTargetPageIsEmpty(
+    request.initialDesignInspection?.content,
+    request.mutationTarget.kind === "page"
+      ? request.mutationTarget.pageId
+      : undefined,
+  );
   if (
     request.initialDesignInspection === undefined ||
     request.continuation !== undefined ||
@@ -28,7 +34,7 @@ export function resolveInitialModelToolSurface(
     request.scope.selectedNodeIds.length > 0 ||
     request.mutationTarget.kind !== "page" ||
     !CREATE_INTENT.test(request.prompt) ||
-    NON_GENERATION_INTENT.test(request.prompt) ||
+    (!targetPageIsEmpty && NON_GENERATION_INTENT.test(request.prompt)) ||
     PAGE_LIFECYCLE_INTENT.test(request.prompt) ||
     !inspectionContainsTargetPage(
       request.initialDesignInspection.content,
@@ -38,6 +44,44 @@ export function resolveInitialModelToolSurface(
     return "general";
   }
   return "new-design";
+}
+
+/**
+ * Host state outranks ambiguous prose when the bound Page has no material
+ * content. Words such as “continue”, “adjust”, or “refine” commonly describe
+ * later stages of a brand/UI brief and must not route a fresh Page through the
+ * slower existing-document workflow.
+ */
+function inspectionTargetPageIsEmpty(
+  content: string | undefined,
+  pageId: string | undefined,
+): boolean {
+  if (!content || !pageId) return false;
+  let value: unknown;
+  try {
+    value = JSON.parse(content);
+  } catch {
+    return false;
+  }
+  if (!isRecord(value) || !isRecord(value.document)) return false;
+  const document = value.document;
+  if (!isRecord(document.pagesById) || !isRecord(document.nodesById)) {
+    return false;
+  }
+  const nodesById = document.nodesById;
+  const page = document.pagesById[pageId];
+  if (!isRecord(page) || !Array.isArray(page.rootNodeIds)) return false;
+  if (page.rootNodeIds.length === 0) return true;
+  return page.rootNodeIds.every((rootId) => {
+    if (typeof rootId !== "string") return false;
+    const root = nodesById[rootId];
+    return (
+      isRecord(root) &&
+      root.kind === "frame" &&
+      Array.isArray(root.childIds) &&
+      root.childIds.length === 0
+    );
+  });
 }
 
 function inspectionContainsTargetPage(

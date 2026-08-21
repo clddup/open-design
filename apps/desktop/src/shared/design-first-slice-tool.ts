@@ -347,11 +347,167 @@ export function normalizeDesignFirstSliceToolInput(
   const modelInput = { ...input };
   delete modelInput.skillRefs;
   if (!isCompactDeliverable(input.deliverable)) return undefined;
-  const skillRefs = builtinDesignSkillRefsForDeliverable(input.deliverable);
-  const candidate = { ...modelInput, skillRefs };
+  const deliverable = input.deliverable;
+  const objective =
+    typeof input.objective === "string" ? input.objective.trim() : "";
+  const targets = Array.isArray(input.targets)
+    ? input.targets.map((target) =>
+        normalizeFirstSliceTarget(target, deliverable),
+      )
+    : input.targets;
+  const skillRefs = builtinDesignSkillRefsForDeliverable(deliverable);
+  const candidate = {
+    ...modelInput,
+    designIntent:
+      input.designIntent ?? defaultDesignIntent(deliverable, objective),
+    briefFidelity: input.briefFidelity ?? defaultBriefFidelity(objective),
+    targets,
+    visualSystem: input.visualSystem ?? deriveVisualSystem(input.firstSlice),
+    rasterAssetRoles: input.rasterAssetRoles ?? [],
+    skillRefs,
+  };
   return isDesignFirstSliceToolInput(candidate)
     ? structuredClone(candidate)
     : undefined;
+}
+
+function normalizeFirstSliceTarget(
+  value: unknown,
+  deliverable: DesignFirstSliceToolInput["deliverable"],
+): unknown {
+  if (!isRecord(value)) return value;
+  const label = typeof value.label === "string" ? value.label : "Design target";
+  const firstRegion = Array.isArray(value.regions)
+    ? value.regions.find(isRecord)
+    : undefined;
+  const safeNodeId =
+    firstRegion && typeof firstRegion.nodeId === "string"
+      ? firstRegion.nodeId
+      : "";
+  return {
+    ...value,
+    objective: value.objective ?? `Complete ${label} as requested`,
+    layout:
+      value.layout ??
+      "Use one clear visual hierarchy inside the declared delivery frame.",
+    spacing:
+      value.spacing ??
+      "Use a consistent spacing rhythm derived from the visible composition.",
+    qualityProfile:
+      value.qualityProfile ??
+      (deliverable === "ui"
+        ? {
+            kind: "ui",
+            platform: "other",
+            input: "mixed",
+            insets: [0, 0, 0, 0],
+            safeNodeIds: safeNodeId ? [safeNodeId] : [],
+            hitNodeIds: [],
+          }
+        : { kind: "graphic" }),
+  };
+}
+
+function defaultDesignIntent(
+  deliverable: DesignFirstSliceToolInput["deliverable"],
+  objective: string,
+): DesignIntent {
+  const subject = boundedDefaultText(
+    `Requested ${deliverable} design: ${objective || "visible editable design"}`,
+    500,
+  );
+  return {
+    subject,
+    audience: "The people addressed by the current user request",
+    primaryJob: boundedDefaultText(
+      objective || "Deliver the requested visual result clearly",
+      500,
+    ),
+    visualThesis:
+      "The visible first slice establishes a deliberate hierarchy before secondary detail is added.",
+    signatureMotif:
+      "The strongest editable form and its surrounding negative space carry the visual identity.",
+    typographyLanguage:
+      "Typography follows the hierarchy visible in the submitted editable slice.",
+    colorMaterialLanguage:
+      "Color and material decisions come from the submitted editable slice and user brief.",
+    compositionTension:
+      "Scale, alignment, and negative space create a clear primary visual focus.",
+    antiPatterns: [
+      "Do not replace hierarchy with repeated generic cards",
+      "Do not add decoration without a compositional purpose",
+      "Do not invent content or product capabilities outside the request",
+    ],
+  };
+}
+
+function defaultBriefFidelity(objective: string): DesignBriefFidelity {
+  return {
+    requiredContent: [
+      boundedDefaultText(objective || "The requested visual deliverable", 500),
+    ],
+    preservedSemantics: [],
+    prohibitedAdditions: [
+      "Do not invent unrequested content, features, or delivery targets",
+    ],
+    assumptions: [],
+  };
+}
+
+function deriveVisualSystem(
+  firstSlice: unknown,
+): DesignFirstSliceToolInput["visualSystem"] {
+  const colors: string[] = [];
+  const typography: string[] = [];
+  if (isRecord(firstSlice) && Array.isArray(firstSlice.stages)) {
+    for (const stage of firstSlice.stages) {
+      if (!isRecord(stage) || !Array.isArray(stage.elements)) continue;
+      for (const element of stage.elements) {
+        if (!isRecord(element)) continue;
+        for (const paint of [element.fill, element.stroke]) {
+          if (isRecord(paint) && typeof paint.color === "string") {
+            colors.push(paint.color);
+          }
+        }
+        if (isRecord(element.text)) {
+          if (typeof element.text.color === "string") {
+            colors.push(element.text.color);
+          }
+          if (typeof element.text.fontFamily === "string") {
+            typography.push(
+              `${element.text.fontFamily}${
+                typeof element.text.fontStyleName === "string"
+                  ? ` ${element.text.fontStyleName}`
+                  : ""
+              }`,
+            );
+          }
+        }
+      }
+    }
+  }
+  return {
+    formLanguage:
+      "Use the editable geometry and hierarchy established by the first visible slice.",
+    palette: uniqueText(colors).slice(0, 12).length
+      ? uniqueText(colors).slice(0, 12)
+      : ["#111111", "#FFFFFF"],
+    surfaceAndDepth:
+      "Depth follows explicit fills, strokes, clipping, and overlap in the editable composition.",
+    typography: uniqueText(typography).slice(0, 8).length
+      ? uniqueText(typography).slice(0, 8)
+      : ["Use a resolvable system typeface with clear hierarchy"],
+    effects: [],
+  };
+}
+
+function uniqueText(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
+}
+
+function boundedDefaultText(value: string, maximum: number): string {
+  const trimmed = value.trim();
+  return (trimmed || "Requested visual deliverable").slice(0, maximum);
 }
 
 function isCompactDeliverable(
@@ -432,12 +588,18 @@ export function explainInvalidDesignFirstSliceToolInput(
       "/objective: must be a non-empty string of at most 2000 characters",
     );
   }
-  if (!isCompactDesignIntent(input.designIntent)) {
+  if (
+    input.designIntent !== undefined &&
+    !isCompactDesignIntent(input.designIntent)
+  ) {
     return invalidFirstSliceMessage(
       "/designIntent: must contain the exact current visual intent fields and 3-12 distinct antiPatterns",
     );
   }
-  if (!isDesignBriefFidelity(input.briefFidelity)) {
+  if (
+    input.briefFidelity !== undefined &&
+    !isDesignBriefFidelity(input.briefFidelity)
+  ) {
     return invalidFirstSliceMessage(
       "/briefFidelity: must contain the current requiredContent, preservedSemantics, prohibitedAdditions, and assumptions arrays",
     );
@@ -458,7 +620,13 @@ export function explainInvalidDesignFirstSliceToolInput(
       `/targets: contains ${input.targets.length} targets; maximum is 32`,
     );
   }
-  const invalidTargetIndex = input.targets.findIndex(
+  const normalizedTargets = input.targets.map((target) =>
+    normalizeFirstSliceTarget(
+      target,
+      input.deliverable as DesignFirstSliceToolInput["deliverable"],
+    ),
+  );
+  const invalidTargetIndex = normalizedTargets.findIndex(
     (target) => !isTarget(target),
   );
   if (invalidTargetIndex >= 0) {
@@ -466,12 +634,15 @@ export function explainInvalidDesignFirstSliceToolInput(
       `/targets/${invalidTargetIndex}: target, frame, qualityProfile, or region fields do not match the exact current shape`,
     );
   }
-  if (!isVisualSystem(input.visualSystem)) {
+  if (input.visualSystem !== undefined && !isVisualSystem(input.visualSystem)) {
     return invalidFirstSliceMessage(
       "/visualSystem: must contain formLanguage, palette, surfaceAndDepth, typography, and optional effects",
     );
   }
-  if (!isRasterRoles(input.rasterAssetRoles)) {
+  if (
+    input.rasterAssetRoles !== undefined &&
+    !isRasterRoles(input.rasterAssetRoles)
+  ) {
     return invalidFirstSliceMessage(
       "/rasterAssetRoles: must contain at most four distinct supported roles",
     );
