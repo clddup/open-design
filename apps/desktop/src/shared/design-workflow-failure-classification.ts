@@ -70,6 +70,11 @@ const WORKFLOW_FAILURES: Readonly<
     "applying-draft",
     true,
   ),
+  logo_exploration_required: recovery(
+    "material-write",
+    "applying-draft",
+    false,
+  ),
 };
 
 export function classifyDesignWorkflowFailure(

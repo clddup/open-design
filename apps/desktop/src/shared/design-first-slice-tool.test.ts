@@ -9,6 +9,7 @@ import {
   DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA,
   explainInvalidDesignFirstSliceToolInput,
   isDesignFirstSliceToolInput,
+  logoBriefRequiresExploration,
   normalizeDesignFirstSliceToolInput,
   type DesignFirstSliceToolInput,
 } from "./design-first-slice-tool";
@@ -22,7 +23,15 @@ describe("compact first-slice tool", () => {
     const properties = DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA.properties;
     expect(properties.firstSlice.properties.stages.maxItems).toBe(3);
     expect(Object.keys(properties).sort()).toEqual(
-      ["deliverable", "firstSlice", "objective", "targets", "version"].sort(),
+      [
+        "deliverable",
+        "firstSlice",
+        "logoExploration",
+        "logoOutputs",
+        "objective",
+        "targets",
+        "version",
+      ].sort(),
     );
     expect(JSON.stringify(properties)).not.toContain('"qualityProfile"');
     expect(JSON.stringify(properties)).not.toContain('"designIntent"');
@@ -82,6 +91,48 @@ describe("compact first-slice tool", () => {
           compileDesignFirstSliceToolInput(normalized).plan,
         ),
     ).toBe(true);
+  });
+
+  it("binds the complete Run prompt as authoritative brief fidelity", () => {
+    const modelInput = structuredClone(fixture()) as unknown as Record<
+      string,
+      unknown
+    >;
+    Reflect.deleteProperty(modelInput, "skillRefs");
+    const authoritativePrompt = [
+      "Create four real brand artboards.",
+      "Concept Exploration must contain three genuinely different directions.",
+      "Selected Logo System must include symbol, wordmark, lockups, clear space, and minimum size.",
+      "Desktop App Icon must include 16/24/32/64/128/256/512 px tests.",
+      "Brand Usage Preview must include title bar, launch screen, app list, and light/dark canvas.",
+    ].join("\n");
+
+    const normalized = normalizeDesignFirstSliceToolInput(modelInput, {
+      authoritativePrompt,
+    });
+
+    expect(normalized?.briefFidelity.requiredContent.join("\n")).toBe(
+      authoritativePrompt,
+    );
+    expect(normalized?.briefFidelity.requiredContent.join("\n")).not.toBe(
+      modelInput.objective,
+    );
+  });
+
+  it("recognizes explicit multi-direction Logo briefs without treating focused marks as exploration", () => {
+    expect(
+      logoBriefRequiresExploration(
+        "Concept Exploration 提供 3 个真正不同的设计方向",
+      ),
+    ).toBe(true);
+    expect(
+      logoBriefRequiresExploration(
+        "Create three genuinely different logo directions with optical tests",
+      ),
+    ).toBe(true);
+    expect(
+      logoBriefRequiresExploration("Create one focused Logo and App Icon"),
+    ).toBe(false);
   });
 
   it("accepts distinct safe-area foreground and interactive hit-area IDs", () => {
@@ -251,6 +302,35 @@ describe("compact first-slice tool", () => {
       ...target,
       qualityProfile: { kind: "graphic" },
     }));
+    input.targets[0].regions.push(
+      {
+        nodeId: "negative_root",
+        name: "Negative Space Direction",
+        role: "content",
+        x: 24,
+        y: 80,
+        width: 342,
+        height: 220,
+      },
+      {
+        nodeId: "modular_root",
+        name: "Modular Direction",
+        role: "content",
+        x: 24,
+        y: 324,
+        width: 342,
+        height: 220,
+      },
+      {
+        nodeId: "typographic_root",
+        name: "Typographic Direction",
+        role: "content",
+        x: 24,
+        y: 568,
+        width: 342,
+        height: 220,
+      },
+    );
     input.logoExploration = {
       targetId: "home",
       directions: [
@@ -267,7 +347,7 @@ describe("compact first-slice tool", () => {
       id: "hero_panel",
       kind: "path",
       name: "Editable Identity Contour",
-      parentId: "home_hero",
+      parentId: "negative_root",
       x: 24,
       y: 24,
       width: 160,
@@ -275,9 +355,13 @@ describe("compact first-slice tool", () => {
       path: "M 0 0 H 160 V 48 H 48 V 160 H 0 Z",
       fill: { color: "#0F172A" },
     };
+    input.firstSlice.stages[0].elements[0].id = "negative_root";
+    input.firstSlice.stages[0].elements[0].name = "Negative Space Direction";
+    input.firstSlice.stages[0].elements[2].parentId = "negative_root";
 
     const modelInput = structuredClone(input);
     Reflect.deleteProperty(modelInput, "skillRefs");
+    expect(explainInvalidDesignFirstSliceToolInput(modelInput)).toBeUndefined();
     const normalized = normalizeDesignFirstSliceToolInput(modelInput);
     expect(normalized?.skillRefs).toEqual(BUILTIN_LOGO_DESIGN_SKILL_REFS);
     expect(normalized && isDesignFirstSliceToolInput(normalized)).toBe(true);
@@ -294,6 +378,12 @@ describe("compact first-slice tool", () => {
       },
     });
 
+    const aliasedPlan = compileDesignFirstSliceToolInput(normalized!).plan;
+    const firstDirection = aliasedPlan.logoExploration?.directions[0];
+    if (!firstDirection) throw new Error("Expected compiled Logo exploration");
+    firstDirection.monochromeNodeId = firstDirection.smallSizeNodeIds[0];
+    expect(isDesignPlanToolInput(aliasedPlan)).toBe(true);
+
     const duplicatePrinciple = structuredClone(modelInput);
     if (!duplicatePrinciple.logoExploration) {
       throw new Error("Expected Logo exploration fixture");
@@ -302,6 +392,25 @@ describe("compact first-slice tool", () => {
       "negative-space";
     expect(
       normalizeDesignFirstSliceToolInput(duplicatePrinciple),
+    ).toBeUndefined();
+
+    const unplannedConceptRoot = structuredClone(modelInput);
+    if (!unplannedConceptRoot.logoExploration) {
+      throw new Error("Expected Logo exploration fixture");
+    }
+    unplannedConceptRoot.logoExploration.directions[0].rootNodeId =
+      "unplanned_concept_root";
+    expect(
+      normalizeDesignFirstSliceToolInput(unplannedConceptRoot),
+    ).toBeUndefined();
+
+    const laterTargetExploration = structuredClone(modelInput);
+    if (!laterTargetExploration.logoExploration) {
+      throw new Error("Expected Logo exploration fixture");
+    }
+    laterTargetExploration.logoExploration.targetId = "profile";
+    expect(
+      normalizeDesignFirstSliceToolInput(laterTargetExploration),
     ).toBeUndefined();
 
     const missingExploration = structuredClone(modelInput);
@@ -343,6 +452,17 @@ describe("compact first-slice tool", () => {
     const wrongTarget = fixture();
     wrongTarget.firstSlice.targetId = "profile";
     expect(isDesignFirstSliceToolInput(wrongTarget)).toBe(false);
+
+    const unplannedRegion = fixture();
+    unplannedRegion.firstSlice.stages[0].elements[0].id = "home_intro";
+    for (const element of unplannedRegion.firstSlice.stages[0].elements.slice(
+      1,
+    )) {
+      element.parentId = "home_intro";
+    }
+    expect(explainInvalidDesignFirstSliceToolInput(unplannedRegion)).toContain(
+      'insert one or more Group/Frame elements using declared region IDs ["home_hero"]',
+    );
   });
 
   it("accepts the 25-element two-stage production login slice that previously failed before any revision", () => {
@@ -373,7 +493,7 @@ describe("compact first-slice tool", () => {
     expect(explainInvalidDesignFirstSliceToolInput(input)).toBeUndefined();
   });
 
-  it("bounds the first visible write to one planned region, three stages and 32 elements with a field-level recovery", () => {
+  it("bounds the first visible write to planned regions, three stages and 32 elements with a field-level recovery", () => {
     const tooManyElements = fixture();
     const stage = tooManyElements.firstSlice.stages[0];
     for (let index = 0; index < 30; index += 1) {
@@ -456,7 +576,7 @@ describe("compact first-slice tool", () => {
         },
       ],
     });
-    expect(isDesignFirstSliceToolInput(multipleRegions)).toBe(false);
+    expect(isDesignFirstSliceToolInput(multipleRegions)).toBe(true);
   });
 });
 

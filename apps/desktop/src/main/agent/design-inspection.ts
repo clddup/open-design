@@ -262,10 +262,10 @@ function assertLogoExplorationEvidence(
         `design_workflow.logo_exploration_incomplete: Logo concept ${direction.conceptId} requires semantic Frame/Group ${direction.rootNodeId} inside exploration artboard ${artboardId}`,
       );
     }
-    for (const evidenceNodeId of [
+    for (const evidenceNodeId of new Set([
       direction.monochromeNodeId,
       ...direction.smallSizeNodeIds,
-    ]) {
+    ])) {
       if (
         !inspection.nodesById.has(evidenceNodeId) ||
         !inspectedParentChainReaches(

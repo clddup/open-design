@@ -38,6 +38,9 @@ describe("handleDesignFirstSliceTool", () => {
       activeTargetId: "home",
     };
     const coordinator = {
+      authoritativeDesignPrompt: vi
+        .fn()
+        .mockReturnValue("Create a focused home screen"),
       registerDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
@@ -142,6 +145,19 @@ describe("handleDesignFirstSliceTool", () => {
       expect.objectContaining({ targetIds: ["home"] }),
       5,
     );
+    expect(coordinator.registerDesignPlan).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        briefFidelity: {
+          requiredContent: ["Create a focused home screen"],
+          preservedSemantics: [],
+          prohibitedAdditions: [
+            "Do not invent unrequested content, features, or delivery targets",
+          ],
+          assumptions: [],
+        },
+      }),
+    );
     expect(result).toMatchObject({
       content: {
         allocation: { targetIds: ["home"], revision: 4 },
@@ -156,6 +172,9 @@ describe("handleDesignFirstSliceTool", () => {
     const input = firstSliceInput();
     const compiled = compileDesignFirstSliceToolInput(input);
     const coordinator = {
+      authoritativeDesignPrompt: vi
+        .fn()
+        .mockReturnValue("Create a focused home screen"),
       registerDesignPlan: vi.fn().mockReturnValue({
         status: "accepted",
         planRevision: 1,
@@ -199,6 +218,39 @@ describe("handleDesignFirstSliceTool", () => {
     ).rejects.toThrow("stage rejected");
     expect(coordinator.recordDesignPlanAllocated).not.toHaveBeenCalled();
     expect(coordinator.recordDesignApplyCompleted).not.toHaveBeenCalled();
+  });
+
+  it("rejects a one-direction compact Logo call when the authoritative brief requests three", async () => {
+    const input = firstSliceInput();
+    input.deliverable = "logo";
+    input.targets = input.targets.map((target) => ({
+      ...target,
+      qualityProfile: { kind: "graphic" },
+    }));
+    const coordinator = {
+      authoritativeDesignPrompt: vi
+        .fn()
+        .mockReturnValue("Concept Exploration 提供 3 个真正不同的设计方向"),
+      registerDesignPlan: vi.fn(),
+    };
+    const rendererHost = { execute: vi.fn() };
+
+    await expect(
+      handleDesignFirstSliceTool(
+        coordinator as never,
+        rendererHost as never,
+        {
+          toolCallId: "slice_logo_incomplete",
+          toolName: DESIGN_FIRST_SLICE_TOOL_NAME,
+          input,
+        },
+        context,
+        context,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("design_workflow.logo_exploration_required");
+    expect(coordinator.registerDesignPlan).not.toHaveBeenCalled();
+    expect(rendererHost.execute).not.toHaveBeenCalled();
   });
 });
 

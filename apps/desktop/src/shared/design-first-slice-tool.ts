@@ -319,7 +319,15 @@ export function isDesignFirstSliceToolInput(
         : [],
     ),
   );
-  if (materializedRegions.size !== 1) return false;
+  if (materializedRegions.size < 1) return false;
+  if (
+    value.logoExploration !== undefined &&
+    !value.logoExploration.directions.some((direction) =>
+      materializedRegions.has(direction.rootNodeId),
+    )
+  ) {
+    return false;
+  }
   if (
     ![...materializedRegions].some((regionId) =>
       allElements.some(
@@ -342,6 +350,7 @@ export function isDesignFirstSliceToolInput(
 
 export function normalizeDesignFirstSliceToolInput(
   input: unknown,
+  options: { authoritativePrompt?: string } = {},
 ): DesignFirstSliceToolInput | undefined {
   if (!isRecord(input)) return undefined;
   const modelInput = { ...input };
@@ -360,7 +369,10 @@ export function normalizeDesignFirstSliceToolInput(
     ...modelInput,
     designIntent:
       input.designIntent ?? defaultDesignIntent(deliverable, objective),
-    briefFidelity: input.briefFidelity ?? defaultBriefFidelity(objective),
+    briefFidelity:
+      options.authoritativePrompt !== undefined
+        ? defaultBriefFidelity(options.authoritativePrompt)
+        : (input.briefFidelity ?? defaultBriefFidelity(objective)),
     targets,
     visualSystem: input.visualSystem ?? deriveVisualSystem(input.firstSlice),
     rasterAssetRoles: input.rasterAssetRoles ?? [],
@@ -369,6 +381,17 @@ export function normalizeDesignFirstSliceToolInput(
   return isDesignFirstSliceToolInput(candidate)
     ? structuredClone(candidate)
     : undefined;
+}
+
+export function logoBriefRequiresExploration(prompt: string): boolean {
+  return (
+    /(?:3|三)\s*(?:个|套|种|条)?\s*(?:真正|明显|完全)?\s*(?:不同|独立|差异化)?\s*(?:的)?\s*(?:logo\s*)?(?:设计)?(?:方向|方案|概念)/iu.test(
+      prompt,
+    ) ||
+    /\b(?:three|3)\s+(?:(?:genuinely|truly|visibly|materially|distinct|different)\s+)*(?:logo\s+)?(?:directions?|concepts?|options?)\b/iu.test(
+      prompt,
+    )
+  );
 }
 
 function normalizeFirstSliceTarget(
@@ -443,15 +466,45 @@ function defaultDesignIntent(
 
 function defaultBriefFidelity(objective: string): DesignBriefFidelity {
   return {
-    requiredContent: [
-      boundedDefaultText(objective || "The requested visual deliverable", 500),
-    ],
+    requiredContent: chunkRequiredContent(
+      objective || "The requested visual deliverable",
+    ),
     preservedSemantics: [],
     prohibitedAdditions: [
       "Do not invent unrequested content, features, or delivery targets",
     ],
     assumptions: [],
   };
+}
+
+function chunkRequiredContent(value: string): string[] {
+  const normalized = value.replaceAll(/\r\n?/g, "\n").trim();
+  if (!normalized) return ["The requested visual deliverable"];
+  const chunks: string[] = [];
+  let current = "";
+  for (const rawLine of normalized.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line.length > 500) {
+      if (current) {
+        chunks.push(current);
+        current = "";
+      }
+      for (let offset = 0; offset < line.length; offset += 500) {
+        chunks.push(line.slice(offset, offset + 500));
+      }
+      continue;
+    }
+    const combined = current ? `${current}\n${line}` : line;
+    if (combined.length > 500) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = combined;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.slice(0, 24);
 }
 
 function deriveVisualSystem(
@@ -663,7 +716,7 @@ export function explainInvalidDesignFirstSliceToolInput(
     )
   ) {
     return invalidFirstSliceMessage(
-      "/logoExploration: when present, exploration requires exactly three directions with distinct principles and stable monochrome plus 32/24/16 px evidence nodes",
+      "/logoExploration: must target targets[0] and declare exactly three directions with distinct principles, rootNodeIds matching three first-target regions, and stable monochrome plus 32/24/16 px evidence nodes",
     );
   }
   const targetIds = new Set(
@@ -735,8 +788,56 @@ export function explainInvalidDesignFirstSliceToolInput(
     );
   }
 
+  const firstTarget = targets[0];
+  const frameIds = new Set(targets.map((target) => target.frame.frameId));
+  const seenElementIds = new Set<string>();
+  const flattenedElements: DesignFirstSliceElement[] = [];
+  for (const stage of stages) {
+    if (!isRecord(stage) || !Array.isArray(stage.elements)) continue;
+    for (const element of stage.elements as unknown[]) {
+      if (isElement(element)) flattenedElements.push(element);
+    }
+  }
+  for (let index = 0; index < flattenedElements.length; index += 1) {
+    const element = flattenedElements[index];
+    if (!element) continue;
+    if (seenElementIds.has(element.id)) {
+      return invalidFirstSliceMessage(
+        `/firstSlice/stages: element ID ${JSON.stringify(element.id)} is duplicated at flattened element ${index}`,
+      );
+    }
+    if (frameIds.has(element.id)) {
+      return invalidFirstSliceMessage(
+        `/firstSlice/stages: element ID ${JSON.stringify(element.id)} collides with a delivery artboard Frame ID`,
+      );
+    }
+    if (
+      element.parentId !== firstTarget?.frame.frameId &&
+      !seenElementIds.has(element.parentId)
+    ) {
+      return invalidFirstSliceMessage(
+        `/firstSlice/stages: parent ${JSON.stringify(element.parentId)} for element ${JSON.stringify(element.id)} must be declared earlier or equal the first target Frame ID`,
+      );
+    }
+    seenElementIds.add(element.id);
+  }
+  const plannedRegionIds = new Set(
+    firstTarget?.regions.map((region) => region.nodeId) ?? [],
+  );
+  const materializedRegionIds = flattenedElements.flatMap((element) =>
+    plannedRegionIds.has(element.id) &&
+    (element.kind === "group" || element.kind === "frame")
+      ? [element.id]
+      : [],
+  );
+  if (materializedRegionIds.length === 0) {
+    return invalidFirstSliceMessage(
+      `/firstSlice/stages: no first-target planned region was materialized; insert one or more Group/Frame elements using declared region IDs ${JSON.stringify([...plannedRegionIds])}`,
+    );
+  }
+
   return invalidFirstSliceMessage(
-    "Cross-field structure is invalid. The first slice must target targets[0], use unique IDs, declare parents before children, materialize exactly one planned region, and include editable non-container content inside it",
+    "Cross-field structure is invalid. The first slice must target targets[0], use unique IDs, declare parents before children, materialize one or more declared planned regions, and include editable non-container content inside them",
   );
 }
 
@@ -1048,19 +1149,23 @@ function isCompactLogoExploration(
   value: unknown,
   targets: readonly Pick<
     DesignFirstSliceToolInput["targets"][number],
-    "targetId"
+    "targetId" | "regions"
   >[],
 ): value is NonNullable<DesignFirstSliceToolInput["logoExploration"]> {
+  const firstTarget = targets[0];
   if (
     !isRecord(value) ||
     !safeId(value.targetId, 128) ||
-    !targets.some((target) => target.targetId === value.targetId) ||
+    value.targetId !== firstTarget?.targetId ||
     !Array.isArray(value.directions) ||
     value.directions.length !== 3 ||
     !exactKeys(value, ["targetId", "directions"])
   ) {
     return false;
   }
+  const firstTargetRegionIds = new Set(
+    firstTarget.regions.map((region) => region.nodeId),
+  );
   const ids = new Set<string>();
   const principles = new Set<string>();
   for (const direction of value.directions) {
@@ -1072,6 +1177,7 @@ function isCompactLogoExploration(
       ) ||
       !text(direction.thesis, 16, 1_000) ||
       !safeId(direction.rootNodeId) ||
+      !firstTargetRegionIds.has(direction.rootNodeId) ||
       !Array.isArray(direction.evidenceNodeIds) ||
       direction.evidenceNodeIds.length !== 4 ||
       !direction.evidenceNodeIds.every((nodeId) => safeId(nodeId)) ||

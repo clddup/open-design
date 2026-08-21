@@ -275,6 +275,13 @@ export class GlobalTaskCoordinator {
     }
   }
 
+  authoritativeDesignPrompt(context: TrustedToolContext): string {
+    this.assertDesignToolContext(context);
+    const binding = this.#toolBindingsByRunId.get(context.runId);
+    if (!binding) throw new Error("Design brief requires an active Run");
+    return binding.prompt;
+  }
+
   grantPageStructureAccess(
     runId: string,
     approvalId: string,

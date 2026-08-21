@@ -5,7 +5,7 @@ import type {
 } from "./index.js";
 
 export type ModelToolDisclosurePhase =
-  "bootstrap" | "host-inspected" | "inspected" | "expanded";
+  "bootstrap" | "host-inspected" | "inspected" | "continuation" | "expanded";
 
 /**
  * Returns the exact model-facing definition view for one disclosure phase.
@@ -18,12 +18,19 @@ export function disclosedToolDefinitions(
   options: { surface?: ModelToolSurface } = {},
 ): AgentToolDefinition[] {
   const surface =
-    phase === "expanded" ? "general" : (options.surface ?? "general");
+    phase === "expanded" || phase === "continuation"
+      ? "general"
+      : (options.surface ?? "general");
   const visibleDefinitions = definitions.filter((definition) => {
     const surfaces = definition.modelDisclosure?.surfaces ?? ["general"];
     return surfaces.includes(surface);
   });
   if (phase === "expanded") return visibleDefinitions;
+  if (phase === "continuation") {
+    return visibleDefinitions.filter(
+      (definition) => definition.modelDisclosure?.role !== "plan",
+    );
+  }
   return visibleDefinitions.flatMap((definition) => {
     const disclosure = definition.modelDisclosure;
     if (disclosure === undefined) return [definition];
@@ -51,15 +58,20 @@ export function disclosedToolDefinitions(
 }
 
 /**
- * New-design Runs stay on the compact surface through inspection and create
- * Plan allocation, then expand after the first material revision. A Plan that
- * explicitly targets an existing artboard expands the edit surface because
- * its first valid mutation may require hierarchy/layout/component tooling.
+ * New-design Runs stay on the compact surface through inspection and first
+ * material commit, then enter a continuation surface that keeps the accepted
+ * Plan authoritative. General Runs expand after a material revision. A Plan
+ * that explicitly targets an existing artboard expands the edit surface
+ * because its first valid mutation may require hierarchy/layout/component
+ * tooling.
  */
 export function resolveModelToolDisclosurePhase(
   definitions: readonly AgentToolDefinition[],
   records: readonly AgentToolCallRecord[],
-  options: { initialInspection?: boolean } = {},
+  options: {
+    initialInspection?: boolean;
+    surface?: ModelToolSurface;
+  } = {},
 ): ModelToolDisclosurePhase {
   const roles = new Map(
     definitions.flatMap((definition) => {
@@ -75,6 +87,15 @@ export function resolveModelToolDisclosurePhase(
   for (const record of records) {
     const role = roles.get(record.toolName);
     if (role === "material-write" && record.revision !== undefined) {
+      const disclosure = definitions.find(
+        (definition) => definition.name === record.toolName,
+      )?.modelDisclosure;
+      if (
+        options.surface === "new-design" &&
+        disclosure?.surfaces?.includes("new-design")
+      ) {
+        return "continuation";
+      }
       return "expanded";
     }
     if (role === "plan" && planTargetsExistingArtboard(record.input)) {

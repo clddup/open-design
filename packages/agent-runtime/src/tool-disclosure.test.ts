@@ -65,7 +65,7 @@ describe("model tool disclosure", () => {
     ).toEqual([definition.name, exportDefinition.name]);
   });
 
-  it("isolates the compact new-design surface and returns to general tools after material revision", () => {
+  it("isolates the compact new-design surface and continues without reopening the full Plan after material revision", () => {
     const compact = {
       ...definition,
       name: "opendesign_generate_first_slice",
@@ -84,22 +84,32 @@ describe("model tool disclosure", () => {
         surfaces: ["general", "new-design"] as const,
       },
     };
+    const plan = {
+      ...definition,
+      name: "opendesign_define_design_plan",
+      modelDisclosure: {
+        bootstrap: "available" as const,
+        role: "plan" as const,
+      },
+    };
 
     expect(
       disclosedToolDefinitions(
-        [definition, compact, inspection],
+        [definition, compact, inspection, plan],
         "host-inspected",
         { surface: "new-design" },
       ).map((tool) => tool.name),
     ).toEqual([compact.name, inspection.name]);
     expect(
-      disclosedToolDefinitions([definition, compact, inspection], "expanded", {
-        surface: "new-design",
-      }).map((tool) => tool.name),
+      disclosedToolDefinitions(
+        [definition, compact, inspection, plan],
+        "continuation",
+        { surface: "new-design" },
+      ).map((tool) => tool.name),
     ).toEqual([definition.name, inspection.name]);
     expect(
       resolveModelToolDisclosurePhase(
-        [definition, compact, inspection],
+        [definition, compact, inspection, plan],
         [
           {
             toolCallId: "slice_1",
@@ -109,9 +119,9 @@ describe("model tool disclosure", () => {
             revision: 4,
           },
         ],
-        { initialInspection: true },
+        { initialInspection: true, surface: "new-design" },
       ),
-    ).toBe("expanded");
+    ).toBe("continuation");
   });
 
   it("allows a compact first material slice beside Plan on the host-inspected surface", () => {

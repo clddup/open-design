@@ -20,6 +20,7 @@ import type {
 import { createOpenDesignPiAgent } from "./pi-core-adapter.js";
 import { createPiModelGatewayStreamFn } from "./pi-model-gateway-adapter.js";
 import { PiRunEventAdapter } from "./pi-run-event-adapter.js";
+import { OpenDesignPiToolAdapter } from "./pi-tool-adapter.js";
 
 const request: AgentRunRequest = {
   runId: "run_pi_tool",
@@ -130,6 +131,79 @@ class RecordingGateway implements ModelGateway {
 }
 
 describe("OpenDesign Pi tool adapter", () => {
+  it("exposes continuation tools without first-slice or Plan after a compact material revision", async () => {
+    const firstSliceTool: AgentToolDefinition = {
+      ...moveTool,
+      name: "opendesign_generate_first_slice",
+      modelDisclosure: {
+        bootstrap: "available",
+        role: "material-write",
+        surfaces: ["new-design"],
+      },
+    };
+    const planTool: AgentToolDefinition = {
+      ...moveTool,
+      name: "opendesign_define_design_plan",
+      modelDisclosure: {
+        bootstrap: "available",
+        role: "plan",
+      },
+    };
+    const checkpointTool: AgentToolDefinition = {
+      ...moveTool,
+      name: "opendesign_design_checkpoint",
+      modelDisclosure: {
+        bootstrap: "deferred",
+        afterInspection: "available",
+        role: "material-write",
+      },
+    };
+    const adapter = new OpenDesignPiToolAdapter({
+      request,
+      definitions: [firstSliceTool, planTool, checkpointTool, inspectTool],
+      toolExecutor: {
+        async *execute(_call, context): AsyncIterable<ToolExecutionEvent> {
+          await Promise.resolve();
+          yield {
+            type: "completed",
+            result: {
+              content: { ok: true },
+              designRevision: {
+                previousRevision: context.revision,
+                revision: context.revision + 1,
+                transactionId: "transaction_first_slice",
+              },
+            },
+          };
+        },
+      },
+      lifecycle: {
+        approvalRequested: () => Promise.resolve(),
+        approvalResolved: () => Promise.resolve(),
+      },
+      maxToolCalls: 8,
+      initialInspection: true,
+      initialModelToolSurface: "new-design",
+    });
+
+    expect(adapter.modelTools.map((tool) => tool.name)).toEqual([
+      firstSliceTool.name,
+    ]);
+
+    const firstSlice = adapter.modelTools[0];
+    expect(firstSlice).toBeDefined();
+    await firstSlice?.execute(
+      "first_slice_1",
+      { dx: 0 },
+      new AbortController().signal,
+    );
+
+    expect(adapter.modelTools.map((tool) => tool.name)).toEqual([
+      checkpointTool.name,
+      inspectTool.name,
+    ]);
+  });
+
   it("preserves progress, revision, attachments, journal and the next model turn", async () => {
     const attachment = {
       attachmentId: `image_${"a".repeat(64)}`,

@@ -23,7 +23,7 @@ Agent utilityProcess ── Conversation / Provider / typed design tools
 - 固定版本 `leafer-editor@2.2.9` 是唯一生产画布与直接操作引擎；Leafer 场景只是当前 revision 的可丢弃投影。
 - Renderer 没有 Node.js、原始 IPC、任意文件系统或模型凭据能力。
 - Agent、MCP 和人工操作都必须通过版本化设计契约进入同一 `EditorRuntime`。
-- Agent 新建设计优先一次提交真实画板根与首个可编辑画面；默认快速模式限制主观精修循环，精细模式保留更严格的视觉审查。
+- Agent 新建设计优先一次提交真实画板根与首个可编辑画面，并基于同一权威 brief 连续完成后续目标；默认快速模式限制主观精修循环，精细模式保留更严格的视觉审查。
 - OpenPencil、旧 Canvas2D 后端和旧通用手写选择框已经从运行时与发行路径移除，不存在 fallback 或双写入口。
 
 ## 项目状态

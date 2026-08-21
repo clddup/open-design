@@ -2,6 +2,10 @@ import {
   DESIGN_FIRST_SLICE_MAX_ELEMENTS,
   DESIGN_FIRST_SLICE_MAX_STAGES,
 } from "./design-first-slice-budget";
+import {
+  DESIGN_LOGO_OUTPUTS,
+  LOGO_CONCEPT_PRINCIPLES,
+} from "./design-agent-plan-review";
 import type { DesignFirstSliceElement } from "./design-first-slice-tool";
 
 const ID_SCHEMA = { type: "string", minLength: 1, maxLength: 256 } as const;
@@ -73,6 +77,8 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
       type: "array",
       minItems: 1,
       maxItems: 32,
+      description:
+        "Declare the complete requested target set. Each target's regions are the complete material sections required for that target, including every requested concept direction; firstSlice may materialize one or more of targets[0]'s declared regions.",
       items: {
         type: "object",
         properties: {
@@ -248,6 +254,54 @@ export const DESIGN_FIRST_SLICE_TOOL_INPUT_SCHEMA = {
         },
       },
       required: ["targetId", "label", "stages"],
+      additionalProperties: false,
+    },
+    logoOutputs: {
+      type: "array",
+      minItems: 1,
+      maxItems: DESIGN_LOGO_OUTPUTS.length,
+      uniqueItems: true,
+      items: { enum: [...DESIGN_LOGO_OUTPUTS] },
+    },
+    logoExploration: {
+      type: "object",
+      description:
+        "Required when the Logo brief asks for multiple directions. Declare exactly three genuinely distinct concepts and stable evidence IDs before drawing so the trusted host cannot verify a partial exploration board.",
+      properties: {
+        targetId: { type: "string", minLength: 1, maxLength: 128 },
+        directions: {
+          type: "array",
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: "object",
+            properties: {
+              conceptId: { type: "string", minLength: 1, maxLength: 128 },
+              principle: { enum: [...LOGO_CONCEPT_PRINCIPLES] },
+              thesis: { type: "string", minLength: 16, maxLength: 1_000 },
+              rootNodeId: ID_SCHEMA,
+              evidenceNodeIds: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                uniqueItems: true,
+                description:
+                  "Distinct editable nodes ordered monochrome master, 32 px, 24 px, and 16 px.",
+                items: ID_SCHEMA,
+              },
+            },
+            required: [
+              "conceptId",
+              "principle",
+              "thesis",
+              "rootNodeId",
+              "evidenceNodeIds",
+            ],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["targetId", "directions"],
       additionalProperties: false,
     },
   },

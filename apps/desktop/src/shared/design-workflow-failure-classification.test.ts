@@ -21,6 +21,8 @@ describe("design workflow failure classification", () => {
     ["new_node_id_namespace_required", "plan-repair", "repairing-plan"],
     ["frame_resize_requires_layout_tool", "layout-repair", "repairing-layout"],
     ["layout_quality_failed", "layout-repair", "repairing-layout"],
+    ["logo_exploration_incomplete", "material-write", "applying-draft"],
+    ["logo_exploration_required", "material-write", "applying-draft"],
   ] as const)(
     "classifies %s once for Main and Timeline",
     (code, phase, presentation) => {

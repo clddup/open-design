@@ -8,6 +8,7 @@ import {
   designPlanTargets,
   INTERNAL_DESIGN_APPLY_TOOL_NAME,
   isDesignPlanToolInput,
+  logoBriefRequiresExploration,
   normalizeDesignApplyToolInput,
   normalizeDesignFirstSliceToolInput,
 } from "../../shared/design-agent-tools.js";
@@ -23,9 +24,21 @@ export async function handleDesignFirstSliceTool(
   signal: AbortSignal,
   reportProgress?: (message: string, progress: number) => void,
 ): Promise<TrustedToolResult> {
-  const input = normalizeDesignFirstSliceToolInput(call.input);
+  const authoritativePrompt = coordinator.authoritativeDesignPrompt(context);
+  const input = normalizeDesignFirstSliceToolInput(call.input, {
+    authoritativePrompt,
+  });
   if (!input) {
     throw new TypeError("Invalid compact first-slice tool input");
+  }
+  if (
+    input.deliverable === "logo" &&
+    logoBriefRequiresExploration(authoritativePrompt) &&
+    input.logoExploration === undefined
+  ) {
+    throw new Error(
+      "design_workflow.logo_exploration_required: The current Logo brief explicitly requests three concept directions. Submit one corrected opendesign_generate_first_slice call with logoExploration, three distinct principles, three declared first-target concept regions, and stable monochrome plus 32/24/16 px evidence IDs; do not allocate or draw a single direction first",
+    );
   }
   const compiled = compileDesignFirstSliceToolInput(input);
   if (!isDesignPlanToolInput(compiled.plan)) {

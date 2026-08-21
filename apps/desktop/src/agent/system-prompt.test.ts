@@ -36,7 +36,16 @@ describe("OpenDesign Agent system prompt", () => {
       "stages are real semantic commits",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
-      "no more than 24 total elements",
+      "no more than 32 total elements",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "one or more meaningful editable regions",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "logoExploration is mandatory in this call",
+    );
+    expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
+      "never submit a second full Plan",
     );
     expect(OPENDESIGN_NEW_DESIGN_SYSTEM_PROMPT).toContain(
       "Do not claim completion after the first slice",
@@ -140,7 +149,10 @@ describe("OpenDesign Agent system prompt", () => {
       "call opendesign_define_design_plan",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "Submit the current contract",
+      "A successful first-slice call already registered the authoritative host-bound Plan",
+    );
+    expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
+      "do not restate or amend the full Plan",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "stateless independent critic",
@@ -179,7 +191,7 @@ describe("OpenDesign Agent system prompt", () => {
       "A high-confidence new-design Run exposes generate_first_slice",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
-      "use opendesign_design_checkpoint action apply-and-capture",
+      "with opendesign_design_checkpoint action apply-and-capture",
     );
     expect(OPENDESIGN_AGENT_SYSTEM_PROMPT).toContain(
       "thorough mode also returns independent critic findings",

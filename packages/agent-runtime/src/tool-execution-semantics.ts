@@ -106,17 +106,101 @@ function projectToolResultValue(value: unknown, depth = 0): unknown {
     return value.map((item) => projectToolResultValue(item, depth + 1));
   }
   if (typeof value === "object") {
+    if (isFirstSliceCheckpointResult(value)) {
+      return projectRecordValue(compactFirstSliceResult(value), depth);
+    }
     if (isDesignChangeSetResult(value)) {
       return projectToolResultValue(compactDesignChangeSet(value), depth + 1);
     }
-    return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        projectToolResultValue(child, depth + 1),
-      ]),
-    );
+    return projectRecordValue(value as Record<string, unknown>, depth);
   }
   return `[OpenDesign omitted unsupported ${typeof value} tool-result value]`;
+}
+
+function projectRecordValue(
+  value: Record<string, unknown>,
+  depth: number,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      projectToolResultValue(child, depth + 1),
+    ]),
+  );
+}
+
+function isFirstSliceCheckpointResult(
+  value: object,
+): value is Record<string, unknown> {
+  const record = value as Record<string, unknown>;
+  return (
+    isRecord(record.checkpoint) &&
+    record.checkpoint.action === "first-slice-and-capture"
+  );
+}
+
+function compactFirstSliceResult(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const plan = isRecord(value.plan) ? value.plan : undefined;
+  const targets = Array.isArray(plan?.targets)
+    ? plan.targets.flatMap((target) =>
+        isRecord(target)
+          ? [
+              {
+                targetId: target.targetId,
+                label: target.label,
+                pageId: target.pageId,
+                artboard: target.artboard,
+                regions: isRecord(target.composition)
+                  ? target.composition.regions
+                  : undefined,
+              },
+            ]
+          : [],
+      )
+    : [];
+  const layoutQuality = isRecord(value.layoutQuality)
+    ? {
+        version: value.layoutQuality.version,
+        revision: value.layoutQuality.revision,
+        artboardFrameId: value.layoutQuality.artboardFrameId,
+        errorCount: value.layoutQuality.errorCount,
+        warningCount: value.layoutQuality.warningCount,
+        issues: Array.isArray(value.layoutQuality.issues)
+          ? value.layoutQuality.issues.slice(0, 12)
+          : [],
+      }
+    : undefined;
+  return {
+    ok: value.ok,
+    status: value.status,
+    label: value.label,
+    revision: value.revision,
+    committedSteps: value.committedSteps,
+    plan: plan
+      ? {
+          version: plan.version,
+          deliverable: plan.deliverable,
+          objective: plan.objective,
+          outputMode: plan.outputMode,
+          targets,
+          rasterAssetRoles: plan.rasterAssetRoles,
+          logoOutputs: plan.logoOutputs,
+          logoExploration: plan.logoExploration,
+        }
+      : undefined,
+    allocation: value.allocation,
+    firstSlice: value.firstSlice,
+    delivery: value.delivery,
+    captureTarget: value.captureTarget,
+    layoutQuality,
+    reviewWorkflow: value.reviewWorkflow,
+    checkpoint: value.checkpoint,
+    warnings: value.warnings,
+    attachment: value.attachment,
+    attachments: value.attachments,
+  };
 }
 
 function compactDesignChangeSet(
@@ -152,6 +236,10 @@ function isDesignChangeSetResult(
     Array.isArray(record.removedNodeIds) &&
     Array.isArray(record.changes)
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function summarizeToolResultValue(value: unknown, depth = 0): unknown {

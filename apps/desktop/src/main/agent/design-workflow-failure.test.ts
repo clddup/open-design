@@ -3,6 +3,22 @@ import { describe, expect, it } from "vitest";
 import { trustedDesignWorkflowFailure } from "./design-workflow-failure";
 
 describe("structured design workflow recovery", () => {
+  it("keeps a pre-write Logo exploration correction on the compact tool without forcing inspection", () => {
+    const failure = trustedDesignWorkflowFailure(
+      new Error(
+        "design_workflow.logo_exploration_required: Declare three directions in the compact first-slice call",
+      ),
+    );
+
+    expect(failure).toEqual({
+      code: "design_logo_exploration_required",
+      message:
+        "design_workflow.logo_exploration_required: Declare three directions in the compact first-slice call",
+      retryable: false,
+      recoverable: true,
+    });
+  });
+
   it("requires inspection while preserving material Plan identities", () => {
     const failure = trustedDesignWorkflowFailure(
       new Error(

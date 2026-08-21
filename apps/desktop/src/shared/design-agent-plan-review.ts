@@ -956,7 +956,8 @@ export function isDesignLogoExploration(
   ) {
     return false;
   }
-  const ids = new Set<string>();
+  const semanticIds = new Set<string>();
+  const evidenceIds = new Set<string>();
   const principles = new Set<string>();
   for (const direction of value.directions) {
     if (
@@ -990,14 +991,17 @@ export function isDesignLogoExploration(
     const principle = String(direction.principle);
     if (principles.has(principle)) return false;
     principles.add(principle);
-    for (const id of [
-      direction.conceptId,
-      direction.rootNodeId,
+    for (const id of [direction.conceptId, direction.rootNodeId]) {
+      if (semanticIds.has(id) || evidenceIds.has(id)) return false;
+      semanticIds.add(id);
+    }
+    const directionEvidenceIds = new Set([
       direction.monochromeNodeId,
       ...direction.smallSizeNodeIds,
-    ]) {
-      if (ids.has(id)) return false;
-      ids.add(id);
+    ]);
+    for (const id of directionEvidenceIds) {
+      if (semanticIds.has(id) || evidenceIds.has(id)) return false;
+      evidenceIds.add(id);
     }
   }
   return true;

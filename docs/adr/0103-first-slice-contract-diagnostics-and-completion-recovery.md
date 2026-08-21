@@ -1,6 +1,6 @@
 # ADR-0103：首切片契约诊断与完成恢复
 
-- 状态：Accepted
+- 状态：Accepted；“首切片只允许一个 planned region”已由 ADR-0125 取代
 - 日期：2026-08-19
 - Compact first-slice：`1`（版本不变）
 - Agent Event：`3.6`（协议版本不变）

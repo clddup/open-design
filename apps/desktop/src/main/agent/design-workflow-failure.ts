@@ -13,6 +13,14 @@ export function trustedDesignWorkflowFailure(
   const message = error.message;
   const classification = classifyDesignWorkflowFailure(message);
   if (!classification) return undefined;
+  if (classification.code === "logo_exploration_required") {
+    return {
+      code: "design_logo_exploration_required",
+      message,
+      retryable: false,
+      recoverable: true,
+    };
+  }
   if (classification.code === "plan_amendment_invalid") {
     return failure(
       "design_plan_amendment_invalid",

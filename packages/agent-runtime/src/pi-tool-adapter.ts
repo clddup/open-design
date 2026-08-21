@@ -123,6 +123,7 @@ export class OpenDesignPiToolAdapter {
   readonly #active = new Map<string, ActiveToolCall>();
   readonly #approvalPort: ApprovalPort | undefined;
   readonly #bootstrapTools: AgentTool[];
+  readonly #continuationTools: AgentTool[];
   readonly #definitions = new Map<string, AgentToolDefinition>();
   readonly #designFailureRecovery = new PiDesignFailureRecovery();
   readonly #progressCircuit = new PiToolProgressCircuit();
@@ -190,6 +191,19 @@ export class OpenDesignPiToolAdapter {
       }
       return this.#createTool(executionDefinition, modelDefinition);
     });
+    this.#continuationTools = disclosedToolDefinitions(
+      safeDefinitions,
+      "continuation",
+      { surface: this.#initialModelToolSurface },
+    ).map((modelDefinition) => {
+      const executionDefinition = this.#definitions.get(modelDefinition.name);
+      if (executionDefinition === undefined) {
+        throw new Error(
+          `Continuation tool ${modelDefinition.name} is missing its trusted definition`,
+        );
+      }
+      return this.#createTool(executionDefinition, modelDefinition);
+    });
     this.#bootstrapTools = disclosedToolDefinitions(
       safeDefinitions,
       "bootstrap",
@@ -251,11 +265,15 @@ export class OpenDesignPiToolAdapter {
     const phase = resolveModelToolDisclosurePhase(
       this.#safeDefinitions,
       this.#records,
-      { initialInspection: this.#initialInspection },
+      {
+        initialInspection: this.#initialInspection,
+        surface: this.#initialModelToolSurface,
+      },
     );
     if (phase === "bootstrap") return this.#bootstrapTools;
     if (phase === "host-inspected") return this.#hostInspectedTools;
     if (phase === "inspected") return this.#inspectedTools;
+    if (phase === "continuation") return this.#continuationTools;
     return this.#expandedTools;
   }
 
