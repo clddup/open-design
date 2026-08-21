@@ -2274,6 +2274,16 @@ function assertCommandsWithinMutationTarget(
       continue;
     }
     if (
+      command.type === "put_library_component_source" ||
+      command.type === "delete_library_component_source" ||
+      command.type === "put_library_variant_set_source" ||
+      command.type === "delete_library_variant_set_source"
+    ) {
+      throw new Error(
+        "Library source changes require the dedicated Library service",
+      );
+    }
+    if (
       command.type === "put_variable_collection" ||
       command.type === "delete_variable_collection" ||
       command.type === "move_variable_collection" ||

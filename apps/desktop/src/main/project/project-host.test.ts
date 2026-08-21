@@ -19,6 +19,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import {
   PROJECT_MANIFEST_NAME,
+  PROJECT_LIBRARY_CATALOG_PATH,
   PROJECT_SAVE_JOURNAL_NAME,
   ProjectHost,
   ProjectHostError,
@@ -66,6 +67,113 @@ function hash(contents: string) {
 }
 
 describe("ProjectHost", () => {
+  it("publishes immutable component releases and explicitly enables them per consuming Design File", async () => {
+    const root = await createProjectRoot();
+    const host = new ProjectHost();
+    const sourceDocument = structuredClone(createWelcomeDocument());
+    sourceDocument.componentsById = {
+      component_card: {
+        id: "component_card",
+        name: "Feature cards",
+        rootNodeId: "feature_group",
+        componentPropertyOrder: [],
+        componentPropertyDefinitions: {},
+        variantProperties: {},
+        extensions: {},
+      },
+    };
+    const sourceDescriptor = designFileDescriptor({
+      designFileId: "design_library",
+      name: "Design System",
+      relativePath: "designs/design-system.opendesign",
+    });
+    const consumerDocument = createEmptyDesignDocument(
+      "document_consumer",
+      "page_consumer",
+    );
+    const consumerDescriptor = designFileDescriptor({
+      designFileId: "design_consumer",
+      documentId: consumerDocument.documentId,
+      name: "Consumer",
+      relativePath: "designs/consumer.opendesign",
+    });
+    await host.createProject(
+      root,
+      { projectId: "project_acme", name: "Acme Design", now },
+      [
+        { descriptor: sourceDescriptor, document: sourceDocument },
+        { descriptor: consumerDescriptor, document: consumerDocument },
+      ],
+    );
+
+    const first = await host.publishDesignFileLibrary(
+      "project_acme",
+      sourceDescriptor.designFileId,
+      "Acme Library",
+      now,
+    );
+    expect(first.release.componentsById.component_card).toMatchObject({
+      source: {
+        libraryId: first.entry.libraryId,
+        releaseId: first.entry.latestReleaseId,
+        sourceDesignFileId: sourceDescriptor.designFileId,
+      },
+      component: { id: "component_card", rootNodeId: "feature_group" },
+    });
+    expect(
+      first.release.componentsById.component_card?.nodesById.frame_welcome,
+    ).toBeUndefined();
+    expect(
+      first.release.componentsById.component_card?.nodesById.feature_group,
+    ).toBeDefined();
+    await expect(
+      readFile(join(root, PROJECT_LIBRARY_CATALOG_PATH), "utf8"),
+    ).resolves.toContain(first.entry.libraryId);
+
+    const enabled = await host.setProjectLibraryEnabled(
+      "project_acme",
+      consumerDescriptor.designFileId,
+      first.entry.libraryId,
+      true,
+    );
+    expect(
+      enabled.enabledLibraryIdsByDesignFileId[consumerDescriptor.designFileId],
+    ).toEqual([first.entry.libraryId]);
+
+    const changedDocument = structuredClone(sourceDocument);
+    changedDocument.revision = 1;
+    const feature = changedDocument.nodesById.feature_one;
+    if (feature?.kind !== "rectangle") throw new Error("Missing feature");
+    feature.properties.fills = [
+      { type: "solid", color: "#db2777", opacity: 1 },
+    ];
+    await host.saveDesignFile(
+      "project_acme",
+      sourceDescriptor.designFileId,
+      changedDocument,
+      later,
+    );
+    const second = await host.publishDesignFileLibrary(
+      "project_acme",
+      sourceDescriptor.designFileId,
+      undefined,
+      later,
+    );
+    expect(second.entry.libraryId).toBe(first.entry.libraryId);
+    expect(second.entry.latestReleaseId).not.toBe(first.entry.latestReleaseId);
+    expect(second.entry.releases).toHaveLength(2);
+    await expect(
+      host.readProjectLibraryRelease(
+        "project_acme",
+        first.entry.libraryId,
+        first.entry.latestReleaseId,
+      ),
+    ).resolves.toMatchObject({ releaseId: first.entry.latestReleaseId });
+    await expect(
+      host.readProjectLibraryRelease("project_acme", first.entry.libraryId),
+    ).resolves.toMatchObject({ releaseId: second.entry.latestReleaseId });
+  });
+
   it("replaces untouched legacy product templates with one neutral blank file", async () => {
     const root = await createProjectRoot();
     const host = new ProjectHost();

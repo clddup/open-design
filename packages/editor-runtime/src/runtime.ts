@@ -917,6 +917,18 @@ function applyOperation(
     case "delete_component":
       deleteComponent(document, command);
       return;
+    case "put_library_component_source":
+      putLibraryComponentSource(document, command);
+      return;
+    case "delete_library_component_source":
+      deleteLibraryComponentSource(document, command);
+      return;
+    case "put_library_variant_set_source":
+      putLibraryVariantSetSource(document, command);
+      return;
+    case "delete_library_variant_set_source":
+      deleteLibraryVariantSetSource(document, command);
+      return;
     case "put_variant_set":
       putVariantSet(document, command);
       return;
@@ -1105,6 +1117,199 @@ function deleteComponent(
     );
   }
   delete document.componentsById[command.componentId];
+}
+
+function putLibraryComponentSource(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "put_library_component_source" }>,
+): void {
+  const componentId = command.source.component.id;
+  if (document.componentsById[componentId]) {
+    throw new OperationError(
+      command.commandId,
+      `Library component ${componentId} conflicts with a local component`,
+      "duplicate",
+    );
+  }
+  const existing = document.libraryComponentsById[componentId];
+  if (existing) {
+    assertStableLibraryIdentity(
+      command.commandId,
+      existing.source,
+      command.source.source,
+      "sourceComponentId",
+      componentId,
+    );
+  }
+  document.libraryComponentsById[componentId] = structuredClone(command.source);
+}
+
+function deleteLibraryComponentSource(
+  document: DesignDocument,
+  command: Extract<
+    DesignOperation,
+    { type: "delete_library_component_source" }
+  >,
+): void {
+  if (!document.libraryComponentsById[command.componentId]) {
+    throw notFound(command.commandId, command.componentId);
+  }
+  const persistentInstance = Object.values(document.nodesById).find(
+    (node) =>
+      node.kind === "instance" &&
+      node.properties.componentId === command.componentId,
+  );
+  if (persistentInstance) {
+    throw new OperationError(
+      command.commandId,
+      `Library component ${command.componentId} is still referenced by instance ${persistentInstance.id}`,
+    );
+  }
+  const dependentSource = Object.values(document.libraryComponentsById).find(
+    (source) =>
+      source.component.id !== command.componentId &&
+      source.dependencyComponentIds.includes(command.componentId),
+  );
+  if (dependentSource) {
+    throw new OperationError(
+      command.commandId,
+      `Library component ${command.componentId} is still required by ${dependentSource.component.id}`,
+    );
+  }
+  const definitionReference = allComponentDefinitions(document).find(
+    (component) =>
+      component.id !== command.componentId &&
+      Object.values(component.componentPropertyDefinitions).some(
+        (definition) =>
+          (definition.type === "INSTANCE_SWAP" &&
+            definition.defaultValue === command.componentId) ||
+          ((definition.type === "INSTANCE_SWAP" ||
+            definition.type === "SLOT") &&
+            definition.preferredValues?.some(
+              (preferred) =>
+                preferred.type === "COMPONENT" &&
+                preferred.key === command.componentId,
+            )),
+      ),
+  );
+  if (definitionReference) {
+    throw new OperationError(
+      command.commandId,
+      `Library component ${command.componentId} is still referenced by component ${definitionReference.id}`,
+    );
+  }
+  const variantSet = Object.values(document.libraryVariantSetsById).find(
+    (source) =>
+      document.libraryComponentsById[command.componentId]?.component
+        .variantSetId === source.variantSet.id,
+  );
+  if (variantSet) {
+    throw new OperationError(
+      command.commandId,
+      `Library component ${command.componentId} is still a member of variant set ${variantSet.variantSet.id}`,
+    );
+  }
+  delete document.libraryComponentsById[command.componentId];
+}
+
+function putLibraryVariantSetSource(
+  document: DesignDocument,
+  command: Extract<DesignOperation, { type: "put_library_variant_set_source" }>,
+): void {
+  const variantSetId = command.source.variantSet.id;
+  if (document.variantSetsById[variantSetId]) {
+    throw new OperationError(
+      command.commandId,
+      `Library variant set ${variantSetId} conflicts with a local variant set`,
+      "duplicate",
+    );
+  }
+  const existing = document.libraryVariantSetsById[variantSetId];
+  if (existing) {
+    assertStableLibraryIdentity(
+      command.commandId,
+      existing.source,
+      command.source.source,
+      "sourceVariantSetId",
+      variantSetId,
+    );
+  }
+  document.libraryVariantSetsById[variantSetId] = structuredClone(
+    command.source,
+  );
+}
+
+function deleteLibraryVariantSetSource(
+  document: DesignDocument,
+  command: Extract<
+    DesignOperation,
+    { type: "delete_library_variant_set_source" }
+  >,
+): void {
+  if (!document.libraryVariantSetsById[command.variantSetId]) {
+    throw notFound(command.commandId, command.variantSetId);
+  }
+  const member = allComponentDefinitions(document).find(
+    (component) => component.variantSetId === command.variantSetId,
+  );
+  if (member) {
+    throw new OperationError(
+      command.commandId,
+      `Library variant set ${command.variantSetId} is still referenced by component ${member.id}`,
+    );
+  }
+  const preferredBy = allComponentDefinitions(document).find((component) =>
+    Object.values(component.componentPropertyDefinitions).some(
+      (definition) =>
+        (definition.type === "INSTANCE_SWAP" || definition.type === "SLOT") &&
+        definition.preferredValues?.some(
+          (preferred) =>
+            preferred.type === "COMPONENT_SET" &&
+            preferred.key === command.variantSetId,
+        ),
+    ),
+  );
+  if (preferredBy) {
+    throw new OperationError(
+      command.commandId,
+      `Library variant set ${command.variantSetId} is still preferred by component ${preferredBy.id}`,
+    );
+  }
+  delete document.libraryVariantSetsById[command.variantSetId];
+}
+
+function assertStableLibraryIdentity(
+  commandId: string,
+  existing: Record<string, string>,
+  replacement: Record<string, string>,
+  sourceEntityField: "sourceComponentId" | "sourceVariantSetId",
+  entityId: string,
+): void {
+  const stableFields = [
+    "libraryId",
+    "sourceProjectId",
+    "sourceDesignFileId",
+    "sourceDocumentId",
+    sourceEntityField,
+  ] as const;
+  const changed = stableFields.find(
+    (field) => existing[field] !== replacement[field],
+  );
+  if (!changed) return;
+  throw new OperationError(
+    commandId,
+    `Library source identity for ${entityId} cannot change ${changed}; import it under a new stable id`,
+    "invalid",
+  );
+}
+
+function allComponentDefinitions(document: DesignDocument) {
+  return [
+    ...Object.values(document.componentsById),
+    ...Object.values(document.libraryComponentsById).map(
+      (source) => source.component,
+    ),
+  ];
 }
 
 function insertElement(
@@ -2049,6 +2254,18 @@ function diffDocuments(
   const changedComponentIds: string[] = [];
   const removedComponentIds: string[] = [];
   const componentChanges: NonNullable<DesignChangeSet["componentChanges"]> = [];
+  const addedLibraryComponentIds: string[] = [];
+  const changedLibraryComponentIds: string[] = [];
+  const removedLibraryComponentIds: string[] = [];
+  const libraryComponentChanges: NonNullable<
+    DesignChangeSet["libraryComponentChanges"]
+  > = [];
+  const addedLibraryVariantSetIds: string[] = [];
+  const changedLibraryVariantSetIds: string[] = [];
+  const removedLibraryVariantSetIds: string[] = [];
+  const libraryVariantSetChanges: NonNullable<
+    DesignChangeSet["libraryVariantSetChanges"]
+  > = [];
   const ids = new Set([
     ...Object.keys(before.nodesById),
     ...Object.keys(after.nodesById),
@@ -2216,6 +2433,33 @@ function diffDocuments(
     });
   }
 
+  diffLibrarySources(
+    before.libraryComponentsById,
+    after.libraryComponentsById,
+    "componentId",
+    [
+      "source",
+      "component",
+      "nodesById",
+      "assetsById",
+      "dependencyComponentIds",
+    ],
+    addedLibraryComponentIds,
+    changedLibraryComponentIds,
+    removedLibraryComponentIds,
+    libraryComponentChanges,
+  );
+  diffLibrarySources(
+    before.libraryVariantSetsById,
+    after.libraryVariantSetsById,
+    "variantSetId",
+    ["source", "variantSet"],
+    addedLibraryVariantSetIds,
+    changedLibraryVariantSetIds,
+    removedLibraryVariantSetIds,
+    libraryVariantSetChanges,
+  );
+
   return deepFreeze({
     documentId: before.documentId,
     fromRevision: before.revision,
@@ -2234,10 +2478,81 @@ function diffDocuments(
     changedComponentIds,
     removedComponentIds,
     componentChanges,
+    addedLibraryComponentIds,
+    changedLibraryComponentIds,
+    removedLibraryComponentIds,
+    libraryComponentChanges,
+    addedLibraryVariantSetIds,
+    changedLibraryVariantSetIds,
+    removedLibraryVariantSetIds,
+    libraryVariantSetChanges,
     ...diffVariantSets(before, after),
     ...diffDesignSystems(before, after),
     changes,
   });
+}
+
+function diffLibrarySources<
+  Source extends object,
+  IdField extends "componentId" | "variantSetId",
+  Change extends {
+    type: "added" | "updated" | "removed";
+    changedFields: string[];
+  } & Record<IdField, string>,
+>(
+  before: Record<string, Source>,
+  after: Record<string, Source>,
+  idField: IdField,
+  fields: readonly string[],
+  addedIds: string[],
+  changedIds: string[],
+  removedIds: string[],
+  changes: Change[],
+): void {
+  const ids = new Set([...Object.keys(before), ...Object.keys(after)]);
+  for (const id of ids) {
+    const previous = before[id];
+    const next = after[id];
+    if (!previous && next) {
+      addedIds.push(id);
+      changes.push({
+        type: "added",
+        [idField]: id,
+        after: next,
+        changedFields: ["source"],
+      } as unknown as Change);
+      continue;
+    }
+    if (previous && !next) {
+      removedIds.push(id);
+      changes.push({
+        type: "removed",
+        [idField]: id,
+        before: previous,
+        changedFields: ["source"],
+      } as unknown as Change);
+      continue;
+    }
+    if (
+      !previous ||
+      !next ||
+      JSON.stringify(previous) === JSON.stringify(next)
+    ) {
+      continue;
+    }
+    changedIds.push(id);
+    changes.push({
+      type: "updated",
+      [idField]: id,
+      before: previous,
+      after: next,
+      changedFields: fields.filter(
+        (field) =>
+          JSON.stringify(previous[field as keyof Source]) !==
+          JSON.stringify(next[field as keyof Source]),
+      ),
+    } as unknown as Change);
+  }
 }
 
 function pageIndexChanged(

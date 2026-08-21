@@ -16,6 +16,29 @@ import {
   effectiveComponentProperties,
   slotLimitViolations,
 } from "./component-resolution-support.js";
+import {
+  componentDefinition,
+  componentProjectionAssets,
+  componentSourceNode,
+  componentSourceNodeIds,
+} from "./component-source.js";
+
+export {
+  componentDefinition,
+  componentDefinitions,
+  componentProjectionAssets,
+  componentSource,
+  componentSourceNode,
+  componentSourceNodeIds,
+  componentVariantSet,
+} from "./component-source.js";
+export {
+  createLibraryReleaseSnapshot,
+  libraryReleaseAssets,
+  planLibraryReleaseUpdate,
+  type CreateLibraryReleaseOptions,
+  type LibraryReleaseUpdatePlan,
+} from "./library-release.js";
 
 export const COMPONENT_SERVICE_VERSION = 6 as const;
 export const COMPONENT_PROJECTION_PREFIX = "__opendesign_instance__:";
@@ -126,24 +149,6 @@ export function componentProjectionId(
 ): string {
   const path = typeof sourcePath === "string" ? [sourcePath] : sourcePath;
   return `${COMPONENT_PROJECTION_PREFIX}${encodeURIComponent(instanceId)}:${componentSourcePathKey(path)}`;
-}
-
-export function componentSourceNodeIds(
-  document: DesignDocument,
-  componentId: string,
-): ReadonlySet<string> {
-  const definition = document.componentsById[componentId];
-  const result = new Set<string>();
-  if (!definition) return result;
-  const visit = (nodeId: string): void => {
-    if (result.has(nodeId)) return;
-    const node = document.nodesById[nodeId];
-    if (!node) return;
-    result.add(nodeId);
-    node.childIds.forEach(visit);
-  };
-  visit(definition.rootNodeId);
-  return result;
 }
 
 export function componentIdForSourceNode(
@@ -272,7 +277,10 @@ export function materializeComponentInstances(
 export function projectComponentInstances(
   document: DesignDocument,
 ): ComponentDocumentProjection {
-  const projectedDocument = materializeComponentMainProperties(document);
+  const projectedDocument = materializeComponentMainProperties({
+    ...document,
+    assetsById: componentProjectionAssets(document),
+  });
   if (
     !Object.values(projectedDocument.nodesById).some(
       (node) => node.kind === "instance",
@@ -381,6 +389,7 @@ function resolveInstance(
     parentProjectionId: string | null,
     componentStack: readonly string[],
     root: boolean,
+    shellSourceComponentId?: string,
     editableRootNodeId?: string,
   ): void => {
     const effectiveProperties = effectiveComponentProperties(
@@ -394,7 +403,7 @@ function resolveInstance(
       return;
     }
     const resolvedComponentId = effectiveProperties.componentId;
-    const definition = document.componentsById[resolvedComponentId];
+    const definition = componentDefinition(document, resolvedComponentId);
     if (!definition) return;
     if (root) {
       rootComponentProperties = effectiveProperties.properties;
@@ -414,7 +423,9 @@ function resolveInstance(
       Extract<DesignNode, { kind: "slot" }>
     >();
     for (const childId of shell.childIds) {
-      const child = document.nodesById[childId];
+      const child = shellSourceComponentId
+        ? componentSourceNode(document, shellSourceComponentId, childId)
+        : document.nodesById[childId];
       if (child?.kind !== "slot" || child.properties.sourceSlotId === null)
         continue;
       if (slotOverrides.has(child.properties.sourceSlotId)) {
@@ -432,7 +443,7 @@ function resolveInstance(
       childId: string,
       childNamespace: readonly string[],
     ): string => {
-      const child = document.nodesById[childId];
+      const child = componentSourceNode(document, resolvedComponentId, childId);
       if (child?.kind === "slot") {
         const override = slotOverrides.get(child.id);
         if (override) return override.id;
@@ -453,7 +464,11 @@ function resolveInstance(
       parentId: string | null,
       nodeRoot: boolean,
     ): void => {
-      const source = document.nodesById[sourceNodeId];
+      const source = componentSourceNode(
+        document,
+        resolvedComponentId,
+        sourceNodeId,
+      );
       const sourcePath = [...namespace, sourceNodeId];
       const selectionSourcePath = [...selectionNamespace, sourceNodeId];
       if (!source) {
@@ -526,6 +541,7 @@ function resolveInstance(
             document,
             contentRoot.childIds,
             propertyDefinition,
+            override ? undefined : resolvedComponentId,
           ),
           overridden: Boolean(override),
           propertyName,
@@ -560,6 +576,7 @@ function resolveInstance(
               overrideParentId,
               [...componentStack, resolvedComponentId],
               false,
+              undefined,
               overrideNode.id,
             );
             return;
@@ -649,6 +666,7 @@ function resolveInstance(
           parentId,
           [...componentStack, resolvedComponentId],
           nodeRoot,
+          resolvedComponentId,
         );
         return;
       }
@@ -733,6 +751,7 @@ function resolveInstance(
     instance.parentId,
     [],
     true,
+    undefined,
   );
   for (const override of instance.properties.overrides) {
     const key = componentSourcePathKey(override.sourcePath);

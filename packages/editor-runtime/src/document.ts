@@ -14,7 +14,10 @@ import {
   schemaValidationIssues,
 } from "@opendesign/design-contracts";
 import {
+  componentDefinition,
+  componentSourceNode,
   componentSourceNodeIds,
+  componentVariantSet,
   resolveComponentInstance,
 } from "@opendesign/component-service";
 import { validateVectorNetwork } from "@opendesign/geometry-service/editable-vector";
@@ -30,6 +33,7 @@ import { isBooleanOperandNode, isContainerNode } from "./node-semantics.js";
 import { validateVariantSetInvariants } from "./variant-set-invariants.js";
 import { canonicalJsonStringify } from "./document-fingerprint.js";
 import { defaultPageName } from "./page-naming.js";
+import { validateLibrarySourceInvariants } from "./library-source-invariants.js";
 
 export { canonicalJsonStringify } from "./document-fingerprint.js";
 
@@ -144,7 +148,7 @@ export function validateDocumentInvariants(
       }
       if (
         definition.type === "INSTANCE_SWAP" &&
-        !ownValue(document.componentsById, definition.defaultValue)
+        !componentDefinition(document, definition.defaultValue)
       ) {
         issues.push({
           path: `/componentsById/${componentId}/componentPropertyDefinitions/${propertyName}/defaultValue`,
@@ -157,8 +161,8 @@ export function validateDocumentInvariants(
         ).entries()) {
           const exists =
             preferred.type === "COMPONENT"
-              ? ownValue(document.componentsById, preferred.key)
-              : ownValue(document.variantSetsById, preferred.key);
+              ? componentDefinition(document, preferred.key)
+              : componentVariantSet(document, preferred.key);
           if (!exists) {
             issues.push({
               path: `/componentsById/${componentId}/componentPropertyDefinitions/${propertyName}/preferredValues/${index}/key`,
@@ -197,6 +201,7 @@ export function validateDocumentInvariants(
   }
 
   issues.push(...validateVariantSetInvariants(document));
+  issues.push(...validateLibrarySourceInvariants(document));
   issues.push(...validateVariableDocument(document));
   issues.push(...validateStyleDocument(document));
 
@@ -361,10 +366,14 @@ export function validateDocumentInvariants(
         const parent = node.parentId
           ? ownValue(document.nodesById, node.parentId)
           : undefined;
-        const source = ownValue(
-          document.nodesById,
-          node.properties.sourceSlotId,
-        );
+        const source =
+          parent?.kind === "instance"
+            ? componentSourceNode(
+                document,
+                parent.properties.componentId,
+                node.properties.sourceSlotId,
+              )
+            : undefined;
         if (parent?.kind !== "instance") {
           issues.push({
             path: `/nodesById/${nodeId}/parentId`,
@@ -530,6 +539,8 @@ export function createEmptyDesignDocument(
     nodesById: {},
     componentsById: {},
     variantSetsById: {},
+    libraryComponentsById: {},
+    libraryVariantSetsById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
@@ -653,6 +664,8 @@ export function createWelcomeDocument(): DesignDocument {
     ),
     componentsById: {},
     variantSetsById: {},
+    libraryComponentsById: {},
+    libraryVariantSetsById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},

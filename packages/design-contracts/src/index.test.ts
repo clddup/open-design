@@ -12,6 +12,7 @@ import {
   FIGMA_SHARED_STYLES_DESIGN_SCHEMA_VERSION,
   FIGMA_EXPORT_SETTINGS_DESIGN_SCHEMA_VERSION,
   FIGMA_LAYER_STATE_DESIGN_SCHEMA_VERSION,
+  LIBRARY_COMPONENT_SOURCE_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
@@ -88,7 +89,25 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION).toBe("1.34.0");
   expect(AUTO_LAYOUT_GRID_V2_DESIGN_SCHEMA_VERSION).toBe("1.35.0");
   expect(FIGMA_LAYER_STATE_DESIGN_SCHEMA_VERSION).toBe("1.36.0");
-  expect(DESIGN_SCHEMA_VERSION).toBe(FIGMA_LAYER_STATE_DESIGN_SCHEMA_VERSION);
+  expect(LIBRARY_COMPONENT_SOURCE_DESIGN_SCHEMA_VERSION).toBe("1.37.0");
+  expect(DESIGN_SCHEMA_VERSION).toBe(
+    LIBRARY_COMPONENT_SOURCE_DESIGN_SCHEMA_VERSION,
+  );
+});
+
+it("migrates 1.36 documents with empty imported Library source stores", () => {
+  const source = structuredClone(textDocumentFixture()) as unknown as Record<
+    string,
+    unknown
+  >;
+  source.schemaVersion = FIGMA_LAYER_STATE_DESIGN_SCHEMA_VERSION;
+  delete source.libraryComponentsById;
+  delete source.libraryVariantSetsById;
+  expect(migrateDesignDocument(source)).toMatchObject({
+    schemaVersion: DESIGN_SCHEMA_VERSION,
+    libraryComponentsById: {},
+    libraryVariantSetsById: {},
+  });
 });
 
 it("migrates 1.35 documents without inventing layer state overrides", () => {
@@ -1441,6 +1460,8 @@ describe("design contract schemas", () => {
     expect(migrateDesignDocument(imagePlacementDocument)).toEqual({
       ...imagePlacementDocument,
       schemaVersion: DESIGN_SCHEMA_VERSION,
+      libraryComponentsById: {},
+      libraryVariantSetsById: {},
     });
   });
 
@@ -1475,6 +1496,8 @@ describe("design contract schemas", () => {
     expect(migrateDesignDocument(maskDocument)).toEqual({
       ...maskDocument,
       schemaVersion: DESIGN_SCHEMA_VERSION,
+      libraryComponentsById: {},
+      libraryVariantSetsById: {},
     });
   });
 
@@ -1509,6 +1532,8 @@ describe("design contract schemas", () => {
     expect(migrateDesignDocument(lineDocument)).toEqual({
       ...lineDocument,
       schemaVersion: DESIGN_SCHEMA_VERSION,
+      libraryComponentsById: {},
+      libraryVariantSetsById: {},
     });
   });
 
@@ -1565,6 +1590,8 @@ describe("design contract schemas", () => {
     expect(migrated).toEqual({
       ...regularShapeDocument,
       schemaVersion: DESIGN_SCHEMA_VERSION,
+      libraryComponentsById: {},
+      libraryVariantSetsById: {},
     });
     const path = migrated?.nodesById.path_1;
     expect(path?.kind).toBe("path");

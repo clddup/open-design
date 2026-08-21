@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updatedAt": "2026-08-18",
-  "documentSchemaVersion": "1.36.0",
+  "documentSchemaVersion": "1.37.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -126,7 +126,7 @@
         "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, cross-container reparenting, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
         "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。"
       },
-      "provider": "DesignDocument 1.36.0 + EditorRuntime",
+      "provider": "DesignDocument 1.37.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -898,7 +898,7 @@
         "en": "Create main components, instances, nested instances, overrides, component properties, slots, and variant sets.",
         "zh-CN": "创建主组件、实例、嵌套实例、override、组件属性、Slot 与 Variant Set。"
       },
-      "provider": "DesignDocument 1.36.0 + @opendesign/component-service contract v6 + isolated @opendesign/figma-interop",
+      "provider": "DesignDocument 1.37.0 + @opendesign/component-service contract v6 + isolated @opendesign/figma-interop",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",

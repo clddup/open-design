@@ -1,6 +1,7 @@
 import {
   Type,
   type Static,
+  type TObject,
   type TSchema,
   type TUnion,
 } from "@sinclair/typebox";
@@ -917,29 +918,119 @@ export const DesignAssetSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const DesignDocumentSchema = Type.Object(
+const LibraryReleaseIdentityProperties = {
+  libraryId: Type.String({ minLength: 1, maxLength: 256 }),
+  releaseId: Type.String({ minLength: 1, maxLength: 256 }),
+  sourceProjectId: Type.String({ minLength: 1, maxLength: 256 }),
+  sourceDesignFileId: Type.String({ minLength: 1, maxLength: 256 }),
+  sourceDocumentId: Type.String({ minLength: 1, maxLength: 256 }),
+};
+
+export const LibraryReleaseIdentitySchema = Type.Object(
+  LibraryReleaseIdentityProperties,
+  { additionalProperties: false },
+);
+
+export const LibraryComponentSourceSchema = Type.Object(
   {
-    format: Type.Literal(DESIGN_FORMAT),
-    schemaVersion: Type.Literal(versions.DESIGN_SCHEMA_VERSION),
-    documentId: Type.String({ minLength: 1 }),
-    revision: Type.Integer({ minimum: 0 }),
-    pageOrder: Type.Array(Type.String({ minLength: 1 }), {
-      minItems: 1,
-      uniqueItems: true,
-    }),
-    pagesById: Type.Record(Type.String(), DesignPageSchema),
+    source: Type.Object(
+      {
+        ...LibraryReleaseIdentityProperties,
+        sourceComponentId: Type.String({ minLength: 1, maxLength: 256 }),
+      },
+      { additionalProperties: false },
+    ),
+    component: ComponentDefinitionSchema,
     nodesById: Type.Record(Type.String(), DesignNodeSchema),
-    componentsById: Type.Record(Type.String(), ComponentDefinitionSchema),
-    variantSetsById: Type.Record(Type.String(), VariantSetDefinitionSchema),
-    ...variables.VariableDocumentProperties,
-    styleOrderByType: StyleOrderByTypeSchema,
-    stylesById: Type.Record(Type.String(), SharedStyleDefinitionSchema),
-    interactionsById: Type.Record(Type.String(), JsonValueSchema),
     assetsById: Type.Record(Type.String(), DesignAssetSchema),
-    extensions: JsonObjectSchema,
+    dependencyComponentIds: Type.Array(
+      Type.String({ minLength: 1, maxLength: 256 }),
+      { maxItems: 4_096, uniqueItems: true },
+    ),
   },
   { additionalProperties: false },
 );
+
+export const LibraryVariantSetSourceSchema = Type.Object(
+  {
+    source: Type.Object(
+      {
+        ...LibraryReleaseIdentityProperties,
+        sourceVariantSetId: Type.String({ minLength: 1, maxLength: 256 }),
+      },
+      { additionalProperties: false },
+    ),
+    variantSet: VariantSetDefinitionSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const LibraryReleaseSnapshotSchema = Type.Object(
+  {
+    version: Type.Literal(1),
+    libraryId: Type.String({ minLength: 1, maxLength: 256 }),
+    releaseId: Type.String({ minLength: 1, maxLength: 256 }),
+    sourceProjectId: Type.String({ minLength: 1, maxLength: 256 }),
+    sourceDesignFileId: Type.String({ minLength: 1, maxLength: 256 }),
+    sourceDocumentId: Type.String({ minLength: 1, maxLength: 256 }),
+    name: Type.String({ minLength: 1, maxLength: 256 }),
+    publishedAt: Type.String({ minLength: 1, maxLength: 64 }),
+    componentsById: Type.Record(
+      Type.String({ minLength: 1, maxLength: 256 }),
+      LibraryComponentSourceSchema,
+    ),
+    variantSetsById: Type.Record(
+      Type.String({ minLength: 1, maxLength: 256 }),
+      LibraryVariantSetSourceSchema,
+    ),
+  },
+  { additionalProperties: false },
+);
+
+const DesignDocumentIdentityProperties = {
+  format: Type.Literal(DESIGN_FORMAT),
+  schemaVersion: Type.Literal(versions.DESIGN_SCHEMA_VERSION),
+  documentId: Type.String({ minLength: 1 }),
+  revision: Type.Integer({ minimum: 0 }),
+  pageOrder: Type.Array(Type.String({ minLength: 1 }), {
+    minItems: 1,
+    uniqueItems: true,
+  }),
+  pagesById: Type.Record(Type.String(), DesignPageSchema),
+  nodesById: Type.Record(Type.String(), DesignNodeSchema),
+};
+
+const DesignDocumentResourceProperties = {
+  componentsById: Type.Record(Type.String(), ComponentDefinitionSchema),
+  variantSetsById: Type.Record(Type.String(), VariantSetDefinitionSchema),
+  libraryComponentsById: Type.Record(
+    Type.String(),
+    LibraryComponentSourceSchema,
+  ),
+  libraryVariantSetsById: Type.Record(
+    Type.String(),
+    LibraryVariantSetSourceSchema,
+  ),
+  styleOrderByType: StyleOrderByTypeSchema,
+  stylesById: Type.Record(Type.String(), SharedStyleDefinitionSchema),
+  interactionsById: Type.Record(Type.String(), JsonValueSchema),
+  assetsById: Type.Record(Type.String(), DesignAssetSchema),
+  extensions: JsonObjectSchema,
+};
+
+type DesignDocumentProperties = typeof DesignDocumentIdentityProperties &
+  typeof DesignDocumentResourceProperties &
+  typeof variables.VariableDocumentProperties;
+
+export const DesignDocumentSchema: TObject<DesignDocumentProperties> =
+  Type.Object(
+    {
+      ...DesignDocumentIdentityProperties,
+      ...DesignDocumentResourceProperties,
+      ...variables.VariableDocumentProperties,
+    },
+    { additionalProperties: false },
+  );
 
 const OperationBaseProperties = {
   commandId: Type.String({ minLength: 1 }),
@@ -1201,6 +1292,38 @@ export const DeleteComponentCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+export const PutLibraryComponentSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("put_library_component_source"),
+    source: LibraryComponentSourceSchema,
+  },
+  { additionalProperties: false },
+);
+export const DeleteLibraryComponentSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("delete_library_component_source"),
+    componentId: Type.String({ minLength: 1, maxLength: 256 }),
+  },
+  { additionalProperties: false },
+);
+export const PutLibraryVariantSetSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("put_library_variant_set_source"),
+    source: LibraryVariantSetSourceSchema,
+  },
+  { additionalProperties: false },
+);
+export const DeleteLibraryVariantSetSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("delete_library_variant_set_source"),
+    variantSetId: Type.String({ minLength: 1, maxLength: 256 }),
+  },
+  { additionalProperties: false },
+);
 export const InsertPageCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1268,6 +1391,10 @@ export const DesignOperationSchema: TUnion<
     typeof DeleteAssetCommandSchema,
     typeof PutComponentCommandSchema,
     typeof DeleteComponentCommandSchema,
+    typeof PutLibraryComponentSourceCommandSchema,
+    typeof DeleteLibraryComponentSourceCommandSchema,
+    typeof PutLibraryVariantSetSourceCommandSchema,
+    typeof DeleteLibraryVariantSetSourceCommandSchema,
     typeof variables.PutVariableCollectionCommandSchema,
     typeof variables.DeleteVariableCollectionCommandSchema,
     typeof variables.MoveVariableCollectionCommandSchema,
@@ -1292,6 +1419,10 @@ export const DesignOperationSchema: TUnion<
   DeleteAssetCommandSchema,
   PutComponentCommandSchema,
   DeleteComponentCommandSchema,
+  PutLibraryComponentSourceCommandSchema,
+  DeleteLibraryComponentSourceCommandSchema,
+  PutLibraryVariantSetSourceCommandSchema,
+  DeleteLibraryVariantSetSourceCommandSchema,
   variables.PutVariableCollectionCommandSchema,
   variables.DeleteVariableCollectionCommandSchema,
   variables.MoveVariableCollectionCommandSchema,
@@ -1445,68 +1576,153 @@ export const ComponentChangeSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const DesignChangeSetSchema = Type.Object(
+type LibraryComponentSourceChangeValue = {
+  type: "added" | "updated" | "removed";
+  componentId: string;
+  before?: Static<typeof LibraryComponentSourceSchema>;
+  after?: Static<typeof LibraryComponentSourceSchema>;
+  changedFields: string[];
+};
+
+export const LibraryComponentSourceChangeSchema: TSchema & {
+  static: LibraryComponentSourceChangeValue;
+} = Type.Object(
   {
-    documentId: Type.String({ minLength: 1 }),
-    fromRevision: Type.Integer({ minimum: 0 }),
-    toRevision: Type.Integer({ minimum: 0 }),
-    addedNodeIds: Type.Array(Type.String(), { uniqueItems: true }),
-    changedNodeIds: Type.Array(Type.String(), { uniqueItems: true }),
-    removedNodeIds: Type.Array(Type.String(), { uniqueItems: true }),
-    addedAssetIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    changedAssetIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    removedAssetIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    addedPageIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    changedPageIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    removedPageIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    addedComponentIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    changedComponentIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    removedComponentIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    addedVariantSetIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    changedVariantSetIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    removedVariantSetIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    pageChanges: Type.Optional(Type.Array(PageChangeSchema)),
-    componentChanges: Type.Optional(Type.Array(ComponentChangeSchema)),
-    variantSetChanges: Type.Optional(Type.Array(VariantSetChangeSchema)),
-    ...variables.VariableChangeSetProperties,
-    addedStyleIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    changedStyleIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    removedStyleIds: Type.Optional(
-      Type.Array(Type.String(), { uniqueItems: true }),
-    ),
-    styleChanges: Type.Optional(Type.Array(SharedStyleChangeSchema)),
-    changes: Type.Array(NodeChangeSchema),
+    type: Type.Union([
+      Type.Literal("added"),
+      Type.Literal("updated"),
+      Type.Literal("removed"),
+    ]),
+    componentId: Type.String({ minLength: 1 }),
+    before: Type.Optional(LibraryComponentSourceSchema),
+    after: Type.Optional(LibraryComponentSourceSchema),
+    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
   },
   { additionalProperties: false },
 );
+
+type LibraryVariantSetSourceChangeValue = {
+  type: "added" | "updated" | "removed";
+  variantSetId: string;
+  before?: Static<typeof LibraryVariantSetSourceSchema>;
+  after?: Static<typeof LibraryVariantSetSourceSchema>;
+  changedFields: string[];
+};
+
+export const LibraryVariantSetSourceChangeSchema: TSchema & {
+  static: LibraryVariantSetSourceChangeValue;
+} = Type.Object(
+  {
+    type: Type.Union([
+      Type.Literal("added"),
+      Type.Literal("updated"),
+      Type.Literal("removed"),
+    ]),
+    variantSetId: Type.String({ minLength: 1 }),
+    before: Type.Optional(LibraryVariantSetSourceSchema),
+    after: Type.Optional(LibraryVariantSetSourceSchema),
+    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
+  },
+  { additionalProperties: false },
+);
+
+const DesignChangeSetCoreProperties = {
+  documentId: Type.String({ minLength: 1 }),
+  fromRevision: Type.Integer({ minimum: 0 }),
+  toRevision: Type.Integer({ minimum: 0 }),
+  addedNodeIds: Type.Array(Type.String(), { uniqueItems: true }),
+  changedNodeIds: Type.Array(Type.String(), { uniqueItems: true }),
+  removedNodeIds: Type.Array(Type.String(), { uniqueItems: true }),
+  addedAssetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedAssetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedAssetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  addedPageIds: Type.Optional(Type.Array(Type.String(), { uniqueItems: true })),
+  changedPageIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedPageIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  addedComponentIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedComponentIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedComponentIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  addedLibraryComponentIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedLibraryComponentIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedLibraryComponentIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  addedLibraryVariantSetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedLibraryVariantSetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedLibraryVariantSetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  addedVariantSetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedVariantSetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedVariantSetIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+};
+
+const DesignChangeSetDetailProperties = {
+  pageChanges: Type.Optional(Type.Array(PageChangeSchema)),
+  componentChanges: Type.Optional(Type.Array(ComponentChangeSchema)),
+  libraryComponentChanges: Type.Optional(
+    Type.Array(LibraryComponentSourceChangeSchema),
+  ),
+  libraryVariantSetChanges: Type.Optional(
+    Type.Array(LibraryVariantSetSourceChangeSchema),
+  ),
+  variantSetChanges: Type.Optional(Type.Array(VariantSetChangeSchema)),
+  addedStyleIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedStyleIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedStyleIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  styleChanges: Type.Optional(Type.Array(SharedStyleChangeSchema)),
+  changes: Type.Array(NodeChangeSchema),
+};
+
+type DesignChangeSetProperties = typeof DesignChangeSetCoreProperties &
+  typeof DesignChangeSetDetailProperties &
+  typeof variables.VariableChangeSetProperties;
+
+export const DesignChangeSetSchema: TObject<DesignChangeSetProperties> =
+  Type.Object(
+    {
+      ...DesignChangeSetCoreProperties,
+      ...DesignChangeSetDetailProperties,
+      ...variables.VariableChangeSetProperties,
+    },
+    { additionalProperties: false },
+  );
 
 export const FidelityWarningSchema = Type.Object(
   {
@@ -1837,6 +2053,18 @@ export type VectorNode = Static<typeof VectorNodeSchema>;
 export type PathNode = Static<typeof PathNodeSchema>;
 export type InstanceNode = Static<typeof InstanceNodeSchema>;
 export type ComponentDefinition = Static<typeof ComponentDefinitionSchema>;
+export type LibraryReleaseIdentity = Static<
+  typeof LibraryReleaseIdentitySchema
+>;
+export type LibraryComponentSource = Static<
+  typeof LibraryComponentSourceSchema
+>;
+export type LibraryVariantSetSource = Static<
+  typeof LibraryVariantSetSourceSchema
+>;
+export type LibraryReleaseSnapshot = Static<
+  typeof LibraryReleaseSnapshotSchema
+>;
 export type ComponentOverride = Static<typeof ComponentOverrideSchema>;
 export type ComponentOverridePatch = Static<
   typeof ComponentOverridePatchSchema
@@ -1870,6 +2098,18 @@ export type PutComponentCommand = Static<typeof PutComponentCommandSchema>;
 export type DeleteComponentCommand = Static<
   typeof DeleteComponentCommandSchema
 >;
+export type PutLibraryComponentSourceCommand = Static<
+  typeof PutLibraryComponentSourceCommandSchema
+>;
+export type DeleteLibraryComponentSourceCommand = Static<
+  typeof DeleteLibraryComponentSourceCommandSchema
+>;
+export type PutLibraryVariantSetSourceCommand = Static<
+  typeof PutLibraryVariantSetSourceCommandSchema
+>;
+export type DeleteLibraryVariantSetSourceCommand = Static<
+  typeof DeleteLibraryVariantSetSourceCommandSchema
+>;
 export type InsertPageCommand = Static<typeof InsertPageCommandSchema>;
 export type UpdatePageCommand = Static<typeof UpdatePageCommandSchema>;
 export type MovePageCommand = Static<typeof MovePageCommandSchema>;
@@ -1883,6 +2123,12 @@ export type Revision = Static<typeof RevisionSchema>;
 export type NodeChange = Static<typeof NodeChangeSchema>;
 export type PageChange = Static<typeof PageChangeSchema>;
 export type ComponentChange = Static<typeof ComponentChangeSchema>;
+export type LibraryComponentSourceChange = Static<
+  typeof LibraryComponentSourceChangeSchema
+>;
+export type LibraryVariantSetSourceChange = Static<
+  typeof LibraryVariantSetSourceChangeSchema
+>;
 export type DesignChangeSet = Static<typeof DesignChangeSetSchema>;
 export type DesignDiff = DesignChangeSet;
 export type FidelityWarning = Static<typeof FidelityWarningSchema>;
@@ -2056,6 +2302,44 @@ export function isDesignAsset(value: unknown): value is DesignAsset {
   return checkSchema(DesignAssetSchema, value);
 }
 
+export function isLibraryReleaseSnapshot(
+  value: unknown,
+): value is LibraryReleaseSnapshot {
+  if (!checkSchema(LibraryReleaseSnapshotSchema, value)) return false;
+  const release = value as LibraryReleaseSnapshot;
+  const identityMatches = (
+    source: LibraryReleaseIdentity,
+    sourceEntityId: string,
+    entityId: string,
+  ) =>
+    source.libraryId === release.libraryId &&
+    source.releaseId === release.releaseId &&
+    source.sourceProjectId === release.sourceProjectId &&
+    source.sourceDesignFileId === release.sourceDesignFileId &&
+    source.sourceDocumentId === release.sourceDocumentId &&
+    sourceEntityId === entityId;
+  return (
+    Object.entries(release.componentsById).every(
+      ([componentId, component]) =>
+        component.component.id === componentId &&
+        identityMatches(
+          component.source,
+          component.source.sourceComponentId,
+          componentId,
+        ),
+    ) &&
+    Object.entries(release.variantSetsById).every(
+      ([variantSetId, variantSet]) =>
+        variantSet.variantSet.id === variantSetId &&
+        identityMatches(
+          variantSet.source,
+          variantSet.source.sourceVariantSetId,
+          variantSetId,
+        ),
+    )
+  );
+}
+
 export function isImagePlacement(value: unknown): value is ImagePlacement {
   return checkSchema(ImagePlacementSchema, value);
 }
@@ -2073,13 +2357,24 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     typeof value !== "object" ||
     value === null ||
     Array.isArray(value) ||
-    !versions.MIGRATABLE_DESIGN_SCHEMA_VERSIONS.includes(String(schemaVersion))
+    (schemaVersion !== versions.DESIGN_SCHEMA_VERSION &&
+      !versions.MIGRATABLE_DESIGN_SCHEMA_VERSIONS.includes(
+        String(schemaVersion),
+      ))
   ) {
     return null;
+  }
+  if (schemaVersion === versions.DESIGN_SCHEMA_VERSION) {
+    const normalized = structuredClone(value) as Record<string, unknown>;
+    normalized.libraryComponentsById ??= {};
+    normalized.libraryVariantSetsById ??= {};
+    return isDesignDocument(normalized) ? normalized : null;
   }
   try {
     const migrated = structuredClone(value) as Record<string, unknown>;
     migrated.schemaVersion = versions.DESIGN_SCHEMA_VERSION;
+    migrated.libraryComponentsById ??= {};
+    migrated.libraryVariantSetsById ??= {};
     if (
       schemaVersion === versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
       hasLegacyInstanceNodes(migrated)

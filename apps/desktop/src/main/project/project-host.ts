@@ -1,8 +1,11 @@
 import {
   isDesignDocument,
+  isLibraryReleaseSnapshot,
   migrateDesignDocument,
   type DesignDocument,
+  type LibraryReleaseSnapshot,
 } from "@opendesign/design-contracts";
+import { createLibraryReleaseSnapshot } from "@opendesign/component-service";
 import {
   PROJECT_MANIFEST_VERSION,
   isDesignFileDescriptor,
@@ -37,11 +40,33 @@ import { createStarterProjectFiles } from "../../shared/project/starter-project.
 
 export const PROJECT_MANIFEST_NAME = "opendesign.project.json";
 export const PROJECT_SAVE_JOURNAL_NAME = ".opendesign-save-journal.json";
+export const PROJECT_LIBRARY_CATALOG_PATH = ".opendesign/libraries.json";
+export const PROJECT_LIBRARY_RELEASE_DIRECTORY = ".opendesign/libraries";
 const DESIGN_FILE_EXTENSION = ".opendesign";
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 const MAX_DESIGN_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_SAVE_JOURNAL_BYTES =
   MAX_MANIFEST_BYTES + MAX_DESIGN_FILE_BYTES + 1024 * 1024;
+const MAX_LIBRARY_CATALOG_BYTES = 4 * 1024 * 1024;
+const MAX_LIBRARY_RELEASE_BYTES = 64 * 1024 * 1024;
+
+export interface ProjectLibraryCatalogEntry {
+  libraryId: string;
+  name: string;
+  sourceProjectId: string;
+  sourceDesignFileId: string;
+  sourceDocumentId: string;
+  latestReleaseId: string;
+  publishedAt: string;
+  releases: Array<{ releaseId: string; publishedAt: string }>;
+}
+
+export interface ProjectLibraryCatalog {
+  version: 1;
+  libraries: ProjectLibraryCatalogEntry[];
+  enabledLibraryIdsByDesignFileId: Record<string, string[]>;
+  ignoredReleaseIdsByDesignFileId: Record<string, Record<string, string>>;
+}
 
 interface OpenProjectRecord {
   rootPath: string;
@@ -130,6 +155,7 @@ export class ProjectHostError extends Error {
       | "INVALID_PROJECT"
       | "INVALID_DESIGN_FILE"
       | "DESIGN_FILE_NOT_FOUND"
+      | "LIBRARY_NOT_FOUND"
       | "PATH_OUTSIDE_PROJECT"
       | "SYMLINK_NOT_ALLOWED"
       | "FILE_TOO_LARGE",
@@ -495,6 +521,227 @@ export class ProjectHost {
       project.manifest = nextManifest;
       this.#touch(project);
       return structuredClone(updatedDescriptor);
+    });
+  }
+
+  async publishDesignFileLibrary(
+    projectId: string,
+    designFileId: string,
+    name?: string,
+    now = new Date().toISOString(),
+  ): Promise<{
+    catalog: ProjectLibraryCatalog;
+    entry: ProjectLibraryCatalogEntry;
+    release: LibraryReleaseSnapshot;
+  }> {
+    return this.#withProjectMutation(projectId, async () => {
+      const project = this.#requireProject(projectId);
+      const source = await this.readDesignFile(projectId, designFileId);
+      const catalog = await readProjectLibraryCatalog(project.rootPath);
+      const existing = catalog.libraries.find(
+        (candidate) => candidate.sourceDesignFileId === designFileId,
+      );
+      const libraryId =
+        existing?.libraryId ??
+        `library_${hashContents(`${projectId}\u0000${designFileId}`).slice(0, 24)}`;
+      const provisionalRelease = createLibraryReleaseSnapshot(source.document, {
+        libraryId,
+        releaseId: "release_pending",
+        sourceProjectId: projectId,
+        sourceDesignFileId: designFileId,
+        name: name?.trim() || existing?.name || source.descriptor.name,
+        publishedAt: now,
+      });
+      const sourceFingerprint = hashContents(
+        JSON.stringify({
+          componentsById: Object.fromEntries(
+            Object.entries(provisionalRelease.componentsById).map(
+              ([componentId, component]) => [
+                componentId,
+                {
+                  component: component.component,
+                  nodesById: component.nodesById,
+                  assetsById: component.assetsById,
+                  dependencyComponentIds: component.dependencyComponentIds,
+                },
+              ],
+            ),
+          ),
+          variantSetsById: Object.fromEntries(
+            Object.entries(provisionalRelease.variantSetsById).map(
+              ([variantSetId, variantSet]) => [
+                variantSetId,
+                variantSet.variantSet,
+              ],
+            ),
+          ),
+        }),
+      );
+      const releaseId = `release_${sourceFingerprint.slice(0, 24)}`;
+      const release = createLibraryReleaseSnapshot(source.document, {
+        libraryId,
+        releaseId,
+        sourceProjectId: projectId,
+        sourceDesignFileId: designFileId,
+        name: name?.trim() || existing?.name || source.descriptor.name,
+        publishedAt:
+          existing?.latestReleaseId === releaseId ? existing.publishedAt : now,
+      });
+      const releasePath = await resolveProjectPath(
+        project.rootPath,
+        libraryReleaseRelativePath(libraryId, releaseId),
+        false,
+      );
+      const releaseContents = JSON.stringify(release, null, 2);
+      if (
+        Buffer.byteLength(releaseContents, "utf8") > MAX_LIBRARY_RELEASE_BYTES
+      ) {
+        throw new ProjectHostError(
+          "FILE_TOO_LARGE",
+          "Published Library release exceeds the 64 MB limit",
+        );
+      }
+      await mkdir(dirname(releasePath), { recursive: true });
+      if (!(await pathExists(releasePath))) {
+        await writeAtomic(releasePath, releaseContents);
+      }
+      const entry: ProjectLibraryCatalogEntry = {
+        libraryId,
+        name: release.name,
+        sourceProjectId: projectId,
+        sourceDesignFileId: designFileId,
+        sourceDocumentId: source.document.documentId,
+        latestReleaseId: releaseId,
+        publishedAt: release.publishedAt,
+        releases: existing?.releases.some(
+          (candidate) => candidate.releaseId === releaseId,
+        )
+          ? existing.releases
+          : [
+              ...(existing?.releases ?? []),
+              { releaseId, publishedAt: release.publishedAt },
+            ],
+      };
+      const nextCatalog: ProjectLibraryCatalog = {
+        ...catalog,
+        libraries: existing
+          ? catalog.libraries.map((candidate) =>
+              candidate.libraryId === libraryId ? entry : candidate,
+            )
+          : [...catalog.libraries, entry],
+      };
+      await writeProjectLibraryCatalog(project.rootPath, nextCatalog);
+      return {
+        catalog: structuredClone(nextCatalog),
+        entry: structuredClone(entry),
+        release: structuredClone(release),
+      };
+    });
+  }
+
+  async listProjectLibraries(
+    projectId: string,
+  ): Promise<ProjectLibraryCatalog> {
+    const project = this.#requireProject(projectId);
+    return structuredClone(await readProjectLibraryCatalog(project.rootPath));
+  }
+
+  async readProjectLibraryRelease(
+    projectId: string,
+    libraryId: string,
+    releaseId?: string,
+  ): Promise<LibraryReleaseSnapshot> {
+    const project = this.#requireProject(projectId);
+    const catalog = await readProjectLibraryCatalog(project.rootPath);
+    const entry = catalog.libraries.find(
+      (candidate) => candidate.libraryId === libraryId,
+    );
+    if (!entry) {
+      throw new ProjectHostError(
+        "LIBRARY_NOT_FOUND",
+        `Unknown Library: ${libraryId}`,
+      );
+    }
+    const selectedReleaseId = releaseId ?? entry.latestReleaseId;
+    if (
+      !entry.releases.some(
+        (candidate) => candidate.releaseId === selectedReleaseId,
+      )
+    ) {
+      throw new ProjectHostError(
+        "LIBRARY_NOT_FOUND",
+        `Unknown Library release: ${selectedReleaseId}`,
+      );
+    }
+    const releasePath = await resolveProjectPath(
+      project.rootPath,
+      libraryReleaseRelativePath(libraryId, selectedReleaseId),
+      true,
+    );
+    const value = await readBoundedJson(
+      releasePath,
+      MAX_LIBRARY_RELEASE_BYTES,
+      "INVALID_PROJECT",
+    );
+    if (
+      !isLibraryReleaseSnapshot(value) ||
+      value.libraryId !== libraryId ||
+      value.releaseId !== selectedReleaseId ||
+      value.sourceProjectId !== projectId ||
+      value.sourceDesignFileId !== entry.sourceDesignFileId ||
+      value.sourceDocumentId !== entry.sourceDocumentId
+    ) {
+      throw new ProjectHostError(
+        "INVALID_PROJECT",
+        "Published Library release does not match its catalog identity",
+      );
+    }
+    return structuredClone(value);
+  }
+
+  async setProjectLibraryEnabled(
+    projectId: string,
+    designFileId: string,
+    libraryId: string,
+    enabled: boolean,
+  ): Promise<ProjectLibraryCatalog> {
+    return this.#withProjectMutation(projectId, async () => {
+      const project = this.#requireProject(projectId);
+      if (
+        !project.manifest.designFiles.some(
+          (candidate) => candidate.designFileId === designFileId,
+        )
+      ) {
+        throw new ProjectHostError(
+          "DESIGN_FILE_NOT_FOUND",
+          `Unknown design file: ${designFileId}`,
+        );
+      }
+      const catalog = await readProjectLibraryCatalog(project.rootPath);
+      if (
+        !catalog.libraries.some(
+          (candidate) => candidate.libraryId === libraryId,
+        )
+      ) {
+        throw new ProjectHostError(
+          "LIBRARY_NOT_FOUND",
+          `Unknown Library: ${libraryId}`,
+        );
+      }
+      const current = new Set(
+        catalog.enabledLibraryIdsByDesignFileId[designFileId] ?? [],
+      );
+      if (enabled) current.add(libraryId);
+      else current.delete(libraryId);
+      const nextCatalog: ProjectLibraryCatalog = {
+        ...catalog,
+        enabledLibraryIdsByDesignFileId: {
+          ...catalog.enabledLibraryIdsByDesignFileId,
+          [designFileId]: [...current].sort(),
+        },
+      };
+      await writeProjectLibraryCatalog(project.rootPath, nextCatalog);
+      return structuredClone(nextCatalog);
     });
   }
 
@@ -1160,6 +1407,192 @@ async function writeAtomic(path: string, contents: string): Promise<void> {
   } finally {
     await rm(temporaryPath, { force: true });
   }
+}
+
+async function readProjectLibraryCatalog(
+  rootPath: string,
+): Promise<ProjectLibraryCatalog> {
+  const path = await resolveProjectPath(
+    rootPath,
+    PROJECT_LIBRARY_CATALOG_PATH,
+    false,
+  );
+  if (!(await pathExists(path))) {
+    return {
+      version: 1,
+      libraries: [],
+      enabledLibraryIdsByDesignFileId: {},
+      ignoredReleaseIdsByDesignFileId: {},
+    };
+  }
+  const value = await readBoundedJson(
+    path,
+    MAX_LIBRARY_CATALOG_BYTES,
+    "INVALID_PROJECT",
+  );
+  if (!isProjectLibraryCatalog(value)) {
+    throw new ProjectHostError(
+      "INVALID_PROJECT",
+      "Project Library catalog is invalid",
+    );
+  }
+  return value;
+}
+
+async function writeProjectLibraryCatalog(
+  rootPath: string,
+  catalog: ProjectLibraryCatalog,
+): Promise<void> {
+  if (!isProjectLibraryCatalog(catalog)) {
+    throw new ProjectHostError(
+      "INVALID_PROJECT",
+      "Project Library catalog is invalid",
+    );
+  }
+  const path = await resolveProjectPath(
+    rootPath,
+    PROJECT_LIBRARY_CATALOG_PATH,
+    false,
+  );
+  const contents = JSON.stringify(catalog, null, 2);
+  if (Buffer.byteLength(contents, "utf8") > MAX_LIBRARY_CATALOG_BYTES) {
+    throw new ProjectHostError(
+      "FILE_TOO_LARGE",
+      "Project Library catalog exceeds its size limit",
+    );
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await writeAtomic(path, contents);
+}
+
+function libraryReleaseRelativePath(
+  libraryId: string,
+  releaseId: string,
+): string {
+  if (!isLibraryStorageId(libraryId) || !isLibraryStorageId(releaseId)) {
+    throw new ProjectHostError(
+      "INVALID_PROJECT",
+      "Library storage identity is invalid",
+    );
+  }
+  return `${PROJECT_LIBRARY_RELEASE_DIRECTORY}/${libraryId}/${releaseId}.json`;
+}
+
+function isProjectLibraryCatalog(
+  value: unknown,
+): value is ProjectLibraryCatalog {
+  if (!isRecord(value)) return false;
+  if (
+    value.version !== 1 ||
+    !Array.isArray(value.libraries) ||
+    !isRecord(value.enabledLibraryIdsByDesignFileId) ||
+    !isRecord(value.ignoredReleaseIdsByDesignFileId) ||
+    !onlyKeys(value, [
+      "version",
+      "libraries",
+      "enabledLibraryIdsByDesignFileId",
+      "ignoredReleaseIdsByDesignFileId",
+    ])
+  ) {
+    return false;
+  }
+  const libraries = value.libraries;
+  if (
+    libraries.length > 4_096 ||
+    !libraries.every(isProjectLibraryCatalogEntry)
+  ) {
+    return false;
+  }
+  const libraryIds = new Set(libraries.map((entry) => entry.libraryId));
+  if (libraryIds.size !== libraries.length) return false;
+  if (
+    !Object.values(value.enabledLibraryIdsByDesignFileId).every(
+      (ids) =>
+        Array.isArray(ids) &&
+        ids.length <= 4_096 &&
+        ids.every((id) => typeof id === "string" && libraryIds.has(id)) &&
+        new Set(ids).size === ids.length,
+    )
+  ) {
+    return false;
+  }
+  return Object.values(value.ignoredReleaseIdsByDesignFileId).every(
+    (ignored) =>
+      isRecord(ignored) &&
+      Object.entries(ignored).every(
+        ([libraryId, releaseId]) =>
+          libraryIds.has(libraryId) &&
+          typeof releaseId === "string" &&
+          isLibraryStorageId(releaseId),
+      ),
+  );
+}
+
+function isProjectLibraryCatalogEntry(
+  value: unknown,
+): value is ProjectLibraryCatalogEntry {
+  if (!isRecord(value) || !Array.isArray(value.releases)) return false;
+  if (
+    !onlyKeys(value, [
+      "libraryId",
+      "name",
+      "sourceProjectId",
+      "sourceDesignFileId",
+      "sourceDocumentId",
+      "latestReleaseId",
+      "publishedAt",
+      "releases",
+    ]) ||
+    !isLibraryStorageId(value.libraryId) ||
+    typeof value.name !== "string" ||
+    value.name.length < 1 ||
+    value.name.length > 256 ||
+    !isStableId(value.sourceProjectId) ||
+    !isStableId(value.sourceDesignFileId) ||
+    !isStableId(value.sourceDocumentId) ||
+    !isLibraryStorageId(value.latestReleaseId) ||
+    !isTimestamp(value.publishedAt) ||
+    value.releases.length < 1 ||
+    value.releases.length > 4_096
+  ) {
+    return false;
+  }
+  const releaseIds = new Set<string>();
+  for (const release of value.releases) {
+    if (
+      !isRecord(release) ||
+      !onlyKeys(release, ["releaseId", "publishedAt"]) ||
+      !isLibraryStorageId(release.releaseId) ||
+      !isTimestamp(release.publishedAt) ||
+      releaseIds.has(release.releaseId)
+    ) {
+      return false;
+    }
+    releaseIds.add(release.releaseId);
+  }
+  return releaseIds.has(value.latestReleaseId);
+}
+
+function isLibraryStorageId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length >= 1 &&
+    value.length <= 256 &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)
+  );
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+}
+
+function onlyKeys(value: Record<string, unknown>, keys: readonly string[]) {
+  const allowed = new Set(keys);
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function removeDurably(path: string): Promise<void> {

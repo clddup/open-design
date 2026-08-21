@@ -1,4 +1,6 @@
 import {
+  componentDefinition,
+  componentSourceNode,
   componentSourcePathKey,
   componentSourceNodeIds,
   resolveComponentInstance,
@@ -44,7 +46,7 @@ export function planCreateComponent(
     commandPrefix: string;
   },
 ): ComponentOperationPlan {
-  if (document.componentsById[input.componentId]) {
+  if (componentDefinition(document, input.componentId)) {
     return failure(
       "duplicate",
       `Component ${input.componentId} already exists`,
@@ -106,7 +108,7 @@ export function planCreateInstance(
     commandPrefix: string;
   },
 ): ComponentOperationPlan {
-  const component = document.componentsById[input.componentId];
+  const component = componentDefinition(document, input.componentId);
   if (!component) {
     return failure(
       "missing-component",
@@ -116,7 +118,11 @@ export function planCreateInstance(
   if (document.nodesById[input.instanceId]) {
     return failure("duplicate", `Layer ${input.instanceId} already exists`);
   }
-  const root = document.nodesById[component.rootNodeId];
+  const root = componentSourceNode(
+    document,
+    component.id,
+    component.rootNodeId,
+  );
   if (!root) {
     return failure(
       "missing-source-node",
@@ -318,8 +324,8 @@ export function planSetComponentOverride(
     componentId: instance.properties.componentId,
     instanceId: instance.id,
     mainNodeId:
-      document.componentsById[instance.properties.componentId]?.rootNodeId ??
-      "",
+      componentDefinition(document, instance.properties.componentId)
+        ?.rootNodeId ?? "",
     selectionNodeIds: [instance.id],
   };
 }
@@ -372,8 +378,8 @@ export function planResetComponentOverrides(
     componentId: instance.properties.componentId,
     instanceId: instance.id,
     mainNodeId:
-      document.componentsById[instance.properties.componentId]?.rootNodeId ??
-      "",
+      componentDefinition(document, instance.properties.componentId)
+        ?.rootNodeId ?? "",
     selectionNodeIds: [instance.id],
   };
 }
@@ -457,8 +463,8 @@ export function planDetachComponentInstance(
     componentId: instance.properties.componentId,
     instanceId: instance.id,
     mainNodeId:
-      document.componentsById[instance.properties.componentId]?.rootNodeId ??
-      "",
+      componentDefinition(document, instance.properties.componentId)
+        ?.rootNodeId ?? "",
     selectionNodeIds: [instance.id],
   };
 }

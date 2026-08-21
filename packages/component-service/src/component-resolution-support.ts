@@ -12,6 +12,12 @@ import type {
   ResolvedComponentProperty,
   SlotLimitViolation,
 } from "./index.js";
+import {
+  componentDefinition,
+  componentDefinitions,
+  componentSourceNode,
+  componentVariantSet,
+} from "./component-source.js";
 
 export function effectiveComponentProperties(
   document: DesignDocument,
@@ -25,7 +31,7 @@ export function effectiveComponentProperties(
       properties: Readonly<Record<string, ResolvedComponentProperty>>;
     }
   | { ok: false; issues: ComponentResolutionIssue[] } {
-  const requestedDefinition = document.componentsById[componentId];
+  const requestedDefinition = componentDefinition(document, componentId);
   if (!requestedDefinition) {
     return {
       ok: false,
@@ -42,7 +48,7 @@ export function effectiveComponentProperties(
   const properties: Record<string, ResolvedComponentProperty> = {};
   let resolvedComponentId = componentId;
   const variantSet = requestedDefinition.variantSetId
-    ? document.variantSetsById[requestedDefinition.variantSetId]
+    ? componentVariantSet(document, requestedDefinition.variantSetId)
     : undefined;
   if (requestedDefinition.variantSetId && !variantSet) {
     issues.push({
@@ -81,7 +87,7 @@ export function effectiveComponentProperties(
       requestedVariantProperties[propertyName] = value;
       properties[propertyName] = { type: "VARIANT", value };
     }
-    const selected = Object.values(document.componentsById).find(
+    const selected = componentDefinitions(document).find(
       (candidate) =>
         candidate.variantSetId === variantSet.id &&
         Object.entries(requestedVariantProperties).every(
@@ -103,7 +109,7 @@ export function effectiveComponentProperties(
       resolvedComponentId = selected.id;
     }
   }
-  const definition = document.componentsById[resolvedComponentId];
+  const definition = componentDefinition(document, resolvedComponentId);
   if (!definition) {
     return { ok: false, issues };
   }
@@ -157,7 +163,7 @@ export function effectiveComponentProperties(
     if (
       propertyDefinition.type === "INSTANCE_SWAP" &&
       typeof effectiveValue === "string" &&
-      !document.componentsById[effectiveValue]
+      !componentDefinition(document, effectiveValue)
     ) {
       issues.push({
         code: "missing-component",
@@ -189,6 +195,7 @@ export function slotLimitViolations(
   document: DesignDocument,
   childIds: readonly string[],
   definition: Extract<ComponentPropertyDefinition, { type: "SLOT" }>,
+  sourceComponentId?: string,
 ): SlotLimitViolation[] {
   const result: SlotLimitViolation[] = [];
   const settings = definition.slotSettings ?? {};
@@ -199,9 +206,14 @@ export function slotLimitViolations(
   if (settings.allowPreferredValuesOnly) {
     const preferred = definition.preferredValues ?? [];
     const valid = childIds.every((childId) => {
-      const child = document.nodesById[childId];
+      const child = sourceComponentId
+        ? componentSourceNode(document, sourceComponentId, childId)
+        : document.nodesById[childId];
       if (child?.kind !== "instance") return false;
-      const component = document.componentsById[child.properties.componentId];
+      const component = componentDefinition(
+        document,
+        child.properties.componentId,
+      );
       return preferred.some((candidate) =>
         candidate.type === "COMPONENT"
           ? candidate.key === child.properties.componentId
