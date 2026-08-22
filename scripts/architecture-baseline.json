@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "desktopLayers": {
     "main": {
       "root": "apps/desktop/src/main",
@@ -46,6 +46,7 @@
       "@opendesign/geometry-service",
       "@opendesign/import-export-service",
       "@opendesign/layout-service",
+      "@opendesign/library-service",
       "@opendesign/style-service",
       "@opendesign/text-service",
       "@opendesign/variable-service"
@@ -63,6 +64,10 @@
       "@opendesign/text-service"
     ],
     "@opendesign/layout-service": [],
+    "@opendesign/library-service": [
+      "@opendesign/component-service",
+      "@opendesign/design-contracts"
+    ],
     "@opendesign/leafer-engine": [
       "@opendesign/component-service",
       "@opendesign/design-contracts",

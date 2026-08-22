@@ -51,6 +51,7 @@ Agent inspection 可只读看到当前文档已导入的 `libraryStylesById`，�
 - Imported Style 进入保存、history 和完整性校验，但不污染 Local Styles 管理区。
 - 禁用、更新、detach、undo/redo 与保存重开保持 Figma 类引用心智，同时继续服从 OpenDesign 的唯一事务事实。
 - Library Service 成为格式无关的发布/更新编排层；Component Service 与 Style Service 继续只负责各自解析语义。
+- `scripts/architecture-baseline.json` 明确登记 Library Service 只依赖 Component Service 与 Design Contracts，EditorRuntime 单向消费该 planner；依赖 DAG 不形成循环。
 
 ## 验证
 
@@ -58,3 +59,4 @@ Agent inspection 可只读看到当前文档已导入的 `libraryStylesById`，�
 - Runtime/Style 测试覆盖首次应用单事务、local/imported 统一解析、内容更新、detach 物化、删除引用保护、身份/类型/key 冲突、undo/redo 和保存重开。
 - 发布测试覆盖 hidden Style 排除、Component 隐藏依赖闭包、Style-only Library 与 Style 内容变化产生新 release。
 - Project/UI 测试覆盖发布、启用、Assets 分类、Inspector 搜索/来源、更新接受顺序、禁用保留现有引用和 imported Style 不可本地编辑。
+- `pnpm architecture:check` 覆盖新增 workspace package、依赖方向和无环性。
