@@ -81,6 +81,8 @@ Phase 6 的第五个切片建立两个状态 owner。`DiagnosticHost` 唯一持�
 
 Phase 6 的第六个切片用 `MediaInputIpcHost` 接管附件选择/导入/预览与设计图片选择/编辑/取消的 6 个 channel，以及所有活动图片编辑 `AbortController`。owner 固定原生文件类型白名单、最多 6 项/单项 16MB/合计 32MB 门禁、图片 attachment/content-addressed asset 转换、解码尺寸校验，并把 8 类严格 `DesignImageEditRequest` 规范化为可信编辑输入。重复 requestId 失败关闭，用户取消与 application shutdown 分别携带明确 AbortError，finally 清理 lease。底层图片 provider、mask/expand/upscale 几何和 provenance 仍由 Image service/Main 编辑器拥有，不进入 IPC registration；shared/preload 契约与 run-scoped reference 权限不变。
 
+Phase 6 的第七个切片用 `StandaloneDesignFileIpcHost` 接管脱离 Project 的 `.opendesign` 打开/保存 channel、原生对话框和唯一活动路径 lease；Project Design File 仍完全由 `ProjectHost` 持有，两者不共享路径状态。owner 在任何文件访问前执行 sender、参数数量、共享 payload、绝对路径和扩展名校验；打开时在 stat 后和 read 后分别执行 64MB 门禁并拒绝非文件与非法 UTF-8，保存时按 UTF-8 byte size 门禁并通过同目录随机临时文件原子替换。Save As 对无扩展名的原生选择补齐 `.opendesign`，取消或失败不提升活动路径，Renderer 只收到名称和内容而不获得绝对路径；application shutdown 清除 lease。Main 入口不再持有 standalone path、文件读写 helper 或这两个 channel 分支。
+
 ### 自动边界门禁与职责治理
 
 `pnpm architecture:check` 是根 `pnpm verify` 的必经步骤，并校验：

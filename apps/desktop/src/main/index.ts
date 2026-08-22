@@ -26,15 +26,8 @@ import {
   safeStorage,
   shell,
 } from "electron";
-import {
-  mkdtemp,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { AgentHost, FatalAgentRunError } from "./agent/agent-host";
@@ -104,10 +97,11 @@ import {
   MediaInputIpcHost,
   type DesignImageEditInput,
 } from "./media-input-ipc";
+import { StandaloneDesignFileIpcHost } from "./standalone-design-file-ipc";
 import { configureFixtureSmoke } from "./professional-fixture-smoke";
 import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
-import { channels, isSaveDesignFileRequest } from "../shared/desktop-api";
+import { channels } from "../shared/desktop-api";
 import type { DiagnosticContext } from "../shared/diagnostics";
 import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
 import { translate } from "../shared/i18n/messages";
@@ -206,9 +200,6 @@ const rendererDesignToolHost = new RendererDesignToolHost(
 rendererDesignToolHost.setPerformanceObserver((sample) =>
   designGenerationPerformance.recordRendererTool(sample),
 );
-const designFileExtension = ".opendesign";
-const maxDesignFileBytes = 64 * 1024 * 1024;
-let activeDesignFilePath: string | null = null;
 let workspaceStore: WorkspaceStore | null = null;
 let projectHost: ProjectHost | null = null;
 let projectIpc: ProjectIpcService | null = null;
@@ -251,6 +242,12 @@ const mediaInputIpcHost = new MediaInputIpcHost({
   getWindow: () => desktopWindowHost.current(),
   openDialog: (window, options) => dialog.showOpenDialog(window, options),
 });
+const standaloneDesignFileIpcHost = new StandaloneDesignFileIpcHost({
+  getLocale: () => applicationPreferences.locale(),
+  getWindow: () => desktopWindowHost.current(),
+  openDialog: (window, options) => dialog.showOpenDialog(window, options),
+  saveDialog: (window, options) => dialog.showSaveDialog(window, options),
+});
 const applicationLifecycle = new ApplicationLifecycle({
   exit: (code) => app.exit(code),
   platform: process.platform,
@@ -292,7 +289,7 @@ const applicationLifecycle = new ApplicationLifecycle({
       rasterFileService = null;
       workspaceStore = null;
       diagnosticHost.clear();
-      activeDesignFilePath = null;
+      standaloneDesignFileIpcHost.clear();
     },
   },
 });
@@ -385,29 +382,6 @@ function requireAgentSvgImportHost(): AgentSvgImportHost {
     throw new Error("Agent SVG import services are not initialized");
   }
   return agentSvgImportHost;
-}
-
-function assertDesignFilePath(path: string) {
-  if (extname(path).toLowerCase() !== designFileExtension) {
-    throw new TypeError("OpenDesign files must use the .opendesign extension");
-  }
-}
-
-async function writeDesignFile(path: string, contents: string) {
-  assertDesignFilePath(path);
-  const temporaryPath = join(
-    dirname(path),
-    `.${basename(path)}.${process.pid}.${Date.now()}.tmp`,
-  );
-  try {
-    await writeFile(temporaryPath, contents, {
-      encoding: "utf8",
-      flag: "wx",
-    });
-    await rename(temporaryPath, path);
-  } finally {
-    await rm(temporaryPath, { force: true });
-  }
 }
 
 async function selectProjectDirectory(
@@ -605,6 +579,10 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     ipc: ipcMain,
     assertRenderer: assertMainRenderer,
   });
+  standaloneDesignFileIpcHost.registerIpc({
+    ipc: ipcMain,
+    assertRenderer: assertMainRenderer,
+  });
   desktopWindowHost.registerIpc(ipcMain);
   registerSvgFileIpc({
     ipc: ipcMain,
@@ -626,85 +604,6 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
   fixtureSmoke.register(ipcMain, assertMainRenderer, () =>
     desktopWindowHost.current(),
   );
-  ipcMain.handle(channels.openDesignFile, async (event) => {
-    assertMainRenderer(event);
-    const window = desktopWindowHost.current();
-    if (!window) return null;
-    const result = await dialog.showOpenDialog(window, {
-      title: translate(
-        applicationPreferences.locale(),
-        "main.openDocumentTitle",
-      ),
-      buttonLabel: translate(
-        applicationPreferences.locale(),
-        "main.openDocumentButton",
-      ),
-      properties: ["openFile"],
-      filters: [
-        {
-          name: translate(
-            applicationPreferences.locale(),
-            "main.documentFilter",
-          ),
-          extensions: ["opendesign"],
-        },
-      ],
-    });
-    if (result.canceled || result.filePaths.length !== 1) return null;
-    const path = result.filePaths[0];
-    if (!path) return null;
-    assertDesignFilePath(path);
-    const file = await stat(path);
-    if (!file.isFile() || file.size > maxDesignFileBytes) {
-      throw new RangeError("OpenDesign document exceeds the 64 MB limit");
-    }
-    const contents = await readFile(path, "utf8");
-    activeDesignFilePath = path;
-    return { name: basename(path), contents };
-  });
-  ipcMain.handle(channels.saveDesignFile, async (event, request: unknown) => {
-    assertMainRenderer(event);
-    if (!isSaveDesignFileRequest(request)) {
-      throw new TypeError("Invalid OpenDesign save request");
-    }
-    if (Buffer.byteLength(request.contents, "utf8") > maxDesignFileBytes) {
-      throw new RangeError("OpenDesign document exceeds the 64 MB limit");
-    }
-    let path = request.saveAs ? null : activeDesignFilePath;
-    if (!path) {
-      const window = desktopWindowHost.current();
-      if (!window) return null;
-      const suggestedName = request.suggestedName.endsWith(designFileExtension)
-        ? request.suggestedName
-        : `${request.suggestedName}${designFileExtension}`;
-      const result = await dialog.showSaveDialog(window, {
-        title: translate(
-          applicationPreferences.locale(),
-          "main.saveDocumentTitle",
-        ),
-        buttonLabel: translate(
-          applicationPreferences.locale(),
-          "main.saveDocumentButton",
-        ),
-        defaultPath: suggestedName,
-        filters: [
-          {
-            name: translate(
-              applicationPreferences.locale(),
-              "main.documentFilter",
-            ),
-            extensions: ["opendesign"],
-          },
-        ],
-      });
-      if (result.canceled || !result.filePath) return null;
-      path = result.filePath;
-    }
-    assertDesignFilePath(path);
-    await writeDesignFile(path, request.contents);
-    activeDesignFilePath = path;
-    return { name: basename(path) };
-  });
   ipcMain.handle(channels.agentRequest, async (event, ...args: unknown[]) => {
     desktopWindowHost.assertRenderer(
       event,
