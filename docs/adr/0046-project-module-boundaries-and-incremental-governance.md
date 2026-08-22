@@ -75,6 +75,8 @@ Phase 6 的第二个切片用唯一 `DesktopWindowHost` 接管 BrowserWindow 实
 
 Phase 6 的第三个切片把 `ApplicationLifecycle` 从最后窗口策略扩展为唯一 shutdown coordinator。Renderer 的 `beforeunload → ProjectAutosaveCoordinator.flushAll → window.close` 仍先完成文档持久化；Main 在 `will-quit` 只建立一次异步终止屏障，随后按固定顺序取消图片工作、停止 Agent、断开 provider/tool handler、拒绝悬挂 Renderer tool、关闭 Workspace、清理 Run correlation、等待 `DiagnosticLog.flush()`，最后清空 service 引用并调用 `app.exit(0)`。单个 teardown step 失败会聚合报告但不跳过其余步骤；重复 `will-quit` 不会重复关闭数据库或退出。普通 macOS 最后窗口继续保留应用，Windows/Linux 最后窗口继续退出，显式 macOS Quit 在 Renderer autosave 后继续退出。Main service bootstrap 与剩余 IPC family 仍属于未完成的 Phase 6。
 
+Phase 6 的第四个切片把 Model Provider catalog/profile/test 与 Global Image Generation settings 的 6 个 channel 迁入 `model-service-ipc`。registration owner 统一执行 sender、参数数量和共享 payload validator，并在每次 invoke 时动态解析当前 `ModelProviderHost` / `ImageGenerationHost`；shutdown 后不能继续调用旧 host。Provider save/delete 只有在持久化成功后才发布 catalog changed，连接测试与图片设置保持原返回/错误语义。Main 入口只注入 host resolver 和 Renderer event publisher，不再拥有该 family 的分支。该切片没有改变 shared/preload API、凭据只驻留 Main 的边界或 provider adapter 行为。
+
 ### 自动边界门禁与职责治理
 
 `pnpm architecture:check` 是根 `pnpm verify` 的必经步骤，并校验：
@@ -103,7 +105,7 @@ ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证
 
 - 聚合入口会按真实业务所有权逐步收缩，而不是一次性重写。
 - 新代码不能建立跨进程后门、包循环或新的巨型模块。
-- 历史大模块仍然存在，Phase 1–5 和 Phase 6 已完成的 IPC/BrowserWindow/shutdown 切片不能描述为全项目治理完成；后续阶段必须继续实际拆除职责。
+- 历史大模块仍然存在，Phase 1–5 和 Phase 6 已完成的 IPC/BrowserWindow/shutdown/provider 切片不能描述为全项目治理完成；后续阶段必须继续实际拆除职责。
 - 导入/导出现在具有独立取消和反馈生命周期，并继续从唯一 Runtime snapshot 生成事务或产物。
 - Page 与 Layer view 不再直接拥有 planner/transaction 编排；新增人工编辑命令应进入对应 controller 或新的完整业务 controller，不应重新堆回 `App.tsx`。
 - Inspector section 不拥有 Runtime 或文档副本；新增 property family 应进入对应 section，通过现有语义 callback 提交，不能重新堆回顶层 `PropertiesPanel.tsx`。
@@ -120,5 +122,6 @@ ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证
 - `project-ipc-registration.test.ts`、`project-ipc.test.ts`、`renderer-design-tool-ipc.test.ts` 与 `renderer-design-tool-host.test.ts`：完整 channel 映射、sender/argument/payload 校验顺序、动态 service 生命周期和 stale response
 - `desktop-window-host.test.ts`、`navigation-policy.test.ts`、`renderer-url.test.ts`、`application-lifecycle.test.ts` 与相邻字体/fixture smoke 测试：安全窗口配置、开发/打包加载、导航/外链、Renderer identity、窗口动作、关闭和双平台最后窗口策略
 - `application-lifecycle.test.ts`、`diagnostic-log.test.ts`、`project-autosave.test.ts`、Project workspace 与 App 关窗测试：Renderer autosave 先行、单次有序 Main teardown、异步诊断 flush、局部失败隔离及 macOS/Windows 退出语义
+- `model-service-ipc.test.ts`、`model-provider-host.test.ts`、`image-generation-host.test.ts`、shared desktop API 与 Settings 测试：完整 channel family、动态 host、凭据 payload 校验、成功后 catalog 通知、连接测试与设置持久化
 - Agent Runtime/Main/Renderer 定向测试：Run-scoped approval、Renderer 活动租约、版本化 Plan amendment 与 Text content 规范化
 - 全仓 `pnpm verify`

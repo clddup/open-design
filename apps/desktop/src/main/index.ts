@@ -85,6 +85,7 @@ import { RasterFileService } from "./raster/raster-file-service";
 import { FontBinaryMainService } from "./font/font-binary-main";
 import type { RasterExportFormat } from "@opendesign/import-export-service/raster";
 import { ModelProviderHost } from "./model/model-provider-host";
+import { registerModelServiceIpc } from "./model/model-service-ipc";
 import {
   ERASE_OBJECT_PROMPT,
   EXPAND_IMAGE_PROMPT,
@@ -104,16 +105,12 @@ import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
 import {
   channels,
-  isDeleteModelProviderProfileRequest,
-  isSaveGlobalImageGenerationSettingsRequest,
   isRendererDiagnosticReport,
   isAgentAttachmentImport,
   isAgentAttachmentPreviewRequest,
   isCancelDesignImageEditRequest,
   isDesignImageEditRequest,
   isLocalePreference,
-  isSaveModelProviderProfileRequest,
-  isTestModelProviderConnectionRequest,
   isSaveDesignFileRequest,
   isThemePreference,
   type DesignImageAreaSelection,
@@ -580,6 +577,15 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     assertRenderer: assertMainRenderer,
     host: rendererDesignToolHost,
   });
+  registerModelServiceIpc({
+    ipc: ipcMain,
+    assertRenderer: assertMainRenderer,
+    getImageGenerationHost: requireImageGenerationHost,
+    getModelProviderHost: requireModelProviderHost,
+    publishModelProviderCatalog: (catalog) => {
+      desktopWindowHost.send(channels.modelProviderCatalogChanged, catalog);
+    },
+  });
   desktopWindowHost.registerIpc(ipcMain);
   registerSvgFileIpc({
     ipc: ipcMain,
@@ -644,74 +650,6 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     nativeTheme.themeSource = value;
     return themePreference;
   });
-  ipcMain.handle(
-    channels.getModelProviderCatalog,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 0);
-      return requireModelProviderHost().getCatalog();
-    },
-  );
-  ipcMain.handle(
-    channels.getGlobalImageGenerationSettings,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 0);
-      return requireImageGenerationHost().getSettings();
-    },
-  );
-  ipcMain.handle(
-    channels.saveGlobalImageGenerationSettings,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isSaveGlobalImageGenerationSettingsRequest(request)) {
-        throw new TypeError("Invalid global image-generation settings");
-      }
-      return requireImageGenerationHost().saveSettings(request);
-    },
-  );
-  ipcMain.handle(
-    channels.saveModelProviderProfile,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isSaveModelProviderProfileRequest(request)) {
-        throw new TypeError("Invalid model provider profile");
-      }
-      const catalog = requireModelProviderHost().saveProfile(request);
-      desktopWindowHost.send(channels.modelProviderCatalogChanged, catalog);
-      return catalog;
-    },
-  );
-  ipcMain.handle(
-    channels.deleteModelProviderProfile,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isDeleteModelProviderProfileRequest(request)) {
-        throw new TypeError("Invalid model provider delete request");
-      }
-      const catalog = requireModelProviderHost().deleteProfile(request);
-      desktopWindowHost.send(channels.modelProviderCatalogChanged, catalog);
-      return catalog;
-    },
-  );
-  ipcMain.handle(
-    channels.testModelProviderConnection,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isTestModelProviderConnectionRequest(request)) {
-        throw new TypeError("Invalid model provider test request");
-      }
-      return requireModelProviderHost().testConnection(request);
-    },
-  );
   ipcMain.handle(channels.selectAgentAttachments, async (event, ...args) => {
     assertMainRenderer(event);
     assertArgumentCount(args, 0);
