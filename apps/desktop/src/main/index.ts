@@ -69,6 +69,7 @@ import {
 } from "./agent/design-visual-critic";
 import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
+import { ApplicationPreferencesHost } from "./application-preferences-host";
 import {
   DesktopWindowHost,
   resolveApplicationIconPath,
@@ -100,29 +101,21 @@ import {
 } from "./model/image-expand-raster";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
 import { DiagnosticLog } from "./diagnostics/diagnostic-log";
+import { DiagnosticHost } from "./diagnostics/diagnostic-host";
 import { configureFixtureSmoke } from "./professional-fixture-smoke";
 import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
 import {
   channels,
-  isRendererDiagnosticReport,
   isAgentAttachmentImport,
   isAgentAttachmentPreviewRequest,
   isCancelDesignImageEditRequest,
   isDesignImageEditRequest,
-  isLocalePreference,
   isSaveDesignFileRequest,
-  isThemePreference,
   type DesignImageAreaSelection,
   type DesignImageExpansion,
-  type ThemePreference,
 } from "../shared/desktop-api";
-import type {
-  DiagnosticContext,
-  DiagnosticEvent,
-  DiagnosticInput,
-} from "../shared/diagnostics";
-import { DEFAULT_APP_LOCALE, type AppLocale } from "../shared/i18n/locale";
+import type { DiagnosticContext } from "../shared/diagnostics";
 import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
 import { translate } from "../shared/i18n/messages";
 import {
@@ -223,8 +216,6 @@ rendererDesignToolHost.setPerformanceObserver((sample) =>
 const designFileExtension = ".opendesign";
 const maxDesignFileBytes = 64 * 1024 * 1024;
 let activeDesignFilePath: string | null = null;
-let themePreference: ThemePreference = "system";
-let localePreference: AppLocale = DEFAULT_APP_LOCALE;
 let workspaceStore: WorkspaceStore | null = null;
 let projectHost: ProjectHost | null = null;
 let projectIpc: ProjectIpcService | null = null;
@@ -239,10 +230,27 @@ let agentSvgImportHost: AgentSvgImportHost | null = null;
 let agentRasterExportHost: AgentRasterExportHost | null = null;
 let svgFileService: SvgFileService | null = null;
 let rasterFileService: RasterFileService | null = null;
-let diagnosticLog: DiagnosticLog | null = null;
-const pendingDiagnosticEvents: DiagnosticEvent[] = [];
 const conversationIdByRunId = new Map<string, string>();
 const conversationIdByRequestId = new Map<string, string>();
+const diagnosticHost = new DiagnosticHost({
+  fallback: (input) => {
+    console.error(`[${input.source}:${input.code}] ${input.message}`);
+  },
+  send: (event) => desktopWindowHost.send(channels.diagnosticEvent, event),
+});
+const applicationPreferences = new ApplicationPreferencesHost({
+  installMenu: installApplicationMenu,
+  persistLocale: (locale) => workspaceStore?.setPreference("locale", locale),
+  publishLocale: (locale) => {
+    desktopWindowHost.send(channels.localeChanged, locale);
+  },
+  publishTheme: (isDark) => {
+    desktopWindowHost.send(channels.themeChanged, isDark);
+  },
+  setNativeTheme: (theme) => {
+    nativeTheme.themeSource = theme;
+  },
+});
 const applicationLifecycle = new ApplicationLifecycle({
   exit: (code) => app.exit(code),
   platform: process.platform,
@@ -272,9 +280,8 @@ const applicationLifecycle = new ApplicationLifecycle({
     clearCorrelations: () => {
       conversationIdByRunId.clear();
       conversationIdByRequestId.clear();
-      pendingDiagnosticEvents.length = 0;
     },
-    flushDiagnostics: () => diagnosticLog?.flush(),
+    flushDiagnostics: () => diagnosticHost.flush(),
     clearServices: () => {
       projectIpc = null;
       globalTaskCoordinator = null;
@@ -289,24 +296,11 @@ const applicationLifecycle = new ApplicationLifecycle({
       svgFileService = null;
       rasterFileService = null;
       workspaceStore = null;
-      diagnosticLog = null;
+      diagnosticHost.clear();
       activeDesignFilePath = null;
     },
   },
 });
-
-function publishDiagnostic(input: DiagnosticInput): void {
-  const event = diagnosticLog?.record(input);
-  if (!event) {
-    console.error(`[${input.source}:${input.code}] ${input.message}`);
-    return;
-  }
-  if (desktopWindowHost.send(channels.diagnosticEvent, event)) return;
-  if (event.presentation === "toast") {
-    pendingDiagnosticEvents.push(event);
-    if (pendingDiagnosticEvents.length > 20) pendingDiagnosticEvents.shift();
-  }
-}
 
 function diagnosticContextForAgentEvent(
   event: AgentEvent,
@@ -429,12 +423,12 @@ async function selectProjectDirectory(
   const result = await dialog.showOpenDialog(window, {
     title:
       purpose === "create"
-        ? translate(localePreference, "main.createProjectTitle")
-        : translate(localePreference, "main.openProjectTitle"),
+        ? translate(applicationPreferences.locale(), "main.createProjectTitle")
+        : translate(applicationPreferences.locale(), "main.openProjectTitle"),
     buttonLabel:
       purpose === "create"
-        ? translate(localePreference, "main.createHere")
-        : translate(localePreference, "main.openProjectButton"),
+        ? translate(applicationPreferences.locale(), "main.createHere")
+        : translate(applicationPreferences.locale(), "main.openProjectButton"),
     properties: ["openDirectory", "createDirectory"],
   });
   if (result.canceled || result.filePaths.length !== 1) return null;
@@ -445,12 +439,15 @@ async function selectSvgOpenFile(): Promise<string | null> {
   const window = desktopWindowHost.current();
   if (!window) return null;
   const result = await dialog.showOpenDialog(window, {
-    title: translate(localePreference, "main.openSvgTitle"),
-    buttonLabel: translate(localePreference, "main.openSvgButton"),
+    title: translate(applicationPreferences.locale(), "main.openSvgTitle"),
+    buttonLabel: translate(
+      applicationPreferences.locale(),
+      "main.openSvgButton",
+    ),
     properties: ["openFile"],
     filters: [
       {
-        name: translate(localePreference, "main.svgFilter"),
+        name: translate(applicationPreferences.locale(), "main.svgFilter"),
         extensions: ["svg"],
       },
     ],
@@ -465,12 +462,15 @@ async function selectSvgSaveFile(
   const window = desktopWindowHost.current();
   if (!window) return null;
   const result = await dialog.showSaveDialog(window, {
-    title: translate(localePreference, "main.saveSvgTitle"),
-    buttonLabel: translate(localePreference, "main.saveSvgButton"),
+    title: translate(applicationPreferences.locale(), "main.saveSvgTitle"),
+    buttonLabel: translate(
+      applicationPreferences.locale(),
+      "main.saveSvgButton",
+    ),
     defaultPath: suggestedName,
     filters: [
       {
-        name: translate(localePreference, "main.svgFilter"),
+        name: translate(applicationPreferences.locale(), "main.svgFilter"),
         extensions: ["svg"],
       },
     ],
@@ -487,12 +487,15 @@ async function selectRasterSaveFile(
   if (!window) return null;
   const extensions = format === "jpeg" ? ["jpg", "jpeg"] : [format];
   const result = await dialog.showSaveDialog(window, {
-    title: translate(localePreference, "main.saveRasterTitle"),
-    buttonLabel: translate(localePreference, "main.saveRasterButton"),
+    title: translate(applicationPreferences.locale(), "main.saveRasterTitle"),
+    buttonLabel: translate(
+      applicationPreferences.locale(),
+      "main.saveRasterButton",
+    ),
     defaultPath: suggestedName,
     filters: [
       {
-        name: translate(localePreference, "main.rasterFilter", {
+        name: translate(applicationPreferences.locale(), "main.rasterFilter", {
           format: format.toUpperCase(),
         }),
         extensions,
@@ -517,10 +520,19 @@ function installApplicationMenu() {
       onExportSvg: () => {
         desktopWindowHost.send(channels.exportSvgCommand);
       },
-      settingsLabel: translate(localePreference, "settings.menuItem"),
-      fileLabel: translate(localePreference, "main.fileMenu"),
-      importSvgLabel: translate(localePreference, "main.importSvgMenu"),
-      exportSvgLabel: translate(localePreference, "main.exportSvgMenu"),
+      settingsLabel: translate(
+        applicationPreferences.locale(),
+        "settings.menuItem",
+      ),
+      fileLabel: translate(applicationPreferences.locale(), "main.fileMenu"),
+      importSvgLabel: translate(
+        applicationPreferences.locale(),
+        "main.importSvgMenu",
+      ),
+      exportSvgLabel: translate(
+        applicationPreferences.locale(),
+        "main.exportSvgMenu",
+      ),
     },
   );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -586,6 +598,14 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
       desktopWindowHost.send(channels.modelProviderCatalogChanged, catalog);
     },
   });
+  diagnosticHost.registerIpc({
+    ipc: ipcMain,
+    assertRenderer: assertMainRenderer,
+  });
+  applicationPreferences.registerIpc({
+    ipc: ipcMain,
+    assertRenderer: assertMainRenderer,
+  });
   desktopWindowHost.registerIpc(ipcMain);
   registerSvgFileIpc({
     ipc: ipcMain,
@@ -607,61 +627,27 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
   fixtureSmoke.register(ipcMain, assertMainRenderer, () =>
     desktopWindowHost.current(),
   );
-  ipcMain.handle(
-    channels.getPendingDiagnostics,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 0);
-      return pendingDiagnosticEvents.splice(0);
-    },
-  );
-  ipcMain.handle(channels.reportDiagnostic, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    const report = args[0];
-    if (!isRendererDiagnosticReport(report)) {
-      throw new TypeError("Invalid diagnostic report");
-    }
-    publishDiagnostic({ ...report, source: "renderer" });
-  });
-  ipcMain.handle(channels.getLocale, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 0);
-    return localePreference;
-  });
-  ipcMain.handle(channels.setLocale, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    const locale = args[0];
-    if (!isLocalePreference(locale)) {
-      throw new TypeError("Invalid locale preference");
-    }
-    localePreference = locale;
-    workspaceStore?.setPreference("locale", locale);
-    installApplicationMenu();
-    desktopWindowHost.send(channels.localeChanged, locale);
-    return localePreference;
-  });
-  ipcMain.handle(channels.getTheme, () => themePreference);
-  ipcMain.handle(channels.setTheme, (_event, value: unknown) => {
-    if (!isThemePreference(value))
-      throw new TypeError("Invalid theme preference");
-    themePreference = value;
-    nativeTheme.themeSource = value;
-    return themePreference;
-  });
   ipcMain.handle(channels.selectAgentAttachments, async (event, ...args) => {
     assertMainRenderer(event);
     assertArgumentCount(args, 0);
     const window = desktopWindowHost.current();
     if (!window) return [];
     const result = await dialog.showOpenDialog(window, {
-      title: translate(localePreference, "main.selectAttachmentsTitle"),
-      buttonLabel: translate(localePreference, "main.selectAttachmentsButton"),
+      title: translate(
+        applicationPreferences.locale(),
+        "main.selectAttachmentsTitle",
+      ),
+      buttonLabel: translate(
+        applicationPreferences.locale(),
+        "main.selectAttachmentsButton",
+      ),
       properties: ["openFile", "multiSelections"],
       filters: [
         {
-          name: translate(localePreference, "main.attachmentFilter"),
+          name: translate(
+            applicationPreferences.locale(),
+            "main.attachmentFilter",
+          ),
           extensions: [
             "png",
             "jpg",
@@ -740,12 +726,18 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     const window = desktopWindowHost.current();
     if (!window) return null;
     const result = await dialog.showOpenDialog(window, {
-      title: translate(localePreference, "main.selectDesignImageTitle"),
-      buttonLabel: translate(localePreference, "main.selectDesignImageButton"),
+      title: translate(
+        applicationPreferences.locale(),
+        "main.selectDesignImageTitle",
+      ),
+      buttonLabel: translate(
+        applicationPreferences.locale(),
+        "main.selectDesignImageButton",
+      ),
       properties: ["openFile"],
       filters: [
         {
-          name: translate(localePreference, "main.imageFilter"),
+          name: translate(applicationPreferences.locale(), "main.imageFilter"),
           extensions: ["png", "jpg", "jpeg", "webp", "gif"],
         },
       ],
@@ -879,12 +871,21 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     const window = desktopWindowHost.current();
     if (!window) return null;
     const result = await dialog.showOpenDialog(window, {
-      title: translate(localePreference, "main.openDocumentTitle"),
-      buttonLabel: translate(localePreference, "main.openDocumentButton"),
+      title: translate(
+        applicationPreferences.locale(),
+        "main.openDocumentTitle",
+      ),
+      buttonLabel: translate(
+        applicationPreferences.locale(),
+        "main.openDocumentButton",
+      ),
       properties: ["openFile"],
       filters: [
         {
-          name: translate(localePreference, "main.documentFilter"),
+          name: translate(
+            applicationPreferences.locale(),
+            "main.documentFilter",
+          ),
           extensions: ["opendesign"],
         },
       ],
@@ -917,12 +918,21 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
         ? request.suggestedName
         : `${request.suggestedName}${designFileExtension}`;
       const result = await dialog.showSaveDialog(window, {
-        title: translate(localePreference, "main.saveDocumentTitle"),
-        buttonLabel: translate(localePreference, "main.saveDocumentButton"),
+        title: translate(
+          applicationPreferences.locale(),
+          "main.saveDocumentTitle",
+        ),
+        buttonLabel: translate(
+          applicationPreferences.locale(),
+          "main.saveDocumentButton",
+        ),
         defaultPath: suggestedName,
         filters: [
           {
-            name: translate(localePreference, "main.documentFilter"),
+            name: translate(
+              applicationPreferences.locale(),
+              "main.documentFilter",
+            ),
             extensions: ["opendesign"],
           },
         ],
@@ -1004,13 +1014,13 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
   agentHost.on((event) => {
     reportAgentDiagnostic(
       event,
-      publishDiagnostic,
+      diagnosticHost.publish,
       diagnosticContextForAgentEvent,
     );
     const performanceSummary =
       designGenerationPerformance.recordAgentEvent(event);
     if (performanceSummary)
-      publishDiagnostic(
+      diagnosticHost.publish(
         designGenerationPerformanceDiagnostic(
           performanceSummary,
           conversationIdByRunId.get(performanceSummary.runId),
@@ -1049,8 +1059,7 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     desktopWindowHost.send(channels.agentEvent, event);
   });
   nativeTheme.on("updated", () => {
-    desktopWindowHost.send(
-      channels.themeChanged,
+    applicationPreferences.publishNativeThemeUpdated(
       nativeTheme.shouldUseDarkColors,
     );
   });
@@ -1124,9 +1133,11 @@ void app.whenReady().then(async () => {
     fixtureSmoke.home,
     app.getPath("userData"),
   );
-  diagnosticLog = new DiagnosticLog(
-    join(app.getPath("userData"), "diagnostics"),
-    { appVersion: app.getVersion(), platform: process.platform },
+  diagnosticHost.initialize(
+    new DiagnosticLog(join(app.getPath("userData"), "diagnostics"), {
+      appVersion: app.getVersion(),
+      platform: process.platform,
+    }),
   );
   workspaceStore = new WorkspaceStore(workspaceDatabase);
   agentAttachmentHost = new AgentAttachmentHost(
@@ -1137,7 +1148,7 @@ void app.whenReady().then(async () => {
   );
   agentReferenceHost = new AgentReferenceHost(agentAttachmentHost);
   const persistedLocale = workspaceStore.getPreference("locale");
-  if (isLocalePreference(persistedLocale)) localePreference = persistedLocale;
+  applicationPreferences.restoreLocale(persistedLocale);
   installApplicationMenu();
   const credentialCipher = {
     available: () => safeStorage.isEncryptionAvailable(),
@@ -2133,7 +2144,7 @@ void app.whenReady().then(async () => {
       console.info(
         `Recovered ${recovered.recoveredRuns} interrupted Agent run(s) and ${recovered.recoveredTools} tool call(s)`,
       );
-      publishDiagnostic({
+      diagnosticHost.publish({
         level: "info",
         source: "storage",
         presentation: "toast",
@@ -2145,7 +2156,7 @@ void app.whenReady().then(async () => {
     console.error(
       `Agent session recovery failed: ${error instanceof Error ? error.message : String(error)}`,
     );
-    publishDiagnostic({
+    diagnosticHost.publish({
       level: "error",
       source: "storage",
       presentation: "toast",
