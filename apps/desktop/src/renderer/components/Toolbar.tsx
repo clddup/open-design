@@ -4,6 +4,7 @@ import {
   Divider,
   DropdownMenu,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   Icon,
   IconButton,
   type IconName,
@@ -66,6 +67,7 @@ export function Toolbar({
   canBooleanAction,
   hierarchyAction,
   canHierarchyAction,
+  maskAction,
   canReorder,
   canDelete,
   canDuplicate,
@@ -75,6 +77,7 @@ export function Toolbar({
   onBooleanOperation,
   onDuplicate,
   onGroup,
+  onToggleMask,
   onReorder,
   onUndo,
   onUngroup,
@@ -87,6 +90,7 @@ export function Toolbar({
   canBooleanAction: boolean;
   hierarchyAction: "group" | "ungroup";
   canHierarchyAction: boolean;
+  maskAction: "create" | "remove" | null;
   canReorder: Readonly<Record<LayerOrderAction, boolean>>;
   canDelete: boolean;
   canDuplicate: boolean;
@@ -96,6 +100,7 @@ export function Toolbar({
   onBooleanOperation: (operation: BooleanOperation) => void;
   onDuplicate: () => void;
   onGroup: () => void;
+  onToggleMask: () => void;
   onReorder: (action: LayerOrderAction) => void;
   onUndo: () => void;
   onUngroup: () => void;
@@ -117,6 +122,7 @@ export function Toolbar({
           subtract: "⌥⇧S",
           intersect: "⌥⇧I",
           exclude: "⌥⇧E",
+          mask: "⌃⌘M",
         }
       : {
           duplicate: "Ctrl+D",
@@ -130,6 +136,7 @@ export function Toolbar({
           subtract: "Alt+Shift+S",
           intersect: "Alt+Shift+I",
           exclude: "Alt+Shift+E",
+          mask: "Ctrl+Alt+M",
         };
   const orderItems: ReadonlyArray<{
     action: LayerOrderAction;
@@ -208,7 +215,10 @@ export function Toolbar({
           ))}
         </DropdownMenu>
         <DropdownMenu
-          disabled={!orderItems.some(({ action }) => canReorder[action])}
+          disabled={
+            maskAction === null &&
+            !orderItems.some(({ action }) => canReorder[action])
+          }
           icon={<Icon name="lucide:ellipsis" />}
           label={t("toolbar.layerOrder")}
         >
@@ -222,6 +232,18 @@ export function Toolbar({
               {t(label)}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={maskAction === null}
+            onSelect={onToggleMask}
+            shortcut={shortcuts.mask}
+          >
+            {t(
+              maskAction === "remove"
+                ? "toolbar.removeMask"
+                : "toolbar.useAsMask",
+            )}
+          </DropdownMenuItem>
         </DropdownMenu>
         <IconButton
           disabled={!canDelete}

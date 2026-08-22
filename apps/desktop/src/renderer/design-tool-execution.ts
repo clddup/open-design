@@ -19,6 +19,7 @@ import {
   planClearPage,
   planCreatePage,
   planCreateBooleanGroup,
+  planCreateMaskGroup,
   planDeletePage,
   planDuplicatePage,
   planGroupNodes,
@@ -30,12 +31,16 @@ import {
   planReorderPage,
   planSvgImport,
   planSetBooleanOperation,
+  planSetMaskType,
+  planRemoveMask,
   planUngroupBooleanGroup,
   planUngroupNode,
   planVectorLayersLineCut,
   planVectorLayersVertexTransform,
   planVectorSemanticEdit,
   type EditorRuntime,
+  type BooleanOperationPlan,
+  type LayerOperationPlan,
 } from "@opendesign/editor-runtime";
 import {
   DESIGN_ARRANGE_TOOL_NAME,
@@ -768,60 +773,95 @@ async function executeDesignToolRequestUnsafe(
     );
     const commandPrefix =
       `hierarchy_${input.action}_${request.call.toolCallId}`.slice(0, 200);
-    const plan =
-      input.action === "group"
-        ? planGroupNodes(document, input.pageId, input.nodeIds, {
-            groupId: input.groupId,
+    let plan: LayerOperationPlan | BooleanOperationPlan;
+    switch (input.action) {
+      case "group":
+        plan = planGroupNodes(document, input.pageId, input.nodeIds, {
+          groupId: input.groupId,
+          name: input.name,
+          commandPrefix,
+        });
+        break;
+      case "ungroup":
+        plan = planUngroupNode(
+          document,
+          input.pageId,
+          input.groupId,
+          commandPrefix,
+        );
+        break;
+      case "create-mask":
+        plan = planCreateMaskGroup(document, input.pageId, input.nodeIds, {
+          groupId: input.groupId,
+          name: input.name,
+          maskType: input.maskType,
+          commandPrefix,
+        });
+        break;
+      case "set-mask-type":
+        plan = planSetMaskType(
+          document,
+          input.pageId,
+          input.maskNodeId,
+          input.maskType,
+          commandPrefix,
+        );
+        break;
+      case "remove-mask":
+        plan = planRemoveMask(
+          document,
+          input.pageId,
+          input.maskNodeId,
+          commandPrefix,
+        );
+        break;
+      case "create-boolean":
+        plan = planCreateBooleanGroup(
+          document,
+          input.pageId,
+          input.nodeIds,
+          input.operation,
+          {
+            booleanId: input.booleanId,
             name: input.name,
             commandPrefix,
-          })
-        : input.action === "ungroup"
-          ? planUngroupNode(
-              document,
-              input.pageId,
-              input.groupId,
-              commandPrefix,
-            )
-          : input.action === "create-boolean"
-            ? planCreateBooleanGroup(
-                document,
-                input.pageId,
-                input.nodeIds,
-                input.operation,
-                {
-                  booleanId: input.booleanId,
-                  name: input.name,
-                  commandPrefix,
-                },
-              )
-            : input.action === "set-boolean-operation"
-              ? planSetBooleanOperation(
-                  document,
-                  input.pageId,
-                  input.booleanId,
-                  input.operation,
-                  commandPrefix,
-                )
-              : input.action === "ungroup-boolean"
-                ? planUngroupBooleanGroup(
-                    document,
-                    input.pageId,
-                    input.booleanId,
-                    commandPrefix,
-                  )
-                : input.action === "reorder"
-                  ? planReorderNodes(
-                      document,
-                      input.pageId,
-                      input.nodeIds,
-                      input.order,
-                      commandPrefix,
-                    )
-                  : planReparentNodes(document, input.pageId, input.nodeIds, {
-                      parentId: input.parentId,
-                      index: input.index,
-                      commandPrefix,
-                    });
+          },
+        );
+        break;
+      case "set-boolean-operation":
+        plan = planSetBooleanOperation(
+          document,
+          input.pageId,
+          input.booleanId,
+          input.operation,
+          commandPrefix,
+        );
+        break;
+      case "ungroup-boolean":
+        plan = planUngroupBooleanGroup(
+          document,
+          input.pageId,
+          input.booleanId,
+          commandPrefix,
+        );
+        break;
+      case "reorder":
+        plan = planReorderNodes(
+          document,
+          input.pageId,
+          input.nodeIds,
+          input.order,
+          commandPrefix,
+        );
+        break;
+      case "reparent":
+        plan = planReparentNodes(document, input.pageId, input.nodeIds, {
+          parentId: input.parentId,
+          index: input.index,
+          commandPrefix,
+        });
+        break;
+    }
     if (!plan.ok) {
       throw new Error(`hierarchy.${plan.code}: ${plan.message}`);
     }
@@ -859,7 +899,7 @@ async function executeDesignToolRequestUnsafe(
     }
     const appliedDocument = runtime.getSnapshot().document;
     const childNodeIds =
-      input.action === "group"
+      input.action === "group" || input.action === "create-mask"
         ? (appliedDocument.nodesById[input.groupId]?.childIds ?? [])
         : input.action === "ungroup"
           ? plan.selectionNodeIds
@@ -882,30 +922,56 @@ async function executeDesignToolRequestUnsafe(
           ? appliedDocument.nodesById[resultParentId]?.childIds
           : appliedDocument.pagesById[input.pageId]?.rootNodeIds
         : undefined;
-    const hierarchyResult =
-      input.action === "reorder"
-        ? {
-            order: input.order,
-            nodeIds: plan.selectionNodeIds,
-            siblingOrder: siblingOrder ?? [],
-          }
-        : input.action === "reparent"
-          ? {
-              nodeIds: plan.selectionNodeIds,
-              parentId: input.parentId,
-              index: input.index,
-              siblingOrder: siblingOrder ?? [],
-            }
-          : input.action === "create-boolean" ||
-              input.action === "set-boolean-operation"
-            ? {
-                booleanId: input.booleanId,
-                operation: input.operation,
-                childNodeIds,
-              }
-            : input.action === "ungroup-boolean"
-              ? { booleanId: input.booleanId, childNodeIds }
-              : { groupId: input.groupId, childNodeIds };
+    let hierarchyResult: Record<string, unknown>;
+    switch (input.action) {
+      case "reorder":
+        hierarchyResult = {
+          order: input.order,
+          nodeIds: plan.selectionNodeIds,
+          siblingOrder: siblingOrder ?? [],
+        };
+        break;
+      case "reparent":
+        hierarchyResult = {
+          nodeIds: plan.selectionNodeIds,
+          parentId: input.parentId,
+          index: input.index,
+          siblingOrder: siblingOrder ?? [],
+        };
+        break;
+      case "create-mask":
+        hierarchyResult = {
+          groupId: input.groupId,
+          maskNodeId: childNodeIds?.[0],
+          maskType: input.maskType,
+          childNodeIds,
+        };
+        break;
+      case "set-mask-type":
+        hierarchyResult = {
+          maskNodeId: input.maskNodeId,
+          maskType: input.maskType,
+        };
+        break;
+      case "remove-mask":
+        hierarchyResult = { maskNodeId: input.maskNodeId };
+        break;
+      case "create-boolean":
+      case "set-boolean-operation":
+        hierarchyResult = {
+          booleanId: input.booleanId,
+          operation: input.operation,
+          childNodeIds,
+        };
+        break;
+      case "ungroup-boolean":
+        hierarchyResult = { booleanId: input.booleanId, childNodeIds };
+        break;
+      case "group":
+      case "ungroup":
+        hierarchyResult = { groupId: input.groupId, childNodeIds };
+        break;
+    }
     const planWarnings: readonly string[] =
       "warnings" in plan && Array.isArray(plan.warnings) ? plan.warnings : [];
     const warnings = [...new Set([...planWarnings, ...result.warnings])];

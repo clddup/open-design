@@ -5,15 +5,21 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   EditorRuntime,
+  canToggleMaskNodes,
   canGroupNodes,
   canReorderNodes,
   canUngroupNode,
   createWelcomeDocument,
   getWorldTransform,
   normalizeDesignDocument,
+  planCreateMaskGroup,
+  planCreateBooleanGroup,
   planGroupNodes,
+  planRemoveMask,
   planReparentNodes,
   planReorderNodes,
+  planSetMaskType,
+  planToggleMaskNodes,
   planUngroupNode,
 } from "./index.js";
 
@@ -152,6 +158,258 @@ describe("layer hierarchy operations", () => {
       runtime.getSnapshot().document.nodesById.group_round_trip?.childIds,
     ).toEqual(["title_welcome", "subtitle_welcome"]);
     expect(runtime.getSnapshot().state.history.undo).toHaveLength(1);
+  });
+
+  it("creates a Figma-style sibling mask object atomically without changing world geometry", () => {
+    const runtime = new EditorRuntime(transformedWelcomeDocument());
+    const before = runtime.getSnapshot().document;
+    const titleWorld = getWorldTransform(before, "title_welcome");
+    const subtitleWorld = getWorldTransform(before, "subtitle_welcome");
+    const plan = planCreateMaskGroup(
+      before,
+      "page_welcome",
+      ["subtitle_welcome", "title_welcome"],
+      {
+        groupId: "copy_mask_group",
+        name: "Copy mask",
+        maskType: "alpha",
+        commandPrefix: "copy_mask",
+      },
+    );
+
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(
+      runtime.apply(transaction(runtime, "create_copy_mask", plan.commands)).ok,
+    ).toBe(true);
+    const masked = runtime.getSnapshot();
+    expect(masked.document.nodesById.copy_mask_group).toMatchObject({
+      kind: "group",
+      childIds: ["title_welcome", "subtitle_welcome"],
+    });
+    expect(masked.document.nodesById.title_welcome?.maskMode).toBe("alpha");
+    expect(
+      masked.document.nodesById.subtitle_welcome?.maskMode,
+    ).toBeUndefined();
+    expectTransformClose(
+      getWorldTransform(masked.document, "title_welcome"),
+      titleWorld,
+    );
+    expectTransformClose(
+      getWorldTransform(masked.document, "subtitle_welcome"),
+      subtitleWorld,
+    );
+    expect(masked.state.history.undo).toHaveLength(1);
+
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.copy_mask_group,
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.maskMode,
+    ).toBeUndefined();
+    expect(runtime.redo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.maskMode,
+    ).toBe("alpha");
+
+    const imageDocument = structuredClone(createWelcomeDocument());
+    imageDocument.assetsById.mask_source_asset = {
+      id: "mask_source_asset",
+      kind: "image",
+      name: "Alpha source",
+      mimeType: "image/png",
+      source: { type: "data", value: "aW1hZ2U=" },
+      size: { width: 200, height: 200 },
+      extensions: {},
+    };
+    imageDocument.nodesById.image_mask_source = {
+      id: "image_mask_source",
+      kind: "image",
+      name: "Image mask source",
+      parentId: "frame_welcome",
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 40, 80],
+      size: { width: 200, height: 200 },
+      opacity: 1,
+      exportSettings: [],
+      properties: {
+        assetId: "mask_source_asset",
+        placement: { mode: "fit" },
+        altText: "Alpha source",
+        cornerRadius: 0,
+      },
+      extensions: {},
+    };
+    const imageFrame = imageDocument.nodesById.frame_welcome;
+    if (imageFrame?.kind !== "frame") throw new Error("Missing image Frame");
+    const frameChildren = imageFrame.childIds;
+    frameChildren.splice(
+      frameChildren.indexOf("title_welcome"),
+      0,
+      "image_mask_source",
+    );
+    const imageRuntime = new EditorRuntime(
+      normalizeDesignDocument(imageDocument),
+    );
+    const imagePlan = planCreateMaskGroup(
+      imageRuntime.getSnapshot().document,
+      "page_welcome",
+      ["title_welcome", "image_mask_source"],
+      {
+        groupId: "image_mask_group",
+        name: "Image mask",
+        maskType: "luminance",
+        commandPrefix: "image_mask",
+      },
+    );
+    if (!imagePlan.ok) throw new Error(imagePlan.message);
+    expect(
+      imageRuntime.apply(
+        transaction(imageRuntime, "image_mask", imagePlan.commands),
+      ).ok,
+    ).toBe(true);
+    expect(
+      imageRuntime.getSnapshot().document.nodesById.image_mask_source?.maskMode,
+    ).toBe("luminance");
+  });
+
+  it("toggles direct and grouped masks while preserving the mask object on removal", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    expect(
+      canToggleMaskNodes(runtime.getSnapshot().document, "page_welcome", [
+        "title_welcome",
+      ]),
+    ).toBe(true);
+    const direct = planSetMaskType(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      "title_welcome",
+      "vector",
+      "vector_title",
+    );
+    if (!direct.ok) throw new Error(direct.message);
+    expect(
+      runtime.apply(transaction(runtime, "vector_title", direct.commands)).ok,
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.maskMode,
+    ).toBe("outline");
+
+    const removed = planRemoveMask(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      "title_welcome",
+      "remove_title_mask",
+    );
+    if (!removed.ok) throw new Error(removed.message);
+    expect(
+      runtime.apply(transaction(runtime, "remove_title_mask", removed.commands))
+        .ok,
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.maskMode,
+    ).toBe("none");
+
+    const grouped = planToggleMaskNodes(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["title_welcome", "subtitle_welcome"],
+      {
+        groupId: "toggle_mask_group",
+        name: "Toggle mask",
+        commandPrefix: "toggle_mask",
+      },
+    );
+    if (!grouped.ok) throw new Error(grouped.message);
+    expect(
+      runtime.apply(transaction(runtime, "toggle_mask", grouped.commands)).ok,
+    ).toBe(true);
+    const toggleOff = planToggleMaskNodes(
+      runtime.getSnapshot().document,
+      "page_welcome",
+      ["toggle_mask_group"],
+      {
+        groupId: "unused_group",
+        name: "Unused",
+        commandPrefix: "toggle_mask_off",
+      },
+    );
+    if (!toggleOff.ok) throw new Error(toggleOff.message);
+    expect(
+      runtime.apply(transaction(runtime, "toggle_mask_off", toggleOff.commands))
+        .ok,
+    ).toBe(true);
+    expect(
+      runtime.getSnapshot().document.nodesById.toggle_mask_group,
+    ).toBeDefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.maskMode,
+    ).toBe("none");
+  });
+
+  it("fails closed for masks without a following sibling or with ambiguous nested mask state", () => {
+    const document = createWelcomeDocument();
+    expect(
+      canToggleMaskNodes(document, "page_welcome", ["feature_group"]),
+    ).toBe(false);
+    expect(
+      planSetMaskType(
+        document,
+        "page_welcome",
+        "feature_group",
+        "alpha",
+        "invalid_terminal_mask",
+      ),
+    ).toMatchObject({ ok: false, code: "invalid-selection" });
+
+    const nested = structuredClone(document);
+    nested.nodesById.title_welcome!.maskMode = "alpha";
+    expect(
+      planCreateMaskGroup(
+        nested,
+        "page_welcome",
+        ["title_welcome", "subtitle_welcome"],
+        {
+          groupId: "nested_mask_group",
+          name: "Nested",
+          maskType: "luminance",
+          commandPrefix: "nested_mask",
+        },
+      ),
+    ).toMatchObject({ ok: false, code: "visual-fidelity" });
+
+    const booleanRuntime = new EditorRuntime(createWelcomeDocument());
+    const booleanPlan = planCreateBooleanGroup(
+      booleanRuntime.getSnapshot().document,
+      "page_welcome",
+      ["feature_one", "feature_two"],
+      "union",
+      {
+        booleanId: "mask_source_boolean",
+        name: "Boolean",
+        commandPrefix: "mask_source_boolean",
+      },
+    );
+    if (!booleanPlan.ok) throw new Error(booleanPlan.message);
+    expect(
+      booleanRuntime.apply(
+        transaction(
+          booleanRuntime,
+          "mask_source_boolean",
+          booleanPlan.commands,
+        ),
+      ).ok,
+    ).toBe(true);
+    expect(
+      canToggleMaskNodes(
+        booleanRuntime.getSnapshot().document,
+        "page_welcome",
+        ["feature_one"],
+      ),
+    ).toBe(false);
   });
 
   it("ungroups a transformed Group in place and preserves child order", () => {

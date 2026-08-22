@@ -7,6 +7,7 @@ import type {
   Paint,
 } from "@opendesign/design-contracts";
 import { Icon } from "@opendesign/ui";
+import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
 import styles from "../PropertiesPanel.module.scss";
 import {
@@ -63,10 +64,18 @@ export const blendModes: BlendMode[] = [
 export const maskModes: MaskMode[] = [
   "none",
   "alpha",
+  "outline",
   "luminance",
   "clipping",
-  "outline",
 ];
+
+export const maskModeLabelKeys: Record<MaskMode, MessageKey> = {
+  none: "properties.maskNone",
+  alpha: "properties.maskAlpha",
+  outline: "properties.maskVector",
+  luminance: "properties.maskLuminance",
+  clipping: "properties.maskClipping",
+};
 
 export function isFillNode(node: DesignNode): node is FillNode {
   return (

@@ -117,6 +117,34 @@ describe("editor command controllers", () => {
     ]);
   });
 
+  it("uses one authoritative command for creating and removing a canvas mask", () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(
+      ["title_welcome", "subtitle_welcome"],
+      "subtitle_welcome",
+    );
+    const { result, rerender } = renderControllers(runtime);
+
+    expect(result.current.layer.maskSelectionAction).toBe("create");
+    expect(result.current.layer.canToggleMaskSelection).toBe(true);
+    act(() => result.current.layer.toggleMaskSelection());
+    let snapshot = runtime.getSnapshot();
+    const groupId = snapshot.state.selection.nodeIds[0];
+    expect(groupId).toBeDefined();
+    expect(snapshot.document.nodesById[groupId ?? ""]?.kind).toBe("group");
+    expect(snapshot.document.nodesById.title_welcome?.maskMode).toBe("alpha");
+    expect(snapshot.state.history.undo).toHaveLength(1);
+
+    rerender();
+    expect(result.current.layer.maskSelectionAction).toBe("remove");
+    act(() => result.current.layer.toggleMaskSelection());
+    snapshot = runtime.getSnapshot();
+    expect(snapshot.document.nodesById[groupId ?? ""]).toBeDefined();
+    expect(snapshot.document.nodesById.title_welcome?.maskMode).toBe("none");
+    expect(snapshot.state.history.undo).toHaveLength(2);
+    expect(snapshot.state.selection.nodeIds).toEqual([groupId]);
+  });
+
   it("routes Inspector constraints and populated Frame resize through one responsive planner", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const { result, setEditorError } = renderControllers(runtime);

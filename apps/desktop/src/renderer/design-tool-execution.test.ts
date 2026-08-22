@@ -3809,6 +3809,134 @@ describe("Renderer semantic hierarchy tool", () => {
     expect(ungrouped.state.history.undo).toHaveLength(1);
   });
 
+  it("creates, changes, and removes a contained sibling mask without reading live selection", async () => {
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    runtime.setSelection(["feature_three"], "feature_three");
+    const before = runtime.getSnapshot().document;
+    const titleWorld = getWorldTransform(before, "title_welcome");
+    const subtitleWorld = getWorldTransform(before, "subtitle_welcome");
+
+    const created = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_create_mask",
+        call: {
+          toolCallId: "tool_hierarchy_create_mask",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "create-mask",
+            label: "Mask welcome subtitle",
+            pageId: "page_welcome",
+            nodeIds: ["subtitle_welcome", "title_welcome"],
+            groupId: "welcome_mask_group",
+            name: "Welcome mask",
+            maskType: "alpha",
+          },
+        },
+        context: selectionContext,
+      },
+      runtime,
+      "page_changed_after_send",
+    );
+
+    expect(created).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "create-mask",
+          atomic: true,
+          groupId: "welcome_mask_group",
+          maskNodeId: "title_welcome",
+          maskType: "alpha",
+          childNodeIds: ["title_welcome", "subtitle_welcome"],
+          revision: 1,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.maskMode,
+    ).toBe("alpha");
+    expect(
+      getWorldTransform(runtime.getSnapshot().document, "title_welcome"),
+    ).toEqual(titleWorld);
+    expect(
+      getWorldTransform(runtime.getSnapshot().document, "subtitle_welcome"),
+    ).toEqual(subtitleWorld);
+
+    const changed = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_set_mask_type",
+        call: {
+          toolCallId: "tool_hierarchy_set_mask_type",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "set-mask-type",
+            label: "Use vector welcome mask",
+            pageId: "page_welcome",
+            maskNodeId: "title_welcome",
+            maskType: "vector",
+          },
+        },
+        context: { ...selectionContext, revision: 1 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(changed).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "set-mask-type",
+          maskNodeId: "title_welcome",
+          maskType: "vector",
+          revision: 2,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.maskMode,
+    ).toBe("outline");
+
+    const removed = await executeDesignToolRequest(
+      {
+        requestId: "hierarchy_remove_mask",
+        call: {
+          toolCallId: "tool_hierarchy_remove_mask",
+          toolName: DESIGN_HIERARCHY_TOOL_NAME,
+          input: {
+            action: "remove-mask",
+            label: "Remove welcome mask",
+            pageId: "page_welcome",
+            maskNodeId: "title_welcome",
+          },
+        },
+        context: { ...selectionContext, revision: 2 },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(removed).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "remove-mask",
+          maskNodeId: "title_welcome",
+          revision: 3,
+        },
+      },
+    });
+    expect(
+      runtime.getSnapshot().document.nodesById.welcome_mask_group,
+    ).toBeDefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome?.maskMode,
+    ).toBe("none");
+    expect(runtime.getSnapshot().state.selection).toEqual({
+      nodeIds: ["feature_three"],
+      anchorNodeId: "feature_three",
+    });
+    expect(runtime.getSnapshot().state.history.undo).toHaveLength(3);
+  });
+
   it("creates, changes, and ungroups a non-destructive Boolean without reading the live selection", async () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     runtime.setSelection(["feature_three"], "feature_three");

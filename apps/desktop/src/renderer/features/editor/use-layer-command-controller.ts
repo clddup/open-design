@@ -8,9 +8,11 @@ import {
   canDeleteNodes,
   canGroupNodes,
   canReorderNodes,
+  canToggleMaskNodes,
   canUngroupBooleanGroup,
   canUngroupNode,
   getArrangementSelectionMetrics,
+  getMaskToggleAction,
   getWorldTransform,
   invertTransform,
   planArrangeNodes,
@@ -21,6 +23,7 @@ import {
   planReparentNodes,
   planReorderNodes,
   planSetBooleanOperation,
+  planToggleMaskNodes,
   planUngroupBooleanGroup,
   planUngroupNode,
   type ArrangeOperation,
@@ -124,6 +127,9 @@ export function useLayerCommandController({
       canGroupSelection:
         !componentTargetActive &&
         canGroupNodes(document, activePageId, selectedNodeIds),
+      canToggleMaskSelection:
+        !componentTargetActive &&
+        canToggleMaskNodes(document, activePageId, selectedNodeIds),
       canUngroupBooleanSelection:
         !componentTargetActive &&
         canUngroupBooleanGroup(document, activePageId, selectedNodeIds),
@@ -140,6 +146,9 @@ export function useLayerCommandController({
             canReorderNodes(document, activePageId, selectedNodeIds, action),
         ]),
       ) as Record<LayerOrderAction, boolean>,
+      maskSelectionAction: componentTargetActive
+        ? null
+        : getMaskToggleAction(document, activePageId, selectedNodeIds),
     };
   }, [activePageId, componentTargetActive, document, selectedNodeIds]);
 
@@ -247,6 +256,45 @@ export function useLayerCommandController({
       return;
     }
     if (applyCommands(t("history.ungroupLayers"), plan.commands)) {
+      runtime.setSelection(plan.selectionNodeIds, plan.selectionNodeIds.at(-1));
+    }
+  }, [
+    activePageId,
+    applyCommands,
+    runtime,
+    setEditorError,
+    t,
+    transactionCounter,
+  ]);
+
+  const toggleMaskSelection = useCallback(() => {
+    const current = runtime.getSnapshot();
+    if (current.state.selection.componentTarget) return;
+    const operationId = `mask_${Date.now()}_${++transactionCounter.current}`;
+    const plan = planToggleMaskNodes(
+      current.document,
+      activePageId,
+      current.state.selection.nodeIds,
+      {
+        groupId: `${operationId}_group`,
+        name: t("canvas.newMaskGroup"),
+        commandPrefix: operationId,
+      },
+    );
+    if (!plan.ok) {
+      setEditorError(plan.message);
+      return;
+    }
+    const removing = plan.commands.some(
+      (command) =>
+        command.type === "update_properties" && command.maskMode === "none",
+    );
+    if (
+      applyCommands(
+        t(removing ? "history.removeMask" : "history.createMask"),
+        plan.commands,
+      )
+    ) {
       runtime.setSelection(plan.selectionNodeIds, plan.selectionNodeIds.at(-1));
     }
   }, [
@@ -496,6 +544,7 @@ export function useLayerCommandController({
     renameLayers,
     reorderSelection,
     reparentLayers,
+    toggleMaskSelection,
     ungroupSelection,
   };
 }

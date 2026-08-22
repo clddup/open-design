@@ -1153,9 +1153,12 @@ export function LeftSidebar({
                     <div className={styles.layerEditor}>
                       <Icon
                         name={
-                          componentIdentityNodeIds.has(node.id)
-                            ? "lucide:component"
-                            : nodeIcons[node.kind]
+                          node.maskMode !== undefined &&
+                          node.maskMode !== "none"
+                            ? "lucide:blend"
+                            : componentIdentityNodeIds.has(node.id)
+                              ? "lucide:component"
+                              : nodeIcons[node.kind]
                         }
                         size={14}
                       />
@@ -1239,13 +1242,23 @@ export function LeftSidebar({
                         }
                       }}
                       tabIndex={key === firstFocusableId ? 0 : -1}
+                      title={
+                        node.maskMode !== undefined && node.maskMode !== "none"
+                          ? t("sidebar.maskLayer", {
+                              name: node.name || t(nodeKindKeys[node.kind]),
+                            })
+                          : node.name
+                      }
                       type="button"
                     >
                       <Icon
                         name={
-                          componentIdentityNodeIds.has(node.id)
-                            ? "lucide:component"
-                            : nodeIcons[node.kind]
+                          node.maskMode !== undefined &&
+                          node.maskMode !== "none"
+                            ? "lucide:blend"
+                            : componentIdentityNodeIds.has(node.id)
+                              ? "lucide:component"
+                              : nodeIcons[node.kind]
                         }
                         size={14}
                       />

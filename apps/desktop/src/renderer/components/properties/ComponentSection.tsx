@@ -33,6 +33,7 @@ import {
   isFillNode,
   isStrokeNode,
   maskModes,
+  maskModeLabelKeys,
 } from "./PaintEffectEditors";
 import {
   ComponentIdentitySummary,
@@ -254,7 +255,7 @@ function ComponentOverrideEditor({
           >
             {maskModes.map((mode) => (
               <option key={mode} value={mode}>
-                {mode}
+                {t(maskModeLabelKeys[mode])}
               </option>
             ))}
           </select>

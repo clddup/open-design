@@ -3507,6 +3507,42 @@ describe("App", () => {
     expect(snapshot.state.history.undo).toHaveLength(2);
   });
 
+  it("creates and removes a contained mask with the Figma shortcut", () => {
+    renderApp();
+    act(() =>
+      runtime().setSelection(
+        ["title_welcome", "subtitle_welcome"],
+        "subtitle_welcome",
+      ),
+    );
+
+    fireEvent.keyDown(window, {
+      code: "KeyM",
+      key: "m",
+      ctrlKey: true,
+      metaKey: true,
+    });
+    let snapshot = runtime().getSnapshot();
+    const groupId = snapshot.state.selection.nodeIds[0];
+    expect(snapshot.document.nodesById[groupId ?? ""]).toMatchObject({
+      kind: "group",
+      childIds: ["title_welcome", "subtitle_welcome"],
+    });
+    expect(snapshot.document.nodesById.title_welcome?.maskMode).toBe("alpha");
+    expect(snapshot.state.history.undo).toHaveLength(1);
+
+    fireEvent.keyDown(window, {
+      code: "KeyM",
+      key: "m",
+      ctrlKey: true,
+      metaKey: true,
+    });
+    snapshot = runtime().getSnapshot();
+    expect(snapshot.document.nodesById[groupId ?? ""]).toBeDefined();
+    expect(snapshot.document.nodesById.title_welcome?.maskMode).toBe("none");
+    expect(snapshot.state.history.undo).toHaveLength(2);
+  });
+
   it("creates a non-destructive Boolean from the toolbar, changes it in the inspector, and ungroups it", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -4783,6 +4819,44 @@ describe("App", () => {
       "title_welcome",
       "subtitle_welcome",
     ]);
+  });
+
+  it("uses the Windows mask shortcut without stealing editable input", async () => {
+    vi.mocked(window.desktop!.getPlatformInfo).mockResolvedValueOnce({
+      platform: "win32",
+      version: "0.0.0",
+    });
+    renderApp();
+    act(() =>
+      runtime().setSelection(
+        ["title_welcome", "subtitle_welcome"],
+        "subtitle_welcome",
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Layer order" })).toBeEnabled(),
+    );
+
+    const input = document.createElement("input");
+    document.body.append(input);
+    fireEvent.keyDown(input, {
+      code: "KeyM",
+      key: "m",
+      altKey: true,
+      ctrlKey: true,
+    });
+    input.remove();
+    expect(runtime().getSnapshot().document.revision).toBe(0);
+
+    fireEvent.keyDown(window, {
+      code: "KeyM",
+      key: "m",
+      altKey: true,
+      ctrlKey: true,
+    });
+    const snapshot = runtime().getSnapshot();
+    expect(snapshot.document.nodesById.title_welcome?.maskMode).toBe("alpha");
+    expect(snapshot.state.history.undo).toHaveLength(1);
   });
 
   it("moves and aligns multiple selected layers in single transactions", async () => {

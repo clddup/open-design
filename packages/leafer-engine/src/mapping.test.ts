@@ -661,6 +661,7 @@ describe("Leafer scene projection", () => {
       size: { width: 100, height: 100 },
       exportSettings: [],
       opacity: 1,
+      maskMode: "luminance",
       extensions: {},
       properties: {
         assetId: "hero",
@@ -698,6 +699,7 @@ describe("Leafer scene projection", () => {
       saturation: -0.35,
       shadows: 0.4,
     });
+    expect(projection.elementsById.get("image")?.data.mask).toBe("grayscale");
   });
 
   it("projects gradients, glow, blur, blend and mask semantics to Leafer", () => {

@@ -853,6 +853,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     canCreateBooleanSelection,
     canDeleteSelection,
     canGroupSelection,
+    canToggleMaskSelection,
     canRenameSelection,
     canUngroupBooleanSelection,
     canUngroupSelection,
@@ -860,9 +861,11 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     duplicateSelection,
     groupSelection,
     layerOrderAvailability,
+    maskSelectionAction,
     reorderSelection,
     renameLayers,
     reparentLayers,
+    toggleMaskSelection,
     ungroupSelection,
   } = useLayerCommandController({
     activePageId,
@@ -1283,6 +1286,17 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
         else groupSelection();
         return;
       }
+      const maskShortcut =
+        event.code === "KeyM" &&
+        !event.shiftKey &&
+        (platform === "darwin"
+          ? event.metaKey && event.ctrlKey && !event.altKey
+          : event.ctrlKey && event.altKey && !event.metaKey);
+      if (maskShortcut) {
+        event.preventDefault();
+        if (canToggleMaskSelection) toggleMaskSelection();
+        return;
+      }
       if (
         modifier &&
         event.shiftKey &&
@@ -1386,6 +1400,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   }, [
     canDeleteSelection,
     canRenameSelection,
+    canToggleMaskSelection,
     changeZoom,
     applyBooleanOperation,
     deleteNodes,
@@ -1398,6 +1413,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     runtime,
     state.selection.nodeIds,
     toggleLeftPanel,
+    toggleMaskSelection,
     toggleSelectedLayerState,
     toggleUtilityPanel,
     ungroupSelection,
@@ -2413,6 +2429,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             canUngroupSelection ||
             canGroupSelection
           }
+          maskAction={maskSelectionAction}
           canReorder={layerOrderAvailability}
           canDelete={canDeleteSelection}
           canDuplicate={
@@ -2429,6 +2446,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
           onDelete={() => deleteNodes(state.selection.nodeIds)}
           onDuplicate={duplicateSelectionAction}
           onGroup={groupSelection}
+          onToggleMask={toggleMaskSelection}
           onReorder={reorderSelection}
           onRedo={() => runtime.redo()}
           onToolChange={(next) => runtime.setTool(next)}

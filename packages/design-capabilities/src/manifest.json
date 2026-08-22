@@ -517,7 +517,7 @@
         "en": "Apply multiple paints and strokes, gradients, shadows, glows, blur, blend modes, masks, and advanced stroke properties.",
         "zh-CN": "应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。"
       },
-      "provider": "DesignDocument 1.10.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
+      "provider": "DesignDocument 1.10.0 + EditorRuntime mask planner + PropertiesPanel + Leafer adapter + SVG filter/mask adapter",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -536,8 +536,8 @@
       },
       "limitations": [
         {
-          "en": "The editable SVG boundary now preserves up to eight normal zero-spread drop shadows, one layer blur, effect order/visibility, rounded Frame clipsContent, and ordered alpha/luminance/outline/clipping sibling mask runs. Inner shadows, background blur, glow, shadow spread/blend, arbitrary combined mask graphs, Electron visual baselines, and professional color picking/styles remain incomplete.",
-          "zh-CN": "可编辑 SVG 边界现可保留最多八个普通零 spread 投影、一层 layer blur、效果顺序/可见性、圆角 Frame clipsContent，以及有序的 alpha/luminance/outline/clipping 同级蒙版段；内阴影、背景模糊、光晕、阴影 spread/blend、任意组合蒙版图、Electron 视觉基线、专业取色器和共享颜色样式仍未完成。"
+          "en": "Figma-style authoring now creates one contained sibling mask atomically from supported Shape, Text, Image, or container sources, exposes Alpha/Vector/Luminance to people and Agent tools, and preserves editable content through undo and save. The editable SVG boundary preserves its controlled alpha/luminance/outline/clipping runs. Image/Text SVG mask sources, arbitrary combined mask graphs, mask-outline canvas view, inner/background effects, Electron visual baselines, and professional color picking remain incomplete.",
+          "zh-CN": "Figma-style 作者工作流现可从受支持的 Shape、Text、Image 或容器 source 原子创建 contained sibling mask，人工与 Agent 均使用 Alpha/Vector/Luminance，并在 undo/save 后保持内容可编辑；可编辑 SVG 边界继续保留其受控 alpha/luminance/outline/clipping 段。Image/Text SVG 蒙版源、任意组合 mask graph、画布蒙版轮廓视图、内/背景效果、Electron 视觉基线和专业取色仍未完成。"
         }
       ],
       "evidence": {
@@ -545,7 +545,10 @@
           "packages/design-contracts/src/index.test.ts",
           "packages/leafer-engine/src/mapping.test.ts",
           "packages/leafer-engine/src/professional-fixtures.test.ts",
+          "packages/editor-runtime/src/layer-operations.test.ts",
           "apps/desktop/src/renderer/App.test.tsx",
+          "apps/desktop/src/renderer/design-tool-execution.test.ts",
+          "apps/desktop/src/renderer/components/LeftSidebar.test.tsx",
           "packages/editor-runtime/src/diagnostics.test.ts",
           "packages/editor-runtime/src/professional-fixtures.test.ts",
           "packages/import-export-service/src/svg.test.ts"
@@ -554,7 +557,9 @@
       },
       "references": [
         "https://help.figma.com/hc/en-us/articles/360041488473-Apply-effects-to-layers",
-        "https://help.figma.com/hc/en-us/articles/360040450253-Masks"
+        "https://help.figma.com/hc/en-us/articles/360040450253-Masks",
+        "https://developers.figma.com/docs/plugins/api/properties/nodes-ismask/",
+        "https://developers.figma.com/docs/plugins/api/MaskType/"
       ]
     },
     {

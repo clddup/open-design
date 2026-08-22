@@ -60,6 +60,7 @@ pnpm build          passed
 
 测试覆盖的关键路径包括：
 
+- Figma-style Mask authoring 专项覆盖同父级 sibling 顺序、最底层 source、contained Group、Alpha/Vector/Luminance、Image source Leafer 投影、world transform 保持、direct/group toggle、解除后保留结构、锁定/末端/嵌套 mask 失败关闭、单 revision/undo、稳定 Agent ID、live selection 隔离、macOS `Control+Command+M`、Windows `Ctrl+Alt+M`、Inspector 术语与图层树标识。定向执行通过 core 40 项与 desktop 238 项测试；复杂组合 graph、Image/Text SVG source、mask outline canvas view 和双平台像素产品证据仍未完成。
 - Image Service contract 3 专项验证覆盖 `DesignDocument 1.39 → 1.40 → 1.41` 迁移、Image 节点与每项 Image Fill/Stroke 的七项 `-1..1` Figma-compatible fields、稀疏归一化、确定性 RGBA 与 alpha 保持、专用 Runtime planner/no-op/undo/JSON 保存重开、完整 Paint stale identity、来源替换保留、通用 Agent apply 旁路拒绝、Figma Plugin API shape、Leafer 节点 filter 与每 Paint 派生缓存、画布 projection、SVG 明确拒绝，以及 Inspector/Agent/App/capture/raster 主链。定向执行通过 core 144 项与 desktop 261 项测试；standalone 跨文件 Image Paint Style asset bundle、SVG 位图嵌入、P3/ICC 和双平台打包产品视觉仍未验证。
 - 固定 UI/Logo live-Agent 评测工具验证场景 prompt 可读取、模型上下文预算与首轮工具面有界、真实 evidence 结构和产物字节完整性。匿名 packet 只暴露 prompt、rubric 与随机排序后的最终 captures，不暴露 Run、Provider、model、app 或 Critic 身份；评分按每项 1–5 分执行 critical/ordinary 非补偿阈值。该自动化只证明评测工具可重放，不证明当前模型设计质量已经通过；真实 macOS/Windows 打包产品 Run 与人工评分仍待执行。命令为 `pnpm evaluation:check`，见 ADR-0120。
 
@@ -116,7 +117,7 @@ pnpm build          passed
 
 Node.js 在涉及 `node:sqlite` 的测试中输出 experimental warning；测试仍通过。该 API 的 Electron 长期兼容策略尚未最终确定。
 
-快速/精细生成深度已从 Composer 贯通 AgentRequest、Pi Runtime、Main coordinator 与 ModelGateway。快速映射 interactive Provider watchdog（60 秒首响应、60 秒流空闲、5 分钟总时限），精细映射 extended（180/120/900 秒）；utilityProcess 只能提交枚举 profile，不能提交毫秒值。快速首稿在 exact-revision layout、inspection、structure 与 component 检查通过后直接 verified，不创建独立 Critic Provider 请求或虚构 refinement；精细仍运行独立 Critic 并要求 evidence-based refinement。`OD-MARK-01` 固定一个 Logo/Symbol 与同标志小尺寸适配，评测 evidence 强制 `generationMode=fast`、`T1<=60s`、`T_all<=5min`，但当前没有真实双平台达标样本。见 ADR-0121 与 ADR-0123。
+Composer 已取消用户可见的快速/精细模式，统一采用自适应执行：新建设计首轮使用有界 reasoning，优先提交视觉成立、真实可编辑且能继续精修的首屏，不用低质稿或 skeleton 换取“已变化”假象；确定性可验收修改在结构、布局和组件检查通过后直接交付，Logo/品牌等主观质量任务在首屏后继续独立 Critic 与 evidence-based refinement。Provider watchdog 仍按任务风险使用可信内部 profile，utilityProcess 不能提交任意毫秒值。`OD-MARK-01` 保留 `T1<=60s / T_all<=5min` 评测预算，但当前没有真实双平台达标样本。见 ADR-0121、ADR-0123 与 ADR-0127。
 
 ## 已配置模型 API 烟测
 

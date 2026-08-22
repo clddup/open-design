@@ -2193,6 +2193,7 @@ function materialTargetRefsForStructuredTool(
   if ("targets" in input) {
     return { nodeIds: input.targets.map((target) => target.nodeId) };
   }
+  if ("maskNodeId" in input) return { nodeIds: [input.maskNodeId] };
   if ("groupId" in input) return { nodeIds: [input.groupId] };
   return { nodeIds: [input.booleanId] };
 }
@@ -2202,6 +2203,7 @@ function createdNodeIdsForStructuredTool(
     DesignHierarchyToolInput | DesignArrangeToolInput | DesignVectorToolInput,
 ): string[] {
   if (input.action === "group") return [input.groupId];
+  if (input.action === "create-mask") return [input.groupId];
   if (input.action === "create-boolean") return [input.booleanId];
   return [];
 }

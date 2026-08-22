@@ -42,6 +42,34 @@ function pageActionProps() {
 }
 
 describe("LeftSidebar layer tree", () => {
+  it("marks active mask sources distinctly in the layer tree", () => {
+    const document = structuredClone(createWelcomeDocument());
+    document.nodesById.title_welcome.maskMode = "alpha";
+    render(
+      <I18nProvider initialLocale="en">
+        <LeftSidebar
+          {...pageActionProps()}
+          activePageId="page_welcome"
+          document={document}
+          onPageChange={vi.fn()}
+          onReparent={vi.fn(() => ({ ok: true }) as const)}
+          onSelect={vi.fn()}
+          onTabChange={vi.fn()}
+          onToggleLock={vi.fn()}
+          onToggleVisibility={vi.fn()}
+          selectedNodeIds={[]}
+          tab="layers"
+        />
+      </I18nProvider>,
+    );
+
+    const maskLayer = screen.getByTitle("Title is a mask layer");
+    expect(maskLayer.querySelector("svg")).toHaveAttribute(
+      "data-icon",
+      "lucide:blend",
+    );
+  });
+
   it("renames one persistent layer inline with Enter", async () => {
     const user = userEvent.setup();
     const onRenameLayer = vi.fn(() => ({ ok: true }) as const);

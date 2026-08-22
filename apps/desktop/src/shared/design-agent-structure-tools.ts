@@ -27,6 +27,28 @@ export type DesignHierarchyToolInput =
       groupId: string;
     }
   | {
+      action: "create-mask";
+      label: string;
+      pageId: string;
+      nodeIds: string[];
+      groupId: string;
+      name: string;
+      maskType: "alpha" | "vector" | "luminance";
+    }
+  | {
+      action: "set-mask-type";
+      label: string;
+      pageId: string;
+      maskNodeId: string;
+      maskType: "alpha" | "vector" | "luminance";
+    }
+  | {
+      action: "remove-mask";
+      label: string;
+      pageId: string;
+      maskNodeId: string;
+    }
+  | {
       action: "create-boolean";
       label: string;
       pageId: string;
@@ -170,12 +192,15 @@ const MODEL_VECTOR_VERTEX_TARGET_SCHEMA = {
 const MODEL_HIERARCHY_SCHEMA = {
   type: "object",
   description:
-    "For group, nodeIds, groupId, and name are required. For ungroup, groupId is required. For create-boolean, nodeIds, booleanId, name, and operation are required. For set-boolean-operation and ungroup-boolean, booleanId is required. For reorder, nodeIds and order are required. For reparent, nodeIds, parentId, and final index are required. Runtime validation enforces the action-specific shape.",
+    "For group, nodeIds, groupId, and name are required. For ungroup, groupId is required. create-mask groups explicit siblings and uses the bottom layer as an alpha, vector, or luminance mask; set-mask-type and remove-mask require maskNodeId. For create-boolean, nodeIds, booleanId, name, and operation are required. For set-boolean-operation and ungroup-boolean, booleanId is required. For reorder, nodeIds and order are required. For reparent, nodeIds, parentId, and final index are required. Runtime validation enforces the action-specific shape.",
   properties: {
     action: {
       enum: [
         "group",
         "ungroup",
+        "create-mask",
+        "set-mask-type",
+        "remove-mask",
         "create-boolean",
         "set-boolean-operation",
         "ungroup-boolean",
@@ -192,9 +217,21 @@ const MODEL_HIERARCHY_SCHEMA = {
       uniqueItems: true,
       items: { type: "string", minLength: 1, maxLength: 256 },
       description:
-        "Explicit same-parent layer IDs; required for group and create-boolean (2..249), reorder (1..500), and reparent (1..500).",
+        "Explicit same-parent layer IDs; required for group, create-mask, and create-boolean (2..249), reorder (1..500), and reparent (1..500). create-mask uses the first layer in actual sibling order as the mask source, regardless of request order.",
     },
     groupId: { type: "string", minLength: 1, maxLength: 256 },
+    maskNodeId: {
+      type: "string",
+      minLength: 1,
+      maxLength: 256,
+      description:
+        "Stable existing mask source ID for set-mask-type or remove-mask.",
+    },
+    maskType: {
+      enum: ["alpha", "vector", "luminance"],
+      description:
+        "Figma-compatible mask type for create-mask or set-mask-type.",
+    },
     booleanId: {
       type: "string",
       minLength: 1,
@@ -235,7 +272,7 @@ const MODEL_HIERARCHY_SCHEMA = {
       minLength: 1,
       maxLength: 256,
       description:
-        "Name for the new Group or Boolean group; required for group and create-boolean.",
+        "Name for the new Group, mask object, or Boolean group; required for group, create-mask, and create-boolean.",
     },
   },
   required: ["action", "label", "pageId"],
@@ -542,6 +579,9 @@ export function isDesignHierarchyToolInput(
   const common =
     (input.action === "group" ||
       input.action === "ungroup" ||
+      input.action === "create-mask" ||
+      input.action === "set-mask-type" ||
+      input.action === "remove-mask" ||
       input.action === "create-boolean" ||
       input.action === "set-boolean-operation" ||
       input.action === "ungroup-boolean" ||
@@ -552,6 +592,42 @@ export function isDesignHierarchyToolInput(
     input.label.length <= 256 &&
     safeId(input.pageId);
   if (!common) return false;
+  if (input.action === "set-mask-type") {
+    return (
+      safeId(input.maskNodeId) &&
+      isDesignMaskType(input.maskType) &&
+      exactKeys(input, ["action", "label", "pageId", "maskNodeId", "maskType"])
+    );
+  }
+  if (input.action === "remove-mask") {
+    return (
+      safeId(input.maskNodeId) &&
+      exactKeys(input, ["action", "label", "pageId", "maskNodeId"])
+    );
+  }
+  if (input.action === "create-mask") {
+    return (
+      safeId(input.groupId) &&
+      typeof input.name === "string" &&
+      input.name.trim().length > 0 &&
+      input.name.length <= 256 &&
+      isDesignMaskType(input.maskType) &&
+      Array.isArray(input.nodeIds) &&
+      input.nodeIds.length >= 2 &&
+      input.nodeIds.length <= 249 &&
+      input.nodeIds.every(safeId) &&
+      new Set(input.nodeIds).size === input.nodeIds.length &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeIds",
+        "groupId",
+        "name",
+        "maskType",
+      ])
+    );
+  }
   if (input.action === "set-boolean-operation") {
     return (
       safeId(input.booleanId) &&
@@ -658,6 +734,12 @@ function isBooleanOperation(value: unknown): value is BooleanOperation {
     value === "intersect" ||
     value === "exclude"
   );
+}
+
+function isDesignMaskType(
+  value: unknown,
+): value is "alpha" | "vector" | "luminance" {
+  return value === "alpha" || value === "vector" || value === "luminance";
 }
 
 export const DESIGN_HIERARCHY_TOOL_INPUT_SCHEMA = MODEL_HIERARCHY_SCHEMA;

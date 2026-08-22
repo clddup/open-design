@@ -2465,6 +2465,28 @@ describe("design Agent tool contract", () => {
       pageId: "page_1",
       groupId: "mascot_group",
     };
+    const createMask = {
+      action: "create-mask",
+      label: "Mask portrait into avatar",
+      pageId: "page_1",
+      nodeIds: ["avatar_shape", "portrait_image"],
+      groupId: "avatar_mask_group",
+      name: "Avatar mask",
+      maskType: "alpha",
+    };
+    const setMaskType = {
+      action: "set-mask-type",
+      label: "Use vector avatar mask",
+      pageId: "page_1",
+      maskNodeId: "avatar_shape",
+      maskType: "vector",
+    };
+    const removeMask = {
+      action: "remove-mask",
+      label: "Remove avatar mask",
+      pageId: "page_1",
+      maskNodeId: "avatar_shape",
+    };
     const reorder = {
       action: "reorder",
       label: "Bring mascot details forward",
@@ -2510,11 +2532,21 @@ describe("design Agent tool contract", () => {
     expect(hierarchy?.description).toContain("explicit stable node IDs");
     expect(hierarchy?.description).toContain("one atomic undoable");
     expect(hierarchy?.description).toContain("non-destructive Boolean");
+    expect(hierarchy?.description).toContain("sibling masks");
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, group),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, ungroup),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, createMask),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, setMaskType),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, removeMask),
     ).toBe(true);
     expect(
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, reorder),
@@ -2617,6 +2649,24 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
         ...ungroupBoolean,
         groupId: "wrong_field",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...createMask,
+        maskType: "clipping",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...setMaskType,
+        groupId: "wrong_field",
+      }),
+    ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(DESIGN_HIERARCHY_TOOL_NAME, {
+        ...removeMask,
+        maskType: "alpha",
       }),
     ).toBe(false);
   });

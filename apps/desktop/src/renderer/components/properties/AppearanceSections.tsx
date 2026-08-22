@@ -19,6 +19,7 @@ import {
   isCornerNode,
   isFillNode,
   isStrokeNode,
+  maskModeLabelKeys,
   maskModes,
 } from "./PaintEffectEditors";
 
@@ -98,7 +99,7 @@ export function AppearanceBasicsSection({
           >
             {maskModes.map((mode) => (
               <option key={mode} value={mode}>
-                {mode}
+                {t(maskModeLabelKeys[mode])}
               </option>
             ))}
           </select>

@@ -138,12 +138,14 @@
 应用多重填充与描边、渐变、阴影、光晕、模糊、混合模式、蒙版和高级描边。
 
 - ID：`appearance.paints-effects-masks`
-- 实现方：DesignDocument 1.10.0 + PropertiesPanel + Leafer adapter + SVG filter/mask adapter
+- 实现方：DesignDocument 1.10.0 + EditorRuntime mask planner + PropertiesPanel + Leafer adapter + SVG filter/mask adapter
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=degraded
-- 证据：自动化 7 项；实机 0 项
-- 限制：可编辑 SVG 边界现可保留最多八个普通零 spread 投影、一层 layer blur、效果顺序/可见性、圆角 Frame clipsContent，以及有序的 alpha/luminance/outline/clipping 同级蒙版段；内阴影、背景模糊、光晕、阴影 spread/blend、任意组合蒙版图、Electron 视觉基线、专业取色器和共享颜色样式仍未完成。
+- 证据：自动化 10 项；实机 0 项
+- 限制：Figma-style 作者工作流现可从受支持的 Shape、Text、Image 或容器 source 原子创建 contained sibling mask，人工与 Agent 均使用 Alpha/Vector/Luminance，并在 undo/save 后保持内容可编辑；可编辑 SVG 边界继续保留其受控 alpha/luminance/outline/clipping 段。Image/Text SVG 蒙版源、任意组合 mask graph、画布蒙版轮廓视图、内/背景效果、Electron 视觉基线和专业取色仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360041488473-Apply-effects-to-layers)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360040450253-Masks)
+- 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/properties/nodes-ismask/)
+- 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/MaskType/)
 
 ## 图片
 

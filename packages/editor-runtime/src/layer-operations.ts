@@ -4,6 +4,7 @@ import {
   type DesignDocument,
   type DesignNode,
   type DesignOperation,
+  type MaskMode,
   type Transform,
 } from "@opendesign/design-contracts";
 import {
@@ -27,6 +28,8 @@ export type LayerOperationFailureCode =
 
 export type LayerOrderAction =
   "bring-forward" | "bring-to-front" | "send-backward" | "send-to-back";
+
+export type DesignMaskType = "alpha" | "vector" | "luminance";
 
 export type LayerOperationPlan =
   | {
@@ -114,6 +117,186 @@ export function planGroupNodes(
     );
   }
   return { ok: true, commands, selectionNodeIds: [options.groupId] };
+}
+
+export function planCreateMaskGroup(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  options: {
+    groupId: string;
+    name: string;
+    maskType: DesignMaskType;
+    commandPrefix: string;
+  },
+): LayerOperationPlan {
+  const eligibility = analyzeMaskGroupSelection(document, pageId, nodeIds);
+  if (!eligibility.ok) return eligibility;
+  const grouped = planGroupNodes(document, pageId, eligibility.ordered, {
+    groupId: options.groupId,
+    name: options.name,
+    commandPrefix: options.commandPrefix,
+  });
+  if (!grouped.ok) return grouped;
+  if (grouped.commands.length + 1 > MAX_TRANSACTION_COMMANDS) {
+    return failure(
+      "operation-limit",
+      `Masking ${eligibility.ordered.length} layers exceeds the ${MAX_TRANSACTION_COMMANDS}-command transaction limit`,
+    );
+  }
+  return {
+    ok: true,
+    commands: [
+      ...grouped.commands,
+      {
+        commandId: `${options.commandPrefix}_mask`,
+        type: "update_properties",
+        nodeId: eligibility.maskNodeId,
+        maskMode: documentMaskMode(options.maskType),
+      },
+    ],
+    selectionNodeIds: [options.groupId],
+  };
+}
+
+export function planSetMaskType(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+  maskType: DesignMaskType,
+  commandPrefix: string,
+): LayerOperationPlan {
+  const eligibility = analyzeDirectMaskSource(document, pageId, nodeId);
+  if (!eligibility.ok) return eligibility;
+  const maskMode = documentMaskMode(maskType);
+  if (eligibility.node.maskMode === maskMode) {
+    return failure(
+      "invalid-selection",
+      `Layer ${nodeId} already uses this mask type`,
+    );
+  }
+  return {
+    ok: true,
+    commands: [
+      {
+        commandId: `${commandPrefix}_mask`,
+        type: "update_properties",
+        nodeId,
+        maskMode,
+      },
+    ],
+    selectionNodeIds: [nodeId],
+  };
+}
+
+export function planRemoveMask(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+  commandPrefix: string,
+): LayerOperationPlan {
+  const maskNode = resolveSelectedMaskSource(document, pageId, nodeId);
+  if (!maskNode) {
+    return failure(
+      "invalid-selection",
+      "Removing a mask requires one active mask layer or its containing Group",
+    );
+  }
+  if (isEffectivelyLocked(document, maskNode.id)) {
+    return failure("locked", "Locked mask layers cannot be changed");
+  }
+  if (
+    maskNode.parentId &&
+    document.nodesById[maskNode.parentId]?.kind === "boolean"
+  ) {
+    return failure(
+      "visual-fidelity",
+      "Boolean source operand masks cannot be changed independently",
+    );
+  }
+  return {
+    ok: true,
+    commands: [
+      {
+        commandId: `${commandPrefix}_unmask`,
+        type: "update_properties",
+        nodeId: maskNode.id,
+        maskMode: "none",
+      },
+    ],
+    selectionNodeIds: [nodeId],
+  };
+}
+
+export function planToggleMaskNodes(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+  options: {
+    groupId: string;
+    name: string;
+    commandPrefix: string;
+  },
+): LayerOperationPlan {
+  const selected = [...new Set(nodeIds)];
+  if (selected.length === 1) {
+    const nodeId = selected[0]!;
+    return resolveSelectedMaskSource(document, pageId, nodeId)
+      ? planRemoveMask(document, pageId, nodeId, options.commandPrefix)
+      : planSetMaskType(
+          document,
+          pageId,
+          nodeId,
+          "alpha",
+          options.commandPrefix,
+        );
+  }
+  return planCreateMaskGroup(document, pageId, selected, {
+    ...options,
+    maskType: "alpha",
+  });
+}
+
+export function canToggleMaskNodes(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+): boolean {
+  const selected = [...new Set(nodeIds)];
+  if (selected.length === 1) {
+    const nodeId = selected[0]!;
+    if (resolveSelectedMaskSource(document, pageId, nodeId)) {
+      return planRemoveMask(document, pageId, nodeId, "mask_capability").ok;
+    }
+    return analyzeDirectMaskSource(document, pageId, nodeId).ok;
+  }
+  const eligibility = analyzeMaskGroupSelection(document, pageId, selected);
+  return (
+    eligibility.ok &&
+    2 + eligibility.ordered.length * 2 <= MAX_TRANSACTION_COMMANDS
+  );
+}
+
+export function getMaskToggleAction(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+): "create" | "remove" | null {
+  const selected = [...new Set(nodeIds)];
+  if (selected.length === 1) {
+    const nodeId = selected[0]!;
+    if (resolveSelectedMaskSource(document, pageId, nodeId)) {
+      return planRemoveMask(document, pageId, nodeId, "mask_capability").ok
+        ? "remove"
+        : null;
+    }
+    return analyzeDirectMaskSource(document, pageId, nodeId).ok
+      ? "create"
+      : null;
+  }
+  return analyzeMaskGroupSelection(document, pageId, selected).ok
+    ? "create"
+    : null;
 }
 
 export function planUngroupNode(
@@ -664,6 +847,132 @@ export function analyzeContainerSelection(
     return failure("invalid-selection", "Selected layers have invalid bounds");
   }
   return { ok: true, bounds, ordered, parentId, siblings };
+}
+
+type DirectMaskSourceAnalysis =
+  | { ok: true; node: DesignNode; siblings: readonly string[] }
+  | LayerOperationFailure;
+
+function analyzeDirectMaskSource(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+): DirectMaskSourceAnalysis {
+  if (!document.pagesById[pageId]) {
+    return failure("not-found", `Page ${pageId} does not exist`);
+  }
+  const node = document.nodesById[nodeId];
+  if (!node) return failure("not-found", `Layer ${nodeId} does not exist`);
+  if (!nodeBelongsToPage(document, pageId, nodeId)) {
+    return failure(
+      "invalid-selection",
+      "The mask layer does not belong to the target page hierarchy",
+    );
+  }
+  if (!supportsMaskAuthoring(node)) {
+    return failure(
+      "visual-fidelity",
+      `Layer ${nodeId} cannot provide a reliable editable mask`,
+    );
+  }
+  if (node.parentId && document.nodesById[node.parentId]?.kind === "boolean") {
+    return failure(
+      "visual-fidelity",
+      "Boolean source operands cannot independently become masks",
+    );
+  }
+  if (isEffectivelyLocked(document, nodeId)) {
+    return failure("locked", "Locked layers cannot be used as masks");
+  }
+  const siblings = childIds(document, pageId, node.parentId);
+  const index = siblings?.indexOf(nodeId) ?? -1;
+  if (!siblings || index < 0 || index >= siblings.length - 1) {
+    return failure(
+      "invalid-selection",
+      "A mask layer must have at least one following sibling to reveal",
+    );
+  }
+  return { ok: true, node, siblings };
+}
+
+type MaskGroupSelectionAnalysis =
+  | {
+      ok: true;
+      maskNodeId: string;
+      ordered: string[];
+    }
+  | LayerOperationFailure;
+
+function analyzeMaskGroupSelection(
+  document: DesignDocument,
+  pageId: string,
+  nodeIds: readonly string[],
+): MaskGroupSelectionAnalysis {
+  const eligibility = analyzeContainerSelection(document, pageId, nodeIds, {
+    action: "Masking",
+    minimum: 2,
+  });
+  if (!eligibility.ok) return eligibility;
+  if (
+    eligibility.parentId &&
+    document.nodesById[eligibility.parentId]?.kind === "boolean"
+  ) {
+    return failure(
+      "visual-fidelity",
+      "Boolean source operands cannot be grouped into a mask object",
+    );
+  }
+  const maskNodeId = eligibility.ordered[0]!;
+  const maskNode = document.nodesById[maskNodeId]!;
+  if (!supportsMaskAuthoring(maskNode)) {
+    return failure(
+      "visual-fidelity",
+      `Bottom layer ${maskNodeId} cannot provide a reliable editable mask`,
+    );
+  }
+  const existingMask = eligibility.ordered.find((nodeId) =>
+    isActiveMaskMode(document.nodesById[nodeId]?.maskMode),
+  );
+  if (existingMask) {
+    return failure(
+      "visual-fidelity",
+      `Layer ${existingMask} already participates as a mask; remove or isolate it before creating another mask object`,
+    );
+  }
+  return { ok: true, maskNodeId, ordered: eligibility.ordered };
+}
+
+function resolveSelectedMaskSource(
+  document: DesignDocument,
+  pageId: string,
+  nodeId: string,
+): DesignNode | null {
+  const selected = document.nodesById[nodeId];
+  if (!selected || !nodeBelongsToPage(document, pageId, nodeId)) return null;
+  if (isActiveMaskMode(selected.maskMode)) return selected;
+  if (selected.kind !== "group") return null;
+  const directSources = selected.childIds
+    .map((childId) => document.nodesById[childId])
+    .filter(
+      (candidate): candidate is DesignNode =>
+        candidate !== undefined && isActiveMaskMode(candidate.maskMode),
+    );
+  return directSources.length === 1 ? directSources[0]! : null;
+}
+
+function supportsMaskAuthoring(node: DesignNode): boolean {
+  return node.kind !== "boolean" && node.kind !== "slice";
+}
+
+function isActiveMaskMode(mode: MaskMode | undefined): boolean {
+  return mode !== undefined && mode !== "none";
+}
+
+function documentMaskMode(maskType: DesignMaskType): MaskMode {
+  // OpenDesign's existing path-mask storage predates Figma's public VECTOR
+  // vocabulary. Keep one persisted fact while the authoring boundary uses the
+  // professional term users and adapters expect.
+  return maskType === "vector" ? "outline" : maskType;
 }
 
 type UngroupSelectionAnalysis =
