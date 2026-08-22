@@ -1,3 +1,4 @@
+import { componentSourceNodeIds } from "@opendesign/component-service";
 import type {
   DesignAsset,
   DesignDocument,
@@ -5,8 +6,10 @@ import type {
   DesignOperation,
   LibraryComponentSource,
   LibraryReleaseSnapshot,
+  LibraryStyleSource,
 } from "@opendesign/design-contracts";
-import { componentSourceNodeIds } from "./component-source.js";
+
+export const LIBRARY_SERVICE_VERSION = 1 as const;
 
 export interface CreateLibraryReleaseOptions {
   libraryId: string;
@@ -21,6 +24,7 @@ export interface LibraryReleaseUpdatePlan {
   commands: DesignOperation[];
   staleComponentIds: string[];
   staleVariantSetIds: string[];
+  staleStyleIds: string[];
 }
 
 export function createLibraryReleaseSnapshot(
@@ -78,14 +82,53 @@ export function createLibraryReleaseSnapshot(
       },
     ]),
   );
+  const componentStyleIds = new Set(
+    Object.values(componentsById).flatMap((source) =>
+      Object.values(source.nodesById).flatMap((node) => nodeStyleIds(node)),
+    ),
+  );
+  for (const styleId of componentStyleIds) {
+    if (!document.stylesById[styleId]) {
+      throw new Error(
+        `Published component references non-local Style ${styleId}; detach it or publish the Style from this file`,
+      );
+    }
+  }
+  const stylesById = Object.fromEntries(
+    Object.values(document.stylesById)
+      .filter(
+        (style) =>
+          !style.hiddenFromPublishing || componentStyleIds.has(style.id),
+      )
+      .map((style) => {
+        const source: LibraryStyleSource = {
+          source: { ...identity, sourceStyleId: style.id },
+          style: structuredClone(style),
+        };
+        return [style.id, source] as const;
+      }),
+  );
   return {
-    version: 1,
+    version: 2,
     ...identity,
     name: options.name,
     publishedAt: options.publishedAt,
     componentsById,
     variantSetsById,
+    stylesById,
   };
+}
+
+export function planLibraryReleaseImport(
+  document: DesignDocument,
+  release: LibraryReleaseSnapshot,
+  commandPrefix: string,
+): LibraryReleaseUpdatePlan {
+  return planReleaseSources(document, release, commandPrefix, {
+    componentIds: new Set(Object.keys(release.componentsById)),
+    styleIds: new Set(Object.keys(release.stylesById)),
+    variantSetIds: new Set(Object.keys(release.variantSetsById)),
+  });
 }
 
 export function planLibraryReleaseUpdate(
@@ -93,8 +136,64 @@ export function planLibraryReleaseUpdate(
   release: LibraryReleaseSnapshot,
   commandPrefix: string,
 ): LibraryReleaseUpdatePlan {
+  const componentIds = new Set(
+    Object.entries(document.libraryComponentsById)
+      .filter(([, source]) => source.source.libraryId === release.libraryId)
+      .map(([componentId]) => componentId),
+  );
+  const variantSetIds = new Set(
+    Object.entries(document.libraryVariantSetsById)
+      .filter(([, source]) => source.source.libraryId === release.libraryId)
+      .map(([variantSetId]) => variantSetId),
+  );
+  const styleIds = new Set(
+    Object.entries(document.libraryStylesById)
+      .filter(([, source]) => source.source.libraryId === release.libraryId)
+      .map(([styleId]) => styleId),
+  );
+  for (const componentId of componentIds) {
+    const source = release.componentsById[componentId];
+    if (!source) continue;
+    for (const node of Object.values(source.nodesById)) {
+      for (const styleId of nodeStyleIds(node)) styleIds.add(styleId);
+    }
+    if (source.component.variantSetId) {
+      variantSetIds.add(source.component.variantSetId);
+    }
+  }
+  return planReleaseSources(document, release, commandPrefix, {
+    componentIds,
+    styleIds,
+    variantSetIds,
+  });
+}
+
+function planReleaseSources(
+  document: DesignDocument,
+  release: LibraryReleaseSnapshot,
+  commandPrefix: string,
+  included: {
+    componentIds: ReadonlySet<string>;
+    styleIds: ReadonlySet<string>;
+    variantSetIds: ReadonlySet<string>;
+  },
+): LibraryReleaseUpdatePlan {
   const commands: DesignOperation[] = [];
-  for (const [componentId, source] of Object.entries(release.componentsById)) {
+  for (const styleId of included.styleIds) {
+    const source = release.stylesById[styleId];
+    if (!source) continue;
+    const existing = document.libraryStylesById[styleId];
+    if (existing && JSON.stringify(existing) === JSON.stringify(source))
+      continue;
+    commands.push({
+      commandId: `${commandPrefix}_style_${commands.length}`,
+      type: "put_library_style_source",
+      source: structuredClone(source),
+    });
+  }
+  for (const componentId of included.componentIds) {
+    const source = release.componentsById[componentId];
+    if (!source) continue;
     const existing = document.libraryComponentsById[componentId];
     if (existing && JSON.stringify(existing) === JSON.stringify(source))
       continue;
@@ -104,9 +203,9 @@ export function planLibraryReleaseUpdate(
       source: structuredClone(source),
     });
   }
-  for (const [variantSetId, source] of Object.entries(
-    release.variantSetsById,
-  )) {
+  for (const variantSetId of included.variantSetIds) {
+    const source = release.variantSetsById[variantSetId];
+    if (!source) continue;
     const existing = document.libraryVariantSetsById[variantSetId];
     if (existing && JSON.stringify(existing) === JSON.stringify(source))
       continue;
@@ -132,6 +231,13 @@ export function planLibraryReleaseUpdate(
           !release.variantSetsById[variantSetId],
       )
       .map(([variantSetId]) => variantSetId),
+    staleStyleIds: Object.entries(document.libraryStylesById)
+      .filter(
+        ([styleId, source]) =>
+          source.source.libraryId === release.libraryId &&
+          !release.stylesById[styleId],
+      )
+      .map(([styleId]) => styleId),
   };
 }
 
@@ -172,6 +278,26 @@ function nodeAssetIds(node: DesignNode): string[] {
     }
   }
   return [...assets];
+}
+
+function nodeStyleIds(node: DesignNode): string[] {
+  const ids = new Set<string>();
+  for (const styleId of [
+    node.fillStyleId,
+    node.strokeStyleId,
+    node.effectStyleId,
+    node.textStyleId,
+    node.gridStyleId,
+  ]) {
+    if (styleId) ids.add(styleId);
+  }
+  if (node.kind === "text") {
+    for (const run of node.properties.runs ?? []) {
+      if (run.style.textStyleId) ids.add(run.style.textStyleId);
+      if (run.style.fillStyleId) ids.add(run.style.fillStyleId);
+    }
+  }
+  return [...ids];
 }
 
 function hasPaints(

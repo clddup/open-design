@@ -187,6 +187,7 @@ function fixture(): DesignDocument {
     variantSetsById: {},
     libraryComponentsById: {},
     libraryVariantSetsById: {},
+    libraryStylesById: {},
     variableCollectionOrder: ["primitive-col", "semantic-col"],
     variableCollectionsById: {
       "primitive-col": {

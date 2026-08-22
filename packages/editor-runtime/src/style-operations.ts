@@ -1,6 +1,7 @@
 import type {
   DesignDocument,
   DesignOperation,
+  LibraryReleaseSnapshot,
   SharedStyleDefinition,
   SharedStyleType,
   StyleReferenceTarget,
@@ -9,6 +10,8 @@ import {
   materializeNodeStyle,
   styleCanApply,
   styleConsumers,
+  styleDefinition,
+  styleDefinitions,
   styleTypeForReference,
   validateStyleDocument,
 } from "@opendesign/style-service";
@@ -27,13 +30,11 @@ export function planCreateStyle(
     commandPrefix: string;
   },
 ): StyleOperationPlan {
-  if (document.stylesById[input.style.id]) {
+  if (styleDefinition(document, input.style.id)) {
     return failure("duplicate", `Style ${input.style.id} already exists`);
   }
   if (
-    Object.values(document.stylesById).some(
-      (style) => style.key === input.style.key,
-    )
+    styleDefinitions(document).some((style) => style.key === input.style.key)
   ) {
     return failure("duplicate", `Style key ${input.style.key} already exists`);
   }
@@ -132,7 +133,7 @@ export function planSetStyleReference(
   if (!node)
     return failure("not-found", `Node ${input.target.nodeId} does not exist`);
   if (input.styleId) {
-    const style = document.stylesById[input.styleId];
+    const style = styleDefinition(document, input.styleId);
     if (!style)
       return failure("not-found", `Style ${input.styleId} does not exist`);
     if (!styleCanApply(node, input.target.field, style)) {
@@ -158,6 +159,60 @@ export function planSetStyleReference(
       },
     ],
   };
+}
+
+export function planApplyLibraryStyle(
+  document: DesignDocument,
+  release: LibraryReleaseSnapshot,
+  input: {
+    styleId: string;
+    target: StyleReferenceTarget;
+    commandPrefix: string;
+  },
+): StyleOperationPlan {
+  const source = release.stylesById[input.styleId];
+  if (!source) {
+    return failure(
+      "not-found",
+      `Style ${input.styleId} is not part of Library ${release.libraryId}`,
+    );
+  }
+  if (document.stylesById[input.styleId]) {
+    return failure(
+      "duplicate",
+      `Library Style ${input.styleId} conflicts with a local Style`,
+    );
+  }
+  const imported = document.libraryStylesById[input.styleId];
+  if (imported && !sameLibraryIdentity(imported.source, source.source)) {
+    return failure(
+      "duplicate",
+      `Style ${input.styleId} conflicts with another Library source`,
+    );
+  }
+  const staged: DesignDocument = {
+    ...document,
+    libraryStylesById: {
+      ...document.libraryStylesById,
+      [input.styleId]: structuredClone(source),
+    },
+  };
+  const reference = planSetStyleReference(staged, {
+    target: input.target,
+    styleId: input.styleId,
+    commandPrefix: input.commandPrefix,
+  });
+  if (!reference.ok) return reference;
+  const commands: DesignOperation[] = [];
+  if (!imported || JSON.stringify(imported) !== JSON.stringify(source)) {
+    commands.push({
+      commandId: `${input.commandPrefix}_put_library_style`,
+      type: "put_library_style_source",
+      source: structuredClone(source),
+    });
+  }
+  commands.push(...reference.commands);
+  return { ok: true, commands };
 }
 
 export function planDeleteStyle(
@@ -351,4 +406,17 @@ function failure(
   message: string,
 ): StyleOperationPlan {
   return { ok: false, code, message };
+}
+
+function sameLibraryIdentity(
+  current: DesignDocument["libraryStylesById"][string]["source"],
+  next: DesignDocument["libraryStylesById"][string]["source"],
+): boolean {
+  return (
+    current.libraryId === next.libraryId &&
+    current.sourceProjectId === next.sourceProjectId &&
+    current.sourceDesignFileId === next.sourceDesignFileId &&
+    current.sourceDocumentId === next.sourceDocumentId &&
+    current.sourceStyleId === next.sourceStyleId
+  );
 }

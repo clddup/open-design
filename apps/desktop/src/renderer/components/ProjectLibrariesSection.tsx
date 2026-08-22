@@ -1,6 +1,7 @@
 import type {
   DesignDocument,
   LibraryReleaseSnapshot,
+  SharedStyleType,
 } from "@opendesign/design-contracts";
 import { Button, Icon, IconButton } from "@opendesign/ui";
 import { useMemo, useState } from "react";
@@ -21,6 +22,11 @@ export function ProjectLibrariesSection({
   const [expandedLibraryIds, setExpandedLibraryIds] = useState<Set<string>>(
     new Set(),
   );
+  const publishable =
+    Object.keys(document.componentsById).length > 0 ||
+    Object.values(document.stylesById).some(
+      (style) => !style.hiddenFromPublishing,
+    );
   if (!actions.available) return null;
 
   return (
@@ -28,13 +34,10 @@ export function ProjectLibrariesSection({
       <div className={styles.heading}>
         <span>{t("sidebar.projectLibraries")}</span>
         <IconButton
-          disabled={
-            actions.busyKey !== null ||
-            Object.keys(document.componentsById).length === 0
-          }
+          disabled={actions.busyKey !== null || !publishable}
           icon={actions.published ? "lucide:refresh-cw" : "lucide:upload"}
           label={
-            Object.keys(document.componentsById).length === 0
+            !publishable
               ? t("sidebar.publishRequiresComponent")
               : actions.published
                 ? t("sidebar.republishCurrentFile")
@@ -156,15 +159,27 @@ export function ProjectLibrariesSection({
                   </div>
                 ) : null}
                 {item.enabled && expanded ? (
-                  <LibraryComponents
-                    busy={actions.busyKey !== null}
-                    document={document}
-                    onPlace={(componentId) =>
-                      actions.placeComponent(item.entry.libraryId, componentId)
-                    }
-                    query={query}
-                    release={item.release}
-                  />
+                  <div className={styles.resources}>
+                    <div className={styles.resourceHeading}>
+                      {t("sidebar.libraryComponents")}
+                    </div>
+                    <LibraryComponents
+                      busy={actions.busyKey !== null}
+                      document={document}
+                      onPlace={(componentId) =>
+                        actions.placeComponent(
+                          item.entry.libraryId,
+                          componentId,
+                        )
+                      }
+                      query={query}
+                      release={item.release}
+                    />
+                    <div className={styles.resourceHeading}>
+                      {t("sidebar.libraryStyles")}
+                    </div>
+                    <LibraryStyles query={query} release={item.release} />
+                  </div>
                 ) : null}
               </div>
             );
@@ -172,6 +187,47 @@ export function ProjectLibrariesSection({
         </div>
       )}
     </section>
+  );
+}
+
+function LibraryStyles({
+  query,
+  release,
+}: {
+  query: string;
+  release: LibraryReleaseSnapshot | null;
+}) {
+  const { t } = useI18n();
+  const entries = useMemo(
+    () => (release ? releaseStyles(release, query) : []),
+    [query, release],
+  );
+  if (!release) {
+    return (
+      <div className={styles.componentEmpty}>
+        {t("sidebar.libraryUnavailable")}
+      </div>
+    );
+  }
+  if (entries.length === 0) {
+    return (
+      <div className={styles.componentEmpty}>
+        {t("sidebar.libraryHasNoStyles")}
+      </div>
+    );
+  }
+  return (
+    <div aria-label={t("sidebar.libraryStyles")} className={styles.styleItems}>
+      {entries.map((entry) => (
+        <div key={entry.id}>
+          <Icon name={styleIcon(entry.styleType)} size={14} />
+          <span>
+            <strong>{entry.name}</strong>
+            <small>{t(styleTypeKey(entry.styleType))}</small>
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -310,4 +366,34 @@ function releaseComponents(release: LibraryReleaseSnapshot, query: string) {
         left.name.localeCompare(right.name) ||
         left.componentId.localeCompare(right.componentId),
     );
+}
+
+function releaseStyles(release: LibraryReleaseSnapshot, query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return Object.values(release.stylesById)
+    .map((source) => source.style)
+    .filter(
+      (style) =>
+        !style.hiddenFromPublishing &&
+        (!normalizedQuery ||
+          style.name.toLocaleLowerCase().includes(normalizedQuery)),
+    )
+    .sort(
+      (left, right) =>
+        left.styleType.localeCompare(right.styleType) ||
+        left.name.localeCompare(right.name) ||
+        left.id.localeCompare(right.id),
+    );
+}
+
+function styleTypeKey(styleType: SharedStyleType) {
+  return `styles.${styleType.toLowerCase()}` as
+    "styles.paint" | "styles.text" | "styles.effect" | "styles.grid";
+}
+
+function styleIcon(styleType: SharedStyleType) {
+  if (styleType === "TEXT") return "lucide:type";
+  if (styleType === "EFFECT") return "lucide:sparkles";
+  if (styleType === "GRID") return "lucide:grid-3x3";
+  return "lucide:swatch-book";
 }

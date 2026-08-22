@@ -31,6 +31,7 @@
     "@opendesign/geometry-service": "workspace:*",
     "@opendesign/import-export-service": "workspace:*",
     "@opendesign/leafer-engine": "workspace:*",
+    "@opendesign/library-service": "workspace:*",
     "@opendesign/model-gateway": "workspace:*",
     "@opendesign/session-store": "workspace:*",
     "@opendesign/style-service": "workspace:*",

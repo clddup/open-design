@@ -24,7 +24,7 @@ Agent utilityProcess ── Conversation / Provider / typed design tools
 - Renderer 没有 Node.js、原始 IPC、任意文件系统或模型凭据能力。
 - Agent、MCP 和人工操作都必须通过版本化设计契约进入同一 `EditorRuntime`。
 - Agent 新建设计优先一次提交真实画板根与首个可编辑画面，并基于同一权威 brief 连续完成后续目标；默认快速模式限制主观精修循环，精细模式保留更严格的视觉审查。
-- 同一 Project 的 Design File 可以发布和启用 Component Library；跨文件 Instance 继续通过唯一事务、revision 与撤销历史保持链接和更新。
+- 同一 Project 的 Design File 可以发布和启用 Component 与 Shared Style Library；跨文件 Instance 和 Style 引用继续通过唯一事务、revision 与撤销历史保持链接和更新。
 - OpenPencil、旧 Canvas2D 后端和旧通用手写选择框已经从运行时与发行路径移除，不存在 fallback 或双写入口。
 
 ## 项目状态
@@ -73,6 +73,7 @@ apps/desktop/            Electron Main、Preload、Renderer 与 Agent 入口
 packages/design-contracts/ 设计文档、事务和运行时 schema
 packages/editor-runtime/   权威文档状态、revision、history 与几何查询
 packages/leafer-engine/    LeaferJS 场景与直接操作 adapter
+packages/library-service/ 同 Project 跨 Design File Library 发布与更新规划
 packages/agent-*/          Agent 协议与运行时
 packages/model-gateway/    模型 Provider adapter
 packages/tool-runtime/     工具策略与执行边界

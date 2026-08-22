@@ -2632,6 +2632,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                 onSetVariableBinding={variableActions.setBinding}
                 onSetVariableMode={variableActions.setSelectedNodeMode}
                 styleActions={styleActions}
+                projectLibraries={projectLibraries}
                 onSvgExportSettingsChange={importExport.setSvgExportSettings}
                 onRasterExportSettingsChange={
                   importExport.setRasterExportSettings

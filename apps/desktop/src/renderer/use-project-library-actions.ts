@@ -1,10 +1,12 @@
-import { planLibraryReleaseUpdate } from "@opendesign/component-service";
+import { planLibraryReleaseUpdate } from "@opendesign/library-service";
 import type {
   DesignDocument,
   DesignOperation,
   LibraryReleaseSnapshot,
+  StyleReferenceTarget,
 } from "@opendesign/design-contracts";
 import {
+  planApplyLibraryStyle,
   planCreateLibraryInstance,
   type EditorRuntime,
 } from "@opendesign/editor-runtime";
@@ -40,6 +42,11 @@ export interface ProjectLibraryActions {
   placeComponent: (
     libraryId: string,
     componentId: string,
+  ) => Promise<AssetActionResult>;
+  applyStyle: (
+    libraryId: string,
+    styleId: string,
+    target: StyleReferenceTarget,
   ) => Promise<AssetActionResult>;
   acceptUpdate: (libraryId: string) => Promise<void>;
   ignoreUpdate: (libraryId: string) => Promise<void>;
@@ -281,6 +288,72 @@ export function useProjectLibraryActions({
     ],
   );
 
+  const applyStyle = useCallback(
+    async (
+      libraryId: string,
+      styleId: string,
+      target: StyleReferenceTarget,
+    ): Promise<AssetActionResult> => {
+      if (busyKey) {
+        return { ok: false, error: t("sidebar.libraryBusy") };
+      }
+      setBusyKey(`style:${libraryId}:${styleId}`);
+      setError(null);
+      try {
+        const api = requireDesktopApi();
+        const release =
+          releases[libraryId] ??
+          (await api.readProjectLibraryRelease({
+            projectId: activeProjectId,
+            libraryId,
+          }));
+        const source = release.stylesById[styleId];
+        if (!source || source.style.hiddenFromPublishing) {
+          return { ok: false, error: t("sidebar.libraryStyleUnavailable") };
+        }
+        const operationId = `library_style_${Date.now()}_${++transactionCounter.current}`;
+        const plan = planApplyLibraryStyle(
+          runtime.getSnapshot().document,
+          release,
+          {
+            styleId,
+            target,
+            commandPrefix: operationId,
+          },
+        );
+        if (!plan.ok) return { ok: false, error: plan.message };
+        if (!applyCommands(t("history.applyLibraryStyle"), plan.commands)) {
+          return { ok: false, error: t("sidebar.libraryStyleUnavailable") };
+        }
+        setReleases((currentReleases) => ({
+          ...currentReleases,
+          [libraryId]: release,
+        }));
+        return {
+          ok: true,
+          message: t("sidebar.libraryStyleApplied", {
+            name: source.style.name,
+          }),
+        };
+      } catch (reason) {
+        const message = errorMessage(reason);
+        setError(message);
+        return { ok: false, error: message };
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [
+      activeProjectId,
+      applyCommands,
+      busyKey,
+      releases,
+      runtime,
+      t,
+      transactionCounter,
+    ],
+  );
+
   const acceptUpdate = useCallback(
     (libraryId: string) =>
       run(`accept:${libraryId}`, async () => {
@@ -394,6 +467,7 @@ export function useProjectLibraryActions({
     publish,
     setEnabled,
     placeComponent,
+    applyStyle,
     acceptUpdate,
     ignoreUpdate,
     clearError: () => setError(null),
@@ -418,6 +492,12 @@ function collectImportedReleaseIds(document: DesignDocument) {
     releaseIds.add(source.source.releaseId);
     releaseIdsByLibraryId[source.source.libraryId] = releaseIds;
   }
+  for (const source of Object.values(document.libraryStylesById)) {
+    const releaseIds =
+      releaseIdsByLibraryId[source.source.libraryId] ?? new Set<string>();
+    releaseIds.add(source.source.releaseId);
+    releaseIdsByLibraryId[source.source.libraryId] = releaseIds;
+  }
   return releaseIdsByLibraryId;
 }
 
@@ -434,11 +514,16 @@ function newestImportedReleaseId(
 }
 
 function importedLibrarySourceKey(document: DesignDocument) {
-  return Object.values(document.libraryComponentsById)
-    .map(
+  return [
+    ...Object.values(document.libraryComponentsById).map(
       (source) =>
         `${source.source.libraryId}\u0000${source.source.releaseId}\u0000${source.component.id}`,
-    )
+    ),
+    ...Object.values(document.libraryStylesById).map(
+      (source) =>
+        `${source.source.libraryId}\u0000${source.source.releaseId}\u0000${source.style.id}`,
+    ),
+  ]
     .sort()
     .join("\u0001");
 }

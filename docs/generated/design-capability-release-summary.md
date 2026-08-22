@@ -2,7 +2,7 @@
 
 # Design capability release summary
 
-Manifest v1 (2026-08-18) · 0 available · 21 degraded · 1 unavailable
+Manifest v1 (2026-08-22) · 0 available · 21 degraded · 1 unavailable
 
 This block is the release-note view of the same manifest used by the built-in Agent and generated help. It must not be edited by hand.
 
@@ -30,7 +30,7 @@ This block is the release-note view of the same manifest used by the built-in Ag
 - `layout.auto-layout` — Auto layout
 - `components.instances-variants` — Components, instances, and variants
 - `variables.collections-modes` — Variables, collections, and modes
-- `styles.shared-local` — Local shared styles
+- `styles.shared-local` — Shared styles
 - `delivery.svg-interchange` — Editable SVG interchange
 - `export.static-formats` — Professional static export
 

@@ -6,13 +6,15 @@ import type {
   StyleReferenceTarget,
 } from "@opendesign/design-contracts";
 
-export const STYLE_SERVICE_VERSION = 1 as const;
+export const STYLE_SERVICE_VERSION = 2 as const;
 
 export type StyleIssueCode =
   | "duplicate-key"
   | "duplicate-order-entry"
   | "incompatible-reference"
   | "map-id-mismatch"
+  | "local-library-id-conflict"
+  | "library-source-identity-mismatch"
   | "missing-order-entry"
   | "missing-style"
   | "order-type-mismatch"
@@ -46,6 +48,16 @@ export function validateStyleDocument(
   const keys = new Map<string, string>();
   const ordered = new Set<string>();
   for (const [styleId, style] of Object.entries(document.stylesById)) {
+    if (document.libraryStylesById[styleId]) {
+      issues.push(
+        issue(
+          "local-library-id-conflict",
+          `/libraryStylesById/${pointer(styleId)}`,
+          `Library Style ${styleId} conflicts with a local Style`,
+          styleId,
+        ),
+      );
+    }
     if (style.id !== styleId) {
       issues.push(
         issue(
@@ -67,6 +79,40 @@ export function validateStyleDocument(
         ),
       );
     } else keys.set(style.key, styleId);
+  }
+  for (const [styleId, source] of Object.entries(document.libraryStylesById)) {
+    const path = `/libraryStylesById/${pointer(styleId)}`;
+    if (source.style.id !== styleId) {
+      issues.push(
+        issue(
+          "map-id-mismatch",
+          `${path}/style/id`,
+          `Library Style id ${source.style.id} must match map key ${styleId}`,
+          styleId,
+        ),
+      );
+    }
+    if (source.source.sourceStyleId !== styleId) {
+      issues.push(
+        issue(
+          "library-source-identity-mismatch",
+          `${path}/source/sourceStyleId`,
+          `Library Style source id ${source.source.sourceStyleId} must match map key ${styleId}`,
+          styleId,
+        ),
+      );
+    }
+    const existing = keys.get(source.style.key);
+    if (existing) {
+      issues.push(
+        issue(
+          "duplicate-key",
+          `${path}/style/key`,
+          `Style key ${source.style.key} is already used by ${existing}`,
+          styleId,
+        ),
+      );
+    } else keys.set(source.style.key, styleId);
   }
   for (const styleType of Object.keys(
     document.styleOrderByType,
@@ -127,7 +173,7 @@ export function validateStyleDocument(
       const styleId = node[field];
       if (!styleId) continue;
       const path = `/nodesById/${pointer(node.id)}/${field}`;
-      const style = document.stylesById[styleId];
+      const style = styleDefinition(document, styleId);
       if (!style) {
         issues.push({
           ...issue(
@@ -176,7 +222,7 @@ export function materializeSharedStyles(
     for (const field of fields) {
       const styleId = node[field];
       if (!styleId) continue;
-      const style = document.stylesById[styleId];
+      const style = styleDefinition(document, styleId);
       if (!style || !styleCanApply(node, field, style)) {
         const code = style ? "incompatible-reference" : "missing-style";
         issues.push({
@@ -222,6 +268,42 @@ export function styleConsumers(
     }
   }
   return consumers;
+}
+
+export function styleDefinition(
+  document: DesignDocument,
+  styleId: string,
+): SharedStyleDefinition | undefined {
+  return (
+    document.stylesById[styleId] ?? document.libraryStylesById[styleId]?.style
+  );
+}
+
+export function styleDefinitions(
+  document: DesignDocument,
+): SharedStyleDefinition[] {
+  return [
+    ...Object.values(document.stylesById),
+    ...Object.values(document.libraryStylesById).map((source) => source.style),
+  ];
+}
+
+export function styleIsReferenced(
+  document: DesignDocument,
+  styleId: string,
+): boolean {
+  if (
+    Object.values(document.nodesById).some((node) =>
+      nodeUsesStyle(node, styleId),
+    )
+  ) {
+    return true;
+  }
+  return Object.values(document.libraryComponentsById).some((source) =>
+    Object.values(source.nodesById).some((node) =>
+      nodeUsesStyle(node, styleId),
+    ),
+  );
 }
 
 export function styleTypeForReference(
@@ -297,6 +379,23 @@ function hasPaints(node: DesignNode): node is Extract<
   }
 > {
   return "fills" in node.properties && "strokes" in node.properties;
+}
+
+function nodeUsesStyle(node: DesignNode, styleId: string): boolean {
+  if (
+    (Object.keys(REFERENCE_TYPES) as StyleReferenceTarget["field"][]).some(
+      (field) => node[field] === styleId,
+    )
+  ) {
+    return true;
+  }
+  return (
+    node.kind === "text" &&
+    (node.properties.runs ?? []).some(
+      (run) =>
+        run.style.textStyleId === styleId || run.style.fillStyleId === styleId,
+    )
+  );
 }
 
 function issue(

@@ -6,10 +6,10 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   componentProjectionId,
-  createLibraryReleaseSnapshot,
   navigateComponentSelection,
   resolveComponentInstance,
 } from "@opendesign/component-service";
+import { createLibraryReleaseSnapshot } from "@opendesign/library-service";
 import { createEmptyDesignDocument } from "./document.js";
 import { normalizeDesignDocument } from "./document.js";
 import { EditorRuntime } from "./runtime.js";

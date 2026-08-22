@@ -965,9 +965,23 @@ export const LibraryVariantSetSourceSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const LibraryStyleSourceSchema = Type.Object(
+  {
+    source: Type.Object(
+      {
+        ...LibraryReleaseIdentityProperties,
+        sourceStyleId: Type.String({ minLength: 1, maxLength: 256 }),
+      },
+      { additionalProperties: false },
+    ),
+    style: SharedStyleDefinitionSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const LibraryReleaseSnapshotSchema = Type.Object(
   {
-    version: Type.Literal(1),
+    version: Type.Literal(2),
     libraryId: Type.String({ minLength: 1, maxLength: 256 }),
     releaseId: Type.String({ minLength: 1, maxLength: 256 }),
     sourceProjectId: Type.String({ minLength: 1, maxLength: 256 }),
@@ -982,6 +996,10 @@ export const LibraryReleaseSnapshotSchema = Type.Object(
     variantSetsById: Type.Record(
       Type.String({ minLength: 1, maxLength: 256 }),
       LibraryVariantSetSourceSchema,
+    ),
+    stylesById: Type.Record(
+      Type.String({ minLength: 1, maxLength: 256 }),
+      LibraryStyleSourceSchema,
     ),
   },
   { additionalProperties: false },
@@ -1011,6 +1029,7 @@ const DesignDocumentResourceProperties = {
     Type.String(),
     LibraryVariantSetSourceSchema,
   ),
+  libraryStylesById: Type.Record(Type.String(), LibraryStyleSourceSchema),
   styleOrderByType: StyleOrderByTypeSchema,
   stylesById: Type.Record(Type.String(), SharedStyleDefinitionSchema),
   interactionsById: Type.Record(Type.String(), JsonValueSchema),
@@ -1324,6 +1343,22 @@ export const DeleteLibraryVariantSetSourceCommandSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+export const PutLibraryStyleSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("put_library_style_source"),
+    source: LibraryStyleSourceSchema,
+  },
+  { additionalProperties: false },
+);
+export const DeleteLibraryStyleSourceCommandSchema = Type.Object(
+  {
+    ...OperationBaseProperties,
+    type: Type.Literal("delete_library_style_source"),
+    styleId: Type.String({ minLength: 1, maxLength: 256 }),
+  },
+  { additionalProperties: false },
+);
 export const InsertPageCommandSchema = Type.Object(
   {
     ...OperationBaseProperties,
@@ -1395,6 +1430,8 @@ export const DesignOperationSchema: TUnion<
     typeof DeleteLibraryComponentSourceCommandSchema,
     typeof PutLibraryVariantSetSourceCommandSchema,
     typeof DeleteLibraryVariantSetSourceCommandSchema,
+    typeof PutLibraryStyleSourceCommandSchema,
+    typeof DeleteLibraryStyleSourceCommandSchema,
     typeof variables.PutVariableCollectionCommandSchema,
     typeof variables.DeleteVariableCollectionCommandSchema,
     typeof variables.MoveVariableCollectionCommandSchema,
@@ -1423,6 +1460,8 @@ export const DesignOperationSchema: TUnion<
   DeleteLibraryComponentSourceCommandSchema,
   PutLibraryVariantSetSourceCommandSchema,
   DeleteLibraryVariantSetSourceCommandSchema,
+  PutLibraryStyleSourceCommandSchema,
+  DeleteLibraryStyleSourceCommandSchema,
   variables.PutVariableCollectionCommandSchema,
   variables.DeleteVariableCollectionCommandSchema,
   variables.MoveVariableCollectionCommandSchema,
@@ -1626,6 +1665,31 @@ export const LibraryVariantSetSourceChangeSchema: TSchema & {
   { additionalProperties: false },
 );
 
+type LibraryStyleSourceChangeValue = {
+  type: "added" | "updated" | "removed";
+  styleId: string;
+  before?: Static<typeof LibraryStyleSourceSchema>;
+  after?: Static<typeof LibraryStyleSourceSchema>;
+  changedFields: string[];
+};
+
+export const LibraryStyleSourceChangeSchema: TSchema & {
+  static: LibraryStyleSourceChangeValue;
+} = Type.Object(
+  {
+    type: Type.Union([
+      Type.Literal("added"),
+      Type.Literal("updated"),
+      Type.Literal("removed"),
+    ]),
+    styleId: Type.String({ minLength: 1 }),
+    before: Type.Optional(LibraryStyleSourceSchema),
+    after: Type.Optional(LibraryStyleSourceSchema),
+    changedFields: Type.Array(Type.String(), { uniqueItems: true }),
+  },
+  { additionalProperties: false },
+);
+
 const DesignChangeSetCoreProperties = {
   documentId: Type.String({ minLength: 1 }),
   fromRevision: Type.Integer({ minimum: 0 }),
@@ -1695,6 +1759,18 @@ const DesignChangeSetDetailProperties = {
   ),
   libraryVariantSetChanges: Type.Optional(
     Type.Array(LibraryVariantSetSourceChangeSchema),
+  ),
+  addedLibraryStyleIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  changedLibraryStyleIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  removedLibraryStyleIds: Type.Optional(
+    Type.Array(Type.String(), { uniqueItems: true }),
+  ),
+  libraryStyleChanges: Type.Optional(
+    Type.Array(LibraryStyleSourceChangeSchema),
   ),
   variantSetChanges: Type.Optional(Type.Array(VariantSetChangeSchema)),
   addedStyleIds: Type.Optional(
@@ -2062,6 +2138,7 @@ export type LibraryComponentSource = Static<
 export type LibraryVariantSetSource = Static<
   typeof LibraryVariantSetSourceSchema
 >;
+export type LibraryStyleSource = Static<typeof LibraryStyleSourceSchema>;
 export type LibraryReleaseSnapshot = Static<
   typeof LibraryReleaseSnapshotSchema
 >;
@@ -2110,6 +2187,12 @@ export type PutLibraryVariantSetSourceCommand = Static<
 export type DeleteLibraryVariantSetSourceCommand = Static<
   typeof DeleteLibraryVariantSetSourceCommandSchema
 >;
+export type PutLibraryStyleSourceCommand = Static<
+  typeof PutLibraryStyleSourceCommandSchema
+>;
+export type DeleteLibraryStyleSourceCommand = Static<
+  typeof DeleteLibraryStyleSourceCommandSchema
+>;
 export type InsertPageCommand = Static<typeof InsertPageCommandSchema>;
 export type UpdatePageCommand = Static<typeof UpdatePageCommandSchema>;
 export type MovePageCommand = Static<typeof MovePageCommandSchema>;
@@ -2128,6 +2211,9 @@ export type LibraryComponentSourceChange = Static<
 >;
 export type LibraryVariantSetSourceChange = Static<
   typeof LibraryVariantSetSourceChangeSchema
+>;
+export type LibraryStyleSourceChange = Static<
+  typeof LibraryStyleSourceChangeSchema
 >;
 export type DesignChangeSet = Static<typeof DesignChangeSetSchema>;
 export type DesignDiff = DesignChangeSet;
@@ -2336,6 +2422,11 @@ export function isLibraryReleaseSnapshot(
           variantSet.source.sourceVariantSetId,
           variantSetId,
         ),
+    ) &&
+    Object.entries(release.stylesById).every(
+      ([styleId, style]) =>
+        style.style.id === styleId &&
+        identityMatches(style.source, style.source.sourceStyleId, styleId),
     )
   );
 }
@@ -2368,6 +2459,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     const normalized = structuredClone(value) as Record<string, unknown>;
     normalized.libraryComponentsById ??= {};
     normalized.libraryVariantSetsById ??= {};
+    normalized.libraryStylesById ??= {};
     return isDesignDocument(normalized) ? normalized : null;
   }
   try {
@@ -2375,6 +2467,7 @@ export function migrateDesignDocument(value: unknown): DesignDocument | null {
     migrated.schemaVersion = versions.DESIGN_SCHEMA_VERSION;
     migrated.libraryComponentsById ??= {};
     migrated.libraryVariantSetsById ??= {};
+    migrated.libraryStylesById ??= {};
     if (
       schemaVersion === versions.ADVANCED_VECTOR_CUT_DESIGN_SCHEMA_VERSION &&
       hasLegacyInstanceNodes(migrated)
@@ -2564,9 +2657,10 @@ function designDocumentHasValidTextRuns(document: DesignDocument): boolean {
         !isUtf16Boundary(node.properties.content, run.end) ||
         style === previousStyle ||
         (run.style.textStyleId !== undefined &&
-          document.stylesById[run.style.textStyleId]?.styleType !== "TEXT") ||
+          documentStyle(document, run.style.textStyleId)?.styleType !==
+            "TEXT") ||
         (run.style.fillStyleId !== undefined &&
-          document.stylesById[run.style.fillStyleId]?.styleType !== "PAINT")
+          documentStyle(document, run.style.fillStyleId)?.styleType !== "PAINT")
       ) {
         return false;
       }
@@ -2576,6 +2670,12 @@ function designDocumentHasValidTextRuns(document: DesignDocument): boolean {
     if (expectedStart !== node.properties.content.length) return false;
   }
   return true;
+}
+
+function documentStyle(document: DesignDocument, styleId: string) {
+  return (
+    document.stylesById[styleId] ?? document.libraryStylesById[styleId]?.style
+  );
 }
 
 function isUtf16Boundary(content: string, index: number): boolean {

@@ -2,7 +2,7 @@
 
 # OpenDesign 专业设计能力
 
-能力清单版本：`1` · 更新日期：2026-08-18 · 文档协议：`1.37.0` · 画布基线：`leafer-editor@2.2.9`
+能力清单版本：`1` · 更新日期：2026-08-22 · 文档协议：`1.38.0` · 画布基线：`leafer-editor@2.2.9`
 
 当前状态：可用 0 项，降级可用 21 项，不可用 1 项。只有必需表面全部可用，并同时具备自动化与实机证据时，能力才允许标记为“可用”。
 
@@ -33,7 +33,7 @@
 创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。
 
 - ID：`layers.hierarchy`
-- 实现方：DesignDocument 1.37.0 + EditorRuntime
+- 实现方：DesignDocument 1.38.0 + EditorRuntime
 - 表面：contract=available；runtime=available；human=degraded；agent=available；render=available；export=unavailable
 - 证据：自动化 7 项；实机 0 项
 - 限制：画布直接操作时的自动归属仍未补齐；图层面板中的显式跨容器重挂载目前以指针拖放为主。
@@ -245,10 +245,10 @@
 创建主组件、实例、嵌套实例、override、组件属性、Slot 与 Variant Set。
 
 - ID：`components.instances-variants`
-- 实现方：DesignDocument 1.37.0 + @opendesign/component-service contract v6 + isolated @opendesign/figma-interop
+- 实现方：DesignDocument 1.38.0 + @opendesign/component-service contract v6 + @opendesign/library-service + isolated @opendesign/figma-interop
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
 - 证据：自动化 16 项；实机 0 项
-- 限制：已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义且具有普通属性显式顺序的 Boolean/Text/Instance-swap/SLOT 属性、真实 Component Set Frame、唯一 VARIANT 解析、Set 生命周期、二维矩阵与画布重排、稳定 sourcePath 高级 override、Slot settings 与指导性限制、Component/Component Set preferred values、Clear/Reset/Detach 物化、Inspector、Agent typed actions 与 inspection、持久 override 图层、不可导出的空 Slot 画布指示、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Canvas、Layers、Inspector 与键盘导航共享唯一 Runtime selection；派生层只使用 session-only Instance 与稳定 source path，持久 nested Instance 拥有自身派生 child，受支持 override 继续进入事务，直接派生 transform 和危险命令失败封闭。exact-revision layout quality 已检查真实 Instance 派生 subtree、完整 clipping chain 与派生 Text evidence；一次可撤销 repair-overflow 事务扩展安全 trailing-edge artboard/持久 clipping Frame，unsafe 结构继续失败封闭。Slot-in-Slot 按 Figma 公开 composition model 永久失败封闭；跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、完整派生直接操作和 macOS/Windows 打包 GUI 实机证据仍未完成。
+- 限制：已实现同一 Design File 内的 Main、链接/嵌套 Instance、Figma-compatible properties、Component Set、Variant、Slot、override、投影、持久化、autosave 和 history。同 Project 的 Design File 可发布不可变 Component/Variant/Shared Style release，由消费文件显式启用、放置链接 imported Instance、应用 imported Style、审阅更新、禁用且不破坏现有引用，并通过同一 Runtime 保存结果。Canvas、Layers、Inspector 与键盘导航共享唯一 Runtime selection；派生层只使用 session-only Instance 与稳定 source path，不安全的派生 transform 和危险命令失败封闭。Slot-in-Slot 按 Figma 公开 composition model 永久失败封闭；跨文件 Variables、Workspace/远端 Library、发布权限、私有 .fig 解码、Plugin/REST 导入导出、完整派生直接操作和 macOS/Windows 打包 GUI 实机证据仍未完成。
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/5579474826519-Explore-component-properties)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360056440594-Create-and-use-variants)
@@ -268,15 +268,15 @@
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/15343816063383-Modes-for-variables)
 - 专业参照：[官方说明](https://developers.figma.com/docs/rest-api/variables/)
 
-### 本地共享样式 — 降级可用
+### 共享样式 — 降级可用
 
-创建、应用、更新、排序、解绑和删除可复用的 Paint、Text、Effect 与 Grid 样式。
+创建并管理本地 Paint、Text、Effect 与 Grid 样式，并在同一 Project 的多个 Design File 之间发布和消费。
 
 - ID：`styles.shared-local`
-- 实现方：DesignDocument 1.27.0 + @opendesign/style-service contract v1 + isolated @opendesign/figma-interop
+- 实现方：DesignDocument 1.38.0 + @opendesign/style-service contract v2 + @opendesign/library-service contract v1 + isolated @opendesign/figma-interop
 - 表面：contract=available；runtime=degraded；human=degraded；agent=degraded；render=degraded；export=degraded
-- 证据：自动化 10 项；实机 0 项
-- 限制：Shared Styles v1 已支持同一 Design File 内的 Paint、Text、Effect、Grid registry、按类型稳定顺序、Figma-shaped 节点引用、解绑/删除/直接编辑时 fallback 保真、Component → Style → Variable 投影、Local Styles UI、Inspector picker、Agent typed 操作、Leafer/SVG/位图、持久化、history 与有界的 Figma 公共 interop。远程 Library、发布/导入权限、Style suggestions、完整 Figma Text/Effect/Paint/Grid payload、私有 .fig 解码、Plugin/REST 双向导入导出及 macOS/Windows 打包 GUI 证据仍未完成。
+- 证据：自动化 14 项；实机 0 项
+- 限制：已实现 Paint、Text、Effect、Grid registry、按类型稳定顺序、Figma-shaped 节点引用、解绑/删除/直接编辑时 fallback 保真、Component → Style → Variable 投影、Local Styles UI、Inspector picker、Agent typed 操作、Leafer/SVG/位图、持久化、history 与有界的 Figma 公共 interop。同 Project Library release 现可发布可见 Styles 与 Component 所需隐藏依赖；消费文件显式启用 Library、搜索 Local/Library Styles、以单事务导入 source 并建立引用、审阅更新，禁用时保留现有引用。跨文件 Variables、Workspace/远端 Library、发布权限、Style suggestions、完整 Figma payload、私有 .fig 解码、Plugin/REST 双向导入导出及 macOS/Windows 打包 GUI 证据仍未完成。
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/BaseStyle/)
 - 专业参照：[官方说明](https://developers.figma.com/docs/plugins/api/properties/nodes-fillstyleid/)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/360038746534-Create-color-text-effect-and-layout-guide-styles)

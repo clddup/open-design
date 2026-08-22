@@ -1,4 +1,4 @@
-import { createLibraryReleaseSnapshot } from "@opendesign/component-service";
+import { createLibraryReleaseSnapshot } from "@opendesign/library-service";
 import type { DesignOperation } from "@opendesign/design-contracts";
 import {
   createEmptyDesignDocument,
@@ -27,6 +27,8 @@ describe("useProjectLibraryActions", () => {
       variantProperties: {},
       extensions: {},
     };
+    source.stylesById.brand_primary = paintStyle("#2563eb");
+    source.styleOrderByType.PAINT.push("brand_primary");
     const previous = createLibraryReleaseSnapshot(source, {
       libraryId: "library_acme",
       releaseId: "release_previous",
@@ -40,6 +42,11 @@ describe("useProjectLibraryActions", () => {
     feature.properties.fills = [
       { type: "solid", color: "#ef4444", opacity: 1 },
     ];
+    const latestStyle = source.stylesById.brand_primary;
+    if (!latestStyle || latestStyle.styleType !== "PAINT") {
+      throw new Error("Library Paint Style is missing");
+    }
+    latestStyle.paints = [{ type: "solid", color: "#db2777", opacity: 1 }];
     const latest = createLibraryReleaseSnapshot(source, {
       libraryId: "library_acme",
       releaseId: "release_current",
@@ -53,6 +60,29 @@ describe("useProjectLibraryActions", () => {
     );
     consumer.libraryComponentsById = structuredClone(previous.componentsById);
     consumer.libraryVariantSetsById = structuredClone(previous.variantSetsById);
+    consumer.libraryStylesById = structuredClone(previous.stylesById);
+    consumer.nodesById.consumer_shape = {
+      id: "consumer_shape",
+      kind: "rectangle",
+      name: "Consumer shape",
+      parentId: null,
+      childIds: [],
+      visible: true,
+      locked: false,
+      transform: [1, 0, 0, 1, 0, 0],
+      size: { width: 120, height: 80 },
+      exportSettings: [],
+      opacity: 1,
+      fillStyleId: "brand_primary",
+      properties: {
+        fills: [],
+        strokes: [],
+        strokeWidth: 0,
+        cornerRadius: 0,
+      },
+      extensions: {},
+    };
+    consumer.pagesById.page_consumer.rootNodeIds.push("consumer_shape");
     const catalog: ProjectLibraryCatalog = {
       version: 1,
       libraries: [
@@ -166,9 +196,10 @@ describe("useProjectLibraryActions", () => {
       libraryId: "library_acme",
     });
     expect(applyCommands).toHaveBeenCalledWith(
-      "Update Library components",
+      "Update Library assets",
       expect.arrayContaining([
         expect.objectContaining({ type: "put_library_component_source" }),
+        expect.objectContaining({ type: "put_library_style_source" }),
       ]),
     );
     expect(setProjectLibraryUpdateAccepted).toHaveBeenCalledWith({
@@ -184,9 +215,26 @@ describe("useProjectLibraryActions", () => {
       saveProjectDesignFile.mock.calls[0]?.[0].document.libraryComponentsById
         .component_feature?.source.releaseId,
     ).toBe("release_current");
+    expect(
+      saveProjectDesignFile.mock.calls[0]?.[0].document.libraryStylesById
+        .brand_primary?.source.releaseId,
+    ).toBe("release_current");
     expect(result.current.items[0]).toMatchObject({
       currentReleaseId: "release_current",
       updateAvailable: false,
     });
   });
 });
+
+function paintStyle(color: string) {
+  return {
+    id: "brand_primary",
+    key: "brand-primary-key",
+    name: "Brand/Primary",
+    description: "",
+    hiddenFromPublishing: false,
+    styleType: "PAINT" as const,
+    paints: [{ type: "solid" as const, color, opacity: 1 }],
+    extensions: {},
+  };
+}

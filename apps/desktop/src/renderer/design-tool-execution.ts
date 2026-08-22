@@ -2277,7 +2277,9 @@ function assertCommandsWithinMutationTarget(
       command.type === "put_library_component_source" ||
       command.type === "delete_library_component_source" ||
       command.type === "put_library_variant_set_source" ||
-      command.type === "delete_library_variant_set_source"
+      command.type === "delete_library_variant_set_source" ||
+      command.type === "put_library_style_source" ||
+      command.type === "delete_library_style_source"
     ) {
       throw new Error(
         "Library source changes require the dedicated Library service",

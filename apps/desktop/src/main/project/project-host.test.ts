@@ -4,10 +4,8 @@ import {
   EditorRuntime,
   planCreateLibraryInstance,
 } from "@opendesign/editor-runtime";
-import {
-  planLibraryReleaseUpdate,
-  resolveComponentInstance,
-} from "@opendesign/component-service";
+import { resolveComponentInstance } from "@opendesign/component-service";
+import { planLibraryReleaseUpdate } from "@opendesign/library-service";
 import {
   PROJECT_MANIFEST_VERSION,
   WORKSPACE_CONTRACT_VERSION,
@@ -73,6 +71,74 @@ function hash(contents: string) {
 }
 
 describe("ProjectHost", () => {
+  it("publishes a Style-only Library and changes its release when Style content changes", async () => {
+    const root = await createProjectRoot();
+    const host = new ProjectHost();
+    const sourceDocument = structuredClone(
+      createEmptyDesignDocument("document_styles", "page_styles"),
+    );
+    sourceDocument.stylesById.primary = {
+      id: "primary",
+      key: "primary-key",
+      name: "Brand/Primary",
+      description: "",
+      hiddenFromPublishing: false,
+      styleType: "PAINT",
+      paints: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+      extensions: {},
+    };
+    sourceDocument.styleOrderByType.PAINT.push("primary");
+    const sourceDescriptor = designFileDescriptor({
+      designFileId: "design_styles",
+      documentId: sourceDocument.documentId,
+      name: "Shared Styles",
+      relativePath: "designs/shared-styles.opendesign",
+    });
+    await host.createProject(
+      root,
+      { projectId: "project_acme", name: "Acme Design", now },
+      [{ descriptor: sourceDescriptor, document: sourceDocument }],
+    );
+
+    const first = await host.publishDesignFileLibrary(
+      "project_acme",
+      sourceDescriptor.designFileId,
+      "Acme Styles",
+      now,
+    );
+    expect(first.release.componentsById).toEqual({});
+    expect(first.release.variantSetsById).toEqual({});
+    expect(first.release.stylesById.primary?.style).toMatchObject({
+      styleType: "PAINT",
+      paints: [{ color: "#2563eb" }],
+    });
+
+    const changedDocument = structuredClone(sourceDocument);
+    changedDocument.revision = 1;
+    const primary = changedDocument.stylesById.primary;
+    if (primary?.styleType !== "PAINT") throw new Error("Missing Paint Style");
+    primary.paints = [{ type: "solid", color: "#db2777", opacity: 1 }];
+    await host.saveDesignFile(
+      "project_acme",
+      sourceDescriptor.designFileId,
+      changedDocument,
+      later,
+    );
+    const second = await host.publishDesignFileLibrary(
+      "project_acme",
+      sourceDescriptor.designFileId,
+      undefined,
+      later,
+    );
+
+    expect(second.entry.libraryId).toBe(first.entry.libraryId);
+    expect(second.entry.latestReleaseId).not.toBe(first.entry.latestReleaseId);
+    expect(second.entry.releases).toHaveLength(2);
+    expect(second.release.stylesById.primary?.style).toMatchObject({
+      paints: [{ color: "#db2777" }],
+    });
+  });
+
   it("publishes immutable component releases and explicitly enables them per consuming Design File", async () => {
     const root = await createProjectRoot();
     const host = new ProjectHost();

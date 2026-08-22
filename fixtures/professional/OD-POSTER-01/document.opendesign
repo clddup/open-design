@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.37.0",
+  "schemaVersion": "1.38.0",
   "documentId": "document_od_poster_01",
   "revision": 1,
   "pageOrder": ["page_poster_01"],
@@ -1335,6 +1335,7 @@
   "variantSetsById": {},
   "libraryComponentsById": {},
   "libraryVariantSetsById": {},
+  "libraryStylesById": {},
   "variableCollectionOrder": [],
   "variableCollectionsById": {},
   "variablesById": {},

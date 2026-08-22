@@ -22,6 +22,7 @@ import { Icon } from "@opendesign/ui";
 import { useI18n } from "../i18n";
 import type { UpdatePropertiesPatch } from "../features/editor/types";
 import type { StyleActions } from "../use-style-actions";
+import type { ProjectLibraryActions } from "../use-project-library-actions";
 import type {
   ExportFormat,
   RasterExportSettings,
@@ -110,6 +111,7 @@ export function PropertiesPanel({
   onSetVariableBinding,
   onSetVariableMode,
   styleActions,
+  projectLibraries,
   selectionCount,
   exportFormat,
   rasterExportSettings,
@@ -226,6 +228,7 @@ export function PropertiesPanel({
   ) => void;
   onSetVariableMode: (collectionId: string, modeId: string | null) => void;
   styleActions?: StyleActions;
+  projectLibraries?: ProjectLibraryActions;
   selectionCount: number;
   exportFormat: ExportFormat;
   rasterExportSettings: RasterExportSettings;
@@ -329,6 +332,7 @@ export function PropertiesPanel({
             onSetVariableBinding={onSetVariableBinding}
             onSetVariableMode={onSetVariableMode}
             styleActions={styleActions}
+            projectLibraries={projectLibraries}
             fontContext={fontContext}
           />
         ) : selectionCount > 1 ? (

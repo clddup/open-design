@@ -4,10 +4,10 @@ import type {
   SharedStyleType,
   StyleReferenceTarget,
 } from "@opendesign/design-contracts";
-import { IconButton } from "@opendesign/ui";
+import { DesktopCombobox, Icon, IconButton } from "@opendesign/ui";
 import { useI18n } from "../../i18n";
+import type { ProjectLibraryActions } from "../../use-project-library-actions";
 import type { StyleActions } from "../../use-style-actions";
-import panelStyles from "../PropertiesPanel.module.scss";
 import styles from "./StyleReferencesSection.module.scss";
 import { Section } from "./controls";
 
@@ -15,10 +15,12 @@ export function StyleReferencesSection({
   actions,
   document,
   node,
+  projectLibraries,
 }: {
   actions: StyleActions;
   document: DesignDocument;
   node: DesignNode;
+  projectLibraries?: ProjectLibraryActions;
 }) {
   const { t } = useI18n();
   const fields = compatibleFields(node);
@@ -33,6 +35,7 @@ export function StyleReferencesSection({
             field={field}
             key={field}
             node={node}
+            projectLibraries={projectLibraries}
           />
         ))}
       </div>
@@ -45,40 +48,146 @@ function StyleReferenceRow({
   document,
   field,
   node,
+  projectLibraries,
 }: {
   actions: StyleActions;
   document: DesignDocument;
   field: StyleReferenceTarget["field"];
   node: DesignNode;
+  projectLibraries?: ProjectLibraryActions;
 }) {
   const { t } = useI18n();
   const styleType = styleTypeForField(field);
-  const candidates = document.styleOrderByType[styleType].flatMap((styleId) => {
+  const localCandidates: StyleCandidate[] = document.styleOrderByType[
+    styleType
+  ].flatMap((styleId) => {
     const style = document.stylesById[styleId];
-    return style ? [style] : [];
+    return style
+      ? [
+          {
+            id: style.id,
+            name: style.name,
+            optionValue: localOptionValue(style.id),
+            source: t("styles.local"),
+          },
+        ]
+      : [];
   });
-  const current = node[field] ?? "";
+  const libraryCandidates: StyleCandidate[] = (
+    projectLibraries?.items ?? []
+  ).flatMap((item) => {
+    if (!item.enabled || !item.release) return [];
+    return Object.values(item.release.stylesById).flatMap((source) =>
+      source.style.styleType === styleType && !source.style.hiddenFromPublishing
+        ? [
+            {
+              id: source.style.id,
+              name: source.style.name,
+              optionValue: libraryOptionValue(
+                item.entry.libraryId,
+                source.style.id,
+              ),
+              source: item.entry.name,
+              libraryId: item.entry.libraryId,
+            },
+          ]
+        : [],
+    );
+  });
+  const currentStyleId = node[field];
+  const currentImported =
+    currentStyleId === undefined
+      ? undefined
+      : document.libraryStylesById[currentStyleId];
+  const candidates: StyleCandidate[] = [
+    ...localCandidates,
+    ...libraryCandidates,
+    ...(currentImported &&
+    !libraryCandidates.some(
+      (candidate) =>
+        candidate.id === currentStyleId &&
+        candidate.libraryId === currentImported.source.libraryId,
+    )
+      ? [
+          {
+            id: currentImported.style.id,
+            name: currentImported.style.name,
+            optionValue: libraryOptionValue(
+              currentImported.source.libraryId,
+              currentImported.style.id,
+            ),
+            source: t("styles.disabledLibrary"),
+            libraryId: currentImported.source.libraryId,
+            unavailable: true,
+          },
+        ]
+      : []),
+  ];
+  const currentValue = currentImported
+    ? libraryOptionValue(
+        currentImported.source.libraryId,
+        currentImported.style.id,
+      )
+    : currentStyleId
+      ? localOptionValue(currentStyleId)
+      : NO_STYLE;
   return (
     <div className={styles.row}>
-      <label className={panelStyles.select}>
+      <label className={styles.field}>
         <span>{fieldLabel(field, t)}</span>
-        <select
-          aria-label={t("styles.apply", { type: t(styleTypeKey(styleType)) })}
-          onChange={(event) =>
-            actions.setReference(
-              { nodeId: node.id, field },
-              event.target.value || null,
-            )
-          }
-          value={current}
-        >
-          <option value="">{t("styles.noStyle")}</option>
-          {candidates.map((style) => (
-            <option key={style.id} value={style.id}>
-              {style.name}
-            </option>
-          ))}
-        </select>
+        <DesktopCombobox
+          ariaLabel={t("styles.apply", { type: t(styleTypeKey(styleType)) })}
+          emptyLabel={t("styles.noMatchingStyles")}
+          onValueChange={(value) => {
+            if (value === NO_STYLE) {
+              actions.setReference({ nodeId: node.id, field }, null);
+              return;
+            }
+            const candidate = candidates.find(
+              (entry) => entry.optionValue === value,
+            );
+            if (!candidate) return;
+            if (candidate?.libraryId && !candidate.unavailable) {
+              void projectLibraries?.applyStyle(
+                candidate.libraryId,
+                candidate.id,
+                { nodeId: node.id, field },
+              );
+              return;
+            }
+            actions.setReference({ nodeId: node.id, field }, candidate.id);
+          }}
+          options={[
+            {
+              value: NO_STYLE,
+              label: t("styles.noStyle"),
+              textValue: t("styles.noStyle"),
+            },
+            ...candidates.map((candidate) => ({
+              value: candidate.optionValue,
+              textValue: `${candidate.name} ${candidate.source}`,
+              keywords: candidate.source,
+              label: (
+                <span className={styles.option}>
+                  <Icon
+                    name={
+                      candidate.libraryId
+                        ? "lucide:library"
+                        : "lucide:swatch-book"
+                    }
+                    size={12}
+                  />
+                  <span>{candidate.name}</span>
+                  <small>{candidate.source}</small>
+                </span>
+              ),
+            })),
+          ]}
+          size="compact"
+          searchAriaLabel={t("styles.search")}
+          searchPlaceholder={t("styles.searchPlaceholder")}
+          value={currentValue}
+        />
       </label>
       <IconButton
         icon="lucide:plus"
@@ -87,19 +196,36 @@ function StyleReferenceRow({
           actions.createFromNode(node.id, field, t("styles.untitled"))
         }
       />
-      <button
-        aria-label={t("styles.updateFromSelection")}
-        className={styles.update}
-        disabled={!current}
+      <IconButton
+        disabled={currentStyleId === undefined || currentImported !== undefined}
+        icon="lucide:refresh-cw"
+        label={t("styles.updateFromSelection")}
         onClick={() =>
-          current && actions.updateFromNode(current, node.id, field)
+          currentStyleId !== undefined &&
+          actions.updateFromNode(currentStyleId, node.id, field)
         }
-        type="button"
-      >
-        ↻
-      </button>
+      />
     </div>
   );
+}
+
+const NO_STYLE = "__opendesign_no_style__";
+
+type StyleCandidate = {
+  id: string;
+  name: string;
+  optionValue: string;
+  source: string;
+  libraryId?: string;
+  unavailable?: boolean;
+};
+
+function localOptionValue(styleId: string) {
+  return `local\u0000${styleId}`;
+}
+
+function libraryOptionValue(libraryId: string, styleId: string) {
+  return `library\u0000${libraryId}\u0000${styleId}`;
 }
 
 function compatibleFields(node: DesignNode): StyleReferenceTarget["field"][] {

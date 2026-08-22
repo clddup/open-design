@@ -132,6 +132,7 @@ function booleanDocument(): DesignDocument {
     variantSetsById: {},
     libraryComponentsById: {},
     libraryVariantSetsById: {},
+    libraryStylesById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},

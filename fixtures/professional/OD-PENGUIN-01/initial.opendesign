@@ -1,6 +1,6 @@
 {
   "format": "dev.opendesign.document",
-  "schemaVersion": "1.37.0",
+  "schemaVersion": "1.38.0",
   "documentId": "document_od_penguin_01",
   "revision": 0,
   "pageOrder": ["page_penguin_01"],
@@ -852,6 +852,7 @@
   "variantSetsById": {},
   "libraryComponentsById": {},
   "libraryVariantSetsById": {},
+  "libraryStylesById": {},
   "variableCollectionOrder": [],
   "variableCollectionsById": {},
   "variablesById": {},

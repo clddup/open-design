@@ -1,13 +1,13 @@
 {
-  "schemaVersion": 51,
-  "recordedAt": "2026-08-20",
+  "schemaVersion": 52,
+  "recordedAt": "2026-08-22",
   "policy": {
     "allowFloatingRefs": false,
     "upgradeRequiresCompatibilityReview": true
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.37.0",
+    "documentSchemaVersion": "1.38.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.11.0",
     "geometryServiceContractVersion": 13,
@@ -46,6 +46,13 @@
       "contractVersion": 6,
       "productionStatus": "same-file-main-instance-ordered-properties-variants-slots-unified-derived-selection-and-layer-state-available-native-gate-pending"
     },
+    "libraryService": {
+      "role": "cross-design-file-library-release-and-update-planner",
+      "package": "@opendesign/library-service",
+      "path": "packages/library-service",
+      "contractVersion": 1,
+      "productionStatus": "same-project-component-variant-and-shared-style-release-import-and-update-available-native-gate-pending"
+    },
     "variableService": {
       "role": "figma-compatible-variable-mode-alias-and-binding-resolution-service",
       "package": "@opendesign/variable-service",
@@ -54,11 +61,11 @@
       "productionStatus": "same-file-collections-modes-aliases-and-core-bindings-available-native-gate-pending"
     },
     "styleService": {
-      "role": "figma-compatible-local-shared-style-resolution-service",
+      "role": "figma-compatible-local-and-imported-shared-style-resolution-service",
       "package": "@opendesign/style-service",
       "path": "packages/style-service",
-      "contractVersion": 1,
-      "productionStatus": "same-file-paint-text-effect-grid-styles-available-native-gate-pending"
+      "contractVersion": 2,
+      "productionStatus": "same-file-and-same-project-library-paint-text-effect-grid-styles-available-native-gate-pending"
     },
     "figmaInterop": {
       "role": "isolated-figma-public-api-compatibility-adapter",

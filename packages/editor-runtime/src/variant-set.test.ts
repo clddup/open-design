@@ -784,6 +784,7 @@ function variantFixture(): DesignDocument {
     },
     libraryComponentsById: {},
     libraryVariantSetsById: {},
+    libraryStylesById: {},
     componentsById: {
       button_default: {
         id: "button_default",

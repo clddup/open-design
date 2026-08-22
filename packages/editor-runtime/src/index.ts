@@ -169,6 +169,7 @@ export {
 export {
   planCreateStyle,
   planCreateStyleFromNode,
+  planApplyLibraryStyle,
   planDeleteStyle,
   planMoveStyle,
   planSetStyleReference,

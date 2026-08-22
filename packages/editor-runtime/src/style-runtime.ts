@@ -4,13 +4,25 @@ import type {
   DesignOperation,
   UpdatePropertiesCommand,
 } from "@opendesign/design-contracts";
-import { materializeNodeStyle, styleCanApply } from "@opendesign/style-service";
+import {
+  materializeNodeStyle,
+  styleCanApply,
+  styleDefinition,
+  styleDefinitions,
+  styleIsReferenced,
+} from "@opendesign/style-service";
 import { OperationError } from "./operation-error.js";
 
 type StyleCommand = Extract<
   DesignOperation,
   {
-    type: "put_style" | "delete_style" | "move_style" | "set_style_reference";
+    type:
+      | "put_style"
+      | "delete_style"
+      | "move_style"
+      | "set_style_reference"
+      | "put_library_style_source"
+      | "delete_library_style_source";
   }
 >;
 
@@ -20,6 +32,13 @@ export function applyStyleOperation(
 ): void {
   switch (command.type) {
     case "put_style": {
+      if (document.libraryStylesById[command.style.id]) {
+        throw new OperationError(
+          command.commandId,
+          `Style ${command.style.id} conflicts with a Library Style`,
+          "duplicate",
+        );
+      }
       const current = document.stylesById[command.style.id];
       if (current && current.styleType !== command.style.styleType) {
         throw new OperationError(
@@ -27,7 +46,7 @@ export function applyStyleOperation(
           "A Style cannot change type after creation",
         );
       }
-      const duplicateKey = Object.values(document.stylesById).find(
+      const duplicateKey = styleDefinitions(document).find(
         (style) =>
           style.id !== command.style.id && style.key === command.style.key,
       );
@@ -96,7 +115,7 @@ export function applyStyleOperation(
       const node = document.nodesById[command.target.nodeId];
       if (!node) throw notFound(command.commandId, command.target.nodeId);
       if (command.styleId) {
-        const style = document.stylesById[command.styleId];
+        const style = styleDefinition(document, command.styleId);
         if (!style) throw notFound(command.commandId, command.styleId);
         if (!styleCanApply(node, command.target.field, style)) {
           throw new OperationError(
@@ -111,7 +130,75 @@ export function applyStyleOperation(
       }
       return;
     }
+    case "put_library_style_source": {
+      const styleId = command.source.style.id;
+      if (document.stylesById[styleId]) {
+        throw new OperationError(
+          command.commandId,
+          `Library Style ${styleId} conflicts with a local Style`,
+          "duplicate",
+        );
+      }
+      const current = document.libraryStylesById[styleId];
+      if (current && !sameLibraryStyleIdentity(current, command.source)) {
+        throw new OperationError(
+          command.commandId,
+          `Library Style ${styleId} cannot change source identity`,
+          "invalid",
+        );
+      }
+      if (
+        current &&
+        current.style.styleType !== command.source.style.styleType
+      ) {
+        throw new OperationError(
+          command.commandId,
+          "A Library Style cannot change type after import",
+          "invalid",
+        );
+      }
+      const duplicateKey = styleDefinitions(document).find(
+        (style) =>
+          style.id !== styleId && style.key === command.source.style.key,
+      );
+      if (duplicateKey) {
+        throw new OperationError(
+          command.commandId,
+          `Style key ${command.source.style.key} is already used by ${duplicateKey.id}`,
+          "duplicate",
+        );
+      }
+      document.libraryStylesById[styleId] = structuredClone(command.source);
+      return;
+    }
+    case "delete_library_style_source": {
+      if (!document.libraryStylesById[command.styleId]) {
+        throw notFound(command.commandId, command.styleId);
+      }
+      if (styleIsReferenced(document, command.styleId)) {
+        throw new OperationError(
+          command.commandId,
+          `Library Style ${command.styleId} is still referenced`,
+          "invalid",
+        );
+      }
+      delete document.libraryStylesById[command.styleId];
+      return;
+    }
   }
+}
+
+function sameLibraryStyleIdentity(
+  current: DesignDocument["libraryStylesById"][string],
+  next: DesignDocument["libraryStylesById"][string],
+): boolean {
+  return (
+    current.source.libraryId === next.source.libraryId &&
+    current.source.sourceProjectId === next.source.sourceProjectId &&
+    current.source.sourceDesignFileId === next.source.sourceDesignFileId &&
+    current.source.sourceDocumentId === next.source.sourceDocumentId &&
+    current.source.sourceStyleId === next.source.sourceStyleId
+  );
 }
 
 export function detachStyleReferencesForUpdate(

@@ -20,6 +20,7 @@ import type { MessageKey } from "../../../shared/i18n/messages";
 import { useI18n } from "../../i18n";
 import type { UpdatePropertiesPatch } from "../../features/editor/types";
 import type { StyleActions } from "../../use-style-actions";
+import type { ProjectLibraryActions } from "../../use-project-library-actions";
 import styles from "../PropertiesPanel.module.scss";
 import {
   AppearanceBasicsSection,
@@ -150,6 +151,7 @@ export function SelectedNodeProperties({
   onSetVariableBinding,
   onSetVariableMode,
   styleActions,
+  projectLibraries,
   fontContext,
 }: {
   node: DesignNode;
@@ -252,6 +254,7 @@ export function SelectedNodeProperties({
   ) => void;
   onSetVariableMode: (collectionId: string, modeId: string | null) => void;
   styleActions?: StyleActions;
+  projectLibraries?: ProjectLibraryActions;
   fontContext?: FontInspectorContext;
 }) {
   const { t } = useI18n();
@@ -933,6 +936,7 @@ export function SelectedNodeProperties({
           actions={styleActions}
           document={document}
           node={node}
+          projectLibraries={projectLibraries}
         />
       )}
       <VariableSection

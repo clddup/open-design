@@ -7,8 +7,13 @@ import type {
 import { materializeSharedStyles } from "@opendesign/style-service";
 import { exportSvg } from "@opendesign/import-export-service";
 import {
+  createLibraryReleaseSnapshot,
+  planLibraryReleaseUpdate,
+} from "@opendesign/library-service";
+import {
   createWelcomeDocument,
   EditorRuntime,
+  planApplyLibraryStyle,
   planCreateStyle,
   planCreateStyleFromNode,
   planDeleteStyle,
@@ -17,7 +22,73 @@ import {
   planUpdateStyle,
 } from "./index.js";
 
-describe("Shared Styles EditorRuntime v1", () => {
+describe("Shared Styles EditorRuntime", () => {
+  it("publishes visible Styles and only carries hidden Styles required by Component sources", () => {
+    const source = structuredClone(createWelcomeDocument());
+    source.stylesById.visible = paintStyle(
+      "visible",
+      "Brand/Visible",
+      "#2563eb",
+    );
+    source.stylesById["hidden-dependency"] = {
+      ...paintStyle(
+        "hidden-dependency",
+        "Brand/Component dependency",
+        "#db2777",
+      ),
+      hiddenFromPublishing: true,
+    };
+    source.stylesById["hidden-unused"] = {
+      ...paintStyle("hidden-unused", "Brand/Internal", "#0f172a"),
+      hiddenFromPublishing: true,
+    };
+    source.styleOrderByType.PAINT.push(
+      "visible",
+      "hidden-dependency",
+      "hidden-unused",
+    );
+    const feature = source.nodesById.feature_one;
+    if (feature?.kind !== "rectangle") throw new Error("Missing feature");
+    feature.fillStyleId = "hidden-dependency";
+    source.componentsById.card = {
+      id: "card",
+      name: "Card",
+      rootNodeId: "feature_group",
+      componentPropertyOrder: [],
+      componentPropertyDefinitions: {},
+      variantProperties: {},
+      extensions: {},
+    };
+
+    const release = createLibraryReleaseSnapshot(source, {
+      libraryId: "library_acme",
+      releaseId: "release_styles",
+      sourceProjectId: "project_acme",
+      sourceDesignFileId: "design_system",
+      name: "Acme Library",
+      publishedAt: "2026-08-22T08:00:00.000Z",
+    });
+
+    expect(Object.keys(release.stylesById).sort()).toEqual([
+      "hidden-dependency",
+      "visible",
+    ]);
+    expect(release.stylesById["hidden-unused"]).toBeUndefined();
+
+    const styleOnlySource = structuredClone(source);
+    styleOnlySource.componentsById = {};
+    const styleOnlyRelease = createLibraryReleaseSnapshot(styleOnlySource, {
+      libraryId: "library_styles_only",
+      releaseId: "release_styles_only",
+      sourceProjectId: "project_acme",
+      sourceDesignFileId: "design_styles",
+      name: "Acme Styles",
+      publishedAt: "2026-08-22T08:00:00.000Z",
+    });
+    expect(styleOnlyRelease.componentsById).toEqual({});
+    expect(Object.keys(styleOnlyRelease.stylesById)).toEqual(["visible"]);
+  });
+
   it("creates from a node, projects updates, diffs, persists and deletes without changing appearance", () => {
     const runtime = new EditorRuntime(createWelcomeDocument());
     const create = planCreateStyleFromNode(runtime.getSnapshot().document, {
@@ -201,6 +272,162 @@ describe("Shared Styles EditorRuntime v1", () => {
       runtime.getSnapshot().document.nodesById.title_welcome,
     ).not.toHaveProperty("textStyleId");
   });
+
+  it("applies, updates, persists, detaches and restores a Library Style through normal history", () => {
+    const source = structuredClone(createWelcomeDocument());
+    source.stylesById["brand-library"] = paintStyle(
+      "brand-library",
+      "Brand/Primary",
+      "#2563eb",
+    );
+    source.styleOrderByType.PAINT.push("brand-library");
+    const previous = createLibraryReleaseSnapshot(source, {
+      libraryId: "library_acme",
+      releaseId: "release_previous",
+      sourceProjectId: "project_acme",
+      sourceDesignFileId: "design_system",
+      name: "Acme Library",
+      publishedAt: "2026-08-21T08:00:00.000Z",
+    });
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    const applied = applyPlan(
+      runtime,
+      planApplyLibraryStyle(runtime.getSnapshot().document, previous, {
+        styleId: "brand-library",
+        target: { nodeId: "title_welcome", field: "fillStyleId" },
+        commandPrefix: "apply_library_brand",
+      }),
+    );
+    expect(applied.changes.addedLibraryStyleIds).toEqual(["brand-library"]);
+    expect(runtime.getSnapshot().document.revision).toBe(1);
+    expect(libraryFill(runtime)).toBe("#2563eb");
+
+    const reopened = new EditorRuntime(
+      JSON.parse(JSON.stringify(runtime.getSnapshot().document)) as unknown,
+    );
+    expect(libraryFill(reopened)).toBe("#2563eb");
+
+    const current = source.stylesById["brand-library"];
+    if (!current || current.styleType !== "PAINT") {
+      throw new Error("Missing Library Paint Style");
+    }
+    current.paints = [{ type: "solid", color: "#db2777", opacity: 1 }];
+    const latest = createLibraryReleaseSnapshot(source, {
+      libraryId: "library_acme",
+      releaseId: "release_latest",
+      sourceProjectId: "project_acme",
+      sourceDesignFileId: "design_system",
+      name: "Acme Library",
+      publishedAt: "2026-08-22T08:00:00.000Z",
+    });
+    const update = planLibraryReleaseUpdate(
+      runtime.getSnapshot().document,
+      latest,
+      "update_library",
+    );
+    expect(update.commands).toHaveLength(1);
+    const updated = runtime.apply(transaction(runtime, update.commands));
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) throw new Error(updated.error.message);
+    expect(updated.changes.changedLibraryStyleIds).toEqual(["brand-library"]);
+    expect(libraryFill(runtime)).toBe("#db2777");
+    expect(runtime.undo("user").ok).toBe(true);
+    expect(libraryFill(runtime)).toBe("#2563eb");
+    expect(runtime.redo("user").ok).toBe(true);
+    expect(libraryFill(runtime)).toBe("#db2777");
+
+    const detached = planSetStyleReference(runtime.getSnapshot().document, {
+      target: { nodeId: "title_welcome", field: "fillStyleId" },
+      styleId: null,
+      commandPrefix: "detach_library_brand",
+    });
+    expect(detached.ok).toBe(true);
+    if (!detached.ok) throw new Error(detached.message);
+    const removed = runtime.apply(
+      transaction(runtime, [
+        ...detached.commands,
+        {
+          commandId: "delete_library_brand_source",
+          type: "delete_library_style_source",
+          styleId: "brand-library",
+        },
+      ]),
+    );
+    expect(removed.ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.libraryStylesById["brand-library"],
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.nodesById.title_welcome,
+    ).toMatchObject({ properties: { fills: [{ color: "#db2777" }] } });
+  });
+
+  it("rejects Library Style identity drift and deletion while the Style is referenced", () => {
+    const source = structuredClone(createWelcomeDocument());
+    source.stylesById["brand-library"] = paintStyle(
+      "brand-library",
+      "Brand/Primary",
+      "#2563eb",
+    );
+    source.styleOrderByType.PAINT.push("brand-library");
+    const release = createLibraryReleaseSnapshot(source, {
+      libraryId: "library_acme",
+      releaseId: "release_initial",
+      sourceProjectId: "project_acme",
+      sourceDesignFileId: "design_system",
+      name: "Acme Library",
+      publishedAt: "2026-08-22T08:00:00.000Z",
+    });
+    const runtime = new EditorRuntime(createWelcomeDocument());
+    applyPlan(
+      runtime,
+      planApplyLibraryStyle(runtime.getSnapshot().document, release, {
+        styleId: "brand-library",
+        target: { nodeId: "title_welcome", field: "fillStyleId" },
+        commandPrefix: "apply_library_brand",
+      }),
+    );
+
+    const deleteResult = runtime.apply(
+      transaction(runtime, [
+        {
+          commandId: "delete_referenced_library_style",
+          type: "delete_library_style_source",
+          styleId: "brand-library",
+        },
+      ]),
+    );
+    expect(deleteResult).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid",
+        commandId: "delete_referenced_library_style",
+      },
+    });
+
+    const drifted = structuredClone(release.stylesById["brand-library"]);
+    if (!drifted) throw new Error("Missing Library Style source");
+    drifted.source.sourceDesignFileId = "another_design_system";
+    const driftResult = runtime.apply(
+      transaction(runtime, [
+        {
+          commandId: "replace_library_style_identity",
+          type: "put_library_style_source",
+          source: drifted,
+        },
+      ]),
+    );
+    expect(driftResult).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid",
+        commandId: "replace_library_style_identity",
+      },
+    });
+    expect(runtime.getSnapshot().document.libraryStylesById).toHaveProperty(
+      "brand-library",
+    );
+  });
 });
 
 function applyPlan(
@@ -228,4 +455,25 @@ function transaction(
     label: "Edit local styles",
     commands,
   };
+}
+
+function paintStyle(id: string, name: string, color: string) {
+  return {
+    id,
+    key: `${id}-key`,
+    name,
+    description: "",
+    hiddenFromPublishing: false,
+    styleType: "PAINT" as const,
+    paints: [{ type: "solid" as const, color, opacity: 1 }],
+    extensions: {},
+  };
+}
+
+function libraryFill(runtime: EditorRuntime) {
+  const title = materializeSharedStyles(runtime.getSnapshot().document).document
+    .nodesById.title_welcome;
+  return title?.kind === "text" && title.properties.fills[0]?.type === "solid"
+    ? title.properties.fills[0].color
+    : undefined;
 }

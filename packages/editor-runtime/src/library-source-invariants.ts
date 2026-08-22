@@ -6,6 +6,11 @@ import type {
   LibraryComponentSource,
 } from "@opendesign/design-contracts";
 import type { DocumentInvariantIssue } from "./layout-document-invariants.js";
+import {
+  styleCanApply,
+  styleDefinition,
+  styleTypeForReference,
+} from "@opendesign/style-service";
 
 export function validateLibrarySourceInvariants(
   document: DesignDocument,
@@ -34,6 +39,7 @@ export function validateLibrarySourceInvariants(
     validateSourceTree(source, path, issues);
     validateSourceDependencies(document, source, path, issues);
     validateSourceAssets(source, path, assetsById, issues);
+    validateSourceStyles(document, source, path, issues);
   }
 
   for (const [variantSetId, source] of Object.entries(
@@ -243,6 +249,56 @@ function validateSourceAssets(
         path: `${path}/nodesById/${escapeJsonPointer(node.id)}/properties`,
         message: `library source asset ${assetId} is missing from its source bundle`,
       });
+    }
+  }
+}
+
+function validateSourceStyles(
+  document: DesignDocument,
+  source: LibraryComponentSource,
+  path: string,
+  issues: DocumentInvariantIssue[],
+): void {
+  const fields = [
+    "fillStyleId",
+    "strokeStyleId",
+    "effectStyleId",
+    "textStyleId",
+    "gridStyleId",
+  ] as const;
+  for (const node of Object.values(source.nodesById)) {
+    const nodePath = `${path}/nodesById/${escapeJsonPointer(node.id)}`;
+    for (const field of fields) {
+      const styleId = node[field];
+      if (!styleId) continue;
+      const style = styleDefinition(document, styleId);
+      if (!style) {
+        issues.push({
+          path: `${nodePath}/${field}`,
+          message: `library source Style ${styleId} does not exist`,
+        });
+      } else if (!styleCanApply(node, field, style)) {
+        issues.push({
+          path: `${nodePath}/${field}`,
+          message: `${field} requires a ${styleTypeForReference(field)} Style`,
+        });
+      }
+    }
+    if (node.kind !== "text") continue;
+    for (const [index, run] of (node.properties.runs ?? []).entries()) {
+      for (const [field, expectedType] of [
+        ["textStyleId", "TEXT"],
+        ["fillStyleId", "PAINT"],
+      ] as const) {
+        const styleId = run.style[field];
+        if (!styleId) continue;
+        if (styleDefinition(document, styleId)?.styleType !== expectedType) {
+          issues.push({
+            path: `${nodePath}/properties/runs/${index}/style/${field}`,
+            message: `library source text run requires a ${expectedType} Style`,
+          });
+        }
+      }
     }
   }
 }

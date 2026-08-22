@@ -9,7 +9,7 @@ import {
   validateStyleDocument,
 } from "./index.js";
 
-describe("Style Service v1", () => {
+describe("Style Service", () => {
   it("preserves document identity when no style projection is required", () => {
     const document = fixture();
     for (const node of Object.values(document.nodesById)) {
@@ -157,6 +157,7 @@ function fixture(): DesignDocument {
     variantSetsById: {},
     libraryComponentsById: {},
     libraryVariantSetsById: {},
+    libraryStylesById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},

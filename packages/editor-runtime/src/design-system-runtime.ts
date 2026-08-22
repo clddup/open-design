@@ -28,7 +28,9 @@ export function applyDesignSystemOperation(
     command.type === "put_style" ||
     command.type === "delete_style" ||
     command.type === "move_style" ||
-    command.type === "set_style_reference"
+    command.type === "set_style_reference" ||
+    command.type === "put_library_style_source" ||
+    command.type === "delete_library_style_source"
   ) {
     applyStyleOperation(document, command);
     return true;

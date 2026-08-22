@@ -9,7 +9,7 @@ const checkOnly = process.argv.includes("--check");
 const generatorPath = "scripts/generate-professional-fixtures.mjs";
 const fixtureRoot = "fixtures/professional";
 const fixtureVersion = 1;
-const documentSchemaVersion = "1.37.0";
+const documentSchemaVersion = "1.38.0";
 
 const fixtureSources = [
   {
@@ -1368,6 +1368,7 @@ function document({
     variantSetsById: {},
     libraryComponentsById: {},
     libraryVariantSetsById: {},
+    libraryStylesById: {},
     variableCollectionOrder: [],
     variableCollectionsById: {},
     variablesById: {},
@@ -1383,7 +1384,8 @@ function assertCurrentDocumentShape(value, fixtureId, stage) {
   if (
     value?.schemaVersion !== documentSchemaVersion ||
     !isPlainObject(value?.libraryComponentsById) ||
-    !isPlainObject(value?.libraryVariantSetsById)
+    !isPlainObject(value?.libraryVariantSetsById) ||
+    !isPlainObject(value?.libraryStylesById)
   ) {
     throw new Error(
       `${fixtureId} ${stage} document does not match the current generated document shape`,

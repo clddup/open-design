@@ -1,6 +1,7 @@
 export * from "./controls/Button";
 export * from "./controls/IconButton";
 export * from "./forms/DesktopSelect";
+export * from "./forms/DesktopCombobox";
 export * from "./icons/Icon";
 export * from "./layout/Divider";
 export * from "./layout/ResizeHandle";

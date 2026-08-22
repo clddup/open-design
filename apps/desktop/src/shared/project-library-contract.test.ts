@@ -1,5 +1,5 @@
 import { createEmptyDesignDocument } from "@opendesign/editor-runtime";
-import { createLibraryReleaseSnapshot } from "@opendesign/component-service";
+import { createLibraryReleaseSnapshot } from "@opendesign/library-service";
 import { describe, expect, it } from "vitest";
 import {
   isProjectLibraryCatalog,

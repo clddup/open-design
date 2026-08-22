@@ -1,4 +1,4 @@
-import { createLibraryReleaseSnapshot } from "@opendesign/component-service";
+import { createLibraryReleaseSnapshot } from "@opendesign/library-service";
 import { createWelcomeDocument } from "@opendesign/editor-runtime";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -20,6 +20,17 @@ describe("ProjectLibrariesSection", () => {
       variantProperties: {},
       extensions: {},
     };
+    document.stylesById.brand_primary = {
+      id: "brand_primary",
+      key: "brand-primary-key",
+      name: "Brand/Primary",
+      description: "",
+      hiddenFromPublishing: false,
+      styleType: "PAINT",
+      paints: [{ type: "solid", color: "#2563eb", opacity: 1 }],
+      extensions: {},
+    };
+    document.styleOrderByType.PAINT.push("brand_primary");
     const release = createLibraryReleaseSnapshot(document, {
       libraryId: "library_acme",
       releaseId: "release_current",
@@ -33,6 +44,9 @@ describe("ProjectLibrariesSection", () => {
     const placeComponent = vi
       .fn()
       .mockResolvedValue({ ok: true, message: "Placed Feature card" });
+    const applyStyle = vi
+      .fn()
+      .mockResolvedValue({ ok: true, message: "Applied Brand/Primary" });
     const acceptUpdate = vi.fn().mockResolvedValue(undefined);
     const ignoreUpdate = vi.fn().mockResolvedValue(undefined);
     const actions: ProjectLibraryActions = {
@@ -69,6 +83,7 @@ describe("ProjectLibrariesSection", () => {
       publish,
       setEnabled,
       placeComponent,
+      applyStyle,
       acceptUpdate,
       ignoreUpdate,
       clearError: vi.fn(),
@@ -101,6 +116,8 @@ describe("ProjectLibrariesSection", () => {
       "library_acme",
       "component_feature",
     );
+    expect(screen.getByText("Brand/Primary")).toBeVisible();
+    expect(screen.getByText("Paint")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Update" }));
     await user.click(screen.getByRole("button", { name: "Ignore" }));

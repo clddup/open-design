@@ -71,6 +71,7 @@ import {
   textRunBaseStyle,
   updateTextRangeStyle,
 } from "./rich-text-operations.js";
+import { styleDefinition } from "@opendesign/style-service";
 
 export interface EditorSnapshot {
   document: DesignDocument;
@@ -1600,7 +1601,7 @@ function applyTextRangeStyleOperation(
   }
   let style = command.style;
   if (typeof command.style.textStyleId === "string") {
-    const reference = document.stylesById[command.style.textStyleId];
+    const reference = styleDefinition(document, command.style.textStyleId);
     if (!reference)
       throw notFound(command.commandId, command.style.textStyleId);
     if (reference.styleType !== "TEXT") {
@@ -1627,7 +1628,7 @@ function applyTextRangeStyleOperation(
     };
   }
   if (typeof command.style.fillStyleId === "string") {
-    const reference = document.stylesById[command.style.fillStyleId];
+    const reference = styleDefinition(document, command.style.fillStyleId);
     if (!reference)
       throw notFound(command.commandId, command.style.fillStyleId);
     if (reference.styleType !== "PAINT") {
@@ -2266,6 +2267,12 @@ function diffDocuments(
   const libraryVariantSetChanges: NonNullable<
     DesignChangeSet["libraryVariantSetChanges"]
   > = [];
+  const addedLibraryStyleIds: string[] = [];
+  const changedLibraryStyleIds: string[] = [];
+  const removedLibraryStyleIds: string[] = [];
+  const libraryStyleChanges: NonNullable<
+    DesignChangeSet["libraryStyleChanges"]
+  > = [];
   const ids = new Set([
     ...Object.keys(before.nodesById),
     ...Object.keys(after.nodesById),
@@ -2459,6 +2466,16 @@ function diffDocuments(
     removedLibraryVariantSetIds,
     libraryVariantSetChanges,
   );
+  diffLibrarySources(
+    before.libraryStylesById,
+    after.libraryStylesById,
+    "styleId",
+    ["source", "style"],
+    addedLibraryStyleIds,
+    changedLibraryStyleIds,
+    removedLibraryStyleIds,
+    libraryStyleChanges,
+  );
 
   return deepFreeze({
     documentId: before.documentId,
@@ -2486,6 +2503,10 @@ function diffDocuments(
     changedLibraryVariantSetIds,
     removedLibraryVariantSetIds,
     libraryVariantSetChanges,
+    addedLibraryStyleIds,
+    changedLibraryStyleIds,
+    removedLibraryStyleIds,
+    libraryStyleChanges,
     ...diffVariantSets(before, after),
     ...diffDesignSystems(before, after),
     changes,
@@ -2494,7 +2515,7 @@ function diffDocuments(
 
 function diffLibrarySources<
   Source extends object,
-  IdField extends "componentId" | "variantSetId",
+  IdField extends "componentId" | "variantSetId" | "styleId",
   Change extends {
     type: "added" | "updated" | "removed";
     changedFields: string[];

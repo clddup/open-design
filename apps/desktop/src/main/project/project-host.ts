@@ -5,7 +5,7 @@ import {
   type DesignDocument,
   type LibraryReleaseSnapshot,
 } from "@opendesign/design-contracts";
-import { createLibraryReleaseSnapshot } from "@opendesign/component-service";
+import { createLibraryReleaseSnapshot } from "@opendesign/library-service";
 import {
   PROJECT_MANIFEST_VERSION,
   isDesignFileDescriptor,
@@ -560,6 +560,11 @@ export class ProjectHost {
                 variantSetId,
                 variantSet.variantSet,
               ],
+            ),
+          ),
+          stylesById: Object.fromEntries(
+            Object.entries(provisionalRelease.stylesById).map(
+              ([styleId, style]) => [styleId, style.style],
             ),
           ),
         }),

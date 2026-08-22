@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-18",
-  "documentSchemaVersion": "1.37.0",
+  "updatedAt": "2026-08-22",
+  "documentSchemaVersion": "1.38.0",
   "engineBaseline": "leafer-editor@2.2.9",
   "categories": [
     {
@@ -126,7 +126,7 @@
         "en": "Create and inspect semantic Frames, Groups, nested layers, visibility, locking, sibling stacking order, cross-container reparenting, and ordered transactions; human commands and the Agent share the same hierarchy planners.",
         "zh-CN": "创建并检查语义化 Frame、Group、嵌套图层、可见性、锁定、兄弟图层堆叠顺序、跨容器重挂载和有序事务；人工命令与 Agent 共用同一套层级 planner。"
       },
-      "provider": "DesignDocument 1.37.0 + EditorRuntime",
+      "provider": "DesignDocument 1.38.0 + EditorRuntime",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -898,7 +898,7 @@
         "en": "Create main components, instances, nested instances, overrides, component properties, slots, and variant sets.",
         "zh-CN": "创建主组件、实例、嵌套实例、override、组件属性、Slot 与 Variant Set。"
       },
-      "provider": "DesignDocument 1.37.0 + @opendesign/component-service contract v6 + isolated @opendesign/figma-interop",
+      "provider": "DesignDocument 1.38.0 + @opendesign/component-service contract v6 + @opendesign/library-service + isolated @opendesign/figma-interop",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -910,8 +910,8 @@
       },
       "limitations": [
         {
-          "en": "Same-file Main components, linked/nested instances, Figma-compatible Boolean/Text/Instance-swap/SLOT properties with explicit ordinary-property order, real Component Set Frames, unique VARIANT resolution, Set lifecycle, matrix editing and on-canvas reordering, stable source-path advanced overrides, Slot settings and guidance, Component/Component Set preferred values, clear/reset/detach materialization, Inspector, typed Agent actions and inspection, persistent override layers, non-exported empty-Slot canvas indicators, Canvas/SVG/raster projection, migration, persistence, autosave, and history are implemented. Canvas, Layers, Inspector, and keyboard navigation share one Runtime selection; derived layers use session-only Instance plus stable source path, persistent nested Instances own their projected children, and supported overrides remain transaction-backed while direct derived transforms and destructive commands fail closed. Exact-revision layout quality now checks the rendered Instance subtree, clipping ancestor chain, and derived Text evidence; one undoable repair-overflow transaction expands safe trailing-edge artboards and persistent clipping Frames while unsafe structure fails closed. Slot-in-Slot is intentionally rejected to match Figma's public composition model. Cross-file libraries, private .fig decoding, Plugin/REST import-export, complete derived direct manipulation, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "已实现同一 Design File 内的 Main、链接/嵌套 Instance、兼容 Figma 公共语义且具有普通属性显式顺序的 Boolean/Text/Instance-swap/SLOT 属性、真实 Component Set Frame、唯一 VARIANT 解析、Set 生命周期、二维矩阵与画布重排、稳定 sourcePath 高级 override、Slot settings 与指导性限制、Component/Component Set preferred values、Clear/Reset/Detach 物化、Inspector、Agent typed actions 与 inspection、持久 override 图层、不可导出的空 Slot 画布指示、Canvas/SVG/位图投影、迁移、持久化、autosave 和 history。Canvas、Layers、Inspector 与键盘导航共享唯一 Runtime selection；派生层只使用 session-only Instance 与稳定 source path，持久 nested Instance 拥有自身派生 child，受支持 override 继续进入事务，直接派生 transform 和危险命令失败封闭。exact-revision layout quality 已检查真实 Instance 派生 subtree、完整 clipping chain 与派生 Text evidence；一次可撤销 repair-overflow 事务扩展安全 trailing-edge artboard/持久 clipping Frame，unsafe 结构继续失败封闭。Slot-in-Slot 按 Figma 公开 composition model 永久失败封闭；跨文件 Library、私有 .fig 解码、Plugin/REST 导入导出、完整派生直接操作和 macOS/Windows 打包 GUI 实机证据仍未完成。"
+          "en": "Same-file Main components, linked/nested instances, Figma-compatible properties, Component Sets, variants, Slots, overrides, projection, persistence, autosave, and history are implemented. Same-Project Design Files can publish immutable Component/Variant/Shared Style releases, explicitly enable them per consumer, place linked imported Instances, apply imported Styles, review updates, disable without breaking existing references, and persist the result through the same Runtime. Canvas, Layers, Inspector, and keyboard navigation share one Runtime selection; derived layers use session-only Instance plus stable source path, while unsafe derived transforms and destructive commands fail closed. Slot-in-Slot is intentionally rejected to match Figma's public composition model. Cross-file Variables, Workspace/remote Libraries, publishing permissions, private .fig decoding, Plugin/REST import-export, complete derived direct manipulation, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "已实现同一 Design File 内的 Main、链接/嵌套 Instance、Figma-compatible properties、Component Set、Variant、Slot、override、投影、持久化、autosave 和 history。同 Project 的 Design File 可发布不可变 Component/Variant/Shared Style release，由消费文件显式启用、放置链接 imported Instance、应用 imported Style、审阅更新、禁用且不破坏现有引用，并通过同一 Runtime 保存结果。Canvas、Layers、Inspector 与键盘导航共享唯一 Runtime selection；派生层只使用 session-only Instance 与稳定 source path，不安全的派生 transform 和危险命令失败封闭。Slot-in-Slot 按 Figma 公开 composition model 永久失败封闭；跨文件 Variables、Workspace/远端 Library、发布权限、私有 .fig 解码、Plugin/REST 导入导出、完整派生直接操作和 macOS/Windows 打包 GUI 实机证据仍未完成。"
         }
       ],
       "evidence": {
@@ -1005,14 +1005,14 @@
       "category": "design-system",
       "status": "degraded",
       "label": {
-        "en": "Local shared styles",
-        "zh-CN": "本地共享样式"
+        "en": "Shared styles",
+        "zh-CN": "共享样式"
       },
       "description": {
-        "en": "Create, apply, update, order, detach, and delete reusable Paint, Text, Effect, and Grid styles.",
-        "zh-CN": "创建、应用、更新、排序、解绑和删除可复用的 Paint、Text、Effect 与 Grid 样式。"
+        "en": "Create and manage local Paint, Text, Effect, and Grid styles, then publish and consume them across Design Files in the same Project.",
+        "zh-CN": "创建并管理本地 Paint、Text、Effect 与 Grid 样式，并在同一 Project 的多个 Design File 之间发布和消费。"
       },
-      "provider": "DesignDocument 1.27.0 + @opendesign/style-service contract v1 + isolated @opendesign/figma-interop",
+      "provider": "DesignDocument 1.38.0 + @opendesign/style-service contract v2 + @opendesign/library-service contract v1 + isolated @opendesign/figma-interop",
       "requiredSurfaces": [
         "contract",
         "runtime",
@@ -1031,8 +1031,8 @@
       },
       "limitations": [
         {
-          "en": "Shared Styles v1 supports same-file Paint, Text, Effect, and Grid registries, stable per-type order, Figma-shaped node references, fallback-preserving detach/delete/direct edits, Component → Style → Variable projection, Local Styles UI, Inspector pickers, typed Agent operations, Leafer/SVG/raster, persistence, history, and bounded public Figma interop. Remote Libraries, publishing/import permissions, Style suggestions, complete Figma Text/Effect/Paint/Grid payloads, private .fig decoding, bidirectional Plugin/REST import-export, and packaged macOS/Windows GUI evidence remain incomplete.",
-          "zh-CN": "Shared Styles v1 已支持同一 Design File 内的 Paint、Text、Effect、Grid registry、按类型稳定顺序、Figma-shaped 节点引用、解绑/删除/直接编辑时 fallback 保真、Component → Style → Variable 投影、Local Styles UI、Inspector picker、Agent typed 操作、Leafer/SVG/位图、持久化、history 与有界的 Figma 公共 interop。远程 Library、发布/导入权限、Style suggestions、完整 Figma Text/Effect/Paint/Grid payload、私有 .fig 解码、Plugin/REST 双向导入导出及 macOS/Windows 打包 GUI 证据仍未完成。"
+          "en": "Paint, Text, Effect, and Grid registries, stable per-type order, Figma-shaped node references, fallback-preserving detach/delete/direct edits, Component → Style → Variable projection, Local Styles UI, Inspector pickers, typed Agent operations, Leafer/SVG/raster, persistence, history, and bounded public Figma interop are implemented. Same-Project Library releases now publish visible Styles plus hidden Component dependencies; consumers explicitly enable Libraries, search Local and Library Styles, import a source and reference in one transaction, review updates, and keep existing references when disabled. Cross-file Variables, Workspace/remote Libraries, publishing permissions, Style suggestions, complete Figma payloads, private .fig decoding, bidirectional Plugin/REST import-export, and packaged macOS/Windows GUI evidence remain incomplete.",
+          "zh-CN": "已实现 Paint、Text、Effect、Grid registry、按类型稳定顺序、Figma-shaped 节点引用、解绑/删除/直接编辑时 fallback 保真、Component → Style → Variable 投影、Local Styles UI、Inspector picker、Agent typed 操作、Leafer/SVG/位图、持久化、history 与有界的 Figma 公共 interop。同 Project Library release 现可发布可见 Styles 与 Component 所需隐藏依赖；消费文件显式启用 Library、搜索 Local/Library Styles、以单事务导入 source 并建立引用、审阅更新，禁用时保留现有引用。跨文件 Variables、Workspace/远端 Library、发布权限、Style suggestions、完整 Figma payload、私有 .fig 解码、Plugin/REST 双向导入导出及 macOS/Windows 打包 GUI 证据仍未完成。"
         }
       ],
       "evidence": {
@@ -1040,12 +1040,16 @@
           "packages/design-contracts/src/index.test.ts",
           "packages/style-service/src/index.test.ts",
           "packages/editor-runtime/src/style-operations.test.ts",
+          "packages/editor-runtime/src/library-source-runtime.test.ts",
           "packages/figma-interop/src/index.test.ts",
           "packages/leafer-engine/src/style-projection.test.ts",
           "packages/leafer-engine/src/component-projection.test.ts",
           "apps/desktop/src/shared/design-style-tool.test.ts",
           "apps/desktop/src/renderer/design-style-tool-execution.test.ts",
           "apps/desktop/src/renderer/components/LocalStylesPanel.test.tsx",
+          "apps/desktop/src/renderer/components/ProjectLibrariesSection.test.tsx",
+          "apps/desktop/src/renderer/use-project-library-actions.test.tsx",
+          "apps/desktop/src/main/project/project-host.test.ts",
           "apps/desktop/src/renderer/components/PropertiesPanel.test.tsx"
         ],
         "manual": []

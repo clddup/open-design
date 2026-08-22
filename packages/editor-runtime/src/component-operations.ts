@@ -3,9 +3,9 @@ import {
   componentSourceNode,
   componentSourcePathKey,
   componentSourceNodeIds,
-  planLibraryReleaseUpdate,
   resolveComponentInstance,
 } from "@opendesign/component-service";
+import { planLibraryReleaseImport } from "@opendesign/library-service";
 import type {
   ComponentOverridePatch,
   DesignDocument,
@@ -211,7 +211,7 @@ export function planCreateLibraryInstance(
       `Component ${input.componentId} conflicts with another Library source`,
     );
   }
-  const update = planLibraryReleaseUpdate(
+  const update = planLibraryReleaseImport(
     document,
     release,
     `${input.commandPrefix}_library`,
@@ -225,6 +225,10 @@ export function planCreateLibraryInstance(
     libraryVariantSetsById: {
       ...document.libraryVariantSetsById,
       ...release.variantSetsById,
+    },
+    libraryStylesById: {
+      ...document.libraryStylesById,
+      ...release.stylesById,
     },
   };
   const instance = planCreateInstance(stagedDocument, input);
