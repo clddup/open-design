@@ -44,6 +44,7 @@
       "@opendesign/component-service",
       "@opendesign/design-contracts",
       "@opendesign/geometry-service",
+      "@opendesign/image-service",
       "@opendesign/import-export-service",
       "@opendesign/layout-service",
       "@opendesign/library-service",
