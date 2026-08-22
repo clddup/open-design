@@ -109,6 +109,51 @@ describe("DesktopWindowHost", () => {
     expect(fixture.createWindow).toHaveBeenCalledTimes(2);
   });
 
+  it("destroys an unpublished startup window during rollback", () => {
+    const fixture = setup();
+    fixture.host.create();
+
+    fixture.host.dispose();
+    fixture.host.dispose();
+
+    expect(fixture.window.destroy).toHaveBeenCalledOnce();
+    expect(fixture.host.current()).toBeNull();
+  });
+
+  it("fails startup and destroys the window when the renderer cannot load", async () => {
+    const fixture = setup();
+    fixture.window.loadFile.mockRejectedValueOnce(
+      new Error("renderer bundle is missing"),
+    );
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    await expect(fixture.host.createAndLoad()).rejects.toThrow(
+      "renderer bundle is missing",
+    );
+
+    expect(fixture.window.destroy).toHaveBeenCalledOnce();
+    expect(fixture.host.current()).toBeNull();
+    expect(error).toHaveBeenCalledWith(
+      "Desktop renderer failed to load: renderer bundle is missing",
+    );
+    error.mockRestore();
+  });
+
+  it("keeps a loaded startup window unpublished until the application commits", async () => {
+    const fixture = setup();
+    const loading = fixture.host.createAndLoad();
+    fixture.handlers.ready?.();
+
+    expect(fixture.showWindow).not.toHaveBeenCalled();
+    await loading;
+    fixture.host.publish();
+
+    expect(fixture.showWindow).toHaveBeenCalledOnce();
+    expect(fixture.showWindow).toHaveBeenCalledWith(fixture.browserWindow);
+  });
+
   it("ignores late lifecycle events from a replaced destroyed window", () => {
     const first = setup();
     first.host.create();
@@ -226,6 +271,7 @@ function setup(
   };
   const window = {
     close: vi.fn(),
+    destroy: vi.fn(),
     isDestroyed: vi.fn(() => false),
     isMaximized: vi.fn(() => false),
     loadFile: vi.fn(() => Promise.resolve()),

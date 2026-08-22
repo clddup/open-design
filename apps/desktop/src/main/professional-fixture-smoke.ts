@@ -14,9 +14,16 @@ import {
   type ProfessionalFixtureSmokeResult,
 } from "../shared/professional-fixture-smoke";
 import { isDesignTransaction } from "@opendesign/design-contracts";
-import type { App, BrowserWindow, IpcMain } from "electron";
+import type { App, BrowserWindow, IpcMainInvokeEvent } from "electron";
 
 const MAX_FIXTURE_FILE_BYTES = 32 * 1024 * 1024;
+
+type ProfessionalFixtureSmokeIpcRegistrar = {
+  handle(
+    channel: string,
+    listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown,
+  ): void;
+};
 
 export type ProfessionalFixtureSmokeConfiguration = {
   fixtureId: ProfessionalFixtureId;
@@ -25,7 +32,7 @@ export type ProfessionalFixtureSmokeConfiguration = {
 
 type ProfessionalFixtureSmokeHost = {
   register: (
-    ipc: IpcMain,
+    ipc: ProfessionalFixtureSmokeIpcRegistrar,
     app: App,
     assertRenderer: (event: Electron.IpcMainInvokeEvent) => void,
     getWindow: () => BrowserWindow | null,
@@ -38,7 +45,7 @@ export type ProfessionalFixtureSmokeApplication = {
   home: string;
   path: (...segments: string[]) => string;
   register: (
-    ipc: IpcMain,
+    ipc: ProfessionalFixtureSmokeIpcRegistrar,
     assertRenderer: (event: Electron.IpcMainInvokeEvent) => void,
     getWindow: () => BrowserWindow | null,
   ) => void;

@@ -39,6 +39,9 @@ export interface DesktopWindowIpcRegistrar {
 
 export class DesktopWindowHost {
   readonly #options: DesktopWindowHostOptions;
+  #loadPromise: Promise<void> | null = null;
+  #presentationDeferred = false;
+  #readyToShow = false;
   #window: BrowserWindow | null = null;
 
   constructor(options: DesktopWindowHostOptions) {
@@ -84,7 +87,12 @@ export class DesktopWindowHost {
     this.#window = window;
 
     window.once("ready-to-show", () => {
-      if (this.current() === window) this.#options.showWindow(window);
+      if (this.current() !== window) return;
+      if (this.#presentationDeferred) {
+        this.#readyToShow = true;
+        return;
+      }
+      this.#options.showWindow(window);
     });
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (isExternalHttpUrl(url)) void this.#options.openExternal(url);
@@ -96,17 +104,64 @@ export class DesktopWindowHost {
       }
     });
 
-    if (rendererUrl) void window.loadURL(rendererUrl);
-    else void window.loadFile(this.#options.packagedRendererPath);
+    const loadPromise = rendererUrl
+      ? window.loadURL(rendererUrl)
+      : window.loadFile(this.#options.packagedRendererPath);
+    this.#loadPromise = loadPromise;
+    void loadPromise.catch((error: unknown) => {
+      if (this.current() === window) this.dispose();
+      console.error(
+        `Desktop renderer failed to load: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
 
     window.on("closed", () => {
-      if (this.#window === window) this.#window = null;
+      if (this.#window === window) {
+        this.#window = null;
+        this.#loadPromise = null;
+        this.#presentationDeferred = false;
+        this.#readyToShow = false;
+      }
     });
     return window;
   }
 
+  async createAndLoad(): Promise<BrowserWindow> {
+    this.#presentationDeferred = true;
+    let window: BrowserWindow;
+    try {
+      window = this.create();
+    } catch (error) {
+      this.#presentationDeferred = false;
+      throw error;
+    }
+    const loadPromise = this.#window === window ? this.#loadPromise : null;
+    if (loadPromise) await loadPromise;
+    if (this.current() !== window) {
+      throw new Error("Desktop renderer window closed before loading");
+    }
+    return window;
+  }
+
+  publish(): void {
+    const window = this.current();
+    this.#presentationDeferred = false;
+    if (!window || !this.#readyToShow) return;
+    this.#readyToShow = false;
+    this.#options.showWindow(window);
+  }
+
   activate(): void {
     if (this.#options.getAllWindows().length === 0) this.create();
+  }
+
+  dispose(): void {
+    const window = this.#window;
+    this.#window = null;
+    this.#loadPromise = null;
+    this.#presentationDeferred = false;
+    this.#readyToShow = false;
+    if (window && !window.isDestroyed()) window.destroy();
   }
 
   registerIpc(ipc: DesktopWindowIpcRegistrar): void {

@@ -56,6 +56,10 @@ import { createApplicationMenuTemplate } from "./application-menu";
 import { ApplicationLifecycle } from "./application-lifecycle";
 import { ApplicationPreferencesHost } from "./application-preferences-host";
 import {
+  DesktopApplication,
+  type DesktopApplicationStartContext,
+} from "./desktop-application";
+import {
   DesktopWindowHost,
   resolveApplicationIconPath,
 } from "./desktop-window-host";
@@ -92,6 +96,7 @@ import {
   type DesignImageEditInput,
 } from "./media-input-ipc";
 import { StandaloneDesignFileIpcHost } from "./standalone-design-file-ipc";
+import { IpcRegistrationScope } from "./ipc-registration-scope";
 import { configureFixtureSmoke } from "./professional-fixture-smoke";
 import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
@@ -299,22 +304,23 @@ const applicationLifecycle = new ApplicationLifecycle({
     clearCorrelations: () => agentIpcRouter.clear(),
     flushDiagnostics: () => diagnosticHost.flush(),
     clearServices: () => {
-      projectIpc = null;
-      globalTaskCoordinator = null;
-      projectHost = null;
-      modelProviderHost = null;
-      imageGenerationHost = null;
-      agentAttachmentHost = null;
-      agentReferenceHost = null;
-      agentSvgExportHost = null;
-      agentRasterExportHost = null;
-      agentSvgImportHost = null;
-      svgFileService = null;
-      rasterFileService = null;
-      workspaceStore = null;
+      clearMainServices();
       diagnosticHost.clear();
-      standaloneDesignFileIpcHost.clear();
     },
+  },
+});
+const desktopApplication = new DesktopApplication({
+  exit: (code) => app.exit(code),
+  reportStartupError: (error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Application startup failed: ${message}`);
+    diagnosticHost.publish({
+      level: "error",
+      source: "main",
+      presentation: "silent",
+      code: "application_startup_failed",
+      message,
+    });
   },
 });
 
@@ -521,7 +527,72 @@ function requireImageGenerationHost(): ImageGenerationHost {
   return imageGenerationHost;
 }
 
-function registerIpc(fontBinaryService: FontBinaryMainService) {
+function clearMainServices(): void {
+  projectIpc = null;
+  globalTaskCoordinator = null;
+  projectHost = null;
+  modelProviderHost = null;
+  imageGenerationHost = null;
+  agentAttachmentHost = null;
+  agentReferenceHost = null;
+  agentSvgExportHost = null;
+  agentRasterExportHost = null;
+  agentSvgImportHost = null;
+  svgFileService = null;
+  rasterFileService = null;
+  workspaceStore = null;
+  standaloneDesignFileIpcHost.clear();
+}
+
+function clearIpcServices(): void {
+  agentSvgExportHost = null;
+  agentRasterExportHost = null;
+  agentSvgImportHost = null;
+  svgFileService = null;
+  rasterFileService = null;
+}
+
+function registerIpc(fontBinaryService: FontBinaryMainService): () => void {
+  const ipc = new IpcRegistrationScope(ipcMain);
+  const handleNativeThemeUpdated = () => {
+    applicationPreferences.publishNativeThemeUpdated(
+      nativeTheme.shouldUseDarkColors,
+    );
+  };
+  let nativeThemeRegistered = false;
+  const dispose = () => {
+    const failures: Error[] = [];
+    const attempt = (label: string, action: () => void) => {
+      try {
+        action();
+      } catch (error) {
+        failures.push(
+          new Error(
+            `${label}: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          ),
+        );
+      }
+    };
+    if (nativeThemeRegistered) {
+      attempt("native theme listener", () => {
+        nativeTheme.off("updated", handleNativeThemeUpdated);
+      });
+      nativeThemeRegistered = false;
+    }
+    attempt("Agent IPC router", () => agentIpcRouter.dispose());
+    attempt("IPC handlers", () => ipc.dispose());
+    attempt("Renderer design tools", () => {
+      rendererDesignToolHost.rejectAll("Desktop startup was rolled back");
+    });
+    clearIpcServices();
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures,
+        "IPC services rollback was incomplete",
+      );
+    }
+  };
   svgFileService = new SvgFileService({
     selectOpenFile: selectSvgOpenFile,
     selectSaveFile: selectSvgSaveFile,
@@ -541,75 +612,85 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     rendererDesignToolHost,
     requireAgentReferenceHost(),
   );
-  registerProjectIpc({
-    ipc: ipcMain,
-    assertRenderer: assertMainRenderer,
-    getService: requireProjectIpc,
-  });
-  registerRendererDesignToolIpc({
-    ipc: ipcMain,
-    assertRenderer: assertMainRenderer,
-    host: rendererDesignToolHost,
-  });
-  registerModelServiceIpc({
-    ipc: ipcMain,
-    assertRenderer: assertMainRenderer,
-    getImageGenerationHost: requireImageGenerationHost,
-    getModelProviderHost: requireModelProviderHost,
-    publishModelProviderCatalog: (catalog) => {
-      desktopWindowHost.send(channels.modelProviderCatalogChanged, catalog);
-    },
-  });
-  diagnosticHost.registerIpc({
-    ipc: ipcMain,
-    assertRenderer: assertMainRenderer,
-  });
-  applicationPreferences.registerIpc({
-    ipc: ipcMain,
-    assertRenderer: assertMainRenderer,
-  });
-  mediaInputIpcHost.registerIpc({
-    ipc: ipcMain,
-    assertRenderer: assertMainRenderer,
-  });
-  standaloneDesignFileIpcHost.registerIpc({
-    ipc: ipcMain,
-    assertRenderer: assertMainRenderer,
-  });
-  desktopWindowHost.registerIpc(ipcMain);
-  registerSvgFileIpc({
-    ipc: ipcMain,
-    assertRenderer: assertMainRenderer,
-    service: svgFileService,
-  });
-  registerRasterFileIpc({
-    ipc: ipcMain,
-    assertRenderer: assertMainRenderer,
-    service: rasterFileService,
-  });
-  fontBinaryService.register(ipcMain, assertMainRenderer, () =>
-    desktopWindowHost.current(),
-  );
-  ipcMain.handle(channels.platformInfo, () => ({
-    platform: process.platform,
-    version: app.getVersion(),
-  }));
-  fixtureSmoke.register(ipcMain, assertMainRenderer, () =>
-    desktopWindowHost.current(),
-  );
-  agentIpcRouter.register({
-    ipc: ipcMain,
-    assertRenderer: (event, message) =>
-      desktopWindowHost.assertRenderer(event, message),
-  });
-  nativeTheme.on("updated", () => {
-    applicationPreferences.publishNativeThemeUpdated(
-      nativeTheme.shouldUseDarkColors,
+  try {
+    registerProjectIpc({
+      ipc,
+      assertRenderer: assertMainRenderer,
+      getService: requireProjectIpc,
+    });
+    registerRendererDesignToolIpc({
+      ipc,
+      assertRenderer: assertMainRenderer,
+      host: rendererDesignToolHost,
+    });
+    registerModelServiceIpc({
+      ipc,
+      assertRenderer: assertMainRenderer,
+      getImageGenerationHost: requireImageGenerationHost,
+      getModelProviderHost: requireModelProviderHost,
+      publishModelProviderCatalog: (catalog) => {
+        desktopWindowHost.send(channels.modelProviderCatalogChanged, catalog);
+      },
+    });
+    diagnosticHost.registerIpc({ ipc, assertRenderer: assertMainRenderer });
+    applicationPreferences.registerIpc({
+      ipc,
+      assertRenderer: assertMainRenderer,
+    });
+    mediaInputIpcHost.registerIpc({ ipc, assertRenderer: assertMainRenderer });
+    standaloneDesignFileIpcHost.registerIpc({
+      ipc,
+      assertRenderer: assertMainRenderer,
+    });
+    desktopWindowHost.registerIpc(ipc);
+    registerSvgFileIpc({
+      ipc,
+      assertRenderer: assertMainRenderer,
+      service: svgFileService,
+    });
+    registerRasterFileIpc({
+      ipc,
+      assertRenderer: assertMainRenderer,
+      service: rasterFileService,
+    });
+    fontBinaryService.register(ipc, assertMainRenderer, () =>
+      desktopWindowHost.current(),
     );
-  });
+    ipc.handle(channels.platformInfo, () => ({
+      platform: process.platform,
+      version: app.getVersion(),
+    }));
+    fixtureSmoke.register(ipc, assertMainRenderer, () =>
+      desktopWindowHost.current(),
+    );
+    agentIpcRouter.register({
+      ipc,
+      assertRenderer: (event, message) =>
+        desktopWindowHost.assertRenderer(event, message),
+    });
+    nativeTheme.on("updated", handleNativeThemeUpdated);
+    nativeThemeRegistered = true;
+  } catch (error) {
+    try {
+      dispose();
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [error, rollbackError],
+        "IPC registration and rollback failed",
+      );
+    }
+    throw error;
+  }
+  return dispose;
 }
 
-void app.whenReady().then(async () => {
+void app.whenReady().then(() => {
+  void desktopApplication.start(startDesktopApplication).catch(() => undefined);
+});
+
+async function startDesktopApplication(
+  startup: DesktopApplicationStartContext,
+): Promise<void> {
   if (
     process.platform === "darwin" &&
     process.env.OPENDESIGN_AGENT_SMOKE !== "1" &&
@@ -623,11 +704,10 @@ void app.whenReady().then(async () => {
       await verifyPackagedAttachmentPipeline();
       console.log("Attachment smoke passed: PDF extraction");
     } catch (error) {
-      console.error(
+      throw new Error(
         `Attachment smoke failed: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
       );
-      app.exit(1);
-      return;
     }
     const timeout = setTimeout(() => {
       console.error("Agent smoke timed out");
@@ -668,10 +748,12 @@ void app.whenReady().then(async () => {
       }
     });
     void agentHost.start().catch(() => undefined);
+    startup.commit();
     return;
   }
 
   fixtureSmoke.startTimeout();
+  startup.defer("Main service references", () => clearMainServices());
 
   const workspaceDatabase = await prepareGlobalWorkspaceDatabase(
     fixtureSmoke.home,
@@ -683,7 +765,16 @@ void app.whenReady().then(async () => {
       platform: process.platform,
     }),
   );
-  workspaceStore = new WorkspaceStore(workspaceDatabase);
+  startup.defer("diagnostic host", async () => {
+    await diagnosticHost.flush();
+    diagnosticHost.clear();
+  });
+  const openedWorkspaceStore = new WorkspaceStore(workspaceDatabase);
+  workspaceStore = openedWorkspaceStore;
+  startup.defer("workspace store", () => {
+    openedWorkspaceStore.close();
+    if (workspaceStore === openedWorkspaceStore) workspaceStore = null;
+  });
   agentAttachmentHost = new AgentAttachmentHost(
     fixtureSmoke.path(".opendesign", "attachments"),
   );
@@ -693,7 +784,11 @@ void app.whenReady().then(async () => {
   agentReferenceHost = new AgentReferenceHost(agentAttachmentHost);
   const persistedLocale = workspaceStore.getPreference("locale");
   applicationPreferences.restoreLocale(persistedLocale);
+  const previousMenu = Menu.getApplicationMenu();
   installApplicationMenu();
+  startup.defer("application menu", () => {
+    Menu.setApplicationMenu(previousMenu);
+  });
   const credentialCipher = {
     available: () => safeStorage.isEncryptionAvailable(),
     encrypt: (value: string) => safeStorage.encryptString(value),
@@ -720,6 +815,10 @@ void app.whenReady().then(async () => {
   agentHost.setModelRequestHandler((request, signal) =>
     requireModelProviderHost().stream(request, signal),
   );
+  startup.defer("Agent handlers", () => {
+    agentHost.setModelRequestHandler(null);
+    agentHost.setDesignToolRequestHandler(null);
+  });
   agentHost.setDesignToolRequestHandler(
     async (call, context, signal, reportProgress) => {
       if (!globalTaskCoordinator) {
@@ -1084,7 +1183,10 @@ void app.whenReady().then(async () => {
                     type: "data",
                     value: Buffer.from(generated.bytes).toString("base64"),
                   },
-                  size: { width: intrinsic.width, height: intrinsic.height },
+                  size: {
+                    width: intrinsic.width,
+                    height: intrinsic.height,
+                  },
                   extensions: {
                     attachmentId: authorized.attachmentId,
                     designRole: call.input.role,
@@ -1708,13 +1810,22 @@ void app.whenReady().then(async () => {
           : "Agent session recovery failed",
     });
   }
-  registerIpc(fontBinaryService);
+  const disposeIpc = registerIpc(fontBinaryService);
+  startup.defer("IPC registrations", disposeIpc);
   if (!fixtureSmoke.active) {
+    startup.defer("Agent process", () => agentHost.stop());
     void agentHost.start().catch(() => undefined);
   }
-  desktopWindowHost.create();
-  app.on("activate", () => desktopWindowHost.activate());
-});
+  await desktopWindowHost.createAndLoad();
+  startup.defer("desktop window", () => desktopWindowHost.dispose());
+  const activate = () => desktopWindowHost.activate();
+  app.on("activate", activate);
+  startup.defer("application activation", () => {
+    app.off("activate", activate);
+  });
+  desktopWindowHost.publish();
+  startup.commit();
+}
 
 async function verifyPackagedAttachmentPipeline(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "opendesign-attachment-smoke-"));
