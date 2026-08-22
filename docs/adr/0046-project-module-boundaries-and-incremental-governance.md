@@ -79,6 +79,8 @@ Phase 6 的第四个切片把 Model Provider catalog/profile/test 与 Global Ima
 
 Phase 6 的第五个切片建立两个状态 owner。`DiagnosticHost` 唯一持有当前 `DiagnosticLog`、最多 20 条 pending toast、Main publish、Renderer report、实时发送和 shutdown flush/clear；未初始化时只输出最小 fallback，silent 事件不进入 pending，Renderer 不能伪造 source。`ApplicationPreferencesHost` 唯一持有 Locale/Theme，Locale set 保持“更新状态→持久化 Workspace→重建菜单→通知 Renderer”的顺序，Theme set 继续只投影到 `nativeTheme`，系统主题变化再通知 Renderer。6 个 channel 都统一先校验 sender 和参数数量；由此补齐了历史 Theme IPC 没有 sender/arity 校验的边界缺口。Main 原生对话框和菜单从 preferences owner 读取当前 Locale，不再持有语言/主题/日志/队列镜像。
 
+Phase 6 的第六个切片用 `MediaInputIpcHost` 接管附件选择/导入/预览与设计图片选择/编辑/取消的 6 个 channel，以及所有活动图片编辑 `AbortController`。owner 固定原生文件类型白名单、最多 6 项/单项 16MB/合计 32MB 门禁、图片 attachment/content-addressed asset 转换、解码尺寸校验，并把 8 类严格 `DesignImageEditRequest` 规范化为可信编辑输入。重复 requestId 失败关闭，用户取消与 application shutdown 分别携带明确 AbortError，finally 清理 lease。底层图片 provider、mask/expand/upscale 几何和 provenance 仍由 Image service/Main 编辑器拥有，不进入 IPC registration；shared/preload 契约与 run-scoped reference 权限不变。
+
 ### 自动边界门禁与职责治理
 
 `pnpm architecture:check` 是根 `pnpm verify` 的必经步骤，并校验：
@@ -107,7 +109,7 @@ ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证
 
 - 聚合入口会按真实业务所有权逐步收缩，而不是一次性重写。
 - 新代码不能建立跨进程后门、包循环或新的巨型模块。
-- 历史大模块仍然存在，Phase 1–5 和 Phase 6 已完成的 IPC/BrowserWindow/shutdown/provider/preferences/diagnostics 切片不能描述为全项目治理完成；后续阶段必须继续实际拆除职责。
+- 历史大模块仍然存在，Phase 1–5 和 Phase 6 已完成的 IPC/BrowserWindow/shutdown/provider/preferences/diagnostics/media-input 切片不能描述为全项目治理完成；后续阶段必须继续实际拆除职责。
 - 导入/导出现在具有独立取消和反馈生命周期，并继续从唯一 Runtime snapshot 生成事务或产物。
 - Page 与 Layer view 不再直接拥有 planner/transaction 编排；新增人工编辑命令应进入对应 controller 或新的完整业务 controller，不应重新堆回 `App.tsx`。
 - Inspector section 不拥有 Runtime 或文档副本；新增 property family 应进入对应 section，通过现有语义 callback 提交，不能重新堆回顶层 `PropertiesPanel.tsx`。
@@ -126,5 +128,6 @@ ADR-0086 已退休默认 800 行和历史逐文件行数预算：连续切片证
 - `application-lifecycle.test.ts`、`diagnostic-log.test.ts`、`project-autosave.test.ts`、Project workspace 与 App 关窗测试：Renderer autosave 先行、单次有序 Main teardown、异步诊断 flush、局部失败隔离及 macOS/Windows 退出语义
 - `model-service-ipc.test.ts`、`model-provider-host.test.ts`、`image-generation-host.test.ts`、shared desktop API 与 Settings 测试：完整 channel family、动态 host、凭据 payload 校验、成功后 catalog 通知、连接测试与设置持久化
 - `diagnostic-host.test.ts`、`diagnostic-log.test.ts`、`application-preferences-host.test.ts`、Application Menu、shared API、Renderer i18n/diagnostics 测试：有界 pending、source ownership、flush/clear、Locale 持久化/菜单/通知、Theme 投影及 sender/arity 失败关闭
+- `media-input-ipc.test.ts`、`agent-attachment-host.test.ts`、shared desktop API、Image Generation、mask/expand 与 lifecycle 测试：选择/导入/预览、内容寻址图片、8 类编辑输入、大小门禁、request lease、用户取消和 shutdown abort
 - Agent Runtime/Main/Renderer 定向测试：Run-scoped approval、Renderer 活动租约、版本化 Plan amendment 与 Text content 规范化
 - 全仓 `pnpm verify`

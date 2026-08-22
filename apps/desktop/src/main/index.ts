@@ -12,8 +12,6 @@ import { JsonlSessionStore } from "@opendesign/session-store";
 import type {
   DesignAsset,
   ImageAssetDerivation,
-  ImageLightingPreset,
-  ImagePlacement,
   Size,
 } from "@opendesign/design-contracts";
 import { resolveImageUpscaleSize } from "@opendesign/image-service";
@@ -102,19 +100,14 @@ import {
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
 import { DiagnosticLog } from "./diagnostics/diagnostic-log";
 import { DiagnosticHost } from "./diagnostics/diagnostic-host";
+import {
+  MediaInputIpcHost,
+  type DesignImageEditInput,
+} from "./media-input-ipc";
 import { configureFixtureSmoke } from "./professional-fixture-smoke";
 import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
 import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
-import {
-  channels,
-  isAgentAttachmentImport,
-  isAgentAttachmentPreviewRequest,
-  isCancelDesignImageEditRequest,
-  isDesignImageEditRequest,
-  isSaveDesignFileRequest,
-  type DesignImageAreaSelection,
-  type DesignImageExpansion,
-} from "../shared/desktop-api";
+import { channels, isSaveDesignFileRequest } from "../shared/desktop-api";
 import type { DiagnosticContext } from "../shared/diagnostics";
 import { handleDesignSystemTool } from "./agent/design-system-tool-handler.js";
 import { translate } from "../shared/i18n/messages";
@@ -222,7 +215,6 @@ let projectIpc: ProjectIpcService | null = null;
 let globalTaskCoordinator: GlobalTaskCoordinator | null = null;
 let modelProviderHost: ModelProviderHost | null = null;
 let imageGenerationHost: ImageGenerationHost | null = null;
-const designImageEditControllers = new Map<string, AbortController>();
 let agentAttachmentHost: AgentAttachmentHost | null = null;
 let agentReferenceHost: AgentReferenceHost | null = null;
 let agentSvgExportHost: AgentSvgExportHost | null = null;
@@ -251,6 +243,14 @@ const applicationPreferences = new ApplicationPreferencesHost({
     nativeTheme.themeSource = theme;
   },
 });
+const mediaInputIpcHost = new MediaInputIpcHost({
+  decodeImageSize: (bytes) => nativeImage.createFromBuffer(bytes).getSize(),
+  editImage: editDesignImageAsset,
+  getAttachmentHost: requireAgentAttachmentHost,
+  getLocale: () => applicationPreferences.locale(),
+  getWindow: () => desktopWindowHost.current(),
+  openDialog: (window, options) => dialog.showOpenDialog(window, options),
+});
 const applicationLifecycle = new ApplicationLifecycle({
   exit: (code) => app.exit(code),
   platform: process.platform,
@@ -262,12 +262,7 @@ const applicationLifecycle = new ApplicationLifecycle({
   },
   resources: {
     abortActiveWork: () => {
-      for (const controller of designImageEditControllers.values()) {
-        controller.abort(
-          new DOMException("OpenDesign is shutting down", "AbortError"),
-        );
-      }
-      designImageEditControllers.clear();
+      mediaInputIpcHost.abortAll("OpenDesign is shutting down");
     },
     stopAgent: () => agentHost.stop(),
     detachAgentHandlers: () => {
@@ -606,6 +601,10 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     ipc: ipcMain,
     assertRenderer: assertMainRenderer,
   });
+  mediaInputIpcHost.registerIpc({
+    ipc: ipcMain,
+    assertRenderer: assertMainRenderer,
+  });
   desktopWindowHost.registerIpc(ipcMain);
   registerSvgFileIpc({
     ipc: ipcMain,
@@ -626,245 +625,6 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
   }));
   fixtureSmoke.register(ipcMain, assertMainRenderer, () =>
     desktopWindowHost.current(),
-  );
-  ipcMain.handle(channels.selectAgentAttachments, async (event, ...args) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 0);
-    const window = desktopWindowHost.current();
-    if (!window) return [];
-    const result = await dialog.showOpenDialog(window, {
-      title: translate(
-        applicationPreferences.locale(),
-        "main.selectAttachmentsTitle",
-      ),
-      buttonLabel: translate(
-        applicationPreferences.locale(),
-        "main.selectAttachmentsButton",
-      ),
-      properties: ["openFile", "multiSelections"],
-      filters: [
-        {
-          name: translate(
-            applicationPreferences.locale(),
-            "main.attachmentFilter",
-          ),
-          extensions: [
-            "png",
-            "jpg",
-            "jpeg",
-            "webp",
-            "gif",
-            "svg",
-            "pdf",
-            "docx",
-            "txt",
-            "md",
-            "markdown",
-            "csv",
-            "html",
-            "htm",
-            "json",
-            "yaml",
-            "yml",
-          ],
-        },
-      ],
-    });
-    if (result.canceled) return [];
-    return requireAgentAttachmentHost().importFiles(result.filePaths);
-  });
-  ipcMain.handle(
-    channels.importAgentAttachments,
-    async (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const attachments = args[0];
-      if (
-        !Array.isArray(attachments) ||
-        attachments.length > 6 ||
-        !attachments.every(isAgentAttachmentImport)
-      ) {
-        throw new TypeError("Invalid Agent attachment import request");
-      }
-      const totalBytes = attachments.reduce(
-        (total, attachment) => total + attachment.bytes.byteLength,
-        0,
-      );
-      if (totalBytes > 32 * 1024 * 1024) {
-        throw new RangeError("Attachments exceed the 32 MB total limit");
-      }
-      return await Promise.all(
-        attachments.map((attachment) =>
-          requireAgentAttachmentHost().importBytes(
-            attachment.name,
-            attachment.bytes,
-          ),
-        ),
-      );
-    },
-  );
-  ipcMain.handle(
-    channels.getAgentAttachmentPreview,
-    async (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isAgentAttachmentPreviewRequest(request)) {
-        throw new TypeError("Invalid Agent attachment preview request");
-      }
-      return {
-        attachmentId: request.attachmentId,
-        previewDataUrl: await requireAgentAttachmentHost().preview(
-          request.attachmentId,
-        ),
-      };
-    },
-  );
-  ipcMain.handle(channels.selectDesignImage, async (event, ...args) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 0);
-    const window = desktopWindowHost.current();
-    if (!window) return null;
-    const result = await dialog.showOpenDialog(window, {
-      title: translate(
-        applicationPreferences.locale(),
-        "main.selectDesignImageTitle",
-      ),
-      buttonLabel: translate(
-        applicationPreferences.locale(),
-        "main.selectDesignImageButton",
-      ),
-      properties: ["openFile"],
-      filters: [
-        {
-          name: translate(applicationPreferences.locale(), "main.imageFilter"),
-          extensions: ["png", "jpg", "jpeg", "webp", "gif"],
-        },
-      ],
-    });
-    const path = result.filePaths[0];
-    if (result.canceled || !path) return null;
-    const selected = (
-      await requireAgentAttachmentHost().importFiles([path])
-    )[0];
-    if (!selected || !selected.attachmentId.startsWith("image_")) {
-      throw new TypeError("Selected design asset is not an image");
-    }
-    const resolved = await requireAgentAttachmentHost().resolve(
-      selected.attachmentId,
-    );
-    if (resolved.kind !== "image") {
-      throw new TypeError("Selected design asset is not an image");
-    }
-    const intrinsic = nativeImage
-      .createFromBuffer(Buffer.from(resolved.data, "base64"))
-      .getSize();
-    if (intrinsic.width <= 0 || intrinsic.height <= 0) {
-      throw new TypeError("Selected design image has invalid dimensions");
-    }
-    const digest = selected.attachmentId.slice("image_".length);
-    return {
-      asset: {
-        id: `asset_${digest}`,
-        kind: "image",
-        name: selected.name,
-        mimeType: resolved.mimeType,
-        source: { type: "data", value: resolved.data },
-        size: { width: intrinsic.width, height: intrinsic.height },
-        extensions: { importedBy: "design-image-picker" },
-      },
-    };
-  });
-  ipcMain.handle(
-    channels.editDesignImage,
-    async (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isDesignImageEditRequest(request)) {
-        throw new TypeError("Invalid design image edit request");
-      }
-      if (designImageEditControllers.has(request.requestId)) {
-        throw new Error(`Image edit ${request.requestId} is already running`);
-      }
-      const controller = new AbortController();
-      designImageEditControllers.set(request.requestId, controller);
-      try {
-        const result = await editDesignImageAsset(
-          request.action === "remove-background" || request.action === "upscale"
-            ? {
-                action: request.action,
-                source: request.source,
-                importedBy: "inspector-image-edit",
-              }
-            : request.action === "replace-background"
-              ? {
-                  action: request.action,
-                  source: request.source,
-                  prompt: request.prompt,
-                  importedBy: "inspector-image-edit",
-                }
-              : request.action === "relight"
-                ? {
-                    action: request.action,
-                    source: request.source,
-                    lightingPreset: request.lightingPreset,
-                    importedBy: "inspector-image-edit",
-                  }
-                : request.action === "prompt-edit"
-                  ? {
-                      action: request.action,
-                      source: request.source,
-                      prompt: request.prompt,
-                      ...(request.reference === undefined
-                        ? {}
-                        : { references: [request.reference] }),
-                      importedBy: "inspector-image-edit",
-                    }
-                  : request.action === "expand"
-                    ? {
-                        action: request.action,
-                        source: request.source,
-                        expansion: request.expansion,
-                        placement: request.placement,
-                        targetSize: request.targetSize,
-                        importedBy: "inspector-image-edit",
-                      }
-                    : {
-                        action: request.action,
-                        source: request.source,
-                        selection: request.selection,
-                        importedBy: "inspector-image-edit",
-                      },
-          controller.signal,
-        );
-        return {
-          requestId: request.requestId,
-          action: request.action,
-          sourceAssetId: request.expectedAssetId,
-          ...result,
-        };
-      } finally {
-        designImageEditControllers.delete(request.requestId);
-      }
-    },
-  );
-  ipcMain.handle(
-    channels.cancelDesignImageEdit,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const request = args[0];
-      if (!isCancelDesignImageEditRequest(request)) {
-        throw new TypeError("Invalid design image edit cancellation request");
-      }
-      const controller = designImageEditControllers.get(request.requestId);
-      if (!controller) return false;
-      controller.abort(
-        new DOMException("Image editing cancelled", "AbortError"),
-      );
-      return true;
-    },
   );
   ipcMain.handle(channels.openDesignFile, async (event) => {
     assertMainRenderer(event);
@@ -2279,51 +2039,6 @@ function withDesignDelivery(
     content: { ...result.content, delivery },
   };
 }
-
-type DesignImageEditInput =
-  | {
-      action: "remove-background";
-      source: DesignAsset;
-      importedBy: "agent-image-edit" | "inspector-image-edit";
-    }
-  | {
-      action: "replace-background";
-      source: DesignAsset;
-      prompt: string;
-      importedBy: "agent-image-edit" | "inspector-image-edit";
-    }
-  | {
-      action: "relight";
-      source: DesignAsset;
-      lightingPreset: ImageLightingPreset;
-      importedBy: "agent-image-edit" | "inspector-image-edit";
-    }
-  | {
-      action: "prompt-edit";
-      source: DesignAsset;
-      prompt: string;
-      references?: readonly DesignAsset[];
-      importedBy: "agent-image-edit" | "inspector-image-edit";
-    }
-  | {
-      action: "erase-object" | "isolate-object";
-      source: DesignAsset;
-      selection: DesignImageAreaSelection;
-      importedBy: "agent-image-edit" | "inspector-image-edit";
-    }
-  | {
-      action: "expand";
-      source: DesignAsset;
-      expansion: DesignImageExpansion;
-      placement: ImagePlacement;
-      targetSize: Size;
-      importedBy: "agent-image-edit" | "inspector-image-edit";
-    }
-  | {
-      action: "upscale";
-      source: DesignAsset;
-      importedBy: "agent-image-edit" | "inspector-image-edit";
-    };
 
 async function editDesignImageAsset(
   input: DesignImageEditInput,
