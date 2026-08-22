@@ -37,6 +37,7 @@
     "@opendesign/session-store": "workspace:*",
     "@opendesign/style-service": "workspace:*",
     "@opendesign/text-service": "workspace:*",
+    "@opendesign/tool-runtime": "workspace:*",
     "@opendesign/variable-service": "workspace:*",
     "@opendesign/ui": "workspace:*",
     "@opendesign/workspace-contracts": "workspace:*",

@@ -306,6 +306,19 @@ export class GlobalTaskCoordinator {
     return this.#pageStructureAccessByRunId.has(runId);
   }
 
+  hasPageStructureAuthorization(
+    runId: string,
+    toolCallId: string,
+    actions: readonly string[],
+  ): boolean {
+    const access = this.#pageStructureAccessByRunId.get(runId);
+    return (
+      access?.toolCallId === toolCallId &&
+      access.actions.size === actions.length &&
+      actions.every((action) => access.actions.has(action))
+    );
+  }
+
   resolveExecutionContext(context: TrustedToolContext): TrustedToolContext {
     this.assertDesignToolContext(context);
     if (

@@ -47,6 +47,10 @@ import {
   handleDesignCheckpointTool,
   handleFirstSliceCheckpoint,
 } from "./agent/design-checkpoint-tool-handler";
+import {
+  MainDesignToolRuntime,
+  mainDesignToolAuditDiagnostic,
+} from "./agent/main-design-tool-runtime";
 import { requireCanvasCaptureLayoutQuality } from "./agent/canvas-capture-quality";
 import {
   requireDesignVisualCriticAttachment,
@@ -819,8 +823,8 @@ async function startDesktopApplication(
     agentHost.setModelRequestHandler(null);
     agentHost.setDesignToolRequestHandler(null);
   });
-  agentHost.setDesignToolRequestHandler(
-    async (call, context, signal, reportProgress) => {
+  const mainDesignToolRuntime = new MainDesignToolRuntime({
+    dispatch: async (call, context, signal, reportProgress) => {
       if (!globalTaskCoordinator) {
         throw new FatalAgentRunError(
           "run_services_unavailable",
@@ -1764,6 +1768,26 @@ async function startDesktopApplication(
       }
       return result;
     },
+    isPreauthorized: (call, context) => {
+      if (
+        call.toolName !== PAGE_STRUCTURE_ACCESS_TOOL_NAME ||
+        !isPageStructureAccessToolInput(call.input)
+      ) {
+        return true;
+      }
+      return (
+        globalTaskCoordinator?.hasPageStructureAuthorization(
+          context.runId,
+          call.toolCallId,
+          call.input.actions,
+        ) ?? false
+      );
+    },
+    recordAudit: (event) =>
+      diagnosticHost.publish(mainDesignToolAuditDiagnostic(event)),
+  });
+  agentHost.setDesignToolRequestHandler((call, context, signal, progress) =>
+    mainDesignToolRuntime.execute(call, context, signal, progress),
   );
   projectHost = new ProjectHost(workspaceStore);
   globalTaskCoordinator = new GlobalTaskCoordinator(

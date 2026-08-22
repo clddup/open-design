@@ -19,8 +19,14 @@ export interface ToolCapability {
 export interface ToolDefinition<TInput, TOutput> {
   name: string;
   description: string;
-  inputSchema: TSchema;
+  inputSchema?: TSchema;
+  validateInput?(input: unknown): boolean;
+  validateOutput?(output: unknown): boolean;
   capability: ToolCapability;
+  resolveCapability?(
+    input: TInput,
+    request: ToolExecutionRequest,
+  ): ToolCapability;
   execute(input: TInput, context: ToolExecutionContext): Promise<TOutput>;
 }
 
@@ -32,6 +38,9 @@ export interface ToolExecutionRequest {
 }
 
 export interface ToolExecutionContext {
+  runId: string;
+  toolCallId: string;
+  toolName: string;
   signal: AbortSignal;
   reportProgress(message: string, progress: number): void;
 }
@@ -135,22 +144,51 @@ export class ToolRuntime {
     assertExecutionRequest(request);
     const tool = this.#tools.get(request.toolName);
     if (!tool) {
+      await this.record(request, "failed", {
+        reason: "tool not registered",
+        stage: "registry",
+      });
       throw new ToolRuntimeError(
         "TOOL_NOT_FOUND",
         `Unknown tool: ${request.toolName}`,
       );
     }
 
-    if (!Value.Check(tool.inputSchema, request.input)) {
+    if (
+      (tool.inputSchema !== undefined &&
+        !Value.Check(tool.inputSchema, request.input)) ||
+      (tool.validateInput !== undefined && !tool.validateInput(request.input))
+    ) {
+      await this.record(request, "failed", {
+        reason: "invalid input",
+        stage: "input",
+      });
       throw new ToolRuntimeError(
         "INVALID_INPUT",
         `Invalid input for ${tool.name}`,
       );
     }
 
+    let capability: ToolCapability;
+    try {
+      capability = tool.resolveCapability
+        ? tool.resolveCapability(request.input, request)
+        : tool.capability;
+      assertResolvedCapability(tool.name, tool.capability, capability);
+    } catch (error) {
+      await this.record(request, "failed", {
+        reason:
+          error instanceof Error
+            ? error.message
+            : "capability resolution failed",
+        stage: "capability",
+      });
+      throw error;
+    }
+
     const policyContext: PolicyContext = {
       ...request,
-      capability: tool.capability,
+      capability,
     };
     await this.record(request, "validated");
     throwIfCancelled(options.signal, tool.name);
@@ -171,6 +209,16 @@ export class ToolRuntime {
         stage: "policy",
       });
       throw error;
+    }
+    if (decision !== "allow" && decision !== "ask" && decision !== "deny") {
+      await this.record(request, "failed", {
+        reason: "invalid policy decision",
+        stage: "policy",
+      });
+      throw new ToolRuntimeError(
+        "POLICY_DENIED",
+        `Policy returned an invalid decision for ${tool.name}`,
+      );
     }
     if (decision === "deny") {
       await this.record(request, "denied", { reason: "policy" });
@@ -195,7 +243,7 @@ export class ToolRuntime {
         });
         throw error;
       }
-      if (!approved) {
+      if (approved !== true) {
         await this.record(request, "denied", { reason: "approval" });
         throw new ToolRuntimeError(
           "APPROVAL_DENIED",
@@ -207,7 +255,7 @@ export class ToolRuntime {
     await this.record(request, "allowed");
     let releaseLease: () => void;
     try {
-      releaseLease = this.acquireExecutionLease(request, tool.capability);
+      releaseLease = this.acquireExecutionLease(request, capability);
     } catch (error) {
       await this.record(request, "failed", {
         reason: error instanceof Error ? error.message : "execution conflict",
@@ -223,7 +271,7 @@ export class ToolRuntime {
     const timeout = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, tool.capability.timeoutMs);
+    }, capability.timeoutMs);
     timeout.unref?.();
 
     try {
@@ -236,6 +284,9 @@ export class ToolRuntime {
       }
       const output = await raceAbort(
         tool.execute(request.input, {
+          runId: request.runId,
+          toolCallId: request.toolCallId,
+          toolName: request.toolName,
           signal: controller.signal,
           reportProgress: (message, progress) => {
             assertProgress(message, progress);
@@ -251,12 +302,18 @@ export class ToolRuntime {
             timedOut ? `${tool.name} timed out` : `${tool.name} was cancelled`,
           ),
       );
+      if (tool.validateOutput && !tool.validateOutput(output)) {
+        throw new ToolRuntimeError(
+          "INVALID_OUTPUT",
+          `${tool.name} returned output that violates its contract`,
+        );
+      }
       const serialized = serializeOutput(output, tool.name);
       const bytes = new TextEncoder().encode(serialized).byteLength;
-      if (bytes > tool.capability.outputLimitBytes) {
+      if (bytes > capability.outputLimitBytes) {
         throw new ToolRuntimeError(
           "OUTPUT_TOO_LARGE",
-          `${tool.name} output exceeds ${tool.capability.outputLimitBytes} bytes`,
+          `${tool.name} output exceeds ${capability.outputLimitBytes} bytes`,
         );
       }
       await this.record(request, "completed");
@@ -350,7 +407,34 @@ function assertToolDefinition(tool: ToolDefinition<unknown, unknown>): void {
   if (!safeIdentifier(tool.name) || tool.description.trim().length === 0) {
     throw new TypeError("Tool definition identity is invalid");
   }
-  const capability = tool.capability;
+  if (tool.inputSchema === undefined && tool.validateInput === undefined) {
+    throw new TypeError(`Tool input validator is missing: ${tool.name}`);
+  }
+  assertCapability(tool.name, tool.capability);
+}
+
+function assertResolvedCapability(
+  toolName: string,
+  declared: ToolCapability,
+  resolved: ToolCapability,
+): void {
+  assertCapability(toolName, resolved);
+  if (
+    resolved.capability !== declared.capability ||
+    resolved.risk !== declared.risk ||
+    resolved.sideEffect !== declared.sideEffect ||
+    resolved.idempotent !== declared.idempotent ||
+    resolved.timeoutMs !== declared.timeoutMs ||
+    resolved.outputLimitBytes !== declared.outputLimitBytes ||
+    resolved.requiresSecret !== declared.requiresSecret
+  ) {
+    throw new TypeError(
+      `Resolved tool capability changes declared authority: ${toolName}`,
+    );
+  }
+}
+
+function assertCapability(toolName: string, capability: ToolCapability): void {
   if (
     !safeIdentifier(capability.capability) ||
     capability.resources.length === 0 ||
@@ -362,7 +446,7 @@ function assertToolDefinition(tool: ToolDefinition<unknown, unknown>): void {
     (capability.concurrencyKey !== undefined &&
       !safeIdentifier(capability.concurrencyKey))
   ) {
-    throw new TypeError(`Tool capability is invalid: ${tool.name}`);
+    throw new TypeError(`Tool capability is invalid: ${toolName}`);
   }
 }
 

@@ -101,6 +101,9 @@ importers:
       '@opendesign/text-service':
         specifier: workspace:*
         version: link:../../packages/text-service
+      '@opendesign/tool-runtime':
+        specifier: workspace:*
+        version: link:../../packages/tool-runtime
       '@opendesign/ui':
         specifier: workspace:*
         version: link:../../packages/ui

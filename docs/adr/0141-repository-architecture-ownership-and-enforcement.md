@@ -14,7 +14,7 @@ ADR-0046 已用完整业务切片拆出多组 Renderer feature、Main IPC host �
 - `AppContent` 在 destination 分支前建立几乎全部 Project、Agent、Editor、Canvas、Image、Import/Export 和 Workbench controller，仍然充当应用级 service locator；
 - `WorkspaceRuntime` 已拥有活动 Design File 身份与名称，Project feature 又维护 `activeProject` 和 `fileName` 镜像，保存、重命名和切换依赖双写；
 - Main 的 Agent 进程、Run、预检、Continuation、reference 和异常退出清理没有统一 supervisor，启动流程也不是可回滚状态机；
-- `@opendesign/tool-runtime` 尚未成为真实生产边界，跨进程 tool wire contract 仍由实现包导出；
+- 审计时 `@opendesign/tool-runtime` 尚未成为真实生产边界，跨进程 tool wire contract 也仍由实现包导出；
 - 无生产调用者的旧 Design Engine/MCP adapter 暴露独立 open/save/apply/undo/redo 生命周期，可能演化成第二份文档权威；
 - Renderer、Main、Preload、Agent、Shared 内部源码图、进程 package allowlist、未声明依赖、声明但未使用依赖和私有 deep import 尚无机器门禁。
 
@@ -91,7 +91,7 @@ MCP 只能依赖 Main 提供的稳定 resource handle、revision、`DesignReadPo
 
 当前步骤 1—5 已落地：`AgentIpcRouter`、原子 `AppNavigator`、活动 Project/Design File 身份单 owner 与完整 `EditorWorkbenchFeature` 均已有定向测试。Workbench controller、selection projection、Image edit、人工 Import/Export 和画布 session 只随 Editor destination 建立；Settings 与 Workspace 会释放这些订阅，返回 Editor 复用同一权威 `EditorRuntime`。`AgentSupervisor` 持有单一 utility-process generation、ready/handshake watchdog、协议失败、异常退出和有界停止；`AgentRunCoordinator` 持有 Run→Conversation、preflight AbortController、continuation、Reference 与 Renderer/performance lease。进程级错误会中断 Global Task 并释放全部 Run lease，shutdown 按 `quiesce/cancelAll → Supervisor stop → detach/dispose` 执行。`DesktopApplication.start()` 使用显式 commit 和逆序 disposer 栈；`IpcRegistrationScope` 记录本次成功注册的 channel；Renderer load 失败会销毁未发布窗口，startup 错误在 rollback 后非零退出。Agent 握手不阻塞窗口首屏。步骤 6—8 和全仓治理仍保持进行中。
 
-步骤 6 的 wire contract 迁移与基础 runtime 加固已完成，但生产迁移仍未完成：Main↔Agent 的 tool call/context/progress/result/failure schema、类型和语义校验现在由 `@opendesign/agent-contracts` 单一拥有，`agent-runtime` 不再兼容导出这些 wire 类型；Desktop shared 只保留 Renderer capture、阶段进度、性能和原生导入导出准备结果等 Renderer 专用契约。Main 接收通用 request 时仍注入具体 design tool semantic validator，`input: unknown` 不扩大执行权限。`@opendesign/tool-runtime` 接受调用方 AbortSignal，并用 Promise race 保证工具忽略 signal 时硬超时仍会返回；相同 call identity 或 capability concurrency key 不能并行执行，progress、definition、request 与 JSON output 均受边界校验。当前 Main design-tool policy gateway 仍未注册到该 runtime，因此步骤 6 继续保持未完成状态。
+步骤 6 的 wire contract 迁移、runtime 加固和生产 Main 接入已完成：Main↔Agent 的 tool call/context/progress/result/failure schema、类型和语义校验由 `@opendesign/agent-contracts` 单一拥有，`agent-runtime` 不再兼容导出这些 wire 类型；Desktop shared 只保留 Renderer capture、阶段进度、性能和原生导入导出准备结果等 Renderer 专用契约。所有 Agent-facing design tools 由 `MainDesignToolRuntime` 使用同一份 `DESIGN_AGENT_TOOL_SPECS` 注册；Runtime 复核 semantic input、精确 Design File resource、Main 已记录的 Page 授权、TrustedToolResult、输出大小、硬超时、取消、调用冲突和 silent audit，再委托现有领域 dispatcher。`GlobalTaskCoordinator` 继续唯一拥有 Plan、ledger、revision、inspection、review 和目标规则；通用 runtime 不复制设计领域门禁。步骤 6 仍需完成 Electron 各进程 package allowlist、源码依赖图、undeclared/unused dependency 与 deep-import 门禁，Main 领域 dispatcher 的 service composition 也尚未完成。
 
 ## 后果
 

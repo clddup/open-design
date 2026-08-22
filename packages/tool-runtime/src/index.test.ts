@@ -1,6 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ToolRuntime, type ToolDefinition } from "./index.js";
+import {
+  ToolRuntime,
+  type PolicyContext,
+  type ToolDefinition,
+} from "./index.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -51,7 +55,7 @@ describe("ToolRuntime", () => {
   });
 
   it("never executes invalid input", async () => {
-    const { runtime } = createRuntime("allow");
+    const { runtime, audit } = createRuntime("allow");
 
     await expect(
       runtime.execute({
@@ -61,6 +65,12 @@ describe("ToolRuntime", () => {
         input: {},
       }),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: "failed",
+        detail: { reason: "invalid input", stage: "input" },
+      }),
+    );
   });
 
   it("enforces approval after policy evaluation", async () => {
@@ -73,6 +83,44 @@ describe("ToolRuntime", () => {
         toolName: "design.read",
         input: { nodeId: "node_1" },
       }),
+    ).rejects.toMatchObject({ code: "APPROVAL_DENIED" });
+  });
+
+  it("fails closed on invalid policy and approval decisions", async () => {
+    const invalidPolicy = runtimeWithTool(
+      {},
+      {
+        evaluate: () => Promise.resolve("unexpected" as unknown as "allow"),
+      },
+    );
+    await expect(
+      invalidPolicy.execute(request("invalid_policy")),
+    ).rejects.toMatchObject({ code: "POLICY_DENIED" });
+
+    const invalidApproval = new ToolRuntime(
+      { evaluate: () => Promise.resolve("ask") },
+      {
+        request: () => Promise.resolve("yes" as unknown as boolean),
+      },
+      { record: () => Promise.resolve() },
+    );
+    invalidApproval.register({
+      name: "design.read",
+      description: "Read the current design",
+      inputSchema: Type.Object({ nodeId: Type.String() }),
+      capability: {
+        capability: "design.read",
+        resources: ["document:*"],
+        risk: "read",
+        sideEffect: false,
+        idempotent: true,
+        timeoutMs: 1_000,
+        outputLimitBytes: 1_024,
+      },
+      execute: () => Promise.resolve({ ok: true }),
+    });
+    await expect(
+      invalidApproval.execute(request("invalid_approval")),
     ).rejects.toMatchObject({ code: "APPROVAL_DENIED" });
   });
 
@@ -196,6 +244,127 @@ describe("ToolRuntime", () => {
       invalidOutput.execute(request("invalid_output")),
     ).rejects.toMatchObject({ code: "INVALID_OUTPUT" });
   });
+
+  it("supports semantic input and output validators without a TypeBox schema", async () => {
+    const execute = vi.fn((input: { nodeId: string }) =>
+      Promise.resolve({ nodeId: input.nodeId }),
+    );
+    const runtime = new ToolRuntime(
+      { evaluate: () => Promise.resolve("allow") },
+      { request: () => Promise.resolve(true) },
+      { record: () => Promise.resolve() },
+    );
+    runtime.register<{ nodeId: string }, { nodeId: string }>({
+      name: "design.semantic-read",
+      description: "Read through a semantic contract",
+      validateInput: (input) =>
+        typeof input === "object" &&
+        input !== null &&
+        "nodeId" in input &&
+        typeof input.nodeId === "string",
+      validateOutput: (output) =>
+        typeof output === "object" &&
+        output !== null &&
+        "nodeId" in output &&
+        typeof output.nodeId === "string",
+      capability: {
+        capability: "design.read",
+        resources: ["document:*"],
+        risk: "read",
+        sideEffect: false,
+        idempotent: true,
+        timeoutMs: 1_000,
+        outputLimitBytes: 1_024,
+      },
+      execute,
+    });
+
+    await expect(
+      runtime.execute({
+        ...request("semantic"),
+        toolName: "design.semantic-read",
+      }),
+    ).resolves.toEqual({ nodeId: "node_1" });
+    await expect(
+      runtime.execute({
+        ...request("invalid_semantic"),
+        toolName: "design.semantic-read",
+        input: { nodeId: 3 },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves exact resources without allowing dynamic authority changes", async () => {
+    const policy = {
+      evaluate: vi.fn((context: PolicyContext) => {
+        void context;
+        return Promise.resolve("allow" as const);
+      }),
+    };
+    const runtime = new ToolRuntime(
+      policy,
+      { request: () => Promise.resolve(true) },
+      { record: () => Promise.resolve() },
+    );
+    runtime.register({
+      name: "design.dynamic-read",
+      description: "Read one resolved document",
+      validateInput: () => true,
+      capability: {
+        capability: "design.read",
+        resources: ["document:*"],
+        risk: "read",
+        sideEffect: false,
+        idempotent: true,
+        timeoutMs: 1_000,
+        outputLimitBytes: 1_024,
+      },
+      resolveCapability: () => ({
+        capability: "design.read",
+        resources: ["document:document_1"],
+        risk: "read",
+        sideEffect: false,
+        idempotent: true,
+        timeoutMs: 1_000,
+        outputLimitBytes: 1_024,
+      }),
+      execute: (_input, context) =>
+        Promise.resolve({
+          runId: context.runId,
+          toolCallId: context.toolCallId,
+          toolName: context.toolName,
+        }),
+    });
+
+    await expect(
+      runtime.execute({
+        ...request("dynamic"),
+        toolName: "design.dynamic-read",
+      }),
+    ).resolves.toEqual({
+      runId: "run_1",
+      toolCallId: "dynamic",
+      toolName: "design.dynamic-read",
+    });
+    const evaluated = policy.evaluate.mock.calls[0]?.[0];
+    expect(evaluated?.capability.resources).toEqual(["document:document_1"]);
+
+    const unsafe = runtimeWithTool({
+      resolveCapability: () => ({
+        capability: "design.read",
+        resources: ["document:document_1"],
+        risk: "destructive",
+        sideEffect: false,
+        idempotent: true,
+        timeoutMs: 1_000,
+        outputLimitBytes: 1_024,
+      }),
+    });
+    await expect(unsafe.execute(request("unsafe_dynamic"))).rejects.toThrow(
+      "Resolved tool capability changes declared authority",
+    );
+  });
 });
 
 function request(toolCallId: string) {
@@ -213,6 +382,10 @@ function runtimeWithTool(
       ToolDefinition<{ nodeId: string }, unknown>["capability"]
     >;
     execute?: ToolDefinition<{ nodeId: string }, unknown>["execute"];
+    resolveCapability?: ToolDefinition<
+      { nodeId: string },
+      unknown
+    >["resolveCapability"];
   } = {},
   policy: { evaluate: () => Promise<"allow" | "ask" | "deny"> } = {
     evaluate: () => Promise.resolve("allow"),
@@ -243,6 +416,9 @@ function runtimeWithTool(
       overrides.execute ??
       ((input: { nodeId: string }) =>
         Promise.resolve({ nodeId: input.nodeId })),
+    ...(overrides.resolveCapability
+      ? { resolveCapability: overrides.resolveCapability }
+      : {}),
   });
   return runtime;
 }

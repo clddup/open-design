@@ -3454,6 +3454,26 @@ describe("GlobalTaskCoordinator", () => {
     );
 
     expect(coordinator.hasPageStructureAccess(context.runId)).toBe(true);
+    expect(
+      coordinator.hasPageStructureAuthorization(
+        context.runId,
+        "tool_page_access",
+        ["create-page", "cross-page-edit"],
+      ),
+    ).toBe(true);
+    expect(
+      coordinator.hasPageStructureAuthorization(context.runId, "tool_other", [
+        "create-page",
+        "cross-page-edit",
+      ]),
+    ).toBe(false);
+    expect(
+      coordinator.hasPageStructureAuthorization(
+        context.runId,
+        "tool_page_access",
+        ["create-page"],
+      ),
+    ).toBe(false);
     expect(coordinator.resolveExecutionContext(context)).toMatchObject({
       scope: { kind: "document", pageId, selectedNodeIds: [] },
       mutationTarget: { kind: "document" },
