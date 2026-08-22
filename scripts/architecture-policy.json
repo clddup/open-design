@@ -1,0 +1,136 @@
+{
+  "desktopLayers": {
+    "main": {
+      "root": "apps/desktop/src/main",
+      "allowedBuiltins": ["electron", "node:"],
+      "allowedPackages": [
+        "@opendesign/agent-contracts",
+        "@opendesign/agent-runtime",
+        "@opendesign/design-contracts",
+        "@opendesign/design-skills",
+        "@opendesign/editor-runtime",
+        "@opendesign/image-service",
+        "@opendesign/import-export-service",
+        "@opendesign/library-service",
+        "@opendesign/model-gateway",
+        "@opendesign/session-store",
+        "@opendesign/tool-runtime",
+        "@opendesign/workspace-contracts",
+        "mammoth",
+        "unpdf"
+      ],
+      "forbiddenRelativeLayers": ["agent", "preload", "renderer"]
+    },
+    "preload": {
+      "root": "apps/desktop/src/preload",
+      "allowedBuiltins": ["electron"],
+      "allowedPackages": [
+        "@opendesign/agent-contracts",
+        "@opendesign/design-contracts",
+        "@opendesign/workspace-contracts"
+      ],
+      "forbiddenRelativeLayers": ["agent", "main", "renderer"]
+    },
+    "renderer": {
+      "root": "apps/desktop/src/renderer",
+      "allowedBuiltins": [],
+      "allowedPackages": [
+        "@opendesign/agent-contracts",
+        "@opendesign/component-service",
+        "@opendesign/design-contracts",
+        "@opendesign/editor-runtime",
+        "@opendesign/geometry-service",
+        "@opendesign/image-service",
+        "@opendesign/import-export-service",
+        "@opendesign/leafer-engine",
+        "@opendesign/library-service",
+        "@opendesign/model-gateway",
+        "@opendesign/style-service",
+        "@opendesign/text-service",
+        "@opendesign/ui",
+        "@opendesign/variable-service",
+        "@opendesign/workspace-contracts",
+        "react",
+        "react-dom",
+        "virtual:offline-iconify"
+      ],
+      "forbiddenRelativeLayers": ["agent", "main", "preload"]
+    },
+    "agent": {
+      "root": "apps/desktop/src/agent",
+      "allowedBuiltins": [],
+      "allowedPackages": [
+        "@opendesign/agent-contracts",
+        "@opendesign/agent-runtime",
+        "@opendesign/design-capabilities",
+        "@opendesign/design-skills",
+        "@opendesign/model-gateway",
+        "@opendesign/workspace-contracts"
+      ],
+      "forbiddenRelativeLayers": ["main", "preload", "renderer"]
+    },
+    "shared": {
+      "root": "apps/desktop/src/shared",
+      "allowedBuiltins": [],
+      "allowedPackages": [
+        "@opendesign/agent-contracts",
+        "@opendesign/design-contracts",
+        "@opendesign/design-skills",
+        "@opendesign/editor-runtime",
+        "@opendesign/import-export-service",
+        "@opendesign/model-gateway",
+        "@opendesign/workspace-contracts"
+      ],
+      "forbiddenRelativeLayers": ["agent", "main", "preload", "renderer"]
+    }
+  },
+  "workspacePackageLayers": {
+    "contracts": [
+      "@opendesign/agent-contracts",
+      "@opendesign/design-contracts",
+      "@opendesign/workspace-contracts"
+    ],
+    "foundation": [
+      "@opendesign/design-capabilities",
+      "@opendesign/design-skills",
+      "@opendesign/discovery",
+      "@opendesign/layout-service",
+      "@opendesign/model-gateway",
+      "@opendesign/session-store",
+      "@opendesign/text-service",
+      "@opendesign/tool-runtime",
+      "@opendesign/ui"
+    ],
+    "services": [
+      "@opendesign/component-service",
+      "@opendesign/geometry-service",
+      "@opendesign/image-service",
+      "@opendesign/import-export-service",
+      "@opendesign/library-service",
+      "@opendesign/style-service",
+      "@opendesign/variable-service"
+    ],
+    "runtimes": [
+      "@opendesign/agent-runtime",
+      "@opendesign/editor-runtime",
+      "@opendesign/figma-interop",
+      "@opendesign/leafer-engine"
+    ],
+    "hosts": [
+      "@opendesign/design-engine",
+      "@opendesign/mcp-host",
+      "@opendesign/mcp-server"
+    ],
+    "application": ["@opendesign/desktop"]
+  },
+  "workspaceAllowedLayerDependencies": {
+    "contracts": [],
+    "foundation": ["contracts", "foundation"],
+    "services": ["contracts", "foundation", "services"],
+    "runtimes": ["contracts", "foundation", "services", "runtimes"],
+    "hosts": ["contracts", "foundation", "services", "runtimes", "hosts"],
+    "application": ["contracts", "foundation", "services", "runtimes", "hosts"]
+  },
+  "virtualModules": ["virtual:offline-iconify"],
+  "ignoredUnusedDependencies": {}
+}

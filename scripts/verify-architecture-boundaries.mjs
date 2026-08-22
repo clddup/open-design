@@ -1,153 +1,274 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  assertAcyclicGraph,
+  packageExportAllowsSpecifier,
+  packageRoot,
+  processImportViolation,
+  resolveSourceImport,
+  sourceImports,
+} from "./architecture-rules.mjs";
 import { relativeWorkspacePath } from "./workspace-path.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const baseline = await json("scripts/architecture-baseline.json");
-
-await verifyDesktopLayers();
-await verifyWorkspaceDependencies();
-
-process.stdout.write(
-  "Architecture dependency and process boundaries are current.\n",
+const policy = await json("scripts/architecture-policy.json");
+const manifests = await workspaceManifests();
+const manifestByName = new Map(
+  manifests.map((manifest) => [manifest.name, manifest]),
 );
 
-async function verifyDesktopLayers() {
-  for (const [layerName, policy] of Object.entries(baseline.desktopLayers)) {
-    const files = await sourceFiles(policy.root);
+await verifyDesktopProcesses();
+await verifyDesktopSourceGraph();
+await verifyWorkspacePackages();
+
+process.stdout.write(
+  "Architecture source, package, and Electron process boundaries are current.\n",
+);
+
+async function verifyDesktopProcesses() {
+  for (const [layerName, layerPolicy] of Object.entries(policy.desktopLayers)) {
+    const files = await sourceFiles(resolve(root, layerPolicy.root));
     for (const file of files) {
-      const source = await readFile(file, "utf8");
-      for (const specifier of importSpecifiers(source)) {
-        if (
-          policy.forbiddenBuiltins?.some((prefix) =>
-            prefix.endsWith(":")
-              ? specifier.startsWith(prefix)
-              : specifier === prefix,
-          )
-        ) {
-          fail(
-            `${relativeWorkspacePath(root, file)} imports forbidden ${specifier}`,
-          );
+      const imports = sourceImports(await readFile(file, "utf8"), file);
+      for (const dependency of imports) {
+        const { specifier } = dependency;
+        if (specifier.startsWith(".")) {
+          assertAllowedRelativeLayer(layerName, layerPolicy, file, specifier);
+          continue;
         }
-        if (
-          policy.allowedBuiltins &&
-          (specifier === "electron" || specifier.startsWith("node:")) &&
-          !policy.allowedBuiltins.some((prefix) =>
-            prefix.endsWith(":")
-              ? specifier.startsWith(prefix)
-              : specifier === prefix,
-          )
-        ) {
+        const violation = processImportViolation(dependency, layerPolicy);
+        if (violation) {
           fail(
-            `${relativeWorkspacePath(root, file)} imports unapproved ${specifier}`,
+            `${relativeWorkspacePath(root, file)} ${violation.replace("the process", `the ${layerName} process`)}`,
           );
-        }
-        if (!specifier.startsWith(".")) continue;
-        const target = resolve(dirname(file), specifier);
-        for (const forbiddenLayer of policy.forbiddenRelativeLayers ?? []) {
-          const forbiddenRoot = resolve(
-            root,
-            "apps/desktop/src",
-            forbiddenLayer,
-          );
-          if (
-            target === forbiddenRoot ||
-            target.startsWith(`${forbiddenRoot}${sep}`)
-          ) {
-            fail(
-              `${relativeWorkspacePath(root, file)} crosses ${layerName} → ${forbiddenLayer}`,
-            );
-          }
         }
       }
     }
   }
 }
 
-async function verifyWorkspaceDependencies() {
-  const packages = await packageManifests();
-  const actual = {};
-  for (const manifestPath of packages) {
-    const manifest = await json(relativeWorkspacePath(root, manifestPath));
-    if (
-      typeof manifest.name !== "string" ||
-      !manifest.name.startsWith("@opendesign/")
-    )
-      continue;
-    actual[manifest.name] = Object.keys(manifest.dependencies ?? {})
-      .filter((name) => name.startsWith("@opendesign/"))
-      .sort();
+async function verifyDesktopSourceGraph() {
+  const sourceRoot = resolve(root, "apps/desktop/src");
+  const files = await sourceFiles(sourceRoot);
+  const fileSet = new Set(files);
+  const graph = new Map(files.map((file) => [file, new Set()]));
+  for (const file of files) {
+    for (const { specifier, typeOnly } of sourceImports(
+      await readFile(file, "utf8"),
+      file,
+    )) {
+      if (typeOnly) continue;
+      if (!specifier.startsWith(".")) continue;
+      const target = resolveSourceImport(file, specifier, fileSet);
+      if (target) {
+        graph.get(file).add(target);
+        continue;
+      }
+      if (!isAssetImport(specifier)) {
+        fail(
+          `${relativeWorkspacePath(root, file)} has unresolved source import ${specifier}`,
+        );
+      }
+    }
   }
-  const expectedNames = Object.keys(baseline.workspaceDependencies).sort();
-  if (
-    JSON.stringify(Object.keys(actual).sort()) !== JSON.stringify(expectedNames)
-  ) {
-    fail(
-      "workspace package set drifted; update the architecture ADR and baseline",
+  try {
+    assertAcyclicGraph(graph, "desktop source dependency");
+  } catch (error) {
+    fail(relativeCycleMessage(error));
+  }
+}
+
+async function verifyWorkspacePackages() {
+  const layerByPackage = classifiedWorkspacePackages();
+  const packageNames = new Set(manifests.map((manifest) => manifest.name));
+  for (const name of packageNames) {
+    if (!layerByPackage.has(name)) {
+      fail(`workspace package ${name} has no architecture layer`);
+    }
+  }
+  for (const name of layerByPackage.keys()) {
+    if (!packageNames.has(name)) {
+      fail(`architecture policy classifies missing workspace package ${name}`);
+    }
+  }
+
+  const graph = new Map();
+  for (const manifest of manifests) {
+    const dependencies = Object.keys(manifest.dependencies ?? {}).filter(
+      (name) => manifestByName.has(name),
     );
+    graph.set(manifest.name, new Set(dependencies));
+    const sourceLayer = layerByPackage.get(manifest.name);
+    const allowedLayers = new Set(
+      policy.workspaceAllowedLayerDependencies[sourceLayer] ?? [],
+    );
+    for (const dependency of dependencies) {
+      const targetLayer = layerByPackage.get(dependency);
+      if (!allowedLayers.has(targetLayer)) {
+        fail(
+          `${manifest.name} (${sourceLayer}) cannot depend on ${dependency} (${targetLayer})`,
+        );
+      }
+    }
+    await verifyManifestImports(manifest);
   }
-  for (const name of expectedNames) {
-    const expected = [...baseline.workspaceDependencies[name]].sort();
-    if (JSON.stringify(actual[name]) !== JSON.stringify(expected)) {
+  try {
+    assertAcyclicGraph(graph, "workspace dependency");
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function verifyManifestImports(manifest) {
+  const directory = dirname(manifest.path);
+  const sourceDirectory = resolve(directory, "src");
+  if (!(await exists(sourceDirectory))) return;
+  const files = await sourceFiles(sourceDirectory);
+  const importedPackages = new Set();
+  for (const file of files) {
+    for (const { specifier } of sourceImports(
+      await readFile(file, "utf8"),
+      file,
+    )) {
+      if (specifier.startsWith(".")) continue;
+      const dependency = packageRoot(specifier);
+      if (
+        dependency.startsWith("node:") ||
+        dependency === "electron" ||
+        policy.virtualModules.includes(dependency)
+      ) {
+        continue;
+      }
+      importedPackages.add(dependency);
+      if (dependency === manifest.name) continue;
+      const declarations = {
+        ...(manifest.dependencies ?? {}),
+        ...(manifest.optionalDependencies ?? {}),
+        ...(manifest.peerDependencies ?? {}),
+      };
+      if (!(dependency in declarations)) {
+        fail(
+          `${relativeWorkspacePath(root, file)} imports undeclared production dependency ${dependency}`,
+        );
+      }
+      const workspaceManifest = manifestByName.get(dependency);
+      if (
+        workspaceManifest &&
+        !packageExportAllowsSpecifier(workspaceManifest, specifier)
+      ) {
+        fail(
+          `${relativeWorkspacePath(root, file)} deep-imports non-exported workspace path ${specifier}`,
+        );
+      }
+    }
+  }
+
+  const ignored = new Set(
+    policy.ignoredUnusedDependencies[manifest.name] ?? [],
+  );
+  for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+    if (!importedPackages.has(dependency) && !ignored.has(dependency)) {
       fail(
-        `${name} dependency boundary drift: ${JSON.stringify(actual[name])} != ${JSON.stringify(expected)}`,
+        `${manifest.name} declares unused production dependency ${dependency}`,
       );
     }
   }
-  assertAcyclic(actual);
 }
 
-function assertAcyclic(graph) {
-  const visited = new Set();
-  const active = new Set();
-  const visit = (name, path) => {
-    if (active.has(name))
-      fail(`workspace dependency cycle: ${[...path, name].join(" → ")}`);
-    if (visited.has(name)) return;
-    active.add(name);
-    for (const dependency of graph[name] ?? [])
-      visit(dependency, [...path, name]);
-    active.delete(name);
-    visited.add(name);
-  };
-  for (const name of Object.keys(graph)) visit(name, []);
+function assertAllowedRelativeLayer(layerName, layerPolicy, file, specifier) {
+  const target = resolve(dirname(file), specifier);
+  for (const forbiddenLayer of layerPolicy.forbiddenRelativeLayers ?? []) {
+    const forbiddenRoot = resolve(root, "apps/desktop/src", forbiddenLayer);
+    if (
+      target === forbiddenRoot ||
+      target.startsWith(`${forbiddenRoot}${sep}`)
+    ) {
+      fail(
+        `${relativeWorkspacePath(root, file)} crosses ${layerName} → ${forbiddenLayer}`,
+      );
+    }
+  }
 }
 
-function importSpecifiers(source) {
-  const values = [];
-  const pattern =
-    /(?:\bfrom\s*|\bimport\s*(?:\(|(?=["']))|\brequire\s*\()\s*["']([^"']+)["']/g;
-  for (const match of source.matchAll(pattern)) values.push(match[1]);
-  return values;
+function classifiedWorkspacePackages() {
+  const result = new Map();
+  for (const [layer, names] of Object.entries(policy.workspacePackageLayers)) {
+    for (const name of names) {
+      if (result.has(name)) fail(`workspace package ${name} has two layers`);
+      result.set(name, layer);
+    }
+  }
+  return result;
 }
 
-async function sourceFiles(relativeRoot) {
-  const start = resolve(root, relativeRoot);
+async function workspaceManifests() {
+  const paths = [];
+  for (const parent of ["packages", "apps"]) {
+    const directory = resolve(root, parent);
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        paths.push(join(directory, entry.name, "package.json"));
+      }
+    }
+  }
+  const result = [];
+  for (const path of paths) {
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    if (
+      typeof manifest.name === "string" &&
+      manifest.name.startsWith("@opendesign/")
+    ) {
+      result.push({ ...manifest, path });
+    }
+  }
+  return result;
+}
+
+async function sourceFiles(start) {
   const result = [];
   const visit = async (directory) => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
-      if (entry.isDirectory()) await visit(path);
-      else if (
-        [".ts", ".tsx"].includes(extname(entry.name)) &&
-        !entry.name.includes(".test.") &&
-        !entry.name.endsWith(".d.ts")
-      ) {
+      if (entry.isDirectory()) {
+        await visit(path);
+      } else if (isProductionSource(entry.name)) {
         result.push(path);
       }
     }
   };
   await visit(start);
-  return result;
+  return result.sort();
 }
 
-async function packageManifests() {
-  const directory = resolve(root, "packages");
-  return (await readdir(directory, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => join(directory, entry.name, "package.json"));
+function isProductionSource(name) {
+  return (
+    [".ts", ".tsx"].includes(extname(name)) &&
+    !name.includes(".test.") &&
+    !name.includes(".spec.") &&
+    !name.endsWith(".d.ts") &&
+    name !== "test-setup.ts"
+  );
+}
+
+function isAssetImport(specifier) {
+  return [".css", ".scss", ".png", ".svg", ".wasm"].includes(
+    extname(specifier.split(/[?#]/u, 1)[0]),
+  );
+}
+
+function relativeCycleMessage(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replaceAll(root, ".");
+}
+
+async function exists(path) {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 async function json(path) {

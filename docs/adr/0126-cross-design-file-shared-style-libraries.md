@@ -51,7 +51,7 @@ Agent inspection 可只读看到当前文档已导入的 `libraryStylesById`，�
 - Imported Style 进入保存、history 和完整性校验，但不污染 Local Styles 管理区。
 - 禁用、更新、detach、undo/redo 与保存重开保持 Figma 类引用心智，同时继续服从 OpenDesign 的唯一事务事实。
 - Library Service 成为格式无关的发布/更新编排层；Component Service 与 Style Service 继续只负责各自解析语义。
-- `scripts/architecture-baseline.json` 明确登记 Library Service 只依赖 Component Service 与 Design Contracts，EditorRuntime 单向消费该 planner；依赖 DAG 不形成循环。
+- `scripts/architecture-policy.json` 将 Library Service 分类为 service；门禁从实际 manifest/source import 验证它对 Component Service 与 Design Contracts 的声明、EditorRuntime 的单向消费和无环 DAG，不维护精确依赖快照。
 
 ## 验证
 

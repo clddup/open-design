@@ -52,7 +52,7 @@
 
 ### Workspace 基线
 
-ADR-0098 新增的 `@opendesign/design-skills` 是无 `@opendesign/*` production dependency 的固定本地 skill 包，登记到 `scripts/architecture-baseline.json` 为 `[]`。这修复的是架构事实漂移，不放宽 dependency DAG。
+ADR-0098 新增的 `@opendesign/design-skills` 是无 `@opendesign/*` production dependency 的固定本地 skill 包；`scripts/architecture-policy.json` 将其分类为 foundation，实际 manifest/source import 和 workspace DAG 由门禁直接推导，不维护精确依赖快照。
 
 ## 明确不做
 

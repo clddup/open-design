@@ -15,8 +15,7 @@
     "@earendil-works/pi-ai": "0.84.1",
     "@opendesign/agent-contracts": "workspace:*",
     "@opendesign/model-gateway": "workspace:*",
-    "@opendesign/session-store": "workspace:*",
-    "@opendesign/tool-runtime": "workspace:*"
+    "@opendesign/session-store": "workspace:*"
   },
   "devDependencies": {
     "typebox": "1.3.7",

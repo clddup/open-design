@@ -15,7 +15,7 @@
   },
   "scripts": {
     "agent-core:check": "node scripts/verify-agent-core-boundary.mjs",
-    "architecture:check": "node --test scripts/workspace-path.test.mjs && node scripts/verify-architecture-boundaries.mjs",
+    "architecture:check": "node --test scripts/workspace-path.test.mjs scripts/architecture-rules.test.mjs && node scripts/verify-architecture-boundaries.mjs",
     "build": "pnpm -r --if-present build",
     "capabilities:generate": "node scripts/generate-capability-doc.mjs",
     "dev": "pnpm --filter @opendesign/desktop dev",

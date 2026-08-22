@@ -27,7 +27,7 @@ Collection 持有稳定 `id/key`、名称、发布可见性、有序 modes、def
 
 Alias 使用公开 `{ type: "VARIABLE_ALIAS", id }` 形状，只能指向同类型 Variable；可以跨同一 Design File 的 Collection。每条解析按消费节点为 alias 链中的每个 Collection 独立选择 mode。missing collection/mode/value/alias、类型不匹配和 cycle 返回结构化 issue，不能无限递归或回退到任意值。
 
-解析与投影语义位于独立、无状态的 `@opendesign/variable-service` 包。该包只依赖 `@opendesign/design-contracts`；EditorRuntime、生产 Leafer 投影与桌面端消费服务结果，不能把 Renderer、引擎对象或 Figma adapter 反向引入协议层。这个依赖边界登记在 `scripts/architecture-baseline.json` 并由架构门禁校验。
+解析与投影语义位于独立、无状态的 `@opendesign/variable-service` 包。该包只依赖 `@opendesign/design-contracts`；EditorRuntime、生产 Leafer 投影与桌面端消费服务结果，不能把 Renderer、引擎对象或 Figma adapter 反向引入协议层。`scripts/architecture-policy.json` 将其分类为 service，并由 layer direction、manifest import 和 cycle 门禁校验。
 
 ### Mode 与绑定
 
