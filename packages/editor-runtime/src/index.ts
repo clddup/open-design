@@ -271,11 +271,12 @@ export {
 } from "./layout-overflow-repair.js";
 export {
   EditorRuntime,
-  diffDocuments,
   type EditorRuntimeListener,
   type EditorRuntimeOptions,
   type EditorSnapshot,
 } from "./runtime.js";
+export { diffDocuments } from "./document-diff.js";
+export type { EditorApplyOptions } from "./editor-history.js";
 export {
   normalizePageName,
   planClearPage,
