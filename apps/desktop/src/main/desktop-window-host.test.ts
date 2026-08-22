@@ -4,6 +4,8 @@ import type {
   IpcMainInvokeEvent,
   WebContents,
 } from "electron";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   DesktopWindowHost,
@@ -77,10 +79,16 @@ describe("DesktopWindowHost", () => {
     expect(fixture.openExternal).toHaveBeenCalledOnce();
 
     const allowed = { preventDefault: vi.fn() };
-    navigate(allowed, "file:///application/renderer/index.html");
+    navigate(
+      allowed,
+      pathToFileURL("/application/renderer/index.html").toString(),
+    );
     expect(allowed.preventDefault).not.toHaveBeenCalled();
     const denied = { preventDefault: vi.fn() };
-    navigate(denied, "file:///application/renderer/other.html");
+    navigate(
+      denied,
+      pathToFileURL("/application/renderer/other.html").toString(),
+    );
     expect(denied.preventDefault).toHaveBeenCalledOnce();
   });
 
@@ -184,14 +192,14 @@ describe("resolveApplicationIconPath", () => {
         isPackaged: true,
         resourcesPath: "/bundle/resources",
       }),
-    ).toBe("/bundle/resources/icon.png");
+    ).toBe(join("/bundle/resources", "icon.png"));
     expect(
       resolveApplicationIconPath({
         appPath: "/repo/apps/desktop",
         isPackaged: false,
         resourcesPath: "/bundle/resources",
       }),
-    ).toBe("/repo/apps/desktop/build/icon.png");
+    ).toBe(join("/repo/apps/desktop", "build/icon.png"));
   });
 });
 
