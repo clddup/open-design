@@ -12,7 +12,11 @@ import type {
   Point,
 } from "@opendesign/design-contracts";
 import { MAX_TRANSACTION_COMMANDS } from "@opendesign/design-contracts";
-import { normalizeImageFilters } from "@opendesign/image-service";
+import {
+  normalizeImageFilters,
+  resolveImageExpansionRaster,
+  type ImageExpansionInsets,
+} from "@opendesign/image-service";
 import { canonicalJsonStringify } from "./document-fingerprint.js";
 import {
   getWorldTransform,
@@ -66,6 +70,18 @@ export type ImageUpdateOperation =
       asset: DesignAsset;
       derivation: ImageAssetDerivation;
       supportingAssets?: readonly DesignAsset[];
+    }
+  | {
+      action: "expand-source";
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      expectedPlacement: ImagePlacement;
+      expectedTargetSize: { width: number; height: number };
+      expansion: ImageExpansionInsets;
+      asset: DesignAsset;
+      derivation: ImageAssetDerivation;
+      supportingAssets: readonly DesignAsset[];
     };
 
 export type ImageUpdateFailureCode =
@@ -278,7 +294,9 @@ export function planImageNodeUpdate(
   }
 
   const sourceUpdate =
-    operation.action === "derive-source" || operation.action === "derive-layer"
+    operation.action === "derive-source" ||
+    operation.action === "derive-layer" ||
+    operation.action === "expand-source"
       ? operation
       : {
           ...operation,
@@ -303,6 +321,64 @@ export function planImageNodeUpdate(
       message: `Asset ${sourceUpdate.asset.id} is not an image`,
     };
   }
+  let expansionGeometry:
+    ReturnType<typeof resolveImageExpansionRaster> | undefined;
+  if (operation.action === "expand-source") {
+    if (
+      node.layoutSizing?.horizontal === "fill" ||
+      node.layoutSizing?.vertical === "fill"
+    ) {
+      return {
+        ok: false,
+        code: "out-of-scope",
+        message:
+          "Image expansion requires fixed sizing on both axes; change Auto Layout Fill sizing first",
+      };
+    }
+    if (
+      !samePlacement(node.properties.placement, operation.expectedPlacement) ||
+      !sameSize(node.size, operation.expectedTargetSize)
+    ) {
+      return {
+        ok: false,
+        code: "asset-stale",
+        message: `Image node ${operation.nodeId} geometry changed after expansion started`,
+      };
+    }
+    if (operation.derivation.operation !== "expand") {
+      return {
+        ok: false,
+        code: "invalid-asset",
+        message: "Image expansion requires an expand derivation",
+      };
+    }
+    try {
+      expansionGeometry = resolveImageExpansionRaster({
+        expansion: operation.expansion,
+        targetSize: operation.expectedTargetSize,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        code: "invalid-asset",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Image expansion geometry is invalid",
+      };
+    }
+    if (
+      !sourceUpdate.asset.size ||
+      !sameSize(sourceUpdate.asset.size, expansionGeometry.outputSize)
+    ) {
+      return {
+        ok: false,
+        code: "invalid-asset",
+        message:
+          "Expanded image asset dimensions do not match the planned canvas",
+      };
+    }
+  }
   const placementChanged =
     operation.action === "replace-source" &&
     operation.placement !== undefined &&
@@ -320,7 +396,8 @@ export function planImageNodeUpdate(
     requestedDerivation.sourceAssetId !== previousAssetId ||
     requestedDerivation.resultAssetId !== sourceUpdate.asset.id ||
     ((operation.action === "derive-source" ||
-      operation.action === "derive-layer") &&
+      operation.action === "derive-layer" ||
+      operation.action === "expand-source") &&
       requestedDerivation.operation === "replacement")
   ) {
     return {
@@ -329,9 +406,21 @@ export function planImageNodeUpdate(
       message: "Image derivation does not match the requested source update",
     };
   }
+  if (
+    requestedDerivation.operation === "expand" &&
+    operation.action !== "expand-source"
+  ) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message: "Image expansion must use the dedicated geometry-bound workflow",
+    };
+  }
 
   const supportingAssets =
-    operation.action === "derive-source" || operation.action === "derive-layer"
+    operation.action === "derive-source" ||
+    operation.action === "derive-layer" ||
+    operation.action === "expand-source"
       ? (operation.supportingAssets ?? [])
       : [];
   const supportingAssetIds = new Set(supportingAssets.map((asset) => asset.id));
@@ -369,6 +458,32 @@ export function planImageNodeUpdate(
       code: "invalid-asset",
       message: `Image derivation input asset ${unresolvedInputAssetId} does not exist`,
     };
+  }
+  if (
+    requestedDerivation.operation === "expand" ||
+    requestedDerivation.operation === "erase-object" ||
+    requestedDerivation.operation === "isolate-object"
+  ) {
+    const maskAsset = requestedDerivation.maskAssetId
+      ? (document.assetsById[requestedDerivation.maskAssetId] ??
+        supportingAssets.find(
+          (asset) => asset.id === requestedDerivation.maskAssetId,
+        ))
+      : undefined;
+    if (
+      typeof requestedDerivation.prompt !== "string" ||
+      requestedDerivation.prompt.trim().length === 0 ||
+      requestedDerivation.referenceAssetIds.length !== 0 ||
+      maskAsset?.kind !== "image" ||
+      maskAsset.mimeType !== "image/png"
+    ) {
+      return {
+        ok: false,
+        code: "invalid-asset",
+        message:
+          "Masked image derivation requires one exact PNG mask and prompt",
+      };
+    }
   }
 
   const commands: DesignOperation[] = [];
@@ -491,6 +606,21 @@ export function planImageNodeUpdate(
       },
     });
     createdNodeId = operation.resultNodeId;
+  } else if (operation.action === "expand-source" && expansionGeometry) {
+    commands.push({
+      commandId: `${commandPrefix}_node`,
+      type: "update_properties",
+      nodeId: operation.nodeId,
+      transform: shiftTransformForExpansion(
+        node.transform,
+        operation.expansion,
+      ),
+      size: expansionGeometry.expandedSize,
+      properties: {
+        assetId: sourceUpdate.asset.id,
+        placement: { mode: "stretch" },
+      },
+    });
   } else {
     commands.push({
       commandId: `${commandPrefix}_node`,
@@ -1029,6 +1159,28 @@ function findImageAssetDerivation(
 
 function samePlacement(left: ImagePlacement, right: ImagePlacement): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function sameSize(
+  left: { width: number; height: number },
+  right: { width: number; height: number },
+): boolean {
+  return left.width === right.width && left.height === right.height;
+}
+
+function shiftTransformForExpansion(
+  transform: DesignNode["transform"],
+  expansion: ImageExpansionInsets,
+): DesignNode["transform"] {
+  const [a, b, c, d, e, f] = transform;
+  return [
+    a,
+    b,
+    c,
+    d,
+    e - a * expansion.left - c * expansion.top,
+    f - b * expansion.left - d * expansion.top,
+  ];
 }
 
 function safeResourceId(value: string): boolean {

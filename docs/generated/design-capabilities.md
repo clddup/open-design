@@ -176,13 +176,14 @@
 基于一张或多张源图，通过蒙版、局部重绘、扩图、背景替换、重打光或风格统一生成可追溯变体。
 
 - ID：`image.ai-editing`
-- 实现方：OpenDesign Image Service contract 4 + Main-owned RGBA mask generation + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner
+- 实现方：OpenDesign Image Service contract 5 + Main-owned RGBA mask/expansion raster + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner
 - 表面：contract=available；runtime=available；human=available；agent=available；render=available；export=available
-- 证据：自动化 7 项；实机 0 项
-- 限制：内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、用提示词和一张可选参考图编辑整图，并通过画布 lasso 执行 Erase/Isolate；带提示词的局部重绘、扩图、背景替换、重打光、风格统一、Image Paint 编辑与多参考图仍未完成。
+- 证据：自动化 8 项；实机 0 项
+- 限制：内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、用提示词和一张可选参考图编辑整图、通过画布 lasso 执行 Erase/Isolate，并使用手柄扩图；带提示词的局部重绘、背景替换、清晰度增强、重打光、风格统一、Image Paint 编辑与多参考图仍未完成。
 - 专业参照：[官方说明](docs/adr/0133-trusted-remove-background-image-editing.md)
 - 专业参照：[官方说明](docs/adr/0134-trusted-prompt-image-editing.md)
 - 专业参照：[官方说明](docs/adr/0135-trusted-area-image-editing.md)
+- 专业参照：[官方说明](docs/adr/0136-trusted-image-expansion.md)
 - 专业参照：[官方说明](https://developers.openai.com/api/docs/guides/image-generation)
 - 专业参照：[官方说明](https://help.figma.com/hc/en-us/articles/24004542669463-Make-or-edit-an-image-with-AI)
 

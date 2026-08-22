@@ -2554,6 +2554,21 @@ describe("design Agent tool contract", () => {
         mask: "data:image/png;base64,aW1hZ2U=",
       }),
     ).toBe(false);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...input,
+        action: "expand",
+        label: "Extend the hero to the right",
+        expansion: { top: 0, right: 160, bottom: 0, left: 0 },
+      }),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...input,
+        action: "expand",
+        expansion: { top: 0, right: 0, bottom: 0, left: 0 },
+      }),
+    ).toBe(false);
   });
 
   it("accepts only exact trusted mask provenance for isolated image layers", () => {
@@ -2609,6 +2624,56 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, {
         ...input,
         resultNodeId: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only geometry-bound trusted image expansion commits", () => {
+    const sourceAssetId = `asset_${"3".repeat(64)}`;
+    const maskAsset = {
+      id: `asset_${"4".repeat(64)}`,
+      kind: "image",
+      name: "Expansion mask.png",
+      mimeType: "image/png",
+      source: { type: "data", value: "bWFzaw==" },
+      size: { width: 1024, height: 1024 },
+      extensions: {},
+    } as const;
+    const resultAsset = {
+      ...maskAsset,
+      id: `asset_${"5".repeat(64)}`,
+      name: "Expanded.png",
+      source: { type: "data", value: "cmVzdWx0" },
+    } as const;
+    const input = {
+      action: "expand-source",
+      label: "Expand hero",
+      pageId: "page_1",
+      nodeId: "hero_image",
+      expectedAssetId: sourceAssetId,
+      expectedPlacement: { mode: "fit" },
+      expectedTargetSize: { width: 320, height: 240 },
+      expansion: { top: 40, right: 0, bottom: 40, left: 0 },
+      asset: resultAsset,
+      supportingAssets: [maskAsset],
+      derivation: {
+        id: "image_derivation_expand",
+        sourceAssetId,
+        resultAssetId: resultAsset.id,
+        operation: "expand",
+        prompt: "Extend the image naturally",
+        maskAssetId: maskAsset.id,
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, input),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(INTERNAL_UPDATE_IMAGE_TOOL_NAME, {
+        ...input,
+        expectedTargetSize: { width: 0, height: 240 },
       }),
     ).toBe(false);
   });

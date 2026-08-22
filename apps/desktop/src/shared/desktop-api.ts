@@ -20,9 +20,12 @@ import {
 import {
   isDesignAsset,
   isImageAssetDerivation,
+  isImagePlacement,
   isDesignDocument,
   type DesignAsset,
   type ImageAssetDerivation,
+  type ImagePlacement,
+  type Size,
   type DesignDocument,
   type LibraryReleaseSnapshot,
 } from "@opendesign/design-contracts";
@@ -266,8 +269,19 @@ export type DesignImageAreaSelection = {
   points: Array<{ x: number; y: number }>;
 };
 
+export type DesignImageExpansion = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
 export type DesignImageEditAction =
-  "remove-background" | "prompt-edit" | "erase-object" | "isolate-object";
+  | "remove-background"
+  | "prompt-edit"
+  | "erase-object"
+  | "isolate-object"
+  | "expand";
 
 type DesignImageEditRequestBase = {
   requestId: string;
@@ -288,6 +302,12 @@ export type DesignImageEditRequest = DesignImageEditRequestBase &
     | {
         action: "erase-object" | "isolate-object";
         selection: DesignImageAreaSelection;
+      }
+    | {
+        action: "expand";
+        expansion: DesignImageExpansion;
+        placement: ImagePlacement;
+        targetSize: Size;
       }
   );
 
@@ -699,6 +719,24 @@ export function isDesignImageEditRequest(
       ])
     );
   }
+  if (value.action === "expand") {
+    return (
+      isDesignImageExpansion(value.expansion) &&
+      isImagePlacement(value.placement) &&
+      isPositiveSize(value.targetSize) &&
+      hasExactKeys(value, [
+        "requestId",
+        "action",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "source",
+        "expansion",
+        "placement",
+        "targetSize",
+      ])
+    );
+  }
   return (
     value.action === "prompt-edit" &&
     typeof value.prompt === "string" &&
@@ -729,7 +767,8 @@ export function isDesignImageEditResult(
     (value.action !== "remove-background" &&
       value.action !== "prompt-edit" &&
       value.action !== "erase-object" &&
-      value.action !== "isolate-object") ||
+      value.action !== "isolate-object" &&
+      value.action !== "expand") ||
     !isStableId(value.sourceAssetId) ||
     !isEmbeddedEditableImageAsset(value.asset) ||
     !isImageAssetDerivation(value.derivation) ||
@@ -780,13 +819,16 @@ export function isDesignImageEditResult(
     return false;
   }
   if (
-    (value.action === "erase-object" || value.action === "isolate-object") &&
+    (value.action === "erase-object" ||
+      value.action === "isolate-object" ||
+      value.action === "expand") &&
     (typeof derivation.prompt !== "string" ||
       derivation.prompt.trim().length === 0 ||
       derivation.referenceAssetIds.length !== 0 ||
       supportingAssets.length !== 1 ||
       supportingAssets[0]?.mimeType !== "image/png" ||
-      derivation.maskAssetId !== supportingAssets[0]?.id)
+      derivation.maskAssetId !== supportingAssets[0]?.id ||
+      (value.action === "expand" && value.asset.mimeType !== "image/png"))
   ) {
     return false;
   }
@@ -822,6 +864,43 @@ export function isDesignImageAreaSelection(
         hasExactKeys(point, ["x", "y"]),
     ) &&
     hasExactKeys(value, ["points"])
+  );
+}
+
+export function isDesignImageExpansion(
+  value: unknown,
+): value is DesignImageExpansion {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["top", "right", "bottom", "left"])
+  ) {
+    return false;
+  }
+  const values = [value.top, value.right, value.bottom, value.left];
+  return (
+    values.some(
+      (candidate) => typeof candidate === "number" && candidate > 0,
+    ) &&
+    values.every(
+      (candidate) =>
+        typeof candidate === "number" &&
+        Number.isFinite(candidate) &&
+        candidate >= 0 &&
+        candidate <= 1_000_000,
+    )
+  );
+}
+
+function isPositiveSize(value: unknown): value is Size {
+  return (
+    isRecord(value) &&
+    typeof value.width === "number" &&
+    Number.isFinite(value.width) &&
+    value.width > 0 &&
+    typeof value.height === "number" &&
+    Number.isFinite(value.height) &&
+    value.height > 0 &&
+    hasExactKeys(value, ["width", "height"])
   );
 }
 

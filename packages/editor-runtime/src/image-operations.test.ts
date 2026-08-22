@@ -560,6 +560,105 @@ describe("image update planner", () => {
     ).toBeUndefined();
   });
 
+  it("expands image bounds while preserving the protected source position in one undo", () => {
+    const maskAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_expand_mask",
+      mimeType: "image/png",
+      name: "Expansion mask",
+      size: { width: 1024, height: 1024 },
+    };
+    const expandedAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_expanded",
+      mimeType: "image/png",
+      name: "Expanded image",
+      size: { width: 1024, height: 1024 },
+    };
+    const runtime = new EditorRuntime(documentWithImage());
+    const input = {
+      action: "expand-source" as const,
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: oldAsset.id,
+      expectedPlacement: { mode: "fit" as const },
+      expectedTargetSize: { width: 320, height: 240 },
+      expansion: { top: 40, right: 0, bottom: 40, left: 0 },
+      asset: expandedAsset,
+      supportingAssets: [maskAsset],
+      derivation: {
+        id: "expand_derivation",
+        sourceAssetId: oldAsset.id,
+        resultAssetId: expandedAsset.id,
+        operation: "expand" as const,
+        prompt: "Extend the image naturally",
+        maskAssetId: maskAsset.id,
+        referenceAssetIds: [],
+        extensions: {},
+      },
+    };
+    const plan = planImageNodeUpdate(runtime.getSnapshot().document, input);
+    expect(plan).toMatchObject({ ok: true });
+    if (!plan.ok) return;
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "expand_image",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        commands: plan.commands,
+      }).ok,
+    ).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
+      transform: [1, 0, 0, 1, 32, -8],
+      size: { width: 320, height: 320 },
+      properties: {
+        assetId: expandedAsset.id,
+        placement: { mode: "stretch" },
+      },
+    });
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
+      transform: [1, 0, 0, 1, 32, 32],
+      size: { width: 320, height: 240 },
+      properties: { assetId: oldAsset.id, placement: { mode: "fit" } },
+    });
+    expect(
+      runtime.getSnapshot().document.assetsById[expandedAsset.id],
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.assetsById[maskAsset.id],
+    ).toBeUndefined();
+
+    const stale = documentWithImage();
+    stale.nodesById.hero!.size = { width: 321, height: 240 };
+    expect(planImageNodeUpdate(stale, input)).toMatchObject({
+      ok: false,
+      code: "asset-stale",
+    });
+    const fillSized = documentWithImage();
+    fillSized.nodesById.hero!.layoutSizing = {
+      horizontal: "fill",
+      vertical: "fixed",
+    };
+    expect(planImageNodeUpdate(fillSized, input)).toMatchObject({
+      ok: false,
+      code: "out-of-scope",
+    });
+    expect(
+      planImageNodeUpdate(documentWithImage(), {
+        action: "derive-source",
+        pageId: input.pageId,
+        nodeId: input.nodeId,
+        expectedAssetId: input.expectedAssetId,
+        asset: input.asset,
+        supportingAssets: input.supportingAssets,
+        derivation: input.derivation,
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-asset" });
+  });
+
   it("preserves an old asset referenced by another Image or Path paint", () => {
     const document = documentWithImage();
     document.nodesById.secondary = imageNode("secondary");

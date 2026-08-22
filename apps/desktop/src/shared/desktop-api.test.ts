@@ -500,6 +500,70 @@ describe("Design image desktop API guards", () => {
       }),
     ).toBe(false);
   });
+
+  it("binds image expansion to exact geometry and PNG mask provenance", () => {
+    const request = {
+      requestId: "image_expand_request",
+      action: "expand",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: sourceAsset.id,
+      source: sourceAsset,
+      expansion: { top: 20, right: 100, bottom: 20, left: 0 },
+      placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
+      targetSize: { width: 400, height: 300 },
+    };
+    expect(isDesignImageEditRequest(request)).toBe(true);
+    expect(
+      isDesignImageEditRequest({
+        ...request,
+        expansion: { top: 0, right: 0, bottom: 0, left: 0 },
+      }),
+    ).toBe(false);
+    expect(
+      isDesignImageEditRequest({
+        ...request,
+        targetSize: { width: 0, height: 300 },
+      }),
+    ).toBe(false);
+
+    const maskAsset = {
+      ...referenceAsset,
+      id: `asset_${"1".repeat(64)}`,
+      name: "Expansion mask.png",
+      mimeType: "image/png",
+    };
+    const resultAsset = {
+      ...referenceAsset,
+      id: `asset_${"2".repeat(64)}`,
+      name: "Hero — Expanded.png",
+      mimeType: "image/png",
+    };
+    const result = {
+      requestId: request.requestId,
+      action: "expand",
+      sourceAssetId: sourceAsset.id,
+      asset: resultAsset,
+      supportingAssets: [maskAsset],
+      derivation: {
+        id: "image_derivation_expand",
+        sourceAssetId: sourceAsset.id,
+        resultAssetId: resultAsset.id,
+        operation: "expand",
+        prompt: "Extend the image naturally",
+        maskAssetId: maskAsset.id,
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(isDesignImageEditResult(result)).toBe(true);
+    expect(
+      isDesignImageEditResult({
+        ...result,
+        asset: { ...resultAsset, mimeType: "image/jpeg" },
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("Font binary desktop API guards", () => {

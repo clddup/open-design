@@ -3467,6 +3467,89 @@ describe("Renderer design tool scope", () => {
     expect(
       afterUndo.imageAssetDerivationsById.isolate_object_derivation,
     ).toBeUndefined();
+
+    const expandMaskAssetId = `asset_${"2".repeat(64)}`;
+    const expandedAssetId = `asset_${"3".repeat(64)}`;
+    const expandRevision = runtime.getSnapshot().document.revision;
+    const expanded = await executeDesignToolRequest(
+      {
+        requestId: "commit_expanded_image_edit",
+        call: {
+          toolCallId: "tool_commit_expanded_image_edit",
+          toolName: INTERNAL_UPDATE_IMAGE_TOOL_NAME,
+          input: {
+            action: "expand-source",
+            label: "Expand hero vertically",
+            pageId: "page_welcome",
+            nodeId: "hero_image",
+            expectedAssetId: promptResultAssetId,
+            expectedPlacement: sourceBeforeIsolation.properties.placement,
+            expectedTargetSize: sourceBeforeIsolation.size,
+            expansion: { top: 40, right: 0, bottom: 40, left: 0 },
+            asset: {
+              id: expandedAssetId,
+              kind: "image",
+              name: "Expanded hero.png",
+              mimeType: "image/png",
+              source: { type: "data", value: "ZXhwYW5kZWQ=" },
+              size: { width: 1024, height: 1024 },
+              extensions: {},
+            },
+            supportingAssets: [
+              {
+                id: expandMaskAssetId,
+                kind: "image",
+                name: "Expansion mask.png",
+                mimeType: "image/png",
+                source: { type: "data", value: "bWFzaw==" },
+                size: { width: 1024, height: 1024 },
+                extensions: {},
+              },
+            ],
+            derivation: {
+              id: "expand_image_derivation",
+              sourceAssetId: promptResultAssetId,
+              resultAssetId: expandedAssetId,
+              operation: "expand",
+              prompt: "Extend the image naturally",
+              maskAssetId: expandMaskAssetId,
+              referenceAssetIds: [],
+              extensions: { modelId: "gpt-image-2" },
+            },
+          },
+        },
+        context: { ...selectionContext, revision: expandRevision },
+      },
+      runtime,
+      "page_welcome",
+    );
+    expect(expanded).toMatchObject({
+      ok: true,
+      result: {
+        content: {
+          action: "expand-source",
+          assetId: expandedAssetId,
+        },
+      },
+    });
+    expect(runtime.getSnapshot().document.nodesById.hero_image).toMatchObject({
+      transform: [1, 0, 0, 1, 32, -8],
+      size: { width: 320, height: 320 },
+      properties: {
+        assetId: expandedAssetId,
+        placement: { mode: "stretch" },
+      },
+    });
+    expect(runtime.undo().ok).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero_image).toEqual(
+      sourceBeforeIsolation,
+    );
+    expect(
+      runtime.getSnapshot().document.assetsById[expandedAssetId],
+    ).toBeUndefined();
+    expect(
+      runtime.getSnapshot().document.assetsById[expandMaskAssetId],
+    ).toBeUndefined();
   });
 
   it("updates one inspected image paint and blocks generic filter rewrites", async () => {

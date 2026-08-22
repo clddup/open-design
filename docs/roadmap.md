@@ -281,7 +281,8 @@ P0 阶段先验收 `OD-PENGUIN-01` 和 `OD-POSTER-01` 的当前可用子集。�
 - [x] 完成可信去背景 AI 图片编辑垂直切片：全局图片服务复用同一配置与凭据，以 `/images/edits` multipart 生成透明 PNG；Main 校验格式、尺寸和真实透明像素，Inspector 与独立 `opendesign_edit_image` 均以 `expectedAssetId` 防 stale，并只在远端成功后原子提交新 asset、`remove-background` derivation 和节点引用。等待期间画布可操作，取消/失败/并发变化零 revision，原图和所有非来源属性保留。见 ADR-0133。
 - [x] 完成可信整图提示词编辑与单参考图垂直切片：Inspector 与 `opendesign_edit_image` 复用 `/images/edits`，源图固定为首个 multipart 输入，可选一张人工选择或当前 Run 已授权的参考图；Main 验证 PNG 结果后，Runtime 才将结果 asset、supporting reference asset、prompt/reference provenance 和节点引用作为一笔 stale-safe revision 提交。取消、失败和并发变化零写入，一次 Undo 与保存重开保持完整来源语义。见 ADR-0134。
 - [x] 完成可信区域图片编辑垂直切片：Image Service contract 4 将 Image node-local lasso 按 Stretch/Fit/Fill/Crop、rotation 与 flip 转为归一化源图坐标；Main 生成同源尺寸 PNG mask 并复用 `/images/edits`。人工 `Select area…` 与 Agent 共用 Erase/Isolate：Erase 更新当前来源，Isolate 插入保留属性的新 sibling Image；mask、结果和 derivation 仅在输出通过验证后以一次 stale-safe revision 提交，Escape/取消/Provider 失败/无效输出/并发变化零写入。见 ADR-0135。
-- 扩展已建立的 Image service：继续支持带提示词的局部重绘、扩图、背景替换、重打光和风格统一，并复用已完成的来源谱系；继续补齐大图按需加载、去重与资源生命周期。任何编辑都不得覆盖原始 asset。
+- [x] 完成可信画布扩图垂直切片：Image Service contract 5 提供四边/四角 outward handle、常用比例与 16px 对齐的受控 Provider canvas；Main 按当前 placement 投影原图、生成透明扩展区 mask，并在 Provider 成功后逐像素覆盖回原图保护矩形。人工 Expand overlay 与 Agent 共用专用 `expand-source`，一笔 stale-safe transaction 提交结果/mask/derivation、节点新尺寸、原点 transform 与 Stretch placement；Escape/取消/输出漂移/size/placement/asset 并发变化零 revision，普通 derive 不能旁路。见 ADR-0136。
+- 扩展已建立的 Image service：继续支持带提示词的局部重绘、背景替换、Boost resolution、重打光和风格统一，并复用已完成的来源谱系；继续补齐大图按需加载、去重与资源生命周期。任何编辑都不得覆盖原始 asset。
 - 扩展 P0-B 已建立的专业位图导出，补海报交付所需的高级颜色、资源和格式保真；导出继续读取 DesignDocument 和受控资源，不能把当前画布截图当作交付产物。
 - 为人工属性面板和 Agent 增加文字、裁剪、替换、调整和导出的语义命令；长任务必须展示进度、支持取消并返回稳定产物或明确失败。
 

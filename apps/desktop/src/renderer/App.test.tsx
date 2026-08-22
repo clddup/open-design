@@ -3530,6 +3530,133 @@ describe("App", () => {
       runtime().setSelection(["background_image"], "background_image");
     });
 
+    const expandMaskAssetId = `asset_${"7".repeat(64)}`;
+    const expandedAssetId = `asset_${"8".repeat(64)}`;
+    vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
+      (request) => {
+        if (request.action !== "expand") {
+          throw new Error("Expected an image expansion request");
+        }
+        expect(request).toMatchObject({
+          expansion: { top: 50, right: 0, bottom: 50, left: 0 },
+          placement: { mode: "fill" },
+          targetSize: { width: 400, height: 300 },
+        });
+        return Promise.resolve({
+          requestId: request.requestId,
+          action: "expand",
+          sourceAssetId,
+          asset: {
+            id: expandedAssetId,
+            kind: "image",
+            name: "Portrait — Expanded.png",
+            mimeType: "image/png",
+            source: { type: "data", value: "ZXhwYW5kZWQ=" },
+            size: { width: 1024, height: 1024 },
+            extensions: { importedBy: "inspector-image-edit" },
+          },
+          supportingAssets: [
+            {
+              id: expandMaskAssetId,
+              kind: "image",
+              name: "Portrait — Expansion mask.png",
+              mimeType: "image/png",
+              source: { type: "data", value: "bWFzaw==" },
+              size: { width: 1024, height: 1024 },
+              extensions: { role: "image-edit-mask" },
+            },
+          ],
+          derivation: {
+            id: "expand_image_result",
+            sourceAssetId,
+            resultAssetId: expandedAssetId,
+            operation: "expand",
+            prompt: "Extend the image naturally",
+            maskAssetId: expandMaskAssetId,
+            referenceAssetIds: [],
+            extensions: { modelId: "gpt-image-2" },
+          },
+        });
+      },
+    );
+    await user.click(screen.getByRole("button", { name: "Expand image…" }));
+    expect(
+      screen.getByRole("application", { name: "Expand image" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("toolbar", { name: "Canvas selection actions" }),
+    ).toBeNull();
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Aspect ratio" }),
+      "1:1",
+    );
+    await user.click(screen.getByRole("button", { name: "Expand" }));
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.nodesById.background_image,
+      ).toMatchObject({
+        transform: [1, 0, 0, 1, 100, 70],
+        size: { width: 400, height: 400 },
+        properties: {
+          assetId: expandedAssetId,
+          placement: { mode: "stretch" },
+          filters: { contrast: 0.2 },
+          cornerRadius: 12,
+        },
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.nodesById.background_image,
+    ).toMatchObject({
+      transform: [1, 0, 0, 1, 100, 120],
+      size: { width: 400, height: 300 },
+      properties: {
+        assetId: sourceAssetId,
+        placement: { mode: "fill" },
+      },
+    });
+    expect(
+      runtime().getSnapshot().document.assetsById[expandedAssetId],
+    ).toBeUndefined();
+    expect(
+      runtime().getSnapshot().document.assetsById[expandMaskAssetId],
+    ).toBeUndefined();
+    await user.click(screen.getByRole("button", { name: "Expand image…" }));
+    const cancelledExpandOverlay = screen.getByRole("application", {
+      name: "Expand image",
+    });
+    fireEvent.keyDown(cancelledExpandOverlay, { key: "Escape" });
+    expect(cancelledExpandOverlay).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand image…" }));
+    act(() => {
+      const current = runtime().getSnapshot().document;
+      const result = runtime().apply({
+        transactionId: "stale_image_expand_session",
+        documentId: current.documentId,
+        baseRevision: current.revision,
+        actor: { type: "user", id: "test" },
+        commands: [
+          {
+            commandId: "update_unrelated_after_expand",
+            type: "update_properties",
+            nodeId: "feature_one",
+            properties: { cornerRadius: 16 },
+          },
+        ],
+      });
+      if (!result.ok) throw new Error(result.error.message);
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("application", { name: "Expand image" }),
+      ).toBeNull(),
+    );
+    act(() => {
+      expect(runtime().undo().ok).toBe(true);
+      runtime().setSelection(["background_image"], "background_image");
+    });
+
     let rejectEdit: ((reason: Error) => void) | undefined;
     vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
       () =>

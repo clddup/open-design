@@ -27,7 +27,11 @@ import {
   screenToDocument,
   isEffectivelyLocked,
 } from "@opendesign/editor-runtime";
-import type { ImageAreaSelection } from "@opendesign/image-service";
+import {
+  createImageExpandSession,
+  type ImageAreaSelection,
+  type ImageExpansionInsets,
+} from "@opendesign/image-service";
 import { navigateComponentSelection } from "@opendesign/component-service";
 import { Icon } from "@opendesign/ui";
 import {
@@ -86,6 +90,7 @@ import {
   ImageAreaSelectionOverlay,
   type ImageAreaSelectionAction,
 } from "./ImageAreaSelectionOverlay";
+import { ImageExpandOverlay } from "./ImageExpandOverlay";
 
 export function Canvas({
   activeAgentRunId,
@@ -101,6 +106,8 @@ export function Canvas({
   imageEditActivity,
   onImageAreaEdit,
   onImageAreaSelectionControllerChange,
+  onImageExpand,
+  onImageExpandControllerChange,
   onImageCropControllerChange,
   onTextLayoutProviderReady,
   onTextEditingStyleControllerChange,
@@ -125,7 +132,11 @@ export function Canvas({
   ) => { ok: boolean };
   imageEditActivity?: {
     action:
-      "remove-background" | "prompt-edit" | "erase-object" | "isolate-object";
+      | "remove-background"
+      | "prompt-edit"
+      | "erase-object"
+      | "isolate-object"
+      | "expand";
     nodeName: string;
     status: "running" | "cancelling";
     onCancel: () => void;
@@ -136,6 +147,10 @@ export function Canvas({
     selection: ImageAreaSelection,
   ) => void;
   onImageAreaSelectionControllerChange: (
+    controller: ((nodeId: string) => boolean) | null,
+  ) => void;
+  onImageExpand: (nodeId: string, expansion: ImageExpansionInsets) => void;
+  onImageExpandControllerChange: (
     controller: ((nodeId: string) => boolean) | null,
   ) => void;
   onImageCropControllerChange: (
@@ -171,6 +186,12 @@ export function Canvas({
   const [imageCropState, setImageCropState] =
     useState<LeaferImageCropState | null>(null);
   const [imageAreaSelection, setImageAreaSelection] = useState<{
+    assetId: string;
+    nodeId: string;
+    pageId: string;
+    revision: number;
+  } | null>(null);
+  const [imageExpand, setImageExpand] = useState<{
     assetId: string;
     nodeId: string;
     pageId: string;
@@ -274,6 +295,7 @@ export function Canvas({
         imageEditActivity !== undefined ||
         tool !== "select" ||
         imageCropState !== null ||
+        imageExpand !== null ||
         vectorEditStateRef.current !== null ||
         current.state.selection.nodeIds.length !== 1 ||
         current.state.selection.nodeIds[0] !== nodeId ||
@@ -296,7 +318,14 @@ export function Canvas({
       });
       return true;
     },
-    [activePageId, imageCropState, imageEditActivity, runtime, tool],
+    [
+      activePageId,
+      imageCropState,
+      imageEditActivity,
+      imageExpand,
+      runtime,
+      tool,
+    ],
   );
 
   useEffect(() => {
@@ -320,6 +349,79 @@ export function Canvas({
       setImageAreaSelection(null);
     }
   }, [activePageId, imageAreaSelection, snapshot, tool]);
+
+  const startImageExpand = useCallback(
+    (nodeId: string) => {
+      const current = runtime.getSnapshot();
+      const node = current.document.nodesById[nodeId];
+      const asset =
+        node?.kind === "image"
+          ? current.document.assetsById[node.properties.assetId]
+          : undefined;
+      if (
+        imageEditActivity !== undefined ||
+        tool !== "select" ||
+        imageCropState !== null ||
+        imageAreaSelection !== null ||
+        vectorEditStateRef.current !== null ||
+        current.state.selection.nodeIds.length !== 1 ||
+        current.state.selection.nodeIds[0] !== nodeId ||
+        node?.kind !== "image" ||
+        node.layoutSizing?.horizontal === "fill" ||
+        node.layoutSizing?.vertical === "fill" ||
+        isEffectivelyLocked(current.document, nodeId) ||
+        !asset?.size ||
+        asset.kind !== "image" ||
+        asset.source.type !== "data" ||
+        (asset.mimeType !== "image/png" &&
+          asset.mimeType !== "image/jpeg" &&
+          asset.mimeType !== "image/webp")
+      ) {
+        return false;
+      }
+      try {
+        createImageExpandSession(node.size);
+      } catch {
+        return false;
+      }
+      setImageExpand({
+        assetId: node.properties.assetId,
+        nodeId,
+        pageId: activePageId,
+        revision: current.document.revision,
+      });
+      return true;
+    },
+    [
+      activePageId,
+      imageAreaSelection,
+      imageCropState,
+      imageEditActivity,
+      runtime,
+      tool,
+    ],
+  );
+
+  useEffect(() => {
+    onImageExpandControllerChange(startImageExpand);
+    return () => onImageExpandControllerChange(null);
+  }, [onImageExpandControllerChange, startImageExpand]);
+
+  useEffect(() => {
+    if (!imageExpand) return;
+    const node = snapshot.document.nodesById[imageExpand.nodeId];
+    if (
+      activePageId !== imageExpand.pageId ||
+      snapshot.document.revision !== imageExpand.revision ||
+      tool !== "select" ||
+      snapshot.state.selection.nodeIds.length !== 1 ||
+      snapshot.state.selection.nodeIds[0] !== imageExpand.nodeId ||
+      node?.kind !== "image" ||
+      node.properties.assetId !== imageExpand.assetId
+    ) {
+      setImageExpand(null);
+    }
+  }, [activePageId, imageExpand, snapshot, tool]);
 
   const enterVectorEdit = useCallback(
     (nodeIds: readonly string[]) => {
@@ -1276,6 +1378,23 @@ export function Canvas({
             />
           );
         })()}
+      {imageExpand &&
+        (() => {
+          const node = snapshot.document.nodesById[imageExpand.nodeId];
+          if (node?.kind !== "image") return null;
+          return (
+            <ImageExpandOverlay
+              document={snapshot.document}
+              node={node}
+              onCancel={() => setImageExpand(null)}
+              onSubmit={(expansion) => {
+                setImageExpand(null);
+                onImageExpand(node.id, expansion);
+              }}
+              viewport={snapshot.state.viewport}
+            />
+          );
+        })()}
       {generationActivity && (
         <span aria-live="polite" className="visually-hidden" role="status">
           {generationActivity.label}
@@ -1305,6 +1424,7 @@ export function Canvas({
         tool === "select" &&
         !imageCropState &&
         !imageAreaSelection &&
+        !imageExpand &&
         !vectorEditScope &&
         !booleanEditScope && (
           <div className={styles.selectionQuickActions}>{selectionActions}</div>
@@ -1338,9 +1458,11 @@ export function Canvas({
                       ? "canvas.imageAreaErasing"
                       : imageEditActivity.action === "isolate-object"
                         ? "canvas.imageAreaIsolating"
-                        : imageEditActivity.action === "remove-background"
-                          ? "properties.imageRemovingBackground"
-                          : "properties.imageEditingWithPrompt",
+                        : imageEditActivity.action === "expand"
+                          ? "canvas.imageExpanding"
+                          : imageEditActivity.action === "remove-background"
+                            ? "properties.imageRemovingBackground"
+                            : "properties.imageEditingWithPrompt",
                   )}
                 </small>
               </span>

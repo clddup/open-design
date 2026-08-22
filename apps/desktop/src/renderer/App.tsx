@@ -11,7 +11,10 @@ import type {
   LeaferTextStyleUpdate,
 } from "@opendesign/leafer-engine";
 import type { TextLayoutProvider } from "@opendesign/text-service";
-import type { ImageAreaSelection } from "@opendesign/image-service";
+import type {
+  ImageAreaSelection,
+  ImageExpansionInsets,
+} from "@opendesign/image-service";
 import type {
   ComponentOverridePatch,
   DesignAsset,
@@ -299,6 +302,9 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const imageAreaSelectionController = useRef<
     ((nodeId: string) => boolean) | null
   >(null);
+  const imageExpandController = useRef<((nodeId: string) => boolean) | null>(
+    null,
+  );
   const [textLayoutProviderEpoch, setTextLayoutProviderEpoch] = useState(0);
   const [diagnosticEvents, setDiagnosticEvents] = useState<DiagnosticEvent[]>(
     [],
@@ -368,6 +374,12 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
   const handleImageAreaSelectionControllerChange = useCallback(
     (controller: ((nodeId: string) => boolean) | null) => {
       imageAreaSelectionController.current = controller;
+    },
+    [],
+  );
+  const handleImageExpandControllerChange = useCallback(
+    (controller: ((nodeId: string) => boolean) | null) => {
+      imageExpandController.current = controller;
     },
     [],
   );
@@ -1081,6 +1093,10 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
         | {
             action: "erase-object" | "isolate-object";
             selection: ImageAreaSelection;
+          }
+        | {
+            action: "expand";
+            expansion: ImageExpansionInsets;
           },
     ) => {
       if (imageEdit) return;
@@ -1105,6 +1121,8 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
           ? `isolated_image_${crypto.randomUUID().replaceAll("-", "")}`
           : undefined;
       const expectedAssetId = node.properties.assetId;
+      const expectedPlacement = structuredClone(node.properties.placement);
+      const expectedTargetSize = structuredClone(node.size);
       setImageEdit({
         requestId,
         nodeId,
@@ -1131,7 +1149,15 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
               }
             : edit.action === "prompt-edit"
               ? { ...requestBase, ...edit }
-              : { ...requestBase, action: edit.action };
+              : edit.action === "expand"
+                ? {
+                    ...requestBase,
+                    action: edit.action,
+                    expansion: { ...edit.expansion },
+                    placement: expectedPlacement,
+                    targetSize: expectedTargetSize,
+                  }
+                : { ...requestBase, action: edit.action };
         const edited = await window.desktop?.editDesignImage(editRequest);
         if (!edited) throw new Error("Image editing is unavailable");
         if (cancelledImageEditRequestIds.current.has(requestId)) {
@@ -1168,17 +1194,30 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                   ? {}
                   : { supportingAssets: edited.supportingAssets }),
               }
-            : {
-                action: "derive-source",
-                pageId: activePageId,
-                nodeId,
-                expectedAssetId,
-                asset: edited.asset,
-                derivation: edited.derivation,
-                ...(edited.supportingAssets === undefined
-                  ? {}
-                  : { supportingAssets: edited.supportingAssets }),
-              },
+            : edit.action === "expand"
+              ? {
+                  action: "expand-source",
+                  pageId: activePageId,
+                  nodeId,
+                  expectedAssetId,
+                  expectedPlacement,
+                  expectedTargetSize,
+                  expansion: edit.expansion,
+                  asset: edited.asset,
+                  derivation: edited.derivation,
+                  supportingAssets: edited.supportingAssets ?? [],
+                }
+              : {
+                  action: "derive-source",
+                  pageId: activePageId,
+                  nodeId,
+                  expectedAssetId,
+                  asset: edited.asset,
+                  derivation: edited.derivation,
+                  ...(edited.supportingAssets === undefined
+                    ? {}
+                    : { supportingAssets: edited.supportingAssets }),
+                },
           `image_edit_${requestId}`,
         );
         if (!plan.ok) throw new Error(plan.message);
@@ -1191,7 +1230,9 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                   ? "history.editImageWithPrompt"
                   : edit.action === "erase-object"
                     ? "history.eraseImageObject"
-                    : "history.isolateImageObject",
+                    : edit.action === "isolate-object"
+                      ? "history.isolateImageObject"
+                      : "history.expandImage",
             ),
             plan.commands,
           )
@@ -2781,6 +2822,10 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
               onImageAreaSelectionControllerChange={
                 handleImageAreaSelectionControllerChange
               }
+              onImageExpand={(nodeId, expansion) =>
+                void runImageEdit(nodeId, { action: "expand", expansion })
+              }
+              onImageExpandControllerChange={handleImageExpandControllerChange}
               onImageCropControllerChange={handleImageCropControllerChange}
               onTextLayoutProviderReady={handleTextLayoutProviderReady}
               onTextEditingStyleControllerChange={
@@ -2946,6 +2991,15 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                     false;
                   if (!started) {
                     setEditorError(t("error.imageAreaSelectionUnavailable"));
+                  }
+                  return started;
+                }}
+                onExpandImage={() => {
+                  if (selectedNode?.kind !== "image") return false;
+                  const started =
+                    imageExpandController.current?.(selectedNode.id) ?? false;
+                  if (!started) {
+                    setEditorError(t("error.imageExpandUnavailable"));
                   }
                   return started;
                 }}

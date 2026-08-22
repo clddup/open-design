@@ -175,6 +175,7 @@ function renderPanel(
           onExportSvg={onExportSvg}
           onCropImage={vi.fn(() => true)}
           onSelectImageArea={vi.fn(() => true)}
+          onExpandImage={vi.fn(() => true)}
           onReplaceImage={vi.fn()}
           imageEditStatus={null}
           imageEditAction={null}

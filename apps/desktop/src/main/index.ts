@@ -12,6 +12,8 @@ import { JsonlSessionStore } from "@opendesign/session-store";
 import type {
   DesignAsset,
   ImageAssetDerivation,
+  ImagePlacement,
+  Size,
 } from "@opendesign/design-contracts";
 import {
   app,
@@ -83,10 +85,16 @@ import type { RasterExportFormat } from "@opendesign/import-export-service/raste
 import { ModelProviderHost } from "./model/model-provider-host";
 import {
   ERASE_OBJECT_PROMPT,
+  EXPAND_IMAGE_PROMPT,
   ISOLATE_OBJECT_PROMPT,
   ImageGenerationHost,
 } from "./model/image-generation-host";
 import { createImageEditMaskPng } from "./model/image-edit-mask";
+import {
+  compositeProtectedImageExpansion,
+  createImageExpansionRaster,
+  type PreparedImageExpansionRaster,
+} from "./model/image-expand-raster";
 import { prepareGlobalWorkspaceDatabase } from "./global-data";
 import { DiagnosticLog } from "./diagnostics/diagnostic-log";
 import { resolveRendererUrl } from "./renderer-url";
@@ -112,6 +120,7 @@ import {
   isThemePreference,
   isWindowAction,
   type DesignImageAreaSelection,
+  type DesignImageExpansion,
   type ThemePreference,
 } from "../shared/desktop-api";
 import type {
@@ -1026,12 +1035,21 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
                     : { references: [request.reference] }),
                   importedBy: "inspector-image-edit",
                 }
-              : {
-                  action: request.action,
-                  source: request.source,
-                  selection: request.selection,
-                  importedBy: "inspector-image-edit",
-                },
+              : request.action === "expand"
+                ? {
+                    action: request.action,
+                    source: request.source,
+                    expansion: request.expansion,
+                    placement: request.placement,
+                    targetSize: request.targetSize,
+                    importedBy: "inspector-image-edit",
+                  }
+                : {
+                    action: request.action,
+                    source: request.source,
+                    selection: request.selection,
+                    importedBy: "inspector-image-edit",
+                  },
           controller.signal,
         );
         return {
@@ -2041,12 +2059,21 @@ void app.whenReady().then(async () => {
                     : { references: [reference] }),
                   importedBy: "agent-image-edit",
                 }
-              : {
-                  action: call.input.action,
-                  source,
-                  selection: call.input.selection,
-                  importedBy: "agent-image-edit",
-                },
+              : call.input.action === "expand"
+                ? {
+                    action: call.input.action,
+                    source,
+                    expansion: call.input.expansion,
+                    placement: prepared.content.placement,
+                    targetSize: prepared.content.targetSize,
+                    importedBy: "agent-image-edit",
+                  }
+                : {
+                    action: call.input.action,
+                    source,
+                    selection: call.input.selection,
+                    importedBy: "agent-image-edit",
+                  },
           signal,
         );
         const result = await executeRendererTool({
@@ -2057,11 +2084,20 @@ void app.whenReady().then(async () => {
             action:
               call.input.action === "isolate-object"
                 ? "derive-layer"
-                : "derive-source",
+                : call.input.action === "expand"
+                  ? "expand-source"
+                  : "derive-source",
             label: call.input.label,
             pageId: call.input.pageId,
             nodeId: call.input.nodeId,
             expectedAssetId: call.input.expectedAssetId,
+            ...(call.input.action === "expand"
+              ? {
+                  expectedPlacement: prepared.content.placement,
+                  expectedTargetSize: prepared.content.targetSize,
+                  expansion: call.input.expansion,
+                }
+              : {}),
             asset: derived.asset,
             derivation: derived.derivation,
             ...(call.input.action === "isolate-object"
@@ -2445,6 +2481,14 @@ type DesignImageEditInput =
       source: DesignAsset;
       selection: DesignImageAreaSelection;
       importedBy: "agent-image-edit" | "inspector-image-edit";
+    }
+  | {
+      action: "expand";
+      source: DesignAsset;
+      expansion: DesignImageExpansion;
+      placement: ImagePlacement;
+      targetSize: Size;
+      importedBy: "agent-image-edit" | "inspector-image-edit";
     };
 
 async function editDesignImageAsset(
@@ -2473,6 +2517,7 @@ async function editDesignImageAsset(
         size: { width: number; height: number };
       }
     | undefined;
+  let pendingExpansion: PreparedImageExpansionRaster | undefined;
   const edited = await (async () => {
     if (input.action === "remove-background") {
       return requireImageGenerationHost().removeBackground(source, signal);
@@ -2491,6 +2536,49 @@ async function editDesignImageAsset(
       Buffer.from(source.bytes),
     );
     const intrinsic = decodedSource.getSize();
+    if (intrinsic.width <= 0 || intrinsic.height <= 0) {
+      throw new TypeError("Image editing source could not be decoded");
+    }
+    if (input.action === "expand") {
+      pendingExpansion = createImageExpansionRaster({
+        expansion: input.expansion,
+        placement: input.placement,
+        source: {
+          bgra: decodedSource.toBitmap(),
+          size: intrinsic,
+        },
+        targetSize: input.targetSize,
+      });
+      const providerSize = pendingExpansion.geometry.outputSize;
+      const preparedSourceBytes = nativeImage
+        .createFromBitmap(Buffer.from(pendingExpansion.sourceCanvas.bgra), {
+          width: providerSize.width,
+          height: providerSize.height,
+        })
+        .toPNG();
+      const maskName = `${input.source.name.replace(/\.[^.]+$/, "")} — Expansion mask.png`;
+      pendingMask = {
+        bytes: pendingExpansion.maskPng,
+        name: maskName,
+        size: providerSize,
+      };
+      return requireImageGenerationHost().expandImage(
+        {
+          source: {
+            bytes: preparedSourceBytes,
+            mimeType: "image/png",
+            name: `${input.source.name.replace(/\.[^.]+$/, "")} — Expansion source.png`,
+          },
+          mask: {
+            bytes: pendingExpansion.maskPng,
+            mimeType: "image/png",
+            name: maskName,
+          },
+          size: `${providerSize.width}x${providerSize.height}`,
+        },
+        signal,
+      );
+    }
     const maskBytes = createImageEditMaskPng({
       width: intrinsic.width,
       height: intrinsic.height,
@@ -2519,9 +2607,26 @@ async function editDesignImageAsset(
       ? requireImageGenerationHost().eraseObject(maskedInput, signal)
       : requireImageGenerationHost().isolateObject(maskedInput, signal);
   })();
-  const bytes = Buffer.from(edited.bytes);
-  const editedNativeImage = nativeImage.createFromBuffer(bytes);
-  const intrinsic = editedNativeImage.getSize();
+  let bytes: Buffer = Buffer.from(edited.bytes);
+  let editedNativeImage = nativeImage.createFromBuffer(bytes);
+  let intrinsic = editedNativeImage.getSize();
+  if (pendingExpansion) {
+    const composite = compositeProtectedImageExpansion({
+      generated: {
+        bgra: editedNativeImage.toBitmap(),
+        size: intrinsic,
+      },
+      prepared: pendingExpansion,
+    });
+    bytes = nativeImage
+      .createFromBitmap(Buffer.from(composite.bgra), {
+        width: composite.size.width,
+        height: composite.size.height,
+      })
+      .toPNG();
+    editedNativeImage = nativeImage.createFromBuffer(bytes);
+    intrinsic = editedNativeImage.getSize();
+  }
   if (
     intrinsic.width <= 0 ||
     intrinsic.height <= 0 ||
@@ -2562,9 +2667,11 @@ async function editDesignImageAsset(
           ? "Object erased"
           : input.action === "isolate-object"
             ? "Object isolated"
-            : "Edited"
+            : input.action === "expand"
+              ? "Expanded"
+              : "Edited"
     }.png`,
-    edited.bytes,
+    bytes,
   );
   const digest = attachment.attachmentId.slice("image_".length);
   const asset: DesignAsset = {
@@ -2589,7 +2696,9 @@ async function editDesignImageAsset(
           ? { prompt: ERASE_OBJECT_PROMPT }
           : input.action === "isolate-object"
             ? { prompt: ISOLATE_OBJECT_PROMPT }
-            : {}),
+            : input.action === "expand"
+              ? { prompt: EXPAND_IMAGE_PROMPT }
+              : {}),
       ...(supportingMaskAsset ? { maskAssetId: supportingMaskAsset.id } : {}),
       referenceAssetIds: references.map((reference) => reference.id),
       extensions: {
@@ -2600,6 +2709,19 @@ async function editDesignImageAsset(
           : {}),
         ...(input.action === "erase-object" || input.action === "isolate-object"
           ? { selectionPointCount: input.selection.points.length }
+          : {}),
+        ...(input.action === "expand" && pendingExpansion
+          ? {
+              expansion: { ...input.expansion },
+              sourcePlacement: structuredClone(input.placement),
+              sourceTargetSize: { ...input.targetSize },
+              providerCanvasSize: {
+                ...pendingExpansion.geometry.outputSize,
+              },
+              providerSourceRect: {
+                ...pendingExpansion.geometry.sourceRect,
+              },
+            }
           : {}),
       },
     },

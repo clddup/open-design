@@ -84,6 +84,7 @@ export function PropertiesPanel({
   onExportFormatChange,
   onCropImage,
   onSelectImageArea,
+  onExpandImage,
   onReplaceImage,
   imageEditStatus,
   imageEditAction,
@@ -168,6 +169,7 @@ export function PropertiesPanel({
   onExportFormatChange: (format: ExportFormat) => void;
   onCropImage: () => boolean;
   onSelectImageArea: () => boolean;
+  onExpandImage: () => boolean;
   onReplaceImage: () => void;
   imageEditStatus: "running" | "cancelling" | null;
   imageEditAction:
@@ -175,6 +177,7 @@ export function PropertiesPanel({
     | "prompt-edit"
     | "erase-object"
     | "isolate-object"
+    | "expand"
     | null;
   onRemoveImageBackground: () => void;
   onEditImageWithPrompt: (prompt: string, reference?: DesignAsset) => void;
@@ -342,6 +345,7 @@ export function PropertiesPanel({
             onGoToComponentMain={onGoToComponentMain}
             onCropImage={onCropImage}
             onSelectImageArea={onSelectImageArea}
+            onExpandImage={onExpandImage}
             onReplaceImage={onReplaceImage}
             imageEditStatus={imageEditStatus}
             imageEditAction={imageEditAction}

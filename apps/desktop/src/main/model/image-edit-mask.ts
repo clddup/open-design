@@ -3,23 +3,33 @@ import { deflateSync, inflateSync } from "node:zlib";
 
 export const MAX_IMAGE_EDIT_MASK_PIXELS = 32 * 1024 * 1024;
 
+export function encodeRgbaPng(input: {
+  width: number;
+  height: number;
+  rgba: Uint8Array;
+}): Uint8Array {
+  const { width, height, rgba } = input;
+  assertRasterDimensions(width, height);
+  if (rgba.byteLength !== width * height * 4) {
+    throw new RangeError("RGBA byte length does not match image dimensions");
+  }
+  const stride = width * 4 + 1;
+  const scanlines = Buffer.allocUnsafe(stride * height);
+  for (let y = 0; y < height; y += 1) {
+    const row = y * stride;
+    scanlines[row] = 0;
+    scanlines.set(rgba.subarray(y * width * 4, (y + 1) * width * 4), row + 1);
+  }
+  return encodeRgbaScanlines(width, height, scanlines);
+}
+
 export function createImageEditMaskPng(input: {
   width: number;
   height: number;
   points: readonly NormalizedPoint[];
 }): Uint8Array {
   const { width, height, points } = input;
-  if (
-    !Number.isInteger(width) ||
-    !Number.isInteger(height) ||
-    width <= 0 ||
-    height <= 0 ||
-    width * height > MAX_IMAGE_EDIT_MASK_PIXELS
-  ) {
-    throw new RangeError(
-      "Image edit mask dimensions exceed the supported limit",
-    );
-  }
+  assertRasterDimensions(width, height);
   assertSelectionPoints(points);
   const stride = width * 4 + 1;
   const scanlines = Buffer.allocUnsafe(stride * height);
@@ -45,6 +55,14 @@ export function createImageEditMaskPng(input: {
       "Image edit selection does not cover any source pixels",
     );
   }
+  return encodeRgbaScanlines(width, height, scanlines);
+}
+
+function encodeRgbaScanlines(
+  width: number,
+  height: number,
+  scanlines: Buffer,
+): Uint8Array {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0);
   header.writeUInt32BE(height, 4);
@@ -59,6 +77,20 @@ export function createImageEditMaskPng(input: {
     pngChunk("IDAT", deflateSync(scanlines, { level: 9 })),
     pngChunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+function assertRasterDimensions(width: number, height: number): void {
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    width * height > MAX_IMAGE_EDIT_MASK_PIXELS
+  ) {
+    throw new RangeError(
+      "Image edit mask dimensions exceed the supported limit",
+    );
+  }
 }
 
 export function inspectImageEditMaskPng(value: Uint8Array): {

@@ -124,10 +124,21 @@ export type EditImageToolInput = EditImageToolBase &
         selection: ImageAreaSelection;
         resultNodeId: string;
       }
+    | {
+        action: "expand";
+        expansion: ImageExpansion;
+      }
   );
 
 export type ImageAreaSelection = {
   points: Array<{ x: number; y: number }>;
+};
+
+export type ImageExpansion = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
 };
 
 export type InternalReadImageSourceToolInput = {
@@ -142,6 +153,8 @@ export type PreparedImageEditSource = {
   nodeId: string;
   expectedAssetId: string;
   asset: DesignAsset;
+  placement: ImagePlacement;
+  targetSize: { width: number; height: number };
 };
 
 export type InternalUpdateImageToolInput =
@@ -175,6 +188,19 @@ export type InternalUpdateImageToolInput =
       asset: DesignAsset;
       derivation: ImageAssetDerivation;
       supportingAssets?: DesignAsset[];
+    }
+  | {
+      action: "expand-source";
+      label: string;
+      pageId: string;
+      nodeId: string;
+      expectedAssetId: string;
+      expectedPlacement: ImagePlacement;
+      expectedTargetSize: { width: number; height: number };
+      expansion: ImageExpansion;
+      asset: DesignAsset;
+      derivation: ImageAssetDerivation;
+      supportingAssets: DesignAsset[];
     };
 
 const NORMALIZED_POINT_SCHEMA = {
@@ -381,6 +407,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
         "prompt-edit",
         "erase-object",
         "isolate-object",
+        "expand",
       ],
     },
     label: { type: "string", minLength: 1, maxLength: 256 },
@@ -412,6 +439,19 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       minLength: 1,
       maxLength: 256,
       description: "Stable new Image layer ID required only by isolate-object.",
+    },
+    expansion: {
+      type: "object",
+      properties: Object.fromEntries(
+        ["top", "right", "bottom", "left"].map((edge) => [
+          edge,
+          { type: "number", minimum: 0, maximum: 1_000_000 },
+        ]),
+      ),
+      required: ["top", "right", "bottom", "left"],
+      additionalProperties: false,
+      description:
+        "Outward expansion in Image node-local design units. At least one edge must be positive; each edge is limited by the current node size at execution.",
     },
   },
   required: ["action", "label", "pageId", "nodeId", "expectedAssetId"],
@@ -452,6 +492,18 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
         anyOf: [
           { required: ["prompt"] },
           { required: ["referenceAttachmentId"] },
+        ],
+      },
+    },
+    {
+      properties: { action: { const: "expand" } },
+      required: ["expansion"],
+      not: {
+        anyOf: [
+          { required: ["prompt"] },
+          { required: ["referenceAttachmentId"] },
+          { required: ["selection"] },
+          { required: ["resultNodeId"] },
         ],
       },
     },
@@ -646,6 +698,19 @@ export function isEditImageToolInput(
       ])
     );
   }
+  if (input.action === "expand") {
+    return (
+      isImageExpansion(input.expansion) &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "expansion",
+      ])
+    );
+  }
   return (
     input.action === "prompt-edit" &&
     typeof input.prompt === "string" &&
@@ -691,7 +756,17 @@ export function isPreparedImageEditSource(
     safeId(input.expectedAssetId) &&
     isBoundedEmbeddedImageAsset(input.asset) &&
     input.asset.id === input.expectedAssetId &&
-    exactKeys(input, ["kind", "pageId", "nodeId", "expectedAssetId", "asset"])
+    isImagePlacement(input.placement) &&
+    isPositiveSize(input.targetSize) &&
+    exactKeys(input, [
+      "kind",
+      "pageId",
+      "nodeId",
+      "expectedAssetId",
+      "asset",
+      "placement",
+      "targetSize",
+    ])
   );
 }
 
@@ -699,6 +774,39 @@ export function isInternalUpdateImageToolInput(
   input: unknown,
 ): input is InternalUpdateImageToolInput {
   if (!isRecord(input) || !hasCommonUpdateFields(input)) return false;
+  if (input.action === "expand-source") {
+    return (
+      safeId(input.expectedAssetId) &&
+      isImagePlacement(input.expectedPlacement) &&
+      isPositiveSize(input.expectedTargetSize) &&
+      isImageExpansion(input.expansion) &&
+      isBoundedEmbeddedImageAsset(input.asset) &&
+      isImageAssetDerivation(input.derivation) &&
+      input.derivation.operation === "expand" &&
+      input.derivation.sourceAssetId === input.expectedAssetId &&
+      input.derivation.resultAssetId === input.asset.id &&
+      input.derivation.maskAssetId !== undefined &&
+      input.derivation.referenceAssetIds.length === 0 &&
+      Array.isArray(input.supportingAssets) &&
+      input.supportingAssets.length === 1 &&
+      isBoundedEmbeddedImageAsset(input.supportingAssets[0]) &&
+      input.supportingAssets[0].mimeType === "image/png" &&
+      input.supportingAssets[0].id === input.derivation.maskAssetId &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "expectedPlacement",
+        "expectedTargetSize",
+        "expansion",
+        "asset",
+        "derivation",
+        "supportingAssets",
+      ])
+    );
+  }
   if (input.action === "derive-source" || input.action === "derive-layer") {
     if (
       !safeId(input.expectedAssetId) ||
@@ -864,6 +972,34 @@ function isImageAreaSelection(value: unknown): value is ImageAreaSelection {
         exactKeys(point, ["x", "y"]),
     ) &&
     exactKeys(value, ["points"])
+  );
+}
+
+function isImageExpansion(value: unknown): value is ImageExpansion {
+  if (
+    !isRecord(value) ||
+    !exactKeys(value, ["top", "right", "bottom", "left"])
+  ) {
+    return false;
+  }
+  const values = [value.top, value.right, value.bottom, value.left];
+  return (
+    values.some((candidate) => finite(candidate) && candidate > 0) &&
+    values.every(
+      (candidate) =>
+        finite(candidate) && candidate >= 0 && candidate <= 1_000_000,
+    )
+  );
+}
+
+function isPositiveSize(
+  value: unknown,
+): value is { width: number; height: number } {
+  return (
+    isRecord(value) &&
+    positive(value.width) &&
+    positive(value.height) &&
+    exactKeys(value, ["width", "height"])
   );
 }
 

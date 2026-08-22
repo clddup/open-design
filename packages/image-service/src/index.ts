@@ -8,7 +8,7 @@ import type {
 } from "@opendesign/design-contracts";
 import { IMAGE_FILTER_KEYS } from "@opendesign/design-contracts";
 
-export const IMAGE_SERVICE_CONTRACT_VERSION = 4 as const;
+export const IMAGE_SERVICE_CONTRACT_VERSION = 5 as const;
 
 const FILTER_EPSILON = 0.000_001;
 
@@ -143,6 +143,34 @@ export interface ImageAreaSelection {
   points: readonly NormalizedPoint[];
 }
 
+export interface ImageExpansionInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export type ImageExpandHandle =
+  | "top"
+  | "top-right"
+  | "right"
+  | "bottom-right"
+  | "bottom"
+  | "bottom-left"
+  | "left"
+  | "top-left";
+
+export interface ImageExpandSession {
+  expansion: ImageExpansionInsets;
+  targetSize: Size;
+}
+
+export interface ImageExpansionRasterGeometry {
+  expandedSize: Size;
+  outputSize: Size;
+  sourceRect: { x: number; y: number; width: number; height: number };
+}
+
 export interface CreateImageAreaSelectionInput {
   placement: ImagePlacement;
   sourceSize: Size;
@@ -152,6 +180,9 @@ export interface CreateImageAreaSelectionInput {
 
 const MAX_IMAGE_AREA_SELECTION_POINTS = 512;
 const MIN_IMAGE_AREA_SELECTION_AREA = 0.000_001;
+const MAX_IMAGE_EXPANSION_PER_EDGE = 2;
+const MAX_IMAGE_EXPANSION_ASPECT_RATIO = 3;
+const IMAGE_EXPANSION_SHORT_EDGE = 1_024;
 
 /**
  * Converts a freeform lasso from Image-node local coordinates into normalized
@@ -250,6 +281,150 @@ export function imageSourceToTargetTransform({
     resolved.offset.x,
     resolved.offset.y,
   ];
+}
+
+export function imageTargetToSourceTransform(
+  input: ResolveImagePlacementInput,
+): Transform {
+  return invertAffineTransform(imageSourceToTargetTransform(input));
+}
+
+export function createImageExpandSession(targetSize: Size): ImageExpandSession {
+  assertPositiveSize(targetSize, "targetSize");
+  return {
+    expansion: { top: 0, right: 0, bottom: 0, left: 0 },
+    targetSize: structuredClone(targetSize),
+  };
+}
+
+export function resizeImageExpand(
+  session: ImageExpandSession,
+  handle: ImageExpandHandle,
+  point: Point,
+): ImageExpandSession {
+  assertPositiveSize(session.targetSize, "targetSize");
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    throw new RangeError("Image expansion point must be finite");
+  }
+  const { width, height } = session.targetSize;
+  const next = { ...session.expansion };
+  if (handle.includes("left")) {
+    next.left = clamp(-point.x, 0, width * MAX_IMAGE_EXPANSION_PER_EDGE);
+  }
+  if (handle.includes("right")) {
+    next.right = clamp(
+      point.x - width,
+      0,
+      width * MAX_IMAGE_EXPANSION_PER_EDGE,
+    );
+  }
+  if (handle.includes("top")) {
+    next.top = clamp(-point.y, 0, height * MAX_IMAGE_EXPANSION_PER_EDGE);
+  }
+  if (handle.includes("bottom")) {
+    next.bottom = clamp(
+      point.y - height,
+      0,
+      height * MAX_IMAGE_EXPANSION_PER_EDGE,
+    );
+  }
+  assertImageExpansionInsets(next, session.targetSize, false);
+  return { ...session, expansion: next };
+}
+
+export function setImageExpandAspectRatio(
+  session: ImageExpandSession,
+  ratio: number,
+): ImageExpandSession {
+  assertPositiveSize(session.targetSize, "targetSize");
+  if (
+    !Number.isFinite(ratio) ||
+    ratio < 1 / MAX_IMAGE_EXPANSION_ASPECT_RATIO ||
+    ratio > MAX_IMAGE_EXPANSION_ASPECT_RATIO
+  ) {
+    throw new RangeError("Image expansion aspect ratio is unsupported");
+  }
+  const { width, height } = session.targetSize;
+  const currentRatio = width / height;
+  const expansion: ImageExpansionInsets = {
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  };
+  if (Math.abs(currentRatio - ratio) < 0.000_001)
+    return { ...session, expansion };
+  if (ratio > currentRatio) {
+    const extra = height * ratio - width;
+    expansion.left = extra / 2;
+    expansion.right = extra / 2;
+  } else {
+    const extra = width / ratio - height;
+    expansion.top = extra / 2;
+    expansion.bottom = extra / 2;
+  }
+  assertImageExpansionInsets(expansion, session.targetSize, true);
+  return { ...session, expansion };
+}
+
+export function resolveImageExpansionRaster(input: {
+  expansion: ImageExpansionInsets;
+  targetSize: Size;
+}): ImageExpansionRasterGeometry {
+  assertPositiveSize(input.targetSize, "targetSize");
+  assertImageExpansionInsets(input.expansion, input.targetSize, true);
+  const expandedSize = {
+    width:
+      input.expansion.left + input.targetSize.width + input.expansion.right,
+    height:
+      input.expansion.top + input.targetSize.height + input.expansion.bottom,
+  };
+  const aspect = expandedSize.width / expandedSize.height;
+  const outputSize =
+    aspect >= 1
+      ? {
+          width: roundUpTo16(IMAGE_EXPANSION_SHORT_EDGE * aspect),
+          height: IMAGE_EXPANSION_SHORT_EDGE,
+        }
+      : {
+          width: IMAGE_EXPANSION_SHORT_EDGE,
+          height: roundUpTo16(IMAGE_EXPANSION_SHORT_EDGE / aspect),
+        };
+  const left = Math.round(
+    (input.expansion.left / expandedSize.width) * outputSize.width,
+  );
+  const top = Math.round(
+    (input.expansion.top / expandedSize.height) * outputSize.height,
+  );
+  const right = Math.round(
+    ((input.expansion.left + input.targetSize.width) / expandedSize.width) *
+      outputSize.width,
+  );
+  const bottom = Math.round(
+    ((input.expansion.top + input.targetSize.height) / expandedSize.height) *
+      outputSize.height,
+  );
+  return {
+    expandedSize,
+    outputSize,
+    sourceRect: {
+      x: left,
+      y: top,
+      width: Math.max(1, right - left),
+      height: Math.max(1, bottom - top),
+    },
+  };
+}
+
+export function imageExpansionIsEmpty(
+  expansion: ImageExpansionInsets,
+): boolean {
+  return (
+    expansion.top <= 0.000_001 &&
+    expansion.right <= 0.000_001 &&
+    expansion.bottom <= 0.000_001 &&
+    expansion.left <= 0.000_001
+  );
 }
 
 export function resolveImagePlacement({
@@ -519,6 +694,47 @@ function assertPositiveSize(size: Size, name: string): void {
   }
 }
 
+function assertImageExpansionInsets(
+  expansion: ImageExpansionInsets,
+  targetSize: Size,
+  requireMaterialExpansion: boolean,
+): void {
+  const values = [
+    expansion.top,
+    expansion.right,
+    expansion.bottom,
+    expansion.left,
+  ];
+  if (values.some((value) => !Number.isFinite(value) || value < 0)) {
+    throw new RangeError(
+      "Image expansion insets must be finite and non-negative",
+    );
+  }
+  if (
+    expansion.left > targetSize.width * MAX_IMAGE_EXPANSION_PER_EDGE ||
+    expansion.right > targetSize.width * MAX_IMAGE_EXPANSION_PER_EDGE ||
+    expansion.top > targetSize.height * MAX_IMAGE_EXPANSION_PER_EDGE ||
+    expansion.bottom > targetSize.height * MAX_IMAGE_EXPANSION_PER_EDGE
+  ) {
+    throw new RangeError(
+      "Image expansion exceeds the supported per-edge limit",
+    );
+  }
+  if (requireMaterialExpansion && imageExpansionIsEmpty(expansion)) {
+    throw new RangeError("Image expansion must extend at least one edge");
+  }
+  const width = expansion.left + targetSize.width + expansion.right;
+  const height = expansion.top + targetSize.height + expansion.bottom;
+  const aspect = Math.max(width / height, height / width);
+  if (aspect > MAX_IMAGE_EXPANSION_ASPECT_RATIO + 0.000_001) {
+    throw new RangeError("Expanded image aspect ratio exceeds 3:1");
+  }
+}
+
+function roundUpTo16(value: number): number {
+  return Math.ceil(value / 16) * 16;
+}
+
 function normalizeRotation(value: number): number {
   const normalized = ((((value + 180) % 360) + 360) % 360) - 180;
   return Object.is(normalized, -0) ? 0 : normalized;
@@ -531,13 +747,17 @@ function invertAffineTransform(transform: Transform): Transform {
     throw new RangeError("Image source transform is not invertible");
   }
   return [
-    d / determinant,
-    -b / determinant,
-    -c / determinant,
-    a / determinant,
-    (c * f - d * e) / determinant,
-    (b * e - a * f) / determinant,
+    canonicalZero(d / determinant),
+    canonicalZero(-b / determinant),
+    canonicalZero(-c / determinant),
+    canonicalZero(a / determinant),
+    canonicalZero((c * f - d * e) / determinant),
+    canonicalZero((b * e - a * f) / determinant),
   ];
+}
+
+function canonicalZero(value: number): number {
+  return Object.is(value, -0) ? 0 : value;
 }
 
 function transformAffinePoint(transform: Transform, point: Point): Point {

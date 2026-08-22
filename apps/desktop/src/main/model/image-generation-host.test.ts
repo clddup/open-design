@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { WorkspaceStore } from "../project/workspace-store";
-import { ImageGenerationHost } from "./image-generation-host";
+import {
+  EXPAND_IMAGE_PROMPT,
+  ImageGenerationHost,
+} from "./image-generation-host";
 import {
   ModelProviderHost,
   modelProviderCredentialKey,
@@ -358,6 +361,55 @@ describe("ImageGenerationHost", () => {
       ),
     ).rejects.toThrow("matching the source dimensions");
     expect(fetch).not.toHaveBeenCalled();
+    store.close();
+  });
+
+  it("expands an exact-size prepared canvas and rejects provider size drift", async () => {
+    const store = new WorkspaceStore(":memory:");
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: pngFixture(2, 1024, 1024).toString("base64") }],
+        }),
+        { status: 200 },
+      ),
+    );
+    const host = new ImageGenerationHost(store, cipher, fetch);
+    host.saveSettings({
+      enabled: true,
+      apiFormat: "openai-images",
+      authMode: "none",
+      baseUrl: "https://images.example/v1",
+      modelId: "gpt-image-2",
+    });
+    const source = {
+      bytes: pngFixture(6, 1024, 1024),
+      mimeType: "image/png" as const,
+      name: "Expansion source.png",
+    };
+    const mask = {
+      bytes: pngFixture(6, 1024, 1024),
+      mimeType: "image/png" as const,
+      name: "Expansion mask.png",
+    };
+    await expect(
+      host.expandImage(
+        { source, mask, size: "1024x1024" },
+        new AbortController().signal,
+      ),
+    ).resolves.toMatchObject({ operation: "expand" });
+    const form = fetch.mock.calls[0]?.[1]?.body;
+    if (!(form instanceof FormData)) throw new Error("Expected FormData");
+    expect(form.get("prompt")).toBe(EXPAND_IMAGE_PROMPT);
+    expect(form.get("size")).toBe("1024x1024");
+
+    await expect(
+      host.expandImage(
+        { source, mask, size: "1536x1024" },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("must match the prepared source canvas");
+    expect(fetch).toHaveBeenCalledTimes(1);
     store.close();
   });
 

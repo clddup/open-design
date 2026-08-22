@@ -280,6 +280,8 @@ describe("Renderer design tool bridge", () => {
             pageId: "page_1",
             nodeId: "hero_image",
             expectedAssetId: assetId,
+            placement: { mode: "fit" },
+            targetSize: { width: 800, height: 450 },
             asset: {
               id: assetId,
               kind: "image",

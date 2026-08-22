@@ -34,6 +34,7 @@ export function ImageSection({
   onFiltersChange,
   onCrop,
   onSelectArea,
+  onExpand,
   onReplace,
   editStatus,
   editAction,
@@ -49,6 +50,7 @@ export function ImageSection({
   onFiltersChange: (filters: ImageFilters) => void;
   onCrop: () => boolean;
   onSelectArea: () => boolean;
+  onExpand: () => boolean;
   onReplace: () => void;
   editStatus: "running" | "cancelling" | null;
   editAction:
@@ -56,6 +58,7 @@ export function ImageSection({
     | "prompt-edit"
     | "erase-object"
     | "isolate-object"
+    | "expand"
     | null;
   onRemoveBackground: () => void;
   onEditWithPrompt: (prompt: string, reference?: DesignAsset) => void;
@@ -281,6 +284,15 @@ export function ImageSection({
         >
           <Icon name="lucide:lasso-select" size={13} />
           {t("properties.imageSelectArea")}
+        </button>
+        <button
+          className={cx(styles.addPaint, styles.imageReplaceButton)}
+          disabled={editStatus !== null}
+          onClick={onExpand}
+          type="button"
+        >
+          <Icon name="lucide:scan" size={13} />
+          {t("properties.imageExpand")}
         </button>
         <button
           className={cx(styles.addPaint, styles.imageReplaceButton)}

@@ -68,11 +68,18 @@ export type MaskedImageEditInput = {
   mask: ImageEditSource & { mimeType: "image/png" };
 };
 
+export type ExpandImageInput = MaskedImageEditInput & {
+  size: `${number}x${number}`;
+};
+
 export const ERASE_OBJECT_PROMPT =
   "Remove only the object or area inside the transparent mask and reconstruct the background naturally. Preserve the composition, geometry, lighting, texture, and every unmasked part of the source image. Do not crop, resize, restyle, or add unrelated content.";
 
 export const ISOLATE_OBJECT_PROMPT =
   "Preserve the complete object indicated by the transparent mask, including fine edge detail, and isolate it on a fully transparent background. Remove everything else. Do not crop, resize, restyle, relight, or invent missing object content.";
+
+export const EXPAND_IMAGE_PROMPT =
+  "Extend the source image naturally into every transparent masked border. Continue the existing scene, composition, perspective, geometry, lighting, texture, depth, and color treatment. Preserve the complete unmasked source exactly, add no unrelated focal subject, and fill the full output canvas without seams or blank borders.";
 
 export type EditedImage = {
   bytes: Uint8Array;
@@ -81,7 +88,11 @@ export type EditedImage = {
   providerRequestId?: string;
   outputFormat: "png";
   operation:
-    "remove-background" | "prompt-edit" | "erase-object" | "isolate-object";
+    | "remove-background"
+    | "prompt-edit"
+    | "erase-object"
+    | "isolate-object"
+    | "expand";
 };
 
 export class ImageGenerationHost {
@@ -297,12 +308,27 @@ export class ImageGenerationHost {
     );
   }
 
+  async expandImage(
+    input: ExpandImageInput,
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    return this.editMaskedImage(
+      input,
+      "expand",
+      EXPAND_IMAGE_PROMPT,
+      "auto",
+      signal,
+      input.size,
+    );
+  }
+
   private async editMaskedImage(
     input: MaskedImageEditInput,
-    operation: "erase-object" | "isolate-object",
+    operation: "erase-object" | "isolate-object" | "expand",
     prompt: string,
     background: "auto" | "transparent",
     signal: AbortSignal,
+    requestedSize?: `${number}x${number}`,
   ): Promise<EditedImage> {
     assertImageEditSource(input.source);
     assertImageEditSource(input.mask);
@@ -317,16 +343,34 @@ export class ImageGenerationHost {
         "Image edit mask must be an alpha PNG matching the source dimensions",
       );
     }
-    return this.editImage(
+    if (
+      operation === "expand" &&
+      requestedSize !== `${source.width}x${source.height}`
+    ) {
+      throw new TypeError(
+        "Expanded image request size must match the prepared source canvas",
+      );
+    }
+    const edited = await this.editImage(
       {
         operation,
         prompt,
         sources: [input.source],
         mask: input.mask,
         background,
+        ...(requestedSize ? { size: requestedSize } : {}),
       },
       signal,
     );
+    if (operation === "expand") {
+      const result = pngMetadata(edited.bytes);
+      if (result.width !== source.width || result.height !== source.height) {
+        throw new TypeError(
+          "Expanded image output dimensions must match the prepared source canvas",
+        );
+      }
+    }
+    return edited;
   }
 
   private async editImage(
@@ -336,6 +380,7 @@ export class ImageGenerationHost {
       sources: readonly ImageEditSource[];
       mask?: ImageEditSource & { mimeType: "image/png" };
       background: "auto" | "transparent";
+      size?: `${number}x${number}`;
     },
     signal: AbortSignal,
   ): Promise<EditedImage> {
@@ -368,7 +413,7 @@ export class ImageGenerationHost {
       );
     }
     form.set("n", "1");
-    form.set("size", "auto");
+    form.set("size", input.size ?? "auto");
     form.set("quality", "auto");
     form.set("background", input.background);
     form.set("output_format", "png");

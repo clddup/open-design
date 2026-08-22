@@ -2,14 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   applyImageFiltersToRgba,
   createImageAreaSelection,
+  createImageExpandSession,
   createImageCropSession,
   imageFiltersAreNeutral,
   imageCropSourceTransform,
   imageSourceToTargetTransform,
+  imageTargetToSourceTransform,
+  imageExpansionIsEmpty,
   moveImageCrop,
   normalizeImageFilters,
   resetImageCrop,
+  resizeImageExpand,
   resolveImagePlacement,
+  resolveImageExpansionRaster,
+  setImageExpandAspectRatio,
   setImageCropZoom,
 } from "./index.js";
 
@@ -202,6 +208,12 @@ describe("image placement geometry", () => {
         (point) => point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1,
       ),
     ).toBe(true);
+    const targetToSource = imageTargetToSourceTransform({
+      placement: { mode: "stretch" },
+      sourceSize: { width: 800, height: 400 },
+      targetSize: { width: 400, height: 200 },
+    });
+    expect(targetToSource).toEqual([2, 0, 0, 2, 0, 0]);
   });
 
   it("bounds and validates freeform lasso selections", () => {
@@ -229,6 +241,75 @@ describe("image placement geometry", () => {
         ],
       }),
     ).toThrow("too small");
+  });
+});
+
+describe("image expansion geometry", () => {
+  it("resizes only the dragged outward edges and rejects unsupported aspect ratios", () => {
+    const session = createImageExpandSession({ width: 400, height: 300 });
+    const right = resizeImageExpand(session, "right", { x: 520, y: 150 });
+    expect(right.expansion).toEqual({
+      top: 0,
+      right: 120,
+      bottom: 0,
+      left: 0,
+    });
+    const corner = resizeImageExpand(right, "top-left", { x: -40, y: -60 });
+    expect(corner.expansion).toEqual({
+      top: 60,
+      right: 120,
+      bottom: 0,
+      left: 40,
+    });
+    expect(() =>
+      resizeImageExpand(
+        createImageExpandSession({ width: 1_200, height: 300 }),
+        "right",
+        { x: 1_210, y: 150 },
+      ),
+    ).toThrow("aspect ratio");
+  });
+
+  it("applies common aspect ratios by expanding symmetrically", () => {
+    const square = setImageExpandAspectRatio(
+      createImageExpandSession({ width: 400, height: 200 }),
+      1,
+    );
+    expect(square.expansion).toEqual({
+      top: 100,
+      right: 0,
+      bottom: 100,
+      left: 0,
+    });
+    expect(imageExpansionIsEmpty(square.expansion)).toBe(false);
+    expect(
+      imageExpansionIsEmpty(
+        createImageExpandSession({ width: 400, height: 200 }).expansion,
+      ),
+    ).toBe(true);
+  });
+
+  it("derives a bounded 16px-aligned provider canvas and protected source rect", () => {
+    const geometry = resolveImageExpansionRaster({
+      targetSize: { width: 400, height: 300 },
+      expansion: { top: 50, right: 100, bottom: 50, left: 100 },
+    });
+    expect(geometry.expandedSize).toEqual({ width: 600, height: 400 });
+    expect(geometry.outputSize).toEqual({ width: 1536, height: 1024 });
+    expect(geometry.sourceRect).toEqual({
+      x: 256,
+      y: 128,
+      width: 1024,
+      height: 768,
+    });
+    expect(geometry.outputSize.width % 16).toBe(0);
+    expect(geometry.outputSize.height % 16).toBe(0);
+    expect(() =>
+      resolveImageExpansionRaster({
+        targetSize: { width: 400, height: 300 },
+        expansion: { top: 0, right: 0, bottom: 0, left: 0 },
+      }),
+    ).toThrow("extend at least one edge");
   });
 });
 

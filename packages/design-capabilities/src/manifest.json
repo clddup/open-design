@@ -666,7 +666,7 @@
         "en": "Create traced variants from one or more source images using masks, inpainting, outpainting, background replacement, relighting, or style harmonization.",
         "zh-CN": "基于一张或多张源图，通过蒙版、局部重绘、扩图、背景替换、重打光或风格统一生成可追溯变体。"
       },
-      "provider": "OpenDesign Image Service contract 4 + Main-owned RGBA mask generation + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner",
+      "provider": "OpenDesign Image Service contract 5 + Main-owned RGBA mask/expansion raster + ImageGenerationHost openai-images edit adapter + EditorRuntime recoverable derivation planner",
       "requiredSurfaces": ["contract", "runtime", "human", "agent", "render"],
       "surfaces": {
         "contract": "available",
@@ -678,14 +678,15 @@
       },
       "limitations": [
         {
-          "en": "Embedded PNG, JPEG, and WebP Image nodes support background removal, full-image prompt editing with one optional reference, and canvas-lasso Erase/Isolate through the global openai-images service. Prompted local repainting, expansion, background replacement, relighting, style harmonization, Image Paint editing, and multiple references remain unavailable.",
-          "zh-CN": "内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、用提示词和一张可选参考图编辑整图，并通过画布 lasso 执行 Erase/Isolate；带提示词的局部重绘、扩图、背景替换、重打光、风格统一、Image Paint 编辑与多参考图仍未完成。"
+          "en": "Embedded PNG, JPEG, and WebP Image nodes support background removal, full-image prompt editing with one optional reference, canvas-lasso Erase/Isolate, and handle-based Expand through the global openai-images service. Prompted local repainting, background replacement, resolution boosting, relighting, style harmonization, Image Paint editing, and multiple references remain unavailable.",
+          "zh-CN": "内嵌 PNG、JPEG 与 WebP Image 节点已可通过全局 openai-images 服务去背景、用提示词和一张可选参考图编辑整图、通过画布 lasso 执行 Erase/Isolate，并使用手柄扩图；带提示词的局部重绘、背景替换、清晰度增强、重打光、风格统一、Image Paint 编辑与多参考图仍未完成。"
         }
       ],
       "evidence": {
         "automated": [
           "apps/desktop/src/main/model/image-generation-host.test.ts",
           "apps/desktop/src/main/model/image-edit-mask.test.ts",
+          "apps/desktop/src/main/model/image-expand-raster.test.ts",
           "apps/desktop/src/shared/design-agent-tools.test.ts",
           "apps/desktop/src/shared/design-tool-bridge.test.ts",
           "apps/desktop/src/renderer/design-tool-execution.test.ts",
@@ -698,6 +699,7 @@
         "docs/adr/0133-trusted-remove-background-image-editing.md",
         "docs/adr/0134-trusted-prompt-image-editing.md",
         "docs/adr/0135-trusted-area-image-editing.md",
+        "docs/adr/0136-trusted-image-expansion.md",
         "https://developers.openai.com/api/docs/guides/image-generation",
         "https://help.figma.com/hc/en-us/articles/24004542669463-Make-or-edit-an-image-with-AI"
       ]

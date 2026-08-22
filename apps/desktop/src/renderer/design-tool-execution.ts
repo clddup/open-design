@@ -1358,7 +1358,9 @@ async function executeDesignToolRequestUnsafe(
       );
     }
     const asset = document.assetsById[input.expectedAssetId];
+    const imageNode = document.nodesById[input.nodeId];
     if (
+      imageNode?.kind !== "image" ||
       !asset ||
       asset.kind !== "image" ||
       asset.source.type !== "data" ||
@@ -1379,6 +1381,8 @@ async function executeDesignToolRequestUnsafe(
           nodeId: input.nodeId,
           expectedAssetId: input.expectedAssetId,
           asset,
+          placement: structuredClone(imageNode.properties.placement),
+          targetSize: structuredClone(imageNode.size),
         },
       },
     };
@@ -1446,29 +1450,42 @@ async function executeDesignToolRequestUnsafe(
                           ? {}
                           : { supportingAssets: input.supportingAssets }),
                       }
-                    : input.action === "derive-layer"
+                    : input.action === "expand-source"
                       ? {
                           action: input.action,
                           pageId: input.pageId,
                           nodeId: input.nodeId,
                           expectedAssetId: input.expectedAssetId,
-                          resultNodeId: input.resultNodeId,
-                          resultNodeName: input.resultNodeName,
+                          expectedPlacement: input.expectedPlacement,
+                          expectedTargetSize: input.expectedTargetSize,
+                          expansion: input.expansion,
                           asset: input.asset,
                           derivation: input.derivation,
-                          ...(input.supportingAssets === undefined
-                            ? {}
-                            : { supportingAssets: input.supportingAssets }),
+                          supportingAssets: input.supportingAssets,
                         }
-                      : {
-                          action: input.action,
-                          pageId: input.pageId,
-                          nodeId: input.nodeId,
-                          asset: input.asset,
-                          ...(input.placement === undefined
-                            ? {}
-                            : { placement: input.placement }),
-                        },
+                      : input.action === "derive-layer"
+                        ? {
+                            action: input.action,
+                            pageId: input.pageId,
+                            nodeId: input.nodeId,
+                            expectedAssetId: input.expectedAssetId,
+                            resultNodeId: input.resultNodeId,
+                            resultNodeName: input.resultNodeName,
+                            asset: input.asset,
+                            derivation: input.derivation,
+                            ...(input.supportingAssets === undefined
+                              ? {}
+                              : { supportingAssets: input.supportingAssets }),
+                          }
+                        : {
+                            action: input.action,
+                            pageId: input.pageId,
+                            nodeId: input.nodeId,
+                            asset: input.asset,
+                            ...(input.placement === undefined
+                              ? {}
+                              : { placement: input.placement }),
+                          },
             commandPrefix,
           );
     if (!plan.ok) {
