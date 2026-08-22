@@ -4239,6 +4239,106 @@ describe("Leafer engine selection bounds synchronization", () => {
     adapter.dispose();
   });
 
+  it("toggles the frozen selection snapshot with a Shift box selection", async () => {
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    adapter.sync(createInput());
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const firstCard = findElement(app.tree, "feature_one");
+    const secondCard = findElement(app.tree, "feature_two");
+    if (!firstCard || !secondCard) throw new Error("Missing card fixtures");
+    expect(app.editor.list.map((element) => element.id)).toEqual([
+      "feature_one",
+    ]);
+    leaferHarness.boxMatches = [firstCard, secondCard];
+    app.editor.selector.dragging = true;
+    app.emit("drag.start", boxDragEvent(20, 20, { shiftKey: true }));
+    app.editor.selector.dragging = false;
+    app.emit("drag.end", boxDragEvent(640, 360, { shiftKey: true }));
+
+    expect(app.editor.list).toEqual([secondCard]);
+    adapter.dispose();
+  });
+
+  it("cancels Box Select on Escape, short drag, tool change, stale scope, and dispose", async () => {
+    const input = createInput();
+    const adapter = await createLeaferEngineAdapter(
+      createHost(),
+      createCallbacks(),
+    );
+    adapter.sync(input);
+    flushAnimationFrames();
+
+    const app = leaferHarness.app;
+    if (!app) throw new Error("Fake Leafer App was not created");
+    const secondCard = findElement(app.tree, "feature_two");
+    if (!secondCard) throw new Error("Missing card fixture");
+    leaferHarness.boxMatches = [secondCard];
+
+    app.editor.selector.dragging = true;
+    app.emit("drag.start", boxDragEvent(20, 20));
+    app.editor.selector.dragging = false;
+    app.editor.target = [secondCard];
+    const escape = emitWindowKey("Escape");
+    app.emit("drag.end", boxDragEvent(640, 360));
+    expect(escape.preventDefault).toHaveBeenCalledTimes(1);
+    expect(app.editor.list.map((element) => element.id)).toEqual([
+      "feature_one",
+    ]);
+
+    app.editor.selector.dragging = true;
+    app.emit("drag.start", boxDragEvent(20, 20));
+    app.editor.selector.dragging = false;
+    app.editor.target = [secondCard];
+    app.emit("drag.end", { ...boxDragEvent(640, 360), isCancel: true });
+    expect(app.editor.list.map((element) => element.id)).toEqual([
+      "feature_one",
+    ]);
+
+    app.editor.selector.dragging = true;
+    app.emit("drag.start", boxDragEvent(20, 20));
+    app.editor.selector.dragging = false;
+    app.emit("drag.end", boxDragEvent(22, 22));
+    expect(app.editor.list.map((element) => element.id)).toEqual([
+      "feature_one",
+    ]);
+
+    app.editor.selector.dragging = true;
+    app.emit("drag.start", boxDragEvent(20, 20));
+    app.editor.selector.dragging = false;
+    adapter.sync({ ...input, tool: "pen" });
+    app.emit("drag.end", boxDragEvent(640, 360));
+    expect(app.editor.list.map((element) => element.id)).toEqual([
+      "feature_one",
+    ]);
+
+    adapter.sync(input);
+    app.editor.selector.dragging = true;
+    app.emit("drag.start", boxDragEvent(20, 20));
+    app.editor.selector.dragging = false;
+    const replacementDocument = structuredClone(input.document);
+    replacementDocument.documentId = "box_select_replacement";
+    adapter.sync({ ...input, document: replacementDocument });
+    app.emit("drag.end", boxDragEvent(640, 360));
+    expect(app.editor.list.map((element) => element.id)).toEqual([
+      "feature_one",
+    ]);
+
+    app.editor.selector.dragging = true;
+    app.emit("drag.start", boxDragEvent(20, 20));
+    app.editor.selector.dragging = false;
+    adapter.dispose();
+    app.emit("drag.end", boxDragEvent(640, 360));
+    expect(app.editor.list.map((element) => element.id)).toEqual([
+      "feature_one",
+    ]);
+  });
+
   it("adds and removes an unrelated root without replaying the existing scene", async () => {
     const host = createHost();
     const adapter = await createLeaferEngineAdapter(host, createCallbacks());

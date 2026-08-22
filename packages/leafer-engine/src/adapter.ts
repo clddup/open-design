@@ -130,6 +130,7 @@ import type {
   LeaferVectorEditTool,
 } from "./types.js";
 import { BoxDrawController } from "./box-draw-controller.js";
+import { BoxSelectController } from "./box-select-controller.js";
 import { ImageCropController } from "./image-crop-controller.js";
 import { PenToolController } from "./pen-tool-controller.js";
 import { asLeaferEvent, eventClientPoint } from "./pointer-event.js";
@@ -184,12 +185,6 @@ interface TransformSession {
   changed: boolean;
   kind: LeaferOperationKind;
   selectionNodeIds: string[];
-}
-
-interface BoxSelectSession {
-  additiveNodeIds: Set<string>;
-  start: { x: number; y: number };
-  startClient: { x: number; y: number };
 }
 
 type VectorEditControl =
@@ -331,6 +326,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   readonly #generationSkeletonLayer: LeaferGroup;
   readonly #editorOverlays: EditorOverlayController;
   readonly #boxDrawController: BoxDrawController;
+  readonly #boxSelectController: BoxSelectController;
   readonly #imageCropController: ImageCropController;
   readonly #penToolController: PenToolController;
   readonly #textRunEditor: TextRunEditController<LeaferElement>;
@@ -344,7 +340,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
   #geometryLoadGeneration = 0;
   #geometryLoadPromise: Promise<void> | null = null;
   #disposed = false;
-  #boxSelect: BoxSelectSession | null = null;
   #input: LeaferEngineSyncInput | null = null;
   #projection: LeaferSceneProjection | null = null;
   #synchronizing = false;
@@ -554,6 +549,18 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       restoreProjection: () => this.#restoreProjection(),
       root: this.#app.tree as unknown as LeaferGroup,
     });
+    this.#boxSelectController = new BoxSelectController({
+      app: this.#app,
+      current: () => ({
+        disposed: this.#disposed,
+        input: this.#input,
+      }),
+      editor: this.#editor,
+      element: (nodeId) => this.#elements.get(nodeId),
+      leafer,
+      nodeId: (element) => this.#nodeId(element),
+      scheduleEditorRefresh: () => this.#scheduleEditorRefresh(),
+    });
     this.#penToolController = new PenToolController({
       current: () => ({
         disposed: this.#disposed,
@@ -658,6 +665,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       previous?.textRunProjection !== input.textRunProjection;
     const sceneChanged = documentSceneChanged || textRunProjectionChanged;
     this.#boxDrawController.syncInput(input);
+    this.#boxSelectController.syncInput(input);
     this.#imageCropController.syncInput(input);
     this.#penToolController.prepareSync(input, sceneChanged);
     if (
@@ -765,6 +773,10 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           projection,
           projectionContinuityLost: textRunProjectionChanged,
         });
+        this.#boxSelectController.syncProjection({
+          input,
+          projectionContinuityLost: textRunProjectionChanged,
+        });
         this.#penToolController.syncProjection({
           changedNodeIds,
           input,
@@ -780,7 +792,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
           this.#cancelVectorEdit();
         }
         if (identityChanged) this.#editor.visible = false;
-        if (identityChanged || !contiguousChanges) this.#boxSelect = null;
         if (
           identityChanged ||
           !contiguousChanges ||
@@ -849,6 +860,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       }
     } catch (error) {
       this.#boxDrawController.cancel();
+      this.#boxSelectController.cancel();
       this.#penToolController.abortSync();
       this.finishGenerationPresentation();
       this.#report(error);
@@ -935,8 +947,8 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     this.#booleanNodeIds.clear();
     this.#detachTextEditDom(false);
     this.#textRunEditor.clear();
-    this.#boxSelect = null;
     this.#boxDrawController.dispose();
+    this.#boxSelectController.dispose();
     this.#penToolController.dispose();
     this.#cancelVectorEdit();
     this.#imageCropController.dispose();
@@ -1162,14 +1174,14 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
     );
 
     this.#app.on(DragEvent.START, (event: unknown) => {
-      this.#startBoxSelect(event);
+      this.#boxSelectController.start(event);
       this.#boxDrawController.start(event);
     });
     this.#app.on(DragEvent.DRAG, (event: unknown) =>
       this.#boxDrawController.update(event),
     );
     this.#app.on(DragEvent.END, (event: unknown) => {
-      this.#finishBoxSelect(event);
+      this.#boxSelectController.finish(event);
       this.#boxDrawController.finish(event);
     });
     this.#app.on(PointerEvent.DOWN, (event: unknown) => {
@@ -2288,83 +2300,6 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
       revision: input.document.revision,
       ...activeSelection,
     });
-  }
-
-  #startBoxSelect(event: unknown): void {
-    const input = this.#input;
-    if (
-      !input ||
-      input.tool !== "select" ||
-      !this.#editor.selector.dragging ||
-      this.#disposed
-    ) {
-      return;
-    }
-    const drag = asLeaferEvent(event);
-    const client = eventClientPoint(drag);
-    this.#boxSelect = {
-      additiveNodeIds: new Set(
-        drag.shiftKey
-          ? this.#editor.list.flatMap((element) => {
-              const nodeId = this.#nodeId(element as LeaferElement);
-              return nodeId ? [nodeId] : [];
-            })
-          : [],
-      ),
-      start: drag.getInnerPoint(this.#editor.selector),
-      startClient: client,
-    };
-  }
-
-  #finishBoxSelect(event: unknown): void {
-    const session = this.#boxSelect;
-    this.#boxSelect = null;
-    if (!session || this.#disposed) return;
-    const drag = asLeaferEvent(event);
-    const client = eventClientPoint(drag);
-    if (
-      drag.isCancel ||
-      Math.hypot(
-        client.x - session.startClient.x,
-        client.y - session.startClient.y,
-      ) < MIN_DRAW_DISTANCE
-    ) {
-      return;
-    }
-    const end = drag.getInnerPoint(this.#editor.selector);
-    const rect = rectFromPoints(session.start, end, false, false);
-    const bounds = new this.#leafer.Bounds(
-      rect.x,
-      rect.y,
-      rect.width,
-      rect.height,
-    );
-    const selected = this.#leafer.EditSelectHelper.findByBounds(
-      this.#app as unknown as LeaferElement,
-      bounds,
-      "hit",
-    ).flatMap((element) => {
-      const nodeId = this.#nodeId(element as LeaferElement);
-      return nodeId ? [{ element: element as LeaferElement, nodeId }] : [];
-    });
-    const selectedNodeIds = new Set(selected.map(({ nodeId }) => nodeId));
-    const targetNodeIds = new Set(session.additiveNodeIds);
-    for (const nodeId of selectedNodeIds) {
-      if (targetNodeIds.has(nodeId)) targetNodeIds.delete(nodeId);
-      else targetNodeIds.add(nodeId);
-    }
-    const target = [...targetNodeIds].flatMap((nodeId) => {
-      const element = this.#elements.get(nodeId);
-      return element ? [element] : [];
-    });
-    const current = this.#editor.list;
-    if (
-      current.length !== target.length ||
-      current.some((element, index) => element !== target[index])
-    ) {
-      this.#editor.target = target.length === 0 ? (null as never) : target;
-      this.#scheduleEditorRefresh();
-    }
   }
 
   #syncVectorEdit(): void {
@@ -4576,6 +4511,7 @@ class WebLeaferEngineAdapter implements LeaferEngineAdapter {
         return;
       }
     }
+    if (this.#boxSelectController.handleKeyDown(event)) return;
     if (this.#penToolController.handleKeyDown(event)) return;
     if (this.#boxDrawController.handleKeyDown(event)) return;
     if (event.code === "Escape" && this.#editor.innerEditing) {
@@ -5208,31 +5144,6 @@ function sameViewport(left: ViewportState, right: ViewportState): boolean {
 function readElementText(element: LeaferElement): string {
   const text = (element as LeaferElement & { text?: unknown }).text;
   return typeof text === "string" ? text : "";
-}
-
-function rectFromPoints(
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-  constrain: boolean,
-  fromCenter: boolean,
-) {
-  let width = end.x - start.x;
-  let height = end.y - start.y;
-  if (constrain) {
-    const size = Math.max(Math.abs(width), Math.abs(height));
-    width = Math.sign(width || 1) * size;
-    height = Math.sign(height || 1) * size;
-  }
-  return {
-    x: fromCenter
-      ? start.x - Math.abs(width)
-      : Math.min(start.x, start.x + width),
-    y: fromCenter
-      ? start.y - Math.abs(height)
-      : Math.min(start.y, start.y + height),
-    width: Math.max(1, Math.abs(width) * (fromCenter ? 2 : 1)),
-    height: Math.max(1, Math.abs(height) * (fromCenter ? 2 : 1)),
-  };
 }
 
 function readLinePoints(
