@@ -278,6 +278,7 @@ export type DesignImageExpansion = {
 
 export type DesignImageEditAction =
   | "remove-background"
+  | "replace-background"
   | "prompt-edit"
   | "erase-object"
   | "isolate-object"
@@ -296,6 +297,10 @@ export type DesignImageEditRequest = DesignImageEditRequestBase &
   (
     | { action: "remove-background" }
     | { action: "upscale" }
+    | {
+        action: "replace-background";
+        prompt: string;
+      }
     | {
         action: "prompt-edit";
         prompt: string;
@@ -739,6 +744,22 @@ export function isDesignImageEditRequest(
       ])
     );
   }
+  if (value.action === "replace-background") {
+    return (
+      typeof value.prompt === "string" &&
+      value.prompt.trim().length > 0 &&
+      value.prompt.length <= 32_000 &&
+      hasExactKeys(value, [
+        "requestId",
+        "action",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "source",
+        "prompt",
+      ])
+    );
+  }
   return (
     value.action === "prompt-edit" &&
     typeof value.prompt === "string" &&
@@ -767,6 +788,7 @@ export function isDesignImageEditResult(
     !isRecord(value) ||
     !isStableId(value.requestId) ||
     (value.action !== "remove-background" &&
+      value.action !== "replace-background" &&
       value.action !== "prompt-edit" &&
       value.action !== "erase-object" &&
       value.action !== "isolate-object" &&
@@ -820,6 +842,16 @@ export function isDesignImageEditResult(
       derivation.maskAssetId !== undefined ||
       derivation.referenceAssetIds.length !== 0 ||
       value.asset.mimeType !== "image/png")
+  ) {
+    return false;
+  }
+  if (
+    value.action === "replace-background" &&
+    (typeof derivation.prompt !== "string" ||
+      derivation.prompt.trim().length === 0 ||
+      derivation.maskAssetId !== undefined ||
+      derivation.referenceAssetIds.length !== 0 ||
+      supportingAssets.length !== 0)
   ) {
     return false;
   }

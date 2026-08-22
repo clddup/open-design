@@ -20,6 +20,7 @@ export const IMAGE_DERIVATION_OPERATION_LABEL_KEYS: Record<
 > = {
   replacement: "properties.imageSourceOperation.replacement",
   "remove-background": "properties.imageSourceOperation.remove-background",
+  "replace-background": "properties.imageSourceOperation.replace-background",
   "erase-object": "properties.imageSourceOperation.erase-object",
   "isolate-object": "properties.imageSourceOperation.isolate-object",
   expand: "properties.imageSourceOperation.expand",
@@ -34,6 +35,7 @@ export const IMAGE_EDIT_PROGRESS_LABEL_KEYS: Record<
   MessageKey
 > = {
   "remove-background": "properties.imageRemovingBackground",
+  "replace-background": "properties.imageReplacingBackground",
   "prompt-edit": "properties.imageEditingWithPrompt",
   "erase-object": "canvas.imageAreaErasing",
   "isolate-object": "canvas.imageAreaIsolating",

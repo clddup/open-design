@@ -434,6 +434,56 @@ describe("Design image desktop API guards", () => {
     );
   });
 
+  it("binds background replacement to one description and no hidden inputs", () => {
+    const request = {
+      requestId: "image_background_request",
+      action: "replace-background",
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: sourceAsset.id,
+      source: sourceAsset,
+      prompt: "A warm editorial studio with a limestone plinth",
+    };
+    expect(isDesignImageEditRequest(request)).toBe(true);
+    expect(isDesignImageEditRequest({ ...request, prompt: "   " })).toBe(false);
+    expect(
+      isDesignImageEditRequest({ ...request, reference: referenceAsset }),
+    ).toBe(false);
+
+    const resultAsset = {
+      ...sourceAsset,
+      id: `asset_${"9".repeat(64)}`,
+      name: "Hero — Background replaced.png",
+      mimeType: "image/png",
+    };
+    const result = {
+      requestId: request.requestId,
+      action: request.action,
+      sourceAssetId: sourceAsset.id,
+      asset: resultAsset,
+      derivation: {
+        id: "image_derivation_background",
+        sourceAssetId: sourceAsset.id,
+        resultAssetId: resultAsset.id,
+        operation: request.action,
+        prompt: request.prompt,
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    expect(isDesignImageEditResult(result)).toBe(true);
+    expect(
+      isDesignImageEditResult({
+        ...result,
+        derivation: {
+          ...result.derivation,
+          referenceAssetIds: [referenceAsset.id],
+        },
+        supportingAssets: [referenceAsset],
+      }),
+    ).toBe(false);
+  });
+
   it("accepts bounded source-normalized area edits and exact mask provenance", () => {
     const request = {
       requestId: "image_area_edit_request",

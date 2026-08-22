@@ -112,6 +112,10 @@ export type EditImageToolInput = EditImageToolBase &
     | { action: "remove-background" }
     | { action: "upscale" }
     | {
+        action: "replace-background";
+        prompt: string;
+      }
+    | {
         action: "prompt-edit";
         prompt: string;
         referenceAttachmentId?: string;
@@ -416,6 +420,7 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
     action: {
       enum: [
         "remove-background",
+        "replace-background",
         "prompt-edit",
         "erase-object",
         "isolate-object",
@@ -474,6 +479,18 @@ export const EDIT_IMAGE_TOOL_INPUT_SCHEMA = {
       not: {
         anyOf: [
           { required: ["prompt"] },
+          { required: ["referenceAttachmentId"] },
+          { required: ["selection"] },
+          { required: ["resultNodeId"] },
+          { required: ["expansion"] },
+        ],
+      },
+    },
+    {
+      properties: { action: { const: "replace-background" } },
+      required: ["prompt"],
+      not: {
+        anyOf: [
           { required: ["referenceAttachmentId"] },
           { required: ["selection"] },
           { required: ["resultNodeId"] },
@@ -715,6 +732,21 @@ export function isEditImageToolInput(
       "expectedAssetId",
     ]);
   }
+  if (input.action === "replace-background") {
+    return (
+      typeof input.prompt === "string" &&
+      input.prompt.trim().length > 0 &&
+      input.prompt.length <= 32_000 &&
+      exactKeys(input, [
+        "action",
+        "label",
+        "pageId",
+        "nodeId",
+        "expectedAssetId",
+        "prompt",
+      ])
+    );
+  }
   if (input.action === "erase-object" || input.action === "isolate-object") {
     return (
       isImageAreaSelection(input.selection) &&
@@ -923,6 +955,12 @@ export function isInternalUpdateImageToolInput(
         (typeof derivation.prompt !== "string" ||
           derivation.prompt.trim().length === 0 ||
           derivation.maskAssetId !== undefined)) ||
+      (derivation.operation === "replace-background" &&
+        (typeof derivation.prompt !== "string" ||
+          derivation.prompt.trim().length === 0 ||
+          derivation.maskAssetId !== undefined ||
+          derivation.referenceAssetIds.length !== 0 ||
+          supportingAssets.length !== 0)) ||
       ((derivation.operation === "erase-object" ||
         derivation.operation === "isolate-object") &&
         (typeof derivation.prompt !== "string" ||
@@ -932,6 +970,7 @@ export function isInternalUpdateImageToolInput(
           supportingAssets.length !== 1 ||
           supportingAssets[0]?.mimeType !== "image/png")) ||
       (derivation.operation !== "remove-background" &&
+        derivation.operation !== "replace-background" &&
         derivation.operation !== "prompt-edit" &&
         derivation.operation !== "erase-object" &&
         derivation.operation !== "isolate-object")

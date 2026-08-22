@@ -58,6 +58,11 @@ export type ImageEditSource = {
 
 export type RemoveImageBackgroundInput = ImageEditSource;
 
+export type ReplaceImageBackgroundInput = {
+  source: ImageEditSource;
+  prompt: string;
+};
+
 export type PromptImageEditInput = {
   source: ImageEditSource;
   prompt: string;
@@ -91,6 +96,9 @@ export const EXPAND_IMAGE_PROMPT =
 export const BOOST_RESOLUTION_PROMPT =
   "Increase only the source image resolution and recover natural high-frequency detail. Preserve the exact composition, crop, geometry, subject identity, text, colors, lighting, transparency, and every visible element. Do not add, remove, move, restyle, relight, sharpen excessively, or invent unrelated content. Fill the exact requested output dimensions.";
 
+export const REPLACE_BACKGROUND_PROMPT_PREFIX =
+  "Replace only the background of the source image with the background described below. Preserve every foreground subject exactly, including identity, pose, silhouette, proportions, product geometry, logos, text, material, edge detail, lighting on the subject, placement, crop, and composition. Do not add, remove, move, resize, restyle, or relight foreground content. Make the new background spatially coherent with the existing subject and fill the complete image without borders. New background:";
+
 export type EditedImage = {
   bytes: Uint8Array;
   apiFormat: GlobalImageGenerationSettings["apiFormat"];
@@ -99,6 +107,7 @@ export type EditedImage = {
   outputFormat: "png";
   operation:
     | "remove-background"
+    | "replace-background"
     | "prompt-edit"
     | "erase-object"
     | "isolate-object"
@@ -287,6 +296,27 @@ export class ImageGenerationHost {
         operation: "prompt-edit",
         prompt,
         sources: [input.source, ...references],
+        background: "auto",
+      },
+      signal,
+    );
+  }
+
+  async replaceBackground(
+    input: ReplaceImageBackgroundInput,
+    signal: AbortSignal,
+  ): Promise<EditedImage> {
+    const prompt = input.prompt.trim();
+    if (prompt.length < 1 || prompt.length > 32_000) {
+      throw new RangeError(
+        "Image background prompt must contain 1 to 32,000 characters",
+      );
+    }
+    return this.editImage(
+      {
+        operation: "replace-background",
+        prompt: `${REPLACE_BACKGROUND_PROMPT_PREFIX}\n${prompt}`,
+        sources: [input.source],
         background: "auto",
       },
       signal,

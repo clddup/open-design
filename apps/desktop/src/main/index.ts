@@ -1026,31 +1026,38 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
                 source: request.source,
                 importedBy: "inspector-image-edit",
               }
-            : request.action === "prompt-edit"
+            : request.action === "replace-background"
               ? {
                   action: request.action,
                   source: request.source,
                   prompt: request.prompt,
-                  ...(request.reference === undefined
-                    ? {}
-                    : { references: [request.reference] }),
                   importedBy: "inspector-image-edit",
                 }
-              : request.action === "expand"
+              : request.action === "prompt-edit"
                 ? {
                     action: request.action,
                     source: request.source,
-                    expansion: request.expansion,
-                    placement: request.placement,
-                    targetSize: request.targetSize,
+                    prompt: request.prompt,
+                    ...(request.reference === undefined
+                      ? {}
+                      : { references: [request.reference] }),
                     importedBy: "inspector-image-edit",
                   }
-                : {
-                    action: request.action,
-                    source: request.source,
-                    selection: request.selection,
-                    importedBy: "inspector-image-edit",
-                  },
+                : request.action === "expand"
+                  ? {
+                      action: request.action,
+                      source: request.source,
+                      expansion: request.expansion,
+                      placement: request.placement,
+                      targetSize: request.targetSize,
+                      importedBy: "inspector-image-edit",
+                    }
+                  : {
+                      action: request.action,
+                      source: request.source,
+                      selection: request.selection,
+                      importedBy: "inspector-image-edit",
+                    },
           controller.signal,
         );
         return {
@@ -2051,7 +2058,8 @@ void app.whenReady().then(async () => {
                 source,
                 importedBy: "agent-image-edit",
               }
-            : call.input.action === "prompt-edit"
+            : call.input.action === "prompt-edit" ||
+                call.input.action === "replace-background"
               ? {
                   action: call.input.action,
                   source,
@@ -2487,6 +2495,12 @@ type DesignImageEditInput =
       importedBy: "agent-image-edit" | "inspector-image-edit";
     }
   | {
+      action: "replace-background";
+      source: DesignAsset;
+      prompt: string;
+      importedBy: "agent-image-edit" | "inspector-image-edit";
+    }
+  | {
       action: "prompt-edit";
       source: DesignAsset;
       prompt: string;
@@ -2554,6 +2568,12 @@ async function editDesignImageAsset(
           prompt: input.prompt,
           references: references.map(toImageEditSource),
         },
+        signal,
+      );
+    }
+    if (input.action === "replace-background") {
+      return requireImageGenerationHost().replaceBackground(
+        { source, prompt: input.prompt },
         signal,
       );
     }
@@ -2720,15 +2740,17 @@ async function editDesignImageAsset(
     `${input.source.name.replace(/\.[^.]+$/, "")} — ${
       input.action === "remove-background"
         ? "Background removed"
-        : input.action === "erase-object"
-          ? "Object erased"
-          : input.action === "isolate-object"
-            ? "Object isolated"
-            : input.action === "expand"
-              ? "Expanded"
-              : input.action === "upscale"
-                ? "Resolution boosted"
-                : "Edited"
+        : input.action === "replace-background"
+          ? "Background replaced"
+          : input.action === "erase-object"
+            ? "Object erased"
+            : input.action === "isolate-object"
+              ? "Object isolated"
+              : input.action === "expand"
+                ? "Expanded"
+                : input.action === "upscale"
+                  ? "Resolution boosted"
+                  : "Edited"
     }.png`,
     bytes,
   );
@@ -2751,13 +2773,15 @@ async function editDesignImageAsset(
       operation: input.action,
       ...(input.action === "prompt-edit"
         ? { prompt: input.prompt.trim() }
-        : input.action === "erase-object"
-          ? { prompt: ERASE_OBJECT_PROMPT }
-          : input.action === "isolate-object"
-            ? { prompt: ISOLATE_OBJECT_PROMPT }
-            : input.action === "expand"
-              ? { prompt: EXPAND_IMAGE_PROMPT }
-              : {}),
+        : input.action === "replace-background"
+          ? { prompt: input.prompt.trim() }
+          : input.action === "erase-object"
+            ? { prompt: ERASE_OBJECT_PROMPT }
+            : input.action === "isolate-object"
+              ? { prompt: ISOLATE_OBJECT_PROMPT }
+              : input.action === "expand"
+                ? { prompt: EXPAND_IMAGE_PROMPT }
+                : {}),
       ...(supportingMaskAsset ? { maskAssetId: supportingMaskAsset.id } : {}),
       referenceAssetIds: references.map((reference) => reference.id),
       extensions: {

@@ -928,6 +928,7 @@ export const DesignAssetSchema = Type.Object(
 export const ImageAssetDerivationOperationSchema = Type.Union([
   Type.Literal("replacement"),
   Type.Literal("remove-background"),
+  Type.Literal("replace-background"),
   Type.Literal("erase-object"),
   Type.Literal("isolate-object"),
   Type.Literal("expand"),

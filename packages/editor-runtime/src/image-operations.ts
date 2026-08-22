@@ -488,6 +488,21 @@ export function planImageNodeUpdate(
     operation.action === "expand-source"
       ? (operation.supportingAssets ?? [])
       : [];
+  if (
+    requestedDerivation.operation === "replace-background" &&
+    (typeof requestedDerivation.prompt !== "string" ||
+      requestedDerivation.prompt.trim().length === 0 ||
+      requestedDerivation.maskAssetId !== undefined ||
+      requestedDerivation.referenceAssetIds.length !== 0 ||
+      supportingAssets.length !== 0)
+  ) {
+    return {
+      ok: false,
+      code: "invalid-asset",
+      message:
+        "Image background replacement requires one prompt and no mask or reference asset",
+    };
+  }
   const supportingAssetIds = new Set(supportingAssets.map((asset) => asset.id));
   const derivationInputAssetIds = new Set([
     ...requestedDerivation.referenceAssetIds,

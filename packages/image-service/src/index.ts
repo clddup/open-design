@@ -8,7 +8,7 @@ import type {
 } from "@opendesign/design-contracts";
 import { IMAGE_FILTER_KEYS } from "@opendesign/design-contracts";
 
-export const IMAGE_SERVICE_CONTRACT_VERSION = 6 as const;
+export const IMAGE_SERVICE_CONTRACT_VERSION = 7 as const;
 
 const FILTER_EPSILON = 0.000_001;
 

@@ -1085,6 +1085,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
       nodeId: string,
       edit:
         | { action: "remove-background" }
+        | { action: "replace-background"; prompt: string }
         | {
             action: "prompt-edit";
             prompt: string;
@@ -1155,7 +1156,8 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                   points: edit.selection.points.map((point) => ({ ...point })),
                 },
               }
-            : edit.action === "prompt-edit"
+            : edit.action === "prompt-edit" ||
+                edit.action === "replace-background"
               ? { ...requestBase, ...edit }
               : edit.action === "expand"
                 ? {
@@ -1171,15 +1173,26 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
         if (cancelledImageEditRequestIds.current.has(requestId)) {
           throw new DOMException("Image editing cancelled", "AbortError");
         }
+        const promptMismatch =
+          (edit.action === "prompt-edit" ||
+            edit.action === "replace-background") &&
+          edited.derivation.prompt !== edit.prompt.trim();
+        const referenceMismatch =
+          edit.action === "prompt-edit" &&
+          (edited.derivation.referenceAssetIds[0] !== edit.reference?.id ||
+            edited.derivation.referenceAssetIds.length !==
+              (edit.reference === undefined ? 0 : 1));
+        const backgroundInputsMismatch =
+          edit.action === "replace-background" &&
+          (edited.derivation.referenceAssetIds.length !== 0 ||
+            edited.derivation.maskAssetId !== undefined);
         if (
           edited.requestId !== requestId ||
           edited.action !== edit.action ||
           edited.sourceAssetId !== expectedAssetId ||
-          (edit.action === "prompt-edit" &&
-            (edited.derivation.prompt !== edit.prompt.trim() ||
-              edited.derivation.referenceAssetIds[0] !== edit.reference?.id ||
-              edited.derivation.referenceAssetIds.length !==
-                (edit.reference === undefined ? 0 : 1)))
+          promptMismatch ||
+          referenceMismatch ||
+          backgroundInputsMismatch
         ) {
           throw new Error(
             "Image edit response did not match the current request",
@@ -1247,15 +1260,17 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
             t(
               edit.action === "remove-background"
                 ? "history.removeImageBackground"
-                : edit.action === "prompt-edit"
-                  ? "history.editImageWithPrompt"
-                  : edit.action === "erase-object"
-                    ? "history.eraseImageObject"
-                    : edit.action === "isolate-object"
-                      ? "history.isolateImageObject"
-                      : edit.action === "expand"
-                        ? "history.expandImage"
-                        : "history.boostImageResolution",
+                : edit.action === "replace-background"
+                  ? "history.replaceImageBackground"
+                  : edit.action === "prompt-edit"
+                    ? "history.editImageWithPrompt"
+                    : edit.action === "erase-object"
+                      ? "history.eraseImageObject"
+                      : edit.action === "isolate-object"
+                        ? "history.isolateImageObject"
+                        : edit.action === "expand"
+                          ? "history.expandImage"
+                          : "history.boostImageResolution",
             ),
             plan.commands,
           )
@@ -1293,6 +1308,7 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
     (
       edit:
         | { action: "remove-background" }
+        | { action: "replace-background"; prompt: string }
         | {
             action: "prompt-edit";
             prompt: string;
@@ -3040,6 +3056,12 @@ function AppContent({ initialView }: { initialView?: AppView } = {}) {
                 }
                 onRemoveImageBackground={() =>
                   void runSelectedImageEdit({ action: "remove-background" })
+                }
+                onReplaceImageBackground={(prompt) =>
+                  void runSelectedImageEdit({
+                    action: "replace-background",
+                    prompt,
+                  })
                 }
                 onUpscaleImage={() =>
                   void runSelectedImageEdit({ action: "upscale" })

@@ -91,6 +91,7 @@ export function PropertiesPanel({
   imageEditStatus,
   imageEditAction,
   onRemoveImageBackground,
+  onReplaceImageBackground,
   onEditImageWithPrompt,
   onSelectImageEditReference,
   onCancelImageEdit,
@@ -177,6 +178,7 @@ export function PropertiesPanel({
   imageEditStatus: "running" | "cancelling" | null;
   imageEditAction: DesignImageEditAction | null;
   onRemoveImageBackground: () => void;
+  onReplaceImageBackground: (prompt: string) => void;
   onEditImageWithPrompt: (prompt: string, reference?: DesignAsset) => void;
   onSelectImageEditReference: () => Promise<DesignAsset | null>;
   onCancelImageEdit: () => void;
@@ -348,6 +350,7 @@ export function PropertiesPanel({
             imageEditStatus={imageEditStatus}
             imageEditAction={imageEditAction}
             onRemoveImageBackground={onRemoveImageBackground}
+            onReplaceImageBackground={onReplaceImageBackground}
             onEditImageWithPrompt={onEditImageWithPrompt}
             onSelectImageEditReference={onSelectImageEditReference}
             onCancelImageEdit={onCancelImageEdit}

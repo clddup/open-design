@@ -181,6 +181,7 @@ function renderPanel(
           imageEditStatus={null}
           imageEditAction={null}
           onRemoveImageBackground={vi.fn()}
+          onReplaceImageBackground={vi.fn()}
           onEditImageWithPrompt={vi.fn()}
           onSelectImageEditReference={vi.fn().mockResolvedValue(null)}
           onCancelImageEdit={vi.fn()}

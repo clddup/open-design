@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 55,
+  "schemaVersion": 56,
   "recordedAt": "2026-08-22",
   "policy": {
     "allowFloatingRefs": false,
@@ -7,7 +7,7 @@
   },
   "contracts": {
     "documentFormat": "dev.opendesign.document",
-    "documentSchemaVersion": "1.42.0",
+    "documentSchemaVersion": "1.43.0",
     "runtimeProtocolVersion": "0.1.0",
     "agentProtocolVersion": "3.11.0",
     "geometryServiceContractVersion": 13,
@@ -18,7 +18,7 @@
     "textEditingSessionServiceContractVersion": 2,
     "textRunLayoutServiceContractVersion": 4,
     "layoutServiceContractVersion": 8,
-    "imageServiceContractVersion": 3
+    "imageServiceContractVersion": 7
   },
   "components": {
     "agentCore": {
@@ -157,9 +157,9 @@
       "productionStatus": "frame-constraints-linear-auto-layout-grid-v3-canvas-track-reorder-automatic-rows-sizing-wrap-min-max-auto-gap-absolute-child-and-layout-guides-available-native-gate-pending"
     },
     "imageService": {
-      "role": "versioned-image-placement-crop-adjustment-area-expansion-and-upscale-service",
+      "role": "versioned-image-placement-crop-adjustment-area-expansion-upscale-and-background-replacement-service",
       "contractPackage": "@opendesign/image-service",
-      "contractVersion": 6,
+      "contractVersion": 7,
       "renderAdapterPackage": "@opendesign/leafer-engine",
       "adjustmentFields": [
         "exposure",
@@ -170,7 +170,7 @@
         "highlights",
         "shadows"
       ],
-      "productionStatus": "placement-focal-crop-direct-manipulation-seven-field-image-node-and-image-paint-adjustments-source-normalized-area-selection-handle-expansion-and-trusted-upscale-target-available-svg-color-management-and-native-gate-pending"
+      "productionStatus": "placement-focal-crop-direct-manipulation-seven-field-image-node-and-image-paint-adjustments-source-normalized-area-selection-handle-expansion-trusted-upscale-target-and-background-replacement-available-svg-color-management-and-native-gate-pending"
     },
     "svgInterchange": {
       "role": "structured-svg-import-export-service",

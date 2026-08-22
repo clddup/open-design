@@ -2479,6 +2479,7 @@ describe("design Agent tool contract", () => {
     expect(tool).toMatchObject({ risk: "external", approval: "never" });
     expect(tool?.description).toContain("transparent PNG");
     expect(tool?.description).toContain("prompt-edit");
+    expect(tool?.description).toContain("replace-background");
     expect(tool?.description).toContain("upscale");
     expect(validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, input)).toBe(
       true,
@@ -2487,6 +2488,21 @@ describe("design Agent tool contract", () => {
       validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
         ...input,
         source: "data:image/png;base64,aW1hZ2U=",
+      }),
+    ).toBe(false);
+    const replaceBackground = {
+      ...input,
+      action: "replace-background",
+      label: "Replace the product background",
+      prompt: "A graphite studio with a soft horizon",
+    };
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, replaceBackground),
+    ).toBe(true);
+    expect(
+      validateDesignAgentToolInput(EDIT_IMAGE_TOOL_NAME, {
+        ...replaceBackground,
+        referenceAttachmentId: `image_${"b".repeat(64)}`,
       }),
     ).toBe(false);
     expect(

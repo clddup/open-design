@@ -423,6 +423,63 @@ describe("image update planner", () => {
     ).toBeUndefined();
   });
 
+  it("commits a background replacement without accepting masks or references", () => {
+    const editedAsset: DesignAsset = {
+      ...newAsset,
+      id: "asset_background_replaced",
+      mimeType: "image/png",
+      name: "Old — Background replaced",
+    };
+    const input = {
+      action: "derive-source" as const,
+      pageId: "page_welcome",
+      nodeId: "hero",
+      expectedAssetId: oldAsset.id,
+      asset: editedAsset,
+      derivation: {
+        id: "replace_background_derivation",
+        sourceAssetId: oldAsset.id,
+        resultAssetId: editedAsset.id,
+        operation: "replace-background" as const,
+        prompt: "A quiet cobalt studio",
+        referenceAssetIds: [],
+        extensions: { provider: "openai-images", modelId: "gpt-image-2" },
+      },
+    };
+    const runtime = new EditorRuntime(documentWithImage());
+    const plan = planImageNodeUpdate(runtime.getSnapshot().document, input);
+    expect(plan).toMatchObject({ ok: true });
+    if (!plan.ok) return;
+    const before = runtime.getSnapshot().document;
+    expect(
+      runtime.apply({
+        transactionId: "replace_background",
+        documentId: before.documentId,
+        baseRevision: before.revision,
+        actor: { type: "user", id: "test" },
+        commands: plan.commands,
+      }).ok,
+    ).toBe(true);
+    expect(runtime.getSnapshot().document.nodesById.hero).toMatchObject({
+      properties: { assetId: editedAsset.id, placement: { mode: "fit" } },
+    });
+    expect(runtime.undo().ok).toBe(true);
+    expect(
+      runtime.getSnapshot().document.assetsById[editedAsset.id],
+    ).toBeUndefined();
+
+    expect(
+      planImageNodeUpdate(documentWithImage(), {
+        ...input,
+        supportingAssets: [{ ...newAsset, id: "asset_background_reference" }],
+        derivation: {
+          ...input.derivation,
+          referenceAssetIds: ["asset_background_reference"],
+        },
+      }),
+    ).toMatchObject({ ok: false, code: "invalid-asset" });
+  });
+
   it("rejects missing, unrelated, duplicate, and conflicting prompt-edit references", () => {
     const referenceAsset: DesignAsset = {
       ...newAsset,

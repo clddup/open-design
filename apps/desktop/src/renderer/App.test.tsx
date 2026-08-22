@@ -3366,6 +3366,83 @@ describe("App", () => {
       runtime().getSnapshot().document.assetsById[promptResultAssetId],
     ).toBeUndefined();
 
+    const backgroundResultAssetId = `asset_${"8".repeat(64)}`;
+    vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(
+      (request) => {
+        if (request.action !== "replace-background") {
+          throw new Error("Expected a background replacement request");
+        }
+        expect(request).toMatchObject({
+          action: "replace-background",
+          prompt: "A quiet cobalt studio with a concrete floor",
+        });
+        expect(request).not.toHaveProperty("reference");
+        return Promise.resolve({
+          requestId: request.requestId,
+          action: request.action,
+          sourceAssetId,
+          asset: {
+            id: backgroundResultAssetId,
+            kind: "image",
+            name: "Portrait — Background replaced.png",
+            mimeType: "image/png",
+            source: { type: "data", value: "YmFja2dyb3VuZA==" },
+            size: { width: 800, height: 600 },
+            extensions: { importedBy: "inspector-image-edit" },
+          },
+          derivation: {
+            id: "replace_background_result",
+            sourceAssetId,
+            resultAssetId: backgroundResultAssetId,
+            operation: "replace-background",
+            prompt: request.prompt,
+            referenceAssetIds: [],
+            extensions: { modelId: "gpt-image-2" },
+          },
+        });
+      },
+    );
+    await user.click(
+      screen.getByRole("button", { name: "More image actions" }),
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Replace background…" }),
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "New background" }),
+      "A quiet cobalt studio with a concrete floor",
+    );
+    expect(screen.queryByText("No reference image")).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Replace background" }),
+    );
+    await waitFor(() =>
+      expect(
+        runtime().getSnapshot().document.nodesById.background_image,
+      ).toMatchObject({
+        transform: [1, 0, 0, 1, 100, 120],
+        size: { width: 400, height: 300 },
+        properties: {
+          assetId: backgroundResultAssetId,
+          placement: { mode: "fill", focalPoint: { x: 0.5, y: 0.5 } },
+          filters: { contrast: 0.2 },
+          cornerRadius: 12,
+        },
+      }),
+    );
+    expect(
+      runtime().getSnapshot().document.imageAssetDerivationsById
+        .replace_background_result,
+    ).toMatchObject({
+      operation: "replace-background",
+      prompt: "A quiet cobalt studio with a concrete floor",
+      referenceAssetIds: [],
+    });
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      runtime().getSnapshot().document.assetsById[backgroundResultAssetId],
+    ).toBeUndefined();
+
     const maskAssetId = `asset_${"5".repeat(64)}`;
     const isolatedAssetId = `asset_${"6".repeat(64)}`;
     vi.mocked(window.desktop!.editDesignImage).mockImplementationOnce(

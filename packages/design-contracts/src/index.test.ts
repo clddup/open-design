@@ -18,6 +18,7 @@ import {
   IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
   IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION,
   IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
+  IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION,
   FONT_FACE_IDENTITY_DESIGN_SCHEMA_VERSION,
   FIGMA_TEXT_LISTS_DESIGN_SCHEMA_VERSION,
   AUTO_LAYOUT_GRID_DESIGN_SCHEMA_VERSION,
@@ -68,6 +69,19 @@ it("validates typed image asset derivation commands", () => {
       commandId: "put_image_derivation",
       type: "put_image_asset_derivation",
       derivation,
+    }),
+  ).toBe(true);
+  expect(
+    Value.Check(DesignOperationSchema, {
+      commandId: "put_background_derivation",
+      type: "put_image_asset_derivation",
+      derivation: {
+        ...derivation,
+        id: "image_derivation_background",
+        operation: "replace-background",
+        prompt: "A quiet cobalt studio",
+        referenceAssetIds: [],
+      },
     }),
   ).toBe(true);
   expect(
@@ -134,8 +148,9 @@ it("keeps Auto Layout and Layout Guide schema milestones distinct", () => {
   expect(IMAGE_ADJUSTMENTS_DESIGN_SCHEMA_VERSION).toBe("1.40.0");
   expect(IMAGE_PAINT_ADJUSTMENTS_DESIGN_SCHEMA_VERSION).toBe("1.41.0");
   expect(IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION).toBe("1.42.0");
+  expect(IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION).toBe("1.43.0");
   expect(DESIGN_SCHEMA_VERSION).toBe(
-    IMAGE_ASSET_DERIVATIONS_DESIGN_SCHEMA_VERSION,
+    IMAGE_BACKGROUND_REPLACEMENT_DESIGN_SCHEMA_VERSION,
   );
 });
 
