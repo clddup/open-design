@@ -77,6 +77,7 @@ import {
 } from "./navigation-policy";
 import { ProjectHost } from "./project/project-host";
 import { ProjectIpcService } from "./project/project-ipc";
+import { registerProjectIpc } from "./project/project-ipc-registration";
 import { WorkspaceStore } from "./project/workspace-store";
 import { registerSvgFileIpc } from "./svg/svg-file-ipc";
 import { SvgFileService } from "./svg/svg-file-service";
@@ -101,11 +102,8 @@ import { prepareGlobalWorkspaceDatabase } from "./global-data";
 import { DiagnosticLog } from "./diagnostics/diagnostic-log";
 import { resolveRendererUrl } from "./renderer-url";
 import { configureFixtureSmoke } from "./professional-fixture-smoke";
-import {
-  isRendererDesignToolProgress,
-  isRendererDesignToolResponse,
-  type RendererDesignCaptureTarget,
-} from "../shared/design-tool-bridge";
+import type { RendererDesignCaptureTarget } from "../shared/design-tool-bridge";
+import { registerRendererDesignToolIpc } from "./agent/renderer-design-tool-ipc";
 import {
   channels,
   isDeleteModelProviderProfileRequest,
@@ -552,172 +550,6 @@ function assertArgumentCount(args: unknown[], count: number) {
   if (args.length !== count) throw new TypeError("Unexpected IPC arguments");
 }
 
-function registerProjectIpc() {
-  ipcMain.handle(channels.createProject, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    return requireProjectIpc().createProject(args[0]);
-  });
-  ipcMain.handle(channels.openProject, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 0);
-    return requireProjectIpc().openProject();
-  });
-  ipcMain.handle(channels.openRecentProject, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    return requireProjectIpc().openRecentProject(args[0]);
-  });
-  ipcMain.handle(channels.listRecentProjects, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 0);
-    return requireProjectIpc().listRecentProjects();
-  });
-  ipcMain.handle(channels.removeRecentProject, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    return requireProjectIpc().removeRecentProject(args[0]);
-  });
-  ipcMain.handle(channels.revealRecentProject, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    return requireProjectIpc().revealRecentProject(args[0]);
-  });
-  ipcMain.handle(channels.listOpenProjects, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 0);
-    return requireProjectIpc().listOpenProjects();
-  });
-  ipcMain.handle(channels.createConversation, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    return requireProjectIpc().createConversation(args[0]);
-  });
-  ipcMain.handle(channels.deleteConversation, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    return requireProjectIpc().deleteConversation(args[0]);
-  });
-  ipcMain.handle(
-    channels.resolveConversationOpenContext,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().resolveConversationOpenContext(args[0]);
-    },
-  );
-  ipcMain.handle(channels.listConversations, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 0);
-    return requireProjectIpc().listConversations();
-  });
-  ipcMain.handle(channels.designToolProgress, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    const progress = args[0];
-    if (!isRendererDesignToolProgress(progress)) {
-      throw new TypeError("Invalid design tool progress");
-    }
-    return rendererDesignToolHost.progress(progress);
-  });
-  ipcMain.handle(
-    channels.resolveDesignToolRequest,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      const response = args[0];
-      if (!isRendererDesignToolResponse(response)) {
-        throw new TypeError("Invalid design tool response");
-      }
-      if (!rendererDesignToolHost.resolve(response)) {
-        throw new Error("Design tool request is no longer active");
-      }
-    },
-  );
-  ipcMain.handle(channels.listGlobalTasks, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 0);
-    return requireProjectIpc().listGlobalTasks();
-  });
-  ipcMain.handle(
-    channels.createProjectDesignFile,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().createDesignFile(args[0]);
-    },
-  );
-  ipcMain.handle(
-    channels.readProjectDesignFile,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().readDesignFile(args[0]);
-    },
-  );
-  ipcMain.handle(
-    channels.saveProjectDesignFile,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().saveDesignFile(args[0]);
-    },
-  );
-  ipcMain.handle(
-    channels.renameProjectDesignFile,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().renameDesignFile(args[0]);
-    },
-  );
-  ipcMain.handle(
-    channels.publishProjectLibrary,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().publishProjectLibrary(args[0]);
-    },
-  );
-  ipcMain.handle(channels.listProjectLibraries, (event, ...args: unknown[]) => {
-    assertMainRenderer(event);
-    assertArgumentCount(args, 1);
-    return requireProjectIpc().listProjectLibraries(args[0]);
-  });
-  ipcMain.handle(
-    channels.readProjectLibraryRelease,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().readProjectLibraryRelease(args[0]);
-    },
-  );
-  ipcMain.handle(
-    channels.setProjectLibraryEnabled,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().setProjectLibraryEnabled(args[0]);
-    },
-  );
-  ipcMain.handle(
-    channels.setProjectLibraryUpdateIgnored,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().setProjectLibraryUpdateIgnored(args[0]);
-    },
-  );
-  ipcMain.handle(
-    channels.setProjectLibraryUpdateAccepted,
-    (event, ...args: unknown[]) => {
-      assertMainRenderer(event);
-      assertArgumentCount(args, 1);
-      return requireProjectIpc().setProjectLibraryUpdateAccepted(args[0]);
-    },
-  );
-}
-
 function registerIpc(fontBinaryService: FontBinaryMainService) {
   svgFileService = new SvgFileService({
     selectOpenFile: selectSvgOpenFile,
@@ -738,7 +570,16 @@ function registerIpc(fontBinaryService: FontBinaryMainService) {
     rendererDesignToolHost,
     requireAgentReferenceHost(),
   );
-  registerProjectIpc();
+  registerProjectIpc({
+    ipc: ipcMain,
+    assertRenderer: assertMainRenderer,
+    getService: requireProjectIpc,
+  });
+  registerRendererDesignToolIpc({
+    ipc: ipcMain,
+    assertRenderer: assertMainRenderer,
+    host: rendererDesignToolHost,
+  });
   registerSvgFileIpc({
     ipc: ipcMain,
     assertRenderer: assertMainRenderer,
